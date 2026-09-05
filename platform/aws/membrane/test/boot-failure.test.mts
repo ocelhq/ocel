@@ -23,9 +23,14 @@ async function runChild(
   env: Record<string, string> = {},
 ): Promise<{ code: number; stderr: string }> {
   const file = join(dir, `child-${Math.random().toString(36).slice(2)}.mts`);
-  await writeFile(file, `import { reportFatalBoot } from ${JSON.stringify(membraneSrc)};\n${body}\n`);
+  await writeFile(
+    file,
+    `import { reportFatalBoot } from ${JSON.stringify(membraneSrc)};\n${body}\n`,
+  );
   try {
-    const { stderr } = await execFileAsync(process.execPath, [file], { env: { ...process.env, ...env } });
+    const { stderr } = await execFileAsync(process.execPath, [file], {
+      env: { ...process.env, ...env },
+    });
     return { code: 0, stderr };
   } catch (err: any) {
     return { code: err.code ?? -1, stderr: err.stderr ?? "" };

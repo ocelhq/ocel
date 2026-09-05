@@ -1,16 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import {
+  CONCERNS,
   cellNameOf,
   cellsOf,
-  CONCERNS,
   concernsAsked,
-  legsOf,
-  LIVES,
   type FixtureSpec,
   fixtureNameOf,
   fixturesNamed,
   groupKeyOf,
   groups,
+  LIVES,
+  legsOf,
   preferredOf,
   SERVES,
   spec,
@@ -77,9 +77,7 @@ describe("fixtures named in the environment", () => {
 
   it("names a fixture by its concern and its name, so the two buckets never collide", () => {
     expect(fixturesNamed(rows, "sdk/node").map((row) => row.dir)).toEqual(["sdk/node"]);
-    expect(fixturesNamed(rows, "deploy/node").map((row) => row.dir)).toEqual([
-      "deploy/node",
-    ]);
+    expect(fixturesNamed(rows, "deploy/node").map((row) => row.dir)).toEqual(["deploy/node"]);
   });
 
   it("keeps spec order, not the order it was named in", () => {
@@ -94,9 +92,7 @@ describe("fixtures named in the environment", () => {
   });
 
   it("refuses a name this target does not run", () => {
-    expect(() => fixturesNamed(rows, "deploy/node,sdk/next")).toThrow(
-      /no fixture named sdk\/next/,
-    );
+    expect(() => fixturesNamed(rows, "deploy/node,sdk/next")).toThrow(/no fixture named sdk\/next/);
   });
 });
 

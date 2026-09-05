@@ -10,9 +10,9 @@ import type { SessionFile } from "../session";
 import { verifyUpload } from "../signing";
 import { detectUploads } from "./route";
 
-const encodedMetadata = Buffer.from(
-  JSON.stringify({ uploader: "avatar", metadata: {} }),
-).toString("base64");
+const encodedMetadata = Buffer.from(JSON.stringify({ uploader: "avatar", metadata: {} })).toString(
+  "base64",
+);
 
 async function createProjectFor(session: { headers: Headers }, slug: string) {
   const res = await createProject(
@@ -42,9 +42,7 @@ async function presign(
       body: JSON.stringify({
         projectId,
         bucket: "storage",
-        files: [
-          { key: "photo.png", name: "photo.png", size: 5, mimeType: "image/png" },
-        ],
+        files: [{ key: "photo.png", name: "photo.png", size: 5, mimeType: "image/png" }],
         metadata: encodedMetadata,
         callbackBaseUrl: "http://localhost:3000/api/upload",
       }),
@@ -66,10 +64,7 @@ function detectRequest(projectId: string, headers: Headers) {
 }
 
 async function fileState(sessionId: string, idx: number) {
-  const [row] = await db
-    .select()
-    .from(uploadSession)
-    .where(eq(uploadSession.id, sessionId));
+  const [row] = await db.select().from(uploadSession).where(eq(uploadSession.id, sessionId));
   return (row.files as SessionFile[])[idx];
 }
 
@@ -103,13 +98,8 @@ describe("POST /api/blob/detect (MinIO)", () => {
       expect(completion.file.key).toBe(key);
       expect(completion.callbackBaseUrl).toBe("http://localhost:3000/api/upload");
 
-      const [row] = await db
-        .select()
-        .from(uploadSession)
-        .where(eq(uploadSession.id, sessionId));
-      expect(
-        verifyUpload(row.secret, sessionId, completion.file, completion.signature),
-      ).toBe(true);
+      const [row] = await db.select().from(uploadSession).where(eq(uploadSession.id, sessionId));
+      expect(verifyUpload(row.secret, sessionId, completion.file, completion.signature)).toBe(true);
       expect((await fileState(sessionId, 0)).state).toBe("succeeded");
 
       const second = await detectUploads(detectRequest(projectId, session.headers));
@@ -132,9 +122,7 @@ describe("POST /api/blob/detect (MinIO)", () => {
         headers: { "content-type": "image/png" },
       });
 
-      const body = await (
-        await detectUploads(detectRequest(projectId, session.headers))
-      ).json();
+      const body = await (await detectUploads(detectRequest(projectId, session.headers))).json();
       expect(body.completions).toHaveLength(1);
       expect(body.completions[0].sessionId).toBe(b.sessionId);
       expect((await fileState(b.sessionId, 0)).state).toBe("succeeded");
@@ -157,9 +145,7 @@ describe("POST /api/blob/detect (MinIO)", () => {
 
       const results = await Promise.all(
         Array.from({ length: 5 }, () =>
-          detectUploads(detectRequest(projectId, session.headers)).then((r) =>
-            r.json(),
-          ),
+          detectUploads(detectRequest(projectId, session.headers)).then((r) => r.json()),
         ),
       );
       const total = results.reduce((n, r) => n + r.completions.length, 0);

@@ -1,10 +1,9 @@
-import { describe, expect, it } from "vitest";
-
 import {
-  serveStaticAsset,
   type AssetBucket,
   type AssetStoreDeps,
+  serveStaticAsset,
 } from "@framework/next-router/assets";
+import { describe, expect, it } from "vitest";
 
 function bucketServing(
   files: Record<string, { body: string; etag?: string; contentType?: string }>,
@@ -255,9 +254,7 @@ describe("serveStaticAsset", () => {
     const store: AssetBucket = {
       async get(key) {
         keys.push(key);
-        return key === "assets/p/app/b1/some.rsc"
-          ? { body: new Blob(["RSC"]).stream() }
-          : null;
+        return key === "assets/p/app/b1/some.rsc" ? { body: new Blob(["RSC"]).stream() } : null;
       },
     };
     const deps = countingDeps(store, "assets/p/app/b1");
@@ -287,10 +284,7 @@ describe("serveStaticAsset", () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("<html>v1</html>");
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
-    expect(keys).toEqual([
-      "assets/p/app/b1/v1.0",
-      "assets/p/app/b1/v1.0.html",
-    ]);
+    expect(keys).toEqual(["assets/p/app/b1/v1.0", "assets/p/app/b1/v1.0.html"]);
   });
 
   it("resolves the root request to the index.html document", async () => {

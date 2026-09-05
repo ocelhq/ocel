@@ -1,9 +1,4 @@
-export type Need =
-  | "edge-middleware"
-  | "edge-runtime"
-  | "ppr-resume"
-  | "edge-cache"
-  | "streaming";
+export type Need = "edge-middleware" | "edge-runtime" | "ppr-resume" | "edge-cache" | "streaming";
 
 export type NeedDetail = {
   count: number;

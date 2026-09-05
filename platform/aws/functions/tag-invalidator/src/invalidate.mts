@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { coordinateOf, type Raise, type Raises } from "./records.mjs";
 import { invalidationBatches } from "./tags.mjs";
-import { targetsOf, type DynamoCommands, type DynamoLike } from "./targets.mjs";
+import { type DynamoCommands, type DynamoLike, targetsOf } from "./targets.mjs";
 
 export interface CloudFrontLike {
   send(command: any): Promise<any>;
@@ -76,7 +76,7 @@ async function settledPool(
 
 function callerReference(release: string, raise: Raise, paths: readonly string[]): string {
   const content = [release, ...[...raise.sequenceNumbers].sort(), ...paths].join("\n");
-  return "ocel-" + createHash("sha256").update(content).digest("hex").slice(0, 40);
+  return `ocel-${createHash("sha256").update(content).digest("hex").slice(0, 40)}`;
 }
 
 async function reach(

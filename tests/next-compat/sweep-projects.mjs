@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 
-import { POLL_INTERVAL_MS, listParameterNames, sleep } from "./aws.mjs";
-import { PREVIEW_ROOT_STACK_PARAM_PREFIX, projectSlugForRun, strandedProjectSlugs } from "./lib.mjs";
+import { listParameterNames, POLL_INTERVAL_MS, sleep } from "./aws.mjs";
+import {
+  PREVIEW_ROOT_STACK_PARAM_PREFIX,
+  projectSlugForRun,
+  strandedProjectSlugs,
+} from "./lib.mjs";
 import { destroyProject } from "./project-teardown.mjs";
 
 const LIST_DEADLINE_MS = 120_000;
@@ -20,7 +24,9 @@ async function listRootStackParams() {
         );
         process.exit(1);
       }
-      console.error(`[ocel-e2e] could not list ${PREVIEW_ROOT_STACK_PARAM_PREFIX} (${err.message}); will retry`);
+      console.error(
+        `[ocel-e2e] could not list ${PREVIEW_ROOT_STACK_PARAM_PREFIX} (${err.message}); will retry`,
+      );
       await sleep(POLL_INTERVAL_MS);
     }
   }
@@ -38,7 +44,9 @@ console.error(`[ocel-e2e] ${stranded.length} stranded e2e project(s): ${stranded
 
 const failed = stranded.filter((slug) => !destroyProject(slug));
 if (failed.length > 0) {
-  console.error(`[ocel-e2e] could not reclaim ${failed.join(", ")} — their preview footprint keeps billing`);
+  console.error(
+    `[ocel-e2e] could not reclaim ${failed.join(", ")} — their preview footprint keeps billing`,
+  );
   process.exit(1);
 }
 

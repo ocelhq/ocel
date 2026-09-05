@@ -29,8 +29,7 @@ function folderProblem(folder: string): string | undefined {
     return "'/' is the project root, which is what an unscoped variable already uses. Leave 'folders' off instead.";
   if (folder.endsWith("/")) return "a folder path must not end with '/'.";
   if (folder.includes("//")) return "a folder path has no empty segments.";
-  if (folder.includes(KEY_DELIMITER))
-    return `a folder path may not contain '${KEY_DELIMITER}'.`;
+  if (folder.includes(KEY_DELIMITER)) return `a folder path may not contain '${KEY_DELIMITER}'.`;
   return undefined;
 }
 

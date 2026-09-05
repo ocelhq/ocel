@@ -7,10 +7,7 @@ export function isSegmentPrefetch(headers: Headers): boolean {
 }
 
 export function isSegmentPayload(response: Response): boolean {
-  return (
-    response.status === 204 ||
-    response.headers.get(POSTPONED) === SEGMENT_PAYLOAD
-  );
+  return response.status === 204 || response.headers.get(POSTPONED) === SEGMENT_PAYLOAD;
 }
 
 export function asSegmentPayload(response: Response): Response {

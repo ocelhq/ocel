@@ -98,9 +98,7 @@ export function createEdgeInvoker(
       env: {
         ...(bundle.env ?? {}),
         ...(variables?.env ?? {}),
-        ...(envelope && sealed
-          ? prefixed(await unseal(envelope, await sealed.arrayBuffer()))
-          : {}),
+        ...(envelope && sealed ? prefixed(await unseal(envelope, await sealed.arrayBuffer())) : {}),
         ...(cache && { OCEL_CACHE_RPC: cache.rpc, OCEL_CACHE_SCOPE: cache.scope }),
       },
     };
@@ -125,10 +123,7 @@ function siblingKey(key: string, name: string): string {
   return key.slice(0, key.lastIndexOf("/") + 1) + name;
 }
 
-async function unseal(
-  envelope: string,
-  sealed: ArrayBuffer,
-): Promise<Record<string, string>> {
+async function unseal(envelope: string, sealed: ArrayBuffer): Promise<Record<string, string>> {
   const key = await crypto.subtle.importKey(
     "raw",
     base64Bytes(envelope),

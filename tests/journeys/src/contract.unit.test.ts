@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { json, type ContractContext } from "./contract";
+import { type ContractContext, json } from "./contract";
 import { healthRows } from "./rows";
 
 function answering(app: string): ContractContext["fetch"] {

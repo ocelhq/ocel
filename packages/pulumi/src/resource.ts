@@ -1,9 +1,9 @@
-import { createUrn, dynamic, type Input, type Resource } from "@pulumi/pulumi";
 import { createHash } from "node:crypto";
+import { createUrn, dynamic, type Input, type Resource } from "@pulumi/pulumi";
 import { checkTarget, runLink, type Target } from "./cli.js";
 import { customLink, type DescribedCustom } from "./custom.js";
 import type { GrantInput } from "./grants.js";
-import { postgresLink, type DescribedPostgres } from "./postgres.js";
+import { type DescribedPostgres, postgresLink } from "./postgres.js";
 
 /**
  * A postgres resource described from what a Pulumi resource exposes.
@@ -79,11 +79,7 @@ function linkProvider<I extends LinkInputs>(
   });
 
   const set = (inputs: I) =>
-    runLink(
-      ["set", "--owner", inputs.owner],
-      inputs,
-      `${JSON.stringify(recordFor(inputs))}\n`,
-    );
+    runLink(["set", "--owner", inputs.owner], inputs, `${JSON.stringify(recordFor(inputs))}\n`);
 
   return {
     async create(inputs: I) {
@@ -94,10 +90,7 @@ function linkProvider<I extends LinkInputs>(
     async diff(_id: string, olds: LinkState, news: I) {
       const replaces = replacesFor(olds, news);
       return {
-        changes:
-          replaces.length > 0 ||
-          !resolved(news) ||
-          olds.digest !== digestOf(news),
+        changes: replaces.length > 0 || !resolved(news) || olds.digest !== digestOf(news),
         replaces,
         deleteBeforeReplace: replaces.length > 0,
       };
@@ -120,14 +113,12 @@ export const postgresProvider = linkProvider<PostgresInputs>(
       properties: inputs.properties,
       grants: inputs.grants,
     }),
-  (inputs) =>
-    linkFields.every((field) => inputs.properties[field] !== undefined),
+  (inputs) => linkFields.every((field) => inputs.properties[field] !== undefined),
 );
 
 export const customProvider = linkProvider<CustomInputs>(
   (inputs) => customLink(inputs.name, { properties: inputs.properties }),
-  (inputs) =>
-    Object.values(inputs.properties).every((value) => value !== undefined),
+  (inputs) => Object.values(inputs.properties).every((value) => value !== undefined),
 );
 
 /**
@@ -159,11 +150,7 @@ export function postgres(
  * directory holding `ocel.config.ts`, which is the directory Pulumi runs the
  * program from unless it is given.
  */
-export function custom(
-  name: string,
-  resource: DescribedCustomResource,
-  opts?: LinkOptions,
-): void {
+export function custom(name: string, resource: DescribedCustomResource, opts?: LinkOptions): void {
   declare(customProvider, name, opts, { properties: resource.properties });
 }
 
@@ -199,9 +186,7 @@ function declare(
 class LinkResource extends dynamic.Resource {}
 
 function idFor(inputs: LinkInputs): string {
-  return [inputs.class, inputs.environment, inputs.name]
-    .filter(Boolean)
-    .join("/");
+  return [inputs.class, inputs.environment, inputs.name].filter(Boolean).join("/");
 }
 
 const identity = ["name", "owner", "project", "class", "environment"] as const;
@@ -210,13 +195,7 @@ function replacesFor(olds: LinkState, news: LinkInputs): string[] {
   return identity.filter((field) => olds[field] !== news[field]);
 }
 
-const linkFields = [
-  "host",
-  "port",
-  "database",
-  "username",
-  "password",
-] as const;
+const linkFields = ["host", "port", "database", "username", "password"] as const;
 
 function describe(resource: DescribedPostgresResource) {
   return {

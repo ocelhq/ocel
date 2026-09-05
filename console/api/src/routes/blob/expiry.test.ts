@@ -5,13 +5,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { createTestSessionWithOrganization } from "../../../test/auth-harness";
 import { setupTestDatabase } from "../../../test/db";
 import { createProject } from "../projects/route";
-import { presignUpload } from "./presign/route";
 import { detectUploads, expireOverdueSessions } from "./detect/route";
+import { presignUpload } from "./presign/route";
 import type { SessionFile } from "./session";
 
-const encodedMetadata = Buffer.from(
-  JSON.stringify({ uploader: "avatar", metadata: {} }),
-).toString("base64");
+const encodedMetadata = Buffer.from(JSON.stringify({ uploader: "avatar", metadata: {} })).toString(
+  "base64",
+);
 
 async function createProjectFor(session: { headers: Headers }, slug: string) {
   const res = await createProject(
@@ -27,10 +27,7 @@ async function createProjectFor(session: { headers: Headers }, slug: string) {
   return res.json() as Promise<{ id: string }>;
 }
 
-async function presign(
-  session: { headers: Headers },
-  projectId: string,
-): Promise<string> {
+async function presign(session: { headers: Headers }, projectId: string): Promise<string> {
   const res = await presignUpload(
     new Request("http://localhost/api/blob/presign", {
       method: "POST",
@@ -66,10 +63,7 @@ function detectRequest(projectId: string, headers: Headers) {
 }
 
 async function files(sessionId: string): Promise<SessionFile[]> {
-  const [row] = await db
-    .select()
-    .from(uploadSession)
-    .where(eq(uploadSession.id, sessionId));
+  const [row] = await db.select().from(uploadSession).where(eq(uploadSession.id, sessionId));
   return row.files as SessionFile[];
 }
 
@@ -78,10 +72,7 @@ async function setFileStates(sessionId: string, states: SessionFile["state"][]) 
     ...f,
     state: states[i],
   }));
-  await db
-    .update(uploadSession)
-    .set({ files: next })
-    .where(eq(uploadSession.id, sessionId));
+  await db.update(uploadSession).set({ files: next }).where(eq(uploadSession.id, sessionId));
 }
 
 async function makeOverdue(sessionId: string) {
@@ -176,10 +167,7 @@ describe("blob expiry sweep (via POST /api/blob/detect)", () => {
       const b = await detectUploads(detectRequest(projectId, session.headers));
       expect((await a.json()).completions).toHaveLength(0);
       expect((await b.json()).completions).toHaveLength(0);
-      expect((await files(sessionId)).map((f) => f.state)).toEqual([
-        "succeeded",
-        "succeeded",
-      ]);
+      expect((await files(sessionId)).map((f) => f.state)).toEqual(["succeeded", "succeeded"]);
     } finally {
       await session.cleanup();
     }

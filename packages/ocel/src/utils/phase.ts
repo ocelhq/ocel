@@ -14,10 +14,7 @@ export function unprovisionedPhase(): UnprovisionedPhase | undefined {
   return process.env.OCEL_PHASE === "discovery" ? "discovery" : undefined;
 }
 
-export function unprovisioned(
-  what: string,
-  access: string,
-): UnprovisionedResourceError {
+export function unprovisioned(what: string, access: string): UnprovisionedResourceError {
   return new UnprovisionedResourceError(
     `'${what}' cannot be used during discovery: tried to access '${access}' before the resource was provisioned`,
   );

@@ -1,4 +1,4 @@
-export { buildEnv, BuildEnvError, type BuildEnv } from "./build-env.js";
+export { type BuildEnv, BuildEnvError, buildEnv } from "./build-env.js";
 
 export interface ProviderDescriptor {
   package: string;
@@ -29,12 +29,7 @@ export interface DnsDescriptor {
  * need the deploy cannot meet refuses the deploy instead of silently serving
  * less than the app asks for.
  */
-export type Need =
-  | "edge-middleware"
-  | "edge-runtime"
-  | "ppr-resume"
-  | "edge-cache"
-  | "streaming";
+export type Need = "edge-middleware" | "edge-runtime" | "ppr-resume" | "edge-cache" | "streaming";
 
 export interface AppDomainConfig {
   production?: string | string[];

@@ -1,7 +1,7 @@
-import { defineConfig } from "ocel/config";
-import { cloudflare } from "ocel/edge";
-import { cloudflareDns } from "ocel/dns";
 import awsProvider from "@ocel/provider-aws";
+import { defineConfig } from "ocel/config";
+import { cloudflareDns } from "ocel/dns";
+import { cloudflare } from "ocel/edge";
 
 export default defineConfig({
   slug: "ocelhq",

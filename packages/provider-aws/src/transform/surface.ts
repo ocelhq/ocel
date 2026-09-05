@@ -133,11 +133,7 @@ function allFields<T>() {
  */
 export const surfaceFields = {
   function: {
-    lambda: allFields<FunctionLambdaSurface>()(
-      "memorySizeMb",
-      "timeoutSeconds",
-      "runtime",
-    ),
+    lambda: allFields<FunctionLambdaSurface>()("memorySizeMb", "timeoutSeconds", "runtime"),
     url: allFields<FunctionUrlSurface>()("invokeMode"),
     vpc: allFields<FunctionVpcSurface>()("subnetIds", "securityGroupIds"),
   },
@@ -161,10 +157,7 @@ export const surfaceFields = {
       "deletionProtection",
       "skipFinalSnapshot",
     ),
-    instance: allFields<PostgresInstanceSurface>()(
-      "instanceClass",
-      "publiclyAccessible",
-    ),
+    instance: allFields<PostgresInstanceSurface>()("instanceClass", "publiclyAccessible"),
   },
 } as const satisfies {
   [T in SurfaceType]: {
@@ -181,10 +174,7 @@ export function isSurfaceType(value: string): value is SurfaceType {
  * The fields a transform may set on one underlying resource, or `undefined`
  * when the provider renders no such resource for that type.
  */
-export function allowedFields(
-  type: SurfaceType,
-  key: string,
-): readonly string[] | undefined {
+export function allowedFields(type: SurfaceType, key: string): readonly string[] | undefined {
   const keys = surfaceFields[type] as Record<string, readonly string[]>;
   return Object.hasOwn(keys, key) ? keys[key] : undefined;
 }

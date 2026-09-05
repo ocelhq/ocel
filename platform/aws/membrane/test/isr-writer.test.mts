@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { entryMissHeader } from "@framework/next-cache";
 import type { CacheEntryFile } from "@framework/next-cache";
+import { entryMissHeader } from "@framework/next-cache";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import { IsrWriteRejected, entryStoreAt, isrEntryStore } from "../src/next/isr-writer.mjs";
+import { entryStoreAt, IsrWriteRejected, isrEntryStore } from "../src/next/isr-writer.mjs";
 
 const URL_ENV = "OCEL_ISR_WRITER_URL";
 const SECRET_ENV = "OCEL_ISR_WRITER_SECRET";
@@ -101,9 +101,7 @@ function throwingFetch(err: unknown) {
 }
 
 test("a read GETs the entry at its cache key with the deploy's secret", async () => {
-  const { impl, calls } = fakeFetch(
-    new Response(JSON.stringify(entry), { status: 200 }),
-  );
+  const { impl, calls } = fakeFetch(new Response(JSON.stringify(entry), { status: 200 }));
 
   expect(await entryStoreAt(WRITER_URL, "write-secret", impl).read("blog/post")).toEqual(entry);
 
@@ -126,7 +124,10 @@ test.each([
   ["an absent entry", entryMissResponse()],
   ["a misdirected read", new Response("Not Found", { status: 404 })],
   ["an unreachable writer", new TypeError("fetch failed")],
-  ["a timed-out read", Object.assign(new Error("The operation was aborted"), { name: "TimeoutError" })],
+  [
+    "a timed-out read",
+    Object.assign(new Error("The operation was aborted"), { name: "TimeoutError" }),
+  ],
   ["a writer outage", new Response("Internal Error", { status: 503 })],
   ["a rejected credential", new Response("Unauthorized", { status: 401 })],
   ["a refused key", new Response("Bad Request", { status: 400 })],
@@ -134,8 +135,7 @@ test.each([
   ["a truncated body", new Response("{not json", { status: 200 })],
 ])("fails open to a cache miss on %s", async (_name, outcome) => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
-  const impl =
-    outcome instanceof Response ? fakeFetch(outcome).impl : throwingFetch(outcome);
+  const impl = outcome instanceof Response ? fakeFetch(outcome).impl : throwingFetch(outcome);
 
   await expect(
     entryStoreAt(WRITER_URL, "write-secret", impl).read("blog/post"),

@@ -1,15 +1,15 @@
-import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
-import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
+import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 import {
   isGuardRejection,
   readableSnapshot,
-  tagRecordUpdate,
-  tagSnapshotKey,
   type TagRecord,
   type TagRecordUpdate,
   type TagSnapshot,
+  tagRecordUpdate,
+  tagSnapshotKey,
 } from "@framework/next-cache";
 
 export interface UseCacheEntry {
@@ -74,9 +74,7 @@ export function awsUseCacheStore(): UseCacheStore {
   return {
     async readEntry(key) {
       try {
-        const out = await s3.send(
-          new GetObjectCommand({ Bucket: bucket, Key: objectKey(key) }),
-        );
+        const out = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: objectKey(key) }));
         return JSON.parse(await streamToString(out.Body));
       } catch (err: any) {
         if (isNotFound(err)) return null;
@@ -124,9 +122,7 @@ export function awsUseCacheStore(): UseCacheStore {
 
     async writeTag(tag, record) {
       try {
-        await ddb.send(
-          new UpdateItemCommand(tagRecordUpdate(table, tagNamespace, tag, record)),
-        );
+        await ddb.send(new UpdateItemCommand(tagRecordUpdate(table, tagNamespace, tag, record)));
         return true;
       } catch (err) {
         if (isGuardRejection(err)) return false;

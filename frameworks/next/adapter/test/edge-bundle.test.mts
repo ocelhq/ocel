@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
@@ -42,9 +42,7 @@ async function synthEdgeProject() {
 
   const tracedAssets = {
     "server/edge/assets/text.abc.txt": Buffer.from("PLAIN TEXT ASSET"),
-    "server/edge/assets/pic.abc.png": Buffer.from([
-      0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe,
-    ]),
+    "server/edge/assets/pic.abc.png": Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe]),
     "server/edge/assets/worker.abc.js": Buffer.from("NOT A CHUNK"),
     "server/edge/assets/caf\u00e9.abc.txt": Buffer.from("ACCENTED"),
     "server/edge/assets/a`b${c}.abc.txt": Buffer.from("TEMPLATEY"),
@@ -56,10 +54,7 @@ async function synthEdgeProject() {
     await writeFile(tracedAbs[name]!, bytes);
   }
 
-  const middlewareManifest = join(
-    projectDir,
-    ".next/server/middleware-manifest.json",
-  );
+  const middlewareManifest = join(projectDir, ".next/server/middleware-manifest.json");
   await writeFile(
     middlewareManifest,
     JSON.stringify({
@@ -237,9 +232,7 @@ async function readBundle(projectDir: string) {
 }
 
 async function readManifest(projectDir: string) {
-  return JSON.parse(
-    await readFile(join(outputDir(projectDir), "routing-manifest.json"), "utf8"),
-  );
+  return JSON.parse(await readFile(join(outputDir(projectDir), "routing-manifest.json"), "utf8"));
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -264,9 +257,7 @@ test("gives every edge entry key one bundle entry, variants folded together", as
     "middleware_app/edge-page/page",
     "middleware_middleware",
   ]);
-  expect(bundle.entries["middleware_app/edge-page/page"].handlerExport).toBe(
-    "handler",
-  );
+  expect(bundle.entries["middleware_app/edge-page/page"].handlerExport).toBe("handler");
 });
 
 test("gives the edge runtime the client asset suffix Next's sandbox would have set", async () => {
@@ -276,9 +267,7 @@ test("gives the edge runtime the client asset suffix Next's sandbox would have s
   await adapter.onBuildComplete!(args as never);
 
   const bundle = await readBundle(projectDir);
-  expect(bundle.shim).toContain(
-    'globalThis.NEXT_CLIENT_ASSET_SUFFIX = "?dpl=3f7c1b9a5e2d4c8f"',
-  );
+  expect(bundle.shim).toContain('globalThis.NEXT_CLIENT_ASSET_SUFFIX = "?dpl=3f7c1b9a5e2d4c8f"');
 });
 
 test("leaves the client asset suffix empty when no deployment id was stamped", async () => {
@@ -286,9 +275,7 @@ test("leaves the client asset suffix empty when no deployment id was stamped", a
 
   await adapter.onBuildComplete!(args as never);
 
-  expect((await readBundle(projectDir)).shim).toContain(
-    'globalThis.NEXT_CLIENT_ASSET_SUFFIX = ""',
-  );
+  expect((await readBundle(projectDir)).shim).toContain('globalThis.NEXT_CLIENT_ASSET_SUFFIX = ""');
 });
 
 test("dedupes chunks by content and assigns ids in sorted-key order", async () => {
@@ -314,10 +301,7 @@ test("dedupes chunks by content and assigns ids in sorted-key order", async () =
     "c/3.js",
     "c/4.js",
   ]);
-  expect(bundle.entries["middleware_middleware"].chunks).toEqual([
-    "c/1.js",
-    "c/4.js",
-  ]);
+  expect(bundle.entries.middleware_middleware.chunks).toEqual(["c/1.js", "c/4.js"]);
 });
 
 test("carries an entry's chunks in the order Next listed them", async () => {
@@ -383,9 +367,7 @@ test("falls back to extensions when the manifest is unreadable", async () => {
   const bundle = await readBundle(projectDir);
   const sources = Object.values(bundle.chunks) as string[];
   expect(sources).not.toContain("PLAIN TEXT ASSET");
-  expect(sources).not.toContain(
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe]).toString("utf8"),
-  );
+  expect(sources).not.toContain(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe]).toString("utf8"));
   expect(
     warn.mock.calls
       .map(([message]) => String(message))
@@ -425,6 +407,7 @@ test("emits a loadable shim for an asset name carrying template syntax", async (
   await adapter.onBuildComplete!(args as never);
 
   const { shim } = await readBundle(projectDir);
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: the asset name under test contains a literal ${c}
   expect(assetTable(shim)).toHaveProperty("server/edge/assets/a`b${c}.abc.txt");
   const mod = await import(`data:text/javascript,${encodeURIComponent(shim)}`);
   expect(typeof mod.default.fetch).toBe("function");
@@ -495,9 +478,7 @@ test("fails the build when two edge outputs disagree on an env value", async () 
   const { args } = await synthEdgeProject();
   args.outputs.appRoutes[0]!.config.env = { __NEXT_BUILD_ID: "other-build" };
 
-  await expect(adapter.onBuildComplete!(args as never)).rejects.toThrow(
-    /__NEXT_BUILD_ID/,
-  );
+  await expect(adapter.onBuildComplete!(args as never)).rejects.toThrow(/__NEXT_BUILD_ID/);
 });
 
 test("excludes node middleware from the edge bundle", async () => {
@@ -572,9 +553,7 @@ test("emits no bundle and no middleware key for a build with neither", async () 
 
   await adapter.onBuildComplete!(args as never);
 
-  expect(await exists(join(outputDir(projectDir), "edge/bundle.json"))).toBe(
-    false,
-  );
+  expect(await exists(join(outputDir(projectDir), "edge/bundle.json"))).toBe(false);
   const manifest = await readManifest(projectDir);
   expect(manifest.middleware).toBeUndefined();
 });
@@ -600,8 +579,9 @@ test("inlines the entries table into the shim and imports only a hit entry's chu
   expect(bundle.shim).toContain("middleware_middleware");
   expect(bundle.shim).toContain('await import("./" + id)');
   expect(bundle.shim).toContain("ctx.props.entryKey");
-  expect(bundle.shim.indexOf("Object.assign(globalThis.process.env, env)")).
-    toBeLessThan(bundle.shim.indexOf("await import"));
+  expect(bundle.shim.indexOf("Object.assign(globalThis.process.env, env)")).toBeLessThan(
+    bundle.shim.indexOf("await import"),
+  );
 });
 
 test("emits a shim that is a loadable module exporting a fetch handler", async () => {
@@ -610,9 +590,7 @@ test("emits a shim that is a loadable module exporting a fetch handler", async (
   await adapter.onBuildComplete!(args as never);
 
   const { shim } = await readBundle(projectDir);
-  const mod = await import(
-    `data:text/javascript,${encodeURIComponent(shim)}`
-  );
+  const mod = await import(`data:text/javascript,${encodeURIComponent(shim)}`);
   expect(typeof mod.default.fetch).toBe("function");
 });
 
@@ -625,9 +603,7 @@ test("hands the cache binding to the chunks on a global, before they evaluate", 
   expect(shim).toContain(
     "globalThis.__OCEL_EDGE_CACHE = { rpc: env.OCEL_CACHE_RPC, scope: env.OCEL_CACHE_SCOPE }",
   );
-  expect(shim.indexOf("__OCEL_EDGE_CACHE")).toBeLessThan(
-    shim.indexOf("await import"),
-  );
+  expect(shim.indexOf("__OCEL_EDGE_CACHE")).toBeLessThan(shim.indexOf("await import"));
 });
 
 test("rebinds every request from the load-time env, never from a request's ctx", async () => {
@@ -679,9 +655,7 @@ test("warns that revalidate is inert for a prerender parented by an edge route",
 
   await adapter.onBuildComplete!(args as never);
 
-  expect(warn).toHaveBeenCalledWith(
-    expect.stringContaining("revalidate is inert"),
-  );
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining("revalidate is inert"));
   expect(warn.mock.calls[0]![0]).toContain("/edge-page");
 });
 
@@ -759,9 +733,7 @@ test("binds each wasm module to the global name its chunks reach for", async () 
 
   const bundle = await readBundle(projectDir);
   expect(bundle.shim).toContain('const WASM = {"wasm_hello":"w/0.wasm"}');
-  expect(bundle.shim).toContain(
-    'globalThis[name] ??= (await import("./" + id)).default',
-  );
+  expect(bundle.shim).toContain('globalThis[name] ??= (await import("./" + id)).default');
   expect(bundle.shim.indexOf("WASM")).toBeLessThan(
     bundle.shim.indexOf("for (const id of e.chunks)"),
   );
@@ -774,9 +746,7 @@ test("prints the bundle size, chunk count and entry count", async () => {
   await adapter.onBuildComplete!(args as never);
 
   expect(log).toHaveBeenCalledWith(
-    expect.stringMatching(
-      /^ocel: edge bundle \d+\.\d MB, 5 chunks, 5 assets, 3 entries$/,
-    ),
+    expect.stringMatching(/^ocel: edge bundle \d+\.\d MB, 5 chunks, 5 assets, 3 entries$/),
   );
 });
 
@@ -787,9 +757,7 @@ test("hands the running entry key to the chunks on a global, before they evaluat
 
   const { shim } = await readBundle(projectDir);
   expect(shim).toContain("globalThis.__OCEL_EDGE_ENTRY = k");
-  expect(shim.indexOf("__OCEL_EDGE_ENTRY")).toBeLessThan(
-    shim.indexOf("await import"),
-  );
+  expect(shim.indexOf("__OCEL_EDGE_ENTRY")).toBeLessThan(shim.indexOf("await import"));
 });
 
 test("writes no value of its own into the edge bundle's env", async () => {
@@ -801,11 +769,9 @@ test("writes no value of its own into the edge bundle's env", async () => {
 
   const bundle = await readBundle(projectDir);
   const declared = new Set(
-    [
-      ...args.outputs.appPages,
-      ...args.outputs.appRoutes,
-      args.outputs.middleware,
-    ].flatMap((o: any) => Object.keys(o?.config?.env ?? {})),
+    [...args.outputs.appPages, ...args.outputs.appRoutes, args.outputs.middleware].flatMap(
+      (o: any) => Object.keys(o?.config?.env ?? {}),
+    ),
   );
   expect(Object.keys(bundle.env).every((k) => declared.has(k))).toBe(true);
   expect(JSON.stringify(bundle)).not.toContain("sk-live-plaintext");

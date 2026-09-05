@@ -5,7 +5,9 @@ import { afterAll, describe, expect, it } from "vitest";
 import { detectRuntime, resolveRuntime } from "./registry.js";
 
 const roots: string[] = [];
-afterAll(() => roots.forEach((d) => rmSync(d, { recursive: true, force: true })));
+afterAll(() => {
+  for (const d of roots) rmSync(d, { recursive: true, force: true });
+});
 
 function dirWith(deps: Record<string, string>): string {
   const dir = mkdtempSync(path.join(tmpdir(), "registry-"));

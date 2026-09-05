@@ -3,8 +3,8 @@ import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { workTree } from "../../ocel";
 import { fixtureDir, laneDir, treeDir } from "../../paths";
-import { copyTree } from "../../tree";
 import type { LadderHooks } from "../../spec";
+import { copyTree } from "../../tree";
 import { recordPlacement, refuse } from "./ladder";
 import { place } from "./place";
 import { spawnBin } from "./run";
@@ -57,7 +57,11 @@ async function configureStack(dir: string, stack: string, env: NodeJS.ProcessEnv
   await pulumi(dir, ["config", "set", "aws:skipCredentialsValidation", "true"], env);
   await pulumi(dir, ["config", "set", "aws:s3UsePathStyle", "true"], env);
   for (const [index, service] of EMULATED_SERVICES.entries()) {
-    await pulumi(dir, ["config", "set", "--path", `aws:endpoints[${index}].${service}`, where.endpoint], env);
+    await pulumi(
+      dir,
+      ["config", "set", "--path", `aws:endpoints[${index}].${service}`, where.endpoint],
+      env,
+    );
   }
 }
 

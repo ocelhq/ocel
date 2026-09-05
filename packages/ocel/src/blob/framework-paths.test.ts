@@ -8,19 +8,18 @@ vi.mock("../utils/rpc", () => ({
 }));
 
 const { bucket } = await import("./bucket.js");
-import { createRouteHandler as honoRouteHandler, uploader as honoUploader } from "./hono.js";
+
+import type { BucketServiceClient } from "./bucket-client.js";
+import type { BucketContext } from "./bucket-context.js";
 import { createRouteHandler as expressRouteHandler } from "./express.js";
+import { createRouteHandler as honoRouteHandler, uploader as honoUploader } from "./hono.js";
 import { decodeMetadata } from "./metadata.js";
 import { uploader } from "./uploader.js";
-import type { BucketContext } from "./bucket-context.js";
-import type { BucketServiceClient } from "./bucket-client.js";
 
 function fakeContext() {
   const presignUpload = vi.fn(async (_req: unknown) => ({
     sessionId: "sess-1",
-    files: [
-      { url: "https://store/put/a", key: "avatars/photo.jpg", name: "photo.jpg" },
-    ],
+    files: [{ url: "https://store/put/a", key: "avatars/photo.jpg", name: "photo.jpg" }],
   }));
   const client = {
     presignUpload,
@@ -65,10 +64,7 @@ describe("hono path", () => {
   });
 
   it("gives middleware the Hono Context as `c`", () => {
-    const up = honoUploader(
-      { middleware: ({ c }) => ({ ua: c.req.header("user-agent") }) },
-      {},
-    );
+    const up = honoUploader({ middleware: ({ c }) => ({ ua: c.req.header("user-agent") }) }, {});
     expect(up.upload).toBeDefined();
   });
 
@@ -129,8 +125,17 @@ describe("express path", () => {
     };
 
     await new Promise<void>((resolve, reject) => {
-      // biome-ignore lint/suspicious/noExplicitAny: fake express req/res
-      handler(req as any, { ...res, end: (c: Buffer) => { res.end(c); resolve(); } } as any, reject as any);
+      handler(
+        req as any,
+        {
+          ...res,
+          end: (c: Buffer) => {
+            res.end(c);
+            resolve();
+          },
+        } as any,
+        reject as any,
+      );
     });
 
     expect(statusCode).toBe(200);

@@ -30,13 +30,10 @@ export async function text(ctx: ContractContext, path: string, init?: RequestIni
   return { res, body: await res.text() };
 }
 
-export async function state(
-  ctx: ContractContext,
-  keys: string[],
-): Promise<Map<string, StateRow>> {
+export async function state(ctx: ContractContext, keys: string[]): Promise<Map<string, StateRow>> {
   const asked = keys.map((key) => `key=${encodeURIComponent(key)}`).join("&");
   const res = await ctx.fetch(`${ctx.baseUrl}/api/next/state?${asked}`);
-  assert.equal(res.status, 200, "the state readback answered " + res.status);
+  assert.equal(res.status, 200, `the state readback answered ${res.status}`);
   const read = (await res.json()) as { rows: StateRow[] };
   return new Map(read.rows.map((row) => [row.key, row]));
 }

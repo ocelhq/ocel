@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { composePpr, resumeRequest, type PprHit } from "../src/ppr";
+import { composePpr, type PprHit, resumeRequest } from "../src/ppr";
 
 function hit(over: Partial<PprHit> = {}): PprHit {
   return {
@@ -19,11 +19,7 @@ describe("resumeRequest", () => {
   const url = new URL("https://fn.example/blog");
 
   it("POSTs the postponed state as the raw body with the resume header", async () => {
-    const req = resumeRequest(
-      url,
-      new Request("https://app.example/blog"),
-      "POSTPONED",
-    );
+    const req = resumeRequest(url, new Request("https://app.example/blog"), "POSTPONED");
 
     expect(req.method).toBe("POST");
     expect(req.headers.get("next-resume")).toBe("1");
@@ -67,12 +63,10 @@ describe("resumeRequest", () => {
   });
 
   it("honors the pprChain headers the build declared", () => {
-    const req = resumeRequest(
-      url,
-      new Request("https://app.example/blog"),
-      "POSTPONED",
-      { "next-resume": "1", "x-custom": "y" },
-    );
+    const req = resumeRequest(url, new Request("https://app.example/blog"), "POSTPONED", {
+      "next-resume": "1",
+      "x-custom": "y",
+    });
 
     expect(req.headers.get("next-resume")).toBe("1");
     expect(req.headers.get("x-custom")).toBe("y");
@@ -116,10 +110,7 @@ describe("composePpr", () => {
     });
 
     it("truncates rather than appends an error body, and says so", async () => {
-      const res = composePpr(
-        hit(),
-        Promise.resolve(new Response("ERROR PAGE", { status: 500 })),
-      );
+      const res = composePpr(hit(), Promise.resolve(new Response("ERROR PAGE", { status: 500 })));
 
       expect(await res.text()).toBe("[shell]");
       expect(logged).toEqual(["ppr resume dropped: origin answered 500"]);

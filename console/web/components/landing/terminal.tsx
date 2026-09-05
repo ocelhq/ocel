@@ -19,13 +19,7 @@ type TerminalProps = {
   onClick?: () => void;
 };
 
-export function Terminal({
-  title,
-  children,
-  className,
-  bodyClassName,
-  onClick,
-}: TerminalProps) {
+export function Terminal({ title, children, className, bodyClassName, onClick }: TerminalProps) {
   const interactive = onClick
     ? {
         role: "button" as const,
@@ -53,15 +47,9 @@ export function Terminal({
         <span className="size-[9px] shrink-0 rounded-full border-[1.5px] border-foreground" />
         <span className="size-[9px] shrink-0 rounded-full border-[1.5px] border-foreground" />
         <span className="size-[9px] shrink-0 rounded-full bg-primary" />
-        <span className="ml-2 truncate font-mono text-[11px] text-dim">
-          {title}
-        </span>
+        <span className="ml-2 truncate font-mono text-[11px] text-dim">{title}</span>
       </div>
-      <div
-        className={cn("overflow-x-auto px-5.5 py-4.5 font-mono", bodyClassName)}
-      >
-        {children}
-      </div>
+      <div className={cn("overflow-x-auto px-5.5 py-4.5 font-mono", bodyClassName)}>{children}</div>
     </div>
   );
 }

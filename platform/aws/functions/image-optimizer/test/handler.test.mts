@@ -59,12 +59,12 @@ test("an envelope missing its fields is refused without a read", async () => {
 });
 
 test("an unconfigured function is a 502", async () => {
-  const previous = process.env["OCEL_IMAGE_ASSET_BUCKET"];
-  delete process.env["OCEL_IMAGE_ASSET_BUCKET"];
+  const previous = process.env.OCEL_IMAGE_ASSET_BUCKET;
+  delete process.env.OCEL_IMAGE_ASSET_BUCKET;
   try {
     const response = await handle(event(payload(imageConfig())));
     expect(response.status).toBe(502);
   } finally {
-    if (previous !== undefined) process.env["OCEL_IMAGE_ASSET_BUCKET"] = previous;
+    if (previous !== undefined) process.env.OCEL_IMAGE_ASSET_BUCKET = previous;
   }
 });

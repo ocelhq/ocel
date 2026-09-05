@@ -104,9 +104,7 @@ function under(dir: string, parent: string): boolean {
 
 export async function nestedMembers(root: string, appDirs: string[]): Promise<string[]> {
   const named = await workspacePackages(root);
-  const nested = [...named.values()].filter((dir) =>
-    appDirs.some((app) => under(dir, app)),
-  );
+  const nested = [...named.values()].filter((dir) => appDirs.some((app) => under(dir, app)));
   return nested.sort();
 }
 
@@ -166,11 +164,7 @@ export function rootManifest(name: string, carried: Manifest): string {
   )}\n`;
 }
 
-export async function writeWorkspace(
-  root: string,
-  name: string,
-  members: string[],
-): Promise<void> {
+export async function writeWorkspace(root: string, name: string, members: string[]): Promise<void> {
   const carried = splitWorkspaceFile(await readFile(path.join(repoRoot, WORKSPACE_FILE), "utf8"));
   await writeFile(path.join(root, WORKSPACE_FILE), workspaceFileFor(members, carried.settings));
   await writeFile(
@@ -201,7 +195,12 @@ export async function writeLockfile(root: string): Promise<void> {
 
 async function linkVendored(source: string, dest: string): Promise<void> {
   const vendored = path.join(source, "node_modules");
-  if (await access(vendored).then(() => true, () => false)) {
+  if (
+    await access(vendored).then(
+      () => true,
+      () => false,
+    )
+  ) {
     await symlink(vendored, path.join(dest, "node_modules"), "dir");
   }
 }

@@ -21,12 +21,7 @@ export const project = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [
-    uniqueIndex("project_organizationId_slug_uidx").on(
-      table.organizationId,
-      table.slug,
-    ),
-  ],
+  (table) => [uniqueIndex("project_organizationId_slug_uidx").on(table.organizationId, table.slug)],
 );
 
 export const projectRelations = relations(project, ({ one }) => ({

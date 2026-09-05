@@ -1,17 +1,12 @@
-import { describe, expect, it } from "vitest";
-
-import type { CacheDeps } from "../src/cache";
-import {
-  unprovisionedImageOrigin,
-  type ImageConfig,
-} from "@framework/next-router/image";
-import { serveImage, type ImageDeps } from "../src/image";
-import type { ImagePutOptions, ImageStore } from "../src/image-store";
 import fixtures from "@framework/next-router/fixtures/image-conformance.json";
+import { type ImageConfig, unprovisionedImageOrigin } from "@framework/next-router/image";
+import { describe, expect, it } from "vitest";
+import type { CacheDeps } from "../src/cache";
+import { type ImageDeps, serveImage } from "../src/image";
+import type { ImagePutOptions, ImageStore } from "../src/image-store";
 import { coloDeps } from "./cache-deps";
 
-const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]
-  .config;
+const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0].config;
 
 interface FakeStore extends ImageStore {
   objects: Map<string, { body: Uint8Array; customMetadata?: Record<string, string> }>;
@@ -249,13 +244,8 @@ describe("the durable image tier", () => {
       },
     });
 
-    const warm = await get(
-      h.deps,
-      "url=%2F_next%2Fstatic%2Fmedia%2Flogo.abc123.png&w=640&q=75",
-    );
-    expect(warm.headers.get("cache-control")).toBe(
-      "public, max-age=315360000, immutable",
-    );
+    const warm = await get(h.deps, "url=%2F_next%2Fstatic%2Fmedia%2Flogo.abc123.png&w=640&q=75");
+    expect(warm.headers.get("cache-control")).toBe("public, max-age=315360000, immutable");
     await warm.text();
     await h.flush();
     const objectKey = h.objectKey();
@@ -299,9 +289,7 @@ describe("the durable image tier", () => {
     expect(served.headers.get("set-cookie")).toBeNull();
     expect(served.headers.get("access-control-allow-origin")).toBeNull();
     expect(served.headers.get("content-type")).toBe("text/html");
-    expect(served.headers.get("content-security-policy")).toBe(
-      "script-src 'unsafe-inline'",
-    );
+    expect(served.headers.get("content-security-policy")).toBe("script-src 'unsafe-inline'");
   });
 
   it("skips the write when the entry's metadata exceeds the budget", async () => {
@@ -351,9 +339,7 @@ describe("the durable image tier", () => {
 
     const response = await get(h.deps);
     expect(response.status).toBe(200);
-    expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=0, must-revalidate",
-    );
+    expect(response.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
     await response.text();
     await h.flush();
 
@@ -403,9 +389,7 @@ describe("the durable image tier", () => {
     const response = await get(h.deps);
     expect(response.status).toBe(200);
     expect(response.headers.get("x-ocel-cache")).toBe("MISS");
-    expect(response.headers.get("cache-control")).toBe(
-      "public, max-age=14400, must-revalidate",
-    );
+    expect(response.headers.get("cache-control")).toBe("public, max-age=14400, must-revalidate");
     expect(await response.text()).toBe(OPTIMIZED);
 
     await expect(h.flush()).resolves.toBeUndefined();
@@ -466,10 +450,7 @@ describe("the durable image tier", () => {
     for (const [name, mutate] of [
       ["missing", () => undefined],
       ["unparseable", () => ({ "ocel-image-version": "1", "ocel-image-headers": "{" })],
-      [
-        "wrong version",
-        () => ({ "ocel-image-version": "99", "ocel-image-headers": "[]" }),
-      ],
+      ["wrong version", () => ({ "ocel-image-version": "99", "ocel-image-headers": "[]" })],
     ] as Array<[string, () => Record<string, string> | undefined]>) {
       const h = harness(`r2-untrusted-${name.replace(" ", "-")}`);
 

@@ -43,18 +43,12 @@ export async function resolveResources(request: Request): Promise<Response> {
   }
   const { projectId, resources } = parsed.data;
 
-  const [foundProject] = await db
-    .select()
-    .from(project)
-    .where(eq(project.id, projectId));
+  const [foundProject] = await db.select().from(project).where(eq(project.id, projectId));
 
   if (!foundProject) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
-  const isMember = await verifyOrganizationMembership(
-    userId,
-    foundProject.organizationId,
-  );
+  const isMember = await verifyOrganizationMembership(userId, foundProject.organizationId);
   if (!isMember) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -77,10 +71,7 @@ export async function resolveResources(request: Request): Promise<Response> {
       eq(resourceAssignment.resourceType, resource.type),
     );
 
-    let [assignment] = await db
-      .select()
-      .from(resourceAssignment)
-      .where(reuseKey);
+    let [assignment] = await db.select().from(resourceAssignment).where(reuseKey);
 
     if (!assignment) {
       const provisioned = await handler.provision({
@@ -109,10 +100,7 @@ export async function resolveResources(request: Request): Promise<Response> {
         if (!isUniqueConstraintViolation(error)) {
           throw error;
         }
-        [assignment] = await db
-          .select()
-          .from(resourceAssignment)
-          .where(reuseKey);
+        [assignment] = await db.select().from(resourceAssignment).where(reuseKey);
       }
     }
 

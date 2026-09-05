@@ -241,11 +241,7 @@
 }
 
 .animate-flow {
-  background-image: repeating-linear-gradient(
-    90deg,
-    var(--primary) 0 9px,
-    transparent 9px 16px
-  );
+  background-image: repeating-linear-gradient(90deg, var(--primary) 0 9px, transparent 9px 16px);
   background-size: 16px 100%;
   background-repeat: repeat-x;
   animation: ocel-flow 0.7s linear infinite;

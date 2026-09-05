@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -35,7 +35,9 @@ function buildAdapter() {
 function buildApp() {
   const adapter = join(repoRoot, "frameworks/next/adapter/dist/next-adapter.mjs");
   if (!existsSync(adapter)) {
-    fatal(`no built adapter at ${adapter} — drop --skip-adapter or run \`pnpm --filter @framework/next-adapter build\``);
+    fatal(
+      `no built adapter at ${adapter} — drop --skip-adapter or run \`pnpm --filter @framework/next-adapter build\``,
+    );
   }
   rmSync(outRoot, { recursive: true, force: true });
   log(`building ${relative(repoRoot, appDir)} into ${relative(repoRoot, appOut)}`);
@@ -63,7 +65,10 @@ function verify() {
   const dispatch = manifest.dispatch ?? {};
 
   const lambdaEntries = Object.entries(dispatch).filter(([, v]) => v.kind === "lambda");
-  check(lambdaEntries.length > 1, `app routes to ${lambdaEntries.length} lambda pathname(s) — not a multi-route app, so "one bundle" proves nothing`);
+  check(
+    lambdaEntries.length > 1,
+    `app routes to ${lambdaEntries.length} lambda pathname(s) — not a multi-route app, so "one bundle" proves nothing`,
+  );
 
   check(
     funcDirs.length === 1 && basename(funcDirs[0] ?? "") === "bundle-0.func",
@@ -104,9 +109,25 @@ function readBundle(dir, name) {
   return { name, dir, config, launcher, launcherRel, ...probe };
 }
 
-function verifyBundle({ name, dir, config, launcher, launcherRel, entries, primary, unresolved, dispatchProbe }) {
-  check(config.id === name, `${name}: config.json.id is ${JSON.stringify(config.id)}, expected ${JSON.stringify(name)}`);
-  check(config.runtime?.name === "next", `${name}: config.json.runtime is ${JSON.stringify(config.runtime)}`);
+function verifyBundle({
+  name,
+  dir,
+  config,
+  launcher,
+  launcherRel,
+  entries,
+  primary,
+  unresolved,
+  dispatchProbe,
+}) {
+  check(
+    config.id === name,
+    `${name}: config.json.id is ${JSON.stringify(config.id)}, expected ${JSON.stringify(name)}`,
+  );
+  check(
+    config.runtime?.name === "next",
+    `${name}: config.json.runtime is ${JSON.stringify(config.runtime)}`,
+  );
 
   const appRelDir = dirname(launcherRel);
   check(
@@ -125,17 +146,25 @@ function verifyBundle({ name, dir, config, launcher, launcherRel, entries, prima
     `${name}: launcher PRIMARY ${JSON.stringify(primary)} is not a key in ENTRIES`,
   );
 
-  check(dispatchProbe.noHeader === 502, `${name}: dispatcher answered ${dispatchProbe.noHeader} for a request with no x-ocel-entry, expected 502`);
-  check(dispatchProbe.unknownKey === 502, `${name}: dispatcher answered ${dispatchProbe.unknownKey} for an unknown entry key, expected 502`);
-  check(dispatchProbe.routed === true, `${name}: dispatcher did not route a known entry key to its handler`);
+  check(
+    dispatchProbe.noHeader === 502,
+    `${name}: dispatcher answered ${dispatchProbe.noHeader} for a request with no x-ocel-entry, expected 502`,
+  );
+  check(
+    dispatchProbe.unknownKey === 502,
+    `${name}: dispatcher answered ${dispatchProbe.unknownKey} for an unknown entry key, expected 502`,
+  );
+  check(
+    dispatchProbe.routed === true,
+    `${name}: dispatcher did not route a known entry key to its handler`,
+  );
 }
 
 function verifyDispatch(dispatch, bundles) {
   for (const [pathname, entry] of Object.entries(dispatch)) {
     const where = `${entry.kind} ${pathname}`;
 
-    const nodeParented =
-      typeof entry.entryKey === "string" || bundles.has(entry.id);
+    const nodeParented = typeof entry.entryKey === "string" || bundles.has(entry.id);
 
     if (entry.kind === "prerender" && !nodeParented) {
       check(
@@ -156,7 +185,13 @@ function verifyDispatch(dispatch, bundles) {
     }
 
     const bundle = bundles.get(entry.id);
-    if (!check(bundle !== undefined, `${where}: id ${JSON.stringify(entry.id)} names no emitted bundle`)) continue;
+    if (
+      !check(
+        bundle !== undefined,
+        `${where}: id ${JSON.stringify(entry.id)} names no emitted bundle`,
+      )
+    )
+      continue;
     check(
       Object.hasOwn(bundle.entries, entry.entryKey),
       `${where}: entryKey ${JSON.stringify(entry.entryKey)} is not in ${entry.id}'s launcher ENTRIES`,
@@ -234,7 +269,9 @@ function probeLauncher(launcher) {
     encoding: "utf8",
   });
   if (res.status !== 0) {
-    return { error: (res.stderr || res.error?.message || "").trim().split("\n").slice(0, 6).join(" | ") };
+    return {
+      error: (res.stderr || res.error?.message || "").trim().split("\n").slice(0, 6).join(" | "),
+    };
   }
   try {
     return JSON.parse(res.stdout);
@@ -248,7 +285,9 @@ function reportSize(functionsDir, bundles) {
   notes.push(`bundled: ${bundles.size} function(s), ${total.files} files, ${mib(total.bytes)}`);
   for (const bundle of bundles.values()) {
     const one = measure(bundle.dir);
-    notes.push(`  ${bundle.name}: ${Object.keys(bundle.entries).length} entries, ${one.files} files, ${mib(one.bytes)}, primary ${bundle.primary}`);
+    notes.push(
+      `  ${bundle.name}: ${Object.keys(bundle.entries).length} entries, ${one.files} files, ${mib(one.bytes)}, primary ${bundle.primary}`,
+    );
   }
   if (!opts.compare) return;
 

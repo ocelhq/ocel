@@ -1,9 +1,9 @@
+import awsProvider from "@ocel/provider-aws";
+import { route53 } from "@ocel/provider-aws/dns";
+import { apiGateway, cloudfront } from "@ocel/provider-aws/edge";
 import { defineConfig, type Need } from "ocel/config";
 import { cloudflareDns } from "ocel/dns";
 import { cloudflare } from "ocel/edge";
-import { route53 } from "@ocel/provider-aws/dns";
-import { apiGateway, cloudfront } from "@ocel/provider-aws/edge";
-import awsProvider from "@ocel/provider-aws";
 
 type Exactly<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 
@@ -70,13 +70,7 @@ export const zoneAsDns = defineConfig({
 
 export const everyNeed = defineConfig({
   slug: "test-app",
-  allowDegraded: [
-    "edge-middleware",
-    "edge-runtime",
-    "ppr-resume",
-    "edge-cache",
-    "streaming",
-  ],
+  allowDegraded: ["edge-middleware", "edge-runtime", "ppr-resume", "edge-cache", "streaming"],
 });
 
 export const unknownNeed = defineConfig({

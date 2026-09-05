@@ -2,8 +2,8 @@ import { ENVIRONMENTS, type ExpectationEnvironment, type Skipped, skippedOn } fr
 import { coverageFrom, coverCells, requestedPick } from "./pick";
 import {
   type Cell,
-  cellsOf,
   type Concern,
+  cellsOf,
   concernsAsked,
   type FixtureSpec,
   fixtureNameOf,
@@ -13,8 +13,8 @@ import {
   type TargetName,
   variantNameOf,
 } from "./spec";
-import { BASE } from "./variants";
 import type { Target } from "./targets/types";
+import { BASE } from "./variants";
 
 export const ENVIRONMENT_ENV = "OCEL_JOURNEY_ENVIRONMENT";
 export const VARIANTS_ENV = "OCEL_JOURNEY_VARIANTS";
@@ -57,7 +57,10 @@ export function variantsAsked(
   if (named.length === 0) {
     return undefined;
   }
-  const known = new Set([BASE, ...spec.flatMap((row) => (row.variants ?? []).map((one) => one.name))]);
+  const known = new Set([
+    BASE,
+    ...spec.flatMap((row) => (row.variants ?? []).map((one) => one.name)),
+  ]);
   const unknown = named.filter((name) => !known.has(name));
   if (unknown.length > 0) {
     throw new Error(

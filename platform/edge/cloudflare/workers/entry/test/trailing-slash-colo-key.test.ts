@@ -1,12 +1,11 @@
-import { describe, expect, it } from "vitest";
-
 import {
-  deps as routerDeps,
   get,
   type Scenario as RouterScenario,
+  deps as routerDeps,
 } from "@framework/next-router/test-support/serve-scenario";
+import { describe, expect, it } from "vitest";
 
-import { serve, type RouteDeps } from "../src/index";
+import { type RouteDeps, serve } from "../src/index";
 import { coloDeps } from "./cache-deps";
 
 interface Scenario extends RouterScenario {
@@ -119,10 +118,7 @@ describe("the resolved path is what keys the response", () => {
       expect(first.app).toBe(second.app);
       expect(first.manifest.buildId).toBe(second.manifest.buildId);
       expect(renders()).toBe(2);
-      expect(keys()).toEqual([
-        "https://cache.ocel/p1/web/d1/p",
-        "https://cache.ocel/p1/web/d2/p",
-      ]);
+      expect(keys()).toEqual(["https://cache.ocel/p1/web/d1/p", "https://cache.ocel/p1/web/d2/p"]);
     });
   });
 });

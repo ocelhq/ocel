@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { mergeSnapshot, tagSnapshotKey, type TagSnapshot } from "../src/index.mjs";
+import { mergeSnapshot, type TagSnapshot, tagSnapshotKey } from "../src/index.mjs";
 
 const fixture: TagSnapshot = JSON.parse(
   readFileSync(

@@ -18,10 +18,7 @@ interface Completion {
   signature: string;
 }
 
-async function transitionPendingToSucceeded(
-  sessionId: string,
-  idx: number,
-): Promise<boolean> {
+async function transitionPendingToSucceeded(sessionId: string, idx: number): Promise<boolean> {
   const result = await db.execute(sql`
     UPDATE upload_session
     SET files = jsonb_set(files, ${`{${idx},state}`}::text[], '"succeeded"'::jsonb)
@@ -32,10 +29,7 @@ async function transitionPendingToSucceeded(
   return (result.rowCount ?? 0) > 0;
 }
 
-export async function expireOverdueSessions(
-  projectId: string,
-  userId: string,
-): Promise<void> {
+export async function expireOverdueSessions(projectId: string, userId: string): Promise<void> {
   await db.execute(sql`
     UPDATE upload_session
     SET files = (
@@ -75,17 +69,11 @@ export async function detectUploads(request: Request): Promise<Response> {
   }
   const { projectId } = parsed.data;
 
-  const [foundProject] = await db
-    .select()
-    .from(project)
-    .where(eq(project.id, projectId));
+  const [foundProject] = await db.select().from(project).where(eq(project.id, projectId));
   if (!foundProject) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
-  const isMember = await verifyOrganizationMembership(
-    userId,
-    foundProject.organizationId,
-  );
+  const isMember = await verifyOrganizationMembership(userId, foundProject.organizationId);
   if (!isMember) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -111,10 +99,7 @@ export async function detectUploads(request: Request): Promise<Response> {
       if (file.state !== "pending") continue;
       if ((await objectSessionTag(file.key)) !== session.id) continue;
 
-      const transitioned = await transitionPendingToSucceeded(
-        session.id,
-        idx,
-      );
+      const transitioned = await transitionPendingToSucceeded(session.id, idx);
       if (!transitioned) continue;
 
       const signed = {

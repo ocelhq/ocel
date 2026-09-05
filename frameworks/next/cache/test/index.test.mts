@@ -7,9 +7,9 @@ import {
   cacheKey,
   deserialize,
   entryObjectKey,
+  type TagRecord,
   tagFreshness,
   tagsOf,
-  type TagRecord,
 } from "../src/index.mjs";
 
 describe("cacheKey", () => {
@@ -65,25 +65,23 @@ describe("base64 codec", () => {
 
 describe("tagsOf", () => {
   it("splits the x-next-cache-tags header for page kinds", () => {
-    expect(
-      tagsOf({ kind: "APP_PAGE", headers: { "x-next-cache-tags": "a,b" } }, {}),
-    ).toEqual(["a", "b"]);
+    expect(tagsOf({ kind: "APP_PAGE", headers: { "x-next-cache-tags": "a,b" } }, {})).toEqual([
+      "a",
+      "b",
+    ]);
   });
 
   it("returns no tags when the header is absent or empty", () => {
     expect(tagsOf({ kind: "APP_PAGE", headers: {} }, {})).toEqual([]);
-    expect(
-      tagsOf({ kind: "APP_PAGE", headers: { "x-next-cache-tags": "" } }, {}),
-    ).toEqual([]);
+    expect(tagsOf({ kind: "APP_PAGE", headers: { "x-next-cache-tags": "" } }, {})).toEqual([]);
   });
 
   it("combines ctx and value tags for FETCH kinds", () => {
-    expect(
-      tagsOf(
-        { kind: "FETCH", tags: ["v"] },
-        { tags: ["c"], softTags: ["s"] },
-      ),
-    ).toEqual(["c", "s", "v"]);
+    expect(tagsOf({ kind: "FETCH", tags: ["v"] }, { tags: ["c"], softTags: ["s"] })).toEqual([
+      "c",
+      "s",
+      "v",
+    ]);
   });
 
   it("names a tag once when the entry and the request agree on it", () => {
@@ -100,21 +98,15 @@ describe("areTagsExpired", () => {
   const records = (m: Record<string, TagRecord>) => new Map(Object.entries(m));
 
   it("expires when an expiry passed and landed after the entry", () => {
-    expect(
-      areTagsExpired(["t"], records({ t: { expired: 500 } }), 100, 1000),
-    ).toBe(true);
+    expect(areTagsExpired(["t"], records({ t: { expired: 500 } }), 100, 1000)).toBe(true);
   });
 
   it("does not expire an entry written after the expiry", () => {
-    expect(
-      areTagsExpired(["t"], records({ t: { expired: 500 } }), 1000, 2000),
-    ).toBe(false);
+    expect(areTagsExpired(["t"], records({ t: { expired: 500 } }), 1000, 2000)).toBe(false);
   });
 
   it("does not expire when the expiry is still in the future", () => {
-    expect(
-      areTagsExpired(["t"], records({ t: { expired: 5000 } }), 100, 1000),
-    ).toBe(false);
+    expect(areTagsExpired(["t"], records({ t: { expired: 5000 } }), 100, 1000)).toBe(false);
   });
 
   it("ignores tags with no record", () => {
@@ -130,21 +122,19 @@ describe("tagFreshness", () => {
   });
 
   it("is expired when an expiry passed and landed after the entry", () => {
-    expect(tagFreshness(["t"], records({ t: { expired: 500 } }), 100, 1000)).toBe(
-      "expired",
-    );
+    expect(tagFreshness(["t"], records({ t: { expired: 500 } }), 100, 1000)).toBe("expired");
   });
 
   it("is stale when only the stale mark landed after the entry", () => {
-    expect(
-      tagFreshness(["t"], records({ t: { stale: 500, expired: 50_000 } }), 100, 1000),
-    ).toBe("stale");
+    expect(tagFreshness(["t"], records({ t: { stale: 500, expired: 50_000 } }), 100, 1000)).toBe(
+      "stale",
+    );
   });
 
   it("is fresh when the stale mark predates the entry", () => {
-    expect(
-      tagFreshness(["t"], records({ t: { stale: 500, expired: 50_000 } }), 800, 1000),
-    ).toBe("fresh");
+    expect(tagFreshness(["t"], records({ t: { stale: 500, expired: 50_000 } }), 800, 1000)).toBe(
+      "fresh",
+    );
   });
 
   it("prefers the expired verdict over another tag's stale one", () => {

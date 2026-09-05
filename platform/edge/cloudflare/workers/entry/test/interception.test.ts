@@ -1,12 +1,11 @@
-import { tagSnapshotKey, type TagSnapshot } from "@framework/next-cache";
-import { describe, expect, it } from "vitest";
-
+import { type TagSnapshot, tagSnapshotKey } from "@framework/next-cache";
 import genesisSnapshot from "@framework/next-cache/fixtures/genesis-tag-snapshot.json?raw";
+import { describe, expect, it } from "vitest";
 import {
-  intercept,
   type InterceptDeps,
   type InterceptionConfig,
   type InterceptTarget,
+  intercept,
 } from "../src/interception";
 import { createTagClock } from "../src/tag-clock";
 
@@ -26,10 +25,7 @@ function fakeStore(objects: Record<string, string>, opts: { fail?: boolean } = {
   };
 }
 
-function stored(
-  entries: Record<string, unknown>,
-  opts: { fail?: boolean } = {},
-) {
+function stored(entries: Record<string, unknown>, opts: { fail?: boolean } = {}) {
   const objects: Record<string, string> = {};
   for (const [key, value] of Object.entries(entries)) {
     objects[key] = JSON.stringify(value);
@@ -110,9 +106,7 @@ const storeDeps = (
   over: Partial<InterceptDeps> = {},
 ): InterceptDeps => ({ store, ...over });
 
-async function served(
-  ...args: Parameters<typeof intercept>
-): Promise<Response | null> {
+async function served(...args: Parameters<typeof intercept>): Promise<Response | null> {
   const outcome = await intercept(...args);
   return outcome?.kind === "complete" ? outcome.response : null;
 }
@@ -328,14 +322,10 @@ describe("intercept, tag state from the snapshot", () => {
   for (const [why, body] of Object.entries(unusable)) {
     it(`falls open on a snapshot that is ${why}`, async () => {
       const store = fakeStore({
-        [entryKey("/blog")]: JSON.stringify(
-          appPage({ tags: "products", lastModified: 1_000 }),
-        ),
+        [entryKey("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
         ...(body ? { [snapshotKey]: body } : {}),
       });
-      expect(
-        await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 })),
-      ).toBeNull();
+      expect(await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }))).toBeNull();
     });
   }
 
@@ -414,11 +404,8 @@ describe("intercept, PPR entries", () => {
   const pprTarget = (over: Partial<InterceptTarget> = {}) =>
     target({ revalidate: 60, expiration: 3600, ...over });
 
-  const read = (
-    t: InterceptTarget,
-    entries: Record<string, unknown>,
-    now: number,
-  ) => intercept(req(), t, cfg, storeDeps(stored(entries), { now: () => now }));
+  const read = (t: InterceptTarget, entries: Record<string, unknown>, now: number) =>
+    intercept(req(), t, cfg, storeDeps(stored(entries), { now: () => now }));
 
   it("hands back the shell, the postponed state, and no shared-cache claim", async () => {
     const outcome = await read(pprTarget(), { [entryKey("/blog")]: pprEntry() }, 2_000);
@@ -577,15 +564,10 @@ describe("intercept, PPR entries", () => {
       },
     });
 
-  const readSegment = (
-    t: InterceptTarget,
-    entries: Record<string, unknown>,
-    now: number,
-  ) =>
+  const readSegment = (t: InterceptTarget, entries: Record<string, unknown>, now: number) =>
     intercept(segmentReq(), t, cfg, storeDeps(stored(entries), { now: () => now }));
 
-  const concreteTarget = () =>
-    pprTarget({ routePath: "/posts/7", fallbackPath: "/posts/[id]" });
+  const concreteTarget = () => pprTarget({ routePath: "/posts/7", fallbackPath: "/posts/[id]" });
 
   it("answers a segment prefetch from the fallback when the concrete entry carries no segmentData", async () => {
     const outcome = await readSegment(
@@ -755,10 +737,7 @@ describe("intercept, PPR entries", () => {
       req({ headers: { RSC: "1", "next-router-prefetch": "1" } }),
       pprTarget(),
       cfg,
-      storeDeps(
-        stored({ [entryKey("/blog")]: pprEntry({ rscHeaders }) }),
-        { now: () => 2_000 },
-      ),
+      storeDeps(stored({ [entryKey("/blog")]: pprEntry({ rscHeaders }) }), { now: () => 2_000 }),
     );
 
     expect(outcome?.kind).toBe("complete");
@@ -780,10 +759,7 @@ describe("intercept, PPR entries", () => {
       req({ headers: { RSC: "1", "next-router-prefetch": "1" } }),
       pprTarget(),
       cfg,
-      storeDeps(
-        stored({ [entryKey("/blog")]: pprEntry({ rscHeaders }) }),
-        { now: () => 2_000 },
-      ),
+      storeDeps(stored({ [entryKey("/blog")]: pprEntry({ rscHeaders }) }), { now: () => 2_000 }),
     );
 
     expect(outcome?.kind).toBe("complete");
@@ -801,10 +777,7 @@ describe("intercept, PPR entries", () => {
       req({ headers: { RSC: "1", "next-router-prefetch": "1" } }),
       target(),
       cfg,
-      storeDeps(
-        stored({ [entryKey("/blog")]: appPage({ rscHeaders }) }),
-        { now: () => 2_000 },
-      ),
+      storeDeps(stored({ [entryKey("/blog")]: appPage({ rscHeaders }) }), { now: () => 2_000 }),
     );
 
     expect(outcome?.kind).toBe("complete");
@@ -813,11 +786,7 @@ describe("intercept, PPR entries", () => {
   });
 
   it("does not add x-nextjs-postponed to the composed ppr response", async () => {
-    const outcome = await read(
-      pprTarget(),
-      { [entryKey("/blog")]: pprEntry() },
-      2_000,
-    );
+    const outcome = await read(pprTarget(), { [entryKey("/blog")]: pprEntry() }, 2_000);
 
     expect(outcome?.kind).toBe("ppr");
     const shell = (outcome as { shell: Response }).shell;
@@ -1097,9 +1066,7 @@ describe("priming the tag clock past the response", () => {
           return { etag: `"${key}"`, text: async () => JSON.stringify(snapshot()) };
         }
         const objects: Record<string, string> = {
-          [entryKey("/blog")]: JSON.stringify(
-            appPage({ tags: "products", lastModified: 1_000 }),
-          ),
+          [entryKey("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
         };
         const body = objects[key];
         return body === undefined ? null : { etag: `"${key}"`, text: async () => body };

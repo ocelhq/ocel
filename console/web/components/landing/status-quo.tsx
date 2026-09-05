@@ -37,9 +37,7 @@ function ToolRow({ tools }: { tools: Tool[] }) {
           <span className="flex w-5 justify-center text-foreground">
             <Logo className={`${size} w-auto`} />
           </span>
-          <span className="font-mono text-[12.5px] text-muted-foreground">
-            {name}
-          </span>
+          <span className="font-mono text-[12.5px] text-muted-foreground">{name}</span>
         </span>
       ))}
     </div>
@@ -51,15 +49,11 @@ function Trade({ good, bad }: { good: string; bad: ReactNode }) {
     <div className="mt-5 space-y-2.5">
       <div className="flex gap-3">
         <span className="mt-px font-mono text-[13px] text-chart-2">✓</span>
-        <p className="text-[15px] font-medium leading-[1.55] text-foreground">
-          {good}
-        </p>
+        <p className="text-[15px] font-medium leading-[1.55] text-foreground">{good}</p>
       </div>
       <div className="flex gap-3">
         <span className="mt-px font-mono text-[13px] text-primary">✕</span>
-        <p className="text-[15px] leading-[1.55] text-muted-foreground">
-          {bad}
-        </p>
+        <p className="text-[15px] leading-[1.55] text-muted-foreground">{bad}</p>
       </div>
     </div>
   );
@@ -80,9 +74,7 @@ function Panel({
 }) {
   return (
     <div className={`p-7 md:p-9 ${className ?? ""}`}>
-      <div className="font-mono text-[11px] tracking-[0.1em] text-dim">
-        {label}
-      </div>
+      <div className="font-mono text-[11px] tracking-[0.1em] text-dim">{label}</div>
       <h3 className="mt-3 text-[21px] font-semibold leading-[1.2] tracking-[-0.01em] text-foreground">
         {question}
       </h3>
@@ -95,12 +87,8 @@ function Panel({
 export function StatusQuo() {
   return (
     <section className="relative overflow-hidden border-t-[1.5px] border-foreground">
-      <span className="absolute right-10 top-11 font-mono text-[15px] text-faint">
-        +
-      </span>
-      <span className="absolute bottom-12 left-10 font-mono text-[15px] text-primary">
-        +
-      </span>
+      <span className="absolute right-10 top-11 font-mono text-[15px] text-faint">+</span>
+      <span className="absolute bottom-12 left-10 font-mono text-[15px] text-primary">+</span>
       <div className="mx-auto max-w-[1180px] px-5 py-16 md:px-10 md:py-[84px]">
         <div className="mb-3.5 font-mono text-xs tracking-[0.08em] text-primary">
           THE STATUS QUO
@@ -109,8 +97,8 @@ export function StatusQuo() {
           Today, you have to choose.
         </h2>
         <p className="mt-3.5 max-w-[52ch] text-[15px] leading-[1.65] text-muted-foreground">
-          Every tool sits on one side of a line. Pick the experience or pick the
-          ownership — never both.
+          Every tool sits on one side of a line. Pick the experience or pick the ownership — never
+          both.
         </p>
 
         <div className="relative mt-9 grid grid-cols-1 border-[1.5px] border-foreground md:grid-cols-2">

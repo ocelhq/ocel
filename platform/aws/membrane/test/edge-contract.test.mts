@@ -1,7 +1,5 @@
 import { isrPrefixOf, tagNamespace, tagSnapshotKey } from "@framework/next-cache";
-import contract from "@framework/next-cache/fixtures/edge-contract.json" with {
-  type: "json",
-};
+import contract from "@framework/next-cache/fixtures/edge-contract.json" with { type: "json" };
 import { afterEach, expect, test } from "vitest";
 import { revalidatedHeader } from "../src/next/revalidation-signal.mjs";
 

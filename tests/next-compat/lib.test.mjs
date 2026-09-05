@@ -3,58 +3,58 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   APP_NAME,
-  BASELINE_INCLUDE_PATTERN,
-  BYTECODE_EMBEDDED_MARKER,
-  BYTECODE_EMBED_ENV,
-  BYTECODE_S3_REHYDRATE_MARKER,
-  DNS_LABEL,
-  GOLDEN_MARKER,
-  GOLDEN_REVALIDATE_SECONDS,
-  GOLDEN_ROUTE,
-  ISR_REVALIDATE_SECONDS,
-  ISR_ROUTE,
-  MAX_SLUG_LEN,
-  PLAN_APPLY_HINT,
-  PREVIEW_ROOT_STACK_PARAM_PREFIX,
-  SLUG_PREFIX,
-  WARM_SUMMARY_MARKER,
   appAssetPrefix,
+  BASELINE_INCLUDE_PATTERN,
+  BYTECODE_EMBED_ENV,
+  BYTECODE_EMBEDDED_MARKER,
+  BYTECODE_S3_REHYDRATE_MARKER,
   buildBaselineManifest,
   bytecodeCacheKeyName,
   bytecodeCacheKeyPrefix,
-  bytecodeEmbedEnabled,
   bytecodeEmbeddedOutcome,
+  bytecodeEmbedEnabled,
   bytecodeRehydrateOutcome,
+  DNS_LABEL,
   deployURL,
   embeddedArtifactPairs,
   embeddedBytecodePath,
   envSegment,
+  GOLDEN_MARKER,
+  GOLDEN_REVALIDATE_SECONDS,
+  GOLDEN_ROUTE,
   goldenDifferences,
+  ISR_REVALIDATE_SECONDS,
+  ISR_ROUTE,
   isrToken,
   lambdaFunctionNames,
   lambdaLogGroups,
   logWindowVerdict,
+  MAX_SLUG_LEN,
   markerLines,
   mergeBaselineManifest,
+  PLAN_APPLY_HINT,
+  PREVIEW_ROOT_STACK_PARAM_PREFIX,
   planProblems,
   previewRef,
   previewRefForApp,
   projectSlug,
   projectSlugForRun,
   renderOcelConfig,
+  SLUG_PREFIX,
   strandedProjectSlugs,
   strongestCoverage,
+  suiteResultFromJest,
   suitesFromHarnessOutput,
   suitesStartedInHarnessOutput,
   summarizeOutcomes,
-  suiteResultFromJest,
+  TYPESCRIPT_PIN,
   tail,
   tarEntryNames,
+  WARM_SUMMARY_MARKER,
   warmCoverage,
   warmSummaryOutcome,
   withBuildScript,
   withPinnedTypeScript,
-  TYPESCRIPT_PIN,
   zipEntryNames,
 } from "./lib.mjs";
 
@@ -88,7 +88,9 @@ describe("projectSlug", () => {
   });
 
   it("stays a valid label when a hostile run id would cap onto a hyphen", () => {
-    const slug = projectSlug({ runId: `${"a".repeat(MAX_SLUG_LEN - SLUG_PREFIX.length - 1)} tail` });
+    const slug = projectSlug({
+      runId: `${"a".repeat(MAX_SLUG_LEN - SLUG_PREFIX.length - 1)} tail`,
+    });
     expect(slug).toMatch(DNS_LABEL);
     expect(slug.length).toBeLessThanOrEqual(MAX_SLUG_LEN);
   });
@@ -108,14 +110,17 @@ describe("previewRef", () => {
   });
 
   it("separates two temp apps whose names collide once truncated", () => {
-    const install = "next-install-" + "a".repeat(64);
-    expect(previewRef({ dir: `/tmp/${install}` })).not.toBe(previewRef({ dir: `/tmp/${install}x` }));
+    const install = `next-install-${"a".repeat(64)}`;
+    expect(previewRef({ dir: `/tmp/${install}` })).not.toBe(
+      previewRef({ dir: `/tmp/${install}x` }),
+    );
   });
 
   it("leaves the preview label room for the project slug the shared wildcard prefixes it with", () => {
     const previewidSuffix = "-".length + 8;
     const slug = projectSlug({ runId: "31599563227" });
-    const pointer = previewRef({ dir: "/tmp/next-install-" + "a".repeat(64) }).length + previewidSuffix;
+    const pointer =
+      previewRef({ dir: `/tmp/next-install-${"a".repeat(64)}` }).length + previewidSuffix;
     expect(slug.length + 2 + pointer + 2 + APP_NAME.length).toBeLessThanOrEqual(63);
   });
 
@@ -208,7 +213,10 @@ describe("renderOcelConfig", () => {
 
 describe("withBuildScript", () => {
   it("adds the next build script buildNext requires", () => {
-    expect(withBuildScript({ name: "app" })).toEqual({ name: "app", scripts: { build: "next build" } });
+    expect(withBuildScript({ name: "app" })).toEqual({
+      name: "app",
+      scripts: { build: "next build" },
+    });
   });
 
   it("leaves an existing build script alone", () => {
@@ -231,7 +239,9 @@ describe("withPinnedTypeScript", () => {
   });
 
   it.each(["latest", "*", "^7", "7.0.2", "next"])("rewrites a devDependency on %s", (range) => {
-    const patched = withPinnedTypeScript({ devDependencies: { typescript: range, next: "latest" } });
+    const patched = withPinnedTypeScript({
+      devDependencies: { typescript: range, next: "latest" },
+    });
     expect(patched.devDependencies).toEqual({ typescript: TYPESCRIPT_PIN, next: "latest" });
   });
 
@@ -247,7 +257,10 @@ describe("withPinnedTypeScript", () => {
   });
 
   it("pins transitive resolutions under both override spellings", () => {
-    const patched = withPinnedTypeScript({ overrides: { react: "19" }, pnpm: { peerDependencyRules: {} } });
+    const patched = withPinnedTypeScript({
+      overrides: { react: "19" },
+      pnpm: { peerDependencyRules: {} },
+    });
     expect(patched.overrides).toEqual({ react: "19", typescript: TYPESCRIPT_PIN });
     expect(patched.pnpm).toEqual({ peerDependencyRules: {}, overrides: overrides });
   });
@@ -323,10 +336,20 @@ describe("goldenDifferences", () => {
 
   it("ignores the headers that differ between any two responses", () => {
     const withHeader = leg({
-      headers: { ...leg().headers, date: "Mon, 01 Jan 2035 00:00:00 GMT", "x-nextjs-cache": "STALE", "x-ocel-cache": "BYPASS" },
+      headers: {
+        ...leg().headers,
+        date: "Mon, 01 Jan 2035 00:00:00 GMT",
+        "x-nextjs-cache": "STALE",
+        "x-ocel-cache": "BYPASS",
+      },
     });
     const without = leg({
-      headers: { ...leg().headers, date: "Mon, 01 Jan 2035 00:00:07 GMT", "x-nextjs-cache": "HIT", "x-ocel-cache": "MISS" },
+      headers: {
+        ...leg().headers,
+        date: "Mon, 01 Jan 2035 00:00:07 GMT",
+        "x-nextjs-cache": "HIT",
+        "x-ocel-cache": "MISS",
+      },
     });
 
     expect(goldenDifferences(withHeader, without)).toEqual([]);
@@ -413,7 +436,9 @@ describe("lambdaLogGroups", () => {
 
   it("ignores non-function ARNs and an empty response", () => {
     expect(lambdaLogGroups({})).toEqual([]);
-    expect(lambdaLogGroups({ ResourceTagMappingList: [{ ResourceARN: "arn:aws:s3:::bucket" }] })).toEqual([]);
+    expect(
+      lambdaLogGroups({ ResourceTagMappingList: [{ ResourceARN: "arn:aws:s3:::bucket" }] }),
+    ).toEqual([]);
   });
 });
 
@@ -421,7 +446,9 @@ describe("lambdaFunctionNames", () => {
   it("extracts bare function names from tagged ARNs", () => {
     expect(
       lambdaFunctionNames({
-        ResourceTagMappingList: [{ ResourceARN: "arn:aws:lambda:us-east-1:1:function:proj--web-abc123" }],
+        ResourceTagMappingList: [
+          { ResourceARN: "arn:aws:lambda:us-east-1:1:function:proj--web-abc123" },
+        ],
       }),
     ).toEqual(["proj--web-abc123"]);
   });
@@ -433,13 +460,17 @@ describe("lambdaFunctionNames", () => {
         { ResourceARN: "arn:aws:lambda:us-east-1:1:function:b" },
       ],
     };
-    expect(lambdaLogGroups(response)).toEqual(lambdaFunctionNames(response).map((name) => `/aws/lambda/${name}`));
+    expect(lambdaLogGroups(response)).toEqual(
+      lambdaFunctionNames(response).map((name) => `/aws/lambda/${name}`),
+    );
   });
 });
 
 describe("envSegment", () => {
   it("names a preview by its identity", () => {
-    expect(envSegment({ class: "preview", identity: "e2e-42-abcd1234" })).toBe("preview-e2e-42-abcd1234");
+    expect(envSegment({ class: "preview", identity: "e2e-42-abcd1234" })).toBe(
+      "preview-e2e-42-abcd1234",
+    );
   });
 
   it("names production the fixed token, regardless of identity", () => {
@@ -475,14 +506,20 @@ describe("appAssetPrefix", () => {
 describe("bytecodeCacheKeyPrefix", () => {
   it("joins prefix/bytecode/functionName with a trailing slash", () => {
     expect(
-      bytecodeCacheKeyPrefix({ prefix: "preview-e2e-42/e2e-42/app/bld123", functionName: "proj--web-abc123" }),
+      bytecodeCacheKeyPrefix({
+        prefix: "preview-e2e-42/e2e-42/app/bld123",
+        functionName: "proj--web-abc123",
+      }),
     ).toBe("preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/");
   });
 });
 
 describe("bytecodeCacheKeyName", () => {
   it("parses a real archive name into its node version and arch", () => {
-    expect(bytecodeCacheKeyName("node24.3.1-x86_64.tar.gz")).toEqual({ nodeVersion: "24.3.1", arch: "x86_64" });
+    expect(bytecodeCacheKeyName("node24.3.1-x86_64.tar.gz")).toEqual({
+      nodeVersion: "24.3.1",
+      arch: "x86_64",
+    });
   });
 
   it("rejects a version that is not three dot-separated numbers", () => {
@@ -501,27 +538,41 @@ describe("bytecodeRehydrateOutcome", () => {
   const key = "preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/node24.3.1-x86_64.tar.gz";
 
   it("recognizes a rehydrate hit naming the key", () => {
-    expect(bytecodeRehydrateOutcome(`ocel: rehydrated compile cache from ${key}: 4096 bytes in 312ms`, key)).toEqual({
+    expect(
+      bytecodeRehydrateOutcome(
+        `ocel: rehydrated compile cache from ${key}: 4096 bytes in 312ms`,
+        key,
+      ),
+    ).toEqual({
       kind: "hit",
       message: `ocel: rehydrated compile cache from ${key}: 4096 bytes in 312ms`,
     });
   });
 
   it("recognizes the expected first-cold-start miss", () => {
-    expect(bytecodeRehydrateOutcome(`ocel: no compile cache at ${key} yet; nothing to rehydrate`, key).kind).toBe(
-      "miss",
-    );
+    expect(
+      bytecodeRehydrateOutcome(`ocel: no compile cache at ${key} yet; nothing to rehydrate`, key)
+        .kind,
+    ).toBe("miss");
   });
 
   it("recognizes a fetch failure", () => {
     expect(
-      bytecodeRehydrateOutcome(`ocel: could not fetch the compile cache at ${key}: connection reset`, key).kind,
+      bytecodeRehydrateOutcome(
+        `ocel: could not fetch the compile cache at ${key}: connection reset`,
+        key,
+      ).kind,
     ).toBe("fetch-error");
   });
 
   it("ignores unrelated log lines, and a line naming a different key", () => {
     expect(bytecodeRehydrateOutcome("START RequestId: abc", key)).toBeNull();
-    expect(bytecodeRehydrateOutcome(`ocel: rehydrated compile cache from some/other/key.tar.gz: 10 bytes in 1ms`, key)).toBeNull();
+    expect(
+      bytecodeRehydrateOutcome(
+        `ocel: rehydrated compile cache from some/other/key.tar.gz: 10 bytes in 1ms`,
+        key,
+      ),
+    ).toBeNull();
   });
 
   it("recognizes a cache over the ceiling", () => {
@@ -541,26 +592,39 @@ describe("bytecodeRehydrateOutcome", () => {
 
   it("recognizes a rehydration timeout", () => {
     expect(
-      bytecodeRehydrateOutcome(`ocel: rehydrating the compile cache from ${key} ran out of time: context deadline exceeded`, key)
-        .kind,
+      bytecodeRehydrateOutcome(
+        `ocel: rehydrating the compile cache from ${key} ran out of time: context deadline exceeded`,
+        key,
+      ).kind,
     ).toBe("timeout");
   });
 
   it("recognizes a dir-clear failure that names no key at all", () => {
     expect(
-      bytecodeRehydrateOutcome("ocel: could not clear /tmp/.ocel/compile-cache before rehydrating the compile cache: permission denied", key)
-        .kind,
+      bytecodeRehydrateOutcome(
+        "ocel: could not clear /tmp/.ocel/compile-cache before rehydrating the compile cache: permission denied",
+        key,
+      ).kind,
     ).toBe("clear-error");
   });
 
   it("recognizes the feature disabling itself before a key could ever be composed", () => {
-    expect(bytecodeRehydrateOutcome("ocel: could not read node's version, compile cache disabled: exit status 1", key).kind).toBe(
-      "disabled",
-    );
-    expect(bytecodeRehydrateOutcome('ocel: not a node version: "garbage", compile cache disabled', key).kind).toBe("disabled");
-    expect(bytecodeRehydrateOutcome("ocel: no aws config for the compile cache: no EC2 IMDS role found", key).kind).toBe(
-      "disabled",
-    );
+    expect(
+      bytecodeRehydrateOutcome(
+        "ocel: could not read node's version, compile cache disabled: exit status 1",
+        key,
+      ).kind,
+    ).toBe("disabled");
+    expect(
+      bytecodeRehydrateOutcome('ocel: not a node version: "garbage", compile cache disabled', key)
+        .kind,
+    ).toBe("disabled");
+    expect(
+      bytecodeRehydrateOutcome(
+        "ocel: no aws config for the compile cache: no EC2 IMDS role found",
+        key,
+      ).kind,
+    ).toBe("disabled");
   });
 });
 
@@ -581,9 +645,13 @@ describe("bytecodeEmbedEnabled", () => {
 describe("embeddedBytecodePath", () => {
   it("mirrors the key's basename into the artifact, minus the gzip layer", () => {
     expect(
-      embeddedBytecodePath("preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/node24.3.1-arm64.tar.gz"),
+      embeddedBytecodePath(
+        "preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/node24.3.1-arm64.tar.gz",
+      ),
     ).toBe(".ocel/bytecode/node24.3.1-arm64.tar");
-    expect(embeddedBytecodePath("node24.3.1-x86_64.tar.gz")).toBe(".ocel/bytecode/node24.3.1-x86_64.tar");
+    expect(embeddedBytecodePath("node24.3.1-x86_64.tar.gz")).toBe(
+      ".ocel/bytecode/node24.3.1-x86_64.tar",
+    );
   });
 
   it("refuses a key that names no cache tarball", () => {
@@ -604,7 +672,10 @@ describe("bytecodeEmbeddedOutcome", () => {
 
   it("classifies each way the local leg can fail without calling any of them a hit", () => {
     expect(
-      bytecodeEmbeddedOutcome(`ocel: could not open the embedded compile cache at ${tarPath}: permission denied`, tarPath),
+      bytecodeEmbeddedOutcome(
+        `ocel: could not open the embedded compile cache at ${tarPath}: permission denied`,
+        tarPath,
+      ),
     ).toEqual({ kind: "open-error", message: expect.any(String) });
     expect(
       bytecodeEmbeddedOutcome(
@@ -613,14 +684,20 @@ describe("bytecodeEmbeddedOutcome", () => {
       ).kind,
     ).toBe("clear-error");
     expect(
-      bytecodeEmbeddedOutcome(`ocel: could not load the embedded compile cache at ${tarPath}: unexpected EOF`, tarPath).kind,
+      bytecodeEmbeddedOutcome(
+        `ocel: could not load the embedded compile cache at ${tarPath}: unexpected EOF`,
+        tarPath,
+      ).kind,
     ).toBe("load-error");
   });
 
   it("ignores unrelated lines, and a line naming a different tar", () => {
     expect(bytecodeEmbeddedOutcome("START RequestId: abc", tarPath)).toBeNull();
     expect(
-      bytecodeEmbeddedOutcome("ocel: loaded embedded compile cache from /var/task/.ocel/bytecode/node22.0.0-x86_64.tar: 1 bytes in 1ms", tarPath),
+      bytecodeEmbeddedOutcome(
+        "ocel: loaded embedded compile cache from /var/task/.ocel/bytecode/node22.0.0-x86_64.tar: 1 bytes in 1ms",
+        tarPath,
+      ),
     ).toBeNull();
   });
 
@@ -648,7 +725,9 @@ describe("embeddedArtifactPairs", () => {
   });
 
   it("reports a repackaged artifact whose original is gone rather than dropping it", () => {
-    expect(embeddedArtifactPairs([embedded])).toEqual([{ embedded, original: null, digest: "deadbeefdeadb" }]);
+    expect(embeddedArtifactPairs([embedded])).toEqual([
+      { embedded, original: null, digest: "deadbeefdeadb" },
+    ]);
   });
 
   it("finds none when the deploy embedded nothing", () => {
@@ -664,7 +743,15 @@ describe("embeddedArtifactPairs", () => {
 });
 
 describe("warmSummaryOutcome", () => {
-  const summary = { state: "published", entries: 12, loaded: 12, stoppedBy: "complete", bytes: 4096, key: "k", uploaded: true };
+  const summary = {
+    state: "published",
+    entries: 12,
+    loaded: 12,
+    stoppedBy: "complete",
+    bytes: 4096,
+    key: "k",
+    uploaded: true,
+  };
 
   it("reads the summary out of the membrane's stderr line", () => {
     const message = `${WARM_SUMMARY_MARKER} ${JSON.stringify(summary)}`;
@@ -686,21 +773,34 @@ describe("warmSummaryOutcome", () => {
 
 describe("warmCoverage", () => {
   const key = "preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/node24.3.1-x86_64.tar.gz";
-  const published = { state: "published", entries: 12, loaded: 12, stoppedBy: "complete", bytes: 4096, key, uploaded: true };
+  const published = {
+    state: "published",
+    entries: 12,
+    loaded: 12,
+    stoppedBy: "complete",
+    bytes: 4096,
+    key,
+    uploaded: true,
+  };
 
   it("proves a whole bundle when this pass's own PUT created the object", () => {
     expect(warmCoverage(published, key).kind).toBe("complete");
   });
 
   it("reports a walk the ceiling or the deadline cut short as partial", () => {
-    expect(warmCoverage({ ...published, loaded: 7, stoppedBy: "ceiling" }, key).kind).toBe("partial");
-    expect(warmCoverage({ ...published, loaded: 7, stoppedBy: "deadline" }, key).kind).toBe("partial");
+    expect(warmCoverage({ ...published, loaded: 7, stoppedBy: "ceiling" }, key).kind).toBe(
+      "partial",
+    );
+    expect(warmCoverage({ ...published, loaded: 7, stoppedBy: "deadline" }, key).kind).toBe(
+      "partial",
+    );
   });
 
   it("reports entries that failed to load as partial even on a complete walk", () => {
-    expect(warmCoverage({ ...published, loaded: 11, failures: [{ entry: "/x", message: "boom" }] }, key).kind).toBe(
-      "partial",
-    );
+    expect(
+      warmCoverage({ ...published, loaded: 11, failures: [{ entry: "/x", message: "boom" }] }, key)
+        .kind,
+    ).toBe("partial");
   });
 
   it("refuses to believe a published state that claims no upload", () => {
@@ -714,7 +814,13 @@ describe("warmCoverage", () => {
 
   it("reports a publish nobody could account for as partial, with the reason", () => {
     const verdict = warmCoverage(
-      { state: "published", uploaded: true, bytes: 4096, key, uncounted: "node did not report back" },
+      {
+        state: "published",
+        uploaded: true,
+        bytes: 4096,
+        key,
+        uncounted: "node did not report back",
+      },
       key,
     );
     expect(verdict.kind).toBe("partial");
@@ -733,17 +839,23 @@ describe("warmCoverage", () => {
 
   it("proves nothing from an already-cached pass, whether or not it walked", () => {
     expect(warmCoverage({ state: "already-cached" }, key).kind).toBe("unproven");
-    expect(warmCoverage({ ...published, state: "already-cached", uploaded: undefined }, key).kind).toBe("unproven");
+    expect(
+      warmCoverage({ ...published, state: "already-cached", uploaded: undefined }, key).kind,
+    ).toBe("unproven");
   });
 
   it("treats disabled, failed and an unknown state as failures", () => {
     expect(warmCoverage({ state: "disabled", error: "no capability" }, key).kind).toBe("failed");
-    expect(warmCoverage({ state: "failed", entries: 12, loaded: 3, error: "put denied" }, key).kind).toBe("failed");
+    expect(
+      warmCoverage({ state: "failed", entries: 12, loaded: 3, error: "put denied" }, key).kind,
+    ).toBe("failed");
     expect(warmCoverage({ state: "somethingelse" }, key).kind).toBe("failed");
   });
 
   it("sets a summary naming another build's key aside", () => {
-    expect(warmCoverage({ ...published, key: "other/build/node24.3.1-x86_64.tar.gz" }, key).kind).toBe("other-build");
+    expect(
+      warmCoverage({ ...published, key: "other/build/node24.3.1-x86_64.tar.gz" }, key).kind,
+    ).toBe("other-build");
   });
 });
 
@@ -763,9 +875,9 @@ describe("strongestCoverage", () => {
 
 describe("summarizeOutcomes", () => {
   it("counts outcomes by kind", () => {
-    expect(
-      summarizeOutcomes([{ kind: "miss" }, { kind: "fetch-error" }, { kind: "miss" }]),
-    ).toBe("2 miss, 1 fetch-error");
+    expect(summarizeOutcomes([{ kind: "miss" }, { kind: "fetch-error" }, { kind: "miss" }])).toBe(
+      "2 miss, 1 fetch-error",
+    );
   });
 
   it("says so when nothing related was seen at all", () => {
@@ -777,23 +889,43 @@ describe("logWindowVerdict", () => {
   const pageLimit = 1000;
 
   it("reads a window that was polled cleanly to its end", () => {
-    const verdict = logWindowVerdict({ attempts: 5, failures: 0, confirmed: true, events: 12, pageLimit });
+    const verdict = logWindowVerdict({
+      attempts: 5,
+      failures: 0,
+      confirmed: true,
+      events: 12,
+      pageLimit,
+    });
     expect(verdict.kind).toBe("read");
     expect(verdict.detail).toContain("5/5");
   });
 
   it("still reads it when polls failed but the last read succeeded", () => {
-    expect(logWindowVerdict({ attempts: 5, failures: 4, confirmed: true, events: 12, pageLimit }).kind).toBe("read");
+    expect(
+      logWindowVerdict({ attempts: 5, failures: 4, confirmed: true, events: 12, pageLimit }).kind,
+    ).toBe("read");
   });
 
   it("reports a window never read to its end as unread, however many polls succeeded", () => {
-    const verdict = logWindowVerdict({ attempts: 13, failures: 1, confirmed: false, events: 0, pageLimit });
+    const verdict = logWindowVerdict({
+      attempts: 13,
+      failures: 1,
+      confirmed: false,
+      events: 0,
+      pageLimit,
+    });
     expect(verdict.kind).toBe("unread");
     expect(verdict.detail).toContain("12/13");
   });
 
   it("reports a full page as truncated, because a line could have been dropped off its end", () => {
-    const verdict = logWindowVerdict({ attempts: 2, failures: 0, confirmed: true, events: pageLimit, pageLimit });
+    const verdict = logWindowVerdict({
+      attempts: 2,
+      failures: 0,
+      confirmed: true,
+      events: pageLimit,
+      pageLimit,
+    });
     expect(verdict.kind).toBe("truncated");
     expect(verdict.detail).toContain(String(pageLimit));
   });
@@ -855,7 +987,7 @@ function buildTarEntry(name, content) {
   header.write("0000644\0", 100, 8, "utf8");
   header.write("0000000\0", 108, 8, "utf8");
   header.write("0000000\0", 116, 8, "utf8");
-  header.write(data.length.toString(8).padStart(11, "0") + "\0", 124, 12, "utf8");
+  header.write(`${data.length.toString(8).padStart(11, "0")}\0`, 124, 12, "utf8");
   header.write("00000000000\0", 136, 12, "utf8");
   header.fill(0x20, 148, 156);
   header.write("0", 156, 1, "utf8");
@@ -865,7 +997,7 @@ function buildTarEntry(name, content) {
 
   let sum = 0;
   for (const byte of header) sum += byte;
-  header.write(sum.toString(8).padStart(6, "0") + "\0 ", 148, 8, "utf8");
+  header.write(`${sum.toString(8).padStart(6, "0")}\0 `, 148, 8, "utf8");
 
   const dataBlocks = Math.ceil(data.length / 512) * 512;
   const padded = Buffer.alloc(dataBlocks);
@@ -892,7 +1024,10 @@ describe("zipEntryNames", () => {
   });
 
   it("finds the record past a trailing comment", () => {
-    const zip = buildZip([{ name: "a.txt", content: "a" }], "a comment the scan has to walk back over");
+    const zip = buildZip(
+      [{ name: "a.txt", content: "a" }],
+      "a comment the scan has to walk back over",
+    );
     expect(zipEntryNames(zip)).toEqual(["a.txt"]);
   });
 
@@ -1038,11 +1173,13 @@ describe("suitesFromHarnessOutput", () => {
 
   it("ignores a line the harness truncated mid-JSON rather than aborting the group", () => {
     const stdout = [
-      "--test output start-- {\"testResults\":[{\"name\":\"/work/nextjs/test/e2e/tru --test output end--",
+      '--test output start-- {"testResults":[{"name":"/work/nextjs/test/e2e/tru --test output end--',
       framed("test/e2e/ok.test.ts", { assertionResults: [] }),
     ].join("\n");
 
-    expect(suitesFromHarnessOutput(stdout, "/work/nextjs").map((s) => s.suite)).toEqual(["test/e2e/ok.test.ts"]);
+    expect(suitesFromHarnessOutput(stdout, "/work/nextjs").map((s) => s.suite)).toEqual([
+      "test/e2e/ok.test.ts",
+    ]);
   });
 });
 
@@ -1055,7 +1192,10 @@ describe("suitesStartedInHarnessOutput", () => {
       "test/e2e/b.test.ts finished on retry 0/2 in 3s",
     ].join("\n");
 
-    expect(suitesStartedInHarnessOutput(stdout)).toEqual(["test/e2e/a.test.ts", "test/e2e/b.test.ts"]);
+    expect(suitesStartedInHarnessOutput(stdout)).toEqual([
+      "test/e2e/a.test.ts",
+      "test/e2e/b.test.ts",
+    ]);
   });
 
   it("still sees the announcement when concurrent output shares the line", () => {
@@ -1087,14 +1227,19 @@ describe("suiteResultFromJest", () => {
 
   it("records the name the harness's exclusion pattern actually matches", () => {
     const escapeRegexp = (s) => s.replace(/[|\\{}()[\]^$+*?.-]/g, "\\$&");
-    const exclusionPattern = (cases) => new RegExp(`^(?!(?:${cases.map(escapeRegexp).join("|")})$).`, "i");
+    const exclusionPattern = (cases) =>
+      new RegExp(`^(?!(?:${cases.map(escapeRegexp).join("|")})$).`, "i");
     const jestTestId = (ancestorTitles, title) => [...ancestorTitles, title].join(" ");
 
     const { failed } = suiteResultFromJest({
       testResults: [
         {
           assertionResults: [
-            { ancestorTitles: ["app dir", "revalidation"], title: "revalidates on demand", status: "failed" },
+            {
+              ancestorTitles: ["app dir", "revalidation"],
+              title: "revalidates on demand",
+              status: "failed",
+            },
           ],
         },
       ],
@@ -1107,14 +1252,19 @@ describe("suiteResultFromJest", () => {
 
   it("marks a suite that produced no assertions at all as a runtime error", () => {
     expect(suiteResultFromJest({ testResults: [] })).toEqual({ outcome: "runtimeError" });
-    expect(suiteResultFromJest({ testResults: [{ assertionResults: [] }] })).toEqual({ outcome: "runtimeError" });
+    expect(suiteResultFromJest({ testResults: [{ assertionResults: [] }] })).toEqual({
+      outcome: "runtimeError",
+    });
   });
 
   it("marks a suite whose testResult carries a testExecError as a runtime error, even with assertions", () => {
     expect(
       suiteResultFromJest({
         testResults: [
-          { testExecError: { message: "boom" }, assertionResults: [{ title: "renders", status: "passed" }] },
+          {
+            testExecError: { message: "boom" },
+            assertionResults: [{ title: "renders", status: "passed" }],
+          },
         ],
       }),
     ).toEqual({ outcome: "runtimeError" });
@@ -1190,7 +1340,9 @@ describe("buildBaselineManifest", () => {
   });
 
   it("excludes a suite that produced nothing by rule, not by a fake suite entry", () => {
-    const manifest = buildBaselineManifest([{ suite: "test/e2e/dead.test.ts", results: { testResults: [] } }]);
+    const manifest = buildBaselineManifest([
+      { suite: "test/e2e/dead.test.ts", results: { testResults: [] } },
+    ]);
     expect(manifest).toEqual(v2({}, ["test/e2e/dead.test.ts"]));
   });
 

@@ -46,9 +46,7 @@ export const gaps: Gap[] = [
     id: "dev-upload-key-namespaced",
     reason: "the dev blob store namespaces an upload key, so the documents/ prefix assertion fails",
     issue: 882,
-    affects: [
-      { on: ["dev"], cells: SDK_CELLS, tests: [{ row: UPLOAD_ROW, legs: ["contract"] }] },
-    ],
+    affects: [{ on: ["dev"], cells: SDK_CELLS, tests: [{ row: UPLOAD_ROW, legs: ["contract"] }] }],
   },
   {
     id: "no-router-in-front-of-dev",
@@ -241,9 +239,7 @@ export const gaps: Gap[] = [
     id: "aws-container-unimplemented",
     reason: "the aws provider advertises serverless only, so preflight refuses a container app",
     issue: 937,
-    affects: [
-      { on: ["aws", "aws.floci"], variants: ["container"], tests: [UP_TITLE], skip: true },
-    ],
+    affects: [{ on: ["aws", "aws.floci"], variants: ["container"], tests: [UP_TITLE], skip: true }],
   },
   {
     id: "cloudfront-stub",

@@ -1,14 +1,14 @@
-import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { bucket, createRouteHandler, uploader } from "ocel/blob";
 import { createUploadClient } from "ocel/blob/client";
-import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { createTestSessionWithOrganization } from "../../../test/auth-harness";
 import { setupTestDatabase } from "../../../test/db";
 import { createProject } from "../projects/route";
@@ -39,11 +39,7 @@ async function minioReachable(): Promise<boolean> {
   }
 }
 
-async function toWebRequest(
-  // biome-ignore lint/suspicious/noExplicitAny: node req
-  req: any,
-  base: string,
-): Promise<Request> {
+async function toWebRequest(req: any, base: string): Promise<Request> {
   const headers = new Headers();
   for (const [k, v] of Object.entries(req.headers)) {
     if (typeof v === "string") headers.set(k, v);
@@ -62,10 +58,11 @@ async function toWebRequest(
   });
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: node res
 async function sendWebResponse(res: any, webRes: Response): Promise<void> {
   res.statusCode = webRes.status;
-  webRes.headers.forEach((v, k) => res.setHeader(k, v));
+  webRes.headers.forEach((v, k) => {
+    res.setHeader(k, v);
+  });
   res.end(Buffer.from(await webRes.arrayBuffer()));
 }
 
@@ -82,9 +79,7 @@ async function waitForDevServerAddr(child: ChildProcess): Promise<string> {
     };
     child.stdout?.on("data", onData);
     child.stderr?.on("data", (d) => process.stderr.write(`[devserver] ${d}`));
-    child.on("exit", (code) =>
-      reject(new Error(`devserver exited early (code ${code})`)),
-    );
+    child.on("exit", (code) => reject(new Error(`devserver exited early (code ${code})`)));
     setTimeout(() => reject(new Error("devserver never printed DEV_SERVER_ADDR")), 15_000);
   });
 }
@@ -157,22 +152,18 @@ describe("ocel/blob dev e2e (MinIO)", () => {
         },
       });
 
-      const listened = await new Promise<{ srv: Server; port: number }>(
-        (resolve) => {
-          const srv = createServer();
-          srv.listen(0, "127.0.0.1", () =>
-            resolve({ srv, port: (srv.address() as { port: number }).port }),
-          );
-        },
-      );
+      const listened = await new Promise<{ srv: Server; port: number }>((resolve) => {
+        const srv = createServer();
+        srv.listen(0, "127.0.0.1", () =>
+          resolve({ srv, port: (srv.address() as { port: number }).port }),
+        );
+      });
       server = listened.srv;
       appBase = `http://127.0.0.1:${listened.port}`;
 
-      devServer = spawn(
-        devServerBin,
-        ["-api", appBase, "-token", token, "-project", projectId],
-        { stdio: ["pipe", "pipe", "pipe"] },
-      );
+      devServer = spawn(devServerBin, ["-api", appBase, "-token", token, "-project", projectId], {
+        stdio: ["pipe", "pipe", "pipe"],
+      });
       const devServerAddr = await waitForDevServerAddr(devServer);
 
       process.env.OCEL_RUNTIME_ADDRESS = devServerAddr;
@@ -201,7 +192,6 @@ describe("ocel/blob dev e2e (MinIO)", () => {
           }
           if (url.pathname === "/app/upload") {
             const handler = req.method === "GET" ? route.GET : route.POST;
-            // biome-ignore lint/suspicious/noExplicitAny: BlobRequest is a web Request
             return sendWebResponse(res, await handler(webReq as any));
           }
           res.statusCode = 404;

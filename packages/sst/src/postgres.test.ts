@@ -16,10 +16,7 @@ function repoRoot() {
 }
 
 const fixture = JSON.parse(
-  readFileSync(
-    new URL("proto/common/links/v1/fixtures/postgres.json", repoRoot()),
-    "utf8",
-  ),
+  readFileSync(new URL("proto/common/links/v1/fixtures/postgres.json", repoRoot()), "utf8"),
 );
 
 function sstPostgres(properties: Record<string, unknown>) {
@@ -73,9 +70,7 @@ describe("the record a postgres link publishes as", () => {
 
   it("refuses a resource missing a field an app resolving it reads", () => {
     const { password, ...rest } = fixture.postgres;
-    expect(() => postgresLink("orders", { properties: rest })).toThrow(
-      /carries no password/,
-    );
+    expect(() => postgresLink("orders", { properties: rest })).toThrow(/carries no password/);
   });
 
   it("refuses a port that is not a whole number", () => {

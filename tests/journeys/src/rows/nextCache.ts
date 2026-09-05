@@ -4,8 +4,8 @@ import {
   CACHED,
   cacheControlFor,
   DYNAMIC_CACHE_CONTROL,
-  imageCacheControl,
   IMMUTABLE_CACHE_CONTROL,
+  imageCacheControl,
   ROUTER_VARY,
   sameDirectives,
   type Tier,
@@ -49,12 +49,7 @@ async function cachedHalf(ctx: ContractContext, path: string, scope: string): Pr
 }
 
 async function settled(ctx: ContractContext, path: string, scope: string): Promise<string> {
-  return steady(
-    () => cachedHalf(ctx, path, scope),
-    path,
-    SETTLED_READS,
-    SETTLE_ATTEMPTS,
-  );
+  return steady(() => cachedHalf(ctx, path, scope), path, SETTLED_READS, SETTLE_ATTEMPTS);
 }
 
 async function movedOn(
@@ -143,7 +138,8 @@ export const nextCacheRows: ContractRow[] = [
     },
   },
   {
-    title: "an RSC request answers text/x-component, varies on the router headers and names this deployment",
+    title:
+      "an RSC request answers text/x-component, varies on the router headers and names this deployment",
     run: async (ctx) => {
       const { html } = await page(ctx, "/cache/deployment");
       const id = marker(html, "deployment");
@@ -179,7 +175,8 @@ export const nextCacheRows: ContractRow[] = [
     },
   },
   {
-    title: "the image optimizer serves a local and a self-hosted image and refuses a bad host, width or quality",
+    title:
+      "the image optimizer serves a local and a self-hosted image and refuses a bad host, width or quality",
     run: async (ctx) => {
       for (const url of [LOCAL_IMAGE, `${ctx.baseUrl}${LOCAL_IMAGE}`]) {
         const res = await ctx.fetch(imageUrl(ctx, url, ALLOWED_WIDTH, ALLOWED_QUALITY));
@@ -190,7 +187,10 @@ export const nextCacheRows: ContractRow[] = [
       }
 
       const refused: Array<[string, string]> = [
-        ["a disallowed host", imageUrl(ctx, "https://images.invalid/ocel.png", ALLOWED_WIDTH, ALLOWED_QUALITY)],
+        [
+          "a disallowed host",
+          imageUrl(ctx, "https://images.invalid/ocel.png", ALLOWED_WIDTH, ALLOWED_QUALITY),
+        ],
         ["a disallowed width", imageUrl(ctx, LOCAL_IMAGE, 999, ALLOWED_QUALITY)],
         ["a disallowed quality", imageUrl(ctx, LOCAL_IMAGE, ALLOWED_WIDTH, 50)],
       ];

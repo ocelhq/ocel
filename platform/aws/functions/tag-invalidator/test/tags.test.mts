@@ -15,12 +15,7 @@ describe("invalidationBatches", () => {
     expect(
       invalidationBatches(RELEASE, ["products", "_N_T_/shop", "cart", "_N_T_/"]).batches,
     ).toEqual([
-      [
-        `#${RELEASE}|_N_T_/shop`,
-        `#${RELEASE}|_N_T_/`,
-        `#${RELEASE}|products`,
-        `#${RELEASE}|cart`,
-      ],
+      [`#${RELEASE}|_N_T_/shop`, `#${RELEASE}|_N_T_/`, `#${RELEASE}|products`, `#${RELEASE}|cart`],
     ]);
   });
 
@@ -66,6 +61,6 @@ describe("invalidationBatches", () => {
     const fits = "x".repeat(256 - RELEASE.length - 1);
 
     expect(invalidationBatches(RELEASE, [fits]).batches).toEqual([[`#${RELEASE}|${fits}`]]);
-    expect(invalidationBatches(RELEASE, [fits + "x"]).batches).toEqual([]);
+    expect(invalidationBatches(RELEASE, [`${fits}x`]).batches).toEqual([]);
   });
 });

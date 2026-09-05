@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { isBuiltin } from "node:module";
 import { readdir, rm } from "node:fs/promises";
+import { isBuiltin } from "node:module";
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -107,4 +107,9 @@ await Promise.all(
   ),
 );
 
-process.stdout.write(`${loose.map((file) => relative(dist, file)).sort().join("\n")}\n`);
+process.stdout.write(
+  `${loose
+    .map((file) => relative(dist, file))
+    .sort()
+    .join("\n")}\n`,
+);

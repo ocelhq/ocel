@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { handle, type HandlerDeps, type SqsRecord } from "../src/handle.mjs";
+import { type HandlerDeps, handle, type SqsRecord } from "../src/handle.mjs";
 import { body, bucket, credentials, host, originDocument, recordUrl, region } from "./fixture.mjs";
 
 const bypassToken = "s3cr3t-preview-mode-id";
 
-function record(messageId: string, group: string, overrides: Record<string, unknown> = {}): SqsRecord {
+function record(
+  messageId: string,
+  group: string,
+  overrides: Record<string, unknown> = {},
+): SqsRecord {
   return { messageId, body: body(overrides), attributes: { MessageGroupId: group } };
 }
 
@@ -32,7 +36,10 @@ function bootstrap(answers: Record<string, Response | Error> = {}): {
   return { deps, requested };
 }
 
-const revalidated = new Response(null, { status: 200, headers: { "x-nextjs-cache": "REVALIDATED" } });
+const revalidated = new Response(null, {
+  status: 200,
+  headers: { "x-nextjs-cache": "REVALIDATED" },
+});
 
 function failures(response: { batchItemFailures: { itemIdentifier: string }[] }): string[] {
   return response.batchItemFailures.map(({ itemIdentifier }) => itemIdentifier);
@@ -80,7 +87,10 @@ it("stops a group at its first failure and reports the rest of that group, unpro
 });
 
 it("keeps a record carrying no group from stopping the records after it", async () => {
-  const { deps, requested } = bootstrap({ "/a": new Response(null, { status: 500 }), "/b": revalidated });
+  const { deps, requested } = bootstrap({
+    "/a": new Response(null, { status: 500 }),
+    "/b": revalidated,
+  });
 
   const response = await handle(deps, {
     Records: [
@@ -94,7 +104,10 @@ it("keeps a record carrying no group from stopping the records after it", async 
 });
 
 it("treats an empty group id the same as a missing one", async () => {
-  const { deps, requested } = bootstrap({ "/a": new Response(null, { status: 500 }), "/b": revalidated });
+  const { deps, requested } = bootstrap({
+    "/a": new Response(null, { status: 500 }),
+    "/b": revalidated,
+  });
 
   const response = await handle(deps, {
     Records: [
@@ -111,7 +124,10 @@ it("logs the record it skipped for a stopped group, as well as reporting it", as
   const { deps } = bootstrap({ "/a/1": new Response(null, { status: 500 }) });
 
   await handle(deps, {
-    Records: [record("a-1", "group-a", { routePath: "/a/1" }), record("a-2", "group-a", { routePath: "/a/2" })],
+    Records: [
+      record("a-1", "group-a", { routePath: "/a/1" }),
+      record("a-2", "group-a", { routePath: "/a/2" }),
+    ],
   });
 
   expect(events(lines)).toEqual(["RevalidateFailed", "RevalidateSkipped"]);
@@ -134,7 +150,9 @@ it("rejects an unknown message version as an item failure", async () => {
 it("fails a record whose route the deploy never recorded, without triggering", async () => {
   const { deps, requested } = bootstrap();
 
-  const response = await handle(deps, { Records: [record("m-1", "group-a", { routeId: "/not-a-route" })] });
+  const response = await handle(deps, {
+    Records: [record("m-1", "group-a", { routeId: "/not-a-route" })],
+  });
 
   expect(failures(response)).toEqual(["m-1"]);
   expect(requested).toEqual([]);

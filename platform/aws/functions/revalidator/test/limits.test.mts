@@ -17,7 +17,13 @@ it("keeps the queue's visibility timeout longer than a function that runs to its
 });
 
 it("documents the values .24 renders", () => {
-  expect({ batchSize, triggerTimeoutMs, originTimeoutMs, functionTimeoutMs, visibilityTimeoutMs }).toEqual({
+  expect({
+    batchSize,
+    triggerTimeoutMs,
+    originTimeoutMs,
+    functionTimeoutMs,
+    visibilityTimeoutMs,
+  }).toEqual({
     batchSize: 10,
     triggerTimeoutMs: 10_000,
     originTimeoutMs: 2_000,

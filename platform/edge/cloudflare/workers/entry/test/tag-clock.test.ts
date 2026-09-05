@@ -1,4 +1,4 @@
-import { tagSnapshotKey, type TagSnapshot } from "@framework/next-cache";
+import { type TagSnapshot, tagSnapshotKey } from "@framework/next-cache";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -322,7 +322,7 @@ describe("readers arriving together on a cold memo", () => {
 
     const joiner = clock.freshness(["posts"], 1_000, 3_000);
     for (let i = 0; i < 5; i++) {
-      releases.forEach((done) => done());
+      for (const done of releases) done();
       await Promise.resolve();
     }
     expect(await successor).toBe("fresh");
@@ -423,7 +423,9 @@ describe("two builds sharing one binding", () => {
     store.release();
 
     expect(await createTagClock(older, { store }).freshness(["posts"], 1_000, 3_000)).toBe("fresh");
-    expect(await createTagClock(newer, { store }).freshness(["posts"], 1_000, 3_000)).toBe("expired");
+    expect(await createTagClock(newer, { store }).freshness(["posts"], 1_000, 3_000)).toBe(
+      "expired",
+    );
     expect(store.gets).toHaveLength(2);
   });
 });
@@ -515,4 +517,3 @@ describe("the PoP copy's drawn lifetime", () => {
     expect(new Set(snapshotCache.maxAges).size).toBeGreaterThanOrEqual(3);
   });
 });
-

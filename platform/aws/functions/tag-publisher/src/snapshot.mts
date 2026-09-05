@@ -1,9 +1,9 @@
 import {
   readableSnapshot,
-  tagSnapshotKey,
   type StoredTagSnapshot,
   type TagSnapshot,
   type TagSnapshotStore,
+  tagSnapshotKey,
 } from "@framework/next-cache";
 
 export interface S3Like {
@@ -20,9 +20,7 @@ function isNotFound(err: any): boolean {
 }
 
 function isPreconditionFailed(err: any): boolean {
-  return (
-    err?.name === "PreconditionFailed" || err?.$metadata?.httpStatusCode === 412
-  );
+  return err?.name === "PreconditionFailed" || err?.$metadata?.httpStatusCode === 412;
 }
 
 export class S3TagSnapshotStore implements TagSnapshotStore {

@@ -19,9 +19,7 @@ export function declaredLiveKeys(): string[] {
 }
 
 function published(): LiveValues | undefined {
-  return (globalThis as Record<symbol, unknown>)[LIVE_VALUES] as
-    | LiveValues
-    | undefined;
+  return (globalThis as Record<symbol, unknown>)[LIVE_VALUES] as LiveValues | undefined;
 }
 
 function parseLiveValues(message: unknown): LiveValues | undefined {

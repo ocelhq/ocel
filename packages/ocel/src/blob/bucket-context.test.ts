@@ -37,9 +37,9 @@ describe("resolveBucketContext", () => {
   });
 
   it("throws a clear error when the resource config is missing", () => {
-    expect(() =>
-      resolveBucketContext(bucket("storage", { uploaders: {} })),
-    ).toThrow(/OCEL_RESOURCE_BUCKET_storage/);
+    expect(() => resolveBucketContext(bucket("storage", { uploaders: {} }))).toThrow(
+      /OCEL_RESOURCE_BUCKET_storage/,
+    );
   });
 
   it("presents the session token the runtime handed it", async () => {
@@ -76,8 +76,8 @@ describe("resolveBucketContext", () => {
       bucket: { bucket: "org-project-store" },
     });
 
-    expect(() =>
-      resolveBucketContext(bucket("storage", { uploaders: {} })),
-    ).toThrow(/OCEL_RUNTIME_ADDRESS/);
+    expect(() => resolveBucketContext(bucket("storage", { uploaders: {} }))).toThrow(
+      /OCEL_RUNTIME_ADDRESS/,
+    );
   });
 });

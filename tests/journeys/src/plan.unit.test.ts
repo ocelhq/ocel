@@ -66,10 +66,10 @@ describe("planning the two concerns of one runtime", () => {
   it("plans the product rows for the sdk cell alone", () => {
     const productTitles = productRows.map((row) => row.title);
     const titlesOf = (cell: string) =>
-      planned.filter((entry) => entry.cell === cell && entry.leg === "contract").map((e) => e.title);
-    expect(titlesOf("deploy/node/web").some((title) => productTitles.includes(title))).toBe(
-      false,
-    );
+      planned
+        .filter((entry) => entry.cell === cell && entry.leg === "contract")
+        .map((e) => e.title);
+    expect(titlesOf("deploy/node/web").some((title) => productTitles.includes(title))).toBe(false);
     expect(titlesOf("sdk/node/web")).toEqual(expect.arrayContaining(productTitles));
   });
 
@@ -140,10 +140,26 @@ function withHooks(rows: LadderRow[], refuse: boolean): FixtureSpec {
   };
 }
 
-const publishRow: LadderRow = { title: "lists both records", phase: "publish", run: async () => undefined };
-const consumeRow: LadderRow = { title: "both link routes answer", phase: "consume", run: async () => undefined };
-const outliveRow: LadderRow = { title: "the record survives", phase: "outlive", run: async () => undefined };
-const pruneRow: LadderRow = { title: "both partitions are empty", phase: "prune", run: async () => undefined };
+const publishRow: LadderRow = {
+  title: "lists both records",
+  phase: "publish",
+  run: async () => undefined,
+};
+const consumeRow: LadderRow = {
+  title: "both link routes answer",
+  phase: "consume",
+  run: async () => undefined,
+};
+const outliveRow: LadderRow = {
+  title: "the record survives",
+  phase: "outlive",
+  run: async () => undefined,
+};
+const pruneRow: LadderRow = {
+  title: "both partitions are empty",
+  phase: "prune",
+  run: async () => undefined,
+};
 
 describe("planTests", () => {
   it("plans nothing extra for a fixture with no hooks", () => {
@@ -169,7 +185,9 @@ describe("planTests", () => {
       .filter((row) => row.cell === cellKey("sdk/with-sst", "web"))
       .map((row) => row.title);
     expect(titles.filter((title) => title === REFUSE_TITLE).length).toBe(1);
-    expect(titles.indexOf(REFUSE_TITLE)).toBeLessThan(titles.indexOf("publish · lists both records"));
+    expect(titles.indexOf(REFUSE_TITLE)).toBeLessThan(
+      titles.indexOf("publish · lists both records"),
+    );
   });
 
   it("plans one publish, outlive and prune title but three consume titles", () => {

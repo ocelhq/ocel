@@ -9,14 +9,11 @@ import { presignUpload } from "../presign/route";
 import type { SessionFile } from "../session";
 import { uploadStatus } from "./route";
 
-const encodedMetadata = Buffer.from(
-  JSON.stringify({ uploader: "avatar", metadata: {} }),
-).toString("base64");
+const encodedMetadata = Buffer.from(JSON.stringify({ uploader: "avatar", metadata: {} })).toString(
+  "base64",
+);
 
-async function seedSession(
-  session: { headers: Headers },
-  slug: string,
-): Promise<string> {
+async function seedSession(session: { headers: Headers }, slug: string): Promise<string> {
   const created = await createProject(
     new Request("http://localhost/api/projects", {
       method: "POST",
@@ -60,18 +57,12 @@ function statusRequest(sessionId: string | null, headers: Headers) {
 }
 
 async function setFileStates(sessionId: string, states: SessionFile["state"][]) {
-  const [row] = await db
-    .select()
-    .from(uploadSession)
-    .where(eq(uploadSession.id, sessionId));
+  const [row] = await db.select().from(uploadSession).where(eq(uploadSession.id, sessionId));
   const files = (row.files as SessionFile[]).map((f, i) => ({
     ...f,
     state: states[i],
   }));
-  await db
-    .update(uploadSession)
-    .set({ files })
-    .where(eq(uploadSession.id, sessionId));
+  await db.update(uploadSession).set({ files }).where(eq(uploadSession.id, sessionId));
 }
 
 describe("GET /api/blob/status", () => {
@@ -84,21 +75,17 @@ describe("GET /api/blob/status", () => {
     try {
       const sessionId = await seedSession(session, "status-agg");
 
-      const pending = await uploadStatus(
-        statusRequest(sessionId, session.headers),
-      );
+      const pending = await uploadStatus(statusRequest(sessionId, session.headers));
       expect((await pending.json()).state).toBe("pending");
 
       await setFileStates(sessionId, ["succeeded", "pending"]);
       expect(
-        (await (await uploadStatus(statusRequest(sessionId, session.headers))).json())
-          .state,
+        (await (await uploadStatus(statusRequest(sessionId, session.headers))).json()).state,
       ).toBe("pending");
 
       await setFileStates(sessionId, ["succeeded", "succeeded"]);
       expect(
-        (await (await uploadStatus(statusRequest(sessionId, session.headers))).json())
-          .state,
+        (await (await uploadStatus(statusRequest(sessionId, session.headers))).json()).state,
       ).toBe("succeeded");
     } finally {
       await session.cleanup();

@@ -6,9 +6,7 @@ export const ASSET_PREFIX = "prod/proj1/web/r3f8a1c9d/assets";
 
 export const CONFIG_KEY = "prod/proj1/web/r3f8a1c9d/image-config.json";
 
-export function imageConfig(
-  overrides: Partial<CompiledImageConfig> = {},
-): CompiledImageConfig {
+export function imageConfig(overrides: Partial<CompiledImageConfig> = {}): CompiledImageConfig {
   return {
     path: "/_next/image",
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
@@ -21,12 +19,9 @@ export function imageConfig(
     maximumResponseBody: 8 * 1024 * 1024,
     dangerouslyAllowSVG: false,
     dangerouslyAllowLocalIP: false,
-    contentSecurityPolicy:
-      "script-src 'none'; frame-src 'none'; sandbox;",
+    contentSecurityPolicy: "script-src 'none'; frame-src 'none'; sandbox;",
     contentDispositionType: "attachment",
-    remotePatterns: [
-      { protocol: "https", hostname: "^cdn\\.example\\.com$", pathname: "^\\/.*$" },
-    ],
+    remotePatterns: [{ protocol: "https", hostname: "^cdn\\.example\\.com$", pathname: "^\\/.*$" }],
     localPatterns: [{ pathname: "^\\/.*$", search: "" }],
     ...overrides,
   };

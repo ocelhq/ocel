@@ -1,16 +1,14 @@
-import { entryMissHeader, entryObjectKey } from "@framework/next-cache";
 import { WorkerEntrypoint } from "cloudflare:workers";
-
+import type { TagRecord } from "@framework/next-cache";
+import { entryMissHeader, entryObjectKey } from "@framework/next-cache";
 import { bearer, matchesHash, matchesSecret } from "@platform/cf-auth";
-
 import { readEntry, writeEntry } from "./entry";
+import type { Env } from "./env";
 import { IsrDeploy } from "./isr-deploy";
 import { IsrSnapshot } from "./isr-snapshot";
+import type { Memo } from "./memo";
 import { forget, memoize, memoized } from "./memo";
 import { isSecretHash } from "./registry";
-import type { Env } from "./env";
-import type { Memo } from "./memo";
-import type { TagRecord } from "@framework/next-cache";
 
 export { IsrDeploy, IsrSnapshot };
 
@@ -145,11 +143,7 @@ export default class extends WorkerEntrypoint<Env> {
         });
       }
 
-      const outcome = await writeEntry(
-        this.env.OCEL_CACHE_STORE,
-        objectKey,
-        await request.text(),
-      );
+      const outcome = await writeEntry(this.env.OCEL_CACHE_STORE, objectKey, await request.text());
       if (outcome === "rate-limited") {
         return new Response("Too Many Requests", { status: 429 });
       }

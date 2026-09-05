@@ -52,7 +52,14 @@ async function storeWithResponses(responses: any[]) {
   });
   vi.doMock("@aws-sdk/client-s3", async (orig) => {
     const actual = await orig<any>();
-    return { ...actual, S3Client: class { async send() { return {}; } } };
+    return {
+      ...actual,
+      S3Client: class {
+        async send() {
+          return {};
+        }
+      },
+    };
   });
   const { awsCacheStore } = await import("../src/next/cache-store.mjs");
   return { store: awsCacheStore(), sends };
@@ -111,9 +118,7 @@ function writerAnswering(...responses: Response[]) {
 test("routes entry reads through the ISR writer when one is injected", async () => {
   adoptStore();
   adoptWriter();
-  const calls = writerAnswering(
-    new Response(`{"lastModified":1,"value":{}}`, { status: 200 }),
-  );
+  const calls = writerAnswering(new Response(`{"lastModified":1,"value":{}}`, { status: 200 }));
 
   const { store, built, sent } = await entryStore();
 
@@ -149,7 +154,10 @@ test("names an entry the same way on the read as on the write", async () => {
 
 test.each([
   ["unreachable", () => Promise.reject(new TypeError("fetch failed"))],
-  ["timing out", () => Promise.reject(Object.assign(new Error("aborted"), { name: "TimeoutError" }))],
+  [
+    "timing out",
+    () => Promise.reject(Object.assign(new Error("aborted"), { name: "TimeoutError" })),
+  ],
   ["erroring", () => Promise.resolve(new Response("Internal Error", { status: 503 }))],
   ["refusing the credential", () => Promise.resolve(new Response("Unauthorized", { status: 401 }))],
   ["refusing the key", () => Promise.resolve(new Response("Bad Request", { status: 400 }))],
@@ -263,8 +271,7 @@ test("indexes the tag record a singular revalidateTag writes", async () => {
     TableName: TABLE,
     Key: { pk: { S: "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#products" }, sk: { S: "#META" } },
     ConditionExpression: "attribute_not_exists(expired) OR expired < :expired",
-    UpdateExpression:
-      "SET tag = :tag, gsi1pk = :ns, gsi1sk = :writtenAt, expired = :expired",
+    UpdateExpression: "SET tag = :tag, gsi1pk = :ns, gsi1sk = :writtenAt, expired = :expired",
     ExpressionAttributeValues: {
       ":tag": { S: "products" },
       ":ns": { S: "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#" },
@@ -294,9 +301,7 @@ function fakeTable() {
 
   const send = (input: any) => {
     const item = items.get(input.Key.pk.S) ?? { ...input.Key };
-    const guard = /attribute_not_exists\((\w+)\) OR \w+ < (:\w+)/.exec(
-      input.ConditionExpression,
-    );
+    const guard = /attribute_not_exists\((\w+)\) OR \w+ < (:\w+)/.exec(input.ConditionExpression);
     if (guard && item[guard[1]]) {
       const incoming = Number(input.ExpressionAttributeValues[guard[2]].N);
       if (Number(item[guard[1]].N) >= incoming) {
@@ -329,7 +334,14 @@ async function storesOverTable() {
   });
   vi.doMock("@aws-sdk/client-s3", async (orig) => {
     const actual = await orig<any>();
-    return { ...actual, S3Client: class { async send() { return {}; } } };
+    return {
+      ...actual,
+      S3Client: class {
+        async send() {
+          return {};
+        }
+      },
+    };
   });
   const { awsCacheStore } = await import("../src/next/cache-store.mjs");
   const { awsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
@@ -372,9 +384,7 @@ test("routes entry writes through the ISR writer when one is injected", async ()
   await store.writeEntry("blog/post", { lastModified: 1, value: {} });
 
   expect(fetches).toHaveLength(1);
-  expect(fetches[0][0]).toBe(
-    "https://writer.example/prod/proj/app/BID/entry?key=blog%2Fpost",
-  );
+  expect(fetches[0][0]).toBe("https://writer.example/prod/proj/app/BID/entry?key=blog%2Fpost");
   expect(sent).toHaveLength(0);
 });
 

@@ -24,10 +24,7 @@ export function directives(cacheControl: string | null): Map<string, string> {
   return parsed;
 }
 
-export function deltaSeconds(
-  cacheControl: string | null,
-  ...names: string[]
-): number | undefined {
+export function deltaSeconds(cacheControl: string | null, ...names: string[]): number | undefined {
   const parsed = directives(cacheControl);
   for (const name of names) {
     if (!parsed.has(name)) continue;
@@ -41,11 +38,7 @@ export function storagePolicy(cacheControl: string | null): CachePolicy | null {
   if (!cacheControl) return null;
 
   const parsed = directives(cacheControl);
-  if (
-    parsed.has("no-store") ||
-    parsed.has("no-cache") ||
-    parsed.has("private")
-  ) {
+  if (parsed.has("no-store") || parsed.has("no-cache") || parsed.has("private")) {
     return null;
   }
 
@@ -70,10 +63,7 @@ export function withStatus(response: Response, status: CacheStatus): Response {
   return respond(response, headers);
 }
 
-export function withVercelCacheAlias(
-  response: Response,
-  enabled: boolean | undefined,
-): Response {
+export function withVercelCacheAlias(response: Response, enabled: boolean | undefined): Response {
   if (!enabled) return response;
   const status = response.headers.get(CACHE_STATUS);
   if (status === null) return response;

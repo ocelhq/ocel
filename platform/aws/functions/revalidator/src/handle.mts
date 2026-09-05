@@ -1,7 +1,7 @@
-import { context, report, type Outcome } from "./log.mjs";
 import { parseMessage } from "@platform/edge-contract/revalidation";
-import { resolve, type OriginDeps } from "./origin.mjs";
-import { trigger, type TriggerDeps } from "./trigger.mjs";
+import { context, type Outcome, report } from "./log.mjs";
+import { type OriginDeps, resolve } from "./origin.mjs";
+import { type TriggerDeps, trigger } from "./trigger.mjs";
 
 export interface SqsRecord {
   messageId: string;
@@ -34,14 +34,20 @@ async function once(deps: HandlerDeps, record: SqsRecord): Promise<Outcome> {
   return outcome;
 }
 
-export async function handle(deps: HandlerDeps, event: { Records?: SqsRecord[] }): Promise<BatchResponse> {
+export async function handle(
+  deps: HandlerDeps,
+  event: { Records?: SqsRecord[] },
+): Promise<BatchResponse> {
   const batchItemFailures: { itemIdentifier: string }[] = [];
   const stopped = new Set<string>();
 
   for (const record of event.Records ?? []) {
     const group = record.attributes?.MessageGroupId || record.messageId;
     if (stopped.has(group)) {
-      report(context(record.messageId, null), { event: "RevalidateSkipped", reason: "group-stopped" });
+      report(context(record.messageId, null), {
+        event: "RevalidateSkipped",
+        reason: "group-stopped",
+      });
       batchItemFailures.push({ itemIdentifier: record.messageId });
       continue;
     }

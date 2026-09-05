@@ -18,7 +18,7 @@ export interface BoundCacheTags {
 function percentEncode(ch: string): string {
   let out = "";
   for (const byte of encoder.encode(ch)) {
-    out += "%" + byte.toString(16).toUpperCase().padStart(2, "0");
+    out += `%${byte.toString(16).toUpperCase().padStart(2, "0")}`;
   }
   return out;
 }

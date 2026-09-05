@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -15,8 +15,7 @@ const fixtureFile = join(packageRoot, "fixtures", "image-conformance.json");
 const port = Number(process.env.OCEL_IMAGE_FIXTURE_PORT ?? 3111);
 const origin = `http://127.0.0.1:${port}`;
 
-const BROWSER_ACCEPT =
-  "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
+const BROWSER_ACCEPT = "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
 
 const ASSETS = {
   "public/_fixtures/photo.png": png(),
@@ -58,13 +57,19 @@ const CASES = [
   {
     name: "url-local-with-search",
     query: { url: `${PHOTO}?v=1`, w: "640", q: "75" },
-    note: "localPatterns defaults to search: \"\", so any query string is refused",
+    note: 'localPatterns defaults to search: "", so any query string is refused',
   },
   { name: "url-local-allowed", query: { url: PHOTO, w: "640", q: "75" }, accept: BROWSER_ACCEPT },
   { name: "url-absolute-unparseable", query: { url: "https://[", w: "640", q: "75" } },
-  { name: "url-absolute-ftp", query: { url: "ftp://cdn.allowed.example/img/a.png", w: "640", q: "75" } },
+  {
+    name: "url-absolute-ftp",
+    query: { url: "ftp://cdn.allowed.example/img/a.png", w: "640", q: "75" },
+  },
   { name: "url-absolute-data", query: { url: "data:image/png;base64,AAAA", w: "640", q: "75" } },
-  { name: "url-absolute-denied", query: { url: "https://evil.example/img/a.png", w: "640", q: "75" } },
+  {
+    name: "url-absolute-denied",
+    query: { url: "https://evil.example/img/a.png", w: "640", q: "75" },
+  },
   {
     name: "url-absolute-suffix-attack",
     query: { url: "https://allowed.example.evil.example/img/a.png", w: "640", q: "75" },
@@ -120,7 +125,11 @@ const CASES = [
   { name: "q-zero", query: { url: PHOTO, w: "640", q: "0" } },
   { name: "q-over-100", query: { url: PHOTO, w: "640", q: "101" } },
   { name: "q-not-in-qualities", query: { url: PHOTO, w: "640", q: "50" } },
-  { name: "w-and-q-in-image-sizes", query: { url: PHOTO, w: "32", q: "75" }, accept: BROWSER_ACCEPT },
+  {
+    name: "w-and-q-in-image-sizes",
+    query: { url: PHOTO, w: "32", q: "75" },
+    accept: BROWSER_ACCEPT,
+  },
 
   {
     name: "accept-absent",
@@ -274,7 +283,9 @@ async function staticMediaPath() {
   const entries = await readdir(dir);
   const emitted = entries.filter((name) => name.endsWith(".png")).sort();
   if (emitted.length === 0) {
-    throw new Error(`no static-import image under ${dir}; app/image-fixtures/page.tsx must import one`);
+    throw new Error(
+      `no static-import image under ${dir}; app/image-fixtures/page.tsx must import one`,
+    );
   }
   return `/_next/static/media/${emitted[0]}`;
 }
@@ -303,7 +314,10 @@ async function clientEnv() {
 
 async function generateVariant(variant, baseEnv) {
   const env = { ...baseEnv, OCEL_IMAGE_FIXTURES: variant };
-  await run(join(appRoot, "node_modules", ".bin", "next"), ["build"], { cwd: appRoot, env: { ...process.env, ...env } });
+  await run(join(appRoot, "node_modules", ".bin", "next"), ["build"], {
+    cwd: appRoot,
+    env: { ...process.env, ...env },
+  });
   await rm(join(appRoot, ".next", "cache", "images"), { recursive: true, force: true });
 
   const config = await compiledConfig();
@@ -338,10 +352,7 @@ async function main() {
   }
 
   await mkdir(dirname(fixtureFile), { recursive: true });
-  await writeFile(
-    fixtureFile,
-    `${JSON.stringify({ next: nextVersion, variants }, null, 2)}\n`,
-  );
+  await writeFile(fixtureFile, `${JSON.stringify({ next: nextVersion, variants }, null, 2)}\n`);
   console.log(`wrote ${fixtureFile}`);
 
   await rm(join(appRoot, ".next"), { recursive: true, force: true });

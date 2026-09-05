@@ -27,13 +27,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exit(2);
   }
   if (mode === "policy") {
-    process.stdout.write(printPolicy(tier) + "\n");
+    process.stdout.write(`${printPolicy(tier)}\n`);
   } else if (mode === "policy-parts") {
     if (!dir) {
       console.error("policy-parts needs a directory to write the parts into");
       process.exit(2);
     }
-    process.stdout.write(writePolicyParts(tier, dir).join("\n") + "\n");
+    process.stdout.write(`${writePolicyParts(tier, dir).join("\n")}\n`);
   } else {
     runTier(tier);
   }
@@ -47,7 +47,9 @@ export function policyParts(document) {
   for (const statement of policy.Statement) {
     const alone = render([statement]);
     if (alone.length > MANAGED_POLICY_CHARS) {
-      throw new Error(`one statement renders to ${alone.length} characters, past the ${MANAGED_POLICY_CHARS} a managed policy carries: ${alone}`);
+      throw new Error(
+        `one statement renders to ${alone.length} characters, past the ${MANAGED_POLICY_CHARS} a managed policy carries: ${alone}`,
+      );
     }
     if (current.length > 0 && render([...current, statement]).length > MANAGED_POLICY_CHARS) {
       parts.push(render(current));
@@ -59,7 +61,9 @@ export function policyParts(document) {
     parts.push(render(current));
   }
   if (parts.length > MANAGED_SESSION_POLICIES) {
-    throw new Error(`the document splits into ${parts.length} managed policies, past the ${MANAGED_SESSION_POLICIES} a role session may carry`);
+    throw new Error(
+      `the document splits into ${parts.length} managed policies, past the ${MANAGED_SESSION_POLICIES} a role session may carry`,
+    );
   }
   return parts;
 }
@@ -81,7 +85,9 @@ export function printPolicy(tier) {
   });
   const document = res.stdout.toString().trim();
   if (!document.startsWith("{")) {
-    throw new Error(`ocel bootstrap policy ${tier} wrote no policy document, only: ${document || "(nothing)"}`);
+    throw new Error(
+      `ocel bootstrap policy ${tier} wrote no policy document, only: ${document || "(nothing)"}`,
+    );
   }
   return document;
 }
@@ -106,17 +112,22 @@ function runTier(tier) {
 
 function stageSmokeApp() {
   const outFile = join(mkdtempSync(join(tmpdir(), "ocel-e2e-tier-app-")), "app-dir");
-  run("stage-smoke-app.mjs", process.execPath, [
-    script("stage-smoke-app.mjs"),
-    required("NEXTJS_DIR"),
-    join(adapterDir(), "tests", "next-compat", "smoke-app"),
-    outFile,
-  ], {
-    cwd: adapterDir(),
-    env: process.env,
-    stdio: ["ignore", "inherit", "inherit"],
-    timeout: STAGE_TIMEOUT_MS,
-  });
+  run(
+    "stage-smoke-app.mjs",
+    process.execPath,
+    [
+      script("stage-smoke-app.mjs"),
+      required("NEXTJS_DIR"),
+      join(adapterDir(), "tests", "next-compat", "smoke-app"),
+      outFile,
+    ],
+    {
+      cwd: adapterDir(),
+      env: process.env,
+      stdio: ["ignore", "inherit", "inherit"],
+      timeout: STAGE_TIMEOUT_MS,
+    },
+  );
   return readFileSync(outFile, "utf8").trim();
 }
 
@@ -128,16 +139,20 @@ function configuredDir(label) {
 }
 
 function ocel(args, options) {
-  return run(`ocel ${args.join(" ")}`, process.execPath, [
-    join(adapterDir(), "packages", "ocel", "bin", "run.js"),
-    ...args,
-  ], { env: withoutSkipDriftChecks(process.env), ...options });
+  return run(
+    `ocel ${args.join(" ")}`,
+    process.execPath,
+    [join(adapterDir(), "packages", "ocel", "bin", "run.js"), ...args],
+    { env: withoutSkipDriftChecks(process.env), ...options },
+  );
 }
 
 function run(label, command, args, options) {
   const res = spawnSync(command, args, options);
   if (res.error || res.signal || res.status !== 0) {
-    const why = res.error?.message ?? (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`);
+    const why =
+      res.error?.message ??
+      (res.signal ? `killed with ${res.signal}` : `exited with ${res.status}`);
     console.error(`[ocel-e2e] ${label}: ${why}`);
     process.exit(1);
   }

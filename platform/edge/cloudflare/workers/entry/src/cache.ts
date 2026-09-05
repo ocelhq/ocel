@@ -1,19 +1,14 @@
 import {
   CACHE_STATUS,
-  NEXT_CACHE_STATUS,
+  type CacheStatus,
   deltaSeconds,
   headResponse,
+  NEXT_CACHE_STATUS,
   respond,
   storagePolicy,
   withStatus,
-  withVercelCacheAlias,
-  type CacheStatus,
 } from "@framework/next-router/http-cache";
-import {
-  asSegmentPayload,
-  isSegmentPayload,
-  isSegmentPrefetch,
-} from "@framework/next-router/segment";
+import { isSegmentPayload } from "@framework/next-router/segment";
 
 import { enqueued, type RevalidationRoute, type RevalidationSender } from "./revalidation";
 import type { TagClock, TagVerdict } from "./tag-clock";
@@ -30,8 +25,7 @@ export const SUPPRESS_SELF_REVALIDATION = true;
 
 type NextCacheStatus = "HIT" | "STALE";
 
-const nextCacheStatus = (stale: boolean): NextCacheStatus =>
-  stale ? "STALE" : "HIT";
+const nextCacheStatus = (stale: boolean): NextCacheStatus => (stale ? "STALE" : "HIT");
 
 export interface CacheDeps {
   cache: Cache;
@@ -77,9 +71,7 @@ export function staleWindowMs(meta: EntryMeta, now: number): number {
   return meta.expiration * 1000 - (now - meta.lastModified);
 }
 
-export type CacheKeyResult =
-  | { cacheable: true; key: string }
-  | { cacheable: false };
+export type CacheKeyResult = { cacheable: true; key: string } | { cacheable: false };
 
 export function variantPath(
   pathname: string,
@@ -125,9 +117,7 @@ export function cacheKey(
   if (variant === null) return { cacheable: false };
 
   const key = new URL(`https://cache.ocel/${scope}${variant}`);
-  const names = (allowQuery ?? [...url.searchParams.keys()]).filter(
-    (name) => name !== "_rsc",
-  );
+  const names = (allowQuery ?? [...url.searchParams.keys()]).filter((name) => name !== "_rsc");
 
   for (const name of [...names].sort()) {
     for (const value of url.searchParams.getAll(name)) {
@@ -140,9 +130,7 @@ export function cacheKey(
 
 export function hasDraftCookie(request: Request): boolean {
   const cookie = request.headers.get("cookie");
-  return (
-    cookie !== null && new RegExp(`(?:^|;\\s*)${DRAFT_COOKIE}=`).test(cookie)
-  );
+  return cookie !== null && new RegExp(`(?:^|;\\s*)${DRAFT_COOKIE}=`).test(cookie);
 }
 
 export function servedFromStore(response: Response, stale: boolean): Response {
@@ -183,8 +171,7 @@ function suppressedStaleServe(target: CacheTarget, response: Response): boolean 
 }
 
 const prerenderPolicy: ColoPolicy = {
-  storable: (response) =>
-    storagePolicy(response.headers.get("cache-control")) !== null,
+  storable: (response) => storagePolicy(response.headers.get("cache-control")) !== null,
   window: entryWindow,
   forServe: (response, status) => {
     const served = withStatus(response, status);
@@ -278,11 +265,7 @@ export async function storeInColo(
 
 const inFlight = new WeakMap<Cache, Map<string, Promise<unknown>>>();
 
-export function refreshOnce(
-  deps: CacheDeps,
-  key: string,
-  run: () => Promise<unknown>,
-): void {
+export function refreshOnce(deps: CacheDeps, key: string, run: () => Promise<unknown>): void {
   let pending = inFlight.get(deps.cache);
   if (!pending) inFlight.set(deps.cache, (pending = new Map()));
   if (pending.has(key)) return;
@@ -294,10 +277,7 @@ export function refreshOnce(
   deps.waitUntil(promise);
 }
 
-function inFlightFill(
-  deps: CacheDeps,
-  key: string,
-): Promise<unknown> | undefined {
+function inFlightFill(deps: CacheDeps, key: string): Promise<unknown> | undefined {
   return inFlight.get(deps.cache)?.get(key);
 }
 
@@ -344,8 +324,7 @@ async function claimSentinel(cache: Cache, sentinel: Request): Promise<boolean> 
   try {
     if (await cache.match(sentinel)) return false;
     await cache.put(sentinel, sentinelRecord(refreshSentinelTtlSeconds));
-  } catch {
-  }
+  } catch {}
   return true;
 }
 
@@ -367,15 +346,10 @@ async function settleSentinel(
     else {
       await cache.put(
         sentinel,
-        sentinelRecord(
-          outcome === "refused"
-            ? refreshBackoffSeconds
-            : refreshSentinelTtlSeconds,
-        ),
+        sentinelRecord(outcome === "refused" ? refreshBackoffSeconds : refreshSentinelTtlSeconds),
       );
     }
-  } catch {
-  }
+  } catch {}
 }
 
 async function askBelow(deps: CacheDeps, refreshing: number): Promise<boolean> {
@@ -454,13 +428,7 @@ async function serveOrAdmitRefresh(
       return outcome;
     };
     if (target.refreshKey) {
-      admitRefresh(
-        deps,
-        target.refreshKey,
-        modified,
-        refresh,
-        staleWindowMs(meta, now()),
-      );
+      admitRefresh(deps, target.refreshKey, modified, refresh, staleWindowMs(meta, now()));
     } else refreshOnce(deps, target.key, refresh);
     return policy.forServe(fromStorage(cached, true), "STALE");
   }
@@ -484,10 +452,7 @@ async function colo(
 
   const filling = inFlightFill(deps, target.key);
   if (filling) {
-    const settled = await settledWithin(
-      filling,
-      deps.joinFillTimeoutMs ?? joinFillTimeoutMs,
-    );
+    const settled = await settledWithin(filling, deps.joinFillTimeoutMs ?? joinFillTimeoutMs);
     if (settled) {
       const joined = await serveOrRefresh();
       if (joined) return joined;
@@ -547,4 +512,3 @@ export async function serveCachedImage(
 
   return request.method === "HEAD" ? headResponse(response) : response;
 }
-

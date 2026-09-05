@@ -7,7 +7,5 @@ import { runtimeFiles } from "./runtime-files.mjs";
 const pkgDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 await Promise.all(
-  runtimeFiles.map((name) =>
-    copyFile(join(pkgDir, "src", name), join(pkgDir, "dist", name)),
-  ),
+  runtimeFiles.map((name) => copyFile(join(pkgDir, "src", name), join(pkgDir, "dist", name))),
 );

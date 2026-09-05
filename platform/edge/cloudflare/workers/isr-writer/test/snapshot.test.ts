@@ -1,5 +1,5 @@
-import { tagSnapshotKey, type TagSnapshot } from "@framework/next-cache";
 import { env } from "cloudflare:test";
+import { type TagSnapshot, tagSnapshotKey } from "@framework/next-cache";
 import { describe, expect, it } from "vitest";
 
 import { TagClock } from "../src/snapshot";
@@ -174,7 +174,9 @@ describe("raise", () => {
     const prefix = freshPrefix();
     await env.OCEL_CACHE_STORE.put(tagSnapshotKey(prefix), "{not a snapshot");
 
-    await expect(clockFor(prefix).raise(new Map([["a", { expired: 5_000 }]]), 9_000)).rejects.toThrow();
+    await expect(
+      clockFor(prefix).raise(new Map([["a", { expired: 5_000 }]]), 9_000),
+    ).rejects.toThrow();
     expect(await (await env.OCEL_CACHE_STORE.get(tagSnapshotKey(prefix)))!.text()).toBe(
       "{not a snapshot",
     );

@@ -46,11 +46,7 @@ export type LinkPlaceholdersOf<L, G> = keyof G extends never
 
 /** Whether a value names a property of a published record. */
 export function isLinkOutput(value: unknown): value is LinkOutput {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Object.hasOwn(value, outputPlaceholderKey)
-  );
+  return typeof value === "object" && value !== null && Object.hasOwn(value, outputPlaceholderKey);
 }
 
 /**
@@ -68,9 +64,7 @@ export const links: LinkPlaceholders = new Proxy({} as LinkPlaceholders, {
 function propertiesOf(link: string): LinkProperties {
   return new Proxy({} as LinkProperties, {
     get(_target, property) {
-      return unnameable(property)
-        ? undefined
-        : placeholder(link, property as string);
+      return unnameable(property) ? undefined : placeholder(link, property as string);
     },
   });
 }

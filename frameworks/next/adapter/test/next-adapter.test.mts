@@ -1,25 +1,22 @@
+import { createHash } from "node:crypto";
 import {
-  mkdtemp,
+  lstat,
   mkdir,
-  writeFile,
-  readFile,
+  mkdtemp,
   readdir,
+  readFile,
   readlink,
   realpath,
   stat,
-  lstat,
   symlink,
   utimes,
+  writeFile,
 } from "node:fs/promises";
-import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  PHASE_DEVELOPMENT_SERVER,
-  PHASE_PRODUCTION_BUILD,
-} from "next/constants.js";
 import { variantHeadersFile } from "@framework/next-cache/naming";
+import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD } from "next/constants.js";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { defaultImages } from "./fixtures.mts";
 
@@ -48,10 +45,7 @@ async function synthProject() {
   await writeFile(join(projectDir, "public", "next.svg"), "<svg/>");
   await writeFile(join(projectDir, "public", "icons", "logo.png"), "x");
 
-  const handler = join(
-    projectDir,
-    ".next/server/app/api/documents/route.js",
-  );
+  const handler = join(projectDir, ".next/server/app/api/documents/route.js");
   await mkdir(dirname(handler), { recursive: true });
   await writeFile(handler, "module.exports = () => {}");
 
@@ -114,10 +108,7 @@ async function synthDedupProject() {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-dedup-"));
 
   const pageHandler = join(projectDir, ".next/server/app/page.js");
-  const routeHandler = join(
-    projectDir,
-    ".next/server/app/api/documents/route.js",
-  );
+  const routeHandler = join(projectDir, ".next/server/app/api/documents/route.js");
   const shared = join(projectDir, ".next/server/chunks/shared.js");
   for (const f of [pageHandler, routeHandler, shared]) {
     await mkdir(dirname(f), { recursive: true });
@@ -226,10 +217,7 @@ async function synthPrerenderProject() {
   await mkdir(join(appDir, "index.segments"), { recursive: true });
   await writeFile(join(appDir, "index.html"), "<html>root</html>");
   await writeFile(join(appDir, "index.rsc"), "RSC-ROOT");
-  await writeFile(
-    join(appDir, "index.segments/_tree.segment.rsc"),
-    "RSC-TREE",
-  );
+  await writeFile(join(appDir, "index.segments/_tree.segment.rsc"), "RSC-TREE");
 
   const richConfig = {
     allowQuery: [],
@@ -354,12 +342,7 @@ async function partitionFuncDirs(projectDir: string) {
 }
 
 async function readManifest(projectDir: string) {
-  return JSON.parse(
-    await readFile(
-      join(projectDir, ".ocel/output/routing-manifest.json"),
-      "utf8",
-    ),
-  );
+  return JSON.parse(await readFile(join(projectDir, ".ocel/output/routing-manifest.json"), "utf8"));
 }
 
 async function readLauncher(projectDir: string, bundle = "bundle-0") {
@@ -439,15 +422,9 @@ test("copies the dispatcher into the bundle verbatim", async () => {
   await adapter.onBuildComplete(args as never);
 
   expect(
-    await readFile(
-      join(functionsDir(projectDir), "bundle-0.func/__ocel_dispatch.cjs"),
-      "utf8",
-    ),
+    await readFile(join(functionsDir(projectDir), "bundle-0.func/__ocel_dispatch.cjs"), "utf8"),
   ).toBe(
-    await readFile(
-      fileURLToPath(new URL("../src/next-dispatch.cjs", import.meta.url)),
-      "utf8",
-    ),
+    await readFile(fileURLToPath(new URL("../src/next-dispatch.cjs", import.meta.url)), "utf8"),
   );
 });
 
@@ -544,9 +521,7 @@ test("a dynamic route reaches the launcher as the pattern that spans it", async 
   await adapter.onBuildComplete(args as never);
 
   const { routes } = await readLauncher(projectDir);
-  expect(routes.dynamic).toEqual([
-    ["^[/]?/api/todos/(?<nxtPid>[^/]+?)(?:/)?$", "/api/todos/[id]"],
-  ]);
+  expect(routes.dynamic).toEqual([["^[/]?/api/todos/(?<nxtPid>[^/]+?)(?:/)?$", "/api/todos/[id]"]]);
   expect(new RegExp(routes.dynamic[0][0], "i").test("/api/todos/7")).toBe(true);
 });
 
@@ -599,8 +574,7 @@ test("fails the build when a route's entry lands in no bundle", async () => {
   process.chdir(projectDir);
   vi.resetModules();
   vi.doMock("../src/pack.mts", async () => {
-    const actual =
-      await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
+    const actual = await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
     return {
       ...actual,
       packBundles: (members: never, opts: never) => {
@@ -619,9 +593,7 @@ test("fails the build when a route's entry lands in no bundle", async () => {
   });
   try {
     const { default: adapter } = await import("../src/next-adapter.mts");
-    await expect(adapter.onBuildComplete(args as never)).rejects.toThrow(
-      /\/api\/documents/,
-    );
+    await expect(adapter.onBuildComplete(args as never)).rejects.toThrow(/\/api\/documents/);
   } finally {
     vi.doUnmock("../src/pack.mts");
     vi.resetModules();
@@ -630,13 +602,10 @@ test("fails the build when a route's entry lands in no bundle", async () => {
 
 test("fails the build when a prerender's parent renders nowhere", async () => {
   const { projectDir, args } = await synthPrerenderProject();
-  (args.outputs.prerenders[0] as Record<string, unknown>).parentOutputId =
-    "/ghost";
+  (args.outputs.prerenders[0] as Record<string, unknown>).parentOutputId = "/ghost";
   const adapter = await loadAdapterIn(projectDir);
 
-  await expect(adapter.onBuildComplete(args as never)).rejects.toThrow(
-    /\/ghost/,
-  );
+  await expect(adapter.onBuildComplete(args as never)).rejects.toThrow(/\/ghost/);
 });
 
 test("carries an empty-string entry key instead of dropping it", async () => {
@@ -746,9 +715,7 @@ test("gives variants one shared bundle id and one shared entry key", async () =>
     id: "bundle-0",
     entryKey: "/api/documents",
   });
-  expect(manifest.dispatch["/api/documents.rsc"]).toEqual(
-    manifest.dispatch["/api/documents"],
-  );
+  expect(manifest.dispatch["/api/documents.rsc"]).toEqual(manifest.dispatch["/api/documents"]);
   expect(manifest.pathnames).toContain("/index.rsc");
   expect(manifest.pathnames).toContain("/api/documents.rsc");
 });
@@ -767,8 +734,7 @@ test("splits over the budget and points each route at its own bundle", async () 
   process.chdir(projectDir);
   vi.resetModules();
   vi.doMock("../src/pack.mts", async () => {
-    const actual =
-      await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
+    const actual = await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
     return {
       ...actual,
       packBundles: (members: never, opts: never) =>
@@ -793,9 +759,9 @@ test("splits over the budget and points each route at its own bundle", async () 
   expect(manifest.dispatch["/api/documents.rsc"].id).toBe("bundle-1");
 
   expect(Object.keys((await readLauncher(projectDir, "bundle-0")).entries)).toEqual(["/"]);
-  expect(
-    Object.keys((await readLauncher(projectDir, "bundle-1")).entries),
-  ).toEqual(["/api/documents"]);
+  expect(Object.keys((await readLauncher(projectDir, "bundle-1")).entries)).toEqual([
+    "/api/documents",
+  ]);
 
   const whole = {
     "/": "/",
@@ -825,10 +791,7 @@ test("enumerates public/ files as static in the routing manifest", async () => {
   await adapter.onBuildComplete(args as never);
 
   const manifest = JSON.parse(
-    await readFile(
-      join(projectDir, ".ocel/output/routing-manifest.json"),
-      "utf8",
-    ),
+    await readFile(join(projectDir, ".ocel/output/routing-manifest.json"), "utf8"),
   );
 
   expect(manifest.pathnames).toContain("/next.svg");
@@ -885,9 +848,7 @@ test("carries the compiled image config and its hash into the manifest", async (
   expect(images.path).toBe("/_next/image");
   expect(images.minimumCacheTTL).toBe(14400);
   expect(images.remotePatterns[0].protocol).toBe("https");
-  expect(new RegExp(images.remotePatterns[0].hostname).test("a.example.com")).toBe(
-    true,
-  );
+  expect(new RegExp(images.remotePatterns[0].hostname).test("a.example.com")).toBe(true);
   expect(images.configHash).toMatch(/^[0-9a-f]{64}$/);
 });
 
@@ -897,13 +858,9 @@ test("writes an image config artifact the manifest's configHash covers", async (
 
   await adapter.onBuildComplete(args as never);
 
-  const bytes = await readFile(
-    join(projectDir, ".ocel/output/image-config.json"),
-  );
+  const bytes = await readFile(join(projectDir, ".ocel/output/image-config.json"));
   const { images } = await readManifest(projectDir);
-  expect(createHash("sha256").update(bytes).digest("hex")).toBe(
-    images.configHash,
-  );
+  expect(createHash("sha256").update(bytes).digest("hex")).toBe(images.configHash);
   expect(JSON.parse(bytes.toString()).configHash).toBeUndefined();
 });
 
@@ -918,17 +875,10 @@ test("hashes both public/ and built static files into the manifest", async () =>
   expect(assetHashes["/_next/static/media/logo.png"]).toBe(
     createHash("sha256").update("PNG").digest("hex"),
   );
-  expect(assetHashes["/icons/logo.png"]).toBe(
-    createHash("sha256").update("x").digest("hex"),
-  );
-  expect(assetHashes["/next.svg"]).toBe(
-    createHash("sha256").update("<svg/>").digest("hex"),
-  );
+  expect(assetHashes["/icons/logo.png"]).toBe(createHash("sha256").update("x").digest("hex"));
+  expect(assetHashes["/next.svg"]).toBe(createHash("sha256").update("<svg/>").digest("hex"));
   expect(
-    await readFile(
-      join(projectDir, ".ocel/output/static/_next/static/media/logo.png"),
-      "utf8",
-    ),
+    await readFile(join(projectDir, ".ocel/output/static/_next/static/media/logo.png"), "utf8"),
   ).toBe("PNG");
 });
 
@@ -940,9 +890,7 @@ test("keys the error pages by the path they are served at", async () => {
   await adapter.onBuildComplete(args as never);
 
   const { assetHashes } = await readManifest(projectDir);
-  expect(assetHashes["/404.html"]).toBe(
-    createHash("sha256").update("gone").digest("hex"),
-  );
+  expect(assetHashes["/404.html"]).toBe(createHash("sha256").update("gone").digest("hex"));
   expect(assetHashes["/404"]).toBeUndefined();
 });
 
@@ -954,9 +902,7 @@ test("writes a statically-optimized page under its .html name", async () => {
   await adapter.onBuildComplete(args as never);
 
   const staticDir = join(projectDir, ".ocel/output/static");
-  expect(await readFile(join(staticDir, "some.html"), "utf8")).toBe(
-    "<html>some</html>",
-  );
+  expect(await readFile(join(staticDir, "some.html"), "utf8")).toBe("<html>some</html>");
   expect(await exists(join(staticDir, "some"))).toBe(false);
 
   const manifest = await readManifest(projectDir);
@@ -1006,16 +952,10 @@ test("emits a page and its own children without colliding", async () => {
   await adapter.onBuildComplete(args as never);
 
   const staticDir = join(projectDir, ".ocel/output/static");
-  expect(await readFile(join(staticDir, "overlap.html"), "utf8")).toBe(
-    "<html>parent</html>",
-  );
-  expect(await readFile(join(staticDir, "overlap/[slug].html"), "utf8")).toBe(
-    "<html>child</html>",
-  );
+  expect(await readFile(join(staticDir, "overlap.html"), "utf8")).toBe("<html>parent</html>");
+  expect(await readFile(join(staticDir, "overlap/[slug].html"), "utf8")).toBe("<html>child</html>");
   expect(await readFile(join(staticDir, "overlap.rsc"), "utf8")).toBe("RSC");
-  expect(await readFile(join(staticDir, "overlap/[slug].rsc"), "utf8")).toBe(
-    "CHILD RSC",
-  );
+  expect(await readFile(join(staticDir, "overlap/[slug].rsc"), "utf8")).toBe("CHILD RSC");
 });
 
 test("writes a statically-optimized dynamic page under its template's name", async () => {
@@ -1027,9 +967,7 @@ test("writes a statically-optimized dynamic page under its template's name", asy
   await adapter.onBuildComplete(args as never);
 
   const staticDir = join(projectDir, ".ocel/output/static");
-  expect(await readFile(join(staticDir, "docs/[slug].html"), "utf8")).toBe(
-    "<html>slug</html>",
-  );
+  expect(await readFile(join(staticDir, "docs/[slug].html"), "utf8")).toBe("<html>slug</html>");
 
   const manifest = await readManifest(projectDir);
   expect(manifest.assetHashes["/docs/[slug].html"]).toBe(
@@ -1054,9 +992,7 @@ test("leaves static outputs that are already files alone", async () => {
   expect(await exists(join(staticDir, "favicon.ico"))).toBe(true);
   expect(await exists(join(staticDir, "opengraph-image.png"))).toBe(true);
   expect(await readFile(join(staticDir, "sitemap.xml"), "utf8")).toBe("<urlset/>");
-  expect(await exists(join(staticDir, "_next/static/chunks/a.js.html"))).toBe(
-    false,
-  );
+  expect(await exists(join(staticDir, "_next/static/chunks/a.js.html"))).toBe(false);
   expect(await exists(join(staticDir, "favicon.ico.html"))).toBe(false);
   expect(await exists(join(staticDir, "sitemap.xml.html"))).toBe(false);
 });
@@ -1070,12 +1006,8 @@ test("emits a dotted page and its own children without colliding", async () => {
   await adapter.onBuildComplete(args as never);
 
   const staticDir = join(projectDir, ".ocel/output/static");
-  expect(await readFile(join(staticDir, "v1.0.html"), "utf8")).toBe(
-    "<html>parent</html>",
-  );
-  expect(await readFile(join(staticDir, "v1.0/[slug].html"), "utf8")).toBe(
-    "<html>child</html>",
-  );
+  expect(await readFile(join(staticDir, "v1.0.html"), "utf8")).toBe("<html>parent</html>");
+  expect(await readFile(join(staticDir, "v1.0/[slug].html"), "utf8")).toBe("<html>child</html>");
   expect((await readManifest(projectDir)).dispatch["/v1.0"]).toEqual({
     kind: "static",
   });
@@ -1105,12 +1037,8 @@ test("omits the image config when the app opted out of optimization", async () =
   await adapter.onBuildComplete(args as never);
 
   expect((await readManifest(projectDir)).images).toBeUndefined();
-  expect(await exists(join(projectDir, ".ocel/output/image-config.json"))).toBe(
-    false,
-  );
-  expect(warn).toHaveBeenCalledWith(
-    expect.stringMatching(/images\.unoptimized is true/),
-  );
+  expect(await exists(join(projectDir, ".ocel/output/image-config.json"))).toBe(false);
+  expect(warn).toHaveBeenCalledWith(expect.stringMatching(/images\.unoptimized is true/));
   warn.mockRestore();
 });
 
@@ -1299,10 +1227,7 @@ test("writes the bundle name into its config.json", async () => {
   await adapter.onBuildComplete(args as never);
 
   const config = JSON.parse(
-    await readFile(
-      join(projectDir, ".ocel/output/functions/bundle-0.func/config.json"),
-      "utf8",
-    ),
+    await readFile(join(projectDir, ".ocel/output/functions/bundle-0.func/config.json"), "utf8"),
   );
 
   expect(config.id).toBe("bundle-0");
@@ -1322,10 +1247,7 @@ test("records the owning app in each function's config.json", async () => {
   }
 
   const config = JSON.parse(
-    await readFile(
-      join(projectDir, ".ocel/output/functions/bundle-0.func/config.json"),
-      "utf8",
-    ),
+    await readFile(join(projectDir, ".ocel/output/functions/bundle-0.func/config.json"), "utf8"),
   );
 
   expect(config.app).toBe("marketing");
@@ -1333,10 +1255,7 @@ test("records the owning app in each function's config.json", async () => {
 
 async function readCacheEntry(projectDir: string, key: string) {
   return JSON.parse(
-    await readFile(
-      join(projectDir, ".ocel/output/cache", `${key}.cache.json`),
-      "utf8",
-    ),
+    await readFile(join(projectDir, ".ocel/output/cache", `${key}.cache.json`), "utf8"),
   );
 }
 
@@ -1376,10 +1295,10 @@ test("trusts the host header so a deployed res.revalidate can address itself", a
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
   const adapter = await loadAdapterIn(projectDir);
 
-  const config = await adapter.modifyConfig!(
-    { experimental: { ppr: true } } as never,
-    { phase: PHASE_PRODUCTION_BUILD, nextVersion: "16.2.10" },
-  );
+  const config = await adapter.modifyConfig!({ experimental: { ppr: true } } as never, {
+    phase: PHASE_PRODUCTION_BUILD,
+    nextVersion: "16.2.10",
+  });
 
   expect(config.experimental).toEqual({ ppr: true, trustHostHeader: true });
 });
@@ -1395,9 +1314,7 @@ test("leaves a non-build phase untouched and writes nothing", async () => {
 
   expect(config.cacheHandler).toBeUndefined();
   expect(config.cacheMaxMemorySize).toBe(1);
-  await expect(
-    readFile(join(projectDir, ".ocel/cache-handler.cjs"), "utf8"),
-  ).rejects.toThrow();
+  await expect(readFile(join(projectDir, ".ocel/cache-handler.cjs"), "utf8")).rejects.toThrow();
 });
 
 test("names the layer's cache handler by absolute path in required-server-files", async () => {
@@ -1454,10 +1371,7 @@ test("carries a pages route's data twin onto its cache entry", async () => {
   const handler = join(pagesDir, "blog.js");
   await writeFile(handler, "module.exports = () => {}");
   await writeFile(join(pagesDir, "blog.html"), "<html>blog</html>");
-  await writeFile(
-    join(pagesDir, "blog.json"),
-    JSON.stringify({ pageProps: { title: "blog" } }),
-  );
+  await writeFile(join(pagesDir, "blog.json"), JSON.stringify({ pageProps: { title: "blog" } }));
 
   args.outputs.pages.push({
     pathname: "/blog",
@@ -1659,10 +1573,7 @@ test("projects only the variant headers, and only for routes that have them", as
 
   const projection = await readVariantHeaders(projectDir);
   expect(Object.keys(projection)).toEqual(["index"]);
-  expect(Object.keys(projection.index)).toEqual([
-    "rscHeaders",
-    "segmentHeaders",
-  ]);
+  expect(Object.keys(projection.index)).toEqual(["rscHeaders", "segmentHeaders"]);
 });
 
 test("keeps content-type on an APP_ROUTE cache entry", async () => {
@@ -1778,9 +1689,7 @@ test("states the runtime and next's own build id in serve.json", async () => {
 
   await adapter.onBuildComplete(args as never);
 
-  const serve = JSON.parse(
-    await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"),
-  );
+  const serve = JSON.parse(await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"));
   const manifest = await readManifest(projectDir);
   expect(serve).toEqual({
     runtime: "next",
@@ -1800,9 +1709,9 @@ test("names the bundle serving the root route as the entry", async () => {
 
   const manifest = await readManifest(projectDir);
   expect(manifest.dispatch["/"].id).toBe(manifest.entry);
-  expect(
-    await exists(join(projectDir, `.ocel/output/functions/${manifest.entry}.func`)),
-  ).toBe(true);
+  expect(await exists(join(projectDir, `.ocel/output/functions/${manifest.entry}.func`))).toBe(
+    true,
+  );
 });
 
 test("names no entry when no function serves the root route", async () => {
@@ -1812,15 +1721,11 @@ test("names no entry when no function serves the root route", async () => {
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  const serve = JSON.parse(
-    await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"),
-  );
+  const serve = JSON.parse(await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"));
   expect(manifest.dispatch["/"]).toBeUndefined();
   expect(manifest.entry).toBe("");
   expect(serve.entry).toBe("");
-  expect(
-    await exists(join(projectDir, ".ocel/output/functions/bundle-0.func")),
-  ).toBe(true);
+  expect(await exists(join(projectDir, ".ocel/output/functions/bundle-0.func"))).toBe(true);
 });
 
 test("names the root route's bundle in a build split across several bundles", async () => {
@@ -1838,8 +1743,7 @@ test("names the root route's bundle in a build split across several bundles", as
   process.chdir(projectDir);
   vi.resetModules();
   vi.doMock("../src/pack.mts", async () => {
-    const actual =
-      await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
+    const actual = await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
     return {
       ...actual,
       packBundles: (members: never, opts: never) =>
@@ -1860,15 +1764,14 @@ test("names the root route's bundle in a build split across several bundles", as
   const manifest = await readManifest(projectDir);
   expect(manifest.entry).toBe(manifest.dispatch["/"].id);
   expect(manifest.entry).not.toBe(manifest.dispatch["/api/documents"].id);
-  expect(
-    Object.keys((await readLauncher(projectDir, manifest.entry)).entries),
-  ).toEqual(["/", "/_middleware"]);
+  expect(Object.keys((await readLauncher(projectDir, manifest.entry)).entries)).toEqual([
+    "/",
+    "/_middleware",
+  ]);
 });
 
 async function readServeNeeds(projectDir: string) {
-  const serve = JSON.parse(
-    await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"),
-  );
+  const serve = JSON.parse(await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"));
   return serve.needs;
 }
 
@@ -1892,9 +1795,7 @@ test("declares the edge-middleware need with the matchers behind it", async () =
       handlerExport: "handler",
     },
     config: {
-      matchers: [
-        { source: "/dashboard/:path*", sourceRegex: "^/dashboard(?:/(.*))?$" },
-      ],
+      matchers: [{ source: "/dashboard/:path*", sourceRegex: "^/dashboard(?:/(.*))?$" }],
     },
   } as never;
   const adapter = await loadAdapterIn(projectDir);
@@ -2038,10 +1939,7 @@ test("seeds fetch-cache entries under their hash, wrapped in an envelope", async
   await adapter.onBuildComplete(args as never);
 
   const entry = JSON.parse(
-    await readFile(
-      join(projectDir, ".ocel/output/fetch-cache", `${fetchHash}.cache.json`),
-      "utf8",
-    ),
+    await readFile(join(projectDir, ".ocel/output/fetch-cache", `${fetchHash}.cache.json`), "utf8"),
   );
 
   expect(entry.value).toEqual({
@@ -2068,10 +1966,7 @@ test("stamps fetch entries with build time, not the file's mtime", async () => {
   await adapter.onBuildComplete(args as never);
 
   const entry = JSON.parse(
-    await readFile(
-      join(projectDir, ".ocel/output/fetch-cache", `${fetchHash}.cache.json`),
-      "utf8",
-    ),
+    await readFile(join(projectDir, ".ocel/output/fetch-cache", `${fetchHash}.cache.json`), "utf8"),
   );
   expect(entry.lastModified).toBeGreaterThanOrEqual(before);
 });
@@ -2126,9 +2021,9 @@ test("un-normalizes a static Pages Router root output's pathname", async () => {
   expect(manifest.assetHashes["/index.html"]).toBe(
     createHash("sha256").update("<html>root</html>").digest("hex"),
   );
-  expect(
-    await readFile(join(projectDir, ".ocel/output/static/index.html"), "utf8"),
-  ).toBe("<html>root</html>");
+  expect(await readFile(join(projectDir, ".ocel/output/static/index.html"), "utf8")).toBe(
+    "<html>root</html>",
+  );
 });
 
 test("un-normalizes a getServerSideProps root's dispatch key, keeping its own id as entryKey", async () => {
@@ -2197,12 +2092,8 @@ test("un-normalizes a prerendered root's dispatch key from its PAGES parent, lea
   expect(manifest.dispatch["/docs/index"]).toBeUndefined();
   expect(manifest.pathnames).toContain("/docs");
   expect(manifest.pathnames).not.toContain("/docs/index");
-  expect(await exists(join(projectDir, ".ocel/output/cache/docs.cache.json"))).toBe(
-    true,
-  );
-  expect(
-    await exists(join(projectDir, ".ocel/output/cache/docs/index.cache.json")),
-  ).toBe(false);
+  expect(await exists(join(projectDir, ".ocel/output/cache/docs.cache.json"))).toBe(true);
+  expect(await exists(join(projectDir, ".ocel/output/cache/docs/index.cache.json"))).toBe(false);
 });
 
 test("un-normalizes a nested pages/index/foo output by dropping one leading /index segment", async () => {
@@ -2305,24 +2196,9 @@ test("keeps an edge Pages Router output's already-denormalized pathname addressa
 
 test("only translates a STATIC_FILE named under server/pages/, not any /index-shaped pathname", async () => {
   const { projectDir, args } = await synthProject();
-  await addStaticOutput(
-    args,
-    "/index/foo",
-    join(projectDir, "out/index/foo.html"),
-    "EXPORT FOO",
-  );
-  await addStaticOutput(
-    args,
-    "/en",
-    join(projectDir, ".next/server/pages/en.html"),
-    "LOCALE EN",
-  );
-  await addStaticOutput(
-    args,
-    "/404",
-    join(projectDir, ".next/server/pages/404.html"),
-    "NOT FOUND",
-  );
+  await addStaticOutput(args, "/index/foo", join(projectDir, "out/index/foo.html"), "EXPORT FOO");
+  await addStaticOutput(args, "/en", join(projectDir, ".next/server/pages/en.html"), "LOCALE EN");
+  await addStaticOutput(args, "/404", join(projectDir, ".next/server/pages/404.html"), "NOT FOUND");
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
@@ -2414,12 +2290,7 @@ test("resolves a static-kind /500 page as errorRoutes.serverError", async () => 
 test("leaves .rsc, _next/data, _next/static and public/ pathnames untouched", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticFile(projectDir, args, "/index.rsc", "RSC-ROOT");
-  await withStaticFile(
-    projectDir,
-    args,
-    "/_next/data/test-build/index.json",
-    "{}",
-  );
+  await withStaticFile(projectDir, args, "/_next/data/test-build/index.json", "{}");
   await withStaticFile(projectDir, args, "/_next/static/chunks/a.js", "JS");
   await mkdir(join(projectDir, "public"), { recursive: true });
   await writeFile(join(projectDir, "public", "index.txt"), "public root file");
@@ -2494,9 +2365,7 @@ test("keeps a dynamic pages/index/[...slug] route addressable by its own name", 
   expect(manifest.pathnames).toContain("/index/[...slug]");
 
   const { routes } = await readLauncher(projectDir);
-  expect(routes.dynamic).toEqual([
-    ["^[/]?/index/(?<nxtPslug>.+?)(?:/)?$", "/index/[...slug]"],
-  ]);
+  expect(routes.dynamic).toEqual([["^[/]?/index/(?<nxtPslug>.+?)(?:/)?$", "/index/[...slug]"]]);
   await expectManifestJoinsLaunchers(projectDir);
 });
 
@@ -2581,9 +2450,7 @@ test("names the bundle and the reserved entry key in a nodejs middleware manifes
     runtime: "nodejs",
     id: "bundle-0",
     entryKey: "/_middleware",
-    matchers: [
-      { source: "/dashboard/:path*", sourceRegex: "^/dashboard(?:/(.*))?$" },
-    ],
+    matchers: [{ source: "/dashboard/:path*", sourceRegex: "^/dashboard(?:/(.*))?$" }],
   });
 });
 
@@ -2635,8 +2502,7 @@ test("injects node middleware's entry and assets into bundle-0 only, including a
   process.chdir(projectDir);
   vi.resetModules();
   vi.doMock("../src/pack.mts", async () => {
-    const actual =
-      await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
+    const actual = await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
     return {
       ...actual,
       packBundles: (members: never, opts: never) =>
@@ -2657,17 +2523,13 @@ test("injects node middleware's entry and assets into bundle-0 only, including a
   const { entries: entries0 } = await readLauncher(projectDir, "bundle-0");
   expect(entries0).toHaveProperty("/_middleware", "./.next/server/middleware.js");
   expect(
-    await exists(
-      join(functionsDir(projectDir), "bundle-0.func/.next/server/middleware.js"),
-    ),
+    await exists(join(functionsDir(projectDir), "bundle-0.func/.next/server/middleware.js")),
   ).toBe(true);
 
   const { entries: entries1 } = await readLauncher(projectDir, "bundle-1");
   expect(entries1).not.toHaveProperty("/_middleware");
   expect(
-    await exists(
-      join(functionsDir(projectDir), "bundle-1.func/.next/server/middleware.js"),
-    ),
+    await exists(join(functionsDir(projectDir), "bundle-1.func/.next/server/middleware.js")),
   ).toBe(false);
 
   const manifest = await readManifest(projectDir);
@@ -2714,9 +2576,7 @@ test("reports a missing middleware asset in the aggregate no-source warning", as
   const noSourceLines = lines.filter((l) => l.includes("no source on disk"));
   expect(noSourceLines).toHaveLength(1);
   expect(noSourceLines[0]).toContain("chunks/ghost.js");
-  expect(await exists(join(functionsDir(projectDir), "bundle-0.func/chunks/ghost.js"))).toBe(
-    false,
-  );
+  expect(await exists(join(functionsDir(projectDir), "bundle-0.func/chunks/ghost.js"))).toBe(false);
 });
 
 test("warns when node middleware's assets push a bundle over the budget", async () => {
@@ -2729,8 +2589,7 @@ test("warns when node middleware's assets push a bundle over the budget", async 
   process.chdir(projectDir);
   vi.resetModules();
   vi.doMock("../src/pack.mts", async () => {
-    const actual =
-      await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
+    const actual = await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
     return {
       ...actual,
       packBundles: (members: never, opts: never) =>
@@ -2768,9 +2627,7 @@ test("never lets /_middleware enter the launcher's route table", async () => {
 test("warns once when node middleware's matcher covers part of the build's cached surface", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticFile(projectDir, args, "/_next/static/chunks/a.js", "JS");
-  await withNodeMiddleware(projectDir, args, [
-    { source: "/:path*", sourceRegex: "^/.*$" },
-  ]);
+  await withNodeMiddleware(projectDir, args, [{ source: "/:path*", sourceRegex: "^/.*$" }]);
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   const adapter = await loadAdapterIn(projectDir);
   let lines: string[];
@@ -2852,9 +2709,7 @@ test("rewrites an absolute symlink asset into a link inside the bundle", async (
   const dest = join(bundle, "node_modules/pkg");
   expect(isAbsolute(await readlink(dest))).toBe(false);
   expect(await realpath(dest)).toBe(await realpath(join(bundle, "vendor/pkg")));
-  expect(await readFile(join(dest, "index.js"), "utf8")).toBe(
-    "module.exports = 1",
-  );
+  expect(await readFile(join(dest, "index.js"), "utf8")).toBe("module.exports = 1");
 });
 
 test("leaves a relative symlink asset resolving inside the bundle", async () => {
@@ -2876,9 +2731,7 @@ test("leaves a relative symlink asset resolving inside the bundle", async () => 
   const dest = join(bundle, "node_modules/pkg");
   expect(await readlink(dest)).toBe("../vendor/pkg");
   expect(await realpath(dest)).toBe(await realpath(join(bundle, "vendor/pkg")));
-  expect(await readFile(join(dest, "index.js"), "utf8")).toBe(
-    "module.exports = 1",
-  );
+  expect(await readFile(join(dest, "index.js"), "utf8")).toBe("module.exports = 1");
 });
 
 test("copies a symlink asset whose in-repo target the trace never carried", async () => {
@@ -2895,9 +2748,7 @@ test("copies a symlink asset whose in-repo target the trace never carried", asyn
   const bundle = join(functionsDir(projectDir), "bundle-0.func");
   const dest = join(bundle, "node_modules/pkg");
   expect((await lstat(dest)).isDirectory()).toBe(true);
-  expect(await readFile(join(dest, "index.js"), "utf8")).toBe(
-    "module.exports = 1",
-  );
+  expect(await readFile(join(dest, "index.js"), "utf8")).toBe("module.exports = 1");
   expect(await exists(join(bundle, "vendor/pkg"))).toBe(false);
 });
 
@@ -2921,16 +2772,10 @@ test("dereferences a symlink asset whose target leaves the repo root", async () 
   await adapter.onBuildComplete(args as never);
 
   const bundle = join(functionsDir(projectDir), "bundle-0.func");
-  expect((await lstat(join(bundle, "node_modules/pkg"))).isDirectory()).toBe(
-    true,
+  expect((await lstat(join(bundle, "node_modules/pkg"))).isDirectory()).toBe(true);
+  expect((await lstat(join(bundle, "node_modules/data.txt"))).isFile()).toBe(true);
+  expect(await readFile(join(bundle, "node_modules/pkg/index.js"), "utf8")).toBe(
+    "module.exports = 2",
   );
-  expect((await lstat(join(bundle, "node_modules/data.txt"))).isFile()).toBe(
-    true,
-  );
-  expect(
-    await readFile(join(bundle, "node_modules/pkg/index.js"), "utf8"),
-  ).toBe("module.exports = 2");
-  expect(await readFile(join(bundle, "node_modules/data.txt"), "utf8")).toBe(
-    "OUT",
-  );
+  expect(await readFile(join(bundle, "node_modules/data.txt"), "utf8")).toBe("OUT");
 });

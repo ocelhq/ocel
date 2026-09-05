@@ -1,13 +1,12 @@
-import { entryMissHeader, tagSnapshotKey, type TagSnapshot } from "@framework/next-cache";
-import { SELF, env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
+import { env, runDurableObjectAlarm, runInDurableObject, SELF } from "cloudflare:test";
+import { entryMissHeader, type TagSnapshot, tagSnapshotKey } from "@framework/next-cache";
 import { sha256Hex } from "@platform/cf-auth";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { claimBuild } from "../src/build";
+import type { Env } from "../src/env";
 import { IsrDeploy } from "../src/isr-deploy";
 import { IsrSnapshot } from "../src/isr-snapshot";
-import { claimBuild } from "../src/build";
 import * as registry from "../src/registry";
-import type { Env } from "../src/env";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv extends Env {}
@@ -230,9 +229,7 @@ describe("destroy", () => {
     await initialize(prefix, "write-secret");
     expect((await writeEntryReq(prefix, "a", "write-secret")).status).toBe(204);
 
-    const res = await SELF.fetch(
-      bearerReq(`/${prefix}/destroy`, BOOTSTRAP, { method: "POST" }),
-    );
+    const res = await SELF.fetch(bearerReq(`/${prefix}/destroy`, BOOTSTRAP, { method: "POST" }));
     expect(res.status).toBe(204);
 
     expect((await writeEntryReq(prefix, "b", "write-secret")).status).toBe(401);
@@ -287,9 +284,7 @@ describe("routing", () => {
 async function seedBehindTheWorker(prefix: string, secret: string) {
   const stub = env.ISR_WRITER_DO.get(env.ISR_WRITER_DO.idFromName(prefix));
   const hash = await sha256Hex(secret);
-  await runInDurableObject(stub, (_instance, ctx) =>
-    registry.initialize(ctx.storage, hash),
-  );
+  await runInDurableObject(stub, (_instance, ctx) => registry.initialize(ctx.storage, hash));
 }
 
 describe("concurrent registry reads", () => {
@@ -456,8 +451,12 @@ describe("tag raises", () => {
     await initialize(theirs, "their-secret");
     await seedGenesis(theirs, 1_000);
 
-    expect((await raiseReq(theirs, "my-secret", { records: { a: { expired: 5_000 } } })).status).toBe(401);
-    expect((await raiseReq(theirs, BOOTSTRAP, { records: { a: { expired: 5_000 } } })).status).toBe(401);
+    expect(
+      (await raiseReq(theirs, "my-secret", { records: { a: { expired: 5_000 } } })).status,
+    ).toBe(401);
+    expect((await raiseReq(theirs, BOOTSTRAP, { records: { a: { expired: 5_000 } } })).status).toBe(
+      401,
+    );
     const unsigned = await SELF.fetch(
       req(`/${theirs}/tags`, { method: "POST", body: JSON.stringify({ records: {} }) }),
     );
@@ -489,7 +488,9 @@ describe("tag raises", () => {
     await initialize(prefix, "write-secret");
     const raise = vi.spyOn(IsrSnapshot.prototype, "raise").mockResolvedValue("exhausted");
 
-    expect((await raiseReq(prefix, "write-secret", { records: { a: { expired: 5_000 } } })).status).toBe(429);
+    expect(
+      (await raiseReq(prefix, "write-secret", { records: { a: { expired: 5_000 } } })).status,
+    ).toBe(429);
     raise.mockRestore();
   });
 

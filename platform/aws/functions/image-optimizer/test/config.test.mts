@@ -30,7 +30,9 @@ test("the digest is over the stored bytes, not over a re-serialization", async (
   });
   const reordered = serialize(config) !== JSON.stringify(config);
   expect(reordered).toBe(true);
-  await expect(loadImageConfig(store, ASSET_PREFIX, configHash(config))).rejects.toThrow(BootstrapError);
+  await expect(loadImageConfig(store, ASSET_PREFIX, configHash(config))).rejects.toThrow(
+    BootstrapError,
+  );
 });
 
 test("refuses a config that does not hash to configHash", async () => {
@@ -43,7 +45,9 @@ test("refuses a config that does not hash to configHash", async () => {
 
 test("refuses a configHash that is not a sha256 digest", async () => {
   const store = storeWithConfig(imageConfig());
-  await expect(loadImageConfig(store, ASSET_PREFIX, "../../etc/passwd")).rejects.toThrow(BootstrapError);
+  await expect(loadImageConfig(store, ASSET_PREFIX, "../../etc/passwd")).rejects.toThrow(
+    BootstrapError,
+  );
   expect(store.reads).toEqual([]);
 });
 
@@ -127,9 +131,9 @@ describe("memoization", () => {
     const store = storeWithConfig(config);
     const hash = configHash(config);
     await loadImageConfig(store, ASSET_PREFIX, hash);
-    await expect(
-      loadImageConfig(store, "prod/proj1/web/r0000000/assets", hash),
-    ).rejects.toThrow(/no image config at/);
+    await expect(loadImageConfig(store, "prod/proj1/web/r0000000/assets", hash)).rejects.toThrow(
+      /no image config at/,
+    );
   });
 
   test("a rejected config is never memoized", async () => {

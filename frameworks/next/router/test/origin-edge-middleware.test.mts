@@ -1,14 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-import { serve, type RouteDeps } from "../src/index.mjs";
-import { assetStoreServing } from "../test-support/dispatch-scenario.mjs";
-import type { TestRouteDeps } from "../test-support/dispatch-scenario.mjs";
 import {
   buildOriginEdgeApp,
-  serveDispatch,
   type OriginEdgeApp,
   type RunningServer,
+  serveDispatch,
 } from "../../adapter/test/origin-edge-app.mjs";
+import { type RouteDeps, serve } from "../src/index.mjs";
+import type { TestRouteDeps } from "../test-support/dispatch-scenario.mjs";
+import { assetStoreServing } from "../test-support/dispatch-scenario.mjs";
 
 const PAGE_ENTRY = "app/api/docs/route";
 
@@ -190,10 +189,7 @@ describe("a waived edge middleware compiled as a Node entry", () => {
       return fetch(input);
     }) as unknown as typeof fetch;
 
-    const response = await serve(
-      new Request("https://app.example/dashboard"),
-      deps,
-    );
+    const response = await serve(new Request("https://app.example/dashboard"), deps);
 
     expect(response.status).toBe(200);
     expect(seen).toEqual([hosted.origin.origin, hosted.origin.origin]);

@@ -1,19 +1,17 @@
 import { describe, expect, it } from "vitest";
-
+import fixtures from "../fixtures/image-conformance.json" with { type: "json" };
 import {
   getSupportedMimeType,
+  type ImageConfig,
+  type ImageOriginRequest,
   isImageRequest,
   serveImage,
   validateImageRequest,
-  type ImageConfig,
-  type ImageOriginRequest,
 } from "../src/image.mjs";
-import fixtures from "../fixtures/image-conformance.json" with { type: "json" };
 
 const ASSET_PREFIX = "prod/p1/web/r3f8a1c9d/assets";
 
-const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]!
-  .config;
+const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]!.config;
 
 function configWith(overrides: Partial<ImageConfig>): ImageConfig {
   return { ...BASE_CONFIG, ...overrides };
@@ -55,16 +53,12 @@ describe("validateImageRequest ordering", () => {
 
   it("decodes the pathname before testing for recursion", () => {
     const encoded = encodeURIComponent("/_next/%69mage");
-    expect(rejection(`url=${encoded}&w=640&q=75`)).toBe(
-      '"url" parameter cannot be recursive',
-    );
+    expect(rejection(`url=${encoded}&w=640&q=75`)).toBe('"url" parameter cannot be recursive');
   });
 
   it("matches recursion anywhere in the pathname, not only as a prefix", () => {
     const prefixed = encodeURIComponent("/assets/cdn/_next/image/x.png");
-    expect(rejection(`url=${prefixed}&w=640&q=75`)).toBe(
-      '"url" parameter cannot be recursive',
-    );
+    expect(rejection(`url=${prefixed}&w=640&q=75`)).toBe('"url" parameter cannot be recursive');
   });
 
   it("tests the integer regex before parseInt", () => {
@@ -154,7 +148,9 @@ describe("validateImageRequest pattern matching", () => {
 
   it("compares the protocol with the trailing colon stripped from both sides", () => {
     const config = configWith({
-      remotePatterns: [{ protocol: "http", hostname: "^(?:cdn\\.example)$", pathname: ANY_PATHNAME }],
+      remotePatterns: [
+        { protocol: "http", hostname: "^(?:cdn\\.example)$", pathname: ANY_PATHNAME },
+      ],
     });
     expect(
       validate(`url=${encodeURIComponent("http://cdn.example/a.png")}&w=640&q=75`, config).ok,
@@ -167,9 +163,9 @@ describe("validateImageRequest pattern matching", () => {
 
 describe("validateImageRequest absent-key semantics", () => {
   it("treats absent localPatterns as allow-all and an empty array as deny-all", () => {
-    expect(validate("url=/anything.png&w=640&q=75", configWith({ localPatterns: undefined })).ok).toBe(
-      true,
-    );
+    expect(
+      validate("url=/anything.png&w=640&q=75", configWith({ localPatterns: undefined })).ok,
+    ).toBe(true);
     expect(rejection("url=/anything.png&w=640&q=75", configWith({ localPatterns: [] }))).toBe(
       '"url" parameter is not allowed',
     );
@@ -243,18 +239,22 @@ describe("serveImage", () => {
   it("hands the origin the validated parameters and the config hash", async () => {
     const seen: ImageOriginRequest[] = [];
     const url = imageUrl("url=%2Fa.png&w=640&q=75");
-    const response = await serveImage(new Request(url, { headers: { accept: "image/webp" } }), url, {
-      config: BASE_CONFIG,
-      basePath: "",
-      assetPrefix: ASSET_PREFIX,
-      slug: "p1",
-      deploymentId: "d1",
-      app: "web",
-      origin: async (payload) => {
-        seen.push(payload);
-        return new Response("optimized");
+    const response = await serveImage(
+      new Request(url, { headers: { accept: "image/webp" } }),
+      url,
+      {
+        config: BASE_CONFIG,
+        basePath: "",
+        assetPrefix: ASSET_PREFIX,
+        slug: "p1",
+        deploymentId: "d1",
+        app: "web",
+        origin: async (payload) => {
+          seen.push(payload);
+          return new Response("optimized");
+        },
       },
-    });
+    );
 
     expect(await response.text()).toBe("optimized");
     expect(seen).toEqual([
@@ -342,9 +342,7 @@ describe("serveImage", () => {
       });
 
     const got = await serve("GET");
-    expect(got.headers.get("cache-control")).toBe(
-      "public, max-age=315360000, immutable",
-    );
+    expect(got.headers.get("cache-control")).toBe("public, max-age=315360000, immutable");
 
     const head = await serve("HEAD");
     expect(head.status).toBe(200);

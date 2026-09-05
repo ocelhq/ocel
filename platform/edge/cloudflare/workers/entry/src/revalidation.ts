@@ -13,10 +13,7 @@ export interface RevalidationMessage {
   enqueuedAt: number;
 }
 
-export type RevalidationRoute = Omit<
-  RevalidationMessage,
-  "v" | "lastModified" | "enqueuedAt"
->;
+export type RevalidationRoute = Omit<RevalidationMessage, "v" | "lastModified" | "enqueuedAt">;
 
 export function revalidationMessage(
   route: RevalidationRoute,
@@ -46,18 +43,11 @@ function retryWindow(enqueuedAt: number): number {
 }
 
 async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(value),
-  );
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export async function revalidationIds(
-  message: RevalidationMessage,
-): Promise<RevalidationIds> {
+export async function revalidationIds(message: RevalidationMessage): Promise<RevalidationIds> {
   const group = `${message.isrPrefix}:${message.routePath}`;
   const hash = await sha256Hex(group);
   return {
@@ -71,9 +61,7 @@ export async function revalidationIds(
   };
 }
 
-export type RevalidationSender = (
-  message: RevalidationMessage,
-) => Promise<boolean>;
+export type RevalidationSender = (message: RevalidationMessage) => Promise<boolean>;
 
 export const enqueueTimeoutMs = 1_000;
 

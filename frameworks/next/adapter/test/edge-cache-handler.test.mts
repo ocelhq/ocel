@@ -1,11 +1,9 @@
-import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, test, vi } from "vitest";
 
-const handlerPath = fileURLToPath(
-  new URL("../src/edge-cache-handler.cjs", import.meta.url),
-);
+const handlerPath = fileURLToPath(new URL("../src/edge-cache-handler.cjs", import.meta.url));
 const require = createRequire(import.meta.url);
 
 function loadHandler(runtime?: string) {
@@ -148,9 +146,9 @@ test("refuses a non-fetch write instead of storing it", async () => {
   const rpc = fakeRpc();
   bind(rpc);
 
-  await expect(
-    new Handler().set("k", { kind: "APP_PAGE", html: "<p/>" }, {}),
-  ).rejects.toThrow(/fetch entries only.*APP_PAGE/);
+  await expect(new Handler().set("k", { kind: "APP_PAGE", html: "<p/>" }, {})).rejects.toThrow(
+    /fetch entries only.*APP_PAGE/,
+  );
   expect(rpc.calls).toEqual([]);
 });
 
@@ -175,10 +173,8 @@ test("forwards a tag invalidation with its durations", async () => {
 test("fails loudly on a write with no binding", async () => {
   const Handler = loadHandler("edge");
 
-  await expect(
-    new Handler().set("k", { kind: "FETCH", data: {} }, {}),
-  ).rejects.toThrow(/__OCEL_EDGE_CACHE/);
-  await expect(new Handler().revalidateTag("a")).rejects.toThrow(
+  await expect(new Handler().set("k", { kind: "FETCH", data: {} }, {})).rejects.toThrow(
     /__OCEL_EDGE_CACHE/,
   );
+  await expect(new Handler().revalidateTag("a")).rejects.toThrow(/__OCEL_EDGE_CACHE/);
 });

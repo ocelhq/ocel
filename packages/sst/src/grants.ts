@@ -13,10 +13,7 @@ export interface SSTInclude {
   resources?: string[];
 }
 
-export function grantsFor(
-  name: string,
-  include: SSTInclude[] | undefined,
-): Grant[] | undefined {
+export function grantsFor(name: string, include: SSTInclude[] | undefined): Grant[] | undefined {
   if (!include || include.length === 0) {
     return undefined;
   }
@@ -38,10 +35,7 @@ export function grantsFor(
   });
 }
 
-export function scoped(
-  name: string,
-  grants: Grant[] | undefined,
-): Grant[] | undefined {
+export function scoped(name: string, grants: Grant[] | undefined): Grant[] | undefined {
   if (!grants || grants.length === 0) {
     return undefined;
   }
@@ -69,8 +63,5 @@ function unscopedAction(action: string): boolean {
   if (separator < 0) {
     return action === wildcard;
   }
-  return (
-    action.slice(0, separator) === wildcard ||
-    action.slice(separator + 1) === wildcard
-  );
+  return action.slice(0, separator) === wildcard || action.slice(separator + 1) === wildcard;
 }

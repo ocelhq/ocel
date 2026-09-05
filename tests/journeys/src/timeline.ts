@@ -88,7 +88,7 @@ export function sweep(tests: TimelineTest[]): Segment[] {
 
 function tailOf(segments: Segment[]): Tail | undefined {
   const last = segments.at(-1);
-  if (!last || last.active.length !== 1) {
+  if (last?.active.length !== 1) {
     return undefined;
   }
   const cell = last.active[0];
@@ -114,9 +114,7 @@ function timingFor(
     const leg = legOf(test);
     held[leg] = (held[leg] ?? 0) + test.duration;
   }
-  const legs = Object.fromEntries(
-    Object.entries(held).map(([leg, ms]) => [leg, seconds(ms)]),
-  );
+  const legs = Object.fromEntries(Object.entries(held).map(([leg, ms]) => [leg, seconds(ms)]));
   const first = Math.min(...tests.map((test) => test.startTime));
   return { cell, start: seconds(first - runStart), legs, file: seconds(file) };
 }

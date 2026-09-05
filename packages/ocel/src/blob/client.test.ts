@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createUploadClient } from "./client.js";
 import type { Bucket } from "./bucket.js";
+import { createUploadClient } from "./client.js";
 import type { Uploader } from "./types.js";
 
 type TestBucket = Bucket<{ avatar: Uploader<{ userId: string }, unknown> }>;
@@ -84,9 +84,7 @@ describe("createUploadClient", () => {
       if (url.includes("op=presign")) {
         return jsonRes({
           sessionId: "sess-1",
-          files: [
-            { url: "https://store/put/a", key: "avatars/a.jpg", name: "a.jpg" },
-          ],
+          files: [{ url: "https://store/put/a", key: "avatars/a.jpg", name: "a.jpg" }],
         });
       }
       if (url === "https://store/put/a") return jsonRes({}, false, 403);

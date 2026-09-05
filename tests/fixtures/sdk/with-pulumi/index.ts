@@ -33,9 +33,7 @@ const subnetIds = subnets.map((subnet) => subnet.id);
 const security = new aws.ec2.SecurityGroup("orders", {
   vpcId: vpc.id,
   ingress: [{ protocol: "tcp", fromPort: 5432, toPort: 5432, self: true }],
-  egress: [
-    { protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] },
-  ],
+  egress: [{ protocol: "-1", fromPort: 0, toPort: 0, cidrBlocks: ["0.0.0.0/0"] }],
 });
 
 for (const service of ["s3", "dynamodb"]) {

@@ -1,10 +1,9 @@
 import { tagSnapshotKey } from "@framework/next-cache";
-import { describe, expect, it } from "vitest";
-
-import { dispatchResult, serve, type RouteDeps } from "../src/index";
-import { refreshBackoffSeconds, sentinelUrl } from "../src/cache";
-import { coloDeps } from "./cache-deps";
 import { baseDeps } from "@framework/next-router/test-support/dispatch-scenario";
+import { describe, expect, it } from "vitest";
+import { refreshBackoffSeconds, sentinelUrl } from "../src/cache";
+import { dispatchResult, type RouteDeps, serve } from "../src/index";
+import { coloDeps } from "./cache-deps";
 
 describe("dispatchResult", () => {
   it("invokes the parent function for a prerender route until ISR lands", async () => {
@@ -267,7 +266,11 @@ describe("dispatchResult", () => {
       interception: {
         config: { isrPrefix: "prod/p/app/build" },
         now: () => 2_000,
-        store: { async get() { return null; } },
+        store: {
+          async get() {
+            return null;
+          },
+        },
       },
     });
 
@@ -337,9 +340,7 @@ describe("dispatchResult", () => {
     return {
       async get(key: string) {
         const entry = entries[key];
-        return entry === undefined
-          ? null
-          : { text: async () => JSON.stringify(entry) };
+        return entry === undefined ? null : { text: async () => JSON.stringify(entry) };
       },
     };
   }
@@ -386,10 +387,7 @@ describe("dispatchResult", () => {
     return { deps, lambdaCalls: () => lambda };
   }
 
-  const dispatchBlog = (
-    deps: RouteDeps,
-    request = new Request("https://app.example/blog"),
-  ) =>
+  const dispatchBlog = (deps: RouteDeps, request = new Request("https://app.example/blog")) =>
     dispatchResult(
       { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
       request,
@@ -488,62 +486,73 @@ describe("dispatchResult", () => {
   });
 
   it.each([
-    ["a complete entry", "/blog", { kind: "APP_PAGE", html: "<html>edge</html>", status: 200, headers: {} }],
-    ["a PPR shell", "/ppr", { kind: "APP_PAGE", html: "[shell]", postponed: "POSTPONED", status: 200, headers: {} }],
-  ])("caps the R2 tier's admission wait on %s's remaining stale window", async (_name, path, value) => {
-    const bounds: number[] = [];
-    const pending: Promise<unknown>[] = [];
-    const id = path.slice(1);
-    const deps = baseDeps({
-      manifest: {
-        buildId: "t",
-        basePath: "",
-        pathnames: [],
-        routes: {},
-        dispatch: {
-          [path]: {
-            kind: "prerender",
-            id: path,
-            config: "postponed" in value ? { renderingMode: "PARTIALLY_STATIC" } : {},
-            fallback: { initialRevalidate: 60, initialExpiration: 3600 },
+    [
+      "a complete entry",
+      "/blog",
+      { kind: "APP_PAGE", html: "<html>edge</html>", status: 200, headers: {} },
+    ],
+    [
+      "a PPR shell",
+      "/ppr",
+      { kind: "APP_PAGE", html: "[shell]", postponed: "POSTPONED", status: 200, headers: {} },
+    ],
+  ])(
+    "caps the R2 tier's admission wait on %s's remaining stale window",
+    async (_name, path, value) => {
+      const bounds: number[] = [];
+      const pending: Promise<unknown>[] = [];
+      const id = path.slice(1);
+      const deps = baseDeps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: [],
+          routes: {},
+          dispatch: {
+            [path]: {
+              kind: "prerender",
+              id: path,
+              config: "postponed" in value ? { renderingMode: "PARTIALLY_STATIC" } : {},
+              fallback: { initialRevalidate: 60, initialExpiration: 3600 },
+            },
           },
         },
-      },
-      functionUrls: { [path]: "https://fn.example.com" },
-      fetch: (async () =>
-        new Response("regenerated", {
-          status: 200,
-          headers: { "cache-control": "s-maxage=60" },
-        })) as unknown as typeof fetch,
-      cache: coloDeps({
-        cache: {
-          match: async () => undefined,
-          put: async () => {},
-        } as unknown as Cache,
-        waitUntil: (p: Promise<unknown>) => {
-          pending.push(p);
+        functionUrls: { [path]: "https://fn.example.com" },
+        fetch: (async () =>
+          new Response("regenerated", {
+            status: 200,
+            headers: { "cache-control": "s-maxage=60" },
+          })) as unknown as typeof fetch,
+        cache: coloDeps({
+          cache: {
+            match: async () => undefined,
+            put: async () => {},
+          } as unknown as Cache,
+          waitUntil: (p: Promise<unknown>) => {
+            pending.push(p);
+          },
+          admissionDelay: (staleForMs: number) => {
+            bounds.push(staleForMs);
+            return Promise.resolve();
+          },
+        }),
+        interception: {
+          config: interceptionConfig,
+          now: () => 1_000 + 3_599_500,
+          store: storeOf({ [entryKey(id)]: { lastModified: 1_000, value } }),
         },
-        admissionDelay: (staleForMs: number) => {
-          bounds.push(staleForMs);
-          return Promise.resolve();
-        },
-      }),
-      interception: {
-        config: interceptionConfig,
-        now: () => 1_000 + 3_599_500,
-        store: storeOf({ [entryKey(id)]: { lastModified: 1_000, value } }),
-      },
-    });
+      });
 
-    await dispatchResult(
-      { resolvedPathname: path, invocationTarget: { pathname: path } },
-      new Request(`https://app.example${path}`),
-      deps,
-    );
-    await Promise.all(pending);
+      await dispatchResult(
+        { resolvedPathname: path, invocationTarget: { pathname: path } },
+        new Request(`https://app.example${path}`),
+        deps,
+      );
+      await Promise.all(pending);
 
-    expect(bounds).toEqual([500]);
-  });
+      expect(bounds).toEqual([500]);
+    },
+  );
 
   function refreshOverStore(
     entries: Record<string, unknown>,
@@ -672,12 +681,8 @@ describe("dispatchResult", () => {
     await dispatchBlog(deps);
     await Promise.all(pending);
 
-    const sentinelWrites = puts.filter(
-      (put) => put.url === sentinelUrl("p1/web/d1:/blog"),
-    );
-    expect(sentinelWrites.at(-1)?.cacheControl).toBe(
-      `max-age=${refreshBackoffSeconds}`,
-    );
+    const sentinelWrites = puts.filter((put) => put.url === sentinelUrl("p1/web/d1:/blog"));
+    expect(sentinelWrites.at(-1)?.cacheControl).toBe(`max-age=${refreshBackoffSeconds}`);
   });
 
   it("renders when R2 is still stale by the time the refresh is admitted", async () => {
@@ -701,9 +706,9 @@ describe("dispatchResult", () => {
     await Promise.all(pending);
 
     expect(lambdaCalls()).toBe(0);
-    expect(
-      puts.find((put) => put.body === "<html>newer</html>")?.entryModified,
-    ).toBe(String(1_500));
+    expect(puts.find((put) => put.body === "<html>newer</html>")?.entryModified).toBe(
+      String(1_500),
+    );
   });
 
   it("renders when the stale entry below is older than the one being refreshed", async () => {
@@ -841,8 +846,7 @@ describe("dispatchResult", () => {
   function coloHoldingSentinel(refreshKey: string): Cache {
     const url = sentinelUrl(refreshKey);
     return {
-      match: async (request: Request) =>
-        request.url === url ? new Response(null) : undefined,
+      match: async (request: Request) => (request.url === url ? new Response(null) : undefined),
       put: async () => {},
       delete: async () => false,
     } as unknown as Cache;
@@ -1134,9 +1138,7 @@ describe("dispatchResult", () => {
         config: interceptionConfig,
         now: () => 2_000,
         store: countingStore(
-          storeOf(
-            opts.entry ? { [entryKey(opts.entryPath ?? "ppr")]: opts.entry } : {},
-          ),
+          storeOf(opts.entry ? { [entryKey(opts.entryPath ?? "ppr")]: opts.entry } : {}),
         ),
       },
     });
@@ -1361,7 +1363,6 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("[shell][dynamic]");
     expect(resumeRequests()[0].method).toBe("POST");
   });
-
 });
 
 describe("a Server Action's invalidation reaching the colo it travelled through", () => {
@@ -1597,9 +1598,7 @@ describe("an afterFiles rewrite shadowed by a dynamic route", () => {
         routes: {
           beforeMiddleware: [],
           beforeFiles: [],
-          afterFiles: [
-            { sourceRegex: "^/to-ssg(?:/)?$", destination: "/ssg/hello" },
-          ],
+          afterFiles: [{ sourceRegex: "^/to-ssg(?:/)?$", destination: "/ssg/hello" }],
           dynamicRoutes: [
             {
               sourceRegex: "^/ssg/(?<nxtPslug>[^/]+?)(?:/)?$",
@@ -1849,9 +1848,7 @@ describe("a fallback path of a dynamic route's ISR revalidation", () => {
     expect(await res.text()).toBe("<html>post-7</html>");
     expect(storeReads).toContain("prod/p/app/build/cache/posts/7.cache.json");
     expect(storeReads).not.toContain("prod/p/app/build/cache/posts/[id].cache.json");
-    expect(sent).toEqual([
-      expect.objectContaining({ routePath: "/posts/7" }),
-    ]);
+    expect(sent).toEqual([expect.objectContaining({ routePath: "/posts/7" })]);
   });
 });
 
@@ -1959,7 +1956,11 @@ describe("a generated interception rewrite's prerender key", () => {
       capturedPath = new URL(req.url).pathname;
       return new Response("miss", { status: 404 });
     }) as unknown as typeof fetch;
-    deps.interception!.store = { async get() { return null; } };
+    deps.interception!.store = {
+      async get() {
+        return null;
+      },
+    };
 
     await serve(
       new Request("https://app.example/test-nested", {

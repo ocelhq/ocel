@@ -4,8 +4,8 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   readdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -16,10 +16,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { buildApp, buildApps, detectApp, placeFile, writeBuildPlan } from "./build.js";
 import { BUNDLE_HANDLER } from "./bundle.js";
 import {
+  appOutDir,
   BUILD_PLAN_FILE,
   NODE_ENTRY_ROUTE_ID,
   SERVE_DESCRIPTOR_FILE,
-  appOutDir,
   sanitizeName,
 } from "./layout.js";
 import { artifactHash } from "./trace.js";
@@ -102,10 +102,7 @@ describe("buildApp", () => {
     dirs.push(outDir);
     await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
-    const server = readFileSync(
-      path.join(appFuncDir(outDir, "api"), "src", "server.js"),
-      "utf8",
-    );
+    const server = readFileSync(path.join(appFuncDir(outDir, "api"), "src", "server.js"), "utf8");
     expect(server).toContain("req.params?.name ?? ");
     expect(server).not.toContain("_optionalChain");
     expect(server).not.toContain("_nullishCoalesce");
@@ -117,10 +114,7 @@ describe("buildApp", () => {
     dirs.push(outDir);
     await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
-    const server = readFileSync(
-      path.join(appFuncDir(outDir, "api"), "src", "server.js"),
-      "utf8",
-    );
+    const server = readFileSync(path.join(appFuncDir(outDir, "api"), "src", "server.js"), "utf8");
     expect(server).toContain('"./lib/db.js"');
     expect(server).not.toMatch(/["']\.\/lib\/db["']/);
     expect(server).toContain('"./config/index.js"');
@@ -128,10 +122,7 @@ describe("buildApp", () => {
     expect(server).toContain('from "express"');
     expect(server).toContain('"./greeting.js"');
 
-    const db = readFileSync(
-      path.join(appFuncDir(outDir, "api"), "src", "lib", "db.js"),
-      "utf8",
-    );
+    const db = readFileSync(path.join(appFuncDir(outDir, "api"), "src", "lib", "db.js"), "utf8");
     expect(db).toContain('"../greeting.js"');
   });
 
@@ -169,11 +160,14 @@ describe("buildApp", () => {
     dirs.push(outDir);
     const emptyDir = mkdtempSync(path.join(tmpdir(), "nb-empty-"));
     dirs.push(emptyDir);
-    writeFileSync(path.join(emptyDir, "package.json"), JSON.stringify({ dependencies: { express: "5" } }));
+    writeFileSync(
+      path.join(emptyDir, "package.json"),
+      JSON.stringify({ dependencies: { express: "5" } }),
+    );
 
-    await expect(
-      buildApp({ name: "api", cwd: emptyDir }, { outDir }),
-    ).rejects.toThrow(/src\/server\.ts/);
+    await expect(buildApp({ name: "api", cwd: emptyDir }, { outDir })).rejects.toThrow(
+      /src\/server\.ts/,
+    );
   });
 
   it("honors an explicit entrypoint override", async () => {
@@ -213,7 +207,9 @@ describe("buildApps", () => {
     );
 
     for (const app of ["storefront", "admin"]) {
-      const config = JSON.parse(readFileSync(path.join(appFuncDir(outDir, app), "config.json"), "utf8"));
+      const config = JSON.parse(
+        readFileSync(path.join(appFuncDir(outDir, app), "config.json"), "utf8"),
+      );
       expect(config.app).toBe(app);
     }
   });
@@ -231,8 +227,12 @@ describe("self-contained .func artifact", () => {
     await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
     const funcDir = appFuncDir(outDir, "api");
-    expect(existsSync(path.join(funcDir, "node_modules", "workspace-pkg", "dist", "index.js"))).toBe(true);
-    expect(existsSync(path.join(funcDir, "node_modules", "workspace-pkg", "package.json"))).toBe(true);
+    expect(
+      existsSync(path.join(funcDir, "node_modules", "workspace-pkg", "dist", "index.js")),
+    ).toBe(true);
+    expect(existsSync(path.join(funcDir, "node_modules", "workspace-pkg", "package.json"))).toBe(
+      true,
+    );
     expect(existsSync(path.join(funcDir, "_external"))).toBe(false);
 
     const isolated = mkdtempSync(path.join(tmpdir(), "nb-func-"));
@@ -262,7 +262,10 @@ function nodeApp(dep: string): string {
   dirs.push(dir);
   writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { [dep]: "*" } }));
   mkdirSync(path.join(dir, "src"), { recursive: true });
-  writeFileSync(path.join(dir, "src", "server.ts"), "export default { fetch: () => new Response() }\n");
+  writeFileSync(
+    path.join(dir, "src", "server.ts"),
+    "export default { fetch: () => new Response() }\n",
+  );
   return dir;
 }
 
@@ -456,7 +459,9 @@ describe("build strategy", () => {
     dirs.push(dir);
     writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { hono: "4" } }));
 
-    await expect(buildApp({ name: "api", cwd: dir }, { outDir })).rejects.toThrow(/no entrypoint found/);
+    await expect(buildApp({ name: "api", cwd: dir }, { outDir })).rejects.toThrow(
+      /no entrypoint found/,
+    );
   });
 });
 
@@ -464,7 +469,9 @@ describe("runtime resolution", () => {
   it("throws when a configured app's runtime can't be detected", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "nb-nort-"));
     dirs.push(dir);
-    await expect(buildApp({ name: "x", cwd: dir }, { outDir: dir })).rejects.toThrow(/could not detect a runtime/);
+    await expect(buildApp({ name: "x", cwd: dir }, { outDir: dir })).rejects.toThrow(
+      /could not detect a runtime/,
+    );
   });
 });
 
@@ -472,7 +479,10 @@ describe("detectApp", () => {
   it("synthesizes a single app named from the dir with the detected runtime", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "nb-detect-"));
     dirs.push(dir);
-    writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { express: "5" } }));
+    writeFileSync(
+      path.join(dir, "package.json"),
+      JSON.stringify({ dependencies: { express: "5" } }),
+    );
     expect(detectApp(dir)).toEqual({
       name: sanitizeName(path.basename(dir)),
       cwd: dir,
@@ -527,6 +537,8 @@ describe("placeFile", () => {
   it("keeps a user file under cwd at the artifact root", () => {
     mkdirSync(path.join(cwd, "src"), { recursive: true });
     writeFileSync(path.join(cwd, "src", "server.ts"), "");
-    expect(placeFile(path.join(cwd, "src", "server.ts"), cwd).dest).toBe(path.join("src", "server.ts"));
+    expect(placeFile(path.join(cwd, "src", "server.ts"), cwd).dest).toBe(
+      path.join("src", "server.ts"),
+    );
   });
 });

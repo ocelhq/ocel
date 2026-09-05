@@ -4,11 +4,7 @@ import { retainOwner } from "@framework/next-router/origin-response";
 
 const ABSENT = new Set([403, 404]);
 
-export function s3AssetBucket(
-  bucket: string,
-  region: string,
-  doFetch: typeof fetch,
-): AssetBucket {
+export function s3AssetBucket(bucket: string, region: string, doFetch: typeof fetch): AssetBucket {
   const origin = `https://${bucket}.s3.${region}.amazonaws.com`;
   return {
     async get(key: string): Promise<AssetObject | null> {
@@ -16,9 +12,7 @@ export function s3AssetBucket(
       if (!response.ok || !response.body) {
         await response.body?.cancel();
         if (response.ok || ABSENT.has(response.status)) return null;
-        throw new Error(
-          `ocel: reading ${key} out of ${bucket} answered ${response.status}`,
-        );
+        throw new Error(`ocel: reading ${key} out of ${bucket} answered ${response.status}`);
       }
       const etag = response.headers.get("etag");
       return { body: response.body, ...(etag ? { httpEtag: etag } : {}) };

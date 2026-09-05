@@ -28,11 +28,9 @@ describe("shouldBypass", () => {
 
   it("anchors the regex at both ends", () => {
     expect(
-      check(
-        { bypassFor: [{ type: "header", key: "x-k", value: "abc" }] },
-        "https://app.example/",
-        { "x-k": "xxabcxx" },
-      ),
+      check({ bypassFor: [{ type: "header", key: "x-k", value: "abc" }] }, "https://app.example/", {
+        "x-k": "xxabcxx",
+      }),
     ).toBe(false);
   });
 
@@ -50,9 +48,7 @@ describe("shouldBypass", () => {
         "next-action": "7f3a",
       }),
     ).toBe(true);
-    expect(check({ bypassFor: nextBypassFor }, "https://app.example/")).toBe(
-      false,
-    );
+    expect(check({ bypassFor: nextBypassFor }, "https://app.example/")).toBe(false);
   });
 
   it("treats an empty header value as absent, as Next does", () => {
@@ -73,31 +69,21 @@ describe("shouldBypass", () => {
 
   it("matches a cookie by name, ignoring a valueless key prefix", () => {
     const config = { bypassFor: [{ type: "cookie" as const, key: "badcooki" }] };
-    expect(check(config, "https://app.example/", { cookie: "badcookie" })).toBe(
-      false,
-    );
-    expect(
-      check(config, "https://app.example/", { cookie: "badcooki=1" }),
-    ).toBe(true);
+    expect(check(config, "https://app.example/", { cookie: "badcookie" })).toBe(false);
+    expect(check(config, "https://app.example/", { cookie: "badcooki=1" })).toBe(true);
   });
 
   it("matches a query condition on the last value of a repeated key", () => {
     const config = {
       bypassFor: [{ type: "query" as const, key: "mode", value: "draft" }],
     };
-    expect(check(config, "https://app.example/?mode=live&mode=draft")).toBe(
-      true,
-    );
-    expect(check(config, "https://app.example/?mode=draft&mode=live")).toBe(
-      false,
-    );
+    expect(check(config, "https://app.example/?mode=live&mode=draft")).toBe(true);
+    expect(check(config, "https://app.example/?mode=draft&mode=live")).toBe(false);
   });
 
   it("bypasses on a matching revalidate token", () => {
     const config = { bypassToken: "tok" };
-    expect(
-      check(config, "https://app.example/", { "x-prerender-revalidate": "tok" }),
-    ).toBe(true);
+    expect(check(config, "https://app.example/", { "x-prerender-revalidate": "tok" })).toBe(true);
     expect(
       check(config, "https://app.example/", {
         "x-prerender-revalidate": "wrong",
@@ -113,11 +99,9 @@ describe("shouldBypass", () => {
 
   it("survives a malformed condition regex without throwing", () => {
     expect(
-      check(
-        { bypassFor: [{ type: "header", key: "x-k", value: "([" }] },
-        "https://app.example/",
-        { "x-k": "([" },
-      ),
+      check({ bypassFor: [{ type: "header", key: "x-k", value: "([" }] }, "https://app.example/", {
+        "x-k": "([",
+      }),
     ).toBe(false);
   });
 });

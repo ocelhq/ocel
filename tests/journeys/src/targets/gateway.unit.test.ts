@@ -1,5 +1,5 @@
-import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "bun:test";
+import { createServer, type Server } from "node:http";
 import { type Edge, forwarder } from "./gateway";
 
 type Edging = { edge: Edge; sockets: () => number; reload: () => void; close: () => Promise<void> };

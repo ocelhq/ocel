@@ -2,8 +2,8 @@ import {
   detectDomainLocale,
   getAcceptLanguageLocale,
   getCookieLocale,
-  normalizeLocalePath,
   type I18nConfig,
+  normalizeLocalePath,
 } from "@next/routing";
 
 import { dataPagePathname, withoutBasePath } from "./trailing-slash.mjs";
@@ -75,11 +75,7 @@ function isRoot(pathname: string): boolean {
   return pathname === "" || pathname === "/" || pathname === "/index";
 }
 
-function wrapDataPagePathname(
-  pagePathname: string,
-  basePath: string,
-  buildId: string,
-): string {
+function wrapDataPagePathname(pagePathname: string, basePath: string, buildId: string): string {
   const rest = withoutBasePath(pagePathname, basePath) ?? pagePathname;
   const page = isRoot(rest) ? "index" : rest.slice(1);
   return `${basePath}/_next/data/${buildId}/${page}.json`;
@@ -95,10 +91,7 @@ function rootRedirect(
 ): URL | undefined {
   if (i18n.localeDetection === false) return undefined;
 
-  const preferred = getAcceptLanguageLocale(
-    headers.get("accept-language") ?? "",
-    i18n.locales,
-  );
+  const preferred = getAcceptLanguageLocale(headers.get("accept-language") ?? "", i18n.locales);
   const detected =
     domain?.defaultLocale ??
     getCookieLocale(headers.get("cookie") ?? undefined, i18n.locales) ??

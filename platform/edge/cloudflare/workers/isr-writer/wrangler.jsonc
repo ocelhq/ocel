@@ -4,39 +4,39 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-13",
   "observability": {
-    "enabled": true,
+    "enabled": true
   },
   "upload_source_maps": true,
   "compatibility_flags": ["nodejs_compat"],
   "vars": {
-    "BOOTSTRAP_SECRET": "dev-secret",
+    "BOOTSTRAP_SECRET": "dev-secret"
   },
   "r2_buckets": [
     {
       "binding": "OCEL_CACHE_STORE",
-      "bucket_name": "ocel-edge-cache",
-    },
+      "bucket_name": "ocel-edge-cache"
+    }
   ],
   "durable_objects": {
     "bindings": [
       {
         "name": "ISR_WRITER_DO",
-        "class_name": "IsrDeploy",
+        "class_name": "IsrDeploy"
       },
       {
         "name": "ISR_SNAPSHOT_DO",
-        "class_name": "IsrSnapshot",
-      },
-    ],
+        "class_name": "IsrSnapshot"
+      }
+    ]
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["IsrDeploy"],
+      "new_sqlite_classes": ["IsrDeploy"]
     },
     {
       "tag": "v2",
-      "new_sqlite_classes": ["IsrSnapshot"],
-    },
-  ],
+      "new_sqlite_classes": ["IsrSnapshot"]
+    }
+  ]
 }

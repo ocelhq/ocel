@@ -6,7 +6,11 @@ function check(overrides: Parameters<typeof payload>[1], config = imageConfig())
   return validate(payload(config, overrides), config);
 }
 
-function rejects(overrides: Parameters<typeof payload>[1], message: string, config?: ReturnType<typeof imageConfig>) {
+function rejects(
+  overrides: Parameters<typeof payload>[1],
+  message: string,
+  config?: ReturnType<typeof imageConfig>,
+) {
   const result = check(overrides, config);
   expect(result.ok).toBe(false);
   if (result.ok) return;
@@ -56,7 +60,11 @@ describe("url", () => {
   });
 
   test("an empty localPatterns array denies every local path", () => {
-    rejects({ url: "/a.png" }, '"url" parameter is not allowed', imageConfig({ localPatterns: [] }));
+    rejects(
+      { url: "/a.png" },
+      '"url" parameter is not allowed',
+      imageConfig({ localPatterns: [] }),
+    );
   });
 
   test("an absent localPatterns allows every local path", () => {
@@ -81,21 +89,36 @@ describe("url", () => {
   test("the compiled hostname regex is anchored, so a suffix attack fails", () => {
     const config = imageConfig({
       remotePatterns: [
-        { protocol: "https", hostname: "^(?:(?!\\.)(?:[^.]*)\\.)example\\.com$", pathname: "^\\/.*$" },
+        {
+          protocol: "https",
+          hostname: "^(?:(?!\\.)(?:[^.]*)\\.)example\\.com$",
+          pathname: "^\\/.*$",
+        },
       ],
     });
-    rejects({ url: "https://cdn.example.com.evil.example/a.png" }, '"url" parameter is not allowed', config);
+    rejects(
+      { url: "https://cdn.example.com.evil.example/a.png" },
+      '"url" parameter is not allowed',
+      config,
+    );
     expect(check({ url: "https://cdn.example.com/a.png" }, config).ok).toBe(true);
   });
 
   test("userinfo cannot smuggle an allowlisted hostname", () => {
-    rejects({ url: "https://cdn.example.com@evil.example/a.png" }, '"url" parameter is not allowed');
+    rejects(
+      { url: "https://cdn.example.com@evil.example/a.png" },
+      '"url" parameter is not allowed',
+    );
   });
 
   test("domains matches an exact hostname", () => {
     const config = imageConfig({ domains: ["images.example.org"], remotePatterns: [] });
     expect(check({ url: "https://images.example.org/a.png" }, config).ok).toBe(true);
-    rejects({ url: "https://sub.images.example.org/a.png" }, '"url" parameter is not allowed', config);
+    rejects(
+      { url: "https://sub.images.example.org/a.png" },
+      '"url" parameter is not allowed',
+      config,
+    );
   });
 });
 
@@ -110,7 +133,10 @@ describe("width and quality", () => {
 
   test("w must be an integer", () => {
     rejects({ w: 99.9 }, '"w" parameter (width) must be an integer greater than 0');
-    rejects({ w: "640" as unknown as number }, '"w" parameter (width) must be an integer greater than 0');
+    rejects(
+      { w: "640" as unknown as number },
+      '"w" parameter (width) must be an integer greater than 0',
+    );
   });
 
   test("w not in deviceSizes union imageSizes", () => {
@@ -128,8 +154,16 @@ describe("width and quality", () => {
 
   test("q must be an integer between 1 and 100", () => {
     rejects({ q: 75.5 }, '"q" parameter (quality) must be an integer between 1 and 100');
-    rejects({ q: 0 }, '"q" parameter (quality) must be an integer between 1 and 100', imageConfig({ qualities: undefined }));
-    rejects({ q: 101 }, '"q" parameter (quality) must be an integer between 1 and 100', imageConfig({ qualities: undefined }));
+    rejects(
+      { q: 0 },
+      '"q" parameter (quality) must be an integer between 1 and 100',
+      imageConfig({ qualities: undefined }),
+    );
+    rejects(
+      { q: 101 },
+      '"q" parameter (quality) must be an integer between 1 and 100',
+      imageConfig({ qualities: undefined }),
+    );
   });
 
   test("q not in qualities", () => {
@@ -137,10 +171,7 @@ describe("width and quality", () => {
   });
 
   test("w=0 with no q is a quality error, not a width error", () => {
-    rejects(
-      { w: 0, q: undefined as unknown as number },
-      '"q" parameter (quality) is required',
-    );
+    rejects({ w: 0, q: undefined as unknown as number }, '"q" parameter (quality) is required');
   });
 
   test("w=99.9 with no q is a width error", () => {

@@ -1,4 +1,3 @@
-export { defineTransform } from "./define";
 export type {
   Gate,
   Patch,
@@ -8,7 +7,9 @@ export type {
   TransformRule,
   TransformRules,
 } from "./define";
-import { links as openLinks, type LinkPlaceholdersOf } from "./output";
+export { defineTransform } from "./define";
+
+import { type LinkPlaceholdersOf, links as openLinks } from "./output";
 
 /**
  * The records published to the coordinate a deploy targets, each property
@@ -35,7 +36,6 @@ export type TransformLinks = LinkPlaceholdersOf<Links, LinksGenerated>;
  */
 export const links = openLinks as TransformLinks;
 
-export { isLinkOutput } from "./output";
 export type {
   Linked,
   LinkOutput,
@@ -44,12 +44,13 @@ export type {
   LinkPlaceholdersOf,
   LinkProperties,
 } from "./output";
+export { isLinkOutput } from "./output";
 export type {
   AwsSurfaces,
   BucketBucketSurface,
   BucketCorsSurface,
-  BucketUploadCompleterSurface,
   BucketNotificationSurface,
+  BucketUploadCompleterSurface,
   EnvClass,
   FunctionLambdaSurface,
   FunctionUrlSurface,

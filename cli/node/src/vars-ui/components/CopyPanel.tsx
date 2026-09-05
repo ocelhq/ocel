@@ -11,13 +11,13 @@ import {
 import { cn } from "@/lib/utils";
 
 import {
+  type Address,
   addressKey,
+  type CopyBranch,
+  type CopyCell,
   copyTree,
   folderName,
   plural,
-  type Address,
-  type CopyBranch,
-  type CopyCell,
 } from "../model";
 import { useValue } from "../signals";
 import {
@@ -113,8 +113,8 @@ function Panel({ here }: { here: string }) {
           <>
             <SectionLabel className="mt-6">Left alone</SectionLabel>
             <ul className="space-y-2">
-              {plan.skipped.map((skip, index) => (
-                <li key={index} className="flex flex-wrap items-center gap-2">
+              {plan.skipped.map((skip) => (
+                <li key={skip.key} className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-[13px]">{skip.key}</span>
                   <span className="font-sans text-[13.5px] text-body">{skip.reason}</span>
                 </li>
@@ -128,7 +128,9 @@ function Panel({ here }: { here: string }) {
         )}
       </div>
       <SheetFooter className="flex-row items-center border-t border-border p-4">
-        <span className="font-mono text-xs text-muted-foreground">{plural(count, "value")} chosen</span>
+        <span className="font-mono text-xs text-muted-foreground">
+          {plural(count, "value")} chosen
+        </span>
         <span className="flex-1" />
         <Button variant="outline" size="sm" disabled={busy} onClick={closeCopy}>
           Cancel
@@ -175,9 +177,13 @@ function Branch({ branch }: { branch: CopyBranch }) {
               )
             }
           />
-          <span className="font-mono text-[13px]">{branch.folder === "" ? "/" : branch.folder}</span>
+          <span className="font-mono text-[13px]">
+            {branch.folder === "" ? "/" : branch.folder}
+          </span>
         </label>
-        <span className="font-mono text-xs text-muted-foreground">{plural(branch.cells.length, "value")}</span>
+        <span className="font-mono text-xs text-muted-foreground">
+          {plural(branch.cells.length, "value")}
+        </span>
       </div>
       {open && (
         <ul className="mb-2 ml-8 space-y-2">

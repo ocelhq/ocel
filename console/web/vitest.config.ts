@@ -26,12 +26,10 @@ export default defineConfig({
     passWithNoTests: true,
     env: {
       DATABASE_URL:
-        process.env.TEST_DATABASE_URL ??
-        "postgres://postgres:postgres@localhost:5432/ocelhq_test",
+        process.env.TEST_DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/ocelhq_test",
       OCEL_RESOURCE_POSTGRES_main: postgresLink(
         "main",
-        process.env.TEST_DATABASE_URL ??
-          "postgres://postgres:postgres@localhost:5432/ocelhq_test",
+        process.env.TEST_DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/ocelhq_test",
       ),
       OCEL_CLOUD_ADMIN_URL:
         process.env.TEST_OCEL_CLOUD_ADMIN_URL ??

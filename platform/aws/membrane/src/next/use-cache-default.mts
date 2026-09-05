@@ -1,11 +1,11 @@
 import { clockMethods, tagClock } from "./tag-clock.mjs";
 import {
   bufferValue,
+  type CacheEntry,
   MB,
   now,
   pendingSets,
   streamOf,
-  type CacheEntry,
 } from "./use-cache-entry.mjs";
 
 interface StoredEntry {
@@ -68,9 +68,7 @@ const handler = {
         stale: stored.stale,
         timestamp: stored.timestamp,
         expire: stored.expire,
-        revalidate: tagClock.areTagsStale(stored.tags, stored.timestamp)
-          ? -1
-          : stored.revalidate,
+        revalidate: tagClock.areTagsStale(stored.tags, stored.timestamp) ? -1 : stored.revalidate,
       };
     } catch {
       return undefined;
@@ -92,8 +90,7 @@ const handler = {
           expire: entry.expire,
           revalidate: entry.revalidate,
         });
-      } catch {
-      }
+      } catch {}
     });
   },
 

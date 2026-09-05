@@ -1,7 +1,7 @@
-import net from "node:net";
-import http from "node:http";
 import { EventEmitter } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
+import http from "node:http";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
@@ -43,7 +43,9 @@ const doors: Record<string, (invoke: Invoke) => Promise<void>> = {
   serveEntry: (invoke) => membrane.serveEntry(invoke),
   serveInvoke: (invoke) => membrane.serveInvoke(invoke),
   serveServer: (invoke) =>
-    membrane.serveServer(http.createServer((req, res) => invoke(req, res, { waitUntil: () => {} }))),
+    membrane.serveServer(
+      http.createServer((req, res) => invoke(req, res, { waitUntil: () => {} })),
+    ),
 };
 
 async function start(door: string, invoke: Invoke): Promise<number> {
@@ -127,7 +129,7 @@ describe.each(Object.keys(doors))("%s", (door) => {
     const port = await start(door, echo);
 
     expect(await reach(port, { "x-ocel-origin-secret": SECRET.replace("9", "0") })).toBe(403);
-    expect(await reach(port, { "x-ocel-origin-secret": SECRET + "0" })).toBe(403);
+    expect(await reach(port, { "x-ocel-origin-secret": `${SECRET}0` })).toBe(403);
     expect(seen).toBeUndefined();
   });
 

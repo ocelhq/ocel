@@ -10,15 +10,14 @@ export class ImageError extends Error {
 }
 
 export function upstreamFailure(detail: unknown): ImageError {
-  return new ImageError(
-    400,
-    '"url" parameter is valid but upstream response is invalid',
-    detail,
-  );
+  return new ImageError(400, '"url" parameter is valid but upstream response is invalid', detail);
 }
 
 export class BootstrapError extends Error {
-  constructor(message: string, readonly detail?: unknown) {
+  constructor(
+    message: string,
+    readonly detail?: unknown,
+  ) {
     super(message);
     this.name = "BootstrapError";
   }

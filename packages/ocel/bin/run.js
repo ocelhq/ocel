@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { join } from "path";
-import { constants } from "node:os";
 import { createRequire } from "node:module";
+import { constants } from "node:os";
+import { join } from "node:path";
 
 const { platform, arch } = process;
 const require = createRequire(import.meta.url);
@@ -34,7 +34,7 @@ try {
   process.exit(1);
 }
 
-const { spawn } = require("child_process");
+const { spawn } = require("node:child_process");
 const child = spawn(binaryPath, process.argv.slice(2), { stdio: "inherit" });
 
 process.on("SIGINT", () => {});

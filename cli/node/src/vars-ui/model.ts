@@ -91,17 +91,11 @@ export function addressKey(at: Address): string {
   return `${at.key} ${at.folder} ${at.environment}`;
 }
 
-export function overrideOf(
-  cell: MatrixCell,
-  environment: string,
-): Override | undefined {
+export function overrideOf(cell: MatrixCell, environment: string): Override | undefined {
   return cell.overrides?.find((held) => held.environment === environment);
 }
 
-export function held(
-  cell: MatrixCell,
-  environment: string,
-): { set: boolean; version: number } {
+export function held(cell: MatrixCell, environment: string): { set: boolean; version: number } {
   if (environment === "") return { set: cell.set, version: cell.version };
   const override = overrideOf(cell, environment);
   return { set: override !== undefined, version: override?.version ?? 0 };
@@ -116,10 +110,7 @@ export function owedCell(cell: MatrixCell): boolean {
 }
 
 export function owedCount(current: State): number {
-  return current.matrix.rows.reduce(
-    (total, row) => total + row.cells.filter(owedCell).length,
-    0,
-  );
+  return current.matrix.rows.reduce((total, row) => total + row.cells.filter(owedCell).length, 0);
 }
 
 export function readable(row: MatrixRow): string[] {
@@ -133,10 +124,7 @@ export function readBy(row: MatrixRow, app: AppResolution): boolean {
   return folders.includes("") || folders.includes(app.folder);
 }
 
-export function readersOf(
-  row: MatrixRow,
-  apps: readonly AppResolution[],
-): AppResolution[] {
+export function readersOf(row: MatrixRow, apps: readonly AppResolution[]): AppResolution[] {
   return apps.filter((app) => readBy(row, app));
 }
 
@@ -155,12 +143,10 @@ export function variantOf(
 ): Variant {
   const override = environment === "" ? undefined : overrideOf(cell, environment);
   const reference = environment === "" ? cell.reference : override?.reference;
-  const set =
-    environment === "" ? cell.set || reference !== undefined : override !== undefined;
+  const set = environment === "" ? cell.set || reference !== undefined : override !== undefined;
   return {
     at: { key: row.key, folder: cell.folder, environment },
-    kind:
-      environment !== "" ? "environment" : cell.folder === "" ? "root" : "folder",
+    kind: environment !== "" ? "environment" : cell.folder === "" ? "root" : "folder",
     class: row.class,
     state: cell.state,
     set,
@@ -188,10 +174,7 @@ export interface Catalogue {
   variants: ReadonlyMap<string, Variant>;
 }
 
-export function catalogueOf(
-  current: State,
-  extras: readonly Address[],
-): Catalogue {
+export function catalogueOf(current: State, extras: readonly Address[]): Catalogue {
   const variants = new Map<string, Variant>();
   const put = (variant: Variant) => {
     const key = addressKey(variant.at);
@@ -202,9 +185,7 @@ export function catalogueOf(
     const cells = cellOf(row, "") ? row.cells : [forbiddenRoot, ...row.cells];
     for (const cell of cells) {
       const real = cell.folder === "" || materialised(cell);
-      const wanted = asked.some(
-        (at) => at.folder === cell.folder && at.environment === "",
-      );
+      const wanted = asked.some((at) => at.folder === cell.folder && at.environment === "");
       if (real || wanted) put(variantOf(row, cell, "", !real));
       for (const override of cell.overrides ?? []) {
         put(variantOf(row, cell, override.environment, false));
@@ -223,10 +204,7 @@ export function variantsOf(catalogue: Catalogue): Variant[] {
   return [...catalogue.variants.values()];
 }
 
-export function variantAt(
-  catalogue: Catalogue,
-  at: Address,
-): Variant | undefined {
+export function variantAt(catalogue: Catalogue, at: Address): Variant | undefined {
   const known = catalogue.variants.get(addressKey(at));
   if (known) return known;
   const row = catalogue.rows.find((candidate) => candidate.key === at.key);
@@ -294,8 +272,7 @@ function lineOf(
   environment: string,
 ): KeyLine {
   const at = { key: row.key, folder: cell.folder, environment };
-  const variant =
-    catalogue.variants.get(addressKey(at)) ?? variantOf(row, cell, environment, true);
+  const variant = catalogue.variants.get(addressKey(at)) ?? variantOf(row, cell, environment, true);
   const root = cellOf(row, "");
   let inherits: Inherits = null;
   if (environment !== "") {
@@ -363,7 +340,8 @@ export function listingOf(
       for (const row of current.matrix.rows) {
         const cell = cellOf(row, folder);
         if (!cell || !listed(cell)) continue;
-        if (!catalogue.variants.has(addressKey({ key: row.key, folder, environment: "" }))) continue;
+        if (!catalogue.variants.has(addressKey({ key: row.key, folder, environment: "" })))
+          continue;
         lines.push(lineOf(catalogue, owed, row, cell, lens.environment));
         if (owedCell(cell)) owing += 1;
       }
@@ -381,14 +359,9 @@ export function setForOptions(catalogue: Catalogue, row: MatrixRow): string[] {
   );
 }
 
-export function overrideOptions(
-  current: State,
-  catalogue: Catalogue,
-  at: Cell,
-): string[] {
+export function overrideOptions(current: State, catalogue: Catalogue, at: Cell): string[] {
   return current.environments.filter(
-    (environment) =>
-      !catalogue.variants.has(addressKey({ ...at, environment })),
+    (environment) => !catalogue.variants.has(addressKey({ ...at, environment })),
   );
 }
 
@@ -436,10 +409,7 @@ export interface Draft {
   version: number;
 }
 
-export function baselineOf(
-  at: Address,
-  baselines: ReadonlyMap<string, string>,
-): string {
+export function baselineOf(at: Address, baselines: ReadonlyMap<string, string>): string {
   return baselines.get(addressKey(at)) ?? "";
 }
 
@@ -728,7 +698,5 @@ export function doneLabel(owed: number): string {
 }
 
 export function tallyLine(owed: number): string {
-  return owed === 0
-    ? "every required cell is filled"
-    : `${plural(owed, "cell")} to fill`;
+  return owed === 0 ? "every required cell is filled" : `${plural(owed, "cell")} to fill`;
 }

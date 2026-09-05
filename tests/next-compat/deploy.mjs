@@ -2,11 +2,11 @@
 
 import { spawnSync } from "node:child_process";
 import {
+  closeSync,
   existsSync,
   openSync,
-  readFileSync,
   readdirSync,
-  closeSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -16,13 +16,13 @@ import {
   APP_NAME,
   BUILD_LOG_FILE,
   DEPLOY_RESULT_FILE,
-  SKIP_DRIFT_CHECK_ENV,
-  STATE_FILE,
   deployURL,
   planProblems,
   previewRefForApp,
   projectSlugForRun,
   renderOcelConfig,
+  SKIP_DRIFT_CHECK_ENV,
+  STATE_FILE,
   tail,
   withBuildScript,
   withPinnedTypeScript,
@@ -31,7 +31,8 @@ import { linkSidecar } from "./sidecar.mjs";
 
 const DEFAULT_TIMEOUT_MS = 25 * 60 * 1000;
 
-const deadline = Date.now() + (Number(process.env.OCEL_E2E_DEPLOY_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS);
+const deadline =
+  Date.now() + (Number(process.env.OCEL_E2E_DEPLOY_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS);
 
 const FAILURE_LOG_LINES = 200;
 
@@ -55,7 +56,7 @@ function hasTypeScriptNextConfig() {
 }
 
 try {
-  process.stdout.write(deploy() + "\n");
+  process.stdout.write(`${deploy()}\n`);
 } catch (err) {
   console.error(`[ocel-e2e] deploy failed: ${err.message}`);
   echoLogTail();
@@ -70,7 +71,7 @@ function deploy() {
   const ref = previewRefForApp(appDir);
   writeFileSync(
     join(appDir, STATE_FILE),
-    JSON.stringify({ slug, ref, appName: APP_NAME, startedAt: Date.now() }, null, 2) + "\n",
+    `${JSON.stringify({ slug, ref, appName: APP_NAME, startedAt: Date.now() }, null, 2)}\n`,
   );
   console.error(`[ocel-e2e] preview ${ref} of project ${slug} in ${appDir}`);
 
@@ -86,7 +87,9 @@ function deploy() {
 
   const resultPath = join(appDir, DEPLOY_RESULT_FILE);
   if (!existsSync(resultPath)) {
-    throw new Error(`${resultPath} was not written; the deploy reported success but produced no result`);
+    throw new Error(
+      `${resultPath} was not written; the deploy reported success but produced no result`,
+    );
   }
   return deployURL(JSON.parse(readFileSync(resultPath, "utf8")));
 }
@@ -120,7 +123,7 @@ function patchPackageJson() {
   const pkg = JSON.parse(readFileSync(path, "utf8"));
   const patched = withPinnedTypeScript(withBuildScript(pkg));
   if (patched !== pkg) {
-    writeFileSync(path, JSON.stringify(patched, null, 2) + "\n");
+    writeFileSync(path, `${JSON.stringify(patched, null, 2)}\n`);
     console.error("[ocel-e2e] patched package.json (build script, typescript pin)");
   }
 }
@@ -144,7 +147,10 @@ function planFirst(adapterDir, ref) {
 }
 
 function runOcel(adapterDir, args) {
-  run(`ocel ${args[0]}`, process.execPath, [join(adapterDir, "packages", "ocel", "bin", "run.js"), ...args]);
+  run(`ocel ${args[0]}`, process.execPath, [
+    join(adapterDir, "packages", "ocel", "bin", "run.js"),
+    ...args,
+  ]);
 }
 
 function run(label, command, args) {

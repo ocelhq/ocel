@@ -5,7 +5,9 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { buildNext, nextRunner } from "./next.js";
 
 const roots: string[] = [];
-afterAll(() => roots.forEach((d) => rmSync(d, { recursive: true, force: true })));
+afterAll(() => {
+  for (const d of roots) rmSync(d, { recursive: true, force: true });
+});
 
 const realRun = nextRunner.run;
 afterEach(() => (nextRunner.run = realRun));
@@ -20,7 +22,9 @@ function nextApp(pkg: unknown): string {
 describe("buildNext", () => {
   it("throws when there is no build script", async () => {
     const dir = nextApp({ dependencies: { next: "16" } });
-    await expect(buildNext({ name: "web", cwd: dir }, { outDir: dir })).rejects.toThrow(/no "build" script/);
+    await expect(buildNext({ name: "web", cwd: dir }, { outDir: dir })).rejects.toThrow(
+      /no "build" script/,
+    );
   });
 
   it("runs the resolved build command and emits no function", async () => {
@@ -81,7 +85,11 @@ describe("buildNext", () => {
 
     await buildNext(
       { name: "web", cwd: dir },
-      { outDir: "/out", edgeKind: "cloudfront", allowDegraded: ["edge-middleware", "edge-runtime"] },
+      {
+        outDir: "/out",
+        edgeKind: "cloudfront",
+        allowDegraded: ["edge-middleware", "edge-runtime"],
+      },
     );
 
     expect(env?.OCEL_EDGE_KIND).toBe("cloudfront");
@@ -104,7 +112,10 @@ describe("buildNext", () => {
     let env: Record<string, string> | undefined;
     nextRunner.run = async (_command, _args, _cwd, e) => void (env = e);
 
-    await buildNext({ name: "web", cwd: dir, env: { NODE_ENV: "development" } }, { outDir: "/out" });
+    await buildNext(
+      { name: "web", cwd: dir, env: { NODE_ENV: "development" } },
+      { outDir: "/out" },
+    );
 
     expect(env?.NODE_ENV).toBe("production");
   });

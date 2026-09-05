@@ -1,16 +1,16 @@
 import type { CompiledImageConfig } from "./contract.mjs";
-import { ImageError, BootstrapError } from "./errors.mjs";
+import { BootstrapError, ImageError } from "./errors.mjs";
 import { sharp } from "./sharp.mjs";
 import {
   ANIMATABLE_TYPES,
   AVIF,
   BYPASS_TYPES,
-  JPEG,
-  PNG,
-  WEBP,
   detectContentType,
   extensionFor,
   isAnimated,
+  JPEG,
+  PNG,
+  WEBP,
 } from "./sniff.mjs";
 
 const SHARP_TIMEOUT_SECONDS = 7;
@@ -36,22 +36,16 @@ export async function transform(input: TransformInput): Promise<Transformed> {
   const { bytes, config } = input;
 
   const upstreamType = detectContentType(bytes);
-  if (
-    !upstreamType ||
-    !upstreamType.startsWith("image/") ||
-    upstreamType.includes(",")
-  ) {
+  if (!upstreamType?.startsWith("image/") || upstreamType.includes(",")) {
     throw new ImageError(400, "The requested resource isn't a valid image.", {
       upstreamType,
     });
   }
 
   if (upstreamType.startsWith("image/svg") && !config.dangerouslyAllowSVG) {
-    throw new ImageError(
-      400,
-      '"url" parameter is valid but image type is not allowed',
-      { upstreamType },
-    );
+    throw new ImageError(400, '"url" parameter is valid but image type is not allowed', {
+      upstreamType,
+    });
   }
 
   if (ANIMATABLE_TYPES.includes(upstreamType) && isAnimated(bytes, upstreamType)) {
@@ -91,11 +85,7 @@ export function fallbackOr400(
   return { bytes, contentType: upstreamType, unmodified: true, passthrough: true };
 }
 
-function outputType(
-  mimeType: string,
-  upstreamType: string,
-  config: CompiledImageConfig,
-): string {
+function outputType(mimeType: string, upstreamType: string, config: CompiledImageConfig): string {
   if (mimeType) {
     if (!config.formats.includes(mimeType)) {
       throw new BootstrapError("mimeType is not a configured output format", mimeType);

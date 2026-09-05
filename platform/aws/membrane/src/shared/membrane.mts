@@ -1,7 +1,7 @@
-import net from "node:net";
+import { createHash, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import Module from "node:module";
-import { createHash, timingSafeEqual } from "node:crypto";
+import net from "node:net";
 
 let controlSocket: net.Socket | null = null;
 const controlHandlers = new Set<(message: unknown) => void>();
@@ -15,7 +15,7 @@ function control(): net.Socket {
 }
 
 export function sendControl(type: string, payload: unknown): void {
-  control().write(JSON.stringify({ type, payload }) + "\n");
+  control().write(`${JSON.stringify({ type, payload })}\n`);
 }
 
 export function onControlMessage(handler: (message: unknown) => void): void {
@@ -120,10 +120,7 @@ export function installCompileCacheWarm(warm: unknown): void {
   onControlMessage((message) => {
     if (!message || typeof message !== "object") return;
     if ((message as { type?: unknown }).type !== "warm-compile-cache") return;
-    sendControl(
-      "compile-cache-warmed",
-      warmNow(warm, (message as { payload?: unknown }).payload),
-    );
+    sendControl("compile-cache-warmed", warmNow(warm, (message as { payload?: unknown }).payload));
   });
 }
 
@@ -197,12 +194,11 @@ interface Trust {
   guard?: OriginGuard;
 }
 
-function normalizeLoopbackHeaders(
-  headers: http.IncomingHttpHeaders,
-  trust: Trust,
-): void {
+function normalizeLoopbackHeaders(headers: http.IncomingHttpHeaders, trust: Trust): void {
   if (trust.forwarded) {
-    const forwarded = String(headers["x-forwarded-host"] ?? "").split(",")[0]?.trim();
+    const forwarded = String(headers["x-forwarded-host"] ?? "")
+      .split(",")[0]
+      ?.trim();
     if (forwarded) headers.host = forwarded;
   } else {
     delete headers["x-forwarded-host"];

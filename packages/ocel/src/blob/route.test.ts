@@ -7,10 +7,11 @@ vi.mock("../utils/rpc", () => ({
 }));
 
 const { bucket } = await import("./bucket.js");
+
+import type { BucketServiceClient } from "./bucket-client.js";
+import type { BucketContext } from "./bucket-context.js";
 import { decodeMetadata, encodeMetadata } from "./metadata.js";
 import { createRouteHandler } from "./route.js";
-import type { BucketContext } from "./bucket-context.js";
-import type { BucketServiceClient } from "./bucket-client.js";
 import { uploader } from "./uploader.js";
 
 function makeReq(url: string, body?: unknown) {
@@ -257,9 +258,7 @@ describe("op=callback", () => {
     const { ctx, verifyUploadSignature } = fakeContext();
     const { POST } = createRouteHandler(storage, { runtime: ctx });
 
-    const res = await POST(
-      makeReq(callbackUrl, { sessionId: "sess-1", signature: "sig", file }),
-    );
+    const res = await POST(makeReq(callbackUrl, { sessionId: "sess-1", signature: "sig", file }));
 
     expect(res.status).toBe(200);
     expect(verifyUploadSignature).toHaveBeenCalledWith({
@@ -282,9 +281,7 @@ describe("op=callback", () => {
     });
     const { POST } = createRouteHandler(storage, { runtime: ctx });
 
-    const res = await POST(
-      makeReq(callbackUrl, { sessionId: "sess-1", signature: "sig", file }),
-    );
+    const res = await POST(makeReq(callbackUrl, { sessionId: "sess-1", signature: "sig", file }));
 
     expect(res.status).toBe(404);
     expect(onUploadComplete).not.toHaveBeenCalled();
@@ -296,9 +293,7 @@ describe("op=callback", () => {
     });
     const { POST } = createRouteHandler(storage, { runtime: ctx });
 
-    const res = await POST(
-      makeReq(callbackUrl, { sessionId: "sess-1", signature: "bad", file }),
-    );
+    const res = await POST(makeReq(callbackUrl, { sessionId: "sess-1", signature: "bad", file }));
 
     expect(res.status).toBe(401);
     expect(onUploadComplete).not.toHaveBeenCalled();

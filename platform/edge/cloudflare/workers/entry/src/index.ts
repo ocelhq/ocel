@@ -1,38 +1,24 @@
 import {
+  type HostRequestExtras,
+  type RouteResult,
+  type RouteDeps as RouterDeps,
   dispatchResult as routeDispatchResult,
   serve as routeServe,
-  type HostRequestExtras,
-  type RouteDeps as RouterDeps,
-  type RouteResult,
 } from "@framework/next-router";
 import type { AssetStoreDeps } from "@framework/next-router/assets";
-
-import { deploymentScope, type CacheDeps } from "./cache";
 import { functionUrlImageOrigin } from "@framework/next-router/image";
-import { coloImageCache } from "./image";
-import { coloPrerender, type InterceptionTier } from "./prerender";
-import type { ImageStore } from "./image-store";
-import {
-  createEdgeInvoker,
-  type EdgeCacheStub,
-  type EdgeObjectStore,
-} from "./edge";
-import { invalidateSnapshot } from "./tag-clock";
-import {
-  resolveDeployment,
-  type DeploymentRecord,
-  type DeploymentsDeps,
-} from "./deployments";
+import { type CacheDeps, deploymentScope } from "./cache";
+import { type DeploymentRecord, type DeploymentsDeps, resolveDeployment } from "./deployments";
+import { createEdgeInvoker, type EdgeCacheStub, type EdgeObjectStore } from "./edge";
 import type { CacheEntrypointProps, Env } from "./env";
-import {
-  globalPreviewTarget,
-  normalizeBaseDomain,
-  previewApps,
-  previewTarget,
-} from "./preview";
+import { coloImageCache } from "./image";
+import type { ImageStore } from "./image-store";
 import { nodeOrigin } from "./node";
-import { edgeOriginFetch } from "./signing";
+import { coloPrerender, type InterceptionTier } from "./prerender";
+import { globalPreviewTarget, normalizeBaseDomain, previewApps, previewTarget } from "./preview";
 import { revalidationSender } from "./revalidation";
+import { edgeOriginFetch } from "./signing";
+import { invalidateSnapshot } from "./tag-clock";
 
 export { CacheEntrypoint } from "./cache-entrypoint";
 export type { Env } from "./env";
@@ -49,10 +35,7 @@ export function withEdgeHeader(response: Response): Response {
 }
 
 export interface RouteDeps
-  extends Omit<
-    RouterDeps,
-    "prerender" | "imageCache" | "onRevalidated" | "hostRequestInit"
-  > {
+  extends Omit<RouterDeps, "prerender" | "imageCache" | "onRevalidated" | "hostRequestInit"> {
   cache?: CacheDeps;
   interception?: InterceptionTier;
   imageStore?: ImageStore;
@@ -85,10 +68,7 @@ function forgetSnapshot(tier: InterceptionTier): Promise<void> {
   return invalidateSnapshot(config, clockDeps);
 }
 
-export async function serve(
-  request: Request,
-  deps: RouteDeps,
-): Promise<Response> {
+export async function serve(request: Request, deps: RouteDeps): Promise<Response> {
   return withEdgeHeader(await routeServe(request, bound(deps)));
 }
 
@@ -123,11 +103,7 @@ export type ResolveBase = Omit<
 export type ServeFetch = (request: Request) => Promise<Response>;
 
 interface ServeRuntime {
-  serve: (
-    record: DeploymentRecord,
-    deployments: DeploymentsDeps,
-    base: ResolveBase,
-  ) => ServeFetch;
+  serve: (record: DeploymentRecord, deployments: DeploymentsDeps, base: ResolveBase) => ServeFetch;
   routeDeps?: (
     record: DeploymentRecord,
     deployments: DeploymentsDeps,
@@ -156,9 +132,7 @@ function runtimeFor(record: DeploymentRecord): ServeRuntime {
   return record.routingManifest ? routedRuntime : originRuntime;
 }
 
-async function resolveRecord(
-  deployments: DeploymentsDeps,
-): Promise<DeploymentRecord | Response> {
+async function resolveRecord(deployments: DeploymentsDeps): Promise<DeploymentRecord | Response> {
   const resolution = await resolveDeployment(deployments);
   if (resolution.kind === "not-found") return deploymentNotFoundResponse();
   if (resolution.kind === "unavailable") return unavailableResponse();
@@ -198,9 +172,7 @@ function routedDeps(
   const { edgeWorkers } = record;
   const manifest = record.routingManifest;
   if (!manifest) {
-    throw new Error(
-      `deployment ${record.deploymentId} carries no routing manifest to route with`,
-    );
+    throw new Error(`deployment ${record.deploymentId} carries no routing manifest to route with`);
   }
   return {
     ...rest,
@@ -285,10 +257,7 @@ function unavailableResponse(): Response {
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const store = env.OCEL_CACHE_STORE;
-    const originFetch = edgeOriginFetch(
-      env.OCEL_EDGE_ACCESS_KEY_ID,
-      env.OCEL_EDGE_SECRET_KEY,
-    );
+    const originFetch = edgeOriginFetch(env.OCEL_EDGE_ACCESS_KEY_ID, env.OCEL_EDGE_SECRET_KEY);
 
     const host = new URL(request.url).host;
     const global = env.OCEL_PREVIEW === "1" && env.OCEL_PREVIEW_GLOBAL === "1";
@@ -297,9 +266,7 @@ export default {
     let app = env.OCEL_APP;
     let slug = env.OCEL_SLUG;
     const baseDomain =
-      env.OCEL_PREVIEW === "1"
-        ? normalizeBaseDomain(env.OCEL_PREVIEW_BASE_DOMAIN)
-        : "";
+      env.OCEL_PREVIEW === "1" ? normalizeBaseDomain(env.OCEL_PREVIEW_BASE_DOMAIN) : "";
     if (global) {
       const target = globalPreviewTarget(host, baseDomain);
       if (target === null) return deploymentNotFoundResponse();
@@ -307,11 +274,7 @@ export default {
       pointer = target.pointer;
       app = target.app;
     } else if (baseDomain) {
-      const target = previewTarget(
-        host,
-        baseDomain,
-        previewApps(env.OCEL_PREVIEW_APPS),
-      );
+      const target = previewTarget(host, baseDomain, previewApps(env.OCEL_PREVIEW_APPS));
       if (target === null) return deploymentNotFoundResponse();
       pointer = target.pointer;
       app = target.app;
@@ -323,10 +286,7 @@ export default {
       {
         fetch,
         originFetch,
-        imageOrigin: functionUrlImageOrigin(
-          env.OCEL_IMAGE_OPTIMIZER_URL,
-          originFetch ?? fetch,
-        ),
+        imageOrigin: functionUrlImageOrigin(env.OCEL_IMAGE_OPTIMIZER_URL, originFetch ?? fetch),
         imageStore: store,
         assetStore: {
           store,

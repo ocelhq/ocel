@@ -1,16 +1,16 @@
+import { createExecutionContext, env } from "cloudflare:test";
 import {
-  tagNamespace,
-  tagSnapshotKey,
   type TagRecord,
   type TagSnapshot,
+  tagNamespace,
+  tagSnapshotKey,
 } from "@framework/next-cache";
-import { createExecutionContext, env } from "cloudflare:test";
 import { beforeEach, expect, it } from "vitest";
 
 import { CacheEntrypoint, createEdgeCache, tagRaiser } from "../src/cache-entrypoint";
-import type { ObjectStoreReader } from "../src/tag-clock";
 import type { Env } from "../src/index";
 import type { AwsService } from "../src/signing";
+import type { ObjectStoreReader } from "../src/tag-clock";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {
@@ -47,7 +47,9 @@ interface Call {
   body: string;
 }
 
-function awsRecorder(reply: (call: Call) => Response | Promise<Response> = () => new Response(null, { status: 404 })) {
+function awsRecorder(
+  reply: (call: Call) => Response | Promise<Response> = () => new Response(null, { status: 404 }),
+) {
   const calls: Call[] = [];
   return {
     calls,
@@ -182,7 +184,10 @@ it("returns from a write before the object lands, and writes behind it", async (
   expect(put.url).toBe(
     `https://${bucket}.s3.${region}.amazonaws.com/${scope}/fetch-cache/abc123.cache.json`,
   );
-  expect(JSON.parse(put.body)).toEqual({ ...entry(), value: { ...entry().value, tags: ["posts"] } });
+  expect(JSON.parse(put.body)).toEqual({
+    ...entry(),
+    value: { ...entry().value, tags: ["posts"] },
+  });
 });
 
 it("skips an oversized entry rather than failing the render", async () => {
@@ -236,9 +241,9 @@ it("records one tag update per tag, under the prefix's tag namespace", async () 
 
 it("writes no tag item at all for a scope that is not one release's ISR prefix", async () => {
   const aws = awsRecorder(() => new Response("{}"));
-  await expect(
-    cacheWith(aws).revalidateTags("prod/proj/app/r00000000", ["posts"]),
-  ).rejects.toThrow(/ISR prefix/);
+  await expect(cacheWith(aws).revalidateTags("prod/proj/app/r00000000", ["posts"])).rejects.toThrow(
+    /ISR prefix/,
+  );
   expect(aws.calls).toHaveLength(0);
 });
 
@@ -270,7 +275,9 @@ it("treats a rejected guard as the ordinary outcome it is", async () => {
 });
 
 it("surfaces a tag write that failed for any other reason", async () => {
-  const aws = awsRecorder(() => new Response(JSON.stringify({ __type: "x#ThrottlingException" }), { status: 400 }));
+  const aws = awsRecorder(
+    () => new Response(JSON.stringify({ __type: "x#ThrottlingException" }), { status: 400 }),
+  );
   await expect(cacheWith(aws).revalidateTags(scope, ["posts"])).rejects.toThrow(/dynamodb 400/);
 });
 

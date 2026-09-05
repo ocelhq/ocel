@@ -71,9 +71,7 @@ function mediaSelections(header: string, preferences: string[]): string[] {
       if (key === "q" || key === "Q") {
         seenQ = true;
         const parsed = parseFloat(raw);
-        q = !Number.isFinite(parsed) || parsed > 1 || (parsed < 0.001 && parsed !== 0)
-          ? 1
-          : parsed;
+        q = !Number.isFinite(parsed) || parsed > 1 || (parsed < 0.001 && parsed !== 0) ? 1 : parsed;
       } else if (!seenQ) {
         params[key] = raw[0] === '"' ? `"${quoted[raw]}"` : raw;
       }

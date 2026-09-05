@@ -1,9 +1,8 @@
+import { type I18nConfig, resolveRoutes } from "@next/routing";
 import { describe, expect, it } from "vitest";
-import { resolveRoutes, type I18nConfig } from "@next/routing";
-
-import { serve, type RouteDeps } from "../src/index.mjs";
 import type { AssetBucket } from "../src/assets.mjs";
 import { localeOf, resolveLocale } from "../src/i18n.mjs";
+import { type RouteDeps, serve } from "../src/index.mjs";
 
 function assetStore(files: Record<string, string>): RouteDeps["assetStore"] {
   const store: AssetBucket = {
@@ -386,13 +385,9 @@ describe("pages-router i18n", () => {
       kind: "lambda",
       id: "posts",
     };
-    (deps.manifest.routes as { shouldNormalizeNextData?: boolean }).shouldNormalizeNextData =
-      true;
+    (deps.manifest.routes as { shouldNormalizeNextData?: boolean }).shouldNormalizeNextData = true;
 
-    const res = await serve(
-      new Request("https://app.example/_next/data/b1/en/about.json"),
-      deps,
-    );
+    const res = await serve(new Request("https://app.example/_next/data/b1/en/about.json"), deps);
 
     expect(res.status).toBe(200);
     expect(deps.forwarded).toEqual(["/_next/data/b1/en/about.json"]);
@@ -421,14 +416,7 @@ describe("pages-router i18n", () => {
 
 describe("resolveLocale", () => {
   const at = (pathname: string, basePath = "", headers = new Headers()) =>
-    resolveLocale(
-      I18N,
-      basePath,
-      "b1",
-      [],
-      new URL(`https://app.example${pathname}`),
-      headers,
-    );
+    resolveLocale(I18N, basePath, "b1", [], new URL(`https://app.example${pathname}`), headers);
 
   it("only strips a basePath on a segment boundary", () => {
     expect(at("/documents", "/docs").pathname).toBe("/en/documents");
@@ -445,27 +433,19 @@ describe("resolveLocale", () => {
   });
 
   it("prefixes a _next/data page URL that carries no locale", () => {
-    expect(at("/_next/data/b1/about.json").pathname).toBe(
-      "/_next/data/b1/en/about.json",
-    );
+    expect(at("/_next/data/b1/about.json").pathname).toBe("/_next/data/b1/en/about.json");
   });
 
   it("prefixes a _next/data index URL that carries no locale", () => {
-    expect(at("/_next/data/b1/index.json").pathname).toBe(
-      "/_next/data/b1/en.json",
-    );
+    expect(at("/_next/data/b1/index.json").pathname).toBe("/_next/data/b1/en.json");
   });
 
   it("leaves a _next/data page URL's own locale in place", () => {
-    expect(at("/_next/data/b1/fr/about.json").pathname).toBe(
-      "/_next/data/b1/fr/about.json",
-    );
+    expect(at("/_next/data/b1/fr/about.json").pathname).toBe("/_next/data/b1/fr/about.json");
   });
 
   it("still bails out a _next/static URL", () => {
-    expect(at("/_next/static/chunks/x.js").pathname).toBe(
-      "/_next/static/chunks/x.js",
-    );
+    expect(at("/_next/static/chunks/x.js").pathname).toBe("/_next/static/chunks/x.js");
   });
 });
 

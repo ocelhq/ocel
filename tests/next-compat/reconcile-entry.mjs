@@ -36,13 +36,7 @@ export function reconcileEntry(wildcard) {
   console.error(`[ocel-e2e] reconciling the shared preview entry on ${wildcard} (from ${dir})`);
   const res = spawnSync(
     process.execPath,
-    [
-      join(adapterDir, "packages", "ocel", "bin", "run.js"),
-      "domain",
-      "use",
-      wildcard,
-      "--preview",
-    ],
+    [join(adapterDir, "packages", "ocel", "bin", "run.js"), "domain", "use", wildcard, "--preview"],
     {
       cwd: dir,
       stdio: ["ignore", "inherit", "inherit"],

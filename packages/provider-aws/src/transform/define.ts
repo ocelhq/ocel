@@ -1,12 +1,6 @@
 import type { TransformLinks } from "./index";
 import { links } from "./output";
-import type {
-  AwsSurfaces,
-  GateContext,
-  SurfaceType,
-  TagMap,
-  TransformContext,
-} from "./surface";
+import type { AwsSurfaces, GateContext, SurfaceType, TagMap, TransformContext } from "./surface";
 
 /**
  * Decides whether a rule applies, from ambient context alone. Target a
@@ -21,6 +15,7 @@ export type Patch<T> = { readonly [K in keyof T]?: T[K] };
  * Receives the fully-defaulted args and either mutates them in place or
  * returns a whole replacement. Returning part of the args fails the deploy.
  */
+// biome-ignore lint/suspicious/noConfusingVoidType: a transform may mutate in place and return nothing
 export type TransformFn<T> = (args: T, ctx: TransformContext) => T | void;
 
 /** Either form a rule may use for one underlying resource. */
@@ -58,10 +53,7 @@ export type TransformRules = TransformRule | readonly TransformRule[];
 export function defineTransform(
   rules: TransformRules | ((inputs: TransformInputs) => TransformRules),
 ): readonly TransformRule[] {
-  const authored =
-    typeof rules === "function"
-      ? rules({ links: links as TransformLinks })
-      : rules;
+  const authored = typeof rules === "function" ? rules({ links: links as TransformLinks }) : rules;
   return Array.isArray(authored)
     ? (authored as readonly TransformRule[])
     : [authored as TransformRule];

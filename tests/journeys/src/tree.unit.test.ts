@@ -1,7 +1,7 @@
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { beforeAll, describe, expect, it } from "bun:test";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { beforeAll, describe, expect, it } from "bun:test";
 import { appDirs, configTree, treeRoot } from "./ocel";
 import { type Concern, specByName } from "./spec";
 import type { CellContext } from "./targets/types";
@@ -163,7 +163,12 @@ describe("the root manifest a tree gets", () => {
 describe("the workspace file a tree gets", () => {
   it("carries every install-affecting key the repo root declares", () => {
     const carried = splitWorkspaceFile(ROOT_WORKSPACE);
-    expect(carried.packages).toEqual(["apps/*", "apps/*/apps/*", "packages/*", "packages/native/*"]);
+    expect(carried.packages).toEqual([
+      "apps/*",
+      "apps/*/apps/*",
+      "packages/*",
+      "packages/native/*",
+    ]);
     expect(carried.settings).toContain("better-sqlite3: false");
     expect(carried.settings).toContain("semver: ^7.7.2");
     expect(carried.settings).toContain("react: ^19.2.0");

@@ -1,5 +1,5 @@
-import assert from "node:assert/strict";
 import { describe, it } from "bun:test";
+import assert from "node:assert/strict";
 import { contractTitle, UP_TITLE } from "../plan";
 import { productRows, staticRows } from "../rows";
 import { resolve } from "./index";
@@ -103,11 +103,18 @@ describe("resolve", () => {
   });
 
   it("names a cell by its fixture and app, and reaches every variant of it unless one is named", () => {
-    const every = listed([gap("one", [{ on: ["aws"], cells: ["sdk/node/web"], tests: [UP_TITLE] }])], "aws");
+    const every = listed(
+      [gap("one", [{ on: ["aws"], cells: ["sdk/node/web"], tests: [UP_TITLE] }])],
+      "aws",
+    );
     assert.ok(every["sdk/node/web"]?.[UP_TITLE]);
     assert.ok(every["sdk/node-container/web"]?.[UP_TITLE]);
     const base = listed(
-      [gap("one", [{ on: ["aws"], cells: ["sdk/node/web"], variants: ["base"], tests: [UP_TITLE] }])],
+      [
+        gap("one", [
+          { on: ["aws"], cells: ["sdk/node/web"], variants: ["base"], tests: [UP_TITLE] },
+        ]),
+      ],
       "aws",
     );
     assert.ok(base["sdk/node/web"]?.[UP_TITLE]);
@@ -146,13 +153,21 @@ describe("resolve", () => {
     assert.throws(
       () =>
         resolve(
-          [gap("one", [{ on: ["dev"], cells: ["sdk/node/web"], variants: ["container"], tests: [UP_TITLE] }])],
+          [
+            gap("one", [
+              { on: ["dev"], cells: ["sdk/node/web"], variants: ["container"], tests: [UP_TITLE] },
+            ]),
+          ],
           "dev",
         ),
       /one on dev lists sdk\/node\/web/,
     );
     assert.throws(
-      () => resolve([gap("one", [{ on: ["vps"], variants: ["cloudflare"], tests: [UP_TITLE] }])], "vps"),
+      () =>
+        resolve(
+          [gap("one", [{ on: ["vps"], variants: ["cloudflare"], tests: [UP_TITLE] }])],
+          "vps",
+        ),
       /one on vps lists cloudflare, which plans none of the tests named/,
     );
     assert.throws(
@@ -171,7 +186,11 @@ describe("resolve", () => {
         resolve(
           [
             gap("one", [
-              { on: ["dev"], cells: ["sdk/node/web"], tests: [{ row: HEALTH, legs: ["rollback"] }] },
+              {
+                on: ["dev"],
+                cells: ["sdk/node/web"],
+                tests: [{ row: HEALTH, legs: ["rollback"] }],
+              },
             ]),
           ],
           "dev",
@@ -186,7 +205,11 @@ describe("resolve", () => {
         resolve(
           [
             gap("one", [
-              { on: ["vps"], cells: ["sdk/node/web"], tests: [{ row: HEALTH, legs: ["rollback"] }] },
+              {
+                on: ["vps"],
+                cells: ["sdk/node/web"],
+                tests: [{ row: HEALTH, legs: ["rollback"] }],
+              },
             ]),
           ],
           "vps",
@@ -231,7 +254,19 @@ describe("resolve", () => {
   it("names the whole cell a skipping block reaches, under the gap that skips it", () => {
     const { expectations, skipped } = resolve(
       [
-        gap("one", [{ on: ["aws"], cells: ["sdk/workspace/next"], variants: ["container"], tests: [UP_TITLE], skip: true }], 9),
+        gap(
+          "one",
+          [
+            {
+              on: ["aws"],
+              cells: ["sdk/workspace/next"],
+              variants: ["container"],
+              tests: [UP_TITLE],
+              skip: true,
+            },
+          ],
+          9,
+        ),
         gap("two", [{ on: ["aws"], cells: ["sdk/node/web"], tests: [{ row: HEALTH }] }]),
       ],
       "aws",
@@ -258,11 +293,7 @@ describe("resolve", () => {
 
   it("refuses two gaps with one id, and a gap that affects nothing", () => {
     assert.throws(
-      () =>
-        resolve(
-          [gap("one", [{ on: ["dev"], tests: [UP_TITLE] }]), gap("one", [])],
-          "dev",
-        ),
+      () => resolve([gap("one", [{ on: ["dev"], tests: [UP_TITLE] }]), gap("one", [])], "dev"),
       /one is listed twice/,
     );
     assert.throws(() => resolve([gap("one", [])], "dev"), /one affects nothing/);

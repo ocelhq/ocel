@@ -1,3 +1,4 @@
+import type { LookupAddress } from "node:dns";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, test } from "vitest";
@@ -6,13 +7,15 @@ import { fetchUpstream, guardedLookup, type UpstreamDeps } from "../src/upstream
 import { imageConfig } from "./fixtures.mjs";
 import { solid } from "./images.mjs";
 
+type LookupCallback = (err: Error | null, addresses: LookupAddress[]) => void;
+
 const servers: http.Server[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    servers.splice(0).map(
-      (server) => new Promise<void>((resolve) => server.close(() => resolve())),
-    ),
+    servers
+      .splice(0)
+      .map((server) => new Promise<void>((resolve) => server.close(() => resolve()))),
   );
 });
 
@@ -42,11 +45,10 @@ function serveJpeg(): Promise<Served> {
   });
 }
 
-const allowLoopback = (address: string) =>
-  address === "127.0.0.1" || isReachableAddress(address);
+const allowLoopback = (address: string) => address === "127.0.0.1" || isReachableAddress(address);
 
 function resolvesTo(...addresses: string[]): UpstreamDeps["lookup"] {
-  return ((_hostname: string, _options: unknown, callback: Function) => {
+  return ((_hostname: string, _options: unknown, callback: LookupCallback) => {
     callback(
       null,
       addresses.map((address) => ({ address, family: address.includes(":") ? 6 : 4 })),
@@ -88,9 +90,9 @@ describe("the happy path", () => {
     await fetchUpstream(`http://cdn.test:${port}/x.jpg`, config(), loopback);
     const headers = requests[0]!.headers;
     expect(headers["accept-encoding"]).toBe("identity");
-    expect(headers["accept"]).toBe("image/*");
-    expect(headers["cookie"]).toBeUndefined();
-    expect(headers["authorization"]).toBeUndefined();
+    expect(headers.accept).toBe("image/*");
+    expect(headers.cookie).toBeUndefined();
+    expect(headers.authorization).toBeUndefined();
     expect(Object.keys(headers).sort()).toEqual([
       "accept",
       "accept-encoding",
@@ -149,10 +151,7 @@ describe("the address policy at connect time", () => {
   test("dangerouslyAllowLocalIP permits a literal loopback target", async () => {
     const { port, requests } = await serveJpeg();
     await expect(
-      fetchUpstream(
-        `http://127.0.0.1:${port}/x.jpg`,
-        config({ dangerouslyAllowLocalIP: true }),
-      ),
+      fetchUpstream(`http://127.0.0.1:${port}/x.jpg`, config({ dangerouslyAllowLocalIP: true })),
     ).resolves.toBeTruthy();
     expect(requests).toHaveLength(1);
   });
@@ -160,11 +159,9 @@ describe("the address policy at connect time", () => {
   test("dangerouslyAllowLocalIP permits a name that resolves to loopback", async () => {
     const { port, requests } = await serveJpeg();
     await expect(
-      fetchUpstream(
-        `http://cdn.test:${port}/x.jpg`,
-        config({ dangerouslyAllowLocalIP: true }),
-        { lookup: resolvesTo("127.0.0.1") },
-      ),
+      fetchUpstream(`http://cdn.test:${port}/x.jpg`, config({ dangerouslyAllowLocalIP: true }), {
+        lookup: resolvesTo("127.0.0.1"),
+      }),
     ).resolves.toBeTruthy();
     expect(requests).toHaveLength(1);
   });
@@ -178,9 +175,7 @@ describe("the address policy at connect time", () => {
       fetchUpstream(
         `http://localhost:${port}/x.jpg`,
         config({
-          remotePatterns: [
-            { protocol: "http", hostname: "^localhost$", pathname: "^\\/.*$" },
-          ],
+          remotePatterns: [{ protocol: "http", hostname: "^localhost$", pathname: "^\\/.*$" }],
         }),
       ),
     ).rejects.toThrow('"url" parameter is valid but upstream response is invalid');
@@ -195,7 +190,7 @@ describe("the address policy at connect time", () => {
 
     let calls = 0;
     const rebinding: UpstreamDeps = {
-      lookup: ((_hostname: string, _options: unknown, callback: Function) => {
+      lookup: ((_hostname: string, _options: unknown, callback: LookupCallback) => {
         calls += 1;
         const address = calls === 1 ? "127.0.0.1" : "169.254.169.254";
         callback(null, [{ address, family: 4 }]);
@@ -229,10 +224,11 @@ describe("the lookup's all contract", () => {
 
   test("all:true returns the whole filtered list, in order", async () => {
     const result = await new Promise<unknown>((resolve) =>
-      guardedLookup(deps)("cdn.test", { all: true } as never, ((
-        _err: unknown,
-        value: unknown,
-      ) => resolve(value)) as never),
+      guardedLookup(deps)(
+        "cdn.test",
+        { all: true } as never,
+        ((_err: unknown, value: unknown) => resolve(value)) as never,
+      ),
     );
     expect(result).toEqual([
       { address: "76.76.21.21", family: 4 },
@@ -242,8 +238,11 @@ describe("the lookup's all contract", () => {
 
   test("all:false returns a single address, not an array", async () => {
     const result = await new Promise<unknown[]>((resolve) =>
-      guardedLookup(deps)("cdn.test", {} as never, ((...args: unknown[]) =>
-        resolve(args)) as never),
+      guardedLookup(deps)(
+        "cdn.test",
+        {} as never,
+        ((...args: unknown[]) => resolve(args)) as never,
+      ),
     );
     expect(result).toEqual([null, "76.76.21.21", 4]);
   });
@@ -254,9 +253,11 @@ describe("the lookup's all contract", () => {
       isReachable: isReachableAddress,
     };
     const error = await new Promise<unknown>((resolve) =>
-      guardedLookup(blocked)("cdn.test", { all: true } as never, ((
-        err: unknown,
-      ) => resolve(err)) as never),
+      guardedLookup(blocked)(
+        "cdn.test",
+        { all: true } as never,
+        ((err: unknown) => resolve(err)) as never,
+      ),
     );
     expect(error).toBeInstanceOf(Error);
   });
@@ -264,15 +265,18 @@ describe("the lookup's all contract", () => {
   test("a numeric options argument keeps the family it names", async () => {
     let seen: unknown;
     const constrained: UpstreamDeps = {
-      lookup: ((_h: string, options: unknown, cb: Function) => {
+      lookup: ((_h: string, options: unknown, cb: LookupCallback) => {
         seen = options;
         cb(null, [{ address: "8.8.8.8", family: 4 }]);
       }) as UpstreamDeps["lookup"],
       isReachable: isReachableAddress,
     };
     const result = await new Promise<unknown[]>((resolve) =>
-      guardedLookup(constrained)("cdn.test", 4 as never, ((...args: unknown[]) =>
-        resolve(args)) as never),
+      guardedLookup(constrained)(
+        "cdn.test",
+        4 as never,
+        ((...args: unknown[]) => resolve(args)) as never,
+      ),
     );
     expect(seen).toMatchObject({ family: 4, all: true });
     expect(result).toEqual([null, "8.8.8.8", 4]);
@@ -280,14 +284,16 @@ describe("the lookup's all contract", () => {
 
   test("a resolver failure is relayed rather than swallowed", async () => {
     const failing: UpstreamDeps = {
-      lookup: ((_h: string, _o: unknown, cb: Function) =>
+      lookup: ((_h: string, _o: unknown, cb: LookupCallback) =>
         cb(new Error("ENOTFOUND"))) as UpstreamDeps["lookup"],
       isReachable: allowLoopback,
     };
     const error = await new Promise<unknown>((resolve) =>
-      guardedLookup(failing)("cdn.test", { all: true } as never, ((
-        err: unknown,
-      ) => resolve(err)) as never),
+      guardedLookup(failing)(
+        "cdn.test",
+        { all: true } as never,
+        ((err: unknown) => resolve(err)) as never,
+      ),
     );
     expect((error as Error).message).toBe("ENOTFOUND");
   });
@@ -362,7 +368,7 @@ describe("redirects", () => {
       res.end();
     });
     const rebinding: UpstreamDeps = {
-      lookup: ((_h: string, _o: unknown, cb: Function) => {
+      lookup: ((_h: string, _o: unknown, cb: LookupCallback) => {
         calls += 1;
         cb(null, [{ address: calls === 1 ? "127.0.0.1" : "169.254.169.254", family: 4 }]);
       }) as UpstreamDeps["lookup"],
@@ -391,11 +397,7 @@ describe("redirects", () => {
       res.end();
     });
     await expect(
-      fetchUpstream(
-        `http://cdn.test:${port}/start`,
-        config({ maximumRedirects: 1 }),
-        loopback,
-      ),
+      fetchUpstream(`http://cdn.test:${port}/start`, config({ maximumRedirects: 1 }), loopback),
     ).rejects.toThrow();
     expect(requests.length).toBe(2);
   });
@@ -477,28 +479,24 @@ describe("upstream failures", () => {
   });
 });
 
-test(
-  "a slowloris origin is ended by the wall-clock deadline",
-  async () => {
-    const timers: NodeJS.Timeout[] = [];
-    const { port } = await serve((_req, res) => {
-      res.writeHead(200, { "content-type": "image/jpeg" });
-      res.write(Buffer.from([0xff, 0xd8, 0xff]));
-      timers.push(
-        setInterval(() => {
-          res.write(Buffer.from([0x00]));
-        }, 100),
-      );
-    });
-    const started = Date.now();
-    try {
-      await expect(
-        fetchUpstream(`http://cdn.test:${port}/x.jpg`, config(), loopback),
-      ).rejects.toThrow('"url" parameter is valid but upstream response is invalid');
-    } finally {
-      timers.forEach((timer) => clearInterval(timer));
-    }
-    expect(Date.now() - started).toBeGreaterThan(5_000);
-  },
-  20_000,
-);
+test("a slowloris origin is ended by the wall-clock deadline", async () => {
+  const timers: NodeJS.Timeout[] = [];
+  const { port } = await serve((_req, res) => {
+    res.writeHead(200, { "content-type": "image/jpeg" });
+    res.write(Buffer.from([0xff, 0xd8, 0xff]));
+    timers.push(
+      setInterval(() => {
+        res.write(Buffer.from([0x00]));
+      }, 100),
+    );
+  });
+  const started = Date.now();
+  try {
+    await expect(
+      fetchUpstream(`http://cdn.test:${port}/x.jpg`, config(), loopback),
+    ).rejects.toThrow('"url" parameter is valid but upstream response is invalid');
+  } finally {
+    for (const timer of timers) clearInterval(timer);
+  }
+  expect(Date.now() - started).toBeGreaterThan(5_000);
+}, 20_000);

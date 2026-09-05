@@ -1,5 +1,5 @@
-import { entryMissHeader } from "@framework/next-cache";
 import type { CacheEntryFile } from "@framework/next-cache";
+import { entryMissHeader } from "@framework/next-cache";
 
 const writerURLEnv = "OCEL_ISR_WRITER_URL";
 const writerSecretEnv = "OCEL_ISR_WRITER_SECRET";
@@ -86,9 +86,7 @@ export function entryStoreAt(
         console.error(rejected.message);
         throw rejected;
       }
-      throw new Error(
-        `ocel cache handler: isr writer rejected ${key}: status ${res.status}`,
-      );
+      throw new Error(`ocel cache handler: isr writer rejected ${key}: status ${res.status}`);
     },
   };
 }

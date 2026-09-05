@@ -12,24 +12,15 @@ function regex(source: string): RegExp {
   return compiled;
 }
 
-export function matchLocalPattern(
-  pattern: CompiledLocalPattern,
-  url: URL,
-): boolean {
+export function matchLocalPattern(pattern: CompiledLocalPattern, url: URL): boolean {
   if (pattern.search !== undefined && pattern.search !== url.search) {
     return false;
   }
   return regex(pattern.pathname).test(url.pathname);
 }
 
-export function matchRemotePattern(
-  pattern: CompiledRemotePattern,
-  url: URL,
-): boolean {
-  if (
-    pattern.protocol !== undefined &&
-    pattern.protocol !== url.protocol.replace(/:$/, "")
-  ) {
+export function matchRemotePattern(pattern: CompiledRemotePattern, url: URL): boolean {
+  if (pattern.protocol !== undefined && pattern.protocol !== url.protocol.replace(/:$/, "")) {
     return false;
   }
   if (pattern.port !== undefined && pattern.port !== url.port) return false;

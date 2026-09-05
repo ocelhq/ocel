@@ -16,8 +16,7 @@ export interface TagRecordUpdate {
 
 const sortKeyWidth = 15;
 
-export const tagSortKey = (at: number) =>
-  String(Math.round(at)).padStart(sortKeyWidth, "0");
+export const tagSortKey = (at: number) => String(Math.round(at)).padStart(sortKeyWidth, "0");
 
 export function tagRecordUpdate(
   table: string,
@@ -43,7 +42,7 @@ export function tagRecordUpdate(
     TableName: table,
     Key: { pk: { S: `${namespace}${tag}` }, sk: { S: "#META" } },
     ConditionExpression: `attribute_not_exists(${advancing}) OR ${advancing} < :${advancing}`,
-    UpdateExpression: "SET " + sets.join(", "),
+    UpdateExpression: `SET ${sets.join(", ")}`,
     ExpressionAttributeValues: values,
   };
 }

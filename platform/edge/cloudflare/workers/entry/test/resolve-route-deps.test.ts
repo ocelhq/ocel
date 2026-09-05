@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-
-import { resolveRouteDeps, type RouteDeps } from "../src/index";
 import type { DeploymentRecord, DeploymentsBinding } from "../src/deployments";
+import { type RouteDeps, resolveRouteDeps } from "../src/index";
 
 function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
@@ -128,10 +127,7 @@ describe("resolveRouteDeps", () => {
   });
 
   it("returns 503 when the store is unreachable on a cold isolate", async () => {
-    const deps = await resolveRouteDeps(
-      { binding: failingBinding(), app: "web" },
-      { assetStore },
-    );
+    const deps = await resolveRouteDeps({ binding: failingBinding(), app: "web" }, { assetStore });
 
     expect(deps).toBeInstanceOf(Response);
     expect((deps as Response).status).toBe(503);

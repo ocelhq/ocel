@@ -41,10 +41,7 @@ describe("getProjectById", () => {
     try {
       const created = await createProjectFor(session, "get-me");
 
-      const response = await getProjectById(
-        getRequest(session.headers),
-        created.id,
-      );
+      const response = await getProjectById(getRequest(session.headers), created.id);
 
       expect(response.status).toBe(200);
       const body = await response.json();
@@ -71,10 +68,7 @@ describe("getProjectById", () => {
       });
 
       try {
-        const response = await getProjectById(
-          getRequest(session.headers),
-          created.id,
-        );
+        const response = await getProjectById(getRequest(session.headers), created.id);
 
         expect(response.status).toBe(200);
         const body = await response.json();
@@ -114,10 +108,7 @@ describe("getProjectById", () => {
     try {
       const created = await createProjectFor(session, "not-your-org");
 
-      const response = await getProjectById(
-        getRequest(otherSession.headers),
-        created.id,
-      );
+      const response = await getProjectById(getRequest(otherSession.headers), created.id);
 
       expect(response.status).toBe(404);
     } finally {

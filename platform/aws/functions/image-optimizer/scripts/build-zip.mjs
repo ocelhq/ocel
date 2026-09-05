@@ -19,11 +19,10 @@ rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 mkdirSync(out, { recursive: true });
 
-execFileSync(
-  "bun",
-  ["build", ...bunArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))],
-  { cwd: root, stdio: "inherit" },
-);
+execFileSync("bun", ["build", ...bunArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))], {
+  cwd: root,
+  stdio: "inherit",
+});
 
 writeFileSync(
   join(stage, "package.json"),
@@ -50,11 +49,10 @@ writeFileSync(
   ].join("\n"),
 );
 
-execFileSync(
-  "pnpm",
-  ["install", "--node-linker=hoisted", "--prod", "--no-frozen-lockfile"],
-  { cwd: stage, stdio: "inherit" },
-);
+execFileSync("pnpm", ["install", "--node-linker=hoisted", "--prod", "--no-frozen-lockfile"], {
+  cwd: stage,
+  stdio: "inherit",
+});
 
 execFileSync("cp", ["-R", join(stage, "node_modules"), join(out, "node_modules")], {
   stdio: "inherit",
@@ -91,7 +89,11 @@ const entries = execFileSync("find", [".", "-mindepth", "1"], { cwd: out, encodi
   .join("\n");
 const zip = join(root, "dist", "image-optimizer.zip");
 rmSync(zip, { force: true });
-execFileSync("zip", ["-X", "-q", "-@", zip], { cwd: out, input: entries, stdio: ["pipe", "inherit", "inherit"] });
+execFileSync("zip", ["-X", "-q", "-@", zip], {
+  cwd: out,
+  input: entries,
+  stdio: ["pipe", "inherit", "inherit"],
+});
 
 function unzippedSize(dir) {
   let total = 0;

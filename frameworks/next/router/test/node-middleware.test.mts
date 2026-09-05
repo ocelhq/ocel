@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-
-import { serve, type RouteDeps } from "../src/index.mjs";
 import type { AssetBucket } from "../src/assets.mjs";
+import { type RouteDeps, serve } from "../src/index.mjs";
 import type { TestRouteDeps } from "../test-support/dispatch-scenario.mjs";
 
 const ENTRY_HEADER = "x-ocel-entry";
@@ -109,9 +108,6 @@ function transportResponse(
   return new Response(init.body ?? null, { status: init.status ?? 200, headers });
 }
 
-const passthroughBody =
-  'async () => new Response(null, { headers: { "x-middleware-next": "1", "x-mw-ran": "1", "x-ocel-middleware-headers": "x-middleware-next,x-mw-ran" } })';
-
 describe("node middleware matchers", () => {
   it("does not invoke middleware for a path its matchers exclude", async () => {
     const origin = fakeOrigin(() => new Response(null, { status: 200 }));
@@ -125,9 +121,7 @@ describe("node middleware matchers", () => {
   });
 
   it("invokes middleware for a path its matchers name", async () => {
-    const origin = fakeOrigin(
-      () => mwResponse({ "x-middleware-next": "1", "x-mw-ran": "1" }),
-    );
+    const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1", "x-mw-ran": "1" }));
     const res = await serve(
       new Request("https://app.example/static.txt"),
       staticDeps(nodeMiddleware([{ sourceRegex: "^/static\\.txt$" }]), { fetch: origin.fetch }),
@@ -140,9 +134,7 @@ describe("node middleware matchers", () => {
 
 describe("node middleware forwarding", () => {
   it("carries x-ocel-entry: /_middleware and reaches the bundle named by middleware.id", async () => {
-    const origin = fakeOrigin(
-      () => mwResponse({ "x-middleware-next": "1" }),
-    );
+    const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1" }));
     await serve(
       new Request("https://app.example/static.txt"),
       staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
@@ -155,9 +147,7 @@ describe("node middleware forwarding", () => {
   });
 
   it("pins the forwarded URL and the x-forwarded-* pair the dispatcher rebuilds the public URL from", async () => {
-    const origin = fakeOrigin(
-      () => mwResponse({ "x-middleware-next": "1" }),
-    );
+    const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1" }));
     await serve(
       new Request("https://app.example/static.txt?a=1"),
       staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
@@ -172,12 +162,11 @@ describe("node middleware forwarding", () => {
   });
 
   it("responds directly with the middleware's own body and status", async () => {
-    const origin = fakeOrigin(
-      () =>
-        mwResponse(
-          { "content-type": "application/json" },
-          { status: 401, body: JSON.stringify({ error: "nope" }) },
-        ),
+    const origin = fakeOrigin(() =>
+      mwResponse(
+        { "content-type": "application/json" },
+        { status: 401, body: JSON.stringify({ error: "nope" }) },
+      ),
     );
     const res = await serve(
       new Request("https://app.example/static.txt"),
@@ -219,12 +208,8 @@ describe("node middleware forwarding", () => {
   });
 
   it("redirects with the middleware's Set-Cookie intact", async () => {
-    const origin = fakeOrigin(
-      () =>
-        mwResponse(
-          { location: "/login", "set-cookie": "sid=abc; Path=/" },
-          { status: 307 },
-        ),
+    const origin = fakeOrigin(() =>
+      mwResponse({ location: "/login", "set-cookie": "sid=abc; Path=/" }, { status: 307 }),
     );
     const res = await serve(
       new Request("https://app.example/static.txt"),
@@ -314,9 +299,7 @@ describe("node middleware forwarding", () => {
 
 describe("Next's internal protocol headers are not honoured from the client", () => {
   it("does not forward a client-supplied x-nextjs-data header to node middleware", async () => {
-    const origin = fakeOrigin(
-      () => mwResponse({ "x-middleware-next": "1" }),
-    );
+    const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1" }));
     await serve(
       new Request("https://app.example/static.txt", {
         headers: { "x-nextjs-data": "1" },
@@ -328,9 +311,7 @@ describe("Next's internal protocol headers are not honoured from the client", ()
   });
 
   it("does not forward a client-supplied x-matched-path header to node middleware", async () => {
-    const origin = fakeOrigin(
-      () => mwResponse({ "x-middleware-next": "1" }),
-    );
+    const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1" }));
     await serve(
       new Request("https://app.example/static.txt", {
         headers: { "x-matched-path": "/forged" },
@@ -344,9 +325,7 @@ describe("Next's internal protocol headers are not honoured from the client", ()
 
 describe("x-nextjs-data on the middleware invocation", () => {
   it("sets x-nextjs-data on a genuine data request's middleware invocation", async () => {
-    const origin = fakeOrigin(
-      () => mwResponse({ "x-middleware-next": "1" }),
-    );
+    const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1" }));
     await serve(
       new Request("https://app.example/_next/data/t/static.txt.json"),
       staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
@@ -356,9 +335,7 @@ describe("x-nextjs-data on the middleware invocation", () => {
   });
 
   it("does not set x-nextjs-data on an ordinary document request", async () => {
-    const origin = fakeOrigin(
-      () => mwResponse({ "x-middleware-next": "1" }),
-    );
+    const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1" }));
     await serve(
       new Request("https://app.example/static.txt"),
       staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
@@ -460,9 +437,7 @@ describe("node middleware retries a throttled origin", () => {
   });
 
   it("does not retry a real 500 the app produced on purpose", async () => {
-    const origin = fakeOrigin(
-      () => mwResponse({}, { status: 500, body: "app error" }),
-    );
+    const origin = fakeOrigin(() => mwResponse({}, { status: 500, body: "app error" }));
 
     const res = await serve(
       new Request("https://app.example/static.txt"),
@@ -475,9 +450,8 @@ describe("node middleware retries a throttled origin", () => {
   });
 
   it("does not retry an app-authored 429 — it reaches the client verbatim, uncounted against the retry budget", async () => {
-    const origin = fakeOrigin(
-      () =>
-        mwResponse({ "retry-after": "60" }, { status: 429, body: "rate limited" }),
+    const origin = fakeOrigin(() =>
+      mwResponse({ "retry-after": "60" }, { status: 429, body: "rate limited" }),
     );
 
     const res = await serve(

@@ -2,10 +2,7 @@ import { userInfo } from "node:os";
 
 export const HARNESS_PREFIX = "j-";
 
-export function runIdentity(
-  env: NodeJS.ProcessEnv,
-  username: string,
-): string {
+export function runIdentity(env: NodeJS.ProcessEnv, username: string): string {
   const ci = env.GITHUB_RUN_ID;
   if (ci) {
     return ci;

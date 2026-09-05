@@ -67,8 +67,8 @@ function DropNotice() {
       {drop.undeclared.length > 0 && (
         <p>
           Ignored {plural(drop.undeclared.length, "key")} this project does not declare:{" "}
-          <Code>{names(drop.undeclared)}</Code>. Keys come from <Code>defineEnv</Code> in app
-          code; this page cannot create one.
+          <Code>{names(drop.undeclared)}</Code>. Keys come from <Code>defineEnv</Code> in app code;
+          this page cannot create one.
         </p>
       )}
       {drop.skipped.map((skip) => (
@@ -100,8 +100,8 @@ function Banner() {
     <Note role="status" data-slot="banner" label="Deploy waiting" className="mb-6">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <p className="flex-1 basis-96">
-          Deploy <Code>{recovery.deploy}</Code> is waiting on{" "}
-          {plural(recovery.owed.length, "cell")} it was refused.{" "}
+          Deploy <Code>{recovery.deploy}</Code> is waiting on {plural(recovery.owed.length, "cell")}{" "}
+          it was refused.{" "}
           {left === 0
             ? "Every one now holds a value; save and resume below."
             : `${plural(left, "cell")} still ${left === 1 ? "needs" : "need"} a value.`}
@@ -126,7 +126,7 @@ function BulkBar() {
     .map((v) => v!.at);
   const removable = cells.filter((at) => {
     const v = known.get(`${at.key} ${at.folder} ${at.environment}`);
-    return v !== undefined && v.set && !v.reference;
+    return v?.set && !v.reference;
   });
   return (
     <div
@@ -270,9 +270,7 @@ export function App() {
     return <p className="p-12 font-mono text-sm text-body">{goodbye}</p>;
   }
   if (!current) {
-    return (
-      <p className="p-12 font-mono text-sm text-body">Reading this project’s variables…</p>
-    );
+    return <p className="p-12 font-mono text-sm text-body">Reading this project’s variables…</p>;
   }
   const recovery = current.recovery !== undefined;
   return (

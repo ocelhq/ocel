@@ -1,5 +1,5 @@
-const { existsSync, realpathSync } = require("fs");
-const { dirname, join } = require("path");
+const { existsSync, realpathSync } = require("node:fs");
+const { dirname, join } = require("node:path");
 
 const packageName = process.argv[2];
 if (!packageName) {
@@ -49,7 +49,7 @@ try {
     paths: searchFrom,
   });
   process.stdout.write(binaryPath);
-} catch (e) {
+} catch {
   console.error(
     `Failed to locate binary for ${platformPackage} from ${searchFrom.join(", ")}. Is ${packageName} installed? Run \`npm install ${packageName}\` (or add it as a dependency via your package manager).`,
   );

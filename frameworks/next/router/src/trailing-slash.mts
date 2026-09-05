@@ -5,10 +5,7 @@ export interface TrailingSlashConfig {
   skipMiddlewareUrlNormalize?: boolean;
 }
 
-export function withoutBasePath(
-  pathname: string,
-  basePath: string,
-): string | undefined {
+export function withoutBasePath(pathname: string, basePath: string): string | undefined {
   if (!basePath) return pathname;
   if (pathname === basePath) return "";
   if (pathname.startsWith(`${basePath}/`)) return pathname.slice(basePath.length);

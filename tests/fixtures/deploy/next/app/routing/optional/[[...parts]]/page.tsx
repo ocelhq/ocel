@@ -9,7 +9,9 @@ export default async function OptionalCatchAll({
   return (
     <main>
       <h1>optional catch-all</h1>
-      <p data-ocel="param:parts">{parts?.length ? parts.map((part) => decodeURIComponent(part)).join("|") : "none"}</p>
+      <p data-ocel="param:parts">
+        {parts?.length ? parts.map((part) => decodeURIComponent(part)).join("|") : "none"}
+      </p>
     </main>
   );
 }

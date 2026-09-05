@@ -2,9 +2,9 @@ import {
   mergeRecord,
   mergeSnapshot,
   readableSnapshot,
-  tagSnapshotKey,
   type TagRecord,
   type TagSnapshot,
+  tagSnapshotKey,
 } from "@framework/next-cache";
 
 import { isRateLimited } from "./r2";
@@ -125,6 +125,8 @@ function sameRecords(a: Record<string, TagRecord>, b: Record<string, TagRecord>)
   if (tags.length !== Object.keys(b).length) return false;
   return tags.every(
     (tag) =>
-      Object.hasOwn(b, tag) && a[tag]!.stale === b[tag]!.stale && a[tag]!.expired === b[tag]!.expired,
+      Object.hasOwn(b, tag) &&
+      a[tag]!.stale === b[tag]!.stale &&
+      a[tag]!.expired === b[tag]!.expired,
   );
 }

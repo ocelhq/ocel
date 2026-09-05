@@ -1,36 +1,35 @@
-import { computed, signal } from "./signals";
-
-import { api, ApiError, hold, query } from "./api";
+import { ApiError, api, hold, query } from "./api";
 import { parseDotenv } from "./dotenv";
 import {
+  type Address,
+  type AppResolution,
   addressKey,
   applyDotenv,
   baselineOf,
+  type CopyPlan,
   catalogueOf,
+  type DropOutcome,
   dirtyEntries,
   editable,
   environmentsOf,
   listingOf,
   names,
+  type OtherValue,
   owedSet,
+  type Problem,
   planCopy,
   plural,
   reduceSave,
   removeSummary,
   revealable,
-  saveSummary,
-  unfilledOwed,
-  variantsOf,
-  type Address,
-  type AppResolution,
-  type CopyPlan,
-  type DropOutcome,
-  type OtherValue,
-  type Problem,
   type SaveResult,
   type State,
+  saveSummary,
+  unfilledOwed,
   type Version,
+  variantsOf,
 } from "./model";
+import { computed, signal } from "./signals";
 
 export const state = signal<State | null>(null);
 export const hoveredApp = signal<AppResolution | null>(null);
@@ -86,19 +85,13 @@ const emptyState: State = {
   matrix: { columns: [], rows: [], apps: [] },
 };
 
-export const catalogue = computed(() =>
-  catalogueOf(state.value ?? emptyState, extras.value),
-);
+export const catalogue = computed(() => catalogueOf(state.value ?? emptyState, extras.value));
 
 export const variants = computed(() => catalogue.value.variants);
 
-export const environments = computed(() =>
-  state.value ? environmentsOf(state.value) : [],
-);
+export const environments = computed(() => (state.value ? environmentsOf(state.value) : []));
 
-export const dirty = computed(() =>
-  dirtyEntries(catalogue.value, drafts.value, baselines.value),
-);
+export const dirty = computed(() => dirtyEntries(catalogue.value, drafts.value, baselines.value));
 
 export const owed = computed(() => owedSet(state.value?.recovery));
 
@@ -146,8 +139,7 @@ async function attend(): Promise<void> {
   while (farewell.value === null) {
     try {
       await hold("/api/presence");
-    } catch {
-    }
+    } catch {}
     if (farewell.value !== null) return;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
@@ -399,9 +391,7 @@ export async function save(): Promise<void> {
       ...(reduced.saved < results.length && { tone: "owed" as const }),
     };
     await reveal(
-      results
-        .filter((result) => !result.ok && result.status === 409)
-        .map((result) => result.at),
+      results.filter((result) => !result.ok && result.status === 409).map((result) => result.at),
     );
   } finally {
     saving.value = false;
@@ -411,7 +401,7 @@ export async function save(): Promise<void> {
 export function askRemoval(cells: readonly Address[]): void {
   const held = cells
     .map((at) => variants.value.get(addressKey(at)))
-    .filter((v) => v !== undefined && v.set && !v.reference)
+    .filter((v) => v?.set && !v.reference)
     .map((v) => ({ at: v!.at, version: v!.version }));
   if (held.length === 0) return;
   removing.value = { cells: held };
@@ -625,8 +615,7 @@ export function closeDrawer(): void {
 }
 
 export function leave(): void {
-  void api("POST", "/api/done").catch(() => {
-  });
+  void api("POST", "/api/done").catch(() => {});
   farewell.value = "Returned to the terminal. You can close this tab.";
 }
 

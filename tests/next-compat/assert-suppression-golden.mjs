@@ -4,9 +4,9 @@ import {
   GOLDEN_MARKER,
   GOLDEN_REVALIDATE_SECONDS,
   GOLDEN_ROUTE,
+  goldenDifferences,
   PREFETCH_PURPOSE_HEADER,
   PREFETCH_PURPOSE_VALUE,
-  goldenDifferences,
 } from "./lib.mjs";
 
 const SETTLE_MS = 20_000;
@@ -96,7 +96,11 @@ async function settle() {
   const deadline = Date.now() + SETTLE_MS + POLL_INTERVAL_MS;
   let last;
   while (Date.now() < deadline) {
-    last = await probe(VARIANTS[0], {}).catch((error) => ({ status: 0, error: error.message, body: "" }));
+    last = await probe(VARIANTS[0], {}).catch((error) => ({
+      status: 0,
+      error: error.message,
+      body: "",
+    }));
     if (last.status === 200 && last.body.includes(GOLDEN_MARKER)) return;
     await sleep(POLL_INTERVAL_MS);
   }

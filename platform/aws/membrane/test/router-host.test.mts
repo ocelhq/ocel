@@ -1,20 +1,18 @@
 import http from "node:http";
 import v8 from "node:v8";
 import vm from "node:vm";
-import { afterAll, beforeAll, expect, test } from "vitest";
-
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
-
-import { edgeHeader, routerMode } from "../src/shared/edge-kind.mjs";
+import { afterAll, beforeAll, expect, test } from "vitest";
+import { s3AssetBucket } from "../src/next/router-assets.mjs";
 import {
+  type RouterHost,
   routerHostFromEnv,
   serveRouted,
   siblingFunctionUrls,
   withoutClientControl,
-  type RouterHost,
 } from "../src/next/router-host.mjs";
-import { s3AssetBucket } from "../src/next/router-assets.mjs";
 import { isLoopback, siblingOriginFetch } from "../src/next/router-signing.mjs";
+import { edgeHeader, routerMode } from "../src/shared/edge-kind.mjs";
 
 const LOCAL_BUNDLE = "local-bundle";
 const SIBLING_BUNDLE = "other-bundle";
@@ -60,9 +58,7 @@ beforeAll(async () => {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end("local");
   });
-  await new Promise<void>((resolve) =>
-    local.listen({ host: "127.0.0.1", port: 0 }, resolve),
-  );
+  await new Promise<void>((resolve) => local.listen({ host: "127.0.0.1", port: 0 }, resolve));
   const address = local.address();
   if (!address || typeof address === "string") throw new Error("no local port");
   localOrigin = `http://127.0.0.1:${address.port}`;
@@ -95,11 +91,7 @@ function host(): RouterHost {
 function serving(path: string, headers: Record<string, string> = {}) {
   seen = [];
   signed = [];
-  return serveRouted(
-    new Request(`https://app.example${path}`, { headers }),
-    host(),
-    () => {},
-  );
+  return serveRouted(new Request(`https://app.example${path}`, { headers }), host(), () => {});
 }
 
 const forged = {
@@ -272,8 +264,11 @@ test("an asset body stays readable after the S3 response it came from is collect
 
 test("a broken bucket is not a missing page", async () => {
   const answering = (status: number) =>
-    s3AssetBucket("assets-bucket", "us-east-1", (async () =>
-      new Response(null, { status })) as unknown as typeof fetch);
+    s3AssetBucket(
+      "assets-bucket",
+      "us-east-1",
+      (async () => new Response(null, { status })) as unknown as typeof fetch,
+    );
 
   expect(await answering(404).get("assets/gone.html")).toBeNull();
   expect(await answering(403).get("assets/gone.html")).toBeNull();
@@ -296,9 +291,7 @@ test("an asset bucket the function cannot read refuses to boot", async () => {
   };
 
   expect(() => routerHostFromEnv(env, localOrigin)).toThrow(/assets-bucket/);
-  expect(
-    routerHostFromEnv({ ...env, ...credentials }, localOrigin).assetBucket,
-  ).toBeDefined();
+  expect(routerHostFromEnv({ ...env, ...credentials }, localOrigin).assetBucket).toBeDefined();
 });
 
 test("a sibling call signs with the credentials the sandbox holds now", async () => {

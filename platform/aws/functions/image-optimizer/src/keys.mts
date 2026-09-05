@@ -46,8 +46,16 @@ export function assetPath(pathname: string): string {
       throw new BootstrapError("image path escapes the build prefix", decoded);
     }
   }
-  if (/[\0-\x1f\x7f]/.test(decoded)) {
+  if (hasControlCharacter(decoded)) {
     throw new BootstrapError("image path holds control characters", decoded);
   }
   return decoded;
+}
+
+function hasControlCharacter(value: string): boolean {
+  for (const ch of value) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
 }

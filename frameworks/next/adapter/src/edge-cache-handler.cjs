@@ -1,7 +1,7 @@
 if (process.env.NEXT_RUNTIME === "edge") {
   const resolveCacheBinding = () => {
     const cache = globalThis.__OCEL_EDGE_CACHE;
-    if (!cache || !cache.rpc) {
+    if (!cache?.rpc) {
       throw new Error(
         "ocel: no cache binding on globalThis.__OCEL_EDGE_CACHE — the edge bundle was loaded without one",
       );
@@ -53,6 +53,5 @@ if (process.env.NEXT_RUNTIME === "edge") {
     resetRequestCache() {}
   };
 } else {
-  module.exports =
-    require("next/dist/server/lib/incremental-cache/file-system-cache").default;
+  module.exports = require("next/dist/server/lib/incremental-cache/file-system-cache").default;
 }

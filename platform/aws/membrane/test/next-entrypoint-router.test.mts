@@ -1,6 +1,6 @@
-import net from "node:net";
 import { EventEmitter } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -197,10 +197,7 @@ test("every Set-Cookie the app writes survives the router", async () => {
     headers: { "x-set-cookies": "1" },
   });
 
-  expect(response.headers.getSetCookie()).toEqual([
-    "csrf=1; Path=/",
-    "session=2; Path=/",
-  ]);
+  expect(response.headers.getSetCookie()).toEqual(["csrf=1; Path=/", "session=2; Path=/"]);
 });
 
 test("a forwarded host a client forges is not the host the app answers as", async () => {
@@ -222,9 +219,7 @@ test("a pathname the manifest does not route is a 404 the router answers", async
 test("carries the origin's cache tags out through the router to the front", async () => {
   const res = await front(`/__stale`);
 
-  expect(res.headers.get("cache-tag")).toBe(
-    "r0a1b2c3d|_N_T_/products,r0a1b2c3d|products",
-  );
+  expect(res.headers.get("cache-tag")).toBe("r0a1b2c3d|_N_T_/products,r0a1b2c3d|products");
   await res.text();
 });
 
@@ -245,9 +240,7 @@ test("leaves a stale response Next marked private alone", async () => {
 test("shapes an ISR page's s-maxage from its initialRevalidateSeconds", async () => {
   const res = await front(`/isr`);
 
-  expect(res.headers.get("cache-control")).toBe(
-    "s-maxage=60, stale-while-revalidate=600",
-  );
+  expect(res.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate=600");
   await res.text();
 });
 

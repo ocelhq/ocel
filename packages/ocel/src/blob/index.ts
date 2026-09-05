@@ -1,15 +1,14 @@
 export { UnprovisionedResourceError } from "../utils/phase.js";
-export { bucket, Bucket, type BucketOptions } from "./bucket.js";
-export { uploader } from "./uploader.js";
+export { Bucket, type BucketOptions, bucket } from "./bucket.js";
+export {
+  type BucketContext,
+  resolveBucketContext,
+} from "./bucket-context.js";
 export {
   createRouteHandler,
   type RouteHandlers,
   type RouteOptions,
 } from "./route.js";
-export {
-  resolveBucketContext,
-  type BucketContext,
-} from "./bucket-context.js";
 export type {
   AnyUploader,
   BlobRequest,
@@ -21,3 +20,4 @@ export type {
   UploaderAuth,
   UploaderUpload,
 } from "./types.js";
+export { uploader } from "./uploader.js";

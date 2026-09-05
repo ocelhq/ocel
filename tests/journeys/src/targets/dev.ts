@@ -3,14 +3,10 @@ import { access, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import {
-  applyConsoleEnvDefaults,
-  consoleUrl,
-  HARNESS_ONLY_ENV,
-} from "@ocel-tests/shared/env";
+import { applyConsoleEnvDefaults, consoleUrl, HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
+import { JOURNEY_CONFIG } from "../config";
 import { INITIAL_GREETING, redact, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
-import { JOURNEY_CONFIG } from "../config";
 import { live, relay } from "../live";
 import { runOcel, treeRoot, workTree } from "../ocel";
 import { ocelBin } from "../paths";
@@ -162,7 +158,14 @@ async function up(cell: CellContext): Promise<Deployment> {
 
   await runOcel(cell, dir, "up", "console-link", ["console", "link", "--create", cell.slug], env);
   if (setsEnv(cell.fixture.rows)) {
-    await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
+    await runOcel(
+      cell,
+      dir,
+      "up",
+      "env-greeting",
+      ["env", "set", "GREETING", INITIAL_GREETING],
+      env,
+    );
     await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
   }
   if (migrates(cell.fixture.rows)) {

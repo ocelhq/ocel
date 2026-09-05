@@ -1,26 +1,17 @@
+import { WorkerEntrypoint } from "cloudflare:workers";
 import {
-  isGuardRejection,
-  tagNamespace,
-  tagRecordUpdate,
   type EdgeCacheRpc,
   type FetchCacheEntry,
+  isGuardRejection,
   type TagRecord,
+  tagNamespace,
+  tagRecordUpdate,
 } from "@framework/next-cache";
-import { WorkerEntrypoint } from "cloudflare:workers";
-
-import { awsServiceFetch, type AwsServiceFetch } from "./signing";
-import {
-  createTagClock,
-  dropSnapshotMemo,
-  parseJson,
-  type ObjectStoreReader,
-} from "./tag-clock";
 import type { CacheEntrypointProps, Env, IsrWriterBinding } from "./env";
+import { type AwsServiceFetch, awsServiceFetch } from "./signing";
+import { createTagClock, dropSnapshotMemo, type ObjectStoreReader, parseJson } from "./tag-clock";
 
-export type SnapshotRaiser = (
-  scope: string,
-  records: Record<string, TagRecord>,
-) => Promise<void>;
+export type SnapshotRaiser = (scope: string, records: Record<string, TagRecord>) => Promise<void>;
 
 export interface EdgeCacheDeps {
   region: string;
@@ -35,8 +26,7 @@ export interface EdgeCacheDeps {
 
 const maxEntryBytes = 2 * 1024 * 1024;
 
-const fetchObjectKey = (scope: string, key: string) =>
-  `${scope}/fetch-cache/${key}.cache.json`;
+const fetchObjectKey = (scope: string, key: string) => `${scope}/fetch-cache/${key}.cache.json`;
 
 const objectUrl = (deps: EdgeCacheDeps, key: string) =>
   `https://${deps.fetchBucket}.s3.${deps.region}.amazonaws.com/` +
@@ -57,9 +47,7 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
         if (all.length === 0) return entry;
 
         const clock = createTagClock({ isrPrefix: scope }, { store: deps.snapshots });
-        return (await clock.freshness(all, entry.lastModified, now())) === "fresh"
-          ? entry
-          : null;
+        return (await clock.freshness(all, entry.lastModified, now())) === "fresh" ? entry : null;
       } catch {
         return null;
       }

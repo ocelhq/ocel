@@ -1,5 +1,5 @@
 import { source } from "./cli.js";
-import { scoped, type Grant } from "./grants.js";
+import { type Grant, scoped } from "./grants.js";
 
 /** The typed properties a postgres link carries, as `common.links.v1.PostgresProperties`. */
 export interface PostgresProperties {
@@ -23,14 +23,9 @@ export interface DescribedPostgres {
   grants?: Grant[];
 }
 
-export function postgresLink(
-  name: string,
-  described: DescribedPostgres,
-): PostgresLink {
+export function postgresLink(name: string, described: DescribedPostgres): PostgresLink {
   if (!name) {
-    throw new Error(
-      "a link is published under no name; the name is what a consuming app binds to",
-    );
+    throw new Error("a link is published under no name; the name is what a consuming app binds to");
   }
   const link: PostgresLink = {
     name,
@@ -46,10 +41,7 @@ export function postgresLink(
 
 const textFields = ["host", "database", "username", "password"] as const;
 
-function propertiesFor(
-  name: string,
-  properties: Record<string, unknown>,
-): PostgresProperties {
+function propertiesFor(name: string, properties: Record<string, unknown>): PostgresProperties {
   const out = {} as PostgresProperties;
   for (const field of textFields) {
     const value = properties[field];

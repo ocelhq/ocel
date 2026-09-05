@@ -78,8 +78,7 @@ export function sqsFetch(
     service: "sqs",
     retries: 0,
   });
-  return ((input, init) =>
-    client.fetch(input as RequestInfo, init)) as typeof fetch;
+  return ((input, init) => client.fetch(input as RequestInfo, init)) as typeof fetch;
 }
 
 export type AwsService = "s3" | "dynamodb";

@@ -20,7 +20,9 @@ export function Apps({ current }: { current: State }) {
               onMouseLeave={() => (hoveredApp.value = null)}
             >
               <span className="text-foreground">{app.name}</span>
-              <span className="text-muted-foreground">reads {folderName(app.folder)}, then root</span>
+              <span className="text-muted-foreground">
+                reads {folderName(app.folder)}, then root
+              </span>
               <span
                 className={cn(
                   "inline-flex items-center gap-1.5",

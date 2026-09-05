@@ -1,5 +1,5 @@
-import net from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -17,7 +17,7 @@ function published(): LiveState {
 }
 
 function push(message: unknown): void {
-  for (const conn of connections) conn.write(JSON.stringify(message) + "\n");
+  for (const conn of connections) conn.write(`${JSON.stringify(message)}\n`);
 }
 
 function waitForConnection(): Promise<void> {
@@ -101,15 +101,9 @@ describe("receiving a push", () => {
     ["a message of another type", { type: "log", generation: 1, values: { A: "x" } }],
     ["no generation", { type: "liveValues", values: { A: "x" } }],
     ["a generation below one", { type: "liveValues", generation: 0, values: { A: "x" } }],
-    [
-      "a fractional generation",
-      { type: "liveValues", generation: 1.5, values: { A: "x" } },
-    ],
+    ["a fractional generation", { type: "liveValues", generation: 1.5, values: { A: "x" } }],
     ["no values", { type: "liveValues", generation: 1 }],
-    [
-      "a value that is not a string",
-      { type: "liveValues", generation: 1, values: { A: 7 } },
-    ],
+    ["a value that is not a string", { type: "liveValues", generation: 1, values: { A: 7 } }],
   ])("ignores %s", async (_name, message) => {
     vi.stubEnv("OCEL_LIVE_KEYS", "A");
     const { awaitLiveValues } = await load();
@@ -144,7 +138,7 @@ describe("receiving a push", () => {
     const line = JSON.stringify({ type: "liveValues", generation: 1, values: { A: "x" } });
     connections[0]!.write(line.slice(0, 20));
     await settle();
-    connections[0]!.write(line.slice(20) + "\n");
+    connections[0]!.write(`${line.slice(20)}\n`);
     await ready;
 
     expect(published()).toEqual({ generation: 1, values: { A: "x" } });

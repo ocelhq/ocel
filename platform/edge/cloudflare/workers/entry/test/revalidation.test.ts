@@ -3,11 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   enqueueTimeoutMs,
-  revalidationIds,
-  revalidationRetryWindowMs,
-  revalidationMessage,
-  revalidationSender,
   type RevalidationRoute,
+  revalidationIds,
+  revalidationMessage,
+  revalidationRetryWindowMs,
+  revalidationSender,
 } from "../src/revalidation";
 
 const route: RevalidationRoute = {
@@ -23,8 +23,7 @@ const route: RevalidationRoute = {
   routePath: "/blog",
 };
 
-const queueUrl =
-  "https://sqs.eu-west-2.amazonaws.com/363236815301/ocel-revalidate.fifo";
+const queueUrl = "https://sqs.eu-west-2.amazonaws.com/363236815301/ocel-revalidate.fifo";
 
 async function capture(
   send: () => Promise<boolean>,
@@ -48,12 +47,10 @@ async function capture(
 const sender = (over: { timeoutMs?: number } = {}) =>
   revalidationSender(queueUrl, "AKIAEXAMPLE", "secretkey", over.timeoutMs)!;
 
-const body = async (request: Request) =>
-  new URLSearchParams(await request.text());
+const body = async (request: Request) => new URLSearchParams(await request.text());
 
 const warnings = () => vi.spyOn(console, "warn").mockImplementation(() => {});
-const logged = (warn: ReturnType<typeof warnings>) =>
-  JSON.stringify(warn.mock.calls);
+const logged = (warn: ReturnType<typeof warnings>) => JSON.stringify(warn.mock.calls);
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -101,7 +98,9 @@ describe("revalidationIds", () => {
 
   it("keeps the group id inside SQS's 128 characters on a pathological route", async () => {
     const long = `/${"segment/".repeat(40)}end`;
-    const ids = await revalidationIds(revalidationMessage({ ...route, routePath: long }, 1_000, 10));
+    const ids = await revalidationIds(
+      revalidationMessage({ ...route, routePath: long }, 1_000, 10),
+    );
 
     expect(long.length).toBeGreaterThan(128);
     expect(ids.MessageGroupId.length).toBeLessThanOrEqual(128);
@@ -177,8 +176,7 @@ describe("the queue send", () => {
     const warn = warnings();
     await capture(
       () => sender()(revalidationMessage(route, 1_000, 42)),
-      () =>
-        new Response("<Error><Code>AccessDenied</Code></Error>", { status: 403 }),
+      () => new Response("<Error><Code>AccessDenied</Code></Error>", { status: 403 }),
     );
 
     expect(logged(warn)).not.toContain("TOKEN");
@@ -215,9 +213,7 @@ describe("the queue send", () => {
 
   it("says nothing at all about a send the queue took", async () => {
     const warn = warnings();
-    const { accepted } = await capture(() =>
-      sender()(revalidationMessage(route, 1_000, 42)),
-    );
+    const { accepted } = await capture(() => sender()(revalidationMessage(route, 1_000, 42)));
 
     expect(accepted).toBe(true);
     expect(warn).not.toHaveBeenCalled();

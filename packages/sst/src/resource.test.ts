@@ -90,21 +90,15 @@ describe("declaring a postgres link", () => {
   });
 
   it("takes the ocel project from the sst config root unless it is given", () => {
-    expect(declare({ project: "/repo/other" }).props.project).toBe(
-      "/repo/other",
-    );
+    expect(declare({ project: "/repo/other" }).props.project).toBe("/repo/other");
   });
 
   it("refuses an environment outside the preview class", () => {
-    expect(() => declare({ environment: "pr-12" })).toThrow(
-      /is named alongside class production/,
-    );
+    expect(() => declare({ environment: "pr-12" })).toThrow(/is named alongside class production/);
   });
 
   it("refuses the reserved class-wide marker", () => {
-    expect(() =>
-      declare({ class: "preview", environment: "*" }),
-    ).toThrow(/reserved/);
+    expect(() => declare({ class: "preview", environment: "*" })).toThrow(/reserved/);
   });
 
   it("keeps only the fields a postgres link carries", () => {
@@ -143,11 +137,7 @@ describe("publishing a postgres link", () => {
       declare({ class: "preview", environment: "pr-12" }).props as never,
     );
 
-    expect(argv().args.slice(-3)).toEqual([
-      "--preview",
-      "--environment",
-      "pr-12",
-    ]);
+    expect(argv().args.slice(-3)).toEqual(["--preview", "--environment", "pr-12"]);
   });
 
   it("binds class-wide when no preview environment is named", async () => {
@@ -166,13 +156,10 @@ describe("publishing a postgres link", () => {
   it("surfaces the CLI's refusal verbatim", async () => {
     run.mockReturnValue({
       status: 1,
-      stderr:
-        "link orders in production is already published by publisher urn:pulumi:other\n",
+      stderr: "link orders in production is already published by publisher urn:pulumi:other\n",
     } as never);
 
-    await expect(
-      postgresProvider.create(declare().props as never),
-    ).rejects.toThrow(
+    await expect(postgresProvider.create(declare().props as never)).rejects.toThrow(
       "link orders in production is already published by publisher urn:pulumi:other",
     );
   });
@@ -185,11 +172,7 @@ describe("changing a published postgres link", () => {
       getSSTLink: () => ({ properties: { ...properties, host: "moved" } }),
     });
 
-    const diff = await postgresProvider.diff(
-      "id",
-      olds,
-      latest().props as never,
-    );
+    const diff = await postgresProvider.diff("id", olds, latest().props as never);
 
     expect(diff).toMatchObject({ changes: true, replaces: [] });
   });
@@ -215,17 +198,19 @@ describe("changing a published postgres link", () => {
       }),
     });
 
-    expect(
-      await postgresProvider.diff("id", olds, latest().props as never),
-    ).toMatchObject({ changes: true, replaces: [] });
+    expect(await postgresProvider.diff("id", olds, latest().props as never)).toMatchObject({
+      changes: true,
+      replaces: [],
+    });
   });
 
   it("holds still when nothing changed", async () => {
     const olds = (await postgresProvider.create(declare().props as never)).outs;
 
-    expect(
-      await postgresProvider.diff("id", olds, declare().props as never),
-    ).toMatchObject({ changes: false, replaces: [] });
+    expect(await postgresProvider.diff("id", olds, declare().props as never)).toMatchObject({
+      changes: false,
+      replaces: [],
+    });
   });
 });
 
@@ -286,22 +271,22 @@ describe("declaring a custom link", () => {
   });
 
   it("reports a change rather than throwing while a property is still unknown", async () => {
-    const olds = (await customProvider.create(declareCustom().props as never))
-      .outs;
+    const olds = (await customProvider.create(declareCustom().props as never)).outs;
     custom("network", { properties: { ...network, subnetIds: undefined } });
 
-    expect(
-      await customProvider.diff("id", olds, latest().props as never),
-    ).toMatchObject({ changes: true, replaces: [] });
+    expect(await customProvider.diff("id", olds, latest().props as never)).toMatchObject({
+      changes: true,
+      replaces: [],
+    });
   });
 
   it("holds still when nothing changed", async () => {
-    const olds = (await customProvider.create(declareCustom().props as never))
-      .outs;
+    const olds = (await customProvider.create(declareCustom().props as never)).outs;
 
-    expect(
-      await customProvider.diff("id", olds, declareCustom().props as never),
-    ).toMatchObject({ changes: false, replaces: [] });
+    expect(await customProvider.diff("id", olds, declareCustom().props as never)).toMatchObject({
+      changes: false,
+      replaces: [],
+    });
   });
 
   it("runs ocel link rm for the name it published", async () => {

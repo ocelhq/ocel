@@ -1,9 +1,3 @@
-import { boundCacheTags } from "@framework/next-cache/cache-tags";
-import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
-import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
-import type { ServeDescriptor } from "@platform/edge-contract/serve";
-import type { AdapterOutput, NextAdapter } from "next";
-import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream, writeFileSync } from "node:fs";
 import {
@@ -11,30 +5,24 @@ import {
   cp,
   lstat,
   mkdir,
-  readFile,
   readdir,
+  readFile,
   readlink,
   rm,
   stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-  sep,
-} from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
-import {
-  compileImageConfig,
-  imageConfigHash,
-  serializeImageConfig,
-} from "./image-config.mjs";
-import { packBundles, type PackedMember } from "./pack.mjs";
+import { boundCacheTags } from "@framework/next-cache/cache-tags";
+import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
+import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
+import type { ServeDescriptor } from "@platform/edge-contract/serve";
+import type { AdapterOutput, NextAdapter } from "next";
+import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
+import { compileImageConfig, imageConfigHash, serializeImageConfig } from "./image-config.mjs";
+import { type PackedMember, packBundles } from "./pack.mjs";
 import { stableStringify } from "./stable-json.mjs";
 
 const exactly =
@@ -95,16 +83,7 @@ const adapter = {
   },
 
   async onBuildComplete(args) {
-    const {
-      routing,
-      outputs,
-      projectDir,
-      repoRoot,
-      distDir,
-      config,
-      nextVersion,
-      buildId,
-    } = args;
+    const { routing, outputs, projectDir, repoRoot, distDir, config, buildId } = args;
 
     const basePath = config.basePath || "";
 
@@ -121,8 +100,7 @@ const adapter = {
     const nodeMiddleware = middleware?.runtime === "nodejs" ? middleware : undefined;
     const programmableEdge = isProgrammableEdge(process.env.OCEL_EDGE_KIND);
     const waived = waivedNeeds(process.env.OCEL_ALLOW_DEGRADED);
-    const compileEdgeOnOrigin = (need: string) =>
-      !programmableEdge && waived.has(need);
+    const compileEdgeOnOrigin = (need: string) => !programmableEdge && waived.has(need);
     const edgeMiddleware = middleware?.runtime === "edge" ? middleware : undefined;
     const originEdgeMiddleware = compileEdgeOnOrigin("edge-middleware")
       ? edgeMiddleware
@@ -181,9 +159,7 @@ const adapter = {
     const entryRoutes: typeof functionRoutes = [];
     for (const members of groups.values()) {
       members.sort(
-        (a, b) =>
-          a.pathname.length - b.pathname.length ||
-          (a.pathname < b.pathname ? -1 : 1),
+        (a, b) => a.pathname.length - b.pathname.length || (a.pathname < b.pathname ? -1 : 1),
       );
       const entry = members[0]!;
       entryRoutes.push(entry);
@@ -202,15 +178,11 @@ const adapter = {
 
     const originEdge = await planOriginEdgeEntries(
       distDir,
-      [
-        ...originEdgeRoutes,
-        ...(originEdgeMiddleware ? [originEdgeMiddleware] : []),
-      ],
+      [...originEdgeRoutes, ...(originEdgeMiddleware ? [originEdgeMiddleware] : [])],
       appRel,
       assetSuffix,
       (edgeEntryKey) =>
-        originEdgeMiddleware &&
-        edgeEntryKey === edgeEntryOf(originEdgeMiddleware).entryKey
+        originEdgeMiddleware && edgeEntryKey === edgeEntryOf(originEdgeMiddleware).entryKey
           ? middlewareEntryKey
           : edgeEntryKey,
     );
@@ -230,9 +202,7 @@ const adapter = {
     const seededBundleId = seeded ? bundles[0]!.name : undefined;
 
     const bundleNameByEntryKey = new Map(
-      bundles.flatMap((b) =>
-        b.members.map((m) => [m.member.id, b.name] as const),
-      ),
+      bundles.flatMap((b) => b.members.map((m) => [m.member.id, b.name] as const)),
     );
 
     const bundleNameOf = (entryKey: string, pathname: string): string => {
@@ -254,16 +224,13 @@ const adapter = {
 
     const rootPathname = basePath || "/";
     const rootEntryKey = entryKeyByPathname.get(rootPathname);
-    const entry =
-      rootEntryKey === undefined ? "" : bundleNameOf(rootEntryKey, rootPathname);
+    const entry = rootEntryKey === undefined ? "" : bundleNameOf(rootEntryKey, rootPathname);
 
     const routeKinds = routeKindsById(allRoutes, outputs.prerenders);
 
     const prerenderGroups = groupPrerenders(outputs.prerenders);
 
-    const variantHeaders = JSON.stringify(
-      variantHeaderProjection(prerenderGroups),
-    );
+    const variantHeaders = JSON.stringify(variantHeaderProjection(prerenderGroups));
 
     const routes = routeTable(entryKeyByPathname, routing.dynamicRoutes ?? []);
 
@@ -281,32 +248,22 @@ const adapter = {
 
         const mirrored = mirroredPaths(Object.keys(bundle.assets));
         for (const [destRel, srcAbs] of Object.entries(bundle.assets)) {
-          await copyAsset(
-            srcAbs,
-            join(funcDir, destRel),
-            repoRoot,
-            funcDir,
-            mirrored,
-          );
+          await copyAsset(srcAbs, join(funcDir, destRel), repoRoot, funcDir, mirrored);
         }
 
         const dispatchDest = join(funcDir, appRel, dispatchName);
         await mkdir(dirname(dispatchDest), { recursive: true });
-        await copyFile(
-          new URL("next-dispatch.cjs", import.meta.url),
-          dispatchDest,
-        );
+        await copyFile(new URL("next-dispatch.cjs", import.meta.url), dispatchDest);
 
         const entries: Record<string, string> = Object.fromEntries(
           bundle.members.map(({ member }) => [
             member.id,
-            "./" + relative(projectDir, member.filePath).split(sep).join("/"),
+            `./${relative(projectDir, member.filePath).split(sep).join("/")}`,
           ]),
         );
         if (nodeMiddleware && bundle.name === seededBundleId) {
           entries[middlewareEntryKey] =
-            "./" +
-            relative(projectDir, nodeMiddleware.filePath).split(sep).join("/");
+            `./${relative(projectDir, nodeMiddleware.filePath).split(sep).join("/")}`;
         }
         if (originEdge && bundle.name === seededBundleId) {
           await copyFile(
@@ -324,12 +281,7 @@ const adapter = {
         const launcherRel = join(appRel, launcherName);
         await writeFile(
           join(funcDir, launcherRel),
-          renderLauncher(
-            entries,
-            primaryEntryKey(bundle.members),
-            routes,
-            nextConfigProjection,
-          ),
+          renderLauncher(entries, primaryEntryKey(bundle.members), routes, nextConfigProjection),
         );
 
         await writeFile(
@@ -360,16 +312,10 @@ const adapter = {
     ];
     const assetHashes: Record<string, string> = {};
     for (const [pathname, filePath] of staticAssets) {
-      assetHashes[pathname] = await copyHashedFile(
-        filePath,
-        join(outputRoot, "static", pathname),
-      );
+      assetHashes[pathname] = await copyHashedFile(filePath, join(outputRoot, "static", pathname));
     }
     for (const { dataKey } of nextDataStaticFiles) {
-      assetHashes[dataKey] = await writeHashedFile(
-        join(outputRoot, "static", dataKey),
-        "{}",
-      );
+      assetHashes[dataKey] = await writeHashedFile(join(outputRoot, "static", dataKey), "{}");
     }
 
     if (originMiddleware) {
@@ -440,10 +386,7 @@ const adapter = {
       dispatchKeyOrigin.set(key, original);
     }
 
-    const publicDispatch = publicFiles.map((p) => [
-      p.pathname,
-      { kind: "static" },
-    ]);
+    const publicDispatch = publicFiles.map((p) => [p.pathname, { kind: "static" }]);
 
     const prerenderDispatch = outputs.prerenders.map((p) => {
       const routeKey = p.pathname;
@@ -461,10 +404,7 @@ const adapter = {
         routeKey,
         {
           kind: "prerender",
-          id:
-            entryKey === undefined
-              ? p.parentOutputId
-              : bundleNameOf(entryKey, routeKey),
+          id: entryKey === undefined ? p.parentOutputId : bundleNameOf(entryKey, routeKey),
           config: p.config,
           fallback: {
             initialRevalidate: p.fallback?.initialRevalidate,
@@ -491,16 +431,10 @@ const adapter = {
       if (target.kind === "lambda") return target.page === true;
       return target.kind === "prerender" || target.kind === "static";
     };
-    const firstDispatchedErrorPage = (
-      candidates: string[],
-    ): string | undefined => candidates.find(isDispatchedErrorPage);
-    const notFoundKey = firstDispatchedErrorPage([
-      `${basePath}/404`,
-      `${basePath}/_not-found`,
-    ]);
-    const notFoundFlightKey = firstDispatchedErrorPage([
-      `${basePath}/_not-found`,
-    ]);
+    const firstDispatchedErrorPage = (candidates: string[]): string | undefined =>
+      candidates.find(isDispatchedErrorPage);
+    const notFoundKey = firstDispatchedErrorPage([`${basePath}/404`, `${basePath}/_not-found`]);
+    const notFoundFlightKey = firstDispatchedErrorPage([`${basePath}/_not-found`]);
     const serverErrorKey = firstDispatchedErrorPage([`${basePath}/500`]);
     const errorRoutes: NonNullable<RoutingManifest["errorRoutes"]> = {};
     if (notFoundKey !== undefined) errorRoutes.notFound = notFoundKey;
@@ -514,27 +448,24 @@ const adapter = {
       : {};
 
     const vercelCacheField: Partial<Pick<RoutingManifest, "vercelCacheAlias">> =
-      process.env.OCEL_E2E_VERCEL_CACHE_HEADER === "1"
-        ? { vercelCacheAlias: true }
-        : {};
+      process.env.OCEL_E2E_VERCEL_CACHE_HEADER === "1" ? { vercelCacheAlias: true } : {};
 
-    const middlewareField: Partial<Pick<RoutingManifest, "middleware">> =
-      middleware
-        ? {
-            middleware: originMiddleware
-              ? {
-                  runtime: "nodejs",
-                  id: seededBundleId!,
-                  entryKey: middlewareEntryKey,
-                  matchers: originMiddleware.config.matchers ?? [],
-                }
-              : {
-                  runtime: "edge",
-                  entryKey: edgeEntryOf(middleware).entryKey,
-                  matchers: middleware.config.matchers ?? [],
-                },
-          }
-        : {};
+    const middlewareField: Partial<Pick<RoutingManifest, "middleware">> = middleware
+      ? {
+          middleware: originMiddleware
+            ? {
+                runtime: "nodejs",
+                id: seededBundleId!,
+                entryKey: middlewareEntryKey,
+                matchers: originMiddleware.config.matchers ?? [],
+              }
+            : {
+                runtime: "edge",
+                entryKey: edgeEntryOf(middleware).entryKey,
+                matchers: middleware.config.matchers ?? [],
+              },
+        }
+      : {};
 
     const errorRoutesField: Partial<Pick<RoutingManifest, "errorRoutes">> =
       Object.keys(errorRoutes).length > 0 ? { errorRoutes } : {};
@@ -557,9 +488,7 @@ const adapter = {
         ...new Set([
           ...allRoutes.map((o) => routeKeyOf(o, basePath)),
           ...outputs.prerenders.map((p) => p.pathname),
-          ...outputs.staticFiles.map((o) =>
-            staticRouteKeyOf(o, pagesDistDir, basePath),
-          ),
+          ...outputs.staticFiles.map((o) => staticRouteKeyOf(o, pagesDistDir, basePath)),
           ...publicFiles.map((p) => p.pathname),
           ...nextDataStaticFiles.map((d) => d.dataKey),
         ]),
@@ -574,22 +503,13 @@ const adapter = {
     });
 
     await mkdir(outputRoot, { recursive: true });
-    writeFileSync(
-      join(outputRoot, "routing-manifest.json"),
-      JSON.stringify(routingManifest),
-    );
+    writeFileSync(join(outputRoot, "routing-manifest.json"), JSON.stringify(routingManifest));
     const pprRoutes = outputs.prerenders
       .filter((p) => p.pprChain && isUserFacingPathname(p.pathname))
       .map((p) => p.pathname);
-    const cachedRoutes = outputs.prerenders.filter((p) =>
-      isUserFacingPathname(p.pathname),
-    );
-    const streamedRoutes = outputs.appPages.filter((p) =>
-      isUserFacingPathname(p.pathname),
-    );
-    const edgeNeedRoutes = edgeRoutes.filter((r) =>
-      isUserFacingPathname(r.pathname),
-    );
+    const cachedRoutes = outputs.prerenders.filter((p) => isUserFacingPathname(p.pathname));
+    const streamedRoutes = outputs.appPages.filter((p) => isUserFacingPathname(p.pathname));
+    const edgeNeedRoutes = edgeRoutes.filter((r) => isUserFacingPathname(r.pathname));
     const needs: ServeDescriptor["needs"] = {
       ...(middleware?.runtime === "edge" && {
         "edge-middleware": {
@@ -624,19 +544,14 @@ const adapter = {
     writeFileSync(join(outputRoot, "serve.json"), JSON.stringify(serve));
 
     if (images) {
-      await writeFile(
-        join(outputRoot, "image-config.json"),
-        serializeImageConfig(images),
-      );
+      await writeFile(join(outputRoot, "image-config.json"), serializeImageConfig(images));
     }
 
     await emitEdgeBundle(
       outputRoot,
       distDir,
       assetSuffix,
-      programmableEdge
-        ? [...edgeRoutes, ...(edgeMiddleware ? [edgeMiddleware] : [])]
-        : [],
+      programmableEdge ? [...edgeRoutes, ...(edgeMiddleware ? [edgeMiddleware] : [])] : [],
     );
   },
 } satisfies NextAdapter;
@@ -651,9 +566,7 @@ function configClass(_route: NodeRoute): string {
   return "";
 }
 
-function primaryEntryKey(
-  members: readonly PackedMember<NodeRoute>[],
-): string | null {
+function primaryEntryKey(members: readonly PackedMember<NodeRoute>[]): string | null {
   const weighed = [...members].sort(
     (a, b) => b.sizeBytes - a.sizeBytes || (a.member.id < b.member.id ? -1 : 1),
   );
@@ -838,8 +751,7 @@ async function classifyEdgeSources(
 
   const isMap = (key: string) => key.endsWith(".map");
   const isChunk = (key: string) =>
-    !isMap(key) &&
-    (assetNames ? !assetNames.has(key) : /\.[cm]?js$/.test(key));
+    !isMap(key) && (assetNames ? !assetNames.has(key) : /\.[cm]?js$/.test(key));
   const isAsset = (key: string) => !isMap(key) && !isChunk(key);
 
   const chunkPathByKey = new Map<string, string>();
@@ -945,9 +857,7 @@ async function planOriginEdgeEntries(
       kind: launcherKey === middlewareEntryKey ? "middleware" : "route",
       entryKey: edgeEntryKey,
       handlerExport: parts.handlerExports.get(edgeEntryKey)!,
-      chunks: [...parts.entryAssets.get(edgeEntryKey)!].map(
-        (key) => chunkRelByKey.get(key)!,
-      ),
+      chunks: [...parts.entryAssets.get(edgeEntryKey)!].map((key) => chunkRelByKey.get(key)!),
       assets,
       wasm,
       env: parts.env,
@@ -969,14 +879,12 @@ function renderOriginEdgeWrapper(spec: {
   env: Record<string, string>;
   clientAssetSuffix: string;
 }): string {
-  return (
-    [
-      `module.exports = require(${JSON.stringify(`./${originEdgeRuntimeName}`)}).entry(`,
-      `  __dirname,`,
-      `  ${stableStringify(spec)},`,
-      `)`,
-    ].join("\n") + "\n"
-  );
+  return `${[
+    `module.exports = require(${JSON.stringify(`./${originEdgeRuntimeName}`)}).entry(`,
+    `  __dirname,`,
+    `  ${stableStringify(spec)},`,
+    `)`,
+  ].join("\n")}\n`;
 }
 
 async function emitEdgeBundle(
@@ -987,14 +895,8 @@ async function emitEdgeBundle(
 ): Promise<void> {
   if (sources.length === 0) return;
 
-  const {
-    chunkPathByKey,
-    wasmPathByName,
-    assetPathByName,
-    env,
-    entryAssets,
-    handlerExports,
-  } = await classifyEdgeSources(distDir, sources);
+  const { chunkPathByKey, wasmPathByName, assetPathByName, env, entryAssets, handlerExports } =
+    await classifyEdgeSources(distDir, sources);
 
   const { idByKey: chunkIdByKey, modules: chunks } = await moduleIds(
     chunkPathByKey,
@@ -1137,8 +1039,8 @@ function groupPrerenders(prerenders: readonly any[]): PrerenderGroup[] {
 
 function variantHeadersOf(group: PrerenderGroup): Record<string, unknown> {
   const rscHeaders = group.rsc?.fallback?.initialHeaders;
-  const segmentHeaders = group.segments.find((m) => m.fallback?.initialHeaders)
-    ?.fallback.initialHeaders;
+  const segmentHeaders = group.segments.find((m) => m.fallback?.initialHeaders)?.fallback
+    .initialHeaders;
   return {
     ...(rscHeaders && { rscHeaders }),
     ...(segmentHeaders && { segmentHeaders }),
@@ -1209,10 +1111,7 @@ async function emitCacheEntries(
   );
 }
 
-async function emitFetchEntries(
-  outputRoot: string,
-  distDir: string,
-): Promise<void> {
+async function emitFetchEntries(outputRoot: string, distDir: string): Promise<void> {
   const fetchCacheDir = join(distDir, "cache", "fetch-cache");
   let names: string[];
   try {
@@ -1240,10 +1139,7 @@ async function emitFetchEntries(
       }
 
       const revalidate = value.revalidate;
-      if (
-        typeof revalidate === "number" &&
-        stats.mtimeMs + revalidate * 1000 <= lastModified
-      ) {
+      if (typeof revalidate === "number" && stats.mtimeMs + revalidate * 1000 <= lastModified) {
         return;
       }
 
@@ -1299,24 +1195,22 @@ function renderLauncher(
   routes: RouteTable,
   nextConfig: NextConfigProjection,
 ): string {
-  return (
-    [
-      `const { AsyncLocalStorage } = require('node:async_hooks')`,
-      `globalThis.AsyncLocalStorage = AsyncLocalStorage`,
-      `process.env.NODE_ENV ||= 'production'`,
-      `const ENTRIES = ${JSON.stringify(entries)}`,
-      `const PRIMARY = ${JSON.stringify(primary)}`,
-      `const ROUTES = ${JSON.stringify(routes)}`,
-      `const NEXT_CONFIG = ${JSON.stringify(nextConfig)}`,
-      `module.exports = require(${JSON.stringify(`./${dispatchName}`)})({`,
-      `  entries: ENTRIES,`,
-      `  primary: PRIMARY,`,
-      `  routes: ROUTES,`,
-      `  nextConfig: NEXT_CONFIG,`,
-      `  load: (specifier) => require(specifier),`,
-      `})`,
-    ].join("\n") + "\n"
-  );
+  return `${[
+    `const { AsyncLocalStorage } = require('node:async_hooks')`,
+    `globalThis.AsyncLocalStorage = AsyncLocalStorage`,
+    `process.env.NODE_ENV ||= 'production'`,
+    `const ENTRIES = ${JSON.stringify(entries)}`,
+    `const PRIMARY = ${JSON.stringify(primary)}`,
+    `const ROUTES = ${JSON.stringify(routes)}`,
+    `const NEXT_CONFIG = ${JSON.stringify(nextConfig)}`,
+    `module.exports = require(${JSON.stringify(`./${dispatchName}`)})({`,
+    `  entries: ENTRIES,`,
+    `  primary: PRIMARY,`,
+    `  routes: ROUTES,`,
+    `  nextConfig: NEXT_CONFIG,`,
+    `  load: (specifier) => require(specifier),`,
+    `})`,
+  ].join("\n")}\n`;
 }
 
 function routePathname(
@@ -1343,9 +1237,7 @@ function unindex(pathname: string): string {
 function unindexLeaf(pathname: string): string {
   if (dynamicSegment.test(pathname)) return pathname;
   if (pathname === "/index") return "/";
-  return pathname.endsWith("/index")
-    ? pathname.slice(0, -"/index".length)
-    : pathname;
+  return pathname.endsWith("/index") ? pathname.slice(0, -"/index".length) : pathname;
 }
 
 function isPagesRouterKind(type: string): boolean {
@@ -1361,10 +1253,7 @@ function routeKindsById(
 ): Map<string, string> {
   const prerendered = new Set(prerenders.map((p) => p.parentOutputId));
   return new Map(
-    routes.map((r) => [
-      r.id,
-      r.type === "PAGES_API" && prerendered.has(r.id) ? "PAGES" : r.type,
-    ]),
+    routes.map((r) => [r.id, r.type === "PAGES_API" && prerendered.has(r.id) ? "PAGES" : r.type]),
   );
 }
 
@@ -1394,15 +1283,9 @@ function staticRouteKeyOf(
     : file.pathname;
 }
 
-function nextDataPathnameOf(
-  pageKey: string,
-  buildId: string,
-  basePath: string,
-): string {
+function nextDataPathnameOf(pageKey: string, buildId: string, basePath: string): string {
   const unprefixed =
-    basePath && pageKey.startsWith(basePath)
-      ? pageKey.slice(basePath.length) || "/"
-      : pageKey;
+    basePath && pageKey.startsWith(basePath) ? pageKey.slice(basePath.length) || "/" : pageKey;
   const normalized = unprefixed === "/" ? "/index" : unprefixed;
   const dataPathname = `/_next/data/${buildId}${normalized}.json`;
   return basePath ? `${basePath}${dataPathname}` : dataPathname;
@@ -1454,14 +1337,14 @@ async function collectPublicFiles(
     if (!entry.isFile()) continue;
     const abs = join(entry.parentPath, entry.name);
     const rel = relative(publicDir, abs);
-    files.push({ pathname: "/" + rel.split(sep).join("/"), filePath: abs });
+    files.push({ pathname: `/${rel.split(sep).join("/")}`, filePath: abs });
   }
   return files;
 }
 
 function containedIn(root: string, target: string): string | undefined {
   const rel = relative(root, target);
-  if (isAbsolute(rel) || rel === ".." || rel.startsWith(".." + sep)) {
+  if (isAbsolute(rel) || rel === ".." || rel.startsWith(`..${sep}`)) {
     return undefined;
   }
   return rel;
@@ -1502,10 +1385,7 @@ async function copyAsset(
         : undefined;
     await rm(dest, { recursive: true, force: true });
     if (rel !== undefined) {
-      await symlink(
-        relative(dirname(dest), join(funcDir, rel)).split(sep).join("/"),
-        dest,
-      );
+      await symlink(relative(dirname(dest), join(funcDir, rel)).split(sep).join("/"), dest);
       return;
     }
     let targetInfo;

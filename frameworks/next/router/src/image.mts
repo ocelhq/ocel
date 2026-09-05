@@ -5,13 +5,8 @@ import type {
 } from "@framework/next-protocol/routing-manifest";
 
 import { mediaType } from "./accept.mjs";
+import { deltaSeconds, headResponse, NEXT_CACHE_STATUS, withStatus } from "./http-cache.mjs";
 import { retainOwner } from "./origin-response.mjs";
-import {
-  deltaSeconds,
-  headResponse,
-  withStatus,
-  NEXT_CACHE_STATUS,
-} from "./http-cache.mjs";
 
 export type { CompiledLocalPattern, CompiledRemotePattern, ImageConfig };
 
@@ -109,10 +104,7 @@ function matchLocalPattern(pattern: CompiledLocalPattern, url: URL): boolean {
 }
 
 function matchRemotePattern(pattern: CompiledRemotePattern, url: URL): boolean {
-  if (
-    pattern.protocol !== undefined &&
-    pattern.protocol !== url.protocol.replace(/:$/, "")
-  ) {
+  if (pattern.protocol !== undefined && pattern.protocol !== url.protocol.replace(/:$/, "")) {
     return false;
   }
   if (pattern.port !== undefined && pattern.port !== url.port) return false;
@@ -123,11 +115,7 @@ function matchRemotePattern(pattern: CompiledRemotePattern, url: URL): boolean {
   return regex(pattern.pathname).test(url.pathname);
 }
 
-function hasRemoteMatch(
-  domains: string[],
-  patterns: CompiledRemotePattern[],
-  url: URL,
-): boolean {
+function hasRemoteMatch(domains: string[], patterns: CompiledRemotePattern[], url: URL): boolean {
   return (
     domains.some((domain) => url.hostname === domain) ||
     patterns.some((pattern) => matchRemotePattern(pattern, url))
@@ -170,9 +158,7 @@ export function validateImageRequest(
     }
     if (config.localPatterns) {
       if (!parsed) return malformed();
-      const allowed = config.localPatterns.some((pattern) =>
-        matchLocalPattern(pattern, parsed),
-      );
+      const allowed = config.localPatterns.some((pattern) => matchLocalPattern(pattern, parsed));
       if (!allowed) return invalid('"url" parameter is not allowed');
     }
   } else {
@@ -224,17 +210,12 @@ export function validateImageRequest(
       quality,
       mimeType: getSupportedMimeType(config.formats, accept),
       isAbsolute,
-      isStatic: STATIC_IMPORT_PREFIXES.some((prefix) =>
-        rawUrl.startsWith(`${basePath}${prefix}`),
-      ),
+      isStatic: STATIC_IMPORT_PREFIXES.some((prefix) => rawUrl.startsWith(`${basePath}${prefix}`)),
     },
   };
 }
 
-const STATIC_IMPORT_PREFIXES = [
-  "/_next/static/media",
-  "/_next/static/immutable/media",
-];
+const STATIC_IMPORT_PREFIXES = ["/_next/static/media", "/_next/static/immutable/media"];
 
 function parseAbsolute(url: string): URL | undefined {
   try {
@@ -375,13 +356,8 @@ function normalized(href: string): string {
 }
 
 async function sha256(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(value),
-  );
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export const unprovisionedImageOrigin: ImageOrigin = async () =>

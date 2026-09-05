@@ -1,25 +1,25 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { defer } from "../utils/defer.js";
+import { callSite } from "./callsite.js";
 import { declareEnv } from "./declare.js";
 import {
-  isLive,
-  validateDefinitions,
   type Definitions,
+  isLive,
   type VariableDefinition,
+  validateDefinitions,
 } from "./definition.js";
 import { EnvValueError } from "./errors.js";
 import { liveGeneration, NO_GENERATION, readLive } from "./live.js";
-import { callSite } from "./callsite.js";
 import { assertInScope, inScope } from "./scope.js";
 import { coerce, readDelivered, undeclared } from "./value.js";
 
-export {
-  type Definitions,
-  type VariableClass,
-  type VariableDefinition,
-} from "./definition.js";
 export { EnvClientError } from "./client.js";
-export { deployment, type Deployment } from "./deployment.js";
+export type {
+  Definitions,
+  VariableClass,
+  VariableDefinition,
+} from "./definition.js";
+export { type Deployment, deployment } from "./deployment.js";
 export { EnvDefinitionError, EnvEdgeError, EnvValueError } from "./errors.js";
 export { EnvScopeError } from "./scope.js";
 

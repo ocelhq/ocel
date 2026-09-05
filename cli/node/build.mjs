@@ -1,7 +1,7 @@
-import tailwind from "@tailwindcss/postcss";
 import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import tailwind from "@tailwindcss/postcss";
 import postcss from "postcss";
 
 import { runtimeFiles } from "../../frameworks/next/adapter/scripts/runtime-files.mjs";
@@ -53,17 +53,11 @@ const compiled = await postcss([tailwind({ optimize: { minify: true } })]).proce
   { from: sheet, to: join(dist, "vars-ui/app.css") },
 );
 await writeFile(join(dist, "vars-ui/app.css"), compiled.css);
-await copyFile(
-  join(platformDir, "src/vars-ui/index.html"),
-  join(dist, "vars-ui/index.html"),
-);
+await copyFile(join(platformDir, "src/vars-ui/index.html"), join(dist, "vars-ui/index.html"));
 
 await Promise.all([
   ...runtimeFiles.map((name) =>
-    copyFile(
-      join(root, "frameworks/next/adapter/src", name),
-      join(dist, "next-adapter", name),
-    ),
+    copyFile(join(root, "frameworks/next/adapter/src", name), join(dist, "next-adapter", name)),
   ),
   copyFile(join(workers, "entry/dist/index.js"), join(dist, "workers/entry-cloudflare.js")),
   copyFile(

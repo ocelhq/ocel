@@ -1,16 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 
 import { matchesSecret } from "@platform/cf-auth";
-
-import * as store from "./store";
-import type {
-  DeploymentRecord,
-  HistoryEntry,
-  Identity,
-  Promotion,
-  PruneResult,
-} from "./store";
 import type { Env } from "./env";
+import type { DeploymentRecord, HistoryEntry, Identity, Promotion, PruneResult } from "./store";
+import * as store from "./store";
 
 export class DeploymentsStore extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -18,11 +11,7 @@ export class DeploymentsStore extends DurableObject<Env> {
     store.ensureSchema(ctx.storage);
   }
 
-  async initialize(
-    ownerToken: string,
-    secret: string,
-    force: boolean,
-  ): Promise<Identity> {
+  async initialize(ownerToken: string, secret: string, force: boolean): Promise<Identity> {
     return store.initialize(this.ctx.storage, ownerToken, secret, force);
   }
 
@@ -41,10 +30,7 @@ export class DeploymentsStore extends DurableObject<Env> {
     store.putStaged(this.ctx.storage, record);
   }
 
-  async promote(
-    promotion: Promotion,
-    pointer?: string,
-  ): Promise<{ conflict?: string }> {
+  async promote(promotion: Promotion, pointer?: string): Promise<{ conflict?: string }> {
     try {
       store.promote(this.ctx.storage, promotion, pointer);
       return {};
@@ -54,17 +40,11 @@ export class DeploymentsStore extends DurableObject<Env> {
     }
   }
 
-  async pointerIdentity(
-    app: string,
-    pointer?: string,
-  ): Promise<string | undefined> {
+  async pointerIdentity(app: string, pointer?: string): Promise<string | undefined> {
     return store.pointerIdentity(this.ctx.storage, app, pointer);
   }
 
-  async record(
-    app: string,
-    identity: string,
-  ): Promise<DeploymentRecord | undefined> {
+  async record(app: string, identity: string): Promise<DeploymentRecord | undefined> {
     return store.record(this.ctx.storage, app, identity);
   }
 

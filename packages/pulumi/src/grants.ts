@@ -18,10 +18,7 @@ export interface GrantInput {
   label?: string;
 }
 
-export function scoped(
-  name: string,
-  grants: Grant[] | undefined,
-): Grant[] | undefined {
+export function scoped(name: string, grants: Grant[] | undefined): Grant[] | undefined {
   if (!grants || grants.length === 0) {
     return undefined;
   }
@@ -47,8 +44,5 @@ function unscopedAction(action: string): boolean {
   if (separator < 0) {
     return action === wildcard;
   }
-  return (
-    action.slice(0, separator) === wildcard ||
-    action.slice(separator + 1) === wildcard
-  );
+  return action.slice(0, separator) === wildcard || action.slice(separator + 1) === wildcard;
 }

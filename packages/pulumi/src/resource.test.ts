@@ -1,13 +1,8 @@
-import { output, type Resource } from "@pulumi/pulumi";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { output, type Resource } from "@pulumi/pulumi";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  custom,
-  customProvider,
-  postgres,
-  postgresProvider,
-} from "./resource.js";
+import { custom, customProvider, postgres, postgresProvider } from "./resource.js";
 
 interface Built {
   name: string;
@@ -49,8 +44,7 @@ const entry = join("/repo/app/node_modules/ocel", "bin", "run.js");
 
 const root = "/repo/app";
 
-const ownerUrn =
-  "urn:pulumi:production::shop::pulumi-nodejs:dynamic:Resource::ocel-link-orders";
+const ownerUrn = "urn:pulumi:production::shop::pulumi-nodejs:dynamic:Resource::ocel-link-orders";
 
 const properties = {
   host: "orders.cluster-c.us-east-1.rds.amazonaws.com",
@@ -135,15 +129,11 @@ describe("declaring a postgres link", () => {
   });
 
   it("refuses an environment outside the preview class", () => {
-    expect(() => declare({ environment: "pr-12" })).toThrow(
-      /is named alongside class production/,
-    );
+    expect(() => declare({ environment: "pr-12" })).toThrow(/is named alongside class production/);
   });
 
   it("refuses the reserved class-wide marker", () => {
-    expect(() => declare({ class: "preview", environment: "*" })).toThrow(
-      /reserved/,
-    );
+    expect(() => declare({ class: "preview", environment: "*" })).toThrow(/reserved/);
   });
 
   it("keeps only the fields a postgres link carries", async () => {
@@ -157,9 +147,7 @@ describe("declaring a postgres link", () => {
 
 describe("publishing a postgres link", () => {
   it("runs ocel link set in the project, owned by this resource", async () => {
-    const created = await postgresProvider.create(
-      await inputs(declare()),
-    );
+    const created = await postgresProvider.create(await inputs(declare()));
 
     const { command, args, options } = argv();
     expect(command).toBe(process.execPath);
@@ -178,40 +166,29 @@ describe("publishing a postgres link", () => {
       await inputs(declare({ class: "preview", environment: "pr-12" })),
     );
 
-    expect(argv().args.slice(-3)).toEqual([
-      "--preview",
-      "--environment",
-      "pr-12",
-    ]);
+    expect(argv().args.slice(-3)).toEqual(["--preview", "--environment", "pr-12"]);
   });
 
   it("binds class-wide when no preview environment is named", async () => {
-    await postgresProvider.create(
-      await inputs(declare({ class: "preview" })),
-    );
+    await postgresProvider.create(await inputs(declare({ class: "preview" })));
 
     expect(argv().args.slice(-1)).toEqual(["--preview"]);
   });
 
   it("holds a digest and never a property", async () => {
-    const created = await postgresProvider.create(
-      await inputs(declare()),
-    );
+    const created = await postgresProvider.create(await inputs(declare()));
 
     expect(created.outs.digest).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(created.outs)).not.toContain(properties.password);
   });
 
   it("resolves a grant's resource from a pulumi output before it publishes", async () => {
-    const resourceArn =
-      "arn:aws:rds-db:us-east-1:111122223333:dbuser:cluster-abc/operator";
+    const resourceArn = "arn:aws:rds-db:us-east-1:111122223333:dbuser:cluster-abc/operator";
     postgres(
       "orders",
       {
         ...properties,
-        grants: [
-          { actions: ["rds-db:connect"], resources: [output(resourceArn)] },
-        ],
+        grants: [{ actions: ["rds-db:connect"], resources: [output(resourceArn)] }],
       },
       { project: root },
     );
@@ -227,13 +204,10 @@ describe("publishing a postgres link", () => {
   it("surfaces the CLI's refusal verbatim", async () => {
     run.mockReturnValue({
       status: 1,
-      stderr:
-        "link orders in production is already published by publisher urn:pulumi:other\n",
+      stderr: "link orders in production is already published by publisher urn:pulumi:other\n",
     } as never);
 
-    await expect(
-      postgresProvider.create(await inputs(declare())),
-    ).rejects.toThrow(
+    await expect(postgresProvider.create(await inputs(declare()))).rejects.toThrow(
       "link orders in production is already published by publisher urn:pulumi:other",
     );
   });
@@ -244,11 +218,7 @@ describe("changing a published postgres link", () => {
     const olds = (await postgresProvider.create(await inputs(declare()))).outs;
     postgres("orders", { ...properties, host: "moved" }, { project: root });
 
-    const diff = await postgresProvider.diff(
-      "id",
-      olds,
-      await inputs(latest()),
-    );
+    const diff = await postgresProvider.diff("id", olds, await inputs(latest()));
 
     expect(diff).toMatchObject({ changes: true, replaces: [] });
   });
@@ -268,31 +238,27 @@ describe("changing a published postgres link", () => {
 
   it("reports a change rather than throwing while a property is still unknown", async () => {
     const olds = (await postgresProvider.create(await inputs(declare()))).outs;
-    postgres(
-      "orders",
-      { ...properties, host: undefined as never },
-      { project: root },
-    );
+    postgres("orders", { ...properties, host: undefined as never }, { project: root });
 
-    expect(
-      await postgresProvider.diff("id", olds, await inputs(latest())),
-    ).toMatchObject({ changes: true, replaces: [] });
+    expect(await postgresProvider.diff("id", olds, await inputs(latest()))).toMatchObject({
+      changes: true,
+      replaces: [],
+    });
   });
 
   it("holds still when nothing changed", async () => {
     const olds = (await postgresProvider.create(await inputs(declare()))).outs;
 
-    expect(
-      await postgresProvider.diff("id", olds, await inputs(declare())),
-    ).toMatchObject({ changes: false, replaces: [] });
+    expect(await postgresProvider.diff("id", olds, await inputs(declare()))).toMatchObject({
+      changes: false,
+      replaces: [],
+    });
   });
 });
 
 describe("removing a postgres link", () => {
   it("runs ocel link rm for the name it published", async () => {
-    const created = await postgresProvider.create(
-      await inputs(declare()),
-    );
+    const created = await postgresProvider.create(await inputs(declare()));
     run.mockClear();
 
     await postgresProvider.delete("id", created.outs);
@@ -330,9 +296,7 @@ describe("declaring a custom link", () => {
   });
 
   it("runs ocel link set with a custom record sourced to pulumi", async () => {
-    const created = await customProvider.create(
-      await inputs(declareCustom()),
-    );
+    const created = await customProvider.create(await inputs(declareCustom()));
 
     const { args, options } = argv();
     expect(args).toEqual([entry, "link", "set", "--owner", customOwner]);
@@ -352,27 +316,23 @@ describe("declaring a custom link", () => {
       { project: root },
     );
 
-    expect(
-      await customProvider.diff("id", olds, await inputs(latest())),
-    ).toMatchObject({ changes: true, replaces: [] });
+    expect(await customProvider.diff("id", olds, await inputs(latest()))).toMatchObject({
+      changes: true,
+      replaces: [],
+    });
   });
 
   it("holds still when nothing changed", async () => {
     const olds = (await customProvider.create(await inputs(declareCustom()))).outs;
 
-    expect(
-      await customProvider.diff(
-        "id",
-        olds,
-        await inputs(declareCustom()),
-      ),
-    ).toMatchObject({ changes: false, replaces: [] });
+    expect(await customProvider.diff("id", olds, await inputs(declareCustom()))).toMatchObject({
+      changes: false,
+      replaces: [],
+    });
   });
 
   it("runs ocel link rm for the name it published", async () => {
-    const created = await customProvider.create(
-      await inputs(declareCustom()),
-    );
+    const created = await customProvider.create(await inputs(declareCustom()));
     run.mockClear();
 
     await customProvider.delete("id", created.outs);

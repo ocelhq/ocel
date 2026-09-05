@@ -34,9 +34,7 @@ describe("vpsProvider", () => {
   });
 
   it("carries the public key the deploy login is to answer to", () => {
-    expect(
-      vpsProvider({ ssh: "prod-box", deployKey: "~/.ssh/ocel-deploy.pub" }),
-    ).toEqual({
+    expect(vpsProvider({ ssh: "prod-box", deployKey: "~/.ssh/ocel-deploy.pub" })).toEqual({
       package: "@ocel/provider-vps",
       options: { ssh: "prod-box", deployKey: "~/.ssh/ocel-deploy.pub" },
     });

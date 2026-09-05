@@ -2,8 +2,8 @@ import { db } from "@console/db";
 import { resourceAssignment } from "@console/db/schema";
 import { and, eq } from "drizzle-orm";
 import { Client } from "pg";
-import { beforeAll, describe, expect, it } from "vitest";
 import { uuidv7 } from "uuidv7";
+import { beforeAll, describe, expect, it } from "vitest";
 import { createTestSessionWithOrganization } from "../../../../test/auth-harness";
 import { setupTestDatabase } from "../../../../test/db";
 import { createProject } from "../../projects/route";
@@ -121,9 +121,7 @@ describe("POST /api/resources/resolve", () => {
 
       expect(first.status).toBe(200);
       const firstBody = await first.json();
-      const { postgres } = JSON.parse(
-        firstBody.env.OCEL_RESOURCE_POSTGRES_main,
-      );
+      const { postgres } = JSON.parse(firstBody.env.OCEL_RESOURCE_POSTGRES_main);
 
       const client = new Client({
         host: postgres.host,
@@ -134,9 +132,7 @@ describe("POST /api/resources/resolve", () => {
       });
       await client.connect();
       try {
-        const result = await client.query(
-          "select current_database() as db, current_user as role",
-        );
+        const result = await client.query("select current_database() as db, current_user as role");
         expect(result.rows[0].db).toBe(postgres.database);
         expect(result.rows[0].role).toBe(postgres.username);
       } finally {
@@ -216,9 +212,7 @@ describe("POST /api/resources/resolve", () => {
     const session = await createTestSessionWithOrganization();
 
     try {
-      const response = await resolveResources(
-        postRequest({ projectId: "" }, session.headers),
-      );
+      const response = await resolveResources(postRequest({ projectId: "" }, session.headers));
 
       expect(response.status).toBe(400);
     } finally {

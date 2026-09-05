@@ -1,18 +1,17 @@
-import { describe, expect, it } from "vitest";
 import { refreshHeader } from "@framework/next-cache";
 import { deltaSeconds } from "@framework/next-router/http-cache";
-
+import { parseMessage } from "@platform/edge-contract/revalidation";
+import { describe, expect, it } from "vitest";
 import {
+  type CacheDeps,
+  type CacheTarget,
   refreshBackoffSeconds,
   refreshSentinelTtlSeconds,
   sentinelUrl,
   serveCached,
-  type CacheDeps,
-  type CacheTarget,
 } from "../src/cache";
 import { dispatchResult, type RouteDeps } from "../src/index";
 import type { RevalidationMessage, RevalidationRoute } from "../src/revalidation";
-import { parseMessage } from "@platform/edge-contract/revalidation";
 import { coloDeps } from "./cache-deps";
 
 const isrPrefix = "prod/p/app/build";
@@ -47,9 +46,7 @@ function sentinelWatch(key: string) {
     match: (...args: Parameters<Cache["match"]>) => real.match(...args),
     put: (request: Request, response: Response) => {
       if (request.url === url) {
-        watch.ttls.push(
-          deltaSeconds(response.headers.get("cache-control"), "max-age"),
-        );
+        watch.ttls.push(deltaSeconds(response.headers.get("cache-control"), "max-age"));
       }
       return real.put(request, response);
     },
@@ -224,16 +221,13 @@ function noAssets(): RouteDeps["assetStore"] {
   };
 }
 
-const cacheObject = (routePath: string) =>
-  `${isrPrefix}/cache/${routePath}.cache.json`;
+const cacheObject = (routePath: string) => `${isrPrefix}/cache/${routePath}.cache.json`;
 
 function storeOf(entries: Record<string, unknown>) {
   return {
     async get(key: string) {
       const entry = entries[key];
-      return entry === undefined
-        ? null
-        : { text: async () => JSON.stringify(entry) };
+      return entry === undefined ? null : { text: async () => JSON.stringify(entry) };
     },
   };
 }
@@ -251,9 +245,7 @@ function recorder() {
     requests,
     fetch,
     revalidating: () =>
-      requests.filter(
-        (r) => r.method === "GET" && r.headers.get("purpose") !== "prefetch",
-      ),
+      requests.filter((r) => r.method === "GET" && r.headers.get("purpose") !== "prefetch"),
   };
 }
 
@@ -314,9 +306,7 @@ function blogDeps(
         : {
             config: { isrPrefix },
             now: () => over.now ?? 2_000,
-            store: storeOf(
-              over.entry ? { [cacheObject("blog")]: over.entry } : {},
-            ),
+            store: storeOf(over.entry ? { [cacheObject("blog")]: over.entry } : {}),
           },
   };
 }
@@ -328,11 +318,13 @@ const dispatchBlog = (deps: RouteDeps, request?: Request) =>
     deps,
   );
 
-async function dispatchStale(over: {
-  entry?: unknown;
-  enqueueRevalidation?: CacheDeps["enqueueRevalidation"];
-  interception?: RouteDeps["interception"];
-} = {}) {
+async function dispatchStale(
+  over: {
+    entry?: unknown;
+    enqueueRevalidation?: CacheDeps["enqueueRevalidation"];
+    interception?: RouteDeps["interception"];
+  } = {},
+) {
   const pending: Promise<unknown>[] = [];
   const origin = recorder();
   const response = await dispatchBlog(
@@ -499,8 +491,7 @@ describe("revalidating a fallback path of a dynamic route", () => {
       fetch: origin.fetch,
       cache: coloDeps({
         cache:
-          over.cache ??
-          ({ match: async () => undefined, put: async () => {} } as unknown as Cache),
+          over.cache ?? ({ match: async () => undefined, put: async () => {} } as unknown as Cache),
         waitUntil: over.waitUntil ?? (() => {}),
         enqueueRevalidation: over.enqueueRevalidation,
       }),

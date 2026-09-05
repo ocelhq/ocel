@@ -1,22 +1,22 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { callSite } from "./callsite.js";
 import {
-  isLive,
-  validateDefinitions,
   type Definitions,
+  isLive,
   type VariableDefinition,
+  validateDefinitions,
 } from "./definition.js";
 import { EnvEdgeError } from "./errors.js";
-import { callSite } from "./callsite.js";
 import { assertInScope } from "./scope.js";
 import { coerce, readDelivered, undeclared } from "./value.js";
 
-export {
-  type Definitions,
-  type VariableClass,
-  type VariableDefinition,
-} from "./definition.js";
 export { EnvClientError } from "./client.js";
-export { deployment, type Deployment } from "./deployment.js";
+export type {
+  Definitions,
+  VariableClass,
+  VariableDefinition,
+} from "./definition.js";
+export { type Deployment, deployment } from "./deployment.js";
 export { EnvDefinitionError, EnvEdgeError, EnvValueError } from "./errors.js";
 export { EnvScopeError } from "./scope.js";
 
@@ -59,9 +59,7 @@ function resolve(key: string, definition: VariableDefinition): unknown {
 function notLive(key: string, definition: VariableDefinition): EnvEdgeError {
   const entry = (globalThis as Record<string, unknown>)[ENTRY_GLOBAL];
   const where =
-    typeof entry === "string" && entry !== ""
-      ? `edge entry '${entry}'`
-      : "an edge entry";
+    typeof entry === "string" && entry !== "" ? `edge entry '${entry}'` : "an edge entry";
   return new EnvEdgeError(
     `'${key}' is class '${definition.class}' and cannot be read from ${where}: a '${definition.class}' value is read live on every request, and the edge tier has no live channel to read it over. Move this entry to the nodejs runtime, or declare '${key}' as 'sensitive'.`,
   );

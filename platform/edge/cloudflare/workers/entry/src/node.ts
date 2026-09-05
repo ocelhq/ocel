@@ -10,9 +10,7 @@ export interface NodeOriginDeps {
   originFetch?: typeof fetch;
 }
 
-export function nodeOrigin(
-  deps: NodeOriginDeps,
-): (request: Request) => Promise<Response> {
+export function nodeOrigin(deps: NodeOriginDeps): (request: Request) => Promise<Response> {
   const urls = Object.values(deps.functionUrls);
   const { app, originFetch } = deps;
 

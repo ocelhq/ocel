@@ -67,15 +67,7 @@ export function animatedGif() {
       Buffer.from([0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0]),
       Buffer.from([0x02, 0x02, 0x04 | (index << 3) | 0x40, 0x01, 0x00]),
     ]);
-  return Buffer.concat([
-    header,
-    screen,
-    palette,
-    loop,
-    frame(0),
-    frame(1),
-    Buffer.from([0x3b]),
-  ]);
+  return Buffer.concat([header, screen, palette, loop, frame(0), frame(1), Buffer.from([0x3b])]);
 }
 
 export function ico() {

@@ -1,11 +1,5 @@
 import { clockMethods, tagClock, useCacheStore } from "./tag-clock.mjs";
-import {
-  bufferValue,
-  now,
-  pendingSets,
-  streamOf,
-  type CacheEntry,
-} from "./use-cache-entry.mjs";
+import { bufferValue, type CacheEntry, now, pendingSets, streamOf } from "./use-cache-entry.mjs";
 
 const pending = pendingSets();
 
@@ -31,9 +25,7 @@ const handler = {
         stale: stored.stale,
         timestamp: stored.timestamp,
         expire: stored.expire,
-        revalidate: tagClock.areTagsStale(stored.tags, stored.timestamp)
-          ? -1
-          : stored.revalidate,
+        revalidate: tagClock.areTagsStale(stored.tags, stored.timestamp) ? -1 : stored.revalidate,
       };
     } catch {
       return undefined;
@@ -58,8 +50,7 @@ const handler = {
           revalidate: entry.revalidate,
           body: Buffer.from(bytes).toString("base64"),
         });
-      } catch {
-      }
+      } catch {}
     });
   },
 

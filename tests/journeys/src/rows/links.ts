@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { type ContractRow, json } from "../contract";
 
-export const LINK_ROW = "GET /api/link answers with what it resolved and the greeting it deployed with";
+export const LINK_ROW =
+  "GET /api/link answers with what it resolved and the greeting it deployed with";
 export const LINK_QUERY_ROW = "GET /api/link/query answers ok after a select through the link";
 
 export const linkRows: ContractRow[] = [

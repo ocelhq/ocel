@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { serve } from "../src/index.mjs";
 import {
-  SERVICE_WORKER_PATH,
-  USER_REDIRECT_FROM,
   deps,
   get,
   type Scenario,
+  SERVICE_WORKER_PATH,
+  USER_REDIRECT_FROM,
 } from "../test-support/serve-scenario.mjs";
 
 describe("trailingSlash: true", () => {
@@ -63,10 +63,7 @@ describe("trailingSlash: true", () => {
   );
 
   it("does not redirect a data request", async () => {
-    const res = await serve(
-      get("/_next/data/t/a.json", { "x-nextjs-data": "1" }),
-      deps(scenario),
-    );
+    const res = await serve(get("/_next/data/t/a.json", { "x-nextjs-data": "1" }), deps(scenario));
     expect(res.status).toBe(200);
     expect(res.headers.get("x-matched-path")).toBe("/_next/data/t/a.json");
   });
@@ -145,10 +142,7 @@ describe("trailingSlash: false", () => {
   });
 
   it("does not redirect a data request", async () => {
-    const res = await serve(
-      get("/_next/data/t/a.json", { "x-nextjs-data": "1" }),
-      deps(scenario),
-    );
+    const res = await serve(get("/_next/data/t/a.json", { "x-nextjs-data": "1" }), deps(scenario));
     expect(res.status).toBe(200);
   });
 });
@@ -331,9 +325,10 @@ describe("the resolved path is what keys the response", () => {
   });
 
   describe("a lambda route, forwarded to its Function URL", () => {
-    function lambdaScenario(
-      overrides: Partial<Scenario> & { route: string },
-    ): { scenario: Scenario; forwarded: () => Request | undefined } {
+    function lambdaScenario(overrides: Partial<Scenario> & { route: string }): {
+      scenario: Scenario;
+      forwarded: () => Request | undefined;
+    } {
       let captured: Request | undefined;
       const { route, ...rest } = overrides;
       return {
@@ -411,10 +406,7 @@ describe("the resolved path is what keys the response", () => {
 
   it("probes an unmatched path slash-free before serving the build's 404", async () => {
     const probes: string[] = [];
-    const res = await serve(
-      get("/unknown/"),
-      deps({ trailingSlash: true, pages: ["/a"], probes }),
-    );
+    const res = await serve(get("/unknown/"), deps({ trailingSlash: true, pages: ["/a"], probes }));
 
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("not found");

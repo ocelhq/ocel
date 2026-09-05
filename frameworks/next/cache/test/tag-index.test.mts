@@ -20,10 +20,12 @@ describe("tagRecordUpdate", () => {
   it("addresses the record and guards the advancing watermark", () => {
     expect(update("products", { expired: 700, writtenAt: 1700 })).toEqual({
       TableName: "state",
-      Key: { pk: { S: "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#products" }, sk: { S: "#META" } },
+      Key: {
+        pk: { S: "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#products" },
+        sk: { S: "#META" },
+      },
       ConditionExpression: "attribute_not_exists(expired) OR expired < :expired",
-      UpdateExpression:
-        "SET tag = :tag, gsi1pk = :ns, gsi1sk = :writtenAt, expired = :expired",
+      UpdateExpression: "SET tag = :tag, gsi1pk = :ns, gsi1sk = :writtenAt, expired = :expired",
       ExpressionAttributeValues: {
         ":tag": { S: "products" },
         ":ns": { S: "PROJECT#proj#STACK#prod--app--r3f8a1c9d#TAG#" },
@@ -35,9 +37,7 @@ describe("tagRecordUpdate", () => {
 
   it("guards a stale-only write on stale and leaves expiry unwritten", () => {
     const input = update("products", { stale: 700, writtenAt: 1700 });
-    expect(input.ConditionExpression).toBe(
-      "attribute_not_exists(stale) OR stale < :stale",
-    );
+    expect(input.ConditionExpression).toBe("attribute_not_exists(stale) OR stale < :stale");
     expect(input.UpdateExpression).toBe(
       "SET tag = :tag, gsi1pk = :ns, gsi1sk = :writtenAt, stale = :stale",
     );

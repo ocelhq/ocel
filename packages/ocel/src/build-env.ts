@@ -19,9 +19,9 @@ export type BuildEnv<TSchemas extends Record<string, StandardSchemaV1>> = {
  * Anything returned here can end up in deployment records. A real secret
  * belongs in the runtime `secret` env class instead.
  */
-export function buildEnv<
-  const TSchemas extends Record<string, StandardSchemaV1>,
->(schemas: TSchemas): BuildEnv<TSchemas> {
+export function buildEnv<const TSchemas extends Record<string, StandardSchemaV1>>(
+  schemas: TSchemas,
+): BuildEnv<TSchemas> {
   for (const key of Object.keys(schemas)) {
     if (!isUsableKey(key)) {
       throw new BuildEnvError(

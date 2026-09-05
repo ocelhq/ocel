@@ -25,8 +25,6 @@ export interface VpsProviderOptions {
 }
 
 /** Declares a VPS as the provider `ocel deploy` provisions into. */
-export default function vpsProvider(
-  options: VpsProviderOptions,
-): ProviderDescriptor {
+export default function vpsProvider(options: VpsProviderOptions): ProviderDescriptor {
   return { package: "@ocel/provider-vps", options };
 }

@@ -13,9 +13,7 @@ export interface DescribedCustom {
 
 export function customLink(name: string, described: DescribedCustom): CustomLink {
   if (!name) {
-    throw new Error(
-      "a link is published under no name; the name is what a transform reads it by",
-    );
+    throw new Error("a link is published under no name; the name is what a transform reads it by");
   }
   const properties = described.properties;
   if (Object.keys(properties).length === 0) {

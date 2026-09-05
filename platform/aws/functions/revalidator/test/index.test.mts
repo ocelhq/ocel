@@ -3,7 +3,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { handler } from "../src/index.mjs";
 import { body, bucket, host, originDocument, recordUrl, region } from "./fixture.mjs";
 
-const record = { messageId: "m-1", body: body({ expect: null }), attributes: { MessageGroupId: "g-1" } };
+const record = {
+  messageId: "m-1",
+  body: body({ expect: null }),
+  attributes: { MessageGroupId: "g-1" },
+};
 
 let fetched: string[];
 

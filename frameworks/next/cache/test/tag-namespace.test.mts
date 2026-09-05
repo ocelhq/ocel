@@ -78,7 +78,7 @@ describe("isrPrefixOf", () => {
   });
 
   it("refuses a whole tag partition key, which carries the tag as well", () => {
-    expect(isrPrefixOf(tagNamespace("prod/acme/web/r3f8a1c9d/isr")! + "cart#42")).toBeNull();
-    expect(isrPrefixOf(tagNamespace("prod/acme/web/r3f8a1c9d/isr")! + "cart")).toBeNull();
+    expect(isrPrefixOf(`${tagNamespace("prod/acme/web/r3f8a1c9d/isr")!}cart#42`)).toBeNull();
+    expect(isrPrefixOf(`${tagNamespace("prod/acme/web/r3f8a1c9d/isr")!}cart`)).toBeNull();
   });
 });

@@ -5,13 +5,7 @@ import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-export function CommandLine({
-  command,
-  className,
-}: {
-  command: string;
-  className?: string;
-}) {
+export function CommandLine({ command, className }: { command: string; className?: string }) {
   const [copied, setCopied] = useState(false);
 
   function copy() {

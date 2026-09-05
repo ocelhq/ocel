@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defineTransform } from "./define";
-import { evaluate, type EvaluateRequest, type TransformModule } from "./evaluate";
+import { type EvaluateRequest, evaluate, type TransformModule } from "./evaluate";
 import { isLinkOutput, links, outputPlaceholderKey } from "./output";
 
 function request(): EvaluateRequest {
@@ -48,10 +48,7 @@ describe("links", () => {
 
     expect(Object.isFrozen(placeholder)).toBe(true);
     expect(Object.isFrozen(placeholder[outputPlaceholderKey])).toBe(true);
-    expect(Object.keys(placeholder[outputPlaceholderKey])).toEqual([
-      "link",
-      "property",
-    ]);
+    expect(Object.keys(placeholder[outputPlaceholderKey])).toEqual(["link", "property"]);
   });
 
   it("refuses an output that names no link or no property", () => {
@@ -102,9 +99,7 @@ describe("evaluate with link outputs", () => {
   });
 
   it("serializes to what the deploy decodes", () => {
-    expect(
-      JSON.parse(JSON.stringify(links.network.privateSubnetIds)),
-    ).toEqual({
+    expect(JSON.parse(JSON.stringify(links.network.privateSubnetIds))).toEqual({
       $ocelOutput: { link: "network", property: "privateSubnetIds" },
     });
   });
@@ -116,8 +111,7 @@ describe("evaluate with link outputs", () => {
           "vpc.ts",
           defineTransform({
             function: {
-              vpc: () =>
-                ({ subnetIds: links.network.privateSubnetIds }) as never,
+              vpc: () => ({ subnetIds: links.network.privateSubnetIds }) as never,
             },
           }),
         ),

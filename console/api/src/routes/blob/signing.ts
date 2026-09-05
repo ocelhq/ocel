@@ -7,10 +7,7 @@ export interface SignedFile {
   mimeType: string;
 }
 
-export function canonicalUploadPayload(
-  sessionId: string,
-  file: SignedFile,
-): string {
+export function canonicalUploadPayload(sessionId: string, file: SignedFile): string {
   return JSON.stringify({
     sessionId,
     file: {
@@ -22,14 +19,8 @@ export function canonicalUploadPayload(
   });
 }
 
-export function signUpload(
-  secret: string,
-  sessionId: string,
-  file: SignedFile,
-): string {
-  return createHmac("sha256", secret)
-    .update(canonicalUploadPayload(sessionId, file))
-    .digest("hex");
+export function signUpload(secret: string, sessionId: string, file: SignedFile): string {
+  return createHmac("sha256", secret).update(canonicalUploadPayload(sessionId, file)).digest("hex");
 }
 
 export function verifyUpload(
@@ -40,8 +31,5 @@ export function verifyUpload(
 ): boolean {
   const expected = Buffer.from(signUpload(secret, sessionId, file));
   const presented = Buffer.from(signature);
-  return (
-    expected.length === presented.length &&
-    timingSafeEqual(expected, presented)
-  );
+  return expected.length === presented.length && timingSafeEqual(expected, presented);
 }

@@ -2,8 +2,8 @@ import {
   type Cell,
   type FixtureSpec,
   fixtureNameOf,
-  ladderTitle,
   type Leg,
+  ladderTitle,
   legsOf,
   variantNameOf,
 } from "./spec";
@@ -31,7 +31,10 @@ export function contractTitle(leg: Leg, title: string): string {
   return leg === "contract" ? title : `${leg} · ${title}`;
 }
 
-export function ladderConsumeTitle(leg: "contract" | "redeploy" | "rollback", title: string): string {
+export function ladderConsumeTitle(
+  leg: "contract" | "redeploy" | "rollback",
+  title: string,
+): string {
   const base = ladderTitle("consume", title);
   return leg === "contract" ? base : `${leg} · ${base}`;
 }

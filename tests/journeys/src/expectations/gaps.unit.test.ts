@@ -1,5 +1,5 @@
-import assert from "node:assert/strict";
 import { describe, it } from "bun:test";
+import assert from "node:assert/strict";
 import { contractTitle, DESTROY_TITLE, planTests, UP_TITLE } from "../plan";
 import { nextCacheRows } from "../rows";
 import { cellsOf, specForTarget } from "../spec";
@@ -42,9 +42,7 @@ function upIssues(listed: Expectations, over: string[]): Record<string, number[]
 
 function on(variant: string, cell: string): string {
   const cut = cell.lastIndexOf("/");
-  return variant === "base"
-    ? cell
-    : `${cell.slice(0, cut)}-${variant}${cell.slice(cut)}`;
+  return variant === "base" ? cell : `${cell.slice(0, cut)}-${variant}${cell.slice(cut)}`;
 }
 
 function alive(environment: ExpectationEnvironment): string[] {
@@ -227,15 +225,15 @@ describe("the gap list", () => {
         }
         assert.deepEqual(Object.keys(cell), [UP_TITLE], name);
       }
-      assert.deepEqual(
-        issues(listed, on(variant, "deploy/node/web"), UP_TITLE),
-        [issue],
-        variant,
-      );
+      assert.deepEqual(issues(listed, on(variant, "deploy/node/web"), UP_TITLE), [issue], variant);
     }
     for (const variant of ["base", "cloudflare"]) {
       assert.deepEqual(issues(listed, on(variant, "sdk/with-sst/web"), UP_TITLE), [857], variant);
-      assert.deepEqual(issues(listed, on(variant, "sdk/with-pulumi/web"), UP_TITLE), [856], variant);
+      assert.deepEqual(
+        issues(listed, on(variant, "sdk/with-pulumi/web"), UP_TITLE),
+        [856],
+        variant,
+      );
     }
   });
 
@@ -287,19 +285,9 @@ describe("the gap list", () => {
       "sdk/with-transforms-api-gateway",
       "sdk/with-transforms-cloudflare",
     ]);
-    assert.deepEqual(alive("aws.floci"), [
-      "deploy/node-api-gateway",
-    ]);
-    assert.deepEqual(alive("dev"), [
-      "deploy/node",
-      "deploy/next",
-      "deploy/workspace",
-    ]);
-    assert.deepEqual(alive("vps"), [
-      "deploy/node",
-      "deploy/next",
-      "deploy/workspace",
-    ]);
+    assert.deepEqual(alive("aws.floci"), ["deploy/node-api-gateway"]);
+    assert.deepEqual(alive("dev"), ["deploy/node", "deploy/next", "deploy/workspace"]);
+    assert.deepEqual(alive("vps"), ["deploy/node", "deploy/next", "deploy/workspace"]);
     assert.deepEqual(alive("vps.incus"), alive("vps"));
   });
 
@@ -311,7 +299,10 @@ describe("the gap list", () => {
           .filter(([name]) => name.slice(0, name.lastIndexOf("/")) === cell)
           .flatMap(([, titles]) => titles[UP_TITLE] ?? []);
         for (const gap of why) {
-          assert.ok(ups.some((one) => one.id === gap.id), `${cell} on ${environment} via ${gap.id}`);
+          assert.ok(
+            ups.some((one) => one.id === gap.id),
+            `${cell} on ${environment} via ${gap.id}`,
+          );
         }
       }
     }

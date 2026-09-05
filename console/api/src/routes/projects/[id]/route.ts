@@ -3,10 +3,7 @@ import { db } from "@console/db";
 import { project } from "@console/db/schema";
 import { eq } from "drizzle-orm";
 
-export async function getProjectById(
-  request: Request,
-  id: string,
-): Promise<Response> {
+export async function getProjectById(request: Request, id: string): Promise<Response> {
   const userId = await getSessionUserId(request.headers);
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -18,10 +15,7 @@ export async function getProjectById(
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
-  const isMember = await verifyOrganizationMembership(
-    userId,
-    found.organizationId,
-  );
+  const isMember = await verifyOrganizationMembership(userId, found.organizationId);
   if (!isMember) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }

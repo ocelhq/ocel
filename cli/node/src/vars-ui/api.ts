@@ -12,11 +12,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(
-  method: string,
-  path: string,
-  body?: unknown,
-): Promise<T> {
+export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, {
     method,
     headers: {
@@ -30,8 +26,7 @@ export async function api<T>(
     let message = text;
     try {
       message = JSON.parse(text).error ?? text;
-    } catch {
-    }
+    } catch {}
     throw new ApiError(response.status, message.trim());
   }
   return text ? (JSON.parse(text) as T) : (undefined as T);
@@ -46,8 +41,7 @@ export async function hold(path: string): Promise<void> {
     throw new ApiError(response.status, await response.text());
   }
   const reader = response.body.getReader();
-  while (!(await reader.read()).done) {
-  }
+  while (!(await reader.read()).done) {}
 }
 
 export function query(at: Address): string {

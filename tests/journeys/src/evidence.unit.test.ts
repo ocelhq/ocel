@@ -1,8 +1,8 @@
+import { afterAll, describe, it } from "bun:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, describe, it } from "bun:test";
 import { REDACTED, SECRET_TOKEN } from "./contract";
 import { evidence } from "./evidence";
 

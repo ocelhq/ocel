@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { defineTransform } from "./define";
-import { evaluate, type EvaluateRequest, type TransformModule } from "./evaluate";
+import { type EvaluateRequest, evaluate, type TransformModule } from "./evaluate";
 
-function request(
-  overrides: Partial<EvaluateRequest> = {},
-): EvaluateRequest {
+function request(overrides: Partial<EvaluateRequest> = {}): EvaluateRequest {
   return {
     envClass: "production",
     env: "prod",
@@ -39,18 +37,13 @@ describe("evaluate", () => {
     const req = request();
 
     expect(evaluate(req, [])).toEqual({
-      resources: [
-        { name: "api-users", surfaces: req.resources[0]!.surfaces, tags: {} },
-      ],
+      resources: [{ name: "api-users", surfaces: req.resources[0]!.surfaces, tags: {} }],
     });
   });
 
   it("merges a patch over the defaulted args, leaving unmentioned fields alone", () => {
     const got = evaluate(request(), [
-      transformModule(
-        "a.ts",
-        defineTransform({ function: { lambda: { memorySizeMb: 2048 } } }),
-      ),
+      transformModule("a.ts", defineTransform({ function: { lambda: { memorySizeMb: 2048 } } })),
     ]);
 
     expect(got.resources[0]!.surfaces.lambda).toEqual({
@@ -288,10 +281,7 @@ describe("evaluate", () => {
   it("leaves a resource alone when the rule targets another resource type", () => {
     const req = request();
     const got = evaluate(req, [
-      transformModule(
-        "a.ts",
-        defineTransform({ postgres: { cluster: { maxCapacity: 16 } } }),
-      ),
+      transformModule("a.ts", defineTransform({ postgres: { cluster: { maxCapacity: 16 } } })),
     ]);
 
     expect(got.resources[0]!.surfaces).toEqual(req.resources[0]!.surfaces);

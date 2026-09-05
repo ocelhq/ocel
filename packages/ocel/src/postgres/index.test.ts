@@ -4,9 +4,7 @@ vi.mock("../utils/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
 }));
 
-const { postgres, connectionStringFor, UnprovisionedResourceError } = await import(
-  "./index.js"
-);
+const { postgres, connectionStringFor, UnprovisionedResourceError } = await import("./index.js");
 
 describe("postgres()", () => {
   beforeEach(() => {

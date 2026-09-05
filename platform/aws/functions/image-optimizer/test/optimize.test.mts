@@ -1,14 +1,17 @@
-import http from "node:http";
 import { createHash } from "node:crypto";
+import type { LookupAddress } from "node:dns";
+import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { isReachableAddress } from "../src/addresses.mjs";
 import { resetConfigMemo } from "../src/config.mjs";
 import { IMAGE_PASSTHROUGH } from "../src/contract.mjs";
 import { optimize } from "../src/optimize.mjs";
-import { isReachableAddress } from "../src/addresses.mjs";
 import type { UpstreamDeps } from "../src/upstream.mjs";
 import { configHash, imageConfig, payload, storeWithConfig } from "./fixtures.mjs";
 import { animatedGif, solid } from "./images.mjs";
+
+type LookupCallback = (err: Error | null, addresses: LookupAddress[]) => void;
 
 const ASSET = "prod/proj1/web/r3f8a1c9d/assets/logo.png";
 
@@ -30,7 +33,7 @@ function serve(handler: http.RequestListener): Promise<number> {
 }
 
 const loopback: UpstreamDeps = {
-  lookup: ((_h: string, _o: unknown, cb: Function) =>
+  lookup: ((_h: string, _o: unknown, cb: LookupCallback) =>
     cb(null, [{ address: "127.0.0.1", family: 4 }])) as UpstreamDeps["lookup"],
   isReachable: (address: string) => address === "127.0.0.1" || isReachableAddress(address),
 };
@@ -60,9 +63,10 @@ describe("the config the edge validated against", () => {
   test("a config for another build cannot be substituted", async () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
-    store.put("prod/proj1/web/rbbbbbbbb/image-config.json", store.objects.get(
-      "prod/proj1/web/r3f8a1c9d/image-config.json",
-    )!);
+    store.put(
+      "prod/proj1/web/rbbbbbbbb/image-config.json",
+      store.objects.get("prod/proj1/web/r3f8a1c9d/image-config.json")!,
+    );
     store.objects.delete("prod/proj1/web/r3f8a1c9d/image-config.json");
     expect((await optimize(payload(config), { store })).status).toBe(502);
   });
@@ -70,7 +74,10 @@ describe("the config the edge validated against", () => {
   test("an asset prefix that is not plain path segments is a 502", async () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
-    const response = await optimize(payload(config, { assetPrefix: "prod/proj1/web/../rbbbbbbbb/assets" }), { store });
+    const response = await optimize(
+      payload(config, { assetPrefix: "prod/proj1/web/../rbbbbbbbb/assets" }),
+      { store },
+    );
     expect(response.status).toBe(502);
     expect(store.reads).toEqual([]);
   });
@@ -89,10 +96,9 @@ describe("re-validation", () => {
   test("rejects a host the loaded config does not allow", async () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
-    const response = await optimize(
-      payload(config, { url: "https://evil.example/a.png" }),
-      { store },
-    );
+    const response = await optimize(payload(config, { url: "https://evil.example/a.png" }), {
+      store,
+    });
     expect(response.status).toBe(400);
     expect(text(response.body)).toBe('"url" parameter is not allowed');
   });
@@ -117,9 +123,7 @@ describe("re-validation", () => {
       const response = await optimize(payload(config, { mimeType: "text/html" }), { store });
       expect(response.status).toBe(502);
       expect(response.headers).toEqual({});
-      expect(text(response.body)).toBe(
-        "The image optimizer could not serve this request.",
-      );
+      expect(text(response.body)).toBe("The image optimizer could not serve this request.");
     });
 
     test("a format the loaded config does not list is refused", async () => {
@@ -173,7 +177,7 @@ describe("a local image", () => {
     expect(store.reads).toContain(ASSET);
     expect(response.headers["content-type"]).toBe("image/webp");
     expect(response.headers["cache-control"]).toBe("public, max-age=31536000, immutable");
-    expect(response.headers["etag"]).toBe(
+    expect(response.headers.etag).toBe(
       createHash("sha256").update(response.body).digest("base64url"),
     );
     expect(response.headers["content-disposition"]).toBe('attachment; filename="logo.webp"');
@@ -187,9 +191,7 @@ describe("a local image", () => {
     const store = storeWithConfig(config);
     const response = await optimize(payload(config), { store });
     expect(response.status).toBe(400);
-    expect(text(response.body)).toBe(
-      '"url" parameter is valid but upstream response is invalid',
-    );
+    expect(text(response.body)).toBe('"url" parameter is valid but upstream response is invalid');
   });
 
   test("is capped at maximumResponseBody like any other read", async () => {
@@ -198,9 +200,7 @@ describe("a local image", () => {
     store.put(ASSET, { bytes: await solid("png", 400, 400) });
     const response = await optimize(payload(config), { store });
     expect(response.status).toBe(400);
-    expect(text(response.body)).toBe(
-      '"url" parameter is valid but upstream response is invalid',
-    );
+    expect(text(response.body)).toBe('"url" parameter is valid but upstream response is invalid');
   });
 
   test("a traversal in the path fails closed before any read", async () => {
@@ -258,9 +258,9 @@ describe("failure behavior", () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
     const gif = new Uint8Array([
-      0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00,
-      0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
-      0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b,
+      0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0xff, 0xff,
+      0xff, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02,
+      0x02, 0x44, 0x01, 0x00, 0x3b,
     ]);
     store.put(ASSET, { bytes: gif, cacheControl: "public, max-age=999999", etag: '"src"' });
     const response = await optimize(payload(config), { store });
@@ -270,7 +270,7 @@ describe("failure behavior", () => {
     expect(response.headers["content-type"]).toBe("image/gif");
     expect(response.headers[IMAGE_PASSTHROUGH]).toBe("1");
     expect(response.headers["x-content-type-options"]).toBe("nosniff");
-    expect(response.headers["etag"]).toBe(Buffer.from('"src"').toString("base64url"));
+    expect(response.headers.etag).toBe(Buffer.from('"src"').toString("base64url"));
   });
 
   test("an animated image is unmodified but is not a passthrough", async () => {
@@ -300,7 +300,7 @@ describe("failure behavior", () => {
   test("an SVG without the flag is a 400 even though it is a real image", async () => {
     const config = imageConfig();
     const store = storeWithConfig(config);
-    store.put(ASSET, { bytes: new TextEncoder().encode("<svg onload=\"alert(1)\"/>") });
+    store.put(ASSET, { bytes: new TextEncoder().encode('<svg onload="alert(1)"/>') });
     const response = await optimize(payload(config), { store });
     expect(response.status).toBe(400);
     expect(text(response.body)).toBe('"url" parameter is valid but image type is not allowed');
@@ -319,8 +319,6 @@ describe("failure behavior", () => {
     });
     expect(response.status).toBe(400);
     expect(text(response.body)).not.toContain("arn:aws");
-    expect(text(response.body)).toBe(
-      '"url" parameter is valid but upstream response is invalid',
-    );
+    expect(text(response.body)).toBe('"url" parameter is valid but upstream response is invalid');
   });
 });

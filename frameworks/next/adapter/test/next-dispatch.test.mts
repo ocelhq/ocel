@@ -1,15 +1,13 @@
-import Module, { createRequire } from "node:module";
 import fs, { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { Writable } from "node:stream";
 import type http from "node:http";
+import Module, { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, test, vi } from "vitest";
 
-const dispatchPath = fileURLToPath(
-  new URL("../src/next-dispatch.cjs", import.meta.url),
-);
+const dispatchPath = fileURLToPath(new URL("../src/next-dispatch.cjs", import.meta.url));
 const require = createRequire(import.meta.url);
 const createDispatch = require(dispatchPath);
 
@@ -188,7 +186,8 @@ test("reuses the eagerly loaded primary when a request hits it", async () => {
 test("passes req, res and ctx through to the entry untouched", async () => {
   const seen: unknown[] = [];
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: ENTRIES,
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
     primary: null,
     load: () => ({
       handler: (...args: unknown[]) => {
@@ -239,17 +238,14 @@ const ROUTED = {
 test("a self-fetch is served by the route it asks for, not the one it came from", async () => {
   const { loads, load } = fakeLoader();
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: ROUTED,
+    nextConfig: projectedConfig(),
+    entries: ROUTED,
     primary: null,
     routes: ROUTES,
     load,
   });
 
-  const result = await dispatch.handler(
-    fakeReq(undefined, "/header?result=122"),
-    fakeRes(),
-    {},
-  );
+  const result = await dispatch.handler(fakeReq(undefined, "/header?result=122"), fakeRes(), {});
 
   expect(result).toMatchObject({ path: ROUTED["/header"] });
   expect(loads).not.toContain(ROUTED["/server"]);
@@ -258,7 +254,8 @@ test("a self-fetch is served by the route it asks for, not the one it came from"
 test("a dynamic route serves a concrete pathname beneath it", async () => {
   const { load } = fakeLoader();
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: ROUTED,
+    nextConfig: projectedConfig(),
+    entries: ROUTED,
     primary: null,
     routes: ROUTES,
     load,
@@ -272,7 +269,8 @@ test("a dynamic route serves a concrete pathname beneath it", async () => {
 test("an exact route wins over a dynamic one that also matches", async () => {
   const { load } = fakeLoader();
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: ROUTED,
+    nextConfig: projectedConfig(),
+    entries: ROUTED,
     primary: null,
     routes: {
       exact: { "/blog/featured": "/header" },
@@ -289,7 +287,8 @@ test("an exact route wins over a dynamic one that also matches", async () => {
 test("a named request is served by the name, never by its pathname", async () => {
   const { load } = fakeLoader();
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: ROUTED,
+    nextConfig: projectedConfig(),
+    entries: ROUTED,
     primary: null,
     routes: ROUTES,
     load,
@@ -303,7 +302,8 @@ test("a named request is served by the name, never by its pathname", async () =>
 test("a basePath route is served under the path the build gave it", async () => {
   const { load } = fakeLoader();
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { "/docs/header": "./.next/server/app/header/page.js" },
+    nextConfig: projectedConfig(),
+    entries: { "/docs/header": "./.next/server/app/header/page.js" },
     primary: null,
     routes: {
       exact: { "/docs/header": "/docs/header" },
@@ -320,7 +320,8 @@ test("a basePath route is served under the path the build gave it", async () => 
 test("a pathname another bundle owns fails by name, not by a local catch-all", async () => {
   const { loads, load } = fakeLoader();
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { "/files/[...path]": "./.next/server/app/files/[...path]/page.js" },
+    nextConfig: projectedConfig(),
+    entries: { "/files/[...path]": "./.next/server/app/files/[...path]/page.js" },
     primary: null,
     routes: {
       exact: { "/elsewhere": "/elsewhere" },
@@ -356,7 +357,8 @@ test("fails closed on a key the bundle does not carry, naming it", async () => {
 
 test("fails closed on an entry module that exports no handler, naming the key", async () => {
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: ENTRIES,
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
     primary: null,
     load: () => ({}),
   });
@@ -372,7 +374,8 @@ test("awaits an async entry module before reaching for its handler", async () =>
   const handler = (...args: unknown[]) => ({ path: "async", args });
   const loads: string[] = [];
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: ENTRIES,
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
     primary: null,
     load: (path: string) => {
       loads.push(path);
@@ -393,7 +396,8 @@ test("awaits an async entry module before reaching for its handler", async () =>
 test("fails closed on an async entry module that rejects, naming the key", async () => {
   silenceErrors();
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: ENTRIES,
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
     primary: null,
     load: () => Promise.reject(new Error("boom")),
   });
@@ -408,10 +412,10 @@ test("fails closed on an async entry module that rejects, naming the key", async
 test("pins the response cache of an async entry module once it resolves", async () => {
   const getResponseCache = vi.fn();
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: ENTRIES,
+    nextConfig: projectedConfig(),
+    entries: ENTRIES,
     primary: "app/page",
-    load: () =>
-      Promise.resolve({ handler: () => ({}), routeModule: { getResponseCache } }),
+    load: () => Promise.resolve({ handler: () => ({}), routeModule: { getResponseCache } }),
   });
 
   await dispatch.handler(fakeReq("app/page"), fakeRes(), {});
@@ -512,7 +516,8 @@ test("warms every entry, primary first and then in table order", () => {
   const dir = stubCompileCache();
   const { loads, load } = cachingLoader({});
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: WARM_ENTRIES,
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
     primary: "app/a/page",
     load,
   });
@@ -539,7 +544,8 @@ test("reuses the primary's init load rather than requiring it twice", () => {
   stubCompileCache();
   const { loads, load } = cachingLoader({});
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: WARM_ENTRIES,
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
     primary: "app/page",
     load,
   });
@@ -617,7 +623,8 @@ test("stops between entries once the deadline has passed", () => {
   vi.spyOn(Date, "now").mockImplementation(() => now);
   const { loads, load } = cachingLoader({});
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: WARM_ENTRIES,
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
     primary: "app/page",
     load: (path: string) => {
       now += 10;
@@ -627,10 +634,7 @@ test("stops between entries once the deadline has passed", () => {
 
   const report = dispatch.warm({ deadlineMs: 1015, ceilingBytes: 64 << 20 });
 
-  expect(loads).toEqual([
-    WARM_ENTRIES["app/page"],
-    WARM_ENTRIES["app/a/page"],
-  ]);
+  expect(loads).toEqual([WARM_ENTRIES["app/page"], WARM_ENTRIES["app/a/page"]]);
   expect(report).toMatchObject({ loaded: 2, stoppedBy: "deadline" });
 });
 
@@ -642,17 +646,15 @@ test("stops before the ceiling, predicting the next entry by the largest growth 
     [WARM_ENTRIES["app/b/page"]]: 1000,
   });
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: WARM_ENTRIES,
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
     primary: "app/page",
     load,
   });
 
   const report = dispatch.warm({ deadlineMs: Date.now() + 600_000, ceilingBytes: 4096 });
 
-  expect(loads).toEqual([
-    WARM_ENTRIES["app/page"],
-    WARM_ENTRIES["app/a/page"],
-  ]);
+  expect(loads).toEqual([WARM_ENTRIES["app/page"], WARM_ENTRIES["app/a/page"]]);
   expect(report).toMatchObject({ loaded: 2, stoppedBy: "ceiling", bytes: 3024 });
 });
 
@@ -664,7 +666,8 @@ test("charges 512 bytes per cached file, matching what the uploader charges", ()
     [WARM_ENTRIES["app/b/page"]]: 30,
   });
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: WARM_ENTRIES,
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
     primary: "app/page",
     load,
   });
@@ -678,7 +681,8 @@ test("flushes before every measurement, including the last entry's", () => {
   stubCompileCache();
   const { load } = cachingLoader({});
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: WARM_ENTRIES,
+    nextConfig: projectedConfig(),
+    entries: WARM_ENTRIES,
     primary: "app/page",
     load,
   });
@@ -892,7 +896,7 @@ function routeModuleLoader(getResponseCache?: () => never) {
       getResponseCache ??
       ((req: any) => {
         if (!routeModule.responseCache) {
-          const minimal = (req[NEXT_REQUEST_META] ?? {}).minimalMode ?? false;
+          const minimal = req[NEXT_REQUEST_META]?.minimalMode ?? false;
           caches.push(minimal);
           routeModule.responseCache = { minimal };
         }
@@ -1010,22 +1014,21 @@ test("loads the middleware entry at INIT alongside the primary", () => {
   const { loads, load } = fakeLoader();
 
   createDispatch({
-    nextConfig: projectedConfig(),    entries: { ...ENTRIES, [MIDDLEWARE_KEY]: "./.next/server/middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { ...ENTRIES, [MIDDLEWARE_KEY]: "./.next/server/middleware.js" },
     primary: "app/page",
     load,
   });
 
-  expect(loads).toEqual([
-    ENTRIES["app/page"],
-    "./.next/server/middleware.js",
-  ]);
+  expect(loads).toEqual([ENTRIES["app/page"], "./.next/server/middleware.js"]);
 });
 
 test("loads the middleware entry at INIT even with no primary to elect", () => {
   const { loads, load } = fakeLoader();
 
   createDispatch({
-    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./.next/server/middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { [MIDDLEWARE_KEY]: "./.next/server/middleware.js" },
     primary: null,
     load,
   });
@@ -1102,7 +1105,8 @@ test("prefers the forwarded host and proto the membrane normalizes onto the requ
     },
   });
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1137,13 +1141,17 @@ test("carries a POST body as a readable web stream of the request's real bytes",
     },
   });
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
 
   const { Readable } = await import("node:stream");
-  const postReq = Readable.from([Buffer.from("pay"), Buffer.from("load")]) as unknown as http.IncomingMessage;
+  const postReq = Readable.from([
+    Buffer.from("pay"),
+    Buffer.from("load"),
+  ]) as unknown as http.IncomingMessage;
   Object.assign(postReq, {
     url: "/submit",
     method: "POST",
@@ -1163,7 +1171,8 @@ test("forwards every Set-Cookie value onto the real response", async () => {
   response.headers.append("set-cookie", "b=2; Path=/");
   const load = () => ({ default: () => ({ response }) });
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1182,7 +1191,8 @@ test("declares the middleware's own header names so the hop can be told apart fr
   response.headers.append("set-cookie", "a=1; Path=/");
   const load = () => ({ default: () => ({ response }) });
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1191,9 +1201,7 @@ test("declares the middleware's own header names so the hop can be told apart fr
   await dispatch.handler(middlewareReq(), res, {});
 
   const declared = String(res.headers["x-ocel-middleware-headers"]).split(",");
-  expect(declared).toEqual(
-    expect.arrayContaining(["x-middleware-next", "link", "set-cookie"]),
-  );
+  expect(declared).toEqual(expect.arrayContaining(["x-middleware-next", "link", "set-cookie"]));
   expect(declared).toHaveLength(3);
 });
 
@@ -1201,7 +1209,8 @@ test("awaits a top-level-await middleware module before reading its default expo
   const load = () =>
     Promise.resolve({ default: () => ({ response: new Response("hi", { status: 200 }) }) });
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1217,7 +1226,8 @@ test("fails closed on both requests when a top-level-await module rejects", asyn
   const errors = silenceErrors();
   const load = () => Promise.reject(new Error("boom"));
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1232,9 +1242,7 @@ test("fails closed on both requests when a top-level-await module rejects", asyn
   expect(first.text()).not.toMatch(/boom/);
   expect(second.text()).not.toMatch(/boom/);
   expect(first.text()).toMatch(new RegExp(MIDDLEWARE_KEY.replace(/\//g, "\\/")));
-  expect(errors.mock.calls.some((call) => String(call[0]).includes("boom"))).toBe(
-    true,
-  );
+  expect(errors.mock.calls.some((call) => String(call[0]).includes("boom"))).toBe(true);
 });
 
 test("primes a top-level-await middleware module at INIT, not deferred to first request", () => {
@@ -1245,7 +1253,8 @@ test("primes a top-level-await middleware module at INIT, not deferred to first 
   };
 
   createDispatch({
-    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1262,7 +1271,8 @@ test("registers the adapter's waitUntil on the invocation's own ctx", async () =
     default: () => ({ response: new Response(null, { status: 200 }), waitUntil: backgroundWork }),
   });
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1286,7 +1296,8 @@ test("passes a request.waitUntil that forwards to the invocation's own ctx", asy
     },
   });
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1307,7 +1318,8 @@ test("fails closed when the middleware module throws, without leaking its stack 
     },
   });
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1317,15 +1329,14 @@ test("fails closed when the middleware module throws, without leaking its stack 
 
   expect(res.statusCode).toBe(502);
   expect(res.text()).not.toMatch(/boom/);
-  expect(errors.mock.calls.some((call) => String(call[0]).includes("boom"))).toBe(
-    true,
-  );
+  expect(errors.mock.calls.some((call) => String(call[0]).includes("boom"))).toBe(true);
 });
 
 test("fails closed when the middleware module exports no adapter function", async () => {
   const load = () => ({ notAnAdapter: true });
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1340,7 +1351,8 @@ test("fails closed when the middleware module exports no adapter function", asyn
 test("fails closed when the adapter function returns no Response", async () => {
   const load = () => ({ default: () => ({ response: undefined }) });
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: null,
     load,
   });
@@ -1355,7 +1367,8 @@ test("warm() picks up the middleware entry for free", () => {
   stubCompileCache();
   const { loads, load } = cachingLoader({});
   const dispatch = createDispatch({
-    nextConfig: projectedConfig(),    entries: { ...WARM_ENTRIES, [MIDDLEWARE_KEY]: "./middleware.js" },
+    nextConfig: projectedConfig(),
+    entries: { ...WARM_ENTRIES, [MIDDLEWARE_KEY]: "./middleware.js" },
     primary: "app/page",
     load,
   });

@@ -11,11 +11,10 @@ const out = join(root, "dist", "zip");
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
-execFileSync(
-  "bun",
-  ["build", ...bunArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))],
-  { cwd: root, stdio: "inherit" },
-);
+execFileSync("bun", ["build", ...bunArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))], {
+  cwd: root,
+  stdio: "inherit",
+});
 
 execFileSync("chmod", ["-R", "u=rwX,go=rX", out], { stdio: "inherit" });
 execFileSync("find", [out, "-exec", "touch", "-t", "198001010000", "{}", "+"], {

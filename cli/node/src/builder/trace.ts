@@ -1,17 +1,12 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { nodeFileTrace } from "@vercel/nft";
 import type { ServeDescriptor } from "@platform/edge-contract/serve";
+import { nodeFileTrace } from "@vercel/nft";
 import { init as lexerInit, parse as parseImports } from "es-module-lexer";
 import ts from "typescript";
-import {
-  NODE_ENTRY_ROUTE_ID,
-  SERVE_DESCRIPTOR_FILE,
-  appOutDir,
-  functionRel,
-} from "./layout.js";
+import { appOutDir, functionRel, NODE_ENTRY_ROUTE_ID, SERVE_DESCRIPTOR_FILE } from "./layout.js";
 import type { AppInput, BuildOptions, FunctionSummary, RuntimeSpec } from "./types.js";
 
 const TS_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
@@ -57,9 +52,9 @@ export function resolveEntrypoint(input: AppInput, spec: RuntimeSpec): string {
 
 function toOutExt(rel: string): string {
   const ext = path.extname(rel);
-  if (ext === ".ts" || ext === ".tsx") return rel.slice(0, -ext.length) + ".js";
-  if (ext === ".mts") return rel.slice(0, -ext.length) + ".mjs";
-  if (ext === ".cts") return rel.slice(0, -ext.length) + ".cjs";
+  if (ext === ".ts" || ext === ".tsx") return `${rel.slice(0, -ext.length)}.js`;
+  if (ext === ".mts") return `${rel.slice(0, -ext.length)}.mjs`;
+  if (ext === ".cts") return `${rel.slice(0, -ext.length)}.cjs`;
   return rel;
 }
 
@@ -81,8 +76,7 @@ function findPackage(absFile: string, cache: PkgCache): { root: string; name: st
         try {
           const name: unknown = JSON.parse(readFileSync(pj, "utf8")).name;
           if (typeof name === "string" && name.length > 0) entry = { name };
-        } catch {
-        }
+        } catch {}
       }
       cache.set(dir, entry);
     }
@@ -110,7 +104,9 @@ export function placeFile(absPath: string, cwd: string, cache: PkgCache = new Ma
 }
 
 function isUserSource(absPath: string): boolean {
-  return !absPath.includes(`${path.sep}node_modules${path.sep}`) && TS_EXT.has(path.extname(absPath));
+  return (
+    !absPath.includes(`${path.sep}node_modules${path.sep}`) && TS_EXT.has(path.extname(absPath))
+  );
 }
 
 function emittedExt(sourceExt: string): string {
@@ -228,7 +224,9 @@ export async function artifactHash(dir: string): Promise<string> {
   const rels = (await regularFiles(dir)).sort();
   const outer = createHash("sha256");
   for (const rel of rels) {
-    const digest = createHash("sha256").update(await readFile(path.join(dir, rel))).digest("hex");
+    const digest = createHash("sha256")
+      .update(await readFile(path.join(dir, rel)))
+      .digest("hex");
     outer.update(`${rel}\0${digest}\n`);
   }
   return outer.digest("hex").slice(0, 16);
@@ -281,7 +279,9 @@ export async function traceBuild(
     }
   }
 
-  const handler = toOutExt(placeFile(entrypoint, input.cwd, pkgCache).dest).split(path.sep).join("/");
+  const handler = toOutExt(placeFile(entrypoint, input.cwd, pkgCache).dest)
+    .split(path.sep)
+    .join("/");
   await writeFile(
     path.join(funcDir, "config.json"),
     `${JSON.stringify({ runtime, handler, id: NODE_ENTRY_ROUTE_ID, app: input.name }, null, 2)}\n`,

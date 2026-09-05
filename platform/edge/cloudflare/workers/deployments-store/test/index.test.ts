@@ -1,9 +1,8 @@
-import { SELF, createExecutionContext, env } from "cloudflare:test";
+import { createExecutionContext, env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-
-import { SCHEMA_VERSION } from "../src/store";
-import type { DeploymentRecord } from "../src/store";
 import type { Env } from "../src/env";
+import type { DeploymentRecord } from "../src/store";
+import { SCHEMA_VERSION } from "../src/store";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv extends Env {}
@@ -95,8 +94,11 @@ describe("initialize", () => {
     expect(await res.json()).toEqual({ ownerToken: "owner-1", secret: SECRET });
 
     expect(
-      (await SELF.fetch(authedReq("/staged", { method: "PUT", body: JSON.stringify(makeRecord()) })))
-        .status,
+      (
+        await SELF.fetch(
+          authedReq("/staged", { method: "PUT", body: JSON.stringify(makeRecord()) }),
+        )
+      ).status,
     ).toBe(204);
     expect(
       (
@@ -175,9 +177,7 @@ describe("authenticated write endpoint", () => {
 
   it("promotes, then reports it through history", async () => {
     await initialize();
-    await SELF.fetch(
-      authedReq("/staged", { method: "PUT", body: JSON.stringify(makeRecord()) }),
-    );
+    await SELF.fetch(authedReq("/staged", { method: "PUT", body: JSON.stringify(makeRecord()) }));
     const promoteRes = await SELF.fetch(
       authedReq("/promote", {
         method: "POST",
@@ -197,14 +197,24 @@ describe("authenticated write endpoint", () => {
     await SELF.fetch(
       authedReq("/promote", {
         method: "POST",
-        body: JSON.stringify({ promotionId: "promo-1", ts: 1_000, builds: { web: "b1" }, tag: "v1.2.3" }),
+        body: JSON.stringify({
+          promotionId: "promo-1",
+          ts: 1_000,
+          builds: { web: "b1" },
+          tag: "v1.2.3",
+        }),
       }),
     );
 
     const clashRes = await SELF.fetch(
       authedReq("/promote", {
         method: "POST",
-        body: JSON.stringify({ promotionId: "promo-2", ts: 2_000, builds: { web: "b2" }, tag: "v1.2.3" }),
+        body: JSON.stringify({
+          promotionId: "promo-2",
+          ts: 2_000,
+          builds: { web: "b2" },
+          tag: "v1.2.3",
+        }),
       }),
     );
 
@@ -252,7 +262,12 @@ describe("authenticated write endpoint", () => {
     await SELF.fetch(
       authedReq("/promote", {
         method: "POST",
-        body: JSON.stringify({ promotionId: "promo-pr-1", ts: 1_000, builds: { web: "pr-1" }, pointer: "pr-42" }),
+        body: JSON.stringify({
+          promotionId: "promo-pr-1",
+          ts: 1_000,
+          builds: { web: "pr-1" },
+          pointer: "pr-42",
+        }),
       }),
     );
 
@@ -295,9 +310,7 @@ describe("authenticated write endpoint", () => {
 
   it("destroys the instance, freeing the slug", async () => {
     await initialize();
-    await SELF.fetch(
-      authedReq("/staged", { method: "PUT", body: JSON.stringify(makeRecord()) }),
-    );
+    await SELF.fetch(authedReq("/staged", { method: "PUT", body: JSON.stringify(makeRecord()) }));
 
     const destroyRes = await SELF.fetch(authedReq("/destroy", { method: "POST" }));
     expect(destroyRes.status).toBe(204);
@@ -310,9 +323,7 @@ describe("authenticated write endpoint", () => {
 
   it("returns 400 on a malformed body", async () => {
     await initialize();
-    const res = await SELF.fetch(
-      authedReq("/promote", { method: "POST", body: "not json" }),
-    );
+    const res = await SELF.fetch(authedReq("/promote", { method: "POST", body: "not json" }));
     expect(res.status).toBe(400);
   });
 
@@ -334,10 +345,7 @@ describe("service-binding read path", () => {
     await store.putStaged(makeRecord());
     await store.promote({ promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" } });
 
-    const entry = new (await import("../src/index")).default(
-      createExecutionContext(),
-      env,
-    );
+    const entry = new (await import("../src/index")).default(createExecutionContext(), env);
     expect(await entry.pointerRecord({ slug: SLUG, app: "web" })).toEqual({
       kind: "record",
       identity: "deploy-1",
@@ -372,10 +380,7 @@ describe("service-binding read path", () => {
     );
     expect(promoteRes.status).toBe(204);
 
-    const entry = new (await import("../src/index")).default(
-      createExecutionContext(),
-      env,
-    );
+    const entry = new (await import("../src/index")).default(createExecutionContext(), env);
     expect(
       await entry.pointerRecord({ slug: SLUG, app: "web", pointer: "flaky-web-2626" }),
     ).toEqual({
@@ -393,10 +398,7 @@ describe("service-binding read path", () => {
     await store.putStaged(makeRecord());
     await store.promote({ promotionId: "promo-1", ts: 1_000, builds: { web: "deploy-1" } });
 
-    const entry = new (await import("../src/index")).default(
-      createExecutionContext(),
-      env,
-    );
+    const entry = new (await import("../src/index")).default(createExecutionContext(), env);
     expect(await entry.pointerRecord({ slug: SLUG })).toEqual({
       kind: "record",
       identity: "deploy-1",
@@ -414,10 +416,7 @@ describe("service-binding read path", () => {
       builds: { web: "deploy-1", admin: "deploy-9" },
     });
 
-    const entry = new (await import("../src/index")).default(
-      createExecutionContext(),
-      env,
-    );
+    const entry = new (await import("../src/index")).default(createExecutionContext(), env);
     expect(await entry.pointerRecord({ slug: SLUG })).toEqual({
       kind: "ambiguous-app",
     });

@@ -7,9 +7,9 @@ import type {
 } from "next/dist/shared/lib/image-config.js";
 import { stableStringify } from "./stable-json.mjs";
 
-const { makeRe } = createRequire(import.meta.url)(
-  "next/dist/compiled/picomatch",
-) as { makeRe: (glob: string, options?: { dot?: boolean }) => RegExp };
+const { makeRe } = createRequire(import.meta.url)("next/dist/compiled/picomatch") as {
+  makeRe: (glob: string, options?: { dot?: boolean }) => RegExp;
+};
 
 export interface CompiledRemotePattern {
   protocol?: string;
@@ -54,9 +54,7 @@ interface NormalizedRemotePattern {
   search?: string;
 }
 
-function toRemotePattern(
-  pattern: URL | RemotePattern,
-): NormalizedRemotePattern {
+function toRemotePattern(pattern: URL | RemotePattern): NormalizedRemotePattern {
   return pattern instanceof URL
     ? {
         protocol: pattern.protocol,
@@ -68,11 +66,8 @@ function toRemotePattern(
     : pattern;
 }
 
-function optedOutOfOptimization(
-  images: Required<ImageConfigComplete>,
-): string | undefined {
-  if (images.loader !== "default")
-    return `images.loader is "${images.loader}"`;
+function optedOutOfOptimization(images: Required<ImageConfigComplete>): string | undefined {
+  if (images.loader !== "default") return `images.loader is "${images.loader}"`;
   if (images.unoptimized) return "images.unoptimized is true";
   return undefined;
 }
@@ -125,7 +120,5 @@ export function serializeImageConfig(config: CompiledImageConfig): string {
 }
 
 export function imageConfigHash(config: CompiledImageConfig): string {
-  return createHash("sha256")
-    .update(serializeImageConfig(config))
-    .digest("hex");
+  return createHash("sha256").update(serializeImageConfig(config)).digest("hex");
 }

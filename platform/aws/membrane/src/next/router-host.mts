@@ -1,23 +1,17 @@
 import { readFileSync } from "node:fs";
-
-import { CONTROL_HEADERS, serve, type RouteDeps } from "@framework/next-router";
+import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
+import { CONTROL_HEADERS, type RouteDeps, serve } from "@framework/next-router";
 import type { AssetBucket } from "@framework/next-router/assets";
 import { functionUrlImageOrigin } from "@framework/next-router/image";
-import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
-
-import type { Invoke } from "../shared/membrane.mjs";
+import { fetchToNodeHandler } from "../node/fetch-bridge.mjs";
 import {
   invalidatesByCacheTag,
   routingManifestPathVar,
   withEdgeHeader,
 } from "../shared/edge-kind.mjs";
-import { fetchToNodeHandler } from "../node/fetch-bridge.mjs";
+import type { Invoke } from "../shared/membrane.mjs";
 import { s3AssetBucket, uncachedResponses } from "./router-assets.mjs";
-import {
-  credentialsOf,
-  s3ObjectFetch,
-  siblingOriginFetch,
-} from "./router-signing.mjs";
+import { credentialsOf, s3ObjectFetch, siblingOriginFetch } from "./router-signing.mjs";
 
 const NEXT_INTERNAL_PREFIX = "x-middleware-";
 
@@ -47,10 +41,7 @@ export interface RouterHost {
   originFetch: typeof fetch;
 }
 
-function routerDeps(
-  host: RouterHost,
-  waitUntil: (promise: Promise<unknown>) => void,
-): RouteDeps {
+function routerDeps(host: RouterHost, waitUntil: (promise: Promise<unknown>) => void): RouteDeps {
   return {
     manifest: host.manifest,
     functionUrls: {
@@ -62,10 +53,7 @@ function routerDeps(
     deploymentId: host.deploymentId,
     originFetch: host.originFetch,
     keepCacheTags: host.keepCacheTags,
-    imageOrigin: functionUrlImageOrigin(
-      host.imageOptimizerUrl,
-      host.originFetch,
-    ),
+    imageOrigin: functionUrlImageOrigin(host.imageOptimizerUrl, host.originFetch),
     assetStore: {
       store: host.assetBucket,
       assetPrefix: host.assetPrefix,
@@ -84,28 +72,19 @@ export async function serveRouted(
   const stripped = new Request(request, {
     headers: withoutClientControl(request.headers),
   });
-  return withEdgeHeader(
-    await serve(stripped, routerDeps(host, waitUntil)),
-    host.edgeKind,
-  );
+  return withEdgeHeader(await serve(stripped, routerDeps(host, waitUntil)), host.edgeKind);
 }
 
 export function routerHostInvoke(host: RouterHost): Invoke {
   return (req, res, ocel) =>
-    fetchToNodeHandler((request) => serveRouted(request, host, ocel.waitUntil))(
-      req,
-      res,
-      ocel,
-    );
+    fetchToNodeHandler((request) => serveRouted(request, host, ocel.waitUntil))(req, res, ocel);
 }
 
 const functionUrlsVar = "OCEL_FUNCTION_URLS";
 
 const assetBucketVar = "OCEL_ASSET_BUCKET";
 
-export function siblingFunctionUrls(
-  declared: string | undefined,
-): Record<string, string> {
+export function siblingFunctionUrls(declared: string | undefined): Record<string, string> {
   if (!declared) return {};
   const parsed: unknown = JSON.parse(declared);
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -121,10 +100,7 @@ export function siblingFunctionUrls(
   return urls;
 }
 
-export function routerHostFromEnv(
-  env: NodeJS.ProcessEnv,
-  localOrigin: string,
-): RouterHost {
+export function routerHostFromEnv(env: NodeJS.ProcessEnv, localOrigin: string): RouterHost {
   const manifestPath = env[routingManifestPathVar];
   if (!manifestPath) {
     throw new Error(`ocel: ${routingManifestPathVar} names no routing manifest`);
@@ -151,9 +127,7 @@ export function routerHostFromEnv(
     ...(bucket && region
       ? { assetBucket: s3AssetBucket(bucket, region, s3ObjectFetch(env, region)) }
       : {}),
-    ...(env.OCEL_IMAGE_OPTIMIZER_URL
-      ? { imageOptimizerUrl: env.OCEL_IMAGE_OPTIMIZER_URL }
-      : {}),
+    ...(env.OCEL_IMAGE_OPTIMIZER_URL ? { imageOptimizerUrl: env.OCEL_IMAGE_OPTIMIZER_URL } : {}),
     originFetch: siblingOriginFetch(env, region),
   };
 }

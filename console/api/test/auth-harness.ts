@@ -41,9 +41,7 @@ export async function createTestSessionWithOrganization() {
     headers,
     organization: createdOrganization,
     async cleanup() {
-      await db
-        .delete(organization)
-        .where(eq(organization.id, createdOrganization.id));
+      await db.delete(organization).where(eq(organization.id, createdOrganization.id));
       await db.delete(user).where(eq(user.id, signUpResult.user.id));
     },
   };

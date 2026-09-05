@@ -1,7 +1,7 @@
-import net from "node:net";
-import http from "node:http";
 import { EventEmitter } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
+import http from "node:http";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
@@ -225,12 +225,18 @@ describe("invocation lifecycle", () => {
   test("still completes when the request is aborted (close without finish)", async () => {
     let settled = false;
     const invoke: Invoke = (_req, res, ocel) => {
-      ocel.waitUntil(new Promise<void>((r) => setTimeout(() => ((settled = true), r()), 60)));
+      ocel.waitUntil(
+        new Promise<void>((r) =>
+          setTimeout(() => {
+            settled = true;
+            r();
+          }, 60),
+        ),
+      );
       setTimeout(() => {
         try {
           res.end("late");
-        } catch {
-        }
+        } catch {}
       }, 1000);
     };
 
@@ -250,9 +256,7 @@ describe("invocation lifecycle", () => {
     });
 
     await waitFor(() =>
-      messages.some(
-        (m) => m.type === "invocation-complete" && m.payload.requestId === "req-abort",
-      ),
+      messages.some((m) => m.type === "invocation-complete" && m.payload.requestId === "req-abort"),
     );
     expect(settled).toBe(true);
   });
@@ -263,7 +267,13 @@ describe("invocation lifecycle", () => {
       runWithWaitUntil(ocel.waitUntil, async () => {
         await Promise.resolve();
         background(
-          () => new Promise<void>((r) => setTimeout(() => ((settled = true), r()), 80)),
+          () =>
+            new Promise<void>((r) =>
+              setTimeout(() => {
+                settled = true;
+                r();
+              }, 80),
+            ),
         );
         res.end("ok");
       });
@@ -360,15 +370,7 @@ describe("an app that calls listen() instead of exporting a handler", () => {
     await request(port, "listen-once-a");
     await request(port, "listen-once-b");
 
-    expect(ran).toEqual([
-      "prepended",
-      "on",
-      "once",
-      "undefined",
-      "prepended",
-      "on",
-      "undefined",
-    ]);
+    expect(ran).toEqual(["prepended", "on", "once", "undefined", "prepended", "on", "undefined"]);
 
     server.close();
   });

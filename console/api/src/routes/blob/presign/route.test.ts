@@ -43,9 +43,7 @@ function presignBody(projectId: string) {
   return {
     projectId,
     bucket: "storage",
-    files: [
-      { key: "avatar.png", name: "avatar.png", size: 2048, mimeType: "image/png" },
-    ],
+    files: [{ key: "avatar.png", name: "avatar.png", size: 2048, mimeType: "image/png" }],
     metadata: encodedMetadata,
     contentDisposition: "inline",
     callbackBaseUrl: "http://localhost:3000/api/upload",
@@ -63,9 +61,7 @@ describe("POST /api/blob/presign", () => {
     try {
       const created = await createProjectFor(session, "blob-presign-ok");
 
-      const response = await presignUpload(
-        postRequest(presignBody(created.id), session.headers),
-      );
+      const response = await presignUpload(postRequest(presignBody(created.id), session.headers));
 
       expect(response.status).toBe(200);
       const bodyJson = await response.json();
@@ -89,14 +85,9 @@ describe("POST /api/blob/presign", () => {
       expect(signed).toContain("content-type");
       expect(signed).toContain("content-disposition");
       expect(target.contentDisposition).toBe("inline");
-      expect(url.searchParams.get("x-amz-tagging")).toBe(
-        `sessionId=${sessionId}`,
-      );
+      expect(url.searchParams.get("x-amz-tagging")).toBe(`sessionId=${sessionId}`);
 
-      const [row] = await db
-        .select()
-        .from(uploadSession)
-        .where(eq(uploadSession.id, sessionId));
+      const [row] = await db.select().from(uploadSession).where(eq(uploadSession.id, sessionId));
       expect(row).toBeTruthy();
       expect(row.userId).toBe(session.user.id);
       expect(row.projectId).toBe(created.id);
@@ -120,9 +111,7 @@ describe("POST /api/blob/presign", () => {
     const session = await createTestSessionWithOrganization();
     try {
       const created = await createProjectFor(session, "blob-presign-unauthed");
-      const response = await presignUpload(
-        postRequest(presignBody(created.id), new Headers()),
-      );
+      const response = await presignUpload(postRequest(presignBody(created.id), new Headers()));
       expect(response.status).toBe(401);
     } finally {
       await session.cleanup();
@@ -147,9 +136,7 @@ describe("POST /api/blob/presign", () => {
   it("returns 400 for an invalid body", async () => {
     const session = await createTestSessionWithOrganization();
     try {
-      const response = await presignUpload(
-        postRequest({ projectId: "" }, session.headers),
-      );
+      const response = await presignUpload(postRequest({ projectId: "" }, session.headers));
       expect(response.status).toBe(400);
     } finally {
       await session.cleanup();

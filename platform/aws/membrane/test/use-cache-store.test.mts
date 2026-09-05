@@ -129,17 +129,13 @@ test("reports a rejected conditional write rather than throwing", async () => {
   });
   const { store } = await storeWithResponses([rejected]);
 
-  await expect(
-    store.writeTag("products", { expired: 5, writtenAt: 5 }),
-  ).resolves.toBe(false);
+  await expect(store.writeTag("products", { expired: 5, writtenAt: 5 })).resolves.toBe(false);
 });
 
 test("surfaces failures that are not the guard", async () => {
   const { store } = await storeWithResponses([new Error("dynamo is down")]);
 
-  await expect(
-    store.writeTag("products", { expired: 5, writtenAt: 5 }),
-  ).rejects.toThrow(/down/);
+  await expect(store.writeTag("products", { expired: 5, writtenAt: 5 })).rejects.toThrow(/down/);
 });
 
 async function storeWithObjects(responses: any[]) {
@@ -178,7 +174,7 @@ const objectBody = (value: unknown) => ({
 
 test("hashes the cache key into a legal object name under the build prefix", async () => {
   const { store, sends } = await storeWithObjects([{}]);
-  const cacheKey = "\u0000binary\uffff" + "x".repeat(4096);
+  const cacheKey = `\u0000binary\uffff${"x".repeat(4096)}`;
 
   await store.writeEntry(cacheKey, envelope);
 
@@ -293,9 +289,7 @@ test("reports an absent snapshot as unusable rather than as an empty clock", asy
 });
 
 test("reports a snapshot at an unknown version as unusable", async () => {
-  const { store } = await storeWithObjects([
-    storedSnapshot({ ...snapshot, version: 2 }, '"v1"'),
-  ]);
+  const { store } = await storeWithObjects([storedSnapshot({ ...snapshot, version: 2 }, '"v1"')]);
 
   expect(await store.readTagSnapshot(null)).toEqual({ status: "unusable" });
 });
@@ -307,9 +301,7 @@ test("reports a snapshot document of null as unusable", async () => {
 });
 
 test("reads a snapshot with no records as a fresh, empty clock", async () => {
-  const { store } = await storeWithObjects([
-    storedSnapshot({ ...snapshot, records: {} }, '"v1"'),
-  ]);
+  const { store } = await storeWithObjects([storedSnapshot({ ...snapshot, records: {} }, '"v1"')]);
 
   expect(await store.readTagSnapshot(null)).toEqual({
     status: "fresh",

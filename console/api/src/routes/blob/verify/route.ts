@@ -16,9 +16,7 @@ const verifyUploadSchema = z.object({
   }),
 });
 
-export async function verifyUploadSignature(
-  request: Request,
-): Promise<Response> {
+export async function verifyUploadSignature(request: Request): Promise<Response> {
   const userId = await getSessionUserId(request.headers);
   if (!userId) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -39,10 +37,7 @@ export async function verifyUploadSignature(
   }
   const { sessionId, signature, file } = parsed.data;
 
-  const [row] = await db
-    .select()
-    .from(uploadSession)
-    .where(eq(uploadSession.id, sessionId));
+  const [row] = await db.select().from(uploadSession).where(eq(uploadSession.id, sessionId));
 
   if (!row || !(await verifyOrganizationMembership(userId, row.organizationId))) {
     return Response.json({ valid: false }, { status: 200 });

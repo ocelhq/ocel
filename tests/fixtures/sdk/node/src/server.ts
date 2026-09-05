@@ -46,10 +46,9 @@ app.get("/api/todos", async (_req, res) => {
 });
 
 app.get("/api/todos/:id", async (req, res) => {
-  const { rows } = await pg.query(
-    "SELECT id, title, done FROM todos WHERE id = $1",
-    [Number(req.params.id)],
-  );
+  const { rows } = await pg.query("SELECT id, title, done FROM todos WHERE id = $1", [
+    Number(req.params.id),
+  ]);
   if (rows.length === 0) {
     res.status(404).json({ error: "not found" });
     return;
@@ -58,9 +57,7 @@ app.get("/api/todos/:id", async (req, res) => {
 });
 
 app.delete("/api/todos/:id", async (req, res) => {
-  const { rowCount } = await pg.query("DELETE FROM todos WHERE id = $1", [
-    Number(req.params.id),
-  ]);
+  const { rowCount } = await pg.query("DELETE FROM todos WHERE id = $1", [Number(req.params.id)]);
   if (!rowCount) {
     res.status(404).json({ error: "not found" });
     return;
