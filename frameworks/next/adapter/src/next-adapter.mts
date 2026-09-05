@@ -19,7 +19,15 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, join, relative, sep } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { pipeline } from "node:stream/promises";
 import {
   compileImageConfig,
@@ -271,8 +279,15 @@ const adapter = {
       bundles.map(async (bundle) => {
         const funcDir = join(outputRoot, "functions", `${bundle.name}.func`);
 
+        const mirrored = mirroredPaths(Object.keys(bundle.assets));
         for (const [destRel, srcAbs] of Object.entries(bundle.assets)) {
-          await copyAsset(srcAbs, join(funcDir, destRel));
+          await copyAsset(
+            srcAbs,
+            join(funcDir, destRel),
+            repoRoot,
+            funcDir,
+            mirrored,
+          );
         }
 
         const dispatchDest = join(funcDir, appRel, dispatchName);
@@ -1444,7 +1459,32 @@ async function collectPublicFiles(
   return files;
 }
 
-async function copyAsset(srcAbs: string, dest: string): Promise<void> {
+function containedIn(root: string, target: string): string | undefined {
+  const rel = relative(root, target);
+  if (isAbsolute(rel) || rel === ".." || rel.startsWith(".." + sep)) {
+    return undefined;
+  }
+  return rel;
+}
+
+function mirroredPaths(destKeys: readonly string[]): ReadonlySet<string> {
+  const paths = new Set<string>();
+  for (const key of destKeys) {
+    const parts = key.split("/");
+    for (let i = 1; i <= parts.length; i++) {
+      paths.add(parts.slice(0, i).join("/"));
+    }
+  }
+  return paths;
+}
+
+async function copyAsset(
+  srcAbs: string,
+  dest: string,
+  repoRoot: string,
+  funcDir: string,
+  mirrored: ReadonlySet<string>,
+): Promise<void> {
   let info;
   try {
     info = await lstat(srcAbs);
@@ -1453,8 +1493,32 @@ async function copyAsset(srcAbs: string, dest: string): Promise<void> {
   }
   await mkdir(dirname(dest), { recursive: true });
   if (info.isSymbolicLink()) {
+    const raw = await readlink(srcAbs);
+    const target = isAbsolute(raw) ? raw : resolve(dirname(srcAbs), raw);
+    const contained = containedIn(repoRoot, target);
+    const rel =
+      contained !== undefined && mirrored.has(contained.split(sep).join("/"))
+        ? contained
+        : undefined;
     await rm(dest, { recursive: true, force: true });
-    await symlink(await readlink(srcAbs), dest);
+    if (rel !== undefined) {
+      await symlink(
+        relative(dirname(dest), join(funcDir, rel)).split(sep).join("/"),
+        dest,
+      );
+      return;
+    }
+    let targetInfo;
+    try {
+      targetInfo = await stat(target);
+    } catch {
+      return;
+    }
+    if (targetInfo.isDirectory()) {
+      await cp(target, dest, { recursive: true, dereference: true });
+      return;
+    }
+    await copyFile(target, dest);
     return;
   }
   if (info.isDirectory()) {
