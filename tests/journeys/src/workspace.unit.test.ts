@@ -1,12 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { specByName } from "./spec";
-import {
-  appCommand,
-  appFolder,
-  appHomes,
-  migrateCommand,
-  stateComplaint,
-} from "./workspace";
+import { appCommand, appHomes, migrateCommand, stateComplaint } from "./workspace";
 
 const workspace = specByName("sdk", "workspace");
 const composite = specByName("sdk", "node");
@@ -26,11 +20,6 @@ describe("a multi-app row", () => {
 
   it("migrates where the config sits, since the schema belongs to the project", () => {
     expect(migrateCommand()).toEqual(["pnpm", "run", "migrate"]);
-  });
-
-  it("gives each app of a workspace its own env folder, and every other row none", () => {
-    expect(workspace.apps.map((app) => appFolder(workspace, app))).toEqual(["/next", "/express"]);
-    expect(appFolder(composite, "web")).toBeUndefined();
   });
 
   it("names the app directories that must hold no state of their own", () => {

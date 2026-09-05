@@ -8,7 +8,6 @@ handed.
 
 The config names each app, points at it under `apps/`, and gives it its own env folder, and
 in production its own hostname. There is one bootstrap and one edge in front of both.
-`APP_NAME` is the value that tells each running app which hostname is its own.
 
 The apps live under `apps/*` in the repo's own `pnpm-workspace.yaml`; a project of your own
 lists them the same way.
@@ -18,8 +17,8 @@ lists them the same way.
 ```bash
 pnpm install
 ocel run -- pnpm migrate
-APP_NAME=next ocel dev -- pnpm --dir apps/next start
-APP_NAME=express ocel dev -- pnpm --dir apps/express start
+ocel dev -- pnpm --dir apps/next start
+ocel dev -- pnpm --dir apps/express start
 ```
 
 ```bash
