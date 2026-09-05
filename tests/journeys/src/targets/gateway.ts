@@ -1,4 +1,9 @@
-import { createServer as createHttpServer, request as httpRequest, type Server } from "node:http";
+import {
+  Agent,
+  createServer as createHttpServer,
+  request as httpRequest,
+  type Server,
+} from "node:http";
 import { connect, type Socket } from "node:net";
 
 const PROXY_PORT = 443;
@@ -57,12 +62,16 @@ function tunnel(box: string): Server {
   return server;
 }
 
-function forwarder(box: string, hostname: string): Server {
-  return createHttpServer((from, to) => {
+export type Edge = { host: string; port: number };
+
+export function forwarder(edge: Edge, hostname: string): Server {
+  const unpooled = new Agent({ keepAlive: false });
+  const server = createHttpServer((from, to) => {
     const upstream = httpRequest(
       {
-        host: box,
-        port: EDGE_PORT,
+        host: edge.host,
+        port: edge.port,
+        agent: unpooled,
         method: from.method,
         path: from.url,
         headers: { ...from.headers, host: hostname },
@@ -77,6 +86,8 @@ function forwarder(box: string, hostname: string): Server {
     });
     from.pipe(upstream);
   });
+  server.on("close", () => unpooled.destroy());
+  return server;
 }
 
 export async function openGateway(box: string): Promise<Gateway> {
@@ -92,7 +103,7 @@ export async function openGateway(box: string): Promise<Gateway> {
     serving(hostname) {
       let url = forwarders.get(hostname);
       if (!url) {
-        const server = forwarder(box, hostname);
+        const server = forwarder({ host: box, port: EDGE_PORT }, hostname);
         servers.push(server);
         url = listening(server);
         forwarders.set(hostname, url);
