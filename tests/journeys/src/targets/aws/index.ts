@@ -9,7 +9,7 @@ import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import { migrates, setsEnv } from "../../rows";
 import type { PrepareFailures } from "../../prepare";
-import { cellsOf, type Leg, specForTarget, variantNameOf } from "../../spec";
+import { type Cell, cellsOf, type Leg, specForTarget, variantNameOf } from "../../spec";
 import { copyTree } from "../../tree";
 import { migrateCommand, setAppNames, setSiteHostnames } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
@@ -140,7 +140,7 @@ async function prepare(): Promise<PrepareFailures> {
   }
   const [first] = specForTarget("aws");
   if (!first) {
-    throw new Error("no example in the spec table runs on aws, so there is nothing to bootstrap");
+    throw new Error("no fixture in the spec table runs on aws, so there is nothing to bootstrap");
   }
   const runId = currentRunIdentity();
   const slug = projectSlug(first.name, runId);
@@ -254,11 +254,26 @@ async function stands(slug: string): Promise<boolean> {
   return (await store()).stands(slug);
 }
 
+export function cellsBySlugPart(cells: Cell[]): Map<string, Cell> {
+  const byPart = new Map<string, Cell>();
+  for (const cell of cells) {
+    const part = slugPart(cell.name);
+    const taken = byPart.get(part);
+    if (taken) {
+      throw new Error(
+        `${cell.name} and ${taken.name} both slug to ${part}, so a sweep could not tell them apart`,
+      );
+    }
+    byPart.set(part, cell);
+  }
+  return byPart;
+}
+
 async function sweep(runId: string): Promise<void> {
   const where = await place();
   const fixtures = specForTarget("aws");
   const cells = fixtures.flatMap((fixture) => cellsOf(fixture, "aws"));
-  const byPart = new Map(cells.map((cell) => [slugPart(cell.name), cell]));
+  const byPart = cellsBySlugPart(cells);
   const mine = cells.map((cell) => projectSlug(cell.name, runId));
   const { reclaim, unreadable } = sweepable(await list(), mine, [...byPart.keys()]);
 
