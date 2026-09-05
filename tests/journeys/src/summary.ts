@@ -55,6 +55,14 @@ function skippedLines(skipped: Skipped): string[] {
   );
 }
 
+function redTable(report: Report): string[] {
+  const red = report.rows.filter((entry) => entry.verdict !== "ok");
+  if (red.length === 0) {
+    return [];
+  }
+  return ["| cell | test | verdict | gap |", "| --- | --- | --- | --- |", ...red.map(row), ""];
+}
+
 export function summaryTable(report: Report, meta: SummaryMeta): string {
   const counts = new Map<Verdict, number>();
   for (const entry of report.rows) {
@@ -75,10 +83,7 @@ export function summaryTable(report: Report, meta: SummaryMeta): string {
     ...gapLines(report),
     ...skippedLines(meta.skipped ?? {}),
     "",
-    "| cell | test | verdict | gap |",
-    "| --- | --- | --- | --- |",
-    ...report.rows.map(row),
-    "",
+    ...redTable(report),
   ].join("\n");
 }
 
