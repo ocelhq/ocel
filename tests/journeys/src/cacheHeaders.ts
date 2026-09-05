@@ -31,6 +31,21 @@ export function imageCacheControl(seconds: number): string {
   return `public, max-age=${seconds}, must-revalidate`;
 }
 
+export function directivesOf(value: string | null): Set<string> {
+  return new Set(
+    (value ?? "")
+      .split(",")
+      .map((directive) => directive.trim().toLowerCase())
+      .filter((directive) => directive !== ""),
+  );
+}
+
+export function sameDirectives(value: string | null, expected: string): boolean {
+  const listed = directivesOf(value);
+  const wanted = directivesOf(expected);
+  return listed.size === wanted.size && [...wanted].every((directive) => listed.has(directive));
+}
+
 export function variesOn(vary: string | null, names: string[]): boolean {
   const listed = new Set(
     (vary ?? "")

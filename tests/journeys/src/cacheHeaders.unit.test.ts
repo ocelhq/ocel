@@ -6,6 +6,7 @@ import {
   imageCacheControl,
   IMMUTABLE_CACHE_CONTROL,
   ROUTER_VARY,
+  sameDirectives,
   SERVED_CACHE_CONTROL,
   tierOf,
   variesOn,
@@ -45,6 +46,30 @@ describe("imageCacheControl", () => {
 describe("IMMUTABLE_CACHE_CONTROL", () => {
   it("is a year of max-age", () => {
     expect(IMMUTABLE_CACHE_CONTROL).toBe("public, max-age=31536000, immutable");
+  });
+});
+
+describe("sameDirectives", () => {
+  it("reads a header an edge re-serialised without spaces as the same directives", () => {
+    expect(sameDirectives("public,max-age=31536000,immutable", IMMUTABLE_CACHE_CONTROL)).toBe(true);
+  });
+
+  it("ignores case and the order the directives were written in", () => {
+    expect(sameDirectives("IMMUTABLE, Max-Age=31536000 , public", IMMUTABLE_CACHE_CONTROL)).toBe(
+      true,
+    );
+  });
+
+  it("is false when a directive, its value, or the header itself is missing", () => {
+    expect(sameDirectives("public, max-age=60, immutable", IMMUTABLE_CACHE_CONTROL)).toBe(false);
+    expect(sameDirectives("public, max-age=31536000", IMMUTABLE_CACHE_CONTROL)).toBe(false);
+    expect(sameDirectives(null, IMMUTABLE_CACHE_CONTROL)).toBe(false);
+  });
+
+  it("is false when the header carries a directive the expectation does not", () => {
+    expect(
+      sameDirectives("public, max-age=31536000, immutable, no-transform", IMMUTABLE_CACHE_CONTROL),
+    ).toBe(false);
   });
 });
 
