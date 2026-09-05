@@ -173,5 +173,7 @@ func CheckWritable(definitions []*resourcesv1.VariableDefinition, key, folder st
 		return fmt.Errorf("%s is scoped to %s, so %s holds no value for it. Set it in one of the folders it names, or widen the scope where it is declared",
 			key, strings.Join(scope, " and "), folder)
 	}
-	return nil
+	return fmt.Errorf("no app in this project declares %s, so a value stored under it would be delivered to nothing: "+
+		"declare it in a defineEnv call — `defineEnv({ %s: { class: \"plain\" } })` — and set it again",
+		key, key)
 }
