@@ -232,9 +232,6 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 	}
 
 	deploying := "DEPLOY " + describeEnv(req.GetEnvironment())
-	if req.GetSuppressResources() {
-		deploying += " suppress_resources=true"
-	}
 	if err := stream.Send(fakeProgress(deploying)); err != nil {
 		return err
 	}

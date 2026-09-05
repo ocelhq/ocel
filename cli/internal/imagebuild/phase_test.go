@@ -32,16 +32,16 @@ func variables(t *testing.T, plan builtPlan, step string) map[string]string {
 	return nil
 }
 
-func TestTheBuildStepRunsInTheSuppressedPhase(t *testing.T) {
+func TestTheBuildStepRunsInThePhaseItIsHanded(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a suppressed deploy builds the image in the phase", func(t *testing.T) {
+	t.Run("a named phase reaches the build step", func(t *testing.T) {
 		t.Parallel()
 
-		plan := plannedInPhase(t, "testdata/plainserver", providerkit.PhaseResourcesSuppressed)
+		plan := plannedInPhase(t, "testdata/plainserver", "discovery")
 
-		if got := variables(t, plan, "build")[providerkit.PhaseEnvName]; got != providerkit.PhaseResourcesSuppressed {
-			t.Errorf("the build step runs with %s = %q, want %q, so the app's build knows nothing is provisioned", providerkit.PhaseEnvName, got, providerkit.PhaseResourcesSuppressed)
+		if got := variables(t, plan, "build")[providerkit.PhaseEnvName]; got != "discovery" {
+			t.Errorf("the build step runs with %s = %q, want %q, so the app's build knows what it is in", providerkit.PhaseEnvName, got, "discovery")
 		}
 	})
 
