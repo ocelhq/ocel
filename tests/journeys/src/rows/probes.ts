@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import { type ContractRow, json, LARGE_BYTES, SLEEP_MS } from "../contract";
+import {
+  type ContractRow,
+  describeResponse,
+  json,
+  LARGE_BYTES,
+  SLEEP_MS,
+} from "../contract";
 
 export const STREAM_ROW = "GET /api/probes/stream streams its chunks in order to the sentinel";
 
@@ -107,11 +113,11 @@ export const probeRows: ContractRow[] = [
     },
   },
   {
-    title: "GET /api/probes/sleep holds the request open for thirty seconds",
+    title: "GET /api/probes/sleep holds the request open for twenty-five seconds",
     run: async (ctx) => {
-      const { res, body } = await json(ctx, `/api/probes/sleep?ms=${SLEEP_MS}`);
-      assert.equal(res.status, 200);
-      assert.deepEqual(body, { slept: SLEEP_MS });
+      const { res, text, body } = await json(ctx, `/api/probes/sleep?ms=${SLEEP_MS}`);
+      assert.equal(res.status, 200, describeResponse(res, text));
+      assert.deepEqual(body, { slept: SLEEP_MS }, describeResponse(res, text));
     },
   },
 ];
