@@ -87,8 +87,14 @@ diagnose_no_ssh() {
         incus exec "$name" -- sh -c 'ip -4 -br addr; ip -4 route; cat /etc/resolv.conf'
     diagnose_section "guest name resolution" \
         incus exec "$name" -- getent hosts archive.ubuntu.com
-    diagnose_section "guest egress (http status)" \
-        incus exec "$name" -- curl -4 -sS -m 10 -o /dev/null -w '%{http_code}\n' http://archive.ubuntu.com/ubuntu/
+    diagnose_section "guest link and path mtu" \
+        incus exec "$name" -- sh -c 'ip -d link show enp5s0 | head -n 2; ping -4 -M do -s 1472 -c 3 -W 3 1.1.1.1; ping -4 -M do -s 1372 -c 3 -W 3 1.1.1.1'
+    diagnose_section "guest egress (status, connect, total, bytes/s)" \
+        incus exec "$name" -- curl -4 -sS -m 30 -o /dev/null -w '%{http_code} %{time_connect} %{time_total} %{speed_download}\n' http://archive.ubuntu.com/ubuntu/dists/noble/Release
+    diagnose_section "host egress (status, connect, total, bytes/s)" \
+        curl -4 -sS -m 30 -o /dev/null -w '%{http_code} %{time_connect} %{time_total} %{speed_download}\n' http://archive.ubuntu.com/ubuntu/dists/noble/Release
+    diagnose_section "host links and offloads" \
+        sh -c 'ip -br link; for dev in $(ls /sys/class/net | grep -v lo); do echo "$dev:"; ethtool -k "$dev" 2>/dev/null | grep -E "checksum|segmentation-offload|generic-receive"; done'
     diagnose_section "guest cloud-init log tail" \
         incus exec "$name" -- tail -n 30 /var/log/cloud-init.log
     diagnose_section "host bridge" \

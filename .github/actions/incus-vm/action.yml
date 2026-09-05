@@ -109,3 +109,4 @@ runs:
           sudo "$cmd" -I DOCKER-USER -i incusbr0 -j ACCEPT
           sudo "$cmd" -I DOCKER-USER -o incusbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
         done
+        sudo iptables -t mangle -A FORWARD -i incusbr0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
