@@ -1,5 +1,6 @@
 import {
-  originBodyBytes,
+  bodyWithinBudget,
+  payloadTooLarge,
   type OriginBodyBudget,
 } from "@framework/next-router/origin-body";
 import { encodeForwardedSearch } from "@framework/next-router/request-target";
@@ -42,21 +43,9 @@ export function nodeOrigin(
 
     let body: BodyInit | null = request.body;
     if (budget && request.body) {
-      const contentType = request.headers.get("content-type");
-      const declared = Number(request.headers.get("content-length"));
-      if (Number.isFinite(declared) && declared > 0) {
-        if (originBodyBytes(declared, contentType, budget.encoding) > budget.maxBytes) {
-          return payloadTooLarge();
-        }
-      } else {
-        const buffered = await request.arrayBuffer();
-        if (
-          originBodyBytes(buffered.byteLength, contentType, budget.encoding) > budget.maxBytes
-        ) {
-          return payloadTooLarge();
-        }
-        body = buffered;
-      }
+      const within = await bodyWithinBudget(request, budget);
+      if (within === undefined) return payloadTooLarge();
+      body = within;
     }
 
     return originFetch(
@@ -68,10 +57,6 @@ export function nodeOrigin(
       }),
     );
   };
-}
-
-function payloadTooLarge(): Response {
-  return new Response(null, { status: 413 });
 }
 
 function noSingleFunctionUrl(app: string, count: number): Response {

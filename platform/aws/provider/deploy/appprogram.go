@@ -222,13 +222,12 @@ func (r *release) routerHost(plan providerkit.StackPlan) (*routerHost, error) {
 		AssetPrefix:       prefix,
 		ImageOptimizerURL: r.cfg.ImageOptimizerURL,
 		Env: map[string]string{
-			routingManifestEnv:         routingManifestInTask,
-			assetPrefixEnv:             prefix,
-			slugEnv:                    r.cfg.Slug,
-			appNameEnv:                 plan.App.App,
-			deploymentIDEnv:            plan.App.Deployment,
-			edge.OriginBodyLimitVar:    strconv.Itoa(lambdaOriginBodyLimitBytes),
-			edge.OriginBodyEncodingVar: edge.OriginBodyEncodingBase64,
+			routingManifestEnv:      routingManifestInTask,
+			assetPrefixEnv:          prefix,
+			slugEnv:                 r.cfg.Slug,
+			appNameEnv:              plan.App.App,
+			deploymentIDEnv:         plan.App.Deployment,
+			edge.OriginBodyLimitVar: strconv.Itoa(lambdaOriginBodyLimitBytes),
 		},
 	}
 	if r.cfg.AssetBucket != "" {

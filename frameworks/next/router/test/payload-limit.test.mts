@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, type RouteDeps } from "../src/index.mjs";
-import {
-  originBodyBudget,
-  originBodyBytes,
-  type OriginBodyBudget,
-} from "../src/origin-body.mjs";
+import { originBodyBudget, type OriginBodyBudget } from "../src/origin-body.mjs";
 import { noAssets } from "../test-support/dispatch-scenario.mjs";
 
 const LIMIT = 6_289_408;
@@ -64,59 +60,23 @@ function dispatchUpload(
   );
 }
 
-describe("originBodyBytes", () => {
-  it("is the raw byte length when the origin takes bodies verbatim", () => {
-    expect(originBodyBytes(9_000, "text/plain", "identity")).toBe(9_000);
-    expect(originBodyBytes(9_000, "application/octet-stream", "identity")).toBe(9_000);
-    expect(originBodyBytes(9_000, null, "identity")).toBe(9_000);
-  });
-
-  it("is the raw byte length for a text content type even when the origin base64-encodes", () => {
-    expect(originBodyBytes(9_000, "text/plain", "base64")).toBe(9_000);
-    expect(originBodyBytes(9_000, "application/json", "base64")).toBe(9_000);
-  });
-
-  it("expands to base64's 4/3 ratio for a non-text content type", () => {
-    expect(originBodyBytes(3, "application/octet-stream", "base64")).toBe(4);
-    expect(originBodyBytes(3_000_000, "application/octet-stream", "base64")).toBe(4_000_000);
-  });
-
-  it("treats an absent content type as non-text", () => {
-    expect(originBodyBytes(3, null, "base64")).toBe(4);
-  });
-});
-
 describe("originBodyBudget", () => {
   it("is undefined when the origin declares no limit", () => {
-    expect(originBodyBudget(undefined, undefined)).toBeUndefined();
-    expect(originBodyBudget(undefined, "base64")).toBeUndefined();
-    expect(originBodyBudget("", "base64")).toBeUndefined();
-    expect(originBodyBudget("nonsense", "base64")).toBeUndefined();
-    expect(originBodyBudget("0", "base64")).toBeUndefined();
-    expect(originBodyBudget("-1", "base64")).toBeUndefined();
+    expect(originBodyBudget(undefined)).toBeUndefined();
+    expect(originBodyBudget("")).toBeUndefined();
+    expect(originBodyBudget("nonsense")).toBeUndefined();
+    expect(originBodyBudget("0")).toBeUndefined();
+    expect(originBodyBudget("-1")).toBeUndefined();
   });
 
-  it("defaults to identity encoding when the origin declares a limit but no encoding", () => {
-    expect(originBodyBudget("1024", undefined)).toEqual({
-      maxBytes: 1024,
-      encoding: "identity",
-    });
-  });
-
-  it("reads the declared base64 encoding", () => {
-    expect(originBodyBudget("1024", "base64")).toEqual({
-      maxBytes: 1024,
-      encoding: "base64",
-    });
+  it("reads the declared limit", () => {
+    expect(originBodyBudget("1024")).toEqual({ maxBytes: 1024 });
   });
 });
 
 describe("a declared origin body budget", () => {
   it("passes a body comfortably under the limit through to the origin", async () => {
-    const { deps, calls, bytes } = recordingDeps({
-      maxBytes: LIMIT,
-      encoding: "base64",
-    });
+    const { deps, calls, bytes } = recordingDeps({ maxBytes: LIMIT });
 
     const body = "x".repeat(1024);
     const res = await dispatchUpload(deps, body, {
@@ -130,7 +90,7 @@ describe("a declared origin body budget", () => {
   });
 
   it("returns 413 without reaching the origin for a text body over the limit", async () => {
-    const { deps, calls } = recordingDeps({ maxBytes: LIMIT, encoding: "base64" });
+    const { deps, calls } = recordingDeps({ maxBytes: LIMIT });
 
     const size = LIMIT + 1;
     const res = await dispatchUpload(deps, "x".repeat(size), {
@@ -142,32 +102,32 @@ describe("a declared origin body budget", () => {
     expect(calls()).toBe(0);
   });
 
-  it("trips at roughly 3/4 of the limit when the origin base64-encodes non-text bodies", async () => {
-    const { deps, calls } = recordingDeps({ maxBytes: LIMIT, encoding: "base64" });
+  it("measures a binary body raw, so one just under the limit reaches the origin", async () => {
+    const { deps, calls } = recordingDeps({ maxBytes: LIMIT });
 
-    const overBinaryLimit = LIMIT - 1024;
-    const res = await dispatchUpload(deps, new Uint8Array(overBinaryLimit), {
+    const overLimit = LIMIT + 1024;
+    const res = await dispatchUpload(deps, new Uint8Array(overLimit), {
       "content-type": "application/octet-stream",
-      "content-length": String(overBinaryLimit),
+      "content-length": String(overLimit),
     });
 
     expect(res.status).toBe(413);
     expect(calls()).toBe(0);
 
-    const underBinaryLimit = Math.floor((LIMIT * 3) / 4) - 1024;
-    const ok = await dispatchUpload(deps, new Uint8Array(underBinaryLimit), {
+    const underLimit = LIMIT - 1024;
+    const ok = await dispatchUpload(deps, new Uint8Array(underLimit), {
       "content-type": "application/octet-stream",
-      "content-length": String(underBinaryLimit),
+      "content-length": String(underLimit),
     });
 
     expect(ok.status).toBe(200);
     expect(calls()).toBe(1);
   });
 
-  it("takes the same binary body when the origin declares identity encoding", async () => {
-    const { deps, calls } = recordingDeps({ maxBytes: LIMIT, encoding: "identity" });
+  it("takes a five megabyte binary body, the size the probe suite posts", async () => {
+    const { deps, calls, bytes } = recordingDeps({ maxBytes: LIMIT });
 
-    const size = LIMIT - 1024;
+    const size = 5 * 1024 * 1024;
     const res = await dispatchUpload(deps, new Uint8Array(size), {
       "content-type": "application/octet-stream",
       "content-length": String(size),
@@ -175,10 +135,11 @@ describe("a declared origin body budget", () => {
 
     expect(res.status).toBe(200);
     expect(calls()).toBe(1);
+    expect(bytes()).toBe(size);
   });
 
   it("buffers to measure a body that declares no content-length", async () => {
-    const { deps, calls } = recordingDeps({ maxBytes: 1024, encoding: "identity" });
+    const { deps, calls } = recordingDeps({ maxBytes: 1024 });
 
     const chunked = new ReadableStream({
       start(controller) {

@@ -33,6 +33,23 @@ async function resolved(
   );
 }
 
+function streamedPost(bytes: number): Request {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(bytes));
+      controller.close();
+    },
+  });
+  const request = new Request("https://api.example.com/upload", {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body,
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
+  request.headers.delete("content-length");
+  return request;
+}
+
 describe("node runtime serve path", () => {
   it("forwards to the app's single Function URL, signed with SigV4", async () => {
     const wire = capturing();
@@ -121,7 +138,7 @@ describe("node runtime serve path", () => {
     const wire = capturing();
     const serve = (await resolved(makeRecord(), {
       originFetch: wire.fetch,
-      originBodyBudget: { maxBytes: 16, encoding: "identity" },
+      originBodyBudget: { maxBytes: 16 },
     })) as ServeFetch;
 
     const response = await serve(
@@ -136,11 +153,51 @@ describe("node runtime serve path", () => {
     expect(wire.calls).toHaveLength(0);
   });
 
+  it("takes a five megabyte binary body against the lambda budget, measured raw", async () => {
+    const wire = capturing();
+    const serve = (await resolved(makeRecord(), {
+      originFetch: wire.fetch,
+      originBodyBudget: { maxBytes: 6_291_456 - 2048 },
+    })) as ServeFetch;
+
+    const size = 5 * 1024 * 1024;
+    const response = await serve(
+      new Request("https://api.example.com/api/probes/large", {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream" },
+        body: new Uint8Array(size),
+      }),
+    );
+
+    expect(response.status).not.toBe(413);
+    expect(wire.calls).toHaveLength(1);
+    expect((await wire.calls[0].arrayBuffer()).byteLength).toBe(size);
+  });
+
+  it("answers 413 for a binary body past the lambda budget", async () => {
+    const wire = capturing();
+    const serve = (await resolved(makeRecord(), {
+      originFetch: wire.fetch,
+      originBodyBudget: { maxBytes: 6_291_456 - 2048 },
+    })) as ServeFetch;
+
+    const response = await serve(
+      new Request("https://api.example.com/api/probes/large", {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream" },
+        body: new Uint8Array(6_291_456),
+      }),
+    );
+
+    expect(response.status).toBe(413);
+    expect(wire.calls).toHaveLength(0);
+  });
+
   it("forwards a body inside the origin's payload budget", async () => {
     const wire = capturing();
     const serve = (await resolved(makeRecord(), {
       originFetch: wire.fetch,
-      originBodyBudget: { maxBytes: 1024, encoding: "identity" },
+      originBodyBudget: { maxBytes: 1024 },
     })) as ServeFetch;
 
     await serve(
@@ -152,6 +209,36 @@ describe("node runtime serve path", () => {
     );
 
     expect(await wire.calls[0].json()).toEqual({ sku: "x" });
+  });
+
+  it("measures a streamed body with no content-length and forwards it intact", async () => {
+    const wire = capturing();
+    const serve = (await resolved(makeRecord(), {
+      originFetch: wire.fetch,
+      originBodyBudget: { maxBytes: 1024 },
+    })) as ServeFetch;
+
+    const request = streamedPost(512);
+    expect(request.headers.get("content-length")).toBeNull();
+
+    const response = await serve(request);
+
+    expect(response.status).not.toBe(413);
+    expect(wire.calls).toHaveLength(1);
+    expect((await wire.calls[0].arrayBuffer()).byteLength).toBe(512);
+  });
+
+  it("answers 413 for a streamed body with no content-length past the budget", async () => {
+    const wire = capturing();
+    const serve = (await resolved(makeRecord(), {
+      originFetch: wire.fetch,
+      originBodyBudget: { maxBytes: 1024 },
+    })) as ServeFetch;
+
+    const response = await serve(streamedPost(4096));
+
+    expect(response.status).toBe(413);
+    expect(wire.calls).toHaveLength(0);
   });
 
   it("binds none of next's machinery onto the forwarded request", async () => {

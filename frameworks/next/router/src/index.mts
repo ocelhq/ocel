@@ -22,7 +22,7 @@ import { localeOf, resolveLocale } from "./i18n.mjs";
 import { withStatus, withVercelCacheAlias } from "./http-cache.mjs";
 import { asSegmentPayload, isSegmentPrefetch } from "./segment.mjs";
 import {
-  originBodyBytes,
+  bodyWithinBudget,
   payloadTooLarge,
   type OriginBodyBudget,
 } from "./origin-body.mjs";
@@ -1111,19 +1111,9 @@ function originFetch(deps: RouteDeps): typeof fetch {
     if (budget) {
       request = new Request(input as RequestInfo, init);
       if (request.body) {
-        const contentType = request.headers.get("content-type");
-        const declared = Number(request.headers.get("content-length"));
-        if (Number.isFinite(declared) && declared > 0) {
-          if (originBodyBytes(declared, contentType, budget.encoding) > budget.maxBytes) {
-            return payloadTooLarge();
-          }
-        } else {
-          const buffered = await request.arrayBuffer();
-          if (originBodyBytes(buffered.byteLength, contentType, budget.encoding) > budget.maxBytes) {
-            return payloadTooLarge();
-          }
-          request = new Request(request, { body: buffered });
-        }
+        const body = await bodyWithinBudget(request, budget);
+        if (body === undefined) return payloadTooLarge();
+        if (body !== request.body) request = new Request(request, { body });
       }
     }
     const response = await (request

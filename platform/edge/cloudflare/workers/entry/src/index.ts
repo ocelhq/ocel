@@ -325,10 +325,7 @@ export default {
       {
         fetch,
         originFetch,
-        originBodyBudget: originBodyBudget(
-          env.OCEL_ORIGIN_BODY_LIMIT,
-          env.OCEL_ORIGIN_BODY_ENCODING,
-        ),
+        originBodyBudget: originBodyBudget(env.OCEL_ORIGIN_BODY_LIMIT),
         imageOrigin: functionUrlImageOrigin(
           env.OCEL_IMAGE_OPTIMIZER_URL,
           originFetch ?? fetch,
