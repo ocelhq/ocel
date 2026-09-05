@@ -1,4 +1,6 @@
 import http from "node:http";
+import v8 from "node:v8";
+import vm from "node:vm";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
@@ -249,6 +251,23 @@ test("the asset store reads an object out of the release's S3 prefix", async () 
   );
 
   expect(await bucket.get("prod/shop/web/r0a1b2c3d/assets/missing.html")).toBeNull();
+});
+
+test("an asset body stays readable after the S3 response it came from is collected", async () => {
+  v8.setFlagsFromString("--expose-gc");
+  const collectGarbage = vm.runInNewContext("gc") as () => void;
+  const viaLocal = ((input: Request | string) => {
+    const url = new URL(typeof input === "string" ? input : input.url);
+    return fetch(new URL(url.pathname, localOrigin));
+  }) as typeof fetch;
+  const bucket = s3AssetBucket("assets-bucket", "us-east-1", viaLocal);
+
+  const hit = await bucket.get("assets/index.html");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  collectGarbage();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(await new Response(hit!.body).text()).toBe("local");
 });
 
 test("a broken bucket is not a missing page", async () => {

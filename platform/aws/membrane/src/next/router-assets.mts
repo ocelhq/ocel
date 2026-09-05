@@ -1,5 +1,6 @@
 import type { AssetBucket, AssetObject } from "@framework/next-router/assets";
 import type { ResponseCache } from "@framework/next-router/http-cache";
+import { retainOwner } from "@framework/next-router/origin-response";
 
 const ABSENT = new Set([403, 404]);
 
@@ -11,7 +12,7 @@ export function s3AssetBucket(
   const origin = `https://${bucket}.s3.${region}.amazonaws.com`;
   return {
     async get(key: string): Promise<AssetObject | null> {
-      const response = await doFetch(`${origin}/${objectPath(key)}`);
+      const response = retainOwner(await doFetch(`${origin}/${objectPath(key)}`));
       if (!response.ok || !response.body) {
         await response.body?.cancel();
         if (response.ok || ABSENT.has(response.status)) return null;
