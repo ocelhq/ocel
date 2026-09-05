@@ -1,17 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import { AWS_BASE, journeyZone, renderConfig, shapeFor, VPS_BASE } from "./config";
 import { evidence } from "./evidence";
-import { type Compute, type Edge, specByName } from "./spec";
+import { specByName } from "./spec";
 import type { CellContext } from "./targets/types";
+import { compose, container, cloudflare, type Variant } from "./variants";
 
-function cell(example: string, compute: Compute, edge?: Edge): CellContext {
+function cell(example: string, variant?: Variant): CellContext {
   const spec = specByName(example);
   return {
     example: spec,
     name: example,
-    mode: "full",
-    compute,
-    ...(edge === undefined ? {} : { edge }),
+    ...(variant === undefined ? {} : { variant }),
     suites: spec.suites,
     dir: "/nowhere",
     slug: `j-1-${example}`,
@@ -32,9 +31,9 @@ describe("journeyZone", () => {
 });
 
 describe("shapeFor", () => {
-  it("overlays the aws example with the cell's compute, edge, dns and hostnames", () => {
+  it("overlays the aws example with the variant's config, the dns and the hostnames", () => {
     expect(
-      shapeFor(cell("workspace", "container", "cloudflare"), "aws", {
+      shapeFor(cell("workspace", compose(container, cloudflare)), "aws", {
         OCEL_JOURNEY_ZONE: "j.example",
         OCEL_JOURNEY_DNS: "cloudflare",
       }),
@@ -48,8 +47,8 @@ describe("shapeFor", () => {
     });
   });
 
-  it("leaves compute to the provider when the cell is serverless, and dns alone off a real zone", () => {
-    expect(shapeFor(cell("express", "serverless"), "aws", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
+  it("leaves the example's config alone for a base cell, and dns alone off a real zone", () => {
+    expect(shapeFor(cell("express"), "aws", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
       base: AWS_BASE,
       slug: "j-1-express",
       hostnames: { web: "web-j-1-express.j.example" },
@@ -57,7 +56,7 @@ describe("shapeFor", () => {
   });
 
   it("hangs a vps cell's hostnames under the box's zone", () => {
-    expect(shapeFor(cell("express", "container"), "vps", {})).toEqual({
+    expect(shapeFor(cell("express"), "vps", {})).toEqual({
       base: VPS_BASE,
       slug: "j-1-express",
       hostnames: { web: "web-j-1-express.localhost" },
@@ -65,7 +64,7 @@ describe("shapeFor", () => {
   });
 
   it("renames a dev cell and nothing else", () => {
-    expect(shapeFor(cell("express", "serverless"), "dev", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
+    expect(shapeFor(cell("express"), "dev", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
       base: AWS_BASE,
       slug: "j-1-express",
     });

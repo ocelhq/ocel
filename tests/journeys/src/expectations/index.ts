@@ -1,6 +1,6 @@
 import { contractRows } from "../contract";
 import { contractTitle, type PlannedTest, planTests } from "../plan";
-import { type Leg, specForTarget, type Suite, type TargetName } from "../spec";
+import { cellsOf, type Leg, specForTarget, type Suite, type TargetName } from "../spec";
 import { targetNamed } from "../targets";
 import { gaps } from "./gaps";
 import type {
@@ -9,10 +9,20 @@ import type {
   Expectations,
   Gap,
   Listed,
+  Resolved,
+  Skipped,
   TestPick,
 } from "./types";
 
-export type { Compute, Edge, ExpectationEnvironment, Expectations, Gap, Listed } from "./types";
+export type {
+  ExpectationEnvironment,
+  Expectations,
+  Gap,
+  Listed,
+  Resolved,
+  Skipped,
+} from "./types";
+export { ENVIRONMENTS } from "./types";
 
 export const CONTRACT_LEGS: Leg[] = ["contract", "redeploy", "rollback"];
 
@@ -33,6 +43,10 @@ const targetOf: Record<ExpectationEnvironment, TargetName> = {
   vps: "vps",
   "vps.incus": "vps",
 };
+
+export function targetOfEnvironment(environment: ExpectationEnvironment): TargetName {
+  return targetOf[environment];
+}
 
 function titlesOf(pick: TestPick): string[] {
   if (typeof pick === "string") {
@@ -72,25 +86,18 @@ function hitsFor(block: Affected, planned: PlannedTest[], said: string): Planned
   const titles = new Set(block.tests.flatMap(titlesOf));
   const hits = planned.filter(
     (test) =>
-      (block.cells === undefined || block.cells.includes(test.cell)) &&
-      (block.compute === undefined || block.compute.includes(test.variant.compute)) &&
-      (block.edge === undefined ||
-        (test.variant.edge !== undefined && block.edge.includes(test.variant.edge))) &&
+      (block.cells === undefined || block.cells.includes(`${test.example}/${test.app}`)) &&
+      (block.variants === undefined || block.variants.includes(test.variant)) &&
       titles.has(test.title),
   );
   for (const cell of block.cells ?? []) {
-    if (!hits.some((hit) => hit.cell === cell)) {
+    if (!hits.some((hit) => `${hit.example}/${hit.app}` === cell)) {
       throw new Error(`${said} lists ${cell}, which plans none of the tests named`);
     }
   }
-  for (const compute of block.compute ?? []) {
-    if (!hits.some((hit) => hit.variant.compute === compute)) {
-      throw new Error(`${said} lists ${compute}, which plans none of the tests named`);
-    }
-  }
-  for (const edge of block.edge ?? []) {
-    if (!hits.some((hit) => hit.variant.edge === edge)) {
-      throw new Error(`${said} lists ${edge}, which plans none of the tests named`);
+  for (const variant of block.variants ?? []) {
+    if (!hits.some((hit) => hit.variant === variant)) {
+      throw new Error(`${said} lists ${variant}, which plans none of the tests named`);
     }
   }
   if (hits.length === 0) {
@@ -99,33 +106,46 @@ function hitsFor(block: Affected, planned: PlannedTest[], said: string): Planned
   return hits;
 }
 
-export function resolve(listed: Gap[], environment: ExpectationEnvironment): Expectations {
+export function resolve(listed: Gap[], environment: ExpectationEnvironment): Resolved {
   checkIds(listed);
   const target = targetNamed(targetOf[environment]);
-  const planned = planTests(specForTarget(target.name), target.legs, target);
-  const out: Expectations = {};
+  const cells = specForTarget(target.name).flatMap((example) => cellsOf(example, target.name));
+  const planned = planTests(cells, target.legs);
+  const expectations: Expectations = {};
+  const skipped: Skipped = {};
   for (const gap of listed) {
     const carried = new Set<string>();
+    const skippedCells = new Set<string>();
     for (const block of gap.affects) {
       if (!block.on.includes(environment)) {
         continue;
       }
       for (const hit of hitsFor(block, planned, `${gap.id} on ${environment}`)) {
+        if (block.skip) {
+          skippedCells.add(hit.cell.split("/")[0] ?? hit.cell);
+        }
         const at = JSON.stringify([hit.cell, hit.title]);
         if (carried.has(at)) {
           continue;
         }
         carried.add(at);
-        const cell = (out[hit.cell] ??= {});
+        const cell = (expectations[hit.cell] ??= {});
         (cell[hit.title] ??= []).push(listedOf(gap));
       }
     }
+    for (const cell of skippedCells) {
+      (skipped[cell] ??= []).push(listedOf(gap));
+    }
   }
-  return out;
+  return { expectations, skipped };
 }
 
 export function expectationsFor(environment: ExpectationEnvironment): Expectations {
-  return resolve(gaps, environment);
+  return resolve(gaps, environment).expectations;
+}
+
+export function skippedOn(environment: ExpectationEnvironment): Skipped {
+  return resolve(gaps, environment).skipped;
 }
 
 export function issueUrl(issue: number): string {

@@ -253,9 +253,6 @@ async function list(): Promise<string[]> {
 export const devTarget: Target = {
   name: "dev",
   concurrency: 4,
-  modes: ["full"],
-  computes: ["serverless"],
-  edges: [],
   legTimeoutMs: 180_000,
   legs: ["up", "contract", "destroy"],
   guard,

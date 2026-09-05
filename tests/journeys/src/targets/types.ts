@@ -2,7 +2,8 @@ import type { Fetch } from "../contract";
 import type { Evidence } from "../evidence";
 import type { ExpectationEnvironment } from "../expectations/types";
 import type { PrepareFailures } from "../prepare";
-import type { Compute, Edge, ExampleSpec, Leg, Mode, Suite, TargetName } from "../spec";
+import type { ExampleSpec, Leg, Suite, TargetName } from "../spec";
+import type { Variant } from "../variants";
 
 export type Deployment = {
   baseUrl: (app: string) => string;
@@ -12,9 +13,7 @@ export type Deployment = {
 export type CellContext = {
   example: ExampleSpec;
   name: string;
-  mode: Mode;
-  compute: Compute;
-  edge?: Edge;
+  variant?: Variant;
   suites: Suite[];
   dir: string;
   slug: string;
@@ -27,9 +26,6 @@ export type Target = {
   concurrency: number;
   legTimeoutMs: number;
   legs: Leg[];
-  modes: Mode[];
-  computes: Compute[];
-  edges: Edge[];
   guard: () => Promise<ExpectationEnvironment>;
   prepare?: () => Promise<PrepareFailures | void>;
   setup: () => Promise<void>;

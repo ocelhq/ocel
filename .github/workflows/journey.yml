@@ -32,16 +32,17 @@ on:
         description: "Targets to drive against their real accounts, space separated. dev is never dispatched."
         default: "aws vps"
         type: string
-      edges:
-        description: "Edges the aws lane enumerates, space separated. Empty runs every edge it offers."
+      variants:
+        description: "Variants each lane enumerates, space separated, base among them. Empty runs every variant an example lists."
         default: ""
         type: string
-      computes:
-        description: "Computes the aws lane enumerates, space separated. Empty runs every compute it offers."
-        default: ""
-        type: string
+      skips:
+        description: "skip leaves out every cell the gap list marks dead; run drives them too, to see what has since turned green."
+        default: "skip"
+        type: choice
+        options: [skip, run]
       coverage:
-        description: "covering runs one cell per axis value; full runs every variant."
+        description: "covering runs each variant on one member of a group; full runs every cell."
         default: "full"
         type: choice
         options: [full, covering]
@@ -77,8 +78,8 @@ jobs:
       dev: ${{ steps.lanes.outputs.dev }}
       aws: ${{ steps.lanes.outputs.aws }}
       vps: ${{ steps.lanes.outputs.vps }}
-      edges: ${{ steps.lanes.outputs.edges }}
-      computes: ${{ steps.lanes.outputs.computes }}
+      variants: ${{ steps.lanes.outputs.variants }}
+      skips: ${{ steps.lanes.outputs.skips }}
       coverage: ${{ steps.lanes.outputs.coverage }}
       examples: ${{ steps.lanes.outputs.examples }}
       seed: ${{ steps.lanes.outputs.seed }}
@@ -105,8 +106,8 @@ jobs:
           ACTION: ${{ github.event.action }}
           LABEL: ${{ github.event.label.name }}
           TARGETS: ${{ inputs.targets }}
-          EDGES: ${{ inputs.edges }}
-          COMPUTES: ${{ inputs.computes }}
+          VARIANTS: ${{ inputs.variants }}
+          SKIPS: ${{ inputs.skips }}
           COVERAGE: ${{ inputs.coverage }}
           EXAMPLES: ${{ inputs.examples }}
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -161,16 +162,16 @@ jobs:
             coverage=${COVERAGE:-full}
           else
             coverage=covering
-            EDGES=
-            COMPUTES=
+            VARIANTS=
+            SKIPS=
           fi
 
           {
             echo "dev=$dev"
             echo "aws=$aws"
             echo "vps=$vps"
-            echo "edges=${EDGES:-}"
-            echo "computes=${COMPUTES:-}"
+            echo "variants=${VARIANTS:-}"
+            echo "skips=${SKIPS:-skip}"
             echo "coverage=$coverage"
             echo "examples=$(echo "$EXAMPLES" | tr ' ' ',')"
             echo "seed=$seed"
@@ -240,6 +241,8 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
       REAL: ${{ needs.binary.outputs.real }}
       OCEL_JOURNEY_COVERAGE: ${{ needs.binary.outputs.coverage }}
+      OCEL_JOURNEY_VARIANTS: ${{ needs.binary.outputs.variants }}
+      OCEL_JOURNEY_SKIPS: ${{ needs.binary.outputs.skips }}
       EMULATOR: ocel-journey-${{ github.run_id }}-${{ github.run_attempt }}
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
       OCEL_RESOURCE_POSTGRES_main: '{"name":"main","postgres":{"host":"localhost","port":5432,"database":"postgres","username":"postgres","password":"postgres"}}'
@@ -302,9 +305,6 @@ jobs:
 
       - name: Run the journey
         if: ${{ needs.binary.outputs.aws == 'true' }}
-        env:
-          OCEL_JOURNEY_EDGES: ${{ needs.binary.outputs.edges }}
-          OCEL_JOURNEY_COMPUTES: ${{ needs.binary.outputs.computes }}
         run: |
           set -uo pipefail
           if [ "$REAL" = true ]; then
@@ -365,6 +365,7 @@ jobs:
         if: ${{ !cancelled() && needs.binary.outputs.dev == 'true' }}
         env:
           OCEL_TARGET: dev
+          OCEL_JOURNEY_SKIPS: ${{ needs.binary.outputs.skips }}
         run: pnpm --filter @ocel-tests/journeys journey
 
       - name: Dump console/web log on failure
@@ -405,6 +406,8 @@ jobs:
       OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
       OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
       OCEL_JOURNEY_COVERAGE: ${{ needs.binary.outputs.coverage }}
+      OCEL_JOURNEY_VARIANTS: ${{ needs.binary.outputs.variants }}
+      OCEL_JOURNEY_SKIPS: ${{ needs.binary.outputs.skips }}
       CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
       CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
       VM: ocel-journey-${{ github.run_id }}-${{ github.run_attempt }}

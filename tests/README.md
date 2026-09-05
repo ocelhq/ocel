@@ -39,9 +39,10 @@ pnpm --filter @ocel-tests/journeys cell --example express --target aws
 scripts/floci.sh destroy ocel-journeys
 ```
 
-One emulator serves every edge. `OCEL_JOURNEY_EDGES` and `OCEL_JOURNEY_COMPUTES` narrow
-what the target offers, and `OCEL_JOURNEY_COVERAGE=full` runs every variant rather than a
-covering subset.
+One emulator serves every edge. `OCEL_JOURNEY_VARIANTS` narrows a run to the variants it
+names (`base` among them), `OCEL_JOURNEY_COVERAGE=full` runs every cell rather than a
+covering subset, and `OCEL_JOURNEY_SKIPS=run` drives the cells the gap list marks dead at
+up, which a run otherwise leaves out.
 
 The host is `localhost.localstack.cloud`, not the `127.0.0.1` the script prints: S3-Control
 addresses its endpoint as `<account>.<host>`, and `<account>.127.0.0.1` resolves nowhere,

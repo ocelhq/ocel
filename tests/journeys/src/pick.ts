@@ -1,18 +1,14 @@
 import { createHash } from "node:crypto";
-import {
-  type ExampleSpec,
-  modesOf,
-  type Offered,
-  preferredOf,
-  type Variant,
-  variantsOf,
-} from "./spec";
+import { type Cell, type ExampleSpec, preferredOf, variantNameOf } from "./spec";
+import { BASE } from "./variants";
 
 export type Pick = { seed: string; touched: string[] };
 
 export type Coverage = "full" | "covering";
 
 export const COVERAGES: Coverage[] = ["full", "covering"];
+
+export type CellsFor = (example: ExampleSpec) => Cell[];
 
 function rotation(seed: string, group: string): number {
   return createHash("sha256").update(`${seed}:${group}`).digest().readUInt32BE(0);
@@ -85,65 +81,30 @@ export function coverageFrom(env: NodeJS.ProcessEnv = process.env): Coverage {
   return asked as Coverage;
 }
 
-function sameVariant(one: Variant, other: Variant): boolean {
-  return one.mode === other.mode && one.compute === other.compute && one.edge === other.edge;
-}
-
-function defaultVariant(example: ExampleSpec, offered: Offered): Variant {
-  const [variant] = variantsOf(example, offered);
-  if (!variant) {
-    throw new Error(`${example.name} runs in no variant this target offers`);
-  }
-  return variant;
-}
-
-function oneFactorOff(offered: Offered): Variant[] {
-  const mode = offered.modes[0];
-  const compute = offered.computes[0];
-  const edge = offered.edges[0];
-  const rest: Variant = edge === undefined ? { mode, compute } : { mode, compute, edge };
-  return [
-    ...offered.modes.slice(1).map((one) => ({ ...rest, mode: one })),
-    ...offered.computes.slice(1).map((one) => ({ ...rest, compute: one })),
-    ...offered.edges.slice(1).map((one) => ({ ...rest, edge: one })),
-  ];
-}
-
-function foldedIntoAModeItRuns(member: ExampleSpec, variant: Variant, offered: Offered): Variant {
-  const modes = modesOf(member, offered.modes);
-  return modes.includes(variant.mode) ? variant : { ...variant, mode: modes[0] };
-}
-
-function takerOf(
-  free: ExampleSpec[],
-  variant: Variant,
-  offered: Offered,
-  turn: number,
-): ExampleSpec {
-  const able = free.filter((row) => modesOf(row, offered.modes).includes(variant.mode));
-  const pool = able.length > 0 ? able : free;
-  return pool[turn % pool.length];
-}
-
 function coverGroup(
   group: string,
   members: ExampleSpec[],
-  offered: Offered,
+  cellsFor: CellsFor,
   pick: Pick,
-): Map<string, Variant[]> {
-  const chosen = new Map<string, Variant[]>();
-  const add = (example: ExampleSpec, variant: Variant) => {
+): Map<string, Cell[]> {
+  const chosen = new Map<string, Cell[]>();
+  const add = (example: ExampleSpec, cell: Cell | undefined) => {
+    if (!cell) {
+      return;
+    }
     const held = chosen.get(example.name) ?? [];
-    if (!held.some((one) => sameVariant(one, variant))) {
-      held.push(variant);
+    if (!held.some((one) => one.name === cell.name)) {
+      held.push(cell);
     }
     chosen.set(example.name, held);
   };
+  const cellOf = (example: ExampleSpec, variant: string) =>
+    cellsFor(example).find((cell) => variantNameOf(cell) === variant);
 
   const free: ExampleSpec[] = [];
   for (const member of members) {
     if (pick.touched.includes(member.dir)) {
-      chosen.set(member.name, variantsOf(member, offered));
+      chosen.set(member.name, cellsFor(member));
     } else {
       free.push(member);
     }
@@ -154,40 +115,53 @@ function coverGroup(
 
   const start = rotation(pick.seed, group);
   const lead = free.find((row) => row.name === preferredOf(group)) ?? free[start % free.length];
-  add(lead, defaultVariant(lead, offered));
+  add(lead, cellOf(lead, BASE));
 
-  for (const [index, variant] of oneFactorOff(offered).entries()) {
-    const member = takerOf(free, variant, offered, start + index);
-    add(member, foldedIntoAModeItRuns(member, variant, offered));
+  const variants: string[] = [];
+  for (const member of free) {
+    for (const cell of cellsFor(member)) {
+      const variant = variantNameOf(cell);
+      if (variant !== BASE && !variants.includes(variant)) {
+        variants.push(variant);
+      }
+    }
+  }
+  for (const [index, variant] of variants.entries()) {
+    const able = free.filter((member) => cellOf(member, variant) !== undefined);
+    const taker = able[(start + index) % able.length];
+    add(taker, cellOf(taker, variant));
   }
 
   for (const member of free) {
     if (!chosen.has(member.name)) {
-      add(member, defaultVariant(member, offered));
+      add(member, cellOf(member, BASE));
     }
   }
   return chosen;
 }
 
-export function coverVariants(
+export function coverCells(
   rows: ExampleSpec[],
-  offered: Offered,
+  cellsFor: CellsFor,
   coverage: Coverage,
   pick: Pick | undefined,
-): Map<string, Variant[]> {
+): Map<string, Cell[]> {
   if (coverage === "full") {
-    return new Map(rows.map((row) => [row.name, variantsOf(row, offered)]));
+    return new Map(rows.map((row) => [row.name, cellsFor(row)]));
   }
   const asked = pick ?? { seed: "", touched: [] };
+  const out = new Map<string, Cell[]>();
   const groups = new Map<string, ExampleSpec[]>();
   for (const row of rows) {
-    const name = row.group ?? row.name;
-    groups.set(name, [...(groups.get(name) ?? []), row]);
+    if (row.group === undefined) {
+      out.set(row.name, cellsFor(row));
+      continue;
+    }
+    groups.set(row.group, [...(groups.get(row.group) ?? []), row]);
   }
-  const out = new Map<string, Variant[]>();
   for (const [group, members] of groups) {
-    for (const [name, variants] of coverGroup(group, members, offered, asked)) {
-      out.set(name, variants);
+    for (const [name, cells] of coverGroup(group, members, cellsFor, asked)) {
+      out.set(name, cells);
     }
   }
   return new Map(rows.map((row) => [row.name, out.get(row.name) ?? []]));

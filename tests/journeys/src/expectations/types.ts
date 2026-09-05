@@ -1,8 +1,8 @@
-import type { Compute, Edge, Leg, Suite } from "../spec";
+import type { Leg, Suite } from "../spec";
 
 export type ExpectationEnvironment = "aws" | "aws.floci" | "dev" | "vps" | "vps.incus";
 
-export type { Compute, Edge };
+export const ENVIRONMENTS: ExpectationEnvironment[] = ["aws", "aws.floci", "dev", "vps", "vps.incus"];
 
 export type TestPick =
   | string
@@ -11,10 +11,10 @@ export type TestPick =
 
 export type Affected = {
   on: ExpectationEnvironment[];
-  edge?: Edge[];
-  compute?: Compute[];
   cells?: string[];
+  variants?: string[];
   tests: TestPick[];
+  skip?: true;
 };
 
 export type Gap = {
@@ -27,3 +27,7 @@ export type Gap = {
 export type Listed = Pick<Gap, "id" | "reason" | "issue">;
 
 export type Expectations = Record<string, Record<string, Listed[]>>;
+
+export type Skipped = Record<string, Listed[]>;
+
+export type Resolved = { expectations: Expectations; skipped: Skipped };

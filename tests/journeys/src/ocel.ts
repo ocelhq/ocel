@@ -9,10 +9,8 @@ import { plantWorkspace } from "./tree";
 
 export type Ran = { code: number | null; stdout: string; stderr: string };
 
-export const SUPPRESS_RESOURCES_ENV = "OCEL_DEPLOY_SUPPRESS_RESOURCES";
-
 export function cellEnv(cell: CellContext): NodeJS.ProcessEnv {
-  return cell.mode === "hello" ? { [SUPPRESS_RESOURCES_ENV]: "1" } : {};
+  return { ...cell.variant?.env };
 }
 
 export const COMMAND_LOG = "commands.jsonl";

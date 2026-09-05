@@ -1,23 +1,9 @@
 import { readFileSync } from "node:fs";
 import { prepareFile } from "./paths";
-import type { Edge } from "./spec";
 
-export type PrepareFailures = {
-  lane?: string;
-  edges?: { [K in Edge]?: string };
-};
+export type PrepareFailures = { lane?: string };
 
 export type PrepareRecord = { ms: number; failures: PrepareFailures };
-
-export function failureFor(
-  failures: PrepareFailures,
-  edge: Edge | undefined,
-): string | undefined {
-  if (failures.lane) {
-    return failures.lane;
-  }
-  return edge === undefined ? undefined : failures.edges?.[edge];
-}
 
 export function readPrepared(runId: string, target: string): PrepareRecord | undefined {
   try {
@@ -28,6 +14,6 @@ export function readPrepared(runId: string, target: string): PrepareRecord | und
   }
 }
 
-export function readPrepareFailures(runId: string, target: string): PrepareFailures {
-  return readPrepared(runId, target)?.failures ?? {};
+export function readPrepareFailure(runId: string, target: string): string | undefined {
+  return readPrepared(runId, target)?.failures.lane;
 }
