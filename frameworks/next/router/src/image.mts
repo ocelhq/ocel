@@ -5,6 +5,7 @@ import type {
 } from "@framework/next-protocol/routing-manifest";
 
 import { mediaType } from "./accept.mjs";
+import { retainOwner } from "./origin-response.mjs";
 import {
   deltaSeconds,
   headResponse,
@@ -397,11 +398,13 @@ export function functionUrlImageOrigin(
   return async (payload) => {
     try {
       return relayed(
-        await doFetch(url, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload),
-        }),
+        retainOwner(
+          await doFetch(url, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          }),
+        ),
       );
     } catch {
       return unprovisionedImageOrigin(payload);
