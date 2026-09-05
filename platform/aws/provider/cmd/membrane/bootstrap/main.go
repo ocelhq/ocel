@@ -160,7 +160,9 @@ func fatalInit(msg string) {
 		})
 		req, _ := http.NewRequest("POST", url, bytes.NewReader(payload))
 		req.Header.Set("Lambda-Runtime-Function-Error-Type", "Ocel.InitError")
-		http.DefaultClient.Do(req)
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			resp.Body.Close()
+		}
 	}
 	os.Exit(1)
 }

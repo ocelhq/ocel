@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	provider "github.com/pulumi/pulumi-go-provider"
 	"github.com/pulumi/pulumi-go-provider/infer"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
@@ -53,7 +52,7 @@ func probePlugin(t *testing.T, counter *pushCounter) pulumi.Plugin {
 	if err != nil {
 		t.Fatalf("build the probe plugin: %v", err)
 	}
-	var _ provider.Provider = built
+	var _ = built
 	return pulumi.Plugin{Package: "probe", Version: "1.0.0", Provider: built}
 }
 

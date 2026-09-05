@@ -1,10 +1,11 @@
 package deploy
 
 import (
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func TestIdentity(t *testing.T) {

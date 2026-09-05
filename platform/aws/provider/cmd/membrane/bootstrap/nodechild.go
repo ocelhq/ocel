@@ -151,7 +151,7 @@ func (m *nodeChild) writeControlRequest(line []byte, deadline time.Time) error {
 		return err
 	}
 	_, err := m.control.Write(line)
-	m.control.SetWriteDeadline(time.Time{})
+	_ = m.control.SetWriteDeadline(time.Time{})
 	return err
 }
 

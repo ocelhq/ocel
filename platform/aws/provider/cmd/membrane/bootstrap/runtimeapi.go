@@ -81,7 +81,7 @@ func (c *runtimeClient) startResponse(ctx context.Context, requestID string) (*r
 	go func() {
 		resp, err := c.http.Do(req)
 		if err == nil {
-			io.Copy(io.Discard, resp.Body)
+			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 		}
 		w.done <- err

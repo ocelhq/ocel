@@ -53,7 +53,7 @@ func Sanitize(value string) string {
 	var b strings.Builder
 	prevDash := false
 	for _, r := range strings.ToLower(value) {
-		if !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
 			r = '-'
 		}
 		if r == '-' {

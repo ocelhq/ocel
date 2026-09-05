@@ -39,7 +39,7 @@ func TestGlobalPreviewBaseDomain(t *testing.T) {
 
 		for arg, want := range map[string]string{
 			"*.preview.acme.com": "preview.acme.com",
-			" *.ACME.com ":       "acme.com",
+			" *.ACME.com ":       "acme.com", //nolint:gocritic // the whitespace is what the parser trims
 		} {
 			got, err := globalPreviewBaseDomain(arg)
 			if err != nil {

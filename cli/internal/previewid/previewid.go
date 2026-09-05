@@ -34,7 +34,7 @@ func Resolve(ref string, prNumber string) (Identity, error) {
 	switch {
 	case base == "":
 		base = "env"
-	case !(base[0] >= 'a' && base[0] <= 'z'):
+	case base[0] < 'a' || base[0] > 'z':
 		base = "env-" + base
 	}
 	if len(base) > maxBaseLen {

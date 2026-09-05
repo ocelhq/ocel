@@ -11,7 +11,7 @@ func TestBoundedCaptureAnnotate(t *testing.T) {
 		c := &boundedCapture{}
 		err := errors.New("exit status 1")
 		got := c.annotate(err)
-		if got != err {
+		if !errors.Is(got, err) {
 			t.Errorf("annotate() = %v, want the original error unwrapped", got)
 		}
 	})

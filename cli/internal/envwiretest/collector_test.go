@@ -3,6 +3,7 @@ package envwiretest
 import (
 	"cmp"
 	"context"
+	"errors"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -159,7 +160,8 @@ func runDiscovery(t *testing.T, root string, gate *envgate.Gate) {
 func refuse(t *testing.T, gate *envgate.Gate) *envgate.Refusal {
 	t.Helper()
 	err := gate.Check()
-	refusal, ok := err.(*envgate.Refusal)
+	refusal := &envgate.Refusal{}
+	ok := errors.As(err, &refusal)
 	if !ok {
 		t.Fatalf("Check() = %v, want a *Refusal", err)
 	}

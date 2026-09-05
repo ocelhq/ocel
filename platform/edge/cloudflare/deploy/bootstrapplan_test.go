@@ -344,12 +344,12 @@ func TestBootstrapWithTheCredentialGone(t *testing.T) {
 			t.Errorf("secrets set = %+v, want %s alone on %s", m.putSecrets, bootstrapSecretBinding, sharedStoreScriptName)
 		}
 		for _, offer := range out.Offers {
-			switch {
-			case offer.Kind == edge.OfferDeploymentsStore:
+			switch offer.Kind {
+			case edge.OfferDeploymentsStore:
 				if cred := credOf(t, offer); cred != m.putSecrets[0].text {
 					t.Errorf("offered credential = %q, want the %q that was set on the worker", cred, m.putSecrets[0].text)
 				}
-			case offer.Kind == edge.OfferISRWriter:
+			case edge.OfferISRWriter:
 				if cred := credOf(t, offer); cred != "" {
 					t.Errorf("the isr writer was reoffered %q, want the credential it still holds left alone", cred)
 				}

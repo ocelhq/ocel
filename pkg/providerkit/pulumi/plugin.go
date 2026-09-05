@@ -58,6 +58,6 @@ func host(plugin Plugin) (int, error) {
 	}
 	serving := grpc.NewServer()
 	rpc.RegisterResourceProviderServer(serving, server)
-	go serving.Serve(listener)
+	go func() { _ = serving.Serve(listener) }()
 	return listener.Addr().(*net.TCPAddr).Port, nil
 }

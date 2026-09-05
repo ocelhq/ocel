@@ -2,6 +2,7 @@ package envwiretest
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"slices"
@@ -66,7 +67,8 @@ func TestDevserverDiscover(t *testing.T) {
 
 		t.Run("the verdict is exactly the cells dev's store leaves short", func(t *testing.T) {
 			err := srv.CheckEnv(context.Background())
-			refusal, ok := err.(*envgate.Refusal)
+			refusal := &envgate.Refusal{}
+			ok := errors.As(err, &refusal)
 			if !ok {
 				t.Fatalf("CheckEnv() = %v, want a *Refusal", err)
 			}

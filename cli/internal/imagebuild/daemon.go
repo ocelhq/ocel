@@ -133,11 +133,11 @@ func (d daemon) tag(ctx context.Context, image Image) error {
 }
 
 func (d daemon) unreachable(err error) error {
-	return fmt.Errorf("no docker daemon answers at %s, and a container app's image is built by the one on this machine: start docker, or set %s to a daemon that is running\n    %v", d.Address, providerkit.DockerHostEnv, err)
+	return fmt.Errorf("no docker daemon answers at %s, and a container app's image is built by the one on this machine: start docker, or set %s to a daemon that is running\n    %w", d.Address, providerkit.DockerHostEnv, err)
 }
 
 func (d daemon) noBuilder(err error) error {
-	return fmt.Errorf("the daemon at %s never named a builder to run the build on: start docker, or set %s to a daemon that is running\n    %v", d.Address, providerkit.DockerHostEnv, err)
+	return fmt.Errorf("the daemon at %s never named a builder to run the build on: start docker, or set %s to a daemon that is running\n    %w", d.Address, providerkit.DockerHostEnv, err)
 }
 
 func Reachable(ctx context.Context) error {

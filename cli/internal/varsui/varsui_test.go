@@ -134,7 +134,7 @@ func (s *fakeStore) Delete(_ context.Context, at envgate.Address, expected *int6
 
 func (s *fakeStore) History(_ context.Context, at envgate.Address) ([]varsui.Version, error) {
 	_, held := s.held[at]
-	if _, base := s.cells[at.Cell]; !held && !(base && at.Environment == "") {
+	if _, base := s.cells[at.Cell]; !held && (!base || at.Environment != "") {
 		return nil, nil
 	}
 	return []varsui.Version{{Version: 2, CreatedAt: 200}, {Version: 1, CreatedAt: 100}}, nil

@@ -662,7 +662,7 @@ type racingSSM struct {
 func (r *racingSSM) PutParameter(ctx context.Context, in *ssm.PutParameterInput, opts ...func(*ssm.Options)) (*ssm.PutParameterOutput, error) {
 	if !r.raced {
 		r.raced = true
-		r.fakeSSM.params[aws.ToString(in.Name)] = r.winner
+		r.params[aws.ToString(in.Name)] = r.winner
 	}
 	return r.fakeSSM.PutParameter(ctx, in, opts...)
 }

@@ -1,6 +1,9 @@
 package credentials
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestLoad(t *testing.T) {
 	t.Run("an env token overrides everything else", func(t *testing.T) {
@@ -44,7 +47,7 @@ func TestLoad(t *testing.T) {
 		if err == nil {
 			t.Skip("machine has ambient keyring/file credentials; env fallthrough still verified by the token being empty")
 		}
-		if err != ErrNotLoggedIn {
+		if !errors.Is(err, ErrNotLoggedIn) {
 			t.Logf("Load() without env token returned: %v", err)
 		}
 	})

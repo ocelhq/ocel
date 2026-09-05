@@ -260,7 +260,7 @@ func (e *Edge) open(state edge.StackState) (*Stack, error) {
 	if build == nil {
 		records := e.records
 		build = func(held edge.StackState) Ledger {
-			return ledger.New(records, providerkit.Class(held.Class), held.Slug)
+			return ledger.New(records, held.Class, held.Slug)
 		}
 	}
 	return &Stack{front: e, state: state, ledger: build(state)}, nil

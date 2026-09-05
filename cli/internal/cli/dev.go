@@ -132,7 +132,7 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, c
 	if err := result.Claim(addr); err != nil {
 		return err
 	}
-	defer result.Release()
+	defer func() { _ = result.Release() }()
 
 	resolved, err := resolveOnce(ctx, srv, cfg, projectCfg.EnvVars, stdout, stderr)
 	if err != nil {

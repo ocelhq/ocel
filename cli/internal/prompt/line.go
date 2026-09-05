@@ -25,7 +25,7 @@ func (p Prompter) confirmLine(ctx context.Context, question string) (bool, error
 
 	line, err := p.readLine(ctx)
 	if err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return false, nil
 		}
 		return false, err
@@ -40,7 +40,7 @@ func (p Prompter) phraseLine(ctx context.Context, label, phrase string) (bool, e
 
 	line, err := p.readLine(ctx)
 	if err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return false, nil
 		}
 		return false, err
@@ -67,7 +67,7 @@ func (p Prompter) selectLine(ctx context.Context, title string, options []Option
 
 		line, err := p.readLine(ctx)
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return nil, false, nil
 			}
 			return nil, false, err
@@ -154,10 +154,10 @@ func readLineFrom(stdin io.Reader) (string, error) {
 	}
 
 	line = strings.TrimRight(line, "\r\n")
-	if err == io.EOF && line != "" {
+	if errors.Is(err, io.EOF) && line != "" {
 		err = nil
 	}
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		err = fmt.Errorf("failed to read input: %w", err)
 	}
 	return line, err

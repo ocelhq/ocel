@@ -42,7 +42,7 @@ func TestSliceDatabaseName(t *testing.T) {
 		if len(got) > maxPostgresIdentLen {
 			t.Errorf("sliceDatabaseName() length = %d, want <= %d", len(got), maxPostgresIdentLen)
 		}
-		if first := got[0]; !(first >= 'a' && first <= 'z') {
+		if first := got[0]; first < 'a' || first > 'z' {
 			t.Errorf("sliceDatabaseName() = %q, want a letter first", got)
 		}
 	})
@@ -51,7 +51,7 @@ func TestSliceDatabaseName(t *testing.T) {
 		t.Parallel()
 
 		got := sliceDatabaseName(sliceCoordinate("7shop", "web", "main"))
-		if first := got[0]; !(first >= 'a' && first <= 'z') {
+		if first := got[0]; first < 'a' || first > 'z' {
 			t.Errorf("sliceDatabaseName() = %q, want a letter first", got)
 		}
 	})

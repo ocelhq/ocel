@@ -314,11 +314,11 @@ func (h *handlers) ListLinks(ctx context.Context, req *envvarsv1.ListLinksReques
 	for _, published := range found {
 		link, err := DecodeLink(published.Record)
 		if err != nil {
-			return nil, linksError(fmt.Errorf("read link %s's record: %v: %w", published.Name, err, ErrUnreadableRecord))
+			return nil, linksError(fmt.Errorf("read link %s's record: %w: %w", published.Name, err, ErrUnreadableRecord))
 		}
 		shapes, err := DecodeShapes(published.Shapes)
 		if err != nil {
-			return nil, linksError(fmt.Errorf("read link %s's shape: %v: %w", published.Name, err, ErrUnreadableRecord))
+			return nil, linksError(fmt.Errorf("read link %s's shape: %w: %w", published.Name, err, ErrUnreadableRecord))
 		}
 		resp.Links = append(resp.Links, &envvarsv1.LinkSummary{
 			Name:       published.Name,

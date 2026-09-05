@@ -248,7 +248,7 @@ func encode(name providerkit.RecordName) (string, error) {
 func encodeSegment(segment string) string {
 	var written strings.Builder
 	for i := 0; i < len(segment); i++ {
-		if plain(segment[i]) && !(i == 0 && segment[i] == '.') {
+		if plain(segment[i]) && (i != 0 || segment[i] != '.') {
 			written.WriteByte(segment[i])
 			continue
 		}
