@@ -1,5 +1,8 @@
 import type { Fetch } from "../../contract";
 
+const EDGE_HEADER = "x-ocel-edge";
+const STABLE_EDGE_ANSWERS = 6;
+
 export type ServingReport = {
   host: string;
   waitedMs: number;
@@ -27,6 +30,9 @@ export async function awaitServing(
     const host = new URL(baseUrl).host;
     let attempts = 0;
     let last = "no attempt completed";
+    let edged = 0;
+    let edgedSince = began;
+    let edgedStatus = 0;
     while (true) {
       attempts += 1;
       try {
@@ -36,8 +42,25 @@ export async function awaitServing(
           break;
         }
         last = `last status ${response.status}`;
+        if (response.headers.get(EDGE_HEADER)) {
+          if (edged === 0) {
+            edgedSince = now();
+          }
+          edged += 1;
+          edgedStatus = response.status;
+        } else {
+          edged = 0;
+        }
       } catch (refused) {
         last = (refused as Error).message;
+        edged = 0;
+      }
+      if (edged >= STABLE_EDGE_ANSWERS) {
+        throw new Error(
+          `${host} is served by the ocel edge, which answered ${edgedStatus} for ${edged} ` +
+            `consecutive attempts over ${Math.round((now() - edgedSince) / 1000)}s: the app ` +
+            `behind the edge is broken, not still propagating`,
+        );
       }
       if (now() >= deadline) {
         throw new Error(
