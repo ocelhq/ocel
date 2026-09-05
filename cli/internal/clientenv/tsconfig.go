@@ -11,28 +11,28 @@ import (
 
 const maxExtends = 16
 
-func withMapping(path, source string) (string, error) {
+func withMapping(path, source, accessor string) (string, error) {
 	if hasKey(source, specifier) {
 		return source, nil
 	}
 
 	file, ok := parse(source)
 	if !ok {
-		return "", refuse(path, "", "ocel could not read it")
+		return "", refuse(path, "", accessor, "ocel could not read it")
 	}
 
 	baseURL := file.baseURL
 	if file.hasExtends && (!file.hasBaseURL || !file.hasPaths) {
 		base, err := extended(path, file.extends)
 		if err != nil {
-			return "", refuse(path, baseURL, err.Error())
+			return "", refuse(path, baseURL, accessor, err.Error())
 		}
 		if !file.hasPaths {
 			if base.mapped {
 				return source, nil
 			}
 			if base.hasPaths {
-				return "", refuse(path, baseURL, fmt.Sprintf(
+				return "", refuse(path, baseURL, accessor, fmt.Sprintf(
 					"it extends %q, which states compilerOptions.paths of its own, and TypeScript does not merge paths across extends — writing one here would replace every alias that config declares",
 					file.extends))
 			}
@@ -42,9 +42,9 @@ func withMapping(path, source string) (string, error) {
 		}
 	}
 
-	target, err := accessorTarget(baseURL)
+	target, err := accessorTarget(filepath.Dir(path), baseURL, accessor)
 	if err != nil {
-		return "", refuse(path, "", fmt.Sprintf("ocel could not resolve the accessor against its baseUrl %q", baseURL))
+		return "", refuse(path, "", accessor, fmt.Sprintf("ocel could not resolve the accessor against its baseUrl %q", baseURL))
 	}
 
 	entry := fmt.Sprintf("%q: [%q]", specifier, target)
@@ -58,23 +58,23 @@ func withMapping(path, source string) (string, error) {
 	}
 }
 
-func refuse(path, baseURL, reason string) error {
-	target, err := accessorTarget(baseURL)
+func refuse(path, baseURL, accessor, reason string) error {
+	target, err := accessorTarget(filepath.Dir(path), baseURL, accessor)
 	if err != nil {
-		target, _ = accessorTarget("")
+		target, _ = accessorTarget(filepath.Dir(path), "", accessor)
 	}
 	return fmt.Errorf("%s: %s, so the %q mapping was not written. Add it under compilerOptions.paths yourself:\n    %q: [%q]",
 		filepath.Base(path), reason, specifier, specifier, target)
 }
 
-func accessorTarget(baseURL string) (string, error) {
-	target := accessorPath
+func accessorTarget(configDir, baseURL, accessor string) (string, error) {
+	from := configDir
 	if baseURL != "" {
-		rel, err := filepath.Rel(filepath.FromSlash(baseURL), accessorPath)
-		if err != nil {
-			return "", err
-		}
-		target = rel
+		from = filepath.Join(configDir, filepath.FromSlash(baseURL))
+	}
+	target, err := filepath.Rel(from, accessor)
+	if err != nil {
+		return "", err
 	}
 	slashed := filepath.ToSlash(target)
 	if strings.HasPrefix(slashed, "../") {

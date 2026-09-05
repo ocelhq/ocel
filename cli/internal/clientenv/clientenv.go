@@ -19,11 +19,13 @@ import (
 
 const specifier = "ocel/env/client"
 
-var accessorPath = filepath.Join(".ocel", "env-client.ts")
+const scratchDirName = ".ocel"
+
+const accessorFile = "env-client.ts"
 
 var configFiles = []string{"tsconfig.json", "jsconfig.json"}
 
-var recordPath = filepath.Join(".ocel", "output", "client-digests.json")
+var recordPath = filepath.Join(scratchDirName, "output", "client-digests.json")
 
 type App struct {
 	Name      string
@@ -36,28 +38,35 @@ type Key struct {
 	Source string
 }
 
-func Generate(apps []App) error {
+func Generate(projectDir string, apps []App) error {
 	for _, app := range apps {
 		keys, err := Keys(app.Variables)
 		if err != nil {
 			return err
 		}
-		if err := GenerateKeys(app.Dir, keys); err != nil {
+		if err := GenerateKeys(projectDir, app, keys); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func GenerateKeys(dir string, keys []Key) error {
-	path := filepath.Join(dir, accessorPath)
+func GenerateKeys(projectDir string, app App, keys []Key) error {
+	path := accessorPath(projectDir, app.Name, app.Dir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", filepath.Dir(accessorPath), err)
+		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
 	}
 	if err := os.WriteFile(path, []byte(accessor(filepath.Dir(path), keys)), 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", accessorPath, err)
+		return fmt.Errorf("write %s: %w", path, err)
 	}
-	return mapSpecifier(dir)
+	return mapSpecifier(app.Dir, path)
+}
+
+func accessorPath(projectDir, appName, appDir string) string {
+	if appName != "" && filepath.Clean(appDir) != filepath.Clean(projectDir) {
+		return filepath.Join(projectDir, scratchDirName, "apps", appName, accessorFile)
+	}
+	return filepath.Join(projectDir, scratchDirName, accessorFile)
 }
 
 const schemaSpecifier = "ocel/env/schema"
@@ -113,7 +122,7 @@ func specifierFor(from, source string) string {
 	return rel
 }
 
-func mapSpecifier(dir string) error {
+func mapSpecifier(dir, accessor string) error {
 	for _, name := range configFiles {
 		path := filepath.Join(dir, name)
 		source, err := os.ReadFile(path)
@@ -124,7 +133,7 @@ func mapSpecifier(dir string) error {
 			return err
 		}
 
-		updated, err := withMapping(path, string(source))
+		updated, err := withMapping(path, string(source), accessor)
 		if err != nil {
 			return err
 		}
