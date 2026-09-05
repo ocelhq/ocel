@@ -5,7 +5,6 @@ import {
   LINK_ROW,
   nextCacheRows,
   nextDataCacheRows,
-  PREFETCH_TITLE,
   STREAM_ROW,
   UPLOAD_ROW,
 } from "../rows";
@@ -24,9 +23,6 @@ const BASE = ["base"];
 const SERVERLESS = ["base", "api-gateway", "cloudflare"];
 
 const EVERY_NEXT_CACHE_ROW = [...nextCacheRows, ...nextDataCacheRows];
-const EVERY_NEXT_CACHE_ROW_WITH_A_ROUTER = EVERY_NEXT_CACHE_ROW.filter(
-  (row) => row.title !== PREFETCH_TITLE,
-);
 
 export const gaps: Gap[] = [
   {
@@ -84,7 +80,7 @@ export const gaps: Gap[] = [
         on: ["vps", "vps.incus"],
         cells: NEXT_CELLS,
         variants: BASE,
-        tests: [{ rows: EVERY_NEXT_CACHE_ROW_WITH_A_ROUTER }],
+        tests: [{ rows: EVERY_NEXT_CACHE_ROW }],
       },
     ],
   },
