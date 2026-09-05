@@ -13,8 +13,8 @@ packages:
   - platform/edge/cloudflare/lib/*
   - packages/native-lib/*
   - scripts/*
-  - examples/*
-  - examples/*/apps/*
+  - tests/fixtures/*/*
+  - tests/fixtures/*/*/apps/*
   - tests/*
 
 allowBuilds:

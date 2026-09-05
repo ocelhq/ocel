@@ -1,6 +1,6 @@
 # with-transforms
 
-Four of the [examples](../README.md) are three rungs of one ladder, and a team climbs it as
+Four of these fixtures are three rungs of one ladder, and a team climbs it as
 it scales. Every rung deploys with `ocel deploy`; what changes is how much of the
 provisioning you have taken back.
 

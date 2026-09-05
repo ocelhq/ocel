@@ -1,5 +1,5 @@
 {
-  "name": "@ocel-examples/with-transforms",
+  "name": "@ocel-fixtures/sdk-with-transforms",
   "version": "0.0.0",
   "private": true,
   "type": "module",
