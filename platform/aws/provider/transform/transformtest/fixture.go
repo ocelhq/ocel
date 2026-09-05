@@ -17,12 +17,12 @@ func repo(t *testing.T) string {
 	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", ".."))
 }
 
-func ExampleModule(t *testing.T, example, module string) string {
+func FixtureModule(t *testing.T, fixture, module string) string {
 	t.Helper()
-	path := filepath.Join(repo(t), "examples", example, filepath.FromSlash(module))
+	path := filepath.Join(repo(t), "tests", "fixtures", "sdk", fixture, filepath.FromSlash(module))
 	source, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read the %s example module: %v", example, err)
+		t.Fatalf("read the %s fixture module: %v", fixture, err)
 	}
 	return string(source)
 }
