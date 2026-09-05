@@ -15,8 +15,9 @@ provider packages alone. Both run from the provider workflows.
 
 A cell is one fixture on one target, named in `journeys/src/spec.ts`. A fixture belongs to
 one concern: `deploy` asks whether a runtime runs on a target at all, and its apps under
-`fixtures/deploy/` declare no resources; `sdk` asks whether what an app declares is
-provisioned, linked and usable, from `fixtures/sdk/`. The harness starts nothing but the
+`fixtures/deploy/` declare no resources; `lifecycle` asks whether a release can be replaced
+and rolled back there, from `fixtures/lifecycle/`; `sdk` asks whether what an app declares
+is provisioned, linked and usable, from `fixtures/sdk/`. The harness starts nothing but the
 `ocel` binary; bring up what the target needs first. For `dev` that is postgres, the
 control-plane schema and the console:
 
@@ -43,11 +44,11 @@ scripts/floci.sh destroy ocel-journeys
 ```
 
 One emulator serves every edge. `OCEL_JOURNEY_CONCERN` narrows a run to the concerns it
-names, space or comma separated, and unset covers both; `OCEL_JOURNEY_FIXTURES` narrows it
-further to fixtures named `<concern>/<name>`. `OCEL_JOURNEY_VARIANTS` narrows a run to the
-variants it names (`base` among them), `OCEL_JOURNEY_COVERAGE=full` runs every cell rather
-than a covering subset, and `OCEL_JOURNEY_SKIPS=run` drives the cells the gap list marks
-dead at up, which a run otherwise leaves out.
+names, space or comma separated, and unset covers every one; `OCEL_JOURNEY_FIXTURES`
+narrows it further to fixtures named `<concern>/<name>`. `OCEL_JOURNEY_VARIANTS` narrows a
+run to the variants it names (`base` among them), `OCEL_JOURNEY_COVERAGE=full` runs every
+cell rather than a covering subset, and `OCEL_JOURNEY_SKIPS=run` drives the cells the gap
+list marks dead at up, which a run otherwise leaves out.
 
 The host is `localhost.localstack.cloud`, not the `127.0.0.1` the script prints: S3-Control
 addresses its endpoint as `<account>.<host>`, and `<account>.127.0.0.1` resolves nowhere,
@@ -82,13 +83,13 @@ left behind, and only projects the harness named.
 
 `--shard <index>/<total>` is accepted and validated by `cell`; it selects nothing yet.
 
-A pull request runs the `deploy` bucket alone; a full run — workflow dispatch, or the
-`journey:real` label — runs both, `deploy` cells first. Either way it runs one member of
-each fixture group per concern, plus every member whose directory the diff touches. To
-reproduce a pull request's pick on a laptop:
+A pull request runs the `deploy` and `lifecycle` buckets; a full run — workflow dispatch,
+or the `journey:real` label — runs all three, `lifecycle` cells first. Either way it runs
+one member of each fixture group per concern, plus every member whose directory the diff
+touches. To reproduce a pull request's pick on a laptop:
 
 ```
-OCEL_JOURNEY_CONCERN=deploy OCEL_JOURNEY_SEED=<pull request number> \
+OCEL_JOURNEY_CONCERN="deploy lifecycle" OCEL_JOURNEY_SEED=<pull request number> \
   OCEL_JOURNEY_TOUCHED=<concern/name,concern/name> \
   pnpm --filter @ocel-tests/journeys journey
 ```
