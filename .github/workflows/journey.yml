@@ -446,6 +446,10 @@ jobs:
         if: ${{ needs.binary.outputs.real == 'true' }}
         run: pnpm turbo run build --filter=ocel
 
+      - name: The Docker the image build on this runner needs
+        if: ${{ needs.binary.outputs.real == 'true' }}
+        uses: ./.github/actions/containerd-docker
+
       - name: Take the binaries this lane drives
         uses: ./.github/actions/journey-binaries
 
