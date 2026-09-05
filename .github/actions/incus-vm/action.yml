@@ -109,4 +109,10 @@ runs:
           sudo "$cmd" -I DOCKER-USER -i incusbr0 -j ACCEPT
           sudo "$cmd" -I DOCKER-USER -o incusbr0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
         done
-        sudo iptables -t mangle -A FORWARD -i incusbr0 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+
+    - name: Guests fetch from the mirror the runner itself uses, since archive.ubuntu.com stalls from Azure
+      shell: bash
+      run: |
+        set -euo pipefail
+        mirror=$(apt-get indextargets --format '$(REPO_URI)' 2>/dev/null | grep -m1 -E 'archive\.ubuntu\.com/ubuntu' || true)
+        echo "OCEL_INCUS_APT_MIRROR=${mirror:-http://azure.archive.ubuntu.com/ubuntu/}" >> "$GITHUB_ENV"
