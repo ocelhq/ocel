@@ -13,6 +13,7 @@ import type { ExpectationEnvironment } from "../expectations/types";
 import { JOURNEY_CONFIG } from "../config";
 import { cellEnv, runOcel, treeRoot, workTree } from "../ocel";
 import { ocelBin } from "../paths";
+import { migrates } from "../rows";
 import { appCommand, appHomes, migrateCommand, stateComplaint } from "../workspace";
 import type { CellContext, Deployment, Target } from "./types";
 
@@ -115,7 +116,7 @@ async function serve(
   app: string,
 ): Promise<Running> {
   const port = await freePort();
-  const child = spawn(ocelBin, ["dev", "--", ...appCommand(cell.example, app)], {
+  const child = spawn(ocelBin, ["dev", "--", ...appCommand(cell.fixture, app)], {
     cwd: dir,
     env: { ...env, PORT: String(port), APP_NAME: app },
     detached: true,
@@ -139,7 +140,7 @@ async function serve(
 
 async function stateStaysHome(cell: CellContext, dir: string): Promise<void> {
   const holding: string[] = [];
-  for (const candidate of [dir, ...appHomes(cell.example).map((home) => path.join(dir, home))]) {
+  for (const candidate of [dir, ...appHomes(cell.fixture).map((home) => path.join(dir, home))]) {
     try {
       await access(path.join(candidate, ".ocel"));
       holding.push(candidate);
@@ -159,14 +160,14 @@ async function up(cell: CellContext): Promise<Deployment> {
   await runOcel(cell, dir, "up", "console-link", ["console", "link", "--create", cell.slug], env);
   await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
   await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
-  if (cell.suites.includes("product")) {
+  if (migrates(cell.fixture.rows)) {
     await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand()], env);
   }
 
   const standing: Standing = { dir, apps: [] };
   running.set(cell.slug, standing);
   const urls = new Map<string, string>();
-  for (const app of cell.example.apps) {
+  for (const app of cell.fixture.apps) {
     const handle = await serve(cell, dir, env, app);
     standing.apps.push(handle);
     urls.set(app, `http://127.0.0.1:${handle.port}`);

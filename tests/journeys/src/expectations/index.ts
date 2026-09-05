@@ -1,6 +1,6 @@
-import { contractRows } from "../contract";
 import { contractTitle, type PlannedTest, planTests } from "../plan";
-import { cellsOf, type Leg, specForTarget, type Suite, type TargetName } from "../spec";
+import { everyRow } from "../rows";
+import { cellsOf, type Leg, specForTarget, type TargetName } from "../spec";
 import { targetNamed } from "../targets";
 import { gaps } from "./gaps";
 import type {
@@ -26,16 +26,6 @@ export { ENVIRONMENTS } from "./types";
 
 export const CONTRACT_LEGS: Leg[] = ["contract", "redeploy", "rollback"];
 
-const EVERY_SUITE: Suite[] = [
-  "health",
-  "static",
-  "product",
-  "probes",
-  "links",
-  "next-routing",
-  "next-cache",
-];
-
 const targetOf: Record<ExpectationEnvironment, TargetName> = {
   aws: "aws",
   "aws.floci": "aws",
@@ -56,11 +46,16 @@ function titlesOf(pick: TestPick): string[] {
   if ("row" in pick) {
     return legs.map((leg) => contractTitle(leg, pick.row));
   }
-  const suites = pick.rows === "every" ? EVERY_SUITE : pick.rows;
+  const rows = pick.rows === "every" ? everyRow : pick.rows;
   const except = new Set(pick.except ?? []);
-  return contractRows(suites)
+  return rows
     .filter((row) => !except.has(row.title))
     .flatMap((row) => legs.map((leg) => contractTitle(leg, row.title)));
+}
+
+export function cellOf(key: string): string {
+  const parts = key.split("/");
+  return parts.slice(0, -1).join("/");
 }
 
 function listedOf(gap: Gap): Listed {
@@ -86,12 +81,12 @@ function hitsFor(block: Affected, planned: PlannedTest[], said: string): Planned
   const titles = new Set(block.tests.flatMap(titlesOf));
   const hits = planned.filter(
     (test) =>
-      (block.cells === undefined || block.cells.includes(`${test.example}/${test.app}`)) &&
+      (block.cells === undefined || block.cells.includes(`${test.fixture}/${test.app}`)) &&
       (block.variants === undefined || block.variants.includes(test.variant)) &&
       titles.has(test.title),
   );
   for (const cell of block.cells ?? []) {
-    if (!hits.some((hit) => `${hit.example}/${hit.app}` === cell)) {
+    if (!hits.some((hit) => `${hit.fixture}/${hit.app}` === cell)) {
       throw new Error(`${said} lists ${cell}, which plans none of the tests named`);
     }
   }
@@ -109,7 +104,7 @@ function hitsFor(block: Affected, planned: PlannedTest[], said: string): Planned
 export function resolve(listed: Gap[], environment: ExpectationEnvironment): Resolved {
   checkIds(listed);
   const target = targetNamed(targetOf[environment]);
-  const cells = specForTarget(target.name).flatMap((example) => cellsOf(example, target.name));
+  const cells = specForTarget(target.name).flatMap((fixture) => cellsOf(fixture, target.name));
   const planned = planTests(cells, target.legs);
   const expectations: Expectations = {};
   const skipped: Skipped = {};
@@ -122,7 +117,7 @@ export function resolve(listed: Gap[], environment: ExpectationEnvironment): Res
       }
       for (const hit of hitsFor(block, planned, `${gap.id} on ${environment}`)) {
         if (block.skip) {
-          skippedCells.add(hit.cell.split("/")[0] ?? hit.cell);
+          skippedCells.add(cellOf(hit.cell));
         }
         const at = JSON.stringify([hit.cell, hit.title]);
         if (carried.has(at)) {

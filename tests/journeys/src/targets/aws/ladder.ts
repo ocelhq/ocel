@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { contractRows } from "../../contract";
+import { linkRows } from "../../rows";
 import { JOURNEY_CONFIG } from "../../config";
 import { cellEnv, ocel, spawnOcel, workTree } from "../../ocel";
 import type { LadderRow } from "../../spec";
@@ -389,7 +389,7 @@ export const ladderRows: LadderRow[] = [
     phase: "consume",
     run: async (_cell, live) => {
       assert.ok(live, "consume ran with no live deployment to reach the link routes on");
-      for (const row of contractRows(["links"])) {
+      for (const row of linkRows) {
         await row.run(live!);
       }
     },

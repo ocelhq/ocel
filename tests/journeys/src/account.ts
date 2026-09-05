@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { type ExpectationEnvironment, expectationsFor } from "./expectations";
+import { cellOf, type ExpectationEnvironment, expectationsFor } from "./expectations";
 import type { Expectations } from "./expectations/types";
 import { currentRunIdentity } from "./identity";
 import { readRows, type RecordedRow } from "./ledger";
@@ -65,14 +65,14 @@ export function unhandledFrom(run: Run, rows: RecordedRow[]): string[] {
 function modulesFrom(rows: RecordedRow[]): TimelineModule[] {
   const spans = new Map<string, { from: number; to: number }>();
   for (const row of rows) {
-    const example = row.cell.split("/")[0];
-    const held = spans.get(example);
+    const cell = cellOf(row.cell);
+    const held = spans.get(cell);
     const from = Math.min(held?.from ?? row.startTime, row.startTime);
     const to = Math.max(held?.to ?? 0, row.startTime + row.duration);
-    spans.set(example, { from, to });
+    spans.set(cell, { from, to });
   }
-  return [...spans.entries()].map(([example, span]) => ({
-    example,
+  return [...spans.entries()].map(([cell, span]) => ({
+    cell,
     duration: span.to - span.from,
   }));
 }
@@ -80,7 +80,7 @@ function modulesFrom(rows: RecordedRow[]): TimelineModule[] {
 export function timelineFrom(input: TimingInput): Timed {
   const legByKey = new Map(input.planned.map((entry) => [key(entry.cell, entry.title), entry.leg]));
   const tests: TimelineTest[] = input.rows.map((row) => ({
-    example: row.cell.split("/")[0],
+    cell: cellOf(row.cell),
     leg: legByKey.get(key(row.cell, row.title)),
     title: row.title,
     startTime: row.startTime,

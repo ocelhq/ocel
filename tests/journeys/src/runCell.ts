@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { afterAll, beforeAll, describe, it } from "bun:test";
 import {
   type ContractRow,
-  contractRows,
   INITIAL_GREETING,
   REDEPLOY_GREETING,
   secretGuarded,
@@ -10,7 +9,7 @@ import {
 import { evidence } from "./evidence";
 import { currentRunIdentity, projectSlug } from "./identity";
 import { ledgerFor } from "./ledger";
-import { evidenceDir, exampleDir } from "./paths";
+import { evidenceDir, fixtureDir } from "./paths";
 import {
   cellKey,
   contractTitle,
@@ -23,7 +22,7 @@ import {
 } from "./plan";
 import { readPrepareFailure } from "./prepare";
 import { cellNamed, environmentFrom, selectionFor } from "./selection";
-import { type Cell, ladderTitle, type Leg, suitesOf } from "./spec";
+import { type Cell, ladderTitle, type Leg } from "./spec";
 import { selectedTarget } from "./targets";
 import type { CellContext, Deployment } from "./targets/types";
 
@@ -46,17 +45,15 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function describeSelected({ name, example, variant }: Cell) {
+function describeSelected({ name, fixture, variant }: Cell) {
   const target = selectedTarget();
   const runId = currentRunIdentity();
   const slug = projectSlug(name, runId);
-  const dir = exampleDir(example.dir);
-  const suites = suitesOf(example, variant);
+  const dir = fixtureDir(fixture.dir);
   const cell: CellContext = {
-    example,
+    fixture,
     name,
     ...(variant === undefined ? {} : { variant }),
-    suites,
     dir,
     slug,
     runId,
@@ -96,8 +93,8 @@ function describeSelected({ name, example, variant }: Cell) {
     );
   }
 
-  const rows = contractRows(suites);
-  const hooks = example.hooks;
+  const rows = fixture.rows;
+  const hooks = fixture.hooks;
   const publishRows = hooks?.rows?.filter((row) => row.phase === "publish") ?? [];
   const consumeRows = hooks?.rows?.filter((row) => row.phase === "consume") ?? [];
   const outliveRows = hooks?.rows?.filter((row) => row.phase === "outlive") ?? [];
@@ -166,7 +163,7 @@ function describeSelected({ name, example, variant }: Cell) {
   }
 
   function perAppDescribe(body: (app: string) => void) {
-    for (const app of example.apps) {
+    for (const app of fixture.apps) {
       describe(cellKey(name, app), () => body(app));
     }
   }

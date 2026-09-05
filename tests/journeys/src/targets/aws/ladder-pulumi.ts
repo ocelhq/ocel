@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { workTree } from "../../ocel";
-import { exampleDir, laneDir, treeDir } from "../../paths";
+import { fixtureDir, laneDir, treeDir } from "../../paths";
 import { copyTree } from "../../tree";
 import type { LadderHooks } from "../../spec";
 import { recordPlacement, refuse } from "./ladder";
@@ -97,7 +97,7 @@ export const pulumiHooks: LadderHooks = {
 
 export async function pulumiSweep(runId: string): Promise<void> {
   const dir = await copyTree(
-    exampleDir("with-pulumi"),
+    fixtureDir("sdk/with-pulumi"),
     treeDir(runId, "aws", "ladder-sweep-with-pulumi"),
   );
   try {

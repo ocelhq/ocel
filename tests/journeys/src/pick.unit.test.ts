@@ -5,12 +5,14 @@ import {
   coverageFrom,
   coverCells,
   type Pick,
-  pickExamples,
+  pickFixtures,
 } from "./pick";
 import {
   type Cell,
   cellsOf,
-  type ExampleSpec,
+  type FixtureSpec,
+  fixtureNameOf,
+  groupKeyOf,
   preferredOf,
   spec,
   specByName,
@@ -18,76 +20,94 @@ import {
   variantNameOf,
 } from "./spec";
 
-const nodeHttp = spec.filter((row) => row.group === "node-http").map((row) => row.name);
+const GROUP = "sdk/node-http";
 
-const PREFERRED = preferredOf("node-http") as string;
+const nodeHttp = spec.filter((row) => groupKeyOf(row) === GROUP).map(fixtureNameOf);
 
-function names(rows: { name: string }[]): string[] {
-  return rows.map((row) => row.name);
+const PREFERRED = preferredOf(GROUP) as string;
+
+function names(rows: FixtureSpec[]): string[] {
+  return rows.map(fixtureNameOf);
 }
 
 describe("picking one member of a group", () => {
-  it("runs every example when nothing asked for a pick", () => {
-    const { chosen, leftOut } = pickExamples(spec, undefined);
+  it("runs every fixture when nothing asked for a pick", () => {
+    const { chosen, leftOut } = pickFixtures(spec, undefined);
     expect(names(chosen)).toEqual(names(spec));
     expect(leftOut).toEqual([]);
   });
 
-  it("runs every ungrouped example whatever the seed", () => {
-    const { chosen } = pickExamples(spec, { seed: "7", touched: [] });
-    const ungrouped = spec.filter((row) => row.group === undefined);
+  it("runs every ungrouped fixture whatever the seed", () => {
+    const { chosen } = pickFixtures(spec, { seed: "7", touched: [] });
+    const ungrouped = spec.filter((row) => groupKeyOf(row) === undefined);
     expect(names(chosen)).toEqual(expect.arrayContaining(names(ungrouped)));
   });
 
-  it("runs the group's preferred member when the diff touches none of them", () => {
+  it("runs each concern's preferred member when the diff touches none of them", () => {
     for (const seed of ["7", "8", "1234"]) {
-      const { chosen, leftOut } = pickExamples(spec, { seed, touched: [] });
+      const { chosen, leftOut } = pickFixtures(spec, { seed, touched: [] });
       expect(names(chosen).filter((name) => nodeHttp.includes(name))).toEqual([PREFERRED]);
-      expect(names(leftOut)).toHaveLength(nodeHttp.length - 1);
+      expect(names(leftOut).filter((name) => nodeHttp.includes(name))).toHaveLength(
+        nodeHttp.length - 1,
+      );
     }
   });
 
+  it("picks one member per concern, so a run covers both buckets", () => {
+    const { chosen } = pickFixtures(spec, { seed: "7", touched: [] });
+    const picked = chosen.filter((row) => groupKeyOf(row) !== undefined);
+    expect(new Set(picked.map((row) => row.concern))).toEqual(new Set(["deploy", "sdk"]));
+  });
+
   it("runs the member the diff touches, and leaves the preferred one out", () => {
-    const { chosen, leftOut } = pickExamples(spec, { seed: "7", touched: ["fastify"] });
-    expect(names(chosen)).toContain("fastify");
-    expect(names(leftOut)).toEqual(["express", "hono", PREFERRED]);
+    const { chosen, leftOut } = pickFixtures(spec, { seed: "7", touched: ["sdk/fastify"] });
+    expect(names(chosen)).toContain("sdk/fastify");
+    expect(names(leftOut)).toEqual(
+      expect.arrayContaining(["sdk/express", "sdk/hono", PREFERRED]),
+    );
   });
 
   it("runs every member the diff touches", () => {
-    const { chosen, leftOut } = pickExamples(spec, { seed: "7", touched: ["express", "hono"] });
-    expect(names(chosen)).toContain("express");
-    expect(names(chosen)).toContain("hono");
-    expect(names(leftOut)).toEqual(["fastify", PREFERRED]);
+    const { chosen, leftOut } = pickFixtures(spec, {
+      seed: "7",
+      touched: ["sdk/express", "sdk/hono"],
+    });
+    expect(names(chosen)).toContain("sdk/express");
+    expect(names(chosen)).toContain("sdk/hono");
+    expect(names(leftOut)).toContain("sdk/fastify");
+    expect(names(leftOut)).toContain(PREFERRED);
   });
 
   it("keeps the spec's order in what it chose", () => {
-    const { chosen } = pickExamples(spec, { seed: "1", touched: ["express", "fastify"] });
-    expect(names(chosen)).toEqual(
-      names(spec.filter((row) => row.name !== "hono" && row.name !== PREFERRED)),
-    );
+    const { chosen } = pickFixtures(spec, {
+      seed: "1",
+      touched: ["sdk/express", "sdk/fastify"],
+    });
+    expect(names(chosen)).toEqual(names(spec.filter((row) => chosen.includes(row))));
   });
 });
 
 describe("picking one member of a group that names no preferred one", () => {
-  const members: ExampleSpec[] = ["one", "two", "three"].map((name) => ({
+  const members: FixtureSpec[] = ["one", "two", "three"].map((name) => ({
     name,
-    dir: name,
-    kind: "composite",
+    concern: "sdk" as const,
+    dir: `sdk/${name}`,
+    kind: "composite" as const,
     group: "made-up",
-    suites: ["health"],
+    rows: [],
     apps: ["web"],
   }));
 
   it("reaches the same member twice for the same seed", () => {
-    const once = pickExamples(members, { seed: "1234", touched: [] });
-    const twice = pickExamples(members, { seed: "1234", touched: [] });
+    const once = pickFixtures(members, { seed: "1234", touched: [] });
+    const twice = pickFixtures(members, { seed: "1234", touched: [] });
     expect(names(once.chosen)).toEqual(names(twice.chosen));
   });
 
   it("reaches every member of the group across seeds", () => {
     const seen = new Set<string>();
     for (let seed = 1; seed <= 50; seed += 1) {
-      const { chosen } = pickExamples(members, { seed: String(seed), touched: [] });
+      const { chosen } = pickFixtures(members, { seed: String(seed), touched: [] });
       for (const name of names(chosen)) {
         seen.add(name);
       }
@@ -97,39 +117,39 @@ describe("picking one member of a group that names no preferred one", () => {
 });
 
 const ROWS = specForTarget("aws");
-const NODE_HTTP = ROWS.filter((row) => row.group === "node-http");
+const NODE_HTTP = ROWS.filter((row) => groupKeyOf(row) === GROUP);
 const SEEDS = ["1", "2", "3", "4", "5", "938"];
 
-const onAws: CellsFor = (example) => cellsOf(example, "aws");
+const onAws: CellsFor = (fixture) => cellsOf(fixture, "aws");
 
 function cellsOn(
-  rows: ExampleSpec[],
+  rows: FixtureSpec[],
   cellsFor: CellsFor,
   coverage: Coverage,
   pick: Pick | undefined,
 ): Cell[] {
   const covered = coverCells(rows, cellsFor, coverage, pick);
-  return rows.flatMap((row) => covered.get(row.name) ?? []);
+  return rows.flatMap((row) => covered.get(fixtureNameOf(row)) ?? []);
 }
 
 const seeded = (seed: string, touched: string[] = []): Pick => ({ seed, touched });
 
-function variantsCovered(rows: ExampleSpec[], cellsFor: CellsFor, pick: Pick): string[] {
+function variantsCovered(rows: FixtureSpec[], cellsFor: CellsFor, pick: Pick): string[] {
   return cellsOn(rows, cellsFor, "covering", pick).map(variantNameOf);
 }
 
 describe("covering the variants a group lists, one member each", () => {
-  it("runs every cell of every example under full coverage", () => {
+  it("runs every cell of every fixture under full coverage", () => {
     const covered = coverCells(ROWS, onAws, "full", seeded("7"));
     for (const row of ROWS) {
-      expect(covered.get(row.name)).toEqual(onAws(row));
+      expect(covered.get(fixtureNameOf(row))).toEqual(onAws(row));
     }
   });
 
   it("runs each variant the group lists on exactly one member", () => {
     for (const seed of SEEDS) {
       const variants = variantsCovered(NODE_HTTP, onAws, seeded(seed));
-      for (const variant of ["hello", "container", "api-gateway", "cloudflare"]) {
+      for (const variant of ["container", "api-gateway", "cloudflare"]) {
         expect(variants.filter((one) => one === variant)).toHaveLength(1);
       }
     }
@@ -144,7 +164,7 @@ describe("covering the variants a group lists, one member each", () => {
     for (const seed of SEEDS) {
       const covered = coverCells(NODE_HTTP, onAws, "covering", seeded(seed));
       for (const row of NODE_HTTP) {
-        expect((covered.get(row.name) ?? []).length).toBeGreaterThan(0);
+        expect((covered.get(fixtureNameOf(row)) ?? []).length).toBeGreaterThan(0);
       }
     }
   });
@@ -156,10 +176,12 @@ describe("covering the variants a group lists, one member each", () => {
     }
   });
 
-  it("runs every cell of an example the diff touches", () => {
-    const covered = coverCells(ROWS, onAws, "covering", seeded("7", ["hono"]));
-    expect(covered.get("hono")).toEqual(onAws(specByName("hono")));
-    expect((covered.get("express") ?? []).length).toBeLessThan(onAws(specByName("express")).length);
+  it("runs every cell of a fixture the diff touches", () => {
+    const covered = coverCells(ROWS, onAws, "covering", seeded("7", ["sdk/hono"]));
+    expect(covered.get("sdk/hono")).toEqual(onAws(specByName("sdk", "hono")));
+    expect((covered.get("sdk/express") ?? []).length).toBeLessThan(
+      onAws(specByName("sdk", "express")).length,
+    );
   });
 
   it("reaches the same cells twice for one seed, and moves them across seeds", () => {
@@ -177,28 +199,32 @@ describe("covering the variants a group lists, one member each", () => {
   });
 
   it("hands a variant only to a member that has a cell for it", () => {
-    const skipping: CellsFor = (example) =>
-      onAws(example).filter((cell) => !(example.name === "express" && cell.variant?.name === "hello"));
+    const skipping: CellsFor = (fixture) =>
+      onAws(fixture).filter(
+        (cell) => !(fixture.name === "express" && cell.variant?.name === "container"),
+      );
     for (const seed of SEEDS) {
       const covered = coverCells(NODE_HTTP, skipping, "covering", seeded(seed));
-      expect(covered.get("express")?.some((cell) => cell.name === "express-hello")).toBe(false);
-      expect(variantsCovered(NODE_HTTP, skipping, seeded(seed))).toContain("hello");
+      expect(
+        covered.get("sdk/express")?.some((cell) => cell.name === "sdk/express-container"),
+      ).toBe(false);
+      expect(variantsCovered(NODE_HTTP, skipping, seeded(seed))).toContain("container");
     }
   });
 
   it("drops a variant no member has a cell for", () => {
-    const noCloudflare: CellsFor = (example) =>
-      onAws(example).filter((cell) => cell.variant?.name !== "cloudflare");
+    const noCloudflare: CellsFor = (fixture) =>
+      onAws(fixture).filter((cell) => cell.variant?.name !== "cloudflare");
     expect(variantsCovered(NODE_HTTP, noCloudflare, seeded("3"))).not.toContain("cloudflare");
   });
 
-  it("runs every cell of an example that stands in no group", () => {
+  it("runs every cell of a fixture that stands in no group", () => {
     for (const name of ["vps", "dev"] as const) {
       const rows = specForTarget(name);
-      const cellsFor: CellsFor = (example) => cellsOf(example, name);
+      const cellsFor: CellsFor = (fixture) => cellsOf(fixture, name);
       const covered = coverCells(rows, cellsFor, "covering", seeded("9"));
-      for (const row of rows.filter((one) => one.group === undefined)) {
-        expect(covered.get(row.name)).toEqual(cellsFor(row));
+      for (const row of rows.filter((one) => groupKeyOf(one) === undefined)) {
+        expect(covered.get(fixtureNameOf(row))).toEqual(cellsFor(row));
       }
     }
   });

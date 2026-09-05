@@ -3,50 +3,48 @@ import { describe, it } from "bun:test";
 import { reclaimable, sweepable } from "./slugs";
 
 const CELLS = [
-  "express",
-  "express-hello",
-  "express-container",
-  "express-hello-container",
-  "workspace",
-  "workspace-hello",
-  "workspace-hello-api-gateway",
-  "workspace-hello-api-gateway-container",
+  "deploy-express",
+  "deploy-express-container",
+  "sdk-express",
+  "sdk-express-container",
+  "sdk-workspace",
+  "sdk-workspace-api-gateway",
 ];
 
 describe("reclaimable", () => {
-  it("reads the example out of a harness slug", () => {
-    assert.deepEqual(reclaimable("j-local-vndaba-express", CELLS), {
-      slug: "j-local-vndaba-express",
-      example: "express",
+  it("reads the cell out of a harness slug", () => {
+    assert.deepEqual(reclaimable("j-local-vndaba-deploy-express", CELLS), {
+      slug: "j-local-vndaba-deploy-express",
+      cell: "deploy-express",
     });
   });
 
   it("reads the longest cell name a slug ends in, not the shortest", () => {
-    assert.deepEqual(reclaimable("j-1874-express-hello", CELLS), {
-      slug: "j-1874-express-hello",
-      example: "express-hello",
+    assert.deepEqual(reclaimable("j-1874-sdk-express", CELLS), {
+      slug: "j-1874-sdk-express",
+      cell: "sdk-express",
     });
-    assert.deepEqual(reclaimable("j-1874-express-hello-container", CELLS), {
-      slug: "j-1874-express-hello-container",
-      example: "express-hello-container",
+    assert.deepEqual(reclaimable("j-1874-sdk-express-container", CELLS), {
+      slug: "j-1874-sdk-express-container",
+      cell: "sdk-express-container",
     });
-    assert.deepEqual(reclaimable("j-1874-workspace-hello-api-gateway-container", CELLS), {
-      slug: "j-1874-workspace-hello-api-gateway-container",
-      example: "workspace-hello-api-gateway-container",
+    assert.deepEqual(reclaimable("j-1874-sdk-workspace-api-gateway", CELLS), {
+      slug: "j-1874-sdk-workspace-api-gateway",
+      cell: "sdk-workspace-api-gateway",
     });
-    assert.deepEqual(reclaimable("j-1874-workspace-hello-api-gateway", CELLS), {
-      slug: "j-1874-workspace-hello-api-gateway",
-      example: "workspace-hello-api-gateway",
+    assert.deepEqual(reclaimable("j-1874-sdk-workspace", CELLS), {
+      slug: "j-1874-sdk-workspace",
+      cell: "sdk-workspace",
     });
   });
 
   it("reads nothing out of a slug no harness run made", () => {
-    assert.equal(reclaimable("express", CELLS), undefined);
-    assert.equal(reclaimable("jobs-express", CELLS), undefined);
-    assert.equal(reclaimable("j--express", CELLS), undefined);
+    assert.equal(reclaimable("deploy-express", CELLS), undefined);
+    assert.equal(reclaimable("jobs-deploy-express", CELLS), undefined);
+    assert.equal(reclaimable("j--deploy-express", CELLS), undefined);
   });
 
-  it("reads nothing out of a harness slug naming an example nobody has", () => {
+  it("reads nothing out of a harness slug naming a cell nobody has", () => {
     assert.equal(reclaimable("j-1874-nowhere", CELLS), undefined);
   });
 });
@@ -54,15 +52,15 @@ describe("reclaimable", () => {
 describe("sweepable", () => {
   it("leaves this run's slugs and everything without the prefix alone", () => {
     const found = [
-      "express",
+      "deploy-express",
       "someone-elses-project",
-      "j-1874-express",
-      "j-local-vndaba-express",
+      "j-1874-sdk-express",
+      "j-local-vndaba-sdk-express",
     ];
-    const { reclaim, unreadable } = sweepable(found, ["j-1874-express"], CELLS);
+    const { reclaim, unreadable } = sweepable(found, ["j-1874-sdk-express"], CELLS);
     assert.deepEqual(
       reclaim.map((entry) => entry.slug),
-      ["j-local-vndaba-express"],
+      ["j-local-vndaba-sdk-express"],
     );
     assert.deepEqual(unreadable, []);
   });
@@ -74,7 +72,7 @@ describe("sweepable", () => {
   });
 
   it("names a slug listed twice once", () => {
-    const { reclaim } = sweepable(["j-9-express", "j-9-express"], [], CELLS);
+    const { reclaim } = sweepable(["j-9-sdk-express", "j-9-sdk-express"], [], CELLS);
     assert.equal(reclaim.length, 1);
   });
 });

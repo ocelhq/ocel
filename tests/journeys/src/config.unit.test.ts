@@ -1,19 +1,17 @@
 import { describe, expect, it } from "bun:test";
 import { AWS_BASE, journeyZone, renderConfig, shapeFor, VPS_BASE } from "./config";
 import { evidence } from "./evidence";
-import { specByName } from "./spec";
+import { type Concern, specByName } from "./spec";
 import type { CellContext } from "./targets/types";
-import { compose, container, cloudflare, type Variant } from "./variants";
+import { cloudflare, container, type Variant } from "./variants";
 
-function cell(example: string, variant?: Variant): CellContext {
-  const spec = specByName(example);
+function cell(concern: Concern, name: string, variant?: Variant): CellContext {
   return {
-    example: spec,
-    name: example,
+    fixture: specByName(concern, name),
+    name: `${concern}/${name}`,
     ...(variant === undefined ? {} : { variant }),
-    suites: spec.suites,
     dir: "/nowhere",
-    slug: `j-1-${example}`,
+    slug: `j-1-${concern}-${name}`,
     runId: "1",
     evidence: evidence("/nowhere"),
   };
@@ -31,48 +29,58 @@ describe("journeyZone", () => {
 });
 
 describe("shapeFor", () => {
-  it("overlays the aws example with the variant's config, the dns and the hostnames", () => {
+  it("overlays the aws fixture with the variant's config, the dns and the hostnames", () => {
     expect(
-      shapeFor(cell("workspace", compose(container, cloudflare)), "aws", {
+      shapeFor(cell("sdk", "workspace", cloudflare), "aws", {
         OCEL_JOURNEY_ZONE: "j.example",
         OCEL_JOURNEY_DNS: "cloudflare",
       }),
     ).toEqual({
       base: AWS_BASE,
-      slug: "j-1-workspace",
-      compute: "container",
+      slug: "j-1-sdk-workspace",
       edge: "cloudflare",
       dns: "cloudflare",
-      hostnames: { next: "next-j-1-workspace.j.example", express: "express-j-1-workspace.j.example" },
+      hostnames: {
+        next: "next-j-1-sdk-workspace.j.example",
+        express: "express-j-1-sdk-workspace.j.example",
+      },
     });
   });
 
-  it("leaves the example's config alone for a base cell, and dns alone off a real zone", () => {
-    expect(shapeFor(cell("express"), "aws", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
+  it("takes the compute a container variant names", () => {
+    expect(shapeFor(cell("deploy", "express", container), "aws", {})).toEqual({
       base: AWS_BASE,
-      slug: "j-1-express",
-      hostnames: { web: "web-j-1-express.j.example" },
+      slug: "j-1-deploy-express",
+      compute: "container",
+    });
+  });
+
+  it("leaves the fixture's config alone for a base cell, and dns alone off a real zone", () => {
+    expect(shapeFor(cell("deploy", "express"), "aws", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
+      base: AWS_BASE,
+      slug: "j-1-deploy-express",
+      hostnames: { web: "web-j-1-deploy-express.j.example" },
     });
   });
 
   it("hangs a vps cell's hostnames under the box's zone", () => {
-    expect(shapeFor(cell("express"), "vps", {})).toEqual({
+    expect(shapeFor(cell("deploy", "express"), "vps", {})).toEqual({
       base: VPS_BASE,
-      slug: "j-1-express",
-      hostnames: { web: "web-j-1-express.localhost" },
+      slug: "j-1-deploy-express",
+      hostnames: { web: "web-j-1-deploy-express.localhost" },
     });
   });
 
   it("renames a dev cell and nothing else", () => {
-    expect(shapeFor(cell("express"), "dev", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
+    expect(shapeFor(cell("deploy", "express"), "dev", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
       base: AWS_BASE,
-      slug: "j-1-express",
+      slug: "j-1-deploy-express",
     });
   });
 });
 
 describe("renderConfig", () => {
-  it("spreads the example's own config under the cell's slug", () => {
+  it("spreads the fixture's own config under the cell's slug", () => {
     expect(renderConfig({ base: AWS_BASE, slug: "j-1-express" })).toBe(
       `import { defineConfig } from "ocel/config";
 import base from "./ocel.config.ts";

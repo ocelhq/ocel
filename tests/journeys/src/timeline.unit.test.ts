@@ -13,35 +13,35 @@ const overlapping: TimelineInput = {
   workers: 2,
   prepareMs: 12_000,
   tests: [
-    { example: "with-sst", leg: "up", title: "up", ...at(0, 60) },
-    { example: "with-sst", leg: "contract", title: "health", ...at(60, 10) },
-    { example: "with-sst", leg: "destroy", title: "destroy", ...at(70, 110) },
-    { example: "next-hello", leg: "up", title: "up", ...at(0, 30) },
-    { example: "next-hello", leg: "contract", title: "health", ...at(30, 5) },
-    { example: "next-hello", title: "publish · a bucket", ...at(35, 5) },
-    { example: "next-hello", leg: "destroy", title: "destroy", ...at(40, 20) },
+    { cell: "with-sst", leg: "up", title: "up", ...at(0, 60) },
+    { cell: "with-sst", leg: "contract", title: "health", ...at(60, 10) },
+    { cell: "with-sst", leg: "destroy", title: "destroy", ...at(70, 110) },
+    { cell: "next-hello", leg: "up", title: "up", ...at(0, 30) },
+    { cell: "next-hello", leg: "contract", title: "health", ...at(30, 5) },
+    { cell: "next-hello", title: "publish · a bucket", ...at(35, 5) },
+    { cell: "next-hello", leg: "destroy", title: "destroy", ...at(40, 20) },
   ],
   modules: [
-    { example: "with-sst", duration: 180_000 },
-    { example: "next-hello", duration: 60_000 },
+    { cell: "with-sst", duration: 180_000 },
+    { cell: "next-hello", duration: 60_000 },
   ],
 };
 
 describe("legOf", () => {
   it("takes the planned leg when the plan named one", () => {
-    expect(legOf({ example: "a", leg: "redeploy", title: "health", startTime: 0, duration: 1 })).toBe(
+    expect(legOf({ cell: "a", leg: "redeploy", title: "health", startTime: 0, duration: 1 })).toBe(
       "redeploy",
     );
   });
 
   it("folds an unplanned row into the leg its title prefixes", () => {
-    expect(legOf({ example: "a", title: "rollback · health", startTime: 0, duration: 1 })).toBe(
+    expect(legOf({ cell: "a", title: "rollback · health", startTime: 0, duration: 1 })).toBe(
       "rollback",
     );
   });
 
   it("folds a ladder phase into other", () => {
-    expect(legOf({ example: "a", title: "publish · a bucket", startTime: 0, duration: 1 })).toBe(
+    expect(legOf({ cell: "a", title: "publish · a bucket", startTime: 0, duration: 1 })).toBe(
       "other",
     );
   });
@@ -56,22 +56,22 @@ describe("timelineOf", () => {
     expect(timeline.speedUp).toBe(1.2);
   });
 
-  it("sees both examples running at once", () => {
+  it("sees both cells running at once", () => {
     expect(timeline.maxOverlap).toBe(2);
   });
 
-  it("names the example that runs the tail alone", () => {
-    expect(timeline.tail).toEqual({ example: "with-sst", seconds: 120 });
+  it("names the cell that runs the tail alone", () => {
+    expect(timeline.tail).toEqual({ cell: "with-sst", seconds: 120 });
   });
 
   it("keeps the prepare it was handed", () => {
     expect(timeline.prepare).toBe(12);
   });
 
-  it("orders the examples by file wall and folds every leg", () => {
-    expect(timeline.examples.map((row) => row.example)).toEqual(["with-sst", "next-hello"]);
-    expect(timeline.examples[1]).toEqual({
-      example: "next-hello",
+  it("orders the cells by file wall and folds every leg", () => {
+    expect(timeline.cells.map((row) => row.cell)).toEqual(["with-sst", "next-hello"]);
+    expect(timeline.cells[1]).toEqual({
+      cell: "next-hello",
       start: 0,
       legs: { up: 30, contract: 5, other: 5, destroy: 20 },
       file: 60,
@@ -80,7 +80,7 @@ describe("timelineOf", () => {
 });
 
 describe("timingTable", () => {
-  it("renders the stat line and a row per example", () => {
+  it("renders the stat line and a row per cell", () => {
     expect(
       timingTable(timelineOf(overlapping), { target: "aws", runId: "42" }),
     ).toBe(
@@ -89,7 +89,7 @@ describe("timingTable", () => {
         "",
         "wall 200s · Σ files 240s · 2 workers · speed-up 1.2x · max overlap 2 · prepare 12s · tail: with-sst alone for 120s",
         "",
-        "| example | start | up | contract | redeploy | rollback | destroy | other | file |",
+        "| cell | start | up | contract | redeploy | rollback | destroy | other | file |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         "| with-sst | 0 | 60 | 10 | 0 | 0 | 110 | 0 | 180 |",
         "| next-hello | 0 | 30 | 5 | 0 | 0 | 20 | 5 | 60 |",
@@ -105,8 +105,8 @@ describe("timingTable", () => {
         runEnd: START + 10_000,
         workers: 4,
         tests: [
-          { example: "a", leg: "up", title: "up", ...at(0, 10) },
-          { example: "b", leg: "up", title: "up", ...at(0, 10) },
+          { cell: "a", leg: "up", title: "up", ...at(0, 10) },
+          { cell: "b", leg: "up", title: "up", ...at(0, 10) },
         ],
         modules: [],
       }),

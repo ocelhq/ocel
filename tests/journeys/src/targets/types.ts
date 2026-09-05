@@ -2,7 +2,7 @@ import type { Fetch } from "../contract";
 import type { Evidence } from "../evidence";
 import type { ExpectationEnvironment } from "../expectations/types";
 import type { PrepareFailures } from "../prepare";
-import type { ExampleSpec, Leg, Suite, TargetName } from "../spec";
+import type { FixtureSpec, Leg, TargetName } from "../spec";
 import type { Variant } from "../variants";
 
 export type Deployment = {
@@ -11,10 +11,9 @@ export type Deployment = {
 };
 
 export type CellContext = {
-  example: ExampleSpec;
+  fixture: FixtureSpec;
   name: string;
   variant?: Variant;
-  suites: Suite[];
   dir: string;
   slug: string;
   runId: string;

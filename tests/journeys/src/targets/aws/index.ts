@@ -4,9 +4,10 @@ import { setTimeout as pause } from "node:timers/promises";
 import { AWS_BASE, JOURNEY_CONFIG, writeJourneyConfig } from "../../config";
 import { type Fetch, INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
-import { appHostname, currentRunIdentity, projectSlug } from "../../identity";
+import { appHostname, currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { cellEnv, configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
-import { exampleDir, treeDir } from "../../paths";
+import { fixtureDir, treeDir } from "../../paths";
+import { migrates } from "../../rows";
 import type { PrepareFailures } from "../../prepare";
 import { cellsOf, type Leg, specForTarget, variantNameOf } from "../../spec";
 import { copyTree } from "../../tree";
@@ -62,7 +63,7 @@ function zone(): string {
 
 function hostnames(cell: CellContext): Map<string, string> {
   return new Map(
-    cell.example.apps.map((app) => {
+    cell.fixture.apps.map((app) => {
       const host = appHostname(app, cell.slug, zone());
       if (!host) {
         throw new Error(`${cell.slug} declares no hostname for ${app}`);
@@ -98,7 +99,7 @@ async function awaitEdge(cell: CellContext, leg: Leg, deployed: Deployment): Pro
   if ((await place()).world !== "real") {
     return;
   }
-  const urls = new Map(cell.example.apps.map((app) => [app, deployed.baseUrl(app)]));
+  const urls = new Map(cell.fixture.apps.map((app) => [app, deployed.baseUrl(app)]));
   const served = await awaitServing(deployed.fetch, urls, {
     timeoutMs: SERVING_TIMEOUT_MS,
     intervalMs: SERVING_INTERVAL_MS,
@@ -148,7 +149,7 @@ async function prepare(): Promise<PrepareFailures> {
   }
   const runId = currentRunIdentity();
   const slug = projectSlug(first.name, runId);
-  const dir = await copyTree(exampleDir(first.dir), treeDir(runId, "aws", "bootstrap"));
+  const dir = await copyTree(fixtureDir(first.dir), treeDir(runId, "aws", "bootstrap"));
   try {
     await writeJourneyConfig(dir, { base: AWS_BASE, slug });
     await ocel(
@@ -184,8 +185,8 @@ async function up(cell: CellContext): Promise<Deployment> {
 
   await runOcel(cell, dir, "up", "env-greeting", ["env", "set", "GREETING", INITIAL_GREETING], env);
   await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
-  await setAppNames(cell.example, (name, args) => runOcel(cell, dir, "up", name, args, env));
-  await setSiteHostnames(cell.example, hostnames(cell), (name, args) =>
+  await setAppNames(cell.fixture, (name, args) => runOcel(cell, dir, "up", name, args, env));
+  await setSiteHostnames(cell.fixture, hostnames(cell), (name, args) =>
     runOcel(cell, dir, "up", name, args, env),
   );
   await runOcel(cell, dir, "up", "deploy", ["deploy", "--yes"], env);
@@ -195,7 +196,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   const deployed = deployment(cell, await dispatcher());
   await awaitEdge(cell, "up", deployed);
 
-  if (cell.suites.includes("product")) {
+  if (migrates(cell.fixture.rows)) {
     await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand()], env);
   }
 
@@ -207,7 +208,7 @@ async function up(cell: CellContext): Promise<Deployment> {
         slug: cell.slug,
         variant: variantNameOf(cell),
         apps: Object.fromEntries(
-          cell.example.apps.map((app) => [app, deployed.baseUrl(app)]),
+          cell.fixture.apps.map((app) => [app, deployed.baseUrl(app)]),
         ),
       },
       null,
@@ -256,23 +257,22 @@ async function stands(slug: string): Promise<boolean> {
 
 async function sweep(runId: string): Promise<void> {
   const where = await place();
-  const examples = specForTarget("aws");
-  const cells = examples.flatMap((example) => cellsOf(example, "aws").map((cell) => cell.name));
-  const mine = cells.map((name) => projectSlug(name, runId));
-  const { reclaim, unreadable } = sweepable(await list(), mine, cells);
+  const fixtures = specForTarget("aws");
+  const cells = fixtures.flatMap((fixture) => cellsOf(fixture, "aws"));
+  const byPart = new Map(cells.map((cell) => [slugPart(cell.name), cell]));
+  const mine = cells.map((cell) => projectSlug(cell.name, runId));
+  const { reclaim, unreadable } = sweepable(await list(), mine, [...byPart.keys()]);
 
   const complaints: string[] = unreadable.map(
-    (slug) => `${slug} carries the harness prefix and names no example in the spec table`,
+    (slug) => `${slug} carries the harness prefix and names no cell in the spec table`,
   );
   for (const stranded of reclaim) {
-    const example = examples.find((row) =>
-      cellsOf(row, "aws").some((cell) => cell.name === stranded.example),
-    );
-    if (!example) {
+    const cell = byPart.get(stranded.cell);
+    if (!cell) {
       continue;
     }
     const dir = await copyTree(
-      exampleDir(example.dir),
+      fixtureDir(cell.fixture.dir),
       treeDir(runId, "aws", `sweep-${stranded.slug}`),
     );
     try {
@@ -298,7 +298,7 @@ async function sweep(runId: string): Promise<void> {
     ["with-pulumi", pulumiSweep],
   ];
   for (const [name, sweepLadder] of ladderSweeps) {
-    if (!examples.some((example) => example.name === name)) {
+    if (!fixtures.some((fixture) => fixture.name === name)) {
       continue;
     }
     try {

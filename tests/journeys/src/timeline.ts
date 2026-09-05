@@ -3,14 +3,14 @@ export const TIMED_LEGS = ["up", "contract", "redeploy", "rollback", "destroy"] 
 export const OTHER_LEG = "other";
 
 export type TimelineTest = {
-  example: string;
+  cell: string;
   leg?: string;
   title: string;
   startTime: number;
   duration: number;
 };
 
-export type TimelineModule = { example: string; duration: number };
+export type TimelineModule = { cell: string; duration: number };
 
 export type TimelineInput = {
   runStart: number;
@@ -21,14 +21,14 @@ export type TimelineInput = {
   prepareMs?: number;
 };
 
-export type ExampleTiming = {
-  example: string;
+export type CellTiming = {
+  cell: string;
   start: number;
   legs: Record<string, number>;
   file: number;
 };
 
-export type Tail = { example: string; seconds: number };
+export type Tail = { cell: string; seconds: number };
 
 export type Timeline = {
   workers: number;
@@ -38,7 +38,7 @@ export type Timeline = {
   maxOverlap: number;
   tail?: Tail;
   prepare?: number;
-  examples: ExampleTiming[];
+  cells: CellTiming[];
 };
 
 export type Segment = { from: number; to: number; active: string[] };
@@ -59,8 +59,8 @@ export function sweep(tests: TimelineTest[]): Segment[] {
   const points = tests
     .filter((test) => test.duration > 0)
     .flatMap((test) => [
-      { at: test.startTime, example: test.example, delta: 1 },
-      { at: test.startTime + test.duration, example: test.example, delta: -1 },
+      { at: test.startTime, cell: test.cell, delta: 1 },
+      { at: test.startTime + test.duration, cell: test.cell, delta: -1 },
     ])
     .sort((a, b) => a.at - b.at || a.delta - b.delta);
 
@@ -79,7 +79,7 @@ export function sweep(tests: TimelineTest[]): Segment[] {
     }
     while (index < points.length && points[index].at === at) {
       const point = points[index];
-      held.set(point.example, (held.get(point.example) ?? 0) + point.delta);
+      held.set(point.cell, (held.get(point.cell) ?? 0) + point.delta);
       index += 1;
     }
   }
@@ -91,24 +91,24 @@ function tailOf(segments: Segment[]): Tail | undefined {
   if (!last || last.active.length !== 1) {
     return undefined;
   }
-  const example = last.active[0];
+  const cell = last.active[0];
   let from = last.from;
   for (let index = segments.length - 2; index >= 0; index -= 1) {
     const segment = segments[index];
-    if (segment.active.length !== 1 || segment.active[0] !== example || segment.to !== from) {
+    if (segment.active.length !== 1 || segment.active[0] !== cell || segment.to !== from) {
       break;
     }
     from = segment.from;
   }
-  return { example, seconds: seconds(last.to - from) };
+  return { cell, seconds: seconds(last.to - from) };
 }
 
 function timingFor(
-  example: string,
+  cell: string,
   tests: TimelineTest[],
   runStart: number,
   file: number,
-): ExampleTiming {
+): CellTiming {
   const held: Record<string, number> = {};
   for (const test of tests) {
     const leg = legOf(test);
@@ -118,20 +118,20 @@ function timingFor(
     Object.entries(held).map(([leg, ms]) => [leg, seconds(ms)]),
   );
   const first = Math.min(...tests.map((test) => test.startTime));
-  return { example, start: seconds(first - runStart), legs, file: seconds(file) };
+  return { cell, start: seconds(first - runStart), legs, file: seconds(file) };
 }
 
 export function timelineOf(input: TimelineInput): Timeline {
   const wallMs = Math.max(0, input.runEnd - input.runStart);
   const filesMs = input.modules.reduce((total, module) => total + module.duration, 0);
-  const byExample = new Map<string, TimelineTest[]>();
+  const byCell = new Map<string, TimelineTest[]>();
   for (const test of input.tests) {
-    byExample.set(test.example, [...(byExample.get(test.example) ?? []), test]);
+    byCell.set(test.cell, [...(byCell.get(test.cell) ?? []), test]);
   }
-  const moduleMs = new Map(input.modules.map((module) => [module.example, module.duration]));
-  const examples = [...byExample.entries()]
-    .map(([example, tests]) => timingFor(example, tests, input.runStart, moduleMs.get(example) ?? 0))
-    .sort((a, b) => b.file - a.file || a.example.localeCompare(b.example));
+  const moduleMs = new Map(input.modules.map((module) => [module.cell, module.duration]));
+  const cells = [...byCell.entries()]
+    .map(([cell, tests]) => timingFor(cell, tests, input.runStart, moduleMs.get(cell) ?? 0))
+    .sort((a, b) => b.file - a.file || a.cell.localeCompare(b.cell));
   const segments = sweep(input.tests);
   return {
     workers: input.workers,
@@ -141,7 +141,7 @@ export function timelineOf(input: TimelineInput): Timeline {
     maxOverlap: segments.reduce((most, segment) => Math.max(most, segment.active.length), 0),
     tail: tailOf(segments),
     prepare: input.prepareMs === undefined ? undefined : seconds(input.prepareMs),
-    examples,
+    cells,
   };
 }
 
@@ -156,7 +156,7 @@ export function timingTable(timeline: Timeline, meta: TimingMeta): string {
     `max overlap ${timeline.maxOverlap}`,
     ...(timeline.prepare === undefined ? [] : [`prepare ${timeline.prepare}s`]),
     timeline.tail
-      ? `tail: ${timeline.tail.example} alone for ${timeline.tail.seconds}s`
+      ? `tail: ${timeline.tail.cell} alone for ${timeline.tail.seconds}s`
       : "tail: none",
   ].join(" · ");
 
@@ -166,11 +166,11 @@ export function timingTable(timeline: Timeline, meta: TimingMeta): string {
     "",
     stat,
     "",
-    `| example | start | ${columns.join(" | ")} | file |`,
+    `| cell | start | ${columns.join(" | ")} | file |`,
     `| --- | --- |${" --- |".repeat(columns.length)} --- |`,
-    ...timeline.examples.map(
+    ...timeline.cells.map(
       (row) =>
-        `| ${row.example} | ${row.start} | ${columns.map((leg) => row.legs[leg] ?? 0).join(" | ")} | ${row.file} |`,
+        `| ${row.cell} | ${row.start} | ${columns.map((leg) => row.legs[leg] ?? 0).join(" | ")} | ${row.file} |`,
     ),
     "",
   ].join("\n");

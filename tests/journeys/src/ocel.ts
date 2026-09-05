@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { shapeFor, writeJourneyConfig } from "./config";
 import { redact, REDACTED } from "./contract";
-import { exampleMember, ocelBin, treeDir } from "./paths";
+import { fixtureMember, ocelBin, treeDir } from "./paths";
 import type { Leg, TargetName } from "./spec";
 import type { CellContext } from "./targets/types";
 import { plantWorkspace } from "./tree";
@@ -27,11 +27,11 @@ export function treeRoot(cell: CellContext, target: string): string {
 }
 
 export function configTree(cell: CellContext, target: string): string {
-  return path.join(treeRoot(cell, target), exampleMember(cell.example.dir));
+  return path.join(treeRoot(cell, target), fixtureMember(cell.fixture.dir));
 }
 
 export function appDirs(cell: CellContext): string[] {
-  return [exampleMember(cell.example.dir)];
+  return [fixtureMember(cell.fixture.dir)];
 }
 
 export async function workTree(cell: CellContext, target: TargetName): Promise<string> {

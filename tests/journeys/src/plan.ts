@@ -1,5 +1,4 @@
-import { contractRows } from "./contract";
-import { type Cell, type ExampleSpec, ladderTitle, type Leg, suitesOf, variantNameOf } from "./spec";
+import { type Cell, type FixtureSpec, fixtureNameOf, ladderTitle, type Leg, variantNameOf } from "./spec";
 
 export const UP_TITLE = "up";
 export const DESTROY_TITLE = "destroy";
@@ -9,7 +8,7 @@ export const REFUSE_TITLE = "refuse";
 
 export type PlannedTest = {
   cell: string;
-  example: string;
+  fixture: string;
   app: string;
   variant: string;
   title: string;
@@ -30,17 +29,17 @@ export function ladderConsumeTitle(leg: "contract" | "redeploy" | "rollback", ti
 }
 
 function ladderConsumeRows(
-  example: ExampleSpec,
+  fixture: FixtureSpec,
   leg: "contract" | "redeploy" | "rollback",
 ): Array<{ title: string; leg: Leg }> {
-  return (example.hooks?.rows ?? [])
+  return (fixture.hooks?.rows ?? [])
     .filter((row) => row.phase === "consume")
     .map((row) => ({ title: ladderConsumeTitle(leg, row.title), leg }));
 }
 
 function titlesForLeg(cell: Cell, leg: Leg): Array<{ title: string; leg: Leg }> {
-  const { example } = cell;
-  const rows = contractRows(suitesOf(example, cell.variant)).map((row) => ({
+  const { fixture } = cell;
+  const rows = fixture.rows.map((row) => ({
     title: contractTitle(leg, row.title),
     leg,
   }));
@@ -50,16 +49,16 @@ function titlesForLeg(cell: Cell, leg: Leg): Array<{ title: string; leg: Leg }> 
     case "destroy":
       return [{ title: DESTROY_TITLE, leg }];
     case "contract":
-      return [...rows, ...ladderConsumeRows(example, "contract")];
+      return [...rows, ...ladderConsumeRows(fixture, "contract")];
     case "redeploy":
-      return [{ title: REDEPLOY_TITLE, leg }, ...rows, ...ladderConsumeRows(example, "redeploy")];
+      return [{ title: REDEPLOY_TITLE, leg }, ...rows, ...ladderConsumeRows(fixture, "redeploy")];
     case "rollback":
-      return [{ title: ROLLBACK_TITLE, leg }, ...rows, ...ladderConsumeRows(example, "rollback")];
+      return [{ title: ROLLBACK_TITLE, leg }, ...rows, ...ladderConsumeRows(fixture, "rollback")];
   }
 }
 
-function ladderPhaseTitles(example: ExampleSpec): Array<{ title: string }> {
-  const hooks = example.hooks;
+function ladderPhaseTitles(fixture: FixtureSpec): Array<{ title: string }> {
+  const hooks = fixture.hooks;
   if (!hooks) {
     return [];
   }
@@ -78,18 +77,18 @@ function ladderPhaseTitles(example: ExampleSpec): Array<{ title: string }> {
 export function planTests(cells: Cell[], legs: Leg[]): PlannedTest[] {
   const planned: PlannedTest[] = [];
   for (const cell of cells) {
-    const { example } = cell;
-    const shared = { example: example.name, variant: variantNameOf(cell) };
-    for (const app of example.apps) {
+    const { fixture } = cell;
+    const shared = { fixture: fixtureNameOf(fixture), variant: variantNameOf(cell) };
+    for (const app of fixture.apps) {
       for (const leg of legs) {
         for (const entry of titlesForLeg(cell, leg)) {
           planned.push({ cell: cellKey(cell.name, app), app, ...shared, ...entry });
         }
       }
     }
-    const [firstApp] = example.apps;
+    const [firstApp] = fixture.apps;
     if (firstApp) {
-      for (const entry of ladderPhaseTitles(example)) {
+      for (const entry of ladderPhaseTitles(fixture)) {
         planned.push({ cell: cellKey(cell.name, firstApp), app: firstApp, ...shared, ...entry });
       }
     }

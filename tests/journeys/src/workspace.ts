@@ -1,32 +1,32 @@
 import path from "node:path";
-import type { ExampleSpec } from "./spec";
+import type { FixtureSpec } from "./spec";
 
-function nested(example: ExampleSpec): boolean {
-  return example.apps.length > 1;
+function nested(fixture: FixtureSpec): boolean {
+  return fixture.apps.length > 1;
 }
 
-export function appPath(example: ExampleSpec, app: string): string {
-  return nested(example) ? `apps/${app}` : ".";
+export function appPath(fixture: FixtureSpec, app: string): string {
+  return nested(fixture) ? `apps/${app}` : ".";
 }
 
-export function appFolder(example: ExampleSpec, app: string): string | undefined {
-  return example.kind === "workspace" ? `/${app}` : undefined;
+export function appFolder(fixture: FixtureSpec, app: string): string | undefined {
+  return fixture.kind === "workspace" ? `/${app}` : undefined;
 }
 
-export function appHomes(example: ExampleSpec): string[] {
-  return nested(example) ? example.apps.map((app) => appPath(example, app)) : [];
+export function appHomes(fixture: FixtureSpec): string[] {
+  return nested(fixture) ? fixture.apps.map((app) => appPath(fixture, app)) : [];
 }
 
-export function appCommand(example: ExampleSpec, app: string): string[] {
-  return ["pnpm", "--dir", appPath(example, app), "run", "dev"];
+export function appCommand(fixture: FixtureSpec, app: string): string[] {
+  return ["pnpm", "--dir", appPath(fixture, app), "run", "dev"];
 }
 
 export async function setAppNames(
-  example: ExampleSpec,
+  fixture: FixtureSpec,
   run: (name: string, args: string[]) => Promise<unknown>,
 ): Promise<void> {
-  for (const app of example.apps) {
-    const folder = appFolder(example, app);
+  for (const app of fixture.apps) {
+    const folder = appFolder(fixture, app);
     if (folder) {
       await run(`env-app-${app}`, ["env", "set", "APP_NAME", app, "--folder", folder]);
     }
@@ -34,16 +34,16 @@ export async function setAppNames(
 }
 
 export async function setSiteHostnames(
-  example: ExampleSpec,
+  fixture: FixtureSpec,
   hostnames: Map<string, string>,
   run: (name: string, args: string[]) => Promise<unknown>,
 ): Promise<void> {
-  for (const app of example.apps) {
+  for (const app of fixture.apps) {
     const hostname = hostnames.get(app);
     if (!hostname) {
       continue;
     }
-    const folder = appFolder(example, app);
+    const folder = appFolder(fixture, app);
     await run(`env-site-${app}`, [
       "env",
       "set",

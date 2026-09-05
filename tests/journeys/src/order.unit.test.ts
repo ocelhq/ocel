@@ -3,25 +3,36 @@ import { longestFirst } from "./order";
 import { type Cell, cellsOf, spec, specForTarget } from "./spec";
 
 function cells(target: "aws" | "vps"): Cell[] {
-  return specForTarget(target).flatMap((example) => cellsOf(example, target));
+  return specForTarget(target).flatMap((fixture) => cellsOf(fixture, target));
 }
 
+const bare: Cell[] = spec.map((fixture) => ({ name: fixture.dir, fixture }));
+
 describe("longestFirst", () => {
-  it("runs the ladders, then the composites, then the workspace", () => {
-    const kinds = longestFirst(cells("aws")).map((cell) => cell.example.kind);
+  it("runs every deploy cell before any sdk cell", () => {
+    const concerns = longestFirst(cells("aws")).map((cell) => cell.fixture.concern);
+    expect(concerns.indexOf("sdk")).toBeGreaterThan(concerns.lastIndexOf("deploy"));
+  });
+
+  it("runs the ladders, then the composites, then the workspace inside a concern", () => {
+    const kinds = longestFirst(cells("aws"))
+      .filter((cell) => cell.fixture.concern === "sdk")
+      .map((cell) => cell.fixture.kind);
     const firstComposite = kinds.indexOf("composite");
     const firstWorkspace = kinds.indexOf("workspace");
     expect(kinds.slice(0, firstComposite).every((kind) => kind === "ladder")).toBe(true);
-    expect(kinds.slice(firstComposite, firstWorkspace).every((kind) => kind === "composite")).toBe(true);
+    expect(kinds.slice(firstComposite, firstWorkspace).every((kind) => kind === "composite")).toBe(
+      true,
+    );
     expect(kinds.slice(firstWorkspace).every((kind) => kind === "workspace")).toBe(true);
   });
 
   it("holds the spec order inside a rank", () => {
     expect(
-      longestFirst(spec.map((example) => ({ name: example.name, example })))
-        .filter((cell) => cell.example.kind === "composite")
+      longestFirst(bare)
+        .filter((cell) => cell.fixture.concern === "deploy" && cell.fixture.kind === "composite")
         .map((cell) => cell.name),
-    ).toEqual(["express", "hono", "fastify", "next"]);
+    ).toEqual(["deploy/express", "deploy/hono", "deploy/fastify", "deploy/next"]);
   });
 
   it("leaves the cells it was handed alone", () => {

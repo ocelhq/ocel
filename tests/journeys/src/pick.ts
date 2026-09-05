@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
-import { type Cell, type ExampleSpec, preferredOf, variantNameOf } from "./spec";
+import {
+  type Cell,
+  type FixtureSpec,
+  fixtureNameOf,
+  groupKeyOf,
+  preferredOf,
+  variantNameOf,
+} from "./spec";
 import { BASE } from "./variants";
 
 export type Pick = { seed: string; touched: string[] };
@@ -8,40 +15,41 @@ export type Coverage = "full" | "covering";
 
 export const COVERAGES: Coverage[] = ["full", "covering"];
 
-export type CellsFor = (example: ExampleSpec) => Cell[];
+export type CellsFor = (fixture: FixtureSpec) => Cell[];
 
 function rotation(seed: string, group: string): number {
   return createHash("sha256").update(`${seed}:${group}`).digest().readUInt32BE(0);
 }
 
-function memberFor(seed: string, group: string, members: ExampleSpec[]): ExampleSpec {
+function memberFor(seed: string, group: string, members: FixtureSpec[]): FixtureSpec {
   return members[rotation(seed, group) % members.length];
 }
 
-function untouched(seed: string, group: string, members: ExampleSpec[]): ExampleSpec {
-  const preferred = members.find((row) => row.name === preferredOf(group));
+function untouched(seed: string, group: string, members: FixtureSpec[]): FixtureSpec {
+  const preferred = members.find((row) => fixtureNameOf(row) === preferredOf(group));
   return preferred ?? memberFor(seed, group, members);
 }
 
-export function pickExamples(
-  rows: ExampleSpec[],
+export function pickFixtures(
+  rows: FixtureSpec[],
   pick: Pick | undefined,
-): { chosen: ExampleSpec[]; leftOut: ExampleSpec[] } {
+): { chosen: FixtureSpec[]; leftOut: FixtureSpec[] } {
   if (!pick) {
     return { chosen: rows, leftOut: [] };
   }
 
-  const groups = new Map<string, ExampleSpec[]>();
+  const groups = new Map<string, FixtureSpec[]>();
   for (const row of rows) {
-    if (row.group === undefined) {
+    const key = groupKeyOf(row);
+    if (key === undefined) {
       continue;
     }
-    const members = groups.get(row.group) ?? [];
+    const members = groups.get(key) ?? [];
     members.push(row);
-    groups.set(row.group, members);
+    groups.set(key, members);
   }
 
-  const running = new Set<ExampleSpec>();
+  const running = new Set<FixtureSpec>();
   for (const [group, members] of groups) {
     const touched = members.filter((row) => pick.touched.includes(row.dir));
     for (const row of touched.length > 0 ? touched : [untouched(pick.seed, group, members)]) {
@@ -49,8 +57,8 @@ export function pickExamples(
     }
   }
 
-  const chosen = rows.filter((row) => row.group === undefined || running.has(row));
-  const leftOut = rows.filter((row) => row.group !== undefined && !running.has(row));
+  const chosen = rows.filter((row) => groupKeyOf(row) === undefined || running.has(row));
+  const leftOut = rows.filter((row) => groupKeyOf(row) !== undefined && !running.has(row));
   return { chosen, leftOut };
 }
 
@@ -83,28 +91,28 @@ export function coverageFrom(env: NodeJS.ProcessEnv = process.env): Coverage {
 
 function coverGroup(
   group: string,
-  members: ExampleSpec[],
+  members: FixtureSpec[],
   cellsFor: CellsFor,
   pick: Pick,
 ): Map<string, Cell[]> {
   const chosen = new Map<string, Cell[]>();
-  const add = (example: ExampleSpec, cell: Cell | undefined) => {
+  const add = (fixture: FixtureSpec, cell: Cell | undefined) => {
     if (!cell) {
       return;
     }
-    const held = chosen.get(example.name) ?? [];
+    const held = chosen.get(fixtureNameOf(fixture)) ?? [];
     if (!held.some((one) => one.name === cell.name)) {
       held.push(cell);
     }
-    chosen.set(example.name, held);
+    chosen.set(fixtureNameOf(fixture), held);
   };
-  const cellOf = (example: ExampleSpec, variant: string) =>
-    cellsFor(example).find((cell) => variantNameOf(cell) === variant);
+  const cellOf = (fixture: FixtureSpec, variant: string) =>
+    cellsFor(fixture).find((cell) => variantNameOf(cell) === variant);
 
-  const free: ExampleSpec[] = [];
+  const free: FixtureSpec[] = [];
   for (const member of members) {
     if (pick.touched.includes(member.dir)) {
-      chosen.set(member.name, cellsFor(member));
+      chosen.set(fixtureNameOf(member), cellsFor(member));
     } else {
       free.push(member);
     }
@@ -114,7 +122,8 @@ function coverGroup(
   }
 
   const start = rotation(pick.seed, group);
-  const lead = free.find((row) => row.name === preferredOf(group)) ?? free[start % free.length];
+  const lead =
+    free.find((row) => fixtureNameOf(row) === preferredOf(group)) ?? free[start % free.length];
   add(lead, cellOf(lead, BASE));
 
   const variants: string[] = [];
@@ -133,7 +142,7 @@ function coverGroup(
   }
 
   for (const member of free) {
-    if (!chosen.has(member.name)) {
+    if (!chosen.has(fixtureNameOf(member))) {
       add(member, cellOf(member, BASE));
     }
   }
@@ -141,28 +150,29 @@ function coverGroup(
 }
 
 export function coverCells(
-  rows: ExampleSpec[],
+  rows: FixtureSpec[],
   cellsFor: CellsFor,
   coverage: Coverage,
   pick: Pick | undefined,
 ): Map<string, Cell[]> {
   if (coverage === "full") {
-    return new Map(rows.map((row) => [row.name, cellsFor(row)]));
+    return new Map(rows.map((row) => [fixtureNameOf(row), cellsFor(row)]));
   }
   const asked = pick ?? { seed: "", touched: [] };
   const out = new Map<string, Cell[]>();
-  const groups = new Map<string, ExampleSpec[]>();
+  const groups = new Map<string, FixtureSpec[]>();
   for (const row of rows) {
-    if (row.group === undefined) {
-      out.set(row.name, cellsFor(row));
+    const key = groupKeyOf(row);
+    if (key === undefined) {
+      out.set(fixtureNameOf(row), cellsFor(row));
       continue;
     }
-    groups.set(row.group, [...(groups.get(row.group) ?? []), row]);
+    groups.set(key, [...(groups.get(key) ?? []), row]);
   }
   for (const [group, members] of groups) {
     for (const [name, cells] of coverGroup(group, members, cellsFor, asked)) {
       out.set(name, cells);
     }
   }
-  return new Map(rows.map((row) => [row.name, out.get(row.name) ?? []]));
+  return new Map(rows.map((row) => [fixtureNameOf(row), out.get(fixtureNameOf(row)) ?? []]));
 }

@@ -1,4 +1,5 @@
-import type { Leg, Suite } from "../spec";
+import type { ContractRow } from "../contract";
+import type { Leg } from "../spec";
 
 export type ExpectationEnvironment = "aws" | "aws.floci" | "dev" | "vps" | "vps.incus";
 
@@ -7,7 +8,7 @@ export const ENVIRONMENTS: ExpectationEnvironment[] = ["aws", "aws.floci", "dev"
 export type TestPick =
   | string
   | { row: string; legs?: Leg[] }
-  | { rows: Suite[] | "every"; legs?: Leg[]; except?: string[] };
+  | { rows: ContractRow[] | "every"; legs?: Leg[]; except?: string[] };
 
 export type Affected = {
   on: ExpectationEnvironment[];

@@ -9,8 +9,8 @@ import {
   stateComplaint,
 } from "./workspace";
 
-const workspace = specByName("workspace");
-const composite = specByName("express");
+const workspace = specByName("sdk", "workspace");
+const composite = specByName("sdk", "express");
 
 describe("a multi-app row", () => {
   it("reaches each app under apps/, and a single app where the config sits", () => {
@@ -54,16 +54,14 @@ describe("a multi-app row", () => {
 });
 
 describe("the state a workspace writes", () => {
-  const home = "/trees/workspace/workspace";
+  const home = "/trees/sdk__workspace/sdk/workspace";
 
   it("is content with state under the config's own directory", () => {
     expect(stateComplaint(home, [home])).toBeUndefined();
   });
 
   it("complains when an app under it holds state", () => {
-    expect(stateComplaint(home, [home, "/trees/workspace/workspace/apps/next"])).toMatch(
-      /workspace\/apps\/next/,
-    );
+    expect(stateComplaint(home, [home, `${home}/apps/next`])).toMatch(/workspace\/apps\/next/);
   });
 
   it("complains when the config's directory holds none", () => {

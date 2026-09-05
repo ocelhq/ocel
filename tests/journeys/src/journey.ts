@@ -6,10 +6,18 @@ import type { ExpectationEnvironment } from "./expectations";
 import { currentRunIdentity } from "./identity";
 import { longestFirst } from "./order";
 import { cellFile, cellFilesDir, cellsDir, packageRoot, prepareFile } from "./paths";
-import { pickExamples, requestedPick } from "./pick";
+import { pickFixtures, requestedPick } from "./pick";
 import type { PrepareFailures } from "./prepare";
-import { ENVIRONMENT_ENV, type Selection, selectionFor } from "./selection";
-import { type Cell, type ExampleSpec, examplesNamed, specForTarget } from "./spec";
+import {
+  CONCERN_ENV,
+  ENVIRONMENT_ENV,
+  FIXTURES_ENV,
+  fixturesFor,
+  type Selection,
+  selectionFor,
+} from "./selection";
+import type { Cell, FixtureSpec } from "./spec";
+import { fixtureNameOf, groupKeyOf } from "./spec";
 import { laneWorkers, selectedTarget } from "./targets";
 import type { Target } from "./targets/types";
 
@@ -70,8 +78,8 @@ function sayWhatIsSkipped(target: Target, selection: Selection) {
 
 export async function runJourney(
   target: Target,
-  examples: ExampleSpec[],
-  leftOut: ExampleSpec[] = [],
+  fixtures: FixtureSpec[],
+  leftOut: FixtureSpec[] = [],
 ): Promise<number> {
   const runId = currentRunIdentity();
   await rm(cellsDir(runId, target.name), { recursive: true, force: true });
@@ -80,8 +88,9 @@ export async function runJourney(
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     OCEL_TARGET: target.name,
-    OCEL_EXAMPLES: examples.map((row) => row.name).join(","),
-    OCEL_JOURNEY_LEFT_OUT: leftOut.map((row) => row.name).join(","),
+    [CONCERN_ENV]: [...new Set(fixtures.map((row) => row.concern))].join(" "),
+    [FIXTURES_ENV]: fixtures.map(fixtureNameOf).join(","),
+    OCEL_JOURNEY_LEFT_OUT: leftOut.map(fixtureNameOf).join(","),
     [ENVIRONMENT_ENV]: environment,
   };
   const selection = selectionFor(target, environment, env);
@@ -112,11 +121,11 @@ export async function runJourney(
   return verdict.exitCode;
 }
 
-function sayWhatIsLeftOut(seed: string, chosen: ExampleSpec[], leftOut: ExampleSpec[]) {
-  const groups = new Set(leftOut.map((row) => row.group));
+function sayWhatIsLeftOut(seed: string, chosen: FixtureSpec[], leftOut: FixtureSpec[]) {
+  const groups = new Set(leftOut.map(groupKeyOf));
   for (const group of groups) {
-    const running = chosen.filter((row) => row.group === group).map((row) => row.name);
-    const dropped = leftOut.filter((row) => row.group === group).map((row) => row.name);
+    const running = chosen.filter((row) => groupKeyOf(row) === group).map(fixtureNameOf);
+    const dropped = leftOut.filter((row) => groupKeyOf(row) === group).map(fixtureNameOf);
     process.stderr.write(
       `${group}: running ${running.join(", ")}, leaving out ${dropped.join(", ")} (seed ${seed})\n`,
     );
@@ -125,9 +134,9 @@ function sayWhatIsLeftOut(seed: string, chosen: ExampleSpec[], leftOut: ExampleS
 
 async function main(): Promise<number> {
   const target = selectedTarget();
-  const named = examplesNamed(specForTarget(target.name), process.env.OCEL_EXAMPLES);
+  const named = fixturesFor(target.name, process.env);
   const pick = requestedPick();
-  const { chosen, leftOut } = pickExamples(named, pick);
+  const { chosen, leftOut } = pickFixtures(named, pick);
   if (pick && leftOut.length > 0) {
     sayWhatIsLeftOut(pick.seed, chosen, leftOut);
   }

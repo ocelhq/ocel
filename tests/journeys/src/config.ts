@@ -32,7 +32,7 @@ const EDGE_IMPORTS: Record<Edge, { name: string; from: string }> = {
 
 function hostnamesOf(cell: CellContext, zone: string): Record<string, string> {
   const named: Record<string, string> = {};
-  for (const app of cell.example.apps) {
+  for (const app of cell.fixture.apps) {
     const host = appHostname(app, cell.slug, zone);
     if (host) {
       named[app] = host;

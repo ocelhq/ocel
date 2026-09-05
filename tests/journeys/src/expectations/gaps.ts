@@ -1,21 +1,28 @@
-import { EDGE_ISR_TITLE } from "../nextCache";
 import { DESTROY_TITLE, UP_TITLE } from "../plan";
+import {
+  EDGE_ISR_TITLE,
+  LINK_QUERY_ROW,
+  LINK_ROW,
+  nextCacheRows,
+  nextDataCacheRows,
+  STREAM_ROW,
+  UPLOAD_ROW,
+} from "../rows";
 import type { Gap } from "./types";
 
-const NODE_HTTP = ["express/web", "hono/web", "fastify/web"];
-const COMPOSITE = [...NODE_HTTP, "next/web"];
-const WORKSPACE = ["workspace/next", "workspace/express"];
-const EVERY_AWS_CELL_BUT_LADDERS = [...COMPOSITE, ...WORKSPACE, "with-transforms/web"];
+const DEPLOY_NODE_HTTP = ["deploy/express/web", "deploy/hono/web", "deploy/fastify/web"];
+const SDK_NODE_HTTP = ["sdk/express/web", "sdk/hono/web", "sdk/fastify/web"];
+const DEPLOY_WORKSPACE = ["deploy/workspace/next", "deploy/workspace/express"];
+const SDK_WORKSPACE = ["sdk/workspace/next", "sdk/workspace/express"];
+const DEPLOY_CELLS = [...DEPLOY_NODE_HTTP, "deploy/next/web", ...DEPLOY_WORKSPACE];
+const SDK_CELLS = [...SDK_NODE_HTTP, "sdk/next/web", ...SDK_WORKSPACE];
+const NEXT_CELLS = ["deploy/next/web", "sdk/next/web"];
+const EVERY_AWS_CELL_BUT_LADDERS = [...DEPLOY_CELLS, ...SDK_CELLS, "sdk/with-transforms/web"];
 
 const BASE = ["base"];
-const HELLO = ["hello"];
 const SERVERLESS = ["base", "api-gateway", "cloudflare"];
-const ON_API_GATEWAY = ["api-gateway", "hello-api-gateway"];
 
-const UPLOAD_ROW = "the upload protocol stores a document and /api/documents lists it";
-const STREAM_ROW = "GET /api/probes/stream streams its chunks in order to the sentinel";
-const LINK_QUERY_ROW = "GET /api/link/query answers ok after a select through the link";
-const LINK_ROW = "GET /api/link answers with what it resolved and the greeting it deployed with";
+const EVERY_NEXT_CACHE_ROW = [...nextCacheRows, ...nextDataCacheRows];
 
 export const gaps: Gap[] = [
   {
@@ -34,24 +41,30 @@ export const gaps: Gap[] = [
     id: "dev-upload-key-namespaced",
     reason: "the dev blob store namespaces an upload key, so the documents/ prefix assertion fails",
     issue: 882,
-    affects: [{ on: ["dev"], tests: [{ row: UPLOAD_ROW, legs: ["contract"] }] }],
+    affects: [
+      { on: ["dev"], cells: SDK_CELLS, tests: [{ row: UPLOAD_ROW, legs: ["contract"] }] },
+    ],
   },
   {
     id: "no-router-in-front-of-dev",
     reason: "ocel dev does not front a Next app with the router, so no cache tier is observable",
     issue: 898,
     affects: [
-      { on: ["dev"], cells: ["next/web"], tests: [{ rows: ["next-cache"], legs: ["contract"] }] },
+      {
+        on: ["dev"],
+        cells: NEXT_CELLS,
+        tests: [{ rows: EVERY_NEXT_CACHE_ROW, legs: ["contract"] }],
+      },
     ],
   },
   {
     id: "no-bucket-on-a-box",
-    reason: "the vps provider serves no bucket, so every composite example is refused at up",
+    reason: "the vps provider serves no bucket, so every sdk fixture is refused at up",
     issue: 918,
     affects: [
       {
         on: ["vps", "vps.incus"],
-        cells: [...COMPOSITE, ...WORKSPACE],
+        cells: SDK_CELLS,
         variants: BASE,
         tests: [UP_TITLE],
         skip: true,
@@ -65,9 +78,9 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["vps", "vps.incus"],
-        cells: ["next/web"],
+        cells: NEXT_CELLS,
         variants: BASE,
-        tests: [{ rows: ["next-cache"] }],
+        tests: [{ rows: EVERY_NEXT_CACHE_ROW }],
       },
     ],
   },
@@ -78,7 +91,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws", "aws.floci"],
-        cells: ["with-sst/web"],
+        cells: ["sdk/with-sst/web"],
         variants: SERVERLESS,
         tests: [UP_TITLE],
         skip: true,
@@ -92,7 +105,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws", "aws.floci"],
-        cells: ["with-pulumi/web"],
+        cells: ["sdk/with-pulumi/web"],
         variants: SERVERLESS,
         tests: [UP_TITLE],
         skip: true,
@@ -105,7 +118,7 @@ export const gaps: Gap[] = [
       "the aws journey migrates through ocel run, which needs a console link the lane never has",
     issue: 911,
     affects: [
-      { on: ["aws"], cells: NODE_HTTP, variants: SERVERLESS, tests: [UP_TITLE], skip: true },
+      { on: ["aws"], cells: SDK_NODE_HTTP, variants: SERVERLESS, tests: [UP_TITLE], skip: true },
     ],
   },
   {
@@ -115,14 +128,14 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws"],
-        cells: ["next/web", ...WORKSPACE],
+        cells: ["sdk/next/web", ...SDK_WORKSPACE],
         variants: SERVERLESS,
         tests: [UP_TITLE],
         skip: true,
       },
       {
         on: ["aws.floci"],
-        cells: ["next/web", ...WORKSPACE],
+        cells: ["sdk/next/web", ...SDK_WORKSPACE],
         variants: ["api-gateway"],
         tests: [UP_TITLE],
         skip: true,
@@ -136,8 +149,8 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws", "aws.floci"],
-        cells: ["next/web", ...WORKSPACE],
-        variants: ["hello-api-gateway"],
+        cells: ["deploy/next/web", ...DEPLOY_WORKSPACE],
+        variants: ["api-gateway"],
         tests: [UP_TITLE],
         skip: true,
       },
@@ -150,14 +163,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws"],
-        cells: [...COMPOSITE, ...WORKSPACE],
-        variants: HELLO,
-        tests: [UP_TITLE],
-        skip: true,
-      },
-      {
-        on: ["aws"],
-        cells: ["with-transforms/web"],
+        cells: [...DEPLOY_CELLS, "sdk/with-transforms/web"],
         variants: BASE,
         tests: [UP_TITLE],
         skip: true,
@@ -171,7 +177,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws"],
-        cells: ["with-transforms/web"],
+        cells: ["sdk/with-transforms/web"],
         variants: ["cloudflare"],
         tests: [UP_TITLE],
         skip: true,
@@ -185,7 +191,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws"],
-        cells: ["with-transforms/web"],
+        cells: ["sdk/with-transforms/web"],
         variants: ["api-gateway"],
         tests: [{ row: LINK_QUERY_ROW }],
       },
@@ -199,7 +205,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws"],
-        cells: ["with-transforms/web"],
+        cells: ["sdk/with-transforms/web"],
         variants: ["api-gateway"],
         tests: [{ row: LINK_ROW, legs: ["redeploy"] }],
       },
@@ -213,7 +219,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws.floci"],
-        cells: [...NODE_HTTP, "with-transforms/web"],
+        cells: [...SDK_NODE_HTTP, "sdk/with-transforms/web"],
         variants: ["api-gateway"],
         tests: [UP_TITLE],
         skip: true,
@@ -229,7 +235,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws.floci"],
         cells: EVERY_AWS_CELL_BUT_LADDERS,
-        variants: ON_API_GATEWAY,
+        variants: ["api-gateway"],
         tests: [{ rows: "every", except: [STREAM_ROW, EDGE_ISR_TITLE] }],
       },
     ],
@@ -247,7 +253,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws.floci"],
-        cells: ["next/web"],
+        cells: NEXT_CELLS,
         variants: ["api-gateway"],
         tests: [{ row: EDGE_ISR_TITLE }],
       },
@@ -269,7 +275,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws.floci"],
         cells: EVERY_AWS_CELL_BUT_LADDERS,
-        variants: [...BASE, ...HELLO],
+        variants: BASE,
         tests: [UP_TITLE],
         skip: true,
       },
