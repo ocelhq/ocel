@@ -15,7 +15,13 @@ function clock(timeoutMs: number) {
   };
 }
 
-function answering(answers: Array<number | string>): Fetch {
+type Answer = number | string | { edged: number };
+
+function edged(status: number) {
+  return { edged: status };
+}
+
+function answering(answers: Answer[]): Fetch {
   let served = 0;
   return (async (input: unknown) => {
     const answer = answers[served] ?? answers[answers.length - 1];
@@ -24,7 +30,13 @@ function answering(answers: Array<number | string>): Fetch {
       throw new Error(answer);
     }
     assert.equal(String(input), "https://app.example.com/health");
-    return new Response(null, { status: answer });
+    if (typeof answer === "number") {
+      return new Response(null, { status: answer });
+    }
+    return new Response(null, {
+      status: answer.edged,
+      headers: { "x-ocel-edge": "cloudfront" },
+    });
   }) as unknown as Fetch;
 }
 
@@ -67,6 +79,40 @@ describe("awaitServing", () => {
         return true;
       },
     );
+  });
+
+  it("gives up long before the deadline once the edge itself has answered six times", async () => {
+    await assert.rejects(
+      awaitServing(answering([edged(404)]), URLS, clock(900_000)),
+      (error: Error) => {
+        assert.match(error.message, /app\.example\.com/);
+        assert.match(error.message, /answered 404 for 6 consecutive attempts over 25s/);
+        assert.doesNotMatch(error.message, /900s/);
+        return true;
+      },
+    );
+  });
+
+  it("counts the run afresh when an answer comes back without the edge header", async () => {
+    const served = await awaitServing(
+      answering([edged(502), edged(502), 403, edged(502), edged(502), edged(502), 200]),
+      URLS,
+      clock(900_000),
+    );
+    assert.deepEqual(served, {
+      web: { host: "app.example.com", waitedMs: 30_000, attempts: 7, status: 200 },
+    });
+  });
+
+  it("takes the 200 that lands one attempt short of the run the edge would end on", async () => {
+    const served = await awaitServing(
+      answering([edged(502), edged(502), edged(502), edged(502), edged(502), 200]),
+      URLS,
+      clock(900_000),
+    );
+    assert.deepEqual(served, {
+      web: { host: "app.example.com", waitedMs: 25_000, attempts: 6, status: 200 },
+    });
   });
 
   it("waits for every app in the cell", async () => {
