@@ -19,7 +19,7 @@ import (
 )
 
 func stubAppBuildRecorder(deps *cmddeps.Deps, built *bool) {
-	deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, string, io.Writer) error {
+	deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 		*built = true
 		return nil
 	}
@@ -28,7 +28,7 @@ func stubAppBuildRecorder(deps *cmddeps.Deps, built *bool) {
 func captureBuildEnv(deps *cmddeps.Deps) *map[string]map[string]string {
 	clitest.StubRecordedDeploymentIDs(deps)
 	var got map[string]map[string]string
-	deps.BuildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ string, _ io.Writer) error {
+	deps.BuildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ io.Writer) error {
 		got = envByApp
 		return nil
 	}

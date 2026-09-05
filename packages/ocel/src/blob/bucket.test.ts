@@ -22,20 +22,12 @@ describe("Bucket record", () => {
     vi.unstubAllEnvs();
   });
 
-  it("refuses its record when this deploy provisioned nothing", () => {
-    vi.stubEnv("OCEL_PHASE", "resources-suppressed");
-
-    expect(() => bucket("storage", { uploaders: { avatar } }).__config()).toThrow(
-      "'bucket(\"storage\")' cannot be used while resources are suppressed",
-    );
-    expect(() => bucket("storage", { uploaders: { avatar } }).__config()).toThrow(
-      UnprovisionedResourceError,
-    );
-  });
-
-  it("refuses its record during discovery with the same typed error", () => {
+  it("refuses its record during discovery with a typed error", () => {
     vi.stubEnv("OCEL_PHASE", "discovery");
 
+    expect(() => bucket("storage", { uploaders: { avatar } }).__config()).toThrow(
+      "'bucket(\"storage\")' cannot be used during discovery",
+    );
     expect(() => bucket("storage", { uploaders: { avatar } }).__config()).toThrow(
       UnprovisionedResourceError,
     );

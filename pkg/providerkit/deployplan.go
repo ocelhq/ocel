@@ -67,9 +67,6 @@ func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployP
 		Tag:         req.GetTag(),
 		Builds:      make(map[string]string, len(manifest.GetApps())),
 	}
-	if req.GetSuppressResources() {
-		plan.Phase = PhaseResourcesSuppressed
-	}
 	if !ephemeral(env) {
 		plan.Infra = naming.InfraStack(name)
 	}

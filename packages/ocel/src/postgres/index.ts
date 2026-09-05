@@ -9,9 +9,8 @@ type PgReturn = Pool & { connectionString: string };
 export function postgres(id: string, config?: PostgresConfig): PgReturn {
   const pg = new Postgres(id, config);
 
-  const phase = unprovisionedPhase();
-  if (phase) {
-    return unprovisionedProxy<PgReturn>(`postgres("${id}")`, phase);
+  if (unprovisionedPhase()) {
+    return unprovisionedProxy<PgReturn>(`postgres("${id}")`);
   }
 
   const { host, port, database, username, password } = pg.__config();

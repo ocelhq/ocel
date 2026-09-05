@@ -140,7 +140,7 @@ func TestBuild(t *testing.T) {
 			return nil
 		}}
 
-		if err := builder.Build(context.Background(), cfg, nil, "", io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -193,7 +193,7 @@ func TestBuild(t *testing.T) {
 			Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express"}},
 		}
 
-		err := Build(context.Background(), cfg, nil, "", io.Discard)
+		err := Build(context.Background(), cfg, nil, io.Discard)
 		if err == nil {
 			t.Fatal("Build succeeded with no materialized builder, want error")
 		}
@@ -219,7 +219,7 @@ func TestBuild(t *testing.T) {
 			return nil
 		}}
 
-		if err := builder.Build(context.Background(), &projectconfig.Config{Dir: root}, nil, "", io.Discard); err != nil {
+		if err := builder.Build(context.Background(), &projectconfig.Config{Dir: root}, nil, io.Discard); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -255,7 +255,7 @@ func TestBuild(t *testing.T) {
 			return errors.New("node-builder failed: no entrypoint resolved for app \"api\"")
 		}}
 
-		err := builder.Build(context.Background(), cfg, nil, "", io.Discard)
+		err := builder.Build(context.Background(), cfg, nil, io.Discard)
 		if err == nil {
 			t.Fatal("Build succeeded, want error")
 		}
@@ -278,7 +278,7 @@ func TestBuild(t *testing.T) {
 		}}
 
 		vars := map[string]map[string]string{"": {"POSTHOG_ID": "ph-123"}}
-		if err := builder.Build(context.Background(), &projectconfig.Config{Dir: root}, vars, "", io.Discard); err != nil {
+		if err := builder.Build(context.Background(), &projectconfig.Config{Dir: root}, vars, io.Discard); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 		if value, _ := lookup(got, "POSTHOG_ID"); value != "ph-123" {
@@ -309,7 +309,7 @@ func TestBuild(t *testing.T) {
 			"storefront": {"POSTHOG_ID": "ph-store"},
 			"admin":      {"POSTHOG_ID": "ph-admin"},
 		}
-		if err := builder.Build(context.Background(), cfg, vars, "", io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, vars, io.Discard); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -342,7 +342,7 @@ func TestBuild(t *testing.T) {
 				{Name: "admin", Path: "apps/admin", Framework: "next", Folder: "/admin"},
 			},
 		}
-		if err := builder.Build(context.Background(), cfg, nil, "", io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -376,7 +376,7 @@ func TestBuild(t *testing.T) {
 					Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next"}},
 				}
 				vars := map[string]map[string]string{"web": {name: "hijacked"}}
-				err := builder.Build(context.Background(), cfg, vars, "", io.Discard)
+				err := builder.Build(context.Background(), cfg, vars, io.Discard)
 				if err == nil {
 					t.Fatalf("Build succeeded with a variable declared as %s, want a refusal", name)
 				}
@@ -406,7 +406,7 @@ func TestBuild(t *testing.T) {
 			Dir:  root,
 			Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next", Folder: "/web"}},
 		}
-		if err := builder.Build(context.Background(), cfg, nil, "", io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -449,7 +449,7 @@ func TestBuild(t *testing.T) {
 			Dir:  root,
 			Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express"}},
 		}
-		if err := builder.Build(context.Background(), cfg, nil, "", io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -495,7 +495,7 @@ func TestBuild(t *testing.T) {
 			Dir:  root,
 			Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next"}},
 		}
-		if err := builder.Build(context.Background(), cfg, nil, "", io.Discard); err != nil {
+		if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {
 			t.Fatalf("Build: %v", err)
 		}
 
@@ -569,7 +569,7 @@ func TestBuild(t *testing.T) {
 				Dir:  root,
 				Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express"}},
 			}
-			err := builder.Build(context.Background(), cfg, nil, "", io.Discard)
+			err := builder.Build(context.Background(), cfg, nil, io.Discard)
 			if err == nil {
 				t.Fatal("Build succeeded, want the unusable build plan to fail the build")
 			}
@@ -593,7 +593,7 @@ func TestBuild(t *testing.T) {
 		}
 
 		var stderr bytes.Buffer
-		if err := Build(context.Background(), cfg, nil, "", &stderr); err != nil {
+		if err := Build(context.Background(), cfg, nil, &stderr); err != nil {
 			t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 		}
 
@@ -629,7 +629,7 @@ func TestBuild(t *testing.T) {
 		fixtureRoot := expressFixture(t)
 
 		var stderr bytes.Buffer
-		if err := Build(context.Background(), &projectconfig.Config{Dir: fixtureRoot}, nil, "", &stderr); err != nil {
+		if err := Build(context.Background(), &projectconfig.Config{Dir: fixtureRoot}, nil, &stderr); err != nil {
 			t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 		}
 
@@ -713,7 +713,7 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 				return json.Unmarshal(request, &got)
 			}}
 
-			if err := builder.Build(context.Background(), tc.cfg(root), nil, "", io.Discard); err != nil {
+			if err := builder.Build(context.Background(), tc.cfg(root), nil, io.Discard); err != nil {
 				t.Fatalf("Build: %v", err)
 			}
 

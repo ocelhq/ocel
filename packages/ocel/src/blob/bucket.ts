@@ -41,9 +41,8 @@ export class Bucket<
   }
 
   __config(): ResolvedBucketConfig {
-    const phase = unprovisionedPhase();
-    if (phase) {
-      throw unprovisioned(`bucket("${this.name}")`, "__config", phase);
+    if (unprovisionedPhase()) {
+      throw unprovisioned(`bucket("${this.name}")`, "__config");
     }
     return getConfig(this.name, "bucket");
   }

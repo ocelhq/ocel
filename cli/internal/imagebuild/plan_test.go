@@ -82,7 +82,7 @@ func planned(t *testing.T, dir string) builtPlan {
 
 func plannedFrom(t *testing.T, loc workspace.Location) builtPlan {
 	t.Helper()
-	raw, err := imagebuild.Plan(loc, "")
+	raw, err := imagebuild.Plan(loc)
 	if err != nil {
 		t.Fatalf("Plan(%s) = %v", loc.Root, err)
 	}
@@ -141,7 +141,7 @@ func TestNoVariableOcelRunsUnderAppearsAnywhereInThePlanItHandsTheFrontend(t *te
 	const leak = "a value the plan must never carry"
 	t.Setenv("OCEL_PLAN_LEAK", leak)
 
-	raw, err := imagebuild.Plan(located(t, "testdata/plainserver"), "")
+	raw, err := imagebuild.Plan(located(t, "testdata/plainserver"))
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
@@ -154,7 +154,7 @@ func TestNoVariableOcelRunsUnderAppearsAnywhereInThePlanItHandsTheFrontend(t *te
 }
 
 func TestADirectoryRailpackCannotReadSaysWhyInsteadOfPlanningNothing(t *testing.T) {
-	_, err := imagebuild.Plan(located(t, t.TempDir()), "")
+	_, err := imagebuild.Plan(located(t, t.TempDir()))
 	if err == nil {
 		t.Fatal("Plan() over an empty directory succeeded, so a build with nothing in it would be attempted")
 	}
@@ -216,7 +216,7 @@ func TestAnInstallOcelCannotScopeStopsTheBuildRatherThanInstallingTheWholeWorksp
 	loc := located(t, workspaceApp)
 	loc.Manager = workspace.YarnBerry
 
-	_, err := imagebuild.Plan(loc, "")
+	_, err := imagebuild.Plan(loc)
 	if err == nil {
 		t.Fatal("Plan() dropped a scoped install it could not place, so the image installs every package in the workspace to serve one app")
 	}

@@ -219,7 +219,7 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, nil)
-		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, string, io.Writer) error {
+		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 			return errors.New("boom: app build failed")
 		}
 		root, _ := clitest.SetUpDeployFixture(t)
