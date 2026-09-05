@@ -267,6 +267,10 @@ func servedByFunctions(functions []manifestbuilder.Function, cfg *projectconfig.
 	})
 }
 
+func runtimeOf(runtime projectconfig.Runtime) manifestbuilder.Runtime {
+	return manifestbuilder.Runtime{Name: runtime.Name, Arch: runtime.Arch}
+}
+
 func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string, images map[string]string) []manifestbuilder.App {
 	byApp := make(map[string][]manifestbuilder.Usage, len(apps))
 	for _, u := range usages {
@@ -279,7 +283,7 @@ func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string
 		named[a.Name] = true
 		out = append(out, manifestbuilder.App{
 			Name:            a.Name,
-			Framework:       a.Framework,
+			Runtime:         runtimeOf(a.Runtime),
 			Compute:         a.Compute,
 			Domains:         a.Domains,
 			Folder:          a.Folder,

@@ -39,7 +39,7 @@ export default defineConfig({
   slug: "shop",
   provider: awsProvider(),
   links: ["orders"],
-  apps: [{ name: "api", framework: "express", path: "." }],
+  apps: [{ name: "api", path: "." }],
 });
 ```
 

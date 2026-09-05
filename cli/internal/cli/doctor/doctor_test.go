@@ -165,8 +165,8 @@ export default {
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { production: "shop.example.com", preview: "*.preview.example.com" },
   apps: [
-    { name: "web", path: "apps/web", framework: "express" },
-    { name: "api", path: "apps/api", framework: "express" },
+    { name: "web", path: "apps/web", runtime: "node" },
+    { name: "api", path: "apps/api", runtime: "node" },
   ],
 };
 `)
@@ -356,8 +356,8 @@ export default {
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { production: "shop.example.com" },
   apps: [
-    { name: "web", path: "apps/web", framework: "express" },
-    { name: "api", path: "apps/api", framework: "express" },
+    { name: "web", path: "apps/web", runtime: "node" },
+    { name: "api", path: "apps/api", runtime: "node" },
   ],
 };
 `)

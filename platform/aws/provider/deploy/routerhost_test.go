@@ -22,7 +22,7 @@ func routedArtifactRoot(t *testing.T) string {
 	t.Helper()
 	return writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json": routedManifest,
-		"apps/web/serve.json":            `{"framework":"next","buildId":"WEB1","edgeRouting":true,"entry":"/"}`,
+		"apps/web/serve.json":            `{"runtime":"next","buildId":"WEB1","edgeRouting":true,"entry":"/"}`,
 	})
 }
 
@@ -43,10 +43,10 @@ func routedCoordinate(t *testing.T) naming.Coordinate {
 }
 
 func routedApp() *contractv1.ManifestApp {
-	return &contractv1.ManifestApp{Name: "web", Framework: frameworkNext}
+	return &contractv1.ManifestApp{Name: "web", Runtime: &contractv1.Runtime{Name: runtimeNext}}
 }
 
-func servingPlan(t *testing.T, cfg Config, app, framework string, coord naming.Coordinate) providerkit.StackPlan {
+func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coordinate) providerkit.StackPlan {
 	t.Helper()
 	stack := coord.Stack()
 	facts := cfg.Edge.Facts()
@@ -54,7 +54,7 @@ func servingPlan(t *testing.T, cfg Config, app, framework string, coord naming.C
 		Root:              cfg.ArtifactRoot,
 		Project:           "shop",
 		App:               app,
-		Framework:         framework,
+		Runtime:           runtime,
 		Stack:             stack,
 		Coordinate:        coord,
 		EdgeRunsCode:      facts.RunsCode,
@@ -69,7 +69,7 @@ func servingPlan(t *testing.T, cfg Config, app, framework string, coord naming.C
 		Edge: cfg.Edge,
 		App: &providerkit.AppPlan{
 			App:         app,
-			Framework:   framework,
+			Runtime:     runtime,
 			Deployment:  "d1",
 			Routing:     serving.Routing,
 			Guard:       serving.Guard,
@@ -80,7 +80,7 @@ func servingPlan(t *testing.T, cfg Config, app, framework string, coord naming.C
 
 func routedPlan(t *testing.T, cfg Config) providerkit.StackPlan {
 	t.Helper()
-	return servingPlan(t, cfg, "web", frameworkNext, routedCoordinate(t))
+	return servingPlan(t, cfg, "web", runtimeNext, routedCoordinate(t))
 }
 
 func routedRouter(t *testing.T, cfg Config) *routerHost {
@@ -124,8 +124,8 @@ func TestRouterHostNamesTheEntryAndWhatTheRouterReads(t *testing.T) {
 
 func routedFunctions() []*contractv1.ManifestFunction {
 	return []*contractv1.ManifestFunction{
-		{LogicalName: "fn--web--entry", App: "web", Framework: frameworkNext, RouteId: "/"},
-		{LogicalName: "fn--web--admin", App: "web", Framework: frameworkNext, RouteId: "/admin"},
+		{LogicalName: "fn--web--entry", App: "web", Runtime: &contractv1.Runtime{Name: runtimeNext}, RouteId: "/"},
+		{LogicalName: "fn--web--admin", App: "web", Runtime: &contractv1.Runtime{Name: runtimeNext}, RouteId: "/admin"},
 	}
 }
 

@@ -23,8 +23,8 @@ func TestDeployResult(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{{
-			Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js",
-			ArtifactPath: "output/api", Framework: "express", App: "api",
+			Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js",
+			ArtifactPath: "output/api", App: "api",
 		}})
 		root, _ := clitest.SetUpDeployFixture(t)
 		addAppToFixtureConfig(t, root)
@@ -87,8 +87,8 @@ func TestDeployResult(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{{
-			Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js",
-			ArtifactPath: "output/api", Framework: "express", App: "api",
+			Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js",
+			ArtifactPath: "output/api", App: "api",
 		}})
 		root, _ := clitest.SetUpDeployFixture(t)
 		addAppToFixtureConfig(t, root)
@@ -129,5 +129,5 @@ func readDeployResult(t *testing.T, root string) deployresult.Result {
 func writeServeDescriptor(t *testing.T, root, app, buildID string) {
 	t.Helper()
 	clitest.WriteFile(t, filepath.Join(root, ".ocel", "output", "apps", app, edge.ServeDescriptorFile),
-		`{"framework":"express","buildId":"`+buildID+`"}`)
+		`{"runtime":"node","buildId":"`+buildID+`"}`)
 }

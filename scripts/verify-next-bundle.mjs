@@ -106,7 +106,7 @@ function readBundle(dir, name) {
 
 function verifyBundle({ name, dir, config, launcher, launcherRel, entries, primary, unresolved, dispatchProbe }) {
   check(config.id === name, `${name}: config.json.id is ${JSON.stringify(config.id)}, expected ${JSON.stringify(name)}`);
-  check(config.framework === "next", `${name}: config.json.framework is ${JSON.stringify(config.framework)}`);
+  check(config.runtime?.name === "next", `${name}: config.json.runtime is ${JSON.stringify(config.runtime)}`);
 
   const appRelDir = dirname(launcherRel);
   check(

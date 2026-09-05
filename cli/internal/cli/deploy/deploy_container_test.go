@@ -112,7 +112,7 @@ func containerProject(t *testing.T, health string) (cmddeps.Deps, string, string
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+		{Route: "index", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	clitest.StubAppImages(&deps, "api")
 
@@ -216,7 +216,7 @@ func TestAServerlessOnlyDeployAsksForNoRegistryAtAll(t *testing.T) {
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+		{Route: "index", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	root, _ := clitest.SetUpDeployFixture(t)
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -224,7 +224,7 @@ export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", compute: "serverless", framework: "express" }],
+  apps: [{ name: "api", path: "apps/api", compute: "serverless", runtime: "node" }],
   registry: { server: "ghcr.io", password: "OCEL_TEST_REGISTRY_TOKEN" },
 };
 `)

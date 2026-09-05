@@ -148,7 +148,7 @@ func reportEvent(rep runui.Reporter, ev *progressv1.OperationEvent) {
 }
 
 func Ready(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, hint string) error {
-	resp, err := preflight.Run(ctx, rep, runner, cfg, required, "", nil, preflight.Frameworks(cfg), hint)
+	resp, err := preflight.Run(ctx, rep, runner, cfg, required, "", nil, preflight.Runtimes(cfg), hint)
 	if err != nil {
 		return err
 	}

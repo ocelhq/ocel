@@ -11,7 +11,7 @@ function run(over: Partial<Run> = {}): Run {
 
 function row(over: Partial<RecordedRow> = {}): RecordedRow {
   return {
-    cell: "sdk/express/web",
+    cell: "sdk/node/web",
     title: "up",
     outcome: "passed",
     startTime: 1_000,
@@ -54,28 +54,28 @@ describe("what a lane plans from the environment its children read", () => {
     const planned = plannedFrom(
       aws,
       selectionFor(aws, "aws", {
-        OCEL_JOURNEY_FIXTURES: "deploy/express,sdk/next",
+        OCEL_JOURNEY_FIXTURES: "deploy/node,sdk/next",
         OCEL_JOURNEY_SKIPS: "run",
       }),
     );
     const fixtures = new Set(planned.map((entry) => entry.fixture));
-    expect([...fixtures].sort()).toEqual(["deploy/express", "sdk/next"]);
+    expect([...fixtures].sort()).toEqual(["deploy/node", "sdk/next"]);
   });
 });
 
 describe("the account a run settles from its rows", () => {
   const planned: PlannedTest[] = [
     {
-      cell: "sdk/express/web",
-      fixture: "sdk/express",
+      cell: "sdk/node/web",
+      fixture: "sdk/node",
       app: "web",
       variant: "base",
       title: "up",
       leg: "up",
     },
     {
-      cell: "sdk/express/web",
-      fixture: "sdk/express",
+      cell: "sdk/node/web",
+      fixture: "sdk/node",
       app: "web",
       variant: "base",
       title: "destroy",
@@ -117,7 +117,7 @@ describe("the account a run settles from its rows", () => {
       meta,
     });
     expect(account.verdict.exitCode).toBe(1);
-    expect(account.verdict.report).toContain("NEW RED — sdk/express/web › up");
+    expect(account.verdict.report).toContain("NEW RED — sdk/node/web › up");
     expect(account.verdict.report).not.toContain("UNHANDLED");
   });
 
@@ -125,7 +125,7 @@ describe("the account a run settles from its rows", () => {
     const account = accountOf({
       rows: [
         row({ title: "up", startTime: 1_000, duration: 3_000 }),
-        row({ cell: "sdk/express-container/web", title: "up", startTime: 2_000, duration: 9_000 }),
+        row({ cell: "sdk/node-container/web", title: "up", startTime: 2_000, duration: 9_000 }),
       ],
       run: run(),
       runStart: 0,
@@ -136,8 +136,8 @@ describe("the account a run settles from its rows", () => {
       meta,
     });
     expect(account.timeline.cells.map((entry) => [entry.cell, entry.file])).toEqual([
-      ["sdk/express-container", 9],
-      ["sdk/express", 3],
+      ["sdk/node-container", 9],
+      ["sdk/node", 3],
     ]);
     expect(account.timeline.files).toBe(12);
   });

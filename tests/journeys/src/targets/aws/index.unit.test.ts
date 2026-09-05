@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { type Cell, cellsOf, specByName, specForTarget } from "../../spec";
 import { cellsBySlugPart } from "./index";
 
-const fixture = specByName("deploy", "express");
+const fixture = specByName("deploy", "node");
 
 function named(name: string): Cell {
   return { name, fixture };
@@ -17,7 +17,7 @@ describe("cellsBySlugPart", () => {
 
   it("refuses two cells that slug to one part, rather than dropping one", () => {
     expect(() =>
-      cellsBySlugPart([named("deploy/express-api-gateway"), named("deploy/express/api-gateway")]),
-    ).toThrow(/both slug to deploy-express-api-gateway/);
+      cellsBySlugPart([named("deploy/node-api-gateway"), named("deploy/node/api-gateway")]),
+    ).toThrow(/both slug to deploy-node-api-gateway/);
   });
 });

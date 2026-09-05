@@ -52,8 +52,19 @@ export interface ProjectDomainConfig extends AppDomainConfig {
  */
 export type Compute = "serverless" | "container";
 
-/** The framework an app is served with. */
-export type Framework = "next" | "express" | "fastify" | "hono";
+/** What a serverless app's functions are packed for and run on. */
+export type RuntimeName = "node" | "next";
+
+/** The processor architecture a serverless app's functions are built for. */
+export type RuntimeArch = "x86_64" | "arm64";
+
+/**
+ * The runtime a serverless app's functions run on. Named on its own it takes
+ * the architecture the provider runs by default; written out it also names the
+ * architecture, and a provider that does not run that one refuses the deploy
+ * by name.
+ */
+export type Runtime = RuntimeName | { name: RuntimeName; arch?: RuntimeArch };
 
 /**
  * How a container app's image is built. Left off, the image is built from the
@@ -106,17 +117,16 @@ interface AppFields {
 }
 
 /**
- * An app in a project. A serverless app is packed per route and declares the
- * framework that is packed; a container app is one image serving everything,
- * built from the app's directory, so it declares a framework only if it wants
- * to. An app that leaves `compute` to its provider may land on either, so it
- * declares one.
+ * An app in a project. A serverless app is packed per route and its functions
+ * run on a runtime, which is detected from the app when it is left off. A
+ * container app is one image serving everything, run as the image says, so it
+ * has no runtime to name and naming one refuses the deploy.
  */
 export type AppConfig =
-  | (AppFields & { compute?: "serverless"; framework: Framework })
+  | (AppFields & { compute?: "serverless"; runtime?: Runtime })
   | (AppFields & {
       compute: "container";
-      framework?: Framework;
+      runtime?: never;
       build?: BuildConfig;
       health?: HealthConfig;
     });

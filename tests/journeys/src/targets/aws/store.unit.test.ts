@@ -89,9 +89,9 @@ describe("deployedSlugs", () => {
       }
       return args.includes("--starting-token")
         ? page(["j-1-hello"])
-        : page(["j-1-express"], "more");
+        : page(["j-1-node"], "more");
     });
-    assert.deepEqual(await awsStore(undefined, cli).deployedSlugs(), ["j-1-express", "j-1-hello"]);
+    assert.deepEqual(await awsStore(undefined, cli).deployedSlugs(), ["j-1-node", "j-1-hello"]);
     assert.equal(calls.filter((args) => args[0] === "dynamodb").length, 4);
   });
 });
@@ -99,24 +99,24 @@ describe("deployedSlugs", () => {
 describe("stands", () => {
   it("reaches the slug with a key condition rather than paging the partition", async () => {
     const { cli, calls } = cliOver((args) =>
-      describeStacks(args) ? tableAsked(args) : page(["j-1-express"]),
+      describeStacks(args) ? tableAsked(args) : page(["j-1-node"]),
     );
-    assert.equal(await awsStore(undefined, cli).stands("j-1-express"), true);
+    assert.equal(await awsStore(undefined, cli).stands("j-1-node"), true);
     const queried = calls.filter((args) => args[0] === "dynamodb");
     assert.equal(queried.length, 1);
     assert.ok(queried[0]?.includes("pk = :pk AND begins_with(sk, :sk)"));
     assert.ok(
       queried[0]?.includes(
-        JSON.stringify({ ":pk": { S: "projects#production" }, ":sk": { S: "j-1-express" } }),
+        JSON.stringify({ ":pk": { S: "projects#production" }, ":sk": { S: "j-1-node" } }),
       ),
     );
   });
 
   it("does not mistake a longer slug sharing the prefix for the one asked about", async () => {
     const { cli } = cliOver((args) =>
-      describeStacks(args) ? tableAsked(args) : page(["j-1-express-two"]),
+      describeStacks(args) ? tableAsked(args) : page(["j-1-node-two"]),
     );
-    assert.equal(await awsStore(undefined, cli).stands("j-1-express"), false);
+    assert.equal(await awsStore(undefined, cli).stands("j-1-node"), false);
   });
 
   it("carries the failure out rather than answering that the slug is gone", async () => {
@@ -126,7 +126,7 @@ describe("stands", () => {
       }
       return tableAsked(args);
     });
-    await assert.rejects(awsStore(undefined, cli).stands("j-1-express"), /ThrottlingException/);
+    await assert.rejects(awsStore(undefined, cli).stands("j-1-node"), /ThrottlingException/);
   });
 });
 

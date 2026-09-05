@@ -18,7 +18,7 @@ import { sstHooks } from "./targets/aws/ladder-sst";
 import type { CellContext } from "./targets/types";
 import { AWS, BASE, runsOn, type Variant } from "./variants";
 
-export type Framework = "express" | "hono" | "fastify" | "next";
+export type Runtime = "node" | "next";
 
 export type Kind = "composite" | "ladder" | "workspace";
 
@@ -59,7 +59,7 @@ export type FixtureSpec = {
   name: string;
   concern: Concern;
   dir: string;
-  framework?: Framework;
+  runtime?: Runtime;
   kind: Kind;
   group?: string;
   rows: ContractRow[];
@@ -84,32 +84,10 @@ const LADDER = [...healthRows, ...staticRows, ...linkRows];
 
 export const spec: FixtureSpec[] = [
   {
-    name: "express",
+    name: "node",
     concern: "deploy",
-    dir: "deploy/express",
-    framework: "express",
-    kind: "composite",
-    group: "node-http",
-    rows: SERVED,
-    apps: ["web"],
-    variants: AWS,
-  },
-  {
-    name: "hono",
-    concern: "deploy",
-    dir: "deploy/hono",
-    framework: "hono",
-    kind: "composite",
-    group: "node-http",
-    rows: SERVED,
-    apps: ["web"],
-    variants: AWS,
-  },
-  {
-    name: "fastify",
-    concern: "deploy",
-    dir: "deploy/fastify",
-    framework: "fastify",
+    dir: "deploy/node",
+    runtime: "node",
     kind: "composite",
     group: "node-http",
     rows: SERVED,
@@ -120,7 +98,7 @@ export const spec: FixtureSpec[] = [
     name: "next",
     concern: "deploy",
     dir: "deploy/next",
-    framework: "next",
+    runtime: "next",
     kind: "composite",
     rows: [...SERVED, ...NEXT_SERVED],
     apps: ["web"],
@@ -137,32 +115,10 @@ export const spec: FixtureSpec[] = [
     variants: AWS,
   },
   {
-    name: "express",
+    name: "node",
     concern: "sdk",
-    dir: "sdk/express",
-    framework: "express",
-    kind: "composite",
-    group: "node-http",
-    rows: STORED,
-    apps: ["web"],
-    variants: AWS,
-  },
-  {
-    name: "hono",
-    concern: "sdk",
-    dir: "sdk/hono",
-    framework: "hono",
-    kind: "composite",
-    group: "node-http",
-    rows: STORED,
-    apps: ["web"],
-    variants: AWS,
-  },
-  {
-    name: "fastify",
-    concern: "sdk",
-    dir: "sdk/fastify",
-    framework: "fastify",
+    dir: "sdk/node",
+    runtime: "node",
     kind: "composite",
     group: "node-http",
     rows: STORED,
@@ -173,7 +129,7 @@ export const spec: FixtureSpec[] = [
     name: "next",
     concern: "sdk",
     dir: "sdk/next",
-    framework: "next",
+    runtime: "next",
     kind: "composite",
     rows: [...STORED, ...NEXT_SERVED, ...NEXT_STORED],
     apps: ["web"],
@@ -193,7 +149,7 @@ export const spec: FixtureSpec[] = [
     name: "with-transforms",
     concern: "sdk",
     dir: "sdk/with-transforms",
-    framework: "express",
+    runtime: "node",
     kind: "ladder",
     rows: LADDER,
     apps: ["web"],
@@ -204,7 +160,7 @@ export const spec: FixtureSpec[] = [
     name: "with-sst",
     concern: "sdk",
     dir: "sdk/with-sst",
-    framework: "express",
+    runtime: "node",
     kind: "ladder",
     rows: LADDER,
     apps: ["web"],
@@ -216,7 +172,7 @@ export const spec: FixtureSpec[] = [
     name: "with-pulumi",
     concern: "sdk",
     dir: "sdk/with-pulumi",
-    framework: "express",
+    runtime: "node",
     kind: "ladder",
     rows: LADDER,
     apps: ["web"],

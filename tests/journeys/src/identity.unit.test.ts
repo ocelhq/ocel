@@ -17,19 +17,19 @@ describe("run identity", () => {
 
 describe("project slug", () => {
   it("carries the run id behind the sweep prefix", () => {
-    expect(projectSlug("express", "local-ada")).toBe("j-local-ada-express");
+    expect(projectSlug("node", "local-ada")).toBe("j-local-ada-node");
   });
 });
 
 describe("app hostname", () => {
   it("hangs app and slug off the zone as one label", () => {
-    expect(appHostname("web", "j-local-ada-express", "journey.test")).toBe(
-      "web-j-local-ada-express.journey.test",
+    expect(appHostname("web", "j-local-ada-node", "journey.test")).toBe(
+      "web-j-local-ada-node.journey.test",
     );
   });
 
   it("is absent without a zone", () => {
-    expect(appHostname("web", "express", undefined)).toBeUndefined();
+    expect(appHostname("web", "node", undefined)).toBeUndefined();
   });
 
   it("refuses a label a dns label cannot hold", () => {

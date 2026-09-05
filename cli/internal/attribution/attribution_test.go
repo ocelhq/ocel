@@ -220,7 +220,7 @@ func TestCompute(t *testing.T) {
 		}
 	})
 
-	t.Run("JSX in a .js file reads as the framework reads it", func(t *testing.T) {
+	t.Run("JSX in a .js file reads as the bundler reads it", func(t *testing.T) {
 		root := fixtureRoot(t, "jsx-in-js")
 
 		usages, err := Compute(root, []App{{Name: "web", Path: "apps/web"}}, []Declaration{

@@ -1434,9 +1434,16 @@ func describeEnv(env *environmentv1.Environment) string {
 		env.GetTier(), env.GetLifecycle(), env.GetIdentity())
 }
 
+func describeRuntime(r *contractv1.Runtime) string {
+	if r.GetArch() == "" {
+		return r.GetName()
+	}
+	return r.GetName() + "/" + r.GetArch()
+}
+
 func describeFunction(f *contractv1.ManifestFunction) string {
-	return fmt.Sprintf("logical_name=%s runtime=%s handler=%s artifact_path=%s framework=%s app=%s",
-		f.GetLogicalName(), f.GetRuntime(), f.GetHandler(), f.GetArtifactPath(), f.GetFramework(), f.GetApp())
+	return fmt.Sprintf("logical_name=%s runtime=%s handler=%s artifact_path=%s app=%s",
+		f.GetLogicalName(), describeRuntime(f.GetRuntime()), f.GetHandler(), f.GetArtifactPath(), f.GetApp())
 }
 
 func describeUsage(u *contractv1.ManifestUsage) string {
@@ -1496,8 +1503,8 @@ func describeApp(a *contractv1.ManifestApp) string {
 	for _, v := range a.GetVariables() {
 		keys = append(keys, v.GetKey())
 	}
-	return fmt.Sprintf("name=%s framework=%s production_domain=%s vars=%s deployment=%s",
-		a.GetName(), a.GetFramework(), strings.Join(productionHostnames(a.GetDomains()), ","), strings.Join(keys, ","), a.GetDeploymentId())
+	return fmt.Sprintf("name=%s runtime=%s production_domain=%s vars=%s deployment=%s",
+		a.GetName(), describeRuntime(a.GetRuntime()), strings.Join(productionHostnames(a.GetDomains()), ","), strings.Join(keys, ","), a.GetDeploymentId())
 }
 
 func parseInfraTier(s string) environmentv1.Tier {

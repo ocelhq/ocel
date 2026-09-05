@@ -29,8 +29,13 @@ func TestSurfaceConformance(t *testing.T) {
 		"postgres": {"cluster", "instance"},
 	}
 
+	defaults, err := translateFunctionSpec("", providerkit.FunctionSpec{})
+	if err != nil {
+		t.Fatalf("translateFunctionSpec: %v", err)
+	}
+
 	rendered := map[string]transform.Surfaces{
-		"function": functionSurfaces(translateFunctionSpec("", providerkit.FunctionSpec{})),
+		"function": functionSurfaces(defaults),
 		"bucket":   bucketSurfaces(translateBucket(&providerkit.BucketSpec{})),
 		"postgres": postgresSurfaces(translatePostgres(&providerkit.PostgresSpec{})),
 	}

@@ -51,29 +51,29 @@ describe("planning a workspace row", () => {
     }
   });
 
-  it("names the apps after the frameworks the project mounts", () => {
+  it("names the apps the way the project config does", () => {
     expect(workspace.apps).toEqual(["next", "express"]);
   });
 });
 
-describe("planning the two concerns of one framework", () => {
-  const deploy = specByName("deploy", "express");
-  const sdk = specByName("sdk", "express");
+describe("planning the two concerns of one runtime", () => {
+  const deploy = specByName("deploy", "node");
+  const sdk = specByName("sdk", "node");
   const planned = planTests([base(deploy), base(sdk)], ALL_LEGS);
 
   it("gives each concern a cell of its own, so neither can shadow the other", () => {
-    expect(planned.some((entry) => entry.cell === "deploy/express/web")).toBe(true);
-    expect(planned.some((entry) => entry.cell === "sdk/express/web")).toBe(true);
+    expect(planned.some((entry) => entry.cell === "deploy/node/web")).toBe(true);
+    expect(planned.some((entry) => entry.cell === "sdk/node/web")).toBe(true);
   });
 
   it("plans the product rows for the sdk cell alone", () => {
     const productTitles = productRows.map((row) => row.title);
     const titlesOf = (cell: string) =>
       planned.filter((entry) => entry.cell === cell && entry.leg === "contract").map((e) => e.title);
-    expect(titlesOf("deploy/express/web").some((title) => productTitles.includes(title))).toBe(
+    expect(titlesOf("deploy/node/web").some((title) => productTitles.includes(title))).toBe(
       false,
     );
-    expect(titlesOf("sdk/express/web")).toEqual(expect.arrayContaining(productTitles));
+    expect(titlesOf("sdk/node/web")).toEqual(expect.arrayContaining(productTitles));
   });
 
   it("asks the deploy cell for health, static and the probes, and nothing else", () => {
@@ -86,7 +86,7 @@ describe("planning the two concerns of one framework", () => {
   });
 
   it("still runs redeploy and rollback with the contract after each", () => {
-    const cells = planned.filter((entry) => entry.cell === "deploy/express/web");
+    const cells = planned.filter((entry) => entry.cell === "deploy/node/web");
     const titles = cells.map((entry) => entry.title);
     expect(titles).toContain(REDEPLOY_TITLE);
     expect(titles).toContain(ROLLBACK_TITLE);
@@ -104,7 +104,7 @@ function withHooks(rows: LadderRow[], refuse: boolean): FixtureSpec {
     name: "with-sst",
     concern: "sdk",
     dir: "sdk/with-sst",
-    framework: "express",
+    runtime: "node",
     kind: "ladder",
     rows: healthRows,
     apps: ["web"],
@@ -126,10 +126,10 @@ const pruneRow: LadderRow = { title: "both partitions are empty", phase: "prune"
 describe("planTests", () => {
   it("plans nothing extra for a fixture with no hooks", () => {
     const composite: FixtureSpec = {
-      name: "express",
+      name: "node",
       concern: "deploy",
-      dir: "deploy/express",
-      framework: "express",
+      dir: "deploy/node",
+      runtime: "node",
       kind: "composite",
       rows: healthRows,
       apps: ["web"],
@@ -170,24 +170,24 @@ describe("planTests", () => {
 });
 
 describe("planning the cells a fixture runs on a target", () => {
-  const express = specByName("sdk", "express");
+  const node = specByName("sdk", "node");
 
   function cellsOn(target: TargetName): string[] {
-    return [...new Set(planTests(cellsOf(express, target), ["up"]).map((row) => row.cell))];
+    return [...new Set(planTests(cellsOf(node, target), ["up"]).map((row) => row.cell))];
   }
 
   it("plans one cell per variant beside the base cell on aws", () => {
     expect(cellsOn("aws")).toEqual([
-      "sdk/express/web",
-      "sdk/express-container/web",
-      "sdk/express-api-gateway/web",
-      "sdk/express-cloudflare/web",
+      "sdk/node/web",
+      "sdk/node-container/web",
+      "sdk/node-api-gateway/web",
+      "sdk/node-cloudflare/web",
     ]);
   });
 
   it("plans only the variants a target runs", () => {
-    expect(cellsOn("vps")).toEqual(["sdk/express/web"]);
-    expect(cellsOn("dev")).toEqual(["sdk/express/web"]);
+    expect(cellsOn("vps")).toEqual(["sdk/node/web"]);
+    expect(cellsOn("dev")).toEqual(["sdk/node/web"]);
   });
 
   it("carries the fixture, app and variant of every test it plans", () => {

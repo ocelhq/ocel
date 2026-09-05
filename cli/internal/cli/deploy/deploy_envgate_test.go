@@ -197,7 +197,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 
 	t.Run("a folder no app binds is a warning, not a refusal", func(t *testing.T) {
 		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
-		writeAppsConfig(t, root, `{ name: "api", path: "apps/api", framework: "express" }`)
+		writeAppsConfig(t, root, `{ name: "api", path: "apps/api", runtime: "node" }`)
 		writeAppSource(t, root, "api")
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
 		deps := clitest.NewDeps()
@@ -216,8 +216,8 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	t.Run("each app is built with its own diverged value", func(t *testing.T) {
 		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
 		writeAppsConfig(t, root, `
-    { name: "web", path: "apps/web", framework: "express", folder: "/web" },
-    { name: "admin", path: "apps/admin", framework: "express", folder: "/admin" }`)
+    { name: "web", path: "apps/web", runtime: "node", folder: "/web" },
+    { name: "admin", path: "apps/admin", runtime: "node", folder: "/admin" }`)
 		writeAppSource(t, root, "web", "admin")
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
 		envSet(t, root, "POSTHOG_ID", "ph_admin", envOptions{folder: "/admin"})
@@ -237,8 +237,8 @@ func TestEnvGateOnDeploy(t *testing.T) {
 	t.Run("a half-completed folder rename stops the deploy naming both files", func(t *testing.T) {
 		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"],"source":"ocel/env.ts"}]`)
 		writeAppsConfig(t, root, `
-    { name: "web", path: "apps/web", framework: "express", folder: "/web" },
-    { name: "admin", path: "apps/admin", framework: "express", folder: "/administration" }`)
+    { name: "web", path: "apps/web", runtime: "node", folder: "/web" },
+    { name: "admin", path: "apps/admin", runtime: "node", folder: "/administration" }`)
 		envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
 		envSet(t, root, "POSTHOG_ID", "ph_admin", envOptions{folder: "/admin"})
 

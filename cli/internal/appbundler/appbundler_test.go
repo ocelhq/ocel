@@ -45,8 +45,7 @@ func newLayout(t *testing.T, files tree) layout {
 func (l layout) target(entry string) Target {
 	return Target{
 		App:        "api",
-		Framework:  "express",
-		Runtime:    "nodejs24.x",
+		Runtime:    Runtime{Name: "node"},
 		Entrypoint: filepath.Join(l.appSrc, filepath.FromSlash(entry)),
 		FuncDir:    l.funcDir,
 		AppDir:     l.appDir,
@@ -110,7 +109,7 @@ func TestBundle(t *testing.T) {
 		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.funcDir, configFileName))), &cfg); err != nil {
 			t.Fatal(err)
 		}
-		want := functionConfig{Runtime: "nodejs24.x", Handler: HandlerFile, Framework: "express", ID: entryRouteID, App: "api"}
+		want := functionConfig{Runtime: Runtime{Name: "node"}, Handler: HandlerFile, ID: entryRouteID, App: "api"}
 		if cfg != want {
 			t.Errorf("%s = %+v, want %+v", configFileName, cfg, want)
 		}
@@ -120,8 +119,8 @@ func TestBundle(t *testing.T) {
 		if err := json.Unmarshal([]byte(readFile(t, descriptorPath)), &descriptor); err != nil {
 			t.Fatal(err)
 		}
-		if descriptor.Framework != "express" {
-			t.Errorf("%s framework = %q, want express", edge.ServeDescriptorFile, descriptor.Framework)
+		if descriptor.Runtime != "node" {
+			t.Errorf("%s runtime = %q, want node", edge.ServeDescriptorFile, descriptor.Runtime)
 		}
 		if len(descriptor.BuildID) != buildIDLength {
 			t.Errorf("%s buildId = %q, want %d hex characters", edge.ServeDescriptorFile, descriptor.BuildID, buildIDLength)
@@ -342,11 +341,11 @@ func TestBundle(t *testing.T) {
 			wants: []string{"server.js"},
 		},
 		{
-			name:  "a runtime that is not node fails the build",
+			name:  "an unnamed runtime fails the build",
 			files: tree{"package.json": appPkg, "server.js": "console.log('hi');\n"},
 			entry: "server.js",
-			mut:   func(target *Target) { target.Runtime = "python3.13" },
-			wants: []string{"python3.13", "nodejs"},
+			mut:   func(target *Target) { target.Runtime = Runtime{} },
+			wants: []string{"runtime"},
 		},
 		{
 			name:  "an unstated app fails the build",
@@ -374,41 +373,6 @@ func TestBundle(t *testing.T) {
 				if !strings.Contains(err.Error(), want) {
 					t.Errorf("error = %q, want it to name %q", err, want)
 				}
-			}
-		})
-	}
-}
-
-func TestNodeEngine(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		runtime string
-		want    string
-		wantErr bool
-	}{
-		{runtime: "nodejs24.x", want: "24"},
-		{runtime: "nodejs20.x", want: "20"},
-		{runtime: "provided.al2023", wantErr: true},
-		{runtime: "nodejs", wantErr: true},
-		{runtime: "", wantErr: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.runtime, func(t *testing.T) {
-			t.Parallel()
-
-			engine, err := nodeEngine(tt.runtime)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("nodeEngine(%q) succeeded, want error", tt.runtime)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("nodeEngine(%q): %v", tt.runtime, err)
-			}
-			if engine.Version != tt.want {
-				t.Errorf("nodeEngine(%q) = %q, want %q", tt.runtime, engine.Version, tt.want)
 			}
 		})
 	}

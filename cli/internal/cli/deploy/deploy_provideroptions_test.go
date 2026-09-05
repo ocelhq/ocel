@@ -24,7 +24,7 @@ export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: `+options+` },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", framework: "express" }],
+  apps: [{ name: "api", path: "apps/api", runtime: "node" }],
 };
 `)
 
@@ -34,7 +34,7 @@ export default {
 	deps = clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+		{Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	return root, journal, deps
 }

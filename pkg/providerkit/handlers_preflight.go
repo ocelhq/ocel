@@ -36,7 +36,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return nil, err
 	}
 
-	required, err := RequiredFeatures(gate.Bootstrapper.Catalogue(), req.GetFrameworks(), string(gate.Edge))
+	required, err := RequiredFeatures(gate.Bootstrapper.Catalogue(), req.GetRuntimes(), string(gate.Edge))
 	if err != nil {
 		return nil, RefusalError(err)
 	}

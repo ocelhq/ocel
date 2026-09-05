@@ -15,6 +15,13 @@ import (
 
 const ContractVersion = "provider.v1"
 
+func runtimeProto(runtime Runtime) *contractv1.Runtime {
+	if runtime.Name == "" {
+		return nil
+	}
+	return &contractv1.Runtime{Name: runtime.Name, Arch: runtime.Arch}
+}
+
 type Declaration struct {
 	Type     linksv1.LinkType
 	Name     string
@@ -23,9 +30,14 @@ type Declaration struct {
 	Source   string
 }
 
+type Runtime struct {
+	Name string
+	Arch string
+}
+
 type App struct {
 	Name            string
-	Framework       string
+	Runtime         Runtime
 	Compute         string
 	Domains         map[string][]string
 	Folder          string
@@ -67,10 +79,9 @@ type Variable struct {
 
 type Function struct {
 	Route        string
-	Runtime      string
+	Runtime      Runtime
 	Handler      string
 	ArtifactPath string
-	Framework    string
 	App          string
 	RouteID      string
 }
@@ -238,10 +249,9 @@ func Build(slug string, domains map[string][]string, apps []App, compute string,
 
 		manifestFunctions = append(manifestFunctions, &contractv1.ManifestFunction{
 			LogicalName:  logical,
-			Runtime:      f.Runtime,
+			Runtime:      runtimeProto(f.Runtime),
 			Handler:      f.Handler,
 			ArtifactPath: f.ArtifactPath,
-			Framework:    f.Framework,
 			RouteId:      f.RouteID,
 			App:          f.App,
 		})
@@ -371,11 +381,11 @@ func tierDomains(domains map[string][]string) ([]*contractv1.TierDomains, error)
 }
 
 func buildApps(apps []App, compute string, functions []Function, variables map[string][]Variable) ([]*contractv1.ManifestApp, error) {
-	frameworkByApp := make(map[string]string, len(functions))
+	runtimeByApp := make(map[string]Runtime, len(functions))
 	for _, f := range functions {
-		if f.App != "" && f.Framework != "" {
-			if _, ok := frameworkByApp[f.App]; !ok {
-				frameworkByApp[f.App] = f.Framework
+		if f.App != "" && f.Runtime.Name != "" {
+			if _, ok := runtimeByApp[f.App]; !ok {
+				runtimeByApp[f.App] = f.Runtime
 			}
 		}
 	}
@@ -384,9 +394,9 @@ func buildApps(apps []App, compute string, functions []Function, variables map[s
 	configured := make(map[string]bool, len(apps))
 	for _, a := range apps {
 		configured[a.Name] = true
-		framework := a.Framework
-		if framework == "" {
-			framework = frameworkByApp[a.Name]
+		runtime := a.Runtime
+		if runtime.Name == "" {
+			runtime = runtimeByApp[a.Name]
 		}
 		appCompute := a.Compute
 		if appCompute == "" {
@@ -398,7 +408,7 @@ func buildApps(apps []App, compute string, functions []Function, variables map[s
 		}
 		manifestApps = append(manifestApps, &contractv1.ManifestApp{
 			Name:      a.Name,
-			Framework: framework,
+			Runtime:   runtimeProto(runtime),
 			Compute:   appCompute,
 			Domains:   appDomains,
 			Variables: manifestVariables(variables[a.Name]),
@@ -413,7 +423,7 @@ func buildApps(apps []App, compute string, functions []Function, variables map[s
 		configured[f.App] = true
 		manifestApps = append(manifestApps, &contractv1.ManifestApp{
 			Name:      f.App,
-			Framework: frameworkByApp[f.App],
+			Runtime:   runtimeProto(runtimeByApp[f.App]),
 			Compute:   compute,
 			Variables: manifestVariables(variables[f.App]),
 		})

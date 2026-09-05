@@ -873,7 +873,7 @@ func TestResolveBytecodeResolution(t *testing.T) {
 
 		r := resolveBytecodeResolution(context.Background(), nodeVersion)
 		if r == nil {
-			t.Fatal("resolveBytecodeResolution() = nil, want a resolution for a node framework function")
+			t.Fatal("resolveBytecodeResolution() = nil, want a resolution for a node runtime function")
 		}
 		if r.bucket != "assets-xyz" {
 			t.Errorf("bucket = %q, want %q", r.bucket, "assets-xyz")

@@ -87,26 +87,26 @@ describe("the variants a run narrows to", () => {
 
 describe("what a run selects", () => {
   it("runs every cell that is not skipped under full coverage", () => {
-    expect(cellsOf({ ...FULL, [FIXTURES_ENV]: "deploy/express", [SKIPS_ENV]: "run" })).toEqual([
-      "deploy/express",
-      "deploy/express-container",
-      "deploy/express-api-gateway",
-      "deploy/express-cloudflare",
+    expect(cellsOf({ ...FULL, [FIXTURES_ENV]: "deploy/node", [SKIPS_ENV]: "run" })).toEqual([
+      "deploy/node",
+      "deploy/node-container",
+      "deploy/node-api-gateway",
+      "deploy/node-cloudflare",
     ]);
-    expect(cellsOf({ ...FULL, [FIXTURES_ENV]: "deploy/express" })).toEqual([
-      "deploy/express-api-gateway",
-      "deploy/express-cloudflare",
+    expect(cellsOf({ ...FULL, [FIXTURES_ENV]: "deploy/node" })).toEqual([
+      "deploy/node-api-gateway",
+      "deploy/node-cloudflare",
     ]);
   });
 
-  it("names a cell after the bucket it belongs to, so the two frameworks never collide", () => {
+  it("names a cell after the bucket it belongs to, so the two concerns never collide", () => {
     const both = cellsOf({
       ...FULL,
-      [FIXTURES_ENV]: "deploy/express,sdk/express",
+      [FIXTURES_ENV]: "deploy/node,sdk/node",
       [SKIPS_ENV]: "run",
       [VARIANTS_ENV]: "base",
     });
-    expect(both).toEqual(["deploy/express", "sdk/express"]);
+    expect(both).toEqual(["deploy/node", "sdk/node"]);
   });
 
   it("selects only the bucket the concern names", () => {
@@ -116,12 +116,12 @@ describe("what a run selects", () => {
   });
 
   it("enumerates only the variants named", () => {
-    const named = { ...FULL, [FIXTURES_ENV]: "deploy/express", [SKIPS_ENV]: "run" };
+    const named = { ...FULL, [FIXTURES_ENV]: "deploy/node", [SKIPS_ENV]: "run" };
     expect(cellsOf({ ...named, [VARIANTS_ENV]: "cloudflare,container" })).toEqual([
-      "deploy/express-container",
-      "deploy/express-cloudflare",
+      "deploy/node-container",
+      "deploy/node-cloudflare",
     ]);
-    expect(cellsOf({ ...named, [VARIANTS_ENV]: "base" })).toEqual(["deploy/express"]);
+    expect(cellsOf({ ...named, [VARIANTS_ENV]: "base" })).toEqual(["deploy/node"]);
   });
 
   it("reports the skipped cells it would have run, and no others", () => {
@@ -150,10 +150,10 @@ describe("what a run selects", () => {
   });
 
   it("finds a selected cell by name, and refuses one it did not select", () => {
-    const selection = selectionFor(AWS, "aws", { ...FULL, [FIXTURES_ENV]: "deploy/express" });
-    expect(cellNamed(selection, "deploy/express-cloudflare").fixture.dir).toBe("deploy/express");
-    expect(() => cellNamed(selection, "deploy/express")).toThrow(
-      /this run selects no cell named deploy\/express \(/,
+    const selection = selectionFor(AWS, "aws", { ...FULL, [FIXTURES_ENV]: "deploy/node" });
+    expect(cellNamed(selection, "deploy/node-cloudflare").fixture.dir).toBe("deploy/node");
+    expect(() => cellNamed(selection, "deploy/node")).toThrow(
+      /this run selects no cell named deploy\/node \(/,
     );
   });
 });

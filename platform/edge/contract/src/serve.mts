@@ -12,7 +12,7 @@ export type NeedDetail = {
 };
 
 export type ServeDescriptor = {
-  framework: string;
+  runtime: string;
   buildId: string;
   edgeRouting: boolean;
   entry: string;

@@ -40,19 +40,19 @@ func TestEveryEdgeKindHasAFeatureOfItsOwn(t *testing.T) {
 
 func TestWhatThisCatalogueSaysAProjectNeeds(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		frameworks []string
-		edge       string
-		want       []string
+		name     string
+		runtimes []string
+		edge     string
+		want     []string
 	}{
 		{
-			name:       "a project on neither needs nothing",
-			frameworks: []string{"express"},
+			name:     "a project on neither needs nothing",
+			runtimes: []string{"node"},
 		},
 		{
-			name:       "a Next app needs regeneration and image optimization",
-			frameworks: []string{"express", "next"},
-			want:       []string{FeatureISR, FeatureImageOptimization},
+			name:     "a Next app needs regeneration and image optimization",
+			runtimes: []string{"node", "next"},
+			want:     []string{FeatureISR, FeatureImageOptimization},
 		},
 		{
 			name: "a Cloudflare front needs its feature and what it stands on",
@@ -60,37 +60,37 @@ func TestWhatThisCatalogueSaysAProjectNeeds(t *testing.T) {
 			want: []string{FeatureISR, FeatureCloudflareEdge},
 		},
 		{
-			name:       "a Cloudflare-fronted Next project needs all three, named once",
-			frameworks: []string{"next"},
-			edge:       "cloudflare",
-			want:       []string{FeatureISR, FeatureImageOptimization, FeatureCloudflareEdge},
+			name:     "a Cloudflare-fronted Next project needs all three, named once",
+			runtimes: []string{"next"},
+			edge:     "cloudflare",
+			want:     []string{FeatureISR, FeatureImageOptimization, FeatureCloudflareEdge},
 		},
 		{
-			name:       "a CloudFront-fronted project needs the CloudFront edge feature",
-			frameworks: []string{"express"},
-			edge:       "cloudfront",
-			want:       []string{FeatureCloudFrontEdge},
+			name:     "a CloudFront-fronted project needs the CloudFront edge feature",
+			runtimes: []string{"node"},
+			edge:     "cloudfront",
+			want:     []string{FeatureCloudFrontEdge},
 		},
 		{
-			name:       "an API Gateway-fronted project needs the API Gateway edge feature",
-			frameworks: []string{"express"},
-			edge:       "api-gateway",
-			want:       []string{FeatureAPIGatewayEdge},
+			name:     "an API Gateway-fronted project needs the API Gateway edge feature",
+			runtimes: []string{"node"},
+			edge:     "api-gateway",
+			want:     []string{FeatureAPIGatewayEdge},
 		},
 		{
-			name:       "a CloudFront-fronted Next project needs its edge and what Next asks for",
-			frameworks: []string{"next"},
-			edge:       "cloudfront",
-			want:       []string{FeatureISR, FeatureImageOptimization, FeatureCloudFrontEdge},
+			name:     "a CloudFront-fronted Next project needs its edge and what Next asks for",
+			runtimes: []string{"next"},
+			edge:     "cloudfront",
+			want:     []string{FeatureISR, FeatureImageOptimization, FeatureCloudFrontEdge},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := providerkit.RequiredFeatures(Catalogue(), tc.frameworks, tc.edge)
+			got, err := providerkit.RequiredFeatures(Catalogue(), tc.runtimes, tc.edge)
 			if err != nil {
 				t.Fatalf("RequiredFeatures: %v", err)
 			}
 			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("RequiredFeatures(%v, %q) = %v, want %v", tc.frameworks, tc.edge, got, tc.want)
+				t.Errorf("RequiredFeatures(%v, %q) = %v, want %v", tc.runtimes, tc.edge, got, tc.want)
 			}
 		})
 	}

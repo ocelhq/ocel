@@ -9,7 +9,7 @@ const FN_URL = "https://abc123.lambda-url.eu-west-2.on.aws/";
 function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     app: "api",
-    framework: "express",
+    runtime: "node",
     buildId: "0123456789abcdef",
     routingManifest: null,
     functionUrls: { api: FN_URL },
@@ -72,7 +72,7 @@ async function withGlobalFetch<T>(
   }
 }
 
-describe("node framework serve path", () => {
+describe("node runtime serve path", () => {
   it("forwards to the app's single Function URL, signed with SigV4", async () => {
     const wire = capturing();
     const serve = (await resolved(makeRecord(), {
@@ -246,22 +246,9 @@ describe("node framework serve path", () => {
     expect(wire.calls).toHaveLength(0);
   });
 
-  it("serves fastify and hono through the same path", async () => {
-    for (const framework of ["fastify", "hono"]) {
-      const wire = capturing();
-      const serve = (await resolved(makeRecord({ framework }), {
-        originFetch: wire.fetch,
-      })) as ServeFetch;
-
-      await serve(new Request("https://api.example.com/ping"));
-
-      expect(wire.calls[0].url).toBe("https://abc123.lambda-url.eu-west-2.on.aws/ping");
-    }
-  });
-
-  it("passes a framework it has never heard of through to the origin", async () => {
+  it("passes a runtime it has never heard of through to the origin", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord({ framework: "sveltekit" }), {
+    const serve = (await resolved(makeRecord({ runtime: "sveltekit" }), {
       originFetch: wire.fetch,
     })) as ServeFetch;
 
@@ -272,7 +259,7 @@ describe("node framework serve path", () => {
 
   it("routes a next deployment through next's own serve", async () => {
     const record = makeRecord({
-      framework: "next",
+      runtime: "next",
       functionUrls: {},
       routingManifest: {
         buildId: "build-1",

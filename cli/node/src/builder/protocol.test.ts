@@ -34,7 +34,7 @@ describe("protocol records", () => {
     });
   });
 
-  it("leads every record with its own newline, so a framework's unterminated partial line cannot glue onto it", () => {
+  it("leads every record with its own newline, so a build's unterminated partial line cannot glue onto it", () => {
     const { lines } = captureStdout();
     reportError("no entrypoint resolved");
 
@@ -83,8 +83,8 @@ describe("protocol records", () => {
 
   it("carries no app/stage when the failure is not scoped to either", () => {
     const { lines } = captureStdout();
-    reportError("could not detect a framework");
+    reportError("could not detect a runtime");
 
-    expect(parseRecord(lines[0]!)).toEqual({ type: "error", message: "could not detect a framework" });
+    expect(parseRecord(lines[0]!)).toEqual({ type: "error", message: "could not detect a runtime" });
   });
 });

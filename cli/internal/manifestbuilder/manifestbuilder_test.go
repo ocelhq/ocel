@@ -25,13 +25,17 @@ type goldenManifest struct {
 	Functions     []goldenFunction `json:"functions,omitempty"`
 }
 
+type goldenRuntime struct {
+	Name string `json:"name"`
+	Arch string `json:"arch,omitempty"`
+}
+
 type goldenFunction struct {
-	LogicalName  string `json:"logical_name"`
-	Runtime      string `json:"runtime"`
-	Handler      string `json:"handler"`
-	ArtifactPath string `json:"artifact_path"`
-	Framework    string `json:"framework"`
-	RouteID      string `json:"route_id"`
+	LogicalName  string        `json:"logical_name"`
+	Runtime      goldenRuntime `json:"runtime"`
+	Handler      string        `json:"handler"`
+	ArtifactPath string        `json:"artifact_path"`
+	RouteID      string        `json:"route_id"`
 }
 
 type goldenResource struct {
@@ -61,10 +65,9 @@ func toGolden(m *contractv1.Manifest) goldenManifest {
 	for _, f := range m.GetFunctions() {
 		g.Functions = append(g.Functions, goldenFunction{
 			LogicalName:  f.GetLogicalName(),
-			Runtime:      f.GetRuntime(),
+			Runtime:      goldenRuntime{Name: f.GetRuntime().GetName(), Arch: f.GetRuntime().GetArch()},
 			Handler:      f.GetHandler(),
 			ArtifactPath: f.GetArtifactPath(),
-			Framework:    f.GetFramework(),
 			RouteID:      f.GetRouteId(),
 		})
 	}
@@ -89,8 +92,8 @@ func synthDeclarations() []Declaration {
 
 func synthFunctions() []Function {
 	return []Function{
-		{Route: "api/documents", App: "web", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "next", RouteID: "/api/documents"},
-		{Route: "worker", App: "web", Runtime: "nodejs24.x", Handler: "app/worker.ts", ArtifactPath: "dist/worker.zip", Framework: ""},
+		{Route: "api/documents", App: "web", Runtime: Runtime{Name: "next"}, Handler: "app/api.ts", ArtifactPath: "dist/api.zip", RouteID: "/api/documents"},
+		{Route: "worker", App: "web", Runtime: Runtime{Name: "node"}, Handler: "app/worker.ts", ArtifactPath: "dist/worker.zip"},
 	}
 }
 
@@ -306,8 +309,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, "serverless", nil, nil, []Function{
-			{Route: "api/users", App: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a"},
-			{Route: "users", App: "web-api", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b"},
+			{Route: "api/users", App: "web", Runtime: Runtime{Name: "node"}, Handler: "h.js", ArtifactPath: "a"},
+			{Route: "users", App: "web-api", Runtime: Runtime{Name: "node"}, Handler: "h.js", ArtifactPath: "b"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -326,8 +329,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, "serverless", nil, nil, []Function{
-			{Route: "api/users", App: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a"},
-			{Route: "api_users", App: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b"},
+			{Route: "api/users", App: "web", Runtime: Runtime{Name: "node"}, Handler: "h.js", ArtifactPath: "a"},
+			{Route: "api_users", App: "web", Runtime: Runtime{Name: "node"}, Handler: "h.js", ArtifactPath: "b"},
 		}, nil)
 		if err == nil {
 			t.Fatal("Build: expected a collision error, got nil")
@@ -373,7 +376,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, "serverless", nil, nil, []Function{
-			{Route: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a"},
+			{Route: "index", Runtime: Runtime{Name: "node"}, Handler: "h.js", ArtifactPath: "a"},
 		}, nil)
 		if err == nil {
 			t.Fatal("Build: expected an error for a function with no app, got nil")
@@ -436,7 +439,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, "serverless", nil, nil, []Function{
-			{Route: "Web API", App: "web", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
+			{Route: "Web API", App: "web", Runtime: Runtime{Name: "node"}, Handler: "app/api.ts", ArtifactPath: "dist/api.zip"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -453,7 +456,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, "serverless", nil, nil, []Function{
-			{Route: "api/documents", App: "web", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "functions/api/documents.func", Framework: "next", RouteID: "/api/documents"},
+			{Route: "api/documents", App: "web", Runtime: Runtime{Name: "next"}, Handler: "route.js", ArtifactPath: "functions/api/documents.func", RouteID: "/api/documents"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -471,12 +474,12 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		apps := []App{
-			{Name: "web", Framework: "next", Domains: map[string][]string{"production": {"example.com"}}},
-			{Name: "admin", Framework: "express"},
+			{Name: "web", Domains: map[string][]string{"production": {"example.com"}}},
+			{Name: "admin"},
 		}
 		manifest, err := Build("proj-1", nil, apps, "serverless", nil, nil, []Function{
-			{Route: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "next", App: "web"},
-			{Route: "admin", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b", Framework: "express", App: "admin"},
+			{Route: "web", Runtime: Runtime{Name: "next"}, Handler: "h.js", ArtifactPath: "a", App: "web"},
+			{Route: "admin", Runtime: Runtime{Name: "node"}, Handler: "h.js", ArtifactPath: "b", App: "admin"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -489,8 +492,8 @@ func TestBuild(t *testing.T) {
 		if got[0].GetName() != "admin" || got[1].GetName() != "web" {
 			t.Fatalf("apps = [%q %q], want sorted [admin web]", got[0].GetName(), got[1].GetName())
 		}
-		if got[1].GetFramework() != "next" {
-			t.Fatalf("web framework = %q, want %q", got[1].GetFramework(), "next")
+		if got[1].GetRuntime().GetName() != "next" {
+			t.Fatalf("web runtime = %q, want %q", got[1].GetRuntime().GetName(), "next")
 		}
 		if got := got[1].GetDomains(); len(got) != 1 || got[0].GetTier() != environmentv1.Tier_TIER_PRODUCTION || len(got[0].GetHostnames()) != 1 || got[0].GetHostnames()[0] != "example.com" {
 			t.Fatalf("web domains = %v, want one production entry [example.com]", got)
@@ -503,8 +506,8 @@ func TestBuild(t *testing.T) {
 	t.Run("records the app a function belongs to", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express"}}, "serverless", nil, nil, []Function{
-			{Route: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "express", App: "web"},
+		manifest, err := Build("proj-1", nil, []App{{Name: "web"}}, "serverless", nil, nil, []Function{
+			{Route: "web", Runtime: Runtime{Name: "node"}, Handler: "h.js", ArtifactPath: "a", App: "web"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -518,8 +521,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, "serverless", nil, nil, []Function{
-			{Route: "api/documents", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "next", App: "storefront"},
-			{Route: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b", Framework: "next", App: "storefront"},
+			{Route: "api/documents", Runtime: Runtime{Name: "next"}, Handler: "h.js", ArtifactPath: "a", App: "storefront"},
+			{Route: "index", Runtime: Runtime{Name: "next"}, Handler: "h.js", ArtifactPath: "b", App: "storefront"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -531,32 +534,32 @@ func TestBuild(t *testing.T) {
 		if apps[0].GetName() != "storefront" {
 			t.Fatalf("app name = %q, want %q", apps[0].GetName(), "storefront")
 		}
-		if apps[0].GetFramework() != "next" {
-			t.Fatalf("app framework = %q, want %q", apps[0].GetFramework(), "next")
+		if apps[0].GetRuntime().GetName() != "next" {
+			t.Fatalf("app runtime = %q, want %q", apps[0].GetRuntime().GetName(), "next")
 		}
 		if apps[0].GetCompute() != "serverless" {
 			t.Errorf("app compute = %q, want %q — an app nobody configured takes the compute preflight resolved", apps[0].GetCompute(), "serverless")
 		}
 	})
 
-	t.Run("fills a configured app's framework from its functions", func(t *testing.T) {
+	t.Run("fills a configured app's runtime from its functions", func(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, []App{{Name: "web"}}, "serverless", nil, nil, []Function{
-			{Route: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "express", App: "web"},
+			{Route: "web", Runtime: Runtime{Name: "node"}, Handler: "h.js", ArtifactPath: "a", App: "web"},
 		}, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
-		if got := manifest.GetApps()[0].GetFramework(); got != "express" {
-			t.Fatalf("app framework = %q, want %q", got, "express")
+		if got := manifest.GetApps()[0].GetRuntime().GetName(); got != "node" {
+			t.Fatalf("app runtime = %q, want %q", got, "node")
 		}
 	})
 
 	t.Run("a configured app with no functions still appears", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express", Compute: "container", Image: "ocel/web@" + fakeDigest}}, "serverless", nil, nil, nil, nil)
+		manifest, err := Build("proj-1", nil, []App{{Name: "web", Compute: "container", Image: "ocel/web@" + fakeDigest}}, "serverless", nil, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -571,7 +574,7 @@ func TestBuild(t *testing.T) {
 	t.Run("a configured app that names no compute takes the resolved one", func(t *testing.T) {
 		t.Parallel()
 
-		manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express", Image: "ocel/web@" + fakeDigest}}, "container", nil, nil, nil, nil)
+		manifest, err := Build("proj-1", nil, []App{{Name: "web", Image: "ocel/web@" + fakeDigest}}, "container", nil, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
@@ -583,7 +586,7 @@ func TestBuild(t *testing.T) {
 	t.Run("refuses to build with no compute resolved", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express"}}, "", nil, nil, nil, nil)
+		_, err := Build("proj-1", nil, []App{{Name: "web"}}, "", nil, nil, nil, nil)
 		if err == nil || !strings.Contains(err.Error(), "compute") {
 			t.Fatalf("Build err = %v, want a refusal naming the compute the manifest was never given", err)
 		}
@@ -613,8 +616,8 @@ func TestBuild(t *testing.T) {
 				{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"},
 			},
 		}
-		manifest, err := Build("proj-1", nil, []App{{Name: "admin", Framework: "express"}}, "serverless", nil, nil, []Function{
-			{Route: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "next", App: "storefront"},
+		manifest, err := Build("proj-1", nil, []App{{Name: "admin"}}, "serverless", nil, nil, []Function{
+			{Route: "index", Runtime: Runtime{Name: "next"}, Handler: "h.js", ArtifactPath: "a", App: "storefront"},
 		}, variables)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -649,8 +652,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, []App{
-			{Name: "admin", Framework: "express", Folder: "/admin"},
-			{Name: "web", Framework: "express"},
+			{Name: "admin", Folder: "/admin"},
+			{Name: "web"},
 		}, "serverless", nil, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -677,7 +680,7 @@ func TestBuild(t *testing.T) {
 				{Key: "ROOT_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET},
 			},
 		}
-		manifest, err := Build("proj-1", nil, []App{{Name: "admin", Framework: "express", Folder: "/admin"}}, "serverless", nil, nil, nil, variables)
+		manifest, err := Build("proj-1", nil, []App{{Name: "admin", Folder: "/admin"}}, "serverless", nil, nil, nil, variables)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}

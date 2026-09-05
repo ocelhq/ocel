@@ -143,7 +143,7 @@ func (p Private) sameAs(other Private) bool {
 
 type DeploymentRecord struct {
 	App              string            `json:"app"`
-	Framework        string            `json:"framework"`
+	Runtime          string            `json:"runtime"`
 	Identity         string            `json:"identity"`
 	DeploymentID     string            `json:"deploymentId"`
 	Entry            string            `json:"entry"`

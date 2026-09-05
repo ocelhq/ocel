@@ -73,14 +73,14 @@ func queuedAppRequest(apps []string) *contractv1.DeployRequest {
 	for slot, app := range apps {
 		manifest.Apps = append(manifest.Apps, &contractv1.ManifestApp{
 			Name:         app,
-			Framework:    "next",
+			Runtime:      &contractv1.Runtime{Name: "next"},
 			Compute:      string(providerkit.ComputeServerless),
 			DeploymentId: fmt.Sprintf("%032x", slot+1),
 		})
 		manifest.Functions = append(manifest.Functions, &contractv1.ManifestFunction{
 			LogicalName:  app + "-server",
 			App:          app,
-			Runtime:      "nodejs22.x",
+			Runtime:      &contractv1.Runtime{Name: "next"},
 			Handler:      "index.handler",
 			ArtifactPath: appArtifactPath(app),
 		})

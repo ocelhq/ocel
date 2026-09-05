@@ -22,18 +22,20 @@
   "functions": [
     {
       "logical_name": "fn--web--api-documents",
-      "runtime": "nodejs24.x",
+      "runtime": {
+        "name": "next"
+      },
       "handler": "app/api.ts",
       "artifact_path": "dist/api.zip",
-      "framework": "next",
       "route_id": "/api/documents"
     },
     {
       "logical_name": "fn--web--worker",
-      "runtime": "nodejs24.x",
+      "runtime": {
+        "name": "node"
+      },
       "handler": "app/worker.ts",
       "artifact_path": "dist/worker.zip",
-      "framework": "",
       "route_id": ""
     }
   ]

@@ -25,7 +25,7 @@ func TestRunBuild(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: ".", framework: "express" }],
+  apps: [{ name: "api", path: ".", runtime: "node" }],
 };
 `)
 

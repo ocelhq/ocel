@@ -265,13 +265,13 @@ func TestToApps(t *testing.T) {
 		t.Parallel()
 
 		got := toApps([]projectconfig.App{
-			{Name: "admin", Framework: "express", Folder: "/admin"},
-			{Name: "web", Framework: "express"},
+			{Name: "admin", Folder: "/admin"},
+			{Name: "web"},
 		}, nil, "serverless", nil)
 
 		want := []manifestbuilder.App{
-			{Name: "admin", Framework: "express", Folder: "/admin"},
-			{Name: "web", Framework: "express"},
+			{Name: "admin", Folder: "/admin"},
+			{Name: "web"},
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("toApps() = %+v, want %+v", got, want)

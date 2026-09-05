@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path"
 	"slices"
@@ -22,10 +23,13 @@ import (
 func TestTranslateFunctionSpec(t *testing.T) {
 	t.Run("passes runtime and entrypoint", func(t *testing.T) {
 		t.Parallel()
-		got := translateFunctionSpec("", providerkit.FunctionSpec{
-			Runtime: "nodejs24.x",
+		got, err := translateFunctionSpec("", providerkit.FunctionSpec{
+			Runtime: providerkit.Runtime{Name: providerkit.RuntimeNode},
 			Handler: "src/server.js",
 		})
+		if err != nil {
+			t.Fatalf("translateFunctionSpec: %v", err)
+		}
 		if got.Runtime != "nodejs24.x" {
 			t.Errorf("Runtime = %q, want nodejs24.x", got.Runtime)
 		}
@@ -36,7 +40,10 @@ func TestTranslateFunctionSpec(t *testing.T) {
 
 	t.Run("empty falls back to pinned defaults", func(t *testing.T) {
 		t.Parallel()
-		got := translateFunctionSpec("", providerkit.FunctionSpec{})
+		got, err := translateFunctionSpec("", providerkit.FunctionSpec{})
+		if err != nil {
+			t.Fatalf("translateFunctionSpec: %v", err)
+		}
 		if got.Runtime != defaultFunctionRuntime {
 			t.Errorf("Runtime = %q, want default %q", got.Runtime, defaultFunctionRuntime)
 		}
@@ -47,7 +54,10 @@ func TestTranslateFunctionSpec(t *testing.T) {
 
 	t.Run("defaults size the function for SSR", func(t *testing.T) {
 		t.Parallel()
-		got := translateFunctionSpec("", providerkit.FunctionSpec{})
+		got, err := translateFunctionSpec("", providerkit.FunctionSpec{})
+		if err != nil {
+			t.Fatalf("translateFunctionSpec: %v", err)
+		}
 		if got.MemorySizeMB != defaultFunctionMemoryMB {
 			t.Errorf("MemorySizeMB = %d, want default %d", got.MemorySizeMB, defaultFunctionMemoryMB)
 		}
@@ -58,7 +68,10 @@ func TestTranslateFunctionSpec(t *testing.T) {
 
 	t.Run("Next gets the bundle memory default", func(t *testing.T) {
 		t.Parallel()
-		got := translateFunctionSpec(frameworkNext, providerkit.FunctionSpec{})
+		got, err := translateFunctionSpec(runtimeNext, providerkit.FunctionSpec{})
+		if err != nil {
+			t.Fatalf("translateFunctionSpec: %v", err)
+		}
 		if got.MemorySizeMB != nextBundleFunctionMemoryMB {
 			t.Errorf("MemorySizeMB = %d, want the Next default %d", got.MemorySizeMB, nextBundleFunctionMemoryMB)
 		}
@@ -66,7 +79,10 @@ func TestTranslateFunctionSpec(t *testing.T) {
 
 	t.Run("non-Next keeps the flat default", func(t *testing.T) {
 		t.Parallel()
-		got := translateFunctionSpec("express", providerkit.FunctionSpec{})
+		got, err := translateFunctionSpec(providerkit.RuntimeNode, providerkit.FunctionSpec{})
+		if err != nil {
+			t.Fatalf("translateFunctionSpec: %v", err)
+		}
 		if got.MemorySizeMB != defaultFunctionMemoryMB {
 			t.Errorf("MemorySizeMB = %d, want default %d", got.MemorySizeMB, defaultFunctionMemoryMB)
 		}
@@ -74,7 +90,10 @@ func TestTranslateFunctionSpec(t *testing.T) {
 
 	t.Run("what the spec asks for wins over both defaults", func(t *testing.T) {
 		t.Parallel()
-		got := translateFunctionSpec(frameworkNext, providerkit.FunctionSpec{Memory: 3008, Timeout: 45 * time.Second})
+		got, err := translateFunctionSpec(runtimeNext, providerkit.FunctionSpec{Memory: 3008, Timeout: 45 * time.Second})
+		if err != nil {
+			t.Fatalf("translateFunctionSpec: %v", err)
+		}
 		if got.MemorySizeMB != 3008 {
 			t.Errorf("MemorySizeMB = %d, want the spec's own 3008", got.MemorySizeMB)
 		}
@@ -84,14 +103,67 @@ func TestTranslateFunctionSpec(t *testing.T) {
 	})
 }
 
+func TestLambdaRuntimeFor(t *testing.T) {
+	t.Parallel()
+
+	t.Run("every neutral name lands on the pinned Node runtime", func(t *testing.T) {
+		t.Parallel()
+		for _, name := range []string{"", providerkit.RuntimeNode, providerkit.RuntimeNext} {
+			got, err := lambdaRuntimeFor(providerkit.Runtime{Name: name})
+			if err != nil {
+				t.Fatalf("lambdaRuntimeFor(%q): %v", name, err)
+			}
+			if got != "nodejs24.x" {
+				t.Errorf("lambdaRuntimeFor(%q) = %q, want nodejs24.x", name, got)
+			}
+		}
+	})
+
+	t.Run("an unset or x86_64 arch is taken", func(t *testing.T) {
+		t.Parallel()
+		for _, arch := range []string{"", archX8664} {
+			if _, err := lambdaRuntimeFor(providerkit.Runtime{Name: providerkit.RuntimeNext, Arch: arch}); err != nil {
+				t.Fatalf("lambdaRuntimeFor(arch %q): %v", arch, err)
+			}
+		}
+	})
+
+	t.Run("arm64 is refused by name", func(t *testing.T) {
+		t.Parallel()
+		_, err := lambdaRuntimeFor(providerkit.Runtime{Name: providerkit.RuntimeNext, Arch: "arm64"})
+		var refusal providerkit.Refusal
+		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+			t.Fatalf("lambdaRuntimeFor(arm64) = %v, want a %s refusal", err, providerkit.CodeInvalid)
+		}
+		for _, want := range []string{"arm64", archX8664} {
+			if !strings.Contains(refusal.Error(), want) {
+				t.Errorf("refusal %q does not name %q", refusal.Error(), want)
+			}
+		}
+	})
+
+	t.Run("a runtime this provider does not have is refused", func(t *testing.T) {
+		t.Parallel()
+		_, err := lambdaRuntimeFor(providerkit.Runtime{Name: "deno"})
+		var refusal providerkit.Refusal
+		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+			t.Fatalf("lambdaRuntimeFor(deno) = %v, want a %s refusal", err, providerkit.CodeInvalid)
+		}
+	})
+}
+
 func argsFor(functions []*contractv1.ManifestFunction) func(appFunction) functionArgs {
 	args := make(map[string]functionArgs, len(functions))
 	for _, fn := range functions {
-		args[fn.GetLogicalName()] = translateFunctionSpec(fn.GetFramework(), providerkit.FunctionSpec{
+		translated, err := translateFunctionSpec(fn.GetRuntime().GetName(), providerkit.FunctionSpec{
 			Name:    fn.GetLogicalName(),
-			Runtime: fn.GetRuntime(),
+			Runtime: providerkit.Runtime{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()},
 			Handler: fn.GetHandler(),
 		})
+		if err != nil {
+			panic(err)
+		}
+		args[fn.GetLogicalName()] = translated
 	}
 	return func(fn appFunction) functionArgs { return args[fn.Logical] }
 }
@@ -136,8 +208,12 @@ func TestMembraneLayer(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		args, err := translateFunctionSpec("", providerkit.FunctionSpec{})
+		if err != nil {
+			return err
+		}
 		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", stack, "fn--api--users"),
-			"/users", translateFunctionSpec("", providerkit.FunctionSpec{}), artifactRef{Bucket: "artifacts", Key: "fn.zip"},
+			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"},
 			nil, nil, nil, nil, role.Arn, layer.Arn, functionURLAuthIAM)
 		return err
 	}

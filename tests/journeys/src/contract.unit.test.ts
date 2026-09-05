@@ -26,10 +26,10 @@ const health = healthRows[0];
 describe("the health row", () => {
   it("passes when the hostname answers with the app it was asked for", async () => {
     expect(health).toBeDefined();
-    await expect(health?.run(context("express", "express"))).resolves.toBeUndefined();
+    await expect(health?.run(context("node", "node"))).resolves.toBeUndefined();
   });
 
   it("fails when a hostname answers with another app of the same project", async () => {
-    await expect(health?.run(context("express", "hono"))).rejects.toThrow(/hono/);
+    await expect(health?.run(context("node", "next"))).rejects.toThrow(/next/);
   });
 });

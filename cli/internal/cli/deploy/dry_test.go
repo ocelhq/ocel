@@ -25,8 +25,8 @@ func dryDeps(t *testing.T) cmddeps.Deps {
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []manifestbuilder.Function{{
-		Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js",
-		ArtifactPath: "output/api", Framework: "express", App: "api",
+		Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js",
+		ArtifactPath: "output/api", App: "api",
 	}})
 	return deps
 }

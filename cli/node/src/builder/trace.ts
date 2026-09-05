@@ -12,7 +12,7 @@ import {
   appOutDir,
   functionRel,
 } from "./layout.js";
-import type { AppInput, BuildOptions, FrameworkSpec, FunctionSummary } from "./types.js";
+import type { AppInput, BuildOptions, FunctionSummary, RuntimeSpec } from "./types.js";
 
 const TS_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
 
@@ -30,7 +30,15 @@ function transpileTs(source: string, ext: string): string {
 
 const RESOLVE_EXT = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
-export function resolveEntrypoint(input: AppInput, spec: FrameworkSpec): string {
+export function functionRuntime(
+  input: AppInput,
+  spec: RuntimeSpec,
+): { name: string; arch?: string } {
+  const arch = input.runtime?.arch;
+  return arch ? { name: spec.name, arch } : { name: spec.name };
+}
+
+export function resolveEntrypoint(input: AppInput, spec: RuntimeSpec): string {
   if (input.entrypoint) {
     const abs = path.resolve(input.cwd, input.entrypoint);
     if (!existsSync(abs)) {
@@ -242,9 +250,10 @@ export async function writeServeDescriptor(
 export async function traceBuild(
   input: AppInput,
   options: BuildOptions,
-  spec: FrameworkSpec,
+  spec: RuntimeSpec,
 ): Promise<FunctionSummary> {
   const entrypoint = resolveEntrypoint(input, spec);
+  const runtime = functionRuntime(input, spec);
 
   const funcRel = functionRel(input.name);
   const funcDir = path.join(options.outDir, funcRel);
@@ -275,11 +284,11 @@ export async function traceBuild(
   const handler = toOutExt(placeFile(entrypoint, input.cwd, pkgCache).dest).split(path.sep).join("/");
   await writeFile(
     path.join(funcDir, "config.json"),
-    `${JSON.stringify({ runtime: spec.runtime, handler, framework: spec.name, id: NODE_ENTRY_ROUTE_ID, app: input.name }, null, 2)}\n`,
+    `${JSON.stringify({ runtime, handler, id: NODE_ENTRY_ROUTE_ID, app: input.name }, null, 2)}\n`,
   );
 
   await writeServeDescriptor(options.outDir, input.name, {
-    framework: spec.name,
+    runtime: spec.name,
     buildId: await artifactHash(funcDir),
     edgeRouting: false,
     entry: NODE_ENTRY_ROUTE_ID,
@@ -288,10 +297,9 @@ export async function traceBuild(
 
   return {
     name: input.name,
-    runtime: spec.runtime,
+    runtime,
     handler,
     artifactPath: funcRel,
-    framework: spec.name,
     strategy: "trace",
   };
 }

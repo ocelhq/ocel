@@ -226,7 +226,7 @@ func TestFunctionEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("a node framework function with no isr still takes the bytecode cache", func(t *testing.T) {
+	t.Run("a node runtime function with no isr still takes the bytecode cache", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "1")
 		cache := bytecodeConfig{Bucket: "assets-xyz", Prefix: "prod/proj/api/API1/bytecode"}
 

@@ -85,7 +85,7 @@ func prebuiltConfig(root string) *projectconfig.Config {
 	return &projectconfig.Config{
 		Dir:  root,
 		Slug: "prebuilt",
-		Apps: []projectconfig.App{{Name: "api", Path: ".", Framework: "express", Compute: "serverless"}},
+		Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "serverless"}},
 	}
 }
 

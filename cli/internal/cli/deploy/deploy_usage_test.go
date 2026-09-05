@@ -17,7 +17,7 @@ func TestDeployUsageEdges(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+			{Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)
@@ -89,8 +89,8 @@ func TestDeployScopesDeliveryToTheUsingApps(t *testing.T) {
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
-		{Route: "web", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
+		{Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		{Route: "web", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/web", App: "web"},
 	})
 	root, sockPath := clitest.SetUpDeployFixture(t)
 	writeSharedResourceMonorepo(t, root)
@@ -121,7 +121,7 @@ func TestDeployAttributesAnUnconfiguredProjectToItsOnlyApp(t *testing.T) {
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output", Framework: "express", App: "web"},
+		{Route: "index", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output", App: "web"},
 	})
 	root, sockPath := clitest.SetUpDeployFixture(t)
 
@@ -144,8 +144,8 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
-			{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
+			{Route: "index", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "index", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/web", App: "web"},
 		})
 		root, _ := clitest.SetUpDeployFixture(t)
 
@@ -166,8 +166,8 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
-			{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/legacy", Framework: "express", App: "legacy"},
+			{Route: "index", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "index", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/legacy", App: "legacy"},
 		})
 		root, _ := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)
@@ -187,7 +187,7 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "index", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+			{Route: "index", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 		root, _ := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)
@@ -196,7 +196,7 @@ export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/ap1", framework: "express" }],
+  apps: [{ name: "api", path: "apps/ap1", runtime: "node" }],
 };
 `)
 
@@ -224,8 +224,8 @@ export default {
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [
-    { name: "api", path: "apps/api", framework: "express" },
-    { name: "web", path: "apps/web", framework: "express" },
+    { name: "api", path: "apps/api", runtime: "node" },
+    { name: "web", path: "apps/web", runtime: "node" },
   ],
 };
 `)

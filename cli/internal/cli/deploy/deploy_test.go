@@ -156,10 +156,9 @@ export default {
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
 			{
 				Route:        "api",
-				Runtime:      "nodejs24.x",
+				Runtime:      manifestbuilder.Runtime{Name: "node"},
 				Handler:      "src/server.js",
 				ArtifactPath: "output/api",
-				Framework:    "express",
 				App:          "api",
 			},
 		})
@@ -173,7 +172,7 @@ export default {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "FUNCTION logical_name=fn--api--api runtime=nodejs24.x handler=src/server.js artifact_path=output/api framework=express app=api") {
+		if !strings.Contains(out, "FUNCTION logical_name=fn--api--api runtime=node handler=src/server.js artifact_path=output/api app=api") {
 			t.Errorf("stdout = %q, want the function to have reached the manifest", out)
 		}
 		if strings.Contains(stderr.String(), "deploying infrastructure only") {
@@ -523,14 +522,14 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+			{Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
-  apps: [{ name: "api", path: "apps/api", framework: "express", domains: { production: "Api.Acme.com" } }],
+  apps: [{ name: "api", path: "apps/api", runtime: "node", domains: { production: "Api.Acme.com" } }],
 };
 `)
 		writeAppSource(t, root, "api")
@@ -544,13 +543,13 @@ export default {
 		if got := strings.Count(out, "APP "); got != 1 {
 			t.Fatalf("stdout echoed %d apps, want exactly 1:\n%s", got, out)
 		}
-		if !strings.Contains(out, "APP name=api framework=express production_domain=api.acme.com") {
+		if !strings.Contains(out, "APP name=api runtime=node production_domain=api.acme.com") {
 			t.Errorf("stdout = %q, want the app with its per-app production domain", out)
 		}
 		if !strings.Contains(out, "deployment="+clitest.FixtureDeploymentID("api")) {
 			t.Errorf("stdout = %q, want the app deployed under the id its build recorded", out)
 		}
-		if !strings.Contains(out, "framework=express app=api") {
+		if !strings.Contains(out, "runtime=node handler=src/server.js artifact_path=output/api app=api") {
 			t.Errorf("stdout = %q, want the function attributed to the api app", out)
 		}
 
@@ -561,8 +560,8 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "web", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
-			{Route: "admin", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/admin", Framework: "express", App: "admin"},
+			{Route: "web", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/web", App: "web"},
+			{Route: "admin", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/admin", App: "admin"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -570,8 +569,8 @@ export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
   apps: [
-    { name: "web", path: "apps/web", framework: "express", domains: { production: "acme.com" } },
-    { name: "admin", path: "apps/admin", framework: "express" },
+    { name: "web", path: "apps/web", runtime: "node", domains: { production: "acme.com" } },
+    { name: "admin", path: "apps/admin", runtime: "node" },
   ],
 };
 `)
@@ -586,20 +585,20 @@ export default {
 		if got := strings.Count(out, "APP "); got != 2 {
 			t.Fatalf("stdout echoed %d apps, want exactly 2:\n%s", got, out)
 		}
-		if !strings.Contains(out, "APP name=admin framework=express production_domain=") {
+		if !strings.Contains(out, "APP name=admin runtime=node production_domain=") {
 			t.Errorf("stdout = %q, want the admin app with no domain of its own", out)
 		}
-		if !strings.Contains(out, "APP name=web framework=express production_domain=acme.com") {
+		if !strings.Contains(out, "APP name=web runtime=node production_domain=acme.com") {
 			t.Errorf("stdout = %q, want the web app with its own production domain", out)
 		}
-		if !strings.Contains(out, "logical_name=fn--web--web") || !strings.Contains(out, "artifact_path=output/web framework=express app=web") {
+		if !strings.Contains(out, "logical_name=fn--web--web") || !strings.Contains(out, "artifact_path=output/web app=web") {
 			t.Errorf("stdout = %q, want the web function attributed to the web app", out)
 		}
-		if !strings.Contains(out, "logical_name=fn--admin--admin") || !strings.Contains(out, "artifact_path=output/admin framework=express app=admin") {
+		if !strings.Contains(out, "logical_name=fn--admin--admin") || !strings.Contains(out, "artifact_path=output/admin app=admin") {
 			t.Errorf("stdout = %q, want the admin function attributed to the admin app", out)
 		}
 		for _, app := range []string{"web", "admin"} {
-			if !strings.Contains(out, "name="+app+" framework=express production_domain=") {
+			if !strings.Contains(out, "name="+app+" runtime=node production_domain=") {
 				t.Errorf("stdout = %q, want %s echoed", out, app)
 			}
 			if !strings.Contains(out, "deployment="+clitest.FixtureDeploymentID(app)) {
@@ -617,7 +616,7 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "output/index", Framework: "next", App: "express-app"},
+			{Route: "index", Runtime: manifestbuilder.Runtime{Name: "next"}, Handler: "h.js", ArtifactPath: "output/index", App: "express-app"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 
@@ -630,7 +629,7 @@ export default {
 		if got := strings.Count(out, "APP "); got != 1 {
 			t.Fatalf("stdout echoed %d apps, want exactly 1:\n%s", got, out)
 		}
-		if !strings.Contains(out, "APP name=express-app framework=next production_domain=") {
+		if !strings.Contains(out, "APP name=express-app runtime=next production_domain=") {
 			t.Errorf("stdout = %q, want the detected app named in the manifest", out)
 		}
 
@@ -651,7 +650,7 @@ export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", framework: "express" }],
+  apps: [{ name: "api", path: "apps/api", runtime: "node" }],
 };
 `)
 	writeAppSource(t, root, "api")
@@ -678,7 +677,7 @@ export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", framework: "express", compute: "container" }],
+  apps: [{ name: "api", path: "apps/api", runtime: "node", compute: "container" }],
 };
 `)
 	writeAppSource(t, root, "api")

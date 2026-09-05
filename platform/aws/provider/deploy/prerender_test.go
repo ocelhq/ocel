@@ -18,7 +18,7 @@ func nextManifest() *contractv1.Manifest {
 	return &contractv1.Manifest{
 		Slug: "proj",
 		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "web_index", Framework: "next", App: "web"},
+			{LogicalName: "web_index", Runtime: &contractv1.Runtime{Name: "next"}, App: "web"},
 		},
 	}
 }
@@ -26,9 +26,9 @@ func nextManifest() *contractv1.Manifest {
 func nodeManifest() *contractv1.Manifest {
 	return &contractv1.Manifest{
 		Slug: "proj",
-		Apps: []*contractv1.ManifestApp{{Name: "api", Framework: "express"}},
+		Apps: []*contractv1.ManifestApp{{Name: "api", Runtime: &contractv1.Runtime{Name: "node"}}},
 		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "api_handler", Framework: "express", App: "api", RouteId: "/"},
+			{LogicalName: "api_handler", Runtime: &contractv1.Runtime{Name: "node"}, App: "api", RouteId: "/"},
 		},
 	}
 }
@@ -38,7 +38,7 @@ func nodeAppTree(t *testing.T) string {
 	return writeTree(t, map[string]string{
 		"apps/api/serve.json":  serveDescriptor(t, "express", "a1b2c3d4e5f60718"),
 		"apps/api/index.mjs":   "export default {}",
-		"apps/api/config.json": `{"runtime":"nodejs22.x","handler":"index.mjs","framework":"express","app":"api"}`,
+		"apps/api/config.json": `{"runtime":{"name":"node"},"handler":"index.mjs","app":"api"}`,
 	})
 }
 
@@ -46,8 +46,8 @@ func twoAppManifest() *contractv1.Manifest {
 	return &contractv1.Manifest{
 		Slug: "proj",
 		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "web_index", Framework: "next", App: "web"},
-			{LogicalName: "admin_index", Framework: "next", App: "admin"},
+			{LogicalName: "web_index", Runtime: &contractv1.Runtime{Name: "next"}, App: "web"},
+			{LogicalName: "admin_index", Runtime: &contractv1.Runtime{Name: "next"}, App: "admin"},
 		},
 	}
 }
@@ -111,7 +111,7 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 		}
 		coord := storageCoordinate(cfg.Env, manifest.GetSlug(), name, releaseOf(id))
 		builds.coords[name] = coord
-		if app.GetFramework() != frameworkNext {
+		if app.GetRuntime().GetName() != runtimeNext {
 			continue
 		}
 		prefix := isrPrefixOf(coord)
@@ -147,15 +147,15 @@ func pushSet(ctx context.Context, set *assetSet, err error) error {
 	return set.push(ctx, quietReporter{})
 }
 
-func pushStaticAssetSet(ctx context.Context, cfg Config, app, framework string, coord naming.Coordinate) error {
-	set, err := staticAssetSet(cfg, app, framework, coord)
+func pushStaticAssetSet(ctx context.Context, cfg Config, app, runtime string, coord naming.Coordinate) error {
+	set, err := staticAssetSet(cfg, app, runtime, coord)
 	return pushSet(ctx, set, err)
 }
 
 func uploadStaticAssets(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds) error {
 	for _, app := range manifestApps(deployedManifest(manifest)) {
 		name := app.GetName()
-		if err := pushStaticAssetSet(ctx, deployedConfig(cfg), name, app.GetFramework(), builds.coords[name]); err != nil {
+		if err := pushStaticAssetSet(ctx, deployedConfig(cfg), name, app.GetRuntime().GetName(), builds.coords[name]); err != nil {
 			return err
 		}
 	}

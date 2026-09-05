@@ -124,7 +124,7 @@ function cellFor(concern: Concern, name: string): CellContext {
 describe("where an app sits in the tree built for it", () => {
   it("keeps the path the fixture has in the repo, whatever kind the fixture is", () => {
     for (const [concern, name] of [
-      ["deploy", "express"],
+      ["deploy", "node"],
       ["sdk", "workspace"],
     ] as const) {
       const cell = cellFor(concern, name);
@@ -135,7 +135,7 @@ describe("where an app sits in the tree built for it", () => {
   });
 
   it("brings the config's own directory alone, whatever kind the fixture is", () => {
-    expect(appDirs(cellFor("deploy", "express"))).toEqual(["tests/fixtures/deploy/express"]);
+    expect(appDirs(cellFor("deploy", "node"))).toEqual(["tests/fixtures/deploy/node"]);
     expect(appDirs(cellFor("sdk", "workspace"))).toEqual(["tests/fixtures/sdk/workspace"]);
   });
 });

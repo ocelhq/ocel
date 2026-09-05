@@ -61,13 +61,13 @@ func (b *Bootstrapper) Catalogue() []providerkit.Feature {
 		{
 			Name:    FeatureCache,
 			Summary: "the reference provider's response cache",
-			Needs:   []string{providerkit.NeedsFrameworkPrefix + "next"},
+			Needs:   []string{providerkit.NeedsRuntimePrefix + "next"},
 		},
 		{
 			Name:      FeatureImages,
 			Summary:   "the reference provider's image optimizer",
 			DependsOn: []string{FeatureCache},
-			Needs:     []string{providerkit.NeedsFrameworkPrefix + "next", providerkit.NeedsEdgePrefix + "relay"},
+			Needs:     []string{providerkit.NeedsRuntimePrefix + "next", providerkit.NeedsEdgePrefix + "relay"},
 		},
 	}
 }

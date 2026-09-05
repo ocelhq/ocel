@@ -20,8 +20,8 @@ const (
 	FeatureCloudFrontEdge    = "cloudfront-edge"
 	FeatureAPIGatewayEdge    = "apigateway-edge"
 
-	needsFrameworkPrefix = providerkit.NeedsFrameworkPrefix
-	needsEdgePrefix      = providerkit.NeedsEdgePrefix
+	needsRuntimePrefix = providerkit.NeedsRuntimePrefix
+	needsEdgePrefix    = providerkit.NeedsEdgePrefix
 )
 
 type stackRefs struct {

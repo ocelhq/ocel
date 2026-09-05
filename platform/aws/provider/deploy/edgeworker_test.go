@@ -18,7 +18,7 @@ func TestAnAppSynthesizedFromFunctionsNamesTheComputeItRunsOn(t *testing.T) {
 
 	apps := manifestApps(&contractv1.Manifest{
 		Functions: []*contractv1.ManifestFunction{
-			{App: "web", Framework: "next"},
+			{App: "web", Runtime: &contractv1.Runtime{Name: "next"}},
 		},
 	})
 
@@ -124,9 +124,9 @@ func TestProjectWorkerStems(t *testing.T) {
 	})
 }
 
-func serveDescriptor(t *testing.T, framework, buildID string) string {
+func serveDescriptor(t *testing.T, runtime, buildID string) string {
 	t.Helper()
-	raw, err := json.Marshal(edge.ServeDescriptor{Framework: framework, BuildID: buildID, Entry: "/"})
+	raw, err := json.Marshal(edge.ServeDescriptor{Runtime: runtime, BuildID: buildID, Entry: "/"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func withServeDescriptors(t *testing.T, files map[string]string) map[string]stri
 		if _, written := out[descriptor]; written {
 			continue
 		}
-		out[descriptor] = serveDescriptor(t, frameworkNext, buildIDOf(t, contents))
+		out[descriptor] = serveDescriptor(t, runtimeNext, buildIDOf(t, contents))
 	}
 	return out
 }

@@ -20,7 +20,7 @@ func siblingAppRoot(t *testing.T, apps ...string) string {
 	files := map[string]string{}
 	for _, app := range apps {
 		files["apps/"+app+"/routing-manifest.json"] = routedManifest
-		files["apps/"+app+"/serve.json"] = `{"framework":"next","buildId":"WEB1","edgeRouting":true,"entry":"/"}`
+		files["apps/"+app+"/serve.json"] = `{"runtime":"next","buildId":"WEB1","edgeRouting":true,"entry":"/"}`
 		files["apps/"+app+"/static/"+app+".txt"] = "an asset only " + app + " ships"
 	}
 	return writeTree(t, files)
@@ -68,7 +68,7 @@ func siblingAppPlan(t *testing.T, app string) providerkit.StackPlan {
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &providerkit.AppPlan{
 			App:        app,
-			Framework:  frameworkNext,
+			Runtime:    runtimeNext,
 			Entry:      "fn--" + app + "--entry",
 			Deployment: "d1",
 			Functions: []providerkit.FunctionSpec{

@@ -309,8 +309,8 @@ func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
 				}
 			}
 			for _, need := range f.Needs {
-				if !strings.HasPrefix(need, providerkit.NeedsFrameworkPrefix) && !strings.HasPrefix(need, providerkit.NeedsEdgePrefix) {
-					t.Errorf("%s needs %q, which is neither a %s nor an %s token", f.Name, need, providerkit.NeedsFrameworkPrefix, providerkit.NeedsEdgePrefix)
+				if !strings.HasPrefix(need, providerkit.NeedsRuntimePrefix) && !strings.HasPrefix(need, providerkit.NeedsEdgePrefix) {
+					t.Errorf("%s needs %q, which is neither a %s nor an %s token", f.Name, need, providerkit.NeedsRuntimePrefix, providerkit.NeedsEdgePrefix)
 				}
 			}
 		}

@@ -4,7 +4,7 @@ import { lruSet } from "./lru";
 
 export interface DeploymentRecord {
   app: string;
-  framework: string;
+  runtime: string;
   identity: string;
   deploymentId: string;
   entry?: string;
