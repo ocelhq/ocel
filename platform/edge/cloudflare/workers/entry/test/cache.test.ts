@@ -1652,19 +1652,20 @@ describe("admitRefresh", () => {
     delete (deps as CacheDeps).admissionDelay;
     const run = countingRun();
     const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
 
     try {
-      const started = Date.now();
       admitRefresh(deps, "build:/default", 0, run);
       expect(run.calls).toBe(0);
+      await vi.advanceTimersByTimeAsync(admissionJitterMs / 2 - 1);
+      expect(run.calls).toBe(0);
+      await vi.advanceTimersByTimeAsync(1);
       await deps.flush();
-      const elapsed = Date.now() - started;
 
       expect(random).toHaveBeenCalled();
       expect(run.calls).toBe(1);
-      expect(elapsed).toBeGreaterThanOrEqual(admissionJitterMs / 2 - 20);
-      expect(elapsed).toBeLessThan(admissionJitterMs);
     } finally {
+      vi.useRealTimers();
       random.mockRestore();
     }
   });
