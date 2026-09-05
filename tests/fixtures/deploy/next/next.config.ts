@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const site = new URL(process.env.OCEL_URL!).hostname;
+const served = process.env.OCEL_URL;
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
     deviceSizes: [640, 1080],
     imageSizes: [64],
     minimumCacheTTL: 60,
-    remotePatterns: [{ protocol: "https", hostname: site }],
+    remotePatterns: served ? [{ protocol: "https", hostname: new URL(served).hostname }] : [],
   },
 
   async headers() {

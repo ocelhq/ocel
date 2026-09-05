@@ -1,8 +1,6 @@
 package appurl
 
 import (
-	"cmp"
-
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -10,36 +8,38 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-const (
-	Name       = providerkit.URLEnvName
-	ClientName = providerkit.ClientURLEnvName
-)
-
 func Production(cfg *projectconfig.Config) map[string]string {
-	project := first(cfg.Domains["production"])
-	if len(cfg.Apps) == 0 {
-		return urls(map[string]string{envwire.RootApp: project})
-	}
-	hosts := make(map[string]string, len(cfg.Apps))
-	for _, app := range cfg.Apps {
-		hosts[app.Name] = cmp.Or(first(app.Domains["production"]), project)
-	}
-	return urls(hosts)
+	return byApp(cfg, cfg.Domains["production"], func(app projectconfig.App) []string {
+		return app.Domains["production"]
+	})
 }
 
 func Preview(cfg *projectconfig.Config, host func(app string) string) map[string]string {
-	if len(cfg.Apps) == 0 {
-		return urls(map[string]string{envwire.RootApp: host("")})
-	}
-	hosts := make(map[string]string, len(cfg.Apps))
-	for _, app := range cfg.Apps {
-		named := app.Name
+	return byApp(cfg, nil, func(app projectconfig.App) []string {
 		if len(cfg.Apps) < 2 {
-			named = ""
+			return []string{host("")}
 		}
-		hosts[app.Name] = host(named)
+		return []string{host(app.Name)}
+	})
+}
+
+func byApp(cfg *projectconfig.Config, project []string, declared func(projectconfig.App) []string) map[string]string {
+	apps := cfg.Apps
+	if len(apps) == 0 {
+		apps = []projectconfig.App{{Name: envwire.RootApp}}
 	}
-	return urls(hosts)
+	own := make([][]string, len(apps))
+	for slot, app := range apps {
+		own[slot] = declared(app)
+	}
+
+	urls := make(map[string]string, len(apps))
+	for slot, served := range providerkit.AttributeHostnames(project, own) {
+		if host := first(served); host != "" {
+			urls[apps[slot].Name] = "https://" + host
+		}
+	}
+	return urls
 }
 
 func Variables(url string) []manifestbuilder.Variable {
@@ -47,12 +47,12 @@ func Variables(url string) []manifestbuilder.Variable {
 		return nil
 	}
 	return []manifestbuilder.Variable{
-		{Key: Name, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
-		{Key: ClientName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url, ClientAccessible: true},
+		{Key: providerkit.URLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
+		{Key: providerkit.ClientURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url, ClientAccessible: true},
 	}
 }
 
-func Add(byApp map[string][]manifestbuilder.Variable, byURL map[string]string) {
+func Prepend(byApp map[string][]manifestbuilder.Variable, byURL map[string]string) {
 	for app, variables := range byApp {
 		byApp[app] = append(Variables(byURL[app]), variables...)
 	}
@@ -65,27 +65,16 @@ func BuildEnv(byURL map[string]string) map[string]map[string]string {
 		for _, v := range Variables(url) {
 			env[v.Key] = v.Value
 		}
-		byApp[BuiltApp(app)] = env
+		byApp[BuildKey(app)] = env
 	}
 	return byApp
 }
 
-func BuiltApp(app string) string {
+func BuildKey(app string) string {
 	if app == envwire.RootApp {
 		return ""
 	}
 	return app
-}
-
-func urls(hosts map[string]string) map[string]string {
-	out := make(map[string]string, len(hosts))
-	for app, host := range hosts {
-		if host == "" {
-			continue
-		}
-		out[app] = "https://" + host
-	}
-	return out
 }
 
 func first(hosts []string) string {

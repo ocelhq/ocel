@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func TestProduction(t *testing.T) {
@@ -49,6 +50,23 @@ func TestProduction(t *testing.T) {
 			t.Errorf("urls = %v, want none: a project that declares no production domain has no hostname to hand out", urls)
 		}
 	})
+
+	t.Run("hands a project-level domain to the app the deploy serves it on, and no other", func(t *testing.T) {
+		t.Parallel()
+		cfg := &projectconfig.Config{
+			Domains: map[string][]string{"production": {"acme.com"}},
+			Apps:    []projectconfig.App{{Name: "web"}, {Name: "api"}},
+		}
+
+		served := providerkit.AttributeHostnames(cfg.Domains["production"], [][]string{nil, nil})
+		urls := appurl.Production(cfg)
+		if got, want := urls["web"], "https://"+served[0][0]; got != want {
+			t.Errorf("web url = %q, want %q: the deploy serves a project hostname on the first app `apps` names", got, want)
+		}
+		if got, ok := urls["api"]; ok {
+			t.Errorf("api url = %q, want none: nothing serves api, so an url would name a host that answers for web", got)
+		}
+	})
 }
 
 func TestPreview(t *testing.T) {
@@ -80,30 +98,30 @@ func TestPreview(t *testing.T) {
 	})
 }
 
-func TestAdd(t *testing.T) {
+func TestPrepend(t *testing.T) {
 	t.Parallel()
 
 	byApp := map[string][]manifestbuilder.Variable{
 		"web": {{Key: "LOG_LEVEL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "info"}},
 		"api": nil,
 	}
-	appurl.Add(byApp, map[string]string{"web": "https://acme.com"})
+	appurl.Prepend(byApp, map[string]string{"web": "https://acme.com"})
 
 	held := map[string]manifestbuilder.Variable{}
 	for _, v := range byApp["web"] {
 		held[v.Key] = v
 	}
-	if got, want := held[appurl.Name].Value, "https://acme.com"; got != want {
-		t.Errorf("%s = %q, want %q", appurl.Name, got, want)
+	if got, want := held[providerkit.URLEnvName].Value, "https://acme.com"; got != want {
+		t.Errorf("%s = %q, want %q", providerkit.URLEnvName, got, want)
 	}
-	if got, want := held[appurl.ClientName].Value, "https://acme.com"; got != want {
-		t.Errorf("%s = %q, want the same value mirrored for the browser bundle", appurl.ClientName, got)
+	if got, want := held[providerkit.ClientURLEnvName].Value, "https://acme.com"; got != want {
+		t.Errorf("%s = %q, want the same value mirrored for the browser bundle", providerkit.ClientURLEnvName, got)
 	}
-	if !held[appurl.ClientName].ClientAccessible {
-		t.Errorf("%s is not client-accessible, so nothing would inline it into the bundle", appurl.ClientName)
+	if !held[providerkit.ClientURLEnvName].ClientAccessible {
+		t.Errorf("%s is not client-accessible, so nothing would inline it into the bundle", providerkit.ClientURLEnvName)
 	}
-	if held[appurl.Name].ClientAccessible {
-		t.Errorf("%s is client-accessible, and a bundler inlines only its own public prefix", appurl.Name)
+	if held[providerkit.URLEnvName].ClientAccessible {
+		t.Errorf("%s is client-accessible, and a bundler inlines only its own public prefix", providerkit.URLEnvName)
 	}
 	if held["LOG_LEVEL"].Value != "info" {
 		t.Errorf("web variables = %+v, want the declared ones kept", byApp["web"])
@@ -117,10 +135,14 @@ func TestBuildEnv(t *testing.T) {
 	t.Parallel()
 
 	env := appurl.BuildEnv(map[string]string{envwire.RootApp: "https://acme.com"})
-	if got, want := env[""][appurl.Name], "https://acme.com"; got != want {
+	if got, want := env[""][providerkit.URLEnvName], "https://acme.com"; got != want {
 		t.Errorf("build env = %v, want the unnamed app keyed as the builder keys it, holding %q", env, want)
 	}
-	if got, want := env[""][appurl.ClientName], "https://acme.com"; got != want {
-		t.Errorf("build env %s = %q, want %q", appurl.ClientName, got, want)
+	if got, want := env[""][providerkit.ClientURLEnvName], "https://acme.com"; got != want {
+		t.Errorf("build env %s = %q, want %q", providerkit.ClientURLEnvName, got, want)
+	}
+
+	if got := appurl.BuildEnv(map[string]string{"api": ""})["api"]; len(got) != 0 {
+		t.Errorf("build env = %v, want the key absent where the app is served on no hostname, rather than an empty string a build would parse", got)
 	}
 }

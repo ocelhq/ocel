@@ -415,25 +415,20 @@ func (r *deployRun) appNames() []string {
 func (r *deployRun) hostnames() []string {
 	tier := environmentTier(r.plan.Class)
 	seen := map[string]bool{}
-	hosts := tierHostnames(r.manifest.GetDomains(), tier, seen)
+	hosts := unseen(tierHostnames(r.manifest.GetDomains(), tier), seen)
 	for _, app := range r.manifest.GetApps() {
-		hosts = append(hosts, tierHostnames(app.GetDomains(), tier, seen)...)
+		hosts = append(hosts, unseen(tierHostnames(app.GetDomains(), tier), seen)...)
 	}
 	return hosts
 }
 
-func tierHostnames(declared []*contractv1.TierDomains, tier environmentv1.Tier, seen map[string]bool) []string {
+func tierHostnames(declared []*contractv1.TierDomains, tier environmentv1.Tier) []string {
 	var hosts []string
 	for _, domains := range declared {
 		if domains.GetTier() != tier {
 			continue
 		}
-		for _, host := range domains.GetHostnames() {
-			if !seen[host] {
-				seen[host] = true
-				hosts = append(hosts, host)
-			}
-		}
+		hosts = append(hosts, domains.GetHostnames()...)
 	}
 	return hosts
 }
@@ -446,8 +441,8 @@ func (r *deployRun) previewSite() edge.PreviewSite {
 }
 
 func (r *deployRun) servedHostnames() [][]string {
-	served := make([][]string, len(r.plan.Apps))
 	if r.plan.Class == ClassPreview {
+		served := make([][]string, len(r.plan.Apps))
 		site, names := r.previewSite(), r.appNames()
 		for slot := range served {
 			app := ""
@@ -461,15 +456,11 @@ func (r *deployRun) servedHostnames() [][]string {
 		return served
 	}
 	tier := environmentTier(r.plan.Class)
-	seen := map[string]bool{}
-	project := tierHostnames(r.manifest.GetDomains(), tier, seen)
+	own := make([][]string, len(r.plan.Apps))
 	for slot, entry := range r.plan.Apps {
-		if slot == 0 {
-			served[slot] = project
-		}
-		served[slot] = append(served[slot], tierHostnames(entry.Manifest.GetDomains(), tier, seen)...)
+		own[slot] = tierHostnames(entry.Manifest.GetDomains(), tier)
 	}
-	return served
+	return AttributeHostnames(tierHostnames(r.manifest.GetDomains(), tier), own)
 }
 
 func (r *deployRun) checkpoint(ctx context.Context) error {
