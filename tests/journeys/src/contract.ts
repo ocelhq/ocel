@@ -10,7 +10,7 @@ export const REDACTED = "<redacted>";
 
 export const OCEL_SVG_BYTES = 365;
 export const LARGE_BYTES = 5 * 1024 * 1024;
-export const SLEEP_MS = 30_000;
+export const SLEEP_MS = 25_000;
 
 export type ContractContext = {
   app: string;
@@ -46,8 +46,26 @@ export function secretGuarded(inner: Fetch): Fetch {
   };
 }
 
+export function describeResponse(res: Response, text: string): string {
+  const headers = [...res.headers]
+    .map(([name, value]) => `  ${name}: ${value}`)
+    .sort()
+    .join("\n");
+  const body = text.length > 500 ? `${text.slice(0, 500)}... (${text.length} bytes)` : text;
+  return `status ${res.status}\n${headers}\nbody: ${JSON.stringify(body)}`;
+}
+
 export async function json(ctx: ContractContext, path: string, init?: RequestInit) {
   const res = await ctx.fetch(`${ctx.baseUrl}${path}`, init);
   const text = await res.text();
-  return { res, text, body: text.length > 0 ? JSON.parse(text) : undefined };
+  return { res, text, body: parseBody(path, res, text) };
+}
+
+function parseBody(path: string, res: Response, text: string) {
+  if (text.length === 0) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return assert.fail(`${path} did not answer JSON\n${describeResponse(res, text)}`);
+  }
 }
