@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/resolve"
 )
 
 func TestDevserverDiscover(t *testing.T) {
@@ -92,6 +93,7 @@ func serveDevServer(t *testing.T) *devserver.Server {
 		t.Fatal(err)
 	}
 	srv := devserver.New("http://"+listener.Addr().String(), "tok", "proj", "http://"+listener.Addr().String())
+	srv.UseAccount(resolve.Account{ProjectID: "proj"})
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	t.Cleanup(func() { httpSrv.Close() })

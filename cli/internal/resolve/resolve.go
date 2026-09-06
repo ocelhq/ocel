@@ -21,17 +21,6 @@ type Resource struct {
 	Env  map[string]string
 }
 
-func StubAccount(_ context.Context, apiURL, token, projectID string) (Account, error) {
-	return Account{
-		OrgID:     "org_stub",
-		ProjectID: projectID,
-		UserID:    "user_stub",
-		EnvVars:   map[string]string{},
-		APIURL:    apiURL,
-		Token:     token,
-	}, nil
-}
-
 func StubLiveValues(_ context.Context, apiURL, token, projectID string, keys []string) (map[string]string, error) {
 	return make(map[string]string, len(keys)), nil
 }
