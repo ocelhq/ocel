@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -500,4 +501,56 @@ func readEnvEvent(t *testing.T, reader *bufio.Reader) map[string]string {
 		}
 		return env
 	}
+}
+
+func TestLocalSync(t *testing.T) {
+	t.Parallel()
+
+	t.Run("serves a live-class value from the dotfile, like every other value", func(t *testing.T) {
+		t.Parallel()
+		s := NewLocal("http://127.0.0.1:0", t.TempDir())
+		s.UseValues(map[string]string{"WEBHOOK_SECRET": "whsec_from_the_dotfile"}, envgate.Scope{})
+		url := serve(t, s)
+
+		declareEnv(t, url, &resourcesv1.VariableDefinition{
+			Key: "WEBHOOK_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET,
+		})
+		if status := postSync(t, url); status != http.StatusOK {
+			t.Fatalf("POST /sync status = %d, want 200", status)
+		}
+
+		result := <-s.Sync()
+		if result.Err != nil {
+			t.Fatalf("Sync result error: %v", result.Err)
+		}
+		if want := []string{"WEBHOOK_SECRET"}; !slices.Equal(result.LiveKeys, want) {
+			t.Errorf("LiveKeys = %v, want %v: a local run names the live keys it resolved", result.LiveKeys, want)
+		}
+		if got := result.LiveValues["WEBHOOK_SECRET"]; got != "whsec_from_the_dotfile" {
+			t.Errorf("LiveValues[WEBHOOK_SECRET] = %q, want the value the dotfile carries", got)
+		}
+	})
+
+	t.Run("names a live key the dotfile does not carry rather than resolving it", func(t *testing.T) {
+		t.Parallel()
+		s := NewLocal("http://127.0.0.1:0", t.TempDir())
+		s.UseValues(map[string]string{}, envgate.Scope{})
+		url := serve(t, s)
+
+		declareEnv(t, url, &resourcesv1.VariableDefinition{
+			Key: "WEBHOOK_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET,
+		})
+		postSync(t, url)
+
+		result := <-s.Sync()
+		if result.Err != nil {
+			t.Fatalf("Sync result error: %v", result.Err)
+		}
+		if want := []string{"WEBHOOK_SECRET"}; !slices.Equal(result.LiveKeys, want) {
+			t.Errorf("LiveKeys = %v, want %v", result.LiveKeys, want)
+		}
+		if len(result.LiveValues) != 0 {
+			t.Errorf("LiveValues = %v, want nothing for a key no dotfile entry sets", result.LiveValues)
+		}
+	})
 }

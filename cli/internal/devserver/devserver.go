@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console/envstore"
 	"github.com/ocelhq/ocel/cli/internal/console/resolver"
 	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/devblob"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -45,8 +46,9 @@ type Server struct {
 	token         string
 	projectID     string
 	devServerAddr string
-	blob          *blob.Proxy
+	blob          blobv1connect.BucketServiceHandler
 	detector      *blob.Detector
+	uploads       *devblob.Store
 	syncCh        chan SyncResult
 
 	fetchAccount    func(ctx context.Context, apiURL, token, projectID string) (resolve.Account, error)
@@ -79,7 +81,43 @@ func New(apiURL, token, projectID, devServerAddr string) *Server {
 	}
 }
 
+func NewLocal(devServerAddr, blobDir string) *Server {
+	s := &Server{
+		registry:      resourceregistry.New(),
+		devServerAddr: devServerAddr,
+		uploads:       devblob.New(blobDir, devServerAddr),
+		syncCh:        make(chan SyncResult, 1),
+		config:        newConfigCache(),
+		live:          newLiveKeys(),
+		env:           newEnvState(),
+		fanout:        newEnvFanout(),
+	}
+	s.blob = s.uploads
+	s.resolve = s.resolveFromEnv
+	s.fetchLiveValues = s.liveValuesFromEnv
+	s.config.use(resolve.Account{})
+	return s
+}
+
+func (s *Server) resolveFromEnv(_ context.Context, _ resolve.Account, resources []resourceregistry.Entry) ([]resolve.Resource, error) {
+	return resolve.FromEnv(resources, s.env.snapshot())
+}
+
+func (s *Server) liveValuesFromEnv(_ context.Context, _, _, _ string, keys []string) (map[string]string, error) {
+	values := s.env.snapshot()
+	live := make(map[string]string, len(keys))
+	for _, key := range keys {
+		if value, ok := values[key]; ok {
+			live[key] = value
+		}
+	}
+	return live, nil
+}
+
 func (s *Server) RunDetector(ctx context.Context, reportErr func(error)) {
+	if s.detector == nil {
+		return
+	}
 	s.detector.Run(ctx, reportErr)
 }
 
@@ -168,6 +206,9 @@ func (s *Server) Mux() *http.ServeMux {
 	mux.Handle(resourcePath, resourceHandler)
 	blobPath, blobHandler := blobv1connect.NewBucketServiceHandler(s.blob, interceptors)
 	mux.Handle(blobPath, blobHandler)
+	if s.uploads != nil {
+		s.uploads.Routes(mux)
+	}
 	mux.HandleFunc("/sync", s.handleSync)
 	mux.HandleFunc("/env", s.handleEnv)
 	return mux

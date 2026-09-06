@@ -2,6 +2,7 @@ package devserver
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"sync"
 
@@ -31,6 +32,12 @@ func (e *envState) use(values map[string]string, scope envgate.Scope) {
 	e.scope = scope
 	e.store = newFlatValues(values)
 	e.gate = envgate.New(e.store, scope)
+}
+
+func (e *envState) snapshot() map[string]string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return maps.Clone(e.values)
 }
 
 func (e *envState) current() (*flatValues, *envgate.Gate) {
