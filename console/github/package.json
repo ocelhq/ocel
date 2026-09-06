@@ -1,0 +1,26 @@
+{
+  "name": "@console/github",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "dev": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "express": "~5.0.0",
+    "ocel": "workspace:^",
+    "probot": "^14.3.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "~5.0.0",
+    "@types/node": "^20",
+    "tsx": "^4.19.2",
+    "typescript": "^5",
+    "vite": "^8.1.3",
+    "vitest": "^4.1.9"
+  }
+}
