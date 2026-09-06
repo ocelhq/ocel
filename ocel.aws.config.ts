@@ -8,5 +8,8 @@ export default defineConfig({
   edge: cloudflare(),
   dns: cloudflareDns(),
   provider: awsProvider(),
-  apps: [{ name: "www", runtime: "next", path: "./console/web" }],
+  apps: [
+    { name: "www", runtime: "next", path: "./www" },
+    { name: "github", runtime: "node", path: "./console/github" },
+  ],
 });

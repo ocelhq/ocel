@@ -1,0 +1,85 @@
+name: ocel binary
+description: >-
+  The ocel CLI on PATH, with the AWS provider binary the workspace links beside
+  it. The CLI is either built from this checkout or installed from the latest
+  release; the provider is never published, so it is built from the checkout
+  either way.
+
+inputs:
+  source:
+    description: head builds the CLI from this checkout, release installs the published one.
+    required: false
+    default: head
+  turbo-token:
+    description: Token for the turbo remote cache. Empty disables remote caching.
+    required: false
+    default: ""
+  turbo-team:
+    description: Team slug the remote cache belongs to.
+    required: false
+    default: ""
+  gobuildcache-bucket:
+    description: S3 bucket holding the Go build cache.
+    required: false
+    default: ""
+  gobuildcache-region:
+    description: AWS region of that bucket.
+    required: false
+    default: ""
+  gobuildcache-role-to-assume:
+    description: ARN of the build-cache role.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/node-workspace
+      with:
+        turbo-token: ${{ inputs.turbo-token }}
+        turbo-team: ${{ inputs.turbo-team }}
+
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: cli/go.mod
+        cache-dependency-path: |
+          cli/go.sum
+          platform/aws/provider/go.sum
+          pkg/proto/go.sum
+          sdk/go.sum
+
+    - name: Setup gobuildcache
+      uses: ./.github/actions/gobuildcache
+      with:
+        bucket: ${{ inputs.gobuildcache-bucket }}
+        region: ${{ inputs.gobuildcache-region }}
+        role-to-assume: ${{ inputs.gobuildcache-role-to-assume }}
+
+    - name: Build the node halves the binaries embed
+      shell: bash
+      run: pnpm turbo run build --filter=ocel --filter=@ocel/provider-aws
+
+    - name: Build the provider this deploy drives
+      shell: bash
+      run: node scripts/build-native.mjs --host --target provider-aws
+
+    - name: Build the CLI from this checkout
+      if: inputs.source != 'release'
+      shell: bash
+      run: |
+        set -euo pipefail
+        node scripts/build-native.mjs --host --target cli
+        echo "$GITHUB_WORKSPACE/packages/native-lib/cli-linux-x64/bin" >> "$GITHUB_PATH"
+
+    - name: Take the CLI from the latest release
+      if: inputs.source == 'release'
+      shell: bash
+      run: npm install --global ocel@latest
+
+    - name: Say which CLI this run drives
+      shell: bash
+      run: |
+        set -euo pipefail
+        command -v ocel
+        ocel --version

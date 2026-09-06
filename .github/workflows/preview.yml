@@ -1,0 +1,184 @@
+name: Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed, labeled, unlabeled]
+    paths:
+      - "www/**"
+      - "console/github/**"
+      - "cli/**"
+      - "packages/**"
+      - "frameworks/**"
+      - "pkg/**"
+      - "sdk/**"
+      - "proto/**"
+      - "platform/**"
+      - "scripts/**"
+      - "ocel.aws.config.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - ".github/workflows/preview.yml"
+      - ".github/actions/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event.action != 'closed' }}
+
+env:
+  OCEL_GITHUB_APP_URL: ${{ vars.OCEL_GITHUB_APP_URL }}
+  OCEL_REPORT_SECRET: ${{ secrets.OCEL_REPORT_SECRET }}
+  PR: ${{ github.event.pull_request.number }}
+  SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  REF: ${{ github.event.pull_request.head.ref || github.ref_name }}
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+jobs:
+  up:
+    name: the preview this pull request stands up
+    if: ${{ github.event.action != 'closed' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout the branch the preview is named after
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Take the CLI this preview is deployed with
+        uses: ./.github/actions/ocel-binary
+        with:
+          source: ${{ contains(github.event.pull_request.labels.*.name, 'dogfood:release') && 'release' || 'head' }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+
+      - name: Enter the account Ocel deploys itself into
+        uses: ./.github/actions/dogfood-session
+        with:
+          role-to-assume: ${{ secrets.DOGFOOD_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.DOGFOOD_AWS_REGION }}
+          role-session-name: ocel-preview-${{ github.run_id }}
+          expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
+          cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Tell the app the preview has started
+        id: report-started
+        continue-on-error: true
+        run: scripts/preview-report.sh started
+
+      - name: Stand the preview up
+        id: up
+        env:
+          OCEL_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          ocel preview up --yes --log-format json 2>&1 | tee "$RUNNER_TEMP/preview.log"
+
+      - name: Drop the deployments this preview has outgrown
+        run: ocel preview prune --yes
+
+      - name: Tell the app the preview is deployed
+        id: report-deployed
+        if: ${{ success() }}
+        continue-on-error: true
+        run: scripts/preview-report.sh deployed .ocel/deploy-result.json
+
+      - name: Tell the app the preview failed
+        id: report-failed
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ERROR=$(tail -n 20 "$RUNNER_TEMP/preview.log" 2>/dev/null || echo "the run left no log")
+          export ERROR
+          scripts/preview-report.sh failed
+
+      - name: Mint the token the fallback comment is written with
+        id: app-token
+        if: ${{ always() && (steps.report-deployed.outcome == 'failure' || steps.report-failed.outcome == 'failure') && github.event.pull_request.number }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.OCEL_GITHUB_APP_ID }}
+          private-key: ${{ secrets.OCEL_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Say on the pull request what the app could not
+        if: ${{ always() && steps.app-token.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          OUTCOME: ${{ steps.up.outcome }}
+        run: |
+          set -euo pipefail
+          marker='<!-- ocel-preview -->'
+          if [ "$OUTCOME" = success ] && [ -f .ocel/deploy-result.json ]; then
+            rows=$(jq -r --arg sha "${SHA:0:7}" \
+              '.deployedAt as $at | .apps[] | "| \(.name) | \(.urls[0] // "not served") | `\($sha)` | \($at) |"' \
+              .ocel/deploy-result.json)
+            body=$(printf '%s\n\n| App | URL | Commit | Updated |\n| --- | --- | --- | --- |\n%s\n' "$marker" "$rows")
+          else
+            body=$(printf '%s\n\nThe preview did not deploy. [See the run](%s).\n' "$marker" "$RUN_URL")
+          fi
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq 'map(select(.body | contains("<!-- ocel-preview -->"))) | first | .id // empty')
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -f body="$body"
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body"
+          fi
+
+      - name: Keep what the preview reported
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-result
+          path: |
+            .ocel/deploy-result.json
+            ${{ runner.temp }}/preview.log
+          if-no-files-found: warn
+
+  down:
+    name: the preview a closed pull request leaves behind
+    if: ${{ github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout the base branch, the head one may already be gone
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Take the CLI this preview is torn down with
+        uses: ./.github/actions/ocel-binary
+        with:
+          source: ${{ contains(github.event.pull_request.labels.*.name, 'dogfood:release') && 'release' || 'head' }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+
+      - name: Enter the account Ocel deploys itself into
+        uses: ./.github/actions/dogfood-session
+        with:
+          role-to-assume: ${{ secrets.DOGFOOD_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.DOGFOOD_AWS_REGION }}
+          role-session-name: ocel-preview-${{ github.run_id }}
+          expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
+          cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Tear the preview down
+        run: ocel preview rm --ref "${{ github.event.pull_request.head.ref }}" --yes
+
+      - name: Tell the app the preview is gone
+        continue-on-error: true
+        run: scripts/preview-report.sh removed
