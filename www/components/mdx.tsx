@@ -5,6 +5,8 @@ import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import type { MDXComponents } from "mdx/types";
 import type { ComponentProps } from "react";
+import { CompareWith } from "@/components/compare";
+import { CompareChips } from "@/components/compare/chips";
 import { DevTerminal } from "@/components/dev-terminal";
 import { Hero } from "@/components/hero";
 import { StartCards } from "@/components/start-cards";
@@ -14,7 +16,7 @@ function Tile({ className, ...props }: ComponentProps<typeof Card>) {
     <Card
       {...props}
       className={[
-        "border-(--hairline) bg-(--fog) p-5 text-(--ink) shadow-none hover:border-(--steel) hover:bg-(--fog) [&_p]:text-(--body)",
+        "border-(--hairline) bg-(--tile) p-5 text-(--ink) shadow-none hover:border-(--steel) hover:bg-(--tile) [&_p]:text-(--body)",
         className,
       ]
         .filter(Boolean)
@@ -38,12 +40,12 @@ function Compare(props: ComponentProps<"div">) {
   return (
     <div
       {...props}
-      className="not-prose my-4 grid overflow-hidden border border-(--hairline) md:grid-cols-2 [&>figure]:my-0 [&>figure]:border-0 [&>figure]:shadow-none [&>figure+figure>div:first-child>*]:invisible"
+      className="not-prose my-6 grid overflow-hidden border border-(--hairline) md:grid-cols-2 [&>figure]:my-0 [&>figure]:border-0 [&>figure]:shadow-none max-md:[&>figure+figure>div:first-child]:hidden md:[&>figure+figure>div:first-child>*]:invisible"
     />
   );
 }
 
-function SquareCallout({ className, ...props }: ComponentProps<typeof Callout>) {
+export function SquareCallout({ className, ...props }: ComponentProps<typeof Callout>) {
   return (
     <Callout
       {...props}
@@ -67,6 +69,8 @@ export function getMDXComponents(components?: MDXComponents) {
     ),
     Callout: SquareCallout,
     Compare,
+    CompareWith,
+    CompareChips,
     Card: Tile,
     Cards: TileGrid,
     Hero,

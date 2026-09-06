@@ -1,11 +1,11 @@
-import { CubeIcon, RocketLaunchIcon, ServerStackIcon } from "@heroicons/react/24/outline";
+import { BoltIcon, CubeIcon, ServerStackIcon } from "@heroicons/react/24/outline";
 import { Card, Cards } from "fumadocs-ui/components/card";
 
 export function StartCards() {
   return (
-    <Cards className="gap-4 lg:grid-cols-3">
+    <Cards className="gap-4 lg:grid-cols-3 max-lg:[&>a:last-child:nth-child(odd)]:col-span-full">
       <Card
-        icon={<RocketLaunchIcon />}
+        icon={<BoltIcon />}
         title="Quick start"
         href="/docs/quick-start"
         description="Deploy a Next.js app to AWS in minutes."
@@ -19,7 +19,7 @@ export function StartCards() {
       <Card
         icon={<CubeIcon />}
         title="Frameworks"
-        href="/docs/nextjs"
+        href="/docs/frameworks/nextjs"
         description="Explore supported frameworks and languages."
       />
     </Cards>

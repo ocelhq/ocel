@@ -2,6 +2,7 @@ import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layo
 import { createRelativeLink } from "fumadocs-ui/mdx";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { CompareWith } from "@/components/compare";
 import { getMDXComponents } from "@/components/mdx";
 import { source } from "@/lib/source";
 
@@ -25,6 +26,27 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
       >
         <DocsBody className="landing w-full max-w-4xl pb-24">
           <MDX components={components} />
+        </DocsBody>
+      </DocsPage>
+    );
+  }
+
+  if (page.url === "/docs/compare") {
+    const { vs } = await props.searchParams;
+    return (
+      <DocsPage
+        full
+        className="max-w-none"
+        tableOfContent={{ enabled: false }}
+        tableOfContentPopover={{ enabled: false }}
+      >
+        <DocsBody className="mx-auto w-full max-w-4xl pb-12">
+          <MDX
+            components={{
+              ...components,
+              CompareWith: () => <CompareWith initial={typeof vs === "string" ? vs : undefined} />,
+            }}
+          />
         </DocsBody>
       </DocsPage>
     );

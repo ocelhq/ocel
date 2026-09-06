@@ -1,4 +1,11 @@
-import { CommandLineIcon, RocketLaunchIcon, Squares2X2Icon } from "@heroicons/react/24/outline";
+import {
+  BoltIcon,
+  BookOpenIcon,
+  CommandLineIcon,
+  RocketLaunchIcon,
+  ScaleIcon,
+  Squares2X2Icon,
+} from "@heroicons/react/24/outline";
 import type * as PageTree from "fumadocs-core/page-tree";
 import { loader } from "fumadocs-core/source";
 import { defineDocs } from "fumadocs-mdx/macro";
@@ -8,7 +15,7 @@ const docs = defineDocs({
   dir: "content/docs",
 });
 
-const icons = { CommandLineIcon, Squares2X2Icon };
+const icons = { BoltIcon, BookOpenIcon, CommandLineIcon, Squares2X2Icon, ScaleIcon };
 
 export const source = loader({
   baseUrl: "/docs",

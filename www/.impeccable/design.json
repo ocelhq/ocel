@@ -1,0 +1,505 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-06T00:00:00Z",
+  "title": "Design System: Ocel",
+  "extensions": {
+    "colorMeta": {
+      "electric": {
+        "role": "primary",
+        "displayName": "Electric",
+        "canonical": "#1f35ff",
+        "tonalRamp": [
+          "oklch(20% 0.16 266)",
+          "oklch(30% 0.22 266)",
+          "oklch(40% 0.27 266)",
+          "oklch(49% 0.29 266)",
+          "oklch(59% 0.23 266)",
+          "oklch(70% 0.16 266)",
+          "oklch(82% 0.09 266)",
+          "oklch(94% 0.03 266)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#0a0a0a",
+        "tonalRamp": [
+          "#0a0a0a",
+          "#1c1c1c",
+          "#333333",
+          "#555555",
+          "#8a8a8a",
+          "#c9c9c9",
+          "#ececec",
+          "#f1f1f1"
+        ]
+      },
+      "body": {
+        "role": "neutral",
+        "displayName": "Body",
+        "canonical": "#555555",
+        "tonalRamp": [
+          "#1c1c1c",
+          "#2e2e2e",
+          "#414141",
+          "#555555",
+          "#6e6e6e",
+          "#8a8a8a",
+          "#ababab",
+          "#d0d0d0"
+        ]
+      },
+      "steel": {
+        "role": "neutral",
+        "displayName": "Steel",
+        "canonical": "#8a8a8a",
+        "tonalRamp": [
+          "#2b2b2b",
+          "#414141",
+          "#585858",
+          "#707070",
+          "#8a8a8a",
+          "#a4a4a4",
+          "#c0c0c0",
+          "#dedede"
+        ]
+      },
+      "fog": {
+        "role": "neutral",
+        "displayName": "Fog",
+        "canonical": "#f1f1f1",
+        "tonalRamp": [
+          "#3a3a3a",
+          "#5a5a5a",
+          "#7a7a7a",
+          "#9a9a9a",
+          "#b9b9b9",
+          "#d6d6d6",
+          "#e6e6e6",
+          "#f1f1f1"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#101214",
+          "#16181a",
+          "#2a2d31",
+          "#5f646b",
+          "#9aa0a8",
+          "#d0d0d0",
+          "#f1f1f1",
+          "#ffffff"
+        ]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "color-mix(in srgb, #0a0a0a 12%, transparent)",
+        "tonalRamp": [
+          "rgba(10,10,10,0.6)",
+          "rgba(10,10,10,0.5)",
+          "rgba(10,10,10,0.4)",
+          "rgba(10,10,10,0.3)",
+          "rgba(10,10,10,0.2)",
+          "rgba(10,10,10,0.12)",
+          "rgba(10,10,10,0.08)",
+          "rgba(10,10,10,0.04)"
+        ]
+      },
+      "go": {
+        "role": "tertiary",
+        "displayName": "Go",
+        "canonical": "#1a9e57",
+        "tonalRamp": [
+          "oklch(22% 0.07 155)",
+          "oklch(32% 0.10 155)",
+          "oklch(44% 0.13 155)",
+          "oklch(58% 0.15 155)",
+          "oklch(68% 0.16 155)",
+          "oklch(78% 0.13 155)",
+          "oklch(88% 0.08 155)",
+          "oklch(95% 0.03 155)"
+        ]
+      },
+      "grid": {
+        "role": "neutral",
+        "displayName": "Grid (landing only)",
+        "canonical": "#ececec",
+        "tonalRamp": [
+          "#3a3a3a",
+          "#5a5a5a",
+          "#7a7a7a",
+          "#9a9a9a",
+          "#b9b9b9",
+          "#d6d6d6",
+          "#ececec",
+          "#f7f7f7"
+        ]
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Faint (landing only)",
+        "canonical": "#c9c9c9",
+        "tonalRamp": [
+          "#2b2b2b",
+          "#414141",
+          "#585858",
+          "#707070",
+          "#8a8a8a",
+          "#a4a4a4",
+          "#c9c9c9",
+          "#e6e6e6"
+        ]
+      },
+      "terminal": {
+        "role": "neutral",
+        "displayName": "Terminal",
+        "canonical": "#16181a",
+        "tonalRamp": [
+          "#101214",
+          "#16181a",
+          "#1c1f22",
+          "#2a2d31",
+          "#34383d",
+          "#5f646b",
+          "#7d8590",
+          "#9aa0a8"
+        ]
+      },
+      "terminal-rule": {
+        "role": "neutral",
+        "displayName": "Terminal Rule",
+        "canonical": "#2a2d31",
+        "tonalRamp": [
+          "#101214",
+          "#16181a",
+          "#1c1f22",
+          "#2a2d31",
+          "#34383d",
+          "#5f646b",
+          "#7d8590",
+          "#9aa0a8"
+        ]
+      },
+      "electric-dark": {
+        "role": "primary",
+        "displayName": "Electric (dark)",
+        "canonical": "#4d68ff",
+        "tonalRamp": [
+          "oklch(20% 0.16 270)",
+          "oklch(30% 0.22 270)",
+          "oklch(40% 0.27 270)",
+          "oklch(49% 0.29 270)",
+          "oklch(59% 0.23 270)",
+          "oklch(70% 0.16 270)",
+          "oklch(82% 0.09 270)",
+          "oklch(94% 0.03 270)"
+        ]
+      },
+      "ink-dark": {
+        "role": "neutral",
+        "displayName": "Ink (dark)",
+        "canonical": "#f2f1ec",
+        "tonalRamp": [
+          "#101214",
+          "#2a2d31",
+          "#5f646b",
+          "#9aa0a8",
+          "#c2c1bb",
+          "#dcdbd5",
+          "#e9e8e2",
+          "#f2f1ec"
+        ]
+      },
+      "body-dark": {
+        "role": "neutral",
+        "displayName": "Body (dark)",
+        "canonical": "#9aa0a8",
+        "tonalRamp": [
+          "#1c1f22",
+          "#2a2d31",
+          "#34383d",
+          "#5f646b",
+          "#7d8590",
+          "#9aa0a8",
+          "#c2c6cc",
+          "#e0e2e6"
+        ]
+      },
+      "steel-dark": {
+        "role": "neutral",
+        "displayName": "Steel (dark)",
+        "canonical": "#5f646b",
+        "tonalRamp": [
+          "#101214",
+          "#1c1f22",
+          "#2a2d31",
+          "#34383d",
+          "#5f646b",
+          "#7d8590",
+          "#9aa0a8",
+          "#c2c6cc"
+        ]
+      },
+      "fog-dark": {
+        "role": "neutral",
+        "displayName": "Fog (dark)",
+        "canonical": "#16181a",
+        "tonalRamp": [
+          "#101214",
+          "#16181a",
+          "#1c1f22",
+          "#2a2d31",
+          "#34383d",
+          "#5f646b",
+          "#7d8590",
+          "#9aa0a8"
+        ]
+      },
+      "paper-dark": {
+        "role": "neutral",
+        "displayName": "Paper (dark)",
+        "canonical": "#101214",
+        "tonalRamp": [
+          "#101214",
+          "#16181a",
+          "#1c1f22",
+          "#2a2d31",
+          "#34383d",
+          "#5f646b",
+          "#7d8590",
+          "#9aa0a8"
+        ]
+      },
+      "go-dark": {
+        "role": "tertiary",
+        "displayName": "Go (dark)",
+        "canonical": "#3ecf7a",
+        "tonalRamp": [
+          "oklch(22% 0.07 155)",
+          "oklch(32% 0.10 155)",
+          "oklch(44% 0.13 155)",
+          "oklch(58% 0.15 155)",
+          "oklch(74% 0.17 155)",
+          "oklch(82% 0.13 155)",
+          "oklch(90% 0.08 155)",
+          "oklch(96% 0.03 155)"
+        ]
+      },
+      "hairline-dark": {
+        "role": "neutral",
+        "displayName": "Hairline (dark)",
+        "canonical": "#2a2d31",
+        "tonalRamp": [
+          "#101214",
+          "#16181a",
+          "#1c1f22",
+          "#2a2d31",
+          "#34383d",
+          "#5f646b",
+          "#7d8590",
+          "#9aa0a8"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page titles in docs, the hero on the landing. One phrase may take Electric."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section headings with 2.5rem above in docs."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Sub-headings, tile titles, sidebar navigation."
+      },
+      "lede": {
+        "displayName": "Lede",
+        "purpose": "The one sentence under a display title, about 34 characters wide."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running prose in Body color at 65 to 75 characters."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Mono uppercase captions: separators, table headers, badges, kbd, figure captions. Always Steel."
+      },
+      "filename": {
+        "displayName": "Filename",
+        "purpose": "The title bar of a code block. A path keeps its case."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Code blocks and terminal output at 1.9 line height."
+      },
+      "wordmark": {
+        "displayName": "Wordmark",
+        "purpose": "The lowercase 'ocel' next to the cut-ring mark. Nowhere else."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "color-change",
+        "value": "color 150ms, background-color 150ms, border-color 150ms",
+        "purpose": "The only transition. Hover darkens a border or tints a fill; nothing moves or lifts."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ],
+    "registers": {
+      "landing": "Full engineering drawing: 48px grid paper under a radial mask, mono '+' registration crosses, rotated figure captions, 1.5px foreground header rule, marquee, interactive terminal.",
+      "docs": "Quiet: paper, hairlines, type. No grid, crosses, captions, heavy rules, or marquee.",
+      "dashboard": "Same as docs."
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ink block with paper text. The one solid fill on a docs page.",
+      "html": "<a class=\"ds-btn-primary\" href=\"#\">Deploy now</a>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; background: var(--ink, #0a0a0a); color: var(--paper, #ffffff); border: 1px solid var(--ink, #0a0a0a); border-radius: 0; padding: 10px 16px; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 0.9375rem; font-weight: 500; line-height: 1; text-decoration: none; transition: opacity 150ms; } .ds-btn-primary:hover { opacity: 0.85; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--electric, #1f35ff) 30%, transparent); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Paper with a hairline; the landing escalates to a 1.5px ink border and mono for command-like calls.",
+      "html": "<button class=\"ds-btn-outline\">ocel init ↵</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; background: var(--paper, #ffffff); color: var(--ink, #0a0a0a); border: 1.5px solid var(--ink, #0a0a0a); border-radius: 0; padding: 10px 16px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.875rem; font-weight: 400; line-height: 1; cursor: pointer; transition: background-color 150ms; } .ds-btn-outline:hover { background: var(--fog, #f1f1f1); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--electric, #1f35ff) 30%, transparent); }"
+    },
+    {
+      "name": "Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "The docs badge beside the wordmark. Mono uppercase label inside a hairline.",
+      "html": "<span class=\"ds-chip\">Docs</span>",
+      "css": ".ds-chip { display: inline-block; border: 1px solid var(--steel, #8a8a8a); color: var(--steel, #8a8a8a); background: var(--paper, #ffffff); border-radius: 0; padding: 4px 6px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.625rem; font-weight: 500; line-height: 1; letter-spacing: 0.14em; text-transform: uppercase; }"
+    },
+    {
+      "name": "Tile",
+      "kind": "card",
+      "refersTo": "tile",
+      "description": "Fog block with a hairline. Hover darkens the border to Steel; nothing lifts.",
+      "html": "<a class=\"ds-tile\" href=\"#\"><svg class=\"ds-tile-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M15.59 14.37a6 6 0 0 1-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 0 0 6.16-12.12A14.98 14.98 0 0 0 9.63 8.41m5.96 5.96a14.93 14.93 0 0 1-5.84 2.58m0 0a6 6 0 0 1-7.38-5.84h4.8m2.58 5.84a14.93 14.93 0 0 1-2.58-5.84m0 0a6.04 6.04 0 0 1-1.97-1.97\"/></svg><span class=\"ds-tile-title\">Quick start</span><span class=\"ds-tile-desc\">Deploy a Next.js app to AWS in minutes.</span></a>",
+      "css": ".ds-tile { display: flex; flex-direction: column; gap: 6px; width: 16rem; background: var(--fog, #f1f1f1); border: 1px solid color-mix(in srgb, var(--ink, #0a0a0a) 12%, transparent); border-radius: 0; padding: 20px; text-decoration: none; color: var(--ink, #0a0a0a); transition: border-color 150ms; } .ds-tile:hover { border-color: var(--steel, #8a8a8a); } .ds-tile-icon { width: 20px; height: 20px; color: var(--ink, #0a0a0a); margin-bottom: 6px; } .ds-tile-title { font-family: 'Space Grotesk', 'IBM Plex Sans', system-ui, sans-serif; font-size: 1.0625rem; font-weight: 600; line-height: 1.4; } .ds-tile-desc { font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 0.875rem; line-height: 1.5; color: var(--body, #555555); }"
+    },
+    {
+      "name": "Prose Link",
+      "kind": "custom",
+      "refersTo": "inline-code",
+      "description": "Ink text with a 1.5px Electric bottom border, the system's one annotation.",
+      "html": "<p class=\"ds-prose\">Ocel deploys <a class=\"ds-link\" href=\"#\">apps</a> to your own <a class=\"ds-link\" href=\"#\">cloud</a> with <code class=\"ds-code\">ocel deploy</code>.</p>",
+      "css": ".ds-prose { font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 1rem; line-height: 1.6; color: var(--body, #555555); margin: 0; } .ds-link { color: var(--ink, #0a0a0a); text-decoration: none; border-bottom: 1.5px solid var(--electric, #1f35ff); } .ds-link:hover { color: var(--electric, #1f35ff); } .ds-code { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.85em; background: var(--fog, #f1f1f1); color: var(--ink, #0a0a0a); padding: 0.1em 0.4em; border-radius: 0; }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "button-outline",
+      "description": "Hairline field on paper with a kbd hint. Focus is an Electric ring, no glow.",
+      "html": "<label class=\"ds-search\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" aria-hidden=\"true\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"m21 21-5.2-5.2m0 0A7.5 7.5 0 1 0 5.2 5.2a7.5 7.5 0 0 0 10.6 10.6Z\"/></svg><input type=\"search\" placeholder=\"Search\" /><kbd class=\"ds-kbd\">⌘</kbd><kbd class=\"ds-kbd\">K</kbd></label>",
+      "css": ".ds-search { display: inline-flex; align-items: center; gap: 8px; width: 16rem; background: var(--paper, #ffffff); border: 1px solid color-mix(in srgb, var(--ink, #0a0a0a) 12%, transparent); border-radius: 0; padding: 8px 10px; color: var(--steel, #8a8a8a); transition: border-color 150ms; } .ds-search:focus-within { border-color: var(--electric, #1f35ff); box-shadow: 0 0 0 2px color-mix(in srgb, var(--electric, #1f35ff) 30%, transparent); } .ds-search svg { width: 16px; height: 16px; flex: none; } .ds-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 0.875rem; color: var(--ink, #0a0a0a); } .ds-kbd { background: var(--paper, #ffffff); border: 1px solid color-mix(in srgb, var(--ink, #0a0a0a) 12%, transparent); padding: 4px 8px; color: var(--body, #555555); font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.6875rem; line-height: 1; border-radius: 0; } .ds-kbd + .ds-kbd { margin-left: 2px; }"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "chip",
+      "description": "Grotesk items under a mono Label separator. Active item in Ink on Fog.",
+      "html": "<nav class=\"ds-nav\"><div class=\"ds-nav-sep\">Deploy</div><a class=\"ds-nav-item ds-nav-active\" href=\"#\">Quick start</a><a class=\"ds-nav-item\" href=\"#\">What is Ocel?</a><a class=\"ds-nav-item\" href=\"#\">How a deploy works</a><a class=\"ds-nav-item\" href=\"#\">Compared to IaC</a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; width: 14rem; gap: 2px; font-family: 'Space Grotesk', 'IBM Plex Sans', system-ui, sans-serif; font-size: 0.875rem; } .ds-nav-sep { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--steel, #8a8a8a); padding: 8px 10px 6px; } .ds-nav-item { display: block; padding: 6px 10px; color: var(--body, #555555); text-decoration: none; border-radius: 0; transition: color 150ms, background-color 150ms; } .ds-nav-item:hover { color: var(--ink, #0a0a0a); background: var(--fog, #f1f1f1); } .ds-nav-active { color: var(--ink, #0a0a0a); background: var(--fog, #f1f1f1); font-weight: 500; }"
+    },
+    {
+      "name": "Terminal",
+      "kind": "custom",
+      "refersTo": "terminal",
+      "description": "The signature figure. Dark in every theme, traffic lights, prompt in Steel, check in Go, arrow in Electric.",
+      "html": "<div class=\"ds-term\"><div class=\"ds-term-bar\"><span class=\"ds-dot\" style=\"background:#ff5f57\"></span><span class=\"ds-dot\" style=\"background:#febc2e\"></span><span class=\"ds-dot\" style=\"background:#28c840\"></span></div><pre class=\"ds-term-body\"><span class=\"ds-t-prompt\">$</span> <span class=\"ds-t-ink\">ocel deploy</span>\n\n<span class=\"ds-t-go\">✓</span> Build <span class=\"ds-t-prompt\">·············</span> <span class=\"ds-t-ink\">12s</span>\n<span class=\"ds-t-go\">✓</span> Provision <span class=\"ds-t-prompt\">·········</span> <span class=\"ds-t-ink\">8s</span>\n<span class=\"ds-t-go\">✓</span> Release <span class=\"ds-t-prompt\">···········</span> <span class=\"ds-t-ink\">3s</span>\n<span class=\"ds-t-electric\">→</span> <span class=\"ds-t-ink\">https://api.acme.dev</span></pre></div>",
+      "css": ".ds-term { width: 30rem; max-width: 100%; background: #16181a; border: 1px solid #2a2d31; border-radius: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 0.84375rem; line-height: 1.9; color: #9aa0a8; } .ds-term-bar { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #2a2d31; padding: 10px 16px; } .ds-dot { width: 10px; height: 10px; display: inline-block; border-radius: 0; } .ds-term-body { margin: 0; padding: 12px 16px; overflow-x: auto; white-space: pre; } .ds-t-prompt { color: #7d8590; } .ds-t-ink { color: #f2f1ec; } .ds-t-go { color: #3ecf7a; } .ds-t-electric { color: #4d68ff; }"
+    },
+    {
+      "name": "Callout",
+      "kind": "card",
+      "refersTo": "tile",
+      "description": "Hairline frame with a 2px status-colored left edge. No icon, square.",
+      "html": "<div class=\"ds-callout\"><p class=\"ds-callout-title\">Note</p><p class=\"ds-callout-body\">The first deploy shows the plan for shared infrastructure and waits for a yes.</p></div>",
+      "css": ".ds-callout { width: 30rem; max-width: 100%; border: 1px solid color-mix(in srgb, var(--ink, #0a0a0a) 12%, transparent); border-left: 2px solid var(--electric, #1f35ff); border-radius: 0; padding: 12px; background: var(--paper, #ffffff); font-family: 'IBM Plex Sans', system-ui, sans-serif; } .ds-callout-title { margin: 0 0 4px; font-size: 0.9375rem; font-weight: 600; color: var(--ink, #0a0a0a); } .ds-callout-body { margin: 0; font-size: 0.9375rem; line-height: 1.55; color: var(--body, #555555); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Engineering Drawing",
+    "overview": "Ocel's surfaces are drawn, not decorated. White paper, black ink, hairline rules, and one electric annotation. Every element sits square on the page; nothing is rounded, lifted, or blurred. Type does the work a drawing's line weights do: a grotesk for the titles, a humanist sans for the reading, and a mono for every caption, label, and command. Code and terminal output are the figures on the sheet, so they get the most careful framing on the page.\n\nOne theme, two registers. The landing page is the printed sheet in full: grid paper showing through, registration crosses in the margins, figure captions running down the edge, and a heavy 1.5px foreground rule under the header. The docs and the console dashboard are the same drawing with the scaffolding lifted off: plain paper, hairlines only, and the accent held back to link underlines and the mark, so nothing competes with the reader's work. The materials never change between them. Only how much of the drafting apparatus is left visible.",
+    "keyCharacteristics": [
+      "Paper and ink first. Electric is an annotation, never a surface.",
+      "Zero radius everywhere, enforced globally.",
+      "Depth by rule and tone, never by shadow.",
+      "Mono uppercase labels with wide tracking name every section, column, and tab.",
+      "Real code and real terminal output are the illustrations.",
+      "The landing register may show the grid, crosses, captions, and heavy rules. The docs and dashboard register may not."
+    ],
+    "rules": [
+      {
+        "name": "The One Annotation Rule",
+        "body": "Electric owns less than ten percent of any view. It underlines, marks, and points. It never fills a section, a card, or a button on any surface.",
+        "section": "colors"
+      },
+      {
+        "name": "The Dark Screen Rule",
+        "body": "Terminal and code panes keep their dark palette in light mode. They are screens set into the drawing, not part of the paper.",
+        "section": "colors"
+      },
+      {
+        "name": "The Same Ink Rule",
+        "body": "Landing, docs, and dashboard draw from one token set. A new color on one surface is a new color on all of them, so it must earn a place in this file first.",
+        "section": "colors"
+      },
+      {
+        "name": "The Caption Rule",
+        "body": "Anything that names rather than says is set in Label: mono, uppercase, wide-tracked, Steel. No sentence case labels, no bold sans labels.",
+        "section": "typography"
+      },
+      {
+        "name": "The Code Is Prose Rule",
+        "body": "Code blocks and terminal output are content, never decoration. They get real text, a hairline frame, and the generous 1.9 line height. Never render them as images.",
+        "section": "typography"
+      },
+      {
+        "name": "The Two Registers Rule",
+        "body": "The landing page may show the drafting apparatus: 48px grid paper faded by a radial mask, mono \"+\" registration crosses in the margins, rotated figure captions along the edge, a 1.5px foreground rule under the header, and a marquee. Docs and the console dashboard show none of it. They keep paper, hairlines, and type so nothing competes with the work at hand.",
+        "section": "layout"
+      },
+      {
+        "name": "The No Shadow Rule",
+        "body": "Nothing casts a shadow. A surface that needs to separate from the page gets a hairline or steps to Fog. Hover never lifts; it darkens a border or tints a fill.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep every corner square. The global zero-radius rule is the invariant, not a default.",
+      "Do set every label, caption, table header, and badge in mono uppercase at 0.6875rem with 0.14em tracking in Steel.",
+      "Do underline prose links with a 1.5px Electric bottom border and Ink text.",
+      "Do keep terminal and code panes dark in both themes, framed by a hairline in docs.",
+      "Do separate with hairlines and tonal steps to Fog. Hover darkens a border or tints a fill.",
+      "Do confine grid paper, registration crosses, figure captions, and 1.5px rules to the landing register.",
+      "Do use the cut-ring mark and lowercase Archivo wordmark exactly as built. It is the one curve in the system."
+    ],
+    "donts": [
+      "Don't let Electric fill a button, card, section, or background on any surface. Under ten percent, as annotation only.",
+      "Don't add shadows, glows, blurs, or gradients. The header's backdrop blur and the hero's radial grid mask are the two exceptions, both landing only.",
+      "Don't bring the landing's drafting apparatus into docs or the dashboard. Those surfaces stay quiet so the work is the only thing that stands out.",
+      "Don't invent a second accent. Amber and violet exist only as sidebar tab colors; they never appear in content.",
+      "Don't render code or terminal output as images or screenshots.",
+      "Don't set headings, buttons, or labels in a fourth typeface. Grotesk, Plex Sans, Plex Mono, and Archivo for the wordmark are the whole set."
+    ]
+  }
+}
