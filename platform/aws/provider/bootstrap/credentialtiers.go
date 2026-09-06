@@ -39,7 +39,6 @@ const (
 	appSecurityGroupARN = "arn:aws:ec2:*:*:security-group/*"
 	appVPCARN           = "arn:aws:ec2:*:*:vpc/*"
 	appRepositoryARN    = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"
-	appTaskFamilyARN    = "arn:aws:ecs:*:*:task-definition/*"
 	appLogGroupARN      = "arn:aws:logs:*:*:log-group:/ocel/*"
 	functionLogGroupARN = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
 	appTargetGroupARN   = "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
@@ -390,8 +389,7 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 		},
 		{
 			actions:   []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition"},
-			resources: []string{appTaskFamilyARN},
-			condition: taggedByOcel(),
+			resources: []string{unscopedResource},
 		},
 		{
 			actions:   []string{"ecs:CreateService"},
@@ -402,6 +400,9 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 			actions: []string{
 				"ecs:DeleteService",
 				"ecs:DescribeServices",
+				"ecs:ListTagsForResource",
+				"ecs:TagResource",
+				"ecs:UntagResource",
 				"ecs:UpdateService",
 			},
 			resources: []string{substrateServiceARN},
@@ -503,6 +504,7 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 		},
 		{
 			actions: []string{
+				"ec2:DescribeManagedPrefixLists",
 				"ec2:DescribeNetworkInterfaces",
 				"ec2:DescribeSecurityGroupRules",
 				"ec2:DescribeSecurityGroups",

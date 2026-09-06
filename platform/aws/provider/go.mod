@@ -27,6 +27,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/cloudfront v1.67.6
 	github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore v1.15.6
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.0
+	github.com/aws/aws-sdk-go-v2/service/ecr v1.64.0
 	github.com/aws/aws-sdk-go-v2/service/iam v1.55.1
 	github.com/aws/aws-sdk-go-v2/service/kms v1.55.0
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.99.0
@@ -69,7 +70,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.2 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.38 // indirect
 	github.com/aws/aws-sdk-go-v2/service/dynamodbstreams v1.35.0 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ecr v1.64.0
+	github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2 v1.62.0
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.13 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.24 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.12.7 // indirect

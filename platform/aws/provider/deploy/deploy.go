@@ -28,6 +28,7 @@ type Config struct {
 
 	Tags    TagSweeper
 	Records providerkit.RecordStore
+	Rules   RuleDescriber
 
 	RequiredFeatures []string
 

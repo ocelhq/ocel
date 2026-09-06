@@ -139,17 +139,17 @@ func (r *Releaser) ensureSubstrate(ctx context.Context, ref providerkit.StackRef
 		Tags:    substrateTags(class),
 		Options: work,
 	}
+	if err := providerkit.WriteStack(ctx, owner.cfg.Records, class, SubstrateSlug, substrateRef(class).Name, providerkit.Stack{
+		Kind:   providerkit.StackInfra,
+		Writer: providerkit.WriterFor(""),
+	}); err != nil {
+		return substrate{}, err
+	}
 	if _, err := owner.adapter.Run(ctx, plan, report); err != nil {
 		return substrate{}, fmt.Errorf("stand up the container substrate for the %s class: %w", class, err)
 	}
 	decoded, err := decodeSubstrate(work.outputs)
 	if err != nil {
-		return substrate{}, err
-	}
-	if err := providerkit.WriteStack(ctx, owner.cfg.Records, class, SubstrateSlug, substrateRef(class).Name, providerkit.Stack{
-		Kind:   providerkit.StackInfra,
-		Writer: providerkit.WriterFor(""),
-	}); err != nil {
 		return substrate{}, err
 	}
 	return decoded, r.claimSubstrate(ctx, ref)

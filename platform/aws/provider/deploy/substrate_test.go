@@ -168,8 +168,8 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	if len(remaining) != 0 {
 		t.Errorf("a failed deploy left %d consumer records, so the substrate could never be taken down", len(remaining))
 	}
-	if torn := engine.torn(); len(torn) != 1 || torn[0] != substrateRef(providerkit.ClassProduction).Name.String() {
-		t.Errorf("after the only consumer failed the engine tore down %v, want the substrate it had just stood up: nothing idle-billing outlives a failed first deploy", torn)
+	if torn := engine.torn(); len(torn) != 2 || torn[0] != plan.Ref.Name.String() || torn[1] != substrateRef(providerkit.ClassProduction).Name.String() {
+		t.Errorf("after the only consumer failed the engine tore down %v, want the half-built app stack first and then the substrate it had just stood up: a cluster with a service inside refuses to go, and nothing idle-billing outlives a failed first deploy", torn)
 	}
 
 	plan.App.HealthCheckPath = "not a path"

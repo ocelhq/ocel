@@ -46,6 +46,7 @@ var actionsNoTagScopes = []string{
 }
 
 var actionsAWSGivesNoScopingKey = []string{
+	"ecs:DeregisterTaskDefinition",
 	"lambda:DeleteLayerVersion",
 	"lambda:PublishLayerVersion",
 }
