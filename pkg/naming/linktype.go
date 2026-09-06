@@ -121,6 +121,8 @@ func propertyScalar(fd protoreflect.FieldDescriptor, v protoreflect.Value) any {
 	return v.String()
 }
 
+const ResourceEnvPrefix = "OCEL_RESOURCE_"
+
 func ResourceEnvName(t linksv1.LinkType, resource string) string {
-	return "OCEL_RESOURCE_" + EnvFragment(t) + "_" + resource
+	return ResourceEnvPrefix + EnvFragment(t) + "_" + resource
 }

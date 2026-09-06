@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/ocelhq/ocel/pkg/naming"
 )
 
 const FileName = ".env"
@@ -18,6 +20,8 @@ const FileName = ".env"
 var keyPattern = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 
 var reservedPrefixes = []string{"OCEL_"}
+
+var resourcePattern = regexp.MustCompile(`^` + naming.ResourceEnvPrefix + `[A-Z0-9]+_[A-Za-z0-9_-]+$`)
 
 type File struct {
 	Values     map[string]string
@@ -104,6 +108,9 @@ func unexport(name string) string {
 }
 
 func declarable(key string) bool {
+	if resourcePattern.MatchString(key) {
+		return true
+	}
 	if !keyPattern.MatchString(key) {
 		return false
 	}
