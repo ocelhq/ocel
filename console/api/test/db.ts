@@ -3,6 +3,8 @@ import { pushSchema } from "drizzle-kit/api";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
+const DATABASE_EXISTS_CODES = new Set(["42P04", "23505"]);
+
 async function ensureDatabaseExists(connectionString: string) {
   const url = new URL(connectionString);
   const dbName = url.pathname.slice(1);
@@ -12,7 +14,7 @@ async function ensureDatabaseExists(connectionString: string) {
   try {
     await adminPool.query(`CREATE DATABASE "${dbName}"`);
   } catch (error) {
-    if ((error as { code?: string }).code !== "42P04") {
+    if (!DATABASE_EXISTS_CODES.has((error as { code?: string }).code ?? "")) {
       throw error;
     }
   } finally {
