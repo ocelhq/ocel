@@ -29,7 +29,7 @@ on:
   workflow_dispatch:
     inputs:
       targets:
-        description: "Targets to drive against their real accounts, space separated. dev is never dispatched."
+        description: "Targets to drive against their real accounts, space separated. Neither dev nor dev-local is ever dispatched."
         default: "aws vps"
         type: string
       variants:
@@ -81,6 +81,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       dev: ${{ steps.gate.outputs.dev }}
+      dev_local: ${{ steps.gate.outputs.dev_local }}
       aws: ${{ steps.gate.outputs.aws }}
       vps: ${{ steps.gate.outputs.vps }}
       next: ${{ steps.gate.outputs.next }}
@@ -150,12 +151,14 @@ jobs:
           fi
 
           if [ -n "$forced" ]; then
-            lanes=${forced/all/dev aws vps}
+            lanes=${forced/all/dev dev-local aws vps}
             dev=$(named dev "$lanes")
+            dev_local=$(named dev-local "$lanes")
             aws=$(named aws "$lanes")
             vps=$(named vps "$lanes")
           elif [ "$real" = true ]; then
             dev=false
+            dev_local=false
             aws=$(named aws "$TARGETS")
             vps=$(named vps "$TARGETS")
           else
@@ -168,6 +171,7 @@ jobs:
             seed=$PR
             touched=$(printf '%s\n' "$files" | sed -n 's|^tests/fixtures/\([^/]*\)/\([^/]*\)/.*|\1/\2|p' | sort -u | paste -sd, -)
             dev=$(hit "$shared"'|^console/(resources|api|auth|db|web)/')
+            dev_local=$(hit "$shared")
             aws=$(hit "$shared"'|^platform/(aws|edge)/|^scripts/floci\.sh$')
             vps=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$')
             next=$(hit "$shared"'|^platform/(aws|edge)/')
@@ -185,6 +189,7 @@ jobs:
 
           {
             echo "dev=$dev"
+            echo "dev_local=$dev_local"
             echo "aws=$aws"
             echo "vps=$vps"
             echo "next=$next"
@@ -260,6 +265,7 @@ jobs:
           AWS: ${{ steps.lanes.outputs.aws }}
           VPS: ${{ steps.lanes.outputs.vps }}
           DEV: ${{ steps.lanes.outputs.dev }}
+          DEV_LOCAL: ${{ steps.lanes.outputs.dev_local }}
           NEXT: ${{ steps.lanes.outputs.next }}
           AWS_GREEN: ${{ steps.gate-aws.outputs.green }}
           VPS_GREEN: ${{ steps.gate-vps.outputs.green }}
@@ -271,13 +277,15 @@ jobs:
           aws=$(runs "$AWS" "$AWS_GREEN")
           vps=$(runs "$VPS" "$VPS_GREEN")
           dev=$(runs "$DEV" "$DEV_GREEN")
+          dev_local=$DEV_LOCAL
           next=$(runs "$NEXT" "$NEXT_GREEN")
           any=false
-          [ "$aws$vps$dev$next" = falsefalsefalsefalse ] || any=true
+          [ "$aws$vps$dev$dev_local$next" = falsefalsefalsefalsefalse ] || any=true
           {
             echo "aws=$aws"
             echo "vps=$vps"
             echo "dev=$dev"
+            echo "dev_local=$dev_local"
             echo "next=$next"
             echo "any=$any"
           } | tee -a "$GITHUB_OUTPUT"
@@ -325,7 +333,7 @@ jobs:
   aws:
     name: aws
     needs: binary
-    if: ${{ (needs.binary.outputs.aws == 'true' || needs.binary.outputs.dev == 'true') && needs.binary.result == 'success' }}
+    if: ${{ (needs.binary.outputs.aws == 'true' || needs.binary.outputs.dev == 'true' || needs.binary.outputs.dev_local == 'true') && needs.binary.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ needs.binary.outputs.real == 'true' && 120 || 75 }}
     concurrency:
@@ -433,14 +441,16 @@ jobs:
         if: ${{ always() && needs.binary.outputs.aws == 'true' }}
         run: scripts/floci.sh destroy "$EMULATOR" || echo "could not destroy $EMULATOR"
 
-      - name: Start the services the console stands on
-        if: ${{ !cancelled() && needs.binary.outputs.dev == 'true' }}
-        run: docker compose up -d
+      - name: Start the services these lanes stand on
+        if: ${{ !cancelled() && (needs.binary.outputs.dev == 'true' || needs.binary.outputs.dev_local == 'true') }}
+        run: docker compose up -d ${{ needs.binary.outputs.dev == 'true' && 'postgres ocel-cloud minio minio-createbucket dynamodb' || 'ocel-cloud' }}
 
       - name: Wait for Postgres to be ready
-        if: ${{ !cancelled() && needs.binary.outputs.dev == 'true' }}
+        if: ${{ !cancelled() && (needs.binary.outputs.dev == 'true' || needs.binary.outputs.dev_local == 'true') }}
+        env:
+          SERVICES: ${{ needs.binary.outputs.dev == 'true' && 'postgres ocel-cloud' || 'ocel-cloud' }}
         run: |
-          for svc in postgres ocel-cloud; do
+          for svc in $SERVICES; do
             echo "Waiting for $svc ..."
             for i in $(seq 1 60); do
               if docker compose exec -T "$svc" pg_isready -U postgres >/dev/null 2>&1; then
@@ -454,6 +464,13 @@ jobs:
               fi
             done
           done
+
+      - name: Run the console-free dev journey
+        if: ${{ !cancelled() && needs.binary.outputs.dev_local == 'true' }}
+        env:
+          OCEL_TARGET: dev-local
+          OCEL_JOURNEY_SKIPS: ${{ needs.binary.outputs.skips }}
+        run: pnpm --filter @ocel-tests/journeys journey
 
       - name: Push control-plane schema
         if: ${{ !cancelled() && needs.binary.outputs.dev == 'true' }}

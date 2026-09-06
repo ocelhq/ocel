@@ -214,19 +214,29 @@ describe("the gap list", () => {
     assert.deepEqual(issues(listed, "sdk/with-pulumi-api-gateway/web", UP_TITLE), [856]);
   });
 
-  it("lists nothing on dev at up, destroy or the upload row", () => {
-    const listed = expectationsFor("dev");
-    for (const [name, cell] of Object.entries(listed)) {
-      assert.deepEqual(issues(listed, name, UP_TITLE), [], name);
-      assert.deepEqual(issues(listed, name, DESTROY_TITLE), [], name);
-      assert.ok(!(contractTitle("redeploy", UPLOAD) in cell), name);
+  it("lists nothing on either dev at up, destroy or the upload row", () => {
+    for (const environment of ["dev", "dev-local"] as const) {
+      const listed = expectationsFor(environment);
+      for (const [name, cell] of Object.entries(listed)) {
+        assert.deepEqual(issues(listed, name, UP_TITLE), [], `${name} on ${environment}`);
+        assert.deepEqual(issues(listed, name, DESTROY_TITLE), [], `${name} on ${environment}`);
+        assert.ok(!(contractTitle("redeploy", UPLOAD) in cell), `${name} on ${environment}`);
+      }
+      assert.deepEqual(issues(listed, "sdk/node/web", UPLOAD), [], environment);
+      assert.deepEqual(issues(listed, "deploy/node/web", UPLOAD), [], environment);
+      for (const cell of ["sdk/next/web", "deploy/next/web"]) {
+        assert.deepEqual(
+          issues(listed, cell, nextCacheRows[0]?.title ?? ""),
+          [898],
+          `${cell} on ${environment}`,
+        );
+      }
+      assert.deepEqual(
+        issues(listed, "sdk/workspace/next", nextCacheRows[0]?.title ?? ""),
+        [],
+        environment,
+      );
     }
-    assert.deepEqual(issues(listed, "sdk/node/web", UPLOAD), []);
-    assert.deepEqual(issues(listed, "deploy/node/web", UPLOAD), []);
-    for (const cell of ["sdk/next/web", "deploy/next/web"]) {
-      assert.deepEqual(issues(listed, cell, nextCacheRows[0]?.title ?? ""), [898], cell);
-    }
-    assert.deepEqual(issues(listed, "sdk/workspace/next", nextCacheRows[0]?.title ?? ""), []);
   });
 
   it("lists vps and vps.incus alike: the sdk bucket at up, next-cache behind either next", () => {
@@ -275,6 +285,7 @@ describe("the gap list", () => {
       "sdk/next",
       "sdk/workspace",
     ]);
+    assert.deepEqual(alive("dev-local"), alive("dev"));
     assert.deepEqual(alive("vps"), [
       "deploy/node",
       "deploy/go",
