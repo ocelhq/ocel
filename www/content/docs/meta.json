@@ -1,0 +1,20 @@
+{
+  "title": "Deploy",
+  "pages": [
+    "index",
+    "quick-start",
+    "what-is-ocel",
+    "how-a-deploy-works",
+    "compared-to-iac",
+    "---Deploy---",
+    "project-config",
+    "environments",
+    "nextjs",
+    "providers",
+    "---Console---",
+    "console",
+    "console-link",
+    "cli",
+    "sdk"
+  ]
+}

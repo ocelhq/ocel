@@ -1,0 +1,113 @@
+---
+title: Quick start
+description: A Next.js app in your AWS account.
+---
+
+By the end of this page a Next.js app is running in your AWS account, with a URL.
+
+## Before you start
+
+| You need | Why |
+| --- | --- |
+| Node 20 or newer | Ocel builds your app with it, and the CLI installs from npm |
+| An AWS account | Where the app runs |
+| AWS credentials in your shell | Ocel provisions with them |
+
+Check the credentials are visible:
+
+```bash
+aws sts get-caller-identity
+```
+
+## Install
+
+```bash
+npm install -g ocel
+ocel --version
+```
+
+## Make a project deployable
+
+```bash
+npx create-next-app@latest my-app
+cd my-app
+ocel init
+```
+
+`ocel init` writes one file and adds the two packages it imports to your dependencies. It runs offline and signs you into nothing.
+
+```ts title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "@ocel/provider-aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+});
+```
+
+The slug is the project's identity in your account. Every resource Ocel creates is keyed on it, so pick it once.
+
+## Deploy
+
+```bash
+ocel deploy
+```
+
+The first deploy finds no shared infrastructure in your account, shows the plan to create it, and waits for a yes. Expect a few minutes for that one. Later deploys reuse it.
+
+```txt
+→ web › Building
+✓ web  24s
+→ web › Provisioning
+✓ web › Provisioning  21s
+→ Promotion › Finalizing
+✓ Promotion  2s
+
+✓ Deployed in 54s
+
+  https://my-app.example.com
+```
+
+Open the URL. That is your app, in your account.
+
+## Change something and deploy again
+
+Edit a page, then:
+
+```bash
+ocel deploy
+```
+
+The build runs again, provisioning changes nothing unless the app now asks for something new, and traffic moves to the new deployment. The previous one is still there:
+
+```bash
+ocel deployments
+ocel rollback
+```
+
+## Try a branch
+
+```bash
+git switch -c checkout
+ocel preview
+```
+
+The preview is a full deployment beside production, named after the branch, on its own hostname. `ocel preview rm` tears it down and leaves production alone.
+
+## Clean up
+
+```bash
+ocel destroy production
+```
+
+This removes everything the project created in your account and nothing else.
+
+## Next steps
+
+<Cards>
+  <Card title="Add a database" href="/docs/sdk/database" description="One function call declares it, and the app is connected." />
+  <Card title="Variables and secrets" href="/docs/environments" description="Typed in code, stored in your account." />
+  <Card title="Deploy to a VPS" href="/docs/providers/vps" description="The same config, pointed at a server over SSH." />
+  <Card title="Ocel CLI" href="/docs/cli" description="Every command and flag." />
+</Cards>

@@ -1,0 +1,17 @@
+{
+  "title": "Ocel SDKs",
+  "description": "Application defined infra.",
+  "icon": "Squares2X2Icon",
+  "root": true,
+  "pages": [
+    "index",
+    "---Resources---",
+    "bucket",
+    "queue",
+    "database",
+    "secret",
+    "---Internals---",
+    "dev-server",
+    "wire-format"
+  ]
+}

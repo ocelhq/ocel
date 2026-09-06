@@ -1,0 +1,158 @@
+---
+title: Introduction
+description: Ocel deploys apps to your own cloud.
+---
+
+<Hero />
+
+## Zero infrastructure code
+
+You write one config. It names a target, a cloud or a server, and nothing about how to build there. Your app does not know or care which, nor should it have to. Swapping targets is one line:
+
+<Compare>
+
+```ts title="ocel.config.ts" lineNumbers
+export default defineConfig({
+  slug: "acme",
+  provider: awsProvider(), // [!code --]
+  apps: [{ name: "web" }],
+});
+```
+
+```ts title="ocel.config.ts" lineNumbers
+export default defineConfig({
+  slug: "acme",
+  provider: vps({ ssh: "my-vps" }), // [!code ++]
+  apps: [{ name: "web" }],
+});
+```
+
+</Compare>
+
+Compute is a setting too. On providers that support it, the same app runs as functions or as one container:
+
+<Compare>
+
+```ts title="ocel.config.ts" lineNumbers=4
+  apps: [
+    {
+      name: "web",
+      compute: "serverless", // [!code --]
+    },
+  ],
+```
+
+```ts title="ocel.config.ts" lineNumbers=4
+  apps: [
+    {
+      name: "web",
+      compute: "container", // [!code ++]
+    },
+  ],
+```
+
+</Compare>
+
+Compare this with [infrastructure as code](/docs/compared-to-iac). Or continue exploring:
+
+<StartCards />
+
+## Application defined infrastructure
+
+A database, a bucket, a queue, a realtime channel. Each one is a function call in your app, and the call is what provisions it. There is no other definition of it anywhere.
+
+<Tabs items={["Node", "Python", "Go", "Rust"]}>
+
+<Tab value="Node">
+
+```ts title="server.ts"
+import express from "express";
+import { postgres } from "ocel/postgres";
+
+// infrastructure in your app code!
+const db = postgres("main");
+const app = express();
+
+app.get("/documents", async (_req, res) => {
+  const { rows } = await db.query("select * from documents");
+  res.json(rows);
+});
+
+app.listen(3000);
+```
+
+</Tab>
+
+<Tab value="Python">
+
+```py title="main.py"
+from fastapi import FastAPI
+from ocel import postgres
+
+# infrastructure in your app code!
+db = postgres("main")
+app = FastAPI()
+
+@app.get("/documents")
+async def documents():
+    return await db.fetch("select * from documents")
+```
+
+</Tab>
+
+<Tab value="Go">
+
+```go title="main.go"
+package main
+
+import (
+	"net/http"
+
+	"github.com/ocelhq/ocel/sdk"
+)
+
+// infrastructure in your app code!
+var db = sdk.Postgres("main")
+
+func main() {
+	http.HandleFunc("/documents", func(w http.ResponseWriter, r *http.Request) {
+		rows, _ := db.Query(r.Context(), "select * from documents")
+		sdk.JSON(w, rows)
+	})
+	http.ListenAndServe(":3000", nil)
+}
+```
+
+</Tab>
+
+<Tab value="Rust">
+
+```rust title="main.rs"
+use axum::{routing::get, Json, Router};
+use ocel::postgres;
+
+// infrastructure in your app code!
+static DB: Postgres = postgres!("main");
+
+#[tokio::main]
+async fn main() {
+    let app = Router::new().route("/documents", get(|| async {
+        Json(DB.query("select * from documents").await)
+    }));
+    axum::serve(tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap(), app).await.unwrap();
+}
+```
+
+</Tab>
+
+</Tabs>
+
+This works whether you deploy to a cloud like AWS or VPS. [Learn more about the SDK](/docs/sdk).
+
+## Real infrastructure in dev
+
+Link a project on the console, and `ocel dev` resolves real resources on every machine, for you and your team. No emulators, no containers.
+
+<DevTerminal />
+
+[Learn more about dev mode](/docs/cli/dev).

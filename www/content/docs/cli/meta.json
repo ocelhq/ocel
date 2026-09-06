@@ -1,0 +1,27 @@
+{
+  "title": "Ocel CLI",
+  "description": "Commands reference.",
+  "icon": "CommandLineIcon",
+  "root": true,
+  "pages": [
+    "index",
+    "---Project---",
+    "init",
+    "dev",
+    "build",
+    "deploy",
+    "deployments",
+    "rollback",
+    "destroy",
+    "---Configure---",
+    "env",
+    "domain",
+    "link",
+    "generate",
+    "---Account---",
+    "login",
+    "logout",
+    "doctor",
+    "run"
+  ]
+}

@@ -1,3 +1,235 @@
 @import "tailwindcss";
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
+
+@theme inline {
+  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
+  --font-display: var(--font-grotesk), var(--font-plex-sans), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+:root {
+  --electric: #1f35ff;
+  --ink: #0a0a0a;
+  --body: #555555;
+  --steel: #8a8a8a;
+  --fog: #f1f1f1;
+  --paper: #ffffff;
+  --go: #1a9e57;
+  --rule: var(--ink);
+  --hairline: color-mix(in srgb, var(--ink) 12%, transparent);
+
+  --color-fd-background: var(--paper);
+  --color-fd-foreground: var(--ink);
+  --color-fd-muted: var(--fog);
+  --color-fd-muted-foreground: var(--body);
+  --color-fd-popover: var(--paper);
+  --color-fd-popover-foreground: var(--ink);
+  --color-fd-card: var(--fog);
+  --color-fd-card-foreground: var(--ink);
+  --color-fd-border: var(--hairline);
+  --color-fd-primary: var(--electric);
+  --color-fd-primary-foreground: var(--paper);
+  --color-fd-secondary: var(--fog);
+  --color-fd-secondary-foreground: var(--ink);
+  --color-fd-accent: var(--fog);
+  --color-fd-accent-foreground: var(--ink);
+  --color-fd-ring: var(--electric);
+  --color-fd-success: var(--go);
+  --color-fd-info: var(--electric);
+}
+
+.dark {
+  --electric: #4d68ff;
+  --ink: #f2f1ec;
+  --body: #9aa0a8;
+  --steel: #5f646b;
+  --fog: #16181a;
+  --paper: #101214;
+  --go: #3ecf7a;
+  --rule: #2a2d31;
+  --hairline: #2a2d31;
+}
+
+#nd-sidebar button[data-search-full],
+#nd-sidebar button[aria-haspopup="dialog"] {
+  background: var(--paper);
+}
+
+.dark #nd-sidebar button[data-search-full],
+.dark #nd-sidebar button[aria-haspopup="dialog"] {
+  background: #1c1f22;
+}
+
+.dark #nd-sidebar {
+  --color-fd-muted: #1c1f22;
+  --color-fd-secondary: #1c1f22;
+  --color-fd-border: #34383d;
+}
+
+*,
+*::before,
+*::after {
+  border-radius: 0 !important;
+}
+
+#nd-sidebar button[aria-label="Collapse Sidebar"] {
+  margin-bottom: 0;
+  align-self: center;
+}
+
+.prose {
+  color: var(--body);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.prose :where(h1, h2, h3, h4, strong):not(:where(.not-prose *)) {
+  color: var(--ink);
+}
+
+#nd-page > h1,
+.prose h1:not(:where(.not-prose *)) {
+  font-family: var(--font-display);
+  font-size: 2.125rem;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+}
+
+.prose h2:not(:where(.not-prose *)) {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+  margin-top: 2.5rem;
+}
+
+.prose h3:not(:where(.not-prose *)) {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.prose
+  a:not(
+    :where(
+      .not-prose *,
+      h1 *,
+      h2 *,
+      h3 *,
+      h4 *,
+      h1,
+      h2,
+      h3,
+      h4,
+      [data-card].block,
+      [data-card].block *
+    )
+  ) {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1.5px solid var(--electric);
+}
+
+.prose hr {
+  border-top: 1px solid var(--hairline);
+}
+
+.prose :where(code):not(:where(pre *, .not-prose *)) {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  font-weight: 400;
+  background: var(--fog);
+  color: var(--ink);
+  padding: 0.1em 0.4em;
+  border: none;
+}
+
+.prose :where(code):not(:where(pre *))::before,
+.prose :where(code):not(:where(pre *))::after {
+  content: none;
+}
+
+.prose figure.shiki:not(:where(.not-prose *)) {
+  border: 1px solid var(--hairline);
+  box-shadow: none;
+}
+
+.prose figure.shiki pre {
+  border: none;
+}
+
+.prose pre code {
+  font-family: var(--font-mono);
+  font-size: 0.84375rem;
+  line-height: 1.9;
+}
+
+.prose table {
+  font-size: 0.9375rem;
+}
+
+.prose thead th {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--steel);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.prose tbody td {
+  border-bottom: 1px solid var(--hairline);
+}
+
+#nd-sidebar [data-sidebar-separator],
+#nd-sidebar p.inline-flex,
+#nd-toc > h3,
+#nd-toc h3 {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--steel);
+}
+
+#nd-sidebar {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+}
+
+.dark :where(kbd, .shiki) {
+  box-shadow: none;
+}
+
+.dark #nd-sidebar {
+  --color-fd-border: #34383d;
+}
+
+kbd {
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  padding: 0.25rem 0.5rem;
+  color: var(--body);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1;
+  box-shadow: none;
+}
+
+kbd + kbd {
+  margin-inline-start: 0.125rem;
+}
+
+[data-sidebar-collapsed] {
+  --fd-layout-width: 100vw;
+}
+
+.landing h2 {
+  margin-top: 5rem;
+}

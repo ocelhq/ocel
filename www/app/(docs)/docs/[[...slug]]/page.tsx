@@ -11,18 +11,31 @@ export default async function Page(props: PageProps<"/docs/[[...slug]]">) {
   if (!page) notFound();
 
   const MDX = page.data.body;
+  const components = getMDXComponents({ a: createRelativeLink(source, page) });
+
+  if (page.url === "/docs") {
+    return (
+      <DocsPage
+        full
+        className="max-w-none items-center"
+        tableOfContent={{ enabled: false }}
+        tableOfContentPopover={{ enabled: false }}
+        breadcrumb={{ enabled: false }}
+        footer={{ enabled: false }}
+      >
+        <DocsBody className="landing w-full max-w-4xl pb-24">
+          <MDX components={components} />
+        </DocsBody>
+      </DocsPage>
+    );
+  }
 
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
+    <DocsPage toc={page.data.toc} full={page.data.full} tableOfContent={{ style: "clerk" }}>
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
-        <MDX
-          components={getMDXComponents({
-            // this allows you to link to other pages with relative file paths
-            a: createRelativeLink(source, page),
-          })}
-        />
+        <MDX components={components} />
       </DocsBody>
     </DocsPage>
   );
@@ -38,7 +51,7 @@ export async function generateMetadata(props: PageProps<"/docs/[[...slug]]">): P
   if (!page) notFound();
 
   return {
-    title: page.data.title,
+    title: page.url === "/docs" ? { absolute: "Ocel Docs" } : page.data.title,
     description: page.data.description,
   };
 }

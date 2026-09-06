@@ -8,6 +8,8 @@
     "start": "next start"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
+    "@pierre/diffs": "^1.4.1",
     "@types/mdx": "^2.0.14",
     "fumadocs-core": "^16.15.7",
     "fumadocs-mdx": "^15.4.0",
