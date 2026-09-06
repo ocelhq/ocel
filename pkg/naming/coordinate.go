@@ -19,6 +19,7 @@ const (
 	KindQueue           Kind = "queue"
 	KindLayer           Kind = "layer"
 	KindUploadCompleter Kind = "upload-completer"
+	KindService         Kind = "svc"
 )
 
 var components = map[Kind]string{
@@ -30,6 +31,7 @@ var components = map[Kind]string{
 	KindQueue:           "queue",
 	KindLayer:           "layer",
 	KindUploadCompleter: "upload-completer",
+	KindService:         "service",
 }
 
 func (k Kind) Valid() bool {

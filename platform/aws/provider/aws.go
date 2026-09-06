@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -27,8 +28,10 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
@@ -90,7 +93,11 @@ func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
 func (p *Provider) Serves() []providerkit.LinkType { return deploy.Serves() }
 
 func (p *Provider) Computes() []providerkit.Compute {
-	return []providerkit.Compute{providerkit.ComputeServerless}
+	return []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer}
+}
+
+func (p *Provider) ImageRegistry(ctx context.Context, repositories []string) (providerkit.RegistryTarget, error) {
+	return registry.Resolve(ctx, ecr.NewFromConfig(p.aws), repositories)
 }
 
 func (p *Provider) Region() string { return p.aws.Region }
@@ -161,7 +168,25 @@ func (p *Provider) VerifyGrants(_ context.Context, link providerkit.Link) error 
 }
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPreflight) error {
+	if err := refuseContainersBehindFunctionEdge(pre); err != nil {
+		return err
+	}
 	return p.releases.Preflight(ctx, pre)
+}
+
+func refuseContainersBehindFunctionEdge(pre providerkit.DeployPreflight) error {
+	if pre.Edge != apigateway.Kind {
+		return nil
+	}
+	for _, app := range pre.Plan.Apps {
+		if app.Compute() != providerkit.ComputeContainer {
+			continue
+		}
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"app %s runs as a container, and the %q edge invokes a release's entry function directly, so it has no way to reach one: front this project with an edge that reaches an origin by URL, such as %q, or give %s `compute: \"serverless\"`",
+			app.App, apigateway.Kind, edges.DefaultKind, app.App)
+	}
+	return nil
 }
 
 func (p *Provider) EdgeProgram(ctx context.Context, req providerkit.EdgeProgramRequest) (providerkit.EdgeProgram, error) {

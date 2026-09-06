@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
 const (
@@ -14,8 +16,12 @@ const (
 
 	lambdaServicePrincipal = "lambda.amazonaws.com"
 
+	appRunnerBuildPrincipal = "build.apprunner.amazonaws.com"
+	appRunnerTasksPrincipal = "tasks.apprunner.amazonaws.com"
+
 	lambdaBasicExecutionPolicyARN = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 	lambdaVPCAccessPolicyARN      = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+	appRunnerECRAccessPolicyARN   = "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess"
 )
 
 const (
@@ -34,6 +40,8 @@ const (
 	appSecurityGroupARN = "arn:aws:ec2:*:*:security-group/*"
 	appVPCARN           = "arn:aws:ec2:*:*:vpc/*"
 	appLogGroupARN      = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
+	appServiceARN       = "arn:aws:apprunner:*:*:service/*/*"
+	appRepositoryARN    = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"
 
 	bootstrapEventSourceARN = "arn:aws:lambda:*:*:event-source-mapping:*"
 
@@ -127,9 +135,9 @@ func mergeConditions(conditions ...map[string]any) map[string]any {
 	return merged
 }
 
-func attachedPolicyIsAWSLambdaExecution(resourceTagged bool) map[string]any {
+func attachedPolicyIsAServiceRole(resourceTagged bool) map[string]any {
 	condition := map[string]any{
-		"ArnEquals": map[string]any{"iam:PolicyARN": []string{lambdaBasicExecutionPolicyARN, lambdaVPCAccessPolicyARN}},
+		"ArnEquals": map[string]any{"iam:PolicyARN": []string{lambdaBasicExecutionPolicyARN, lambdaVPCAccessPolicyARN, appRunnerECRAccessPolicyARN}},
 	}
 	if resourceTagged {
 		condition["StringLike"] = map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagPattern}
@@ -138,8 +146,16 @@ func attachedPolicyIsAWSLambdaExecution(resourceTagged bool) map[string]any {
 }
 
 func passedToLambda(resourceTagged bool) map[string]any {
+	return passedTo(lambdaServicePrincipal, resourceTagged)
+}
+
+func passedToAppRunner() map[string]any {
+	return passedTo([]string{appRunnerBuildPrincipal, appRunnerTasksPrincipal}, true)
+}
+
+func passedTo(service any, resourceTagged bool) map[string]any {
 	condition := map[string]any{
-		"StringEquals": map[string]any{"iam:PassedToService": lambdaServicePrincipal},
+		"StringEquals": map[string]any{"iam:PassedToService": service},
 	}
 	if resourceTagged {
 		condition["StringLike"] = map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagPattern}
@@ -294,12 +310,56 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 		{
 			actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			resources: []string{appRoleARN},
-			condition: mergeConditions(attachedPolicyIsAWSLambdaExecution(true), withinAppBoundary(ns)),
+			condition: mergeConditions(attachedPolicyIsAServiceRole(true), withinAppBoundary(ns)),
 		},
 		{
 			actions:   []string{"iam:PassRole"},
 			resources: []string{appRoleARN},
 			condition: passedToLambda(true),
+		},
+		{
+			actions:   []string{"iam:PassRole"},
+			resources: []string{appRoleARN},
+			condition: passedToAppRunner(),
+		},
+		{
+			actions:   []string{"apprunner:CreateService"},
+			resources: []string{appServiceARN},
+			condition: taggedOnCreate(),
+		},
+		{
+			actions: []string{
+				"apprunner:DeleteService",
+				"apprunner:DescribeService",
+				"apprunner:ListOperations",
+				"apprunner:ListTagsForResource",
+				"apprunner:TagResource",
+				"apprunner:UntagResource",
+				"apprunner:UpdateService",
+			},
+			resources: []string{appServiceARN},
+			condition: taggedByOcel(),
+		},
+		{
+			actions:   []string{"ecr:GetAuthorizationToken"},
+			resources: []string{unscopedResource},
+		},
+		{
+			actions: []string{
+				"ecr:BatchCheckLayerAvailability",
+				"ecr:BatchGetImage",
+				"ecr:CompleteLayerUpload",
+				"ecr:CreateRepository",
+				"ecr:DescribeImages",
+				"ecr:DescribeRepositories",
+				"ecr:GetDownloadUrlForLayer",
+				"ecr:InitiateLayerUpload",
+				"ecr:ListTagsForResource",
+				"ecr:PutImage",
+				"ecr:TagResource",
+				"ecr:UploadLayerPart",
+			},
+			resources: []string{appRepositoryARN},
 		},
 		{
 			actions:   []string{"s3:CreateBucket"},
@@ -551,7 +611,7 @@ func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 		{
 			actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			resources: []string{r.bootstrapRole},
-			condition: attachedPolicyIsAWSLambdaExecution(false),
+			condition: attachedPolicyIsAServiceRole(false),
 		},
 		{
 			actions:   []string{"iam:PassRole"},
