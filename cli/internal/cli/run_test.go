@@ -30,7 +30,7 @@ func TestRunRun(t *testing.T) {
 		}
 
 		var stderr bytes.Buffer
-		err := runRun(context.Background(), deps, nil, t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, false, t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
@@ -68,7 +68,7 @@ export default { slug: "test-app" };
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr bytes.Buffer
-		err := runRun(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		t.Run("the child's exit code becomes the command's", func(t *testing.T) {
 			var exitErr *exitsig.ExitError
@@ -129,7 +129,7 @@ export default { slug: "test-app" };
 		leaderDone := make(chan error, 1)
 		var leaderStdout, leaderStderr syncBuffer
 		go func() {
-			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -138,7 +138,7 @@ export default { slug: "test-app" };
 		runAppArgs := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
 
 		var stdout, stderr bytes.Buffer
-		err := runRun(context.Background(), deps, nil, root, runAppArgs, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, false, root, runAppArgs, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
@@ -206,7 +206,7 @@ export default { slug: "test-app" };
 		var stdout, stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runRun(context.Background(), deps, nil, root, []string{"true"}, &stdout, &stderr, strings.NewReader(""))
+			done <- runRun(context.Background(), deps, false, root, []string{"true"}, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		select {

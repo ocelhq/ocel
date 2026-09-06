@@ -21,7 +21,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -159,7 +161,7 @@ func TestDevRefusal(t *testing.T) {
 			Scope: envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}},
 		}
 
-		got := devRefusal(refusal, nil).Error()
+		got := devRefusal(refusal, nil, invocation{name: "dev"}).Error()
 
 		for _, want := range []string{
 			"DATABASE_URL",
@@ -191,7 +193,7 @@ func TestDevRefusal(t *testing.T) {
 			},
 		}
 
-		got := devRefusal(refusal, nil).Error()
+		got := devRefusal(refusal, nil, invocation{name: "dev"}).Error()
 
 		if !strings.Contains(got, "shell") {
 			t.Errorf("refusal = %q, want it to say the key was seen in the environment", got)
@@ -200,14 +202,14 @@ func TestDevRefusal(t *testing.T) {
 			t.Errorf("refusal = %q, want it to disclose no value", got)
 		}
 
-		inFile := devRefusal(refusal, dotfileKeySet(map[string]string{"DATABASE_URL": "postgres://from-the-file"})).Error()
+		inFile := devRefusal(refusal, dotfileKeySet(map[string]string{"DATABASE_URL": "postgres://from-the-file"}), invocation{name: "dev"}).Error()
 		if strings.Contains(inFile, "set in this shell") {
 			t.Errorf("refusal = %q, want no shell hint for a key the file does hold", inFile)
 		}
 	})
 
 	t.Run("it is never given a value it could print", func(t *testing.T) {
-		want := reflect.TypeOf(func(error, map[string]struct{}) error { return nil })
+		want := reflect.TypeOf(func(error, map[string]struct{}, invocation) error { return nil })
 		if got := reflect.TypeOf(devRefusal); got != want {
 			t.Fatalf("devRefusal is %s, want %s: any wider parameter puts a dotfile value in reach of the message", got, want)
 		}
@@ -223,12 +225,48 @@ func TestDevRefusal(t *testing.T) {
 			"API_TOKEN":    "sk-live-must-not-appear",
 		}
 
-		got := devRefusal(refusal, dotfileKeySet(dotfile)).Error()
+		got := devRefusal(refusal, dotfileKeySet(dotfile), invocation{name: "dev"}).Error()
 
 		for _, value := range dotfile {
 			if strings.Contains(got, value) {
 				t.Errorf("refusal = %q, want it to disclose no value from %s", got, dotenv.FileName)
 			}
+		}
+	})
+}
+
+func TestRefusalsNameTheCommandThatRan(t *testing.T) {
+	t.Run("a resource refusal names the command and the flag it was run with", func(t *testing.T) {
+		missing := &resolve.Missing{Resources: []resourceregistry.Entry{
+			{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES},
+		}}
+
+		got := localResourceRefusal(missing, nil, invocation{name: "run", local: true}).Error()
+
+		if !strings.Contains(got, "`ocel run --local` again") {
+			t.Errorf("refusal = %q, want it to name the command that was run", got)
+		}
+		if strings.Contains(got, "ocel dev") {
+			t.Errorf("refusal = %q, want no mention of a command this run never used", got)
+		}
+	})
+
+	t.Run("a variable refusal names the command and the flag it was run with", func(t *testing.T) {
+		t.Setenv("DATABASE_URL", "postgres://from-the-shell")
+
+		refusal := &envgate.Refusal{
+			Problems: []*resourcesv1.VariableProblem{
+				{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
+			},
+		}
+
+		got := devRefusal(refusal, nil, invocation{name: "run", local: true}).Error()
+
+		if !strings.Contains(got, "`ocel run --local` again") {
+			t.Errorf("refusal = %q, want it to name the command that was run", got)
+		}
+		if strings.Contains(got, "`ocel dev`") {
+			t.Errorf("refusal = %q, want the shell hint to name the command that was run", got)
 		}
 	})
 }
@@ -446,7 +484,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
@@ -507,7 +545,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "touch " + startedPath}
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		if err == nil {
 			t.Fatal("runDev = nil, want a refusal")
@@ -544,7 +582,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "touch " + startedPath}
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		if err == nil {
 			t.Fatal("runDev = nil, want a refusal rather than a green gate and a throw at the first read")
@@ -581,7 +619,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
@@ -613,7 +651,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
@@ -656,7 +694,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
@@ -698,7 +736,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
@@ -740,7 +778,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
@@ -779,7 +817,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
@@ -839,7 +877,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
 
 		var stdout, stderr bytes.Buffer
-		err := runRun(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
@@ -875,7 +913,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr bytes.Buffer
-		err := runRun(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
@@ -918,7 +956,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "touch " + startedPath}
 
 		var stdout, stderr bytes.Buffer
-		err := runRun(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		if err == nil {
 			t.Fatal("runRun = nil, want the same refusal `ocel dev` gives")
@@ -955,7 +993,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr syncBuffer
-		err := runRun(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {

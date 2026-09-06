@@ -38,6 +38,8 @@ var (
 	startWatching = watchAndReResolve
 )
 
+var devLocal bool
+
 var devCmd = &cobra.Command{
 	Use:   "dev -- <command> [args...]",
 	Short: "Run your project in development mode",
@@ -51,25 +53,37 @@ var devCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runDev(ctx, newDeps(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDev(ctx, newDeps(), devLocal, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
-func runDev(ctx context.Context, deps cmddeps.Deps, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func init() {
+	devCmd.Flags().BoolVarP(&devLocal, "local", "L", false, "Run with no console: .env alone carries every value and every resource")
+}
+
+type devConsole struct {
+	apiURL    string
+	token     string
+	projectID string
+}
+
+func runDev(ctx context.Context, deps cmddeps.Deps, local bool, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	// TODO: unlike build/deploy, this never calls runtrace.Start, so discovery
 	// below produces no spans or logs and nothing else says so.
-	creds, err := deps.LoadCredentials()
-	if err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &exitsig.ExitError{Code: 1}
+	var creds credentials.Credentials
+	if !local {
+		loaded, err := deps.LoadCredentials()
+		if err != nil {
+			fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first, or `ocel dev --local` to run without one.")
+			return &exitsig.ExitError{Code: 1}
+		}
+		creds = loaded
 	}
 
 	cfg, err := projectconfig.ResolveOptional(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
-
-	apiURL := console.EffectiveBaseURL(creds.APIURL)
 
 	for range 3 {
 		role, err := election.Elect(cfg.Dir)
@@ -81,25 +95,28 @@ func runDev(ctx context.Context, deps cmddeps.Deps, cmd *cobra.Command, cwd stri
 			return runFollower(ctx, deps, role.LeaderAddr, appArgs, stdout, stderr, stdin)
 		}
 
-		binding, err := ensureConsoleBinding(ctx, deps, cfg.Dir, apiURL, stdout, stderr, stdin)
-		if err != nil {
-			return err
+		var link *devConsole
+		if !local {
+			apiURL := console.EffectiveBaseURL(creds.APIURL)
+			bound, bindErr := ensureConsoleBinding(ctx, deps, cfg.Dir, apiURL, stdout, stderr, stdin)
+			if bindErr != nil {
+				return bindErr
+			}
+			link = &devConsole{apiURL: apiURL, token: creds.AccessToken, projectID: bound.ProjectID}
 		}
-		if err := runLeader(ctx, deps, role, creds, apiURL, binding.ProjectID, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, election.ErrLost) {
+		if err := runLeader(ctx, deps, role, link, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, election.ErrLost) {
 			return err
 		}
 	}
 	return errors.New("determine leader/follower role: repeatedly lost the leader election; try again")
 }
 
-func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, link *devConsole, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	file, err := dotenv.Load(cfg.Dir)
 	if err != nil {
 		return err
 	}
 	reportDotfile(stdout, cfg.Dir, file.Values, dotfileWatchedAdvice)
-
-	projectCfg := resolveAccount(ctx, deps, apiURL, creds.AccessToken, projectID, stderr)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -109,8 +126,18 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, c
 	addr := listener.Addr().String()
 	devServerAddr := "http://" + addr
 
-	srv := devserver.New(apiURL, creds.AccessToken, projectID, devServerAddr)
-	srv.UseAccount(projectCfg)
+	run := invocation{name: "dev", local: link == nil}
+
+	var srv *devserver.Server
+	var projectCfg resolve.Account
+	if link == nil {
+		reportLocal(stdout)
+		srv = devserver.NewLocal(devServerAddr, filepath.Join(cfg.Dir, scratchDirName, "blob"))
+	} else {
+		projectCfg = resolveAccount(ctx, deps, link.apiURL, link.token, link.projectID, stderr)
+		srv = devserver.New(link.apiURL, link.token, link.projectID, devServerAddr)
+		srv.UseAccount(projectCfg)
+	}
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
@@ -134,11 +161,11 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, c
 	}
 	defer func() { _ = result.Release() }()
 
-	resolved, err := resolveOnce(ctx, srv, cfg, projectCfg.EnvVars, stdout, stderr)
+	resolved, err := resolveOnce(ctx, srv, cfg, projectCfg.EnvVars, run, stdout, stderr)
 	if err != nil {
 		return err
 	}
-	watching, err := startWatching(background, srv, cfg, projectCfg.EnvVars, stdout, stderr)
+	watching, err := startWatching(background, srv, cfg, projectCfg.EnvVars, run, stdout, stderr)
 	if err != nil {
 		return fmt.Errorf("watch discovery paths: %w", err)
 	}
@@ -160,23 +187,23 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, c
 	return appExitError(ctx, child.wait())
 }
 
-func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, stdout, stderr io.Writer) (map[string]string, error) {
+func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
 	file, err := dotenv.Load(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
 	reportUnreadableLines(stdout, file.Unreadable)
 	srv.UseValues(storeValues(projectEnv, file.Values), envwire.Scope(cfg, false, ""))
-	return discoverAndSync(ctx, srv, cfg, file.Values, stdout, stderr)
+	return discoverAndSync(ctx, srv, cfg, file.Values, run, stdout, stderr)
 }
 
-func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, dotfile map[string]string, stdout, stderr io.Writer) (map[string]string, error) {
+func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, dotfile map[string]string, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
 	if err := srv.Discover(ctx, cfg, stdout, stderr); err != nil {
-		return nil, err
+		return nil, refusedSync(srv, err, dotfile, run)
 	}
 
 	if err := srv.CheckEnv(ctx); err != nil {
-		return nil, devRefusal(err, dotfileKeySet(dotfile))
+		return nil, devRefusal(err, dotfileKeySet(dotfile), run)
 	}
 
 	appFolder := appbuilder.AppFolder(cfg.Apps)
@@ -194,23 +221,41 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 
 	syncResult := <-srv.Sync()
 	if syncResult.Err != nil {
+		if refusal := localResourceRefusal(syncResult.Err, dotfileKeySet(dotfile), run); refusal != nil {
+			return nil, refusal
+		}
 		return nil, fmt.Errorf("sync failed: %w", syncResult.Err)
 	}
 
-	reportLiveValues(stdout, syncResult.LiveKeys)
+	reportLiveValues(stdout, syncResult.LiveKeys, run)
 	return resolvedEnv(syncResult.Account.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, syncResult.DevServerAddress, appFolder), nil
 }
 
-func reportLiveValues(stdout io.Writer, liveKeys []string) {
+func refusedSync(srv *devserver.Server, err error, dotfile map[string]string, run invocation) error {
+	select {
+	case result := <-srv.Sync():
+		if refusal := localResourceRefusal(result.Err, dotfileKeySet(dotfile), run); refusal != nil {
+			return refusal
+		}
+	default:
+	}
+	return err
+}
+
+func reportLiveValues(stdout io.Writer, liveKeys []string, run invocation) {
 	if len(liveKeys) == 0 {
 		return
 	}
 	keys := slices.Clone(liveKeys)
 	slices.Sort(keys)
-	fmt.Fprintf(stdout, "resolved %s once, at startup. Deployed, a rotated value is picked up within a bounded window; here, restart `ocel dev` to pick one up.\n", strings.Join(keys, ", "))
+	if run.local {
+		fmt.Fprintf(stdout, "resolved %s from %s, like every other value. Deployed, a rotated value is picked up within a bounded window.\n", strings.Join(keys, ", "), dotenv.FileName)
+		return
+	}
+	fmt.Fprintf(stdout, "resolved %s once, at startup. Deployed, a rotated value is picked up within a bounded window; here, restart `%s` to pick one up.\n", strings.Join(keys, ", "), run.command())
 }
 
-func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, stdout, stderr io.Writer) (*watcher.Watcher, error) {
+func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, run invocation, stdout, stderr io.Writer) (*watcher.Watcher, error) {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("resolve watch directories: %w", err)
@@ -225,7 +270,7 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 
 	return watcher.Start(ctx, watcher.Config{Set: set, Debounce: watchDebounce, OnChange: func() {
 		srv.ResetManifest()
-		resolved, err := resolveOnce(ctx, srv, cfg, projectEnv, stdout, stderr)
+		resolved, err := resolveOnce(ctx, srv, cfg, projectEnv, run, stdout, stderr)
 		if err != nil {
 			if ctx.Err() == nil {
 				fmt.Fprintln(stderr, "re-resolve failed:", err)
@@ -355,6 +400,8 @@ func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []
 func localURL(port string) string {
 	return "http://localhost:" + cmp.Or(port, os.Getenv(portEnv), defaultDevPort)
 }
+
+const scratchDirName = ".ocel"
 
 const portEnv = "PORT"
 
