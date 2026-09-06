@@ -137,8 +137,11 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 	if task["taskRoleArn"].StringValue() == "" {
 		t.Error("an app granted a link runs without a task role, so the grant reaches nothing")
 	}
+	if !task["containerDefinitions"].IsSecret() {
+		t.Fatal("containerDefinitions is not a secret, so every delivered value would sit in the state checkpoint in the clear")
+	}
 	var definitions []containerDefinition
-	if err := json.Unmarshal([]byte(task["containerDefinitions"].StringValue()), &definitions); err != nil || len(definitions) != 1 {
+	if err := json.Unmarshal([]byte(task["containerDefinitions"].SecretValue().Element.StringValue()), &definitions); err != nil || len(definitions) != 1 {
 		t.Fatalf("containerDefinitions = %v, want one container: %v", task["containerDefinitions"], err)
 	}
 	held := definitions[0]
@@ -165,6 +168,9 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 	rule := recordedOf(t, rec, "aws:lb/listenerRule:ListenerRule")
 	if rule["listenerArn"].StringValue() != fixtureListener {
 		t.Errorf("listenerArn = %v, want the substrate's listener", rule["listenerArn"])
+	}
+	if priority := rule["priority"].NumberValue(); priority < 1 || priority > maxRulePriority || priority != float64(rulePriority("shop-prod-web-container-r3f8a1c90")) {
+		t.Errorf("priority = %v, want one derived from the service name: two releases stood up at once must not both take the next free slot", priority)
 	}
 	demanded := map[string]string{}
 	for _, condition := range rule["conditions"].ArrayValue() {

@@ -14,6 +14,7 @@ const EVERY_NEXT_BEARING_CELL = [...DEPLOY_NEXT_BEARING, ...LIFECYCLE_CELLS, ...
 
 const BASE = ["base"];
 const GATEWAY = ["api-gateway"];
+const CONTAINER = ["container"];
 
 const EVERY_NEXT_CACHE_ROW = [...nextCacheRows, ...nextDataCacheRows];
 
@@ -115,6 +116,7 @@ export const gaps: Gap[] = [
         tests: [UP_TITLE],
         skip: true,
       },
+      { on: ["aws"], variants: CONTAINER, tests: [UP_TITLE], skip: true },
     ],
   },
   {

@@ -97,7 +97,6 @@ describe("what a run selects", () => {
       "deploy/node-api-gateway",
     ]);
     expect(cellsOf({ ...FULL, [FIXTURES_ENV]: "deploy/node" })).toEqual([
-      "deploy/node-container",
       "deploy/node-api-gateway",
     ]);
   });
@@ -140,12 +139,12 @@ describe("what a run selects", () => {
       ...FULL,
       [FIXTURES_ENV]: "deploy/next",
     });
-    expect(Object.keys(skipped)).toEqual(["deploy/next"]);
+    expect(Object.keys(skipped)).toEqual(["deploy/next", "deploy/next-container"]);
     expect(skipped["deploy/next"]?.map((gap) => gap.issue)).toEqual([923]);
     const narrowed = selectionFor(AWS, "aws", {
       ...FULL,
       [FIXTURES_ENV]: "deploy/next",
-      [VARIANTS_ENV]: "container",
+      [VARIANTS_ENV]: "cloudflare",
     });
     expect(narrowed.skipped).toEqual({});
   });

@@ -191,6 +191,7 @@ export default defineConfig({
   apps: base.apps?.map((app) => ({
     ...app,
     compute: "container",
+    runtime: undefined,
     ...(hostnames[app.name] ? { domains: { production: hostnames[app.name] } } : {}),
   })),
 });

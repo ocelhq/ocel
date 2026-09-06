@@ -62,6 +62,8 @@ type Releaser struct {
 
 	mu     sync.Mutex
 	opened map[Scope]*release
+
+	substrates sync.Mutex
 }
 
 type release struct {
@@ -245,7 +247,8 @@ func (r *release) Decode(ctx context.Context, plan providerkit.StackPlan, output
 		work.outputs = outputs
 		return providerkit.StackResult{}, nil
 	}
-	if _, held := plan.Options.(*substrateWork); held {
+	if work, held := plan.Options.(*substrateWork); held {
+		work.outputs = outputs
 		return providerkit.StackResult{}, nil
 	}
 	if work, held := plan.Options.(*containerWork); held {
@@ -446,13 +449,12 @@ func (r *Releaser) Destroy(ctx context.Context, ref providerkit.StackRef, report
 	if err := held.adapter.Destroy(ctx, ref, report); err != nil {
 		return err
 	}
-	if err := r.releaseSubstrate(ctx, ref, report); err != nil {
-		return err
+	if held.cfg.Tags != nil {
+		if err := held.cfg.Tags.SweepTagClock(ctx, naming.Sanitize(ref.Project), ref.Name); err != nil {
+			return err
+		}
 	}
-	if held.cfg.Tags == nil {
-		return nil
-	}
-	return held.cfg.Tags.SweepTagClock(ctx, naming.Sanitize(ref.Project), ref.Name)
+	return r.releaseSubstrate(ctx, held.cfg.Records, ref, report)
 }
 
 func (r *Releaser) Inspect(ctx context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
