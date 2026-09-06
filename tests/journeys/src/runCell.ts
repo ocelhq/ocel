@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, it } from "bun:test";
 import assert from "node:assert/strict";
-import { type ContractRow, INITIAL_GREETING, REDEPLOY_GREETING, secretGuarded } from "./contract";
+import {
+  type ContractContext,
+  type ContractRow,
+  INITIAL_GREETING,
+  REDEPLOY_GREETING,
+  secretGuarded,
+} from "./contract";
 import { evidence } from "./evidence";
 import { currentRunIdentity, projectSlug } from "./identity";
 import { ledgerFor } from "./ledger";
@@ -133,24 +139,30 @@ function describeSelected({ name, fixture, variant }: Cell) {
     }
   });
 
-  function contractContext(app: string, leg: Leg) {
+  async function underContract(
+    app: string,
+    leg: Leg,
+    work: (ctx: ContractContext) => Promise<void>,
+  ) {
     assert.ok(deployment, "the contract ran before the cell came up");
-    return {
+    const guard = secretGuarded(deployment.fetch);
+    await work({
       app,
       baseUrl: deployment.baseUrl(app),
       greeting,
       largeBodyBytes: target.largeBodyBytes,
       leg,
       notes,
-      fetch: secretGuarded(deployment.fetch),
-    };
+      fetch: guard.fetch,
+    });
+    await guard.settle();
   }
 
   function contractLeg(leg: Leg, app: string, rowsForLeg: ContractRow[]) {
     for (const row of rowsForLeg) {
       testIn(cellKey(name, app), contractTitle(leg, row.title), async () => {
         await bringUp();
-        await row.run(contractContext(app, leg));
+        await underContract(app, leg, (ctx) => row.run(ctx));
       });
     }
   }
@@ -159,7 +171,7 @@ function describeSelected({ name, fixture, variant }: Cell) {
     for (const row of consumeRows) {
       testIn(cellKey(name, app), ladderConsumeTitle(leg, row.title), async () => {
         await triggerBeforeUp();
-        await row.run(cell, contractContext(app, leg));
+        await underContract(app, leg, (ctx) => row.run(cell, ctx));
       });
     }
   }
