@@ -30,6 +30,7 @@ const targetOf: Record<ExpectationEnvironment, TargetName> = {
   aws: "aws",
   "aws.floci": "aws",
   dev: "dev",
+  "dev-local": "dev-local",
   vps: "vps",
   "vps.incus": "vps",
 };

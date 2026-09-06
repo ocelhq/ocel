@@ -67,6 +67,7 @@ export function shapeFor(cell: CellContext, target: TargetName, env: NodeJS.Proc
     case "vps":
       return { base: VPS_BASE, slug: cell.slug, hostnames: hostnamesOf(cell, journeyZone(env)) };
     case "dev":
+    case "dev-local":
       return { base: AWS_BASE, slug: cell.slug };
   }
 }

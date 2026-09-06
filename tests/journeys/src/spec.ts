@@ -34,7 +34,7 @@ export type { Compute };
 
 export type Group = { concern: Concern; name: string; preferred: string };
 
-export type TargetName = "dev" | "aws" | "vps";
+export type TargetName = "dev" | "dev-local" | "aws" | "vps";
 
 export type Leg = "up" | "contract" | "redeploy" | "rollback" | "destroy";
 
@@ -109,7 +109,7 @@ export const spec: FixtureSpec[] = [
     rows: SERVED,
     apps: ["web"],
     legs: SERVES,
-    base: ["dev", "vps"],
+    base: ["dev", "dev-local", "vps"],
     variants: HTTP_VARIANTS,
   },
   {
@@ -182,7 +182,7 @@ export const spec: FixtureSpec[] = [
     rows: STORED,
     apps: ["web"],
     legs: SERVES,
-    base: ["dev", "vps"],
+    base: ["dev", "dev-local", "vps"],
     variants: HTTP_VARIANTS,
   },
   {

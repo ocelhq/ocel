@@ -25,7 +25,7 @@ export const gaps: Gap[] = [
     issue: 898,
     affects: [
       {
-        on: ["dev"],
+        on: ["dev", "dev-local"],
         cells: NEXT_CELLS,
         tests: [{ rows: EVERY_NEXT_CACHE_ROW, legs: ["contract"] }],
       },

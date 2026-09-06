@@ -1,21 +1,15 @@
-import { type ChildProcess, spawn } from "node:child_process";
-import { access, rm } from "node:fs/promises";
-import { createServer } from "node:net";
+import { rm } from "node:fs/promises";
 import path from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { applyConsoleEnvDefaults, consoleUrl, HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
 import { JOURNEY_CONFIG } from "../config";
-import { INITIAL_GREETING, redact, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
+import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { isStranded } from "../identity";
-import { live, relay } from "../live";
 import { runOcel, treeRoot, workTree } from "../ocel";
-import { ocelBin } from "../paths";
 import { migrates, setsEnv } from "../rows";
-import { appCommand, appHomes, migrateCommand, stateComplaint } from "../workspace";
+import { appCommand, migrateCommand } from "../workspace";
+import { baseUrls, type Standing, serve, stateStaysHome, stopStanding } from "./devShared";
 import type { CellContext, Deployment, Target } from "./types";
-
-const HEALTH_TIMEOUT_MS = 120_000;
 
 const START_CONSOLE = [
   "docker compose up -d postgres ocel-cloud minio",
@@ -23,30 +17,9 @@ const START_CONSOLE = [
   "pnpm --filter @console/web dev",
 ].join(" && ");
 
-type Running = { app: string; port: number; child: ChildProcess; output: () => string };
-
-type Standing = { dir: string; apps: Running[] };
-
 const running = new Map<string, Standing>();
 
 let seeded: Promise<string> | undefined;
-
-async function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.unref();
-    server.on("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      if (typeof address !== "object" || address === null) {
-        reject(new Error("could not read the port the kernel handed out"));
-        return;
-      }
-      const { port } = address;
-      server.close(() => resolve(port));
-    });
-  });
-}
 
 async function guard(): Promise<ExpectationEnvironment> {
   const url = `${consoleUrl()}/api/projects`;
@@ -89,69 +62,6 @@ function childEnv(token: string): NodeJS.ProcessEnv {
   return env;
 }
 
-async function waitForHealth(url: string, cell: Running): Promise<void> {
-  const deadline = Date.now() + HEALTH_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    if (cell.child.exitCode !== null || cell.child.signalCode !== null) {
-      throw new Error(`ocel dev exited before ${url} answered:\n${redact(cell.output())}`);
-    }
-    try {
-      const res = await fetch(url);
-      if (res.ok) {
-        return;
-      }
-    } catch {}
-    await delay(500);
-  }
-  throw new Error(`${url} never became healthy:\n${redact(cell.output())}`);
-}
-
-async function serve(
-  cell: CellContext,
-  dir: string,
-  env: NodeJS.ProcessEnv,
-  app: string,
-): Promise<Running> {
-  const port = await freePort();
-  const child = spawn(ocelBin, ["dev", "--", ...appCommand(cell.fixture, app)], {
-    cwd: dir,
-    env: { ...env, PORT: String(port) },
-    detached: true,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  let captured = "";
-  const capture = (chunk: Buffer) => {
-    captured += String(chunk);
-  };
-  child.stdout?.on("data", capture);
-  child.stderr?.on("data", capture);
-  const say = live(`${cell.name} up/dev-${app} |`);
-  relay(child.stdout, say);
-  relay(child.stderr, say);
-
-  const handle: Running = { app, port, child, output: () => captured };
-  try {
-    await waitForHealth(`http://127.0.0.1:${port}/health`, handle);
-  } finally {
-    await cell.evidence.write("up", `dev-${app}.log`, captured);
-  }
-  return handle;
-}
-
-async function stateStaysHome(cell: CellContext, dir: string): Promise<void> {
-  const holding: string[] = [];
-  for (const candidate of [dir, ...appHomes(cell.fixture).map((home) => path.join(dir, home))]) {
-    try {
-      await access(path.join(candidate, ".ocel"));
-      holding.push(candidate);
-    } catch {}
-  }
-  const complaint = stateComplaint(dir, holding);
-  if (complaint) {
-    throw new Error(complaint);
-  }
-}
-
 async function up(cell: CellContext): Promise<Deployment> {
   const token = await accessToken();
   const dir = await workTree(cell, "dev");
@@ -184,7 +94,11 @@ async function up(cell: CellContext): Promise<Deployment> {
   running.set(cell.slug, standing);
   const urls = new Map<string, string>();
   for (const app of cell.fixture.apps) {
-    const handle = await serve(cell, dir, env, app);
+    const handle = await serve(cell, dir, env, app, [
+      "dev",
+      "--",
+      ...appCommand(cell.fixture, app),
+    ]);
     standing.apps.push(handle);
     urls.set(app, `http://127.0.0.1:${handle.port}`);
   }
@@ -197,38 +111,15 @@ async function up(cell: CellContext): Promise<Deployment> {
   );
 
   return {
-    baseUrl: (app) => {
-      const url = urls.get(app);
-      if (!url) {
-        throw new Error(`${cell.name} has no app named ${app} on dev`);
-      }
-      return url;
-    },
+    baseUrl: baseUrls(cell, urls, "dev"),
     fetch: (...args) => fetch(...args),
   };
-}
-
-async function stop(handle: Running): Promise<void> {
-  const { child } = handle;
-  if (!child.pid || child.exitCode !== null) {
-    return;
-  }
-  try {
-    process.kill(-child.pid, "SIGTERM");
-  } catch {}
-  await delay(500);
-  try {
-    process.kill(-child.pid, "SIGKILL");
-  } catch {}
 }
 
 async function destroy(cell: CellContext): Promise<void> {
   const standing = running.get(cell.slug);
   if (standing) {
-    for (const handle of standing.apps) {
-      await stop(handle);
-      await cell.evidence.write("destroy", `dev-${handle.app}.log`, handle.output());
-    }
+    await stopStanding(cell, standing);
     await rm(treeRoot(cell, "dev"), { recursive: true, force: true });
     running.delete(cell.slug);
   }

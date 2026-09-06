@@ -28,8 +28,15 @@ export type ContractRow = {
   run: (ctx: ContractContext) => Promise<void>;
 };
 
+const PASSWORD_IN_URL = /(:\/\/[^\s/@:]+:)[^\s/@]+@/g;
+const PASSWORD_IN_JSON = /("password"\s*:\s*)"(?:[^"\\]|\\.)*"/g;
+
 export function redact(text: string): string {
-  return text.split(SECRET_TOKEN).join(REDACTED);
+  return text
+    .split(SECRET_TOKEN)
+    .join(REDACTED)
+    .replace(PASSWORD_IN_URL, `$1${REDACTED}@`)
+    .replace(PASSWORD_IN_JSON, `$1"${REDACTED}"`);
 }
 
 function requestUrl(input: Parameters<Fetch>[0]): string {

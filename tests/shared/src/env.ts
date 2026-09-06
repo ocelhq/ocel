@@ -1,5 +1,7 @@
 export const DEFAULT_DATABASE_URL = "postgres://postgres:postgres@localhost:5432/postgres";
 
+export const DEFAULT_LOCAL_POSTGRES_URL = "postgres://postgres:postgres@localhost:5433/postgres";
+
 export const HARNESS_ONLY_ENV = [
   "DATABASE_URL",
   "OCEL_RESOURCE_POSTGRES_main",
@@ -20,6 +22,10 @@ export function postgresLink(name: string, url: string): string {
       password: decodeURIComponent(parsed.password),
     },
   });
+}
+
+export function localPostgresUrl(): string {
+  return process.env.OCEL_CLOUD_ADMIN_URL ?? DEFAULT_LOCAL_POSTGRES_URL;
 }
 
 export function consoleUrl(): string {
