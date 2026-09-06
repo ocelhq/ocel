@@ -214,11 +214,11 @@ describe("the gap list", () => {
     assert.deepEqual(issues(listed, "sdk/with-pulumi-api-gateway/web", UP_TITLE), [856]);
   });
 
-  it("lists dev at destroy on both buckets, and up and the upload row on the sdk one alone", () => {
+  it("lists dev at up and the upload row on the sdk bucket alone, and nothing at destroy", () => {
     const listed = expectationsFor("dev");
     for (const [name, cell] of Object.entries(listed)) {
       assert.deepEqual(issues(listed, name, UP_TITLE), name.startsWith("sdk/") ? [881] : [], name);
-      assert.deepEqual(issues(listed, name, DESTROY_TITLE), [877], name);
+      assert.deepEqual(issues(listed, name, DESTROY_TITLE), [], name);
       assert.ok(!(contractTitle("redeploy", UPLOAD) in cell), name);
     }
     assert.deepEqual(issues(listed, "sdk/node/web", UPLOAD), [882]);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { REDACTED } from "../contract";
-import { boxEnvironment, issuedByTheBox, recordFile, slugsOf, ssh, strandedSlugs } from "./vps";
+import { boxEnvironment, issuedByTheBox, recordFile, slugsOf, ssh } from "./vps";
 
 const IDENTITY = "/nonexistent/ocel-journey-identity";
 
@@ -63,26 +63,6 @@ describe("slugsOf", () => {
     expect(() => slugsOf("no-records-tier\n")).toThrow(
       /records\/projects\/production does not exist/,
     );
-  });
-});
-
-describe("strandedSlugs", () => {
-  const slugs = ["ocelhq", "j-local-ada-node", "j-42-node", "j-4242-node"];
-
-  it("leaves projects that are not the harness's alone", () => {
-    expect(strandedSlugs(slugs, "42")).not.toContain("ocelhq");
-  });
-
-  it("leaves this run's own projects standing", () => {
-    expect(strandedSlugs(slugs, "42")).toEqual(["j-local-ada-node", "j-4242-node"]);
-  });
-
-  it("takes every harness project when the run identity matches none", () => {
-    expect(strandedSlugs(slugs, "local-bob")).toEqual([
-      "j-local-ada-node",
-      "j-42-node",
-      "j-4242-node",
-    ]);
   });
 });
 

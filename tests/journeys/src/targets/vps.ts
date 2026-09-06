@@ -7,7 +7,7 @@ import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
 import { JOURNEY_CONFIG, journeyZone } from "../config";
 import { INITIAL_GREETING, REDACTED, redact, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
-import { appHostname, HARNESS_PREFIX } from "../identity";
+import { appHostname, HARNESS_PREFIX, isStranded } from "../identity";
 import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
 import { migrates, setsEnv } from "../rows";
@@ -82,11 +82,6 @@ export function slugsOf(listing: string): string[] {
     .map((line) => line.trim().split("/").pop() ?? "")
     .filter((name) => name.endsWith(".rec"))
     .map((name) => decodeURIComponent(name.slice(0, -".rec".length)));
-}
-
-export function strandedSlugs(slugs: string[], runId: string): string[] {
-  const mine = `${HARNESS_PREFIX}${runId}-`;
-  return slugs.filter((slug) => slug.startsWith(HARNESS_PREFIX) && !slug.startsWith(mine));
 }
 
 export function sshRefusal(target: Box, login: string, command: string, error: unknown): Error {
@@ -388,7 +383,7 @@ async function sweep(runId: string): Promise<void> {
         "reclaim a real box by naming what to destroy yourself",
     );
   }
-  const stranded = strandedSlugs(await list(), runId);
+  const stranded = (await list()).filter((slug) => isStranded(slug, runId));
   for (const slug of stranded) {
     const dir = await boxConfig(path.join(outputRoot, "vps", "sweep", slug), slug, DEPLOY_LOGIN);
     await ocel(dir, ["destroy", "production", "--yes"], boxEnv(DEPLOY_LOGIN));

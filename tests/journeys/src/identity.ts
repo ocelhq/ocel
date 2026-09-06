@@ -22,6 +22,10 @@ export function projectSlug(cell: string, run: string): string {
   return `${HARNESS_PREFIX}${run}-${slugPart(cell)}`;
 }
 
+export function isStranded(slug: string, runId: string): boolean {
+  return slug.startsWith(HARNESS_PREFIX) && !slug.startsWith(`${HARNESS_PREFIX}${runId}-`);
+}
+
 const LONGEST_LABEL = 63;
 
 export function appHostname(

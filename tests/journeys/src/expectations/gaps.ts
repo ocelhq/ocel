@@ -1,4 +1,4 @@
-import { DESTROY_TITLE, UP_TITLE } from "../plan";
+import { UP_TITLE } from "../plan";
 import { LINK_QUERY_ROW, LINK_ROW, nextCacheRows, nextDataCacheRows, UPLOAD_ROW } from "../rows";
 import type { Gap } from "./types";
 
@@ -24,12 +24,6 @@ export const gaps: Gap[] = [
     reason: "ocel env set demands a provider, so dev cannot deliver GREETING or SECRET_TOKEN",
     issue: 881,
     affects: [{ on: ["dev"], cells: SDK_CELLS, tests: [UP_TITLE], skip: true }],
-  },
-  {
-    id: "no-project-delete",
-    reason: "the console has no project delete, so destroy leaves the project behind",
-    issue: 877,
-    affects: [{ on: ["dev"], tests: [DESTROY_TITLE] }],
   },
   {
     id: "dev-upload-key-namespaced",
