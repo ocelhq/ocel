@@ -38,7 +38,7 @@ function Compare(props: ComponentProps<"div">) {
   return (
     <div
       {...props}
-      className="not-prose my-4 grid overflow-hidden border border-(--hairline) md:grid-cols-2 [&>figure]:my-0 [&>figure]:border-0 [&>figure]:shadow-none [&>figure+figure>div:first-child>*]:invisible"
+      className="not-prose my-6 grid overflow-hidden border border-(--hairline) md:grid-cols-2 [&>figure]:my-0 [&>figure]:border-0 [&>figure]:shadow-none max-md:[&>figure+figure>div:first-child]:hidden md:[&>figure+figure>div:first-child>*]:invisible"
     />
   );
 }

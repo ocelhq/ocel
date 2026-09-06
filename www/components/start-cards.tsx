@@ -3,7 +3,7 @@ import { Card, Cards } from "fumadocs-ui/components/card";
 
 export function StartCards() {
   return (
-    <Cards className="gap-4 lg:grid-cols-3">
+    <Cards className="gap-4 lg:grid-cols-3 max-lg:[&>a:last-child:nth-child(odd)]:col-span-full">
       <Card
         icon={<RocketLaunchIcon />}
         title="Quick start"

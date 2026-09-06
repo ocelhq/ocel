@@ -7,10 +7,10 @@ export function Hero() {
   return (
     <section className="not-prose flex flex-col gap-8 border-b border-(--hairline) pt-4 pb-12 lg:flex-row lg:items-center lg:justify-between lg:gap-12">
       <div className="max-w-2xl">
-        <h1 className="font-display text-[2.5rem] font-bold leading-tight tracking-[-0.035em] text-(--ink)">
-          Ocel documentation
+        <h1 className="text-balance font-display text-[2.5rem] font-semibold leading-[1.1] tracking-[-0.035em] text-(--ink)">
+          Ocel Documentation
         </h1>
-        <p className="mt-4 text-lg leading-normal text-(--body)">
+        <p className="mt-5 max-w-[34ch] text-lg leading-[1.55] text-(--body)">
           Ocel deploys{" "}
           <Link href="/docs/nextjs" className={inline}>
             apps
@@ -28,7 +28,7 @@ export function Hero() {
           Deploy now
         </Link>
       </div>
-      <OverviewDiagram className="order-first w-full max-w-[24rem] shrink-0 self-center lg:order-none lg:self-auto" />
+      <OverviewDiagram className="order-first w-full max-w-[20rem] shrink-0 self-start lg:order-none lg:self-auto" />
     </section>
   );
 }

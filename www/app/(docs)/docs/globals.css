@@ -104,6 +104,11 @@
   line-height: 1.25;
   letter-spacing: -0.03em;
   margin-top: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.prose :is(h1, h2, h3):not(:where(.not-prose *)) {
+  text-wrap: balance;
 }
 
 .prose h3:not(:where(.not-prose *)) {
@@ -130,6 +135,7 @@
     )
   ) {
   color: var(--ink);
+  font-weight: 400;
   text-decoration: none;
   border-bottom: 1.5px solid var(--electric);
 }
@@ -162,10 +168,38 @@
   border: none;
 }
 
+.prose figure.shiki pre,
 .prose pre code {
   font-family: var(--font-mono);
   font-size: 0.84375rem;
   line-height: 1.9;
+}
+
+.prose figure.shiki figcaption {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--steel);
+}
+
+.prose [role="tablist"] {
+  gap: 1.25rem;
+}
+
+.prose [role="tab"] {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--body);
+  padding-block: 0.875rem;
+}
+
+.prose [role="tab"][data-state="active"] {
+  color: var(--ink);
 }
 
 .prose table {
@@ -230,6 +264,19 @@ kbd + kbd {
   --fd-layout-width: 100vw;
 }
 
-.landing h2 {
+.prose.landing h2:not(:where(.not-prose *)) {
   margin-top: 5rem;
+}
+
+.landing > :is(p, h2, h3, ul, ol, blockquote) {
+  max-width: 35rem;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--electric) 18%, transparent);
+  color: var(--ink);
+}
+
+.landing > :is(div:has(> [role="tablist"]), .shiki) {
+  margin-block: 1.5rem;
 }
