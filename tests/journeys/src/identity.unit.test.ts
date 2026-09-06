@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { appHostname, projectSlug, runIdentity } from "./identity";
+import { appHostname, isStranded, projectSlug, runIdentity } from "./identity";
 
 describe("run identity", () => {
   it("is the GitHub run id in CI", () => {
@@ -18,6 +18,29 @@ describe("run identity", () => {
 describe("project slug", () => {
   it("carries the run id behind the sweep prefix", () => {
     expect(projectSlug("node", "local-ada")).toBe("j-local-ada-node");
+  });
+});
+
+describe("isStranded", () => {
+  const slugs = ["ocelhq", "j-local-ada-node", "j-42-node", "j-4242-node"];
+
+  it("leaves projects that are not the harness's alone", () => {
+    expect(slugs.filter((slug) => isStranded(slug, "42"))).not.toContain("ocelhq");
+  });
+
+  it("leaves this run's own projects standing", () => {
+    expect(slugs.filter((slug) => isStranded(slug, "42"))).toEqual([
+      "j-local-ada-node",
+      "j-4242-node",
+    ]);
+  });
+
+  it("takes every harness project when the run identity matches none", () => {
+    expect(slugs.filter((slug) => isStranded(slug, "local-bob"))).toEqual([
+      "j-local-ada-node",
+      "j-42-node",
+      "j-4242-node",
+    ]);
   });
 });
 

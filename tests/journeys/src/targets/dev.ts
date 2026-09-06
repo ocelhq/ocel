@@ -7,6 +7,7 @@ import { applyConsoleEnvDefaults, consoleUrl, HARNESS_ONLY_ENV } from "@ocel-tes
 import { JOURNEY_CONFIG } from "../config";
 import { INITIAL_GREETING, redact, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
+import { isStranded } from "../identity";
 import { live, relay } from "../live";
 import { runOcel, treeRoot, workTree } from "../ocel";
 import { ocelBin } from "../paths";
@@ -216,26 +217,23 @@ async function stop(handle: Running): Promise<void> {
 
 async function destroy(cell: CellContext): Promise<void> {
   const standing = running.get(cell.slug);
-  if (!standing) {
-    return;
+  if (standing) {
+    for (const handle of standing.apps) {
+      await stop(handle);
+      await cell.evidence.write("destroy", `dev-${handle.app}.log`, handle.output());
+    }
+    await rm(treeRoot(cell, "dev"), { recursive: true, force: true });
+    running.delete(cell.slug);
   }
-  for (const handle of standing.apps) {
-    await stop(handle);
-    await cell.evidence.write("destroy", `dev-${handle.app}.log`, handle.output());
-  }
-  await rm(treeRoot(cell, "dev"), { recursive: true, force: true });
-}
-
-async function answering(port: number): Promise<boolean> {
-  try {
-    const res = await fetch(`http://127.0.0.1:${port}/health`);
-    return res.ok;
-  } catch {
-    return false;
+  const project = (await consoleProjects()).find((found) => found.slug === cell.slug);
+  if (project) {
+    await deleteConsoleProject(project);
   }
 }
 
-async function consoleProjects(): Promise<string[]> {
+type ConsoleProject = { id: string; slug: string };
+
+async function consoleProjects(): Promise<ConsoleProject[]> {
   const token = await accessToken();
   const res = await fetch(`${consoleUrl()}/api/projects`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -243,20 +241,38 @@ async function consoleProjects(): Promise<string[]> {
   if (!res.ok) {
     throw new Error(`the console answered ${res.status} listing this account's projects`);
   }
-  const projects = (await res.json()) as Array<{ slug: string }>;
-  return projects.map((project) => project.slug);
+  return (await res.json()) as ConsoleProject[];
+}
+
+async function deleteConsoleProject(project: ConsoleProject): Promise<void> {
+  const token = await accessToken();
+  const res = await fetch(`${consoleUrl()}/api/projects/${project.id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`the console answered ${res.status} deleting the project ${project.slug}`);
+  }
+}
+
+async function sweep(runId: string): Promise<void> {
+  const projects = await consoleProjects();
+  const stranded = projects.filter((project) => isStranded(project.slug, runId));
+  for (const project of stranded) {
+    await deleteConsoleProject(project);
+  }
+
+  const left = new Set(await list());
+  const standing = stranded.filter((project) => left.has(project.slug)).map(({ slug }) => slug);
+  if (standing.length > 0) {
+    throw new Error(
+      `the dev sweep deleted ${standing.join(", ")} and the console still lists them`,
+    );
+  }
 }
 
 async function list(): Promise<string[]> {
-  const live = new Set(await consoleProjects());
-  for (const [slug, standing] of running) {
-    for (const handle of standing.apps) {
-      if (await answering(handle.port)) {
-        live.add(slug);
-      }
-    }
-  }
-  return [...live];
+  return (await consoleProjects()).map((project) => project.slug);
 }
 
 export const devTarget: Target = {
@@ -274,6 +290,6 @@ export const devTarget: Target = {
   destroy,
   list,
   stands: async (slug) => (await list()).includes(slug),
-  sweep: async () => {},
+  sweep,
   sweepOwn: async () => {},
 };

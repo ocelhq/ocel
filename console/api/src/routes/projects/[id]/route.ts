@@ -1,7 +1,11 @@
-import { getSessionUserId, verifyOrganizationMembership } from "@console/auth";
+import {
+  getActiveOrganizationSession,
+  getSessionUserId,
+  verifyOrganizationMembership,
+} from "@console/auth";
 import { db } from "@console/db";
 import { project } from "@console/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 export async function getProjectById(request: Request, id: string): Promise<Response> {
   const userId = await getSessionUserId(request.headers);
@@ -21,4 +25,22 @@ export async function getProjectById(request: Request, id: string): Promise<Resp
   }
 
   return Response.json(found, { status: 200 });
+}
+
+export async function deleteProject(request: Request, id: string): Promise<Response> {
+  const session = await getActiveOrganizationSession(request.headers);
+  if (!session) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const [deleted] = await db
+    .delete(project)
+    .where(and(eq(project.id, id), eq(project.organizationId, session.activeOrganizationId)))
+    .returning({ id: project.id });
+
+  if (!deleted) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  return new Response(null, { status: 204 });
 }
