@@ -245,6 +245,22 @@ export const nextRoutingRows: ContractRow[] = [
     },
   },
   {
+    title: "the proxy sets three cookies on separate lines and the same render reads them",
+    run: async (ctx) => {
+      const res = await ctx.fetch(`${ctx.baseUrl}/mw/cookies`);
+      assert.equal(res.status, 200);
+      const lines = res.headers.getSetCookie();
+      assert.deepEqual(
+        lines.map((line) => line.split("=")[0]),
+        ["ocel-mw-1", "ocel-mw-2", "ocel-mw-3"],
+        `three cookies arrived as ${JSON.stringify(lines)}`,
+      );
+      const html = await res.text();
+      assert.equal(marker(html, "page"), "mw:cookies");
+      assert.equal(marker(html, "cookie:mw-2"), "value-2");
+    },
+  },
+  {
     title: "the stream page sends its shell before its deferred body",
     run: async (ctx) => {
       const res = await ctx.fetch(`${ctx.baseUrl}/stream`);
