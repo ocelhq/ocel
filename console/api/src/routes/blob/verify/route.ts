@@ -3,17 +3,12 @@ import { db } from "@console/db";
 import { uploadSession } from "@console/db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { verifyUpload } from "../signing";
+import { signedFileSchema, verifyUpload } from "../signing";
 
 const verifyUploadSchema = z.object({
   sessionId: z.string().min(1),
   signature: z.string().min(1),
-  file: z.object({
-    key: z.string().min(1),
-    name: z.string(),
-    size: z.number().int().nonnegative(),
-    mimeType: z.string(),
-  }),
+  file: signedFileSchema,
 });
 
 export async function verifyUploadSignature(request: Request): Promise<Response> {

@@ -5,6 +5,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { db } from "@console/db";
+import { uploadSession } from "@console/db/schema";
+import { eq } from "drizzle-orm";
 import { bucket, createRouteHandler, uploader } from "ocel/blob";
 import { createUploadClient } from "ocel/blob/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -14,6 +17,7 @@ import { setupTestDatabase } from "../../../test/db";
 import { createProject } from "../projects/route";
 import { detectUploads } from "./detect/route";
 import { presignUpload } from "./presign/route";
+import type { SessionFile } from "./session";
 import { uploadStatus } from "./status/route";
 import { verifyUploadSignature } from "./verify/route";
 
@@ -228,11 +232,17 @@ describe("ocel/blob dev e2e (MinIO)", () => {
 
       expect(result.files).toHaveLength(1);
       const landedKey = result.files[0].key;
-      expect(landedKey).toContain(`${projectId}/`); // honest tenancy prefix
-      expect(landedKey).toContain("avatars/me.png");
+      expect(landedKey).toBe("avatars/me.png");
 
       expect(completedPaths).toEqual([landedKey]);
       expect(clientCompleted).toEqual([landedKey]);
+
+      const [row] = await db
+        .select()
+        .from(uploadSession)
+        .where(eq(uploadSession.projectId, projectId));
+      const objectKey = (row.files as SessionFile[])[0].objectKey;
+      expect(objectKey).toBe(`${row.organizationId}/${projectId}/${row.userId}/avatars/me.png`);
 
       const s3 = new S3Client({
         region: process.env.OCEL_BLOB_REGION ?? "us-east-1",
@@ -246,7 +256,7 @@ describe("ocel/blob dev e2e (MinIO)", () => {
       const head = await s3.send(
         new HeadObjectCommand({
           Bucket: process.env.OCEL_BLOB_BUCKET ?? "ocel-dev",
-          Key: landedKey,
+          Key: objectKey,
         }),
       );
       expect(head.ContentDisposition).toBe("inline");

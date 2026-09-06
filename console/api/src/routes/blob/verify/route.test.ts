@@ -66,6 +66,25 @@ describe("POST /api/blob/verify", () => {
     await setupTestDatabase();
   });
 
+  it("hands back the app's own key at presign and verifies the callback that carries it", async () => {
+    const session = await createTestSessionWithOrganization();
+    try {
+      const { sessionId, secret, key } = await seedSession(session, "verify-app-key");
+      expect(key).toBe("a.png");
+
+      const file = { key, name: "a.png", size: 3, mimeType: "image/png" };
+      const res = await verifyUploadSignature(
+        verifyRequest(
+          { sessionId, signature: signUpload(secret, sessionId, file), file },
+          session.headers,
+        ),
+      );
+      expect((await res.json()).valid).toBe(true);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
   it("accepts a correctly-signed callback and returns the stored metadata verbatim", async () => {
     const session = await createTestSessionWithOrganization();
     try {

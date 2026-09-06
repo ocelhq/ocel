@@ -1,5 +1,5 @@
 import { UP_TITLE } from "../plan";
-import { LINK_QUERY_ROW, LINK_ROW, nextCacheRows, nextDataCacheRows, UPLOAD_ROW } from "../rows";
+import { LINK_QUERY_ROW, LINK_ROW, nextCacheRows, nextDataCacheRows } from "../rows";
 import type { Gap } from "./types";
 
 const SDK_NODE_HTTP = ["sdk/node/web"];
@@ -24,12 +24,6 @@ export const gaps: Gap[] = [
     reason: "ocel env set demands a provider, so dev cannot deliver GREETING or SECRET_TOKEN",
     issue: 881,
     affects: [{ on: ["dev"], cells: SDK_CELLS, tests: [UP_TITLE], skip: true }],
-  },
-  {
-    id: "dev-upload-key-namespaced",
-    reason: "the dev blob store namespaces an upload key, so the documents/ prefix assertion fails",
-    issue: 882,
-    affects: [{ on: ["dev"], cells: SDK_CELLS, tests: [{ row: UPLOAD_ROW, legs: ["contract"] }] }],
   },
   {
     id: "no-router-in-front-of-dev",

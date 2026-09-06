@@ -55,7 +55,7 @@ describe("POST /api/blob/presign", () => {
     await setupTestDatabase();
   });
 
-  it("presigns: tenancy-prefixed honest key, a well-formed presigned PUT URL with bound conditions + session tag, and a persisted pending session", async () => {
+  it("presigns: the app's own key back, a well-formed presigned PUT URL over the tenancy-namespaced object with bound conditions + session tag, and a persisted pending session", async () => {
     const session = await createTestSessionWithOrganization();
 
     try {
@@ -73,11 +73,11 @@ describe("POST /api/blob/presign", () => {
       const target = bodyJson.files[0];
       expect(target.name).toBe("avatar.png");
 
-      const expectedKey = `${created.organizationId}/${created.id}/${session.user.id}/avatar.png`;
-      expect(target.key).toBe(expectedKey);
+      expect(target.key).toBe("avatar.png");
 
+      const objectKey = `${created.organizationId}/${created.id}/${session.user.id}/avatar.png`;
       const url = new URL(target.url);
-      expect(url.pathname).toContain(encodeURI(expectedKey));
+      expect(url.pathname).toContain(encodeURI(objectKey));
       expect(url.searchParams.get("X-Amz-Algorithm")).toBe("AWS4-HMAC-SHA256");
       expect(url.searchParams.get("X-Amz-Signature")).toBeTruthy();
       const signed = url.searchParams.get("X-Amz-SignedHeaders") ?? "";
@@ -97,11 +97,65 @@ describe("POST /api/blob/presign", () => {
       expect(row.callbackBaseUrl).toBe("http://localhost:3000/api/upload");
       expect(row.contentDisposition).toBe("inline");
       expect(row.metadata).toBe(encodedMetadata);
-      const files = row.files as Array<{ key: string; state: string }>;
+      const files = row.files as Array<{ key: string; objectKey: string; state: string }>;
       expect(files).toHaveLength(1);
-      expect(files[0].key).toBe(expectedKey);
+      expect(files[0].key).toBe("avatar.png");
+      expect(files[0].objectKey).toBe(objectKey);
       expect(files[0].state).toBe("pending");
       expect(row.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("rejects a key that would escape the tenancy namespace", async () => {
+    const session = await createTestSessionWithOrganization();
+    const refused = [
+      ["a leading slash", "/evil.png"],
+      ["a parent segment", "../evil.png"],
+      ["a parent segment further in", "a/../../evil.png"],
+      ["a current-directory segment", "./evil.png"],
+      ["a backslash", "a\\evil.png"],
+      ["an empty segment", "a//evil.png"],
+      ["a trailing slash", "a/"],
+      ["a percent-encoded parent segment", "..%2Fevil.png"],
+      ["a percent-encoded separator around a parent segment", "a%2F..%2F..%2Fevil.png"],
+      ["percent-encoding that does not decode", "a%zz.png"],
+      ["a control character", "a\u0001evil.png"],
+      ["a percent-encoded newline", "a%0Aevil.png"],
+      ["an object key longer than the store holds", `${"a".repeat(1100)}.png`],
+    ] as const;
+
+    try {
+      const created = await createProjectFor(session, "blob-presign-traversal");
+      for (const [why, key] of refused) {
+        const body = presignBody(created.id);
+        body.files[0].key = key;
+        const response = await presignUpload(postRequest(body, session.headers));
+        expect(response.status, why).toBe(400);
+      }
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("takes a nested key the app chose and namespaces it under the caller", async () => {
+    const session = await createTestSessionWithOrganization();
+    try {
+      const created = await createProjectFor(session, "blob-presign-nested");
+      const body = presignBody(created.id);
+      body.files[0].key = "documents/2024/q1-report.pdf";
+
+      const response = await presignUpload(postRequest(body, session.headers));
+
+      expect(response.status).toBe(200);
+      const target = (await response.json()).files[0];
+      expect(target.key).toBe("documents/2024/q1-report.pdf");
+      expect(new URL(target.url).pathname).toContain(
+        encodeURI(
+          `${created.organizationId}/${created.id}/${session.user.id}/documents/2024/q1-report.pdf`,
+        ),
+      );
     } finally {
       await session.cleanup();
     }

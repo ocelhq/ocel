@@ -5,7 +5,7 @@ import { project, uploadSession } from "@console/db/schema";
 import { eq } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { SessionFile } from "../session";
-import { presignPut, projectObjectPrefix } from "../store";
+import { presignPut, storeObjectKey } from "../store";
 import { presignUploadSchema } from "./validation";
 
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
@@ -42,10 +42,19 @@ export async function presignUpload(request: Request): Promise<Response> {
   }
 
   const organizationId = foundProject.organizationId;
-  const prefix = `${projectObjectPrefix(organizationId, projectId)}${userId}/`;
 
   const sessionId = uuidv7();
   const secret = randomBytes(32).toString("base64url");
+
+  let objectKeys: string[];
+  try {
+    objectKeys = files.map((file) =>
+      storeObjectKey({ organizationId, projectId, userId }, file.key),
+    );
+  } catch (error) {
+    const said = error instanceof Error ? error.message : String(error);
+    return Response.json({ error: `Invalid request: ${said}` }, { status: 400 });
+  }
 
   const targets: {
     url: string;
@@ -54,10 +63,10 @@ export async function presignUpload(request: Request): Promise<Response> {
     contentDisposition?: string;
   }[] = [];
   const fileStates: SessionFile[] = [];
-  for (const file of files) {
-    const key = prefix + file.key;
+  for (const [index, file] of files.entries()) {
+    const objectKey = objectKeys[index];
     const url = await presignPut({
-      key,
+      objectKey,
       contentType: file.mimeType,
       contentLength: file.size,
       sessionId,
@@ -65,12 +74,13 @@ export async function presignUpload(request: Request): Promise<Response> {
     });
     targets.push({
       url,
-      key,
+      key: file.key,
       name: file.name,
       contentDisposition: contentDisposition || undefined,
     });
     fileStates.push({
-      key,
+      key: file.key,
+      objectKey,
       name: file.name,
       size: file.size,
       mimeType: file.mimeType,

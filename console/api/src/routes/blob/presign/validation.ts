@@ -1,15 +1,14 @@
 import { z } from "zod";
+import { signedFileSchema } from "../signing";
+import { withinNamespace } from "../store";
 
 export const presignUploadSchema = z.object({
   projectId: z.string().min(1),
   bucket: z.string().min(1),
   files: z
     .array(
-      z.object({
-        key: z.string().min(1),
-        name: z.string(),
-        size: z.number().int().nonnegative(),
-        mimeType: z.string(),
+      signedFileSchema.extend({
+        key: z.string().min(1).refine(withinNamespace, "key must stay under its namespace"),
       }),
     )
     .min(1),

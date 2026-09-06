@@ -1,11 +1,14 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { z } from "zod";
 
-export interface SignedFile {
-  key: string;
-  name: string;
-  size: number;
-  mimeType: string;
-}
+export const signedFileSchema = z.object({
+  key: z.string().min(1),
+  name: z.string(),
+  size: z.number().int().nonnegative(),
+  mimeType: z.string(),
+});
+
+export type SignedFile = z.infer<typeof signedFileSchema>;
 
 export function canonicalUploadPayload(sessionId: string, file: SignedFile): string {
   return JSON.stringify({
