@@ -353,7 +353,8 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		PulumiProject: naming.PulumiProject(scope.Slug),
 		Secrets:       secretsmanager.NewFromConfig(p.aws),
 
-		Tags: &tagclock.Sweeper{Dynamo: dynamodb.NewFromConfig(p.aws), Table: held.StateTable},
+		Tags:    &tagclock.Sweeper{Dynamo: dynamodb.NewFromConfig(p.aws), Table: held.StateTable},
+		Records: p.Records(),
 
 		Class:          scope.Class,
 		Slug:           scope.Slug,

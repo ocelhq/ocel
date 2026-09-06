@@ -3,7 +3,9 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"hash/fnv"
 	"maps"
 	"slices"
 	"strings"
@@ -41,6 +43,8 @@ const (
 
 	outputKeyContainerURL      = "url"
 	outputKeyContainerPhysical = "physical"
+
+	maxRulePriority = 50000
 )
 
 type containerWork struct {
@@ -82,7 +86,7 @@ type logConfiguration struct {
 	Options map[string]string `json:"options"`
 }
 
-func (r *release) containerWork(plan providerkit.StackPlan, held substrate) (*containerWork, error) {
+func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, error) {
 	app := plan.App
 	project, stack := naming.Sanitize(plan.Ref.Project), plan.Ref.Name
 	if strings.TrimSpace(app.Image) == "" {
@@ -117,8 +121,22 @@ func (r *release) containerWork(plan providerkit.StackPlan, held substrate) (*co
 		policies:   policies,
 		service:    serviceCoordinate(project, stack),
 		role:       roleCoordinate(project, stack),
-		substrate:  held,
 	}, nil
+}
+
+func (r *release) containerWork(plan providerkit.StackPlan, held substrate) (*containerWork, error) {
+	work, err := r.checkContainer(plan)
+	if err != nil {
+		return nil, err
+	}
+	work.substrate = held
+	return work, nil
+}
+
+func rulePriority(physical string) int {
+	sum := fnv.New32a()
+	sum.Write([]byte(physical))
+	return 1 + int(sum.Sum32()%uint32(maxRulePriority))
 }
 
 func containerEnv(app string, values providerkit.AppValues) (map[string]string, error) {
@@ -202,7 +220,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		RequiresCompatibilities: pulumi.StringArray{pulumi.String("FARGATE")},
 		ExecutionRoleArn:        pulumi.String(w.substrate.ExecutionRole),
 		TaskRoleArn:             taskRole,
-		ContainerDefinitions:    pulumi.String(definition),
+		ContainerDefinitions:    pulumi.ToSecret(pulumi.String(definition)).(pulumi.StringOutput),
 		RuntimePlatform: &ecs.TaskDefinitionRuntimePlatformArgs{
 			OperatingSystemFamily: pulumi.String("LINUX"),
 			CpuArchitecture:       pulumi.String("X86_64"),
@@ -237,6 +255,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 	}
 	rule, err := lb.NewListenerRule(ctx, naming.ResourceID(naming.KindService, containerLocalName, "rule"), &lb.ListenerRuleArgs{
 		ListenerArn: pulumi.String(w.substrate.Listener),
+		Priority:    pulumi.Int(rulePriority(physical)),
 		Conditions: lb.ListenerRuleConditionArray{
 			&lb.ListenerRuleConditionArgs{HttpHeader: &lb.ListenerRuleConditionHttpHeaderArgs{
 				HttpHeaderName: pulumi.String(edge.OriginSecretHeader),
@@ -317,19 +336,24 @@ func runsContainer(plan providerkit.StackPlan) bool {
 }
 
 func (r *release) provisionContainer(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
-	held, err := r.ensureSubstrate(ctx, plan.Ref.Class, report)
+	work, err := r.checkContainer(plan)
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
-	work, err := r.containerWork(plan, held)
+	held, err := r.ensureSubstrate(ctx, plan.Ref, report)
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
+	work.substrate = held
 	plan.Options = work
-	if err := r.claimSubstrate(ctx, plan.Ref); err != nil {
+	result, err := r.adapter.Run(ctx, plan, report)
+	if err != nil {
+		if released := r.releaseSubstrate(ctx, r.cfg.Records, plan.Ref, report); released != nil {
+			return providerkit.StackResult{}, errors.Join(err, released)
+		}
 		return providerkit.StackResult{}, err
 	}
-	return r.adapter.Run(ctx, plan, report)
+	return result, nil
 }
 
 func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {

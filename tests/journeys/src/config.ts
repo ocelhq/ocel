@@ -81,6 +81,9 @@ function appOverlay(overlay: Overlay): string {
   if (overlay.compute) {
     lines.push(`    compute: ${JSON.stringify(overlay.compute)},`);
   }
+  if (overlay.compute === "container") {
+    lines.push(`    runtime: undefined,`);
+  }
   if (overlay.hostnames) {
     lines.push(
       `    ...(hostnames[app.name] ? { domains: { production: hostnames[app.name] } } : {}),`,

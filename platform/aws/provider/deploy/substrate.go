@@ -56,7 +56,10 @@ type substrateWork struct {
 	class    providerkit.Class
 	boundary string
 	tags     map[string]string
+	outputs  auto.OutputMap
 }
+
+const cloudFrontOriginFacingPrefixList = "com.amazonaws.global.cloudfront.origin-facing"
 
 func substrateRef(class providerkit.Class) providerkit.StackRef {
 	return providerkit.StackRef{Project: SubstrateSlug, Class: class, Name: naming.InfraStack(string(class))}
@@ -107,10 +110,16 @@ func (r *Releaser) readSubstrate(ctx context.Context, class providerkit.Class) (
 	return decoded, err == nil, err
 }
 
-func (r *Releaser) ensureSubstrate(ctx context.Context, class providerkit.Class, report providerkit.Reporter) (substrate, error) {
+func (r *Releaser) ensureSubstrate(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (substrate, error) {
+	r.substrates.Lock()
+	defer r.substrates.Unlock()
+	class := ref.Class
 	held, present, err := r.readSubstrate(ctx, class)
-	if err != nil || present {
-		return held, err
+	if err != nil {
+		return substrate{}, err
+	}
+	if present {
+		return held, r.claimSubstrate(ctx, ref)
 	}
 	owner, err := r.substrateFor(ctx, class)
 	if err != nil {
@@ -119,35 +128,31 @@ func (r *Releaser) ensureSubstrate(ctx context.Context, class providerkit.Class,
 	if report != nil {
 		report.Say("Standing up the shared container substrate for the " + string(class) + " class: one load balancer and one cluster every container app in it runs behind")
 	}
-	ref := substrateRef(class)
+	work := &substrateWork{
+		class:    class,
+		boundary: owner.cfg.AppBoundaryARN,
+		tags:     substrateTags(class),
+	}
 	plan := providerkit.StackPlan{
-		Ref:  ref,
-		Kind: providerkit.StackInfra,
-		Tags: substrateTags(class),
-		Options: &substrateWork{
-			class:    class,
-			boundary: owner.cfg.AppBoundaryARN,
-			tags:     substrateTags(class),
-		},
+		Ref:     substrateRef(class),
+		Kind:    providerkit.StackInfra,
+		Tags:    substrateTags(class),
+		Options: work,
 	}
 	if _, err := owner.adapter.Run(ctx, plan, report); err != nil {
 		return substrate{}, fmt.Errorf("stand up the container substrate for the %s class: %w", class, err)
 	}
-	outputs, err := owner.adapter.Outputs(ctx, ref, nil)
+	decoded, err := decodeSubstrate(work.outputs)
 	if err != nil {
 		return substrate{}, err
 	}
-	decoded, err := decodeSubstrate(outputs)
-	if err != nil {
-		return substrate{}, err
-	}
-	if err := providerkit.WriteStack(ctx, owner.cfg.Records, class, SubstrateSlug, ref.Name, providerkit.Stack{
+	if err := providerkit.WriteStack(ctx, owner.cfg.Records, class, SubstrateSlug, substrateRef(class).Name, providerkit.Stack{
 		Kind:   providerkit.StackInfra,
 		Writer: providerkit.WriterFor(""),
 	}); err != nil {
 		return substrate{}, err
 	}
-	return decoded, nil
+	return decoded, r.claimSubstrate(ctx, ref)
 }
 
 func (r *Releaser) claimSubstrate(ctx context.Context, ref providerkit.StackRef) error {
@@ -166,15 +171,12 @@ func (r *Releaser) claimSubstrate(ctx context.Context, ref providerkit.StackRef)
 	return nil
 }
 
-func (r *Releaser) releaseSubstrate(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
-	owner, err := r.substrateFor(ctx, ref.Class)
-	if err != nil {
-		return err
-	}
-	records := owner.cfg.Records
+func (r *Releaser) releaseSubstrate(ctx context.Context, records providerkit.RecordStore, ref providerkit.StackRef, report providerkit.Reporter) error {
 	if records == nil {
 		return nil
 	}
+	r.substrates.Lock()
+	defer r.substrates.Unlock()
 	held, err := ports.Held(ctx, records, consumerRecord(ref))
 	if err != nil {
 		return err
@@ -183,6 +185,10 @@ func (r *Releaser) releaseSubstrate(ctx context.Context, ref providerkit.StackRe
 		return nil
 	}
 	if err := ports.Forget(ctx, records, consumerRecord(ref)); err != nil {
+		return err
+	}
+	owner, err := r.substrateFor(ctx, ref.Class)
+	if err != nil {
 		return err
 	}
 	remaining, err := records.List(ctx, consumersRecord(ref.Class))
@@ -227,17 +233,20 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 
+	cloudfront, err := ec2.LookupManagedPrefixList(ctx, &ec2.LookupManagedPrefixListArgs{Name: pulumi.StringRef(cloudFrontOriginFacingPrefixList)})
+	if err != nil {
+		return fmt.Errorf("look up the addresses CloudFront reaches an origin from: %w", err)
+	}
 	front, err := ec2.NewSecurityGroup(ctx, naming.ResourceID(naming.KindService, "front", "security-group"), &ec2.SecurityGroupArgs{
 		Name:        pulumi.String(substrateName(class, "front")),
 		Description: pulumi.String("Ocel: the load balancer every container app in the " + string(class) + " class answers behind"),
 		VpcId:       pulumi.String(vpc.Id),
 		Ingress: ec2.SecurityGroupIngressArray{&ec2.SecurityGroupIngressArgs{
-			Protocol:       pulumi.String("tcp"),
-			FromPort:       pulumi.Int(substrateListenerPort),
-			ToPort:         pulumi.Int(substrateListenerPort),
-			CidrBlocks:     pulumi.StringArray{pulumi.String("0.0.0.0/0")},
-			Ipv6CidrBlocks: pulumi.StringArray{pulumi.String("::/0")},
-			Description:    pulumi.String("Ocel: the edge reaches the origin here; every rule behind it demands the origin secret"),
+			Protocol:      pulumi.String("tcp"),
+			FromPort:      pulumi.Int(substrateListenerPort),
+			ToPort:        pulumi.Int(substrateListenerPort),
+			PrefixListIds: pulumi.StringArray{pulumi.String(cloudfront.Id)},
+			Description:   pulumi.String("Ocel: only the edge reaches the front, and every rule behind it demands the origin secret"),
 		}},
 		Egress: ec2.SecurityGroupEgressArray{&ec2.SecurityGroupEgressArgs{
 			Protocol: pulumi.String("-1"), FromPort: pulumi.Int(0), ToPort: pulumi.Int(0),

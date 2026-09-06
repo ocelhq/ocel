@@ -65,6 +65,11 @@ func TestTheSubstrateProgramStandsUpOneFrontOneClusterAndOneExecutionRole(t *tes
 		if strings.HasSuffix(key, "tasks-security-group") && ingress["fromPort"].NumberValue() != containerPortNumber {
 			t.Errorf("the task security group admits port %v, want %d and only from the front", ingress["fromPort"], containerPortNumber)
 		}
+		if strings.HasSuffix(key, "front-security-group") {
+			if _, open := ingress["cidrBlocks"]; open || len(ingress["prefixListIds"].ArrayValue()) != 1 {
+				t.Errorf("the front admits %v, want only CloudFront's origin-facing prefix list: the secret must never cross the open internet", ingress)
+			}
+		}
 	}
 	if groups != 2 {
 		t.Errorf("declared %d security groups, want one for the front and one for the tasks", groups)
@@ -138,5 +143,40 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 	}
 	if _, present, err := providerkit.ReadStack(ctx, cfg.Records, providerkit.ClassProduction, SubstrateSlug, substrateRef(providerkit.ClassProduction).Name); err != nil || present {
 		t.Errorf("the substrate is still recorded (present %v, err %v) after its last consumer left", present, err)
+	}
+}
+
+func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
+	t.Parallel()
+
+	cfg, plan := plannedContainerStack(t)
+	cfg.Records = fake.NewRecords()
+	cfg.BackendURL = "s3://ocel-state/conformance"
+	cfg.PulumiProject = "ocel-conformance"
+	cfg.Passphrase = "a-passphrase"
+	engine := &mockedEngine{outputs: substrateOutputs()}
+	releaser := standingUp(cfg, engine)
+	ctx := context.Background()
+
+	if _, err := releaser.Provision(ctx, plan, edge.DiscardReporter()); err == nil {
+		t.Fatal("Provision succeeded with no container output, so a deploy would record a container with no origin")
+	}
+	remaining, err := cfg.Records.List(ctx, consumersRecord(providerkit.ClassProduction))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(remaining) != 0 {
+		t.Errorf("a failed deploy left %d consumer records, so the substrate could never be taken down", len(remaining))
+	}
+	if torn := engine.torn(); len(torn) != 1 || torn[0] != substrateRef(providerkit.ClassProduction).Name.String() {
+		t.Errorf("after the only consumer failed the engine tore down %v, want the substrate it had just stood up: nothing idle-billing outlives a failed first deploy", torn)
+	}
+
+	plan.App.HealthCheckPath = "not a path"
+	if _, err := releaser.Provision(ctx, plan, edge.DiscardReporter()); err == nil {
+		t.Fatal("Provision accepted a health check path a load balancer cannot probe")
+	}
+	if ran := engine.stacks(); len(ran) != 2 {
+		t.Errorf("a refused deploy ran %v, want no second substrate stand-up: the app is checked before anything is stood up", ran)
 	}
 }
