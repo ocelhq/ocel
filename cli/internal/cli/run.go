@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -20,7 +21,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/resolve"
 )
+
+var runLocal bool
 
 var runCmd = &cobra.Command{
 	Use:   "run -- <command> [args...]",
@@ -35,25 +39,31 @@ var runCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runRun(ctx, newDeps(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runRun(ctx, newDeps(), runLocal, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
-func runRun(ctx context.Context, deps cmddeps.Deps, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func init() {
+	runCmd.Flags().BoolVarP(&runLocal, "local", "L", false, "Run with no console: .env alone carries every value and every resource")
+}
+
+func runRun(ctx context.Context, deps cmddeps.Deps, local bool, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	// TODO: unlike build/deploy, this never calls runtrace.Start, so discovery
 	// below produces no spans or logs and nothing else says so.
-	creds, err := deps.LoadCredentials()
-	if err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &exitsig.ExitError{Code: 1}
+	var creds credentials.Credentials
+	if !local {
+		loaded, err := deps.LoadCredentials()
+		if err != nil {
+			fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first, or `ocel run --local` to run without one.")
+			return &exitsig.ExitError{Code: 1}
+		}
+		creds = loaded
 	}
 
 	cfg, err := projectconfig.ResolveOptional(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
 	}
-
-	apiURL := console.EffectiveBaseURL(creds.APIURL)
 
 	leaderAddr, found, err := runningDevServer(cfg.Dir)
 	if err != nil {
@@ -63,11 +73,16 @@ func runRun(ctx context.Context, deps cmddeps.Deps, cmd *cobra.Command, cwd stri
 		return runOnceAsFollower(ctx, deps, leaderAddr, appArgs, stdout, stderr, stdin)
 	}
 
-	binding, err := ensureConsoleBinding(ctx, deps, cfg.Dir, apiURL, stdout, stderr, stdin)
-	if err != nil {
-		return err
+	var link *devConsole
+	if !local {
+		apiURL := console.EffectiveBaseURL(creds.APIURL)
+		bound, bindErr := ensureConsoleBinding(ctx, deps, cfg.Dir, apiURL, stdout, stderr, stdin)
+		if bindErr != nil {
+			return bindErr
+		}
+		link = &devConsole{apiURL: apiURL, token: creds.AccessToken, projectID: bound.ProjectID}
 	}
-	return runStandalone(ctx, deps, creds, apiURL, binding.ProjectID, cfg, appArgs, stdout, stderr, stdin)
+	return runStandalone(ctx, deps, link, cfg, appArgs, stdout, stderr, stdin)
 }
 
 func runningDevServer(root string) (string, bool, error) {
@@ -93,15 +108,13 @@ func runOnceAsFollower(ctx context.Context, deps cmddeps.Deps, leaderAddr string
 	return runChildOnce(ctx, deps, appArgs, env, stdin, stdout, stderr)
 }
 
-func runStandalone(ctx context.Context, deps cmddeps.Deps, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runStandalone(ctx context.Context, deps cmddeps.Deps, link *devConsole, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	file, err := dotenv.Load(cfg.Dir)
 	if err != nil {
 		return err
 	}
 	reportUnreadableLines(stdout, file.Unreadable)
 	reportDotfile(stdout, cfg.Dir, file.Values, dotfileReadOnceAdvice)
-
-	projectCfg := resolveAccount(ctx, deps, apiURL, creds.AccessToken, projectID, stderr)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -110,14 +123,22 @@ func runStandalone(ctx context.Context, deps cmddeps.Deps, creds credentials.Cre
 
 	devServerAddr := "http://" + listener.Addr().String()
 
-	srv := devserver.New(apiURL, creds.AccessToken, projectID, devServerAddr)
-	srv.UseAccount(projectCfg)
+	var srv *devserver.Server
+	var projectCfg resolve.Account
+	if link == nil {
+		reportLocal(stdout)
+		srv = devserver.NewLocal(devServerAddr, filepath.Join(cfg.Dir, scratchDirName, "blob"))
+	} else {
+		projectCfg = resolveAccount(ctx, deps, link.apiURL, link.token, link.projectID, stderr)
+		srv = devserver.New(link.apiURL, link.token, link.projectID, devServerAddr)
+		srv.UseAccount(projectCfg)
+	}
 	srv.UseValues(storeValues(projectCfg.EnvVars, file.Values), envwire.Scope(cfg, false, ""))
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
 
-	resolved, err := discoverAndSync(ctx, srv, cfg, file.Values, stdout, stderr)
+	resolved, err := discoverAndSync(ctx, srv, cfg, file.Values, invocation{name: "run", local: link == nil}, stdout, stderr)
 	if err != nil {
 		return err
 	}

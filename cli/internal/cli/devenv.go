@@ -2,7 +2,9 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,12 +14,17 @@ import (
 	"strconv"
 	"strings"
 
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/structpb"
+
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
 func storeValues(projectEnv, dotfile map[string]string) map[string]string {
@@ -40,7 +47,84 @@ func resolveAccount(ctx context.Context, deps cmddeps.Deps, apiURL, token, proje
 	return resolve.Account{ProjectID: projectID, APIURL: apiURL, Token: token}
 }
 
-func devRefusal(err error, dotfileKeys map[string]struct{}) error {
+func reportLocal(stdout io.Writer) {
+	fmt.Fprintf(stdout, "running without the console: %s alone carries every value, every resource is an OCEL_RESOURCE_ entry in it, and uploads land under %s.\n",
+		dotenv.FileName, filepath.Join(scratchDirName, "blob"))
+}
+
+type invocation struct {
+	name  string
+	local bool
+}
+
+func (i invocation) command() string {
+	if i.local {
+		return "ocel " + i.name + " --local"
+	}
+	return "ocel " + i.name
+}
+
+func localResourceRefusal(err error, dotfileKeys map[string]struct{}, run invocation) error {
+	missing := resolve.MissingResources(err)
+	if len(missing) == 0 {
+		return nil
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s not ready — the app has not been started.\n", localPlural(len(missing)))
+	for _, resource := range missing {
+		key, keyErr := resolve.EnvName(resource.Type, resource.Name)
+		if keyErr != nil {
+			return keyErr
+		}
+		example, exampleErr := exampleLink(resource.Type, resource.Name)
+		if exampleErr != nil {
+			return exampleErr
+		}
+		fmt.Fprintf(&b, "\n  %s %s\n    no %s is set, and this run resolves a resource from %s alone\n    fix: add %s=%s to %s\n",
+			strings.ToLower(naming.EnvFragment(resource.Type)), resource.Name, key, dotenv.FileName, key, example, dotenv.FileName)
+		if hint := shellHint(key, dotfileKeys, run); hint != "" {
+			b.WriteString("    " + hint + "\n")
+		}
+	}
+	fmt.Fprintf(&b, "\nSet the entries above in %s, then run `%s` again.", dotenv.FileName, run.command())
+	return errors.New(b.String())
+}
+
+func localPlural(n int) string {
+	if n == 1 {
+		return "1 resource is"
+	}
+	return fmt.Sprintf("%d resources are", n)
+}
+
+func exampleLink(t linksv1.LinkType, name string) (string, error) {
+	link := &linksv1.Link{Name: name}
+	switch t {
+	case linksv1.LinkType_LINK_TYPE_POSTGRES:
+		link.Properties = &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
+			Host: "localhost", Port: 5432, Database: name, Username: name, Password: "a-password",
+		}}
+	default:
+		fields, err := structpb.NewStruct(map[string]any{"url": "https://example.invalid"})
+		if err != nil {
+			return "", err
+		}
+		link.Properties = &linksv1.Link_Custom{Custom: fields}
+	}
+
+	encoded, err := protojson.Marshal(link)
+	if err != nil {
+		return "", err
+	}
+	var stable bytes.Buffer
+	if err := json.Compact(&stable, encoded); err != nil {
+		return "", err
+	}
+	return stable.String(), nil
+}
+
+func devRefusal(err error, dotfileKeys map[string]struct{}, run invocation) error {
 	var refusal *envgate.Refusal
 	if !errors.As(err, &refusal) {
 		return err
@@ -52,22 +136,22 @@ func devRefusal(err error, dotfileKeys map[string]struct{}) error {
 		cell := envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}
 		fmt.Fprintf(&b, "\n  %s%s\n    %s\n    fix: add %s=<VALUE> to %s\n",
 			devCellLabel(cell), devReadBy(refusal.Scope.Apps, cell.Folder), whyUnready(problem), cell.Key, dotenv.FileName)
-		if hint := shellHint(cell.Key, dotfileKeys); hint != "" {
+		if hint := shellHint(cell.Key, dotfileKeys, run); hint != "" {
 			b.WriteString("    " + hint + "\n")
 		}
 	}
-	fmt.Fprintf(&b, "\nSet the values above in %s, then run `ocel dev` again.", dotenv.FileName)
+	fmt.Fprintf(&b, "\nSet the values above in %s, then run `%s` again.", dotenv.FileName, run.command())
 	return errors.New(b.String())
 }
 
-func shellHint(key string, dotfileKeys map[string]struct{}) string {
+func shellHint(key string, dotfileKeys map[string]struct{}, run invocation) string {
 	if _, inFile := dotfileKeys[key]; inFile {
 		return ""
 	}
 	if _, inShell := os.LookupEnv(key); !inShell {
 		return ""
 	}
-	return fmt.Sprintf("%s is set in this shell, but `ocel dev` resolves values from %s so every developer's run is the same.", key, dotenv.FileName)
+	return fmt.Sprintf("%s is set in this shell, but `%s` resolves values from %s so every developer's run is the same.", key, run.command(), dotenv.FileName)
 }
 
 func dotfileKeySet(values map[string]string) map[string]struct{} {

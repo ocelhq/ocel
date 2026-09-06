@@ -89,7 +89,7 @@ func TestReportLiveValues(t *testing.T) {
 		t.Parallel()
 
 		var quiet bytes.Buffer
-		reportLiveValues(&quiet, nil)
+		reportLiveValues(&quiet, nil, invocation{name: "dev"})
 		if quiet.Len() != 0 {
 			t.Errorf("reportLiveValues wrote %q for a run with no live values, want nothing", quiet.String())
 		}
@@ -99,12 +99,28 @@ func TestReportLiveValues(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		reportLiveValues(&out, []string{"WEBHOOK_SECRET", "API_TOKEN"})
+		reportLiveValues(&out, []string{"WEBHOOK_SECRET", "API_TOKEN"}, invocation{name: "dev"})
 		got := out.String()
 		for _, want := range []string{"API_TOKEN", "WEBHOOK_SECRET", "once", "restart"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("reportLiveValues wrote %q, want it to mention %q", got, want)
 			}
+		}
+	})
+
+	t.Run("a local run says the dotfile carries the live value like every other", func(t *testing.T) {
+		t.Parallel()
+
+		var out bytes.Buffer
+		reportLiveValues(&out, []string{"WEBHOOK_SECRET"}, invocation{name: "run", local: true})
+		got := out.String()
+		for _, want := range []string{"WEBHOOK_SECRET", dotenv.FileName} {
+			if !strings.Contains(got, want) {
+				t.Errorf("reportLiveValues wrote %q, want it to mention %q", got, want)
+			}
+		}
+		if strings.Contains(got, "restart") {
+			t.Errorf("reportLiveValues wrote %q, want no restart advice for a run that reads the file", got)
 		}
 	})
 }
@@ -117,7 +133,7 @@ func TestRunDev(t *testing.T) {
 		}
 
 		var stderr bytes.Buffer
-		err := runDev(context.Background(), deps, nil, t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
@@ -136,7 +152,7 @@ func TestRunDev(t *testing.T) {
 		clitest.SetLoggedIn(&deps)
 
 		var stdout, stderr bytes.Buffer
-		err := runDev(context.Background(), deps, nil, t.TempDir(), []string{"true"}, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, t.TempDir(), []string{"true"}, &stdout, &stderr, strings.NewReader(""))
 
 		if err == nil {
 			t.Fatal("runDev: expected an error for an unlinked directory, got nil")
@@ -153,7 +169,7 @@ func TestRunDev(t *testing.T) {
 		root := t.TempDir()
 		writeLink(t, root, "https://elsewhere.example.com", "proj_elsewhere")
 
-		err := runDev(context.Background(), deps, nil, root, []string{"true"}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, root, []string{"true"}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 
 		if err == nil || !strings.Contains(err.Error(), "ocel console link") {
 			t.Fatalf("runDev err = %v, want it to point at `ocel console link`", err)
@@ -181,7 +197,7 @@ func TestRunDev(t *testing.T) {
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		t.Run("the child's exit code becomes the command's", func(t *testing.T) {
 			var exitErr *exitsig.ExitError
@@ -228,7 +244,7 @@ func TestRunDev(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, nil, root, []string{"sh", "-c", "exit 7"}, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, root, []string{"sh", "-c", "exit 7"}, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
@@ -271,7 +287,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		leaderDone := make(chan error, 1)
 		var leaderStdout, leaderStderr syncBuffer
 		go func() {
-			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -283,7 +299,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		clitest.WriteFile(t, filepath.Join(subdir, "index.ts"), "export {};\n")
 
 		var followerStdout, followerStderr bytes.Buffer
-		err := runDev(context.Background(), deps, nil, subdir, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, subdir, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
@@ -348,7 +364,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		leaderDone := make(chan error, 1)
 		var leaderStdout, leaderStderr syncBuffer
 		go func() {
-			leaderDone <- runDev(leaderCtx, deps, nil, firstClone, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, false, firstClone, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, firstClone)
@@ -357,7 +373,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, nil, secondClone, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), deps, false, secondClone, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
@@ -415,7 +431,7 @@ export default { slug: "test-app" };
 
 		leaderDone := make(chan error, 1)
 		go func() {
-			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -428,7 +444,7 @@ export default { slug: "test-app" };
 		followerDone := make(chan error, 1)
 		var followerStdout, followerStderr bytes.Buffer
 		go func() {
-			followerDone <- runDev(followerCtx, deps, nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+			followerDone <- runDev(followerCtx, deps, false, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
 		}()
 
 		waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_main")
@@ -478,7 +494,7 @@ export default { slug: "test-app" };
 		var leaderStdout, leaderStderr syncBuffer
 		leaderDone := make(chan error, 1)
 		go func() {
-			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -491,7 +507,7 @@ export default { slug: "test-app" };
 		followerDone := make(chan error, 1)
 		var followerStdout, followerStderr bytes.Buffer
 		go func() {
-			followerDone <- runDev(followerCtx, deps, nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+			followerDone <- runDev(followerCtx, deps, false, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
 		}()
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
@@ -541,7 +557,7 @@ export default { slug: "test-app" };
 		var leaderStdout, leaderStderr syncBuffer
 		leaderDone := make(chan error, 1)
 		go func() {
-			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -554,7 +570,7 @@ export default { slug: "test-app" };
 		followerDone := make(chan error, 1)
 		var followerStdout, followerStderr bytes.Buffer
 		go func() {
-			followerDone <- runDev(followerCtx, deps, nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+			followerDone <- runDev(followerCtx, deps, false, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
 		}()
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
@@ -589,9 +605,9 @@ export default { slug: "test-app" };
 		}
 
 		stalled := startWatching
-		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, stdout, stderr io.Writer) (*watcher.Watcher, error) {
+		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, run invocation, stdout, stderr io.Writer) (*watcher.Watcher, error) {
 			time.Sleep(300 * time.Millisecond)
-			return stalled(ctx, srv, cfg, projectEnv, stdout, stderr)
+			return stalled(ctx, srv, cfg, projectEnv, run, stdout, stderr)
 		}
 		t.Cleanup(func() { startWatching = stalled })
 
@@ -616,7 +632,7 @@ export default { slug: "test-app" };
 		var leaderStdout, leaderStderr syncBuffer
 		leaderDone := make(chan error, 1)
 		go func() {
-			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -629,7 +645,7 @@ export default { slug: "test-app" };
 		followerDone := make(chan error, 1)
 		var followerStdout, followerStderr bytes.Buffer
 		go func() {
-			followerDone <- runDev(followerCtx, deps, nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+			followerDone <- runDev(followerCtx, deps, false, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
 		}()
 
 		waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
@@ -678,7 +694,7 @@ export default { slug: "test-app" };
 		var leaderStdout, leaderStderr syncBuffer
 		leaderDone := make(chan error, 1)
 		go func() {
-			leaderDone <- runDev(leaderCtx, deps, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+			leaderDone <- runDev(leaderCtx, deps, false, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -733,7 +749,7 @@ export default { slug: "test-app" };
 		followerDone := make(chan error, 1)
 		var stdout, stderr bytes.Buffer
 		go func() {
-			followerDone <- runDev(context.Background(), deps, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
+			followerDone <- runDev(context.Background(), deps, false, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		waitForFile(t, startedPath)

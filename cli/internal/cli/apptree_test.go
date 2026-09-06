@@ -107,7 +107,7 @@ export default { slug: "test-app" };
 		var stdout, stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runRun(ctx, deps, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
+			done <- runRun(ctx, deps, false, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		waitForFile(t, startedPath)
@@ -146,7 +146,7 @@ export default { slug: "test-app" };
 		var stdout, stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runRun(ctx, deps, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
+			done <- runRun(ctx, deps, false, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		waitForFile(t, startedPath)
@@ -185,7 +185,7 @@ export default { slug: "test-app" };
 		var stdout, stderr syncBuffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runDev(ctx, deps, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
+			done <- runDev(ctx, deps, false, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		waitForLockfile(t, root)
@@ -238,7 +238,7 @@ export default { slug: "test-app" };
 		var stdout, stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runDev(ctx, deps, nil, root, appArgs, &stdout, &stderr, strings.NewReader(""))
+			done <- runDev(ctx, deps, false, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		waitForFile(t, startedPath)
