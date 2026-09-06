@@ -3,9 +3,14 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -117,9 +122,13 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 			Resources: []string{"arn:aws:s3:::uploads/*"},
 		}},
 	}}
-	work, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate())
+	release := releasing(t, cfg)
+	work, err := release.containerWork(plan, fixtureSubstrate())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
+	}
+	if err := release.placeRule(context.Background(), work); err != nil {
+		t.Fatalf("placeRule() = %v", err)
 	}
 
 	rec := &inputRecorder{}
@@ -169,7 +178,7 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 	if rule["listenerArn"].StringValue() != fixtureListener {
 		t.Errorf("listenerArn = %v, want the substrate's listener", rule["listenerArn"])
 	}
-	if priority := rule["priority"].NumberValue(); priority < 1 || priority > maxRulePriority || priority != float64(rulePriority("shop-prod-web-container-r3f8a1c90")) {
+	if priority := rule["priority"].NumberValue(); priority < 1 || priority > maxRulePriority || priority != float64(rulePriority("shop-prod-web-container-r3f8a1c90", nil)) {
 		t.Errorf("priority = %v, want one derived from the service name: two releases stood up at once must not both take the next free slot", priority)
 	}
 	demanded := map[string]string{}
@@ -253,6 +262,40 @@ func TestAContainerStackDecodesIntoTheContainerItStoodUp(t *testing.T) {
 
 	if _, err := release.Decode(context.Background(), plan, auto.OutputMap{}); err == nil {
 		t.Error("Decode() of a stack that produced no output succeeded, so a deploy would record a container with no origin")
+	}
+}
+
+type fakeRules struct {
+	taken []string
+}
+
+func (f fakeRules) DescribeRules(_ context.Context, in *elbv2.DescribeRulesInput, _ ...func(*elbv2.Options)) (*elbv2.DescribeRulesOutput, error) {
+	if aws.ToString(in.ListenerArn) != fixtureListener {
+		return nil, errors.New("asked about a listener that is not the front's")
+	}
+	out := &elbv2.DescribeRulesOutput{}
+	for _, priority := range f.taken {
+		out.Rules = append(out.Rules, elbv2types.Rule{Priority: aws.String(priority)})
+	}
+	return out, nil
+}
+
+func TestARuleStepsPastThePrioritiesTheFrontAlreadyHolds(t *testing.T) {
+	t.Parallel()
+
+	hashed := rulePriority("shop-prod-web-container-r3f8a1c90", nil)
+	cfg, plan := plannedContainerStack(t)
+	cfg.Rules = fakeRules{taken: []string{strconv.Itoa(hashed), strconv.Itoa(hashed + 1), "default"}}
+	release := releasing(t, cfg)
+	work, err := release.containerWork(plan, fixtureSubstrate())
+	if err != nil {
+		t.Fatalf("containerWork() = %v", err)
+	}
+	if err := release.placeRule(context.Background(), work); err != nil {
+		t.Fatalf("placeRule() = %v", err)
+	}
+	if work.priority != hashed+2 {
+		t.Errorf("priority = %d, want %d: the two slots the hash landed on are taken, and a collision is a refused deploy", work.priority, hashed+2)
 	}
 }
 

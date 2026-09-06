@@ -81,6 +81,8 @@ github.com/aws/aws-sdk-go-v2/service/dynamodbstreams v1.35.0 h1:v6och6VKfZ/N8Kr5
 github.com/aws/aws-sdk-go-v2/service/dynamodbstreams v1.35.0/go.mod h1:2hgy3N0+CUZxbEKTNCTDWLevN+5pV7lY3B7hMl+oEQ4=
 github.com/aws/aws-sdk-go-v2/service/ecr v1.64.0 h1:iOYGE9bHGhMQYtbjEcgDJEobWIhKoUvE71m+Jm0vZgU=
 github.com/aws/aws-sdk-go-v2/service/ecr v1.64.0/go.mod h1:5ccNgipT/aF9MWzTrKkyGJaCozPt+D6LOD4RFIdP22k=
+github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2 v1.62.0 h1:+hXAYBA8DMJOzvu8lvktjhd8MFZPmHCTds2GoB5D6VM=
+github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2 v1.62.0/go.mod h1:y0rev3Q6/wzO7ksCXFOgMvblMWv2/A8dXnrAT+xxgwA=
 github.com/aws/aws-sdk-go-v2/service/iam v1.55.1 h1:4Jil4gopE1JjXR5ns70AoF+CYLAHllTDOaFs6sCg08A=
 github.com/aws/aws-sdk-go-v2/service/iam v1.55.1/go.mod h1:5H/UUroHvcKm6l2qaqh3CMM6R9K91ls8Y8rVX6cG3ts=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.13 h1:mbRIur/BiHK6SKPjoBIXSE/hJ6g6JGRLuxQy1jGjlN4=

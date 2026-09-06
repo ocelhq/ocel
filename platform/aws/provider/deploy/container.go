@@ -8,8 +8,11 @@ import (
 	"hash/fnv"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
 	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lb"
@@ -47,7 +50,12 @@ const (
 	maxRulePriority = 50000
 )
 
+type RuleDescriber interface {
+	DescribeRules(ctx context.Context, in *elbv2.DescribeRulesInput, opts ...func(*elbv2.Options)) (*elbv2.DescribeRulesOutput, error)
+}
+
 type containerWork struct {
+	priority   int
 	app        string
 	image      string
 	healthPath string
@@ -133,10 +141,51 @@ func (r *release) containerWork(plan providerkit.StackPlan, held substrate) (*co
 	return work, nil
 }
 
-func rulePriority(physical string) int {
+func rulePriority(physical string, taken map[int]bool) int {
 	sum := fnv.New32a()
-	sum.Write([]byte(physical))
-	return 1 + int(sum.Sum32()%uint32(maxRulePriority))
+	_, _ = sum.Write([]byte(physical))
+	start := int(sum.Sum32() % uint32(maxRulePriority))
+	for step := range maxRulePriority {
+		priority := 1 + (start+step)%maxRulePriority
+		if !taken[priority] {
+			return priority
+		}
+	}
+	return 0
+}
+
+func takenPriorities(ctx context.Context, rules RuleDescriber, listener string) (map[int]bool, error) {
+	taken := map[int]bool{}
+	if rules == nil {
+		return taken, nil
+	}
+	var marker *string
+	for {
+		page, err := rules.DescribeRules(ctx, &elbv2.DescribeRulesInput{ListenerArn: aws.String(listener), Marker: marker})
+		if err != nil {
+			return nil, fmt.Errorf("read the rules already on the container front: %w", err)
+		}
+		for _, rule := range page.Rules {
+			if priority, err := strconv.Atoi(aws.ToString(rule.Priority)); err == nil {
+				taken[priority] = true
+			}
+		}
+		if marker = page.NextMarker; marker == nil {
+			return taken, nil
+		}
+	}
+}
+
+func (r *release) placeRule(ctx context.Context, work *containerWork) error {
+	taken, err := takenPriorities(ctx, r.cfg.Rules, work.substrate.Listener)
+	if err != nil {
+		return err
+	}
+	if work.priority = rulePriority(work.physical(), taken); work.priority == 0 {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"the container front for the %s class holds a rule at every priority a listener allows, so %s has no slot: prune the releases behind it", r.cfg.Class, work.app)
+	}
+	return nil
 }
 
 func containerEnv(app string, values providerkit.AppValues) (map[string]string, error) {
@@ -255,7 +304,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 	}
 	rule, err := lb.NewListenerRule(ctx, naming.ResourceID(naming.KindService, containerLocalName, "rule"), &lb.ListenerRuleArgs{
 		ListenerArn: pulumi.String(w.substrate.Listener),
-		Priority:    pulumi.Int(rulePriority(physical)),
+		Priority:    pulumi.Int(w.priority),
 		Conditions: lb.ListenerRuleConditionArray{
 			&lb.ListenerRuleConditionArgs{HttpHeader: &lb.ListenerRuleConditionHttpHeaderArgs{
 				HttpHeaderName: pulumi.String(edge.OriginSecretHeader),
@@ -345,15 +394,22 @@ func (r *release) provisionContainer(ctx context.Context, plan providerkit.Stack
 		return providerkit.StackResult{}, err
 	}
 	work.substrate = held
+	if err := r.placeRule(ctx, work); err != nil {
+		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, report))
+	}
 	plan.Options = work
 	result, err := r.adapter.Run(ctx, plan, report)
 	if err != nil {
-		if released := r.releaseSubstrate(ctx, r.cfg.Records, plan.Ref, report); released != nil {
-			return providerkit.StackResult{}, errors.Join(err, released)
-		}
-		return providerkit.StackResult{}, err
+		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, report))
 	}
 	return result, nil
+}
+
+func (r *release) abandonContainer(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
+	if err := r.adapter.Destroy(ctx, ref, report); err != nil {
+		return err
+	}
+	return r.releaseSubstrate(ctx, r.cfg.Records, ref, report)
 }
 
 func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
@@ -381,6 +437,9 @@ func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan,
 	}
 	work, err := r.containerWork(plan, held)
 	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	if err := r.placeRule(ctx, work); err != nil {
 		return providerkit.Plan{}, err
 	}
 	plan.Options = work
