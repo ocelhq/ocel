@@ -28,6 +28,17 @@ func mockAccountARN(service, suffix string) string {
 	return "arn:aws:" + service + ":us-east-1:" + mockAccount + ":" + suffix
 }
 
+var mockARNs = map[string]string{
+	"aws:ecs/cluster:Cluster":               "cluster/",
+	"aws:ecs/service:Service":               "service/ocel-containers-production/",
+	"aws:ecs/taskDefinition:TaskDefinition": "task-definition/",
+	"aws:lb/loadBalancer:LoadBalancer":      "loadbalancer/app/",
+	"aws:lb/listener:Listener":              "listener/app/",
+	"aws:lb/listenerRule:ListenerRule":      "listener-rule/app/",
+	"aws:lb/targetGroup:TargetGroup":        "targetgroup/",
+	"aws:cloudwatch/logGroup:LogGroup":      "log-group:",
+}
+
 type inputRecorder struct {
 	mu       sync.Mutex
 	recorded map[string]resource.PropertyMap
@@ -56,10 +67,19 @@ func (r *inputRecorder) NewResource(args pulumi.MockResourceArgs) (string, resou
 		state["arn"] = resource.NewStringProperty(mockAccountARN("lambda", "layer:"+args.Name+":1"))
 		return args.Name + "-id", state, nil
 	}
-	if args.TypeToken == "aws:apprunner/service:Service" {
+	if arns, known := mockARNs[args.TypeToken]; known {
 		state := args.Inputs.Copy()
-		state["serviceUrl"] = resource.NewStringProperty(args.Name + ".us-east-1.awsapprunner.com")
-		state["arn"] = resource.NewStringProperty(mockAccountARN("apprunner", "service/"+args.Name+"/abc123"))
+		state["arn"] = resource.NewStringProperty(mockAccountARN(arns, args.Name))
+		if args.TypeToken == "aws:lb/loadBalancer:LoadBalancer" {
+			state["dnsName"] = resource.NewStringProperty(args.Name + ".us-east-1.elb.amazonaws.com")
+		}
+		if _, named := state["name"]; !named {
+			name := args.Name
+			if prefix, ok := state["namePrefix"]; ok && prefix.IsString() {
+				name = prefix.StringValue() + args.Name
+			}
+			state["name"] = resource.NewStringProperty(name)
+		}
 		return args.Name + "-id", state, nil
 	}
 	if args.TypeToken == "aws:iam/role:Role" {

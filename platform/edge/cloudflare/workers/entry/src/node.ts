@@ -7,12 +7,11 @@ import {
 export interface NodeOriginDeps {
   app: string;
   functionUrls: Record<string, string>;
-  origin?: string;
   originFetch?: typeof fetch;
 }
 
 export function nodeOrigin(deps: NodeOriginDeps): (request: Request) => Promise<Response> {
-  const urls = deps.origin ? [deps.origin] : Object.values(deps.functionUrls);
+  const urls = Object.values(deps.functionUrls);
   const { app, originFetch } = deps;
 
   return async (request) => {

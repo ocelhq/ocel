@@ -28,6 +28,8 @@ const (
 type route struct {
 	Stack       string `json:"stack,omitempty"`
 	Origin      string `json:"origin"`
+	Protocol    string `json:"protocol,omitempty"`
+	Container   string `json:"container,omitempty"`
 	Release     string `json:"release"`
 	Assets      string `json:"assets"`
 	AssetPrefix string `json:"assetPrefix,omitempty"`

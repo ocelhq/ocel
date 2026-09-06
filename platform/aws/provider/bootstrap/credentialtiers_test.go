@@ -305,9 +305,11 @@ func TestDeployTierOwnsTheLogGroupsItCreates(t *testing.T) {
 		"logs:UntagResource":       conditionJSON(t, taggedByOcel()),
 		"logs:DescribeLogGroups":   conditionJSON(t, nil),
 	}
-	for action, condition := range scoped {
-		if !grants[grant{action: action, resource: appLogGroupARN, condition: condition}] {
-			t.Errorf("the deploy tier does not grant %s on %s under %s, so a function's log group is either never made with a retention, never reclaimed by the teardown, or reachable beyond what ocel tagged", action, appLogGroupARN, condition)
+	for _, resource := range []string{appLogGroupARN, functionLogGroupARN} {
+		for action, condition := range scoped {
+			if !grants[grant{action: action, resource: resource, condition: condition}] {
+				t.Errorf("the deploy tier does not grant %s on %s under %s, so a log group is either never made with a retention, never reclaimed by the teardown, or reachable beyond what ocel tagged", action, resource, condition)
+			}
 		}
 	}
 }

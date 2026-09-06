@@ -31,4 +31,6 @@ const (
 	OriginRouterVar    = "OCEL_ORIGIN_ROUTER"
 	CacheTagPurgeVar   = "OCEL_CACHE_TAG_PURGE"
 	OriginSecretHeader = "x-ocel-origin-secret"
+
+	OriginContainerHeader = "x-ocel-container"
 )

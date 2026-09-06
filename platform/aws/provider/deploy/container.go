@@ -1,43 +1,46 @@
 package deploy
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
-	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/apprunner"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
 	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lb"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
-	containerPort   = "8080"
-	containerCPU    = "1024"
-	containerMemory = "2048"
-
-	containerPortEnv            = "PORT"
-	appRunnerReservedEnv        = "AWSAPPRUNNER"
-	appRunnerTasksPrincipal     = "tasks.apprunner.amazonaws.com"
-	appRunnerBuildPrincipal     = "build.apprunner.amazonaws.com"
-	appRunnerECRAccessPolicyARN = "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess"
+	containerPort       = "8080"
+	containerPortNumber = 8080
+	containerCPU        = "512"
+	containerMemory     = "1024"
+	containerName       = "app"
+	containerPortEnv    = "PORT"
 
 	containerLocalName = "container"
-	pullRoleLocalName  = "pull"
 
-	maxServiceNameLen = 40
+	targetGroupNamePrefix = "ocel-"
+	deregistrationSeconds = 10
+	healthGraceSeconds    = 60
 
-	healthCheckIntervalSeconds = 10
+	healthCheckIntervalSeconds = 15
 	healthCheckTimeoutSeconds  = 5
-	healthyThreshold           = 1
-	unhealthyThreshold         = 5
+	healthyThreshold           = 2
+	unhealthyThreshold         = 3
+	healthyStatuses            = "200-399"
 
-	outputKeyContainerURL = "url"
-	outputKeyContainerARN = "arn"
+	outputKeyContainerURL      = "url"
+	outputKeyContainerPhysical = "physical"
 )
 
 type containerWork struct {
@@ -47,13 +50,39 @@ type containerWork struct {
 	env        map[string]string
 	tags       map[string]string
 	boundary   string
+	region     string
+	secret     string
 	policies   []linkPolicy
 	service    naming.Coordinate
-	pullRole   naming.Coordinate
-	taskRole   naming.Coordinate
+	role       naming.Coordinate
+	substrate  substrate
 }
 
-func (r *release) containerWork(plan providerkit.StackPlan) (*containerWork, error) {
+type containerDefinition struct {
+	Name         string            `json:"name"`
+	Image        string            `json:"image"`
+	Essential    bool              `json:"essential"`
+	PortMappings []portMapping     `json:"portMappings"`
+	Environment  []environmentPair `json:"environment"`
+	LogConfig    logConfiguration  `json:"logConfiguration"`
+}
+
+type portMapping struct {
+	ContainerPort int    `json:"containerPort"`
+	Protocol      string `json:"protocol"`
+}
+
+type environmentPair struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type logConfiguration struct {
+	Driver  string            `json:"logDriver"`
+	Options map[string]string `json:"options"`
+}
+
+func (r *release) containerWork(plan providerkit.StackPlan, held substrate) (*containerWork, error) {
 	app := plan.App
 	project, stack := naming.Sanitize(plan.Ref.Project), plan.Ref.Name
 	if strings.TrimSpace(app.Image) == "" {
@@ -62,11 +91,11 @@ func (r *release) containerWork(plan providerkit.StackPlan) (*containerWork, err
 	}
 	if !providerkit.HealthCheckPath(app.HealthCheckPath) {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"app %s is probed at %q, which is not a path App Runner can send a health check to", app.App, app.HealthCheckPath)
+			"app %s is probed at %q, which is not a path a load balancer can send a health check to", app.App, app.HealthCheckPath)
 	}
-	if len(app.Functions) > 0 {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"app %s runs as a container and was packed into %d functions as well, so two things would answer the same request", app.App, len(app.Functions))
+	if r.cfg.OriginSecret == "" {
+		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+			"this class holds no origin secret, and a container answers only to an edge that presents one: re-run `%s`", providerkit.BootstrapCommand(plan.Ref.Class))
 	}
 	policies, err := planLinkPolicies(app.Grants)
 	if err != nil {
@@ -83,28 +112,25 @@ func (r *release) containerWork(plan providerkit.StackPlan) (*containerWork, err
 		env:        env,
 		tags:       plan.Tags,
 		boundary:   r.cfg.AppBoundaryARN,
+		region:     r.cfg.Region,
+		secret:     r.cfg.OriginSecret,
 		policies:   policies,
 		service:    serviceCoordinate(project, stack),
-		pullRole:   containerRoleCoordinate(project, stack, pullRoleLocalName),
-		taskRole:   containerRoleCoordinate(project, stack, roleLocalName),
+		role:       roleCoordinate(project, stack),
+		substrate:  held,
 	}, nil
 }
 
 func containerEnv(app string, values providerkit.AppValues) (map[string]string, error) {
-	env := make(map[string]string, len(values.Delivered)+1)
+	env := make(map[string]string, len(values.Delivered)+2)
 	maps.Copy(env, values.Delivered)
 	maps.Copy(env, values.Injected())
-	for _, key := range slices.Sorted(maps.Keys(env)) {
-		if key == containerPortEnv {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid,
-				"app %s sets %s, and a container on this provider listens on %s, which App Runner hands it as %s: drop the value and read the port from the environment",
-				app, containerPortEnv, containerPort, containerPortEnv)
-		}
-		if strings.HasPrefix(key, appRunnerReservedEnv) {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid,
-				"app %s sets %s, and App Runner reserves every key starting with %s: rename it", app, key, appRunnerReservedEnv)
-		}
+	if _, set := env[containerPortEnv]; set {
+		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			"app %s sets %s, and a container on this provider listens on %s, which it is handed as %s: drop the value and read the port from the environment",
+			app, containerPortEnv, containerPort, containerPortEnv)
 	}
+	env[containerPortEnv] = containerPort
 	return env, nil
 }
 
@@ -119,108 +145,222 @@ func serviceCoordinate(project string, stack naming.StackName) naming.Coordinate
 	}
 }
 
-func containerRoleCoordinate(project string, stack naming.StackName, local string) naming.Coordinate {
-	return naming.Coordinate{
-		Project: project,
-		Env:     stack.Env,
-		App:     stack.App,
-		Kind:    naming.KindRole,
-		Name:    naming.Join(naming.WordSeparator, local, string(naming.KindRole)),
-		Release: stack.Release,
+func (w *containerWork) physical() string {
+	return w.service.PhysicalName(maxLambdaNameLen)
+}
+
+func (w *containerWork) definition() (string, error) {
+	pairs := make([]environmentPair, 0, len(w.env))
+	for _, key := range slices.Sorted(maps.Keys(w.env)) {
+		pairs = append(pairs, environmentPair{Name: key, Value: w.env[key]})
 	}
+	encoded, err := json.Marshal([]containerDefinition{{
+		Name:         containerName,
+		Image:        w.image,
+		Essential:    true,
+		PortMappings: []portMapping{{ContainerPort: containerPortNumber, Protocol: "tcp"}},
+		Environment:  pairs,
+		LogConfig: logConfiguration{
+			Driver: "awslogs",
+			Options: map[string]string{
+				"awslogs-group":         w.substrate.LogGroup,
+				"awslogs-region":        w.region,
+				"awslogs-stream-prefix": w.physical(),
+			},
+		},
+	}})
+	if err != nil {
+		return "", fmt.Errorf("render %s's container definition: %w", w.app, err)
+	}
+	return string(encoded), nil
 }
 
 func (w *containerWork) run(ctx *pulumi.Context) error {
-	pull, err := iam.NewRole(ctx, naming.ResourceID(naming.KindRole, pullRoleLocalName), &iam.RoleArgs{
-		NamePrefix:          pulumi.String(rolePrefix(w.pullRole)),
-		Description:         describe(w.pullRole, "role App Runner pulls this app's image with"),
-		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(appRunnerBuildPrincipal)),
-		PermissionsBoundary: permissionsBoundary(w.boundary),
-		Tags:                resourceTags(naming.KindRole, "", w.tags),
-	})
-	if err != nil {
-		return err
-	}
-	if _, err := iam.NewRolePolicyAttachment(ctx, naming.ResourceID(naming.KindRole, pullRoleLocalName, "policy", "ecr"), &iam.RolePolicyAttachmentArgs{
-		Role:      pull.Name,
-		PolicyArn: pulumi.String(appRunnerECRAccessPolicyARN),
-	}); err != nil {
-		return err
-	}
+	physical := w.physical()
+	tags := resourceTags(naming.KindService, "", w.tags)
 
-	instance := &apprunner.ServiceInstanceConfigurationArgs{
-		Cpu:    pulumi.String(containerCPU),
-		Memory: pulumi.String(containerMemory),
-	}
+	var taskRole pulumi.StringPtrInput
+	var before []pulumi.Resource
 	if len(w.policies) > 0 {
-		task, err := w.taskRoleFor(ctx)
+		role, granted, err := w.taskRole(ctx)
 		if err != nil {
 			return err
 		}
-		instance.InstanceRoleArn = task.Arn
+		taskRole = role.Arn
+		before = granted
 	}
 
-	env := pulumi.StringMap{}
-	for key, value := range w.env {
-		env[key] = pulumi.String(value)
+	definition, err := w.definition()
+	if err != nil {
+		return err
 	}
-	service, err := apprunner.NewService(ctx, naming.ResourceID(naming.KindService, containerLocalName), &apprunner.ServiceArgs{
-		ServiceName: pulumi.String(w.service.PhysicalName(maxServiceNameLen)),
-		SourceConfiguration: &apprunner.ServiceSourceConfigurationArgs{
-			AutoDeploymentsEnabled: pulumi.Bool(false),
-			AuthenticationConfiguration: &apprunner.ServiceSourceConfigurationAuthenticationConfigurationArgs{
-				AccessRoleArn: pull.Arn,
-			},
-			ImageRepository: &apprunner.ServiceSourceConfigurationImageRepositoryArgs{
-				ImageIdentifier:     pulumi.String(w.image),
-				ImageRepositoryType: pulumi.String("ECR"),
-				ImageConfiguration: &apprunner.ServiceSourceConfigurationImageRepositoryImageConfigurationArgs{
-					Port:                        pulumi.String(containerPort),
-					RuntimeEnvironmentVariables: env,
-				},
-			},
+	task, err := ecs.NewTaskDefinition(ctx, naming.ResourceID(naming.KindService, containerLocalName, "task"), &ecs.TaskDefinitionArgs{
+		Family:                  pulumi.String(physical),
+		Cpu:                     pulumi.String(containerCPU),
+		Memory:                  pulumi.String(containerMemory),
+		NetworkMode:             pulumi.String("awsvpc"),
+		RequiresCompatibilities: pulumi.StringArray{pulumi.String("FARGATE")},
+		ExecutionRoleArn:        pulumi.String(w.substrate.ExecutionRole),
+		TaskRoleArn:             taskRole,
+		ContainerDefinitions:    pulumi.String(definition),
+		RuntimePlatform: &ecs.TaskDefinitionRuntimePlatformArgs{
+			OperatingSystemFamily: pulumi.String("LINUX"),
+			CpuArchitecture:       pulumi.String("X86_64"),
 		},
-		HealthCheckConfiguration: &apprunner.ServiceHealthCheckConfigurationArgs{
+		Tags: tags,
+	}, pulumi.DependsOn(before))
+	if err != nil {
+		return err
+	}
+
+	group, err := lb.NewTargetGroup(ctx, naming.ResourceID(naming.KindService, containerLocalName, "targets"), &lb.TargetGroupArgs{
+		NamePrefix:          pulumi.String(targetGroupNamePrefix),
+		Port:                pulumi.Int(containerPortNumber),
+		Protocol:            pulumi.String("HTTP"),
+		TargetType:          pulumi.String("ip"),
+		VpcId:               pulumi.String(w.substrate.VPC),
+		DeregistrationDelay: pulumi.Int(deregistrationSeconds),
+		HealthCheck: &lb.TargetGroupHealthCheckArgs{
+			Enabled:            pulumi.Bool(true),
 			Protocol:           pulumi.String("HTTP"),
 			Path:               pulumi.String(w.healthPath),
+			Matcher:            pulumi.String(healthyStatuses),
 			Interval:           pulumi.Int(healthCheckIntervalSeconds),
 			Timeout:            pulumi.Int(healthCheckTimeoutSeconds),
 			HealthyThreshold:   pulumi.Int(healthyThreshold),
 			UnhealthyThreshold: pulumi.Int(unhealthyThreshold),
 		},
-		InstanceConfiguration: instance,
-		Tags:                  resourceTags(naming.KindService, "", w.tags),
+		Tags: tags,
 	})
 	if err != nil {
 		return err
 	}
+	rule, err := lb.NewListenerRule(ctx, naming.ResourceID(naming.KindService, containerLocalName, "rule"), &lb.ListenerRuleArgs{
+		ListenerArn: pulumi.String(w.substrate.Listener),
+		Conditions: lb.ListenerRuleConditionArray{
+			&lb.ListenerRuleConditionArgs{HttpHeader: &lb.ListenerRuleConditionHttpHeaderArgs{
+				HttpHeaderName: pulumi.String(edge.OriginSecretHeader),
+				Values:         pulumi.StringArray{pulumi.String(w.secret)},
+			}},
+			&lb.ListenerRuleConditionArgs{HttpHeader: &lb.ListenerRuleConditionHttpHeaderArgs{
+				HttpHeaderName: pulumi.String(edge.OriginContainerHeader),
+				Values:         pulumi.StringArray{pulumi.String(physical)},
+			}},
+		},
+		Actions: lb.ListenerRuleActionArray{&lb.ListenerRuleActionArgs{
+			Type:           pulumi.String("forward"),
+			TargetGroupArn: group.Arn,
+		}},
+		Tags: tags,
+	})
+	if err != nil {
+		return err
+	}
+
+	service, err := ecs.NewService(ctx, naming.ResourceID(naming.KindService, containerLocalName), &ecs.ServiceArgs{
+		Name:                          pulumi.String(physical),
+		Cluster:                       pulumi.String(w.substrate.Cluster),
+		TaskDefinition:                task.Arn,
+		DesiredCount:                  pulumi.Int(1),
+		LaunchType:                    pulumi.String("FARGATE"),
+		HealthCheckGracePeriodSeconds: pulumi.Int(healthGraceSeconds),
+		WaitForSteadyState:            pulumi.Bool(true),
+		NetworkConfiguration: &ecs.ServiceNetworkConfigurationArgs{
+			Subnets:        pulumi.ToStringArray(w.substrate.Subnets),
+			SecurityGroups: pulumi.StringArray{pulumi.String(w.substrate.TaskSecurity)},
+			AssignPublicIp: pulumi.Bool(true),
+		},
+		LoadBalancers: ecs.ServiceLoadBalancerArray{&ecs.ServiceLoadBalancerArgs{
+			TargetGroupArn: group.Arn,
+			ContainerName:  pulumi.String(containerName),
+			ContainerPort:  pulumi.Int(containerPortNumber),
+		}},
+		Tags: tags,
+	}, pulumi.DependsOn([]pulumi.Resource{rule}))
+	if err != nil {
+		return err
+	}
 	ctx.Export(w.app, pulumi.Map{
-		outputKeyContainerURL: service.ServiceUrl.ApplyT(func(host string) string { return "https://" + host }).(pulumi.StringOutput),
-		outputKeyContainerARN: service.Arn,
+		outputKeyContainerURL:      pulumi.String("http://" + w.substrate.OriginHost),
+		outputKeyContainerPhysical: service.Name,
 	})
 	return nil
 }
 
-func (w *containerWork) taskRoleFor(ctx *pulumi.Context) (*iam.Role, error) {
-	task, err := iam.NewRole(ctx, naming.ResourceID(naming.KindRole, roleLocalName), &iam.RoleArgs{
-		NamePrefix:          pulumi.String(rolePrefix(w.taskRole)),
-		Description:         describe(w.taskRole, "instance role for this app's container"),
-		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(appRunnerTasksPrincipal)),
+func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resource, error) {
+	role, err := iam.NewRole(ctx, naming.ResourceID(naming.KindRole, roleLocalName), &iam.RoleArgs{
+		NamePrefix:          pulumi.String(rolePrefix(w.role)),
+		Description:         describe(w.role, "task role for this app's container"),
+		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
 		PermissionsBoundary: permissionsBoundary(w.boundary),
 		Tags:                resourceTags(naming.KindRole, "", w.tags),
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	granted := make([]pulumi.Resource, 0, len(w.policies))
 	for _, link := range w.policies {
-		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "link", link.Link), &iam.RolePolicyArgs{
-			Role:   task.Name,
+		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "link", link.Link), &iam.RolePolicyArgs{
+			Role:   role.Name,
 			Policy: pulumi.String(link.Policy),
-		}); err != nil {
-			return nil, err
+		})
+		if err != nil {
+			return nil, nil, err
 		}
+		granted = append(granted, policy)
 	}
-	return task, nil
+	return role, granted, nil
+}
+
+func runsContainer(plan providerkit.StackPlan) bool {
+	return plan.App != nil && plan.App.Compute == providerkit.ComputeContainer
+}
+
+func (r *release) provisionContainer(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+	held, err := r.ensureSubstrate(ctx, plan.Ref.Class, report)
+	if err != nil {
+		return providerkit.StackResult{}, err
+	}
+	work, err := r.containerWork(plan, held)
+	if err != nil {
+		return providerkit.StackResult{}, err
+	}
+	plan.Options = work
+	if err := r.claimSubstrate(ctx, plan.Ref); err != nil {
+		return providerkit.StackResult{}, err
+	}
+	return r.adapter.Run(ctx, plan, report)
+}
+
+func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
+	held, present, err := r.readSubstrate(ctx, plan.Ref.Class)
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	if !present {
+		return providerkit.Plan{Groups: []providerkit.ChangeGroup{
+			{
+				Kind:   providerkit.StackGroupKind,
+				Name:   substrateRef(plan.Ref.Class).Name.String(),
+				Action: providerkit.ActionCreate,
+				Reason: "the first container deploy in the " + string(plan.Ref.Class) + " class stands up the load balancer and cluster every container app in it shares",
+				Slow:   true,
+			},
+			{
+				Kind:   providerkit.StackGroupKind,
+				Name:   plan.Ref.Name.String(),
+				Action: providerkit.ActionCreate,
+				Reason: providerkit.DetailUnavailable,
+				Slow:   true,
+			},
+		}}, nil
+	}
+	work, err := r.containerWork(plan, held)
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	plan.Options = work
+	return r.adapter.Preview(ctx, plan, report)
 }
 
 func (r *release) decodeContainer(work *containerWork, outputs auto.OutputMap) (providerkit.StackResult, error) {
@@ -236,13 +376,13 @@ func (r *release) decodeContainer(work *containerWork, outputs auto.OutputMap) (
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
-	arn, err := requireStringField(fields, work.app, outputKeyContainerARN)
+	physical, err := requireStringField(fields, work.app, outputKeyContainerPhysical)
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
 	return providerkit.StackResult{Containers: []providerkit.AppContainer{{
 		Name:     work.app,
-		Physical: arn,
+		Physical: physical,
 		URL:      url,
 		Image:    work.image,
 	}}}, nil

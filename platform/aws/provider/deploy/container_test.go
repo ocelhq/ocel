@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -11,13 +12,36 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const containerImage = "123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+const (
+	containerImage  = "123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	fixtureSecret   = "5e884898da28047151d0e56f8dc6292773603d0d"
+	fixtureOrigin   = "ocel-containers-production-123.us-east-1.elb.amazonaws.com"
+	fixtureListener = "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/ocel-containers-production/abc/def"
+)
+
+func fixtureSubstrate() substrate {
+	return substrate{
+		VPC:           "vpc-123",
+		Subnets:       []string{"subnet-a", "subnet-b"},
+		Listener:      fixtureListener,
+		OriginHost:    fixtureOrigin,
+		TaskSecurity:  "sg-tasks",
+		Cluster:       "arn:aws:ecs:us-east-1:123456789012:cluster/ocel-containers-production",
+		ExecutionRole: "arn:aws:iam::123456789012:role/ocel-containers-production-exec-abc",
+		LogGroup:      "/ocel/containers/production",
+	}
+}
 
 func plannedContainerStack(t *testing.T) (Config, providerkit.StackPlan) {
 	t.Helper()
-	cfg := Config{AppBoundaryARN: "arn:aws:iam::123456789012:policy/ocel-app-boundary"}
+	cfg := Config{
+		Region:         "us-east-1",
+		AppBoundaryARN: "arn:aws:iam::123456789012:policy/ocel-app-boundary",
+		OriginSecret:   fixtureSecret,
+	}
 	stack := naming.AppStack("prod", "web", fixedRelease(t))
 	plan := providerkit.StackPlan{
 		Ref:    providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack},
@@ -39,47 +63,48 @@ func plannedContainerStack(t *testing.T) (Config, providerkit.StackPlan) {
 	return cfg, plan
 }
 
-func TestAContainerPlanIsPreparedAsContainerWorkAndAServerlessPushIsRefused(t *testing.T) {
+func TestAServerlessAppThatPushesAnImageIsRefused(t *testing.T) {
 	t.Parallel()
 
 	cfg, plan := plannedContainerStack(t)
-	release := releasing(t, cfg)
-	prepared, app, err := release.prepare(context.Background(), plan)
-	if err != nil {
-		t.Fatalf("prepare() = %v", err)
-	}
-	if app != nil {
-		t.Errorf("prepare() planned function work %+v for a container app, which has no functions to stand up", app)
-	}
-	work, held := prepared.Options.(*containerWork)
-	if !held {
-		t.Fatalf("prepare() planned %T, want the container work App Runner runs", prepared.Options)
-	}
-	if work.image != containerImage || work.healthPath != "/healthz" {
-		t.Errorf("work = image %q at %q, want the image and health path the plan carried", work.image, work.healthPath)
-	}
-	if work.env["GREETING"] != "hello" || work.env["DATABASE_URL"] != "postgres://db" || work.env[providerkit.PhaseEnvName] != "production" {
-		t.Errorf("env = %v, want every delivered value and the phase: a container reads its values off the environment alone", work.env)
-	}
-
 	plan.App.Compute = providerkit.ComputeServerless
-	if _, _, err := release.prepare(context.Background(), plan); err == nil || !strings.Contains(err.Error(), "serverless") {
+	if _, _, err := releasing(t, cfg).prepare(context.Background(), plan); err == nil || !strings.Contains(err.Error(), "serverless") {
 		t.Fatalf("prepare() of a serverless app that pushes an image = %v, want it refused: functions run no image", err)
 	}
 }
 
-func TestAContainerRefusesValuesAppRunnerOwns(t *testing.T) {
+func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	t.Parallel()
 
-	for _, key := range []string{"PORT", "AWSAPPRUNNER_REGION"} {
-		_, err := containerEnv("web", providerkit.AppValues{Delivered: map[string]string{key: "x"}})
-		if err == nil || !strings.Contains(err.Error(), key) {
-			t.Errorf("containerEnv with %s = %v, want it refused by name: App Runner would silently take the value's place", key, err)
-		}
+	cfg, plan := plannedContainerStack(t)
+	work, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate())
+	if err != nil {
+		t.Fatalf("containerWork() = %v", err)
+	}
+	if work.env["GREETING"] != "hello" || work.env["DATABASE_URL"] != "postgres://db" || work.env[providerkit.PhaseEnvName] != "production" {
+		t.Errorf("env = %v, want every delivered value and the phase: a container reads its values off the environment alone", work.env)
+	}
+	if work.env[containerPortEnv] != containerPort {
+		t.Errorf("%s = %q, want %s, the port the target group probes", containerPortEnv, work.env[containerPortEnv], containerPort)
+	}
+
+	_, err = containerEnv("web", providerkit.AppValues{Delivered: map[string]string{containerPortEnv: "3000"}})
+	if err == nil || !strings.Contains(err.Error(), containerPortEnv) {
+		t.Errorf("containerEnv with %s = %v, want it refused by name: the load balancer would probe a port nothing listens on", containerPortEnv, err)
+	}
+
+	plan.App.HealthCheckPath = "not a path"
+	if _, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate()); err == nil {
+		t.Error("containerWork accepted a health check path a load balancer cannot probe")
+	}
+	cfg.OriginSecret = ""
+	plan.App.HealthCheckPath = "/healthz"
+	if _, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate()); err == nil {
+		t.Error("containerWork accepted a class with no origin secret, so the listener rule would admit every stranger")
 	}
 }
 
-func TestAContainerStackStandsUpAnAppRunnerServiceOverThePushedImage(t *testing.T) {
+func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T) {
 	t.Parallel()
 
 	cfg, plan := plannedContainerStack(t)
@@ -92,8 +117,7 @@ func TestAContainerStackStandsUpAnAppRunnerServiceOverThePushedImage(t *testing.
 			Resources: []string{"arn:aws:s3:::uploads/*"},
 		}},
 	}}
-	release := releasing(t, cfg)
-	work, err := release.containerWork(plan)
+	work, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -103,56 +127,81 @@ func TestAContainerStackStandsUpAnAppRunnerServiceOverThePushedImage(t *testing.
 		t.Fatalf("run the container program: %v", err)
 	}
 
-	service := recordedOf(t, rec, "aws:apprunner/service:Service")
-	if name := service["serviceName"].StringValue(); name != "shop-prod-web-container-r3f8a1c90" || len(name) > maxServiceNameLen {
-		t.Errorf("serviceName = %q, want project, env, app and release within App Runner's %d characters", name, maxServiceNameLen)
+	task := recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")
+	if task["family"].StringValue() != "shop-prod-web-container-r3f8a1c90" {
+		t.Errorf("family = %v, want project, env, app and release", task["family"])
 	}
-	source := service["sourceConfiguration"].ObjectValue()
-	repo := source["imageRepository"].ObjectValue()
-	if repo["imageIdentifier"].StringValue() != containerImage || repo["imageRepositoryType"].StringValue() != "ECR" {
-		t.Errorf("image repository = %v, want the pushed ECR coordinate", repo)
+	if task["executionRoleArn"].StringValue() != fixtureSubstrate().ExecutionRole {
+		t.Errorf("executionRoleArn = %v, want the substrate's shared execution role", task["executionRoleArn"])
 	}
-	image := repo["imageConfiguration"].ObjectValue()
-	if image["port"].StringValue() != containerPort {
-		t.Errorf("port = %v, want %s, the port every ocel container listens on", image["port"], containerPort)
+	if task["taskRoleArn"].StringValue() == "" {
+		t.Error("an app granted a link runs without a task role, so the grant reaches nothing")
 	}
-	env := image["runtimeEnvironmentVariables"].ObjectValue()
-	if env["GREETING"].StringValue() != "hello" || env[providerkit.PhaseEnvName].StringValue() != "production" {
-		t.Errorf("runtime env = %v, want the delivered values and the phase", env)
+	var definitions []containerDefinition
+	if err := json.Unmarshal([]byte(task["containerDefinitions"].StringValue()), &definitions); err != nil || len(definitions) != 1 {
+		t.Fatalf("containerDefinitions = %v, want one container: %v", task["containerDefinitions"], err)
 	}
-	if source["autoDeploymentsEnabled"].BoolValue() {
-		t.Error("auto deployments are on, so a repointed tag would roll the service under a release that never asked for it")
+	held := definitions[0]
+	if held.Image != containerImage || held.Name != containerName || held.PortMappings[0].ContainerPort != containerPortNumber {
+		t.Errorf("container = %+v, want the pushed image listening on %d", held, containerPortNumber)
 	}
-	health := service["healthCheckConfiguration"].ObjectValue()
-	if health["protocol"].StringValue() != "HTTP" || health["path"].StringValue() != "/healthz" {
-		t.Errorf("health check = %v, want an HTTP probe of the path the manifest named", health)
+	env := map[string]string{}
+	for _, pair := range held.Environment {
+		env[pair.Name] = pair.Value
 	}
-	if service["instanceConfiguration"].ObjectValue()["instanceRoleArn"].StringValue() == "" {
-		t.Error("an app granted a link runs without an instance role, so the grant reaches nothing")
+	if env["GREETING"] != "hello" || env[containerPortEnv] != containerPort {
+		t.Errorf("environment = %v, want the delivered values and the port", env)
+	}
+	if held.LogConfig.Options["awslogs-group"] != "/ocel/containers/production" || held.LogConfig.Options["awslogs-region"] != "us-east-1" {
+		t.Errorf("logs = %v, want the class log group in the deploy's region", held.LogConfig)
 	}
 
-	trusts := map[string]string{}
+	group := recordedOf(t, rec, "aws:lb/targetGroup:TargetGroup")
+	health := group["healthCheck"].ObjectValue()
+	if health["path"].StringValue() != "/healthz" || group["targetType"].StringValue() != "ip" || group["vpcId"].StringValue() != "vpc-123" {
+		t.Errorf("target group = %v, want an ip target group in the substrate's VPC probed on the manifest's path", group)
+	}
+
+	rule := recordedOf(t, rec, "aws:lb/listenerRule:ListenerRule")
+	if rule["listenerArn"].StringValue() != fixtureListener {
+		t.Errorf("listenerArn = %v, want the substrate's listener", rule["listenerArn"])
+	}
+	demanded := map[string]string{}
+	for _, condition := range rule["conditions"].ArrayValue() {
+		header := condition.ObjectValue()["httpHeader"].ObjectValue()
+		demanded[header["httpHeaderName"].StringValue()] = header["values"].ArrayValue()[0].StringValue()
+	}
+	if demanded[edge.OriginSecretHeader] != fixtureSecret {
+		t.Errorf("the rule demands %v, want the class's origin secret: without it every stranger reaches the container", demanded)
+	}
+	if demanded[edge.OriginContainerHeader] != "shop-prod-web-container-r3f8a1c90" {
+		t.Errorf("the rule demands %v, want the container the edge names: every release shares one front", demanded)
+	}
+
+	service := recordedOf(t, rec, "aws:ecs/service:Service")
+	if service["launchType"].StringValue() != "FARGATE" || service["cluster"].StringValue() != fixtureSubstrate().Cluster {
+		t.Errorf("service = %v, want a Fargate service in the substrate's cluster", service)
+	}
+	network := service["networkConfiguration"].ObjectValue()
+	if network["securityGroups"].ArrayValue()[0].StringValue() != "sg-tasks" || len(network["subnets"].ArrayValue()) != 2 {
+		t.Errorf("network = %v, want the substrate's task security group and subnets", network)
+	}
+	if !service["waitForSteadyState"].BoolValue() {
+		t.Error("the deploy does not wait for the service to settle, so it would record a container nothing answers on yet")
+	}
+
 	for key, inputs := range rec.recorded {
-		if strings.HasPrefix(key, "aws:iam/role:Role::") {
-			trusts[strings.TrimPrefix(key, "aws:iam/role:Role::")] = inputs["assumeRolePolicy"].StringValue()
+		if strings.HasPrefix(key, "aws:iam/role:Role::") && !strings.Contains(inputs["assumeRolePolicy"].StringValue(), ecsTasksPrincipal) {
+			t.Errorf("%s trusts %q, want %s, which is what the task runs as", key, inputs["assumeRolePolicy"].StringValue(), ecsTasksPrincipal)
 		}
-	}
-	if !strings.Contains(trusts["role-pull"], appRunnerBuildPrincipal) {
-		t.Errorf("the pull role trusts %q, want %s, which is what pulls the image", trusts["role-pull"], appRunnerBuildPrincipal)
-	}
-	if !strings.Contains(trusts["role-app"], appRunnerTasksPrincipal) {
-		t.Errorf("the instance role trusts %q, want %s, which is what the container runs as", trusts["role-app"], appRunnerTasksPrincipal)
-	}
-	if len(rec.attached) != 1 || rec.attached[0] != appRunnerECRAccessPolicyARN {
-		t.Errorf("attached %v, want only the ECR access policy App Runner pulls with", rec.attached)
 	}
 }
 
-func TestAContainerWithNoGrantsRunsWithoutAnInstanceRole(t *testing.T) {
+func TestAContainerWithNoGrantsRunsWithoutATaskRole(t *testing.T) {
 	t.Parallel()
 
 	cfg, plan := plannedContainerStack(t)
-	work, err := releasing(t, cfg).containerWork(plan)
+	work, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -160,8 +209,10 @@ func TestAContainerWithNoGrantsRunsWithoutAnInstanceRole(t *testing.T) {
 	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", plan.Ref.Name.String(), rec)); err != nil {
 		t.Fatalf("run the container program: %v", err)
 	}
-	if _, minted := rec.recorded["aws:iam/role:Role::role-app"]; minted {
-		t.Error("an app granted nothing was minted an instance role, which can only widen what the container reaches")
+	for key := range rec.recorded {
+		if strings.HasPrefix(key, "aws:iam/role:Role::") {
+			t.Errorf("an app granted nothing was minted %s, which can only widen what the container reaches", key)
+		}
 	}
 }
 
@@ -170,15 +221,16 @@ func TestAContainerStackDecodesIntoTheContainerItStoodUp(t *testing.T) {
 
 	cfg, plan := plannedContainerStack(t)
 	release := releasing(t, cfg)
-	prepared, _, err := release.prepare(context.Background(), plan)
+	work, err := release.containerWork(plan, fixtureSubstrate())
 	if err != nil {
-		t.Fatalf("prepare() = %v", err)
+		t.Fatalf("containerWork() = %v", err)
 	}
+	plan.Options = work
 	outputs := auto.OutputMap{"web": auto.OutputValue{Value: map[string]any{
-		outputKeyContainerURL: "https://abc.us-east-1.awsapprunner.com",
-		outputKeyContainerARN: "arn:aws:apprunner:us-east-1:123456789012:service/shop-prod-web-container-r3f8a1c90/abc",
+		outputKeyContainerURL:      "http://" + fixtureOrigin,
+		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
 	}}}
-	result, err := release.Decode(context.Background(), prepared, outputs)
+	result, err := release.Decode(context.Background(), plan, outputs)
 	if err != nil {
 		t.Fatalf("Decode() = %v", err)
 	}
@@ -189,12 +241,12 @@ func TestAContainerStackDecodesIntoTheContainerItStoodUp(t *testing.T) {
 		t.Fatalf("Containers = %v, want the one service the stack stood up", result.Containers)
 	}
 	held := result.Containers[0]
-	if held.Name != "web" || held.URL != "https://abc.us-east-1.awsapprunner.com" || held.Image != containerImage || !strings.HasPrefix(held.Physical, "arn:aws:apprunner:") {
-		t.Errorf("container = %+v, want the app's name, the service URL an edge reaches, the image it runs and the service ARN", held)
+	if held.Name != "web" || held.URL != "http://"+fixtureOrigin || held.Image != containerImage || held.Physical != "shop-prod-web-container-r3f8a1c90" {
+		t.Errorf("container = %+v, want the app's name, the front the edge reaches, the image it runs and the service the rule names", held)
 	}
 
-	if _, err := release.Decode(context.Background(), prepared, auto.OutputMap{}); err == nil {
-		t.Error("Decode() of a stack that produced no output succeeded, so a deploy would record a container with no URL")
+	if _, err := release.Decode(context.Background(), plan, auto.OutputMap{}); err == nil {
+		t.Error("Decode() of a stack that produced no output succeeded, so a deploy would record a container with no origin")
 	}
 }
 

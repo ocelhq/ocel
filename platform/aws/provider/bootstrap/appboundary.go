@@ -3,6 +3,8 @@ package bootstrap
 import (
 	"fmt"
 	"strings"
+
+	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
 const outputAppBoundaryARN = "AppBoundaryArn"
@@ -33,11 +35,6 @@ func appBoundaryActions() []string {
 		"ec2:DeleteNetworkInterface",
 		"ec2:DescribeNetworkInterfaces",
 		"ec2:UnassignPrivateIpAddresses",
-		"ecr:BatchCheckLayerAvailability",
-		"ecr:BatchGetImage",
-		"ecr:DescribeImages",
-		"ecr:GetAuthorizationToken",
-		"ecr:GetDownloadUrlForLayer",
 		"events:PutEvents",
 		"kms:Decrypt",
 		"kms:DescribeKey",
@@ -113,7 +110,17 @@ func appBoundaryResource(ns Namespace, class string) string {
           - Effect: Allow
             Action:
 %s            Resource: '*'
-`, ns.AppBoundaryNameFor(class), class, actions.String())
+          - Effect: Allow
+            Action:
+              - ecr:GetAuthorizationToken
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - ecr:BatchCheckLayerAvailability
+              - ecr:BatchGetImage
+              - ecr:GetDownloadUrlForLayer
+            Resource: 'arn:aws:ecr:*:*:repository/%s/*'
+`, ns.AppBoundaryNameFor(class), class, actions.String(), registry.Namespace)
 }
 
 func appBoundaryOutput() string {
