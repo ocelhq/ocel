@@ -129,7 +129,27 @@ func gitBranch(dir string) (string, error) {
 }
 
 func prNumberFromEnv() string {
-	return os.Getenv("OCEL_PR_NUMBER")
+	if n := os.Getenv("OCEL_PR_NUMBER"); n != "" {
+		return n
+	}
+	return prNumberFromRef(os.Getenv("GITHUB_REF"))
+}
+
+func prNumberFromRef(ref string) string {
+	rest, ok := strings.CutPrefix(ref, "refs/pull/")
+	if !ok {
+		return ""
+	}
+	number, suffix, ok := strings.Cut(rest, "/")
+	if !ok || number == "" || (suffix != "merge" && suffix != "head") {
+		return ""
+	}
+	for _, r := range number {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	return number
 }
 
 func runPackageManagerCommand(ctx context.Context, dir string, argv []string, output io.Writer) error {
