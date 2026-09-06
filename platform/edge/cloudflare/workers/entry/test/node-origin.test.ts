@@ -76,6 +76,21 @@ describe("node runtime serve path", () => {
     expect(sent.headers.get("x-amz-date")).toBeTruthy();
   });
 
+  it("forwards to the origin a container release names, ahead of any function URL", async () => {
+    const wire = capturing();
+    const record = makeRecord({
+      functionUrls: {},
+      origin: "https://abc.eu-west-2.awsapprunner.com",
+    });
+    const serve = (await resolved(record, { originFetch: wire.fetch })) as ServeFetch;
+    expect(serve).toBeTypeOf("function");
+
+    const response = await serve(new Request("https://api.example.com/users?page=2"));
+
+    expect(await response.text()).toBe("origin");
+    expect(wire.calls[0].url).toBe("https://abc.eu-west-2.awsapprunner.com/users?page=2");
+  });
+
   it("percent-encodes the second question mark Next writes into an icon URL", async () => {
     const wire = capturing();
     const serve = (await resolved(makeRecord(), { originFetch: wire.fetch })) as ServeFetch;

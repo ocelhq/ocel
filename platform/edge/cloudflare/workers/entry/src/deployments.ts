@@ -10,6 +10,7 @@ export interface DeploymentRecord {
   entry?: string;
   routingManifest?: RoutingManifest | null;
   functionUrls: Record<string, string>;
+  origin?: string;
   assetPrefix: string;
   isrPrefix: string;
   isrWriteSecret?: string;

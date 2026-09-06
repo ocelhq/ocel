@@ -203,6 +203,9 @@ func (s *stack) stagePatch(ctx context.Context, c Clients, promotion edge.Promot
 	if !found {
 		return nil, fmt.Errorf("promote %s: the deployments ledger holds no record for %s/%s, so nothing names the function the %s stage would serve; re-run the deploy that built it", promotion.PromotionID, app, identity, stageName)
 	}
+	if record.Origin != "" {
+		return nil, fmt.Errorf("promote %s: %s/%s runs as a container at %s, and the %q edge invokes a release's entry function rather than reaching a URL, so it cannot front it; name an edge that reaches an origin by URL in ocel.config.ts, such as `edge: cloudfront()`", promotion.PromotionID, app, identity, record.Origin, Kind)
+	}
 	if record.EntryFunction == "" {
 		return nil, fmt.Errorf("promote %s: the deployment record for %s/%s names no entry function, so the %s stage has nothing to invoke. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotion.PromotionID, app, identity, stageName)
 	}

@@ -134,6 +134,16 @@ describe("the resolver", () => {
     expect(origins[0].originPath).toBe(`/${ASSET_PREFIX}`);
   });
 
+  it("sends a static asset to the origin itself when the release names no asset bucket", async () => {
+    const { origins } = await resolve(request("/_next/static/chunks/main.js"), {
+      "shop.example.com": { ...ROUTE, assets: "", assetPrefix: "" },
+    });
+
+    expect(origins).toHaveLength(1);
+    expect(origins[0].domainName).toBe(ROUTE.origin);
+    expect(origins[0].customHeaders["x-ocel-origin-secret"]).toBe(ROUTE.secret);
+  });
+
   it("sends everything else to the release's entry function with the secret it demands", async () => {
     const { answered, origins } = await resolve(request("/blog"));
 

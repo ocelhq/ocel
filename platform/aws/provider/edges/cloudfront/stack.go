@@ -302,25 +302,25 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 	if !found {
 		return route{}, fmt.Errorf("promote %s: the deployments ledger holds no record for %s/%s, so nothing names the release the edge would point at; re-run the deploy that built it", promotion.PromotionID, app, identity)
 	}
-	if record.EntryFunction == "" {
-		return route{}, fmt.Errorf("promote %s: the deployment record for %s/%s names no entry function, so the edge has nothing to reach. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotion.PromotionID, app, identity)
-	}
-	origin := originHost(record.FunctionURLs[record.Entry])
-	if origin == "" {
-		return route{}, fmt.Errorf("promote %s: the deployment record for %s/%s names entry function %s but no URL the edge can reach it on, and the %q edge fronts a release over its entry function's URL; re-run the deploy to write the record again", promotion.PromotionID, app, identity, record.EntryFunction, Kind)
-	}
 	secret, err := s.originSecret(ctx, c)
 	if err != nil {
 		return route{}, err
 	}
-	return route{
-		Stack:       s.plan().name,
-		Origin:      origin,
-		Release:     identity,
-		Assets:      assetOriginDomain(s.own.AssetBucket, s.own.Region),
-		AssetPrefix: assetOriginPath(record.AssetPrefix),
-		Secret:      secret,
-	}, nil
+	published := route{Stack: s.plan().name, Release: identity, Secret: secret}
+	if record.Origin != "" {
+		published.Origin = originHost(record.Origin)
+		return published, nil
+	}
+	if record.EntryFunction == "" {
+		return route{}, fmt.Errorf("promote %s: the deployment record for %s/%s names no entry function, so the edge has nothing to reach. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotion.PromotionID, app, identity)
+	}
+	published.Origin = originHost(record.FunctionURLs[record.Entry])
+	if published.Origin == "" {
+		return route{}, fmt.Errorf("promote %s: the deployment record for %s/%s names entry function %s but no URL the edge can reach it on, and the %q edge fronts a release over its entry function's URL; re-run the deploy to write the record again", promotion.PromotionID, app, identity, record.EntryFunction, Kind)
+	}
+	published.Assets = assetOriginDomain(s.own.AssetBucket, s.own.Region)
+	published.AssetPrefix = assetOriginPath(record.AssetPrefix)
+	return published, nil
 }
 
 func (s *stack) originSecret(ctx context.Context, c Clients) (string, error) {

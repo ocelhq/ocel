@@ -114,7 +114,7 @@ async function handler(event) {
     value: cacheKey(route.release, request.uri, request.headers, request.cookies),
   };
 
-  if (request.uri.indexOf(STATIC_PREFIX) === 0) {
+  if (route.assets && request.uri.indexOf(STATIC_PREFIX) === 0) {
     const assets = {
       domainName: route.assets,
       originAccessControlConfig: {

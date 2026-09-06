@@ -193,6 +193,26 @@ func TestOnlyTheRoutesThatCanCarryTheEdgeHeaderDeclareIt(t *testing.T) {
 	}
 }
 
+func TestPromoteRefusesAContainerReleaseByName(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	stack := reconciled(t, w)
+	record := edge.DeploymentRecord{App: "web", Identity: "d1.f1", Image: "ocel/web:sha256-abc", Origin: "https://abc.eu-west-1.awsapprunner.com"}
+	if err := stack.Ledger().PutStaged(context.Background(), record); err != nil {
+		t.Fatalf("PutStaged: %v", err)
+	}
+
+	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Identity}}
+	err := stack.Promote(context.Background(), promotion, "", edge.DiscardReporter())
+	if err == nil || !strings.Contains(err.Error(), "container") || !strings.Contains(err.Error(), "cloudfront") {
+		t.Fatalf("Promote of a container release = %v, want it refused with the edge that can front one: this edge invokes a function, and a container has none", err)
+	}
+	if got := w.gateway.count("UpdateStage"); got != 0 {
+		t.Errorf("UpdateStage calls = %d, want none: a refused promotion moves nothing", got)
+	}
+}
+
 func TestPromoteMovesTheStageOnce(t *testing.T) {
 	t.Parallel()
 
