@@ -14,7 +14,6 @@ const EVERY_NEXT_BEARING_CELL = [...DEPLOY_NEXT_BEARING, ...LIFECYCLE_CELLS, ...
 
 const BASE = ["base"];
 const GATEWAY = ["api-gateway"];
-const CDN_EDGES = ["base", "cloudflare"];
 
 const EVERY_NEXT_CACHE_ROW = [...nextCacheRows, ...nextDataCacheRows];
 
@@ -66,7 +65,6 @@ export const gaps: Gap[] = [
       {
         on: ["aws", "aws.floci"],
         cells: ["sdk/with-sst/web"],
-        variants: GATEWAY,
         tests: [UP_TITLE],
         skip: true,
       },
@@ -80,7 +78,6 @@ export const gaps: Gap[] = [
       {
         on: ["aws", "aws.floci"],
         cells: ["sdk/with-pulumi/web"],
-        variants: GATEWAY,
         tests: [UP_TITLE],
         skip: true,
       },
@@ -91,9 +88,7 @@ export const gaps: Gap[] = [
     reason:
       "the aws journey migrates through ocel run, which needs a console link the lane never has",
     issue: 911,
-    affects: [
-      { on: ["aws"], cells: SDK_NODE_HTTP, variants: GATEWAY, tests: [UP_TITLE], skip: true },
-    ],
+    affects: [{ on: ["aws"], cells: SDK_NODE_HTTP, tests: [UP_TITLE], skip: true }],
   },
   {
     id: "build-needs-postgres",
@@ -103,7 +98,6 @@ export const gaps: Gap[] = [
       {
         on: ["aws"],
         cells: [...LIFECYCLE_CELLS, ...SDK_NEXT_BEARING],
-        variants: CDN_EDGES,
         tests: [UP_TITLE],
         skip: true,
       },
@@ -166,8 +160,9 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "floci-runs-no-app-runner",
-    reason: "the aws provider runs a container on App Runner, which floci does not emulate",
+    id: "floci-runs-no-load-balancer",
+    reason:
+      "the aws provider runs a container on Fargate behind a load balancer floci has no data plane for",
     issue: 995,
     affects: [{ on: ["aws.floci"], variants: ["container"], tests: [UP_TITLE], skip: true }],
   },

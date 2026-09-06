@@ -138,13 +138,13 @@ describe("what a run selects", () => {
   it("reports the skipped cells it would have run, and no others", () => {
     const { skipped } = selectionFor(AWS, "aws", {
       ...FULL,
-      [FIXTURES_ENV]: "sdk/node",
+      [FIXTURES_ENV]: "deploy/next",
     });
-    expect(Object.keys(skipped)).toEqual(["sdk/node-api-gateway"]);
-    expect(skipped["sdk/node-api-gateway"]?.map((gap) => gap.issue)).toEqual([911]);
+    expect(Object.keys(skipped)).toEqual(["deploy/next"]);
+    expect(skipped["deploy/next"]?.map((gap) => gap.issue)).toEqual([923]);
     const narrowed = selectionFor(AWS, "aws", {
       ...FULL,
-      [FIXTURES_ENV]: "sdk/node",
+      [FIXTURES_ENV]: "deploy/next",
       [VARIANTS_ENV]: "container",
     });
     expect(narrowed.skipped).toEqual({});

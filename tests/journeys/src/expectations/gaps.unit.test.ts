@@ -70,13 +70,13 @@ describe("the gap list", () => {
     }
   });
 
-  it("lists the App Runner gap at up on every floci container cell, and nowhere else", () => {
+  it("lists the load balancer gap at up on every floci container cell, and nowhere else", () => {
     const containers = cellsOfVariant("container");
     assert.ok(containers.includes("deploy/node-container/web"));
     assert.ok(containers.includes("sdk/with-transforms-container/web"));
     const floci = expectationsFor("aws.floci");
     for (const cell of containers) {
-      assert.deepEqual(issues(floci, cell, UP_TITLE), [995], `${cell} on aws.floci`);
+      assert.ok(issues(floci, cell, UP_TITLE).includes(995), `${cell} on aws.floci`);
     }
     for (const environment of ["aws", "aws.floci"] as const) {
       for (const [cell, titles] of Object.entries(expectationsFor(environment))) {
@@ -85,7 +85,7 @@ describe("the gap list", () => {
         }
         for (const [title, rows] of Object.entries(titles)) {
           assert.ok(
-            !rows.some((row) => row.id === "floci-runs-no-app-runner"),
+            !rows.some((row) => row.id === "floci-runs-no-load-balancer"),
             `${cell} ${title} on ${environment}`,
           );
         }
@@ -275,14 +275,8 @@ describe("the gap list", () => {
       "deploy/next-cloudflare",
       "deploy/workspace-container",
       "deploy/workspace-cloudflare",
-      "lifecycle/next-container",
-      "sdk/node-container",
-      "sdk/next-container",
-      "sdk/workspace-container",
       "sdk/with-transforms-container",
       "sdk/with-transforms-api-gateway",
-      "sdk/with-sst-container",
-      "sdk/with-pulumi-container",
     ]);
     assert.deepEqual(alive("aws.floci"), [
       "deploy/node-api-gateway",
