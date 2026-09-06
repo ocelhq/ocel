@@ -97,6 +97,7 @@ describe("what a run selects", () => {
       "deploy/node-api-gateway",
     ]);
     expect(cellsOf({ ...FULL, [FIXTURES_ENV]: "deploy/node" })).toEqual([
+      "deploy/node-container",
       "deploy/node-api-gateway",
     ]);
   });
@@ -137,14 +138,14 @@ describe("what a run selects", () => {
   it("reports the skipped cells it would have run, and no others", () => {
     const { skipped } = selectionFor(AWS, "aws", {
       ...FULL,
-      [FIXTURES_ENV]: "sdk/with-transforms",
+      [FIXTURES_ENV]: "sdk/node",
     });
-    expect(Object.keys(skipped)).toEqual(["sdk/with-transforms-container"]);
-    expect(skipped["sdk/with-transforms-container"]?.map((gap) => gap.issue)).toEqual([937]);
+    expect(Object.keys(skipped)).toEqual(["sdk/node-api-gateway"]);
+    expect(skipped["sdk/node-api-gateway"]?.map((gap) => gap.issue)).toEqual([911]);
     const narrowed = selectionFor(AWS, "aws", {
       ...FULL,
-      [FIXTURES_ENV]: "sdk/with-transforms",
-      [VARIANTS_ENV]: "api-gateway",
+      [FIXTURES_ENV]: "sdk/node",
+      [VARIANTS_ENV]: "container",
     });
     expect(narrowed.skipped).toEqual({});
   });

@@ -166,10 +166,10 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "aws-container-unimplemented",
-    reason: "the aws provider advertises serverless only, so preflight refuses a container app",
-    issue: 937,
-    affects: [{ on: ["aws", "aws.floci"], variants: ["container"], tests: [UP_TITLE], skip: true }],
+    id: "floci-runs-no-app-runner",
+    reason: "the aws provider runs a container on App Runner, which floci does not emulate",
+    issue: 995,
+    affects: [{ on: ["aws.floci"], variants: ["container"], tests: [UP_TITLE], skip: true }],
   },
   {
     id: "cloudfront-stub",
