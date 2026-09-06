@@ -90,6 +90,9 @@ func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *p
 }
 
 func envGate(cfg *projectconfig.Config, runner *provider.Runner, opts envOptions) *envgate.Gate {
+	if opts.dev {
+		return envgate.New(devValues{}, envwire.DevScope(cfg))
+	}
 	return envgate.New(envwire.Values{
 		Runner: runner,
 		Slug:   cfg.Slug,

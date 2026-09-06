@@ -21,11 +21,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/env"
 	"github.com/ocelhq/ocel/cli/internal/cli/permissions"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console/envstore"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
-	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
@@ -96,7 +96,7 @@ func init() {
 func newDeps() cmddeps.Deps {
 	return cmddeps.Deps{
 		LoadCredentials:     credentials.Load,
-		FetchAccount:        resolve.StubAccount,
+		FetchAccount:        envstore.FetchAccount,
 		BuildApp:            appbuilder.Build,
 		RequireImageBuilder: appimages.RequireBuilder,
 		BuildAppImages:      appimages.Build,

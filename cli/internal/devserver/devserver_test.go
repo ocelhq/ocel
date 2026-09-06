@@ -55,6 +55,14 @@ func newFakeResolveServer(t *testing.T) *httptest.Server {
 	return ts
 }
 
+func newDevServer(apiURL string) *Server {
+	s := New(apiURL, "tok", "proj_1", "http://127.0.0.1:0")
+	s.fetchAccount = func(_ context.Context, api, token, projectID string) (resolve.Account, error) {
+		return resolve.Account{ProjectID: projectID, EnvVars: map[string]string{}, APIURL: api, Token: token}, nil
+	}
+	return s
+}
+
 var testClient = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
 
 func serve(t *testing.T, s *Server) string {
@@ -94,7 +102,7 @@ func TestDeclare(t *testing.T) {
 
 	t.Run("rejects an unspecified resource type", func(t *testing.T) {
 		t.Parallel()
-		s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+		s := newDevServer("https://api.example.com")
 
 		_, err := s.Declare(context.Background(), &resourcesv1.DeclareRequest{
 			Resource: &resourcesv1.ResourceIdentifier{Name: "main"},
@@ -108,7 +116,7 @@ func TestDeclare(t *testing.T) {
 func TestSync(t *testing.T) {
 	t.Run("provisions a declared resource", func(t *testing.T) {
 		resolveServer := newFakeResolveServer(t)
-		s := New(resolveServer.URL, "tok", "proj_1", "http://127.0.0.1:0")
+		s := newDevServer(resolveServer.URL)
 		url := serve(t, s)
 
 		declareResource(t, url, "main", linksv1.LinkType_LINK_TYPE_POSTGRES)
@@ -156,7 +164,8 @@ func TestSync(t *testing.T) {
 		}))
 		defer resolveServer.Close()
 
-		s := New(resolveServer.URL, "tok", "proj_1", "http://dev.local:1234")
+		s := newDevServer(resolveServer.URL)
+		s.devServerAddr = "http://dev.local:1234"
 		url := serve(t, s)
 
 		declareResource(t, url, "main", linksv1.LinkType_LINK_TYPE_POSTGRES)
@@ -195,7 +204,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("only sees resources declared after a reset", func(t *testing.T) {
 		resolveServer := newFakeResolveServer(t)
-		s := New(resolveServer.URL, "tok", "proj_1", "http://127.0.0.1:0")
+		s := newDevServer(resolveServer.URL)
 		url := serve(t, s)
 
 		declareResource(t, url, "stale", linksv1.LinkType_LINK_TYPE_POSTGRES)
@@ -215,7 +224,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("refuses a method other than POST", func(t *testing.T) {
 		t.Parallel()
-		url := serve(t, New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0"))
+		url := serve(t, newDevServer("https://api.example.com"))
 
 		resp, err := http.Get(url + "/sync")
 		if err != nil {
@@ -227,9 +236,36 @@ func TestSync(t *testing.T) {
 		}
 	})
 
+	t.Run("the account it resolves carries the console's dev values", func(t *testing.T) {
+		t.Parallel()
+		console := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/projects/proj_1/env" {
+				http.NotFound(w, r)
+				return
+			}
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"key": "LOG_LEVEL", "value": "debug", "updatedAt": 1_700_000_000_000},
+			})
+		}))
+		t.Cleanup(console.Close)
+
+		s := New(console.URL, "tok", "proj_1", "http://127.0.0.1:0")
+		url := serve(t, s)
+
+		postSync(t, url)
+
+		result := <-s.Sync()
+		if result.Err != nil {
+			t.Fatalf("Sync result error: %v", result.Err)
+		}
+		if got := result.Account.EnvVars["LOG_LEVEL"]; got != "debug" {
+			t.Errorf("Account.EnvVars = %v, want the value the console holds for the project", result.Account.EnvVars)
+		}
+	})
+
 	t.Run("propagates a provision error", func(t *testing.T) {
 		t.Parallel()
-		s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+		s := newDevServer("https://api.example.com")
 		s.resolve = func(context.Context, resolve.Account, []resourceregistry.Entry) ([]resolve.Resource, error) {
 			return nil, errors.New("boom")
 		}
@@ -247,7 +283,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("resolves only live keys eagerly", func(t *testing.T) {
 		t.Parallel()
-		s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+		s := newDevServer("https://api.example.com")
 
 		var asked []string
 		s.fetchLiveValues = func(_ context.Context, _, _, _ string, keys []string) (map[string]string, error) {
@@ -284,7 +320,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("reports the declared live keys even when the source resolves none", func(t *testing.T) {
 		t.Parallel()
-		s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+		s := newDevServer("https://api.example.com")
 		s.fetchLiveValues = func(context.Context, string, string, string, []string) (map[string]string, error) {
 			return map[string]string{}, nil
 		}
@@ -310,7 +346,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("declaring no live keys asks the control plane for nothing", func(t *testing.T) {
 		t.Parallel()
-		s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+		s := newDevServer("https://api.example.com")
 
 		called := false
 		s.fetchLiveValues = func(context.Context, string, string, string, []string) (map[string]string, error) {
@@ -335,7 +371,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("an unreachable live source fails the dev run", func(t *testing.T) {
 		t.Parallel()
-		s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+		s := newDevServer("https://api.example.com")
 		s.fetchLiveValues = func(context.Context, string, string, string, []string) (map[string]string, error) {
 			return nil, errors.New("the control plane is unreachable")
 		}
@@ -360,7 +396,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("forgets live keys a declaration no longer names after a reset", func(t *testing.T) {
 		t.Parallel()
-		s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+		s := newDevServer("https://api.example.com")
 
 		var asked []string
 		s.fetchLiveValues = func(_ context.Context, _, _, _ string, keys []string) (map[string]string, error) {
@@ -393,7 +429,7 @@ func TestEnvStream(t *testing.T) {
 
 	t.Run("receives env pushed after connecting", func(t *testing.T) {
 		t.Parallel()
-		s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+		s := newDevServer("https://api.example.com")
 		s.PushEnv(map[string]string{"INITIAL": "1"})
 		url := serve(t, s)
 
@@ -413,7 +449,7 @@ func TestEnvStream(t *testing.T) {
 
 	t.Run("a new subscriber immediately gets the latest env", func(t *testing.T) {
 		t.Parallel()
-		s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+		s := newDevServer("https://api.example.com")
 		s.PushEnv(map[string]string{"FOO": "bar"})
 		url := serve(t, s)
 

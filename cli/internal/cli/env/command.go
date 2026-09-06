@@ -46,6 +46,7 @@ func newLsCommand(deps cmddeps.Deps) *cobra.Command {
 		})
 	}
 	previewFlag(cmd, &opts)
+	devFlag(cmd, &opts)
 	return cmd
 }
 
@@ -63,6 +64,7 @@ func newSetCommand(deps cmddeps.Deps) *cobra.Command {
 		})
 	}
 	valueFlags(cmd, &opts)
+	devFlag(cmd, &opts)
 	environmentFlag(cmd, &opts)
 	return cmd
 }
@@ -81,6 +83,7 @@ func newGetCommand(deps cmddeps.Deps) *cobra.Command {
 		})
 	}
 	valueFlags(cmd, &opts)
+	devFlag(cmd, &opts)
 	environmentFlag(cmd, &opts)
 	cmd.Flags().BoolVar(&opts.reveal, "reveal", false, "Print the value")
 	return cmd
@@ -100,6 +103,7 @@ func newRmCommand(deps cmddeps.Deps) *cobra.Command {
 		})
 	}
 	valueFlags(cmd, &opts)
+	devFlag(cmd, &opts)
 	environmentFlag(cmd, &opts)
 	return cmd
 }
@@ -164,6 +168,10 @@ func newHistoryCommand(deps cmddeps.Deps) *cobra.Command {
 
 func previewFlag(cmd *cobra.Command, opts *envOptions) {
 	cmd.Flags().BoolVar(&opts.preview, "preview", false, "Use preview values")
+}
+
+func devFlag(cmd *cobra.Command, opts *envOptions) {
+	cmd.Flags().BoolVar(&opts.dev, "dev", false, "Use the values `ocel dev` resolves, held by the linked console project")
 }
 
 func valueFlags(cmd *cobra.Command, opts *envOptions) {

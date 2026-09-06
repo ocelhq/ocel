@@ -29,10 +29,21 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
+func fakeAccount(_ context.Context, apiURL, token, projectID string) (resolve.Account, error) {
+	return resolve.Account{
+		OrgID:     "org_fake",
+		ProjectID: projectID,
+		UserID:    "user_fake",
+		EnvVars:   map[string]string{},
+		APIURL:    apiURL,
+		Token:     token,
+	}, nil
+}
+
 func NewDeps() cmddeps.Deps {
 	return cmddeps.Deps{
 		LoadCredentials:     credentials.Load,
-		FetchAccount:        resolve.StubAccount,
+		FetchAccount:        fakeAccount,
 		BuildApp:            appbuilder.Build,
 		RequireImageBuilder: appimages.RequireBuilder,
 		BuildAppImages:      appimages.Build,

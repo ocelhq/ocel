@@ -30,9 +30,20 @@ import (
 
 type envOptions struct {
 	preview     bool
+	dev         bool
 	folder      string
 	environment string
 	reveal      bool
+}
+
+func (o envOptions) checkDev() error {
+	if o.preview || o.environment != "" {
+		return fmt.Errorf("--dev addresses the values `ocel dev` resolves, which are neither production nor a preview environment; pass --dev alone")
+	}
+	if o.folder != "" {
+		return fmt.Errorf("`ocel dev` spawns one child for the whole project, so a dev value is held under its key alone and --folder would name a scope nothing reads; drop --folder")
+	}
+	return nil
 }
 
 func (o envOptions) checkEnvironment() error {
@@ -131,6 +142,9 @@ func envCoordinate(slug, key string, opts envOptions) *envvarsv1.Coordinate {
 }
 
 func runEnvSet(ctx context.Context, deps cmddeps.Deps, cwd, key, value string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
+	if opts.dev {
+		return runEnvSetDev(ctx, deps, cwd, key, value, opts, stdout, stderr)
+	}
 	if opts.folder != "" {
 		if err := envgate.ValidateFolder(opts.folder); err != nil {
 			return err
@@ -192,6 +206,9 @@ func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfi
 }
 
 func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
+	if opts.dev {
+		return runEnvLsDev(ctx, deps, cwd, opts, stdout, stderr)
+	}
 	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		vars, err := runner.Vars()
 		if err != nil {
@@ -222,6 +239,9 @@ func overridden(values []*envvarsv1.ValueMetadata) bool {
 }
 
 func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+	if opts.dev {
+		return runEnvGetDev(ctx, deps, cwd, key, opts, stdout, stderr)
+	}
 	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		vars, err := runner.Vars()
 		if err != nil {
@@ -256,6 +276,9 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 }
 
 func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+	if opts.dev {
+		return runEnvRmDev(ctx, deps, cwd, key, opts, stdout, stderr)
+	}
 	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
 		vars, err := runner.Vars()
 		if err != nil {

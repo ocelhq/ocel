@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/console/blob"
+	"github.com/ocelhq/ocel/cli/internal/console/envstore"
 	"github.com/ocelhq/ocel/cli/internal/console/resolver"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -68,7 +69,7 @@ func New(apiURL, token, projectID, devServerAddr string) *Server {
 		blob:            blob.NewProxy(apiURL, token, projectID),
 		detector:        blob.NewDetector(apiURL, token, projectID),
 		syncCh:          make(chan SyncResult, 1),
-		fetchAccount:    resolve.StubAccount,
+		fetchAccount:    envstore.FetchAccount,
 		resolve:         resolver.Resolve,
 		fetchLiveValues: resolve.StubLiveValues,
 		config:          newConfigCache(),

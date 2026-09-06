@@ -78,6 +78,10 @@ func Scope(cfg *projectconfig.Config, preview bool, environment string) envgate.
 	return envgate.Scope{Apps: Apps(cfg), Preview: preview, Environment: environment}
 }
 
+func DevScope(cfg *projectconfig.Config) envgate.Scope {
+	return envgate.Scope{Apps: Apps(cfg)}
+}
+
 func Apps(cfg *projectconfig.Config) []envgate.App {
 	if len(cfg.Apps) == 0 {
 		return []envgate.App{{Name: RootApp}}

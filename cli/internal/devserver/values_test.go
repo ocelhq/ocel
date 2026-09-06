@@ -34,7 +34,7 @@ func reportProblems(t *testing.T, url string, problems ...*resourcesv1.VariableP
 
 func serveValues(t *testing.T, values map[string]string, scope envgate.Scope) (*Server, string) {
 	t.Helper()
-	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+	s := newDevServer("https://api.example.com")
 	if values != nil {
 		s.UseValues(values, scope)
 	}
@@ -201,7 +201,7 @@ func TestCheckEnv(t *testing.T) {
 	t.Run("rules from the store as of the end of discovery", func(t *testing.T) {
 		t.Parallel()
 		ctx := context.Background()
-		s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+		s := newDevServer("https://api.example.com")
 		s.UseValues(map[string]string{"API_BASE": "http://localhost:3000"}, envgate.Scope{
 			Apps: []envgate.App{{Name: "web", Folder: "/web"}},
 		})
