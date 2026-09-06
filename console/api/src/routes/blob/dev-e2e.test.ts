@@ -10,7 +10,7 @@ import { uploadSession } from "@console/db/schema";
 import { eq } from "drizzle-orm";
 import { bucket, createRouteHandler, uploader } from "ocel/blob";
 import { createUploadClient } from "ocel/blob/client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createTestSessionWithOrganization } from "../../../test/auth-harness";
 import { setupTestDatabase } from "../../../test/db";
@@ -88,6 +88,8 @@ async function waitForDevServerAddr(child: ChildProcess): Promise<string> {
   });
 }
 
+const UPLOAD_SETTLES_MS = 20_000;
+
 const runIt = (await minioReachable()) && goAvailable() ? it : it.skip;
 
 describe("ocel/blob dev e2e (MinIO)", () => {
@@ -136,6 +138,7 @@ describe("ocel/blob dev e2e (MinIO)", () => {
     async () => {
       const token = session.token;
 
+      let sessionId = "";
       const completedPaths: string[] = [];
       const storageBucket = bucket("storage", {
         uploaders: {
@@ -183,7 +186,9 @@ describe("ocel/blob dev e2e (MinIO)", () => {
           const url = new URL(appBase + req.url);
           const webReq = await toWebRequest(req, appBase);
           if (url.pathname === "/api/blob/presign") {
-            return sendWebResponse(res, await presignUpload(webReq));
+            const presigned = await presignUpload(webReq);
+            sessionId = (await presigned.clone().json()).sessionId;
+            return sendWebResponse(res, presigned);
           }
           if (url.pathname === "/api/blob/verify") {
             return sendWebResponse(res, await verifyUploadSignature(webReq));
@@ -209,7 +214,7 @@ describe("ocel/blob dev e2e (MinIO)", () => {
       const client = createUploadClient<typeof storageBucket>({
         url: `${appBase}/app/upload`,
         pollIntervalMs: 200,
-        maxPollMs: 20_000,
+        maxPollMs: UPLOAD_SETTLES_MS,
       });
 
       const file = new File([Buffer.from("bytes")], "me.png", {
@@ -234,13 +239,12 @@ describe("ocel/blob dev e2e (MinIO)", () => {
       const landedKey = result.files[0].key;
       expect(landedKey).toBe("avatars/me.png");
 
-      expect(completedPaths).toEqual([landedKey]);
+      await vi.waitFor(() => expect(completedPaths).toEqual([landedKey]), {
+        timeout: UPLOAD_SETTLES_MS,
+      });
       expect(clientCompleted).toEqual([landedKey]);
 
-      const [row] = await db
-        .select()
-        .from(uploadSession)
-        .where(eq(uploadSession.projectId, projectId));
+      const [row] = await db.select().from(uploadSession).where(eq(uploadSession.id, sessionId));
       const objectKey = (row.files as SessionFile[])[0].objectKey;
       expect(objectKey).toBe(`${row.organizationId}/${projectId}/${row.userId}/avatars/me.png`);
 
