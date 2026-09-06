@@ -22,6 +22,8 @@ async function ensureDatabaseExists(connectionString: string) {
   }
 }
 
+const SCHEMA_PUSH_LOCK = 815_213;
+
 let setupPromise: Promise<void> | undefined;
 
 export function setupTestDatabase() {
@@ -38,9 +40,16 @@ export function setupTestDatabase() {
 
       const pool = new Pool({ connectionString });
       try {
-        const pushDb = drizzle(pool);
-        const { apply } = await pushSchema(schema, pushDb);
-        await apply();
+        const client = await pool.connect();
+        try {
+          await client.query("SELECT pg_advisory_lock($1)", [SCHEMA_PUSH_LOCK]);
+          const pushDb = drizzle(pool);
+          const { apply } = await pushSchema(schema, pushDb);
+          await apply();
+        } finally {
+          await client.query("SELECT pg_advisory_unlock($1)", [SCHEMA_PUSH_LOCK]);
+          client.release();
+        }
       } finally {
         await pool.end();
       }
