@@ -56,6 +56,12 @@ func (r *inputRecorder) NewResource(args pulumi.MockResourceArgs) (string, resou
 		state["arn"] = resource.NewStringProperty(mockAccountARN("lambda", "layer:"+args.Name+":1"))
 		return args.Name + "-id", state, nil
 	}
+	if args.TypeToken == "aws:apprunner/service:Service" {
+		state := args.Inputs.Copy()
+		state["serviceUrl"] = resource.NewStringProperty(args.Name + ".us-east-1.awsapprunner.com")
+		state["arn"] = resource.NewStringProperty(mockAccountARN("apprunner", "service/"+args.Name+"/abc123"))
+		return args.Name + "-id", state, nil
+	}
 	if args.TypeToken == "aws:iam/role:Role" {
 		state := args.Inputs.Copy()
 		state["arn"] = resource.NewStringProperty("arn:aws:iam::" + mockAccount + ":role/" + args.Name)

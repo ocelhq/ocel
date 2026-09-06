@@ -166,6 +166,8 @@ func (r *release) Run(pctx *sdk.Context, plan providerkit.StackPlan) error {
 		return work.program(pctx)
 	case *appWork:
 		return work.run(pctx, shipped)
+	case *containerWork:
+		return work.run(pctx)
 	case *infraWork:
 		return r.infra(pctx, plan, work)
 	}
@@ -240,6 +242,9 @@ func (r *release) Decode(ctx context.Context, plan providerkit.StackPlan, output
 	if work, held := plan.Options.(*stackWork); held {
 		work.outputs = outputs
 		return providerkit.StackResult{}, nil
+	}
+	if work, held := plan.Options.(*containerWork); held {
+		return r.decodeContainer(work, outputs)
 	}
 	if plan.App != nil {
 		return r.decodeApp(plan, outputs)
@@ -390,12 +395,20 @@ func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, report p
 }
 
 func (r *release) prepare(ctx context.Context, plan providerkit.StackPlan) (providerkit.StackPlan, *appWork, error) {
-	if len(plan.Images.Pushes) > 0 {
-		return providerkit.StackPlan{}, nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"this provider runs no container app, so it has nowhere to push an image: %s declares %d", plan.Ref.Name, len(plan.Images.Pushes))
-	}
 	if plan.Options != nil {
 		return plan, nil, nil
+	}
+	if plan.App != nil && plan.App.Compute == providerkit.ComputeContainer {
+		work, err := r.containerWork(plan)
+		if err != nil {
+			return providerkit.StackPlan{}, nil, err
+		}
+		plan.Options = work
+		return plan, nil, nil
+	}
+	if len(plan.Images.Pushes) > 0 {
+		return providerkit.StackPlan{}, nil, providerkit.Refuse(providerkit.CodeInvalid,
+			"%s runs on serverless compute, which runs functions rather than an image, and this release pushes %d", plan.Ref.Name, len(plan.Images.Pushes))
 	}
 	transformed, err := transformStackPlan(ctx, r.cfg.Transform, plan)
 	if err != nil {
