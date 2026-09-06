@@ -359,6 +359,14 @@ func originHost(rawURL string) string {
 	return strings.TrimSuffix(host, ":443")
 }
 
+func originProtocol(rawURL string) string {
+	scheme, _, found := strings.Cut(rawURL, "://")
+	if !found || scheme == "https" {
+		return ""
+	}
+	return scheme
+}
+
 func pointerOr(pointer string) string {
 	if pointer == "" {
 		return edge.DefaultPointer

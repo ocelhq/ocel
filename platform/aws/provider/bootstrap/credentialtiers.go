@@ -16,12 +16,11 @@ const (
 
 	lambdaServicePrincipal = "lambda.amazonaws.com"
 
-	appRunnerBuildPrincipal = "build.apprunner.amazonaws.com"
-	appRunnerTasksPrincipal = "tasks.apprunner.amazonaws.com"
+	ecsTasksPrincipal = "ecs-tasks.amazonaws.com"
 
 	lambdaBasicExecutionPolicyARN = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 	lambdaVPCAccessPolicyARN      = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-	appRunnerECRAccessPolicyARN   = "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess"
+	ecsTaskExecutionPolicyARN     = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 )
 
 const (
@@ -39,9 +38,19 @@ const (
 	appSubnetGroupARN   = "arn:aws:rds:*:*:subgrp:*"
 	appSecurityGroupARN = "arn:aws:ec2:*:*:security-group/*"
 	appVPCARN           = "arn:aws:ec2:*:*:vpc/*"
-	appLogGroupARN      = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
-	appServiceARN       = "arn:aws:apprunner:*:*:service/*/*"
 	appRepositoryARN    = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"
+	appTaskFamilyARN    = "arn:aws:ecs:*:*:task-definition/*"
+	appLogGroupARN      = "arn:aws:logs:*:*:log-group:/ocel/*"
+	functionLogGroupARN = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
+	appTargetGroupARN   = "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
+
+	substrateClusterARN  = "arn:aws:ecs:*:*:cluster/ocel-*"
+	substrateServiceARN  = "arn:aws:ecs:*:*:service/ocel-*/*"
+	substrateBalancerARN = "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/ocel-*/*"
+	substrateListenerARN = "arn:aws:elasticloadbalancing:*:*:listener/app/ocel-*/*/*"
+	substrateRuleARN     = "arn:aws:elasticloadbalancing:*:*:listener-rule/app/ocel-*/*/*/*"
+	ecsLinkedRoleARN     = "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/*"
+	elbLinkedRoleARN     = "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/*"
 
 	bootstrapEventSourceARN = "arn:aws:lambda:*:*:event-source-mapping:*"
 
@@ -137,7 +146,7 @@ func mergeConditions(conditions ...map[string]any) map[string]any {
 
 func attachedPolicyIsAServiceRole(resourceTagged bool) map[string]any {
 	condition := map[string]any{
-		"ArnEquals": map[string]any{"iam:PolicyARN": []string{lambdaBasicExecutionPolicyARN, lambdaVPCAccessPolicyARN, appRunnerECRAccessPolicyARN}},
+		"ArnEquals": map[string]any{"iam:PolicyARN": []string{lambdaBasicExecutionPolicyARN, lambdaVPCAccessPolicyARN, ecsTaskExecutionPolicyARN}},
 	}
 	if resourceTagged {
 		condition["StringLike"] = map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagPattern}
@@ -149,8 +158,12 @@ func passedToLambda(resourceTagged bool) map[string]any {
 	return passedTo(lambdaServicePrincipal, resourceTagged)
 }
 
-func passedToAppRunner() map[string]any {
-	return passedTo([]string{appRunnerBuildPrincipal, appRunnerTasksPrincipal}, true)
+func passedToECSTasks() map[string]any {
+	return passedTo(ecsTasksPrincipal, true)
+}
+
+func linkedRoleFor(service string) map[string]any {
+	return map[string]any{"StringEquals": map[string]any{"iam:AWSServiceName": service}}
 }
 
 func passedTo(service any, resourceTagged bool) map[string]any {
@@ -320,25 +333,17 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 		{
 			actions:   []string{"iam:PassRole"},
 			resources: []string{appRoleARN},
-			condition: passedToAppRunner(),
+			condition: passedToECSTasks(),
 		},
 		{
-			actions:   []string{"apprunner:CreateService"},
-			resources: []string{appServiceARN},
-			condition: taggedOnCreate(),
+			actions:   []string{"iam:CreateServiceLinkedRole"},
+			resources: []string{ecsLinkedRoleARN},
+			condition: linkedRoleFor("ecs.amazonaws.com"),
 		},
 		{
-			actions: []string{
-				"apprunner:DeleteService",
-				"apprunner:DescribeService",
-				"apprunner:ListOperations",
-				"apprunner:ListTagsForResource",
-				"apprunner:TagResource",
-				"apprunner:UntagResource",
-				"apprunner:UpdateService",
-			},
-			resources: []string{appServiceARN},
-			condition: taggedByOcel(),
+			actions:   []string{"iam:CreateServiceLinkedRole"},
+			resources: []string{elbLinkedRoleARN},
+			condition: linkedRoleFor("elasticloadbalancing.amazonaws.com"),
 		},
 		{
 			actions:   []string{"ecr:GetAuthorizationToken"},
@@ -360,6 +365,93 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"ecr:UploadLayerPart",
 			},
 			resources: []string{appRepositoryARN},
+			condition: inCallerAccount(),
+		},
+		{
+			actions:   []string{"ecs:CreateCluster"},
+			resources: []string{substrateClusterARN},
+			condition: taggedOnCreate(),
+		},
+		{
+			actions: []string{
+				"ecs:DeleteCluster",
+				"ecs:DescribeClusters",
+				"ecs:ListTagsForResource",
+				"ecs:TagResource",
+				"ecs:UntagResource",
+			},
+			resources: []string{substrateClusterARN},
+			condition: taggedByOcel(),
+		},
+		{
+			actions:   []string{"ecs:RegisterTaskDefinition"},
+			resources: []string{unscopedResource},
+			condition: taggedOnCreate(),
+		},
+		{
+			actions:   []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition"},
+			resources: []string{appTaskFamilyARN},
+			condition: taggedByOcel(),
+		},
+		{
+			actions:   []string{"ecs:CreateService"},
+			resources: []string{substrateServiceARN},
+			condition: taggedOnCreate(),
+		},
+		{
+			actions: []string{
+				"ecs:DeleteService",
+				"ecs:DescribeServices",
+				"ecs:UpdateService",
+			},
+			resources: []string{substrateServiceARN},
+			condition: taggedByOcel(),
+		},
+		{
+			actions: []string{
+				"elasticloadbalancing:DescribeListenerAttributes",
+				"elasticloadbalancing:DescribeListeners",
+				"elasticloadbalancing:DescribeLoadBalancerAttributes",
+				"elasticloadbalancing:DescribeLoadBalancers",
+				"elasticloadbalancing:DescribeRules",
+				"elasticloadbalancing:DescribeTags",
+				"elasticloadbalancing:DescribeTargetGroupAttributes",
+				"elasticloadbalancing:DescribeTargetGroups",
+				"elasticloadbalancing:DescribeTargetHealth",
+			},
+			resources: []string{unscopedResource},
+		},
+		{
+			actions:   []string{"elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:CreateTargetGroup"},
+			resources: []string{substrateBalancerARN, appTargetGroupARN},
+			condition: taggedOnCreate(),
+		},
+		{
+			actions: []string{
+				"elasticloadbalancing:AddTags",
+				"elasticloadbalancing:CreateListener",
+				"elasticloadbalancing:CreateRule",
+				"elasticloadbalancing:DeleteListener",
+				"elasticloadbalancing:DeleteLoadBalancer",
+				"elasticloadbalancing:DeleteRule",
+				"elasticloadbalancing:DeleteTargetGroup",
+				"elasticloadbalancing:ModifyListener",
+				"elasticloadbalancing:ModifyListenerAttributes",
+				"elasticloadbalancing:ModifyLoadBalancerAttributes",
+				"elasticloadbalancing:ModifyRule",
+				"elasticloadbalancing:ModifyTargetGroup",
+				"elasticloadbalancing:ModifyTargetGroupAttributes",
+				"elasticloadbalancing:RemoveTags",
+				"elasticloadbalancing:SetSecurityGroups",
+				"elasticloadbalancing:SetSubnets",
+			},
+			resources: []string{substrateBalancerARN, substrateListenerARN, substrateRuleARN, appTargetGroupARN},
+			condition: taggedByOcel(),
+		},
+		{
+			actions:   []string{"elasticloadbalancing:AddTags"},
+			resources: []string{substrateBalancerARN, substrateListenerARN, substrateRuleARN, appTargetGroupARN},
+			condition: taggedOnCreate(),
 		},
 		{
 			actions:   []string{"s3:CreateBucket"},
@@ -451,7 +543,7 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 		},
 		{
 			actions:   []string{"logs:CreateLogGroup"},
-			resources: []string{appLogGroupARN},
+			resources: []string{appLogGroupARN, functionLogGroupARN},
 			condition: taggedOnCreate(),
 		},
 		{
@@ -462,12 +554,12 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"logs:TagResource",
 				"logs:UntagResource",
 			},
-			resources: []string{appLogGroupARN},
+			resources: []string{appLogGroupARN, functionLogGroupARN},
 			condition: taggedByOcel(),
 		},
 		{
 			actions:   []string{"logs:DescribeLogGroups"},
-			resources: []string{appLogGroupARN},
+			resources: []string{appLogGroupARN, functionLogGroupARN},
 		},
 	}
 }

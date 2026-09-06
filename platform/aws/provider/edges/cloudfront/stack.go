@@ -309,6 +309,8 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 	published := route{Stack: s.plan().name, Release: identity, Secret: secret}
 	if record.Origin != "" {
 		published.Origin = originHost(record.Origin)
+		published.Protocol = originProtocol(record.Origin)
+		published.Container = record.Physical
 		return published, nil
 	}
 	if record.EntryFunction == "" {

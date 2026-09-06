@@ -16,19 +16,18 @@ import (
 
 const Namespace = "ocel"
 
-const managedByTag = "ocel:managed-by"
+const (
+	ecrUsername   = "AWS"
+	managedByTag  = "ocel:managed-by"
+	managedByOcel = "ocel"
+)
 
 type ECRAPI interface {
 	CreateRepository(ctx context.Context, in *ecr.CreateRepositoryInput, opts ...func(*ecr.Options)) (*ecr.CreateRepositoryOutput, error)
 	GetAuthorizationToken(ctx context.Context, in *ecr.GetAuthorizationTokenInput, opts ...func(*ecr.Options)) (*ecr.GetAuthorizationTokenOutput, error)
 }
 
-func Resolve(ctx context.Context, api ECRAPI, repositories []string) (providerkit.RegistryTarget, error) {
-	for _, repository := range repositories {
-		if err := ensure(ctx, api, Namespace+"/"+repository); err != nil {
-			return providerkit.RegistryTarget{}, err
-		}
-	}
+func Resolve(ctx context.Context, api ECRAPI) (providerkit.RegistryTarget, error) {
 	out, err := api.GetAuthorizationToken(ctx, &ecr.GetAuthorizationTokenInput{})
 	if err != nil {
 		return providerkit.RegistryTarget{}, fmt.Errorf("mint a login for this account's image registry: %w", err)
@@ -61,11 +60,61 @@ func Resolve(ctx context.Context, api ECRAPI, repositories []string) (providerki
 	}, nil
 }
 
+func Owns(target providerkit.RegistryTarget) bool {
+	return target.Username == ecrUsername && target.Namespace == Namespace
+}
+
+type images struct {
+	api    ECRAPI
+	target providerkit.RegistryTarget
+	pushed providerkit.ImageStore
+}
+
+func Images(target providerkit.RegistryTarget, api ECRAPI) providerkit.ImageStore {
+	return images{api: api, target: target, pushed: providerkit.RegistryImages(target)}
+}
+
+func (i images) String() string { return "images pushed to this account's ECR at " + i.target.Server }
+
+func (i images) GoString() string { return i.String() }
+
+func (i images) ImageDestination() string { return i.target.Server }
+
+func (i images) Has(ctx context.Context, push providerkit.ImagePush) (bool, error) {
+	return i.pushed.Has(ctx, push)
+}
+
+func (i images) Push(ctx context.Context, push providerkit.ImagePush, report providerkit.Reporter) error {
+	repository, err := repositoryOf(i.target, push.Target)
+	if err != nil {
+		return err
+	}
+	if err := ensure(ctx, i.api, repository); err != nil {
+		return err
+	}
+	return i.pushed.Push(ctx, push, report)
+}
+
+func repositoryOf(target providerkit.RegistryTarget, coordinate string) (string, error) {
+	rest, found := strings.CutPrefix(coordinate, target.Server+"/")
+	if !found {
+		return "", fmt.Errorf("%s is not a coordinate under %s, so there is no repository of this account's to hold it", coordinate, target.Server)
+	}
+	repository, _, _ := strings.Cut(rest, "@")
+	if at := strings.LastIndex(repository, ":"); at > strings.LastIndex(repository, "/") {
+		repository = repository[:at]
+	}
+	if repository == "" {
+		return "", fmt.Errorf("%s names no repository", coordinate)
+	}
+	return repository, nil
+}
+
 func ensure(ctx context.Context, api ECRAPI, name string) error {
 	_, err := api.CreateRepository(ctx, &ecr.CreateRepositoryInput{
 		RepositoryName:     aws.String(name),
 		ImageTagMutability: ecrtypes.ImageTagMutabilityImmutable,
-		Tags:               []ecrtypes.Tag{{Key: aws.String(managedByTag), Value: aws.String("ocel")}},
+		Tags:               []ecrtypes.Tag{{Key: aws.String(managedByTag), Value: aws.String(managedByOcel)}},
 	})
 	var exists *ecrtypes.RepositoryAlreadyExistsException
 	if errors.As(err, &exists) {

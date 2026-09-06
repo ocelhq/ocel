@@ -168,6 +168,8 @@ func (r *release) Run(pctx *sdk.Context, plan providerkit.StackPlan) error {
 		return work.run(pctx, shipped)
 	case *containerWork:
 		return work.run(pctx)
+	case *substrateWork:
+		return work.run(pctx)
 	case *infraWork:
 		return r.infra(pctx, plan, work)
 	}
@@ -241,6 +243,9 @@ func (r *release) Configure(_ context.Context, plan providerkit.StackPlan) (auto
 func (r *release) Decode(ctx context.Context, plan providerkit.StackPlan, outputs auto.OutputMap) (providerkit.StackResult, error) {
 	if work, held := plan.Options.(*stackWork); held {
 		work.outputs = outputs
+		return providerkit.StackResult{}, nil
+	}
+	if _, held := plan.Options.(*substrateWork); held {
 		return providerkit.StackResult{}, nil
 	}
 	if work, held := plan.Options.(*containerWork); held {
@@ -368,6 +373,9 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 
 func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
 	r.realized.mark(naming.Sanitize(plan.Ref.Project), plan.Ref.Name)
+	if runsContainer(plan) {
+		return r.provisionContainer(ctx, plan, report)
+	}
 	prepared, work, err := r.prepare(ctx, plan)
 	if err != nil {
 		return providerkit.StackResult{}, err
@@ -387,6 +395,9 @@ func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, rep
 }
 
 func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
+	if runsContainer(plan) {
+		return r.planContainer(ctx, plan, report)
+	}
 	prepared, _, err := r.prepare(ctx, plan)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -396,14 +407,6 @@ func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, report p
 
 func (r *release) prepare(ctx context.Context, plan providerkit.StackPlan) (providerkit.StackPlan, *appWork, error) {
 	if plan.Options != nil {
-		return plan, nil, nil
-	}
-	if plan.App != nil && plan.App.Compute == providerkit.ComputeContainer {
-		work, err := r.containerWork(plan)
-		if err != nil {
-			return providerkit.StackPlan{}, nil, err
-		}
-		plan.Options = work
 		return plan, nil, nil
 	}
 	if len(plan.Images.Pushes) > 0 {
@@ -441,6 +444,9 @@ func (r *Releaser) Destroy(ctx context.Context, ref providerkit.StackRef, report
 		return err
 	}
 	if err := held.adapter.Destroy(ctx, ref, report); err != nil {
+		return err
+	}
+	if err := r.releaseSubstrate(ctx, ref, report); err != nil {
 		return err
 	}
 	if held.cfg.Tags == nil {

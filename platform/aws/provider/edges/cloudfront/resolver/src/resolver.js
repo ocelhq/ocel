@@ -9,8 +9,9 @@ var EDGE_KIND = 'cloudfront';
 var CACHE_KEY_HEADER = 'x-ocel-cache-key';
 var FORWARDED_HOST_HEADER = 'x-forwarded-host';
 var ORIGIN_SECRET_HEADER = 'x-ocel-origin-secret';
+var CONTAINER_HEADER = 'x-ocel-container';
 var CONTROL_PREFIX = 'x-middleware-';
-var CONTROL_HEADERS = ['x-ocel-entry', 'next-resume', ORIGIN_SECRET_HEADER];
+var CONTROL_HEADERS = ['x-ocel-entry', 'next-resume', ORIGIN_SECRET_HEADER, CONTAINER_HEADER];
 
 function headerValue(headers, name) {
   var entry = headers[name];
@@ -133,10 +134,14 @@ async function handler(event) {
 
   var originHeaders = {};
   originHeaders[ORIGIN_SECRET_HEADER] = route.secret;
+  if (route.container) originHeaders[CONTAINER_HEADER] = route.container;
+  var plain = route.protocol === 'http';
   cf.updateRequestOrigin({
     domainName: route.origin,
     originAccessControlConfig: { enabled: false },
-    customOriginConfig: { port: 443, protocol: 'https', sslProtocols: ['TLSv1.2'] },
+    customOriginConfig: plain
+      ? { port: 80, protocol: 'http' }
+      : { port: 443, protocol: 'https', sslProtocols: ['TLSv1.2'] },
     customHeaders: originHeaders,
   });
   return request;

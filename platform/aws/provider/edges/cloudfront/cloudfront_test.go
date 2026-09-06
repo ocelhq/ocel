@@ -361,8 +361,8 @@ func TestPromote(t *testing.T) {
 			App:         "web",
 			Identity:    "d1.f1",
 			Image:       "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel/web:sha256-abc",
-			Physical:    "arn:aws:apprunner:eu-west-1:123456789012:service/shop-prod-web/abc",
-			Origin:      "https://abc.eu-west-1.awsapprunner.com",
+			Physical:    "shop-prod-web-container-r3f8a1c90",
+			Origin:      "http://ocel-containers-production-123.eu-west-1.elb.amazonaws.com",
 			HealthPath:  "/",
 			AssetPrefix: fakeAssetPrefix,
 		}
@@ -375,8 +375,11 @@ func TestPromote(t *testing.T) {
 		}
 
 		published := routeOn(t, w, stack, boundHost)
-		if published.Origin != "abc.eu-west-1.awsapprunner.com" {
-			t.Errorf("origin = %q, want the host the container answers on", published.Origin)
+		if published.Origin != "ocel-containers-production-123.eu-west-1.elb.amazonaws.com" || published.Protocol != "http" {
+			t.Errorf("origin = %q over %q, want the front the container answers behind, reached over plain http", published.Origin, published.Protocol)
+		}
+		if published.Container != "shop-prod-web-container-r3f8a1c90" {
+			t.Errorf("container = %q, want the service the front's rule names: every release shares one front", published.Container)
 		}
 		if published.Assets != "" || published.AssetPrefix != "" {
 			t.Errorf("assets = %q under %q, want none: a container serves its own static files, and a bucket in front would answer 403 for them", published.Assets, published.AssetPrefix)

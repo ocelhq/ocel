@@ -144,6 +144,30 @@ describe("the resolver", () => {
     expect(origins[0].customHeaders["x-ocel-origin-secret"]).toBe(ROUTE.secret);
   });
 
+  it("reaches a container over plain http, naming the container the shared front should answer with", async () => {
+    const { origins } = await resolve(request("/blog", { "x-ocel-container": "forged" }), {
+      "shop.example.com": {
+        ...ROUTE,
+        origin: "ocel-containers-production-123.eu-west-1.elb.amazonaws.com",
+        protocol: "http",
+        container: "shop-prod-web-container-r3f8a1c90",
+        assets: "",
+        assetPrefix: "",
+      },
+    });
+
+    expect(origins).toHaveLength(1);
+    expect(origins[0].customOriginConfig).toEqual({ port: 80, protocol: "http" });
+    expect(origins[0].customHeaders["x-ocel-container"]).toBe("shop-prod-web-container-r3f8a1c90");
+    expect(origins[0].customHeaders["x-ocel-origin-secret"]).toBe(ROUTE.secret);
+  });
+
+  it("names no container on a serverless route", async () => {
+    const { origins } = await resolve(request("/blog"));
+    expect(origins[0].customHeaders).not.toHaveProperty("x-ocel-container");
+    expect(origins[0].customOriginConfig.protocol).toBe("https");
+  });
+
   it("sends everything else to the release's entry function with the secret it demands", async () => {
     const { answered, origins } = await resolve(request("/blog"));
 

@@ -29,6 +29,7 @@ type mockedEngine struct {
 	pending   *pendingSets
 	mu        sync.Mutex
 	ran       []string
+	torndown  []string
 	previewed []providerkit.Change
 }
 
@@ -128,8 +129,17 @@ func (p *previewing) Call(args sdk.MockCallArgs) (resource.PropertyMap, error) {
 	return p.inner.Call(args)
 }
 
-func (e *mockedEngine) Destroy(context.Context, kitpulumi.Setup, providerkit.Reporter) error {
+func (e *mockedEngine) Destroy(_ context.Context, setup kitpulumi.Setup, _ providerkit.Reporter) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.torndown = append(e.torndown, setup.Stack)
 	return nil
+}
+
+func (e *mockedEngine) torn() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return slices.Clone(e.torndown)
 }
 
 func (e *mockedEngine) Outputs(context.Context, kitpulumi.Setup) (auto.OutputMap, error) {

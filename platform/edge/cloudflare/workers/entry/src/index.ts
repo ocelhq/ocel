@@ -125,7 +125,6 @@ const originRuntime: ServeRuntime = {
     nodeOrigin({
       app: deployments.app ?? record.app,
       functionUrls: record.functionUrls,
-      origin: record.origin,
       originFetch: base.originFetch,
     }),
 };
