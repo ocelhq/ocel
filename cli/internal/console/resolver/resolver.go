@@ -6,14 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/console/resolvecache"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
-	"github.com/ocelhq/ocel/pkg/naming"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
 type Resolver struct {
@@ -56,7 +55,7 @@ func (r *Resolver) Resolve(ctx context.Context, baseURL, token, projectID string
 
 	defs := make([]resolvecache.Def, 0, len(resources))
 	for _, entry := range resources {
-		fragment, err := envFragment(entry.Type)
+		fragment, err := resolve.EnvFragment(entry.Type)
 		if err != nil {
 			return nil, err
 		}
@@ -95,7 +94,7 @@ func (r *Resolver) Resolve(ctx context.Context, baseURL, token, projectID string
 func (r *Resolver) callResolve(ctx context.Context, baseURL, token, projectID string, resources []resourceregistry.Entry) (map[string]string, time.Time, error) {
 	entries := make([]resolveResourceEntry, 0, len(resources))
 	for _, resource := range resources {
-		fragment, err := envFragment(resource.Type)
+		fragment, err := resolve.EnvFragment(resource.Type)
 		if err != nil {
 			return nil, time.Time{}, err
 		}
@@ -137,25 +136,13 @@ func (r *Resolver) callResolve(ctx context.Context, baseURL, token, projectID st
 }
 
 func resourcesFromEnv(resources []resourceregistry.Entry, env map[string]string) ([]resolve.Resource, error) {
-	out := make([]resolve.Resource, 0, len(resources))
-	for _, resource := range resources {
-		fragment, err := envFragment(resource.Type)
-		if err != nil {
-			return nil, err
+	resolved, err := resolve.FromEnv(resources, env)
+	if missing := resolve.MissingResources(err); len(missing) > 0 {
+		names := make([]string, 0, len(missing))
+		for _, entry := range missing {
+			names = append(names, strconv.Quote(entry.Name))
 		}
-		key := fmt.Sprintf("OCEL_RESOURCE_%s_%s", fragment, resource.Name)
-		value, ok := env[key]
-		if !ok {
-			return nil, fmt.Errorf("resolve response missing env for resource %q", resource.Name)
-		}
-		out = append(out, resolve.Resource{Name: resource.Name, Type: resource.Type, Env: map[string]string{key: value}})
+		return nil, fmt.Errorf("resolve response missing env for resource %s", strings.Join(names, ", "))
 	}
-	return out, nil
-}
-
-func envFragment(t linksv1.LinkType) (string, error) {
-	if _, ok := naming.KindOf(t); !ok {
-		return "", fmt.Errorf("resource has unsupported type %s", t)
-	}
-	return naming.EnvFragment(t), nil
+	return resolved, err
 }

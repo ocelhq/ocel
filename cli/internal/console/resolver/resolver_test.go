@@ -30,18 +30,18 @@ func TestEnvFragment(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := envFragment(tt.typ)
+			got, err := resolve.EnvFragment(tt.typ)
 			if tt.wantErr {
 				if err == nil {
-					t.Fatalf("envFragment(%v) = %q, want an error", tt.typ, got)
+					t.Fatalf("resolve.EnvFragment(%v) = %q, want an error", tt.typ, got)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("envFragment: %v", err)
+				t.Fatalf("resolve.EnvFragment: %v", err)
 			}
 			if got != tt.want {
-				t.Fatalf("envFragment() = %q, want %q", got, tt.want)
+				t.Fatalf("resolve.EnvFragment() = %q, want %q", got, tt.want)
 			}
 		})
 	}
