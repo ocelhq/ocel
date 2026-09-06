@@ -20,12 +20,6 @@ const EVERY_NEXT_CACHE_ROW = [...nextCacheRows, ...nextDataCacheRows];
 
 export const gaps: Gap[] = [
   {
-    id: "env-set-needs-provider",
-    reason: "ocel env set demands a provider, so dev cannot deliver GREETING or SECRET_TOKEN",
-    issue: 881,
-    affects: [{ on: ["dev"], cells: SDK_CELLS, tests: [UP_TITLE], skip: true }],
-  },
-  {
     id: "no-router-in-front-of-dev",
     reason: "ocel dev does not front a Next app with the router, so no cache tier is observable",
     issue: 898,

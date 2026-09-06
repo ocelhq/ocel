@@ -164,10 +164,17 @@ async function up(cell: CellContext): Promise<Deployment> {
       dir,
       "up",
       "env-greeting",
-      ["env", "set", "GREETING", INITIAL_GREETING],
+      ["env", "set", "GREETING", INITIAL_GREETING, "--dev"],
       env,
     );
-    await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
+    await runOcel(
+      cell,
+      dir,
+      "up",
+      "env-secret",
+      ["env", "set", "SECRET_TOKEN", SECRET_TOKEN, "--dev"],
+      env,
+    );
   }
   if (migrates(cell.fixture.rows)) {
     await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand()], env);
