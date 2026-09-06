@@ -351,6 +351,41 @@ func TestPromote(t *testing.T) {
 		}
 	})
 
+	t.Run("a container release is routed to its own origin with no asset bucket in front", func(t *testing.T) {
+		t.Parallel()
+
+		w := newWorld()
+		stack := reconciled(t, w)
+		bound(t, stack)
+		record := edge.DeploymentRecord{
+			App:         "web",
+			Identity:    "d1.f1",
+			Image:       "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel/web:sha256-abc",
+			Physical:    "arn:aws:apprunner:eu-west-1:123456789012:service/shop-prod-web/abc",
+			Origin:      "https://abc.eu-west-1.awsapprunner.com",
+			HealthPath:  "/",
+			AssetPrefix: fakeAssetPrefix,
+		}
+		if err := stack.Ledger().PutStaged(context.Background(), record); err != nil {
+			t.Fatalf("PutStaged: %v", err)
+		}
+
+		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
+			t.Fatalf("Promote: %v", err)
+		}
+
+		published := routeOn(t, w, stack, boundHost)
+		if published.Origin != "abc.eu-west-1.awsapprunner.com" {
+			t.Errorf("origin = %q, want the host the container answers on", published.Origin)
+		}
+		if published.Assets != "" || published.AssetPrefix != "" {
+			t.Errorf("assets = %q under %q, want none: a container serves its own static files, and a bucket in front would answer 403 for them", published.Assets, published.AssetPrefix)
+		}
+		if published.Secret != fakeSecret {
+			t.Errorf("the route carries no secret, so the origin cannot tell the edge from a stranger")
+		}
+	})
+
 	t.Run("a store that refuses the write records nothing", func(t *testing.T) {
 		t.Parallel()
 
