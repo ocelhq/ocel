@@ -21,12 +21,53 @@ function blobConfig() {
   };
 }
 
-export function storeBucket(): string {
-  return blobConfig().bucket;
+export interface ObjectScope {
+  organizationId: string;
+  projectId: string;
+  userId: string;
 }
 
 export function projectObjectPrefix(organizationId: string, projectId: string): string {
   return `${organizationId}/${projectId}/`;
+}
+
+export const LONGEST_OBJECT_KEY_BYTES = 1024;
+
+function control(character: string): boolean {
+  const point = character.codePointAt(0) ?? 0;
+  return point < 0x20 || point === 0x7f;
+}
+
+export function withinNamespace(key: string): boolean {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(key);
+  } catch {
+    return false;
+  }
+  if (decoded.startsWith("/") || decoded.includes("\\") || [...decoded].some(control)) {
+    return false;
+  }
+  return decoded
+    .split("/")
+    .every((segment) => segment !== "" && segment !== "." && segment !== "..");
+}
+
+export function storeObjectKey(scope: ObjectScope, key: string): string {
+  if (!withinNamespace(key)) {
+    throw new Error("the key names something outside the namespace it was handed");
+  }
+  const objectKey = `${projectObjectPrefix(scope.organizationId, scope.projectId)}${scope.userId}/${key}`;
+  if (Buffer.byteLength(objectKey) > LONGEST_OBJECT_KEY_BYTES) {
+    throw new Error(
+      `the key makes an object key of ${Buffer.byteLength(objectKey)} bytes, and the store holds ${LONGEST_OBJECT_KEY_BYTES}`,
+    );
+  }
+  return objectKey;
+}
+
+export function storeBucket(): string {
+  return blobConfig().bucket;
 }
 
 function s3Client(): S3Client {
@@ -43,7 +84,7 @@ function s3Client(): S3Client {
 }
 
 export interface PresignPutArgs {
-  key: string;
+  objectKey: string;
   contentType: string;
   contentLength: number;
   sessionId: string;
@@ -54,7 +95,7 @@ export async function presignPut(args: PresignPutArgs): Promise<string> {
   const config = blobConfig();
   const command = new PutObjectCommand({
     Bucket: config.bucket,
-    Key: args.key,
+    Key: args.objectKey,
     ContentType: args.contentType,
     ContentLength: args.contentLength,
     ContentDisposition: args.contentDisposition || undefined,
@@ -70,10 +111,10 @@ export async function presignPut(args: PresignPutArgs): Promise<string> {
   });
 }
 
-export async function objectSessionTag(key: string): Promise<string | undefined> {
+export async function objectSessionTag(objectKey: string): Promise<string | undefined> {
   try {
     const { TagSet } = await s3Client().send(
-      new GetObjectTaggingCommand({ Bucket: blobConfig().bucket, Key: key }),
+      new GetObjectTaggingCommand({ Bucket: blobConfig().bucket, Key: objectKey }),
     );
     return TagSet?.find((t) => t.Key === SESSION_TAG_KEY)?.Value;
   } catch (err) {

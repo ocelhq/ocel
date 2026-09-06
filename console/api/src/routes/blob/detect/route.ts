@@ -4,6 +4,7 @@ import { project, uploadSession } from "@console/db/schema";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { SessionFile } from "../session";
+import type { SignedFile } from "../signing";
 import { signUpload } from "../signing";
 import { objectSessionTag } from "../store";
 
@@ -14,7 +15,7 @@ const detectSchema = z.object({
 interface Completion {
   callbackBaseUrl: string;
   sessionId: string;
-  file: { key: string; name: string; size: number; mimeType: string };
+  file: SignedFile;
   signature: string;
 }
 
@@ -97,7 +98,7 @@ export async function detectUploads(request: Request): Promise<Response> {
     for (let idx = 0; idx < files.length; idx++) {
       const file = files[idx];
       if (file.state !== "pending") continue;
-      if ((await objectSessionTag(file.key)) !== session.id) continue;
+      if ((await objectSessionTag(file.objectKey)) !== session.id) continue;
 
       const transitioned = await transitionPendingToSucceeded(session.id, idx);
       if (!transitioned) continue;

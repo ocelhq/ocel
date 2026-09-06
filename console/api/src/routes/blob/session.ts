@@ -2,6 +2,7 @@ export type FileState = "pending" | "succeeded" | "expired";
 
 export interface SessionFile {
   key: string;
+  objectKey: string;
   name: string;
   size: number;
   mimeType: string;

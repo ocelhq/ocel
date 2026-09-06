@@ -214,14 +214,14 @@ describe("the gap list", () => {
     assert.deepEqual(issues(listed, "sdk/with-pulumi-api-gateway/web", UP_TITLE), [856]);
   });
 
-  it("lists dev at up and the upload row on the sdk bucket alone, and nothing at destroy", () => {
+  it("lists dev at up on the sdk bucket alone, and nothing at destroy or the upload row", () => {
     const listed = expectationsFor("dev");
     for (const [name, cell] of Object.entries(listed)) {
       assert.deepEqual(issues(listed, name, UP_TITLE), name.startsWith("sdk/") ? [881] : [], name);
       assert.deepEqual(issues(listed, name, DESTROY_TITLE), [], name);
       assert.ok(!(contractTitle("redeploy", UPLOAD) in cell), name);
     }
-    assert.deepEqual(issues(listed, "sdk/node/web", UPLOAD), [882]);
+    assert.deepEqual(issues(listed, "sdk/node/web", UPLOAD), []);
     assert.deepEqual(issues(listed, "deploy/node/web", UPLOAD), []);
     for (const cell of ["sdk/next/web", "deploy/next/web"]) {
       assert.deepEqual(issues(listed, cell, nextCacheRows[0]?.title ?? ""), [898], cell);

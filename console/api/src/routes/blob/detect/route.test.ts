@@ -78,6 +78,7 @@ describe("POST /api/blob/detect (MinIO)", () => {
     try {
       const { id: projectId } = await createProjectFor(session, "detect-once");
       const { sessionId, url, key } = await presign(session, projectId);
+      expect(key).toBe("photo.png");
 
       const before = await detectUploads(detectRequest(projectId, session.headers));
       expect((await before.json()).completions).toHaveLength(0);
