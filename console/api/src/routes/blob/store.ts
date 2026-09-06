@@ -1,4 +1,10 @@
-import { GetObjectTaggingCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectsCommand,
+  GetObjectTaggingCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const PRESIGN_TTL_S = 60 * 60;
@@ -17,6 +23,10 @@ function blobConfig() {
 
 export function storeBucket(): string {
   return blobConfig().bucket;
+}
+
+export function projectObjectPrefix(organizationId: string, projectId: string): string {
+  return `${organizationId}/${projectId}/`;
 }
 
 function s3Client(): S3Client {
@@ -74,4 +84,37 @@ export async function objectSessionTag(key: string): Promise<string | undefined>
     }
     throw err;
   }
+}
+
+export async function deleteProjectObjects(
+  organizationId: string,
+  projectId: string,
+): Promise<void> {
+  const bucket = blobConfig().bucket;
+  const prefix = projectObjectPrefix(organizationId, projectId);
+  const client = s3Client();
+
+  let continuationToken: string | undefined;
+  do {
+    const page = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    const objects = (page.Contents ?? []).flatMap(({ Key }) => (Key ? [{ Key }] : []));
+    if (objects.length > 0) {
+      const { Errors } = await client.send(
+        new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: objects, Quiet: true } }),
+      );
+      const refused = Errors ?? [];
+      if (refused.length > 0) {
+        throw new Error(
+          `the blob store kept ${refused.length} object(s) under ${prefix}: ${refused[0].Code} ${refused[0].Message}`,
+        );
+      }
+    }
+    continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (continuationToken);
 }
