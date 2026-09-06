@@ -36,3 +36,58 @@ jobs:
 
       - name: Reclaim the boxes nothing is using
         run: scripts/ec2.sh sweep
+
+  previews:
+    name: previews whose pull request has closed
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Take the CLI this sweep is driven with
+        uses: ./.github/actions/ocel-binary
+        with:
+          source: head
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+
+      - name: Enter the account Ocel deploys itself into
+        uses: ./.github/actions/dogfood-session
+        with:
+          role-to-assume: ${{ secrets.DOGFOOD_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.DOGFOOD_AWS_REGION }}
+          role-session-name: ocel-sweep-previews-${{ github.run_id }}
+          expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
+          cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Reclaim the previews whose pull request has closed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          ocel preview ls | tee "$RUNNER_TEMP/previews.tsv"
+          status=0
+          while IFS=$'\t' read -r identity lifecycle label _; do
+            [ "$lifecycle" = ephemeral ] || continue
+            case "$label" in pr-[0-9]*) ;; *) continue ;; esac
+            pr=${label#pr-}
+            state=$(gh pr view "$pr" --json state -q .state) || {
+              echo "::warning::no pull request $pr behind preview $identity"
+              continue
+            }
+            [ "$state" != OPEN ] || continue
+            ref=$(gh pr view "$pr" --json headRefName -q .headRefName)
+            echo "preview $identity belongs to pull request $pr, $state on branch $ref"
+            ocel preview rm --ref "$ref" --yes || status=1
+          done < "$RUNNER_TEMP/previews.tsv"
+          exit "$status"

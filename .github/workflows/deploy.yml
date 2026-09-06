@@ -1,0 +1,75 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "www/**"
+      - "console/github/**"
+      - "ocel.aws.config.ts"
+      - "packages/ocel/**"
+      - ".github/workflows/deploy.yml"
+      - ".github/actions/ocel-binary/**"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Ref to deploy instead of main. Empty deploys the commit this run was dispatched from."
+        default: ""
+        type: string
+      cli:
+        description: "head builds the CLI from the deployed ref; release installs the published one."
+        default: head
+        type: choice
+        options: [head, release]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: production, www and the app the previews report to
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Take the CLI this deploy is driven with
+        uses: ./.github/actions/ocel-binary
+        with:
+          source: ${{ inputs.cli || 'head' }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+
+      - name: Enter the account Ocel deploys itself into
+        uses: ./.github/actions/dogfood-session
+        with:
+          role-to-assume: ${{ secrets.DOGFOOD_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.DOGFOOD_AWS_REGION }}
+          role-session-name: ocel-deploy-${{ github.run_id }}
+          expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
+          cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy
+        run: ocel deploy --yes --log-format json --tag "sha-$(git rev-parse --short=7 HEAD)"
+
+      - name: Keep what the deploy reported
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-result
+          path: .ocel/deploy-result.json
+          if-no-files-found: warn

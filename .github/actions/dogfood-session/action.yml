@@ -1,0 +1,56 @@
+name: Dogfood session
+description: >-
+  A short-lived session on the account Ocel deploys itself into, guarded to
+  the expected AWS account, with the Cloudflare edge account named beside it.
+
+inputs:
+  role-to-assume:
+    description: ARN of the dogfood deploy role.
+    required: true
+  aws-region:
+    description: Region the role session is minted in.
+    required: true
+  role-session-name:
+    description: Session name, per job, so CloudTrail attributes the calls.
+    required: true
+  expected-aws-account-id:
+    description: The only AWS account this session may deploy into.
+    required: true
+  cloudflare-api-token:
+    description: Token for the Cloudflare account the edge is served from.
+    required: true
+  cloudflare-account-id:
+    description: That Cloudflare account's id.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Assume the dogfood deploy role
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.role-to-assume }}
+        aws-region: ${{ inputs.aws-region }}
+        role-session-name: ${{ inputs.role-session-name }}
+
+    - name: Guard the account this session may touch
+      shell: bash
+      env:
+        EXPECTED: ${{ inputs.expected-aws-account-id }}
+      run: |
+        set -euo pipefail
+        account=$(aws sts get-caller-identity --query Account --output text)
+        [ -n "$EXPECTED" ] || { echo "no expected account is named" >&2; exit 1; }
+        [ "$account" = "$EXPECTED" ] || { echo "session is account $account, not $EXPECTED" >&2; exit 1; }
+
+    - name: Name the edge account this session serves from
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.cloudflare-api-token }}
+        ACCOUNT: ${{ inputs.cloudflare-account-id }}
+      run: |
+        set -euo pipefail
+        {
+          echo "CLOUDFLARE_API_TOKEN=$TOKEN"
+          echo "CLOUDFLARE_ACCOUNT_ID=$ACCOUNT"
+        } >> "$GITHUB_ENV"
