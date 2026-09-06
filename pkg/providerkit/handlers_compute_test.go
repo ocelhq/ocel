@@ -172,4 +172,7 @@ func TestTheLedgerRecordAContainerDeployStagesIsTheOneItsPromotionLooksUp(t *tes
 	if record.Image == "" {
 		t.Errorf("the record under %q names no image, so a promotion reading it has nothing to put in front of the app", containerTestImage)
 	}
+	if record.Origin == "" || record.Origin != "https://"+record.Physical+".ctr.fake.invalid" {
+		t.Errorf("the record under %q names origin %q for container %q, want the URL the provider stood the container up on: an edge that fronts a container by URL has nothing else to reach", containerTestImage, record.Origin, record.Physical)
+	}
 }

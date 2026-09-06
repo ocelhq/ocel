@@ -1039,6 +1039,7 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFact
 		EntryFunction:    physicalByLogical[entryLogicalName(r.manifest, entry.App, facts.Entry)],
 		Image:            images.Coordinate(entry.App),
 		Physical:         physicalOf(result.Containers, entry.App),
+		Origin:           originOf(result.Containers, entry.App),
 		HealthPath:       entry.HealthCheckPath,
 		FunctionURLs:     urls,
 		AssetPrefix:      coordinate.AssetKey(""),
@@ -1352,6 +1353,15 @@ func physicalOf(containers []AppContainer, app string) string {
 	for _, container := range containers {
 		if container.Name == app {
 			return container.Physical
+		}
+	}
+	return ""
+}
+
+func originOf(containers []AppContainer, app string) string {
+	for _, container := range containers {
+		if container.Name == app {
+			return container.URL
 		}
 	}
 	return ""

@@ -151,6 +151,7 @@ type DeploymentRecord struct {
 	EntryFunction    string            `json:"entryFunction,omitempty"`
 	Image            string            `json:"image,omitempty"`
 	Physical         string            `json:"physical,omitempty"`
+	Origin           string            `json:"origin,omitempty"`
 	HealthPath       string            `json:"healthPath,omitempty"`
 	RoutingManifest  any               `json:"routingManifest"`
 	FunctionURLs     map[string]string `json:"functionUrls"`
