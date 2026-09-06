@@ -70,22 +70,22 @@ describe("the gap list", () => {
     }
   });
 
-  it("lists the container gap at up on every aws container cell, and nowhere else", () => {
+  it("lists the App Runner gap at up on every floci container cell, and nowhere else", () => {
     const containers = cellsOfVariant("container");
     assert.ok(containers.includes("deploy/node-container/web"));
     assert.ok(containers.includes("sdk/with-transforms-container/web"));
+    const floci = expectationsFor("aws.floci");
+    for (const cell of containers) {
+      assert.deepEqual(issues(floci, cell, UP_TITLE), [995], `${cell} on aws.floci`);
+    }
     for (const environment of ["aws", "aws.floci"] as const) {
-      const listed = expectationsFor(environment);
-      for (const cell of containers) {
-        assert.deepEqual(issues(listed, cell, UP_TITLE), [937], `${cell} on ${environment}`);
-      }
-      for (const [cell, titles] of Object.entries(listed)) {
-        if (containers.includes(cell)) {
+      for (const [cell, titles] of Object.entries(expectationsFor(environment))) {
+        if (environment === "aws.floci" && containers.includes(cell)) {
           continue;
         }
         for (const [title, rows] of Object.entries(titles)) {
           assert.ok(
-            !rows.some((row) => row.id === "aws-container-unimplemented"),
+            !rows.some((row) => row.id === "floci-runs-no-app-runner"),
             `${cell} ${title} on ${environment}`,
           );
         }
@@ -265,12 +265,24 @@ describe("the gap list", () => {
 
   it("skips every cell that is listed dead at up, and leaves the live ones to run", () => {
     assert.deepEqual(alive("aws"), [
+      "deploy/node-container",
       "deploy/node-api-gateway",
+      "deploy/go-container",
       "deploy/go-api-gateway",
+      "deploy/python-container",
       "deploy/python-api-gateway",
+      "deploy/next-container",
       "deploy/next-cloudflare",
+      "deploy/workspace-container",
       "deploy/workspace-cloudflare",
+      "lifecycle/next-container",
+      "sdk/node-container",
+      "sdk/next-container",
+      "sdk/workspace-container",
+      "sdk/with-transforms-container",
       "sdk/with-transforms-api-gateway",
+      "sdk/with-sst-container",
+      "sdk/with-pulumi-container",
     ]);
     assert.deepEqual(alive("aws.floci"), [
       "deploy/node-api-gateway",
