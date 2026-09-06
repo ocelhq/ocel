@@ -1,9 +1,11 @@
 import { DESTROY_TITLE, UP_TITLE } from "../plan";
 import {
+  CLIENT_IP_ROW,
   LINK_QUERY_ROW,
   LINK_ROW,
   nextCacheRows,
   nextDataCacheRows,
+  RUNTIME_ROW,
   STREAM_ROW,
   UPLOAD_ROW,
 } from "../rows";
@@ -30,6 +32,17 @@ const SERVERLESS = ["base", "api-gateway", "cloudflare"];
 const EVERY_NEXT_CACHE_ROW = [...nextCacheRows, ...nextDataCacheRows];
 
 export const gaps: Gap[] = [
+  {
+    id: "dev-is-development",
+    reason:
+      "ocel dev runs the app as development on the runner's clock, never as production in UTC",
+    affects: [{ on: ["dev"], tests: [{ row: RUNTIME_ROW }] }],
+  },
+  {
+    id: "no-hop-in-front-of-dev",
+    reason: "ocel dev fronts the app with no proxy, so nothing appends the client address",
+    affects: [{ on: ["dev"], tests: [{ row: CLIENT_IP_ROW }] }],
+  },
   {
     id: "env-set-needs-provider",
     reason: "ocel env set demands a provider, so dev cannot deliver GREETING or SECRET_TOKEN",
