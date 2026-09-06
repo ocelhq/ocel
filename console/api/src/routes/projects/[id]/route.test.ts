@@ -1,3 +1,9 @@
+import {
+  HeadObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { auth } from "@console/auth/next";
 import { db } from "@console/db";
 import { project, uploadSession } from "@console/db/schema";
@@ -5,8 +11,19 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createTestSessionWithOrganization } from "../../../../test/auth-harness";
 import { setupTestDatabase } from "../../../../test/db";
+import { projectObjectPrefix, storeBucket } from "../../blob/store";
 import { createProject } from "../route";
 import { deleteProject, getProjectById } from "./route";
+
+const blobStore = new S3Client({
+  region: process.env.OCEL_BLOB_REGION ?? "us-east-1",
+  endpoint: process.env.OCEL_BLOB_ENDPOINT ?? "http://localhost:9000",
+  forcePathStyle: true,
+  credentials: {
+    accessKeyId: process.env.OCEL_BLOB_ACCESS_KEY_ID ?? "minioadmin",
+    secretAccessKey: process.env.OCEL_BLOB_SECRET_ACCESS_KEY ?? "minioadmin",
+  },
+});
 
 function getRequest(headers: Headers) {
   return new Request("http://localhost/api/projects/x", {
@@ -188,6 +205,62 @@ describe("deleteProject", () => {
       const [row] = await db.select().from(uploadSession).where(eq(uploadSession.id, uploadId));
       expect(row).toBeUndefined();
     } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("empties the project's prefix in the blob store before it drops the row", async () => {
+    const session = await createTestSessionWithOrganization();
+
+    try {
+      const created = await createProjectFor(session, "delete-with-objects");
+      const prefix = projectObjectPrefix(session.organization.id, created.id);
+      const keys = [`${prefix}${session.user.id}/avatars/me.png`, `${prefix}orphan.bin`];
+      for (const Key of keys) {
+        await blobStore.send(
+          new PutObjectCommand({ Bucket: storeBucket(), Key, Body: Buffer.from("bytes") }),
+        );
+      }
+
+      const response = await deleteProject(deleteRequest(session.headers), created.id);
+
+      expect(response.status).toBe(204);
+      const left = await blobStore.send(
+        new ListObjectsV2Command({ Bucket: storeBucket(), Prefix: prefix }),
+      );
+      expect(left.Contents ?? []).toHaveLength(0);
+      for (const Key of keys) {
+        await expect(
+          blobStore.send(new HeadObjectCommand({ Bucket: storeBucket(), Key })),
+        ).rejects.toThrow();
+      }
+      const [row] = await db.select().from(project).where(eq(project.id, created.id));
+      expect(row).toBeUndefined();
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("keeps the row when the blob store will not give the objects up", async () => {
+    const session = await createTestSessionWithOrganization();
+    const endpoint = process.env.OCEL_BLOB_ENDPOINT;
+
+    try {
+      const created = await createProjectFor(session, "delete-blob-refuses");
+      process.env.OCEL_BLOB_ENDPOINT = "http://127.0.0.1:1";
+
+      const response = await deleteProject(deleteRequest(session.headers), created.id);
+
+      expect(response.status).toBe(500);
+      process.env.OCEL_BLOB_ENDPOINT = endpoint;
+      const [row] = await db.select().from(project).where(eq(project.id, created.id));
+      expect(row).toBeTruthy();
+    } finally {
+      if (endpoint === undefined) {
+        delete process.env.OCEL_BLOB_ENDPOINT;
+      } else {
+        process.env.OCEL_BLOB_ENDPOINT = endpoint;
+      }
       await session.cleanup();
     }
   });

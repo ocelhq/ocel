@@ -5,7 +5,7 @@ import { project, uploadSession } from "@console/db/schema";
 import { eq } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import type { SessionFile } from "../session";
-import { presignPut } from "../store";
+import { presignPut, projectObjectPrefix } from "../store";
 import { presignUploadSchema } from "./validation";
 
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
@@ -42,7 +42,7 @@ export async function presignUpload(request: Request): Promise<Response> {
   }
 
   const organizationId = foundProject.organizationId;
-  const prefix = `${organizationId}/${projectId}/${userId}/`;
+  const prefix = `${projectObjectPrefix(organizationId, projectId)}${userId}/`;
 
   const sessionId = uuidv7();
   const secret = randomBytes(32).toString("base64url");
