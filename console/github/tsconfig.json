@@ -12,6 +12,6 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src/**/*", "test/**/*", "ocel/**/*"],
+  "include": ["src/**/*", "test/**/*", "../../ocel/**/*"],
   "exclude": ["node_modules"]
 }
