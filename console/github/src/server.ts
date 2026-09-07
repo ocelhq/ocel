@@ -80,7 +80,7 @@ export function privateKey(raw: string): string {
 }
 
 async function start(): Promise<void> {
-  const { env } = await import("../ocel/vars");
+  const { env } = await import("../../../ocel/vars");
 
   const probot = createProbot({
     overrides: {
