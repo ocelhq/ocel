@@ -15,7 +15,6 @@ import {
 } from "./index";
 
 const HEALTH = "GET /health answers with the app name";
-const STREAM = "GET /api/probes/stream streams its chunks in order to the sentinel";
 const UPLOAD = "the upload protocol stores a document and /api/documents lists it";
 
 const AWS_PLAN = planTests(
@@ -170,10 +169,9 @@ describe("the gap list", () => {
     }
   });
 
-  it("lists every contract title on floci api-gateway, and up under the master-secret issue", () => {
+  it("lists nothing past up on floci api-gateway, and up under the issue that refuses it", () => {
     const listed = expectationsFor("aws.floci");
     assert.deepEqual(upIssues(listed, cellsOfVariant("api-gateway")), {
-      "deploy/node-api-gateway/web": [],
       "deploy/next-api-gateway/web": [906],
       "deploy/workspace-api-gateway/express": [906],
       "deploy/workspace-api-gateway/next": [906],
@@ -186,21 +184,13 @@ describe("the gap list", () => {
       "sdk/workspace-api-gateway/express": [849],
       "sdk/workspace-api-gateway/next": [849],
     });
-    const node = "sdk/node-api-gateway/web";
-    const lifecycle = "lifecycle/next-api-gateway/web";
-    assert.deepEqual(issues(listed, node, HEALTH), [854]);
-    assert.deepEqual(issues(listed, node, contractTitle("redeploy", HEALTH)), []);
-    assert.deepEqual(issues(listed, lifecycle, contractTitle("redeploy", HEALTH)), [854]);
-    assert.deepEqual(issues(listed, node, STREAM), [851]);
-    assert.deepEqual(issues(listed, "deploy/node-api-gateway/web", HEALTH), [854]);
-    for (const row of nextCacheRows) {
-      for (const cell of ["sdk/next-api-gateway/web", "deploy/next-api-gateway/web"]) {
-        assert.deepEqual(issues(listed, cell, row.title), [854], cell);
-      }
-      for (const leg of CONTRACT_LEGS) {
-        assert.deepEqual(issues(listed, lifecycle, contractTitle(leg, row.title)), [854], leg);
+    const gateway = new Set(cellsOfVariant("api-gateway"));
+    for (const [name, cell] of Object.entries(listed)) {
+      if (gateway.has(name)) {
+        assert.deepEqual(Object.keys(cell), [UP_TITLE], name);
       }
     }
+    assert.equal(listed["deploy/node-api-gateway/web"], undefined);
   });
 
   it("lists no leg marker, refuse or publish title on floci, on any edge", () => {

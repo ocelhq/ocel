@@ -1,12 +1,5 @@
 import { DESTROY_TITLE, UP_TITLE } from "../plan";
-import {
-  LINK_QUERY_ROW,
-  LINK_ROW,
-  nextCacheRows,
-  nextDataCacheRows,
-  STREAM_ROW,
-  UPLOAD_ROW,
-} from "../rows";
+import { LINK_QUERY_ROW, LINK_ROW, nextCacheRows, nextDataCacheRows, UPLOAD_ROW } from "../rows";
 import type { Gap } from "./types";
 
 const DEPLOY_NODE_HTTP = ["deploy/node/web"];
@@ -214,26 +207,6 @@ export const gaps: Gap[] = [
         skip: true,
       },
     ],
-  },
-  {
-    id: "stage-variables",
-    reason:
-      "floci's API Gateway substitutes no stage variables and serves no streaming path, so the edge answers 400",
-    issue: 854,
-    affects: [
-      {
-        on: ["aws.floci"],
-        cells: EVERY_AWS_CELL_BUT_LADDERS,
-        variants: ["api-gateway"],
-        tests: [{ rows: "every", except: [STREAM_ROW] }],
-      },
-    ],
-  },
-  {
-    id: "no-streamed-body",
-    reason: "a floci Function URL never delivers the body of a streamed response and hangs",
-    issue: 851,
-    affects: [{ on: ["aws.floci"], variants: ["api-gateway"], tests: [{ row: STREAM_ROW }] }],
   },
   {
     id: "aws-container-unimplemented",
