@@ -217,13 +217,11 @@ describe("planning the cells a fixture runs on a target", () => {
     return [...new Set(planTests(cellsOf(node, target), ["up"]).map((row) => row.cell))];
   }
 
-  it("plans one cell per variant beside the base cell on aws", () => {
-    expect(cellsOn("aws")).toEqual([
-      "sdk/node/web",
-      "sdk/node-container/web",
-      "sdk/node-api-gateway/web",
-      "sdk/node-cloudflare/web",
-    ]);
+  it("plans one cell per variant, and no base cell where the fixture runs none", () => {
+    expect(cellsOn("aws")).toEqual(["sdk/node-container/web", "sdk/node-api-gateway/web"]);
+    expect(
+      planTests(cellsOf(specByName("sdk", "next"), "aws"), ["up"]).map((row) => row.cell),
+    ).toEqual(["sdk/next/web", "sdk/next-container/web", "sdk/next-cloudflare/web"]);
   });
 
   it("plans only the variants a target runs", () => {

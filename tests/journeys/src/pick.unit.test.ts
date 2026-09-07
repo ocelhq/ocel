@@ -1,12 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  type CellsFor,
-  type Coverage,
-  coverageFrom,
-  coverCells,
-  type Pick,
-  pickFixtures,
-} from "./pick";
+import { type CellsFor, type Coverage, coverageFrom, coverCells, type Pick } from "./pick";
 import {
   type Cell,
   cellsOf,
@@ -14,8 +7,6 @@ import {
   fixtureNameOf,
   groupKeyOf,
   preferredOf,
-  SERVES,
-  spec,
   specByName,
   specForTarget,
   variantNameOf,
@@ -23,101 +14,11 @@ import {
 
 const GROUP = "sdk/node-http";
 
-const nodeHttp = spec.filter((row) => groupKeyOf(row) === GROUP).map(fixtureNameOf);
-
 const PREFERRED = preferredOf(GROUP) as string;
-
-function names(rows: FixtureSpec[]): string[] {
-  return rows.map(fixtureNameOf);
-}
-
-describe("picking one member of a group", () => {
-  it("runs every fixture when nothing asked for a pick", () => {
-    const { chosen, leftOut } = pickFixtures(spec, undefined);
-    expect(names(chosen)).toEqual(names(spec));
-    expect(leftOut).toEqual([]);
-  });
-
-  it("runs every ungrouped fixture whatever the seed", () => {
-    const { chosen } = pickFixtures(spec, { seed: "7", touched: [] });
-    const ungrouped = spec.filter((row) => groupKeyOf(row) === undefined);
-    expect(names(chosen)).toEqual(expect.arrayContaining(names(ungrouped)));
-  });
-
-  it("runs each concern's preferred member when the diff touches none of them", () => {
-    for (const seed of ["7", "8", "1234"]) {
-      const { chosen, leftOut } = pickFixtures(spec, { seed, touched: [] });
-      expect(names(chosen).filter((name) => nodeHttp.includes(name))).toEqual([PREFERRED]);
-      expect(names(leftOut).filter((name) => nodeHttp.includes(name))).toHaveLength(
-        nodeHttp.length - 1,
-      );
-    }
-  });
-
-  it("picks one member per grouped concern", () => {
-    const { chosen } = pickFixtures(spec, { seed: "7", touched: [] });
-    const picked = chosen.filter((row) => groupKeyOf(row) !== undefined);
-    expect(new Set(picked.map((row) => row.concern))).toEqual(new Set(["deploy", "sdk"]));
-  });
-
-  it("runs the member the diff touches, and leaves the preferred one out", () => {
-    const { chosen, leftOut } = pickFixtures(spec, { seed: "7", touched: ["sdk/node"] });
-    expect(names(chosen)).toContain("sdk/node");
-    expect(names(leftOut)).toEqual(expect.arrayContaining([PREFERRED]));
-  });
-
-  it("runs every member the diff touches", () => {
-    const { chosen, leftOut } = pickFixtures(spec, {
-      seed: "7",
-      touched: ["sdk/node", "deploy/node"],
-    });
-    expect(names(chosen)).toContain("sdk/node");
-    expect(names(chosen)).toContain("deploy/node");
-    expect(names(leftOut)).toContain(PREFERRED);
-    expect(names(leftOut)).toContain("deploy/workspace");
-  });
-
-  it("keeps the spec's order in what it chose", () => {
-    const { chosen } = pickFixtures(spec, {
-      seed: "1",
-      touched: ["sdk/node", "deploy/node"],
-    });
-    expect(names(chosen)).toEqual(names(spec.filter((row) => chosen.includes(row))));
-  });
-});
-
-describe("picking one member of a group that names no preferred one", () => {
-  const members: FixtureSpec[] = ["one", "two", "three"].map((name) => ({
-    name,
-    concern: "sdk" as const,
-    dir: `sdk/${name}`,
-    kind: "composite" as const,
-    group: "made-up",
-    rows: [],
-    apps: ["web"],
-    legs: SERVES,
-  }));
-
-  it("reaches the same member twice for the same seed", () => {
-    const once = pickFixtures(members, { seed: "1234", touched: [] });
-    const twice = pickFixtures(members, { seed: "1234", touched: [] });
-    expect(names(once.chosen)).toEqual(names(twice.chosen));
-  });
-
-  it("reaches every member of the group across seeds", () => {
-    const seen = new Set<string>();
-    for (let seed = 1; seed <= 50; seed += 1) {
-      const { chosen } = pickFixtures(members, { seed: String(seed), touched: [] });
-      for (const name of names(chosen)) {
-        seen.add(name);
-      }
-    }
-    expect([...seen].sort()).toEqual(names(members).sort());
-  });
-});
 
 const ROWS = specForTarget("aws");
 const NODE_HTTP = ROWS.filter((row) => groupKeyOf(row) === GROUP);
+const DEPLOY_NODE_HTTP = ROWS.filter((row) => groupKeyOf(row) === "deploy/node-http");
 const SEEDS = ["1", "2", "3", "4", "5", "938"];
 
 const onAws: CellsFor = (fixture) => cellsOf(fixture, "aws");
@@ -176,12 +77,13 @@ describe("covering the variants a group lists, one member each", () => {
     }
   });
 
-  it("runs every cell of a fixture the diff touches", () => {
-    const covered = coverCells(ROWS, onAws, "covering", seeded("7", ["sdk/node"]));
-    expect(covered.get("sdk/node")).toEqual(onAws(specByName("sdk", "node")));
-    expect((covered.get("deploy/node") ?? []).length).toBeLessThan(
-      onAws(specByName("deploy", "node")).length,
-    );
+  it("runs every cell of a fixture the diff touches, and spreads the group it leaves alone", () => {
+    for (const seed of SEEDS) {
+      const covered = coverCells(ROWS, onAws, "covering", seeded(seed, ["sdk/node"]));
+      expect(covered.get("sdk/node")).toEqual(onAws(specByName("sdk", "node")));
+      const deploy = DEPLOY_NODE_HTTP.flatMap((row) => covered.get(fixtureNameOf(row)) ?? []);
+      expect(deploy.length).toBeLessThan(DEPLOY_NODE_HTTP.flatMap(onAws).length);
+    }
   });
 
   it("reaches the same cells twice for one seed, and moves them across seeds", () => {

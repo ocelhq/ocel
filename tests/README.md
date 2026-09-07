@@ -84,9 +84,9 @@ left behind, and only projects the harness named.
 `--shard <index>/<total>` is accepted and validated by `cell`; it selects nothing yet.
 
 A pull request runs the `deploy` and `lifecycle` buckets; a full run — workflow dispatch,
-or the `journey:real` label — runs all three, `lifecycle` cells first. Either way it runs
-one member of each fixture group per concern, plus every member whose directory the diff
-touches. To reproduce a pull request's pick on a laptop:
+or the `journey:real` label — runs all three, `lifecycle` cells first. Either way it spreads
+each edge of a fixture group over one member of that group, and runs every cell of a member
+whose directory the diff touches. To reproduce a pull request's pick on a laptop:
 
 ```
 OCEL_JOURNEY_CONCERN="deploy lifecycle" OCEL_JOURNEY_SEED=<pull request number> \

@@ -5,7 +5,6 @@ export type SummaryMeta = {
   target: string;
   environment: string;
   runId: string;
-  leftOut: string[];
   skipped?: Skipped;
 };
 
@@ -77,7 +76,6 @@ export function summaryTable(report: Report, meta: SummaryMeta): string {
   return [
     `## journey · ${meta.target} · ${meta.environment} · run ${meta.runId}`,
     "",
-    ...(meta.leftOut.length > 0 ? [`left out this pass: ${meta.leftOut.join(", ")}`, ""] : []),
     tally,
     "",
     ...gapLines(report),

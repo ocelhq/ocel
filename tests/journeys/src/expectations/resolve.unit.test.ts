@@ -104,21 +104,21 @@ describe("resolve", () => {
 
   it("names a cell by its fixture and app, and reaches every variant of it unless one is named", () => {
     const every = listed(
-      [gap("one", [{ on: ["aws"], cells: ["sdk/node/web"], tests: [UP_TITLE] }])],
+      [gap("one", [{ on: ["aws"], cells: ["sdk/next/web"], tests: [UP_TITLE] }])],
       "aws",
     );
-    assert.ok(every["sdk/node/web"]?.[UP_TITLE]);
-    assert.ok(every["sdk/node-container/web"]?.[UP_TITLE]);
+    assert.ok(every["sdk/next/web"]?.[UP_TITLE]);
+    assert.ok(every["sdk/next-container/web"]?.[UP_TITLE]);
     const base = listed(
       [
         gap("one", [
-          { on: ["aws"], cells: ["sdk/node/web"], variants: ["base"], tests: [UP_TITLE] },
+          { on: ["aws"], cells: ["sdk/next/web"], variants: ["base"], tests: [UP_TITLE] },
         ]),
       ],
       "aws",
     );
-    assert.ok(base["sdk/node/web"]?.[UP_TITLE]);
-    assert.equal(base["sdk/node-container/web"], undefined);
+    assert.ok(base["sdk/next/web"]?.[UP_TITLE]);
+    assert.equal(base["sdk/next-container/web"], undefined);
   });
 
   it("leaves a cell alone when its plan has none of the tests named and no cell was named", () => {
@@ -126,8 +126,8 @@ describe("resolve", () => {
       [gap("one", [{ on: ["aws"], tests: [{ rows: productRows, legs: ["contract"] }] }])],
       "aws",
     );
-    assert.equal(out["deploy/node/web"], undefined);
-    assert.ok(out["sdk/node/web"]);
+    assert.equal(out["deploy/node-api-gateway/web"], undefined);
+    assert.ok(out["sdk/node-api-gateway/web"]);
   });
 
   it("refuses a block that names a cell whose plan has none of the tests", () => {
@@ -245,10 +245,10 @@ describe("resolve", () => {
   it("lists the cells of the variant a block names, and no others", () => {
     const gaps = [gap("one", [{ on: ["aws"], variants: ["cloudflare"], tests: [UP_TITLE] }])];
     const out = listed(gaps, "aws");
-    assert.ok(out["sdk/node-cloudflare/web"]?.[UP_TITLE]);
-    assert.ok(out["sdk/with-transforms-cloudflare/web"]?.[UP_TITLE]);
-    assert.equal(out["sdk/node/web"], undefined);
-    assert.equal(out["sdk/node-api-gateway/web"], undefined);
+    assert.ok(out["sdk/next-cloudflare/web"]?.[UP_TITLE]);
+    assert.ok(out["sdk/workspace-cloudflare/next"]?.[UP_TITLE]);
+    assert.equal(out["sdk/next/web"], undefined);
+    assert.equal(out["sdk/next-container/web"], undefined);
   });
 
   it("names the whole cell a skipping block reaches, under the gap that skips it", () => {
@@ -282,13 +282,13 @@ describe("resolve", () => {
     const { skipped } = resolve(
       [
         gap("one", [
-          { on: ["aws"], cells: ["sdk/node/web"], tests: [UP_TITLE], skip: true },
+          { on: ["aws"], cells: ["sdk/next/web"], tests: [UP_TITLE], skip: true },
           { on: ["aws"], variants: ["base"], tests: [UP_TITLE], skip: true },
         ]),
       ],
       "aws",
     );
-    assert.equal(skipped["sdk/node"]?.length, 1);
+    assert.equal(skipped["sdk/next"]?.length, 1);
   });
 
   it("refuses two gaps with one id, and a gap that affects nothing", () => {

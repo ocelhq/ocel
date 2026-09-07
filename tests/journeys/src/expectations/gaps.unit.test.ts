@@ -103,30 +103,37 @@ describe("the gap list", () => {
     }
   });
 
-  it("lists the same real-world up on every serverless edge for the sdk cells that fail everywhere", () => {
-    const everywhere: Record<string, number[]> = {
+  it("lists the same real-world up on every edge a fixture runs, for the sdk cells that fail everywhere", () => {
+    const behindACdn: Record<string, number[]> = {
       "lifecycle/next/web": [849],
-      "sdk/node/web": [911],
       "sdk/next/web": [849],
       "sdk/workspace/next": [849],
       "sdk/workspace/express": [849],
+    };
+    const behindTheGateway: Record<string, number[]> = {
+      "sdk/node/web": [911],
       "sdk/with-sst/web": [857],
       "sdk/with-pulumi/web": [856],
     };
     const listed = expectationsFor("aws");
-    for (const variant of ["base", "api-gateway", "cloudflare"]) {
-      for (const [cell, expected] of Object.entries(everywhere)) {
-        const named = on(variant, cell);
-        assert.deepEqual(listed[named], { [UP_TITLE]: listed[named]?.[UP_TITLE] }, named);
-        assert.deepEqual(issues(listed, named, UP_TITLE), expected, named);
+    for (const [variants, everywhere] of [
+      [["base", "cloudflare"], behindACdn],
+      [["api-gateway"], behindTheGateway],
+    ] as const) {
+      for (const variant of variants) {
+        for (const [cell, expected] of Object.entries(everywhere)) {
+          const named = on(variant, cell);
+          assert.deepEqual(listed[named], { [UP_TITLE]: listed[named]?.[UP_TITLE] }, named);
+          assert.deepEqual(issues(listed, named, UP_TITLE), expected, named);
+        }
       }
     }
   });
 
-  it("lists a real-world deploy next behind api-gateway, and the with-transforms link rows", () => {
+  it("lists no api-gateway cell for a Next-bearing fixture, and the with-transforms link rows", () => {
     const listed = expectationsFor("aws");
-    for (const cell of ["deploy/next/web", "deploy/workspace/next", "deploy/workspace/express"]) {
-      assert.deepEqual(issues(listed, on("api-gateway", cell), UP_TITLE), [906], cell);
+    for (const cell of ["deploy/next/web", "deploy/workspace/next", "sdk/next/web"]) {
+      assert.equal(listed[on("api-gateway", cell)], undefined, cell);
     }
     assert.equal(listed["deploy/node-api-gateway/web"], undefined);
     assert.deepEqual(
@@ -145,15 +152,9 @@ describe("the gap list", () => {
     );
   });
 
-  it("lists every deploy cell and the with-transforms edges at up under the edge's own issue", () => {
+  it("lists every deploy cell that stands behind cloudfront at up under the edge's own issue", () => {
     const listed = expectationsFor("aws");
-    for (const cell of [
-      "deploy/node/web",
-      "deploy/next/web",
-      "deploy/workspace/next",
-      "deploy/workspace/express",
-      "sdk/with-transforms/web",
-    ]) {
+    for (const cell of ["deploy/next/web", "deploy/workspace/next", "deploy/workspace/express"]) {
       assert.deepEqual(Object.keys(listed[cell] ?? {}), [UP_TITLE], cell);
       assert.deepEqual(issues(listed, cell, UP_TITLE), [923], cell);
     }
@@ -172,17 +173,10 @@ describe("the gap list", () => {
   it("lists nothing past up on floci api-gateway, and up under the issue that refuses it", () => {
     const listed = expectationsFor("aws.floci");
     assert.deepEqual(upIssues(listed, cellsOfVariant("api-gateway")), {
-      "deploy/next-api-gateway/web": [906],
-      "deploy/workspace-api-gateway/express": [906],
-      "deploy/workspace-api-gateway/next": [906],
-      "lifecycle/next-api-gateway/web": [849],
       "sdk/node-api-gateway/web": [884],
-      "sdk/next-api-gateway/web": [849],
       "sdk/with-pulumi-api-gateway/web": [856],
       "sdk/with-sst-api-gateway/web": [857],
       "sdk/with-transforms-api-gateway/web": [884],
-      "sdk/workspace-api-gateway/express": [849],
-      "sdk/workspace-api-gateway/next": [849],
     });
     const gateway = new Set(cellsOfVariant("api-gateway"));
     for (const [name, cell] of Object.entries(listed)) {
@@ -215,16 +209,10 @@ describe("the gap list", () => {
         }
         assert.deepEqual(Object.keys(cell), [UP_TITLE], name);
       }
-      assert.deepEqual(issues(listed, on(variant, "deploy/node/web"), UP_TITLE), [issue], variant);
+      assert.deepEqual(issues(listed, on(variant, "deploy/next/web"), UP_TITLE), [issue], variant);
     }
-    for (const variant of ["base", "cloudflare"]) {
-      assert.deepEqual(issues(listed, on(variant, "sdk/with-sst/web"), UP_TITLE), [857], variant);
-      assert.deepEqual(
-        issues(listed, on(variant, "sdk/with-pulumi/web"), UP_TITLE),
-        [856],
-        variant,
-      );
-    }
+    assert.deepEqual(issues(listed, "sdk/with-sst-api-gateway/web", UP_TITLE), [857]);
+    assert.deepEqual(issues(listed, "sdk/with-pulumi-api-gateway/web", UP_TITLE), [856]);
   });
 
   it("lists dev at destroy on both buckets, and up and the upload row on the sdk one alone", () => {
@@ -269,11 +257,9 @@ describe("the gap list", () => {
   it("skips every cell that is listed dead at up, and leaves the live ones to run", () => {
     assert.deepEqual(alive("aws"), [
       "deploy/node-api-gateway",
-      "deploy/node-cloudflare",
       "deploy/next-cloudflare",
       "deploy/workspace-cloudflare",
       "sdk/with-transforms-api-gateway",
-      "sdk/with-transforms-cloudflare",
     ]);
     assert.deepEqual(alive("aws.floci"), ["deploy/node-api-gateway"]);
     assert.deepEqual(alive("dev"), ["deploy/node", "deploy/next", "deploy/workspace"]);

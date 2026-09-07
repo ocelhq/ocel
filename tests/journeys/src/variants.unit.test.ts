@@ -1,13 +1,25 @@
 import { describe, expect, it } from "bun:test";
-import { AWS, apiGateway, cloudflare, container, runsOn } from "./variants";
+import {
+  apiGateway,
+  cloudflare,
+  container,
+  HTTP_VARIANTS,
+  NEXT_VARIANTS,
+  runsOn,
+} from "./variants";
 
 describe("the variants the catalogue offers", () => {
   it("runs every one of them on aws alone", () => {
-    for (const one of AWS) {
+    for (const one of [...NEXT_VARIANTS, ...HTTP_VARIANTS]) {
       expect(runsOn(one, "aws")).toBe(true);
       expect(runsOn(one, "vps")).toBe(false);
       expect(runsOn(one, "dev")).toBe(false);
     }
+  });
+
+  it("puts a Next-bearing fixture behind a CDN edge and a plain-http one behind the gateway", () => {
+    expect(NEXT_VARIANTS).toEqual([container, cloudflare]);
+    expect(HTTP_VARIANTS).toEqual([container, apiGateway]);
   });
 
   it("alters the app's config, and nothing else", () => {

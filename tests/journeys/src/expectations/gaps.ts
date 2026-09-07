@@ -2,23 +2,19 @@ import { DESTROY_TITLE, UP_TITLE } from "../plan";
 import { LINK_QUERY_ROW, LINK_ROW, nextCacheRows, nextDataCacheRows, UPLOAD_ROW } from "../rows";
 import type { Gap } from "./types";
 
-const DEPLOY_NODE_HTTP = ["deploy/node/web"];
 const SDK_NODE_HTTP = ["sdk/node/web"];
 const DEPLOY_WORKSPACE = ["deploy/workspace/next", "deploy/workspace/express"];
 const SDK_WORKSPACE = ["sdk/workspace/next", "sdk/workspace/express"];
-const DEPLOY_CELLS = [...DEPLOY_NODE_HTTP, "deploy/next/web", ...DEPLOY_WORKSPACE];
 const SDK_CELLS = [...SDK_NODE_HTTP, "sdk/next/web", ...SDK_WORKSPACE];
 const NEXT_CELLS = ["deploy/next/web", "sdk/next/web"];
 const LIFECYCLE_CELLS = ["lifecycle/next/web"];
-const EVERY_AWS_CELL_BUT_LADDERS = [
-  ...DEPLOY_CELLS,
-  ...LIFECYCLE_CELLS,
-  ...SDK_CELLS,
-  "sdk/with-transforms/web",
-];
+const DEPLOY_NEXT_BEARING = ["deploy/next/web", ...DEPLOY_WORKSPACE];
+const SDK_NEXT_BEARING = ["sdk/next/web", ...SDK_WORKSPACE];
+const EVERY_NEXT_BEARING_CELL = [...DEPLOY_NEXT_BEARING, ...LIFECYCLE_CELLS, ...SDK_NEXT_BEARING];
 
 const BASE = ["base"];
-const SERVERLESS = ["base", "api-gateway", "cloudflare"];
+const GATEWAY = ["api-gateway"];
+const CDN_EDGES = ["base", "cloudflare"];
 
 const EVERY_NEXT_CACHE_ROW = [...nextCacheRows, ...nextDataCacheRows];
 
@@ -88,7 +84,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws", "aws.floci"],
         cells: ["sdk/with-sst/web"],
-        variants: SERVERLESS,
+        variants: GATEWAY,
         tests: [UP_TITLE],
         skip: true,
       },
@@ -102,7 +98,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws", "aws.floci"],
         cells: ["sdk/with-pulumi/web"],
-        variants: SERVERLESS,
+        variants: GATEWAY,
         tests: [UP_TITLE],
         skip: true,
       },
@@ -114,7 +110,7 @@ export const gaps: Gap[] = [
       "the aws journey migrates through ocel run, which needs a console link the lane never has",
     issue: 911,
     affects: [
-      { on: ["aws"], cells: SDK_NODE_HTTP, variants: SERVERLESS, tests: [UP_TITLE], skip: true },
+      { on: ["aws"], cells: SDK_NODE_HTTP, variants: GATEWAY, tests: [UP_TITLE], skip: true },
     ],
   },
   {
@@ -124,29 +120,8 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws"],
-        cells: [...LIFECYCLE_CELLS, "sdk/next/web", ...SDK_WORKSPACE],
-        variants: SERVERLESS,
-        tests: [UP_TITLE],
-        skip: true,
-      },
-      {
-        on: ["aws.floci"],
-        cells: [...LIFECYCLE_CELLS, "sdk/next/web", ...SDK_WORKSPACE],
-        variants: ["api-gateway"],
-        tests: [UP_TITLE],
-        skip: true,
-      },
-    ],
-  },
-  {
-    id: "no-edge-cache-on-api-gateway",
-    reason: "a Next app refuses to deploy behind the api-gateway edge because it needs edge-cache",
-    issue: 906,
-    affects: [
-      {
-        on: ["aws", "aws.floci"],
-        cells: ["deploy/next/web", ...DEPLOY_WORKSPACE],
-        variants: ["api-gateway"],
+        cells: [...LIFECYCLE_CELLS, ...SDK_NEXT_BEARING],
+        variants: CDN_EDGES,
         tests: [UP_TITLE],
         skip: true,
       },
@@ -159,7 +134,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws"],
-        cells: [...DEPLOY_CELLS, "sdk/with-transforms/web"],
+        cells: DEPLOY_NEXT_BEARING,
         variants: BASE,
         tests: [UP_TITLE],
         skip: true,
@@ -174,7 +149,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws"],
         cells: ["sdk/with-transforms/web"],
-        variants: ["api-gateway"],
+        variants: GATEWAY,
         tests: [{ row: LINK_QUERY_ROW }],
       },
     ],
@@ -188,7 +163,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws"],
         cells: ["sdk/with-transforms/web"],
-        variants: ["api-gateway"],
+        variants: GATEWAY,
         tests: [{ row: LINK_ROW, legs: ["redeploy"] }],
       },
     ],
@@ -202,7 +177,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws.floci"],
         cells: [...SDK_NODE_HTTP, "sdk/with-transforms/web"],
-        variants: ["api-gateway"],
+        variants: GATEWAY,
         tests: [UP_TITLE],
         skip: true,
       },
@@ -221,7 +196,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws.floci"],
-        cells: EVERY_AWS_CELL_BUT_LADDERS,
+        cells: EVERY_NEXT_BEARING_CELL,
         variants: BASE,
         tests: [UP_TITLE],
         skip: true,
@@ -235,7 +210,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws.floci"],
-        cells: EVERY_AWS_CELL_BUT_LADDERS,
+        cells: EVERY_NEXT_BEARING_CELL,
         variants: ["cloudflare"],
         tests: [UP_TITLE],
         skip: true,
