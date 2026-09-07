@@ -7,6 +7,7 @@ import { join } from "node:path";
 import {
   describeFunction,
   fetchFunctionLogs,
+  functionLogGroupLabel,
   getObject,
   LAMBDA_ARCH,
   LIST_RETRY_DEADLINE_MS,
@@ -228,7 +229,7 @@ while (Date.now() < logDeadline) {
   } catch (err) {
     failures++;
     logsError = err;
-    log(`could not read /aws/lambda/${functionName} logs (${err.message}); will retry`);
+    log(`could not read ${functionLogGroupLabel(functionName)} logs (${err.message}); will retry`);
   }
   await sleep(LOG_POLL_INTERVAL_MS);
 }
@@ -248,7 +249,9 @@ for (;;) {
     failures++;
     logsError = err;
     if (Date.now() >= confirmDeadline) break;
-    log(`could not finish reading /aws/lambda/${functionName} logs (${err.message}); will retry`);
+    log(
+      `could not finish reading ${functionLogGroupLabel(functionName)} logs (${err.message}); will retry`,
+    );
     await sleep(LOG_POLL_INTERVAL_MS);
   }
 }
@@ -262,7 +265,7 @@ const coverage = logWindowVerdict({
 });
 if (coverage.kind === "unread") {
   fail(
-    `could not read /aws/lambda/${functionName} to the end of the burst window within ` +
+    `could not read ${functionLogGroupLabel(functionName)} to the end of the burst window within ` +
       `${(LOG_DEADLINE_MS + LOG_CONFIRM_DEADLINE_MS) / 1000}s (${coverage.detail}): ${logsError?.message}. Whatever was ` +
       `ingested after the last successful read was never looked at, so the absence of an S3 rehydrate line says ` +
       `nothing — it would be an absence of evidence rather than evidence of absence, and passing on it would report a ` +
@@ -273,7 +276,7 @@ if (coverage.kind === "unread") {
 }
 if (coverage.kind === "truncated") {
   fail(
-    `the read of /aws/lambda/${functionName} covering the burst window is truncated (${coverage.detail}), so lines the ` +
+    `the read of ${functionLogGroupLabel(functionName)} covering the burst window is truncated (${coverage.detail}), so lines the ` +
       `burst produced are paged off the end of it and the absence of an S3 rehydrate line says nothing about the ` +
       `instances whose output did not fit. ${embeddedHits.length} embedded hit${embeddedHits.length === 1 ? "" : "s"} ` +
       `and ${s3Hits.length} S3 line${s3Hits.length === 1 ? "" : "s"} were seen in the page that was read.`,
@@ -304,7 +307,7 @@ if (embeddedHits.length === 0) {
   fail(
     `no instance reported loading the embedded compile cache from ${taskPath} within ${LOG_DEADLINE_MS / 1000}s of the ` +
       `burst, and none reported fetching from S3 either — ${summarizeOutcomes(embedFailures)} in ` +
-      `/aws/lambda/${functionName}${
+      `${functionLogGroupLabel(functionName)}${
         embedFailures.length
           ? `; samples: ${embedFailures
               .slice(0, 5)

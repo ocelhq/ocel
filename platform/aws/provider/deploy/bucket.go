@@ -25,6 +25,7 @@ const (
 
 	bucketNotificationEvent = "s3:ObjectCreated:*"
 
+	uploadCompleterLocalName      = "upload-completer"
 	uploadCompleterRuntime        = "provided.al2023"
 	uploadCompleterHandler        = "bootstrap"
 	uploadCompleterTimeoutSeconds = 30
@@ -141,7 +142,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 	}
 
 	completerRole, err := newServiceRole(ctx,
-		naming.ResourceID(at.Kind, at.Name, "upload-completer-role"),
+		naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-role"),
 		at.Description("execution role for the "+at.Name+" bucket's upload completer"),
 		"lambda.amazonaws.com",
 		boundaryARN,
@@ -153,22 +154,31 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 	if err != nil {
 		return err
 	}
-	if _, err := iam.NewRolePolicyAttachment(ctx, naming.ResourceID(at.Kind, at.Name, "upload-completer-logs-policy"), &iam.RolePolicyAttachmentArgs{
+	if _, err := iam.NewRolePolicyAttachment(ctx, naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-logs-policy"), &iam.RolePolicyAttachmentArgs{
 		Role:      completerRole.Name,
 		PolicyArn: pulumi.String("arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"),
 	}); err != nil {
 		return err
 	}
 
-	completer, err := lambda.NewFunction(ctx, naming.ResourceID(at.Kind, at.Name, "upload-completer"), &lambda.FunctionArgs{
-		Runtime:     pulumi.String(args.UploadCompleterRuntime),
-		Handler:     pulumi.String(args.UploadCompleterHandler),
-		Role:        completerRole.Arn,
-		Timeout:     pulumi.Int(args.UploadCompleterTimeoutSeconds),
-		Description: capDescription(at.Description("upload completer for the "+at.Name+" bucket"), maxDescriptionLen),
-		Tags:        resourceTags(naming.KindUploadCompleter, "", args.Tags),
-		S3Bucket:    pulumi.String(completerCode.Bucket),
-		S3Key:       pulumi.String(completerCode.Key),
+	completerLogs, err := newLambdaLogGroup(ctx,
+		naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-logs"),
+		at.PhysicalPrefix(maxLambdaBaseNameLen-len(uploadCompleterLocalName))+uploadCompleterLocalName,
+		naming.KindUploadCompleter, "", args.Tags)
+	if err != nil {
+		return err
+	}
+
+	completer, err := lambda.NewFunction(ctx, naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName), &lambda.FunctionArgs{
+		Runtime:       pulumi.String(args.UploadCompleterRuntime),
+		Handler:       pulumi.String(args.UploadCompleterHandler),
+		Role:          completerRole.Arn,
+		Timeout:       pulumi.Int(args.UploadCompleterTimeoutSeconds),
+		Description:   capDescription(at.Description("upload completer for the "+at.Name+" bucket"), maxDescriptionLen),
+		LoggingConfig: lambdaLogging(completerLogs),
+		Tags:          resourceTags(naming.KindUploadCompleter, "", args.Tags),
+		S3Bucket:      pulumi.String(completerCode.Bucket),
+		S3Key:         pulumi.String(completerCode.Key),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: pulumi.StringMap{
 				envStateTable:     pulumi.String(stateTableName),
@@ -181,7 +191,7 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		return err
 	}
 
-	perm, err := lambda.NewPermission(ctx, naming.ResourceID(at.Kind, at.Name, "upload-completer-permission"), &lambda.PermissionArgs{
+	perm, err := lambda.NewPermission(ctx, naming.ResourceID(at.Kind, at.Name, uploadCompleterLocalName+"-permission"), &lambda.PermissionArgs{
 		Action:    pulumi.String("lambda:InvokeFunction"),
 		Function:  completer.Name,
 		Principal: pulumi.String("s3.amazonaws.com"),

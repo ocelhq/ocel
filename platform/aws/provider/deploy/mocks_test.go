@@ -8,7 +8,21 @@ import (
 	pulumi "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
-const mockAccount = "123456789012"
+const (
+	mockAccount        = "123456789012"
+	mockAutonameSuffix = "0a1b2c3d"
+)
+
+func autonamed(args pulumi.MockResourceArgs) resource.PropertyMap {
+	state := args.Inputs.Copy()
+	if _, named := state["name"]; named {
+		return state
+	}
+	if prefix, ok := state["namePrefix"]; ok && prefix.IsString() {
+		state["name"] = resource.NewStringProperty(prefix.StringValue() + mockAutonameSuffix)
+	}
+	return state
+}
 
 func mockAccountARN(service, suffix string) string {
 	return "arn:aws:" + service + ":us-east-1:" + mockAccount + ":" + suffix
@@ -52,7 +66,7 @@ func (r *inputRecorder) NewResource(args pulumi.MockResourceArgs) (string, resou
 			r.attached = append(r.attached, arn.StringValue())
 		}
 	}
-	return args.Name + "-id", args.Inputs, nil
+	return args.Name + "-id", autonamed(args), nil
 }
 
 func (r *inputRecorder) Call(pulumi.MockCallArgs) (resource.PropertyMap, error) {

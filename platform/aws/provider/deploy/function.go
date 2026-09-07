@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	cloudwatch "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
 	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	lambda "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -65,6 +66,10 @@ const (
 	maxLambdaNameLen        = 64
 	lambdaAutonameSuffixLen = 8
 	maxLambdaBaseNameLen    = maxLambdaNameLen - lambdaAutonameSuffixLen
+
+	lambdaLogGroupPrefix   = "/aws/lambda/"
+	lambdaLogFormat        = "Text"
+	lambdaLogRetentionDays = 14
 
 	functionURLInvokeModeStream = "RESPONSE_STREAM"
 
@@ -495,6 +500,25 @@ func functionVPCConfig(logicalName string, v functionVPC) (lambda.FunctionVpcCon
 	}, nil
 }
 
+func lambdaLogGroupPrefixFor(base string) string {
+	return lambdaLogGroupPrefix + base + naming.WordSeparator
+}
+
+func newLambdaLogGroup(ctx *pulumi.Context, id, base string, kind naming.Kind, route string, tags map[string]string, opts ...pulumi.ResourceOption) (*cloudwatch.LogGroup, error) {
+	return cloudwatch.NewLogGroup(ctx, id, &cloudwatch.LogGroupArgs{
+		NamePrefix:      pulumi.String(lambdaLogGroupPrefixFor(base)),
+		RetentionInDays: pulumi.Int(lambdaLogRetentionDays),
+		Tags:            resourceTags(kind, route, tags),
+	}, opts...)
+}
+
+func lambdaLogging(group *cloudwatch.LogGroup) lambda.FunctionLoggingConfigPtrInput {
+	return &lambda.FunctionLoggingConfigArgs{
+		LogFormat: pulumi.String(lambdaLogFormat),
+		LogGroup:  group.Name,
+	}
+}
+
 func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn, layerARN pulumi.StringInput, urlAuth string, opts ...pulumi.ResourceOption) (functionRef, error) {
 	var none functionRef
 
@@ -516,6 +540,11 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		return none, err
 	}
 
+	logs, err := newLambdaLogGroup(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "logs"), resourceName, coord.Kind, route, args.Tags, opts...)
+	if err != nil {
+		return none, err
+	}
+
 	fn, err := lambda.NewFunction(ctx, resourceName, &lambda.FunctionArgs{
 		Description: describe(coord, "route "+route),
 		Runtime:     pulumi.String(args.Runtime),
@@ -528,7 +557,8 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: env,
 		},
-		VpcConfig: vpcConfig,
+		VpcConfig:     vpcConfig,
+		LoggingConfig: lambdaLogging(logs),
 
 		Tags: resourceTags(coord.Kind, route, args.Tags),
 

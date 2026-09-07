@@ -41,13 +41,45 @@ export function listObjectKeys(bucket, prefix) {
   return (response.Contents ?? []).map((entry) => entry.Key);
 }
 
+const logGroupByFunction = new Map();
+
+export function functionLogGroup(functionName) {
+  const cached = logGroupByFunction.get(functionName);
+  if (cached) {
+    return cached;
+  }
+  const found = aws([
+    "lambda",
+    "get-function-configuration",
+    "--function-name",
+    functionName,
+    "--query",
+    "LoggingConfig.LogGroup",
+    "--output",
+    "text",
+  ]);
+  if (!found || found === "None") {
+    throw new Error(`lambda ${functionName} reports no LoggingConfig.LogGroup`);
+  }
+  logGroupByFunction.set(functionName, found);
+  return found;
+}
+
+export function functionLogGroupLabel(functionName) {
+  try {
+    return functionLogGroup(functionName);
+  } catch {
+    return `the log group of ${functionName}`;
+  }
+}
+
 export function fetchFunctionLogs(functionName, startTime, filterPattern) {
   const response = JSON.parse(
     aws([
       "logs",
       "filter-log-events",
       "--log-group-name",
-      `/aws/lambda/${functionName}`,
+      functionLogGroup(functionName),
       "--start-time",
       String(startTime),
       ...(filterPattern ? ["--filter-pattern", filterPattern] : []),

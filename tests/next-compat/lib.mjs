@@ -249,10 +249,6 @@ export function lambdaFunctionNames(response) {
     .map((match) => match[1]);
 }
 
-export function lambdaLogGroups(response) {
-  return lambdaFunctionNames(response).map((name) => `/aws/lambda/${name}`);
-}
-
 export function envSegment(environment) {
   if (environment?.class === "preview") {
     return `preview-${environment?.identity ?? ""}`;

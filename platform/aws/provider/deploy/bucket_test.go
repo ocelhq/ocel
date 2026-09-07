@@ -40,7 +40,7 @@ func (r *tagRecorder) NewResource(args pulumi.MockResourceArgs) (string, resourc
 		}
 	}
 	r.tags[args.TypeToken+"::"+args.Name] = recorded
-	state := args.Inputs
+	state := autonamed(args)
 	if r.outputs != nil {
 		for key, value := range r.outputs(args) {
 			state[key] = value
@@ -374,4 +374,28 @@ func TestBucketCORSFollowsTheDeclaredOrigins(t *testing.T) {
 			t.Error("no CORS configuration was registered for a bucket that declares an allowed origin")
 		}
 	})
+}
+
+func TestBucketUploadCompleterLogGroup(t *testing.T) {
+	rec := recordTags(t, func(ctx *pulumi.Context) error {
+		return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&providerkit.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+	})
+
+	group := rec.inputsOf(t, "aws:cloudwatch/logGroup:LogGroup", "bucket-uploads-upload-completer-logs")
+	want := lambdaLogGroupPrefixFor("shop-prod-uploads-upload-completer")
+	if got := group["namePrefix"]; !got.IsString() || got.StringValue() != want {
+		t.Errorf("the upload completer's log group namePrefix = %v, want %q", got, want)
+	}
+	if got, ok := group["name"]; ok {
+		t.Errorf("the upload completer's log group fixes its name to %v, so two stacks sharing a base collide on CreateLogGroup", got)
+	}
+	retention, ok := group["retentionInDays"]
+	if !ok || !retention.IsNumber() || retention.NumberValue() <= 0 {
+		t.Errorf("the upload completer's log group retentionInDays = %v, want a finite retention rather than events kept forever", retention)
+	}
+
+	logging := rec.inputsOf(t, "aws:lambda/function:Function", "bucket-uploads-upload-completer")["loggingConfig"]
+	if !logging.IsObject() || !strings.HasPrefix(logging.ObjectValue()["logGroup"].StringValue(), want) {
+		t.Errorf("the upload completer's loggingConfig = %v, want it pointed at the group the deploy owns under %q", logging, want)
+	}
 }

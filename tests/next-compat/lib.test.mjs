@@ -27,7 +27,6 @@ import {
   ISR_ROUTE,
   isrToken,
   lambdaFunctionNames,
-  lambdaLogGroups,
   logWindowVerdict,
   MAX_SLUG_LEN,
   markerLines,
@@ -423,25 +422,6 @@ describe("markerLines", () => {
   });
 });
 
-describe("lambdaLogGroups", () => {
-  it("maps tagged function ARNs to their log groups", () => {
-    const groups = lambdaLogGroups({
-      ResourceTagMappingList: [
-        { ResourceARN: "arn:aws:lambda:us-east-1:1:function:proj--web-abc123" },
-        { ResourceARN: "arn:aws:lambda:us-east-1:1:function:proj--web-def456" },
-      ],
-    });
-    expect(groups).toEqual(["/aws/lambda/proj--web-abc123", "/aws/lambda/proj--web-def456"]);
-  });
-
-  it("ignores non-function ARNs and an empty response", () => {
-    expect(lambdaLogGroups({})).toEqual([]);
-    expect(
-      lambdaLogGroups({ ResourceTagMappingList: [{ ResourceARN: "arn:aws:s3:::bucket" }] }),
-    ).toEqual([]);
-  });
-});
-
 describe("lambdaFunctionNames", () => {
   it("extracts bare function names from tagged ARNs", () => {
     expect(
@@ -453,16 +433,11 @@ describe("lambdaFunctionNames", () => {
     ).toEqual(["proj--web-abc123"]);
   });
 
-  it("agrees with lambdaLogGroups on the function each names", () => {
-    const response = {
-      ResourceTagMappingList: [
-        { ResourceARN: "arn:aws:lambda:us-east-1:1:function:a" },
-        { ResourceARN: "arn:aws:lambda:us-east-1:1:function:b" },
-      ],
-    };
-    expect(lambdaLogGroups(response)).toEqual(
-      lambdaFunctionNames(response).map((name) => `/aws/lambda/${name}`),
-    );
+  it("ignores non-function ARNs and an empty response", () => {
+    expect(lambdaFunctionNames({})).toEqual([]);
+    expect(
+      lambdaFunctionNames({ ResourceTagMappingList: [{ ResourceARN: "arn:aws:s3:::bucket" }] }),
+    ).toEqual([]);
   });
 });
 
