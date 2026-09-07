@@ -27,6 +27,28 @@ func Runtimes() []string { return []string{RuntimeNode, RuntimeNext, RuntimeGo} 
 
 func KnownRuntime(name string) bool { return slices.Contains(Runtimes(), name) }
 
+const (
+	ArchX8664 = "x86_64"
+	ArchARM64 = "arm64"
+)
+
+func Architecture(declared string) string {
+	if declared == "" {
+		return ArchX8664
+	}
+	return declared
+}
+
+func GoArch(declared string) (string, bool) {
+	switch Architecture(declared) {
+	case ArchX8664:
+		return "amd64", true
+	case ArchARM64:
+		return "arm64", true
+	}
+	return "", false
+}
+
 const MembranePrefix = "ocel-membrane-layer"
 
 type MembraneSource interface {

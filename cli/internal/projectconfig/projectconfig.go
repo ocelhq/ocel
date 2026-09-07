@@ -66,22 +66,12 @@ type Health struct {
 	Path string
 }
 
-const (
-	ArchX8664 = "x86_64"
-	ArchARM64 = "arm64"
-)
-
 type Runtime struct {
 	Name string
 	Arch string
 }
 
-func (r Runtime) Architecture() string {
-	if r.Arch != "" {
-		return r.Arch
-	}
-	return ArchX8664
-}
+func (r Runtime) Architecture() string { return providerkit.Architecture(r.Arch) }
 
 type App struct {
 	Name       string
@@ -702,8 +692,8 @@ func normalizeRuntime(app string, raw rawRuntime) (Runtime, error) {
 		return Runtime{}, fmt.Errorf("app %q declares runtime %q, which nothing runs: the runtimes are %s", app, name, known)
 	}
 	arch := strings.TrimSpace(raw.Arch)
-	if arch != "" && arch != ArchX8664 && arch != ArchARM64 {
-		return Runtime{}, fmt.Errorf("app %q declares runtime.arch %q, which names no architecture: the architectures are %q and %q", app, arch, ArchX8664, ArchARM64)
+	if arch != "" && arch != providerkit.ArchX8664 && arch != providerkit.ArchARM64 {
+		return Runtime{}, fmt.Errorf("app %q declares runtime.arch %q, which names no architecture: the architectures are %q and %q", app, arch, providerkit.ArchX8664, providerkit.ArchARM64)
 	}
 	return Runtime{Name: name, Arch: arch}, nil
 }
