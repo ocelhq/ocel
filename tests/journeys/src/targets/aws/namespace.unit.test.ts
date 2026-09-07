@@ -1,6 +1,9 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { projectSlug } from "../../identity";
+import { repoRoot } from "../../paths";
 import {
   bootstrapStackOf,
   DEFAULT_NAMESPACE,
@@ -94,5 +97,26 @@ describe("strayNamespaces", () => {
 
   it("names a stray once however many stacks carry it", () => {
     assert.deepEqual(strayNamespaces(["j-1799-x", "j-1799-x", "j-1799-x"], mine), ["j-1799-x"]);
+  });
+});
+
+describe("acceptable names", () => {
+  it("ends on a letter or a digit, whatever the cell name ended on", () => {
+    for (const cell of ["deploy-node/", "deploy-node_", "deploy-node--"]) {
+      const got = namespaceFor(cell, "1874");
+      assert.match(got, /^[a-z][a-z0-9-]*[a-z0-9]$/, got);
+    }
+  });
+});
+
+describe("the namespace bound", () => {
+  it("is the one the provider parses against", async () => {
+    const go = await readFile(
+      path.join(repoRoot, "platform", "aws", "provider", "bootstrap", "namespace.go"),
+      "utf8",
+    );
+    const declared = go.match(/MaxNamespaceLength\s*=\s*(\d+)/);
+    assert.ok(declared, "namespace.go declares no MaxNamespaceLength");
+    assert.equal(Number(declared[1]), LONGEST_NAMESPACE);
   });
 });
