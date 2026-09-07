@@ -7,7 +7,10 @@ import (
 	"strings"
 )
 
-const devWriter = "dev"
+const (
+	devWriter     = "dev"
+	unknownWriter = "unknown"
+)
 
 type Writer string
 
@@ -29,6 +32,10 @@ func writerFor(version, revision string) Writer {
 func (w Writer) Release() bool {
 	_, ok := w.release()
 	return ok
+}
+
+func (w Writer) Development() bool {
+	return w.String() != unknownWriter && !w.Release()
 }
 
 func (w Writer) Newer(than Writer) bool {
@@ -70,7 +77,7 @@ func (w Writer) release() (releaseVersion, bool) {
 
 func (w Writer) String() string {
 	if w == "" {
-		return "unknown"
+		return unknownWriter
 	}
 	return string(w)
 }

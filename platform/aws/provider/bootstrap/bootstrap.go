@@ -660,7 +660,7 @@ func updateCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string,
 	}
 	executed = true
 
-	w := cloudformation.NewStackUpdateCompleteWaiter(cfn)
+	w := cloudformation.NewStackUpdateCompleteWaiter(cfn, stackUpdateCadence)
 	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, stackWaitTimeout); err != nil {
 		return fmt.Errorf("wait for %s update: %w", stackName, err)
 	}
@@ -672,7 +672,7 @@ func restampCFNStack(ctx context.Context, cfn CFNAPI, stackName string, params [
 	if err != nil || stack == nil {
 		return err
 	}
-	if sameStackTags(stack.Tags, tags) {
+	if sameStackTags(stack.Tags, tags) || onlyDevWriterMoved(stack.Tags, tags) {
 		return nil
 	}
 	if _, err := cfn.UpdateStack(ctx, &cloudformation.UpdateStackInput{
@@ -687,7 +687,7 @@ func restampCFNStack(ctx context.Context, cfn CFNAPI, stackName string, params [
 		}
 		return fmt.Errorf("restamp %s: %w", stackName, err)
 	}
-	w := cloudformation.NewStackUpdateCompleteWaiter(cfn)
+	w := cloudformation.NewStackUpdateCompleteWaiter(cfn, stackUpdateCadence)
 	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, stackWaitTimeout); err != nil {
 		return fmt.Errorf("wait for the %s restamp: %w", stackName, err)
 	}
@@ -867,7 +867,7 @@ func createOnce(ctx context.Context, cfn CFNAPI, stackName, template string, par
 	}); err != nil {
 		return fmt.Errorf("create %s stack: %w", stackName, err)
 	}
-	w := cloudformation.NewStackCreateCompleteWaiter(cfn)
+	w := cloudformation.NewStackCreateCompleteWaiter(cfn, stackCreateCadence)
 	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, stackWaitTimeout); err != nil {
 		return fmt.Errorf("wait for %s create: %w", stackName, err)
 	}
@@ -1158,4 +1158,20 @@ func isValidationErrorContaining(err error, substr string) bool {
 	return apiErr.ErrorCode() == "ValidationError" && strings.Contains(apiErr.ErrorMessage(), substr)
 }
 
-const stackWaitTimeout = 10 * time.Minute
+const (
+	stackWaitTimeout  = 10 * time.Minute
+	stackWaitMinDelay = 5 * time.Second
+	stackWaitMaxDelay = 20 * time.Second
+)
+
+func stackCreateCadence(o *cloudformation.StackCreateCompleteWaiterOptions) {
+	o.MinDelay, o.MaxDelay = stackWaitMinDelay, stackWaitMaxDelay
+}
+
+func stackUpdateCadence(o *cloudformation.StackUpdateCompleteWaiterOptions) {
+	o.MinDelay, o.MaxDelay = stackWaitMinDelay, stackWaitMaxDelay
+}
+
+func stackDeleteCadence(o *cloudformation.StackDeleteCompleteWaiterOptions) {
+	o.MinDelay, o.MaxDelay = stackWaitMinDelay, stackWaitMaxDelay
+}

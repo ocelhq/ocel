@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -624,5 +625,28 @@ func TestAssetBucketGrantsCloudFrontRead(t *testing.T) {
 				t.Errorf("source account condition = %q, want this account, so no other account's distribution can read the bucket", got)
 			}
 		})
+	}
+}
+
+func TestStackWaitersPollFarSoonerThanTheSDKDefault(t *testing.T) {
+	create := cloudformation.StackCreateCompleteWaiterOptions{}
+	stackCreateCadence(&create)
+	update := cloudformation.StackUpdateCompleteWaiterOptions{}
+	stackUpdateCadence(&update)
+	removal := cloudformation.StackDeleteCompleteWaiterOptions{}
+	stackDeleteCadence(&removal)
+
+	cadences := map[string][2]time.Duration{
+		"create": {create.MinDelay, create.MaxDelay},
+		"update": {update.MinDelay, update.MaxDelay},
+		"delete": {removal.MinDelay, removal.MaxDelay},
+	}
+	for name, got := range cadences {
+		if got[0] != 5*time.Second {
+			t.Errorf("the %s waiter stands by %s between looks, want 5s: a stack that is already done should not idle", name, got[0])
+		}
+		if got[1] != 20*time.Second {
+			t.Errorf("the %s waiter backs off to %s, want 20s", name, got[1])
+		}
 	}
 }

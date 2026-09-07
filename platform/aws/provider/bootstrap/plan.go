@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -26,6 +27,8 @@ func NameStacks(described providerkit.Bootstrap) providerkit.Bootstrap {
 	})
 }
 
+const planFanOut = 4
+
 func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, req Request, groups []providerkit.ChangeGroup) ([]providerkit.ChangeGroup, error) {
 	target, err := bootstrapFor(read.class)
 	if err != nil {
@@ -37,23 +40,35 @@ func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, req Request, gro
 		alongside[name] = true
 	}
 
-	planned := make([]providerkit.ChangeGroup, 0, len(groups))
-	for _, group := range groups {
+	planned := make([]providerkit.ChangeGroup, len(groups))
+	var work sync.WaitGroup
+	inFlight := make(chan struct{}, planFanOut)
+	plan := func(look func()) {
+		work.Add(1)
+		inFlight <- struct{}{}
+		go func() {
+			defer work.Done()
+			defer func() { <-inFlight }()
+			look()
+		}()
+	}
+	for i, group := range groups {
 		stack, ok := renderGroup(target, group.Feature, class, deployed.ArtifactBucket, refs, alongside)
 		switch {
 		case !ok:
-			planned = append(planned, group)
+			planned[i] = group
 		case group.Action == providerkit.ActionCreate:
 			group.Changes = templateChanges(stack.body, group.Action)
-			planned = append(planned, group)
+			planned[i] = group
 		case group.Action == providerkit.ActionDelete:
-			planned = append(planned, planDelete(ctx, cfn, group, stack.body))
+			plan(func() { planned[i] = planDelete(ctx, cfn, group, stack.body) })
 		case group.Action == providerkit.ActionUpdate:
-			planned = append(planned, planUpdate(ctx, cfn, group, stack, req.Writer))
+			plan(func() { planned[i] = planUpdate(ctx, cfn, group, stack, req.Writer) })
 		default:
-			planned = append(planned, group)
+			planned[i] = group
 		}
 	}
+	work.Wait()
 	return planned, nil
 }
 

@@ -347,7 +347,7 @@ func deleteCFNStack(ctx context.Context, cfn CFNTeardownAPI, stackName string) e
 	if _, err := cfn.DeleteStack(ctx, &cloudformation.DeleteStackInput{StackName: aws.String(stackName)}); err != nil {
 		return fmt.Errorf("delete %s stack: %w", stackName, err)
 	}
-	w := cloudformation.NewStackDeleteCompleteWaiter(cfn)
+	w := cloudformation.NewStackDeleteCompleteWaiter(cfn, stackDeleteCadence)
 	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, stackWaitTimeout); err != nil {
 		return fmt.Errorf("wait for %s delete: %w", stackName, err)
 	}

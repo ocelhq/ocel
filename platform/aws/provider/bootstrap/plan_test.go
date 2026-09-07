@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -166,6 +168,86 @@ func TestPlanStillUpdatesAStackWhoseStampAloneIsBehind(t *testing.T) {
 	}
 	if left := cfn.leftBehind(); len(left) != 0 {
 		t.Errorf("change sets %v outlived the plan that made them", left)
+	}
+}
+
+type gatedPlans struct {
+	*fakeCFN
+	mu       sync.Mutex
+	inFlight int
+	peak     int
+	arrived  int
+	want     int
+	together chan struct{}
+}
+
+func gateOf(cfn *fakeCFN, want int) *gatedPlans {
+	return &gatedPlans{fakeCFN: cfn, want: want, together: make(chan struct{})}
+}
+
+func (g *gatedPlans) CreateChangeSet(ctx context.Context, in *cloudformation.CreateChangeSetInput, opts ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {
+	g.mu.Lock()
+	g.inFlight++
+	g.arrived++
+	g.peak = max(g.peak, g.inFlight)
+	if g.arrived == g.want {
+		close(g.together)
+	}
+	g.mu.Unlock()
+
+	select {
+	case <-g.together:
+	case <-time.After(2 * time.Second):
+	}
+	time.Sleep(50 * time.Millisecond)
+
+	g.mu.Lock()
+	g.inFlight--
+	g.mu.Unlock()
+	return g.fakeCFN.CreateChangeSet(ctx, in, opts...)
+}
+
+func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
+	cfn, _ := standingBootstrap(t)
+	ctx := context.Background()
+	read, err := Read(ctx, cfn, ClassProduction)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+
+	var groups []providerkit.ChangeGroup
+	for _, feature := range append([]string{""}, featureNames()...) {
+		stack := StackName
+		if feature != "" {
+			stack = FeatureStackName(feature, ClassProduction)
+		}
+		cfn.fallBehind(stack)
+		groups = append(groups, providerkit.ChangeGroup{
+			Kind:    providerkit.StackGroupKind,
+			Name:    stack,
+			Feature: feature,
+			Action:  providerkit.ActionUpdate,
+		})
+	}
+	gate := gateOf(cfn, min(len(groups), planFanOut))
+
+	plan, err := PlanChanges(ctx, gate, read, everything(), groups)
+	if err != nil {
+		t.Fatalf("PlanChanges: %v", err)
+	}
+	if len(plan) != len(groups) {
+		t.Fatalf("the plan carries %d groups, want %d", len(plan), len(groups))
+	}
+	for i, group := range plan {
+		if group.Name != groups[i].Name {
+			t.Errorf("group %d is %s, want %s: a plan reads back in the order it was asked for", i, group.Name, groups[i].Name)
+		}
+	}
+	if gate.peak < 2 {
+		t.Errorf("at most %d change set(s) stood open at once; the groups were planned one after another", gate.peak)
+	}
+	if gate.peak > planFanOut {
+		t.Errorf("%d change sets stood open at once, over the %d CloudFormation will take", gate.peak, planFanOut)
 	}
 }
 

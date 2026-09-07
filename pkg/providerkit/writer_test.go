@@ -66,6 +66,29 @@ func TestWriterFor(t *testing.T) {
 	})
 }
 
+func TestWriterDevelopment(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		writer Writer
+		want   bool
+	}{
+		{"dev", true},
+		{"dev+cafebabe", true},
+		{"nightly", true},
+		{"1.2", true},
+		{"", false},
+		{"unknown", false},
+		{"1.2.3", false},
+		{"v1.2.3", false},
+		{"1.2.3-rc.1", false},
+	} {
+		if got := tc.writer.Development(); got != tc.want {
+			t.Errorf("Writer(%q).Development() = %v, want %v", tc.writer, got, tc.want)
+		}
+	}
+}
+
 func TestWriterNewer(t *testing.T) {
 	t.Parallel()
 
