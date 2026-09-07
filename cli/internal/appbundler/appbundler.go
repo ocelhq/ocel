@@ -103,6 +103,9 @@ func Bundle(t Target) error {
 	}
 	reportRuntimeFileRisk(t.Log, t.App, result.Metafile, filepath.Dir(t.Entrypoint))
 
+	if err := native.verify(); err != nil {
+		return err
+	}
 	if err := native.copyInto(t.FuncDir); err != nil {
 		return err
 	}
@@ -175,33 +178,19 @@ func writeJSON(dest string, value any) error {
 }
 
 type addon struct {
-	source string
-	dest   string
+	source   string
+	importer string
+	dest     string
+	pkg      string
+	arch     string
+	loadable bool
 }
 
 type addons struct {
 	arch string
 
 	mu     sync.Mutex
-	placed []addon
-}
-
-func (a *addons) admits(source, importer string) error {
-	want, known := providerkit.ELFMachine(a.arch)
-	if !known {
-		return fmt.Errorf("native addon %q required by %s cannot be checked: this app declares architecture %q, which nothing runs it on",
-			source, importer, a.arch)
-	}
-	machine, ok := elfMachine(source)
-	if !ok {
-		return fmt.Errorf("native addon %s required by %s is not a linux ELF binary, so the function it lands in could not load it; %s",
-			source, importer, tracingHint)
-	}
-	if machine == want {
-		return nil
-	}
-	return fmt.Errorf("native addon %s required by %s is built for %s, and this app declares %s: reinstall its dependencies on a host of the declared architecture, or declare the one they were built for",
-		source, importer, machineName(machine), providerkit.Architecture(a.arch))
+	traced []addon
 }
 
 func machineName(machine uint16) string {
@@ -281,32 +270,78 @@ func (a *addons) place(args api.OnResolveArgs) (string, error) {
 	if err != nil || !info.Mode().IsRegular() {
 		return "", fmt.Errorf("native addon %q required by %s was not found at %s; %s", args.Path, args.Importer, source, tracingHint)
 	}
-	if err := a.admits(source, args.Importer); err != nil {
-		return "", err
+	want, known := providerkit.ELFMachine(a.arch)
+	if !known {
+		return "", fmt.Errorf("native addon %s required by %s cannot be checked: this app declares architecture %q, which nothing runs it on",
+			source, args.Importer, a.arch)
 	}
 
-	dest := addonDest(source)
+	root, name, inPackage := packageRoot(filepath.Dir(source))
+	traced := addon{source: source, importer: args.Importer, dest: addonDest(source, root, name, inPackage), pkg: source}
+	if inPackage {
+		traced.pkg = root
+	}
+	if machine, isELF := elfMachine(source); isELF {
+		traced.arch = machineName(machine)
+		traced.loadable = machine == want
+	}
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for _, placed := range a.placed {
-		if placed.dest != dest {
+	for _, seen := range a.traced {
+		if seen.dest != traced.dest {
 			continue
 		}
-		if placed.source == source {
-			return dest, nil
+		if seen.source == traced.source {
+			return traced.dest, nil
 		}
-		return "", fmt.Errorf("native addons %s and %s both land on %s; %s", placed.source, source, dest, tracingHint)
+		return "", fmt.Errorf("native addons %s and %s both land on %s; %s", seen.source, traced.source, traced.dest, tracingHint)
 	}
-	a.placed = append(a.placed, addon{source: source, dest: dest})
-	return dest, nil
+	a.traced = append(a.traced, traced)
+	return traced.dest, nil
+}
+
+func (a *addons) verify() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	serves := map[string]bool{}
+	for _, traced := range a.traced {
+		if traced.loadable {
+			serves[traced.pkg] = true
+		}
+	}
+	for _, traced := range a.traced {
+		if traced.loadable || serves[traced.pkg] {
+			continue
+		}
+		var told []string
+		for _, other := range a.traced {
+			if other.pkg == traced.pkg {
+				told = append(told, describeAddon(other))
+			}
+		}
+		return fmt.Errorf("no native addon under %s can be loaded on %s, the architecture this app declares: %s; reinstall its dependencies on a host of the declared architecture, or declare the one they were built for",
+			traced.pkg, providerkit.Architecture(a.arch), strings.Join(told, ", "))
+	}
+	return nil
+}
+
+func describeAddon(traced addon) string {
+	if traced.arch == "" {
+		return fmt.Sprintf("%s required by %s is not a linux ELF binary", traced.source, traced.importer)
+	}
+	return fmt.Sprintf("%s required by %s is built for %s", traced.source, traced.importer, traced.arch)
 }
 
 func (a *addons) copyInto(funcDir string) error {
 	a.mu.Lock()
-	all := append([]addon(nil), a.placed...)
+	all := append([]addon(nil), a.traced...)
 	a.mu.Unlock()
 	for _, placed := range all {
+		if !placed.loadable {
+			continue
+		}
 		dest := filepath.Join(funcDir, filepath.FromSlash(placed.dest))
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return err
@@ -322,8 +357,8 @@ func (a *addons) copyInto(funcDir string) error {
 	return nil
 }
 
-func addonDest(source string) string {
-	if root, name, ok := packageRoot(filepath.Dir(source)); ok {
+func addonDest(source, root, name string, inPackage bool) string {
+	if inPackage {
 		if rel, err := filepath.Rel(root, source); err == nil {
 			return path.Join(nodeModulesDirName, name, filepath.ToSlash(rel))
 		}

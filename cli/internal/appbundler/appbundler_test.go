@@ -525,6 +525,76 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 		}
 	})
 
+	t.Run("a package shipping one prebuild per platform keeps only the declared one", func(t *testing.T) {
+		t.Parallel()
+
+		prebuilt := tree{
+			"package.json":                        appPkg,
+			"server.js":                           "import native from 'multi-dep';\nconsole.log(native);\n",
+			"node_modules/multi-dep/package.json": `{"name":"multi-dep","main":"index.js"}`,
+			"node_modules/multi-dep/index.js": "module.exports = process.arch === 'arm64'\n" +
+				"  ? require('./prebuilds/linux-arm64.node')\n" +
+				"  : process.platform === 'darwin'\n" +
+				"    ? require('./prebuilds/darwin-arm64.node')\n" +
+				"    : require('./prebuilds/linux-x64.node');\n",
+			"node_modules/multi-dep/prebuilds/linux-x64.node":    elfAddon(providerkit.ArchX8664, "amd64"),
+			"node_modules/multi-dep/prebuilds/linux-arm64.node":  elfAddon(providerkit.ArchARM64, "aarch64"),
+			"node_modules/multi-dep/prebuilds/darwin-arm64.node": "\xcf\xfa\xed\xfe" + strings.Repeat("\x00", 28),
+		}
+		kept := map[string]string{
+			providerkit.ArchX8664: "node_modules/multi-dep/prebuilds/linux-x64.node",
+			providerkit.ArchARM64: "node_modules/multi-dep/prebuilds/linux-arm64.node",
+		}
+		for _, arch := range []string{providerkit.ArchX8664, providerkit.ArchARM64} {
+			t.Run(arch, func(t *testing.T) {
+				t.Parallel()
+
+				l := newLayout(t, prebuilt)
+				if err := Bundle(on(l, arch)); err != nil {
+					t.Fatalf("Bundle: %v", err)
+				}
+				for name, rel := range kept {
+					dest := filepath.Join(l.funcDir, filepath.FromSlash(rel))
+					_, err := os.Stat(dest)
+					if name == arch && err != nil {
+						t.Errorf("%s is not in the bundle: %v", rel, err)
+					}
+					if name != arch && err == nil {
+						t.Errorf("%s is in the bundle, want only what %s loads", rel, arch)
+					}
+				}
+				if _, err := os.Stat(filepath.Join(l.funcDir, filepath.FromSlash(
+					"node_modules/multi-dep/prebuilds/darwin-arm64.node"))); err == nil {
+					t.Error("a mach-o prebuild is in the bundle, want only what linux loads")
+				}
+			})
+		}
+	})
+
+	t.Run("a package with nothing loadable on the declared architecture fails the build", func(t *testing.T) {
+		t.Parallel()
+
+		l := newLayout(t, tree{
+			"package.json":                        appPkg,
+			"server.js":                           "import native from 'multi-dep';\nconsole.log(native);\n",
+			"node_modules/multi-dep/package.json": `{"name":"multi-dep","main":"index.js"}`,
+			"node_modules/multi-dep/index.js": "module.exports = process.platform === 'darwin'\n" +
+				"  ? require('./prebuilds/darwin-arm64.node')\n" +
+				"  : require('./prebuilds/linux-arm64.node');\n",
+			"node_modules/multi-dep/prebuilds/linux-arm64.node":  elfAddon(providerkit.ArchARM64, "aarch64"),
+			"node_modules/multi-dep/prebuilds/darwin-arm64.node": "\xcf\xfa\xed\xfe" + strings.Repeat("\x00", 28),
+		})
+		err := Bundle(on(l, providerkit.ArchX8664))
+		if err == nil {
+			t.Fatal("Bundle succeeded, want a refusal rather than a function that dies at its first require")
+		}
+		for _, want := range []string{"linux-arm64.node", "darwin-arm64.node", providerkit.ArchARM64, providerkit.ArchX8664, "linux ELF"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, want it to name %q", err, want)
+			}
+		}
+	})
+
 	t.Run("an addon that is not a linux binary fails the build", func(t *testing.T) {
 		t.Parallel()
 
