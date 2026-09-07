@@ -76,6 +76,13 @@ type Runtime struct {
 	Arch string
 }
 
+func (r Runtime) Architecture() string {
+	if r.Arch != "" {
+		return r.Arch
+	}
+	return ArchX8664
+}
+
 type App struct {
 	Name       string
 	Path       string
