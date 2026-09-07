@@ -103,21 +103,25 @@ func Bundle(t Target) error {
 	if err := native.copyInto(t.FuncDir); err != nil {
 		return err
 	}
-	if err := writeJSON(filepath.Join(t.FuncDir, configFileName), functionConfig{
-		Runtime: t.Runtime,
-		Handler: HandlerFile,
+	return describeArtifact(t.App, t.Runtime, HandlerFile, t.FuncDir, t.AppDir)
+}
+
+func describeArtifact(app string, runtime Runtime, handler, funcDir, appDir string) error {
+	if err := writeJSON(filepath.Join(funcDir, configFileName), functionConfig{
+		Runtime: runtime,
+		Handler: handler,
 		ID:      entryRouteID,
-		App:     t.App,
+		App:     app,
 	}); err != nil {
 		return err
 	}
 
-	buildID, err := artifactHash(t.FuncDir)
+	buildID, err := artifactHash(funcDir)
 	if err != nil {
 		return err
 	}
-	return writeJSON(filepath.Join(t.AppDir, edge.ServeDescriptorFile), edge.ServeDescriptor{
-		Runtime: t.Runtime.Name,
+	return writeJSON(filepath.Join(appDir, edge.ServeDescriptorFile), edge.ServeDescriptor{
+		Runtime: runtime.Name,
 		BuildID: buildID,
 		Entry:   entryRouteID,
 		Needs:   map[edge.Need]edge.NeedDetail{},

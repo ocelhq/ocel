@@ -35,6 +35,8 @@ const functionsDirName = "functions"
 
 const funcDirSuffix = ".func"
 
+const entryFuncDirName = "index" + funcDirSuffix
+
 const configFileName = "config.json"
 
 const buildPlanFileName = "build-plan.json"
@@ -188,6 +190,12 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		Apps:          make([]appInput, 0, len(cfg.Apps)),
 	}
 	for _, a := range packable(cfg.Apps) {
+		if a.Runtime.Name == providerkit.RuntimeGo {
+			if err := compile(ctx, cfg, a, outputDir, stderr); err != nil {
+				return err
+			}
+			continue
+		}
 		req.Apps = append(req.Apps, appInput{
 			Name:       a.Name,
 			Cwd:        filepath.Join(cfg.Dir, a.Path),
@@ -226,6 +234,22 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		return err
 	}
 	return recordDetectedDeploymentID(cfg.Dir, outputDir, detectedID)
+}
+
+func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App, outputDir string, stderr io.Writer) error {
+	appDir := filepath.Join(outputDir, appsDirName, a.Name)
+	pkg := filepath.Join(cfg.Dir, a.Path)
+	if a.Entrypoint != "" {
+		pkg = filepath.Join(pkg, a.Entrypoint)
+	}
+	return appbundler.Compile(ctx, appbundler.Compilation{
+		App:     a.Name,
+		Runtime: appbundler.Runtime{Name: a.Runtime.Name, Arch: a.Runtime.Architecture()},
+		Package: pkg,
+		FuncDir: filepath.Join(appDir, functionsDirName, entryFuncDirName),
+		AppDir:  appDir,
+		Log:     stderr,
+	})
 }
 
 func packable(apps []projectconfig.App) []projectconfig.App {
