@@ -9,13 +9,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-const BootstrapFile = "bootstrap"
-
 const goModuleFile = "go.mod"
-
-var goArchitectures = map[string]string{"x86_64": "amd64", "arm64": "arm64"}
 
 type Compilation struct {
 	App        string
@@ -38,7 +36,7 @@ func Compile(ctx context.Context, c Compilation) error {
 	if err := c.validate(); err != nil {
 		return err
 	}
-	arch, runs := goArchitectures[c.Runtime.Arch]
+	arch, runs := providerkit.GoArch(c.Runtime.Arch)
 	if !runs {
 		return fmt.Errorf("app %q asks to be compiled for %q, which names no architecture go builds for", c.App, c.Runtime.Arch)
 	}
@@ -48,7 +46,7 @@ func Compile(ctx context.Context, c Compilation) error {
 	if err := os.MkdirAll(c.FuncDir, 0o755); err != nil {
 		return err
 	}
-	binary := filepath.Join(c.FuncDir, BootstrapFile)
+	binary := filepath.Join(c.FuncDir, c.App)
 	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", binary, ".")
 	cmd.Dir = c.pkg()
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off", "GOOS=linux", "GOARCH="+arch)
@@ -61,7 +59,7 @@ func Compile(ctx context.Context, c Compilation) error {
 	if c.Log != nil && said.Len() > 0 {
 		fmt.Fprintf(c.Log, "ocel: compiling %s reported:\n%s\n", c.App, strings.TrimRight(said.String(), "\n"))
 	}
-	return describeArtifact(c.App, c.Runtime, BootstrapFile, c.FuncDir, c.AppDir)
+	return describeArtifact(c.App, c.Runtime, c.App, []string{"./" + c.App}, c.FuncDir, c.AppDir)
 }
 
 func (c Compilation) validate() error {

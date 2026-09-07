@@ -57,35 +57,38 @@ func TestCompileWritesAnExecutableBootstrapForTheArchitectureItWasAsked(t *testi
 			t.Parallel()
 			_, funcDir := compiled(t, goModule(t), arch.named)
 
-			binary := filepath.Join(funcDir, BootstrapFile)
+			binary := filepath.Join(funcDir, "web")
 			info, err := os.Stat(binary)
 			if err != nil {
-				t.Fatalf("the compile wrote no %s: %v", BootstrapFile, err)
+				t.Fatalf("the compile wrote no binary named after the app: %v", err)
 			}
 			if info.Mode()&0o111 == 0 {
-				t.Errorf("%s is mode %v, want the execute bit — the zip carries the mode and the function boots the binary", BootstrapFile, info.Mode())
+				t.Errorf("the binary is mode %v, want the execute bit — the zip carries the mode and the membrane execs it", info.Mode())
 			}
 
 			read, err := elf.Open(binary)
 			if err != nil {
-				t.Fatalf("%s is no linux binary: %v", BootstrapFile, err)
+				t.Fatalf("the binary is no linux executable: %v", err)
 			}
 			defer read.Close()
 			if read.Machine != arch.machine {
-				t.Errorf("%s is built for %v, want %v — the function runs on the architecture the app named", BootstrapFile, read.Machine, arch.machine)
+				t.Errorf("the binary is built for %v, want %v — the function runs on the architecture the app named", read.Machine, arch.machine)
 			}
 		})
 	}
 }
 
-func TestCompileNamesTheBootstrapAsTheHandlerTheFunctionBootsThrough(t *testing.T) {
+func TestCompileDeclaresTheCommandTheArtifactIsServedBy(t *testing.T) {
 	t.Parallel()
 	appDir, funcDir := compiled(t, goModule(t), "x86_64")
 
 	var config functionConfig
 	readJSON(t, filepath.Join(funcDir, configFileName), &config)
-	if config.Handler != BootstrapFile {
-		t.Errorf("handler = %q, want %q", config.Handler, BootstrapFile)
+	if config.Handler != "web" {
+		t.Errorf("handler = %q, want the binary named after the app", config.Handler)
+	}
+	if len(config.Command) != 1 || config.Command[0] != "./web" {
+		t.Errorf("command = %q, want the artifact's own binary, which whatever hosts it execs", config.Command)
 	}
 	if config.Runtime != (Runtime{Name: "go", Arch: "x86_64"}) {
 		t.Errorf("runtime = %+v, want the go runtime at the architecture it was built for", config.Runtime)
@@ -126,8 +129,8 @@ func TestCompileBuildsTheAppsOwnModuleWhateverWorkspaceEnclosesIt(t *testing.T) 
 	}
 
 	_, funcDir := compiled(t, pkg, "x86_64")
-	if _, err := os.Stat(filepath.Join(funcDir, BootstrapFile)); err != nil {
-		t.Fatalf("the compile wrote no %s: a go workspace above the app names modules a release never carries, and the app's own go.mod is what is built: %v", BootstrapFile, err)
+	if _, err := os.Stat(filepath.Join(funcDir, "web")); err != nil {
+		t.Fatalf("the compile wrote no binary: a go workspace above the app names modules a release never carries, and the app's own go.mod is what is built: %v", err)
 	}
 }
 
