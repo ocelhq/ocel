@@ -48,7 +48,7 @@ export interface ProjectDomainConfig extends AppDomainConfig {
 export type Compute = "serverless" | "container";
 
 /** What a serverless app's functions are packed for and run on. */
-export type RuntimeName = "node" | "next";
+export type RuntimeName = "node" | "next" | "go";
 
 /** The processor architecture a serverless app's functions are built for. */
 export type RuntimeArch = "x86_64" | "arm64";

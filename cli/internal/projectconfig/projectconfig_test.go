@@ -451,6 +451,20 @@ export default {
 			},
 		},
 		{
+			name: "reads go as a runtime an app runs on",
+			config: `
+export default {
+  slug: "test-app",
+  apps: [{ name: "api", path: "services/api", runtime: "go" }],
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if got, want := cfg.Apps[0].Runtime, (Runtime{Name: "go"}); got != want {
+					t.Fatalf("Apps[0].Runtime = %+v, want %+v", got, want)
+				}
+			},
+		},
+		{
 			name: "reads a runtime named as an object with an architecture",
 			config: `
 export default {
@@ -806,7 +820,7 @@ export default {
   apps: [{ name: "api", path: "services/api", runtime: "deno" }],
 };
 `,
-			wantErr: []string{`app "api"`, "deno", "node", "next"},
+			wantErr: []string{`app "api"`, "deno", "node", "next", "go"},
 		},
 		{
 			name: "rejects a runtime object with no name",

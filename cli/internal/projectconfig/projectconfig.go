@@ -671,16 +671,28 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 	return apps, nil
 }
 
+func quoted(values []string) string {
+	said := make([]string, 0, len(values))
+	for _, value := range values {
+		said = append(said, fmt.Sprintf("%q", value))
+	}
+	if len(said) < 2 {
+		return strings.Join(said, "")
+	}
+	return strings.Join(said[:len(said)-1], ", ") + " and " + said[len(said)-1]
+}
+
 func normalizeRuntime(app string, raw rawRuntime) (Runtime, error) {
 	if !raw.Named {
 		return Runtime{}, nil
 	}
 	name := strings.TrimSpace(raw.Name)
+	known := quoted(providerkit.Runtimes())
 	if name == "" {
-		return Runtime{}, fmt.Errorf("app %q declares a runtime with no name: give it `runtime: %q` or `runtime: %q`, or drop runtime to have it read from the app's package.json", app, providerkit.RuntimeNode, providerkit.RuntimeNext)
+		return Runtime{}, fmt.Errorf("app %q declares a runtime with no name: name one of %s, or drop runtime to have it read from the app's package.json", app, known)
 	}
-	if name != providerkit.RuntimeNode && name != providerkit.RuntimeNext {
-		return Runtime{}, fmt.Errorf("app %q declares runtime %q, which nothing runs: the runtimes are %q and %q", app, name, providerkit.RuntimeNode, providerkit.RuntimeNext)
+	if !providerkit.KnownRuntime(name) {
+		return Runtime{}, fmt.Errorf("app %q declares runtime %q, which nothing runs: the runtimes are %s", app, name, known)
 	}
 	arch := strings.TrimSpace(raw.Arch)
 	if arch != "" && arch != ArchX8664 && arch != ArchARM64 {
