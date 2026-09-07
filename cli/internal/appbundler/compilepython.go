@@ -3,6 +3,7 @@ package appbundler
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -53,8 +54,13 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 func (c Compilation) installRequirements(ctx context.Context, platform string) error {
 	requirements := filepath.Join(c.Source, pythonRequirementsFile)
 	declared, err := os.Stat(requirements)
-	if err != nil || !declared.Mode().IsRegular() {
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
 		return nil
+	case err != nil:
+		return fmt.Errorf("read app %q's %s: %w", c.App, requirements, err)
+	case !declared.Mode().IsRegular():
+		return fmt.Errorf("app %q holds %s as %s, and pip reads the dependencies it vendors from a file", c.App, requirements, declared.Mode().Type())
 	}
 	program, err := exec.LookPath(pythonProgram)
 	if err != nil {

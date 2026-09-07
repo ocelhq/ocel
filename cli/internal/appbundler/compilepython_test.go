@@ -218,6 +218,47 @@ func TestCompileRefusesAnArchitectureNoWheelIsBuiltFor(t *testing.T) {
 	}
 }
 
+func TestCompileRefusesAPythonAppWhoseDeclaredDependenciesCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	source := pythonApp(t, map[string]string{
+		"main.py":                      "print('hi')\n",
+		"requirements.txt/held-as-dir": "six==1.17.0\n",
+	})
+	err := Compile(context.Background(), Compilation{
+		App:     "web",
+		Runtime: Runtime{Name: "python", Arch: "x86_64"},
+		Source:  source,
+		FuncDir: filepath.Join(t.TempDir(), "index.func"),
+		AppDir:  t.TempDir(),
+	})
+	if err == nil || !strings.Contains(err.Error(), pythonRequirementsFile) {
+		t.Fatalf("err = %v, want a refusal naming %s — a package that silently ships without the dependencies it declares fails at the app's first import instead", err, pythonRequirementsFile)
+	}
+}
+
+func TestVendoringReportsAnythingButAMissingRequirementsFile(t *testing.T) {
+	t.Parallel()
+
+	source := pythonApp(t, map[string]string{"main.py": "print('hi')\n"})
+	looping := filepath.Join(source, pythonRequirementsFile)
+	if err := os.Symlink(pythonRequirementsFile, looping); err != nil {
+		t.Fatal(err)
+	}
+	c := Compilation{
+		App:     "web",
+		Runtime: Runtime{Name: "python", Arch: "x86_64"},
+		Source:  source,
+		FuncDir: filepath.Join(t.TempDir(), "index.func"),
+		AppDir:  t.TempDir(),
+	}
+
+	err := c.installRequirements(context.Background(), "manylinux2014_x86_64")
+	if err == nil || !strings.Contains(err.Error(), pythonRequirementsFile) {
+		t.Fatalf("err = %v, want the stat error naming %s — only a missing file says the app declares no dependencies", err, pythonRequirementsFile)
+	}
+}
+
 func TestCompileLeavesTheBuildHostsOwnDirectoriesOutOfThePythonArtifact(t *testing.T) {
 	t.Parallel()
 
