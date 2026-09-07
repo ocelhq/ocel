@@ -7,6 +7,7 @@ import {
   LONGEST_NAMESPACE,
   namespaceFor,
   namespaceOf,
+  namespaceOfSlug,
   strayNamespaces,
 } from "./namespace";
 
@@ -43,6 +44,15 @@ describe("namespaceFor", () => {
     for (const cell of ["deploy-node", "sdk/workspace", "x".repeat(80)]) {
       const got = namespaceFor(cell, "local-Some_One");
       assert.match(got, /^[a-z][a-z0-9-]*$/, got);
+    }
+  });
+});
+
+describe("namespaceOfSlug", () => {
+  it("reaches the same namespace the cell behind the slug bootstrapped under", () => {
+    for (const cell of ["deploy-node", "sdk/workspace", "x".repeat(80)]) {
+      const run = "local-Some_One";
+      assert.equal(namespaceOfSlug(projectSlug(cell, run)), namespaceFor(cell, run));
     }
   });
 });

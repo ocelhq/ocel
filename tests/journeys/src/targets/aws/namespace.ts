@@ -23,8 +23,12 @@ function fitted(name: string): string {
   return `${head}-${digest}`;
 }
 
+export function namespaceOfSlug(slug: string): string {
+  return fitted(acceptable(slug));
+}
+
 export function namespaceFor(cell: string, run: string): string {
-  return fitted(acceptable(projectSlug(cell, run)));
+  return namespaceOfSlug(projectSlug(cell, run));
 }
 
 export function namespaceOf(env: NodeJS.ProcessEnv): string {
