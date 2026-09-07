@@ -1,0 +1,29 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "live": {
+      "cache": false,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/cli/**",
+        "$TURBO_ROOT$/sdk/**",
+        "$TURBO_ROOT$/pkg/**",
+        "$TURBO_ROOT$/proto/**",
+        "$TURBO_ROOT$/packages/**",
+        "$TURBO_ROOT$/frameworks/**",
+        "$TURBO_ROOT$/platform/vps/**",
+        "$TURBO_ROOT$/platform/edge/**",
+        "$TURBO_ROOT$/scripts/incus.sh",
+        "$TURBO_ROOT$/scripts/incus-fanout.sh",
+        "$TURBO_ROOT$/scripts/assert-ran.sh",
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/go.work.sum",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/.github/workflows/provider-vps.yml",
+        "$TURBO_ROOT$/.github/actions/**",
+        "!$TURBO_ROOT$/**/*.md"
+      ]
+    }
+  }
+}

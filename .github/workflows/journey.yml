@@ -80,10 +80,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
-      dev: ${{ steps.lanes.outputs.dev }}
-      aws: ${{ steps.lanes.outputs.aws }}
-      vps: ${{ steps.lanes.outputs.vps }}
-      next: ${{ steps.lanes.outputs.next }}
+      dev: ${{ steps.gate.outputs.dev }}
+      aws: ${{ steps.gate.outputs.aws }}
+      vps: ${{ steps.gate.outputs.vps }}
+      next: ${{ steps.gate.outputs.next }}
       variants: ${{ steps.lanes.outputs.variants }}
       skips: ${{ steps.lanes.outputs.skips }}
       coverage: ${{ steps.lanes.outputs.coverage }}
@@ -92,6 +92,10 @@ jobs:
       seed: ${{ steps.lanes.outputs.seed }}
       touched: ${{ steps.lanes.outputs.touched }}
       real: ${{ steps.lanes.outputs.real }}
+      aws_key: ${{ steps.gate-aws.outputs.key }}
+      vps_key: ${{ steps.gate-vps.outputs.key }}
+      dev_key: ${{ steps.gate-dev.outputs.key }}
+      next_key: ${{ steps.gate-next.outputs.key }}
     steps:
       - name: Spend the label that asked for this run
         if: ${{ github.event.action == 'labeled' }}
@@ -194,11 +198,89 @@ jobs:
             echo "real=$real"
           } >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
+          {
+            echo "OCEL_JOURNEY_CONCERN=$concern"
+            echo "OCEL_JOURNEY_FIXTURES=$(echo "${FIXTURES:-}" | tr ' ' ',')"
+            echo "OCEL_JOURNEY_SEED=$seed"
+            echo "OCEL_JOURNEY_TOUCHED=$touched"
+            echo "OCEL_JOURNEY_COVERAGE=$coverage"
+            echo "OCEL_JOURNEY_VARIANTS=${VARIANTS:-}"
+            echo "OCEL_JOURNEY_SKIPS=${SKIPS:-skip}"
+          } >> "$GITHUB_ENV"
 
       - uses: ./.github/actions/node-workspace
         with:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Has aws already passed what it reads
+        id: gate-aws
+        if: ${{ steps.lanes.outputs.aws == 'true' && steps.lanes.outputs.real != 'true' }}
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: journey-aws
+          task: "@ocel-tests/journeys#journey:aws"
+
+      - name: Has vps already passed what it reads
+        id: gate-vps
+        if: ${{ steps.lanes.outputs.vps == 'true' && steps.lanes.outputs.real != 'true' }}
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: journey-vps
+          task: "@ocel-tests/journeys#journey:vps"
+
+      - name: Has dev already passed what it reads
+        id: gate-dev
+        if: ${{ steps.lanes.outputs.dev == 'true' && steps.lanes.outputs.real != 'true' }}
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: journey-dev
+          task: "@ocel-tests/journeys#journey:dev"
+
+      - name: Has next already passed what it reads
+        id: gate-next
+        if: ${{ steps.lanes.outputs.next == 'true' }}
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: journey-next
+          task: "@ocel-tests/journeys#journey:next"
+        env:
+          OCEL_JOURNEY_CONCERN: deploy
+          OCEL_JOURNEY_FIXTURES: deploy/next
+          OCEL_JOURNEY_VARIANTS: cloudflare
+          OCEL_JOURNEY_COVERAGE: full
+          OCEL_JOURNEY_SKIPS: skip
+          OCEL_JOURNEY_KEEP: "1"
+          OCEL_JOURNEY_SEED: ""
+          OCEL_JOURNEY_TOUCHED: ""
+
+      - name: Keep the lanes with something left to prove
+        id: gate
+        env:
+          AWS: ${{ steps.lanes.outputs.aws }}
+          VPS: ${{ steps.lanes.outputs.vps }}
+          DEV: ${{ steps.lanes.outputs.dev }}
+          NEXT: ${{ steps.lanes.outputs.next }}
+          AWS_GREEN: ${{ steps.gate-aws.outputs.green }}
+          VPS_GREEN: ${{ steps.gate-vps.outputs.green }}
+          DEV_GREEN: ${{ steps.gate-dev.outputs.green }}
+          NEXT_GREEN: ${{ steps.gate-next.outputs.green }}
+        run: |
+          set -euo pipefail
+          runs() { if [ "$1" = true ] && [ "$2" != true ]; then echo true; else echo false; fi; }
+          aws=$(runs "$AWS" "$AWS_GREEN")
+          vps=$(runs "$VPS" "$VPS_GREEN")
+          dev=$(runs "$DEV" "$DEV_GREEN")
+          next=$(runs "$NEXT" "$NEXT_GREEN")
+          any=false
+          [ "$aws$vps$dev$next" = falsefalsefalsefalse ] || any=true
+          {
+            echo "aws=$aws"
+            echo "vps=$vps"
+            echo "dev=$dev"
+            echo "next=$next"
+            echo "any=$any"
+          } | tee -a "$GITHUB_OUTPUT"
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -222,6 +304,7 @@ jobs:
         run: pnpm turbo run build typecheck test --filter='!./console/*' --filter='!./tests/fixtures/**' --filter='!./tests/*'
 
       - name: Build the binaries a journey drives
+        if: ${{ steps.gate.outputs.any == 'true' }}
         run: |
           set -euo pipefail
           node scripts/build-native.mjs --host --target cli
@@ -229,6 +312,7 @@ jobs:
           node scripts/build-native.mjs --host --target provider-vps
 
       - name: Upload them for the lanes
+        if: ${{ steps.gate.outputs.any == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: journey-binaries
@@ -338,6 +422,13 @@ jobs:
           scripts/floci.sh run "$EMULATOR" -- \
             bash -c 'AWS_ENDPOINT_URL=${OCEL_FLOCI_ENDPOINT/127.0.0.1/localhost.localstack.cloud} pnpm --filter @ocel-tests/journeys journey'
 
+      - name: Record that what aws reads has passed
+        if: ${{ needs.binary.outputs.aws == 'true' && needs.binary.outputs.real != 'true' }}
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: journey-aws
+          key: ${{ needs.binary.outputs.aws_key }}
+
       - name: No emulator left behind
         if: ${{ always() && needs.binary.outputs.aws == 'true' }}
         run: scripts/floci.sh destroy "$EMULATOR" || echo "could not destroy $EMULATOR"
@@ -387,11 +478,19 @@ jobs:
           done
 
       - name: Run the dev journey
+        id: dev
         if: ${{ !cancelled() && needs.binary.outputs.dev == 'true' }}
         env:
           OCEL_TARGET: dev
           OCEL_JOURNEY_SKIPS: ${{ needs.binary.outputs.skips }}
         run: pnpm --filter @ocel-tests/journeys journey
+
+      - name: Record that what dev reads has passed
+        if: ${{ !cancelled() && steps.dev.outcome == 'success' && needs.binary.outputs.real != 'true' }}
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: journey-dev
+          key: ${{ needs.binary.outputs.dev_key }}
 
       - name: Dump console/web log on failure
         if: ${{ failure() && needs.binary.outputs.dev == 'true' }}
@@ -484,6 +583,12 @@ jobs:
 
       - name: Run the journey
         run: pnpm --filter @ocel-tests/journeys journey
+
+      - name: Record that what next reads has passed
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: journey-next
+          key: ${{ needs.binary.outputs.next_key }}
 
       - name: Pack the evidence
         if: always()
@@ -611,6 +716,13 @@ jobs:
 
       - name: Run the journey
         run: pnpm --filter @ocel-tests/journeys journey
+
+      - name: Record that what vps reads has passed
+        if: ${{ needs.binary.outputs.real != 'true' }}
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: journey-vps
+          key: ${{ needs.binary.outputs.vps_key }}
 
       - name: What the runner's daemon holds after the lane
         if: always()

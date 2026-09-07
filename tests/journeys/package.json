@@ -7,6 +7,10 @@
     "cell": "bun src/cell.ts",
     "test": "bun test src",
     "journey": "bun src/journey.ts",
+    "journey:aws": "OCEL_TARGET=aws bun src/journey.ts",
+    "journey:vps": "OCEL_TARGET=vps bun src/journey.ts",
+    "journey:dev": "OCEL_TARGET=dev bun src/journey.ts",
+    "journey:next": "OCEL_TARGET=aws bun src/journey.ts",
     "sweep": "bun src/sweep.ts",
     "typecheck": "tsc --noEmit"
   },

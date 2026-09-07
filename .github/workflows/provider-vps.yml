@@ -36,6 +36,8 @@ on:
       - "scripts/assert-ran.sh"
       - ".github/workflows/provider-vps.yml"
       - ".github/actions/incus-vm/**"
+      - ".github/actions/suite-gate/**"
+      - ".github/actions/suite-passed/**"
   workflow_dispatch:
 
 concurrency:
@@ -52,8 +54,55 @@ env:
   BAKE: curl -fsSL --retry 5 --retry-delay 2 https://get.docker.com | sudo sh
 
 jobs:
-  live:
+  gate:
     if: github.event.action != 'closed'
+    name: what still needs proving
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      live: ${{ steps.gate-live.outputs.green != 'true' }}
+      live_key: ${{ steps.gate-live.outputs.key }}
+      pipeline: ${{ steps.gate-build.outputs.green != 'true' || steps.gate-lifecycle.outputs.green != 'true' || steps.gate-engine.outputs.green != 'true' }}
+      build_key: ${{ steps.gate-build.outputs.key }}
+      lifecycle_key: ${{ steps.gate-lifecycle.outputs.key }}
+      engine_key: ${{ steps.gate-engine.outputs.key }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/node-workspace
+
+      - name: Has the live suite already passed what it reads
+        id: gate-live
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: vps-live
+          task: "@platform/vps-host#live"
+
+      - name: Has the build pipeline already passed what it reads
+        id: gate-build
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: vps-build
+          task: "@cli/node#live"
+
+      - name: Has the lifecycle suite already passed what it reads
+        id: gate-lifecycle
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: vps-lifecycle
+          task: "@platform/vps-host#lifecycle"
+
+      - name: Has the engine install already passed what it reads
+        id: gate-engine
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: vps-engine
+          task: "@platform/vps-host#live"
+
+  live:
+    needs: gate
+    if: needs.gate.outputs.live == 'true'
     name: vps live conformance
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -116,6 +165,12 @@ jobs:
           done
           exit "$status"
 
+      - name: Record that what the live suite reads has passed
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: vps-live
+          key: ${{ needs.gate.outputs.live_key }}
+
       - name: No VM left behind
         if: always()
         run: |
@@ -124,7 +179,8 @@ jobs:
           done
 
   pipeline:
-    if: github.event.action != 'closed'
+    needs: gate
+    if: needs.gate.outputs.pipeline == 'true'
     name: vps build pipeline, lifecycle and engine install
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -180,6 +236,24 @@ jobs:
           scripts/assert-ran.sh reports/lifecycle.json TestLifecycle || status=1
           scripts/assert-ran.sh reports/engine.json TestLive || status=1
           exit "$status"
+
+      - name: Record that what the build pipeline reads has passed
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: vps-build
+          key: ${{ needs.gate.outputs.build_key }}
+
+      - name: Record that what the lifecycle suite reads has passed
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: vps-lifecycle
+          key: ${{ needs.gate.outputs.lifecycle_key }}
+
+      - name: Record that what the engine install reads has passed
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: vps-engine
+          key: ${{ needs.gate.outputs.engine_key }}
 
       - name: No VM left behind
         if: always()

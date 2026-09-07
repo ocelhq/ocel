@@ -1,0 +1,30 @@
+name: suite-passed
+description: >-
+  Records that the fingerprint suite-gate computed has passed, so the next
+  run over the same inputs skips the suite. The record is an Actions cache
+  entry, which only this ref and refs branched from it can read.
+
+inputs:
+  suite:
+    description: The suite name suite-gate was given.
+    required: true
+  key:
+    description: The key suite-gate returned.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Name the run that proved it
+      shell: bash
+      env:
+        MARKER: ${{ runner.temp }}/suite-green/${{ inputs.suite }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$(dirname "$MARKER")"
+        echo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" > "$MARKER"
+
+    - uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/suite-green/${{ inputs.suite }}
+        key: ${{ inputs.key }}
