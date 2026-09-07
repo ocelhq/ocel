@@ -256,13 +256,14 @@ describe("the gap list", () => {
   it("skips every cell that is listed dead at up, and leaves the live ones to run", () => {
     assert.deepEqual(alive("aws"), [
       "deploy/node-api-gateway",
+      "deploy/go-api-gateway",
       "deploy/next-cloudflare",
       "deploy/workspace-cloudflare",
       "sdk/with-transforms-api-gateway",
     ]);
-    assert.deepEqual(alive("aws.floci"), ["deploy/node-api-gateway"]);
+    assert.deepEqual(alive("aws.floci"), ["deploy/node-api-gateway", "deploy/go-api-gateway"]);
     assert.deepEqual(alive("dev"), ["deploy/node", "deploy/next", "deploy/workspace"]);
-    assert.deepEqual(alive("vps"), ["deploy/node", "deploy/next", "deploy/workspace"]);
+    assert.deepEqual(alive("vps"), ["deploy/node", "deploy/go", "deploy/next", "deploy/workspace"]);
     assert.deepEqual(alive("vps.incus"), alive("vps"));
   });
 

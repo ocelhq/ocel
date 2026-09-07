@@ -4,6 +4,7 @@ import {
   envRows,
   healthRows,
   linkRows,
+  nativeRows,
   nextCacheRows,
   nextDataCacheRows,
   nextRoutingRows,
@@ -18,7 +19,7 @@ import { sstHooks } from "./targets/aws/ladder-sst";
 import type { CellContext } from "./targets/types";
 import { BASE, HTTP_VARIANTS, NEXT_VARIANTS, runsOn, type Variant } from "./variants";
 
-export type Runtime = "node" | "next";
+export type Runtime = "node" | "next" | "go";
 
 export type Kind = "composite" | "ladder" | "workspace";
 
@@ -82,8 +83,16 @@ export const groups: Group[] = [
   { concern: "sdk", name: "node-http", preferred: "workspace" },
 ];
 
-const SERVED = [...healthRows, ...staticRows, ...probeRows];
-const STORED = [...healthRows, ...staticRows, ...productRows, ...probeRows, ...envRows];
+const SPOKEN = [...healthRows, ...staticRows, ...probeRows];
+const SERVED = [...SPOKEN, ...nativeRows];
+const STORED = [
+  ...healthRows,
+  ...staticRows,
+  ...productRows,
+  ...nativeRows,
+  ...probeRows,
+  ...envRows,
+];
 const NEXT_SERVED = [...nextRoutingRows, ...nextCacheRows];
 const NEXT_STORED = [...nextStateRows, ...nextDataCacheRows];
 const LADDER = [...healthRows, ...staticRows, ...linkRows];
@@ -100,6 +109,19 @@ export const spec: FixtureSpec[] = [
     apps: ["web"],
     legs: SERVES,
     base: ["dev", "vps"],
+    variants: HTTP_VARIANTS,
+  },
+  {
+    name: "go",
+    concern: "deploy",
+    dir: "deploy/go",
+    runtime: "go",
+    kind: "composite",
+    rows: SPOKEN,
+    apps: ["web"],
+    legs: SERVES,
+    targets: ["aws", "vps"],
+    base: ["vps"],
     variants: HTTP_VARIANTS,
   },
   {

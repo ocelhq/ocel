@@ -4,7 +4,7 @@ import { healthRows } from "./health";
 import { linkRows } from "./links";
 import { nextCacheRows, nextDataCacheRows } from "./nextCache";
 import { nextRoutingRows, nextStateRows } from "./nextRouting";
-import { probeRows } from "./probes";
+import { nativeRows, probeRows } from "./probes";
 import { productRows } from "./product";
 import { staticRows } from "./static";
 
@@ -21,6 +21,7 @@ export const everyRow: ContractRow[] = [
   ...healthRows,
   ...staticRows,
   ...productRows,
+  ...nativeRows,
   ...probeRows,
   ...envRows,
   ...linkRows,

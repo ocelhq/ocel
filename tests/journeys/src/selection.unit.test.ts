@@ -163,6 +163,7 @@ describe("what a run selects", () => {
     expect(covering).toContain("deploy/node-api-gateway");
     expect(covering.filter((name) => name.endsWith("-api-gateway"))).toEqual([
       "deploy/node-api-gateway",
+      "deploy/go-api-gateway",
     ]);
   });
 
