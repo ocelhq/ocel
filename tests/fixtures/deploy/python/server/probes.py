@@ -25,32 +25,30 @@ STATUS_PATH = re.compile(r"^/api/probes/status/(\d+)$")
 
 
 def stream(req):
-    body = b"".join(f"ocel-stream-{i}\n".encode() for i in range(1, STREAM_CHUNKS))
-    req.send_response(200)
-    req.send_header("content-type", "text/plain; charset=utf-8")
-    req.send_header("cache-control", "no-store, no-transform")
-    req.send_header("content-length", str(len(body) + len(STREAM_END)))
-    req.end_headers()
-    for line in body.splitlines(keepends=True):
-        req.wfile.write(line)
-        req.wfile.flush()
+    req.start_chunks(
+        {"content-type": "text/plain; charset=utf-8", "cache-control": "no-store, no-transform"}
+    )
+    for i in range(1, STREAM_CHUNKS):
+        req.write_chunk(f"ocel-stream-{i}\n".encode())
         time.sleep(STREAM_GAP)
-    req.wfile.write(STREAM_END)
+    req.write_chunk(STREAM_END)
+    req.end_chunks()
 
 
 def status(req):
     code = int(STATUS_PATH.match(path_of(req)).group(1))
     if code == 204:
-        req.send_response(204)
-        req.send_header("content-length", "0")
-        req.end_headers()
+        req.write_status(204)
         return
     extra = {"location": "/api/probes/status/204"} if 300 <= code < 400 else None
     req.write_bytes(code, "application/json", json.dumps({"status": code}).encode(), extra)
 
 
 def echo(req):
-    read = body_of(req)
+    read = req.read_body()
+    if read is None:
+        refuse(req)
+        return
     query = {name: values[0] for name, values in parse_qs(urlsplit(req.path).query).items()}
     req.write_json(
         200,
@@ -76,7 +74,10 @@ def echoed(req, read):
 
 
 def take_large(req):
-    read = body_of(req)
+    read = req.read_body()
+    if read is None:
+        refuse(req)
+        return
     req.write_json(200, {"bytes": len(read), "sha256": hashlib.sha256(read).hexdigest()})
 
 
@@ -114,13 +115,13 @@ def vendored(req):
     )
 
 
-def body_of(req):
-    length = int(req.headers.get("content-length") or 0)
-    if length <= 0:
-        return b""
-    if length > MAX_BODY:
-        return b""
-    return req.rfile.read(length)
+def refuse(req):
+    req.write_bytes(
+        400,
+        "application/json",
+        json.dumps({"error": "bad request"}).encode(),
+        {"connection": "close"},
+    )
 
 
 def path_of(req):
