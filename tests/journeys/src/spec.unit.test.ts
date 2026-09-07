@@ -98,6 +98,7 @@ describe("fixtures named in the environment", () => {
 
 describe("the variants a fixture lists", () => {
   const node = specByName("sdk", "node");
+  const next = specByName("sdk", "next");
   const transforms = specByName("sdk", "with-transforms");
 
   it("is none for a row that lists none", () => {
@@ -106,10 +107,11 @@ describe("the variants a fixture lists", () => {
   });
 
   it("is what the row lists and the target runs", () => {
-    expect(variantsOf(node, "aws")).toEqual([container, apiGateway, cloudflare]);
+    expect(variantsOf(node, "aws")).toEqual([container, apiGateway]);
     expect(variantsOf(node, "vps")).toEqual([]);
     expect(variantsOf(node, "dev")).toEqual([]);
-    expect(variantsOf(transforms, "aws")).toEqual([container, apiGateway, cloudflare]);
+    expect(variantsOf(transforms, "aws")).toEqual([container, apiGateway]);
+    expect(variantsOf(next, "aws")).toEqual([container, cloudflare]);
   });
 
   it("refuses a row that lists one variant twice", () => {
@@ -127,23 +129,25 @@ describe("the variants a fixture lists", () => {
   });
 
   it("lists the base cell first, then one cell per variant in the order listed", () => {
-    expect(names(node, "aws")).toEqual([
-      "sdk/node",
-      "sdk/node-container",
-      "sdk/node-api-gateway",
-      "sdk/node-cloudflare",
-    ]);
+    expect(names(next, "aws")).toEqual(["sdk/next", "sdk/next-container", "sdk/next-cloudflare"]);
     expect(names(node, "vps")).toEqual(["sdk/node"]);
     expect(names(node, "dev")).toEqual(["sdk/node"]);
   });
 
-  it("calls the base cell's variant base", () => {
-    expect(cellsOf(node, "aws").map(variantNameOf)).toEqual([
-      "base",
-      "container",
-      "api-gateway",
-      "cloudflare",
+  it("runs the base cell only on the targets the row names, and every target when it names none", () => {
+    expect(names(node, "aws")).toEqual(["sdk/node-container", "sdk/node-api-gateway"]);
+    expect(names(specByName("deploy", "node"), "aws")).toEqual([
+      "deploy/node-container",
+      "deploy/node-api-gateway",
     ]);
+    expect(names(specByName("deploy", "node"), "dev")).toEqual(["deploy/node"]);
+    expect(names(specByName("deploy", "node"), "vps")).toEqual(["deploy/node"]);
+    expect(names(next, "dev")).toEqual(["sdk/next"]);
+  });
+
+  it("calls the base cell's variant base", () => {
+    expect(cellsOf(next, "aws").map(variantNameOf)).toEqual(["base", "container", "cloudflare"]);
+    expect(cellsOf(node, "aws").map(variantNameOf)).toEqual(["container", "api-gateway"]);
   });
 });
 

@@ -7,7 +7,6 @@ import { currentRunIdentity } from "./identity";
 import { follow, LIVE_ENV } from "./live";
 import { longestFirst } from "./order";
 import { cellFile, cellFilesDir, cellsDir, liveFile, packageRoot, prepareFile } from "./paths";
-import { pickFixtures, requestedPick } from "./pick";
 import type { PrepareFailures } from "./prepare";
 import {
   CONCERN_ENV,
@@ -18,7 +17,7 @@ import {
   selectionFor,
 } from "./selection";
 import type { Cell, FixtureSpec } from "./spec";
-import { fixtureNameOf, groupKeyOf } from "./spec";
+import { fixtureNameOf } from "./spec";
 import { laneWorkers, selectedTarget } from "./targets";
 import type { Target } from "./targets/types";
 
@@ -83,11 +82,7 @@ function sayWhatIsSkipped(target: Target, selection: Selection) {
   }
 }
 
-export async function runJourney(
-  target: Target,
-  fixtures: FixtureSpec[],
-  leftOut: FixtureSpec[] = [],
-): Promise<number> {
+export async function runJourney(target: Target, fixtures: FixtureSpec[]): Promise<number> {
   const runId = currentRunIdentity();
   await rm(cellsDir(runId, target.name), { recursive: true, force: true });
 
@@ -97,7 +92,6 @@ export async function runJourney(
     OCEL_TARGET: target.name,
     [CONCERN_ENV]: [...new Set(fixtures.map((row) => row.concern))].join(" "),
     [FIXTURES_ENV]: fixtures.map(fixtureNameOf).join(","),
-    OCEL_JOURNEY_LEFT_OUT: leftOut.map(fixtureNameOf).join(","),
     [ENVIRONMENT_ENV]: environment,
   };
   const selection = selectionFor(target, environment, env);
@@ -128,26 +122,9 @@ export async function runJourney(
   return verdict.exitCode;
 }
 
-function sayWhatIsLeftOut(seed: string, chosen: FixtureSpec[], leftOut: FixtureSpec[]) {
-  const groups = new Set(leftOut.map(groupKeyOf));
-  for (const group of groups) {
-    const running = chosen.filter((row) => groupKeyOf(row) === group).map(fixtureNameOf);
-    const dropped = leftOut.filter((row) => groupKeyOf(row) === group).map(fixtureNameOf);
-    process.stderr.write(
-      `${group}: running ${running.join(", ")}, leaving out ${dropped.join(", ")} (seed ${seed})\n`,
-    );
-  }
-}
-
 async function main(): Promise<number> {
   const target = selectedTarget();
-  const named = fixturesFor(target.name, process.env);
-  const pick = requestedPick();
-  const { chosen, leftOut } = pickFixtures(named, pick);
-  if (pick && leftOut.length > 0) {
-    sayWhatIsLeftOut(pick.seed, chosen, leftOut);
-  }
-  return runJourney(target, chosen, leftOut);
+  return runJourney(target, fixturesFor(target.name, process.env));
 }
 
 if (import.meta.main) {

@@ -82,7 +82,7 @@ describe("the account a run settles from its rows", () => {
       leg: "destroy",
     },
   ];
-  const meta = { target: "dev", environment: "dev", runId: "local-unit", leftOut: [] };
+  const meta = { target: "dev", environment: "dev", runId: "local-unit" };
 
   it("reconciles the recorded rows and holds a crash as an unhandled error", () => {
     const account = accountOf({

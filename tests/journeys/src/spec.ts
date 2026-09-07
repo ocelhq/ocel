@@ -16,7 +16,7 @@ import { ladderRows } from "./targets/aws/ladder";
 import { pulumiHooks } from "./targets/aws/ladder-pulumi";
 import { sstHooks } from "./targets/aws/ladder-sst";
 import type { CellContext } from "./targets/types";
-import { AWS, BASE, runsOn, type Variant } from "./variants";
+import { BASE, HTTP_VARIANTS, NEXT_VARIANTS, runsOn, type Variant } from "./variants";
 
 export type Runtime = "node" | "next";
 
@@ -70,6 +70,7 @@ export type FixtureSpec = {
   apps: string[];
   legs: Leg[];
   targets?: TargetName[];
+  base?: TargetName[];
   variants?: Variant[];
   hooks?: LadderHooks;
 };
@@ -98,7 +99,8 @@ export const spec: FixtureSpec[] = [
     rows: SERVED,
     apps: ["web"],
     legs: SERVES,
-    variants: AWS,
+    base: ["dev", "vps"],
+    variants: HTTP_VARIANTS,
   },
   {
     name: "next",
@@ -109,7 +111,7 @@ export const spec: FixtureSpec[] = [
     rows: [...SERVED, ...NEXT_SERVED],
     apps: ["web"],
     legs: SERVES,
-    variants: AWS,
+    variants: NEXT_VARIANTS,
   },
   {
     name: "workspace",
@@ -120,7 +122,7 @@ export const spec: FixtureSpec[] = [
     rows: SERVED,
     apps: ["next", "express"],
     legs: SERVES,
-    variants: AWS,
+    variants: NEXT_VARIANTS,
   },
   {
     name: "next",
@@ -132,7 +134,7 @@ export const spec: FixtureSpec[] = [
     apps: ["web"],
     legs: LIVES,
     targets: ["aws", "vps"],
-    variants: AWS,
+    variants: NEXT_VARIANTS,
   },
   {
     name: "node",
@@ -144,7 +146,8 @@ export const spec: FixtureSpec[] = [
     rows: STORED,
     apps: ["web"],
     legs: SERVES,
-    variants: AWS,
+    base: ["dev", "vps"],
+    variants: HTTP_VARIANTS,
   },
   {
     name: "next",
@@ -155,7 +158,7 @@ export const spec: FixtureSpec[] = [
     rows: [...STORED, ...NEXT_SERVED, ...NEXT_STORED],
     apps: ["web"],
     legs: SERVES,
-    variants: AWS,
+    variants: NEXT_VARIANTS,
   },
   {
     name: "workspace",
@@ -166,7 +169,7 @@ export const spec: FixtureSpec[] = [
     rows: STORED,
     apps: ["next", "express"],
     legs: SERVES,
-    variants: AWS,
+    variants: NEXT_VARIANTS,
   },
   {
     name: "with-transforms",
@@ -178,7 +181,8 @@ export const spec: FixtureSpec[] = [
     apps: ["web"],
     legs: LIVES,
     targets: ["aws"],
-    variants: AWS,
+    base: [],
+    variants: HTTP_VARIANTS,
   },
   {
     name: "with-sst",
@@ -190,7 +194,8 @@ export const spec: FixtureSpec[] = [
     apps: ["web"],
     legs: LIVES,
     targets: ["aws"],
-    variants: AWS,
+    base: [],
+    variants: HTTP_VARIANTS,
     hooks: { ...sstHooks, rows: ladderRows },
   },
   {
@@ -203,7 +208,8 @@ export const spec: FixtureSpec[] = [
     apps: ["web"],
     legs: LIVES,
     targets: ["aws"],
-    variants: AWS,
+    base: [],
+    variants: HTTP_VARIANTS,
     hooks: { ...pulumiHooks, rows: ladderRows },
   },
 ];
@@ -235,9 +241,13 @@ export function legsOf(one: FixtureSpec, able: Leg[]): Leg[] {
   return one.legs.filter((leg) => able.includes(leg));
 }
 
+export function runsBaseOn(fixture: FixtureSpec, target: TargetName): boolean {
+  return fixture.base === undefined || fixture.base.includes(target);
+}
+
 export function cellsOf(fixture: FixtureSpec, target: TargetName): Cell[] {
   return [
-    { name: fixtureNameOf(fixture), fixture },
+    ...(runsBaseOn(fixture, target) ? [{ name: fixtureNameOf(fixture), fixture }] : []),
     ...variantsOf(fixture, target).map((variant) => ({
       name: cellNameOf(fixture, variant),
       fixture,

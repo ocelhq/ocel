@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { reconcile } from "./reconcile";
 import { journeyVerdict, summaryTable } from "./summary";
 
-const GAP = { id: "no-streamed-body", reason: "the body never arrives", issue: 851 };
+const GAP = { id: "cloudfront-stub", reason: "the edge is not backed", issue: 852 };
 
 describe("summary table", () => {
   const report = reconcile({
@@ -20,7 +20,6 @@ describe("summary table", () => {
     target: "dev",
     environment: "dev",
     runId: "local-ada",
-    leftOut: [],
   });
 
   it("heads the table with the target, environment and run", () => {
@@ -47,7 +46,6 @@ describe("summary table", () => {
       target: "dev",
       environment: "dev",
       runId: "local-ada",
-      leftOut: [],
     });
     expect(said).not.toContain("| cell |");
     expect(said).toContain("green 1");
@@ -58,25 +56,7 @@ describe("summary table", () => {
   });
 
   it("links the issue that owns a red cell", () => {
-    expect(table).toContain("no-streamed-body [#851](https://github.com/ocelhq/ocel/issues/851)");
-  });
-
-  it("says nothing about a pick when the pass ran everything", () => {
-    expect(table).not.toContain("left out this pass");
-  });
-
-  it("names what the pass left out, above the tally", () => {
-    const said = summaryTable(report, {
-      target: "dev",
-      environment: "dev",
-      runId: "local-ada",
-      leftOut: ["sdk/next", "sdk/workspace"],
-    });
-    const lines = said.split("\n");
-    expect(lines[2]).toBe("left out this pass: sdk/next, sdk/workspace");
-    expect(lines.indexOf("left out this pass: sdk/next, sdk/workspace")).toBeLessThan(
-      lines.findIndex((line) => line.includes("green")),
-    );
+    expect(table).toContain("cloudfront-stub [#852](https://github.com/ocelhq/ocel/issues/852)");
   });
 });
 

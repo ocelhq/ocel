@@ -91,25 +91,22 @@ describe("the variants a run narrows to", () => {
 describe("what a run selects", () => {
   it("runs every cell that is not skipped under full coverage", () => {
     expect(cellsOf({ ...FULL, [FIXTURES_ENV]: "deploy/node", [SKIPS_ENV]: "run" })).toEqual([
-      "deploy/node",
       "deploy/node-container",
       "deploy/node-api-gateway",
-      "deploy/node-cloudflare",
     ]);
     expect(cellsOf({ ...FULL, [FIXTURES_ENV]: "deploy/node" })).toEqual([
       "deploy/node-api-gateway",
-      "deploy/node-cloudflare",
     ]);
   });
 
   it("names a cell after the bucket it belongs to, so the two concerns never collide", () => {
     const both = cellsOf({
       ...FULL,
-      [FIXTURES_ENV]: "deploy/node,sdk/node",
+      [FIXTURES_ENV]: "deploy/next,sdk/next",
       [SKIPS_ENV]: "run",
       [VARIANTS_ENV]: "base",
     });
-    expect(both).toEqual(["deploy/node", "sdk/node"]);
+    expect(both).toEqual(["deploy/next", "sdk/next"]);
   });
 
   it("selects only the bucket the concern names", () => {
@@ -119,12 +116,20 @@ describe("what a run selects", () => {
   });
 
   it("enumerates only the variants named", () => {
-    const named = { ...FULL, [FIXTURES_ENV]: "deploy/node", [SKIPS_ENV]: "run" };
+    const named = { ...FULL, [FIXTURES_ENV]: "deploy/next", [SKIPS_ENV]: "run" };
     expect(cellsOf({ ...named, [VARIANTS_ENV]: "cloudflare,container" })).toEqual([
-      "deploy/node-container",
-      "deploy/node-cloudflare",
+      "deploy/next-container",
+      "deploy/next-cloudflare",
     ]);
-    expect(cellsOf({ ...named, [VARIANTS_ENV]: "base" })).toEqual(["deploy/node"]);
+    expect(cellsOf({ ...named, [VARIANTS_ENV]: "base" })).toEqual(["deploy/next"]);
+    expect(
+      cellsOf({
+        ...FULL,
+        [FIXTURES_ENV]: "deploy/node",
+        [SKIPS_ENV]: "run",
+        [VARIANTS_ENV]: "base",
+      }),
+    ).toEqual([]);
   });
 
   it("reports the skipped cells it would have run, and no others", () => {
@@ -132,8 +137,8 @@ describe("what a run selects", () => {
       ...FULL,
       [FIXTURES_ENV]: "sdk/with-transforms",
     });
-    expect(Object.keys(skipped)).toEqual(["sdk/with-transforms", "sdk/with-transforms-container"]);
-    expect(skipped["sdk/with-transforms"]?.map((gap) => gap.issue)).toEqual([923]);
+    expect(Object.keys(skipped)).toEqual(["sdk/with-transforms-container"]);
+    expect(skipped["sdk/with-transforms-container"]?.map((gap) => gap.issue)).toEqual([937]);
     const narrowed = selectionFor(AWS, "aws", {
       ...FULL,
       [FIXTURES_ENV]: "sdk/with-transforms",
@@ -148,9 +153,20 @@ describe("what a run selects", () => {
     expect(covering.length).toBeGreaterThan(0);
   });
 
+  it("covers the plain-http gateway cell on a floci pull request lane", () => {
+    const covering = cellsOf(
+      { [CONCERN_ENV]: "deploy lifecycle", OCEL_JOURNEY_SEED: "4242" },
+      "aws.floci",
+    );
+    expect(covering).toContain("deploy/node-api-gateway");
+    expect(covering.filter((name) => name.endsWith("-api-gateway"))).toEqual([
+      "deploy/node-api-gateway",
+    ]);
+  });
+
   it("finds a selected cell by name, and refuses one it did not select", () => {
     const selection = selectionFor(AWS, "aws", { ...FULL, [FIXTURES_ENV]: "deploy/node" });
-    expect(cellNamed(selection, "deploy/node-cloudflare").fixture.dir).toBe("deploy/node");
+    expect(cellNamed(selection, "deploy/node-api-gateway").fixture.dir).toBe("deploy/node");
     expect(() => cellNamed(selection, "deploy/node")).toThrow(
       /this run selects no cell named deploy\/node \(/,
     );

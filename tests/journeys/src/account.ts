@@ -177,10 +177,6 @@ export async function settleAccount(input: {
     runEnd: input.runEnd,
   });
 
-  const leftOut = (input.env.OCEL_JOURNEY_LEFT_OUT ?? "")
-    .split(",")
-    .map((name) => name.trim())
-    .filter((name) => name !== "");
   const account = accountOf({
     ...shared,
     run: input.run,
@@ -189,7 +185,6 @@ export async function settleAccount(input: {
       target: input.target.name,
       environment: input.environment,
       runId,
-      leftOut,
       skipped: selection.skipped,
     },
   });

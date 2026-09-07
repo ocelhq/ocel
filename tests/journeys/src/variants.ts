@@ -32,9 +32,9 @@ export const cloudflare = variant("cloudflare", {
   config: { edge: "cloudflare" },
 });
 
-export const EDGES: Variant[] = [apiGateway, cloudflare];
+export const NEXT_VARIANTS: Variant[] = [container, cloudflare];
 
-export const AWS: Variant[] = [container, ...EDGES];
+export const HTTP_VARIANTS: Variant[] = [container, apiGateway];
 
 export function runsOn(one: Variant, target: TargetName): boolean {
   return one.on === undefined || one.on.includes(target);

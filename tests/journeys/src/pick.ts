@@ -21,47 +21,6 @@ function rotation(seed: string, group: string): number {
   return createHash("sha256").update(`${seed}:${group}`).digest().readUInt32BE(0);
 }
 
-function memberFor(seed: string, group: string, members: FixtureSpec[]): FixtureSpec {
-  return members[rotation(seed, group) % members.length];
-}
-
-function untouched(seed: string, group: string, members: FixtureSpec[]): FixtureSpec {
-  const preferred = members.find((row) => fixtureNameOf(row) === preferredOf(group));
-  return preferred ?? memberFor(seed, group, members);
-}
-
-export function pickFixtures(
-  rows: FixtureSpec[],
-  pick: Pick | undefined,
-): { chosen: FixtureSpec[]; leftOut: FixtureSpec[] } {
-  if (!pick) {
-    return { chosen: rows, leftOut: [] };
-  }
-
-  const groups = new Map<string, FixtureSpec[]>();
-  for (const row of rows) {
-    const key = groupKeyOf(row);
-    if (key === undefined) {
-      continue;
-    }
-    const members = groups.get(key) ?? [];
-    members.push(row);
-    groups.set(key, members);
-  }
-
-  const running = new Set<FixtureSpec>();
-  for (const [group, members] of groups) {
-    const touched = members.filter((row) => pick.touched.includes(row.dir));
-    for (const row of touched.length > 0 ? touched : [untouched(pick.seed, group, members)]) {
-      running.add(row);
-    }
-  }
-
-  const chosen = rows.filter((row) => groupKeyOf(row) === undefined || running.has(row));
-  const leftOut = rows.filter((row) => groupKeyOf(row) !== undefined && !running.has(row));
-  return { chosen, leftOut };
-}
-
 export function requestedPick(env: NodeJS.ProcessEnv = process.env): Pick | undefined {
   const seed = (env.OCEL_JOURNEY_SEED ?? "").trim();
   if (seed === "") {

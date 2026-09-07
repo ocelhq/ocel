@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { UP_TITLE } from "./plan";
 import { exitCodeFor, reconcile, type TestOutcome, type TestResult } from "./reconcile";
 
-const GAP = { id: "no-streamed-body", reason: "the body never arrives", issue: 851 };
+const GAP = { id: "cloudfront-stub", reason: "the edge is not backed", issue: 852 };
 
 const planned = [
   { cell: "node/web", title: UP_TITLE, leg: "up" as const },
