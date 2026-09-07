@@ -33,7 +33,7 @@ func compiled(t *testing.T, pkg, arch string) (string, string) {
 	err := Compile(context.Background(), Compilation{
 		App:     "web",
 		Runtime: Runtime{Name: "go", Arch: arch},
-		Package: pkg,
+		Source:  pkg,
 		FuncDir: funcDir,
 		AppDir:  appDir,
 	})
@@ -131,12 +131,42 @@ func TestCompileBuildsTheAppsOwnModuleWhateverWorkspaceEnclosesIt(t *testing.T) 
 	}
 }
 
+func TestCompileRefusesAnAppDirectoryThatIsNotItsOwnModuleRoot(t *testing.T) {
+	t.Parallel()
+
+	source := t.TempDir()
+	pkg := filepath.Join(source, "cmd", "server")
+	if err := os.MkdirAll(pkg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{
+		filepath.Join(pkg, "go.mod"):  "module fixture\n\ngo 1.24\n",
+		filepath.Join(pkg, "main.go"): "package main\n\nfunc main() {}\n",
+	} {
+		if err := os.WriteFile(name, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err := Compile(context.Background(), Compilation{
+		App:        "web",
+		Runtime:    Runtime{Name: "go", Arch: "x86_64"},
+		Source:     source,
+		Entrypoint: filepath.Join("cmd", "server"),
+		FuncDir:    filepath.Join(t.TempDir(), "index.func"),
+		AppDir:     t.TempDir(),
+	})
+	if err == nil || !strings.Contains(err.Error(), source) || !strings.Contains(err.Error(), goModuleFile) {
+		t.Fatalf("err = %v, want a refusal naming %s and %s — the container path reads the app directory for a module and would plan this app as node", err, source, goModuleFile)
+	}
+}
+
 func TestCompileRefusesAnArchitectureGoBuildsNothingFor(t *testing.T) {
 	t.Parallel()
 	err := Compile(context.Background(), Compilation{
 		App:     "web",
 		Runtime: Runtime{Name: "go", Arch: "riscv"},
-		Package: goModule(t),
+		Source:  goModule(t),
 		FuncDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:  t.TempDir(),
 	})
@@ -154,7 +184,7 @@ func TestCompileReportsWhatTheCompilerSaidWhenTheAppDoesNotBuild(t *testing.T) {
 	err := Compile(context.Background(), Compilation{
 		App:     "web",
 		Runtime: Runtime{Name: "go", Arch: "x86_64"},
-		Package: pkg,
+		Source:  pkg,
 		FuncDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:  t.TempDir(),
 	})

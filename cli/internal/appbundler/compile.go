@@ -13,15 +13,25 @@ import (
 
 const BootstrapFile = "bootstrap"
 
+const goModuleFile = "go.mod"
+
 var goArchitectures = map[string]string{"x86_64": "amd64", "arm64": "arm64"}
 
 type Compilation struct {
-	App     string
-	Runtime Runtime
-	Package string
-	FuncDir string
-	AppDir  string
-	Log     io.Writer
+	App        string
+	Runtime    Runtime
+	Source     string
+	Entrypoint string
+	FuncDir    string
+	AppDir     string
+	Log        io.Writer
+}
+
+func (c Compilation) pkg() string {
+	if c.Entrypoint == "" {
+		return c.Source
+	}
+	return filepath.Join(c.Source, c.Entrypoint)
 }
 
 func Compile(ctx context.Context, c Compilation) error {
@@ -40,13 +50,13 @@ func Compile(ctx context.Context, c Compilation) error {
 	}
 	binary := filepath.Join(c.FuncDir, BootstrapFile)
 	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", binary, ".")
-	cmd.Dir = c.Package
+	cmd.Dir = c.pkg()
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off", "GOOS=linux", "GOARCH="+arch)
 	var said bytes.Buffer
 	cmd.Stdout = &said
 	cmd.Stderr = &said
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("compile app %q in %s for linux/%s (%w):\n%s", c.App, c.Package, arch, err, said.String())
+		return fmt.Errorf("compile app %q in %s for linux/%s (%w):\n%s", c.App, c.pkg(), arch, err, said.String())
 	}
 	if c.Log != nil && said.Len() > 0 {
 		fmt.Fprintf(c.Log, "ocel: compiling %s reported:\n%s\n", c.App, strings.TrimRight(said.String(), "\n"))
@@ -61,7 +71,7 @@ func (c Compilation) validate() error {
 	}{
 		{"app", c.App},
 		{"appDir", c.AppDir},
-		{"package", c.Package},
+		{"source", c.Source},
 		{"runtime", c.Runtime.Name},
 		{"funcDir", c.FuncDir},
 	}
@@ -74,12 +84,17 @@ func (c Compilation) validate() error {
 	if len(missing) > 0 {
 		return fmt.Errorf("cannot compile: %s not stated", strings.Join(missing, ", "))
 	}
-	info, err := os.Stat(c.Package)
+	pkg := c.pkg()
+	info, err := os.Stat(pkg)
 	if err != nil {
-		return fmt.Errorf("package %s for app %q: %w", c.Package, c.App, err)
+		return fmt.Errorf("package %s for app %q: %w", pkg, c.App, err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("package %s for app %q is not a directory holding a main package", c.Package, c.App)
+		return fmt.Errorf("package %s for app %q is not a directory holding a main package", pkg, c.App)
+	}
+	module, err := os.Stat(filepath.Join(c.Source, goModuleFile))
+	if err != nil || !module.Mode().IsRegular() {
+		return fmt.Errorf("app %q runs on the go runtime and %s holds no %s: an app is compiled from the module rooted in its own directory", c.App, c.Source, goModuleFile)
 	}
 	return nil
 }
