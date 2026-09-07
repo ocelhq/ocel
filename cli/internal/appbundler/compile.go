@@ -36,6 +36,20 @@ func Compile(ctx context.Context, c Compilation) error {
 	if err := c.validate(); err != nil {
 		return err
 	}
+	switch c.Runtime.Name {
+	case providerkit.RuntimeGo:
+		return c.compileGo(ctx)
+	case providerkit.RuntimePython:
+		return c.vendorPython(ctx)
+	}
+	return fmt.Errorf("app %q runs on runtime %q, which is not built from its own source tree", c.App, c.Runtime.Name)
+}
+
+func (c Compilation) compileGo(ctx context.Context) error {
+	module, err := os.Stat(filepath.Join(c.Source, goModuleFile))
+	if err != nil || !module.Mode().IsRegular() {
+		return fmt.Errorf("app %q runs on the go runtime and %s holds no %s: an app is compiled from the module rooted in its own directory", c.App, c.Source, goModuleFile)
+	}
 	arch, runs := providerkit.GoArch(c.Runtime.Arch)
 	if !runs {
 		return fmt.Errorf("app %q asks to be compiled for %q, which names no architecture go builds for", c.App, c.Runtime.Arch)
@@ -56,10 +70,14 @@ func Compile(ctx context.Context, c Compilation) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("compile app %q in %s for linux/%s (%w):\n%s", c.App, c.pkg(), arch, err, said.String())
 	}
-	if c.Log != nil && said.Len() > 0 {
-		fmt.Fprintf(c.Log, "ocel: compiling %s reported:\n%s\n", c.App, strings.TrimRight(said.String(), "\n"))
-	}
+	c.report("compiling", said.String())
 	return describeArtifact(c.App, c.Runtime, c.App, []string{"./" + c.App}, c.FuncDir, c.AppDir)
+}
+
+func (c Compilation) report(what, said string) {
+	if c.Log != nil && strings.TrimSpace(said) != "" {
+		fmt.Fprintf(c.Log, "ocel: %s %s reported:\n%s\n", what, c.App, strings.TrimRight(said, "\n"))
+	}
 }
 
 func (c Compilation) validate() error {
@@ -89,10 +107,6 @@ func (c Compilation) validate() error {
 	}
 	if !info.IsDir() {
 		return fmt.Errorf("package %s for app %q is not a directory holding a main package", pkg, c.App)
-	}
-	module, err := os.Stat(filepath.Join(c.Source, goModuleFile))
-	if err != nil || !module.Mode().IsRegular() {
-		return fmt.Errorf("app %q runs on the go runtime and %s holds no %s: an app is compiled from the module rooted in its own directory", c.App, c.Source, goModuleFile)
 	}
 	return nil
 }
