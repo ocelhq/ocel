@@ -1,7 +1,6 @@
 import type { SVGProps } from "react";
 
-export const cutRing =
-  "M66.94 2.96 A50 50 0 1 0 98.62 38.33 L72.36 44.63 A23 23 0 1 1 57.79 28.36 Z";
+const cutRing = "M66.94 2.96 A50 50 0 1 0 98.62 38.33 L72.36 44.63 A23 23 0 1 1 57.79 28.36 Z";
 
 export function Mark(props: SVGProps<SVGSVGElement>) {
   return (

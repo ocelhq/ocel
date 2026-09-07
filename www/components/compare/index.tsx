@@ -2,7 +2,7 @@ import { highlight } from "fumadocs-core/highlight";
 import { CodeBlock, Pre } from "fumadocs-ui/components/codeblock";
 import { Fragment, type ReactNode } from "react";
 import type { Facts, Pane } from "./data";
-import { families, find, landscape, tools } from "./data";
+import { families, find, tools } from "./data";
 import { LABEL } from "./label";
 import type { PickerFamily, RenderedPane, RenderedRow } from "./picker";
 import { Picker } from "./picker";
@@ -131,7 +131,6 @@ export async function CompareWith({ initial }: { initial?: string }) {
         rendered={Object.fromEntries(entries)}
         families={categories}
         names={names}
-        landscape={landscape()}
         initial={find(initial).slug}
       />
     </main>

@@ -357,15 +357,3 @@ kbd + kbd {
 .dark .compare-select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%235f646b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m2.5 4.5 3.5 3.5 3.5-3.5'/%3E%3C/svg%3E");
 }
-
-.landscape-mark {
-  cursor: pointer;
-}
-
-.landscape-mark .landscape-ring {
-  opacity: 0;
-}
-
-.landscape-mark:focus-visible .landscape-ring {
-  opacity: 0.3;
-}

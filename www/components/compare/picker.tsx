@@ -3,9 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Group, Panel, Separator } from "react-resizable-panels";
-import type { LandscapeData } from "./data";
 import { LABEL } from "./label";
-import { Landscape } from "./landscape";
 
 export type RenderedPane = { owner: string; filename?: string; node: ReactNode };
 
@@ -96,13 +94,11 @@ export function Picker({
   rendered,
   families,
   names,
-  landscape,
   initial,
 }: {
   rendered: Record<string, RenderedRow[]>;
   families: PickerFamily[];
   names: Record<string, string>;
-  landscape: LandscapeData;
   initial: string;
 }) {
   const [selected, setSelected] = useState(initial);
@@ -127,58 +123,54 @@ export function Picker({
 
   return (
     <div className="not-prose">
-      <header className="grid gap-10 border-b border-(--hairline) pb-10 lg:grid-cols-[5fr_6fr] lg:items-start lg:gap-12">
-        <div>
-          <h1 className="text-balance font-display text-[2.5rem] font-semibold leading-[1.1] tracking-[-0.035em] text-(--ink)">
-            Ocel vs <span className="text-(--electric)">{names[selected]}</span>
-          </h1>
-          <p className="mt-5 max-w-[34ch] text-lg leading-[1.55] text-(--body)">
-            The same questions, asked of each tool. Ocel&apos;s answer is always your own account.
-          </p>
+      <header className="border-b border-(--hairline) pb-10">
+        <h1 className="text-balance font-display text-[2.5rem] font-semibold leading-[1.1] tracking-[-0.035em] text-(--ink)">
+          Ocel vs <span className="text-(--electric)">{names[selected]}</span>
+        </h1>
+        <p className="mt-5 max-w-[34ch] text-lg leading-[1.55] text-(--body)">
+          The same questions, asked of each tool. Ocel&apos;s answer is always your own account.
+        </p>
 
-          <div className="mt-8 flex flex-wrap gap-x-6 gap-y-4">
-            <div className="flex w-full flex-col gap-2 sm:w-auto">
-              <label htmlFor="compare-category" className={`${LABEL} text-(--steel)`}>
-                Category
-              </label>
-              <select
-                id="compare-category"
-                className={SELECT}
-                value={family.slug}
-                onChange={(event) => {
-                  const next = families.find((each) => each.slug === event.target.value);
-                  if (next) select(next.tools[0].slug);
-                }}
-              >
-                {families.map((each) => (
-                  <option key={each.slug} value={each.slug}>
-                    {each.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+        <div className="mt-8 flex flex-wrap gap-x-6 gap-y-4">
+          <div className="flex w-full flex-col gap-2 sm:w-auto">
+            <label htmlFor="compare-category" className={`${LABEL} text-(--steel)`}>
+              Category
+            </label>
+            <select
+              id="compare-category"
+              className={SELECT}
+              value={family.slug}
+              onChange={(event) => {
+                const next = families.find((each) => each.slug === event.target.value);
+                if (next) select(next.tools[0].slug);
+              }}
+            >
+              {families.map((each) => (
+                <option key={each.slug} value={each.slug}>
+                  {each.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            <div className="flex w-full flex-col gap-2 sm:w-auto">
-              <label htmlFor="compare-tool" className={`${LABEL} text-(--steel)`}>
-                Tool
-              </label>
-              <select
-                id="compare-tool"
-                className={SELECT}
-                value={selected}
-                onChange={(event) => select(event.target.value)}
-              >
-                {family.tools.map((tool) => (
-                  <option key={tool.slug} value={tool.slug}>
-                    {tool.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="flex w-full flex-col gap-2 sm:w-auto">
+            <label htmlFor="compare-tool" className={`${LABEL} text-(--steel)`}>
+              Tool
+            </label>
+            <select
+              id="compare-tool"
+              className={SELECT}
+              value={selected}
+              onChange={(event) => select(event.target.value)}
+            >
+              {family.tools.map((tool) => (
+                <option key={tool.slug} value={tool.slug}>
+                  {tool.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
-
-        <Landscape data={landscape} selected={selected} onSelect={select} />
       </header>
 
       <section className="mt-10">

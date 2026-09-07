@@ -12,14 +12,10 @@ export type FamilySlug = "hosted" | "iac" | "selfhost";
 
 export type Family = { slug: FamilySlug; name: string; lede: string };
 
-export type Account = "vendor" | "cloud" | "server";
-
 export type Tool = {
   slug: string;
   name: string;
   family: FamilySlug;
-  account: Account;
-  dx: number;
   rows: Row[];
 };
 
@@ -143,8 +139,6 @@ export const tools: Tool[] = [
     slug: "vercel",
     name: "Vercel",
     family: "hosted",
-    account: "vendor",
-    dx: 95,
     rows: [
       {
         key: "account",
@@ -232,8 +226,6 @@ vercel env pull`,
     slug: "railway",
     name: "Railway",
     family: "hosted",
-    account: "vendor",
-    dx: 85,
     rows: [
       {
         key: "account",
@@ -330,8 +322,6 @@ railway dev`,
     slug: "render",
     name: "Render",
     family: "hosted",
-    account: "vendor",
-    dx: 80,
     rows: [
       {
         key: "account",
@@ -426,8 +416,6 @@ databases:
     slug: "fly",
     name: "Fly.io",
     family: "hosted",
-    account: "vendor",
-    dx: 70,
     rows: [
       {
         key: "account",
@@ -512,8 +500,6 @@ primary_region = "ord"
     slug: "terraform",
     name: "Terraform",
     family: "iac",
-    account: "cloud",
-    dx: 20,
     rows: [
       {
         key: "account",
@@ -623,8 +609,6 @@ resource "aws_instance" "app_server" {
     slug: "pulumi",
     name: "Pulumi",
     family: "iac",
-    account: "cloud",
-    dx: 35,
     rows: [
       {
         key: "account",
@@ -758,8 +742,6 @@ link.postgres("orders", {
     slug: "sst",
     name: "SST",
     family: "iac",
-    account: "cloud",
-    dx: 55,
     rows: [
       {
         key: "account",
@@ -871,8 +853,6 @@ link.postgres("orders", {
     slug: "coolify",
     name: "Coolify",
     family: "selfhost",
-    account: "server",
-    dx: 60,
     rows: [
       {
         key: "account",
@@ -951,8 +931,6 @@ link.postgres("orders", {
     slug: "kamal",
     name: "Kamal",
     family: "selfhost",
-    account: "server",
-    dx: 50,
     rows: [
       {
         key: "account",
@@ -1060,8 +1038,6 @@ env:
     slug: "dokku",
     name: "Dokku",
     family: "selfhost",
-    account: "server",
-    dx: 45,
     rows: [
       {
         key: "account",
@@ -1143,8 +1119,6 @@ git push dokku main`,
     slug: "compose",
     name: "Docker Compose",
     family: "selfhost",
-    account: "server",
-    dx: 30,
     rows: [
       {
         key: "account",
@@ -1257,27 +1231,4 @@ export function find(slug: string | null | undefined): Tool {
     tools.find((tool) => tool.slug === slug) ??
     (tools.find((tool) => tool.slug === DEFAULT) as Tool)
   );
-}
-
-export const OCEL_DX = 85;
-
-export type LandscapePoint = {
-  slug: string;
-  name: string;
-  account: Account;
-  dx: number;
-};
-
-export type LandscapeData = { points: LandscapePoint[]; ocel: { dx: number } };
-
-export function landscape(): LandscapeData {
-  return {
-    points: tools.map((tool) => ({
-      slug: tool.slug,
-      name: tool.name,
-      account: tool.account,
-      dx: tool.dx,
-    })),
-    ocel: { dx: OCEL_DX },
-  };
 }
