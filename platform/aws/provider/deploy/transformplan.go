@@ -139,7 +139,14 @@ func executionFor(runtime providerkit.Runtime) (execution, error) {
 			"this provider runs functions on %s and %s, and %q asks for %s",
 			providerkit.ArchX8664, providerkit.ArchARM64, runtime.Name, runtime.Arch)
 	}
-	return execution{Runtime: defaultFunctionRuntime, Arch: arch}, nil
+	return execution{Runtime: managedRuntime(runtime.Name), Arch: arch}, nil
+}
+
+func managedRuntime(name string) string {
+	if name == providerkit.RuntimePython {
+		return pythonFunctionRuntime
+	}
+	return defaultFunctionRuntime
 }
 
 func resolvePlanOutputs(ctx context.Context, plan providerkit.StackPlan, candidates []transformCandidate, results []transform.Result) ([]placedOutput, error) {
