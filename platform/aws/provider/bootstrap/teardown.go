@@ -27,6 +27,16 @@ type IAMKeyAPI interface {
 	DeleteAccessKey(ctx context.Context, in *iam.DeleteAccessKeyInput, optFns ...func(*iam.Options)) (*iam.DeleteAccessKeyOutput, error)
 }
 
+type IAMBoundaryAPI interface {
+	ListEntitiesForPolicy(ctx context.Context, in *iam.ListEntitiesForPolicyInput, optFns ...func(*iam.Options)) (*iam.ListEntitiesForPolicyOutput, error)
+	DeleteRolePermissionsBoundary(ctx context.Context, in *iam.DeleteRolePermissionsBoundaryInput, optFns ...func(*iam.Options)) (*iam.DeleteRolePermissionsBoundaryOutput, error)
+}
+
+type IAMTeardownAPI interface {
+	IAMKeyAPI
+	IAMBoundaryAPI
+}
+
 type BucketEmptierAPI interface {
 	ListObjectVersions(ctx context.Context, in *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error)
 	DeleteObjects(ctx context.Context, in *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
@@ -35,7 +45,7 @@ type BucketEmptierAPI interface {
 type TeardownAPIs struct {
 	CFN     CFNTeardownAPI
 	SSM     SSMAPI
-	IAM     IAMKeyAPI
+	IAM     IAMTeardownAPI
 	Buckets BucketEmptierAPI
 }
 
@@ -179,6 +189,13 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 			}
 		}
 
+		if deployed.AppBoundaryARN != "" {
+			report(progress, "Releasing the app boundary from every role still under it")
+			if err := releaseAppBoundary(ctx, apis.IAM, deployed.AppBoundaryARN, func(msg string) { report(log, msg) }); err != nil {
+				return err
+			}
+		}
+
 		report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", stackName))
 		if err := deleteCFNStack(ctx, apis.CFN, stackName); err != nil {
 			return err
@@ -246,6 +263,40 @@ func deleteAccessKeys(ctx context.Context, iamClient IAMKeyAPI, userName string)
 		}
 	}
 	return nil
+}
+
+func releaseAppBoundary(ctx context.Context, iamClient IAMBoundaryAPI, policyARN string, log func(string)) error {
+	var marker *string
+	for {
+		out, err := iamClient.ListEntitiesForPolicy(ctx, &iam.ListEntitiesForPolicyInput{
+			PolicyArn:         aws.String(policyARN),
+			EntityFilter:      iamtypes.EntityTypeRole,
+			PolicyUsageFilter: iamtypes.PolicyUsageTypePermissionsBoundary,
+			Marker:            marker,
+		})
+		if err != nil {
+			var noPolicy *iamtypes.NoSuchEntityException
+			if errors.As(err, &noPolicy) {
+				return nil
+			}
+			return fmt.Errorf("list the roles under %s: %w", policyARN, err)
+		}
+		for _, role := range out.PolicyRoles {
+			name := aws.ToString(role.RoleName)
+			if _, err := iamClient.DeleteRolePermissionsBoundary(ctx, &iam.DeleteRolePermissionsBoundaryInput{RoleName: aws.String(name)}); err != nil {
+				var noRole *iamtypes.NoSuchEntityException
+				if errors.As(err, &noRole) {
+					continue
+				}
+				return fmt.Errorf("release the app boundary from role %s: %w", name, err)
+			}
+			log(fmt.Sprintf("released the app boundary from role %s; it keeps running under its own policies alone", name))
+		}
+		if !out.IsTruncated {
+			return nil
+		}
+		marker = out.Marker
+	}
 }
 
 const deleteBatchSize = 1000

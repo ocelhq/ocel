@@ -63,6 +63,7 @@ var bootstrapOnlyActions = []string{
 	"iam:CreateUser",
 	"iam:DeletePolicy",
 	"iam:DeleteAccessKey",
+	"iam:DeleteRolePermissionsBoundary",
 	"iam:DeleteUser",
 	"iam:ListAccessKeys",
 	"iam:PutUserPolicy",
