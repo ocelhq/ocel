@@ -16,10 +16,10 @@ import type { CellContext, Deployment, Target } from "../types";
 import { authoritativeFetch, emulatorFetch } from "./dispatch";
 import { pulumiSweep } from "./ladder-pulumi";
 import { sstSweep } from "./ladder-sst";
-import { NAMESPACE_ENV, namespaceFor, strayNamespaces } from "./namespace";
+import { NAMESPACE_ENV, namespaceFor, namespaceOfSlug, strayNamespaces } from "./namespace";
 import { place } from "./place";
 import { awaitServing } from "./serving";
-import { sweepable } from "./slugs";
+import { reclaimable, sweepable } from "./slugs";
 import { awsStore, cliAt, namespacesStanding, type Store, said } from "./store";
 import { expectationEnvironmentFor, type World } from "./world";
 
@@ -293,7 +293,7 @@ async function list(): Promise<string[]> {
 
 async function stands(slug: string): Promise<boolean> {
   const where = await place();
-  return (await store(where.world === "real" ? slug : undefined)).stands(slug);
+  return (await store(where.world === "real" ? namespaceOfSlug(slug) : undefined)).stands(slug);
 }
 
 export function cellsBySlugPart(cells: Cell[]): Map<string, Cell> {
@@ -311,31 +311,67 @@ export function cellsBySlugPart(cells: Cell[]): Map<string, Cell> {
   return byPart;
 }
 
-async function sweepNamespaces(runId: string, cells: Cell[], complaints: string[]): Promise<void> {
+async function sweepStrayNamespace(
+  runId: string,
+  namespace: string,
+  byPart: Map<string, Cell>,
+  complaints: string[],
+): Promise<void> {
   const where = await place();
-  if (where.world !== "real") {
-    return;
+  const held = awsStore(where.endpoint, undefined, namespace);
+  for (const slug of await held.deployedSlugs()) {
+    const stranded = reclaimable(slug, [...byPart.keys()]);
+    const cell = stranded && byPart.get(stranded.cell);
+    if (!cell) {
+      complaints.push(`${slug} stands in the ${namespace} bootstrap and names no cell`);
+      continue;
+    }
+    await inFixture(cell.fixture.dir, runId, `sweep-${slug}`, async (dir) => {
+      await writeJourneyConfig(dir, { base: AWS_BASE, slug });
+      await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir, namespace));
+      process.stdout.write(`swept ${slug} from the ${namespace} bootstrap\n`);
+    }).catch((error) => complaints.push(`${slug}: ${String(error)}`));
   }
+
   const [first] = specForTarget("aws");
   if (!first) {
+    return;
+  }
+  await inFixture(first.dir, runId, `sweep-bootstrap-${namespace}`, async (dir) => {
+    await writeJourneyConfig(dir, { base: AWS_BASE, slug: namespace });
+    await ocel(dir, BOOTSTRAP_DESTROY_ARGS, childEnv(dir, namespace));
+    process.stdout.write(`swept the ${namespace} bootstrap\n`);
+  }).catch((error) => complaints.push(`${namespace} bootstrap: ${String(error)}`));
+}
+
+async function inFixture(
+  from: string,
+  runId: string,
+  name: string,
+  work: (dir: string) => Promise<void>,
+): Promise<void> {
+  const dir = await copyTree(fixtureDir(from), treeDir(runId, "aws", name));
+  try {
+    await work(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function sweepNamespaces(
+  runId: string,
+  cells: Cell[],
+  byPart: Map<string, Cell>,
+  complaints: string[],
+): Promise<void> {
+  const where = await place();
+  if (where.world !== "real") {
     return;
   }
   const mine = cells.map((cell) => namespaceFor(cell.name, runId));
   const stray = strayNamespaces(await namespacesStanding(cliAt(where.endpoint)), mine);
   for (const namespace of stray) {
-    const dir = await copyTree(
-      fixtureDir(first.dir),
-      treeDir(runId, "aws", `sweep-bootstrap-${namespace}`),
-    );
-    try {
-      await writeJourneyConfig(dir, { base: AWS_BASE, slug: namespace });
-      await ocel(dir, BOOTSTRAP_DESTROY_ARGS, childEnv(dir, namespace));
-      process.stdout.write(`swept the ${namespace} bootstrap\n`);
-    } catch (error) {
-      complaints.push(`${namespace} bootstrap: ${String(error)}`);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
+    await sweepStrayNamespace(runId, namespace, byPart, complaints);
   }
 }
 
@@ -377,7 +413,7 @@ async function sweep(runId: string): Promise<void> {
     }
   }
 
-  await sweepNamespaces(runId, cells, complaints);
+  await sweepNamespaces(runId, cells, byPart, complaints);
 
   const ladderSweeps: Array<[string, (runId: string) => Promise<void>]> = [
     ["with-sst", sstSweep],
