@@ -65,6 +65,7 @@ jobs:
           expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
           cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
+          vars-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
 
       - name: Deploy
         run: ocel deploy --yes --log-format json --tag "sha-$(git rev-parse --short=7 HEAD)"

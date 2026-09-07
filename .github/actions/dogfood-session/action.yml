@@ -22,6 +22,9 @@ inputs:
   cloudflare-account-id:
     description: That Cloudflare account's id.
     required: true
+  vars-key:
+    description: ARN of the KMS key the project's variables are sealed with.
+    required: true
 
 runs:
   using: composite
@@ -43,14 +46,18 @@ runs:
         [ -n "$EXPECTED" ] || { echo "no expected account is named" >&2; exit 1; }
         [ "$account" = "$EXPECTED" ] || { echo "session is account $account, not $EXPECTED" >&2; exit 1; }
 
-    - name: Name the edge account this session serves from
+    - name: Name the accounts and the key the config reads
       shell: bash
       env:
         TOKEN: ${{ inputs.cloudflare-api-token }}
         ACCOUNT: ${{ inputs.cloudflare-account-id }}
+        REGION: ${{ inputs.aws-region }}
+        VARS_KEY: ${{ inputs.vars-key }}
       run: |
         set -euo pipefail
         {
           echo "CLOUDFLARE_API_TOKEN=$TOKEN"
           echo "CLOUDFLARE_ACCOUNT_ID=$ACCOUNT"
+          echo "OCEL_AWS_REGION=$REGION"
+          echo "OCEL_AWS_VARS_KEY=$VARS_KEY"
         } >> "$GITHUB_ENV"
