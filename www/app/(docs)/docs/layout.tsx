@@ -61,7 +61,9 @@ export default function Layout({ children }: { children: ReactNode }) {
           </DocsLayout>
         </RootProvider>
         {/* impeccable-live-start */}
-        <script src="http://localhost:8400/live.js?token=5f407778-aece-475d-9642-2860a1d58ca4"></script>
+        {process.env.NODE_ENV === "development" && (
+          <script src="http://localhost:8400/live.js?token=5f407778-aece-475d-9642-2860a1d58ca4"></script>
+        )}
         {/* impeccable-live-end */}
       </body>
     </html>
