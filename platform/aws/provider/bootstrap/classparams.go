@@ -34,18 +34,19 @@ type ClassParams struct {
 	OriginSecret     string
 }
 
-func ReadCoreParams(ctx context.Context, api SSMBatchAPI, class string) (ClassParams, error) {
-	origin, err := OriginSecretParamFor(class)
+func ReadCoreParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class string) (ClassParams, error) {
+	origin, err := ns.OriginSecretParamFor(class)
 	if err != nil {
 		return ClassParams{}, err
 	}
-	found, err := getParameters(ctx, api, []string{PassphraseParamName, origin})
+	passphraseParam := ns.PassphraseParamName()
+	found, err := getParameters(ctx, api, []string{passphraseParam, origin})
 	if err != nil {
 		return ClassParams{}, err
 	}
-	passphrase, ok := found[PassphraseParamName]
+	passphrase, ok := found[passphraseParam]
 	if !ok {
-		return ClassParams{}, fmt.Errorf("read passphrase parameter: %s not found", PassphraseParamName)
+		return ClassParams{}, fmt.Errorf("read passphrase parameter: %s not found", passphraseParam)
 	}
 	return ClassParams{
 		Passphrase:         passphrase,
@@ -57,13 +58,14 @@ func ReadCoreParams(ctx context.Context, api SSMBatchAPI, class string) (ClassPa
 
 var errUnnamedEdge = errors.New("this call names no edge, so it reads none of the parameters an edge is reached through")
 
-func ReadClassParams(ctx context.Context, api SSMBatchAPI, class string, kind edge.Kind) (ClassParams, error) {
-	names, err := edgeNamesFor(class, kind)
+func ReadClassParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class string, kind edge.Kind) (ClassParams, error) {
+	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return ClassParams{}, err
 	}
+	passphraseParam := ns.PassphraseParamName()
 	wanted := []string{
-		PassphraseParamName,
+		passphraseParam,
 		names.credentialsParam,
 		names.valuesParam,
 		names.cacheStoreParam,
@@ -80,9 +82,9 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, class string, kind ed
 
 	var p ClassParams
 
-	passphrase, ok := found[PassphraseParamName]
+	passphrase, ok := found[passphraseParam]
 	if !ok {
-		return ClassParams{}, fmt.Errorf("read passphrase parameter: %s not found", PassphraseParamName)
+		return ClassParams{}, fmt.Errorf("read passphrase parameter: %s not found", passphraseParam)
 	}
 	p.Passphrase = passphrase
 
@@ -130,13 +132,14 @@ type TeardownParams struct {
 	ISRWriter  ISRWriter
 }
 
-func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, class string, kind edge.Kind) (TeardownParams, error) {
-	names, err := edgeNamesFor(class, kind)
+func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class string, kind edge.Kind) (TeardownParams, error) {
+	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return TeardownParams{}, err
 	}
+	passphraseParam := ns.PassphraseParamName()
 	found, err := getParameters(ctx, api, []string{
-		PassphraseParamName,
+		passphraseParam,
 		names.cacheStoreParam,
 		names.isrWriterParam,
 	})
@@ -146,9 +149,9 @@ func ReadTeardownParams(ctx context.Context, api SSMBatchAPI, class string, kind
 
 	var p TeardownParams
 
-	passphrase, ok := found[PassphraseParamName]
+	passphrase, ok := found[passphraseParam]
 	if !ok {
-		p.PassphraseErr = fmt.Errorf("read passphrase parameter: %s not found", PassphraseParamName)
+		p.PassphraseErr = fmt.Errorf("read passphrase parameter: %s not found", passphraseParam)
 	}
 	p.Passphrase = passphrase
 

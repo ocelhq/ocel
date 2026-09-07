@@ -28,15 +28,6 @@ import (
 )
 
 const (
-	StackName = "ocel-bootstrap"
-
-	PreviewStackName = "ocel-bootstrap-preview"
-
-	PassphraseParamName = "/ocel/pulumi/passphrase"
-
-	EdgeUserName        = "ocel-edge"
-	EdgePreviewUserName = "ocel-edge-preview"
-
 	StateTableIndexName = tagclock.IndexName
 
 	outputStateBucket         = "StateBucketName"
@@ -119,45 +110,48 @@ type Request struct {
 	AcceptReplacements bool
 }
 
-func CheckDeployed(ctx context.Context, api CFNDescriber) (Deployed, error) {
-	return CheckDeployedFor(ctx, api, ClassProduction)
+func CheckDeployed(ctx context.Context, api CFNDescriber, ns Namespace) (Deployed, error) {
+	return CheckDeployedFor(ctx, api, ns, ClassProduction)
 }
 
-func CheckDeployedPreview(ctx context.Context, api CFNDescriber) (Deployed, error) {
-	return CheckDeployedFor(ctx, api, ClassPreview)
+func CheckDeployedPreview(ctx context.Context, api CFNDescriber, ns Namespace) (Deployed, error) {
+	return CheckDeployedFor(ctx, api, ns, ClassPreview)
 }
 
-func CheckDeployedFor(ctx context.Context, api CFNDescriber, class string) (Deployed, error) {
-	deployed, _, err := readBootstrap(ctx, api, class)
+func CheckDeployedFor(ctx context.Context, api CFNDescriber, ns Namespace, class string) (Deployed, error) {
+	deployed, _, err := readBootstrap(ctx, api, ns, class)
 	return deployed, err
 }
 
 type Reading struct {
 	Deployed Deployed
+	ns       Namespace
 	class    string
 	refs     stackRefs
 }
 
 func (r Reading) Class() string { return r.class }
 
-func Read(ctx context.Context, api CFNDescriber, class string) (Reading, error) {
-	deployed, refs, err := readBootstrap(ctx, api, class)
+func (r Reading) Namespace() Namespace { return r.ns }
+
+func Read(ctx context.Context, api CFNDescriber, ns Namespace, class string) (Reading, error) {
+	deployed, refs, err := readBootstrap(ctx, api, ns, class)
 	if err != nil {
 		return Reading{}, err
 	}
-	return Reading{Deployed: deployed, class: class, refs: refs}, nil
+	return Reading{Deployed: deployed, ns: ns, class: class, refs: refs}, nil
 }
 
-func FeatureOutputs(ctx context.Context, api CFNDescriber, class, name string) (map[string]string, error) {
+func FeatureOutputs(ctx context.Context, api CFNDescriber, ns Namespace, class, name string) (map[string]string, error) {
 	f, ok := featureNamed(name)
 	if !ok {
 		return nil, fmt.Errorf("bootstrap: no feature named %q", name)
 	}
-	return stackOutputs(ctx, api, f.stackName(class))
+	return stackOutputs(ctx, api, f.stackName(ns, class))
 }
 
-func readBootstrap(ctx context.Context, api CFNDescriber, class string) (Deployed, stackRefs, error) {
-	coreStack, err := StackNameFor(class)
+func readBootstrap(ctx context.Context, api CFNDescriber, ns Namespace, class string) (Deployed, stackRefs, error) {
+	coreStack, err := ns.StackNameFor(class)
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
@@ -179,7 +173,7 @@ func readBootstrap(ctx context.Context, api CFNDescriber, class string) (Deploye
 
 	stamps := make(map[string]Stamp, len(featureRegistry))
 	for _, f := range featureRegistry {
-		stack, err := describeStack(ctx, api, f.stackName(class))
+		stack, err := describeStack(ctx, api, f.stackName(ns, class))
 		if err != nil {
 			return Deployed{}, stackRefs{}, err
 		}
@@ -195,7 +189,7 @@ func readBootstrap(ctx context.Context, api CFNDescriber, class string) (Deploye
 		}
 	}
 
-	target, err := bootstrapFor(class)
+	target, err := bootstrapFor(ns, class)
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
@@ -209,18 +203,19 @@ func readBootstrap(ctx context.Context, api CFNDescriber, class string) (Deploye
 	})
 	for _, f := range featureRegistry {
 		if !d.Features.Has(f.name) {
-			d.Stacks = append(d.Stacks, StackStamp{Name: f.stackName(class), Feature: f.name})
+			d.Stacks = append(d.Stacks, StackStamp{Name: f.stackName(ns, class), Feature: f.name})
 			continue
 		}
 		stamp := stamps[f.name]
 		d.Schema = min(d.Schema, stamp.Schema)
 		d.Stacks = append(d.Stacks, StackStamp{
-			Name:    f.stackName(class),
+			Name:    f.stackName(ns, class),
 			Feature: f.name,
 			Present: true,
 			Schema:  stamp.Schema,
 			Digest:  stamp.Digest,
 			Intended: TemplateDigest(f.planned(featureInputs{
+				ns:             ns,
 				class:          class,
 				artifactBucket: d.ArtifactBucket,
 				refs:           refs,
@@ -240,10 +235,10 @@ func broughtVarsKey(outputs map[string]string) string {
 	return outputs[outputVarsKeyARN]
 }
 
-func standingFeatures(ctx context.Context, api CFNDescriber, class string) (FeatureSet, error) {
+func standingFeatures(ctx context.Context, api CFNDescriber, ns Namespace, class string) (FeatureSet, error) {
 	standing := FeatureSet{}
 	for _, f := range featureRegistry {
-		stack, err := describeStack(ctx, api, f.stackName(class))
+		stack, err := describeStack(ctx, api, f.stackName(ns, class))
 		if err != nil {
 			return nil, err
 		}
@@ -339,54 +334,58 @@ type stackPayloads struct {
 }
 
 type spec struct {
+	ns        Namespace
 	class     string
 	stackName string
 	stackStep string
 }
 
-func (s spec) core() string { return coreStackTemplate(s.class) }
+func (s spec) core() string { return coreStackTemplate(s.ns, s.class) }
 
-func productionBootstrap() spec {
+func productionBootstrap(ns Namespace) spec {
 	return spec{
+		ns:        ns,
 		class:     ClassProduction,
-		stackName: StackName,
+		stackName: ns.CoreStackName(),
 		stackStep: "Ensuring Pulumi state bucket and state table (CloudFormation)",
 	}
 }
 
-func previewBootstrap() spec {
+func previewBootstrap(ns Namespace) spec {
+	name, _ := ns.StackNameFor(ClassPreview)
 	return spec{
+		ns:        ns,
 		class:     ClassPreview,
-		stackName: PreviewStackName,
+		stackName: name,
 		stackStep: "Ensuring preview infrastructure (CloudFormation)",
 	}
 }
 
-func bootstrapFor(class string) (spec, error) {
+func bootstrapFor(ns Namespace, class string) (spec, error) {
 	switch class {
 	case ClassProduction:
-		return productionBootstrap(), nil
+		return productionBootstrap(ns), nil
 	case ClassPreview:
-		return previewBootstrap(), nil
+		return previewBootstrap(ns), nil
 	default:
 		return spec{}, fmt.Errorf("bootstrap: unknown class %q", class)
 	}
 }
 
-func Run(ctx context.Context, apis APIs, class string, req Request, progress, log func(string)) error {
-	target, err := specFor(class)
+func Run(ctx context.Context, apis APIs, ns Namespace, class string, req Request, progress, log func(string)) error {
+	target, err := specFor(ns, class)
 	if err != nil {
 		return err
 	}
 	return run(ctx, apis, target, req, progress, log)
 }
 
-func specFor(class string) (spec, error) {
+func specFor(ns Namespace, class string) (spec, error) {
 	switch class {
 	case ClassProduction:
-		return productionBootstrap(), nil
+		return productionBootstrap(ns), nil
 	case ClassPreview:
-		return previewBootstrap(), nil
+		return previewBootstrap(ns), nil
 	default:
 		return spec{}, fmt.Errorf("there is no %s bootstrap; a bootstrap is either production or preview", class)
 	}
@@ -412,23 +411,23 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	}
 
 	progressf("Ensuring the secret the origin's own front authenticates with (SSM SecureString)")
-	if _, err := ensureOriginSecret(ctx, apis.SSM, target.class); err != nil {
+	if _, err := ensureOriginSecret(ctx, apis.SSM, target.ns, target.class); err != nil {
 		return err
 	}
 
 	progressf(target.stackStep)
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
-	review := admitReplacements(req.AcceptReplacements, logf)
+	review := admitReplacements(target.ns, req.AcceptReplacements, logf)
 	coreBody := target.core()
-	coreTags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
-	if err := upsertCFNStack(ctx, apis.CFN, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
+	coreTags := stampTags(target.ns, Stamp{Schema: RequiredSchema, Digest: TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
+	if err := upsertCFNStack(ctx, apis.CFN, target.ns, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
 	}
-	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.class)
+	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.ns, target.class)
 	if err != nil {
 		return err
 	}
-	steps := stepDeps{class: target.class, ssm: apis.SSM, iam: apis.IAM, progress: progressf, log: logf}
+	steps := stepDeps{ns: target.ns, class: target.class, ssm: apis.SSM, iam: apis.IAM, progress: progressf, log: logf}
 	dropped := Removing(req.Features, req.Remove)
 	if err := tearDownEdges(ctx, apis, steps, dropped); err != nil {
 		return err
@@ -438,7 +437,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	}
 
 	progressf("Ensuring Pulumi passphrase (SSM SecureString)")
-	created, err := ensurePassphrase(ctx, apis.SSM)
+	created, err := ensurePassphrase(ctx, apis.SSM, target.ns)
 	if err != nil {
 		return err
 	}
@@ -448,7 +447,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 		logf("reused the existing Pulumi passphrase")
 	}
 
-	if err := dropFeatures(ctx, apis.CFN, steps, target.class, req.Remove, progressf, logf); err != nil {
+	if err := dropFeatures(ctx, apis.CFN, steps, req.Remove, progressf, logf); err != nil {
 		return err
 	}
 
@@ -458,14 +457,15 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	}
 
 	for _, level := range levels {
-		progressf(fmt.Sprintf("Applying %s (CloudFormation)", strings.Join(featureStackNames(level, target.class), ", ")))
+		progressf(fmt.Sprintf("Applying %s (CloudFormation)", strings.Join(featureStackNames(target.ns, level, target.class), ", ")))
 		produced := make([]map[string]string, len(level))
 		group, gctx := errgroup.WithContext(ctx)
 		for i, name := range level {
 			group.Go(func() error {
 				f, _ := featureNamed(name)
-				stackName := f.stackName(target.class)
+				stackName := f.stackName(target.ns, target.class)
 				stack, err := f.staged(gctx, apis.Store, featureInputs{
+					ns:             target.ns,
 					class:          target.class,
 					artifactBucket: deployed.ArtifactBucket,
 					refs:           refs,
@@ -475,8 +475,8 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 				if err != nil {
 					return fmt.Errorf("%s: %w", name, err)
 				}
-				tags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(stack.body), WrittenBy: req.Writer.String()})
-				if err := upsertCFNStack(gctx, apis.CFN, stackName, stack.body, stack.params, namedIAM, tags, review); err != nil {
+				tags := stampTags(target.ns, Stamp{Schema: RequiredSchema, Digest: TemplateDigest(stack.body), WrittenBy: req.Writer.String()})
+				if err := upsertCFNStack(gctx, apis.CFN, target.ns, stackName, stack.body, stack.params, namedIAM, tags, review); err != nil {
 					return fmt.Errorf("%s: %w", name, err)
 				}
 				if produced[i], err = stackOutputs(gctx, apis.CFN, stackName); err != nil {
@@ -509,11 +509,11 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	return nil
 }
 
-func dropFeatures(ctx context.Context, cfn CFNAPI, steps stepDeps, class string, dropOrder []string, progressf, logf func(string)) error {
+func dropFeatures(ctx context.Context, cfn CFNAPI, steps stepDeps, dropOrder []string, progressf, logf func(string)) error {
 	if len(dropOrder) == 0 {
 		return nil
 	}
-	progressf(fmt.Sprintf("Removing %s (CloudFormation)", strings.Join(featureStackNames(dropOrder, class), ", ")))
+	progressf(fmt.Sprintf("Removing %s (CloudFormation)", strings.Join(featureStackNames(steps.ns, dropOrder, steps.class), ", ")))
 	for _, name := range dropOrder {
 		f, _ := featureNamed(name)
 		if f.drop == nil {
@@ -523,7 +523,7 @@ func dropFeatures(ctx context.Context, cfn CFNAPI, steps stepDeps, class string,
 			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
-	return deleteFeatureStacks(ctx, cfn, class, dropOrder, logf)
+	return deleteFeatureStacks(ctx, cfn, steps.ns, steps.class, dropOrder, logf)
 }
 
 func openEdge(apis APIs, kind edge.Kind) (edge.Edge, error) {
@@ -589,20 +589,20 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 		switch offer.Kind {
 		case edge.OfferCacheStore:
 			d.progress("Adopting the edge cache store (SSM SecureString)")
-			if err := adoptCacheStore(ctx, d.ssm, d.class, front.Kind(), offer.Values); err != nil {
+			if err := adoptCacheStore(ctx, d.ssm, d.ns, d.class, front.Kind(), offer.Values); err != nil {
 				return err
 			}
 		case edge.OfferDeploymentsStore:
 			d.progress("Adopting the deployments-store worker (SSM SecureString)")
-			if err := adoptDeploymentsStore(ctx, d.ssm, d.class, front.Kind(), offer.Values); err != nil {
+			if err := adoptDeploymentsStore(ctx, d.ssm, d.ns, d.class, front.Kind(), offer.Values); err != nil {
 				return err
 			}
 		case edge.OfferISRWriter:
 			d.progress("Adopting the ISR writer worker (SSM SecureString)")
-			if err := adoptISRWriter(ctx, d.ssm, d.class, front.Kind(), offer.Values); err != nil {
+			if err := adoptISRWriter(ctx, d.ssm, d.ns, d.class, front.Kind(), offer.Values); err != nil {
 				return err
 			}
-			if _, err := ensureISRWriterSeed(ctx, d.ssm, d.class, front.Kind()); err != nil {
+			if _, err := ensureISRWriterSeed(ctx, d.ssm, d.ns, d.class, front.Kind()); err != nil {
 				return err
 			}
 		default:
@@ -613,15 +613,7 @@ func bootstrapEdge(ctx context.Context, d stepDeps, front edge.Edge) error {
 		return nil
 	}
 	d.progress("Storing edge bootstrap outputs (SSM SecureString)")
-	return writeEdgeValues(ctx, d.ssm, d.class, front.Kind(), out.Values)
-}
-
-func FeatureStackName(name, class string) string {
-	f, ok := featureNamed(name)
-	if !ok {
-		return name
-	}
-	return f.stackName(class)
+	return writeEdgeValues(ctx, d.ssm, d.ns, d.class, front.Kind(), out.Values)
 }
 
 func absorbRefs(refs *stackRefs, out map[string]string) error {
@@ -631,7 +623,7 @@ func absorbRefs(refs *stackRefs, out map[string]string) error {
 
 type changeReview func(stackName string, changes []cfntypes.ResourceChange) error
 
-func upsertCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review changeReview) error {
+func upsertCFNStack(ctx context.Context, cfn CFNAPI, ns Namespace, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review changeReview) error {
 	stack, err := describeStack(ctx, cfn, stackName)
 	if err != nil {
 		return err
@@ -645,11 +637,11 @@ func upsertCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string,
 	if stack == nil {
 		return createCFNStack(ctx, cfn, stackName, template, params, capabilities, tags)
 	}
-	return updateCFNStack(ctx, cfn, stackName, template, params, capabilities, tags, review)
+	return updateCFNStack(ctx, cfn, ns, stackName, template, params, capabilities, tags, review)
 }
 
-func updateCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review changeReview) error {
-	id, changes, err := planCFNStack(ctx, cfn, stackName, template, params, capabilities, tags)
+func updateCFNStack(ctx context.Context, cfn CFNAPI, ns Namespace, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review changeReview) error {
+	id, changes, err := planCFNStack(ctx, cfn, ns, stackName, template, params, capabilities, tags)
 	if err != nil {
 		return err
 	}
@@ -732,10 +724,10 @@ const (
 	changeSetJitter   = 0.2
 )
 
-func planCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) (string, []cfntypes.ResourceChange, error) {
+func planCFNStack(ctx context.Context, cfn CFNAPI, ns Namespace, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) (string, []cfntypes.ResourceChange, error) {
 	out, err := cfn.CreateChangeSet(ctx, &cloudformation.CreateChangeSetInput{
 		StackName:     aws.String(stackName),
-		ChangeSetName: aws.String(changeSetName()),
+		ChangeSetName: aws.String(ns.changeSetName()),
 		ChangeSetType: cfntypes.ChangeSetTypeUpdate,
 		TemplateBody:  aws.String(template),
 		Parameters:    params,
@@ -821,10 +813,6 @@ func changeSetDelay(attempt int) time.Duration {
 	return step + time.Duration(mathrand.Float64()*changeSetJitter*float64(step))
 }
 
-func changeSetName() string {
-	return fmt.Sprintf("ocel-%d", time.Now().UnixNano())
-}
-
 const discardGrace = 20 * time.Second
 
 func discardChangeSet(ctx context.Context, cfn CFNAPI, id string) {
@@ -906,9 +894,9 @@ func nameStillHeld(ctx context.Context, cfn CFNAPI, stackName string) bool {
 	return false
 }
 
-func ensurePassphrase(ctx context.Context, ssmClient SSMAPI) (created bool, err error) {
+func ensurePassphrase(ctx context.Context, ssmClient SSMAPI, ns Namespace) (created bool, err error) {
 	_, err = ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(PassphraseParamName),
+		Name:           aws.String(ns.PassphraseParamName()),
 		WithDecryption: aws.Bool(true),
 	})
 	if err == nil {
@@ -924,7 +912,7 @@ func ensurePassphrase(ctx context.Context, ssmClient SSMAPI) (created bool, err 
 		return false, err
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:        aws.String(PassphraseParamName),
+		Name:        aws.String(ns.PassphraseParamName()),
 		Description: aws.String("Ocel: the passphrase every Pulumi stack in this account is encrypted under, production and preview alike. This is the only copy - delete it and that state can never be decrypted again."),
 		Value:       aws.String(passphrase),
 		Type:        ssmtypes.ParameterTypeSecureString,
@@ -935,9 +923,9 @@ func ensurePassphrase(ctx context.Context, ssmClient SSMAPI) (created bool, err 
 	return true, nil
 }
 
-func ReadPassphrase(ctx context.Context, ssmClient SSMAPI) (string, error) {
+func ReadPassphrase(ctx context.Context, ssmClient SSMAPI, ns Namespace) (string, error) {
 	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(PassphraseParamName),
+		Name:           aws.String(ns.PassphraseParamName()),
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
@@ -954,7 +942,7 @@ func generatePassphrase() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func coreStackTemplate(class string) string {
+func coreStackTemplate(ns Namespace, class string) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: %q
 Resources:
@@ -966,7 +954,7 @@ Resources:
     Description: "Class this bootstrap is stamped with, checked before an action runs so a preview deploy cannot reach production."
     Value: '%s'
 `, coreStackDescription(class),
-		stateBucketResource(class), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(class), appBoundaryResource(class),
+		stateBucketResource(class), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(class), appBoundaryResource(ns, class),
 		outputStateBucket, class, scopeOf(class),
 		stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, class)
 }

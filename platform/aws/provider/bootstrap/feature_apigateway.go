@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -17,8 +16,6 @@ const (
 	OutputEdgeNotFoundAPIID = "EdgeNotFoundApiId"
 
 	EdgeStageName = "live"
-
-	edgeInvokePolicyName = "ocel-edge-invoke"
 
 	edgeAnyMethod = "ANY"
 
@@ -45,23 +42,12 @@ var apiGatewayEdgeFeature = feature{
 	placements: noPlacements,
 }
 
-func EdgeInvokeRoleName(class edge.Class) string {
-	if class == edge.ClassPreview {
-		return edgeInvokePolicyName + "-preview"
-	}
-	return edgeInvokePolicyName
-}
-
-func EdgeNotFoundAPIName(class edge.Class) string {
-	return naming.Join(naming.WordSeparator, edgeNamespace, "not-found", string(class))
-}
-
 func apiGatewayEdgeTemplate(in featureInputs) featureStack {
 	params, values := crossStack([]crossStackParam{
 		{paramAssetBucketARN, "ARN of the core bootstrap's asset bucket, so the role API Gateway assumes reads a release's static assets out of it and nothing else.", in.refs.assetBucketARN},
 	})
 	held := edge.Class(in.class)
-	responder := notFoundAPIResource(held) +
+	responder := notFoundAPIResource(in.ns, held) +
 		notFoundProxyResource() +
 		notFoundMethodResource("EdgeNotFoundRootMethod", "!GetAtt EdgeNotFoundApi.RootResourceId", edgeRootPath) +
 		notFoundMethodResource("EdgeNotFoundProxyMethod", "!Ref EdgeNotFoundProxy", edgeRootPath+edgeProxyPathPart)
@@ -74,7 +60,7 @@ Description: "Ocel bootstrap feature (%s, %s) - what an API Gateway front needs 
 %s%s%s%sOutputs:
 %s`,
 			FeatureAPIGatewayEdge, in.class, params,
-			invokeRoleResource(held),
+			invokeRoleResource(in.ns, held),
 			responder,
 			notFoundDeploymentResource(published),
 			notFoundStageResource(published),
@@ -87,7 +73,7 @@ func notFoundDeploymentID(responder string) string {
 	return "EdgeNotFoundDeployment" + hex.EncodeToString(sum[:6])
 }
 
-func invokeRoleResource(class edge.Class) string {
+func invokeRoleResource(ns Namespace, class edge.Class) string {
 	return fmt.Sprintf(`  EdgeInvokeRole:
     Type: AWS::IAM::Role
     Metadata:
@@ -113,10 +99,10 @@ func invokeRoleResource(class edge.Class) string {
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub '${%s}/*'
-`, class, EdgeInvokeRoleName(class), edgeInvokePolicyName, paramAssetBucketARN)
+`, class, ns.EdgeInvokeRoleName(class), ns.policyName("edge-invoke"), paramAssetBucketARN)
 }
 
-func notFoundAPIResource(class edge.Class) string {
+func notFoundAPIResource(ns Namespace, class edge.Class) string {
 	return fmt.Sprintf(`  EdgeNotFoundApi:
     Type: AWS::ApiGateway::RestApi
     Metadata:
@@ -127,7 +113,7 @@ func notFoundAPIResource(class edge.Class) string {
       EndpointConfiguration:
         Types:
           - REGIONAL
-`, class, EdgeNotFoundAPIName(class))
+`, class, ns.EdgeNotFoundAPIName(class))
 }
 
 func notFoundProxyResource() string {

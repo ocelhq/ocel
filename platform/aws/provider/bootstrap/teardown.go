@@ -39,17 +39,6 @@ type TeardownAPIs struct {
 	Buckets BucketEmptierAPI
 }
 
-func StackNameFor(class string) (string, error) {
-	switch class {
-	case ClassProduction:
-		return StackName, nil
-	case ClassPreview:
-		return PreviewStackName, nil
-	default:
-		return "", fmt.Errorf("bootstrap: unknown class %q", class)
-	}
-}
-
 func SiblingClassOf(class string) (string, error) {
 	switch class {
 	case ClassProduction:
@@ -61,22 +50,14 @@ func SiblingClassOf(class string) (string, error) {
 	}
 }
 
-func EdgeUserNameFor(class string) (string, error) {
-	user, ok := edgeUserByClass[class]
-	if !ok {
-		return "", fmt.Errorf("edge: unknown class %q", class)
-	}
-	return user, nil
-}
-
-func ClassParamNames(class string) ([]string, error) {
-	secret, ok := originSecretByClass[class]
-	if !ok {
-		return nil, fmt.Errorf("edge: unknown class %q", class)
+func ClassParamNames(ns Namespace, class string) ([]string, error) {
+	secret, err := ns.OriginSecretParamFor(class)
+	if err != nil {
+		return nil, err
 	}
 	var params []string
 	for _, kind := range edgeKinds() {
-		names, err := edgeNamesFor(class, kind)
+		names, err := edgeNamesFor(ns, class, kind)
 		if err != nil {
 			return nil, err
 		}
@@ -85,12 +66,12 @@ func ClassParamNames(class string) ([]string, error) {
 	return append(params, secret), nil
 }
 
-func PassphraseHeldBySibling(ctx context.Context, api CFNDescriber, class string) (bool, error) {
+func PassphraseHeldBySibling(ctx context.Context, api CFNDescriber, ns Namespace, class string) (bool, error) {
 	sibling, err := SiblingClassOf(class)
 	if err != nil {
 		return false, err
 	}
-	stackName, err := StackNameFor(sibling)
+	stackName, err := ns.StackNameFor(sibling)
 	if err != nil {
 		return false, err
 	}
@@ -101,10 +82,10 @@ func PassphraseHeldBySibling(ctx context.Context, api CFNDescriber, class string
 	return out != nil, nil
 }
 
-func featureStackNames(names []string, class string) []string {
+func featureStackNames(ns Namespace, names []string, class string) []string {
 	out := make([]string, 0, len(names))
 	for _, name := range names {
-		out = append(out, FeatureStackName(name, class))
+		out = append(out, ns.FeatureStackName(name, class))
 	}
 	return out
 }
@@ -121,13 +102,13 @@ func FeatureDeleteOrder(names []string) ([]string, error) {
 	return out, nil
 }
 
-func deleteFeatureStacks(ctx context.Context, cfn CFNTeardownAPI, class string, names []string, log func(string)) error {
+func deleteFeatureStacks(ctx context.Context, cfn CFNTeardownAPI, ns Namespace, class string, names []string, log func(string)) error {
 	order, err := FeatureDeleteOrder(names)
 	if err != nil {
 		return err
 	}
 	for _, name := range order {
-		stackName := FeatureStackName(name, class)
+		stackName := ns.FeatureStackName(name, class)
 		out, err := stackOutputs(ctx, cfn, stackName)
 		if err != nil {
 			return err
@@ -145,27 +126,27 @@ func deleteFeatureStacks(ctx context.Context, cfn CFNTeardownAPI, class string, 
 	return nil
 }
 
-func Teardown(ctx context.Context, apis TeardownAPIs, class string, progress, log func(string)) error {
+func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string, progress, log func(string)) error {
 	report := func(f func(string), msg string) {
 		if f != nil {
 			f(msg)
 		}
 	}
 
-	stackName, err := StackNameFor(class)
+	stackName, err := ns.StackNameFor(class)
 	if err != nil {
 		return err
 	}
-	userName, err := EdgeUserNameFor(class)
+	userName, err := ns.EdgeUserNameFor(class)
 	if err != nil {
 		return err
 	}
-	params, err := ClassParamNames(class)
+	params, err := ClassParamNames(ns, class)
 	if err != nil {
 		return err
 	}
 
-	deployed, _, err := readBootstrap(ctx, apis.CFN, class)
+	deployed, _, err := readBootstrap(ctx, apis.CFN, ns, class)
 	if err != nil {
 		return err
 	}
@@ -186,14 +167,14 @@ func Teardown(ctx context.Context, apis TeardownAPIs, class string, progress, lo
 			}
 		}
 
-		standing, err := standingFeatures(ctx, apis.CFN, class)
+		standing, err := standingFeatures(ctx, apis.CFN, ns, class)
 		if err != nil {
 			return err
 		}
 		present := standing.Names()
 		if len(present) > 0 {
-			report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(featureStackNames(present, class), ", ")))
-			if err := deleteFeatureStacks(ctx, apis.CFN, class, present, func(msg string) { report(log, msg) }); err != nil {
+			report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(featureStackNames(ns, present, class), ", ")))
+			if err := deleteFeatureStacks(ctx, apis.CFN, ns, class, present, func(msg string) { report(log, msg) }); err != nil {
 				return err
 			}
 		}
@@ -207,14 +188,14 @@ func Teardown(ctx context.Context, apis TeardownAPIs, class string, progress, lo
 	}
 
 	report(progress, "Deleting the bootstrap's stored parameters (SSM)")
-	shared, err := PassphraseHeldBySibling(ctx, apis.CFN, class)
+	shared, err := PassphraseHeldBySibling(ctx, apis.CFN, ns, class)
 	if err != nil {
 		return err
 	}
 	if !shared {
-		params = append(params, PassphraseParamName)
+		params = append(params, ns.PassphraseParamName())
 	} else {
-		report(log, fmt.Sprintf("the %s bootstrap still stands and its Pulumi state is encrypted under the shared passphrase in %s; it stays", siblingName(class), PassphraseParamName))
+		report(log, fmt.Sprintf("the %s bootstrap still stands and its Pulumi state is encrypted under the shared passphrase in %s; it stays", siblingName(class), ns.PassphraseParamName()))
 	}
 	for _, name := range params {
 		if err := deleteParam(ctx, apis.SSM, name); err != nil {

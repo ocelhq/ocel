@@ -11,7 +11,7 @@ import (
 )
 
 func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
-	read, err := bootstrap.Read(ctx, b.CFN, string(class))
+	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
@@ -19,12 +19,12 @@ func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	shared, err := bootstrap.PassphraseHeldBySibling(ctx, b.CFN, string(class))
+	shared, err := bootstrap.PassphraseHeldBySibling(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
 	params, err := bootstrap.PlanParameterRemoval(ctx,
-		b.paramAPIs(), string(class), shared)
+		b.paramAPIs(), b.Namespace, string(class), shared)
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
@@ -59,7 +59,7 @@ func (b Bootstrapper) standingEdges(ctx context.Context, class providerkit.Class
 		standing := slices.Contains(held, kind)
 		if !standing {
 			var err error
-			if standing, err = bootstrap.EdgeStanding(ctx, b.SSM, string(class), kind); err != nil {
+			if standing, err = bootstrap.EdgeStanding(ctx, b.SSM, b.Namespace, string(class), kind); err != nil {
 				return nil, err
 			}
 		}

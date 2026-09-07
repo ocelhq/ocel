@@ -13,8 +13,8 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("same bytes same digest", func(t *testing.T) {
 		t.Parallel()
 
-		body := coreStackTemplate(ClassProduction)
-		if TemplateDigest(body) != TemplateDigest(coreStackTemplate(ClassProduction)) {
+		body := coreStackTemplate(DefaultNamespace, ClassProduction)
+		if TemplateDigest(body) != TemplateDigest(coreStackTemplate(DefaultNamespace, ClassProduction)) {
 			t.Fatal("rendering the same template twice must produce the same digest")
 		}
 	})
@@ -22,7 +22,7 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("different bytes different digest", func(t *testing.T) {
 		t.Parallel()
 
-		if TemplateDigest(coreStackTemplate(ClassProduction)) == TemplateDigest(coreStackTemplate(ClassPreview)) {
+		if TemplateDigest(coreStackTemplate(DefaultNamespace, ClassProduction)) == TemplateDigest(coreStackTemplate(DefaultNamespace, ClassPreview)) {
 			t.Fatal("two different template bodies must not share a digest")
 		}
 	})
@@ -39,7 +39,7 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("parameter values are not in the body", func(t *testing.T) {
 		t.Parallel()
 
-		in := featureInputs{class: ClassProduction, refs: stackRefs{assetBucket: "bucket-one", assetBucketARN: "arn:one"}}
+		in := featureInputs{ns: DefaultNamespace, class: ClassProduction, refs: stackRefs{assetBucket: "bucket-one", assetBucketARN: "arn:one"}}
 		other := in
 		other.refs = stackRefs{assetBucket: "bucket-two", assetBucketARN: "arn:two"}
 		if TemplateDigest(imageOptimizationTemplate(in).body) != TemplateDigest(imageOptimizationTemplate(other).body) {
@@ -55,8 +55,8 @@ func TestStampTags(t *testing.T) {
 		t.Parallel()
 
 		want := Stamp{Schema: 3, Digest: "abc", WrittenBy: "1.2.3"}
-		if got := readStamp(stampTags(want)); got != want {
-			t.Fatalf("readStamp(stampTags(%+v)) = %+v", want, got)
+		if got := readStamp(stampTags(DefaultNamespace, want)); got != want {
+			t.Fatalf("readStamp(stampTags(DefaultNamespace, %+v)) = %+v", want, got)
 		}
 	})
 

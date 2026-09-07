@@ -29,20 +29,20 @@ import (
 func standingBootstrapper(t *testing.T, class string) Bootstrapper {
 	t.Helper()
 
-	stackName, err := bootstrap.StackNameFor(class)
+	stackName, err := bootstrap.DefaultNamespace.StackNameFor(class)
 	if err != nil {
 		t.Fatalf("StackNameFor(%s): %v", class, err)
 	}
-	params, err := bootstrap.ClassParamNames(class)
+	params, err := bootstrap.ClassParamNames(bootstrap.DefaultNamespace, class)
 	if err != nil {
 		t.Fatalf("ClassParamNames(%s): %v", class, err)
 	}
-	userName, err := bootstrap.EdgeUserNameFor(class)
+	userName, err := bootstrap.DefaultNamespace.EdgeUserNameFor(class)
 	if err != nil {
 		t.Fatalf("EdgeUserNameFor(%s): %v", class, err)
 	}
 
-	stored := map[string]string{bootstrap.PassphraseParamName: "pp"}
+	stored := map[string]string{passphraseParam: "pp"}
 	for _, name := range params {
 		stored[name] = "{}"
 	}
@@ -62,6 +62,8 @@ func standingBootstrapper(t *testing.T, class string) Bootstrapper {
 		Buckets: &teardownBuckets{},
 		Edge:    front,
 		Edges:   registryOf(front),
+
+		Namespace: bootstrap.DefaultNamespace,
 	}
 }
 
@@ -117,8 +119,8 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 			t.Errorf("group %+v, want a stack named under the vendor that holds it", group)
 		}
 	}
-	if got := plan.Groups[0].Name; got != "aws/"+bootstrap.StackName {
-		t.Errorf("the core group is %q, want %q", got, "aws/"+bootstrap.StackName)
+	if got := plan.Groups[0].Name; got != "aws/"+coreStackName {
+		t.Errorf("the core group is %q, want %q", got, "aws/"+coreStackName)
 	}
 	params := plan.Groups[3]
 	if params.Kind != providerkit.ParameterGroupKind || params.Name != "aws/"+bootstrap.ParamGroupName {
@@ -278,6 +280,8 @@ func planningBootstrapper(front edge.Edge) Bootstrapper {
 		IAM:   &teardownIAM{keys: map[string][]string{}},
 		Edge:  front,
 		Edges: registryOf(front),
+
+		Namespace: bootstrap.DefaultNamespace,
 	}
 }
 
@@ -312,8 +316,8 @@ func TestRemoveTearsTheEdgeDownForTheClassThenTheAWSBootstrap(t *testing.T) {
 	if got := b.Edge.(*teardownEdge).torndown; !slices.Equal(got, []edge.Class{edge.ClassProduction}) {
 		t.Errorf("edge teardown classes = %v, want [production]", got)
 	}
-	if !slices.Equal(cfn.deleted, []string{bootstrap.StackName}) {
-		t.Errorf("deleted stacks = %v, want [%s]", cfn.deleted, bootstrap.StackName)
+	if !slices.Equal(cfn.deleted, []string{coreStackName}) {
+		t.Errorf("deleted stacks = %v, want [%s]", cfn.deleted, coreStackName)
 	}
 	if !slices.Equal(buckets.emptied, []string{"ocel-state", "ocel-artifacts", "ocel-assets"}) {
 		t.Errorf("emptied buckets = %v, want state, artifact and asset", buckets.emptied)
@@ -327,7 +331,7 @@ func TestRemoveTearsTheEdgeDownForTheClassThenTheAWSBootstrap(t *testing.T) {
 	for _, name := range []string{
 		edgeParam(t, bootstrap.ClassProduction, "/credentials"),
 		edgeParam(t, bootstrap.ClassProduction, "/values"),
-		bootstrap.PassphraseParamName,
+		passphraseParam,
 	} {
 		if _, still := b.SSM.(*teardownSSM).params[name]; still {
 			t.Errorf("parameter %s survived the teardown", name)
@@ -339,12 +343,12 @@ func TestRemoveKeepsThePassphraseABootstrappedSiblingStillNeeds(t *testing.T) {
 	t.Parallel()
 
 	b := standingBootstrapper(t, bootstrap.ClassPreview)
-	b.CFN.(*teardownCFN).present[bootstrap.StackName] = bootstrap.Deployed{Present: true}
+	b.CFN.(*teardownCFN).present[coreStackName] = bootstrap.Deployed{Present: true}
 
 	if err := b.Remove(context.Background(), providerkit.ClassPreview, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
-	if _, held := b.SSM.(*teardownSSM).params[bootstrap.PassphraseParamName]; !held {
+	if _, held := b.SSM.(*teardownSSM).params[passphraseParam]; !held {
 		t.Error("the passphrase the production bootstrap still needs was deleted")
 	}
 	if _, held := b.SSM.(*teardownSSM).params[edgeParam(t, bootstrap.ClassPreview, "/credentials")]; held {

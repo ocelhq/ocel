@@ -124,7 +124,7 @@ func TestRevalidateQueue(t *testing.T) {
 		for _, tc := range revalidatorTemplates() {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parseRevalidatorTemplate(t, tc.template)
-				wantQueue, wantDLQ := revalidateQueueNames(tc.class)
+				wantQueue, wantDLQ := DefaultNamespace.revalidateQueueNames(tc.class)
 
 				q, ok := tmpl.Resources["RevalidateQueue"]
 				if !ok {
@@ -456,7 +456,7 @@ func TestRunRevalidator(t *testing.T) {
 				cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 				frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-				if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), tc.class, everything(), nil, nil); err != nil {
+				if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), DefaultNamespace, tc.class, everything(), nil, nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
 				template := cfn.template(tc.stackName)

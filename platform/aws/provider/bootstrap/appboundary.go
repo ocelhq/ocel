@@ -5,22 +5,10 @@ import (
 	"strings"
 )
 
-const (
-	AppBoundaryName        = "ocel-app-boundary"
-	AppBoundaryPreviewName = AppBoundaryName + "-preview"
+const outputAppBoundaryARN = "AppBoundaryArn"
 
-	outputAppBoundaryARN = "AppBoundaryArn"
-)
-
-func AppBoundaryNameFor(class string) string {
-	if class == ClassPreview {
-		return AppBoundaryPreviewName
-	}
-	return AppBoundaryName
-}
-
-func appBoundaryARNFor(class string) string {
-	return "arn:aws:iam::" + "${aws:PrincipalAccount}" + ":policy/" + AppBoundaryNameFor(class)
+func appBoundaryARNFor(ns Namespace, class string) string {
+	return "arn:aws:iam::" + "${aws:PrincipalAccount}" + ":policy/" + ns.AppBoundaryNameFor(class)
 }
 
 func appBoundaryActions() []string {
@@ -102,7 +90,7 @@ func appBoundaryActions() []string {
 	}
 }
 
-func appBoundaryResource(class string) string {
+func appBoundaryResource(ns Namespace, class string) string {
 	var actions strings.Builder
 	for _, action := range appBoundaryActions() {
 		fmt.Fprintf(&actions, "              - %s\n", action)
@@ -120,7 +108,7 @@ func appBoundaryResource(class string) string {
           - Effect: Allow
             Action:
 %s            Resource: '*'
-`, AppBoundaryNameFor(class), class, actions.String())
+`, ns.AppBoundaryNameFor(class), class, actions.String())
 }
 
 func appBoundaryOutput() string {

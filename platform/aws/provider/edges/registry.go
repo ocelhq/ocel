@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -21,12 +22,14 @@ type Deps struct {
 	AWS func(ctx context.Context) (aws.Config, error)
 
 	Certificates map[string]string
+
+	Namespace bootstrap.Namespace
 }
 
 var constructors = map[edge.Kind]func(Deps) edge.Edge{
 	cloudflare.Kind: func(Deps) edge.Edge { return cloudflare.New() },
-	cloudfront.Kind: func(deps Deps) edge.Edge { return cloudfront.New(cloudfront.FromConfig(deps.AWS)) },
-	apigateway.Kind: func(deps Deps) edge.Edge { return apigateway.New(apigateway.FromConfig(deps.AWS)) },
+	cloudfront.Kind: func(deps Deps) edge.Edge { return cloudfront.New(cloudfront.FromConfig(deps.AWS, deps.Namespace)) },
+	apigateway.Kind: func(deps Deps) edge.Edge { return apigateway.New(apigateway.FromConfig(deps.AWS, deps.Namespace)) },
 }
 
 const DefaultKind = cloudfront.Kind

@@ -13,8 +13,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-func NameStacks(described providerkit.Bootstrap) providerkit.Bootstrap {
-	coreStack, err := StackNameFor(string(described.Class))
+func NameStacks(ns Namespace, described providerkit.Bootstrap) providerkit.Bootstrap {
+	coreStack, err := ns.StackNameFor(string(described.Class))
 	if err != nil {
 		return described
 	}
@@ -23,14 +23,14 @@ func NameStacks(described providerkit.Bootstrap) providerkit.Bootstrap {
 		if !ok {
 			return coreStack
 		}
-		return f.stackName(string(described.Class))
+		return f.stackName(ns, string(described.Class))
 	})
 }
 
 const planFanOut = 4
 
 func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, req Request, groups []providerkit.ChangeGroup) ([]providerkit.ChangeGroup, error) {
-	target, err := bootstrapFor(read.class)
+	target, err := bootstrapFor(read.ns, read.class)
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +54,7 @@ func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, req Request, gro
 	}
 	for i, group := range groups {
 		stack, ok := renderGroup(target, group.Feature, featureInputs{
+			ns:             read.ns,
 			class:          class,
 			artifactBucket: deployed.ArtifactBucket,
 			refs:           refs,
@@ -69,7 +70,7 @@ func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, req Request, gro
 		case group.Action == providerkit.ActionDelete:
 			plan(func() { planned[i] = planDelete(ctx, cfn, group, stack.body) })
 		case group.Action == providerkit.ActionUpdate:
-			plan(func() { planned[i] = planUpdate(ctx, cfn, group, stack, req.Writer) })
+			plan(func() { planned[i] = planUpdate(ctx, cfn, read.ns, group, stack, req.Writer) })
 		default:
 			planned[i] = group
 		}
@@ -82,11 +83,11 @@ func PlanRemoval(ctx context.Context, cfn CFNAPI, read Reading) ([]providerkit.C
 	if !read.Deployed.Present {
 		return nil, nil
 	}
-	target, err := bootstrapFor(read.class)
+	target, err := bootstrapFor(read.ns, read.class)
 	if err != nil {
 		return nil, err
 	}
-	coreStack, err := StackNameFor(read.class)
+	coreStack, err := read.ns.StackNameFor(read.class)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +105,7 @@ func PlanRemoval(ctx context.Context, cfn CFNAPI, read Reading) ([]providerkit.C
 	for _, feature := range append(order, "") {
 		name := coreStack
 		if feature != "" {
-			name = FeatureStackName(feature, read.class)
+			name = read.ns.FeatureStackName(feature, read.class)
 		}
 		group := providerkit.ChangeGroup{
 			Kind:    providerkit.StackGroupKind,
@@ -113,6 +114,7 @@ func PlanRemoval(ctx context.Context, cfn CFNAPI, read Reading) ([]providerkit.C
 			Action:  providerkit.ActionDelete,
 		}
 		stack, ok := renderGroup(target, feature, featureInputs{
+			ns:             read.ns,
 			class:          read.class,
 			artifactBucket: read.Deployed.ArtifactBucket,
 			refs:           read.refs,
@@ -163,9 +165,9 @@ func renderGroup(target spec, feature string, in featureInputs) (featureStack, b
 	return f.planned(in), true
 }
 
-func planUpdate(ctx context.Context, cfn CFNAPI, group providerkit.ChangeGroup, stack featureStack, writer providerkit.Writer) providerkit.ChangeGroup {
-	tags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(stack.body), WrittenBy: writer.String()})
-	id, changes, err := planCFNStack(ctx, cfn, group.Name, stack.body, stack.params,
+func planUpdate(ctx context.Context, cfn CFNAPI, ns Namespace, group providerkit.ChangeGroup, stack featureStack, writer providerkit.Writer) providerkit.ChangeGroup {
+	tags := stampTags(ns, Stamp{Schema: RequiredSchema, Digest: TemplateDigest(stack.body), WrittenBy: writer.String()})
+	id, changes, err := planCFNStack(ctx, cfn, ns, group.Name, stack.body, stack.params,
 		[]cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}, tags)
 	if err != nil {
 		group.Reason = providerkit.WithoutDetail(group.Reason)

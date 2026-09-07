@@ -39,9 +39,11 @@ type Bootstrapper struct {
 	Edges   providerkit.EdgeRegistry
 	Region  string
 	VarsKey string
+
+	Namespace bootstrap.Namespace
 }
 
-func BootstrapperFor(cfg aws.Config, front edge.Edge, registry providerkit.EdgeRegistry, varsKey string) Bootstrapper {
+func BootstrapperFor(cfg aws.Config, front edge.Edge, registry providerkit.EdgeRegistry, varsKey string, ns bootstrap.Namespace) Bootstrapper {
 	return Bootstrapper{
 		CFN:     cloudformation.NewFromConfig(cfg),
 		SSM:     ssm.NewFromConfig(cfg),
@@ -53,6 +55,8 @@ func BootstrapperFor(cfg aws.Config, front edge.Edge, registry providerkit.EdgeR
 		Edges:   registry,
 		Region:  cfg.Region,
 		VarsKey: varsKey,
+
+		Namespace: ns,
 	}
 }
 
@@ -73,7 +77,7 @@ func (b Bootstrapper) request(req providerkit.BootstrapRequest) bootstrap.Reques
 func (b Bootstrapper) Catalogue() []providerkit.Feature { return bootstrap.Catalogue() }
 
 func (b Bootstrapper) Describe(ctx context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
-	read, err := bootstrap.Read(ctx, b.CFN, string(class))
+	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
 		return providerkit.Bootstrap{}, err
 	}
@@ -103,7 +107,7 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 		return providerkit.Plan{}, err
 	}
 	groups, err := bootstrap.PlanChanges(ctx, b.CFN, read, b.request(req),
-		providerkit.DeriveGroups(bootstrap.NameStacks(described(req.Class, read.Deployed)), bootstrap.Catalogue(), req))
+		providerkit.DeriveGroups(bootstrap.NameStacks(b.Namespace, described(req.Class, read.Deployed)), bootstrap.Catalogue(), req))
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
@@ -111,7 +115,7 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	params, err := bootstrap.PlanParameters(ctx, b.paramAPIs(), string(req.Class), adoptions, b.request(req))
+	params, err := bootstrap.PlanParameters(ctx, b.paramAPIs(), b.Namespace, string(req.Class), adoptions, b.request(req))
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
@@ -128,7 +132,7 @@ func (b Bootstrapper) reading(ctx context.Context, req providerkit.BootstrapRequ
 	if held, carried := req.Held.(bootstrap.Reading); carried && held.Class() == string(req.Class) {
 		return held, nil
 	}
-	return bootstrap.Read(ctx, b.CFN, string(req.Class))
+	return bootstrap.Read(ctx, b.CFN, b.Namespace, string(req.Class))
 }
 
 func (b Bootstrapper) open(kind edge.Kind) (edge.Edge, error) {
@@ -260,7 +264,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if req.Heal {
 		return b.heal(ctx, req, report)
 	}
-	err := bootstrap.Run(ctx, b.apis(), string(req.Class), b.request(req), say(report), detail(report))
+	err := bootstrap.Run(ctx, b.apis(), b.Namespace, string(req.Class), b.request(req), say(report), detail(report))
 	if bootstrap.RefusedWrite(err) {
 		return providerkit.Refuse(providerkit.CodeDenied, "%s", err.Error())
 	}
@@ -268,7 +272,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 }
 
 func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
-	_, err := bootstrap.Heal(ctx, b.apis(), string(req.Class), bootstrap.HealRequest{
+	_, err := bootstrap.Heal(ctx, b.apis(), b.Namespace, string(req.Class), bootstrap.HealRequest{
 		Features: req.Features,
 		Writer:   req.Writer,
 	}, detail(report))
@@ -280,7 +284,7 @@ func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest
 
 func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
 	progress, logf := say(report), detail(report)
-	read, err := bootstrap.Read(ctx, b.CFN, string(class))
+	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
 		return err
 	}
@@ -299,7 +303,7 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 		SSM:     b.SSM,
 		IAM:     b.IAM,
 		Buckets: b.Buckets,
-	}, string(class), progress, logf)
+	}, b.Namespace, string(class), progress, logf)
 }
 
 func (b Bootstrapper) apis() bootstrap.APIs {

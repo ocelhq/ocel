@@ -29,7 +29,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
-	core := groupNamed(t, plan, "aws/"+bootstrap.StackName)
+	core := groupNamed(t, plan, "aws/"+coreStackName)
 	if core.Action != providerkit.ActionCreate {
 		t.Errorf("Plan() against a fresh account plans %s as %q, want %q", core.Name, core.Action, providerkit.ActionCreate)
 	}
@@ -38,7 +38,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 			t.Errorf("Plan() shows %s as %q, want it created", want, planned.Action)
 		}
 	}
-	origin, err := bootstrap.OriginSecretParamFor(string(class))
+	origin, err := bootstrap.DefaultNamespace.OriginSecretParamFor(string(class))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 	if params.Action != providerkit.ActionCreate {
 		t.Errorf("Plan() against a fresh account plans %s as %q, want %q", params.Name, params.Action, providerkit.ActionCreate)
 	}
-	for _, want := range []string{origin, bootstrap.PassphraseParamName} {
+	for _, want := range []string{origin, passphraseParam} {
 		if planned := changeFor(params, want); planned.Action != providerkit.ActionCreate {
 			t.Errorf("Plan() shows %s as %q, want it created", want, planned.Action)
 		}
@@ -63,7 +63,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 	if !standing.Present {
 		t.Fatal("Describe() after Apply() shows no bootstrap")
 	}
-	stack := stackNamed(t, standing, bootstrap.StackName)
+	stack := stackNamed(t, standing, coreStackName)
 	if !stack.Present || !stack.DigestCurrent {
 		t.Errorf("Describe() after Apply() = %+v, want the core stack standing at the digest applied", stack)
 	}
@@ -74,10 +74,10 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 		t.Errorf("the core stack records schema %d, want %d", stack.Schema, bootstrap.RequiredSchema)
 	}
 
-	if status := a.stackStatus(t, bootstrap.StackName); status != "CREATE_COMPLETE" {
-		t.Errorf("%s stands at %q in CloudFormation, want CREATE_COMPLETE", bootstrap.StackName, status)
+	if status := a.stackStatus(t, coreStackName); status != "CREATE_COMPLETE" {
+		t.Errorf("%s stands at %q in CloudFormation, want CREATE_COMPLETE", coreStackName, status)
 	}
-	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), string(class))
+	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), bootstrap.DefaultNamespace, string(class))
 	if err != nil {
 		t.Fatalf("reading back what the bootstrap deployed = %v", err)
 	}
@@ -103,7 +103,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 	if held.VarsKeyARN != "" {
 		t.Errorf("a run that never asked for %s made a key anyway: %+v", bootstrap.FeatureVarsKey, held)
 	}
-	for _, param := range []string{origin, bootstrap.PassphraseParamName} {
+	for _, param := range []string{origin, passphraseParam} {
 		if !a.paramStands(t, param) {
 			t.Errorf("%s was planned and applied but SSM holds no such parameter", param)
 		}
@@ -137,7 +137,7 @@ func TestLiveApplyingTheImageOptimizerStandsItsOwnStackBesideTheCore(t *testing.
 		t.Fatalf("Apply(%s) = %v", feature, err)
 	}
 
-	name := bootstrap.FeatureStackName(feature, string(class))
+	name := bootstrap.DefaultNamespace.FeatureStackName(feature, string(class))
 	if status := a.stackStatus(t, name); status != "CREATE_COMPLETE" {
 		t.Errorf("%s stands at %q in CloudFormation, want CREATE_COMPLETE", name, status)
 	}
@@ -149,7 +149,7 @@ func TestLiveApplyingTheImageOptimizerStandsItsOwnStackBesideTheCore(t *testing.
 	if !stack.Present || !stack.DigestCurrent {
 		t.Errorf("Describe() = %+v, want the feature stack standing at the digest applied", stack)
 	}
-	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), string(class))
+	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), bootstrap.DefaultNamespace, string(class))
 	if err != nil {
 		t.Fatal(err)
 	}

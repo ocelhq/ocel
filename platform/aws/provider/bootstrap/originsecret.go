@@ -12,16 +12,8 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 )
 
-func OriginSecretParamFor(class string) (string, error) {
-	secret, ok := originSecretByClass[class]
-	if !ok {
-		return "", fmt.Errorf("edge: unknown class %q", class)
-	}
-	return secret, nil
-}
-
-func ensureOriginSecret(ctx context.Context, ssmClient SSMAPI, class string) (string, error) {
-	paramName, err := OriginSecretParamFor(class)
+func ensureOriginSecret(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string) (string, error) {
+	paramName, err := ns.OriginSecretParamFor(class)
 	if err != nil {
 		return "", err
 	}

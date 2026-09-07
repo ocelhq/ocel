@@ -36,7 +36,7 @@ func ensureTagInvalidatorPayload(ctx context.Context, store ObjectStore, bucket 
 	return payloads.Place(ctx, store, bucket, tagInvalidatorKeyPrefix, tagInvalidatorLabel, payloads.TagInvalidator())
 }
 
-func tagInvalidatorResources(code payloads.Placement, class string) string {
+func tagInvalidatorResources(ns Namespace, code payloads.Placement, class string) string {
 	return fmt.Sprintf(`  TagInvalidatorDeadLetterQueue:
     Type: AWS::SQS::Queue
     Metadata:
@@ -58,7 +58,7 @@ func tagInvalidatorResources(code payloads.Placement, class string) string {
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: ocel-tag-invalidator
+        - PolicyName: %s
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -117,7 +117,7 @@ func tagInvalidatorResources(code payloads.Placement, class string) string {
       FilterCriteria:
         Filters:
           - Pattern: '%s'
-`, tagInvalidatorDLQRetentionSeconds,
+`, tagInvalidatorDLQRetentionSeconds, ns.policyName("tag-invalidator"),
 		tagInvalidatorRuntime, tagInvalidatorArchitecture, tagInvalidatorHandler, tagInvalidatorMemoryMB, tagInvalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
 		tagInvalidatorStateTableEnvVar, tagInvalidatorClassEnvVar, class,

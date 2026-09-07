@@ -48,10 +48,7 @@ func cloudflareEdgeTemplate(in featureInputs) featureStack {
 	}
 	params, values := crossStack(specs)
 
-	userName := EdgeUserName
-	if in.class == ClassPreview {
-		userName = EdgePreviewUserName
-	}
+	userName, _ := in.ns.EdgeUserNameFor(in.class)
 	return featureStack{
 		params: values,
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
@@ -59,12 +56,12 @@ Description: "Ocel bootstrap feature (%s, %s) - what a Cloudflare front needs in
 %sResources:
 %s%s`,
 			FeatureCloudflareEdge, in.class, params,
-			edgeUserResource(userName, in.class, optimizer),
-			tagPublisherResources(in.code.publisher, in.class)),
+			edgeUserResource(in.ns, userName, in.class, optimizer),
+			tagPublisherResources(in.ns, in.code.publisher, in.class)),
 	}
 }
 
-func edgeUserResource(userName, class string, optimizer bool) string {
+func edgeUserResource(ns Namespace, userName, class string, optimizer bool) string {
 	invoke := ""
 	if optimizer {
 		invoke = imageOptimizerInvokeStatement()
@@ -76,7 +73,7 @@ func edgeUserResource(userName, class string, optimizer bool) string {
     Properties:
       UserName: %s
       Policies:
-        - PolicyName: ocel-edge-cache
+        - PolicyName: %s
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -121,14 +118,14 @@ func edgeUserResource(userName, class string, optimizer bool) string {
                 Condition:
                   StringEquals:
                     kms:ViaService: !Sub 'sqs.${AWS::Region}.amazonaws.com'
-%s`, class, userName,
+%s`, class, userName, ns.policyName("edge-cache"),
 		paramAssetBucketARN, paramAssetBucketARN,
 		paramStateTableARN, paramStateTableARN, StateTableIndexName,
 		paramRevalidateQueueARN, invoke)
 }
 
-func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, class string, _ Request) ([]providerkit.Change, error) {
-	names, err := edgeNamesFor(class, KindCloudflare)
+func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, class string, _ Request) ([]providerkit.Change, error) {
+	names, err := edgeNamesFor(ns, class, KindCloudflare)
 	if err != nil {
 		return nil, err
 	}
@@ -159,8 +156,8 @@ func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, class string, _
 	}, nil
 }
 
-func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, class string, _ Request) ([]providerkit.Change, error) {
-	names, err := edgeNamesFor(class, KindCloudflare)
+func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, ns Namespace, class string, _ Request) ([]providerkit.Change, error) {
+	names, err := edgeNamesFor(ns, class, KindCloudflare)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +189,7 @@ func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, class string, _
 }
 
 func severCloudflareEdge(ctx context.Context, d stepDeps) error {
-	names, err := edgeNamesFor(d.class, KindCloudflare)
+	names, err := edgeNamesFor(d.ns, d.class, KindCloudflare)
 	if err != nil {
 		return err
 	}
@@ -211,7 +208,7 @@ func severCloudflareEdge(ctx context.Context, d stepDeps) error {
 
 func mintEdgeCredentials(ctx context.Context, d stepDeps) error {
 	d.progress("Ensuring edge reader credentials (SSM SecureString)")
-	created, err := ensureEdgeCredentials(ctx, d.iam, d.ssm, d.class, KindCloudflare)
+	created, err := ensureEdgeCredentials(ctx, d.iam, d.ssm, d.ns, d.class, KindCloudflare)
 	if err != nil {
 		return err
 	}

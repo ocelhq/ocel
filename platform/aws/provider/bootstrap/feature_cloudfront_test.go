@@ -57,7 +57,7 @@ func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testin
 			if routes.Type != "AWS::CloudFront::KeyValueStore" {
 				t.Errorf("EdgeRoutes Type = %q, want AWS::CloudFront::KeyValueStore", routes.Type)
 			}
-			if got, want := routes.Properties.Name, EdgeRoutesStoreName(held); got != want {
+			if got, want := routes.Properties.Name, DefaultNamespace.EdgeRoutesStoreName(held); got != want {
 				t.Errorf("key value store name = %q, want %q", got, want)
 			}
 
@@ -68,7 +68,7 @@ func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testin
 			if fn.Type != "AWS::CloudFront::Function" {
 				t.Errorf("EdgeResolver Type = %q, want AWS::CloudFront::Function", fn.Type)
 			}
-			if got, want := fn.Properties.Name, EdgeResolverName(held); got != want {
+			if got, want := fn.Properties.Name, DefaultNamespace.EdgeResolverName(held); got != want {
 				t.Errorf("resolver name = %q, want %q", got, want)
 			}
 			if !fn.Properties.AutoPublish {
@@ -92,7 +92,7 @@ func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testin
 			if cache.Type != "AWS::CloudFront::CachePolicy" {
 				t.Errorf("EdgeCachePolicy Type = %q, want AWS::CloudFront::CachePolicy", cache.Type)
 			}
-			if got, want := cache.Properties.CachePolicyConfig.Name, edgeCachePolicyName(held); got != want {
+			if got, want := cache.Properties.CachePolicyConfig.Name, DefaultNamespace.edgeCachePolicyName(held); got != want {
 				t.Errorf("cache policy name = %q, want %q", got, want)
 			}
 
@@ -103,7 +103,7 @@ func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testin
 			if headers.Type != "AWS::CloudFront::ResponseHeadersPolicy" {
 				t.Errorf("EdgeHeadersPolicy Type = %q, want AWS::CloudFront::ResponseHeadersPolicy", headers.Type)
 			}
-			if got, want := headers.Properties.ResponseHeadersPolicyConfig.Name, edgeHeadersPolicyName(held); got != want {
+			if got, want := headers.Properties.ResponseHeadersPolicyConfig.Name, DefaultNamespace.edgeHeadersPolicyName(held); got != want {
 				t.Errorf("response headers policy name = %q, want %q", got, want)
 			}
 
@@ -114,7 +114,7 @@ func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testin
 			if access.Type != "AWS::CloudFront::OriginAccessControl" {
 				t.Errorf("EdgeAssetAccess Type = %q, want AWS::CloudFront::OriginAccessControl", access.Type)
 			}
-			if got, want := access.Properties.OriginAccessControlConfig.Name, edgeAssetAccessName(held); got != want {
+			if got, want := access.Properties.OriginAccessControlConfig.Name, DefaultNamespace.edgeAssetAccessName(held); got != want {
 				t.Errorf("origin access control name = %q, want %q", got, want)
 			}
 			if got := access.Properties.OriginAccessControlConfig.OriginAccessControlOriginType; got != "s3" {
@@ -142,7 +142,7 @@ func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testin
 func TestTheCoreCarriesNothingACloudFrontFrontNeeds(t *testing.T) {
 	for _, class := range []string{ClassProduction, ClassPreview} {
 		t.Run(class, func(t *testing.T) {
-			body := coreStackTemplate(class)
+			body := coreStackTemplate(DefaultNamespace, class)
 			for _, resource := range templateResources(body) {
 				if strings.HasPrefix(resource.kind, "AWS::CloudFront::") {
 					t.Errorf("the core holds %s (%s); an edge stands in a feature stack of its own", resource.id, resource.kind)

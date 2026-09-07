@@ -186,10 +186,10 @@ func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *
 	if !strings.Contains(applied, "Bootstrapped") {
 		t.Errorf("`ocel bootstrap production --yes` finished without saying it bootstrapped:\n%s", applied)
 	}
-	if status := run.account.stackStatus(t, bootstrap.StackName); status != "CREATE_COMPLETE" {
-		t.Fatalf("%s stands at %q after the CLI applied it, want CREATE_COMPLETE", bootstrap.StackName, status)
+	if status := run.account.stackStatus(t, coreStackName); status != "CREATE_COMPLETE" {
+		t.Fatalf("%s stands at %q after the CLI applied it, want CREATE_COMPLETE", coreStackName, status)
 	}
-	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(run.account.aws), string(class))
+	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(run.account.aws), bootstrap.DefaultNamespace, string(class))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,8 +198,8 @@ func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *
 			t.Errorf("%s is named by the stack the CLI applied but no bucket answers for it", bucket)
 		}
 	}
-	if !run.account.paramStands(t, bootstrap.PassphraseParamName) {
-		t.Errorf("%s is missing after the CLI bootstrapped, and every Pulumi stack this account deploys is encrypted under it", bootstrap.PassphraseParamName)
+	if !run.account.paramStands(t, passphraseParam) {
+		t.Errorf("%s is missing after the CLI bootstrapped, and every Pulumi stack this account deploys is encrypted under it", passphraseParam)
 	}
 
 	standing := run.must(t, "doctor")
@@ -222,15 +222,15 @@ func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *
 	if !strings.Contains(gone, "not set up — run `ocel bootstrap production`") {
 		t.Errorf("`ocel doctor` after a destroy still claims a bootstrap:\n%s", gone)
 	}
-	if status := run.account.stackStatus(t, bootstrap.StackName); status != "" && status != "DELETE_COMPLETE" {
-		t.Errorf("%s stands at %q after a destroy, so the account was not given back", bootstrap.StackName, status)
+	if status := run.account.stackStatus(t, coreStackName); status != "" && status != "DELETE_COMPLETE" {
+		t.Errorf("%s stands at %q after a destroy, so the account was not given back", coreStackName, status)
 	}
 	for _, bucket := range []string{held.StateBucket, held.ArtifactBucket, held.AssetBucket} {
 		if run.account.bucketStands(t, bucket) {
 			t.Errorf("%s still answers after a destroy, so the account was not given back", bucket)
 		}
 	}
-	if run.account.paramStands(t, bootstrap.PassphraseParamName) {
-		t.Errorf("%s stands after the last class on this account went", bootstrap.PassphraseParamName)
+	if run.account.paramStands(t, passphraseParam) {
+		t.Errorf("%s stands after the last class on this account went", passphraseParam)
 	}
 }

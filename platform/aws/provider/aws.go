@@ -47,8 +47,9 @@ type Options struct {
 }
 
 type Provider struct {
-	options Options
-	aws     aws.Config
+	options   Options
+	aws       aws.Config
+	namespace bootstrap.Namespace
 
 	deployed memo[providerkit.Class, bootstrap.Deployed]
 	params   memo[classEdge, bootstrap.ClassParams]
@@ -67,15 +68,19 @@ func New(ctx context.Context, options providerkit.Options) (providerkit.Provider
 	if err != nil {
 		return nil, err
 	}
+	ns, err := bootstrap.ParseNamespace(os.Getenv(bootstrap.NamespaceEnvVar))
+	if err != nil {
+		return nil, providerkit.Refuse(providerkit.CodeInvalid, "%s: %s", bootstrap.NamespaceEnvVar, err.Error())
+	}
 	cfg, err := sdkconfig.Control(ctx, decoded.Region)
 	if err != nil {
 		return nil, err
 	}
-	return NewProvider(decoded, cfg), nil
+	return NewProvider(decoded, cfg, ns), nil
 }
 
-func NewProvider(options Options, cfg aws.Config) *Provider {
-	p := &Provider{options: options, aws: cfg}
+func NewProvider(options Options, cfg aws.Config, ns bootstrap.Namespace) *Provider {
+	p := &Provider{options: options, aws: cfg, namespace: ns}
 	p.releases = deploy.NewReleaser(deploy.ResolverFunc(p.release), &deploy.Realized{})
 	return p
 }
@@ -95,7 +100,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
 	if err != nil {
 		return nil, err
 	}
-	return settling{Bootstrapper: control.BootstrapperFor(p.aws, front, p.edges(), p.options.VarsKey), settled: p.forget}, nil
+	return settling{Bootstrapper: control.BootstrapperFor(p.aws, front, p.edges(), p.options.VarsKey, p.namespace), settled: p.forget}, nil
 }
 
 func (p *Provider) forget() {
@@ -117,7 +122,9 @@ func (p *Provider) Sealer() providerkit.Sealer {
 	return awsports.Sealer{KMS: kms.NewFromConfig(p.aws), Keys: p}
 }
 
-func (p *Provider) Credentials() providerkit.Credentials { return control.CredentialsFor(p.aws) }
+func (p *Provider) Credentials() providerkit.Credentials {
+	return control.CredentialsFor(p.aws, p.namespace)
+}
 
 func (p *Provider) Edges() providerkit.EdgeRegistry { return p.edges() }
 
@@ -195,6 +202,7 @@ func (p *Provider) edges() edges.Registry {
 	return edges.Registry{Deps: edges.Deps{
 		AWS:          func(context.Context) (aws.Config, error) { return p.aws, nil },
 		Certificates: p.options.Certificates,
+		Namespace:    p.namespace,
 	}}
 }
 
@@ -257,16 +265,16 @@ func cacheStoreClient(store bootstrap.CacheStore) awsports.S3API {
 
 func (p *Provider) bootstrapped(ctx context.Context, class providerkit.Class) (bootstrap.Deployed, error) {
 	return p.deployed.resolve(class, func() (bootstrap.Deployed, error) {
-		return bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(p.aws), string(class))
+		return bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(p.aws), p.namespace, string(class))
 	})
 }
 
 func (p *Provider) classParams(ctx context.Context, class providerkit.Class, kind edge.Kind) (bootstrap.ClassParams, error) {
 	return p.params.resolve(classEdge{class: class, kind: kind}, func() (bootstrap.ClassParams, error) {
 		if kind == "" {
-			return bootstrap.ReadCoreParams(ctx, ssm.NewFromConfig(p.aws), string(class))
+			return bootstrap.ReadCoreParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, string(class))
 		}
-		return bootstrap.ReadClassParams(ctx, ssm.NewFromConfig(p.aws), string(class), kind)
+		return bootstrap.ReadClassParams(ctx, ssm.NewFromConfig(p.aws), p.namespace, string(class), kind)
 	})
 }
 

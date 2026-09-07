@@ -3,7 +3,7 @@ package bootstrap
 import edge "github.com/ocelhq/ocel/platform/edge/contract"
 
 func namesFor(class string, kind edge.Kind) edgeNames {
-	names, err := edgeNamesFor(class, kind)
+	names, err := edgeNamesFor(DefaultNamespace, class, kind)
 	if err != nil {
 		panic("no edge parameter names for class " + class + " and kind " + string(kind))
 	}
@@ -46,6 +46,7 @@ func featureStackFor(name, class string, alongside FeatureSet) featureStack {
 		panic("no feature named " + name)
 	}
 	return f.template(featureInputs{
+		ns:        DefaultNamespace,
 		class:     class,
 		code:      fixturePayloads(),
 		refs:      fixtureRefs(),

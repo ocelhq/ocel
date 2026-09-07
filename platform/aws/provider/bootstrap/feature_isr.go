@@ -47,9 +47,9 @@ Description: "Ocel bootstrap feature (%s, %s) - incremental static regeneration 
 %s%s%sOutputs:
 %s`,
 			FeatureISR, in.class, params,
-			revalidateQueueResources(in.class),
-			revalidatorResources(in.code.revalidator),
-			tagInvalidatorResources(in.code.invalidator, in.class),
+			revalidateQueueResources(in.ns, in.class),
+			revalidatorResources(in.ns, in.code.revalidator),
+			tagInvalidatorResources(in.ns, in.code.invalidator, in.class),
 			revalidateQueueOutputs()),
 	}
 }

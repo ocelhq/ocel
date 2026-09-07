@@ -52,7 +52,7 @@ func newWorld() *world {
 }
 
 func (w *world) clients() Clients {
-	return Clients{APIGateway: w.gateway, Routing: w.routing, Dynamo: w.dynamo, CFN: w.cfn, Region: fakeRegion}
+	return Clients{APIGateway: w.gateway, Routing: w.routing, Dynamo: w.dynamo, CFN: w.cfn, Region: fakeRegion, Namespace: bootstrap.DefaultNamespace}
 }
 
 func (w *world) edge() *provider {
@@ -86,12 +86,12 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	name, _ := strings.CutSuffix(aws.ToString(in.StackName), "-"+string(edge.ClassPreview))
 	var outputs []cfntypes.Output
 	switch name {
-	case bootstrap.StackName:
+	case coreStackName:
 		outputs = []cfntypes.Output{
 			{OutputKey: aws.String("StateTableName"), OutputValue: aws.String(fakeStateTable)},
 			{OutputKey: aws.String("AssetBucketName"), OutputValue: aws.String(fakeAssetBucket)},
 		}
-	case bootstrap.StackName + "-" + bootstrap.FeatureAPIGatewayEdge:
+	case coreStackName + "-" + bootstrap.FeatureAPIGatewayEdge:
 		if f.otherEdge {
 			return &cloudformation.DescribeStacksOutput{}, nil
 		}

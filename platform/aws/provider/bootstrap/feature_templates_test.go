@@ -27,7 +27,7 @@ var (
 	subRE    = regexp.MustCompile(`\$\{([A-Za-z0-9:.]+)\}`)
 )
 
-var pseudoParameters = []string{"AWS::AccountId", "AWS::Region", "AWS::Partition", "AWS::URLSuffix", "AWS::StackName", "AWS::NoValue"}
+var pseudoParameters = []string{"AWS::AccountId", "AWS::Region", "AWS::Partition", "AWS::URLSuffix", "AWS::coreStackName", "AWS::NoValue"}
 
 func TestFeatureTemplates(t *testing.T) {
 	for _, name := range featureNames() {

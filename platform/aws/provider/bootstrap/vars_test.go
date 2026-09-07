@@ -82,8 +82,8 @@ func varsBootstraps() []struct {
 		class    string
 		template string
 	}{
-		{"production", ClassProduction, coreStackTemplate(ClassProduction)},
-		{"preview", ClassPreview, coreStackTemplate(ClassPreview)},
+		{"production", ClassProduction, coreStackTemplate(DefaultNamespace, ClassProduction)},
+		{"preview", ClassPreview, coreStackTemplate(DefaultNamespace, ClassPreview)},
 	}
 }
 
@@ -204,7 +204,7 @@ func TestVarsKey(t *testing.T) {
 			if alias.Type != "AWS::KMS::Alias" {
 				t.Errorf("VarsKeyAlias Type = %q, want AWS::KMS::Alias", alias.Type)
 			}
-			if got, want := alias.Properties.AliasName, varsKeyAliasFor(tc.class); got != want {
+			if got, want := alias.Properties.AliasName, DefaultNamespace.varsKeyAliasFor(tc.class); got != want {
 				t.Errorf("AliasName = %q, want %q", got, want)
 			}
 			aliases[tc.class] = alias.Properties.AliasName
@@ -317,11 +317,11 @@ func TestRunVars(t *testing.T) {
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		req := Request{Features: []string{FeatureVarsKey}}
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, req, nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), DefaultNamespace, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
-		tmpl := parseVarsTemplate(t, cfn.template(FeatureStackName(FeatureVarsKey, ClassProduction)))
+		tmpl := parseVarsTemplate(t, cfn.template(DefaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction)))
 		for _, name := range []string{"VarsKey", "VarsKeyAlias"} {
 			if _, ok := tmpl.Resources[name]; !ok {
 				t.Errorf("the vars-key stack does not declare %s", name)
@@ -336,11 +336,11 @@ func TestRunVars(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, Request{}, nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), DefaultNamespace, ClassProduction, Request{}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
-		stack := FeatureStackName(FeatureVarsKey, ClassProduction)
+		stack := DefaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction)
 		if slices.Contains(cfn.stacks(), stack) {
 			t.Errorf("%s stands after a run that never asked for it; bootstrap creates nothing that bills while idle", stack)
 		}
@@ -349,12 +349,12 @@ func TestRunVars(t *testing.T) {
 
 func TestCheckDeployedVars(t *testing.T) {
 	t.Run("parses vars outputs", func(t *testing.T) {
-		api := stubDescriber{StackName: outputs(map[string]string{
+		api := stubDescriber{coreStackName: outputs(map[string]string{
 			outputVarsTable:  "vars-abc",
 			outputVarsKeyARN: "arn:aws:kms:eu-west-1:123456789012:key/abcd",
 		})}
 
-		got, err := CheckDeployed(context.Background(), api)
+		got, err := CheckDeployed(context.Background(), api, DefaultNamespace)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}

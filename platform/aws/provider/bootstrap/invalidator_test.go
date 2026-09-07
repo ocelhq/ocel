@@ -158,8 +158,8 @@ func TestTagInvalidator(t *testing.T) {
 			target    spec
 			stackName string
 		}{
-			{"production", productionBootstrap(), isrStack(ClassProduction)},
-			{"preview", previewBootstrap(), isrStack(ClassPreview)},
+			{"production", productionBootstrap(DefaultNamespace), isrStack(ClassProduction)},
+			{"preview", previewBootstrap(DefaultNamespace), isrStack(ClassPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				cfn := newFakeCFN()

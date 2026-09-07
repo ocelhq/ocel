@@ -88,6 +88,7 @@ func (w *world) clients() Clients {
 		SSM:           w.ssm,
 		CFN:           w.cfn,
 		Region:        fakeRegion,
+		Namespace:     bootstrap.DefaultNamespace,
 	}
 }
 
@@ -131,12 +132,12 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	}
 	var held map[string]string
 	switch name {
-	case bootstrap.StackName:
+	case coreStackName:
 		held = map[string]string{
 			"StateTableName":  fakeStateTable,
 			"AssetBucketName": fakeAssetBucket,
 		}
-	case bootstrap.StackName + "-" + bootstrap.FeatureCloudFrontEdge:
+	case coreStackName + "-" + bootstrap.FeatureCloudFrontEdge:
 		if f.otherEdge {
 			return &cloudformation.DescribeStacksOutput{}, nil
 		}
@@ -212,18 +213,18 @@ func newFakeCloudFront(shared *trail) *fakeCloudFront {
 		distributions: map[string]*fakeDistribution{},
 	}
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		name := bootstrap.EdgeRoutesStoreName(class)
+		name := bootstrap.DefaultNamespace.EdgeRoutesStoreName(class)
 		f.stores[name] = &fakeStore{arn: fakeRoutesARN(class), etag: "kvs-1"}
 	}
 	return f
 }
 
 func fakeRoutesARN(class edge.Class) string {
-	return "arn:aws:cloudfront::123456789012:key-value-store/" + bootstrap.EdgeRoutesStoreName(class)
+	return "arn:aws:cloudfront::123456789012:key-value-store/" + bootstrap.DefaultNamespace.EdgeRoutesStoreName(class)
 }
 
 func fakeResolverARN(class edge.Class) string {
-	return "arn:aws:cloudfront::123456789012:function/" + bootstrap.EdgeResolverName(class)
+	return "arn:aws:cloudfront::123456789012:function/" + bootstrap.DefaultNamespace.EdgeResolverName(class)
 }
 
 func fakeEdgeOutputs(class edge.Class) map[string]string {

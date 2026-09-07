@@ -11,7 +11,7 @@ func TestEnsureOriginSecret(t *testing.T) {
 	t.Run("is create only", func(t *testing.T) {
 		ssmc := newFakeSSM()
 
-		first, err := ensureOriginSecret(context.Background(), ssmc, ClassProduction)
+		first, err := ensureOriginSecret(context.Background(), ssmc, DefaultNamespace, ClassProduction)
 		if err != nil {
 			t.Fatalf("ensureOriginSecret: %v", err)
 		}
@@ -19,7 +19,7 @@ func TestEnsureOriginSecret(t *testing.T) {
 			t.Fatalf("secret = %q, want 32 random bytes the front can carry as a header", first)
 		}
 
-		again, err := ensureOriginSecret(context.Background(), ssmc, ClassProduction)
+		again, err := ensureOriginSecret(context.Background(), ssmc, DefaultNamespace, ClassProduction)
 		if err != nil {
 			t.Fatalf("ensureOriginSecret (second run): %v", err)
 		}
@@ -27,7 +27,7 @@ func TestEnsureOriginSecret(t *testing.T) {
 			t.Errorf("second bootstrap returned %q, want the stored secret; rotating it strands every promoted pointer", again)
 		}
 
-		preview, err := ensureOriginSecret(context.Background(), ssmc, ClassPreview)
+		preview, err := ensureOriginSecret(context.Background(), ssmc, DefaultNamespace, ClassPreview)
 		if err != nil {
 			t.Fatalf("ensureOriginSecret (preview): %v", err)
 		}
@@ -39,7 +39,7 @@ func TestEnsureOriginSecret(t *testing.T) {
 	t.Run("converges on a concurrent bootstrap", func(t *testing.T) {
 		ssmc := &racingSSM{fakeSSM: newFakeSSM(), winner: "the-other-bootstraps-secret"}
 
-		secret, err := ensureOriginSecret(context.Background(), ssmc, ClassProduction)
+		secret, err := ensureOriginSecret(context.Background(), ssmc, DefaultNamespace, ClassProduction)
 		if err != nil {
 			t.Fatalf("ensureOriginSecret lost a race instead of converging: %v", err)
 		}
@@ -49,7 +49,7 @@ func TestEnsureOriginSecret(t *testing.T) {
 	})
 
 	t.Run("refuses a class it has no parameter for", func(t *testing.T) {
-		if _, err := ensureOriginSecret(context.Background(), newFakeSSM(), "staging"); err == nil {
+		if _, err := ensureOriginSecret(context.Background(), newFakeSSM(), DefaultNamespace, "staging"); err == nil {
 			t.Error("an unknown class minted a secret, want the class refused")
 		}
 	})
@@ -57,9 +57,9 @@ func TestEnsureOriginSecret(t *testing.T) {
 
 func TestBootstrapParamsCarryTheOriginSecret(t *testing.T) {
 	params := fullProductionParams()
-	params[OriginSecretParamName] = "origin-1"
+	params[originSecretParam] = "origin-1"
 
-	got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, ClassProduction, KindCloudflare)
+	got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, DefaultNamespace, ClassProduction, KindCloudflare)
 	if err != nil {
 		t.Fatalf("ReadClassParams: %v", err)
 	}
@@ -67,11 +67,11 @@ func TestBootstrapParamsCarryTheOriginSecret(t *testing.T) {
 		t.Errorf("OriginSecret = %q, want the secret bootstrap minted", got.OriginSecret)
 	}
 
-	names, err := ClassParamNames(ClassProduction)
+	names, err := ClassParamNames(DefaultNamespace, ClassProduction)
 	if err != nil {
 		t.Fatalf("ClassParamNames: %v", err)
 	}
-	if !slices.Contains(names, OriginSecretParamName) {
+	if !slices.Contains(names, originSecretParam) {
 		t.Errorf("teardown deletes %v, want the origin secret among them", names)
 	}
 }

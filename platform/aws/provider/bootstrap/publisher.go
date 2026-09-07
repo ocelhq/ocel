@@ -39,8 +39,8 @@ func ensureTagPublisherPayload(ctx context.Context, store ObjectStore, bucket st
 	return payloads.Place(ctx, store, bucket, tagPublisherKeyPrefix, tagPublisherLabel, payloads.TagPublisher())
 }
 
-func tagPublisherResources(code payloads.Placement, class string) string {
-	writerParam, seedParam := isrWriterParamNames(class)
+func tagPublisherResources(ns Namespace, code payloads.Placement, class string) string {
+	writerParam, seedParam := isrWriterParamNames(ns, class)
 	return fmt.Sprintf(`  TagPublisherDeadLetterQueue:
     Type: AWS::SQS::Queue
     Metadata:
@@ -62,7 +62,7 @@ func tagPublisherResources(code payloads.Placement, class string) string {
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: ocel-tag-publisher
+        - PolicyName: %s
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -134,7 +134,7 @@ func tagPublisherResources(code payloads.Placement, class string) string {
       FilterCriteria:
         Filters:
           - Pattern: '%s'
-`, tagPublisherDLQRetentionSeconds,
+`, tagPublisherDLQRetentionSeconds, ns.policyName("tag-publisher"),
 		writerParam, seedParam, writerParam, seedParam,
 		tagPublisherRuntime, tagPublisherArchitecture, tagPublisherHandler, tagPublisherMemoryMB, tagPublisherTimeoutSeconds,
 		code.Bucket, code.Key,
@@ -142,8 +142,8 @@ func tagPublisherResources(code payloads.Placement, class string) string {
 		tagPublisherBatchSize, tagPublisherRetries, tagRecordStreamFilter)
 }
 
-func isrWriterParamNames(class string) (writer, seed string) {
-	names, err := edgeNamesFor(class, KindCloudflare)
+func isrWriterParamNames(ns Namespace, class string) (writer, seed string) {
+	names, err := edgeNamesFor(ns, class, KindCloudflare)
 	if err != nil {
 		return "", ""
 	}

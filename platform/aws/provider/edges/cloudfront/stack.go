@@ -13,7 +13,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -298,7 +297,7 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 
 func (s *stack) originSecret(ctx context.Context, c Clients) (string, error) {
 	command := providerkit.BootstrapCommand(s.class())
-	name, err := bootstrap.OriginSecretParamFor(string(s.class()))
+	name, err := c.Namespace.OriginSecretParamFor(string(s.class()))
 	if err != nil {
 		return "", err
 	}

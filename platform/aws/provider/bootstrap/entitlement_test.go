@@ -23,7 +23,7 @@ func TestRunNeverAsksWhatThePlanEntitles(t *testing.T) {
 			ed := &freePlanEdge{fakeEdge: &fakeEdge{kind: "cloudflare"}}
 			frontedBy(t, ed)
 
-			if err := Run(context.Background(), apisOf(newFakeCFN(), newFakeSSM(), &fakeIAM{}, preloadedStore()), class, everything(), nil, nil); err != nil {
+			if err := Run(context.Background(), apisOf(newFakeCFN(), newFakeSSM(), &fakeIAM{}, preloadedStore()), DefaultNamespace, class, everything(), nil, nil); err != nil {
 				t.Fatalf("run: %v", err)
 			}
 			if ed.checks != 0 {

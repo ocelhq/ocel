@@ -25,7 +25,7 @@ func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.Previ
 	if err != nil {
 		return "", err
 	}
-	outputs, err := bootstrap.FeatureOutputs(ctx, c.CFN, string(edge.ClassPreview), bootstrap.FeatureAPIGatewayEdge)
+	outputs, err := bootstrap.FeatureOutputs(ctx, c.CFN, c.Namespace, string(edge.ClassPreview), bootstrap.FeatureAPIGatewayEdge)
 	if err != nil {
 		return "", err
 	}
