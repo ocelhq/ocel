@@ -56,7 +56,6 @@ on:
         type: string
 
 permissions:
-  actions: read
   contents: read
   id-token: write
   packages: read
@@ -249,7 +248,6 @@ jobs:
       group: ${{ needs.binary.outputs.real == 'true' && 'real-aws' || format('journey-aws-{0}', github.event.pull_request.number) }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
     env:
-      GH_TOKEN: ${{ github.token }}
       OCEL_TARGET: aws
       OCEL_JOURNEY_CONCERN: ${{ needs.binary.outputs.concern }}
       OCEL_JOURNEY_FIXTURES: ${{ needs.binary.outputs.fixtures }}
@@ -326,9 +324,9 @@ jobs:
             echo "AWS_REGION=$REGION"
           } >> "$GITHUB_ENV"
 
-      - name: Reclaim what a run that died left in the account
+      - name: Reclaim what an earlier attempt of this run left behind
         if: ${{ needs.binary.outputs.real == 'true' }}
-        run: pnpm --filter @ocel-tests/journeys sweep --target aws
+        run: pnpm --filter @ocel-tests/journeys sweep --target aws --own
 
       - name: Run the journey
         if: ${{ needs.binary.outputs.aws == 'true' }}
@@ -428,7 +426,6 @@ jobs:
       group: journey-next-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     env:
-      GH_TOKEN: ${{ github.token }}
       OCEL_TARGET: aws
       OCEL_JOURNEY_CONCERN: deploy
       OCEL_JOURNEY_FIXTURES: deploy/next
@@ -447,8 +444,8 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: The node bundles the fixture and the ladder sweeps import
-        run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
+      - name: The node bundle the fixture imports
+        run: pnpm turbo run build --filter=ocel
 
       - name: Take the binaries this lane drives
         uses: ./.github/actions/journey-binaries
@@ -481,8 +478,8 @@ jobs:
             echo "AWS_REGION=$REGION"
           } >> "$GITHUB_ENV"
 
-      - name: Reclaim what a run that died left in the account
-        run: pnpm --filter @ocel-tests/journeys sweep --target aws
+      - name: Reclaim what an earlier attempt of this run left behind
+        run: pnpm --filter @ocel-tests/journeys sweep --target aws --own
 
       - name: Run the journey
         run: pnpm --filter @ocel-tests/journeys journey

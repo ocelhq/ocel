@@ -2,7 +2,7 @@ name: Sweep
 
 on:
   schedule:
-    - cron: "17 4 * * *"
+    - cron: "17 */6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -39,6 +39,88 @@ jobs:
 
       - name: Reclaim the boxes nothing is using
         run: scripts/ec2.sh sweep
+
+  journeys:
+    name: journey cells and namespaces no run is using
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    env:
+      OCEL_TARGET: aws
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+      OCEL_AWS_VARS_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: The node bundles the fixtures and the ladders import
+        run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: |
+            cli/go.sum
+            platform/aws/provider/go.sum
+            platform/vps/provider/go.sum
+            pkg/proto/go.sum
+            sdk/go.sum
+
+      - name: Setup gobuildcache
+        uses: ./.github/actions/gobuildcache
+        with:
+          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+
+      - name: Build the binaries this sweep drives
+        run: |
+          set -euo pipefail
+          node scripts/build-native.mjs --host --target cli
+          node scripts/build-native.mjs --host --target provider-aws
+          echo "OCEL_BIN=$GITHUB_WORKSPACE/packages/native-lib/cli-linux-x64/bin/ocel" >> "$GITHUB_ENV"
+
+      - name: Assume the session that may spend the real account
+        uses: ./.github/actions/real-aws-session
+        with:
+          node-version: "22"
+          pnpm-version: "11.10.0"
+          bun-version: "1.4.0"
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          role-session-name: ocel-sweep-journeys-${{ github.run_id }}
+          role-duration-seconds: "3600"
+          guard-script: tests/next-compat/guard-accounts.sh
+          expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Name the account and the zone this run may touch
+        env:
+          EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          ZONE: ${{ vars.E2E_PREVIEW_DOMAIN }}
+          REGION: ${{ vars.E2E_AWS_REGION }}
+        run: |
+          set -euo pipefail
+          ZONE=${ZONE#\*.}
+          {
+            echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
+            echo "OCEL_JOURNEY_ZONE=$ZONE"
+            echo "AWS_REGION=$REGION"
+          } >> "$GITHUB_ENV"
+
+      - name: Reclaim the cells and namespaces no run is using
+        run: pnpm --filter @ocel-tests/journeys sweep --target aws
 
   previews:
     name: previews whose pull request has closed

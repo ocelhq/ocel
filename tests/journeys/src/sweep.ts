@@ -1,7 +1,7 @@
 import { currentRunIdentity } from "./identity";
 import { targetNamed } from "./targets";
 
-const USAGE = "pnpm sweep --target <name>";
+const USAGE = "pnpm sweep --target <name> [--own]";
 
 function flag(argv: string[], name: string): string | undefined {
   const index = argv.indexOf(`--${name}`);
@@ -22,7 +22,8 @@ async function main(argv: string[]): Promise<void> {
   }
   const target = targetNamed(targetName);
   await target.guard();
-  await target.sweep(currentRunIdentity());
+  const runId = currentRunIdentity();
+  await (argv.includes("--own") ? target.sweepOwn(runId) : target.sweep(runId));
 }
 
 main(process.argv.slice(2)).then(
