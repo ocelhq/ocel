@@ -25,9 +25,6 @@ const (
 )
 
 func (c Compilation) vendorPython(ctx context.Context) error {
-	if c.Entrypoint != "" {
-		return fmt.Errorf("app %q runs on the python runtime and names entrypoint %q: a python app is served by the %s in its own directory, and both the artifact and the image are built from that, so an entrypoint here would name a file nothing boots", c.App, c.Entrypoint, pythonEntryFile)
-	}
 	entry, err := os.Stat(filepath.Join(c.Source, pythonEntryFile))
 	if err != nil || !entry.Mode().IsRegular() {
 		return fmt.Errorf("app %q runs on the python runtime and %s holds no %s: an app is served by the module rooted in its own directory", c.App, c.Source, pythonEntryFile)

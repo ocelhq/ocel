@@ -100,6 +100,9 @@ func (c Compilation) validate() error {
 	if len(missing) > 0 {
 		return fmt.Errorf("cannot compile: %s not stated", strings.Join(missing, ", "))
 	}
+	if c.Runtime.Name == providerkit.RuntimePython && c.Entrypoint != "" {
+		return fmt.Errorf("app %q runs on the python runtime and names entrypoint %q: a python app is served by the %s in its own directory, and both the artifact and the image are built from that, so an entrypoint here would name a file nothing boots", c.App, c.Entrypoint, pythonEntryFile)
+	}
 	pkg := c.pkg()
 	info, err := os.Stat(pkg)
 	if err != nil {
