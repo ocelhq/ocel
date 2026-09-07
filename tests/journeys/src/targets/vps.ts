@@ -413,4 +413,5 @@ export const vpsTarget: Target = {
   list,
   stands: stillRecorded,
   sweep,
+  sweepOwn: async () => {},
 };

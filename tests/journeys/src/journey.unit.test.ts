@@ -27,6 +27,7 @@ function laneThatPrepares(prepared: string[]): Target {
     list: async () => [],
     stands: async () => false,
     sweep: async () => {},
+    sweepOwn: async () => {},
   };
 }
 

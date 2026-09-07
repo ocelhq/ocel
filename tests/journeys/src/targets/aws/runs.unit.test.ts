@@ -1,6 +1,6 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
-import { githubRuns, livelyRuns, runIdOf, type Verdict } from "./runs";
+import { githubRuns, livelyRuns, ofRun, runIdOf, type Verdict } from "./runs";
 
 const ENV = { GITHUB_REPOSITORY: "ocelhq/ocel", GITHUB_TOKEN: "token" };
 
@@ -44,6 +44,29 @@ describe("runIdOf", () => {
     assert.equal(runIdOf("deploy-node"), undefined);
     assert.equal(runIdOf("j--deploy-node"), undefined);
     assert.equal(runIdOf("j-1874"), undefined);
+  });
+});
+
+describe("ofRun", () => {
+  it("keeps only the names the current run made", () => {
+    assert.deepEqual(
+      ofRun(["j-1874-deploy-node", "j-1875-deploy-node", "j-1874-deploy-next"], "1874"),
+      ["j-1874-deploy-node", "j-1874-deploy-next"],
+    );
+  });
+
+  it("names a slug the run made once, however often it stands in the list", () => {
+    assert.deepEqual(ofRun(["j-1874-deploy-node", "j-1874-deploy-node"], "1874"), [
+      "j-1874-deploy-node",
+    ]);
+  });
+
+  it("keeps nothing the harness never made and nothing a local run made", () => {
+    assert.deepEqual(ofRun(["deploy-node", "j-local-vndaba-deploy-node"], "1874"), []);
+  });
+
+  it("keeps a namespace, which carries the same head as the slug", () => {
+    assert.deepEqual(ofRun(["j-1874-deploy-next-a1b2c3"], "1874"), ["j-1874-deploy-next-a1b2c3"]);
   });
 });
 

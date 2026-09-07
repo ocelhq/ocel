@@ -18,9 +18,9 @@ import { pulumiSweep } from "./ladder-pulumi";
 import { sstSweep } from "./ladder-sst";
 import { NAMESPACE_ENV, namespaceFor, namespaceOfSlug, strayNamespaces } from "./namespace";
 import { place } from "./place";
-import { githubRuns, livelyRuns, runIdOf } from "./runs";
+import { githubRuns, livelyRuns, ofRun, runIdOf } from "./runs";
 import { awaitServing } from "./serving";
-import { reclaimable, sweepable } from "./slugs";
+import { reclaimable, type Stranded, sweepable } from "./slugs";
 import { awsStore, cliAt, namespacesStanding, type Store, said } from "./store";
 import { expectationEnvironmentFor } from "./world";
 
@@ -419,6 +419,43 @@ async function sweepNamespaces(
   }
 }
 
+async function reclaimSlugs(
+  runId: string,
+  stranded: Stranded[],
+  byPart: Map<string, Cell>,
+  complaints: string[],
+): Promise<void> {
+  for (const entry of stranded) {
+    const cell = byPart.get(entry.cell);
+    if (!cell) {
+      continue;
+    }
+    await inFixture(cell.fixture.dir, runId, `sweep-${entry.slug}`, async (dir) => {
+      await writeJourneyConfig(dir, { base: AWS_BASE, slug: entry.slug });
+      await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir));
+      process.stdout.write(`swept ${entry.slug}\n`);
+    }).catch((error) => complaints.push(`${entry.slug}: ${String(error)}`));
+  }
+
+  const left = new Set(await list());
+  for (const entry of stranded) {
+    if (left.has(entry.slug)) {
+      complaints.push(`${entry.slug} still stands after the sweep destroyed it`);
+    }
+  }
+}
+
+async function report(real: boolean, complaints: string[]): Promise<void> {
+  if (complaints.length === 0) {
+    return;
+  }
+  const said = `the aws sweep left work behind:\n${complaints.join("\n")}`;
+  if (real) {
+    throw new Error(said);
+  }
+  process.stderr.write(`${said}\n`);
+}
+
 async function sweep(runId: string): Promise<void> {
   const where = await place();
   const fixtures = specForTarget("aws");
@@ -432,33 +469,12 @@ async function sweep(runId: string): Promise<void> {
   );
   const busy = busyRuns(where.world === "real", complaints);
   const live = await busy(reclaim.map((entry) => entry.slug));
-  const strandedSlugs = reclaim.filter((entry) => !underway(entry.slug, live));
-  for (const stranded of strandedSlugs) {
-    const cell = byPart.get(stranded.cell);
-    if (!cell) {
-      continue;
-    }
-    const dir = await copyTree(
-      fixtureDir(cell.fixture.dir),
-      treeDir(runId, "aws", `sweep-${stranded.slug}`),
-    );
-    try {
-      await writeJourneyConfig(dir, { base: AWS_BASE, slug: stranded.slug });
-      await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir));
-      process.stdout.write(`swept ${stranded.slug}\n`);
-    } catch (error) {
-      complaints.push(`${stranded.slug}: ${String(error)}`);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  }
-
-  const left = new Set(await list());
-  for (const stranded of strandedSlugs) {
-    if (left.has(stranded.slug)) {
-      complaints.push(`${stranded.slug} still stands after the sweep destroyed it`);
-    }
-  }
+  await reclaimSlugs(
+    runId,
+    reclaim.filter((entry) => !underway(entry.slug, live)),
+    byPart,
+    complaints,
+  );
 
   await despite(complaints, "namespace sweep", () =>
     sweepNamespaces(runId, cells, byPart, complaints, busy),
@@ -475,14 +491,31 @@ async function sweep(runId: string): Promise<void> {
     await despite(complaints, `${name} ladder sweep`, () => sweepLadder(runId));
   }
 
-  if (complaints.length === 0) {
+  await report(where.world === "real", complaints);
+}
+
+async function sweepOwn(runId: string): Promise<void> {
+  const where = await place();
+  if (where.world !== "real") {
+    await sweep(runId);
     return;
   }
-  const said = `the aws sweep left work behind:\n${complaints.join("\n")}`;
-  if (where.world === "real") {
-    throw new Error(said);
+  const cells = specForTarget("aws").flatMap((fixture) => cellsOf(fixture, "aws"));
+  const byPart = cellsBySlugPart(cells);
+  const { reclaim, unreadable } = sweepable(ofRun(await list(), runId), [], [...byPart.keys()]);
+
+  const complaints: string[] = unreadable.map(
+    (slug) => `${slug} carries this run id and names no cell in the spec table`,
+  );
+  await reclaimSlugs(runId, reclaim, byPart, complaints);
+
+  for (const namespace of ofRun(await namespacesStanding(cliAt(where.endpoint)), runId)) {
+    await despite(complaints, `${namespace} sweep`, () =>
+      sweepStrayNamespace(runId, namespace, byPart, complaints),
+    );
   }
-  process.stderr.write(`${said}\n`);
+
+  await report(true, complaints);
 }
 
 export const awsTarget: Target = {
@@ -501,4 +534,5 @@ export const awsTarget: Target = {
   list,
   stands,
   sweep,
+  sweepOwn,
 };

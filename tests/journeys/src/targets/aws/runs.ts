@@ -95,3 +95,13 @@ export function githubRuns(env: NodeJS.ProcessEnv, fetching: typeof fetch = fetc
     return standing;
   };
 }
+
+export function ofRun(names: Iterable<string>, runId: string): string[] {
+  const mine = new Set<string>();
+  for (const name of names) {
+    if (runIdOf(name) === runId) {
+      mine.add(name);
+    }
+  }
+  return [...mine];
+}

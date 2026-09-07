@@ -275,4 +275,5 @@ export const devTarget: Target = {
   list,
   stands: async (slug) => (await list()).includes(slug),
   sweep: async () => {},
+  sweepOwn: async () => {},
 };

@@ -37,4 +37,5 @@ export type Target = {
   list: () => Promise<string[]>;
   stands: (slug: string) => Promise<boolean>;
   sweep: (runId: string) => Promise<void>;
+  sweepOwn: (runId: string) => Promise<void>;
 };
