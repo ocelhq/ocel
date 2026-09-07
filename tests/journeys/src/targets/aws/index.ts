@@ -16,10 +16,11 @@ import type { CellContext, Deployment, Target } from "../types";
 import { authoritativeFetch, emulatorFetch } from "./dispatch";
 import { pulumiSweep } from "./ladder-pulumi";
 import { sstSweep } from "./ladder-sst";
+import { NAMESPACE_ENV, namespaceFor, strayNamespaces } from "./namespace";
 import { place } from "./place";
 import { awaitServing } from "./serving";
 import { sweepable } from "./slugs";
-import { awsStore, cliAt, type Store, said } from "./store";
+import { awsStore, cliAt, namespacesStanding, type Store, said } from "./store";
 import { expectationEnvironmentFor, type World } from "./world";
 
 const LEG_TIMEOUT_MS = process.env.AWS_ENDPOINT_URL ? 600_000 : 1_800_000;
@@ -35,19 +36,32 @@ let dispatching: Promise<Fetch> | undefined;
 const EVERY_FEATURE = "all";
 const FLOCI_FEATURES = ["isr", "image-optimization", "cloudfront-edge", "apigateway-edge"];
 
+const BOOTSTRAP_ARGS = ["bootstrap", "production", "--yes", "--features", EVERY_FEATURE];
+const BOOTSTRAP_DESTROY_ARGS = ["bootstrap", "destroy", "production", "--yes"];
+
 async function guard(): Promise<ExpectationEnvironment> {
   return expectationEnvironmentFor((await place()).world);
 }
 
-function childEnv(dir: string): NodeJS.ProcessEnv {
+function childEnv(dir: string, namespace?: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
     OCEL_CONFIG: path.join(dir, JOURNEY_CONFIG),
+    ...(namespace ? { [NAMESPACE_ENV]: namespace } : {}),
   };
 }
 
-async function store(): Promise<Store> {
-  return awsStore((await place()).endpoint);
+async function ownNamespace(cell: CellContext): Promise<string | undefined> {
+  return (await place()).world === "real" ? namespaceFor(cell.name, cell.runId) : undefined;
+}
+
+async function cellEnv(cell: CellContext, dir: string): Promise<NodeJS.ProcessEnv> {
+  return childEnv(dir, await ownNamespace(cell));
+}
+
+async function store(namespace?: string): Promise<Store> {
+  const where = await place();
+  return namespace ? awsStore(where.endpoint, undefined, namespace) : awsStore(where.endpoint);
 }
 
 function zone(): string {
@@ -139,7 +153,10 @@ async function awaitDefaultVpc(endpoint: string): Promise<void> {
 
 async function prepare(): Promise<PrepareFailures> {
   const where = await place();
-  if (where.world === "floci" && where.endpoint) {
+  if (where.world === "real") {
+    return {};
+  }
+  if (where.endpoint) {
     await awaitDefaultVpc(where.endpoint);
   }
   const [first] = specForTarget("aws");
@@ -180,7 +197,11 @@ async function cellTree(cell: CellContext): Promise<string> {
 
 async function up(cell: CellContext): Promise<Deployment> {
   const dir = await cellTree(cell);
-  const env = childEnv(dir);
+  const env = await cellEnv(cell, dir);
+
+  if (await ownNamespace(cell)) {
+    await runOcel(cell, dir, "up", "bootstrap", BOOTSTRAP_ARGS, env);
+  }
 
   if (setsEnv(cell.fixture.rows)) {
     await runOcel(
@@ -222,7 +243,7 @@ async function up(cell: CellContext): Promise<Deployment> {
 
 async function redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
   const dir = await cellTree(cell);
-  const env = childEnv(dir);
+  const env = await cellEnv(cell, dir);
   if (setsEnv(cell.fixture.rows)) {
     await runOcel(cell, dir, "redeploy", "env-greeting", ["env", "set", "GREETING", greeting], env);
   }
@@ -234,7 +255,7 @@ async function redeploy(cell: CellContext, greeting: string): Promise<Deployment
 
 async function rollback(cell: CellContext): Promise<Deployment> {
   const dir = await cellTree(cell);
-  await runOcel(cell, dir, "rollback", "rollback", ["rollback"], childEnv(dir));
+  await runOcel(cell, dir, "rollback", "rollback", ["rollback"], await cellEnv(cell, dir));
   const deployed = deployment(cell, await dispatcher());
   await awaitEdge(cell, "rollback", deployed);
   return deployed;
@@ -242,21 +263,28 @@ async function rollback(cell: CellContext): Promise<Deployment> {
 
 async function destroy(cell: CellContext): Promise<void> {
   const dir = await cellTree(cell);
-  const env = childEnv(dir);
+  const namespace = await ownNamespace(cell);
+  const env = childEnv(dir, namespace);
   const hosts = hostnames(cell);
   const unbound: string[] = [];
-  for (const [app, host] of hosts) {
-    try {
-      await runOcel(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
-    } catch (error) {
-      unbound.push(error instanceof Error ? error.message : String(error));
+  try {
+    for (const [app, host] of hosts) {
+      try {
+        await runOcel(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
+      } catch (error) {
+        unbound.push(error instanceof Error ? error.message : String(error));
+      }
     }
+    await runOcel(cell, dir, "destroy", "destroy", ["destroy", "production", "--yes"], env);
+    if (unbound.length > 0 && (await stands(cell.slug))) {
+      throw new Error(unbound.join("\n"));
+    }
+  } finally {
+    if (namespace) {
+      await runOcel(cell, dir, "destroy", "bootstrap-destroy", BOOTSTRAP_DESTROY_ARGS, env);
+    }
+    await rm(treeRoot(cell, "aws"), { recursive: true, force: true });
   }
-  await runOcel(cell, dir, "destroy", "destroy", ["destroy", "production", "--yes"], env);
-  if (unbound.length > 0 && (await stands(cell.slug))) {
-    throw new Error(unbound.join("\n"));
-  }
-  await rm(treeRoot(cell, "aws"), { recursive: true, force: true });
 }
 
 async function list(): Promise<string[]> {
@@ -264,7 +292,8 @@ async function list(): Promise<string[]> {
 }
 
 async function stands(slug: string): Promise<boolean> {
-  return (await store()).stands(slug);
+  const where = await place();
+  return (await store(where.world === "real" ? slug : undefined)).stands(slug);
 }
 
 export function cellsBySlugPart(cells: Cell[]): Map<string, Cell> {
@@ -280,6 +309,34 @@ export function cellsBySlugPart(cells: Cell[]): Map<string, Cell> {
     byPart.set(part, cell);
   }
   return byPart;
+}
+
+async function sweepNamespaces(runId: string, cells: Cell[], complaints: string[]): Promise<void> {
+  const where = await place();
+  if (where.world !== "real") {
+    return;
+  }
+  const [first] = specForTarget("aws");
+  if (!first) {
+    return;
+  }
+  const mine = cells.map((cell) => namespaceFor(cell.name, runId));
+  const stray = strayNamespaces(await namespacesStanding(cliAt(where.endpoint)), mine);
+  for (const namespace of stray) {
+    const dir = await copyTree(
+      fixtureDir(first.dir),
+      treeDir(runId, "aws", `sweep-bootstrap-${namespace}`),
+    );
+    try {
+      await writeJourneyConfig(dir, { base: AWS_BASE, slug: namespace });
+      await ocel(dir, BOOTSTRAP_DESTROY_ARGS, childEnv(dir, namespace));
+      process.stdout.write(`swept the ${namespace} bootstrap\n`);
+    } catch (error) {
+      complaints.push(`${namespace} bootstrap: ${String(error)}`);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
 }
 
 async function sweep(runId: string): Promise<void> {
@@ -319,6 +376,8 @@ async function sweep(runId: string): Promise<void> {
       complaints.push(`${stranded.slug} still stands after the sweep destroyed it`);
     }
   }
+
+  await sweepNamespaces(runId, cells, complaints);
 
   const ladderSweeps: Array<[string, (runId: string) => Promise<void>]> = [
     ["with-sst", sstSweep],
