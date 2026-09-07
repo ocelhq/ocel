@@ -112,6 +112,7 @@ type APIs struct {
 }
 
 type Request struct {
+	VarsKey            string
 	Features           []string
 	Remove             []string
 	Writer             providerkit.Writer
@@ -214,16 +215,29 @@ func readBootstrap(ctx context.Context, api CFNDescriber, class string) (Deploye
 		stamp := stamps[f.name]
 		d.Schema = min(d.Schema, stamp.Schema)
 		d.Stacks = append(d.Stacks, StackStamp{
-			Name:      f.stackName(class),
-			Feature:   f.name,
-			Present:   true,
-			Schema:    stamp.Schema,
-			Digest:    stamp.Digest,
-			Intended:  TemplateDigest(f.render(class, d.ArtifactBucket, refs, d.Features).body),
+			Name:    f.stackName(class),
+			Feature: f.name,
+			Present: true,
+			Schema:  stamp.Schema,
+			Digest:  stamp.Digest,
+			Intended: TemplateDigest(f.planned(featureInputs{
+				class:          class,
+				artifactBucket: d.ArtifactBucket,
+				refs:           refs,
+				alongside:      d.Features,
+				varsKey:        broughtVarsKey(d.Outputs),
+			}).body),
 			WrittenBy: stamp.WrittenBy,
 		})
 	}
 	return d, refs, nil
+}
+
+func broughtVarsKey(outputs map[string]string) string {
+	if outputs[outputVarsKeyBrought] != "true" {
+		return ""
+	}
+	return outputs[outputVarsKeyARN]
 }
 
 func standingFeatures(ctx context.Context, api CFNDescriber, class string) (FeatureSet, error) {
@@ -451,19 +465,16 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 			group.Go(func() error {
 				f, _ := featureNamed(name)
 				stackName := f.stackName(target.class)
-				var code stackPayloads
-				if f.payloads != nil {
-					var err error
-					if code, err = f.payloads(gctx, apis.Store, deployed.ArtifactBucket); err != nil {
-						return fmt.Errorf("%s: %w", name, err)
-					}
-				}
-				stack := f.template(featureInputs{
-					class:     target.class,
-					code:      code,
-					refs:      refs,
-					alongside: alongside,
+				stack, err := f.staged(gctx, apis.Store, featureInputs{
+					class:          target.class,
+					artifactBucket: deployed.ArtifactBucket,
+					refs:           refs,
+					alongside:      alongside,
+					varsKey:        req.VarsKey,
 				})
+				if err != nil {
+					return fmt.Errorf("%s: %w", name, err)
+				}
 				tags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(stack.body), WrittenBy: req.Writer.String()})
 				if err := upsertCFNStack(gctx, apis.CFN, stackName, stack.body, stack.params, namedIAM, tags, review); err != nil {
 					return fmt.Errorf("%s: %w", name, err)

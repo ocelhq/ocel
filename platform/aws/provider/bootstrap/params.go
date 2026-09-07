@@ -34,8 +34,10 @@ const (
 )
 
 type ParamAPIs struct {
-	SSM SSMAPI
-	IAM IAMKeyAPI
+	SSM    SSMAPI
+	IAM    IAMKeyAPI
+	KMS    KeyAPI
+	Region string
 }
 
 type EdgeAdoption struct {
@@ -66,11 +68,11 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, class string, adoptions
 		}
 		adopted = append(adopted, changes...)
 	}
-	written, err := featureParams(ctx, apis, class, req.Features, func(f feature) paramPlanner { return f.afterPlan })
+	written, err := featureParams(ctx, apis, class, req, req.Features, func(f feature) paramPlanner { return f.afterPlan })
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
-	severed, err := featureParams(ctx, apis, class, Removing(req.Features, req.Remove), func(f feature) paramPlanner { return f.dropPlan })
+	severed, err := featureParams(ctx, apis, class, req, Removing(req.Features, req.Remove), func(f feature) paramPlanner { return f.dropPlan })
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
@@ -80,16 +82,16 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, class string, adoptions
 	return group, nil
 }
 
-type paramPlanner func(context.Context, ParamAPIs, string) ([]providerkit.Change, error)
+type paramPlanner func(context.Context, ParamAPIs, string, Request) ([]providerkit.Change, error)
 
-func featureParams(ctx context.Context, apis ParamAPIs, class string, named []string, hook func(feature) paramPlanner) ([]providerkit.Change, error) {
+func featureParams(ctx context.Context, apis ParamAPIs, class string, req Request, named []string, hook func(feature) paramPlanner) ([]providerkit.Change, error) {
 	var changes []providerkit.Change
 	for _, f := range featureRegistry {
 		plan := hook(f)
 		if plan == nil || !slices.Contains(named, f.name) {
 			continue
 		}
-		planned, err := plan(ctx, apis, class)
+		planned, err := plan(ctx, apis, class, req)
 		if err != nil {
 			return nil, err
 		}

@@ -53,7 +53,13 @@ func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, req Request, gro
 		}()
 	}
 	for i, group := range groups {
-		stack, ok := renderGroup(target, group.Feature, class, deployed.ArtifactBucket, refs, alongside)
+		stack, ok := renderGroup(target, group.Feature, featureInputs{
+			class:          class,
+			artifactBucket: deployed.ArtifactBucket,
+			refs:           refs,
+			alongside:      alongside,
+			varsKey:        req.VarsKey,
+		})
 		switch {
 		case !ok:
 			planned[i] = group
@@ -106,7 +112,13 @@ func PlanRemoval(ctx context.Context, cfn CFNAPI, read Reading) ([]providerkit.C
 			Feature: feature,
 			Action:  providerkit.ActionDelete,
 		}
-		stack, ok := renderGroup(target, feature, read.class, read.Deployed.ArtifactBucket, read.refs, alongside)
+		stack, ok := renderGroup(target, feature, featureInputs{
+			class:          read.class,
+			artifactBucket: read.Deployed.ArtifactBucket,
+			refs:           read.refs,
+			alongside:      alongside,
+			varsKey:        broughtVarsKey(read.Deployed.Outputs),
+		})
 		if ok {
 			group = noteStranded(planDelete(ctx, cfn, group, stack.body))
 		}
@@ -140,7 +152,7 @@ func noteStranded(group providerkit.ChangeGroup) providerkit.ChangeGroup {
 	return group
 }
 
-func renderGroup(target spec, feature, class, artifactBucket string, refs stackRefs, alongside FeatureSet) (featureStack, bool) {
+func renderGroup(target spec, feature string, in featureInputs) (featureStack, bool) {
 	if feature == "" {
 		return featureStack{body: target.core()}, true
 	}
@@ -148,7 +160,7 @@ func renderGroup(target spec, feature, class, artifactBucket string, refs stackR
 	if !ok {
 		return featureStack{}, false
 	}
-	return f.render(class, artifactBucket, refs, alongside), true
+	return f.planned(in), true
 }
 
 func planUpdate(ctx context.Context, cfn CFNAPI, group providerkit.ChangeGroup, stack featureStack, writer providerkit.Writer) providerkit.ChangeGroup {

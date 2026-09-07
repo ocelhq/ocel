@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
@@ -31,21 +32,41 @@ type Bootstrapper struct {
 	CFN     bootstrap.CFNAPI
 	SSM     SSMAPI
 	IAM     IAMAPI
+	KMS     bootstrap.KeyAPI
 	Store   bootstrap.ObjectStore
 	Buckets bootstrap.BucketEmptierAPI
 	Edge    edge.Edge
 	Edges   providerkit.EdgeRegistry
+	Region  string
+	VarsKey string
 }
 
-func BootstrapperFor(cfg aws.Config, front edge.Edge, registry providerkit.EdgeRegistry) Bootstrapper {
+func BootstrapperFor(cfg aws.Config, front edge.Edge, registry providerkit.EdgeRegistry, varsKey string) Bootstrapper {
 	return Bootstrapper{
 		CFN:     cloudformation.NewFromConfig(cfg),
 		SSM:     ssm.NewFromConfig(cfg),
 		IAM:     iam.NewFromConfig(cfg),
+		KMS:     kms.NewFromConfig(cfg),
 		Store:   s3.NewFromConfig(cfg),
 		Buckets: s3.NewFromConfig(cfg),
 		Edge:    front,
 		Edges:   registry,
+		Region:  cfg.Region,
+		VarsKey: varsKey,
+	}
+}
+
+func (b Bootstrapper) paramAPIs() bootstrap.ParamAPIs {
+	return bootstrap.ParamAPIs{SSM: b.SSM, IAM: b.IAM, KMS: b.KMS, Region: b.Region}
+}
+
+func (b Bootstrapper) request(req providerkit.BootstrapRequest) bootstrap.Request {
+	return bootstrap.Request{
+		VarsKey:            b.VarsKey,
+		Features:           req.Features,
+		Remove:             req.Remove,
+		Writer:             req.Writer,
+		AcceptReplacements: !req.Unattended,
 	}
 }
 
@@ -81,8 +102,7 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	groups, err := bootstrap.PlanChanges(ctx, b.CFN, read,
-		bootstrap.Request{Features: req.Features, Remove: req.Remove, Writer: req.Writer},
+	groups, err := bootstrap.PlanChanges(ctx, b.CFN, read, b.request(req),
 		providerkit.DeriveGroups(bootstrap.NameStacks(described(req.Class, read.Deployed)), bootstrap.Catalogue(), req))
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -91,10 +111,7 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	params, err := bootstrap.PlanParameters(ctx,
-		bootstrap.ParamAPIs{SSM: b.SSM, IAM: b.IAM},
-		string(req.Class), adoptions,
-		bootstrap.Request{Features: req.Features, Remove: req.Remove})
+	params, err := bootstrap.PlanParameters(ctx, b.paramAPIs(), string(req.Class), adoptions, b.request(req))
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
@@ -243,12 +260,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if req.Heal {
 		return b.heal(ctx, req, report)
 	}
-	err := bootstrap.Run(ctx, b.apis(), string(req.Class), bootstrap.Request{
-		Features:           req.Features,
-		Remove:             req.Remove,
-		Writer:             req.Writer,
-		AcceptReplacements: !req.Unattended,
-	}, say(report), detail(report))
+	err := bootstrap.Run(ctx, b.apis(), string(req.Class), b.request(req), say(report), detail(report))
 	if bootstrap.RefusedWrite(err) {
 		return providerkit.Refuse(providerkit.CodeDenied, "%s", err.Error())
 	}
