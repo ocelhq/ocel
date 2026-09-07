@@ -238,17 +238,14 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 
 func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App, outputDir string, stderr io.Writer) error {
 	appDir := filepath.Join(outputDir, appsDirName, a.Name)
-	pkg := filepath.Join(cfg.Dir, a.Path)
-	if a.Entrypoint != "" {
-		pkg = filepath.Join(pkg, a.Entrypoint)
-	}
 	return appbundler.Compile(ctx, appbundler.Compilation{
-		App:     a.Name,
-		Runtime: appbundler.Runtime{Name: a.Runtime.Name, Arch: a.Runtime.Architecture()},
-		Package: pkg,
-		FuncDir: filepath.Join(appDir, functionsDirName, entryFuncDirName),
-		AppDir:  appDir,
-		Log:     stderr,
+		App:        a.Name,
+		Runtime:    appbundler.Runtime{Name: a.Runtime.Name, Arch: a.Runtime.Architecture()},
+		Source:     filepath.Join(cfg.Dir, a.Path),
+		Entrypoint: a.Entrypoint,
+		FuncDir:    filepath.Join(appDir, functionsDirName, entryFuncDirName),
+		AppDir:     appDir,
+		Log:        stderr,
 	})
 }
 
