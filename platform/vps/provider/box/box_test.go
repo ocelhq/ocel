@@ -321,7 +321,7 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItFlips(t *testing.T) {
 		t.Fatalf("Promote: %v", err)
 	}
 
-	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "serving web", "release web onto shop-web-1111:" + providerkit.InjectedPort}
+	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "serving web", "release web onto shop-web-1111:" + providerkit.InjectedPortText}
 	if !slices.Equal(stood.calls, want) {
 		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running and only then flips", stood.calls, want)
 	}
@@ -357,12 +357,12 @@ func TestARollbackStandsThePreviousContainerBackUpAndFlipsOntoIt(t *testing.T) {
 		t.Fatalf("Promote(rollback): %v", err)
 	}
 
-	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "serving web", "release web onto shop-web-1111:" + providerkit.InjectedPort}
+	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "serving web", "release web onto shop-web-1111:" + providerkit.InjectedPortText}
 	if !slices.Equal(stood.calls, want) {
 		t.Fatalf("a rollback drove the box as %v, want %v: nothing provisions on this path, so re-pointing at a release that is not running is a ledger edit and not a restored site", stood.calls, want)
 	}
 	last := stood.releases[len(stood.releases)-1]
-	if last.Retire != "shop-web-2222:"+providerkit.InjectedPort {
+	if last.Retire != "shop-web-2222:"+providerkit.InjectedPortText {
 		t.Errorf("the rollback retires %q, want the container it is rolling off", last.Retire)
 	}
 }

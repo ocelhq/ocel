@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func main() {
@@ -62,11 +64,7 @@ type spawner func(extraEnv []string, budget time.Duration, onControl func(io.Wri
 
 func bringUp(ctx context.Context, served artifact, live *liveValues, prefetch <-chan error, env []string, start time.Time, bytecodeReady <-chan *bytecodeResolution) (child, error) {
 	if served.executable() {
-		port, err := injectedPort()
-		if err != nil {
-			return nil, err
-		}
-		return bringUpExecutable(served.Command, port, live, prefetch, env, spawnBudget(start))
+		return bringUpExecutable(served.Command, providerkit.InjectedPort, live, prefetch, env, spawnBudget(start))
 	}
 	return bringUpChildWithBytecode(ctx, startNode(entrypointPath(served)), live, prefetch, env, start, bytecodeReady, bytecodeEmbedded, bytecodeRehydrate)
 }

@@ -190,12 +190,12 @@ func standingAppOn(t *testing.T, network, named, body string) string {
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
 		"--network", network, ProxyImage,
-		"caddy", "respond", "--listen", ":"+providerkit.InjectedPort, body).CombinedOutput()
+		"caddy", "respond", "--listen", ":"+providerkit.InjectedPortText, body).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
 	}
 	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
-	return name + ":" + providerkit.InjectedPort
+	return name + ":" + providerkit.InjectedPortText
 }
 
 func standingApp(t *testing.T, body string) (network, upstream string) {

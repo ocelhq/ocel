@@ -90,7 +90,7 @@ func (vm machine) proves(t *testing.T, path string) {
 
 func (vm machine) reads(t *testing.T, container, name string) string {
 	t.Helper()
-	return strings.TrimSpace(vm.peers(t, "curl -sS -m 10 'http://"+container+":"+providerkit.InjectedPort+"/env?name="+name+"'"))
+	return strings.TrimSpace(vm.peers(t, "curl -sS -m 10 'http://"+container+":"+providerkit.InjectedPortText+"/env?name="+name+"'"))
 }
 
 func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftOnTheBox(t *testing.T) {
@@ -113,7 +113,7 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	if got := vm.reads(t, physical, "RELEASE"); got != "handed-by-the-deploy" {
 		t.Errorf("the app reads RELEASE as %q: the image sets it in its own `ENV` line, and what the deploy hands a container outranks an image's defaults, deliberately", got)
 	}
-	if got := vm.reads(t, physical, "PORT"); got != providerkit.InjectedPort {
+	if got := vm.reads(t, physical, "PORT"); got != providerkit.InjectedPortText {
 		t.Errorf("the app reads PORT as %q, and the port the provider injects outranks anything an env file names", got)
 	}
 
@@ -187,7 +187,7 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 	}
 	physical := broken[0].Physical
 
-	refusal := releasing(p, release{physical: physical, address: physical + ":" + providerkit.InjectedPort}, "", 5*time.Second, nil)
+	refusal := releasing(p, release{physical: physical, address: physical + ":" + providerkit.InjectedPortText}, "", 5*time.Second, nil)
 	if refusal == nil {
 		t.Fatal("a release of the crash-looping fixture passed its gate")
 	}

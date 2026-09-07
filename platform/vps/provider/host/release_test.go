@@ -16,10 +16,11 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-const (
-	retiring = "shop-web-older00000"
-	retired  = retiring + ":" + providerkit.InjectedPort
-	flipTo   = physical + ":" + providerkit.InjectedPort
+const retiring = "shop-web-older00000"
+
+var (
+	retired = retiring + ":" + providerkit.InjectedPortText
+	flipTo  = physical + ":" + providerkit.InjectedPortText
 )
 
 type watched struct {
@@ -676,12 +677,12 @@ func TestAHungAppIsDiagnosedByTheCombinationAndNeverByOneLine(t *testing.T) {
 	t.Parallel()
 
 	said := diagnosed(t,
-		session.Result{Code: 4, Stderr: physical + ":" + providerkit.InjectedPort + " never answered /healthz within 30s"},
+		session.Result{Code: 4, Stderr: physical + ":" + providerkit.InjectedPortText + " never answered /healthz within 30s"},
 		"Status=running ExitCode=0 OOMKilled=false Error= StartedAt=2026-01-01T00:00:00Z FinishedAt=0001-01-01T00:00:00Z RestartCount=0", "")
 
 	for what, wanted := range map[string]string{
 		"the verdict the helper reached":      "never answered",
-		"the exact target it probed":          physical + ":" + providerkit.InjectedPort,
+		"the exact target it probed":          physical + ":" + providerkit.InjectedPortText,
 		"the path it probed":                  "/healthz",
 		"the config key that changes it":      healthKey,
 		"the deploy timeout that expired":     "30s",
