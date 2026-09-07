@@ -12,6 +12,7 @@ import (
 
 const (
 	InjectedPortName = "PORT"
+	InjectedPort     = "8080"
 	ownedPrefix      = "OCEL_"
 )
 

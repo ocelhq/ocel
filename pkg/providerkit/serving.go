@@ -20,7 +20,12 @@ import (
 const (
 	RuntimeNode = "node"
 	RuntimeNext = "next"
+	RuntimeGo   = "go"
 )
+
+func Runtimes() []string { return []string{RuntimeNode, RuntimeNext, RuntimeGo} }
+
+func KnownRuntime(name string) bool { return slices.Contains(Runtimes(), name) }
 
 const MembranePrefix = "ocel-membrane-layer"
 
