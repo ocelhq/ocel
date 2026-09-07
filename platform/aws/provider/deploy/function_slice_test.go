@@ -106,7 +106,7 @@ func TestTranslateFunctionSpec(t *testing.T) {
 func TestExecutionFor(t *testing.T) {
 	t.Parallel()
 
-	t.Run("every runtime lands on the pinned Node runtime, on the architecture it named", func(t *testing.T) {
+	t.Run("every runtime lands on a managed runtime its language runs on, on the architecture it named", func(t *testing.T) {
 		t.Parallel()
 		for _, name := range append([]string{""}, providerkit.Runtimes()...) {
 			for arch, want := range map[string]string{
@@ -118,8 +118,8 @@ func TestExecutionFor(t *testing.T) {
 				if err != nil {
 					t.Fatalf("executionFor(%q, %q): %v", name, arch, err)
 				}
-				if got != (execution{Runtime: "nodejs24.x", Arch: want}) {
-					t.Errorf("executionFor(%q, %q) = %+v, want the membrane runtime on %s", name, arch, got, want)
+				if got != (execution{Runtime: managedRuntime(name), Arch: want}) {
+					t.Errorf("executionFor(%q, %q) = %+v, want %q on %s", name, arch, got, managedRuntime(name), want)
 				}
 			}
 		}
@@ -221,6 +221,39 @@ func TestEveryFunctionBootsTheMembraneWhateverRuntimeItServes(t *testing.T) {
 		}
 		if _, injected := env[providerkit.InjectedPortName]; injected {
 			t.Errorf("%q is handed %s by the provider; the membrane tells its child which port to bind", name, providerkit.InjectedPortName)
+		}
+	}
+}
+
+func TestAFunctionRunsOnTheManagedRuntimeItsLanguageNeedsAnInterpreterFrom(t *testing.T) {
+	t.Parallel()
+
+	for name, want := range map[string]string{
+		providerkit.RuntimeNode:   defaultFunctionRuntime,
+		providerkit.RuntimeNext:   defaultFunctionRuntime,
+		providerkit.RuntimeGo:     defaultFunctionRuntime,
+		providerkit.RuntimePython: pythonFunctionRuntime,
+	} {
+		args, err := translateFunctionSpec(name, providerkit.FunctionSpec{Runtime: providerkit.Runtime{Name: name}})
+		if err != nil {
+			t.Fatalf("translateFunctionSpec(%q): %v", name, err)
+		}
+		if args.Runtime != want {
+			t.Errorf("a %q function runs on %q, want %q — the membrane execs the app's command, and the sandbox has to carry what that command is", name, args.Runtime, want)
+		}
+	}
+}
+
+func TestTheMembraneLayerIsCompatibleWithEveryManagedRuntimeAFunctionTakesIt(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range providerkit.Runtimes() {
+		args, err := translateFunctionSpec(name, providerkit.FunctionSpec{Runtime: providerkit.Runtime{Name: name}})
+		if err != nil {
+			t.Fatalf("translateFunctionSpec(%q): %v", name, err)
+		}
+		if !slices.Contains(membraneLayerRuntimes, args.Runtime) {
+			t.Errorf("a %q function runs on %q and the membrane layer declares %v: Lambda refuses a layer the function's runtime is not listed on", name, args.Runtime, membraneLayerRuntimes)
 		}
 	}
 }
@@ -373,8 +406,8 @@ func TestMembraneLayer(t *testing.T) {
 			t.Errorf("%s on the layer = %v, want %q", key, got, want)
 		}
 	}
-	if got := stringsAt(inputs, "compatibleRuntimes"); !slices.Equal(got, []string{membraneLayerRuntime}) {
-		t.Errorf("compatibleRuntimes = %v, want %v", got, []string{membraneLayerRuntime})
+	if got := stringsAt(inputs, "compatibleRuntimes"); !slices.Equal(got, membraneLayerRuntimes) {
+		t.Errorf("compatibleRuntimes = %v, want %v", got, membraneLayerRuntimes)
 	}
 	if got := stringsAt(inputs, "compatibleArchitectures"); !slices.Equal(got, []string{providerkit.ArchX8664}) {
 		t.Errorf("compatibleArchitectures = %v, want %v", got, []string{providerkit.ArchX8664})

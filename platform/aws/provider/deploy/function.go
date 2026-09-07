@@ -15,11 +15,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 const (
 	defaultFunctionRuntime = "nodejs24.x"
+
+	pythonFunctionRuntime = "python" + providerkit.PythonVersion
 
 	defaultFunctionEntry = "src/server.js"
 
@@ -31,8 +34,6 @@ const (
 	execWrapper = "/opt/ocel/bootstrap"
 
 	membraneLayerLocalName = "membrane"
-
-	membraneLayerRuntime = "nodejs24.x"
 
 	maxLayerNameLen = 64
 
@@ -72,6 +73,8 @@ const (
 
 	outputKeyFunctionName = "functionName"
 )
+
+var membraneLayerRuntimes = []string{defaultFunctionRuntime, pythonFunctionRuntime}
 
 func bytecodeCacheEnabled() bool {
 	return os.Getenv(bytecodeCacheEnv) == "1"
@@ -300,14 +303,12 @@ func membraneLayerCoordinate(project string, stack naming.StackName, arch string
 
 func newMembraneLayer(ctx *pulumi.Context, coord naming.Coordinate, arch string, code payloads.Placement) (*lambda.LayerVersion, error) {
 	return lambda.NewLayerVersion(ctx, naming.ResourceID(naming.KindLayer, membraneLayerLocalName, arch), &lambda.LayerVersionArgs{
-		LayerName:      pulumi.String(coord.PhysicalName(maxLayerNameLen)),
-		Description:    describe(coord, "membrane the app's "+arch+" functions boot through"),
-		S3Bucket:       pulumi.String(code.Bucket),
-		S3Key:          pulumi.String(code.Key),
-		SourceCodeHash: pulumi.String(code.SHA256),
-		CompatibleRuntimes: pulumi.StringArray{
-			pulumi.String(membraneLayerRuntime),
-		},
+		LayerName:          pulumi.String(coord.PhysicalName(maxLayerNameLen)),
+		Description:        describe(coord, "membrane the app's "+arch+" functions boot through"),
+		S3Bucket:           pulumi.String(code.Bucket),
+		S3Key:              pulumi.String(code.Key),
+		SourceCodeHash:     pulumi.String(code.SHA256),
+		CompatibleRuntimes: pulumi.ToStringArray(membraneLayerRuntimes),
 		CompatibleArchitectures: pulumi.StringArray{
 			pulumi.String(arch),
 		},
