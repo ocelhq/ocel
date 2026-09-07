@@ -241,6 +241,10 @@ export function legsOf(one: FixtureSpec, able: Leg[]): Leg[] {
   return one.legs.filter((leg) => able.includes(leg));
 }
 
+export function legsKept(able: Leg[], keep: boolean): Leg[] {
+  return keep ? able.filter((leg) => leg !== "destroy") : able;
+}
+
 export function runsBaseOn(fixture: FixtureSpec, target: TargetName): boolean {
   return fixture.base === undefined || fixture.base.includes(target);
 }

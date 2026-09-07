@@ -8,7 +8,8 @@ import { laneDir } from "./paths";
 import { type PlannedTest, planTests } from "./plan";
 import { readPrepared } from "./prepare";
 import { type Report, reconcile, type TestResult } from "./reconcile";
-import { type Selection, selectionFor } from "./selection";
+import { keepsStanding, type Selection, selectionFor } from "./selection";
+import { legsKept } from "./spec";
 import { journeyVerdict, type SummaryMeta, summaryTable } from "./summary";
 import type { Target } from "./targets/types";
 import {
@@ -45,8 +46,8 @@ export type Account = Timed & {
   verdict: { exitCode: number; report: string };
 };
 
-export function plannedFrom(target: Target, selection: Selection): PlannedTest[] {
-  return planTests(selection.cells, target.legs);
+export function plannedFrom(target: Target, selection: Selection, keep: boolean): PlannedTest[] {
+  return planTests(selection.cells, legsKept(target.legs, keep));
 }
 
 function key(cell: string, title: string): string {
@@ -160,7 +161,7 @@ export async function settleAccount(input: {
   await mkdir(dir, { recursive: true });
 
   const selection = selectionFor(input.target, input.environment, input.env);
-  const planned = plannedFrom(input.target, selection);
+  const planned = plannedFrom(input.target, selection, keepsStanding(input.env));
   const prepared = readPrepared(runId, input.target.name);
   const shared: TimingInput = {
     rows: await readRows(runId, input.target.name),
