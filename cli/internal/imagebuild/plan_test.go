@@ -350,6 +350,23 @@ func TestAnAppCarryingAGoModuleIsPlannedAsGoWhateverElseSitsBesideIt(t *testing.
 	}
 }
 
+const polyglotPythonApp = "testdata/polyglotworkspace/apps/svc"
+
+func TestAnAppCarryingAPythonEntrypointIsPlannedAsPythonWhateverElseSitsBesideIt(t *testing.T) {
+	plan := planned(t, polyglotPythonApp)
+
+	install := strings.Join(plan.step(t, "install"), "\n")
+	if !strings.Contains(install, "pip install") {
+		t.Errorf("the install step runs:\n%s\nwant a pip install — the app carries a %s, and the package.json beside it only holds the config's own dependencies", install, "requirements.txt")
+	}
+	if strings.Contains(plan.Deploy.StartCommand, "pnpm") {
+		t.Errorf("the plan starts the app with %q, and no package manager starts a python module", plan.Deploy.StartCommand)
+	}
+	if !strings.Contains(plan.Deploy.StartCommand, "main.py") {
+		t.Errorf("the plan starts the app with %q, want the module the runtime contract names", plan.Deploy.StartCommand)
+	}
+}
+
 func TestTheRootsOwnRailpackFileStillShapesAPlanOcelForcesTheProviderOn(t *testing.T) {
 	plan := planned(t, polyglotApp)
 
