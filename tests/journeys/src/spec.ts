@@ -12,6 +12,7 @@ import {
   probeRows,
   productRows,
   staticRows,
+  vendoredRows,
 } from "./rows";
 import { ladderRows } from "./targets/aws/ladder";
 import { pulumiHooks } from "./targets/aws/ladder-pulumi";
@@ -19,7 +20,7 @@ import { sstHooks } from "./targets/aws/ladder-sst";
 import type { CellContext } from "./targets/types";
 import { BASE, HTTP_VARIANTS, NEXT_VARIANTS, runsOn, type Variant } from "./variants";
 
-export type Runtime = "node" | "next" | "go";
+export type Runtime = "node" | "next" | "go" | "python";
 
 export type Kind = "composite" | "ladder" | "workspace";
 
@@ -118,6 +119,19 @@ export const spec: FixtureSpec[] = [
     runtime: "go",
     kind: "composite",
     rows: RUNTIME_NEUTRAL,
+    apps: ["web"],
+    legs: SERVES,
+    targets: ["aws", "vps"],
+    base: ["vps"],
+    variants: HTTP_VARIANTS,
+  },
+  {
+    name: "python",
+    concern: "deploy",
+    dir: "deploy/python",
+    runtime: "python",
+    kind: "composite",
+    rows: [...RUNTIME_NEUTRAL, ...vendoredRows],
     apps: ["web"],
     legs: SERVES,
     targets: ["aws", "vps"],

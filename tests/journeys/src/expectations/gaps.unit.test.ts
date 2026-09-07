@@ -257,13 +257,24 @@ describe("the gap list", () => {
     assert.deepEqual(alive("aws"), [
       "deploy/node-api-gateway",
       "deploy/go-api-gateway",
+      "deploy/python-api-gateway",
       "deploy/next-cloudflare",
       "deploy/workspace-cloudflare",
       "sdk/with-transforms-api-gateway",
     ]);
-    assert.deepEqual(alive("aws.floci"), ["deploy/node-api-gateway", "deploy/go-api-gateway"]);
+    assert.deepEqual(alive("aws.floci"), [
+      "deploy/node-api-gateway",
+      "deploy/go-api-gateway",
+      "deploy/python-api-gateway",
+    ]);
     assert.deepEqual(alive("dev"), ["deploy/node", "deploy/next", "deploy/workspace"]);
-    assert.deepEqual(alive("vps"), ["deploy/node", "deploy/go", "deploy/next", "deploy/workspace"]);
+    assert.deepEqual(alive("vps"), [
+      "deploy/node",
+      "deploy/go",
+      "deploy/python",
+      "deploy/next",
+      "deploy/workspace",
+    ]);
     assert.deepEqual(alive("vps.incus"), alive("vps"));
   });
 

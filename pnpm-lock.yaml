@@ -1189,6 +1189,28 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  tests/fixtures/deploy/python:
+    dependencies:
+      '@ocel/provider-aws':
+        specifier: workspace:^
+        version: link:../../../../packages/provider-aws
+      '@ocel/provider-vps':
+        specifier: workspace:^
+        version: link:../../../../packages/provider-vps
+      ocel:
+        specifier: workspace:^
+        version: link:../../../../packages/ocel
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   tests/fixtures/deploy/workspace:
     dependencies:
       '@ocel/provider-aws':

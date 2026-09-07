@@ -33,7 +33,7 @@ describe("longestFirst", () => {
       longestFirst(bare)
         .filter((cell) => cell.fixture.concern === "deploy" && cell.fixture.kind === "composite")
         .map((cell) => cell.name),
-    ).toEqual(["deploy/node", "deploy/go", "deploy/next"]);
+    ).toEqual(["deploy/node", "deploy/go", "deploy/python", "deploy/next"]);
   });
 
   it("leaves the cells it was handed alone", () => {
