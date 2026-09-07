@@ -258,6 +258,13 @@ func TestFunctionDefaults(t *testing.T) {
 	})
 }
 
+func testMembraneLayers() map[string]payloads.Placement {
+	return map[string]payloads.Placement{
+		providerkit.ArchX8664: testMembraneLayerPayload(),
+		providerkit.ArchARM64: testMembraneLayerPayload(),
+	}
+}
+
 func testMembraneLayerPayload() payloads.Placement {
 	return payloads.Placement{
 		Bucket: "ocel-artifacts",

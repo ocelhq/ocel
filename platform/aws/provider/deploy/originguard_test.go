@@ -61,6 +61,7 @@ func registerGuarded(t *testing.T, cfg Config, plan providerkit.StackPlan, funct
 			Functions: manifestAppFunctions(functions),
 			Args:      argsFor(functions),
 			Artifacts: map[string]artifactRef{},
+			Layers:    testMembraneLayers(),
 			Env:       held.appEnv(plan, appBundle{}, sessionScope{}),
 			Router:    host,
 			Guard:     guard,
