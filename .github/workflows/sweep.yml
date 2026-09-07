@@ -9,6 +9,9 @@ permissions:
   contents: read
   id-token: write
 
+env:
+  OCEL_CONFIG: ocel.aws.config.ts
+
 jobs:
   ec2:
     name: boxes a run that died left behind
