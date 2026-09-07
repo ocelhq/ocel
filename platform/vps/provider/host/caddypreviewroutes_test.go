@@ -25,8 +25,8 @@ func twoBranchesOfOneApp() ProxyState {
 		Grace:       DrainWindow,
 		PreviewBase: previewBase,
 		Routes: []AppRoute{
-			{RouteKey: previewKey("pr-7", "web"), Upstream: "shop-web-7:" + providerkit.InjectedPort},
-			{RouteKey: previewKey("pr-9", "web"), Upstream: "shop-web-9:" + providerkit.InjectedPort},
+			{RouteKey: previewKey("pr-7", "web"), Upstream: "shop-web-7:" + providerkit.InjectedPortText},
+			{RouteKey: previewKey("pr-9", "web"), Upstream: "shop-web-9:" + providerkit.InjectedPortText},
 		},
 		Claims: []HostClaim{
 			previewClaim("pr-7", "", "shop--pr-7."+previewBase),

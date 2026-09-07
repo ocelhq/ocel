@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -12,9 +13,11 @@ import (
 
 const (
 	InjectedPortName = "PORT"
-	InjectedPort     = "8080"
+	InjectedPort     = 8080
 	ownedPrefix      = "OCEL_"
 )
+
+var InjectedPortText = strconv.Itoa(InjectedPort)
 
 func ResourceEnvName(kind LinkType, resource string) string {
 	return naming.ResourceEnvName(WireLinkType(kind), resource)

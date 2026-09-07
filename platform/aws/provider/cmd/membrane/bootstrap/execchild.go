@@ -43,14 +43,6 @@ func (execChild) answerWarmInvocation(_ context.Context, rw *responseWriter) err
 	return rw.Close()
 }
 
-func injectedPort() (int, error) {
-	port, err := strconv.Atoi(providerkit.InjectedPort)
-	if err != nil {
-		return 0, fmt.Errorf("the port an app binds, %q, is no port number: %w", providerkit.InjectedPort, err)
-	}
-	return port, nil
-}
-
 func startExecutable(command []string, port int, extraEnv []string, budget time.Duration) (*execChild, error) {
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir = taskRoot()

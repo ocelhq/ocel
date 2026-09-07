@@ -64,7 +64,7 @@ func TestAReleaseStandsUpOneLabelledContainerOnTheOneNetworkTargetsResolveAcross
 		"the app label retention reads":                        quoted("--label") + " " + quoted(LabelApp+"=web"),
 		"the project label retention reads":                    quoted("--label") + " " + quoted(LabelProject+"=shop"),
 		"the ref label retention reads":                        quoted("--label") + " " + quoted(LabelRef+"="+appImage),
-		"the port the app is told to bind":                     quoted("--env") + " " + quoted("PORT="+providerkit.InjectedPort),
+		"the port the app is told to bind":                     quoted("--env") + " " + quoted("PORT="+providerkit.InjectedPortText),
 		"the image the release names":                          quoted(appImage),
 	} {
 		if !strings.Contains(command, wanted) {

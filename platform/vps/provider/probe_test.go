@@ -276,7 +276,7 @@ func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testi
 		Claims: []host.HostClaim{{Hostname: hostname, Owner: owner, Pointer: edge.DefaultPointer}},
 		Routes: []host.AppRoute{{
 			RouteKey: host.RouteKey{Owner: owner, Pointer: "@production", App: "web"},
-			Upstream: "shop-web-2222:" + providerkit.InjectedPort,
+			Upstream: "shop-web-2222:" + providerkit.InjectedPortText,
 		}},
 	})
 	if err != nil {

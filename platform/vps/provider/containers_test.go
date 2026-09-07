@@ -58,7 +58,7 @@ func TestStandingAnAppUpEndsAtARunningLabelledContainerAndFlipsNothing(t *testin
 	if held.Name != "web" {
 		t.Errorf("the container is recorded under %q, want the app's own name", held.Name)
 	}
-	if held.Physical == "" || !strings.Contains(held.URL, held.Physical+":"+providerkit.InjectedPort) {
+	if held.Physical == "" || !strings.Contains(held.URL, held.Physical+":"+providerkit.InjectedPortText) {
 		t.Errorf("the container is reachable at %q, want the name and port the proxy dials it by", held.URL)
 	}
 	joined := strings.Join(machine.commands(), "\n")

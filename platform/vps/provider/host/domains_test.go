@@ -40,7 +40,7 @@ func claimingBox(t *testing.T, state ProxyState) *claimBench {
 func routed() ProxyState {
 	return ProxyState{
 		Grace:  DrainWindow,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + providerkit.InjectedPort}},
+		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + providerkit.InjectedPortText}},
 	}
 }
 
@@ -196,8 +196,8 @@ func TestAForwardingRouteFanningOutToASecondUpstreamIsRefused(t *testing.T) {
 	t.Parallel()
 
 	refusedRead(t, planted(t,
-		`"upstreams":[{"dial":"shop-web-2222:`+providerkit.InjectedPort+`"}]`,
-		`"upstreams":[{"dial":"shop-web-2222:`+providerkit.InjectedPort+`"},{"dial":"someone-elses:`+providerkit.InjectedPort+`"}]`),
+		`"upstreams":[{"dial":"shop-web-2222:`+providerkit.InjectedPortText+`"}]`,
+		`"upstreams":[{"dial":"shop-web-2222:`+providerkit.InjectedPortText+`"},{"dial":"someone-elses:`+providerkit.InjectedPortText+`"}]`),
 		"a route ocel writes forwards to the one container this deploy stood up, and a read that takes the first of two upstreams drops the second with no row naming it")
 }
 
@@ -228,7 +228,7 @@ func TestTheDrainServerADeployWritesReadsBackAsOcelsOwn(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Retiring = "shop-web-1111:" + providerkit.InjectedPort
+	state.Retiring = "shop-web-1111:" + providerkit.InjectedPortText
 	if _, err := ReadProxyState(mustRender(t, state)); err != nil {
 		t.Fatalf("ReadProxyState(a config mid-flip) = %v: the drain server is one this deploy just wrote, and refusing it strands every release between the flip and the steady state", err)
 	}
@@ -495,7 +495,7 @@ func TestWhatServesAnAppIsTheUpstreamItsRouteNames(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Serving() = %v", err)
 	}
-	if upstream != "shop-web-2222:"+providerkit.InjectedPort {
+	if upstream != "shop-web-2222:"+providerkit.InjectedPortText {
 		t.Errorf("Serving(web) = %q, want the upstream its route names: a release retires what is serving, and retiring the wrong name drains nothing and stops something live", upstream)
 	}
 	absent, err := stood.host().Serving(context.Background(), keyed("api"))
@@ -516,8 +516,8 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 
 	rel := Release{
 		RouteKey:      keyed("web"),
-		Target:        "shop-web-3333:" + providerkit.InjectedPort,
-		Retire:        "shop-web-2222:" + providerkit.InjectedPort,
+		Target:        "shop-web-3333:" + providerkit.InjectedPortText,
+		Retire:        "shop-web-2222:" + providerkit.InjectedPortText,
 		HealthPath:    "/healthz",
 		DeployTimeout: DeployWindow,
 		DrainTimeout:  DrainWindow,
@@ -541,8 +541,8 @@ func twoProjects() ProxyState {
 	return ProxyState{
 		Grace: DrainWindow,
 		Routes: []AppRoute{
-			{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + providerkit.InjectedPort},
-			{RouteKey: RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}, Upstream: "blog-web-3333:" + providerkit.InjectedPort},
+			{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + providerkit.InjectedPortText},
+			{RouteKey: RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}, Upstream: "blog-web-3333:" + providerkit.InjectedPortText},
 		},
 	}
 }
@@ -573,8 +573,8 @@ func TestADeployOfOneProjectLeavesAnotherProjectsRouteWhereItFoundIt(t *testing.
 	blog := RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}
 	if err := stood.host().Release(context.Background(), Release{
 		RouteKey:      blog,
-		Target:        "blog-web-4444:" + providerkit.InjectedPort,
-		Retire:        "blog-web-3333:" + providerkit.InjectedPort,
+		Target:        "blog-web-4444:" + providerkit.InjectedPortText,
+		Retire:        "blog-web-3333:" + providerkit.InjectedPortText,
 		HealthPath:    "/healthz",
 		DeployTimeout: DeployWindow,
 		DrainTimeout:  DrainWindow,
@@ -587,7 +587,7 @@ func TestADeployOfOneProjectLeavesAnotherProjectsRouteWhereItFoundIt(t *testing.
 		t.Fatal(err)
 	}
 	at := slices.IndexFunc(held.Routes, func(route AppRoute) bool { return route.RouteKey == keyed("web") })
-	if at < 0 || held.Routes[at].Upstream != "shop-web-2222:"+providerkit.InjectedPort {
+	if at < 0 || held.Routes[at].Upstream != "shop-web-2222:"+providerkit.InjectedPortText {
 		t.Errorf("after a deploy of %s the routes read %v; the other project's app is named web too, and its live container is what a deploy that took its route would then stop", otherSurface, held.Routes)
 	}
 	if stood.at("docker stop "+quoted("shop-web-2222")) >= 0 {
@@ -633,8 +633,8 @@ func twoApps() ProxyState {
 	return ProxyState{
 		Grace: DrainWindow,
 		Routes: []AppRoute{
-			{RouteKey: keyed("api"), Upstream: "shop-api-1111:" + providerkit.InjectedPort},
-			{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + providerkit.InjectedPort},
+			{RouteKey: keyed("api"), Upstream: "shop-api-1111:" + providerkit.InjectedPortText},
+			{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + providerkit.InjectedPortText},
 		},
 	}
 }
@@ -844,7 +844,7 @@ func TestATornDownSurfaceLeavesNoRouteForwardingToARemovedContainer(t *testing.T
 	state := twoProjects()
 	state.Routes = append(state.Routes, AppRoute{
 		RouteKey: RouteKey{Owner: surface, Pointer: pointed, App: "worker"},
-		Upstream: "shop-worker-5555:" + providerkit.InjectedPort,
+		Upstream: "shop-worker-5555:" + providerkit.InjectedPortText,
 	})
 	stood := claimingBox(t, state)
 	if err := stood.host().UnrouteSurface(context.Background(), surface); err != nil {

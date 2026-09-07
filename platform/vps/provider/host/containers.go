@@ -68,7 +68,7 @@ func containerRun(spec Container, held handoff) []string {
 	if held.path != "" {
 		argv = append(argv, "--env-file", held.path)
 	}
-	return append(argv, "--env", providerkit.InjectedPortName+"="+providerkit.InjectedPort, spec.Image)
+	return append(argv, "--env", providerkit.InjectedPortName+"="+providerkit.InjectedPortText, spec.Image)
 }
 
 func LabelSelector(label string) string {
