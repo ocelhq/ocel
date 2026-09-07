@@ -442,8 +442,8 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: The node bundle the fixture imports
-        run: pnpm turbo run build --filter=ocel
+      - name: The node bundles the fixture and the ladder sweeps import
+        run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
 
       - name: Take the binaries this lane drives
         uses: ./.github/actions/journey-binaries
