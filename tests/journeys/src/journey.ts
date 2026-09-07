@@ -99,12 +99,14 @@ export async function runJourney(target: Target, fixtures: FixtureSpec[]): Promi
   const files = await writeCellFiles(runId, target, longestFirst(selection.cells));
   const workers = laneWorkers(target);
 
-  await prepareLane(target, runId);
+  const idle = files.length === 0;
+  if (!idle) {
+    await prepareLane(target, runId);
+  }
   const runStart = Date.now();
-  const run =
-    files.length === 0
-      ? { exitCode: 0, signal: null }
-      : await runSuite(target, files, workers, env, liveFile(runId, target.name));
+  const run: Run = idle
+    ? { exitCode: 0, signal: null }
+    : await runSuite(target, files, workers, env, liveFile(runId, target.name));
   const runEnd = Date.now();
 
   const verdict = await settleAccount({
