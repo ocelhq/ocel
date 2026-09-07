@@ -1,8 +1,10 @@
 package envgate_test
 
 import (
+	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -46,6 +48,21 @@ func app(t *testing.T, m envgate.Matrix, name string) envgate.AppResolution {
 	}
 	t.Fatalf("matrix has no readout for app %q; apps are %+v", name, m.Apps)
 	return envgate.AppResolution{}
+}
+
+func TestAnEmptyMatrixEncodesEmptyListsNotNull(t *testing.T) {
+	t.Parallel()
+	g := prefetched(t, newFakeValues(), envgate.Scope{})
+
+	doc, err := json.Marshal(g.Matrix(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"rows":[]`, `"apps":[]`, `"columns":[""]`} {
+		if !strings.Contains(string(doc), want) {
+			t.Errorf("empty matrix encodes as %s, want it to contain %s — the browser iterates each list", doc, want)
+		}
+	}
 }
 
 func TestMatrix(t *testing.T) {
