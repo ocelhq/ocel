@@ -225,6 +225,63 @@ func TestEveryFunctionBootsTheMembraneWhateverRuntimeItServes(t *testing.T) {
 	}
 }
 
+func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		runtime string
+		handler string
+	}{
+		{"an exec artifact takes the program its command runs", providerkit.RuntimeGo, "web"},
+		{"a bundled node artifact takes its bundle", providerkit.RuntimeNode, "index.mjs"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := &inputRecorder{}
+			stack := testStack(t, "prod", "api")
+			coord := functionCoordinate("shop", stack, "fn--api--web")
+			program := func(pctx *pulumi.Context) error {
+				role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api"})
+				if err != nil {
+					return err
+				}
+				args, err := translateFunctionSpec(tc.runtime, providerkit.FunctionSpec{
+					Runtime: providerkit.Runtime{Name: tc.runtime},
+					Handler: tc.handler,
+				})
+				if err != nil {
+					return err
+				}
+				return appStackFunctions{
+					Project:   "shop",
+					Stack:     stack,
+					Functions: []appFunction{{Logical: "fn--api--web", RouteID: "/"}},
+					Args:      func(appFunction) functionArgs { return args },
+					Layers: map[string]payloads.Placement{
+						providerkit.ArchX8664: testMembraneLayerPayload(),
+					},
+					Artifacts: map[string]artifactRef{"fn--api--web": {Bucket: "artifacts", Key: "fn.zip"}},
+					RoleArn:   role.Arn,
+				}.register(pctx)
+			}
+			if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
+				t.Fatalf("run program: %v", err)
+			}
+
+			inputs := rec.inputs("aws:lambda/function:Function", coord.PhysicalName(maxLambdaBaseNameLen))
+			got, ok := inputs[resource.PropertyKey("handler")]
+			if !ok || !got.IsString() {
+				t.Fatalf("handler = %v, want a string", got)
+			}
+			if got.StringValue() != tc.handler {
+				t.Errorf("handler = %q, want %q: Lambda refuses a package whose handler names no file in it", got.StringValue(), tc.handler)
+			}
+		})
+	}
+}
+
 func argsFor(functions []*contractv1.ManifestFunction) func(appFunction) functionArgs {
 	args := make(map[string]functionArgs, len(functions))
 	for _, fn := range functions {

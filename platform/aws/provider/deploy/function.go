@@ -28,8 +28,6 @@ const (
 
 	nextBundleFunctionMemoryMB = 1769
 
-	lambdaConfigHandler = "index.handler"
-
 	execWrapper = "/opt/ocel/bootstrap"
 
 	membraneLayerLocalName = "membrane"
@@ -546,7 +544,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 	fn, err := lambda.NewFunction(ctx, resourceName, &lambda.FunctionArgs{
 		Description: describe(coord, "route "+route),
 		Runtime:     pulumi.String(args.Runtime),
-		Handler:     pulumi.String(lambdaConfigHandler),
+		Handler:     pulumi.String(args.Handler),
 		Role:        roleArn,
 		S3Bucket:    pulumi.String(artifact.Bucket),
 		S3Key:       pulumi.String(artifact.Key),
