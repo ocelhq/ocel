@@ -6,6 +6,7 @@ import { gunzipSync } from "node:zlib";
 
 import {
   fetchFunctionLogs,
+  functionLogGroupLabel,
   getObject,
   LAMBDA_ARCH,
   LIST_RETRY_DEADLINE_MS,
@@ -131,7 +132,7 @@ while (Date.now() < warmDeadline && verdicts.length === 0) {
     warmLogsSucceeded = true;
   } catch (err) {
     warmLogsError = err;
-    log(`could not read /aws/lambda/${functionName} logs (${err.message}); will retry`);
+    log(`could not read ${functionLogGroupLabel(functionName)} logs (${err.message}); will retry`);
     await sleep(LOG_POLL_INTERVAL_MS);
     continue;
   }
@@ -144,7 +145,7 @@ while (Date.now() < warmDeadline && verdicts.length === 0) {
     if (!outcome) continue;
     if (outcome.kind === "unreadable") {
       warn(
-        `a warm summary in /aws/lambda/${functionName} could not be read as JSON (${outcome.reason}): ${outcome.message}`,
+        `a warm summary in ${functionLogGroupLabel(functionName)} could not be read as JSON (${outcome.reason}): ${outcome.message}`,
       );
       continue;
     }
@@ -158,13 +159,13 @@ coverage = strongestCoverage(verdicts);
 
 if (!coverage && !warmLogsSucceeded) {
   fail(
-    `could not read /aws/lambda/${functionName} logs at all within ${LOG_DEADLINE_MS / 1000}s — every attempt failed, ` +
+    `could not read ${functionLogGroupLabel(functionName)} logs at all within ${LOG_DEADLINE_MS / 1000}s — every attempt failed, ` +
       `so nothing here says what published s3://${bucket}/${key}: ${warmLogsError?.message}`,
   );
 }
 if (!coverage) {
   fail(
-    `s3://${bucket}/${key} exists but no warm summary naming it appears in /aws/lambda/${functionName} within ` +
+    `s3://${bucket}/${key} exists but no warm summary naming it appears in ${functionLogGroupLabel(functionName)} within ` +
       `${WARM_LOG_LOOKBACK_MS / 60_000} minutes before the deploy completed. The object is then unattributed: it may ` +
       `be the deploy's warm pass with its logs lost, or it may be a request that reached this build before the ` +
       `promote and fixed a one-route cache — which is exactly what warming exists to prevent, and what this ` +
@@ -276,7 +277,7 @@ while (Date.now() < logDeadline && !hit) {
     logsSucceeded = true;
   } catch (err) {
     logsError = err;
-    log(`could not read /aws/lambda/${functionName} logs (${err.message}); will retry`);
+    log(`could not read ${functionLogGroupLabel(functionName)} logs (${err.message}); will retry`);
     await sleep(LOG_POLL_INTERVAL_MS);
     continue;
   }
@@ -298,7 +299,7 @@ while (Date.now() < logDeadline && !hit) {
 
 if (!hit && !logsSucceeded) {
   fail(
-    `could not read /aws/lambda/${functionName} logs at all within ${LOG_DEADLINE_MS / 1000}s — every attempt ` +
+    `could not read ${functionLogGroupLabel(functionName)} logs at all within ${LOG_DEADLINE_MS / 1000}s — every attempt ` +
       `failed, so nothing here says whether a rehydrate hit ever happened: ${logsError?.message}`,
   );
 }
@@ -311,7 +312,7 @@ if (!hit) {
     : "";
   fail(
     `no instance reported rehydrating the compile cache from ${key} within ${LOG_DEADLINE_MS / 1000}s of the burst ` +
-      `(${summarizeOutcomes(observed)} seen in /aws/lambda/${functionName})${samples}`,
+      `(${summarizeOutcomes(observed)} seen in ${functionLogGroupLabel(functionName)})${samples}`,
   );
 }
 log(`rehydrate hit: ${hit.message}`);

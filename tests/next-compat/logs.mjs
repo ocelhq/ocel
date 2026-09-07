@@ -4,12 +4,12 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { AWS_CLI_RETRY_ENV } from "./aws.mjs";
+import { AWS_CLI_RETRY_ENV, functionLogGroup } from "./aws.mjs";
 import {
   BUILD_LOG_FILE,
   DEPLOY_RESULT_FILE,
   envSegment,
-  lambdaLogGroups,
+  lambdaFunctionNames,
   markerLines,
   STATE_FILE,
 } from "./lib.mjs";
@@ -66,9 +66,9 @@ function printLambdaLogs() {
     ...(env ? [`Key=ocel:env,Values=${env}`] : []),
   ];
 
-  let groups;
+  let functionNames;
   try {
-    groups = lambdaLogGroups(
+    functionNames = lambdaFunctionNames(
       JSON.parse(
         aws([
           "resourcegroupstaggingapi",
@@ -81,17 +81,24 @@ function printLambdaLogs() {
       ),
     );
   } catch (err) {
-    console.log(`(could not resolve log groups: ${err.message})`);
+    console.log(`(could not resolve this app's functions: ${err.message})`);
     return;
   }
 
-  if (groups.length === 0) {
+  if (functionNames.length === 0) {
     console.log(`(no functions tagged ${filters.join(" ")})`);
     return;
   }
 
   const startTime = Number(state.startedAt) || Date.now() - DEFAULT_LOG_WINDOW_MS;
-  for (const group of groups) {
+  for (const functionName of functionNames) {
+    let group;
+    try {
+      group = functionLogGroup(functionName);
+    } catch (err) {
+      console.log(`(could not resolve the log group of ${functionName}: ${err.message})`);
+      continue;
+    }
     console.log(`--- ${group} ---`);
     try {
       const events = JSON.parse(

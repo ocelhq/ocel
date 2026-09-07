@@ -293,6 +293,33 @@ func TestDeployTierWithholdsWhatDefinesTheBootstrapTier(t *testing.T) {
 	}
 }
 
+func TestDeployTierOwnsTheLogGroupsItCreates(t *testing.T) {
+	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
+	scoped := map[string]string{
+		"logs:CreateLogGroup":      conditionJSON(t, taggedOnCreate()),
+		"logs:DeleteLogGroup":      conditionJSON(t, taggedByOcel()),
+		"logs:ListTagsForResource": conditionJSON(t, taggedByOcel()),
+		"logs:PutRetentionPolicy":  conditionJSON(t, taggedByOcel()),
+		"logs:TagResource":         conditionJSON(t, taggedByOcel()),
+		"logs:UntagResource":       conditionJSON(t, taggedByOcel()),
+		"logs:DescribeLogGroups":   conditionJSON(t, nil),
+	}
+	for action, condition := range scoped {
+		if !grants[grant{action: action, resource: appLogGroupARN, condition: condition}] {
+			t.Errorf("the deploy tier does not grant %s on %s under %s, so a function's log group is either never made with a retention, never reclaimed by the teardown, or reachable beyond what ocel tagged", action, appLogGroupARN, condition)
+		}
+	}
+}
+
+func conditionJSON(t *testing.T, condition map[string]any) string {
+	t.Helper()
+	encoded, err := json.Marshal(condition)
+	if err != nil {
+		t.Fatalf("marshal condition: %v", err)
+	}
+	return string(encoded)
+}
+
 func TestOnlyTheEdgeUserIsMintedAndItCarriesNoManagedPolicy(t *testing.T) {
 	for tier, document := range bothTiers(t) {
 		for g := range grantsOf(t, document) {

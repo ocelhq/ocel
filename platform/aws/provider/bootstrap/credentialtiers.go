@@ -56,6 +56,7 @@ const (
 	appSubnetGroupARN   = "arn:aws:rds:*:*:subgrp:*"
 	appSecurityGroupARN = "arn:aws:ec2:*:*:security-group/*"
 	appVPCARN           = "arn:aws:ec2:*:*:vpc/*"
+	appLogGroupARN      = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
 
 	bootstrapEventSourceARN = "arn:aws:lambda:*:*:event-source-mapping:*"
 
@@ -364,6 +365,26 @@ func appProvisioning() []grantStatement {
 		{
 			actions:   []string{"secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"},
 			resources: []string{appSecretARN},
+		},
+		{
+			actions:   []string{"logs:CreateLogGroup"},
+			resources: []string{appLogGroupARN},
+			condition: taggedOnCreate(),
+		},
+		{
+			actions: []string{
+				"logs:DeleteLogGroup",
+				"logs:ListTagsForResource",
+				"logs:PutRetentionPolicy",
+				"logs:TagResource",
+				"logs:UntagResource",
+			},
+			resources: []string{appLogGroupARN},
+			condition: taggedByOcel(),
+		},
+		{
+			actions:   []string{"logs:DescribeLogGroups"},
+			resources: []string{appLogGroupARN},
 		},
 	}
 }

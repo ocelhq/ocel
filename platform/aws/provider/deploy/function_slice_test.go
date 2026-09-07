@@ -673,3 +673,48 @@ func TestISRCacheStore(t *testing.T) {
 		}
 	})
 }
+
+func TestFunctionLogGroup(t *testing.T) {
+	t.Parallel()
+
+	rec := &inputRecorder{}
+	program := func(pctx *pulumi.Context) error {
+		stack := testStack(t, "prod", "api")
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api"})
+		if err != nil {
+			return err
+		}
+		args, err := translateFunctionSpec("", providerkit.FunctionSpec{})
+		if err != nil {
+			return err
+		}
+		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", stack, "fn--api--users"),
+			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"},
+			nil, nil, nil, nil, role.Arn, pulumi.String(mockAccountARN("lambda", "layer:membrane:1")), functionURLAuthIAM)
+		return err
+	}
+	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
+		t.Fatalf("run program: %v", err)
+	}
+
+	group := rec.inputs("aws:cloudwatch/logGroup:LogGroup", naming.ResourceID(naming.KindFunction, "users", "logs"))
+	if len(group) == 0 {
+		t.Fatal("the deploy owns no log group for the function, so Lambda mints one on first invoke that the teardown never reclaims")
+	}
+	want := lambdaLogGroupPrefixFor("shop-prod-api-users-r3f8a1c90")
+	if got := group["namePrefix"]; !got.IsString() || got.StringValue() != want {
+		t.Errorf("the log group's namePrefix = %v, want %q", got, want)
+	}
+	if got, ok := group["name"]; ok {
+		t.Errorf("the log group fixes its name to %v, so two stacks sharing a base collide on CreateLogGroup", got)
+	}
+	retention, ok := group["retentionInDays"]
+	if !ok || !retention.IsNumber() || retention.NumberValue() <= 0 {
+		t.Errorf("the log group's retentionInDays = %v, want a finite retention rather than events kept forever", retention)
+	}
+
+	logging := rec.object(t, "aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90", "loggingConfig")
+	if got := logging["logGroup"]; !got.IsString() || !strings.HasPrefix(got.StringValue(), want) {
+		t.Errorf("the function's loggingConfig.logGroup = %v, want the group the deploy owns under %q", got, want)
+	}
+}
