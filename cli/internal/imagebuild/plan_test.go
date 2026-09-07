@@ -343,7 +343,7 @@ func TestAnAppCarryingAGoModuleIsPlannedAsGoWhateverElseSitsBesideIt(t *testing.
 
 	build := strings.Join(plan.step(t, "build"), "\n")
 	if !strings.Contains(build, "go build") {
-		t.Errorf("the build step runs:\n%s\nwant a go build — the app carries a go.mod, and the package.json beside it only holds the config's own dependencies", build)
+		t.Errorf("the build step runs:\n%s\nwant a go build — the app carries a go.mod, and the package.json and requirements.txt beside it only hold what its tooling reads", build)
 	}
 	if strings.Contains(plan.Deploy.StartCommand, "pnpm") {
 		t.Errorf("the plan starts the app with %q, and no package manager starts a compiled binary", plan.Deploy.StartCommand)
@@ -352,7 +352,7 @@ func TestAnAppCarryingAGoModuleIsPlannedAsGoWhateverElseSitsBesideIt(t *testing.
 
 const polyglotPythonApp = "testdata/polyglotworkspace/apps/svc"
 
-func TestAnAppCarryingAPythonEntrypointIsPlannedAsPythonWhateverElseSitsBesideIt(t *testing.T) {
+func TestAnAppCarryingAPythonProjectFileIsPlannedAsPythonWhateverElseSitsBesideIt(t *testing.T) {
 	plan := planned(t, polyglotPythonApp)
 
 	install := strings.Join(plan.step(t, "install"), "\n")
@@ -364,6 +364,20 @@ func TestAnAppCarryingAPythonEntrypointIsPlannedAsPythonWhateverElseSitsBesideIt
 	}
 	if !strings.Contains(plan.Deploy.StartCommand, "main.py") {
 		t.Errorf("the plan starts the app with %q, want the module the runtime contract names", plan.Deploy.StartCommand)
+	}
+}
+
+const polyglotStrayScriptApp = "testdata/polyglotworkspace/apps/stray"
+
+func TestANodeAppShippingAScriptBesideItselfIsStillPlannedAsNode(t *testing.T) {
+	plan := planned(t, polyglotStrayScriptApp)
+
+	install := strings.Join(plan.step(t, "install"), "\n")
+	if want := "pnpm install --frozen-lockfile --filter \"{./apps/stray}...\""; !strings.Contains(install, want) {
+		t.Errorf("the install step runs:\n%s\nwant %q — the app carries a main.py and no python project file, and a script beside a node app is not a python project", install, want)
+	}
+	if want := "pnpm --filter \"{./apps/stray}\" run start"; plan.Deploy.StartCommand != want {
+		t.Errorf("the plan starts the app with %q, want %q", plan.Deploy.StartCommand, want)
 	}
 }
 
