@@ -103,10 +103,6 @@ func (a appStackFunctions) membraneLayers(ctx *pulumi.Context) (map[string]pulum
 	return layers, nil
 }
 
-func layersFor(args functionArgs, membrane map[string]pulumi.StringInput) pulumi.StringArray {
-	return pulumi.StringArray{membrane[args.Arch]}
-}
-
 func (a appStackFunctions) grantInvoke(ctx *pulumi.Context, arns []pulumi.StringInput) error {
 	optimizer := a.Router.ImageOptimizerURL != ""
 	if len(arns) == 0 && !optimizer {
@@ -149,7 +145,7 @@ func (a appStackFunctions) declare(
 	logical := fn.Logical
 	args := a.Args(fn)
 	ref, err := registerFunction(ctx, logical, functionCoordinate(a.Project, a.Stack, logical),
-		fn.RouteID, args, a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn, layersFor(args, membrane), urlAuth,
+		fn.RouteID, args, a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn, pulumi.StringArray{membrane[args.Arch]}, urlAuth,
 		a.shippedTo(logical)...)
 	if err != nil {
 		return ref, fmt.Errorf("declare %s: %w", logical, err)
