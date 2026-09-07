@@ -190,7 +190,7 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		Apps:          make([]appInput, 0, len(cfg.Apps)),
 	}
 	for _, a := range packable(cfg.Apps) {
-		if a.Runtime.Name == providerkit.RuntimeGo {
+		if compiledFromSource(a.Runtime.Name) {
 			if err := compile(ctx, cfg, a, outputDir, stderr); err != nil {
 				return err
 			}
@@ -234,6 +234,10 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		return err
 	}
 	return recordDetectedDeploymentID(cfg.Dir, outputDir, detectedID)
+}
+
+func compiledFromSource(runtime string) bool {
+	return runtime == providerkit.RuntimeGo || runtime == providerkit.RuntimePython
 }
 
 func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App, outputDir string, stderr io.Writer) error {
