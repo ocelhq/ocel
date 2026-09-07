@@ -8,7 +8,7 @@ import {
   ROLLBACK_TITLE,
   UP_TITLE,
 } from "./plan";
-import { ENV_ROW, healthRows, probeRows, productRows, staticRows } from "./rows";
+import { ENV_ROW, healthRows, nativeRows, probeRows, productRows, staticRows } from "./rows";
 import {
   type Cell,
   cellsOf,
@@ -74,7 +74,7 @@ describe("planning the two concerns of one runtime", () => {
   });
 
   it("asks the deploy cell for health, static and the probes, and nothing else", () => {
-    expect(deploy.rows).toEqual([...healthRows, ...staticRows, ...probeRows]);
+    expect(deploy.rows).toEqual([...healthRows, ...staticRows, ...probeRows, ...nativeRows]);
   });
 
   it("leaves the env row to the sdk cell, since defineEnv is what delivers it", () => {

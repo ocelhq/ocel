@@ -10,7 +10,7 @@ import {
 
 export const STREAM_ROW = "GET /api/probes/stream streams its chunks in order to the sentinel";
 
-export const probeRows: ContractRow[] = [
+export const nativeRows: ContractRow[] = [
   {
     title: "GET /api/probes/native answers from a native sqlite build",
     run: async (ctx) => {
@@ -22,6 +22,9 @@ export const probeRows: ContractRow[] = [
       assert.match(probe.sqlite, /^\d+\.\d+/);
     },
   },
+];
+
+export const probeRows: ContractRow[] = [
   {
     title: STREAM_ROW,
     run: async (ctx) => {
