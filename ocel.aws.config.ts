@@ -15,6 +15,7 @@ export default defineConfig({
   dns: cloudflareDns(),
   provider: awsProvider({ region: aws.OCEL_AWS_REGION, varsKey: aws.OCEL_AWS_VARS_KEY }),
   apps: [
+    { name: "www", runtime: "next", path: "./www" },
     {
       name: "github",
       runtime: "node",
