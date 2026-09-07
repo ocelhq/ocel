@@ -11,7 +11,10 @@ const DIGEST_CHARS = 6;
 
 function acceptable(name: string): string {
   const lowered = name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
-  return lowered.replace(/^[^a-z]+/, "").replace(/-+/g, "-");
+  return lowered
+    .replace(/^[^a-z]+/, "")
+    .replace(/-+/g, "-")
+    .replace(/-+$/, "");
 }
 
 function fitted(name: string): string {

@@ -258,12 +258,13 @@ async function rollback(cell: CellContext): Promise<Deployment> {
 }
 
 async function destroy(cell: CellContext): Promise<void> {
-  const dir = await cellTree(cell);
   const namespace = await ownNamespace(cell);
-  const env = childEnv(dir, namespace);
   const hosts = hostnames(cell);
   const unbound: string[] = [];
+  let dir: string | undefined;
   try {
+    dir = await cellTree(cell);
+    const env = childEnv(dir, namespace);
     for (const [app, host] of hosts) {
       try {
         await runOcel(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
@@ -276,7 +277,8 @@ async function destroy(cell: CellContext): Promise<void> {
       throw new Error(unbound.join("\n"));
     }
   } finally {
-    if (namespace) {
+    if (dir && namespace) {
+      const env = childEnv(dir, namespace);
       await runOcel(cell, dir, "destroy", "bootstrap-destroy", BOOTSTRAP_DESTROY_ARGS, env);
     }
     await rm(treeRoot(cell, "aws"), { recursive: true, force: true });
@@ -305,6 +307,18 @@ export function cellsBySlugPart(cells: Cell[]): Map<string, Cell> {
     byPart.set(part, cell);
   }
   return byPart;
+}
+
+export async function despite(
+  complaints: string[],
+  said: string,
+  work: () => Promise<void>,
+): Promise<void> {
+  try {
+    await work();
+  } catch (error) {
+    complaints.push(`${said}: ${String(error)}`);
+  }
 }
 
 async function sweepStrayNamespace(
@@ -367,7 +381,9 @@ async function sweepNamespaces(
   const mine = cells.map((cell) => namespaceFor(cell.name, runId));
   const stray = strayNamespaces(await namespacesStanding(cliAt(where.endpoint)), mine);
   for (const namespace of stray) {
-    await sweepStrayNamespace(runId, namespace, byPart, complaints);
+    await despite(complaints, `${namespace} sweep`, () =>
+      sweepStrayNamespace(runId, namespace, byPart, complaints),
+    );
   }
 }
 
@@ -409,7 +425,9 @@ async function sweep(runId: string): Promise<void> {
     }
   }
 
-  await sweepNamespaces(runId, cells, byPart, complaints);
+  await despite(complaints, "namespace sweep", () =>
+    sweepNamespaces(runId, cells, byPart, complaints),
+  );
 
   const ladderSweeps: Array<[string, (runId: string) => Promise<void>]> = [
     ["with-sst", sstSweep],
@@ -419,11 +437,7 @@ async function sweep(runId: string): Promise<void> {
     if (!fixtures.some((fixture) => fixture.name === name)) {
       continue;
     }
-    try {
-      await sweepLadder(runId);
-    } catch (error) {
-      complaints.push(`${name} ladder sweep: ${String(error)}`);
-    }
+    await despite(complaints, `${name} ladder sweep`, () => sweepLadder(runId));
   }
 
   if (complaints.length === 0) {
