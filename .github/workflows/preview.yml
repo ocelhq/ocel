@@ -71,6 +71,7 @@ jobs:
           expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
           cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
+          vars-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
 
       - name: Tell the app the preview has started
         id: report-started
@@ -176,6 +177,7 @@ jobs:
           expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
           cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
+          vars-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
 
       - name: Tear the preview down
         run: ocel preview rm --ref "${{ github.event.pull_request.head.ref }}" --yes
