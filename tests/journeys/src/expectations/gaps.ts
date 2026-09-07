@@ -2,6 +2,7 @@ import { DESTROY_TITLE, UP_TITLE } from "../plan";
 import { LINK_QUERY_ROW, LINK_ROW, nextCacheRows, nextDataCacheRows, UPLOAD_ROW } from "../rows";
 import type { Gap } from "./types";
 
+const DEPLOY_GO = ["deploy/go/web"];
 const SDK_NODE_HTTP = ["sdk/node/web"];
 const DEPLOY_WORKSPACE = ["deploy/workspace/next", "deploy/workspace/express"];
 const SDK_WORKSPACE = ["sdk/workspace/next", "sdk/workspace/express"];
@@ -177,6 +178,20 @@ export const gaps: Gap[] = [
       {
         on: ["aws.floci"],
         cells: [...SDK_NODE_HTTP, "sdk/with-transforms/web"],
+        variants: GATEWAY,
+        tests: [UP_TITLE],
+        skip: true,
+      },
+    ],
+  },
+  {
+    id: "no-public-layers-on-floci",
+    reason: "floci serves no public Lambda layer, so a go function cannot attach the web adapter",
+    issue: 1040,
+    affects: [
+      {
+        on: ["aws.floci"],
+        cells: DEPLOY_GO,
         variants: GATEWAY,
         tests: [UP_TITLE],
         skip: true,
