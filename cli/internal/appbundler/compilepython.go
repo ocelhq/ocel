@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -18,6 +19,8 @@ const (
 	pythonRequirementsFile = "requirements.txt"
 	pythonProgram          = "python3"
 	pythonBytecodeDir      = "__pycache__"
+	pythonVirtualenvDir    = "venv"
+	nodeVendorDir          = "node_modules"
 )
 
 func (c Compilation) vendorPython(ctx context.Context) error {
@@ -93,10 +96,13 @@ func copySourceTree(source, dest string) error {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() {
-			if entry.Name() == pythonBytecodeDir {
+		if rel != "." && leftBehindByTheBuildHost(entry.Name()) {
+			if entry.IsDir() {
 				return fs.SkipDir
 			}
+			return nil
+		}
+		if entry.IsDir() {
 			return os.MkdirAll(filepath.Join(dest, rel), 0o755)
 		}
 		if !entry.Type().IsRegular() {
@@ -108,6 +114,17 @@ func copySourceTree(source, dest string) error {
 		}
 		return copyFile(path, filepath.Join(dest, rel), info.Mode().Perm())
 	})
+}
+
+func leftBehindByTheBuildHost(name string) bool {
+	if strings.HasPrefix(name, ".") {
+		return true
+	}
+	switch name {
+	case pythonBytecodeDir, pythonVirtualenvDir, nodeVendorDir:
+		return true
+	}
+	return false
 }
 
 func copyFile(from, to string, mode fs.FileMode) error {

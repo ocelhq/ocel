@@ -217,3 +217,24 @@ func TestCompileRefusesAnArchitectureNoWheelIsBuiltFor(t *testing.T) {
 		t.Fatalf("err = %v, want a refusal naming riscv", err)
 	}
 }
+
+func TestCompileLeavesTheBuildHostsOwnDirectoriesOutOfThePythonArtifact(t *testing.T) {
+	t.Parallel()
+
+	source := pythonApp(t, map[string]string{
+		"main.py":                    "print('hi')\n",
+		".venv/lib/six.py":           "vendored for the build host\n",
+		".env":                       "SECRET=hunter2\n",
+		".git/config":                "[core]\n",
+		".DS_Store":                  "finder\n",
+		"node_modules/left-pad/i.js": "module.exports = 1\n",
+		"venv/pyvenv.cfg":            "home = /usr\n",
+	})
+	_, funcDir := vendored(t, source, "x86_64")
+
+	for _, rel := range []string{".venv", ".env", ".git", ".DS_Store", "node_modules", "venv"} {
+		if _, err := os.Stat(filepath.Join(funcDir, rel)); err == nil {
+			t.Errorf("the artifact carries %s: what an interpreter or an installer leaves in the app directory holds the build host's paths and its secrets, neither of which the function runs on", rel)
+		}
+	}
+}
