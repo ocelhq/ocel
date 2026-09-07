@@ -77,12 +77,17 @@ func (g *Gate) Matrix(environments []string) Matrix {
 	g.mu.Unlock()
 
 	columns := columns(definitions, apps, base, overrides)
-	m := Matrix{Columns: columns}
+	m := Matrix{
+		Columns: columns,
+		Rows:    make([]MatrixRow, 0, len(definitions)),
+		Apps:    make([]AppResolution, 0, len(apps)),
+	}
 	for _, definition := range definitions {
 		row := MatrixRow{
 			Key:   definition.GetKey(),
 			Class: className[definition.GetClass()],
 			Scope: definition.GetFolders(),
+			Cells: make([]MatrixCell, 0, len(columns)),
 		}
 		for _, folder := range columns {
 			cell := Cell{Key: definition.GetKey(), Folder: folder}
