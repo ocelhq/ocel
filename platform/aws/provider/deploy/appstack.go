@@ -90,7 +90,11 @@ func (a appStackFunctions) membraneLayers(ctx *pulumi.Context) (map[string]pulum
 		if _, published := layers[arch]; published {
 			continue
 		}
-		layer, err := newMembraneLayer(ctx, membraneLayerCoordinate(a.Project, a.Stack, arch), arch, a.Layers[arch])
+		code := a.Layers[arch]
+		if !code.Present() {
+			return nil, fmt.Errorf("this release places no %s membrane, so the functions built for it have nothing to boot through", arch)
+		}
+		layer, err := newMembraneLayer(ctx, membraneLayerCoordinate(a.Project, a.Stack, arch), arch, code)
 		if err != nil {
 			return nil, err
 		}
