@@ -83,6 +83,7 @@ jobs:
       dev: ${{ steps.lanes.outputs.dev }}
       aws: ${{ steps.lanes.outputs.aws }}
       vps: ${{ steps.lanes.outputs.vps }}
+      next: ${{ steps.lanes.outputs.next }}
       variants: ${{ steps.lanes.outputs.variants }}
       skips: ${{ steps.lanes.outputs.skips }}
       coverage: ${{ steps.lanes.outputs.coverage }}
@@ -132,6 +133,7 @@ jobs:
 
           forced=${OCEL_JOURNEY_LANES:-}
           real=false
+          next=false
           seed=
           touched=
           if [ "$EVENT" = workflow_dispatch ]; then
@@ -164,6 +166,7 @@ jobs:
             dev=$(hit "$shared"'|^console/(resources|api|auth|db|web)/')
             aws=$(hit "$shared"'|^platform/(aws|edge)/|^scripts/floci\.sh$')
             vps=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$')
+            next=$(hit "$shared"'|^platform/(aws|edge)/')
           fi
 
           if [ "$real" = true ]; then
@@ -180,6 +183,7 @@ jobs:
             echo "dev=$dev"
             echo "aws=$aws"
             echo "vps=$vps"
+            echo "next=$next"
             echo "variants=${VARIANTS:-}"
             echo "skips=${SKIPS:-skip}"
             echo "coverage=$coverage"
@@ -408,6 +412,92 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: journey-evidence-aws
+          path: ${{ runner.temp }}/journey-evidence.tgz
+          if-no-files-found: warn
+
+  next:
+    name: next
+    needs: binary
+    if: ${{ needs.binary.outputs.next == 'true' && needs.binary.result == 'success' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: real-aws
+      cancel-in-progress: false
+    env:
+      OCEL_TARGET: aws
+      OCEL_JOURNEY_CONCERN: deploy
+      OCEL_JOURNEY_FIXTURES: deploy/next
+      OCEL_JOURNEY_VARIANTS: cloudflare
+      OCEL_JOURNEY_COVERAGE: full
+      OCEL_JOURNEY_SKIPS: skip
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: The node bundle the fixture imports
+        run: pnpm turbo run build --filter=ocel
+
+      - name: Take the binaries this lane drives
+        uses: ./.github/actions/journey-binaries
+
+      - name: Assume the session that may spend the real account
+        uses: ./.github/actions/real-aws-session
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          role-session-name: ocel-journey-next-${{ github.run_id }}
+          role-duration-seconds: "3600"
+          guard-script: tests/next-compat/guard-accounts.sh
+          expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Name the account and the zone this run may touch
+        env:
+          EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          ZONE: ${{ vars.E2E_PREVIEW_DOMAIN }}
+          REGION: ${{ vars.E2E_AWS_REGION }}
+        run: |
+          set -euo pipefail
+          ZONE=${ZONE#\*.}
+          {
+            echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
+            echo "OCEL_JOURNEY_ZONE=$ZONE"
+            echo "AWS_REGION=$REGION"
+          } >> "$GITHUB_ENV"
+
+      - name: Reclaim what a run that died left in the account
+        run: pnpm --filter @ocel-tests/journeys sweep --target aws
+
+      - name: Run the journey
+        run: pnpm --filter @ocel-tests/journeys journey
+
+      - name: Pack the evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p tests/journeys/output
+          tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
+            --exclude='*/node_modules' \
+            --exclude='*/node_modules/*' \
+            --exclude='*/trees/*/packages' \
+            -C tests/journeys output
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-evidence-next
           path: ${{ runner.temp }}/journey-evidence.tgz
           if-no-files-found: warn
 
