@@ -150,7 +150,7 @@ func TestEntrypointPath(t *testing.T) {
 				}
 			}
 			t.Setenv("LAMBDA_TASK_ROOT", dir)
-			if got := entrypointPath(); got != tc.want {
+			if got := entrypointPath(readArtifact()); got != tc.want {
 				t.Errorf("entrypointPath() = %q, want %q", got, tc.want)
 			}
 		})

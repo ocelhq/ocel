@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -24,9 +22,9 @@ const minSpawnBudget = 4 * time.Second
 const nodeBinaryPath = "/var/lang/bin/node"
 
 type nodeChild struct {
-	nodePort int
-	control  net.Conn
-	client   *http.Client
+	upstream
+
+	control net.Conn
 
 	live *liveValues
 
@@ -56,7 +54,19 @@ func (m *nodeChild) bytecodeCached() bool {
 	return m.bytecodeCacheSource() != bytecodeSourceNone
 }
 
-func (m *nodeChild) registerWaiter(requestID string) <-chan struct{} {
+func (m *nodeChild) refreshLiveValues(ctx context.Context) {
+	m.live.refreshIfStale(ctx)
+}
+
+func (m *nodeChild) endInvocation(ctx context.Context, requestID string, waiter <-chan struct{}, reached bool) {
+	if !reached {
+		m.signalComplete(requestID)
+	}
+	m.awaitCompletion(ctx, requestID, waiter)
+	m.uploadBytecodeCacheOnce(ctx)
+}
+
+func (m *nodeChild) beginInvocation(requestID string) <-chan struct{} {
 	if m.pending == nil || !m.lifecycle {
 		return nil
 	}
@@ -391,24 +401,27 @@ func nodeChildEnv(sockPath string, extraEnv []string) []string {
 	return append(env, extraEnv...)
 }
 
-func entrypointPath() string {
-	const nodeEntry = "/opt/ocel/node/entrypoint.mjs"
-	data, err := os.ReadFile(filepath.Join(taskRoot(), "config.json"))
-	if err != nil {
-		return nodeEntry
-	}
-	var cfg struct {
-		Runtime struct {
-			Name string `json:"name"`
-		} `json:"runtime"`
-	}
-	if json.Unmarshal(data, &cfg) == nil && cfg.Runtime.Name == "next" {
+func entrypointPath(a artifact) string {
+	if a.Runtime.Name == "next" {
 		return "/opt/ocel/next/entrypoint.mjs"
 	}
-	return nodeEntry
+	return "/opt/ocel/node/entrypoint.mjs"
 }
 
-func startNode(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeChild, error) {
+func startNode(entrypoint string) spawner {
+	return func(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeChild, error) {
+		return spawnNode(entrypoint, extraEnv, budget, onControl, abandon)
+	}
+}
+
+func spawnNode(entrypoint string, extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeChild, error) {
+	if _, err := os.Stat(entrypoint); err != nil {
+		return nil, fmt.Errorf("node entrypoint not found: %w", err)
+	}
+	if _, err := os.Stat(nodeBinaryPath); err != nil {
+		return nil, fmt.Errorf("node binary not found: %w", err)
+	}
+
 	// TODO: one path per process, so two membranes in one sandbox cannot take each other's socket
 	sockPath := "/tmp/ocel-control.sock"
 	_ = os.Remove(sockPath)
@@ -418,7 +431,7 @@ func startNode(extraEnv []string, budget time.Duration, onControl func(io.Writer
 		return nil, err
 	}
 
-	cmd := exec.Command(nodeBinaryPath, entrypointPath())
+	cmd := exec.Command(nodeBinaryPath, entrypoint)
 	cmd.Env = nodeChildEnv(sockPath, extraEnv)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -436,11 +449,10 @@ func startNode(extraEnv []string, budget time.Duration, onControl func(io.Writer
 	}
 
 	m := &nodeChild{
+		upstream:  upstream{port: ready.httpPort, client: newLoopbackClient()},
 		control:   ready.control,
-		nodePort:  ready.httpPort,
 		lifecycle: ready.lifecycle,
 		pending:   map[string]chan struct{}{},
-		client:    newLoopbackClient(),
 	}
 	if !ready.lifecycle {
 		fmt.Fprintln(os.Stderr,
@@ -448,27 +460,8 @@ func startNode(extraEnv []string, budget time.Duration, onControl func(io.Writer
 	}
 
 	go m.drainControl(ready.reader)
-	go superviseNode(exited)
+	go supervise("node", exited)
 	return m, nil
-}
-
-func newLoopbackClient() *http.Client {
-	return &http.Client{
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-		Transport: &http.Transport{
-			MaxIdleConns:        16,
-			MaxIdleConnsPerHost: 16,
-			IdleConnTimeout:     4 * time.Second,
-		},
-	}
-}
-
-func superviseNode(exited <-chan error) {
-	err := <-exited
-	fmt.Fprintf(os.Stderr, "ocel: node exited after startup: %v\n", err)
-	os.Exit(1)
 }
 
 func (m *nodeChild) drainControl(reader *bufio.Reader) {
