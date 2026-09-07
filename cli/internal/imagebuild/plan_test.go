@@ -336,6 +336,20 @@ func TestANodeAppIsPlannedAsOneEvenWhereAnotherLanguageSitsAtTheRoot(t *testing.
 	}
 }
 
+const polyglotGoApp = "testdata/polyglotworkspace/apps/api"
+
+func TestAnAppCarryingAGoModuleIsPlannedAsGoWhateverElseSitsBesideIt(t *testing.T) {
+	plan := planned(t, polyglotGoApp)
+
+	build := strings.Join(plan.step(t, "build"), "\n")
+	if !strings.Contains(build, "go build") {
+		t.Errorf("the build step runs:\n%s\nwant a go build — the app carries a go.mod, and the package.json beside it only holds the config's own dependencies", build)
+	}
+	if strings.Contains(plan.Deploy.StartCommand, "pnpm") {
+		t.Errorf("the plan starts the app with %q, and no package manager starts a compiled binary", plan.Deploy.StartCommand)
+	}
+}
+
 func TestTheRootsOwnRailpackFileStillShapesAPlanOcelForcesTheProviderOn(t *testing.T) {
 	plan := planned(t, polyglotApp)
 
