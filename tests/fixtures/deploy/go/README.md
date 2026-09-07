@@ -2,8 +2,8 @@
 
 A Go app serving plain HTTP on `$PORT`, declaring no resources at all, so a journey can ask
 whether a go runtime runs on a target at all. The binary knows nothing about the compute it
-runs on: serverless, an adapter turns invocations into requests against it; on a container,
-the same server answers the proxy directly.
+runs on: serverless, the membrane execs it and turns invocations into requests against it;
+on a container, the same server answers the proxy directly.
 
 ## Run it
 
