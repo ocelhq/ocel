@@ -20,7 +20,10 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, c child) error {
 		return err
 	}
 
-	c.refreshLiveValues(ctx)
+	controlled, _ := c.(controlledChild)
+	if controlled != nil {
+		controlled.refreshLiveValues(ctx)
+	}
 
 	ctx = lambdacontext.NewContext(ctx, inv.lc)
 	rw, err := rt.startResponse(ctx, inv.lc.AwsRequestID)
@@ -35,20 +38,25 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, c child) error {
 	}
 
 	if isWarmInvocation(inv.Payload) {
-		if err := c.answerWarmInvocation(ctx, rw); err != nil {
+		if err := answerWarm(ctx, controlled, rw); err != nil {
 			fmt.Fprintf(os.Stderr, "ocel: deliver warm response for %s: %v\n", inv.lc.AwsRequestID, err)
 		}
 		return nil
 	}
 
-	waiter := c.beginInvocation(inv.lc.AwsRequestID)
+	var waiter <-chan struct{}
+	if controlled != nil {
+		waiter = controlled.beginInvocation(inv.lc.AwsRequestID)
+	}
 	appCtx, cancelApp := answerBefore(ctx)
 	reached, err := c.endpoint().forward(appCtx, inv, rw)
 	cancelApp()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: deliver response for %s: %v\n", inv.lc.AwsRequestID, err)
 	}
-	c.endInvocation(ctx, inv.lc.AwsRequestID, waiter, reached)
+	if controlled != nil {
+		controlled.endInvocation(ctx, inv.lc.AwsRequestID, waiter, reached)
+	}
 	return nil
 }
 

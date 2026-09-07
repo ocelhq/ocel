@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -20,27 +18,6 @@ const listenDialTimeout = 250 * time.Millisecond
 
 type execChild struct {
 	upstream
-}
-
-func (execChild) refreshLiveValues(context.Context) {}
-
-func (execChild) beginInvocation(string) <-chan struct{} { return nil }
-
-func (execChild) endInvocation(context.Context, string, <-chan struct{}, bool) {}
-
-func (execChild) answerWarmInvocation(_ context.Context, rw *responseWriter) error {
-	summary, err := json.Marshal(warmSummary{
-		State:  warmStateDisabled,
-		Source: bytecodeSourceNone,
-		Error:  "this app is served by a binary of its own, which carries no compile cache to warm",
-	})
-	if err != nil {
-		return rw.closeWithError(errTypeUpstream, err.Error())
-	}
-	if _, err := rw.Write(summary); err != nil {
-		return err
-	}
-	return rw.Close()
 }
 
 func startExecutable(command []string, port int, extraEnv []string, budget time.Duration) (*execChild, error) {

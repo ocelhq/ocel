@@ -12,6 +12,9 @@ import (
 
 type child interface {
 	endpoint() upstream
+}
+
+type controlledChild interface {
 	refreshLiveValues(ctx context.Context)
 	beginInvocation(requestID string) <-chan struct{}
 	endInvocation(ctx context.Context, requestID string, waiter <-chan struct{}, reached bool)
