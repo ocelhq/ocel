@@ -190,7 +190,7 @@ message TierDomains {
 }
 
 message Runtime {
-  string name = 1 [(buf.validate.field).string = {in: ["node", "next", "go"]}];
+  string name = 1 [(buf.validate.field).string = {in: ["node", "next", "go", "python"]}];
 
   string arch = 2 [(buf.validate.field).string = {in: ["x86_64", "arm64"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 }
