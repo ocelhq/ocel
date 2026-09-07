@@ -536,7 +536,7 @@ func TestLinkColdStart(t *testing.T) {
 			nil,
 		)
 
-		_, err := bringUpChild(spawn, l, l.start(context.Background()), nil, budget)
+		_, err := bringUpNode(spawn, l, l.start(context.Background()), nil, budget)
 		if err == nil {
 			t.Fatal("bringUpChild = nil, want init refused")
 		}
@@ -588,7 +588,7 @@ func TestBringUp(t *testing.T) {
 			return &nodeChild{}, nil
 		}
 
-		child, err := bringUpChild(spawn, l, prefetch, nil, time.Minute)
+		child, err := bringUpNode(spawn, l, prefetch, nil, time.Minute)
 		if err != nil {
 			t.Fatalf("bringUpChild: %v", err)
 		}
@@ -614,7 +614,7 @@ func TestBringUp(t *testing.T) {
 		l := newLiveValues(fails(errors.New("AccessDeniedException: dynamodb:Query")), []string{"DB_PASSWORD"}, nil, nil)
 
 		start := time.Now()
-		_, err := bringUpChild(spawn, l, l.start(context.Background()), nil, budget)
+		_, err := bringUpNode(spawn, l, l.start(context.Background()), nil, budget)
 		took := time.Since(start)
 
 		if err == nil {
