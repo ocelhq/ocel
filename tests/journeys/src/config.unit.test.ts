@@ -63,8 +63,20 @@ describe("shapeFor", () => {
     });
   });
 
-  it("hangs a vps cell's hostnames under the box's zone", () => {
-    expect(shapeFor(cell("deploy", "node"), "vps", {})).toEqual({
+  it("seals an aws cell's vars under the key the account brought", () => {
+    expect(
+      shapeFor(cell("deploy", "node"), "aws", { OCEL_AWS_VARS_KEY: " arn:aws:kms:key/k " }),
+    ).toEqual({
+      base: AWS_BASE,
+      slug: "j-1-deploy-node",
+      varsKey: "arn:aws:kms:key/k",
+    });
+  });
+
+  it("hangs a vps cell's hostnames under the box's zone, and takes no key", () => {
+    expect(
+      shapeFor(cell("deploy", "node"), "vps", { OCEL_AWS_VARS_KEY: "arn:aws:kms:key/k" }),
+    ).toEqual({
       base: VPS_BASE,
       slug: "j-1-deploy-node",
       hostnames: { web: "web-j-1-deploy-node.localhost" },
@@ -72,7 +84,12 @@ describe("shapeFor", () => {
   });
 
   it("renames a dev cell and nothing else", () => {
-    expect(shapeFor(cell("deploy", "node"), "dev", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
+    expect(
+      shapeFor(cell("deploy", "node"), "dev", {
+        OCEL_JOURNEY_ZONE: "j.example",
+        OCEL_AWS_VARS_KEY: "arn:aws:kms:key/k",
+      }),
+    ).toEqual({
       base: AWS_BASE,
       slug: "j-1-deploy-node",
     });
@@ -90,6 +107,18 @@ export default defineConfig({
   slug: "j-1-node",
 });
 `,
+    );
+  });
+
+  it("leaves the provider alone when no key is brought", () => {
+    expect(renderConfig({ base: AWS_BASE, slug: "j-1-node" })).not.toContain("provider:");
+  });
+
+  it("keeps the fixture's own provider options under the key it seals vars with", () => {
+    expect(
+      renderConfig({ base: AWS_BASE, slug: "j-1-node", varsKey: "arn:aws:kms:key/k" }),
+    ).toContain(
+      `  provider: { ...base.provider, options: { ...(base.provider as { options?: object })?.options, varsKey: "arn:aws:kms:key/k" } },`,
     );
   });
 

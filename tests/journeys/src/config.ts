@@ -22,6 +22,7 @@ export type Overlay = {
   edge?: Edge;
   dns?: "cloudflare";
   hostnames?: Record<string, string>;
+  varsKey?: string;
 };
 
 const EDGE_IMPORTS: Record<Edge, { name: string; from: string }> = {
@@ -44,14 +45,17 @@ function hostnamesOf(cell: CellContext, zone: string): Record<string, string> {
 export function shapeFor(cell: CellContext, target: TargetName, env: NodeJS.ProcessEnv): Overlay {
   const zone = env.OCEL_JOURNEY_ZONE?.trim() || undefined;
   switch (target) {
-    case "aws":
+    case "aws": {
+      const varsKey = env.OCEL_AWS_VARS_KEY?.trim() || undefined;
       return {
         base: AWS_BASE,
         slug: cell.slug,
         ...cell.variant?.config,
         ...(env.OCEL_JOURNEY_DNS === "cloudflare" ? { dns: "cloudflare" as const } : {}),
         ...(zone ? { hostnames: hostnamesOf(cell, zone) } : {}),
+        ...(varsKey ? { varsKey } : {}),
       };
+    }
     case "vps":
       return { base: VPS_BASE, slug: cell.slug, hostnames: hostnamesOf(cell, journeyZone(env)) };
     case "dev":
@@ -84,6 +88,11 @@ export function renderConfig(overlay: Overlay): string {
   imports.push(`import base from ${JSON.stringify(overlay.base)};`);
 
   const fields = [`  ...base,`, `  slug: ${JSON.stringify(overlay.slug)},`];
+  if (overlay.varsKey) {
+    fields.push(
+      `  provider: { ...base.provider, options: { ...(base.provider as { options?: object })?.options, varsKey: ${JSON.stringify(overlay.varsKey)} } },`,
+    );
+  }
   if (overlay.edge) {
     fields.push(`  edge: ${EDGE_IMPORTS[overlay.edge].name}(),`);
   }
