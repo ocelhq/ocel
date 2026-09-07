@@ -218,6 +218,26 @@ func TestCompileRefusesAnArchitectureNoWheelIsBuiltFor(t *testing.T) {
 	}
 }
 
+func TestCompileRefusesAPythonAppCarryingWhatCannotBeCopiedIntoTheArtifact(t *testing.T) {
+	t.Parallel()
+
+	source := pythonApp(t, map[string]string{"main.py": "print('hi')\n"})
+	linked := filepath.Join(source, "settings.py")
+	if err := os.Symlink(filepath.Join(t.TempDir(), "outside.py"), linked); err != nil {
+		t.Fatal(err)
+	}
+	err := Compile(context.Background(), Compilation{
+		App:     "web",
+		Runtime: Runtime{Name: "python", Arch: "x86_64"},
+		Source:  source,
+		FuncDir: filepath.Join(t.TempDir(), "index.func"),
+		AppDir:  t.TempDir(),
+	})
+	if err == nil || !strings.Contains(err.Error(), linked) {
+		t.Fatalf("err = %v, want a refusal naming %s — an artifact quietly missing a file the app imports fails only once it is running", err, linked)
+	}
+}
+
 func TestCompileRefusesAPythonAppWhoseDeclaredDependenciesCannotBeRead(t *testing.T) {
 	t.Parallel()
 
