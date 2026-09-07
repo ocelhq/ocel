@@ -31,6 +31,9 @@ concurrency:
   group: deploy-production
   cancel-in-progress: false
 
+env:
+  OCEL_CONFIG: ocel.aws.config.ts
+
 jobs:
   deploy:
     name: production, www and the app the previews report to

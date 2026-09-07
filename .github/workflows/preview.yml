@@ -32,6 +32,7 @@ concurrency:
   cancel-in-progress: ${{ github.event.action != 'closed' }}
 
 env:
+  OCEL_CONFIG: ocel.aws.config.ts
   OCEL_GITHUB_APP_URL: ${{ vars.OCEL_GITHUB_APP_URL }}
   OCEL_REPORT_SECRET: ${{ secrets.OCEL_REPORT_SECRET }}
   PR: ${{ github.event.pull_request.number }}
