@@ -25,6 +25,7 @@ const (
 	buildStep   = "build"
 
 	nodeProvider = "node"
+	goProvider   = "golang"
 	providerKey  = "provider"
 )
 
@@ -45,8 +46,8 @@ func Plan(loc workspace.Location) ([]byte, error) {
 		BuildCommand: commands.Build,
 		StartCommand: commands.Start,
 	}
-	if loc.Node {
-		named, done, err := nodeConfigFile(loc.Root)
+	if provider := providerFor(loc); provider != "" {
+		named, done, err := providerConfigFile(loc.Root, provider)
 		if err != nil {
 			return nil, err
 		}
@@ -74,12 +75,23 @@ func Plan(loc workspace.Location) ([]byte, error) {
 	return plan, nil
 }
 
-func nodeConfigFile(root string) (string, func(), error) {
+func providerFor(loc workspace.Location) string {
+	switch {
+	case loc.Go:
+		return goProvider
+	case loc.Node:
+		return nodeProvider
+	default:
+		return ""
+	}
+}
+
+func providerConfigFile(root, provider string) (string, func(), error) {
 	config, err := configuredIn(root)
 	if err != nil {
 		return "", nil, err
 	}
-	config[providerKey] = json.RawMessage(`"` + nodeProvider + `"`)
+	config[providerKey] = json.RawMessage(`"` + provider + `"`)
 	written, err := json.Marshal(config)
 	if err != nil {
 		return "", nil, err

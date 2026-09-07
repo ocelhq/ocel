@@ -16,6 +16,7 @@ import (
 
 const (
 	manifestName      = "package.json"
+	goModuleName      = "go.mod"
 	pnpmWorkspaceFile = "pnpm-workspace.yaml"
 	gitEntry          = ".git"
 	vendorDir         = "node_modules"
@@ -34,6 +35,7 @@ type Location struct {
 	Path         string
 	Member       bool
 	Node         bool
+	Go           bool
 	Manager      Manager
 	App          App
 	BuildCommand string
@@ -87,8 +89,10 @@ func Locate(appDir string) (Location, error) {
 		return Location{}, err
 	}
 	root := dir
-	if enclosingRoot, ok := enclosing(dir); ok {
-		root = enclosingRoot
+	if !regular(filepath.Join(dir, goModuleName)) {
+		if enclosingRoot, ok := enclosing(dir); ok {
+			root = enclosingRoot
+		}
 	}
 	return locatedAt(dir, root)
 }
@@ -107,6 +111,7 @@ func locatedAt(dir, root string) (Location, error) {
 		Root:    root,
 		Path:    filepath.ToSlash(rel),
 		Node:    regular(filepath.Join(dir, manifestName)),
+		Go:      regular(filepath.Join(dir, goModuleName)),
 		App:     describe(dir, app),
 		Manager: detect(root),
 	}
