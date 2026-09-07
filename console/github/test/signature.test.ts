@@ -1,8 +1,8 @@
 import { createHmac } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { createApp } from "../src/http";
 import type { Report } from "../src/report";
-import { createApp } from "../src/server";
 
 const SECRET = "report-secret";
 
