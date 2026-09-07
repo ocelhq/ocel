@@ -21,7 +21,7 @@ const (
 
 func edgeParam(t *testing.T, class, leaf string) string {
 	t.Helper()
-	prefix, err := bootstrap.EdgeParamPrefix(class, cloudflareKind)
+	prefix, err := bootstrap.DefaultNamespace.EdgeParamPrefix(class, cloudflareKind)
 	if err != nil {
 		t.Fatalf("EdgeParamPrefix(%s): %v", class, err)
 	}
@@ -36,12 +36,12 @@ func removingBootstrapper(t *testing.T, class string) Bootstrapper {
 	t.Helper()
 
 	b := standingBootstrapper(t, class)
-	stackName, err := bootstrap.StackNameFor(class)
+	stackName, err := bootstrap.DefaultNamespace.StackNameFor(class)
 	if err != nil {
 		t.Fatalf("StackNameFor(%s): %v", class, err)
 	}
-	isrStack := bootstrap.FeatureStackName(bootstrap.FeatureISR, class)
-	varsKeyStack := bootstrap.FeatureStackName(bootstrap.FeatureVarsKey, class)
+	isrStack := bootstrap.DefaultNamespace.FeatureStackName(bootstrap.FeatureISR, class)
+	varsKeyStack := bootstrap.DefaultNamespace.FeatureStackName(bootstrap.FeatureVarsKey, class)
 	cfn := b.CFN.(*teardownCFN)
 	cfn.present[isrStack] = bootstrap.Deployed{Present: true}
 	cfn.present[varsKeyStack] = bootstrap.Deployed{Present: true}
@@ -101,8 +101,8 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
 
-	isr := groupNamed(plan, "aws/"+bootstrap.FeatureStackName(bootstrap.FeatureISR, bootstrap.ClassProduction))
-	core := groupNamed(plan, "aws/"+bootstrap.StackName)
+	isr := groupNamed(plan, "aws/"+bootstrap.DefaultNamespace.FeatureStackName(bootstrap.FeatureISR, bootstrap.ClassProduction))
+	core := groupNamed(plan, "aws/"+coreStackName)
 	if isr == nil || core == nil {
 		t.Fatalf("plan groups = %s, want the isr stack and the core it stands on", groupNames(plan))
 	}
@@ -141,11 +141,11 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 	if credentials == nil || credentials.Kind != "AWS::SSM::Parameter" {
 		t.Errorf("the parameters group's rows = %+v, want the stored handles typed", params.Changes)
 	}
-	key := changeNamed(params, bootstrap.EdgeUserName+"/AKIAOLD")
+	key := changeNamed(params, edgeUserName+"/AKIAOLD")
 	if key == nil || key.Kind != "AWS::IAM::AccessKey" {
 		t.Errorf("the parameters group's rows = %+v, want the access key the edge signs with", params.Changes)
 	}
-	passphrase := changeNamed(params, bootstrap.PassphraseParamName)
+	passphrase := changeNamed(params, passphraseParam)
 	if passphrase == nil || passphrase.Action != providerkit.ActionDelete {
 		t.Errorf("the passphrase row = %+v, want it deleted when no sibling bootstrap holds it", passphrase)
 	}
@@ -169,14 +169,14 @@ func TestPlanRemovalKeepsThePassphraseABootstrappedSiblingHolds(t *testing.T) {
 	t.Parallel()
 
 	b := removingBootstrapper(t, bootstrap.ClassPreview)
-	b.CFN.(*teardownCFN).present[bootstrap.StackName] = bootstrap.Deployed{Present: true}
+	b.CFN.(*teardownCFN).present[coreStackName] = bootstrap.Deployed{Present: true}
 
 	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassPreview)
 	if err != nil {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
 	params := groupNamed(plan, "aws/"+bootstrap.ParamGroupName)
-	kept := changeNamed(params, bootstrap.PassphraseParamName)
+	kept := changeNamed(params, passphraseParam)
 	if kept == nil || kept.Action != providerkit.ActionKeep {
 		t.Fatalf("the passphrase row = %+v, want it kept", kept)
 	}
@@ -192,13 +192,13 @@ func TestPlanRemovalOfAnAbsentBootstrapStillPlansWhatItLeftBehind(t *testing.T) 
 	t.Parallel()
 
 	b := removingBootstrapper(t, bootstrap.ClassProduction)
-	delete(b.CFN.(*teardownCFN).present, bootstrap.StackName)
+	delete(b.CFN.(*teardownCFN).present, coreStackName)
 
 	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
-	if groupNamed(plan, "aws/"+bootstrap.StackName) != nil {
+	if groupNamed(plan, "aws/"+coreStackName) != nil {
 		t.Errorf("plan groups = %s, want no stack planned where none stands", groupNames(plan))
 	}
 	params := groupNamed(plan, "aws/"+bootstrap.ParamGroupName)
@@ -325,9 +325,9 @@ func TestRemoveTearsDownAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 func severed(t *testing.T, b Bootstrapper, class string) {
 	t.Helper()
 
-	b.CFN.(*teardownCFN).present[bootstrap.FeatureStackName(bootstrap.FeatureCloudflareEdge, class)] =
+	b.CFN.(*teardownCFN).present[bootstrap.DefaultNamespace.FeatureStackName(bootstrap.FeatureCloudflareEdge, class)] =
 		bootstrap.Deployed{Present: true}
-	prefix, err := bootstrap.EdgeParamPrefix(class, cloudflareKind)
+	prefix, err := bootstrap.DefaultNamespace.EdgeParamPrefix(class, cloudflareKind)
 	if err != nil {
 		t.Fatalf("EdgeParamPrefix(%s): %v", class, err)
 	}
@@ -379,7 +379,7 @@ func TestPlanRemovalSaysWhatDroppingTheVarsKeyStrands(t *testing.T) {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
 
-	group := groupNamed(plan, "aws/"+bootstrap.FeatureStackName(bootstrap.FeatureVarsKey, bootstrap.ClassProduction))
+	group := groupNamed(plan, "aws/"+bootstrap.DefaultNamespace.FeatureStackName(bootstrap.FeatureVarsKey, bootstrap.ClassProduction))
 	if group == nil {
 		t.Fatalf("plan groups = %s, want the stack the vars key stands in", groupNames(plan))
 	}

@@ -41,7 +41,7 @@ Resources:
 %sOutputs:
 %s`,
 			FeatureVarsKey, in.class,
-			varsKeyResources(in.class),
+			varsKeyResources(in.ns, in.class),
 			varsKeyOutputs()),
 	}
 }
@@ -64,7 +64,7 @@ type KeyAPI interface {
 
 const varsKeyProbeBytes = 16
 
-func validateBroughtKey(ctx context.Context, apis ParamAPIs, class string, req Request) ([]providerkit.Change, error) {
+func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, class string, req Request) ([]providerkit.Change, error) {
 	if req.VarsKey == "" {
 		return nil, nil
 	}

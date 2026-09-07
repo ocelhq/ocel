@@ -36,6 +36,7 @@ type stackRefs struct {
 }
 
 type featureInputs struct {
+	ns             Namespace
 	class          string
 	artifactBucket string
 	code           stackPayloads
@@ -50,6 +51,7 @@ type featureStack struct {
 }
 
 type stepDeps struct {
+	ns       Namespace
 	class    string
 	ssm      SSMAPI
 	iam      IAMAPI
@@ -67,9 +69,9 @@ type feature struct {
 	payloads   func(context.Context, ObjectStore, string) (stackPayloads, error)
 	placements func(string) stackPayloads
 	after      func(context.Context, stepDeps) error
-	afterPlan  func(context.Context, ParamAPIs, string, Request) ([]providerkit.Change, error)
+	afterPlan  func(context.Context, ParamAPIs, Namespace, string, Request) ([]providerkit.Change, error)
 	drop       func(context.Context, stepDeps) error
-	dropPlan   func(context.Context, ParamAPIs, string, Request) ([]providerkit.Change, error)
+	dropPlan   func(context.Context, ParamAPIs, Namespace, string, Request) ([]providerkit.Change, error)
 }
 
 func (f feature) planned(in featureInputs) featureStack {
@@ -99,11 +101,8 @@ func (f feature) edgeKind() (edge.Kind, bool) {
 	return "", false
 }
 
-func (f feature) stackName(class string) string {
-	if class == ClassPreview {
-		return StackName + "-" + f.name + "-preview"
-	}
-	return StackName + "-" + f.name
+func (f feature) stackName(ns Namespace, class string) string {
+	return ns.featureStackName(f.name, class)
 }
 
 var featureRegistry = []feature{

@@ -16,6 +16,7 @@ const (
 	TagSchema         = "ocel:schema"
 	TagDigest         = "ocel:digest"
 	TagBootstrappedBy = "ocel:bootstrapped-by"
+	TagNamespace      = NamespaceTagKey
 )
 
 type Stamp struct {
@@ -57,8 +58,9 @@ func TemplateDigest(body string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func stampTags(s Stamp) []cfntypes.Tag {
+func stampTags(ns Namespace, s Stamp) []cfntypes.Tag {
 	return []cfntypes.Tag{
+		{Key: aws.String(TagNamespace), Value: aws.String(string(ns))},
 		{Key: aws.String(TagSchema), Value: aws.String(strconv.Itoa(s.Schema))},
 		{Key: aws.String(TagDigest), Value: aws.String(s.Digest)},
 		{Key: aws.String(TagBootstrappedBy), Value: aws.String(s.WrittenBy)},

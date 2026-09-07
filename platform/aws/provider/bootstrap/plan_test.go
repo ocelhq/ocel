@@ -19,7 +19,7 @@ func planned(t *testing.T, cfn CFNAPI, class string, req Request) []providerkit.
 	t.Helper()
 
 	ctx := context.Background()
-	read, err := Read(ctx, cfn, class)
+	read, err := Read(ctx, cfn, DefaultNamespace, class)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -35,7 +35,7 @@ func planned(t *testing.T, cfn CFNAPI, class string, req Request) []providerkit.
 		})
 	}
 	groups, err := PlanChanges(ctx, cfn, read, req, providerkit.DeriveGroups(
-		NameStacks(described), Catalogue(),
+		NameStacks(DefaultNamespace, described), Catalogue(),
 		providerkit.BootstrapRequest{Class: providerkit.Class(class), Features: req.Features, Remove: req.Remove}))
 	if err != nil {
 		t.Fatalf("PlanChanges: %v", err)
@@ -70,13 +70,13 @@ func changeNamed(t *testing.T, group providerkit.ChangeGroup, name string) provi
 func (f *fakeCFN) misstamp(stackName string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.tags[stackName] = stampTags(Stamp{Schema: RequiredSchema, Digest: "beef", WrittenBy: "1.0.0"})
+	f.tags[stackName] = stampTags(DefaultNamespace, Stamp{Schema: RequiredSchema, Digest: "beef", WrittenBy: "1.0.0"})
 }
 
 func TestPlanOnAFreshAccountReadsEveryResourceOffTheTemplates(t *testing.T) {
 	groups := planned(t, newFakeCFN(), ClassProduction, everything())
 
-	core := groupNamed(t, groups, StackName)
+	core := groupNamed(t, groups, coreStackName)
 	if core.Action != providerkit.ActionCreate {
 		t.Errorf("the core group is %q, want it created where nothing stands", core.Action)
 	}
@@ -163,8 +163,8 @@ func TestPlanStillUpdatesAStackWhoseStampAloneIsBehind(t *testing.T) {
 	if group.Reason == "" {
 		t.Errorf("%s says nothing about why it is updated with nothing under it", stack)
 	}
-	if other := groupNamed(t, groups, StackName); other.Action != providerkit.ActionKeep {
-		t.Errorf("%s is %q, want the stacks nothing is stale about kept", StackName, other.Action)
+	if other := groupNamed(t, groups, coreStackName); other.Action != providerkit.ActionKeep {
+		t.Errorf("%s is %q, want the stacks nothing is stale about kept", coreStackName, other.Action)
 	}
 	if left := cfn.leftBehind(); len(left) != 0 {
 		t.Errorf("change sets %v outlived the plan that made them", left)
@@ -210,16 +210,16 @@ func (g *gatedPlans) CreateChangeSet(ctx context.Context, in *cloudformation.Cre
 func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
 	cfn, _ := standingBootstrap(t)
 	ctx := context.Background()
-	read, err := Read(ctx, cfn, ClassProduction)
+	read, err := Read(ctx, cfn, DefaultNamespace, ClassProduction)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
 
 	var groups []providerkit.ChangeGroup
 	for _, feature := range append([]string{""}, featureNames()...) {
-		stack := StackName
+		stack := coreStackName
 		if feature != "" {
-			stack = FeatureStackName(feature, ClassProduction)
+			stack = DefaultNamespace.FeatureStackName(feature, ClassProduction)
 		}
 		cfn.fallBehind(stack)
 		groups = append(groups, providerkit.ChangeGroup{
@@ -348,11 +348,11 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	frontedBy(t, &fakeEdge{kind: "cloudflare"})
 	apis := apisOf(cfn, newFakeSSM(), &fakeIAM{}, preloadedStore())
 	req := Request{Features: []string{FeatureVarsKey}, VarsKey: broughtKeyARN}
-	if err := Run(ctx, apis, ClassProduction, req, nil, nil); err != nil {
+	if err := Run(ctx, apis, DefaultNamespace, ClassProduction, req, nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
-	read, err := Read(ctx, cfn, ClassProduction)
+	read, err := Read(ctx, cfn, DefaultNamespace, ClassProduction)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -360,7 +360,7 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
-	group := groupNamed(t, groups, FeatureStackName(FeatureVarsKey, ClassProduction))
+	group := groupNamed(t, groups, DefaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction))
 	for _, change := range group.Changes {
 		if change.Name == "VarsKey" || change.Name == "VarsKeyAlias" {
 			t.Errorf("the removal plan takes %s from a stack that owns no key, and a destroy must not claim to take a key this account brought", change.Name)

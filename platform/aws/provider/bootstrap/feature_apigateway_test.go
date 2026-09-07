@@ -64,7 +64,7 @@ func TestAPIGatewayEdgeStandsUpWhatEveryRESTAPIInTheAccountShares(t *testing.T) 
 			if role.Type != "AWS::IAM::Role" {
 				t.Errorf("EdgeInvokeRole Type = %q, want AWS::IAM::Role", role.Type)
 			}
-			if got, want := role.Properties.RoleName, EdgeInvokeRoleName(held); got != want {
+			if got, want := role.Properties.RoleName, DefaultNamespace.EdgeInvokeRoleName(held); got != want {
 				t.Errorf("invoke role name = %q, want %q", got, want)
 			}
 
@@ -75,7 +75,7 @@ func TestAPIGatewayEdgeStandsUpWhatEveryRESTAPIInTheAccountShares(t *testing.T) 
 			if api.Type != "AWS::ApiGateway::RestApi" {
 				t.Errorf("EdgeNotFoundApi Type = %q, want AWS::ApiGateway::RestApi", api.Type)
 			}
-			if got, want := api.Properties.Name, EdgeNotFoundAPIName(held); got != want {
+			if got, want := api.Properties.Name, DefaultNamespace.EdgeNotFoundAPIName(held); got != want {
 				t.Errorf("404 responder name = %q, want %q", got, want)
 			}
 

@@ -19,32 +19,9 @@ const (
 )
 
 const (
-	bootstrapBucketARN = "arn:aws:s3:::" + StackName + "*"
-	bootstrapObjectARN = bootstrapBucketARN + "/*"
+	anyKeyARN = "arn:aws:kms:*:*:key/*"
 
-	bootstrapTableARN     = "arn:aws:dynamodb:*:*:table/" + StackName + "*"
-	bootstrapTablePartARN = bootstrapTableARN + "/*"
-
-	bootstrapStackARN     = "arn:aws:cloudformation:*:*:stack/" + StackName + "*/*"
-	bootstrapChangeSetARN = "arn:aws:cloudformation:*:*:changeSet/ocel-*/*"
-	bootstrapRoleARN      = "arn:aws:iam::*:role/" + StackName + "*"
-	bootstrapFunctionARN  = "arn:aws:lambda:*:*:function:" + StackName + "*"
-	bootstrapQueueARN     = "arn:aws:sqs:*:*:ocel-*"
-
-	edgeUserARN = "arn:aws:iam::*:user/" + EdgeUserName + "*"
-
-	appBoundaryARN = "arn:aws:iam::*:policy/" + AppBoundaryName + "*"
-
-	anyKeyARN    = "arn:aws:kms:*:*:key/*"
-	varsAliasARN = "arn:aws:kms:*:*:alias/ocel-vars-*"
-
-	parameterARNPrefix     = "arn:aws:ssm:*:*:parameter"
-	passphraseParameterARN = parameterARNPrefix + PassphraseParamName
-	edgeParameterARN       = parameterARNPrefix + "/ocel/edge/*"
-	originParameterARN     = parameterARNPrefix + "/ocel/origin/*"
-	stackRecordTreeARN     = parameterARNPrefix + "/ocel/rootstack*"
-	stackRecordARN         = stackRecordTreeARN + "/*"
-	ocelParameterARN       = parameterARNPrefix + "/ocel/*"
+	parameterARNPrefix = "arn:aws:ssm:*:*:parameter"
 
 	appBucketARN        = "arn:aws:s3:::*"
 	appFunctionARN      = "arn:aws:lambda:*:*:function:*"
@@ -61,6 +38,52 @@ const (
 
 	unscopedResource = "*"
 )
+
+type scopedARNs struct {
+	bootstrapBucket    string
+	bootstrapObject    string
+	bootstrapTable     string
+	bootstrapTablePart string
+	bootstrapStack     string
+	bootstrapChangeSet string
+	bootstrapRole      string
+	bootstrapFunction  string
+	bootstrapQueue     string
+	edgeUser           string
+	appBoundary        string
+	varsAlias          string
+	passphraseParam    string
+	edgeParam          string
+	originParam        string
+	stackRecordTree    string
+	stackRecord        string
+	anyParam           string
+}
+
+func (n Namespace) scopedARNs() scopedARNs {
+	core := n.CoreStackName()
+	a := scopedARNs{
+		bootstrapBucket:    "arn:aws:s3:::" + core + "*",
+		bootstrapTable:     "arn:aws:dynamodb:*:*:table/" + core + "*",
+		bootstrapStack:     "arn:aws:cloudformation:*:*:stack/" + core + "*/*",
+		bootstrapChangeSet: "arn:aws:cloudformation:*:*:changeSet/" + string(n) + "-*/*",
+		bootstrapRole:      "arn:aws:iam::*:role/" + core + "*",
+		bootstrapFunction:  "arn:aws:lambda:*:*:function:" + core + "*",
+		bootstrapQueue:     "arn:aws:sqs:*:*:" + string(n) + "-*",
+		edgeUser:           "arn:aws:iam::*:user/" + string(n) + "-edge*",
+		appBoundary:        "arn:aws:iam::*:policy/" + n.AppBoundaryNameFor(ClassProduction) + "*",
+		varsAlias:          "arn:aws:kms:*:*:alias/" + string(n) + "-vars-*",
+		passphraseParam:    parameterARNPrefix + n.PassphraseParamName(),
+		edgeParam:          parameterARNPrefix + n.paramRoot() + "/edge/*",
+		originParam:        parameterARNPrefix + n.paramRoot() + "/origin/*",
+		stackRecordTree:    parameterARNPrefix + n.stackRecordRoot() + "*",
+		anyParam:           parameterARNPrefix + n.paramRoot() + "/*",
+	}
+	a.bootstrapObject = a.bootstrapBucket + "/*"
+	a.bootstrapTablePart = a.bootstrapTable + "/*"
+	a.stackRecord = a.stackRecordTree + "/*"
+	return a
+}
 
 type grantStatement struct {
 	actions   []string
@@ -80,9 +103,9 @@ func taggedByOcel() map[string]any {
 	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagPattern}}
 }
 
-func withinAppBoundary() map[string]any {
+func withinAppBoundary(ns Namespace) map[string]any {
 	return map[string]any{"StringEquals": map[string]any{
-		"iam:PermissionsBoundary": []string{appBoundaryARNFor(ClassProduction), appBoundaryARNFor(ClassPreview)},
+		"iam:PermissionsBoundary": []string{appBoundaryARNFor(ns, ClassProduction), appBoundaryARNFor(ns, ClassPreview)},
 	}}
 }
 
@@ -141,7 +164,7 @@ func varsKeyLifecycleActions() []string {
 	}
 }
 
-func bootstrapAccess() []grantStatement {
+func bootstrapAccess(ns Namespace, r scopedARNs) []grantStatement {
 	return []grantStatement{
 		{
 			actions: []string{
@@ -151,12 +174,12 @@ func bootstrapAccess() []grantStatement {
 				"s3:ListMultipartUploadParts",
 				"s3:PutObject",
 			},
-			resources: []string{bootstrapObjectARN},
+			resources: []string{r.bootstrapObject},
 			condition: inCallerAccount(),
 		},
 		{
 			actions:   []string{"s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"},
-			resources: []string{bootstrapBucketARN},
+			resources: []string{r.bootstrapBucket},
 			condition: inCallerAccount(),
 		},
 		{
@@ -170,15 +193,15 @@ func bootstrapAccess() []grantStatement {
 				"dynamodb:Query",
 				"dynamodb:UpdateItem",
 			},
-			resources: []string{bootstrapTableARN, bootstrapTablePartARN},
+			resources: []string{r.bootstrapTable, r.bootstrapTablePart},
 		},
 		{
 			actions:   []string{"ssm:GetParameter", "ssm:GetParameters"},
-			resources: []string{passphraseParameterARN, edgeParameterARN, originParameterARN, stackRecordARN},
+			resources: []string{r.passphraseParam, r.edgeParam, r.originParam, r.stackRecord},
 		},
 		{
 			actions:   []string{"ssm:DeleteParameter", "ssm:PutParameter"},
-			resources: []string{stackRecordARN},
+			resources: []string{r.stackRecord},
 		},
 		{
 			actions:   []string{"kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey"},
@@ -189,7 +212,7 @@ func bootstrapAccess() []grantStatement {
 		},
 		{
 			actions:   []string{"cloudformation:DescribeStacks"},
-			resources: []string{bootstrapStackARN},
+			resources: []string{r.bootstrapStack},
 		},
 		{
 			actions:   []string{"sts:GetCallerIdentity"},
@@ -198,7 +221,7 @@ func bootstrapAccess() []grantStatement {
 	}
 }
 
-func appProvisioning() []grantStatement {
+func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 	return []grantStatement{
 		{
 			actions:   []string{"lambda:CreateFunction"},
@@ -240,7 +263,7 @@ func appProvisioning() []grantStatement {
 		{
 			actions:   []string{"iam:CreateRole"},
 			resources: []string{appRoleARN},
-			condition: mergeConditions(taggedOnCreate(), withinAppBoundary()),
+			condition: mergeConditions(taggedOnCreate(), withinAppBoundary(ns)),
 		},
 		{
 			actions: []string{
@@ -265,12 +288,12 @@ func appProvisioning() []grantStatement {
 				"iam:PutRolePolicy",
 			},
 			resources: []string{appRoleARN},
-			condition: mergeConditions(taggedByOcel(), withinAppBoundary()),
+			condition: mergeConditions(taggedByOcel(), withinAppBoundary(ns)),
 		},
 		{
 			actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
 			resources: []string{appRoleARN},
-			condition: mergeConditions(attachedPolicyIsAWSLambdaExecution(true), withinAppBoundary()),
+			condition: mergeConditions(attachedPolicyIsAWSLambdaExecution(true), withinAppBoundary(ns)),
 		},
 		{
 			actions:   []string{"iam:PassRole"},
@@ -368,7 +391,7 @@ func appProvisioning() []grantStatement {
 	}
 }
 
-func bootstrapProvisioning() []grantStatement {
+func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 	return []grantStatement{
 		{
 			actions: []string{
@@ -377,7 +400,7 @@ func bootstrapProvisioning() []grantStatement {
 				"cloudformation:DeleteStack",
 				"cloudformation:DescribeStackEvents",
 			},
-			resources: []string{bootstrapStackARN},
+			resources: []string{r.bootstrapStack},
 		},
 		{
 			actions: []string{
@@ -385,11 +408,11 @@ func bootstrapProvisioning() []grantStatement {
 				"cloudformation:DescribeChangeSet",
 				"cloudformation:ExecuteChangeSet",
 			},
-			resources: []string{bootstrapStackARN, bootstrapChangeSetARN},
+			resources: []string{r.bootstrapStack, r.bootstrapChangeSet},
 		},
 		{
 			actions:   []string{"s3:CreateBucket"},
-			resources: []string{bootstrapBucketARN},
+			resources: []string{r.bootstrapBucket},
 		},
 		{
 			actions: []string{
@@ -406,12 +429,12 @@ func bootstrapProvisioning() []grantStatement {
 				"s3:PutEncryptionConfiguration",
 				"s3:PutLifecycleConfiguration",
 			},
-			resources: []string{bootstrapBucketARN},
+			resources: []string{r.bootstrapBucket},
 			condition: inCallerAccount(),
 		},
 		{
 			actions:   []string{"s3:DeleteObjectVersion", "s3:GetObjectVersion"},
-			resources: []string{bootstrapObjectARN},
+			resources: []string{r.bootstrapObject},
 			condition: inCallerAccount(),
 		},
 		{
@@ -429,7 +452,7 @@ func bootstrapProvisioning() []grantStatement {
 				"dynamodb:UpdateTable",
 				"dynamodb:UpdateTimeToLive",
 			},
-			resources: []string{bootstrapTableARN, bootstrapTablePartARN},
+			resources: []string{r.bootstrapTable, r.bootstrapTablePart},
 		},
 		{
 			actions:   []string{"kms:CreateKey"},
@@ -449,12 +472,12 @@ func bootstrapProvisioning() []grantStatement {
 			actions:   []string{"kms:DescribeKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags"},
 			resources: []string{anyKeyARN},
 			condition: map[string]any{
-				"ForAnyValue:StringLike": map[string]any{"kms:ResourceAliases": varsKeyAliasFor("*")},
+				"ForAnyValue:StringLike": map[string]any{"kms:ResourceAliases": ns.varsKeyAliasFor("*")},
 			},
 		},
 		{
 			actions:   []string{"kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"},
-			resources: []string{varsAliasARN},
+			resources: []string{r.varsAlias},
 		},
 		{
 			actions:   []string{"kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"},
@@ -477,11 +500,11 @@ func bootstrapProvisioning() []grantStatement {
 				"iam:TagPolicy",
 				"iam:UntagPolicy",
 			},
-			resources: []string{appBoundaryARN},
+			resources: []string{r.appBoundary},
 		},
 		{
 			actions:   []string{"iam:CreateRole", "iam:TagRole"},
-			resources: []string{bootstrapRoleARN},
+			resources: []string{r.bootstrapRole},
 		},
 		{
 			actions: []string{
@@ -497,16 +520,16 @@ func bootstrapProvisioning() []grantStatement {
 				"iam:UpdateAssumeRolePolicy",
 				"iam:UpdateRole",
 			},
-			resources: []string{bootstrapRoleARN},
+			resources: []string{r.bootstrapRole},
 		},
 		{
 			actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
-			resources: []string{bootstrapRoleARN},
+			resources: []string{r.bootstrapRole},
 			condition: attachedPolicyIsAWSLambdaExecution(false),
 		},
 		{
 			actions:   []string{"iam:PassRole"},
-			resources: []string{bootstrapRoleARN},
+			resources: []string{r.bootstrapRole},
 			condition: passedToLambda(false),
 		},
 		{
@@ -528,13 +551,13 @@ func bootstrapProvisioning() []grantStatement {
 				"lambda:UpdateFunctionConfiguration",
 				"lambda:UpdateFunctionUrlConfig",
 			},
-			resources: []string{bootstrapFunctionARN},
+			resources: []string{r.bootstrapFunction},
 		},
 		{
 			actions:   []string{"lambda:CreateEventSourceMapping"},
 			resources: []string{unscopedResource},
 			condition: map[string]any{
-				"ArnLike": map[string]any{"lambda:FunctionArn": bootstrapFunctionARN},
+				"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction},
 			},
 		},
 		{
@@ -557,20 +580,20 @@ func bootstrapProvisioning() []grantStatement {
 				"sqs:TagQueue",
 				"sqs:UntagQueue",
 			},
-			resources: []string{bootstrapQueueARN},
+			resources: []string{r.bootstrapQueue},
 		},
 		{
 			actions:   []string{"ssm:AddTagsToResource", "ssm:DeleteParameter", "ssm:DeleteParameters", "ssm:PutParameter"},
-			resources: []string{ocelParameterARN},
+			resources: []string{r.anyParam},
 		},
 		{
 			actions:   []string{"ssm:GetParametersByPath"},
-			resources: []string{stackRecordTreeARN, stackRecordARN},
+			resources: []string{r.stackRecordTree, r.stackRecord},
 		},
 	}
 }
 
-func edgePrincipal() []grantStatement {
+func edgePrincipal(ns Namespace, r scopedARNs) []grantStatement {
 	return []grantStatement{
 		{
 			actions: []string{
@@ -589,25 +612,27 @@ func edgePrincipal() []grantStatement {
 				"iam:PutUserPolicy",
 				"iam:UpdateAccessKey",
 			},
-			resources: []string{edgeUserARN},
+			resources: []string{r.edgeUser},
 		},
 	}
 }
 
-func deployTier() []grantStatement {
-	return slices.Concat(bootstrapAccess(), appProvisioning())
+func deployTier(ns Namespace) []grantStatement {
+	r := ns.scopedARNs()
+	return slices.Concat(bootstrapAccess(ns, r), appProvisioning(ns, r))
 }
 
-func bootstrapTier() []grantStatement {
-	return slices.Concat(bootstrapAccess(), appProvisioning(), bootstrapProvisioning(), edgePrincipal())
+func bootstrapTier(ns Namespace) []grantStatement {
+	r := ns.scopedARNs()
+	return slices.Concat(bootstrapAccess(ns, r), appProvisioning(ns, r), bootstrapProvisioning(ns, r), edgePrincipal(ns, r))
 }
 
-func DeployCredentialPermissions() (string, error) {
-	return credentialPolicy("deploy", deployTier())
+func DeployCredentialPermissions(ns Namespace) (string, error) {
+	return credentialPolicy("deploy", deployTier(ns))
 }
 
-func BootstrapCredentialPermissions() (string, error) {
-	return credentialPolicy("bootstrap", bootstrapTier())
+func BootstrapCredentialPermissions(ns Namespace) (string, error) {
+	return credentialPolicy("bootstrap", bootstrapTier(ns))
 }
 
 func credentialPolicy(tier string, grants []grantStatement) (string, error) {

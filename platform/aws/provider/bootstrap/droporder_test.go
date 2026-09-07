@@ -9,7 +9,7 @@ func TestAFeatureIsDroppedBeforeWhatRendersAgainstIt(t *testing.T) {
 	cfn, apis := standingBootstrap(t)
 	edge, dropped := edgeStack(ClassProduction), optStack(ClassProduction)
 
-	if err := Run(context.Background(), apis, ClassProduction, Request{Features: []string{FeatureISR, FeatureCloudflareEdge}, Remove: []string{FeatureImageOptimization}}, nil, nil); err != nil {
+	if err := Run(context.Background(), apis, DefaultNamespace, ClassProduction, Request{Features: []string{FeatureISR, FeatureCloudflareEdge}, Remove: []string{FeatureImageOptimization}}, nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
@@ -24,7 +24,7 @@ func TestAFeatureIsDroppedBeforeWhatRendersAgainstIt(t *testing.T) {
 		t.Errorf("%s was rewritten before %s went, so an interrupted run leaves it reading against a set that no longer stands", edge, dropped)
 	}
 
-	deployed, err := CheckDeployed(context.Background(), cfn)
+	deployed, err := CheckDeployed(context.Background(), cfn, DefaultNamespace)
 	if err != nil {
 		t.Fatalf("CheckDeployed: %v", err)
 	}

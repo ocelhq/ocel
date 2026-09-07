@@ -80,6 +80,7 @@ type Clients struct {
 	Dynamo     awsports.DynamoAPI
 	CFN        bootstrap.CFNDescriber
 	Region     string
+	Namespace  bootstrap.Namespace
 }
 
 type provider struct {
@@ -96,7 +97,7 @@ func New(open func(context.Context) (Clients, error)) edge.Edge {
 	return &provider{open: open, delete: NewDeleter()}
 }
 
-func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Context) (Clients, error) {
+func FromConfig(load func(context.Context) (aws.Config, error), ns bootstrap.Namespace) func(context.Context) (Clients, error) {
 	return func(ctx context.Context) (Clients, error) {
 		if load == nil {
 			return Clients{}, fmt.Errorf("the %q edge was built without a way to load AWS configuration", Kind)
@@ -111,6 +112,7 @@ func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Con
 			Dynamo:     dynamodb.NewFromConfig(awscfg),
 			CFN:        cloudformation.NewFromConfig(awscfg),
 			Region:     awscfg.Region,
+			Namespace:  ns,
 		}, nil
 	}
 }
@@ -231,9 +233,9 @@ func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (
 		return bootstrap.Deployed{}, err
 	}
 	if class == edge.ClassPreview {
-		return bootstrap.CheckDeployedPreview(ctx, c.CFN)
+		return bootstrap.CheckDeployedPreview(ctx, c.CFN, c.Namespace)
 	}
-	return bootstrap.CheckDeployed(ctx, c.CFN)
+	return bootstrap.CheckDeployed(ctx, c.CFN, c.Namespace)
 }
 
 func (p *provider) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
@@ -262,7 +264,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	if !deployed.Present {
 		return nil, fmt.Errorf("the %s bootstrap is not standing, so the %q edge has no state table to keep %s's deployments in", spec.Class, Kind, spec.Slug)
 	}
-	role, err := requireInvokeRole(deployed, spec.Class)
+	role, err := requireInvokeRole(c.Namespace, deployed, spec.Class)
 	if err != nil {
 		return nil, err
 	}

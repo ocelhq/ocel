@@ -20,7 +20,7 @@ func TestFeatureStackName(t *testing.T) {
 		if !ok {
 			t.Fatalf("no %s feature in the registry", FeatureISR)
 		}
-		if got := f.stackName(tc.class); got != tc.want {
+		if got := f.stackName(DefaultNamespace, tc.class); got != tc.want {
 			t.Errorf("stackName(%q) = %q, want %q", tc.class, got, tc.want)
 		}
 	}

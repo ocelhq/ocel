@@ -17,11 +17,7 @@ const (
 	varsKeyComponentTagValue = "vars-key"
 )
 
-func varsKeyAliasFor(class string) string {
-	return "alias/ocel-vars-" + class
-}
-
-func varsKeyResources(class string) string {
+func varsKeyResources(ns Namespace, class string) string {
 	return fmt.Sprintf(`  VarsKey:
     Type: AWS::KMS::Key
     Properties:
@@ -45,7 +41,7 @@ func varsKeyResources(class string) string {
     Properties:
       AliasName: %s
       TargetKeyId: !Ref VarsKey
-`, class, varsKeyComponentTagKey, varsKeyComponentTagValue, class, varsKeyAliasFor(class))
+`, class, varsKeyComponentTagKey, varsKeyComponentTagValue, class, ns.varsKeyAliasFor(class))
 }
 
 func varsKeyOutputs() string {

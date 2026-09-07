@@ -34,8 +34,10 @@ var healAllowed = map[string]bool{
 	"AWS::Logs::LogGroup":             true,
 }
 
-func isCoreStack(stackName string) bool {
-	return stackName == StackName || stackName == PreviewStackName
+func isCoreStack(ns Namespace, stackName string) bool {
+	core, _ := ns.StackNameFor(ClassProduction)
+	preview, _ := ns.StackNameFor(ClassPreview)
+	return stackName == core || stackName == preview
 }
 
 func restampOnly(c cfntypes.ResourceChange) bool {
@@ -43,8 +45,14 @@ func restampOnly(c cfntypes.ResourceChange) bool {
 		len(c.Scope) == 1 && c.Scope[0] == cfntypes.ResourceAttributeTags
 }
 
-func healable(stackName string, changes []cfntypes.ResourceChange) error {
-	if isCoreStack(stackName) {
+func healable(ns Namespace) changeReview {
+	return func(stackName string, changes []cfntypes.ResourceChange) error {
+		return healableChange(ns, stackName, changes)
+	}
+}
+
+func healableChange(ns Namespace, stackName string, changes []cfntypes.ResourceChange) error {
+	if isCoreStack(ns, stackName) {
 		return fmt.Errorf("%s is the bootstrap's core, and the core is only ever written by an explicit bootstrap", stackName)
 	}
 	for _, c := range changes {
@@ -68,7 +76,7 @@ func healable(stackName string, changes []cfntypes.ResourceChange) error {
 	return nil
 }
 
-func admitReplacements(accept bool, log func(string)) changeReview {
+func admitReplacements(ns Namespace, accept bool, log func(string)) changeReview {
 	return func(stackName string, changes []cfntypes.ResourceChange) error {
 		var replaced []string
 		for _, c := range changes {
@@ -83,7 +91,7 @@ func admitReplacements(accept bool, log func(string)) changeReview {
 		if log != nil {
 			log(fmt.Sprintf("%s replaces rather than updates: %s", stackName, strings.Join(replaced, ", ")))
 		}
-		if isCoreStack(stackName) {
+		if isCoreStack(ns, stackName) {
 			return fmt.Errorf(
 				"writing %s would replace %s rather than update it in place, and every Pulumi state this account holds lives in it: every app deployed from this bootstrap would be orphaned.\nNo flag writes it anyway. Upgrade to a CLI whose core is an in-place update of this one",
 				stackName, strings.Join(replaced, ", "),
@@ -119,8 +127,8 @@ func RefusedWrite(err error) bool {
 	}
 }
 
-func Heal(ctx context.Context, apis APIs, class string, req HealRequest, log func(string)) (bool, error) {
-	target, err := specFor(class)
+func Heal(ctx context.Context, apis APIs, ns Namespace, class string, req HealRequest, log func(string)) (bool, error) {
+	target, err := specFor(ns, class)
 	if err != nil {
 		return false, err
 	}
@@ -131,7 +139,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func
 	if log == nil {
 		log = func(string) {}
 	}
-	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.class)
+	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.ns, target.class)
 	if err != nil {
 		return false, err
 	}
@@ -157,7 +165,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func
 			if i < 0 {
 				continue
 			}
-			done, err := healStack(ctx, apis, target.class, stale[i], deployed, refs, req.Writer, log)
+			done, err := healStack(ctx, apis, target.ns, target.class, stale[i], deployed, refs, req.Writer, log)
 			if err != nil {
 				if RefusedWrite(err) {
 					return healed, ErrHealNotPermitted
@@ -171,7 +179,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func
 	return healed, nil
 }
 
-func healStack(ctx context.Context, apis APIs, class string, stale StackStamp, deployed Deployed, refs stackRefs, writer providerkit.Writer, log func(string)) (bool, error) {
+func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale StackStamp, deployed Deployed, refs stackRefs, writer providerkit.Writer, log func(string)) (bool, error) {
 	f, ok := featureNamed(stale.Feature)
 	if !ok {
 		return false, fmt.Errorf("this provider has no feature named %q", stale.Feature)
@@ -186,6 +194,7 @@ func healStack(ctx context.Context, apis APIs, class string, stale StackStamp, d
 	}
 
 	stack, err := f.staged(ctx, apis.Store, featureInputs{
+		ns:             ns,
 		class:          class,
 		artifactBucket: deployed.ArtifactBucket,
 		refs:           refs,
@@ -195,9 +204,9 @@ func healStack(ctx context.Context, apis APIs, class string, stale StackStamp, d
 	if err != nil {
 		return false, err
 	}
-	tags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(stack.body), WrittenBy: writer.String()})
+	tags := stampTags(ns, Stamp{Schema: RequiredSchema, Digest: TemplateDigest(stack.body), WrittenBy: writer.String()})
 	capabilities := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
-	if err := updateCFNStack(ctx, apis.CFN, stale.Name, stack.body, stack.params, capabilities, tags, healable); err != nil {
+	if err := updateCFNStack(ctx, apis.CFN, ns, stale.Name, stack.body, stack.params, capabilities, tags, healable(ns)); err != nil {
 		return false, err
 	}
 	log(fmt.Sprintf("refreshed %s", stale.Name))

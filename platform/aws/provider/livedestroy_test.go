@@ -20,7 +20,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: liveWriter}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), string(class))
+	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), bootstrap.DefaultNamespace, string(class))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanRemoval() = %v", err)
 	}
-	leaving := groupNamed(t, removal, "aws/"+bootstrap.StackName)
+	leaving := groupNamed(t, removal, "aws/"+coreStackName)
 	if leaving.Action != providerkit.ActionDelete {
 		t.Errorf("PlanRemoval() plans %s as %q, want %q", leaving.Name, leaving.Action, providerkit.ActionDelete)
 	}
@@ -42,7 +42,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 		t.Error("PlanRemoval() takes the state bucket without warning it is slow, and a destroy that seems hung is one a user interrupts half way")
 	}
 	dropping := groupNamed(t, removal, "aws/"+bootstrap.ParamGroupName)
-	passphrase := changeFor(dropping, bootstrap.PassphraseParamName)
+	passphrase := changeFor(dropping, passphraseParam)
 	if passphrase.Action != providerkit.ActionDelete {
 		t.Errorf("PlanRemoval() plans the passphrase as %q, want the last class on this account to take it", passphrase.Action)
 	}
@@ -61,8 +61,8 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 	if gone.Present {
 		t.Error("Describe() still claims a bootstrap after Remove()")
 	}
-	if status := a.stackStatus(t, bootstrap.StackName); status != "" && status != "DELETE_COMPLETE" {
-		t.Errorf("%s stands at %q after Remove(), want it gone", bootstrap.StackName, status)
+	if status := a.stackStatus(t, coreStackName); status != "" && status != "DELETE_COMPLETE" {
+		t.Errorf("%s stands at %q after Remove(), want it gone", coreStackName, status)
 	}
 	for _, bucket := range []string{held.StateBucket, held.ArtifactBucket, held.AssetBucket} {
 		if a.bucketStands(t, bucket) {
@@ -74,11 +74,11 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 			t.Errorf("%s still answers after Remove()", table)
 		}
 	}
-	origin, err := bootstrap.OriginSecretParamFor(string(class))
+	origin, err := bootstrap.DefaultNamespace.OriginSecretParamFor(string(class))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, param := range []string{origin, bootstrap.PassphraseParamName} {
+	for _, param := range []string{origin, passphraseParam} {
 		if a.paramStands(t, param) {
 			t.Errorf("%s still stands after Remove()", param)
 		}
@@ -92,7 +92,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() after Remove() = %v", err)
 	}
-	if group := groupNamed(t, again, "aws/"+bootstrap.StackName); group.Action != providerkit.ActionCreate {
+	if group := groupNamed(t, again, "aws/"+coreStackName); group.Action != providerkit.ActionCreate {
 		t.Errorf("Plan() over a destroyed account plans %q, want %q", group.Action, providerkit.ActionCreate)
 	}
 }
@@ -113,7 +113,7 @@ func TestLiveDestroyingOneClassLeavesTheSiblingAndThePassphraseItSharesStanding(
 	if err != nil {
 		t.Fatalf("PlanRemoval(%s) = %v", production, err)
 	}
-	shared := changeFor(groupNamed(t, beside, "aws/"+bootstrap.ParamGroupName), bootstrap.PassphraseParamName)
+	shared := changeFor(groupNamed(t, beside, "aws/"+bootstrap.ParamGroupName), passphraseParam)
 	if shared.Action != providerkit.ActionKeep {
 		t.Errorf("destroying %s plans the passphrase as %q while %s still stands on this account", production, shared.Action, preview)
 	}
@@ -124,17 +124,17 @@ func TestLiveDestroyingOneClassLeavesTheSiblingAndThePassphraseItSharesStanding(
 	if err := bootstrapper.Remove(ctx, production, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", production, err)
 	}
-	if !a.paramStands(t, bootstrap.PassphraseParamName) {
+	if !a.paramStands(t, passphraseParam) {
 		t.Errorf("the passphrase went with %s, and every Pulumi state %s holds is encrypted under it", production, preview)
 	}
-	if status := a.stackStatus(t, bootstrap.PreviewStackName); status != "CREATE_COMPLETE" {
-		t.Errorf("%s stands at %q after its sibling was destroyed, want CREATE_COMPLETE", bootstrap.PreviewStackName, status)
+	if status := a.stackStatus(t, previewStackName); status != "CREATE_COMPLETE" {
+		t.Errorf("%s stands at %q after its sibling was destroyed, want CREATE_COMPLETE", previewStackName, status)
 	}
 	standing, err := bootstrapper.Describe(ctx, preview)
 	if err != nil {
 		t.Fatalf("Describe(%s) after destroying its sibling = %v", preview, err)
 	}
-	if stack := stackNamed(t, standing, bootstrap.PreviewStackName); !standing.Present || !stack.DigestCurrent {
+	if stack := stackNamed(t, standing, previewStackName); !standing.Present || !stack.DigestCurrent {
 		t.Errorf("Describe(%s) = %+v after its sibling was destroyed, want a class untouched by a destroy beside it", preview, stack)
 	}
 	dropped, err := bootstrapper.Describe(ctx, production)
@@ -149,14 +149,14 @@ func TestLiveDestroyingOneClassLeavesTheSiblingAndThePassphraseItSharesStanding(
 	if err != nil {
 		t.Fatalf("PlanRemoval(%s) = %v", preview, err)
 	}
-	alone := changeFor(groupNamed(t, last, "aws/"+bootstrap.ParamGroupName), bootstrap.PassphraseParamName)
+	alone := changeFor(groupNamed(t, last, "aws/"+bootstrap.ParamGroupName), passphraseParam)
 	if alone.Action != providerkit.ActionDelete {
 		t.Errorf("destroying the last class plans the passphrase as %q, and a secret nothing decrypts with is one nobody rotates", alone.Action)
 	}
 	if err := bootstrapper.Remove(ctx, preview, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", preview, err)
 	}
-	if a.paramStands(t, bootstrap.PassphraseParamName) {
+	if a.paramStands(t, passphraseParam) {
 		t.Error("the passphrase stands after the last class on this account went")
 	}
 }

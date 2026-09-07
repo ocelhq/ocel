@@ -14,7 +14,7 @@ func TestRunStamps(t *testing.T) {
 
 		req := everything()
 		req.Writer = "1.9.0"
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, req, nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), DefaultNamespace, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		for _, name := range cfn.stacks() {
@@ -29,7 +29,7 @@ func TestRunStamps(t *testing.T) {
 				t.Errorf("%s was written by %q, want 1.9.0", name, stamp.WrittenBy)
 			}
 		}
-		deployed, err := CheckDeployed(context.Background(), cfn)
+		deployed, err := CheckDeployed(context.Background(), cfn, DefaultNamespace)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
@@ -43,10 +43,10 @@ func TestRunStamps(t *testing.T) {
 		frontedBy(t, &fakeEdge{})
 
 		req := Request{Writer: "dev+cafebabe"}
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, req, nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), DefaultNamespace, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		stamp := cfn.stampOf(StackName)
+		stamp := cfn.stampOf(coreStackName)
 		if stamp.WrittenBy != "dev+cafebabe" {
 			t.Errorf("written by %q, want dev+cafebabe", stamp.WrittenBy)
 		}

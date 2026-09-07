@@ -19,13 +19,13 @@ func TestCoreRefusesReplacementWhateverTheCallerAccepts(t *testing.T) {
 	for _, accept := range []bool{false, true} {
 		t.Run(fmt.Sprintf("acceptReplacements=%t", accept), func(t *testing.T) {
 			cfn, apis := standingBootstrap(t)
-			cfn.fallBehind(StackName)
-			cfn.plan(StackName, change(cfntypes.ChangeActionModify, "StateTable", "AWS::DynamoDB::Table", cfntypes.ReplacementTrue))
+			cfn.fallBehind(coreStackName)
+			cfn.plan(coreStackName, change(cfntypes.ChangeActionModify, "StateTable", "AWS::DynamoDB::Table", cfntypes.ReplacementTrue))
 			before := cfn.updates
 
 			req := everything()
 			req.AcceptReplacements = accept
-			err := Run(context.Background(), apis, ClassProduction, req, nil, nil)
+			err := Run(context.Background(), apis, DefaultNamespace, ClassProduction, req, nil, nil)
 			if err == nil {
 				t.Fatal("a bootstrap that would replace the core's state table was allowed through")
 			}
@@ -52,10 +52,10 @@ func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
 
 		req := everything()
 		req.Writer = "9.9.9"
-		if err := Run(context.Background(), apis, ClassProduction, req, nil, nil); err != nil {
+		if err := Run(context.Background(), apis, DefaultNamespace, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		if got := cfn.stampOf(StackName).WrittenBy; got != "9.9.9" {
+		if got := cfn.stampOf(coreStackName).WrittenBy; got != "9.9.9" {
 			t.Errorf("written by %q, want the writer this run carries", got)
 		}
 		if cfn.updates != before {
@@ -70,7 +70,7 @@ func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
 		cfn, apis := standingBootstrap(t)
 		before := cfn.restamps
 
-		if err := Run(context.Background(), apis, ClassProduction, everything(), nil, nil); err != nil {
+		if err := Run(context.Background(), apis, DefaultNamespace, ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 		if cfn.restamps != before {
@@ -83,13 +83,13 @@ func TestADevRebuildLeavesAStackItDidNotChangeAlone(t *testing.T) {
 	cfn, apis := standingBootstrap(t)
 	built := everything()
 	built.Writer = "1.4.0"
-	if err := Run(context.Background(), apis, ClassProduction, built, nil, nil); err != nil {
+	if err := Run(context.Background(), apis, DefaultNamespace, ClassProduction, built, nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	for _, sha := range []string{"dev+1111111", "dev+2222222"} {
 		rebuilt := everything()
 		rebuilt.Writer = providerkit.Writer(sha)
-		if err := Run(context.Background(), apis, ClassProduction, rebuilt, nil, nil); err != nil {
+		if err := Run(context.Background(), apis, DefaultNamespace, ClassProduction, rebuilt, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 	}
@@ -97,13 +97,13 @@ func TestADevRebuildLeavesAStackItDidNotChangeAlone(t *testing.T) {
 
 	rebuilt := everything()
 	rebuilt.Writer = "dev+3333333"
-	if err := Run(context.Background(), apis, ClassProduction, rebuilt, nil, nil); err != nil {
+	if err := Run(context.Background(), apis, DefaultNamespace, ClassProduction, rebuilt, nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if cfn.restamps != before {
 		t.Errorf("a rebuild restamped %d stacks; a development build's git sha is not a reason to write CloudFormation", cfn.restamps-before)
 	}
-	if got := cfn.stampOf(StackName).WrittenBy; got != "dev+1111111" {
+	if got := cfn.stampOf(coreStackName).WrittenBy; got != "dev+1111111" {
 		t.Errorf("written by %q, want the sha that last actually wrote the stack", got)
 	}
 }
@@ -162,14 +162,14 @@ func TestRestampingTurnsOnlyOnWhatTheStackHolds(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfn, _ := standingBootstrap(t)
-			tags := stampTags(tc.standing)
+			tags := stampTags(DefaultNamespace, tc.standing)
 			if tc.unwritten {
 				tags = withoutTag(tags, TagBootstrappedBy)
 			}
-			cfn.stamped(StackName, tags)
+			cfn.stamped(coreStackName, tags)
 			before := cfn.restamps
 
-			if err := restampCFNStack(context.Background(), cfn, StackName, nil, nil, stampTags(tc.incoming)); err != nil {
+			if err := restampCFNStack(context.Background(), cfn, coreStackName, nil, nil, stampTags(DefaultNamespace, tc.incoming)); err != nil {
 				t.Fatalf("restampCFNStack: %v", err)
 			}
 			if wrote := cfn.restamps > before; wrote != tc.writes {
@@ -181,14 +181,14 @@ func TestRestampingTurnsOnlyOnWhatTheStackHolds(t *testing.T) {
 
 func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 	staleBody := "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\nOutputs: {}\n"
-	staleTags := stampTags(Stamp{Schema: RequiredSchema, Digest: "beef", WrittenBy: "1.4.0"})
+	staleTags := stampTags(DefaultNamespace, Stamp{Schema: RequiredSchema, Digest: "beef", WrittenBy: "1.4.0"})
 
 	t.Run("a caller context that is already gone still takes the change set down", func(t *testing.T) {
 		cfn, _ := standingBootstrap(t)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		err := updateCFNStack(ctx, cfn, isrStack(ClassProduction), staleBody, nil, nil, staleTags,
+		err := updateCFNStack(ctx, cfn, DefaultNamespace, isrStack(ClassProduction), staleBody, nil, nil, staleTags,
 			func(string, []cfntypes.ResourceChange) error {
 				cancel()
 				return errors.New("this run stops here")
@@ -206,7 +206,7 @@ func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 
 		func() {
 			defer func() { _ = recover() }()
-			_ = updateCFNStack(context.Background(), cfn, isrStack(ClassProduction), staleBody, nil, nil, staleTags,
+			_ = updateCFNStack(context.Background(), cfn, DefaultNamespace, isrStack(ClassProduction), staleBody, nil, nil, staleTags,
 				func(string, []cfntypes.ResourceChange) error { panic("the run came apart") })
 		}()
 		if left := cfn.leftBehind(); len(left) != 0 {
@@ -248,7 +248,7 @@ func TestHealRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
 	apis.CFN = deniedChangeSets{cfn}
 	var log healLog
 
-	healed, err := Heal(context.Background(), apis, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
+	healed, err := Heal(context.Background(), apis, DefaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
 	if !errors.Is(err, ErrHealNotPermitted) {
 		t.Fatalf("Heal err = %v, want ErrHealNotPermitted", err)
 	}
@@ -268,7 +268,7 @@ func TestSettlingIsBoundedAndReported(t *testing.T) {
 	cfn.busy(stack, settleAttempts*4)
 	var log healLog
 
-	if _, err := Heal(context.Background(), apis, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write); err != nil {
+	if _, err := Heal(context.Background(), apis, DefaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write); err != nil {
 		t.Fatalf("Heal: %v", err)
 	}
 	if len(*waits) >= changeSetAttempts {
@@ -294,7 +294,7 @@ func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockAHeal(t *testing.T) {
 	)
 	var log healLog
 
-	healed, err := Heal(context.Background(), apis, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
+	healed, err := Heal(context.Background(), apis, DefaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
 	if err != nil {
 		t.Fatalf("Heal: %v", err)
 	}
@@ -318,7 +318,7 @@ func TestAPrincipalWhoseShapeChangesStillStopsAHeal(t *testing.T) {
 	})
 	var log healLog
 
-	healed, _ := Heal(context.Background(), apis, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
+	healed, _ := Heal(context.Background(), apis, DefaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write)
 	if healed {
 		t.Error("a heal rewrote the policy of the identity the edge signs its calls with")
 	}

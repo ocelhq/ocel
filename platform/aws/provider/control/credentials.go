@@ -27,13 +27,17 @@ type Credentials struct {
 	STS     STSAPI
 	Region  string
 	Profile string
+
+	Namespace bootstrap.Namespace
 }
 
-func CredentialsFor(cfg aws.Config) Credentials {
+func CredentialsFor(cfg aws.Config, ns bootstrap.Namespace) Credentials {
 	return Credentials{
 		STS:     sts.NewFromConfig(cfg),
 		Region:  cfg.Region,
 		Profile: os.Getenv("AWS_PROFILE"),
+
+		Namespace: ns,
 	}
 }
 
@@ -59,9 +63,9 @@ func (c Credentials) Permissions(tier providerkit.CredentialTier) (edge.Credenti
 	)
 	switch tier {
 	case providerkit.TierBootstrap:
-		document, err = bootstrap.BootstrapCredentialPermissions()
+		document, err = bootstrap.BootstrapCredentialPermissions(c.Namespace)
 	case providerkit.TierDeploy:
-		document, err = bootstrap.DeployCredentialPermissions()
+		document, err = bootstrap.DeployCredentialPermissions(c.Namespace)
 	default:
 		return edge.CredentialDocument{}, providerkit.Refuse(providerkit.CodeInvalid,
 			"credential permissions are rendered for the bootstrap tier or the deploy tier; this request named neither")

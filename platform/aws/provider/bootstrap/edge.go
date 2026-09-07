@@ -17,13 +17,6 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const (
-	edgeParamRoot = "/ocel/edge"
-
-	OriginSecretParamName        = "/ocel/origin/secret"
-	OriginSecretPreviewParamName = "/ocel/origin/secret-preview"
-)
-
 type IAMAPI interface {
 	IAMKeyAPI
 	CreateAccessKey(ctx context.Context, in *iam.CreateAccessKeyInput, optFns ...func(*iam.Options)) (*iam.CreateAccessKeyOutput, error)
@@ -45,16 +38,6 @@ type edgeNames struct {
 	originSecretParam     string
 }
 
-var edgeUserByClass = map[string]string{
-	ClassProduction: EdgeUserName,
-	ClassPreview:    EdgePreviewUserName,
-}
-
-var originSecretByClass = map[string]string{
-	ClassProduction: OriginSecretParamName,
-	ClassPreview:    OriginSecretPreviewParamName,
-}
-
 func (n edgeNames) edgeParams() []string {
 	return []string{
 		n.credentialsParam,
@@ -66,39 +49,33 @@ func (n edgeNames) edgeParams() []string {
 	}
 }
 
-func EdgeParamPrefix(class string, kind edge.Kind) (string, error) {
-	if kind == "" {
-		return "", fmt.Errorf("edge: the %s bootstrap's edge parameters are namespaced by edge kind, and this run names none", class)
+func edgeNamesFor(ns Namespace, class string, kind edge.Kind) (edgeNames, error) {
+	prefix, err := ns.EdgeParamPrefix(class, kind)
+	if err != nil {
+		return edgeNames{}, err
 	}
-	switch class {
-	case ClassProduction:
-		return edgeParamRoot + "/" + string(kind), nil
-	case ClassPreview:
-		return edgeParamRoot + "/" + string(kind) + "-preview", nil
-	default:
-		return "", fmt.Errorf("edge: unknown class %q", class)
+	user, err := ns.EdgeUserNameFor(class)
+	if err != nil {
+		return edgeNames{}, err
 	}
-}
-
-func edgeNamesFor(class string, kind edge.Kind) (edgeNames, error) {
-	prefix, err := EdgeParamPrefix(class, kind)
+	secret, err := ns.OriginSecretParamFor(class)
 	if err != nil {
 		return edgeNames{}, err
 	}
 	return edgeNames{
-		user:                  edgeUserByClass[class],
+		user:                  user,
 		credentialsParam:      prefix + "/credentials",
 		valuesParam:           prefix + "/values",
 		cacheStoreParam:       prefix + "/cache-store",
 		deploymentsStoreParam: prefix + "/deployments-store",
 		isrWriterParam:        prefix + "/isr-writer",
 		isrWriterSeedParam:    prefix + "/isr-writer-seed",
-		originSecretParam:     originSecretByClass[class],
+		originSecretParam:     secret,
 	}, nil
 }
 
-func EdgeStanding(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind) (bool, error) {
-	names, err := edgeNamesFor(class, kind)
+func EdgeStanding(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind) (bool, error) {
+	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return false, err
 	}
@@ -111,28 +88,28 @@ func EdgeStanding(ctx context.Context, ssmClient SSMAPI, class string, kind edge
 	return false, nil
 }
 
-func DeploymentsStoreParamFor(class string, kind edge.Kind) (string, error) {
-	names, err := edgeNamesFor(class, kind)
+func DeploymentsStoreParamFor(ns Namespace, class string, kind edge.Kind) (string, error) {
+	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return "", err
 	}
 	return names.deploymentsStoreParam, nil
 }
 
-func ISRWriterParamFor(class string, kind edge.Kind) (string, error) {
-	names, err := edgeNamesFor(class, kind)
+func ISRWriterParamFor(ns Namespace, class string, kind edge.Kind) (string, error) {
+	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return "", err
 	}
 	return names.isrWriterParam, nil
 }
 
-func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind, values map[string]string) error {
-	names, err := edgeNamesFor(class, kind)
+func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind, values map[string]string) error {
+	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return err
 	}
-	stored, err := ReadEdgeValues(ctx, ssmClient, class, kind)
+	stored, err := ReadEdgeValues(ctx, ssmClient, ns, class, kind)
 	if err != nil {
 		return err
 	}
@@ -155,8 +132,8 @@ func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, class string, kind e
 	return nil
 }
 
-func ReadEdgeValues(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind) (map[string]string, error) {
-	names, err := edgeNamesFor(class, kind)
+func ReadEdgeValues(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind) (map[string]string, error) {
+	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -178,8 +155,8 @@ func ReadEdgeValues(ctx context.Context, ssmClient SSMAPI, class string, kind ed
 	return values, nil
 }
 
-func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMAPI, class string, kind edge.Kind) (created bool, err error) {
-	names, err := edgeNamesFor(class, kind)
+func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind) (created bool, err error) {
+	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return false, err
 	}
@@ -260,8 +237,8 @@ func strandedKeys(recorded, paramName string) string {
 	return fmt.Sprintf("%s, the one %s records, is not among them", recorded, paramName)
 }
 
-func ReadEdgeCredentials(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind) (EdgeCredentials, error) {
-	names, err := edgeNamesFor(class, kind)
+func ReadEdgeCredentials(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind) (EdgeCredentials, error) {
+	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return EdgeCredentials{}, err
 	}
@@ -293,8 +270,8 @@ type DeploymentsStore struct {
 	BootstrapCred string `json:"bootstrapCred"`
 }
 
-func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind, values map[string]string) error {
-	paramName, err := DeploymentsStoreParamFor(class, kind)
+func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind, values map[string]string) error {
+	paramName, err := DeploymentsStoreParamFor(ns, class, kind)
 	if err != nil {
 		return err
 	}
@@ -303,7 +280,7 @@ func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, class string, 
 		ScriptName:    values[edge.OfferKeyStoreScriptName],
 		BootstrapCred: values[edge.OfferKeyStoreBootstrapCred],
 	}
-	stored, err := ReadDeploymentsStoreFor(ctx, ssmClient, class, kind)
+	stored, err := ReadDeploymentsStoreFor(ctx, ssmClient, ns, class, kind)
 	if err != nil {
 		return err
 	}
@@ -339,8 +316,8 @@ func standingCredMissing(kind edge.Kind, surface, scriptName, paramName string) 
 		kind, surface, scriptName, paramName, scriptName, kind)
 }
 
-func ReadDeploymentsStoreFor(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind) (DeploymentsStore, error) {
-	paramName, err := DeploymentsStoreParamFor(class, kind)
+func ReadDeploymentsStoreFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind) (DeploymentsStore, error) {
+	paramName, err := DeploymentsStoreParamFor(ns, class, kind)
 	if err != nil {
 		return DeploymentsStore{}, err
 	}
@@ -368,8 +345,8 @@ type ISRWriter struct {
 	BootstrapCred string `json:"bootstrapCred"`
 }
 
-func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind, values map[string]string) error {
-	paramName, err := ISRWriterParamFor(class, kind)
+func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind, values map[string]string) error {
+	paramName, err := ISRWriterParamFor(ns, class, kind)
 	if err != nil {
 		return err
 	}
@@ -378,7 +355,7 @@ func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, class string, kind ed
 		ScriptName:    values[edge.OfferKeyISRWriterScriptName],
 		BootstrapCred: values[edge.OfferKeyISRWriterBootstrapCred],
 	}
-	stored, err := ReadISRWriterFor(ctx, ssmClient, class, kind)
+	stored, err := ReadISRWriterFor(ctx, ssmClient, ns, class, kind)
 	if err != nil {
 		return err
 	}
@@ -406,8 +383,8 @@ func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, class string, kind ed
 	return nil
 }
 
-func ReadISRWriterFor(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind) (ISRWriter, error) {
-	paramName, err := ISRWriterParamFor(class, kind)
+func ReadISRWriterFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind) (ISRWriter, error) {
+	paramName, err := ISRWriterParamFor(ns, class, kind)
 	if err != nil {
 		return ISRWriter{}, err
 	}
@@ -429,24 +406,24 @@ func ReadISRWriterFor(ctx context.Context, ssmClient SSMAPI, class string, kind 
 	return writer, nil
 }
 
-func ISRWriterSeedParamFor(class string, kind edge.Kind) (string, error) {
-	names, err := edgeNamesFor(class, kind)
+func ISRWriterSeedParamFor(ns Namespace, class string, kind edge.Kind) (string, error) {
+	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return "", err
 	}
 	return names.isrWriterSeedParam, nil
 }
 
-func ensureISRWriterSeed(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind) (string, error) {
-	paramName, err := ISRWriterSeedParamFor(class, kind)
+func ensureISRWriterSeed(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind) (string, error) {
+	paramName, err := ISRWriterSeedParamFor(ns, class, kind)
 	if err != nil {
 		return "", err
 	}
 	return ensureSecret(ctx, ssmClient, paramName, fmt.Sprintf("Ocel: the shared secret the tag publisher authenticates its writes to the %s edge's ISR writer with, read at runtime by name.", class))
 }
 
-func ReadISRWriterSeedFor(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind) (string, error) {
-	paramName, err := ISRWriterSeedParamFor(class, kind)
+func ReadISRWriterSeedFor(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind) (string, error) {
+	paramName, err := ISRWriterSeedParamFor(ns, class, kind)
 	if err != nil {
 		return "", err
 	}
@@ -464,8 +441,8 @@ func ReadISRWriterSeedFor(ctx context.Context, ssmClient SSMAPI, class string, k
 	return aws.ToString(out.Parameter.Value), nil
 }
 
-func adoptCacheStore(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind, values map[string]string) error {
-	names, err := edgeNamesFor(class, kind)
+func adoptCacheStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind, values map[string]string) error {
+	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return err
 	}
@@ -477,7 +454,7 @@ func adoptCacheStore(ctx context.Context, ssmClient SSMAPI, class string, kind e
 		SecretAccessKey: values[edge.OfferKeySecretAccessKey],
 	}
 
-	stored, err := ReadCacheStore(ctx, ssmClient, class, kind)
+	stored, err := ReadCacheStore(ctx, ssmClient, ns, class, kind)
 	if err != nil {
 		return err
 	}
@@ -512,8 +489,8 @@ func adoptCacheStore(ctx context.Context, ssmClient SSMAPI, class string, kind e
 	return nil
 }
 
-func ReadCacheStore(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind) (CacheStore, error) {
-	names, err := edgeNamesFor(class, kind)
+func ReadCacheStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind) (CacheStore, error) {
+	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return CacheStore{}, err
 	}

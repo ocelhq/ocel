@@ -45,14 +45,14 @@ type EdgeAdoption struct {
 	Adoption edge.Adoption
 }
 
-func PlanParameters(ctx context.Context, apis ParamAPIs, class string, adoptions []EdgeAdoption, req Request) (providerkit.ChangeGroup, error) {
+func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, class string, adoptions []EdgeAdoption, req Request) (providerkit.ChangeGroup, error) {
 	group := providerkit.ChangeGroup{Kind: providerkit.ParameterGroupKind, Name: ParamGroupName}
 
-	origin, err := OriginSecretParamFor(class)
+	origin, err := ns.OriginSecretParamFor(class)
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
-	for _, name := range []string{origin, PassphraseParamName} {
+	for _, name := range []string{origin, ns.PassphraseParamName()} {
 		change, err := paramPresence(ctx, apis.SSM, name)
 		if err != nil {
 			return providerkit.ChangeGroup{}, err
@@ -62,17 +62,17 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, class string, adoptions
 
 	var adopted []providerkit.Change
 	for _, edging := range adoptions {
-		changes, err := adoptionChanges(ctx, apis.SSM, class, edging.Kind, edging.Adoption)
+		changes, err := adoptionChanges(ctx, apis.SSM, ns, class, edging.Kind, edging.Adoption)
 		if err != nil {
 			return providerkit.ChangeGroup{}, err
 		}
 		adopted = append(adopted, changes...)
 	}
-	written, err := featureParams(ctx, apis, class, req, req.Features, func(f feature) paramPlanner { return f.afterPlan })
+	written, err := featureParams(ctx, apis, ns, class, req, req.Features, func(f feature) paramPlanner { return f.afterPlan })
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
-	severed, err := featureParams(ctx, apis, class, req, Removing(req.Features, req.Remove), func(f feature) paramPlanner { return f.dropPlan })
+	severed, err := featureParams(ctx, apis, ns, class, req, Removing(req.Features, req.Remove), func(f feature) paramPlanner { return f.dropPlan })
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
@@ -82,16 +82,16 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, class string, adoptions
 	return group, nil
 }
 
-type paramPlanner func(context.Context, ParamAPIs, string, Request) ([]providerkit.Change, error)
+type paramPlanner func(context.Context, ParamAPIs, Namespace, string, Request) ([]providerkit.Change, error)
 
-func featureParams(ctx context.Context, apis ParamAPIs, class string, req Request, named []string, hook func(feature) paramPlanner) ([]providerkit.Change, error) {
+func featureParams(ctx context.Context, apis ParamAPIs, ns Namespace, class string, req Request, named []string, hook func(feature) paramPlanner) ([]providerkit.Change, error) {
 	var changes []providerkit.Change
 	for _, f := range featureRegistry {
 		plan := hook(f)
 		if plan == nil || !slices.Contains(named, f.name) {
 			continue
 		}
-		planned, err := plan(ctx, apis, class, req)
+		planned, err := plan(ctx, apis, ns, class, req)
 		if err != nil {
 			return nil, err
 		}
@@ -100,14 +100,14 @@ func featureParams(ctx context.Context, apis ParamAPIs, class string, req Reques
 	return changes, nil
 }
 
-func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, class string, sharedPassphrase bool) (providerkit.ChangeGroup, error) {
+func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, class string, sharedPassphrase bool) (providerkit.ChangeGroup, error) {
 	group := providerkit.ChangeGroup{Kind: providerkit.ParameterGroupKind, Name: ParamGroupName}
 
-	names, err := ClassParamNames(class)
+	names, err := ClassParamNames(ns, class)
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
-	held, err := paramsHeld(ctx, apis.SSM, append(slices.Clone(names), PassphraseParamName))
+	held, err := paramsHeld(ctx, apis.SSM, append(slices.Clone(names), ns.PassphraseParamName()))
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
@@ -121,7 +121,7 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, class string, sha
 		}
 	}
 
-	user, err := EdgeUserNameFor(class)
+	user, err := ns.EdgeUserNameFor(class)
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
@@ -137,7 +137,7 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, class string, sha
 		})
 	}
 
-	passphrase, err := plannedPassphraseRemoval(held[PassphraseParamName], class, sharedPassphrase)
+	passphrase, err := plannedPassphraseRemoval(held[ns.PassphraseParamName()], ns, class, sharedPassphrase)
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
@@ -155,14 +155,14 @@ func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, class string, sha
 	return group, nil
 }
 
-func plannedPassphraseRemoval(held bool, class string, shared bool) (providerkit.Change, error) {
+func plannedPassphraseRemoval(held bool, ns Namespace, class string, shared bool) (providerkit.Change, error) {
 	if !held {
 		return providerkit.Change{}, nil
 	}
 	if !shared {
 		return providerkit.Change{
 			Kind:   kindParameter,
-			Name:   PassphraseParamName,
+			Name:   ns.PassphraseParamName(),
 			Action: providerkit.ActionDelete,
 			Reason: passphraseStranded,
 		}, nil
@@ -173,24 +173,24 @@ func plannedPassphraseRemoval(held bool, class string, shared bool) (providerkit
 	}
 	return providerkit.Change{
 		Kind:   kindParameter,
-		Name:   PassphraseParamName,
+		Name:   ns.PassphraseParamName(),
 		Action: providerkit.ActionKeep,
 		Reason: fmt.Sprintf(passphraseShared, sibling),
 	}, nil
 }
 
-func adoptionChanges(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind, adoption edge.Adoption) ([]providerkit.Change, error) {
+func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind, adoption edge.Adoption) ([]providerkit.Change, error) {
 	if len(adoption.Values) == 0 && len(adoption.Offers) == 0 {
 		return nil, nil
 	}
-	names, err := edgeNamesFor(class, kind)
+	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return nil, err
 	}
 
 	var changes []providerkit.Change
 	if len(adoption.Values) > 0 {
-		stored, err := ReadEdgeValues(ctx, ssmClient, class, kind)
+		stored, err := ReadEdgeValues(ctx, ssmClient, ns, class, kind)
 		if err != nil {
 			return nil, err
 		}

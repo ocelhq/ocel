@@ -37,13 +37,6 @@ const (
 	revalidatorAssetBucketEnvVar = "OCEL_ASSET_BUCKET"
 )
 
-func revalidateQueueNames(class string) (queue, dlq string) {
-	if class == ClassPreview {
-		return "ocel-revalidate-preview.fifo", "ocel-revalidate-preview-dlq.fifo"
-	}
-	return "ocel-revalidate.fifo", "ocel-revalidate-dlq.fifo"
-}
-
 func revalidatorPlacement(bucket string) payloads.Placement {
 	return payloads.At(bucket, revalidatorKeyPrefix, payloads.Revalidator())
 }
@@ -52,8 +45,8 @@ func ensureRevalidatorPayload(ctx context.Context, store ObjectStore, bucket str
 	return payloads.Place(ctx, store, bucket, revalidatorKeyPrefix, revalidatorLabel, payloads.Revalidator())
 }
 
-func revalidateQueueResources(class string) string {
-	queue, dlq := revalidateQueueNames(class)
+func revalidateQueueResources(ns Namespace, class string) string {
+	queue, dlq := ns.revalidateQueueNames(class)
 	return fmt.Sprintf(`  RevalidateDeadLetterQueue:
     Type: AWS::SQS::Queue
     Metadata:
@@ -81,7 +74,7 @@ func revalidateQueueResources(class string) string {
 		revalidateVisibilityTimeoutSeconds, revalidateRetentionSeconds, revalidateMaxReceiveCount)
 }
 
-func revalidatorResources(code payloads.Placement) string {
+func revalidatorResources(ns Namespace, code payloads.Placement) string {
 	return fmt.Sprintf(`  RevalidatorRole:
     Type: AWS::IAM::Role
     Properties:
@@ -96,7 +89,7 @@ func revalidatorResources(code payloads.Placement) string {
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: ocel-revalidator
+        - PolicyName: %s
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -152,7 +145,7 @@ func revalidatorResources(code payloads.Placement) string {
         - ReportBatchItemFailures
       ScalingConfig:
         MaximumConcurrency: %d
-`, revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
+`, ns.policyName("revalidator"), revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
 		revalidatorAssetBucketEnvVar,
 		revalidatorBatchSize, revalidatorMaxConcurrency)

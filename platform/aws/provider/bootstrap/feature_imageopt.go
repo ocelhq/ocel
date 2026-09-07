@@ -38,7 +38,7 @@ Description: "Ocel bootstrap feature (%s, %s) - the shared image optimizer every
 %sOutputs:
 %s`,
 			FeatureImageOptimization, in.class, params,
-			imageOptimizerResources(in.code.optimizer),
+			imageOptimizerResources(in.ns, in.code.optimizer),
 			imageOptimizerOutputs()),
 	}
 }

@@ -38,7 +38,7 @@ func ensureOptimizerPayload(ctx context.Context, store ObjectStore, bucket strin
 	return payloads.Place(ctx, store, bucket, optimizerKeyPrefix, optimizerLabel, payloads.ImageOptimizer())
 }
 
-func imageOptimizerResources(code payloads.Placement) string {
+func imageOptimizerResources(ns Namespace, code payloads.Placement) string {
 	return fmt.Sprintf(`  ImageOptimizerRole:
     Type: AWS::IAM::Role
     Properties:
@@ -53,7 +53,7 @@ func imageOptimizerResources(code payloads.Placement) string {
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: ocel-image-optimizer-read
+        - PolicyName: %s
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -91,7 +91,7 @@ func imageOptimizerResources(code payloads.Placement) string {
       TargetFunctionArn: !GetAtt ImageOptimizer.Arn
       AuthType: AWS_IAM
       InvokeMode: RESPONSE_STREAM
-`, optimizerRuntime, optimizerArchitecture, optimizerHandler, optimizerMemoryMB, optimizerTimeoutSeconds,
+`, ns.policyName("image-optimizer-read"), optimizerRuntime, optimizerArchitecture, optimizerHandler, optimizerMemoryMB, optimizerTimeoutSeconds,
 		code.Bucket, code.Key, optimizerBucketEnvVar, optimizerThreadpoolSize,
 		optimizerComponentTagKey, optimizerComponentTagValue)
 }
