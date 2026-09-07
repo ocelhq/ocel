@@ -524,6 +524,11 @@ func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 			resources: []string{r.appBoundary},
 		},
 		{
+			actions:   []string{"iam:DeleteRolePermissionsBoundary"},
+			resources: []string{appRoleARN},
+			condition: taggedByOcel(),
+		},
+		{
 			actions:   []string{"iam:CreateRole", "iam:TagRole"},
 			resources: []string{r.bootstrapRole},
 		},

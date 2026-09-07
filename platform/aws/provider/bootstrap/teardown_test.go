@@ -64,8 +64,34 @@ func (c *teardownCFN) DeleteStack(_ context.Context, in *cloudformation.DeleteSt
 }
 
 type teardownIAM struct {
-	keys    map[string][]string
-	deleted []string
+	keys     map[string][]string
+	deleted  []string
+	bounded  map[string][]string
+	released []string
+	onList   func()
+}
+
+func (i *teardownIAM) ListEntitiesForPolicy(_ context.Context, in *iam.ListEntitiesForPolicyInput, _ ...func(*iam.Options)) (*iam.ListEntitiesForPolicyOutput, error) {
+	if i.onList != nil {
+		i.onList()
+	}
+	roles, ok := i.bounded[aws.ToString(in.PolicyArn)]
+	if !ok {
+		return nil, &iamtypes.NoSuchEntityException{}
+	}
+	if in.PolicyUsageFilter != iamtypes.PolicyUsageTypePermissionsBoundary {
+		return nil, errors.New("teardownIAM: only boundary usage is listed")
+	}
+	out := &iam.ListEntitiesForPolicyOutput{}
+	for _, name := range roles {
+		out.PolicyRoles = append(out.PolicyRoles, iamtypes.PolicyRole{RoleName: aws.String(name)})
+	}
+	return out, nil
+}
+
+func (i *teardownIAM) DeleteRolePermissionsBoundary(_ context.Context, in *iam.DeleteRolePermissionsBoundaryInput, _ ...func(*iam.Options)) (*iam.DeleteRolePermissionsBoundaryOutput, error) {
+	i.released = append(i.released, aws.ToString(in.RoleName))
+	return &iam.DeleteRolePermissionsBoundaryOutput{}, nil
 }
 
 func (i *teardownIAM) ListAccessKeys(_ context.Context, in *iam.ListAccessKeysInput, _ ...func(*iam.Options)) (*iam.ListAccessKeysOutput, error) {
@@ -135,6 +161,8 @@ func (b *teardownS3) DeleteObjects(_ context.Context, in *s3.DeleteObjectsInput,
 	return &s3.DeleteObjectsOutput{Errors: b.refuse}, nil
 }
 
+var testAppBoundaryARN = "arn:aws:iam::123456789012:policy/" + defaultNamespace.AppBoundaryNameFor(ClassProduction)
+
 func teardownFakes(t *testing.T) (TeardownAPIs, *teardownCFN, *fakeSSM, *teardownS3) {
 	t.Helper()
 
@@ -143,6 +171,7 @@ func teardownFakes(t *testing.T) (TeardownAPIs, *teardownCFN, *fakeSSM, *teardow
 			outputStateBucket:    "ocel-state",
 			outputArtifactBucket: "ocel-artifacts",
 			outputAssetBucket:    "ocel-assets",
+			outputAppBoundaryARN: testAppBoundaryARN,
 		}},
 	}}
 	ssmc := newFakeSSM()
@@ -166,6 +195,42 @@ func teardownFakes(t *testing.T) (TeardownAPIs, *teardownCFN, *fakeSSM, *teardow
 		Buckets: buckets,
 	}
 	return apis, cfn, ssmc, buckets
+}
+
+func TestTeardownReleasesTheAppBoundaryBeforeTheCoreStackGoes(t *testing.T) {
+	t.Parallel()
+
+	apis, cfn, _, _ := teardownFakes(t)
+	iamc := apis.IAM.(*teardownIAM)
+	iamc.bounded = map[string][]string{testAppBoundaryARN: {"app-role-a", "app-role-b"}}
+	var coreDeletedWhenListed bool
+	iamc.onList = func() { coreDeletedWhenListed = slices.Contains(cfn.deleted, coreStackName) }
+
+	var logged []string
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, func(msg string) { logged = append(logged, msg) }); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+	if want := []string{"app-role-a", "app-role-b"}; !slices.Equal(iamc.released, want) {
+		t.Errorf("released = %v, want %v", iamc.released, want)
+	}
+	if coreDeletedWhenListed {
+		t.Error("the boundary was looked up after the core stack delete began; CloudFormation refuses a policy still in use")
+	}
+	if !slices.ContainsFunc(logged, func(msg string) bool { return strings.Contains(msg, "app-role-a") }) {
+		t.Errorf("log = %v, want each released role named", logged)
+	}
+}
+
+func TestTeardownTakesAnAppBoundaryNobodyCarries(t *testing.T) {
+	t.Parallel()
+
+	apis, cfn, _, _ := teardownFakes(t)
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+	if !slices.Contains(cfn.deleted, coreStackName) {
+		t.Errorf("deleted = %v, want the core stack removed", cfn.deleted)
+	}
 }
 
 func TestTeardownEmptiesEveryPage(t *testing.T) {

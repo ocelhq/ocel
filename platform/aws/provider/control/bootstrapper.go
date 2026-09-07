@@ -26,6 +26,7 @@ type SSMAPI interface {
 type IAMAPI interface {
 	bootstrap.IAMAPI
 	bootstrap.IAMKeyAPI
+	bootstrap.IAMBoundaryAPI
 }
 
 type Bootstrapper struct {
