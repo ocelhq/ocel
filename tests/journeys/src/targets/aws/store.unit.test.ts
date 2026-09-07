@@ -1,6 +1,6 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
-import { awsLinkStore, awsStore, type Cli } from "./store";
+import { awsLinkStore, awsStore, type Cli, namespacesStanding } from "./store";
 
 const TABLES: Record<string, string> = {
   StateTableName: "ocel-state",
@@ -256,5 +256,47 @@ describe("awsLinkStore", () => {
   it("reports no index for an owner that never published there", async () => {
     const { cli } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : linksPage([])));
     assert.equal(await awsLinkStore(undefined, cli).ownerIndex(SLUG, owner), undefined);
+  });
+});
+
+describe("the namespace a store reads under", () => {
+  it("reads the default bootstrap stack when no namespace is named", async () => {
+    const { cli, calls } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : page([])));
+    await awsStore(undefined, cli).deployedSlugs();
+    const named = calls.find(describeStacks)?.includes("ocel-bootstrap");
+    assert.ok(named, "the store read a stack other than ocel-bootstrap");
+  });
+
+  it("reads the bootstrap of the namespace it was given", async () => {
+    const { cli, calls } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : page([])));
+    await awsStore(undefined, cli, "j-1874-deploy-node").deployedSlugs();
+    const named = calls.find(describeStacks)?.includes("j-1874-deploy-node-bootstrap");
+    assert.ok(named, "the store did not read the namespaced bootstrap stack");
+  });
+});
+
+describe("namespacesStanding", () => {
+  function tagged(namespaces: string[], next?: string): string {
+    return JSON.stringify({
+      ResourceTagMappingList: namespaces.map((namespace) => ({
+        Tags: [{ Key: "ocel:namespace", Value: namespace }],
+      })),
+      ...(next ? { PaginationToken: next } : {}),
+    });
+  }
+
+  it("asks the tag index for bootstrap stacks alone, never every stack in the account", async () => {
+    const { cli, calls } = cliOver(() => tagged([]));
+    await namespacesStanding(cli);
+    const asked = calls[0] ?? [];
+    assert.equal(asked[0], "resourcegroupstaggingapi");
+    assert.ok(asked.includes("cloudformation:stack"), asked.join(" "));
+    assert.ok(asked.includes("Key=ocel:namespace"), asked.join(" "));
+  });
+
+  it("reads every namespace the account carries, across pages", async () => {
+    const pages = [tagged(["j-1799-one"], "more"), tagged(["j-1799-two", "ocel"])];
+    const { cli } = cliOver(() => pages.shift() ?? tagged([]));
+    assert.deepEqual(await namespacesStanding(cli), ["j-1799-one", "j-1799-two", "ocel"]);
   });
 });

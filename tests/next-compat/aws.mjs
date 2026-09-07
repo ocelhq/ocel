@@ -114,12 +114,18 @@ export function resolveFunctionName(slug, app, environment, fail) {
   return names[0];
 }
 
+export const DEFAULT_NAMESPACE = "ocel";
+
+export function previewBootstrapStack(env = process.env) {
+  return `${env.OCEL_NAMESPACE?.trim() || DEFAULT_NAMESPACE}-bootstrap-preview`;
+}
+
 export function resolveBootstrapBucket(logicalId, envHint, fail) {
   const found = aws([
     "cloudformation",
     "describe-stack-resources",
     "--stack-name",
-    process.env.OCEL_BOOTSTRAP_STACK || "ocel-bootstrap-preview",
+    previewBootstrapStack(),
     "--query",
     `StackResources[?LogicalResourceId==\`${logicalId}\`].PhysicalResourceId | [0]`,
     "--output",

@@ -2,7 +2,7 @@
 
 import { execFileSync } from "node:child_process";
 
-import { AWS_CLI_RETRY_ENV } from "./aws.mjs";
+import { AWS_CLI_RETRY_ENV, previewBootstrapStack } from "./aws.mjs";
 import { TAG_PROBE_ROUTE, tagProbeTag } from "./lib.mjs";
 
 const PUBLISH_DEADLINE_MS = 180_000;
@@ -112,7 +112,7 @@ function resolveAssetBucket() {
     "cloudformation",
     "describe-stack-resources",
     "--stack-name",
-    process.env.OCEL_BOOTSTRAP_STACK || "ocel-bootstrap-preview",
+    previewBootstrapStack(),
     "--query",
     "StackResources[?LogicalResourceId==`AssetBucket`].PhysicalResourceId | [0]",
     "--output",

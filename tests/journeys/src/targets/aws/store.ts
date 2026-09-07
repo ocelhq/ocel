@@ -1,13 +1,12 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { bootstrapStackOf, namespaceOf } from "./namespace";
 
 const run = promisify(execFile);
 
 const TIMEOUT_MS = 60_000;
 
 const RETRYING = { AWS_RETRY_MODE: "adaptive", AWS_MAX_ATTEMPTS: "6" };
-
-const BOOTSTRAP_STACK = "ocel-bootstrap";
 
 const PRODUCTION_PARTITIONS = ["projects#production", "edgestacks#production"];
 
@@ -87,6 +86,7 @@ const STATE_TABLE_OUTPUT = "StateTableName";
 
 async function bootstrapTable(
   cli: Cli,
+  stack: string,
   output: string,
   consequence: string,
 ): Promise<string | undefined> {
@@ -96,7 +96,7 @@ async function bootstrapTable(
       "cloudformation",
       "describe-stacks",
       "--stack-name",
-      BOOTSTRAP_STACK,
+      stack,
       "--query",
       `Stacks[0].Outputs[?OutputKey=='${output}']|[0].OutputValue`,
       "--output",
@@ -106,23 +106,32 @@ async function bootstrapTable(
     if (noSuchStack(error)) {
       return undefined;
     }
-    throw new Error(
-      `the ${BOOTSTRAP_STACK} stack could not be read, so ${consequence}:${said(error)}`,
-    );
+    throw new Error(`the ${stack} stack could not be read, so ${consequence}:${said(error)}`);
   }
   if (name === "" || name === "None") {
     throw new Error(
-      `the ${BOOTSTRAP_STACK} stack stands but publishes no ${output} output, so ${consequence}`,
+      `the ${stack} stack stands but publishes no ${output} output, so ${consequence}`,
     );
   }
   return name;
 }
 
-async function stateTable(cli: Cli): Promise<string | undefined> {
-  return bootstrapTable(cli, STATE_TABLE_OUTPUT, "nothing can be said about which projects stand");
+async function stateTable(cli: Cli, stack: string): Promise<string | undefined> {
+  return bootstrapTable(
+    cli,
+    stack,
+    STATE_TABLE_OUTPUT,
+    "nothing can be said about which projects stand",
+  );
 }
 
-export function awsStore(endpoint?: string, cli: Cli = cliAt(endpoint)): Store {
+export function awsStore(
+  endpoint?: string,
+  cli: Cli = cliAt(endpoint),
+  namespace: string = namespaceOf(process.env),
+): Store {
+  const stack = bootstrapStackOf(namespace);
+
   async function query(table: string, partition: string, slug?: string): Promise<string[]> {
     const found: string[] = [];
     for (const item of await queryPartition(cli, table, partition, slug)) {
@@ -140,7 +149,7 @@ export function awsStore(endpoint?: string, cli: Cli = cliAt(endpoint)): Store {
     },
 
     async deployedSlugs() {
-      const table = await stateTable(cli);
+      const table = await stateTable(cli, stack);
       if (!table) {
         return [];
       }
@@ -154,7 +163,7 @@ export function awsStore(endpoint?: string, cli: Cli = cliAt(endpoint)): Store {
     },
 
     async stands(slug) {
-      const table = await stateTable(cli);
+      const table = await stateTable(cli, stack);
       if (!table) {
         return false;
       }
@@ -219,12 +228,18 @@ function linkTypeOf(link: Record<string, unknown>): LinkKind {
   return LINK_TYPES.find((type) => type in link) ?? "unspecified";
 }
 
-export function awsLinkStore(endpoint?: string, cli: Cli = cliAt(endpoint)): LinkStore {
+export function awsLinkStore(
+  endpoint?: string,
+  cli: Cli = cliAt(endpoint),
+  namespace: string = namespaceOf(process.env),
+): LinkStore {
+  const stack = bootstrapStackOf(namespace);
+
   async function linkTableOrThrow(): Promise<string> {
-    const name = await bootstrapTable(cli, STATE_TABLE_OUTPUT, "no link can be read");
+    const name = await bootstrapTable(cli, stack, STATE_TABLE_OUTPUT, "no link can be read");
     if (!name) {
       throw new Error(
-        `the ${BOOTSTRAP_STACK} stack publishes no ${STATE_TABLE_OUTPUT} output, so no link can be read`,
+        `the ${stack} stack publishes no ${STATE_TABLE_OUTPUT} output, so no link can be read`,
       );
     }
     return name;
@@ -288,6 +303,42 @@ export function awsLinkStore(endpoint?: string, cli: Cli = cliAt(endpoint)): Lin
       return envelope.names ?? [];
     },
   };
+}
+
+const NAMESPACE_TAG = "ocel:namespace";
+
+type TaggedPage = {
+  ResourceTagMappingList?: Array<{ Tags?: Array<{ Key?: string; Value?: string }> }>;
+  PaginationToken?: string;
+};
+
+export async function namespacesStanding(cli: Cli): Promise<string[]> {
+  const found: string[] = [];
+  const seen = new Set<string>();
+  let token = "";
+  do {
+    const raw = await cli([
+      "resourcegroupstaggingapi",
+      "get-resources",
+      "--resource-type-filters",
+      "cloudformation:stack",
+      "--tag-filters",
+      `Key=${NAMESPACE_TAG}`,
+      ...(token ? ["--pagination-token", token] : []),
+      "--output",
+      "json",
+    ]);
+    const page = JSON.parse(raw) as TaggedPage;
+    for (const resource of page.ResourceTagMappingList ?? []) {
+      const named = resource.Tags?.find((tag) => tag.Key === NAMESPACE_TAG)?.Value;
+      if (named && !seen.has(named)) {
+        seen.add(named);
+        found.push(named);
+      }
+    }
+    token = page.PaginationToken ?? "";
+  } while (token);
+  return found;
 }
 
 export async function answersAsFloci(endpoint: string): Promise<boolean> {
