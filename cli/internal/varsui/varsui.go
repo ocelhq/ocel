@@ -618,11 +618,15 @@ func (s *Session) writeState(ctx context.Context, w http.ResponseWriter) {
 		fail(w, http.StatusBadGateway, err)
 		return
 	}
+	environments := s.opts.Environments
+	if environments == nil {
+		environments = []string{}
+	}
 	writeJSON(w, State{
 		Slug:         s.opts.Slug,
 		Tier:         s.tier(),
 		Other:        s.otherTier(),
-		Environments: s.opts.Environments,
+		Environments: environments,
 		Matrix:       s.opts.Gate.Matrix(s.opts.Environments),
 		Recovery:     s.opts.Recovery,
 	})
