@@ -33,6 +33,8 @@ type Config struct {
 
 	StateTable     string
 	StateTableARN  string
+	VarsTable      string
+	VarsTableARN   string
 	VarsKeyARN     string
 	AppBoundaryARN string
 	Class          providerkit.Class

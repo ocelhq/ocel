@@ -104,7 +104,7 @@ func (b appBundle) hasLive() bool { return len(b.Live) > 0 }
 func sealAppBundle(cfg Config, slug, app string, sensitive map[string]string, keys []live.Key, links []live.Link) (appBundle, error) {
 	manifest, err := live.Render(live.Manifest{
 		Slug:        slug,
-		Table:       cfg.StateTable,
+		Table:       cfg.VarsTable,
 		KeyARN:      cfg.VarsKeyARN,
 		Class:       string(cfg.Class),
 		Environment: overrideEnvironment(cfg),

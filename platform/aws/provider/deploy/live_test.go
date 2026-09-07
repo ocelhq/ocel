@@ -17,16 +17,19 @@ import (
 )
 
 const (
-	valuesTable    = "ocel-state"
-	valuesTableARN = "arn:aws:dynamodb:us-east-1:1234:table/ocel-state"
+	stateTable     = "ocel-state"
+	valuesTable    = "ocel-vars"
+	valuesTableARN = "arn:aws:dynamodb:us-east-1:1234:table/ocel-vars"
 	varsClass      = "production"
 )
 
 func liveConfig() Config {
 	return Config{
 		VarsKeyARN:    productionVarsKeyARN,
-		StateTable:    valuesTable,
-		StateTableARN: valuesTableARN,
+		StateTable:    stateTable,
+		StateTableARN: stateTableARN,
+		VarsTable:     valuesTable,
+		VarsTableARN:  valuesTableARN,
 		Class:         varsClass,
 	}
 }

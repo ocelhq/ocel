@@ -19,8 +19,9 @@ import (
 const fakePageSize = 2
 
 type fakeDynamo struct {
-	mu    sync.Mutex
-	items map[string]map[string]map[string]ddbtypes.AttributeValue
+	mu     sync.Mutex
+	items  map[string]map[string]map[string]ddbtypes.AttributeValue
+	tables map[string]bool
 }
 
 func newFakeDynamo() *fakeDynamo {
@@ -30,6 +31,7 @@ func newFakeDynamo() *fakeDynamo {
 func (f *fakeDynamo) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.sawTable(in.TableName)
 	item, ok := f.items[stringAttr(in.Key, "pk")][stringAttr(in.Key, "sk")]
 	if !ok {
 		return &dynamodb.GetItemOutput{}, nil
@@ -40,6 +42,7 @@ func (f *fakeDynamo) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...
 func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.sawTable(in.TableName)
 	if err := namesAndValuesUsed(in.ExpressionAttributeNames, in.ExpressionAttributeValues, aws.ToString(in.ConditionExpression)); err != nil {
 		return nil, err
 	}
@@ -58,6 +61,7 @@ func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...
 func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.sawTable(in.TableName)
 	if err := namesAndValuesUsed(in.ExpressionAttributeNames, in.ExpressionAttributeValues, aws.ToString(in.ConditionExpression)); err != nil {
 		return nil, err
 	}
@@ -78,6 +82,9 @@ func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.Transact
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, write := range in.TransactItems {
+		if write.Put != nil {
+			f.sawTable(write.Put.TableName)
+		}
 		if write.Put == nil {
 			return nil, fmt.Errorf("fakeDynamo: this transaction carries an operation that is not a put")
 		}
@@ -133,6 +140,7 @@ func namesAndValuesUsed(names map[string]string, values map[string]ddbtypes.Attr
 func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.sawTable(in.TableName)
 	if err := namesAndValuesUsed(in.ExpressionAttributeNames, in.ExpressionAttributeValues, aws.ToString(in.KeyConditionExpression)); err != nil {
 		return nil, err
 	}
@@ -234,4 +242,17 @@ func sealedContext(bound map[string]string) string {
 	}
 	slices.Sort(pairs)
 	return strings.Join(pairs, ",")
+}
+
+func (f *fakeDynamo) sawTable(name *string) {
+	if f.tables == nil {
+		f.tables = map[string]bool{}
+	}
+	f.tables[aws.ToString(name)] = true
+}
+
+func (f *fakeDynamo) tablesUsed() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Sorted(maps.Keys(f.tables))
 }
