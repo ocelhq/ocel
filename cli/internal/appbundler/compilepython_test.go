@@ -135,6 +135,23 @@ func TestCompileRefusesAPythonAppThatNamesAnEntrypointOfItsOwn(t *testing.T) {
 	}
 }
 
+func TestCompileRefusesAPythonAppsEntrypointBeforeLookingForTheDirectoryItNames(t *testing.T) {
+	t.Parallel()
+
+	source := pythonApp(t, map[string]string{"main.py": "print('hi')\n"})
+	err := Compile(context.Background(), Compilation{
+		App:        "web",
+		Runtime:    Runtime{Name: "python", Arch: "x86_64"},
+		Source:     source,
+		Entrypoint: "api",
+		FuncDir:    filepath.Join(t.TempDir(), "index.func"),
+		AppDir:     t.TempDir(),
+	})
+	if err == nil || !strings.Contains(err.Error(), pythonEntryFile) {
+		t.Fatalf("err = %v, want the refusal naming %s — an entrypoint the python build ignores is wrong whether or not the directory it names exists, and a stat error says nothing about that", err, pythonEntryFile)
+	}
+}
+
 func TestVendoringAsksPipOnlyForWheelsTheDeclaredArchitectureCanImport(t *testing.T) {
 	t.Parallel()
 
