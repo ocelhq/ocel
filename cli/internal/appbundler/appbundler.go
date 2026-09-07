@@ -1,6 +1,7 @@
 package appbundler
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -69,7 +71,7 @@ func Bundle(t Target) error {
 		return fmt.Errorf("create %s: %w", t.FuncDir, err)
 	}
 
-	native := &addons{}
+	native := &addons{arch: t.Runtime.Arch}
 	result := api.Build(api.BuildOptions{
 		EntryPoints:       []string{t.Entrypoint},
 		AbsWorkingDir:     filepath.Dir(t.Entrypoint),
@@ -178,8 +180,54 @@ type addon struct {
 }
 
 type addons struct {
+	arch string
+
 	mu     sync.Mutex
 	placed []addon
+}
+
+func (a *addons) admits(source, importer string) error {
+	want, known := providerkit.ELFMachine(a.arch)
+	if !known {
+		return fmt.Errorf("native addon %q required by %s cannot be checked: this app declares architecture %q, which nothing runs it on",
+			source, importer, a.arch)
+	}
+	machine, ok := elfMachine(source)
+	if !ok {
+		return fmt.Errorf("native addon %s required by %s is not a linux ELF binary, so the function it lands in could not load it; %s",
+			source, importer, tracingHint)
+	}
+	if machine == want {
+		return nil
+	}
+	return fmt.Errorf("native addon %s required by %s is built for %s, and this app declares %s: reinstall its dependencies on a host of the declared architecture, or declare the one they were built for",
+		source, importer, machineName(machine), providerkit.Architecture(a.arch))
+}
+
+func machineName(machine uint16) string {
+	if arch, known := providerkit.ArchOfELFMachine(machine); known {
+		return arch
+	}
+	return fmt.Sprintf("ELF machine %#x", machine)
+}
+
+func elfMachine(source string) (uint16, bool) {
+	file, err := os.Open(source)
+	if err != nil {
+		return 0, false
+	}
+	defer file.Close()
+	var header [20]byte
+	if _, err := io.ReadFull(file, header[:]); err != nil {
+		return 0, false
+	}
+	if string(header[:4]) != "\x7fELF" {
+		return 0, false
+	}
+	if header[5] == 2 {
+		return binary.BigEndian.Uint16(header[18:20]), true
+	}
+	return binary.LittleEndian.Uint16(header[18:20]), true
 }
 
 func (a *addons) plugin() api.Plugin {
@@ -232,6 +280,9 @@ func (a *addons) place(args api.OnResolveArgs) (string, error) {
 	info, err := os.Stat(source)
 	if err != nil || !info.Mode().IsRegular() {
 		return "", fmt.Errorf("native addon %q required by %s was not found at %s; %s", args.Path, args.Importer, source, tracingHint)
+	}
+	if err := a.admits(source, args.Importer); err != nil {
+		return "", err
 	}
 
 	dest := addonDest(source)

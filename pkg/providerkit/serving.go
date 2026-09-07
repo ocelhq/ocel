@@ -49,6 +49,31 @@ func GoArch(declared string) (string, bool) {
 	return "", false
 }
 
+const (
+	elfMachineX8664 = 0x3E
+	elfMachineARM64 = 0xB7
+)
+
+func ELFMachine(declared string) (uint16, bool) {
+	switch Architecture(declared) {
+	case ArchX8664:
+		return elfMachineX8664, true
+	case ArchARM64:
+		return elfMachineARM64, true
+	}
+	return 0, false
+}
+
+func ArchOfELFMachine(machine uint16) (string, bool) {
+	switch machine {
+	case elfMachineX8664:
+		return ArchX8664, true
+	case elfMachineARM64:
+		return ArchARM64, true
+	}
+	return "", false
+}
+
 const MembranePrefix = "ocel-membrane-layer"
 
 type MembraneSource interface {
