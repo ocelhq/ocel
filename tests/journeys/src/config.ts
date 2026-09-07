@@ -46,8 +46,12 @@ function dnsOf(env: NodeJS.ProcessEnv): { dns?: "cloudflare" } {
   return env.OCEL_JOURNEY_DNS === "cloudflare" ? { dns: "cloudflare" } : {};
 }
 
-export function sweepShapeFor(cell: Cell, slug: string, env: NodeJS.ProcessEnv): Overlay {
-  return { base: AWS_BASE, slug, ...cell.variant?.config, ...dnsOf(env) };
+export function sweepShapeFor(
+  cell: Cell | undefined,
+  slug: string,
+  env: NodeJS.ProcessEnv,
+): Overlay {
+  return { base: AWS_BASE, slug, ...cell?.variant?.config, ...dnsOf(env) };
 }
 
 export function shapeFor(cell: CellContext, target: TargetName, env: NodeJS.ProcessEnv): Overlay {

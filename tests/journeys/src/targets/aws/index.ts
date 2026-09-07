@@ -1,7 +1,13 @@
 import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
-import { AWS_BASE, JOURNEY_CONFIG, sweepShapeFor, writeJourneyConfig } from "../../config";
+import {
+  AWS_BASE,
+  JOURNEY_CONFIG,
+  type Overlay,
+  sweepShapeFor,
+  writeJourneyConfig,
+} from "../../config";
 import { type Fetch, INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug, slugPart } from "../../identity";
@@ -9,7 +15,14 @@ import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import type { PrepareFailures } from "../../prepare";
 import { migrates, setsEnv } from "../../rows";
-import { type Cell, cellsOf, type Leg, specForTarget, variantNameOf } from "../../spec";
+import {
+  type Cell,
+  cellsOf,
+  type FixtureSpec,
+  type Leg,
+  specForTarget,
+  variantNameOf,
+} from "../../spec";
 import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
@@ -330,21 +343,27 @@ async function sweepStrayNamespace(
 ): Promise<void> {
   const where = await place();
   const held = awsStore(where.endpoint, undefined, namespace);
+  const fixtures = specForTarget("aws");
+  const stranded: Stranded[] = [];
   for (const slug of await held.deployedSlugs()) {
-    const stranded = reclaimable(slug, [...byPart.keys()]);
-    const cell = stranded && byPart.get(stranded.cell);
-    if (!cell) {
-      complaints.push(`${slug} stands in the ${namespace} bootstrap and names no cell`);
+    const read = reclaimable(slug, [...byPart.keys()]);
+    if (!read) {
+      complaints.push(`${slug} stands in the ${namespace} bootstrap and no harness run made it`);
       continue;
     }
-    await inFixture(cell.fixture.dir, runId, `sweep-${slug}`, async (dir) => {
-      await writeJourneyConfig(dir, sweepShapeFor(cell, slug, process.env));
+    stranded.push(read);
+  }
+  const { swept, complaints: unplanned } = sweepPlan(stranded, byPart, fixtures, process.env);
+  complaints.push(...unplanned);
+  for (const one of swept) {
+    await inFixture(one.fixture.dir, runId, `sweep-${one.slug}`, async (dir) => {
+      await writeJourneyConfig(dir, one.overlay);
       await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir, namespace));
-      process.stdout.write(`swept ${slug} from the ${namespace} bootstrap\n`);
-    }).catch((error) => complaints.push(`${slug}: ${String(error)}`));
+      process.stdout.write(`swept ${one.slug} from the ${namespace} bootstrap\n`);
+    }).catch((error) => complaints.push(`${one.slug}: ${String(error)}`));
   }
 
-  const [first] = specForTarget("aws");
+  const [first] = fixtures;
   if (!first) {
     return;
   }
@@ -419,28 +438,57 @@ async function sweepNamespaces(
   }
 }
 
+export type Swept = { slug: string; fixture: FixtureSpec; overlay: Overlay };
+
+export function sweepPlan(
+  reclaim: Stranded[],
+  byPart: Map<string, Cell>,
+  fixtures: FixtureSpec[],
+  env: NodeJS.ProcessEnv,
+): { swept: Swept[]; complaints: string[] } {
+  const [fallback] = fixtures;
+  if (!fallback) {
+    const slugs = reclaim.map((stranded) => stranded.slug);
+    return {
+      swept: [],
+      complaints:
+        slugs.length > 0 ? [`no fixture runs on aws, so nothing destroys ${slugs.join(", ")}`] : [],
+    };
+  }
+  return {
+    swept: reclaim.map((stranded) => {
+      const cell = stranded.cell ? byPart.get(stranded.cell) : undefined;
+      return {
+        slug: stranded.slug,
+        fixture: cell?.fixture ?? fallback,
+        overlay: sweepShapeFor(cell, stranded.slug, env),
+      };
+    }),
+    complaints: [],
+  };
+}
+
 async function reclaimSlugs(
   runId: string,
-  stranded: Stranded[],
+  reclaim: Stranded[],
   byPart: Map<string, Cell>,
+  fixtures: FixtureSpec[],
   complaints: string[],
 ): Promise<void> {
-  for (const entry of stranded) {
-    const cell = byPart.get(entry.cell);
-    if (!cell) {
-      continue;
-    }
-    await inFixture(cell.fixture.dir, runId, `sweep-${entry.slug}`, async (dir) => {
-      await writeJourneyConfig(dir, sweepShapeFor(cell, entry.slug, process.env));
+  const { swept, complaints: unplanned } = sweepPlan(reclaim, byPart, fixtures, process.env);
+  complaints.push(...unplanned);
+  for (const one of swept) {
+    await inFixture(one.fixture.dir, runId, `sweep-${one.slug}`, async (dir) => {
+      await writeJourneyConfig(dir, one.overlay);
       await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir));
-      process.stdout.write(`swept ${entry.slug}\n`);
-    }).catch((error) => complaints.push(`${entry.slug}: ${String(error)}`));
+      process.stdout.write(`swept ${one.slug}\n`);
+    }).catch((error) => complaints.push(`${one.slug}: ${String(error)}`));
   }
 
   const left = new Set(await list());
-  for (const entry of stranded) {
-    if (left.has(entry.slug)) {
-      complaints.push(`${entry.slug} still stands after the sweep destroyed it`);
+  for (const one of swept) {
+    if (left.has(one.slug)) {
+      complaints.push(`${one.slug} still stands after the sweep destroyed it`);
     }
   }
 }
@@ -462,17 +510,16 @@ async function sweep(runId: string): Promise<void> {
   const cells = fixtures.flatMap((fixture) => cellsOf(fixture, "aws"));
   const byPart = cellsBySlugPart(cells);
   const mine = cells.map((cell) => projectSlug(cell.name, runId));
-  const { reclaim, unreadable } = sweepable(await list(), mine, [...byPart.keys()]);
+  const reclaim = sweepable(await list(), mine, [...byPart.keys()]);
 
-  const complaints: string[] = unreadable.map(
-    (slug) => `${slug} carries the harness prefix and names no cell in the spec table`,
-  );
+  const complaints: string[] = [];
   const busy = busyRuns(where.world === "real", complaints);
   const live = await busy(reclaim.map((entry) => entry.slug));
   await reclaimSlugs(
     runId,
     reclaim.filter((entry) => !underway(entry.slug, live)),
     byPart,
+    fixtures,
     complaints,
   );
 
@@ -500,14 +547,13 @@ async function sweepOwn(runId: string): Promise<void> {
     await sweep(runId);
     return;
   }
-  const cells = specForTarget("aws").flatMap((fixture) => cellsOf(fixture, "aws"));
+  const fixtures = specForTarget("aws");
+  const cells = fixtures.flatMap((fixture) => cellsOf(fixture, "aws"));
   const byPart = cellsBySlugPart(cells);
-  const { reclaim, unreadable } = sweepable(ofRun(await list(), runId), [], [...byPart.keys()]);
+  const reclaim = sweepable(ofRun(await list(), runId), [], [...byPart.keys()]);
 
-  const complaints: string[] = unreadable.map(
-    (slug) => `${slug} carries this run id and names no cell in the spec table`,
-  );
-  await reclaimSlugs(runId, reclaim, byPart, complaints);
+  const complaints: string[] = [];
+  await reclaimSlugs(runId, reclaim, byPart, fixtures, complaints);
 
   for (const namespace of ofRun(await namespacesStanding(cliAt(where.endpoint)), runId)) {
     await despite(complaints, `${namespace} sweep`, () =>
