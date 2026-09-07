@@ -24,6 +24,20 @@ export const nativeRows: ContractRow[] = [
   },
 ];
 
+export const vendoredRows: ContractRow[] = [
+  {
+    title: "GET /api/probes/vendored answers from a dependency the build vendored",
+    run: async (ctx) => {
+      const { res, body } = await json(ctx, "/api/probes/vendored");
+      assert.equal(res.status, 200);
+      const probe = body as { dependency: string; version: string; answer: number };
+      assert.equal(probe.dependency, "six");
+      assert.match(probe.version, /^\d+\.\d+/);
+      assert.equal(probe.answer, 2);
+    },
+  },
+];
+
 export const probeRows: ContractRow[] = [
   {
     title: STREAM_ROW,
