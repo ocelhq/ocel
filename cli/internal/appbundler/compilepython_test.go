@@ -150,6 +150,7 @@ func TestVendoringAsksPipOnlyForWheelsTheDeclaredArchitectureCanImport(t *testin
 			"--platform " + platform,
 			"--python-version " + providerkit.PythonVersion,
 			"--implementation cp",
+			"--no-compile",
 		} {
 			if !strings.Contains(argv, want) {
 				t.Errorf("pip is run as %q for %s, and it carries no %q: a wheel built for another machine or another python is installed silently and fails at import", argv, arch, want)

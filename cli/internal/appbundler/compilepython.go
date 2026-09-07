@@ -80,6 +80,7 @@ func pipArgs(target, requirements, platform string) []string {
 		"--platform", platform,
 		"--python-version", providerkit.PythonVersion,
 		"--implementation", "cp",
+		"--no-compile",
 	}
 }
 
