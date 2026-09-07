@@ -162,7 +162,7 @@ func TestEnvReferences(t *testing.T) {
 		envRef(t, root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"})
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", "an edit in the wrong place", envOptions{}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", "an edit in the wrong place", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet through a reference err = nil, want a refusal")
 		}

@@ -10,10 +10,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/declcache"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
+	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -23,6 +25,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 type envOptions struct {
@@ -66,7 +69,17 @@ func withCommand(cmd *cobra.Command, deps cmddeps.Deps, run func(context.Context
 	return run(ctx, cwd)
 }
 
+type envSeal struct{ stdin io.Reader }
+
 func withEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stderr io.Writer, drive func(*provider.Runner, *projectconfig.Config, *contractv1.PreflightResponse) error) error {
+	return drivenEnvProvider(ctx, deps, cwd, opts, nil, stderr, drive)
+}
+
+func withEnvProviderSealing(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdin io.Reader, stderr io.Writer, drive func(*provider.Runner, *projectconfig.Config, *contractv1.PreflightResponse) error) error {
+	return drivenEnvProvider(ctx, deps, cwd, opts, &envSeal{stdin: stdin}, stderr, drive)
+}
+
+func drivenEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, sealing *envSeal, stderr io.Writer, drive func(*provider.Runner, *projectconfig.Config, *contractv1.PreflightResponse) error) error {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
@@ -81,12 +94,29 @@ func withEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts en
 	}
 
 	return provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
-		standing, err := preflight.Run(ctx, runui.Plain(deps.Presentation(stderr), stderr), runner, cfg, envTier(opts), "", nil, nil, hint)
+		rep := runui.Plain(deps.Presentation(stderr), stderr)
+		standing, err := preflight.Run(ctx, rep, runner, cfg, envTier(opts), "", nil, nil, hint)
 		if err != nil {
 			return err
 		}
+		if sealing != nil {
+			if err := offerVarsKey(ctx, deps, runner, cfg, opts, standing.GetBootstrap(), rep, sealing.stdin, stderr); err != nil {
+				return err
+			}
+		}
 		return drive(runner, cfg, standing)
 	})
+}
+
+func offerVarsKey(ctx context.Context, deps cmddeps.Deps, runner *provider.Runner, cfg *projectconfig.Config, opts envOptions, status *contractv1.BootstrapStatus, rep runui.Reporter, stdin io.Reader, stderr io.Writer) error {
+	front := edgewire.Selection(cfg)
+	offered, err := bootstrap.Offers(ctx, runner, envTier(opts), front, providerkit.FeatureVarsKey)
+	if err != nil || !offered {
+		return err
+	}
+	plan := bootstrap.PlanOnly(status, providerkit.FeatureVarsKey)
+	return bootstrap.OfferPlan(ctx, runner, plan, envTier(opts), front, rep,
+		deps.StdinIsTerminal(stdin), stderr, stdin)
 }
 
 func envTier(opts envOptions) environmentv1.Tier {
@@ -100,13 +130,13 @@ func envCoordinate(slug, key string, opts envOptions) *envvarsv1.Coordinate {
 	return &envvarsv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
 }
 
-func runEnvSet(ctx context.Context, deps cmddeps.Deps, cwd, key, value string, opts envOptions, stdout, stderr io.Writer) error {
+func runEnvSet(ctx context.Context, deps cmddeps.Deps, cwd, key, value string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
 	if opts.folder != "" {
 		if err := envgate.ValidateFolder(opts.folder); err != nil {
 			return err
 		}
 	}
-	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
+	return withEnvProviderSealing(ctx, deps, cwd, opts, stdin, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
 		definitions, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err

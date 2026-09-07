@@ -36,7 +36,7 @@ func newUICommand(deps cmddeps.Deps) *cobra.Command {
 }
 
 func runEnvUI(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
-	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	return withEnvProviderSealing(ctx, deps, cwd, opts, stdin, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		gate, err := discoverVariables(ctx, cfg, runner, opts, stderr)
 		if err != nil {
 			return err

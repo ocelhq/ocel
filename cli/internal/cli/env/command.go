@@ -59,7 +59,7 @@ func newSetCommand(deps cmddeps.Deps) *cobra.Command {
 	}
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
-			return runEnvSet(ctx, deps, cwd, args[0], args[1], opts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runEnvSet(ctx, deps, cwd, args[0], args[1], opts, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	valueFlags(cmd, &opts)

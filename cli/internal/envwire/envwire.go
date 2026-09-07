@@ -15,6 +15,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const RootApp = "this project's app"
@@ -208,10 +209,13 @@ func (v Values) Delete(ctx context.Context, at envgate.Address, expected *int64)
 }
 
 func staleOrBroken(err error) error {
-	if err != nil && connect.CodeOf(err) == connect.CodeFailedPrecondition {
-		return varsui.ErrStaleValue
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		return err
 	}
-	return err
+	if _, refused := providerkit.RefusedCode(err); refused {
+		return err
+	}
+	return varsui.ErrStaleValue
 }
 
 func (v Values) History(ctx context.Context, at envgate.Address) ([]varsui.Version, error) {
