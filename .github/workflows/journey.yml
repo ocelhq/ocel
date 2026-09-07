@@ -255,6 +255,7 @@ jobs:
       OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
       CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
       CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
+      OCEL_AWS_VARS_KEY: ${{ needs.binary.outputs.real == 'true' && vars.DOGFOOD_AWS_VARS_KEY || '' }}
       REAL: ${{ needs.binary.outputs.real }}
       OCEL_JOURNEY_COVERAGE: ${{ needs.binary.outputs.coverage }}
       OCEL_JOURNEY_VARIANTS: ${{ needs.binary.outputs.variants }}
@@ -433,6 +434,7 @@ jobs:
       OCEL_JOURNEY_SKIPS: skip
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+      OCEL_AWS_VARS_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
