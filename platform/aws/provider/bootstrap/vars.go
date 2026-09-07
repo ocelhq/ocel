@@ -20,7 +20,7 @@ func varsKeyAliasFor(class string) string {
 	return "alias/ocel-vars-" + class
 }
 
-func varsResources(class string) string {
+func varsKeyResources(class string) string {
 	return fmt.Sprintf(`  VarsKey:
     Type: AWS::KMS::Key
     Properties:
@@ -44,7 +44,18 @@ func varsResources(class string) string {
     Properties:
       AliasName: %s
       TargetKeyId: !Ref VarsKey
-  VarsTable:
+`, class, varsKeyComponentTagKey, varsKeyComponentTagValue, class, varsKeyAliasFor(class))
+}
+
+func varsKeyOutputs() string {
+	return fmt.Sprintf(`  %s:
+    Description: "KMS key every encrypted value of this class is encrypted under. A deploy decrypts through it, and so does each app's execution role."
+    Value: !GetAtt VarsKey.Arn
+`, outputVarsKeyARN)
+}
+
+func varsResources(class string) string {
+	return fmt.Sprintf(`  VarsTable:
     Type: AWS::DynamoDB::Table
     Metadata:
       Description: "Every variable Ocel holds for the %s class, keyed by pk/sk, with the recent versions behind each value. Deleting it means every variable has to be set again."
@@ -73,15 +84,12 @@ func varsResources(class string) string {
               KeyType: RANGE
           Projection:
             ProjectionType: KEYS_ONLY
-`, class, varsKeyComponentTagKey, varsKeyComponentTagValue, class, varsKeyAliasFor(class), class, VarsTableIndexName)
+`, class, VarsTableIndexName)
 }
 
 func varsOutputs() string {
 	return fmt.Sprintf(`  %s:
     Description: "DynamoDB table holding every variable set for this class, with its history. Kept apart from the state table so a variable read never touches deploy state."
     Value: !Ref VarsTable
-  %s:
-    Description: "KMS key every encrypted value of this class is encrypted under. A deploy decrypts through it, and so does each app's execution role."
-    Value: !GetAtt VarsKey.Arn
-`, outputVarsTable, outputVarsKeyARN)
+`, outputVarsTable)
 }

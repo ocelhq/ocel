@@ -2,7 +2,9 @@ package ports_test
 
 import (
 	"context"
+	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
@@ -55,5 +57,43 @@ func TestDeployStateStaysInTheStateTable(t *testing.T) {
 
 	if got := ddb.tablesUsed(); !slices.Equal(got, []string{fakeStateTable}) {
 		t.Errorf("a stack record reached tables %v, want %v alone", got, []string{fakeStateTable})
+	}
+}
+
+type keylessBootstrap struct{}
+
+func (keylessBootstrap) Key(context.Context, kit.Class) (string, error) { return "", nil }
+
+func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
+	sealer := awsports.Sealer{Keys: keylessBootstrap{}}
+	at := kit.Coordinate{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
+
+	_, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret"))
+	if err == nil {
+		t.Fatal("Seal = nil, want a refusal when this bootstrap made no key")
+	}
+	var refusal kit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != kit.CodeNotReady {
+		t.Fatalf("Seal err = %v, want a CodeNotReady refusal", err)
+	}
+	if want := "ocel bootstrap production --features vars-key"; !strings.Contains(err.Error(), want) {
+		t.Errorf("Seal err = %v, want it to name `%s`", err, want)
+	}
+}
+
+func TestSealingBeforeAnyKeyIsWiredRefusesRatherThanPanics(t *testing.T) {
+	sealer := awsports.Sealer{}
+	at := kit.Coordinate{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
+
+	_, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret"))
+	if err == nil {
+		t.Fatal("Seal = nil, want a refusal where nothing holds a key at all")
+	}
+	var refusal kit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != kit.CodeNotReady {
+		t.Fatalf("Seal err = %v, want a CodeNotReady refusal", err)
+	}
+	if want := "ocel bootstrap production --features vars-key"; !strings.Contains(err.Error(), want) {
+		t.Errorf("Seal err = %v, want it to name `%s`", err, want)
 	}
 }

@@ -33,7 +33,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 	if leaving.Action != providerkit.ActionDelete {
 		t.Errorf("PlanRemoval() plans %s as %q, want %q", leaving.Name, leaving.Action, providerkit.ActionDelete)
 	}
-	for _, unrecoverable := range []string{"StateBucket", "ArtifactBucket", "AssetBucket", "VarsTable", "VarsKey"} {
+	for _, unrecoverable := range []string{"StateBucket", "ArtifactBucket", "AssetBucket", "VarsTable"} {
 		if reason := changeFor(leaving, unrecoverable).Reason; reason == "" {
 			t.Errorf("PlanRemoval() takes %s with no reason, and the typed confirmation must name what is unrecoverable before a user types", unrecoverable)
 		}

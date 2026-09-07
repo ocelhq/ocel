@@ -19,6 +19,7 @@ const (
 	FeatureCloudflareEdge    = "cloudflare-edge"
 	FeatureCloudFrontEdge    = "cloudfront-edge"
 	FeatureAPIGatewayEdge    = "apigateway-edge"
+	FeatureVarsKey           = providerkit.FeatureVarsKey
 
 	needsRuntimePrefix = providerkit.NeedsRuntimePrefix
 	needsEdgePrefix    = providerkit.NeedsEdgePrefix
@@ -70,9 +71,13 @@ type feature struct {
 }
 
 func (f feature) render(class, artifactBucket string, refs stackRefs, alongside FeatureSet) featureStack {
+	var code stackPayloads
+	if f.placements != nil {
+		code = f.placements(artifactBucket)
+	}
 	return f.template(featureInputs{
 		class:     class,
-		code:      f.placements(artifactBucket),
+		code:      code,
 		refs:      refs,
 		alongside: alongside,
 	})
@@ -100,6 +105,7 @@ var featureRegistry = []feature{
 	cloudflareEdgeFeature,
 	cloudFrontEdgeFeature,
 	apiGatewayEdgeFeature,
+	varsKeyFeature,
 }
 
 func Catalogue() []providerkit.Feature {

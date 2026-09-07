@@ -247,3 +247,18 @@ func TestBucketsSweepTheCacheStoreOfEveryStandingEdge(t *testing.T) {
 		t.Fatalf("Buckets() carries caches %v, want one for each edge standing in the account", got)
 	}
 }
+
+func TestStandingWithoutAVarsKey(t *testing.T) {
+	p := NewProvider(Options{}, aws.Config{})
+	held := bootstrap.Deployed{
+		StateBucket:    "state",
+		ArtifactBucket: "artifacts",
+		AssetBucket:    "assets",
+		StateTable:     "state-table",
+		VarsTable:      "vars-table",
+	}
+
+	if err := p.standing(held, providerkit.ClassProduction); err != nil {
+		t.Errorf("standing = %v, want a bootstrap with no key ready: a release with no sealed value needs none", err)
+	}
+}

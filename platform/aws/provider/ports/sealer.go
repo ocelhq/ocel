@@ -36,9 +36,19 @@ func (s Sealer) key(ctx context.Context, at kit.Coordinate) (string, error) {
 	}
 	if s.Keys == nil {
 		return "", kit.Refuse(kit.CodeNotReady,
-			"this account has no Ocel bootstrap, so there is no key to seal a value under.\nRun `%s` to create it, then try again", providerkit.BootstrapCommand(at.Class))
+			"nothing in this account holds a key to seal a %s value under.\nRun `%s`, then try again",
+			at.Class, providerkit.BootstrapVarsKeyCommand(at.Class))
 	}
-	return s.Keys.Key(ctx, at.Class)
+	key, err := s.Keys.Key(ctx, at.Class)
+	if err != nil {
+		return "", err
+	}
+	if key == "" {
+		return "", kit.Refuse(kit.CodeNotReady,
+			"the %s bootstrap holds no key to seal a value under, and a key is the one bootstrap item with a standing cost.\nRun `%s` to add one, then try again",
+			at.Class, providerkit.BootstrapVarsKeyCommand(at.Class))
+	}
+	return key, nil
 }
 
 func (s Sealer) Seal(ctx context.Context, at kit.Coordinate, plaintext []byte) ([]byte, error) {

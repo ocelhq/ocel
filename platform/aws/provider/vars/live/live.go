@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const FilePath = ".ocel/variables.live.json"
@@ -98,12 +99,15 @@ func Render(m Manifest) ([]byte, error) {
 	for _, component := range []struct{ name, value string }{
 		{"project slug", m.Slug},
 		{"variable table", m.Table},
-		{"variable key", m.KeyARN},
 		{"environment class", m.Class},
 	} {
 		if component.value == "" {
 			return nil, fmt.Errorf("the live-value manifest names %d keys but no %s", len(m.Keys)+len(m.Links), component.name)
 		}
+	}
+	if m.KeyARN == "" {
+		return nil, fmt.Errorf("the live-value manifest names %d keys but the %s bootstrap holds no key to read them through.\nRun `%s` to add one, then deploy again",
+			len(m.Keys)+len(m.Links), m.Class, providerkit.BootstrapVarsKeyCommand(providerkit.Class(m.Class)))
 	}
 	return json.Marshal(m)
 }
