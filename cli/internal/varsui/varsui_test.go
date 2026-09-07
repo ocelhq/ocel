@@ -435,6 +435,19 @@ func TestGetState(t *testing.T) {
 		}
 	})
 
+	t.Run("a fresh project encodes every list empty, never null", func(t *testing.T) {
+		t.Parallel()
+		s := session(t, newFakeStore())
+
+		resp := request(t, s, http.MethodGet, "/api/state", nil)
+		body := bodyOf(t, resp)
+		for _, want := range []string{`"environments":[]`, `"rows":[]`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("state is %s, want it to contain %s — the browser maps each list", body, want)
+			}
+		}
+	})
+
 	t.Run("the matrix names the environments that still override a cell", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
