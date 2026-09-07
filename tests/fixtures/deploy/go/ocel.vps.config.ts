@@ -2,7 +2,6 @@ import vpsProvider from "@ocel/provider-vps";
 import { buildEnv, defineConfig } from "ocel/config";
 import { z } from "zod";
 
-// What the config itself needs while it is evaluated, read from the shell or the project's .env.
 const ssh = buildEnv({
   OCEL_VPS_HOST: z.string().min(1),
   OCEL_VPS_USER: z.string().min(1),
