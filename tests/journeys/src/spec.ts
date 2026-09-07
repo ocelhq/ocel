@@ -83,8 +83,8 @@ export const groups: Group[] = [
   { concern: "sdk", name: "node-http", preferred: "workspace" },
 ];
 
-const SPOKEN = [...healthRows, ...staticRows, ...probeRows];
-const SERVED = [...SPOKEN, ...nativeRows];
+const RUNTIME_NEUTRAL = [...healthRows, ...staticRows, ...probeRows];
+const SERVED = [...RUNTIME_NEUTRAL, ...nativeRows];
 const STORED = [
   ...healthRows,
   ...staticRows,
@@ -117,7 +117,7 @@ export const spec: FixtureSpec[] = [
     dir: "deploy/go",
     runtime: "go",
     kind: "composite",
-    rows: SPOKEN,
+    rows: RUNTIME_NEUTRAL,
     apps: ["web"],
     legs: SERVES,
     targets: ["aws", "vps"],
