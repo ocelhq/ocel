@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -141,6 +142,27 @@ func TestStartExecutable(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "150ms") {
 			t.Errorf("error = %q, want it to name the budget that expired", err)
+		}
+	})
+
+	t.Run("kills and reaps a command it gave up waiting on", func(t *testing.T) {
+		pidFile := filepath.Join(t.TempDir(), "pid")
+		_, err := startExecutable(
+			[]string{"sh", "-c", "echo $$ > " + pidFile + "; exec sleep 30"},
+			freePort(t), nil, 150*time.Millisecond)
+		if err == nil {
+			t.Fatal("startExecutable() error = nil, want a budget-expiry error")
+		}
+		raw, readErr := os.ReadFile(pidFile)
+		if readErr != nil {
+			t.Fatalf("the command never recorded its pid: %v", readErr)
+		}
+		pid, convErr := strconv.Atoi(strings.TrimSpace(string(raw)))
+		if convErr != nil {
+			t.Fatal(convErr)
+		}
+		if syscall.Kill(pid, 0) == nil {
+			t.Errorf("pid %d is still running after the membrane refused to serve it", pid)
 		}
 	})
 

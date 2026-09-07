@@ -33,7 +33,11 @@ func startExecutable(command []string, port int, extraEnv []string, budget time.
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
 
-	if err := awaitListening(port, exited, budget); err != nil {
+	if alive, err := awaitListening(port, exited, budget); err != nil {
+		if alive {
+			_ = cmd.Process.Kill()
+			<-exited
+		}
 		return nil, err
 	}
 	go supervise(strings.Join(command, " "), exited)
@@ -45,22 +49,22 @@ func executableEnv(port int, extraEnv []string) []string {
 	return append(env, extraEnv...)
 }
 
-func awaitListening(port int, exited <-chan error, budget time.Duration) error {
+func awaitListening(port int, exited <-chan error, budget time.Duration) (alive bool, err error) {
 	address := "127.0.0.1:" + strconv.Itoa(port)
 	deadline := time.Now().Add(budget)
 	for {
 		conn, err := net.DialTimeout("tcp", address, listenDialTimeout)
 		if err == nil {
 			conn.Close()
-			return nil
+			return true, nil
 		}
 		select {
 		case err := <-exited:
-			return fmt.Errorf("the app exited before it listened on %s: %w", address, err)
+			return false, fmt.Errorf("the app exited before it listened on %s: %w", address, err)
 		case <-time.After(listenPollInterval):
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("the app did not listen on %s within %s", address, budget)
+			return true, fmt.Errorf("the app did not listen on %s within %s", address, budget)
 		}
 	}
 }
