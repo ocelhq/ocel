@@ -15,13 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
-)
-
-const (
-	archX8664 = "x86_64"
-	archARM64 = "arm64"
 )
 
 const (
@@ -38,21 +32,9 @@ const (
 
 	execWrapper = "/opt/ocel/bootstrap"
 
-	adapterFunctionRuntime = "provided.al2023"
-
-	adapterLayerAccount = "753240598075"
-	adapterLayerVersion = "28"
-	adapterLayerX8664   = "LambdaAdapterLayerX86"
-	adapterLayerARM64   = "LambdaAdapterLayerArm64"
-
-	adapterPortEnv          = "AWS_LWA_PORT"
-	adapterInvokeModeEnv    = "AWS_LWA_INVOKE_MODE"
-	adapterInvokeModeStream = "response_stream"
-
 	membraneLayerLocalName = "membrane"
 
-	membraneLayerRuntime      = "nodejs24.x"
-	membraneLayerArchitecture = archX8664
+	membraneLayerRuntime = "nodejs24.x"
 
 	maxLayerNameLen = 64
 
@@ -109,27 +91,11 @@ type functionArgs struct {
 	Runtime        string
 	Handler        string
 	Arch           string
-	Adapter        bool
 	MemorySizeMB   int
 	TimeoutSeconds int
 	InvokeMode     string
 	VPC            functionVPC
 	Tags           map[string]string
-}
-
-func (a functionArgs) handlerConfig() string {
-	if a.Adapter {
-		return a.Handler
-	}
-	return lambdaConfigHandler
-}
-
-func adapterLayerARN(region, arch string) string {
-	name := adapterLayerX8664
-	if arch == archARM64 {
-		name = adapterLayerARM64
-	}
-	return "arn:aws:lambda:" + region + ":" + adapterLayerAccount + ":layer:" + name + ":" + adapterLayerVersion
 }
 
 type functionVPC struct {
@@ -323,21 +289,21 @@ func roleCoordinate(project string, stack naming.StackName) naming.Coordinate {
 	}
 }
 
-func membraneLayerCoordinate(project string, stack naming.StackName) naming.Coordinate {
+func membraneLayerCoordinate(project string, stack naming.StackName, arch string) naming.Coordinate {
 	return naming.Coordinate{
 		Project: project,
 		Env:     stack.Env,
 		App:     stack.App,
 		Kind:    naming.KindLayer,
-		Name:    membraneLayerLocalName,
+		Name:    naming.Join(naming.WordSeparator, membraneLayerLocalName, arch),
 		Release: stack.Release,
 	}
 }
 
-func newMembraneLayer(ctx *pulumi.Context, coord naming.Coordinate, code payloads.Placement) (*lambda.LayerVersion, error) {
-	return lambda.NewLayerVersion(ctx, naming.ResourceID(naming.KindLayer, membraneLayerLocalName), &lambda.LayerVersionArgs{
+func newMembraneLayer(ctx *pulumi.Context, coord naming.Coordinate, arch string, code payloads.Placement) (*lambda.LayerVersion, error) {
+	return lambda.NewLayerVersion(ctx, naming.ResourceID(naming.KindLayer, membraneLayerLocalName, arch), &lambda.LayerVersionArgs{
 		LayerName:      pulumi.String(coord.PhysicalName(maxLayerNameLen)),
-		Description:    describe(coord, "membrane the app's functions boot through"),
+		Description:    describe(coord, "membrane the app's "+arch+" functions boot through"),
 		S3Bucket:       pulumi.String(code.Bucket),
 		S3Key:          pulumi.String(code.Key),
 		SourceCodeHash: pulumi.String(code.SHA256),
@@ -345,7 +311,7 @@ func newMembraneLayer(ctx *pulumi.Context, coord naming.Coordinate, code payload
 			pulumi.String(membraneLayerRuntime),
 		},
 		CompatibleArchitectures: pulumi.StringArray{
-			pulumi.String(membraneLayerArchitecture),
+			pulumi.String(arch),
 		},
 	})
 }
@@ -505,14 +471,8 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 func functionEnv(base map[string]string, args functionArgs, isr *isrConfig, bytecode *bytecodeConfig) map[string]string {
 	env := make(map[string]string, len(base))
 	maps.Copy(env, base)
-	if args.Adapter {
-		env[adapterPortEnv] = providerkit.InjectedPort
-		env[providerkit.InjectedPortName] = providerkit.InjectedPort
-		env[adapterInvokeModeEnv] = adapterInvokeModeStream
-	} else {
-		env["AWS_LAMBDA_EXEC_WRAPPER"] = execWrapper
-		env["OCEL_HANDLER"] = "/var/task/" + args.Handler
-	}
+	env["AWS_LAMBDA_EXEC_WRAPPER"] = execWrapper
+	env["OCEL_HANDLER"] = "/var/task/" + args.Handler
 	if isr != nil {
 		maps.Copy(env, isr.env())
 	}
@@ -586,7 +546,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 	fn, err := lambda.NewFunction(ctx, resourceName, &lambda.FunctionArgs{
 		Description: describe(coord, "route "+route),
 		Runtime:     pulumi.String(args.Runtime),
-		Handler:     pulumi.String(args.handlerConfig()),
+		Handler:     pulumi.String(lambdaConfigHandler),
 		Role:        roleArn,
 		S3Bucket:    pulumi.String(artifact.Bucket),
 		S3Key:       pulumi.String(artifact.Key),

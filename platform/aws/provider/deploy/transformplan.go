@@ -114,7 +114,6 @@ func translateFunctionSpec(runtime string, spec providerkit.FunctionSpec) (funct
 		Runtime:        execution.Runtime,
 		Handler:        handler,
 		Arch:           execution.Arch,
-		Adapter:        execution.Adapter,
 		MemorySizeMB:   memoryMB,
 		TimeoutSeconds: defaultFunctionTimeoutSeconds,
 		InvokeMode:     functionURLInvokeModeStream,
@@ -128,32 +127,19 @@ func translateFunctionSpec(runtime string, spec providerkit.FunctionSpec) (funct
 type execution struct {
 	Runtime string
 	Arch    string
-	Adapter bool
 }
 
 func executionFor(runtime providerkit.Runtime) (execution, error) {
-	arch := runtime.Arch
-	if arch == "" {
-		arch = archX8664
-	}
-	if arch != archX8664 && arch != archARM64 {
-		return execution{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"this provider runs functions on %s and %s, and %q asks for %s",
-			archX8664, archARM64, runtime.Name, runtime.Arch)
-	}
-	switch runtime.Name {
-	case "", providerkit.RuntimeNode, providerkit.RuntimeNext:
-		if arch != archX8664 {
-			return execution{}, providerkit.Refuse(providerkit.CodeInvalid,
-				"this provider runs %q functions on %s only, and one asks for %s: the membrane they boot through is built for %s",
-				runtime.Name, archX8664, arch, archX8664)
-		}
-		return execution{Runtime: defaultFunctionRuntime, Arch: archX8664}, nil
-	case providerkit.RuntimeGo:
-		return execution{Runtime: adapterFunctionRuntime, Arch: arch, Adapter: true}, nil
-	default:
+	if runtime.Name != "" && !providerkit.KnownRuntime(runtime.Name) {
 		return execution{}, providerkit.Refuse(providerkit.CodeInvalid, "this provider has no runtime named %q", runtime.Name)
 	}
+	arch := providerkit.Architecture(runtime.Arch)
+	if arch != providerkit.ArchX8664 && arch != providerkit.ArchARM64 {
+		return execution{}, providerkit.Refuse(providerkit.CodeInvalid,
+			"this provider runs functions on %s and %s, and %q asks for %s",
+			providerkit.ArchX8664, providerkit.ArchARM64, runtime.Name, runtime.Arch)
+	}
+	return execution{Runtime: defaultFunctionRuntime, Arch: arch}, nil
 }
 
 func resolvePlanOutputs(ctx context.Context, plan providerkit.StackPlan, candidates []transformCandidate, results []transform.Result) ([]placedOutput, error) {

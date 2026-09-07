@@ -3,6 +3,7 @@ package providerkit_test
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,9 @@ import (
 
 type carrying struct{ *fake.Provider }
 
-func (carrying) Membrane(context.Context) ([]byte, error) { return []byte(fake.Membrane), nil }
+func (carrying) Membrane(_ context.Context, arch string) ([]byte, error) {
+	return []byte(fake.Membrane + arch), nil
+}
 
 func builtRoutingApp(t *testing.T, app string, desc edge.ServeDescriptor, manifest []byte) {
 	t.Helper()
@@ -72,11 +75,12 @@ func TestTheAppPlanCarriesEveryFactTheStoodUpAppServesFrom(t *testing.T) {
 	if app.Routing == nil || app.Routing.Entry != "index" || string(app.Routing.Manifest) != string(routing) {
 		t.Errorf("Routing = %+v, want the entry route and manifest the build wrote", app.Routing)
 	}
-	if app.Membrane.Key == "" {
-		t.Error("the app plan names no membrane, so the functions have nothing to boot through")
+	membrane := app.Membranes[providerkit.ArchX8664]
+	if membrane.Key == "" {
+		t.Errorf("the app plan carries membranes %v, none of them for the architecture its functions run on", app.Membranes)
 	}
-	if !strings.HasPrefix(app.Membrane.Key, providerkit.MembranePrefix) {
-		t.Errorf("Membrane.Key = %q, want it under %q", app.Membrane.Key, providerkit.MembranePrefix)
+	if !strings.HasPrefix(membrane.Key, providerkit.MembranePrefix) {
+		t.Errorf("Membranes[%s].Key = %q, want it under %q", providerkit.ArchX8664, membrane.Key, providerkit.MembranePrefix)
 	}
 }
 
@@ -124,8 +128,8 @@ func TestAProviderCarryingNoMembraneStandsAnAppUpWithout(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want a provider whose functions boot on their own to deploy all the same", result.GetError())
 	}
 	plans := provider.Releases().(*fake.Releaser).Plans()
-	if ref := plans[len(plans)-1].App.Membrane; ref != (providerkit.ArtifactRef{}) {
-		t.Errorf("Membrane = %+v where the provider carries none, want nothing placed", ref)
+	if refs := plans[len(plans)-1].App.Membranes; len(refs) != 0 {
+		t.Errorf("Membranes = %+v where the provider carries none, want nothing placed", refs)
 	}
 }
 
@@ -172,6 +176,33 @@ func TestADeployThatIsNotDryPlacesTheMembrane(t *testing.T) {
 	}
 	if placed := placedMembranes(t, provider.Artifacts()); placed != 1 {
 		t.Errorf("an applying deploy placed %d membranes, want the one its functions boot through", placed)
+	}
+}
+
+func TestTheMembranePlacedIsTheOneForTheArchitectureTheFunctionsRunOn(t *testing.T) {
+	builtProject(t)
+	provider := carrying{fake.NewProvider(fake.Options{})}
+	client := servedBy(t, provider)
+
+	req := deployRequest()
+	req.Manifest.Functions[0].Runtime.Arch = providerkit.ArchARM64
+	result, _ := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	plans := provider.Releases().(*fake.Releaser).Plans()
+	membranes := plans[len(plans)-1].App.Membranes
+	if len(membranes) != 1 || membranes[providerkit.ArchARM64].Key == "" {
+		t.Fatalf("Membranes = %+v, want the one the arm64 functions boot through", membranes)
+	}
+
+	onX8664, _, err := providerkit.MembraneRef(context.Background(), provider, providerkit.ClassProduction, providerkit.ArchX8664)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if membranes[providerkit.ArchARM64] == onX8664 {
+		t.Errorf("an arm64 function boots through %+v, the x86_64 membrane: machine code is not shared across architectures", onX8664)
 	}
 }
 
@@ -233,7 +264,7 @@ func TestADryDeployDrawsTheStackTheApplyWouldProvision(t *testing.T) {
 	if len(drawn) != 1 {
 		t.Fatalf("a dry deploy drew %d app stacks, want the one the manifest declares", len(drawn))
 	}
-	if drawn[0].App.Membrane == (providerkit.ArtifactRef{}) {
+	if len(drawn[0].App.Membranes) == 0 {
 		t.Fatal("the drawn app stack carries no membrane, so the plan is drawn of a stack the apply would never provision")
 	}
 
@@ -244,9 +275,9 @@ func TestADryDeployDrawsTheStackTheApplyWouldProvision(t *testing.T) {
 	if len(applied) != 1 {
 		t.Fatalf("the apply provisioned %d app stacks, want the one the manifest declares", len(applied))
 	}
-	if drawn[0].App.Membrane != applied[0].App.Membrane {
+	if !maps.Equal(drawn[0].App.Membranes, applied[0].App.Membranes) {
 		t.Errorf("the plan was drawn of a stack booting through %+v but the apply provisions %+v, want one stack",
-			drawn[0].App.Membrane, applied[0].App.Membrane)
+			drawn[0].App.Membranes, applied[0].App.Membranes)
 	}
 }
 
@@ -283,7 +314,7 @@ func TestADryDeployPlansTheMembraneUploadItDoesNotMake(t *testing.T) {
 		t.Errorf("planning the membrane placed %d of them, want a row derived by reading alone", placed)
 	}
 
-	if _, err := providerkit.PlaceMembrane(context.Background(), provider, providerkit.ClassProduction, provider.Artifacts(), nil); err != nil {
+	if _, err := providerkit.PlaceMembrane(context.Background(), provider, providerkit.ClassProduction, providerkit.ArchX8664, provider.Artifacts(), nil); err != nil {
 		t.Fatal(err)
 	}
 

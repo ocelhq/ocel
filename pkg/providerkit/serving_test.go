@@ -157,7 +157,12 @@ type membraneCarrier struct {
 	err  error
 }
 
-func (m membraneCarrier) Membrane(context.Context) ([]byte, error) { return m.body, m.err }
+func (m membraneCarrier) Membrane(_ context.Context, arch string) ([]byte, error) {
+	if len(m.body) == 0 || m.err != nil {
+		return nil, m.err
+	}
+	return append(append([]byte(nil), m.body...), arch...), nil
+}
 
 type memoryStore struct {
 	held map[string][]byte
@@ -198,14 +203,14 @@ func TestTheMembraneIsPlacedOnceAndAddressedByItsContent(t *testing.T) {
 	store := &memoryStore{}
 	source := membraneCarrier{body: []byte("membrane")}
 
-	first, err := providerkit.PlaceMembrane(context.Background(), source, providerkit.ClassProduction, store, nil)
+	first, err := providerkit.PlaceMembrane(context.Background(), source, providerkit.ClassProduction, providerkit.ArchX8664, store, nil)
 	if err != nil {
 		t.Fatalf("PlaceMembrane() = %v", err)
 	}
 	if first.Bucket != providerkit.StoreFunctions {
 		t.Errorf("membrane placed in %q, want the %q store the functions read their code from", first.Bucket, providerkit.StoreFunctions)
 	}
-	second, err := providerkit.PlaceMembrane(context.Background(), source, providerkit.ClassProduction, store, nil)
+	second, err := providerkit.PlaceMembrane(context.Background(), source, providerkit.ClassProduction, providerkit.ArchX8664, store, nil)
 	if err != nil {
 		t.Fatalf("PlaceMembrane() a second time = %v", err)
 	}
@@ -218,7 +223,7 @@ func TestTheMembraneIsPlacedOnceAndAddressedByItsContent(t *testing.T) {
 }
 
 func TestAProviderCarryingNoMembraneIsRefusedRatherThanShippingAnEmptyOne(t *testing.T) {
-	_, err := providerkit.PlaceMembrane(context.Background(), membraneCarrier{}, providerkit.ClassProduction, &memoryStore{}, nil)
+	_, err := providerkit.PlaceMembrane(context.Background(), membraneCarrier{}, providerkit.ClassProduction, providerkit.ArchX8664, &memoryStore{}, nil)
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
 		t.Fatalf("PlaceMembrane() with no membrane = %v, want a %s refusal", err, providerkit.CodeNotReady)

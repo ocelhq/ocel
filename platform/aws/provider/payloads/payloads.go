@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 //go:generate pnpm --dir ../../../.. exec turbo run generate --filter=@platform/aws-payloads
@@ -21,7 +23,10 @@ type Payload struct {
 }
 
 var (
-	membraneLayer   = load("membrane-layer.zip")
+	membraneLayers = map[string]Payload{
+		"amd64": load("membrane-layer-amd64.zip"),
+		"arm64": load("membrane-layer-arm64.zip"),
+	}
 	uploadCompleter = load("upload-completer.zip")
 	imageOptimizer  = load("image-optimizer.zip")
 	revalidator     = load("revalidator.zip")
@@ -29,7 +34,13 @@ var (
 	tagInvalidator  = load("tag-invalidator.zip")
 )
 
-func MembraneLayer() Payload { return membraneLayer }
+func MembraneLayer(arch string) (Payload, error) {
+	goarch, builds := providerkit.GoArch(arch)
+	if !builds {
+		return Payload{}, fmt.Errorf("this provider carries no membrane built for %q", arch)
+	}
+	return membraneLayers[goarch], nil
+}
 
 func UploadCompleter() Payload { return uploadCompleter }
 

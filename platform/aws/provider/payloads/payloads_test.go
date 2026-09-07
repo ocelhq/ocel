@@ -7,6 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func TestPayloads(t *testing.T) {
@@ -15,7 +17,8 @@ func TestPayloads(t *testing.T) {
 		payload func() Payload
 		entry   string
 	}{
-		{"membrane layer", MembraneLayer, "ocel/bootstrap"},
+		{"membrane layer x86_64", membraneLayerFor(providerkit.ArchX8664), "ocel/bootstrap"},
+		{"membrane layer arm64", membraneLayerFor(providerkit.ArchARM64), "ocel/bootstrap"},
 		{"upload completer", UploadCompleter, "bootstrap"},
 		{"image optimizer", ImageOptimizer, "index.mjs"},
 		{"revalidator", Revalidator, "index.mjs"},
@@ -51,15 +54,37 @@ func TestPayloads(t *testing.T) {
 	}
 }
 
+func membraneLayerFor(arch string) func() Payload {
+	return func() Payload {
+		layer, err := MembraneLayer(arch)
+		if err != nil {
+			panic(err)
+		}
+		return layer
+	}
+}
+
+func TestTheMembraneIsCarriedForEveryArchitectureAFunctionRunsOn(t *testing.T) {
+	for _, arch := range []string{providerkit.ArchX8664, providerkit.ArchARM64} {
+		if _, err := MembraneLayer(arch); err != nil {
+			t.Errorf("MembraneLayer(%q) = %v, want the membrane built for it", arch, err)
+		}
+	}
+	if _, err := MembraneLayer("riscv"); err == nil {
+		t.Error("MembraneLayer(riscv) = nil error, want a refusal: nothing is built for it")
+	}
+}
+
 func TestPayloadsDiffer(t *testing.T) {
 	seen := map[string]string{}
 	for name, p := range map[string]Payload{
-		"membrane layer":   MembraneLayer(),
-		"upload completer": UploadCompleter(),
-		"image optimizer":  ImageOptimizer(),
-		"revalidator":      Revalidator(),
-		"tag publisher":    TagPublisher(),
-		"tag invalidator":  TagInvalidator(),
+		"membrane layer x86_64": membraneLayerFor(providerkit.ArchX8664)(),
+		"membrane layer arm64":  membraneLayerFor(providerkit.ArchARM64)(),
+		"upload completer":      UploadCompleter(),
+		"image optimizer":       ImageOptimizer(),
+		"revalidator":           Revalidator(),
+		"tag publisher":         TagPublisher(),
+		"tag invalidator":       TagInvalidator(),
 	} {
 		if other, ok := seen[p.SHA256]; ok {
 			t.Errorf("%s and %s carry the same bytes", name, other)
