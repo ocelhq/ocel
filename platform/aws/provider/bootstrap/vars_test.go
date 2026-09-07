@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -86,6 +87,21 @@ func varsBootstraps() []struct {
 	}
 }
 
+func varsKeyBootstraps() []struct {
+	name     string
+	class    string
+	template string
+} {
+	return []struct {
+		name     string
+		class    string
+		template string
+	}{
+		{"production", ClassProduction, featureTemplate(FeatureVarsKey, ClassProduction)},
+		{"preview", ClassPreview, featureTemplate(FeatureVarsKey, ClassPreview)},
+	}
+}
+
 func TestVarsTable(t *testing.T) {
 	for _, tc := range varsBootstraps() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -146,7 +162,7 @@ func TestVarsTable(t *testing.T) {
 
 func TestVarsKey(t *testing.T) {
 	aliases := map[string]string{}
-	for _, tc := range varsBootstraps() {
+	for _, tc := range varsKeyBootstraps() {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseVarsTemplate(t, tc.template)
 
@@ -207,10 +223,25 @@ func TestVarsResourcesAreStackOwned(t *testing.T) {
 	for _, tc := range varsBootstraps() {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseVarsTemplate(t, tc.template)
-			for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
+			for _, name := range []string{"VarsTable"} {
 				res, ok := tmpl.Resources[name]
 				if !ok {
 					t.Errorf("template is missing the %s resource", name)
+					continue
+				}
+				if res.DeletionPolicy != "" {
+					t.Errorf("%s DeletionPolicy = %q, want none so a stack delete removes it", name, res.DeletionPolicy)
+				}
+			}
+		})
+	}
+	for _, tc := range varsKeyBootstraps() {
+		t.Run("key/"+tc.name, func(t *testing.T) {
+			tmpl := parseVarsTemplate(t, tc.template)
+			for _, name := range []string{"VarsKey", "VarsKeyAlias"} {
+				res, ok := tmpl.Resources[name]
+				if !ok {
+					t.Errorf("the vars-key stack is missing the %s resource", name)
 					continue
 				}
 				if res.DeletionPolicy != "" {
@@ -228,12 +259,13 @@ func TestVarsDescriptions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseVarsTemplate(t, tc.template)
 
+			key := parseVarsTemplate(t, featureTemplate(FeatureVarsKey, tc.class))
 			described := map[string]string{
-				"VarsKey":        tmpl.Resources["VarsKey"].Properties.Description,
-				"VarsKeyAlias":   tmpl.Resources["VarsKeyAlias"].Metadata.Description,
+				"VarsKey":        key.Resources["VarsKey"].Properties.Description,
+				"VarsKeyAlias":   key.Resources["VarsKeyAlias"].Metadata.Description,
 				"VarsTable":      tmpl.Resources["VarsTable"].Metadata.Description,
 				outputVarsTable:  tmpl.Outputs[outputVarsTable].Description,
-				outputVarsKeyARN: tmpl.Outputs[outputVarsKeyARN].Description,
+				outputVarsKeyARN: key.Outputs[outputVarsKeyARN].Description,
 			}
 			for name, description := range described {
 				if description == "" {
@@ -264,83 +296,55 @@ func TestVarsDescriptions(t *testing.T) {
 }
 
 func TestRunVars(t *testing.T) {
-	t.Run("provisions the variable store idempotently", func(t *testing.T) {
-		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		frontedBy(t, &fakeEdge{kind: "cloudflare"})
-
-		for i := range 2 {
-			if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, everything(), nil, nil); err != nil {
-				t.Fatalf("Run %d: %v", i+1, err)
-			}
-		}
-		if want := 1 + len(featureNames()); cfn.creates != want {
-			t.Errorf("stacks were created %d times across two bootstraps, want one create each for core and its %d features", cfn.creates, len(featureNames()))
-		}
-
-		tmpl := parseVarsTemplate(t, cfn.template(StackName))
-		for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
-			if _, ok := tmpl.Resources[name]; !ok {
-				t.Errorf("the account's stack no longer declares %s after a re-run", name)
-			}
+	t.Run("the core stack holds the table and no key", func(t *testing.T) {
+		for _, tc := range varsBootstraps() {
+			t.Run(tc.name, func(t *testing.T) {
+				tmpl := parseVarsTemplate(t, tc.template)
+				if _, ok := tmpl.Resources["VarsTable"]; !ok {
+					t.Error("the core stack no longer declares VarsTable")
+				}
+				for _, name := range []string{"VarsKey", "VarsKeyAlias"} {
+					if _, ok := tmpl.Resources[name]; ok {
+						t.Errorf("the core stack declares %s, and a key bills whether or not a value is ever set", name)
+					}
+				}
+			})
 		}
 	})
 
-	t.Run("upgrades a pre store account to the variable store", func(t *testing.T) {
+	t.Run("a run that asks for the key raises a stack of its own", func(t *testing.T) {
 		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-		seed := preStoreTemplate(t)
-		cfn.seed(StackName, seed)
-
-		before := parseVarsTemplate(t, seed)
-		for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
-			if _, ok := before.Resources[name]; ok {
-				t.Fatalf("the seeded account already declares %s; it is not a pre-store account", name)
-			}
-		}
-		for _, name := range []string{outputVarsTable, outputVarsKeyARN} {
-			if _, ok := before.Outputs[name]; ok {
-				t.Fatalf("the seeded account already outputs %s; it is not a pre-store account", name)
-			}
-		}
-
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
+
+		req := Request{Features: []string{FeatureVarsKey}}
+		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, req, nil, nil); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+
+		tmpl := parseVarsTemplate(t, cfn.template(FeatureStackName(FeatureVarsKey, ClassProduction)))
+		for _, name := range []string{"VarsKey", "VarsKeyAlias"} {
+			if _, ok := tmpl.Resources[name]; !ok {
+				t.Errorf("the vars-key stack does not declare %s", name)
+			}
+		}
+		if _, ok := tmpl.Outputs[outputVarsKeyARN]; !ok {
+			t.Errorf("the vars-key stack does not output %s, so nothing records the key it made", outputVarsKeyARN)
+		}
+	})
+
+	t.Run("a run that does not ask for the key makes none", func(t *testing.T) {
+		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+		frontedBy(t, &fakeEdge{kind: "cloudflare"})
+
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), ClassProduction, Request{}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
-		if cfn.creates != 0 {
-			t.Errorf("the upgrade created %d stacks; a live account must be updated, not replaced", cfn.creates)
-		}
-		if cfn.updates != 1 {
-			t.Errorf("the account's stack was updated %d times, want 1", cfn.updates)
-		}
-
-		after := parseVarsTemplate(t, cfn.template(StackName))
-		for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
-			if _, ok := after.Resources[name]; !ok {
-				t.Errorf("the upgrade did not add %s", name)
-			}
-		}
-		for _, name := range []string{outputVarsTable, outputVarsKeyARN} {
-			if _, ok := after.Outputs[name]; !ok {
-				t.Errorf("the upgrade did not add the %s output", name)
-			}
-		}
-		if _, ok := after.Resources["StateBucket"]; !ok {
-			t.Error("the upgrade dropped the state bucket")
+		stack := FeatureStackName(FeatureVarsKey, ClassProduction)
+		if slices.Contains(cfn.stacks(), stack) {
+			t.Errorf("%s stands after a run that never asked for it; bootstrap creates nothing that bills while idle", stack)
 		}
 	})
-}
-
-func preStoreTemplate(t *testing.T) string {
-	t.Helper()
-	tmpl := coreStackTemplate(ClassProduction)
-	for _, block := range []string{varsResources(ClassProduction), varsOutputs()} {
-		if block == "" || !strings.Contains(tmpl, block) {
-			t.Fatalf("cannot derive a pre-store template: the current one has no\n%s", block)
-		}
-		tmpl = strings.Replace(tmpl, block, "", 1)
-	}
-	return tmpl
 }
 
 func TestCheckDeployedVars(t *testing.T) {

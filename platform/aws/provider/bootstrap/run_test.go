@@ -1067,13 +1067,8 @@ func TestRunPreview(t *testing.T) {
 		}
 
 		tmpl := parseVarsTemplate(t, cfn.template(PreviewStackName))
-		for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
-			if _, ok := tmpl.Resources[name]; !ok {
-				t.Errorf("the preview stack no longer declares %s after a re-run", name)
-			}
-		}
-		if got, want := tmpl.Resources["VarsKeyAlias"].Properties.AliasName, varsKeyAliasFor(ClassPreview); got != want {
-			t.Errorf("preview key alias = %q, want %q", got, want)
+		if _, ok := tmpl.Resources["VarsTable"]; !ok {
+			t.Error("the preview stack no longer declares VarsTable after a re-run")
 		}
 	})
 }

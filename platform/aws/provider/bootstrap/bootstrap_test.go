@@ -408,6 +408,7 @@ func TestCheckDeployed(t *testing.T) {
 				{Name: StackName + "-" + FeatureCloudflareEdge, Feature: FeatureCloudflareEdge},
 				{Name: StackName + "-" + FeatureCloudFrontEdge, Feature: FeatureCloudFrontEdge},
 				{Name: StackName + "-" + FeatureAPIGatewayEdge, Feature: FeatureAPIGatewayEdge},
+				{Name: StackName + "-" + FeatureVarsKey, Feature: FeatureVarsKey},
 			},
 		}
 		if !reflect.DeepEqual(got, want) {

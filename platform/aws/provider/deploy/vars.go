@@ -23,12 +23,13 @@ import (
 const functionEnvBudgetBytes = 4096
 
 func varsReadPolicy(r executionRole) (string, error) {
-	statements := []any{
-		map[string]any{
+	var statements []any
+	if r.VarsKeyARN != "" {
+		statements = append(statements, map[string]any{
 			"Effect":   "Allow",
 			"Action":   []string{"kms:Decrypt"},
 			"Resource": r.VarsKeyARN,
-		},
+		})
 	}
 	if r.ValuesTableARN != "" {
 		own, err := valuePartition(r.Slug, r.VarsClass)

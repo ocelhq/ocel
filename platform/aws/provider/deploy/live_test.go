@@ -307,6 +307,20 @@ func TestVarsReadPolicy(t *testing.T) {
 		}
 	})
 
+	t.Run("without a key is the table grant alone", func(t *testing.T) {
+		t.Parallel()
+		raw, err := varsReadPolicy(executionRole{ValuesTableARN: valuesTableARN, Slug: "shop", VarsClass: varsClass})
+		if err != nil {
+			t.Fatalf("varsReadPolicy: %v", err)
+		}
+		if strings.Contains(raw, "kms") {
+			t.Errorf("policy = %s, want no decrypt grant when this bootstrap made no key", raw)
+		}
+		if strings.Contains(raw, `"Resource":""`) {
+			t.Errorf("policy = %s, want no statement over an empty resource", raw)
+		}
+	})
+
 	t.Run("reaches the partitions of the projects this one references", func(t *testing.T) {
 		t.Parallel()
 		raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, ValuesTableARN: valuesTableARN, Slug: "shop", VarsClass: varsClass, VarsReferenced: []string{"platform", "shop", "billing"}})

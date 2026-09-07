@@ -13,6 +13,8 @@ import (
 
 const BootstrapSchema = 1
 
+const FeatureVarsKey = "vars-key"
+
 type Gate struct {
 	Bootstrapper Bootstrapper
 	Records      RecordStore
@@ -555,6 +557,10 @@ func BootstrapCommand(class Class) string {
 
 func BootstrapFeaturesCommand(class Class) string {
 	return BootstrapCommand(class) + " --features"
+}
+
+func BootstrapVarsKeyCommand(class Class) string {
+	return BootstrapFeaturesCommand(class) + " " + FeatureVarsKey
 }
 
 func bootstrapDestroyCommand(class Class) string {

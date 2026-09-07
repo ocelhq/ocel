@@ -451,9 +451,12 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 			group.Go(func() error {
 				f, _ := featureNamed(name)
 				stackName := f.stackName(target.class)
-				code, err := f.payloads(gctx, apis.Store, deployed.ArtifactBucket)
-				if err != nil {
-					return fmt.Errorf("%s: %w", name, err)
+				var code stackPayloads
+				if f.payloads != nil {
+					var err error
+					if code, err = f.payloads(gctx, apis.Store, deployed.ArtifactBucket); err != nil {
+						return fmt.Errorf("%s: %w", name, err)
+					}
 				}
 				stack := f.template(featureInputs{
 					class:     target.class,

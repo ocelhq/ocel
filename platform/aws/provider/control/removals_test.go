@@ -41,15 +41,18 @@ func removingBootstrapper(t *testing.T, class string) Bootstrapper {
 		t.Fatalf("StackNameFor(%s): %v", class, err)
 	}
 	isrStack := bootstrap.FeatureStackName(bootstrap.FeatureISR, class)
+	varsKeyStack := bootstrap.FeatureStackName(bootstrap.FeatureVarsKey, class)
 	cfn := b.CFN.(*teardownCFN)
 	cfn.present[isrStack] = bootstrap.Deployed{Present: true}
+	cfn.present[varsKeyStack] = bootstrap.Deployed{Present: true}
 	cfn.resources = map[string][]cfntypes.StackResourceSummary{
 		stackName: {
 			summary("StateBucket", "AWS::S3::Bucket"),
 			summary("StateTable", "AWS::DynamoDB::Table"),
 			summary("AssetBucket", "AWS::S3::Bucket"),
 		},
-		isrStack: {summary("RevalidationQueue", "AWS::SQS::Queue")},
+		isrStack:     {summary("RevalidationQueue", "AWS::SQS::Queue")},
+		varsKeyStack: {summary("VarsKey", "AWS::KMS::Key")},
 	}
 	b.Edge = &planningEdge{removals: []edge.PlanChange{
 		{Kind: "Cloudflare::Worker", Name: "ocel-deployments-store", Action: edge.PlanDelete},
@@ -363,5 +366,25 @@ func TestRemoveLeavesAloneAnEdgeThisAccountHoldsNothingFor(t *testing.T) {
 	}
 	if len(unused.torndown) != 0 {
 		t.Errorf("the relay edge saw teardowns %v, want none: this account holds nothing for it", unused.torndown)
+	}
+}
+
+func TestPlanRemovalSaysWhatDroppingTheVarsKeyStrands(t *testing.T) {
+	t.Parallel()
+
+	b := removingBootstrapper(t, bootstrap.ClassProduction)
+
+	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassProduction)
+	if err != nil {
+		t.Fatalf("PlanRemoval: %v", err)
+	}
+
+	group := groupNamed(plan, "aws/"+bootstrap.FeatureStackName(bootstrap.FeatureVarsKey, bootstrap.ClassProduction))
+	if group == nil {
+		t.Fatalf("plan groups = %s, want the stack the vars key stands in", groupNames(plan))
+	}
+	key := changeNamed(group, "VarsKey")
+	if key == nil || key.Reason == "" {
+		t.Errorf("the vars key row = %+v, want the note that every value sealed under it is stranded", key)
 	}
 }

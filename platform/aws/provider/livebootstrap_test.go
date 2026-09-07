@@ -33,7 +33,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 	if core.Action != providerkit.ActionCreate {
 		t.Errorf("Plan() against a fresh account plans %s as %q, want %q", core.Name, core.Action, providerkit.ActionCreate)
 	}
-	for _, want := range []string{"StateBucket", "StateTable", "ArtifactBucket", "AssetBucket", "VarsKey", "VarsTable", "AppBoundary"} {
+	for _, want := range []string{"StateBucket", "StateTable", "ArtifactBucket", "AssetBucket", "VarsTable", "AppBoundary"} {
 		if planned := changeFor(core, want); planned.Action != providerkit.ActionCreate {
 			t.Errorf("Plan() shows %s as %q, want it created", want, planned.Action)
 		}
@@ -97,8 +97,11 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 			t.Errorf("%s is named by the stack but no table answers for it", table)
 		}
 	}
-	if held.VarsKeyARN == "" || held.AppBoundaryARN == "" {
-		t.Errorf("the bootstrap stands without a variable key or an app boundary: %+v", held)
+	if held.AppBoundaryARN == "" {
+		t.Errorf("the bootstrap stands without an app boundary: %+v", held)
+	}
+	if held.VarsKeyARN != "" {
+		t.Errorf("a run that never asked for %s made a key anyway: %+v", bootstrap.FeatureVarsKey, held)
 	}
 	for _, param := range []string{origin, bootstrap.PassphraseParamName} {
 		if !a.paramStands(t, param) {

@@ -370,7 +370,6 @@ func (p *Provider) standing(held bootstrap.Deployed, class providerkit.Class) er
 		{held.AssetBucket, "asset bucket"},
 		{held.StateTable, "state table"},
 		{held.VarsTable, "variable store"},
-		{held.VarsKeyARN, "variable store"},
 	} {
 		if missing.held == "" {
 			return providerkit.Refuse(providerkit.CodeNotReady,

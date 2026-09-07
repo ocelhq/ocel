@@ -368,6 +368,7 @@ func TestTeardownRemovesEachFeatureStackBeforeCore(t *testing.T) {
 		FeatureStackName(FeatureImageOptimization, ClassProduction),
 		FeatureStackName(FeatureCloudFrontEdge, ClassProduction),
 		FeatureStackName(FeatureAPIGatewayEdge, ClassProduction),
+		FeatureStackName(FeatureVarsKey, ClassProduction),
 		StackName,
 	}
 	if !slices.Equal(cfn.deleted, want) {

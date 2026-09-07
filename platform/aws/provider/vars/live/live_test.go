@@ -134,6 +134,18 @@ func TestRender(t *testing.T) {
 		}
 	})
 
+	t.Run("a manifest with no key ARN says how to make one", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := Render(Manifest{Slug: "shop", Table: "ocel-vars", Class: "production", Keys: []Key{{Key: "DB_PASSWORD"}}})
+		if err == nil {
+			t.Fatal("Render = nil, want a manifest with live values and no key refused")
+		}
+		if want := "ocel bootstrap production --features vars-key"; !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %v, want it to name `%s`", err, want)
+		}
+	})
+
 	t.Run("a manifest naming no keys is no file", func(t *testing.T) {
 		t.Parallel()
 
