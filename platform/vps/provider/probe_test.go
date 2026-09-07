@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -275,7 +276,7 @@ func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testi
 		Claims: []host.HostClaim{{Hostname: hostname, Owner: owner, Pointer: edge.DefaultPointer}},
 		Routes: []host.AppRoute{{
 			RouteKey: host.RouteKey{Owner: owner, Pointer: "@production", App: "web"},
-			Upstream: "shop-web-2222:" + host.AppPort,
+			Upstream: "shop-web-2222:" + providerkit.InjectedPort,
 		}},
 	})
 	if err != nil {

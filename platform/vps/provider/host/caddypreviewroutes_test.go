@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -24,8 +25,8 @@ func twoBranchesOfOneApp() ProxyState {
 		Grace:       DrainWindow,
 		PreviewBase: previewBase,
 		Routes: []AppRoute{
-			{RouteKey: previewKey("pr-7", "web"), Upstream: "shop-web-7:" + AppPort},
-			{RouteKey: previewKey("pr-9", "web"), Upstream: "shop-web-9:" + AppPort},
+			{RouteKey: previewKey("pr-7", "web"), Upstream: "shop-web-7:" + providerkit.InjectedPort},
+			{RouteKey: previewKey("pr-9", "web"), Upstream: "shop-web-9:" + providerkit.InjectedPort},
 		},
 		Claims: []HostClaim{
 			previewClaim("pr-7", "", "shop--pr-7."+previewBase),

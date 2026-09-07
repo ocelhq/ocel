@@ -74,7 +74,7 @@ func standsUp(t *testing.T, p *vps.Provider, tag string) release {
 	if len(standing) != 1 {
 		t.Fatalf("ProvisionContainers(%s) stood up %v", tag, standing)
 	}
-	return release{physical: standing[0].Physical, address: standing[0].Physical + ":" + host.AppPort}
+	return release{physical: standing[0].Physical, address: standing[0].Physical + ":" + providerkit.InjectedPort}
 }
 
 func releasing(p *vps.Provider, held release, retire string, drain time.Duration, report providerkit.Reporter) error {

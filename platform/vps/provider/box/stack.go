@@ -138,7 +138,7 @@ func (s *stack) serve(ctx context.Context, held standing, report edge.Reporter) 
 	}
 	return s.e.machine.Release(ctx, host.Release{
 		RouteKey:      held.key,
-		Target:        record.Physical + ":" + host.AppPort,
+		Target:        record.Physical + ":" + providerkit.InjectedPort,
 		Retire:        retiring,
 		HealthPath:    record.HealthPath,
 		DeployTimeout: host.DeployWindow,
