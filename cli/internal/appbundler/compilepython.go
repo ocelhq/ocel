@@ -112,7 +112,7 @@ func copySourceTree(source, dest string) error {
 			return os.MkdirAll(filepath.Join(dest, rel), 0o755)
 		}
 		if !entry.Type().IsRegular() {
-			return nil
+			return fmt.Errorf("%s is %s, and an artifact holds the app's own files: what this points at is read on the build host and is nowhere the function runs", path, entry.Type())
 		}
 		info, err := entry.Info()
 		if err != nil {
