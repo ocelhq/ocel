@@ -20,8 +20,16 @@ const fakePageSize = 2
 
 type fakeDynamo struct {
 	mu     sync.Mutex
+	gone   bool
 	items  map[string]map[string]map[string]ddbtypes.AttributeValue
 	tables map[string]bool
+}
+
+func (f *fakeDynamo) missing() error {
+	if f.gone {
+		return &ddbtypes.ResourceNotFoundException{Message: aws.String("Requested resource not found")}
+	}
+	return nil
 }
 
 func newFakeDynamo() *fakeDynamo {
@@ -29,6 +37,9 @@ func newFakeDynamo() *fakeDynamo {
 }
 
 func (f *fakeDynamo) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+	if err := f.missing(); err != nil {
+		return nil, err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sawTable(in.TableName)
@@ -40,6 +51,9 @@ func (f *fakeDynamo) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...
 }
 
 func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+	if err := f.missing(); err != nil {
+		return nil, err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sawTable(in.TableName)
@@ -59,6 +73,9 @@ func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...
 }
 
 func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
+	if err := f.missing(); err != nil {
+		return nil, err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sawTable(in.TableName)
@@ -138,6 +155,9 @@ func namesAndValuesUsed(names map[string]string, values map[string]ddbtypes.Attr
 }
 
 func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	if err := f.missing(); err != nil {
+		return nil, err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sawTable(in.TableName)
