@@ -306,7 +306,7 @@ func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, d
 	writeEdgeConfig(t, root, declaration)
 
 	journal = filepath.Join(t.TempDir(), "edge.journal")
-	t.Setenv(fakeEdgeJournalEnvVar, journal)
+	t.Setenv(FakeEdgeJournalEnvVar, journal)
 
 	deps = NewDeps()
 	SetLoggedIn(&deps)

@@ -30,7 +30,7 @@ const fixtureDefinitions = `[
 func envSet(t *testing.T, root, key, value string, opts envOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runEnvSet(context.Background(), clitest.NewDeps(), root, key, value, opts, &stdout, &stderr); err != nil {
+	if err := runEnvSet(context.Background(), clitest.NewDeps(), root, key, value, opts, nil, &stdout, &stderr); err != nil {
 		t.Fatalf("runEnvSet(%s) err = %v; stdout=%s stderr=%s", key, err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
@@ -98,7 +98,7 @@ func TestRunEnvSet(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "SITE_HOSTNAME", "acme.example", envOptions{}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "SITE_HOSTNAME", "acme.example", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet(SITE_HOSTNAME) err = nil, want a key nothing declares refused: the gate delivers declared keys only, so the value would sit in the store and reach no build and no function")
 		}
@@ -177,7 +177,7 @@ func TestRunEnvSet(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", "sk_typo", envOptions{preview: true, environment: "stagng"}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", "sk_typo", envOptions{preview: true, environment: "stagng"}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet against an environment that does not exist err = nil, want a refusal")
 		}
@@ -195,7 +195,7 @@ func TestRunEnvSet(t *testing.T) {
 		root := setUpEnvFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", "sk_live", envOptions{environment: "staging"}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", "sk_live", envOptions{environment: "staging"}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet --environment against production err = nil, want a refusal")
 		}
@@ -209,7 +209,7 @@ func TestRunEnvSet(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", "sk_live_secret", envOptions{}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", "sk_live_secret", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet against preview infrastructure err = nil, want a class-mismatch refusal")
 		}
@@ -219,7 +219,7 @@ func TestRunEnvSet(t *testing.T) {
 		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", "ph_root", envOptions{}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", "ph_root", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet err = nil, want a root value for a scoped key refused: nothing could ever read it")
 		}
@@ -234,7 +234,7 @@ func TestRunEnvSet(t *testing.T) {
 		root := clitest.SetUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", "ph", envOptions{folder: "/admin"}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", "ph", envOptions{folder: "/admin"}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet err = nil, want a folder outside the key's scope refused")
 		}
@@ -287,7 +287,7 @@ func TestRunEnvSet(t *testing.T) {
 			envDeclaringScript(`[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`))
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", "ph_root_again", envOptions{}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", "ph_root_again", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet err = nil, want the scope the code now declares to refuse a root write")
 		}
@@ -308,7 +308,7 @@ func TestRunEnvSet(t *testing.T) {
 		t.Setenv("OCEL_TEST_ENV_DEFINITIONS", `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
 
 		var stdout, stderr bytes.Buffer
-		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", "ph_root", envOptions{}, &stdout, &stderr)
+		err := runEnvSet(context.Background(), clitest.NewDeps(), root, "POSTHOG_ID", "ph_root", envOptions{}, nil, &stdout, &stderr)
 		if err == nil {
 			t.Fatal("runEnvSet err = nil, want a root value for a scoped key refused: a cached set that never mentioned the key cannot say it is unscoped")
 		}

@@ -641,6 +641,22 @@ message HostKey {
   string fingerprint = 3;
 }
 
+message Refusal {
+  RefusalCode code = 1;
+}
+
+enum RefusalCode {
+  REFUSAL_CODE_UNSPECIFIED = 0;
+
+  REFUSAL_CODE_INVALID = 1;
+
+  REFUSAL_CODE_NOT_READY = 2;
+
+  REFUSAL_CODE_DENIED = 3;
+
+  REFUSAL_CODE_BUSY = 4;
+}
+
 enum HostTrustReason {
   HOST_TRUST_REASON_UNSPECIFIED = 0;
 

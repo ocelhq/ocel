@@ -69,11 +69,16 @@ const FakePreflightJournalEnvVar = "OCEL_TEST_FAKE_PREFLIGHT_JOURNAL"
 
 const FakeHostnameJournalEnvVar = "OCEL_TEST_FAKE_HOSTNAME_JOURNAL"
 
-const fakeEdgeJournalEnvVar = "OCEL_TEST_FAKE_EDGE_JOURNAL"
+const FakeEdgeJournalEnvVar = "OCEL_TEST_FAKE_EDGE_JOURNAL"
 
 const FakeConfigureJournalEnvVar = "OCEL_TEST_FAKE_CONFIGURE_JOURNAL"
 
 const FakeEnabledFeaturesEnvVar = "OCEL_TEST_FAKE_ENABLED_FEATURES"
+
+const (
+	FakeCatalogueEnvVar = "OCEL_TEST_FAKE_CATALOGUE"
+	FakeCatalogueNone   = "none"
+)
 
 const FakeBootstrapEnvVar = "OCEL_TEST_FAKE_BOOTSTRAP"
 
@@ -486,13 +491,18 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, req *c
 		return f
 	}
 	journalDescribe(fmt.Sprintf("tier=%s withDependents=%t", req.GetTier(), req.GetWithDependents()))
-	return &contractv1.DescribeBootstrapResponse{
-		Features: []*contractv1.Feature{
+	var catalogue []*contractv1.Feature
+	if os.Getenv(FakeCatalogueEnvVar) != FakeCatalogueNone {
+		catalogue = []*contractv1.Feature{
 			feature("isr", "incremental static regeneration"),
 			feature("image-optimization", "on-demand image optimization"),
+			feature(providerkit.FeatureVarsKey, "a key the variables are sealed under"),
 			fronting("cloudflare-edge", "a Cloudflare front", "cloudflare", "isr"),
 			fronting("cloudfront-edge", "a CloudFront front", "cloudfront"),
-		},
+		}
+	}
+	return &contractv1.DescribeBootstrapResponse{
+		Features:  catalogue,
 		Bootstrap: fakeBootstrap(req.GetTier()),
 	}, nil
 }
@@ -627,6 +637,7 @@ func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
 			{Name: "ocel-bootstrap", Present: true, Schema: 1, DigestCurrent: true, WrittenBy: "1.4.0", Required: true},
 			{Name: "ocel-bootstrap-isr", Feature: "isr", Present: true, Schema: 1, DigestCurrent: true, WrittenBy: "1.4.0", Required: true},
 			{Name: "ocel-bootstrap-image-optimization", Feature: "image-optimization"},
+			{Name: "ocel-bootstrap-vars-key", Feature: "vars-key"},
 		},
 	}
 	switch shape {
@@ -642,6 +653,8 @@ func fakeBootstrap(tier environmentv1.Tier) *contractv1.BootstrapStatus {
 		status.Schema = 2
 		status.Stacks[0].Schema = 2
 		status.Stacks[1].Schema = 2
+	case "vars-key":
+		status.Stacks[3].Present = true
 	case "downgrade":
 		status.Downgrade = true
 		status.Stacks[0].WrittenBy = "1.9.0"
@@ -864,7 +877,7 @@ func edgeRowKind(kind string) string {
 }
 
 func journalEdge(kind string, dns *contractv1.Dns, allowDegraded []string) {
-	path := os.Getenv(fakeEdgeJournalEnvVar)
+	path := os.Getenv(FakeEdgeJournalEnvVar)
 	if path == "" {
 		return
 	}
@@ -920,7 +933,7 @@ func decodeFakeProviderOptions(config *contractv1.ProviderConfig) (fakeProviderO
 }
 
 func journalBootstrap(req *contractv1.BootstrapRequest) {
-	path := os.Getenv(fakeEdgeJournalEnvVar)
+	path := os.Getenv(FakeEdgeJournalEnvVar)
 	if path == "" {
 		return
 	}

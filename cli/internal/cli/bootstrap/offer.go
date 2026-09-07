@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"connectrpc.com/connect"
+
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
@@ -111,8 +113,42 @@ func (p Plan) Advise(tier environmentv1.Tier, rep runui.Reporter) error {
 	return nil
 }
 
+func Offers(ctx context.Context, runner *provider.Runner, tier environmentv1.Tier, front *contractv1.EdgeSelection, feature string) (bool, error) {
+	client, err := runner.Client()
+	if err != nil {
+		return false, err
+	}
+	described, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: tier, Edge: front})
+	if err != nil {
+		if connect.CodeOf(err) == connect.CodeUnimplemented {
+			return false, nil
+		}
+		return false, err
+	}
+	return slices.ContainsFunc(described.GetFeatures(), func(f *contractv1.Feature) bool {
+		return f.GetName() == feature
+	}), nil
+}
+
+func PlanOnly(status *contractv1.BootstrapStatus, feature string) Plan {
+	if !status.GetPresent() {
+		return Plan{}
+	}
+	plan := Plan{Features: []string{feature}}
+	for _, stack := range status.GetStacks() {
+		if stack.GetFeature() == feature && stack.GetPresent() {
+			return plan
+		}
+	}
+	plan.Missing = []string{feature}
+	return plan
+}
+
 func Offer(ctx context.Context, runner *provider.Runner, status *contractv1.BootstrapStatus, tier environmentv1.Tier, front *contractv1.EdgeSelection, rep runui.Reporter, interactive bool, out io.Writer, in io.Reader) error {
-	plan := PlanFor(status)
+	return OfferPlan(ctx, runner, PlanFor(status), tier, front, rep, interactive, out, in)
+}
+
+func OfferPlan(ctx context.Context, runner *provider.Runner, plan Plan, tier environmentv1.Tier, front *contractv1.EdgeSelection, rep runui.Reporter, interactive bool, out io.Writer, in io.Reader) error {
 	if plan.Empty() {
 		return nil
 	}
