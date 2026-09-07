@@ -95,7 +95,7 @@ func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan
 }
 
 func translateFunctionSpec(runtime string, spec providerkit.FunctionSpec) (functionArgs, error) {
-	lambdaRuntime, err := lambdaRuntimeFor(spec.Runtime)
+	execution, err := executionFor(spec.Runtime)
 	if err != nil {
 		return functionArgs{}, err
 	}
@@ -111,8 +111,10 @@ func translateFunctionSpec(runtime string, spec providerkit.FunctionSpec) (funct
 		memoryMB = spec.Memory
 	}
 	args := functionArgs{
-		Runtime:        lambdaRuntime,
+		Runtime:        execution.Runtime,
 		Handler:        handler,
+		Arch:           execution.Arch,
+		Adapter:        execution.Adapter,
 		MemorySizeMB:   memoryMB,
 		TimeoutSeconds: defaultFunctionTimeoutSeconds,
 		InvokeMode:     functionURLInvokeModeStream,
@@ -123,19 +125,34 @@ func translateFunctionSpec(runtime string, spec providerkit.FunctionSpec) (funct
 	return args, nil
 }
 
-func lambdaRuntimeFor(runtime providerkit.Runtime) (string, error) {
-	switch runtime.Arch {
-	case "", archX8664:
-	default:
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"this provider runs functions on %s only, and %q asks for %s: the membrane layer is built for %s",
-			archX8664, runtime.Name, runtime.Arch, archX8664)
+type execution struct {
+	Runtime string
+	Arch    string
+	Adapter bool
+}
+
+func executionFor(runtime providerkit.Runtime) (execution, error) {
+	arch := runtime.Arch
+	if arch == "" {
+		arch = archX8664
+	}
+	if arch != archX8664 && arch != archARM64 {
+		return execution{}, providerkit.Refuse(providerkit.CodeInvalid,
+			"this provider runs functions on %s and %s, and %q asks for %s",
+			archX8664, archARM64, runtime.Name, runtime.Arch)
 	}
 	switch runtime.Name {
 	case "", providerkit.RuntimeNode, providerkit.RuntimeNext:
-		return defaultFunctionRuntime, nil
+		if arch != archX8664 {
+			return execution{}, providerkit.Refuse(providerkit.CodeInvalid,
+				"this provider runs %q functions on %s only, and one asks for %s: the membrane they boot through is built for %s",
+				runtime.Name, archX8664, arch, archX8664)
+		}
+		return execution{Runtime: defaultFunctionRuntime, Arch: archX8664}, nil
+	case providerkit.RuntimeGo:
+		return execution{Runtime: adapterFunctionRuntime, Arch: arch, Adapter: true}, nil
 	default:
-		return "", providerkit.Refuse(providerkit.CodeInvalid, "this provider has no runtime named %q", runtime.Name)
+		return execution{}, providerkit.Refuse(providerkit.CodeInvalid, "this provider has no runtime named %q", runtime.Name)
 	}
 }
 
