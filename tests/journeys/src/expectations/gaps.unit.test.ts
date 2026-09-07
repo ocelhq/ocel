@@ -14,7 +14,6 @@ import {
   targetOfEnvironment,
 } from "./index";
 
-const HEALTH = "GET /health answers with the app name";
 const UPLOAD = "the upload protocol stores a document and /api/documents lists it";
 
 const AWS_PLAN = planTests(
