@@ -1,6 +1,7 @@
 package appbundler
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,8 +11,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
+
+func elfAddon(arch, tag string) string {
+	machine, known := providerkit.ELFMachine(arch)
+	if !known {
+		panic("no ELF machine for " + arch)
+	}
+	header := make([]byte, 20)
+	copy(header, "\x7fELF")
+	header[4], header[5] = 2, 1
+	binary.LittleEndian.PutUint16(header[18:20], machine)
+	return string(header) + tag
+}
 
 type tree map[string]string
 
@@ -168,7 +182,7 @@ func TestBundle(t *testing.T) {
 			"server.js":                                        "import native from 'native-dep';\nconsole.log(native);\n",
 			"node_modules/native-dep/package.json":             `{"name":"native-dep","main":"index.js"}`,
 			"node_modules/native-dep/index.js":                 "module.exports = require('./build/Release/addon.node');\n",
-			"node_modules/native-dep/build/Release/addon.node": "\x7fELF fake",
+			"node_modules/native-dep/build/Release/addon.node": elfAddon(providerkit.ArchX8664, "fake"),
 		})
 
 		if err := Bundle(l.target("server.js")); err != nil {
@@ -176,7 +190,7 @@ func TestBundle(t *testing.T) {
 		}
 
 		copied := filepath.Join(l.funcDir, "node_modules", "native-dep", "build", "Release", "addon.node")
-		if got := readFile(t, copied); got != "\x7fELF fake" {
+		if got := readFile(t, copied); got != elfAddon(providerkit.ArchX8664, "fake") {
 			t.Errorf("copied addon = %q, want the original bytes", got)
 		}
 		bundle := readFile(t, filepath.Join(l.funcDir, HandlerFile))
@@ -195,7 +209,7 @@ func TestBundle(t *testing.T) {
 			name := fmt.Sprintf("native-dep-%02d", i)
 			files["node_modules/"+name+"/package.json"] = `{"name":"` + name + `","main":"index.js"}`
 			files["node_modules/"+name+"/index.js"] = "module.exports = require('./build/Release/addon.node');\n"
-			files["node_modules/"+name+"/build/Release/addon.node"] = "\x7fELF " + name
+			files["node_modules/"+name+"/build/Release/addon.node"] = elfAddon(providerkit.ArchX8664, name)
 			fmt.Fprintf(&imports, "import n%02d from '%s';\n", i, name)
 			fmt.Fprintf(&logs, "console.log(n%02d);\n", i)
 		}
@@ -209,7 +223,7 @@ func TestBundle(t *testing.T) {
 		for i := range count {
 			name := fmt.Sprintf("native-dep-%02d", i)
 			copied := filepath.Join(l.funcDir, "node_modules", name, "build", "Release", "addon.node")
-			if got, want := readFile(t, copied), "\x7fELF "+name; got != want {
+			if got, want := readFile(t, copied), elfAddon(providerkit.ArchX8664, name); got != want {
 				t.Errorf("copied addon = %q, want %q", got, want)
 			}
 		}
@@ -461,6 +475,68 @@ func TestArtifactHash(t *testing.T) {
 		})
 		if got != want {
 			t.Errorf("hash = %q, want %q — only regular files count", got, want)
+		}
+	})
+}
+
+func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
+	t.Parallel()
+
+	const addonPath = "node_modules/native-dep/build/Release/addon.node"
+	held := func(addon string) tree {
+		return tree{
+			"package.json":                         appPkg,
+			"server.js":                            "import native from 'native-dep';\nconsole.log(native);\n",
+			"node_modules/native-dep/package.json": `{"name":"native-dep","main":"index.js"}`,
+			"node_modules/native-dep/index.js":     "module.exports = require('./build/Release/addon.node');\n",
+			addonPath:                              addon,
+		}
+	}
+	on := func(l layout, arch string) Target {
+		target := l.target("server.js")
+		target.Runtime.Arch = arch
+		return target
+	}
+
+	t.Run("an addon built for the declared architecture is placed", func(t *testing.T) {
+		t.Parallel()
+
+		l := newLayout(t, held(elfAddon(providerkit.ArchARM64, "aarch64")))
+		if err := Bundle(on(l, providerkit.ArchARM64)); err != nil {
+			t.Fatalf("Bundle: %v", err)
+		}
+		if got := readFile(t, filepath.Join(l.funcDir, filepath.FromSlash(addonPath))); got != elfAddon(providerkit.ArchARM64, "aarch64") {
+			t.Errorf("copied addon = %q, want the original bytes", got)
+		}
+	})
+
+	t.Run("an addon built for another architecture fails the build", func(t *testing.T) {
+		t.Parallel()
+
+		l := newLayout(t, held(elfAddon(providerkit.ArchX8664, "amd64")))
+		err := Bundle(on(l, providerkit.ArchARM64))
+		if err == nil {
+			t.Fatal("Bundle succeeded, want a refusal rather than a function that dies at its first require")
+		}
+		for _, want := range []string{"addon.node", providerkit.ArchX8664, providerkit.ArchARM64} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, want it to name %q", err, want)
+			}
+		}
+	})
+
+	t.Run("an addon that is not a linux binary fails the build", func(t *testing.T) {
+		t.Parallel()
+
+		l := newLayout(t, held("\xcf\xfa\xed\xfe"+strings.Repeat("\x00", 28)))
+		err := Bundle(on(l, providerkit.ArchX8664))
+		if err == nil {
+			t.Fatal("Bundle succeeded, want a mach-o addon refused as not linux")
+		}
+		for _, want := range []string{"addon.node", "linux"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, want it to name %q", err, want)
+			}
 		}
 	})
 }
