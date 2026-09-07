@@ -168,6 +168,7 @@ func newTestStore(buckets *fakeBuckets, tokens *fakeTokens, groups *fakeGroups) 
 		buckets.existing = map[string]bool{}
 	}
 	return cacheStore{
+		namespace:   "ocel",
 		buckets:     buckets,
 		tokens:      tokens,
 		groups:      groups,

@@ -27,7 +27,7 @@ type Deps struct {
 }
 
 var constructors = map[edge.Kind]func(Deps) edge.Edge{
-	cloudflare.Kind: func(Deps) edge.Edge { return cloudflare.New() },
+	cloudflare.Kind: func(deps Deps) edge.Edge { return cloudflare.New(string(deps.Namespace)) },
 	cloudfront.Kind: func(deps Deps) edge.Edge { return cloudfront.New(cloudfront.FromConfig(deps.AWS, deps.Namespace)) },
 	apigateway.Kind: func(deps Deps) edge.Edge { return apigateway.New(apigateway.FromConfig(deps.AWS, deps.Namespace)) },
 }

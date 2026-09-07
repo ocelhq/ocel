@@ -446,17 +446,17 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 			t.Setenv(envAccountID, tc.accountID)
 			t.Setenv(envAPIToken, tc.apiToken)
 
-			if err := tc.call(t.Context(), New()); err == nil {
+			if err := tc.call(t.Context(), New("ocel")); err == nil {
 				t.Fatal("expected an error when the environment names no credential")
 			}
 		})
 	}
 
 	t.Run("the provider satisfies the credential verifier contract", func(t *testing.T) {
-		if _, ok := New().(edge.CredentialVerifier); !ok {
+		if _, ok := New("ocel").(edge.CredentialVerifier); !ok {
 			t.Fatal("cloudflare provider does not implement edge.CredentialVerifier")
 		}
-		if _, ok := New().(edge.EntitlementChecker); !ok {
+		if _, ok := New("ocel").(edge.EntitlementChecker); !ok {
 			t.Fatal("cloudflare provider does not implement edge.EntitlementChecker")
 		}
 	})
@@ -512,7 +512,7 @@ func TestTeardown(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 
-		if err := New().Teardown(t.Context(), edge.ClassProduction); err == nil {
+		if err := New("ocel").Teardown(t.Context(), edge.ClassProduction); err == nil {
 			t.Fatal("Teardown without an account id err = nil, want an error")
 		}
 	})
@@ -524,7 +524,7 @@ func TestCodeRuntime(t *testing.T) {
 	t.Run("reports the compat settings the uploaded script carries", func(t *testing.T) {
 		t.Parallel()
 
-		program, ok := New().(edge.Programmable)
+		program, ok := New("ocel").(edge.Programmable)
 		if !ok {
 			t.Fatalf("cloudflare provider does not implement edge.Programmable")
 		}
