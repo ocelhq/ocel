@@ -1,0 +1,5 @@
+{
+  "name": "@fixture/svc",
+  "private": true,
+  "type": "module"
+}

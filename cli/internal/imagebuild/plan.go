@@ -24,9 +24,10 @@ const (
 	installStep = "install"
 	buildStep   = "build"
 
-	nodeProvider = "node"
-	goProvider   = "golang"
-	providerKey  = "provider"
+	nodeProvider   = "node"
+	goProvider     = "golang"
+	pythonProvider = "python"
+	providerKey    = "provider"
 )
 
 func Plan(loc workspace.Location) ([]byte, error) {
@@ -79,6 +80,8 @@ func providerFor(loc workspace.Location) string {
 	switch {
 	case loc.Go:
 		return goProvider
+	case loc.Python:
+		return pythonProvider
 	case loc.Node:
 		return nodeProvider
 	default:
