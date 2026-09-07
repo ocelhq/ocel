@@ -41,7 +41,7 @@ func Compile(ctx context.Context, c Compilation) error {
 	binary := filepath.Join(c.FuncDir, BootstrapFile)
 	cmd := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", binary, ".")
 	cmd.Dir = c.Package
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH="+arch)
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off", "GOOS=linux", "GOARCH="+arch)
 	var said bytes.Buffer
 	cmd.Stdout = &said
 	cmd.Stderr = &said

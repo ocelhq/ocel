@@ -107,6 +107,30 @@ func TestCompileNamesTheBootstrapAsTheHandlerTheFunctionBootsThrough(t *testing.
 	}
 }
 
+func TestCompileBuildsTheAppsOwnModuleWhateverWorkspaceEnclosesIt(t *testing.T) {
+	t.Parallel()
+
+	enclosing := t.TempDir()
+	pkg := filepath.Join(enclosing, "server")
+	if err := os.MkdirAll(pkg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{
+		filepath.Join(pkg, "go.mod"):        "module fixture\n\ngo 1.24\n",
+		filepath.Join(pkg, "main.go"):       "package main\n\nfunc main() {}\n",
+		filepath.Join(enclosing, "go.work"): "go 1.24\n\nuse ./elsewhere\n",
+	} {
+		if err := os.WriteFile(name, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, funcDir := compiled(t, pkg, "x86_64")
+	if _, err := os.Stat(filepath.Join(funcDir, BootstrapFile)); err != nil {
+		t.Fatalf("the compile wrote no %s: a go workspace above the app names modules a release never carries, and the app's own go.mod is what is built: %v", BootstrapFile, err)
+	}
+}
+
 func TestCompileRefusesAnArchitectureGoBuildsNothingFor(t *testing.T) {
 	t.Parallel()
 	err := Compile(context.Background(), Compilation{

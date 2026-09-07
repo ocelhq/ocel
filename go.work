@@ -12,4 +12,5 @@ use (
 	./platform/edge/contract
 	./platform/vps/provider
 	./sdk
+	./tests/fixtures/deploy/go/server
 )
