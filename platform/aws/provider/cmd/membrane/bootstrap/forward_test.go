@@ -84,7 +84,7 @@ func TestHandleInvocationForward(t *testing.T) {
 		defer node.Close()
 
 		rt, cap := fakeRuntime(t, []byte(getEvent))
-		m := &nodeChild{nodePort: portOf(t, node), client: newLoopbackClient()}
+		m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
 		if err := handleInvocation(t.Context(), rt, m); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
@@ -122,7 +122,7 @@ func TestHandleInvocationForward(t *testing.T) {
 		event := `{"version":"2.0","rawPath":"/","requestContext":{"http":{"method":"GET"}},` +
 			`"headers":{"host":"abc.lambda-url.us-east-1.on.aws","x-forwarded-host":"app.ocel.site"}}`
 		rt, _ := fakeRuntime(t, []byte(event))
-		m := &nodeChild{nodePort: portOf(t, node), client: newLoopbackClient()}
+		m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
 		if err := handleInvocation(t.Context(), rt, m); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
@@ -154,7 +154,7 @@ func TestHandleInvocationForward(t *testing.T) {
 				defer node.Close()
 
 				rt, cap := fakeRuntime(t, []byte(getEvent))
-				m := &nodeChild{nodePort: portOf(t, node), client: newLoopbackClient()}
+				m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
 				if err := handleInvocation(t.Context(), rt, m); err != nil {
 					t.Fatalf("handleInvocation: %v", err)
@@ -192,7 +192,7 @@ func TestHandleInvocationForward(t *testing.T) {
 				defer node.Close()
 
 				rt, cap := fakeRuntime(t, []byte(getEvent))
-				m := &nodeChild{nodePort: portOf(t, node), client: newLoopbackClient()}
+				m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
 				if err := handleInvocation(t.Context(), rt, m); err != nil {
 					t.Fatalf("handleInvocation: %v", err)
@@ -221,7 +221,7 @@ func TestHandleInvocationForward(t *testing.T) {
 				defer node.Close()
 
 				rt, cap := fakeRuntime(t, []byte(getEvent))
-				m := &nodeChild{nodePort: portOf(t, node), client: newLoopbackClient()}
+				m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
 				if err := handleInvocation(t.Context(), rt, m); err != nil {
 					t.Fatalf("handleInvocation: %v", err)
@@ -248,7 +248,7 @@ func TestHandleInvocationForward(t *testing.T) {
 		defer node.Close()
 
 		rt, cap := fakeRuntime(t, []byte(getEvent))
-		m := &nodeChild{nodePort: portOf(t, node), client: newLoopbackClient()}
+		m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
 		if err := handleInvocation(t.Context(), rt, m); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
@@ -272,7 +272,7 @@ func TestHandleInvocationForward(t *testing.T) {
 		l.Close()
 
 		rt, cap := fakeRuntime(t, []byte(getEvent))
-		m := &nodeChild{nodePort: deadPort, client: newLoopbackClient()}
+		m := &nodeChild{upstream: upstream{port: deadPort, client: newLoopbackClient()}}
 
 		if err := handleInvocation(t.Context(), rt, m); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
@@ -300,7 +300,7 @@ func TestHandleInvocationForward(t *testing.T) {
 		defer node.Close()
 
 		rt, cap := fakeRuntime(t, []byte(getEvent))
-		m := &nodeChild{nodePort: portOf(t, node), client: newLoopbackClient()}
+		m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
 		if err := handleInvocation(t.Context(), rt, m); err != nil {
 			t.Fatalf("handleInvocation: %v", err)
@@ -329,7 +329,7 @@ func TestHandleInvocationForward(t *testing.T) {
 		defer node.Close()
 
 		rt, cap := fakeRuntime(t, []byte(getEvent))
-		m := &nodeChild{nodePort: portOf(t, node), client: newLoopbackClient()}
+		m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
 		deadline := time.Now().Add(completionMargin + 300*time.Millisecond)
 		ctx, cancel := context.WithDeadline(t.Context(), deadline)

@@ -14,13 +14,13 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 )
 
-func handleInvocation(ctx context.Context, rt *runtimeClient, m *nodeChild) error {
+func handleInvocation(ctx context.Context, rt *runtimeClient, c child) error {
 	inv, err := rt.next(ctx)
 	if err != nil {
 		return err
 	}
 
-	m.live.refreshIfStale(ctx)
+	c.refreshLiveValues(ctx)
 
 	ctx = lambdacontext.NewContext(ctx, inv.lc)
 	rw, err := rt.startResponse(ctx, inv.lc.AwsRequestID)
@@ -35,25 +35,20 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, m *nodeChild) erro
 	}
 
 	if isWarmInvocation(inv.Payload) {
-		if err := m.answerWarmInvocation(ctx, rw); err != nil {
+		if err := c.answerWarmInvocation(ctx, rw); err != nil {
 			fmt.Fprintf(os.Stderr, "ocel: deliver warm response for %s: %v\n", inv.lc.AwsRequestID, err)
 		}
 		return nil
 	}
 
-	waiter := m.registerWaiter(inv.lc.AwsRequestID)
+	waiter := c.beginInvocation(inv.lc.AwsRequestID)
 	appCtx, cancelApp := answerBefore(ctx)
-	reached, err := m.forward(appCtx, inv, rw)
+	reached, err := c.endpoint().forward(appCtx, inv, rw)
 	cancelApp()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: deliver response for %s: %v\n", inv.lc.AwsRequestID, err)
 	}
-	if !reached {
-		m.signalComplete(inv.lc.AwsRequestID)
-	}
-	m.awaitCompletion(ctx, inv.lc.AwsRequestID, waiter)
-
-	m.uploadBytecodeCacheOnce(ctx)
+	c.endInvocation(ctx, inv.lc.AwsRequestID, waiter, reached)
 	return nil
 }
 
@@ -65,22 +60,22 @@ func answerBefore(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithDeadline(ctx, deadline.Add(-completionMargin))
 }
 
-func (m *nodeChild) forward(ctx context.Context, inv *invocation, rw *responseWriter) (reached bool, err error) {
+func (u upstream) forward(ctx context.Context, inv *invocation, rw *responseWriter) (reached bool, err error) {
 	ev, err := parseEvent(inv.Payload)
 	if err != nil {
-		return false, m.fail(rw, http.StatusBadGateway, fmt.Sprintf("bad event payload: %v", err))
+		return false, u.fail(rw, http.StatusBadGateway, fmt.Sprintf("bad event payload: %v", err))
 	}
 
-	resp, err := m.forwardToNode(ctx, ev)
+	resp, err := u.forwardToApp(ctx, ev)
 	if err != nil {
-		return false, m.failBeforeFirstByte(ctx, rw, fmt.Sprintf("upstream request failed: %v", err))
+		return false, u.failBeforeFirstByte(ctx, rw, fmt.Sprintf("upstream request failed: %v", err))
 	}
 	defer resp.Body.Close()
 
 	var first [1]byte
 	n, err := io.ReadFull(resp.Body, first[:])
 	if err != nil && !errors.Is(err, io.EOF) {
-		return true, m.failBeforeFirstByte(ctx, rw, fmt.Sprintf("read upstream body: %v", err))
+		return true, u.failBeforeFirstByte(ctx, rw, fmt.Sprintf("read upstream body: %v", err))
 	}
 	empty := n == 0
 	sentinel := empty && !selfTerminating(resp.StatusCode)
@@ -90,7 +85,7 @@ func (m *nodeChild) forward(ctx context.Context, inv *invocation, rw *responseWr
 
 	prelude, err := encodePrelude(resp.StatusCode, resp.Header)
 	if err != nil {
-		return true, m.fail(rw, http.StatusBadGateway, fmt.Sprintf("encode prelude: %v", err))
+		return true, u.fail(rw, http.StatusBadGateway, fmt.Sprintf("encode prelude: %v", err))
 	}
 	if _, err := rw.Write(prelude); err != nil {
 		return true, err
@@ -114,26 +109,26 @@ func (m *nodeChild) forward(ctx context.Context, inv *invocation, rw *responseWr
 	return true, rw.Close()
 }
 
-func (m *nodeChild) forwardToNode(ctx context.Context, ev *httpEvent) (*http.Response, error) {
-	req, err := buildForwardRequest(ctx, m.nodePort, ev)
+func (u upstream) forwardToApp(ctx context.Context, ev *httpEvent) (*http.Response, error) {
+	req, err := buildForwardRequest(ctx, u.port, ev)
 	if err != nil {
 		return nil, err
 	}
-	resp, retryable, err := m.roundTrip(req)
+	resp, retryable, err := u.roundTrip(req)
 	if err == nil || !retryable {
 		return resp, err
 	}
 
-	req, buildErr := buildForwardRequest(ctx, m.nodePort, ev)
+	req, buildErr := buildForwardRequest(ctx, u.port, ev)
 	if buildErr != nil {
 		return nil, err
 	}
-	resp, _, err = m.roundTrip(req)
+	resp, _, err = u.roundTrip(req)
 	return resp, err
 }
 
-func buildForwardRequest(ctx context.Context, nodePort int, ev *httpEvent) (*http.Request, error) {
-	req, err := buildLoopbackRequest(ctx, nodePort, ev)
+func buildForwardRequest(ctx context.Context, port int, ev *httpEvent) (*http.Request, error) {
+	req, err := buildLoopbackRequest(ctx, port, ev)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +139,7 @@ func buildForwardRequest(ctx context.Context, nodePort int, ev *httpEvent) (*htt
 	return req, nil
 }
 
-func (m *nodeChild) roundTrip(req *http.Request) (resp *http.Response, retryable bool, err error) {
+func (u upstream) roundTrip(req *http.Request) (resp *http.Response, retryable bool, err error) {
 	var reused, wrote bool
 	trace := &httptrace.ClientTrace{
 		GotConn: func(info httptrace.GotConnInfo) {
@@ -156,7 +151,7 @@ func (m *nodeChild) roundTrip(req *http.Request) (resp *http.Response, retryable
 	}
 	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 
-	resp, err = m.client.Do(req)
+	resp, err = u.client.Do(req)
 	if err == nil {
 		return resp, false, nil
 	}
@@ -171,14 +166,14 @@ func selfTerminating(status int) bool {
 	return status == http.StatusNoContent || status == http.StatusNotModified
 }
 
-func (m *nodeChild) failBeforeFirstByte(ctx context.Context, rw *responseWriter, message string) error {
+func (u upstream) failBeforeFirstByte(ctx context.Context, rw *responseWriter, message string) error {
 	if ctx.Err() == context.DeadlineExceeded {
-		return m.fail(rw, http.StatusGatewayTimeout, "app did not answer before the invocation deadline")
+		return u.fail(rw, http.StatusGatewayTimeout, "app did not answer before the invocation deadline")
 	}
-	return m.fail(rw, http.StatusBadGateway, message)
+	return u.fail(rw, http.StatusBadGateway, message)
 }
 
-func (m *nodeChild) fail(rw *responseWriter, status int, message string) error {
+func (u upstream) fail(rw *responseWriter, status int, message string) error {
 	header := http.Header{"Content-Type": []string{"text/plain; charset=utf-8"}}
 	prelude, err := encodePrelude(status, header)
 	if err != nil {

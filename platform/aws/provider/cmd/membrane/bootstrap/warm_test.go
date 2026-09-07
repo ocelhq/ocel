@@ -470,7 +470,7 @@ func TestWarmCompileCache(t *testing.T) {
 func TestDrainControlWarm(t *testing.T) {
 	t.Run("drops an unawaited warm reply", func(t *testing.T) {
 		m, _, nodeConn := controlConnPair(t)
-		waiter := m.registerWaiter("req-1")
+		waiter := m.beginInvocation("req-1")
 
 		fmt.Fprintln(nodeConn, warmedReply)
 		fmt.Fprintln(nodeConn, `{"type":"invocation-complete","payload":{"requestId":"req-1"}}`)
@@ -494,8 +494,7 @@ func TestHandleInvocationWarm(t *testing.T) {
 
 		store := &fakeBytecodeStore{}
 		m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
-		m.nodePort = portOf(t, node)
-		m.client = newLoopbackClient()
+		m.upstream = upstream{port: portOf(t, node), client: newLoopbackClient()}
 
 		rt, captured := warmRuntime(t, []byte(warmEvent), time.Now().Add(10*time.Second))
 		if err := handleInvocation(context.Background(), rt, m); err != nil {
@@ -529,7 +528,7 @@ func TestHandleInvocationWarm(t *testing.T) {
 		defer node.Close()
 
 		rt, captured := fakeRuntime(t, []byte(getEvent))
-		m := &nodeChild{nodePort: portOf(t, node), client: newLoopbackClient()}
+		m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
 
 		if err := handleInvocation(context.Background(), rt, m); err != nil {
 			t.Fatalf("handleInvocation: %v", err)

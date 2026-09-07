@@ -921,8 +921,7 @@ func TestHandleInvocationBytecode(t *testing.T) {
 		store := &fakeBytecodeStore{}
 		u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "compiled bytes"), OK: true}, true)
 		m := &nodeChild{
-			nodePort:  portOf(t, node),
-			client:    &http.Client{},
+			upstream:  upstream{port: portOf(t, node), client: &http.Client{}},
 			control:   goSide,
 			lifecycle: true,
 			pending:   map[string]chan struct{}{},
@@ -1093,7 +1092,7 @@ func TestFlushCompileCache(t *testing.T) {
 func TestDrainControl(t *testing.T) {
 	t.Run("drops an unawaited flush ack", func(t *testing.T) {
 		m, _, nodeConn := controlConnPair(t)
-		waiter := m.registerWaiter("req-1")
+		waiter := m.beginInvocation("req-1")
 
 		fmt.Fprintln(nodeConn, `{"type":"compile-cache-flushed","payload":{"dir":"/tmp/x","ok":true}}`)
 		fmt.Fprintln(nodeConn, `{"type":"invocation-complete","payload":{"requestId":"req-1"}}`)

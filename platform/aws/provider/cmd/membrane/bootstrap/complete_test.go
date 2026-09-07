@@ -29,8 +29,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 
 		goSide, jsSide := net.Pipe()
 		m := &nodeChild{
-			nodePort:  portOf(t, node),
-			client:    &http.Client{},
+			upstream:  upstream{port: portOf(t, node), client: &http.Client{}},
 			control:   goSide,
 			lifecycle: true,
 			pending:   map[string]chan struct{}{},
@@ -65,8 +64,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 		deadline := time.Now().Add(100 * time.Millisecond)
 		rt := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
 		m := &nodeChild{
-			nodePort:  portOf(t, node),
-			client:    &http.Client{},
+			upstream:  upstream{port: portOf(t, node), client: &http.Client{}},
 			lifecycle: true,
 			pending:   map[string]chan struct{}{},
 		}
@@ -96,8 +94,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 		deadline := time.Now().Add(30 * time.Second)
 		rt := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
 		m := &nodeChild{
-			nodePort: portOf(t, node),
-			client:   &http.Client{},
+			upstream: upstream{port: portOf(t, node), client: &http.Client{}},
 			pending:  map[string]chan struct{}{},
 		}
 
@@ -128,8 +125,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 
 		rt := fakeRuntimeWithDeadline(t, []byte(getEvent), time.Now().Add(30*time.Second))
 		m := &nodeChild{
-			nodePort: deadPort,
-			client:   &http.Client{},
+			upstream: upstream{port: deadPort, client: &http.Client{}},
 			pending:  map[string]chan struct{}{},
 		}
 

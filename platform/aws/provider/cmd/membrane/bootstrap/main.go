@@ -12,22 +12,20 @@ import (
 )
 
 func main() {
-	if _, err := os.Stat("/opt/ocel/node/entrypoint.mjs"); err != nil {
-		fatalInit(fmt.Sprintf("node entrypoint not found: %v", err))
-	}
-	if _, err := os.Stat("/var/lang/bin/node"); err != nil {
-		fatalInit(fmt.Sprintf("node binary not found: %v", err))
-	}
-
 	ctx := context.Background()
 	start := time.Now()
 
-	bytecodeReady := make(chan *bytecodeResolution, 1)
-	go func() {
-		resolveCtx, cancel := context.WithTimeout(ctx, bytecodeResolveBudget)
-		defer cancel()
-		bytecodeReady <- resolveBytecodeResolution(resolveCtx, nodeVersionFromBinary)
-	}()
+	served := readArtifact()
+
+	var bytecodeReady chan *bytecodeResolution
+	if !served.executable() {
+		bytecodeReady = make(chan *bytecodeResolution, 1)
+		go func() {
+			resolveCtx, cancel := context.WithTimeout(ctx, bytecodeResolveBudget)
+			defer cancel()
+			bytecodeReady <- resolveBytecodeResolution(resolveCtx, nodeVersionFromBinary)
+		}()
+	}
 
 	live, err := resolveLiveValues(ctx)
 	if err != nil {
@@ -46,7 +44,7 @@ func main() {
 	}
 	go superviseMembrane(membraneServed)
 
-	child, err := bringUpChildWithBytecode(ctx, startNode, live, prefetch, childEnv(bakedEnv, live, membraneEnv), start, bytecodeReady, bytecodeEmbedded, bytecodeRehydrate)
+	child, err := bringUp(ctx, served, live, prefetch, childEnv(bakedEnv, live, membraneEnv), start, bytecodeReady)
 	if err != nil {
 		fatalInit(err.Error())
 	}
@@ -61,6 +59,25 @@ func main() {
 }
 
 type spawner func(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeChild, error)
+
+func bringUp(ctx context.Context, served artifact, live *liveValues, prefetch <-chan error, env []string, start time.Time, bytecodeReady <-chan *bytecodeResolution) (child, error) {
+	if served.executable() {
+		port, err := injectedPort()
+		if err != nil {
+			return nil, err
+		}
+		return bringUpExecutable(served.Command, port, live, prefetch, env, spawnBudget(start))
+	}
+	return bringUpChildWithBytecode(ctx, startNode(entrypointPath(served)), live, prefetch, env, start, bytecodeReady, bytecodeEmbedded, bytecodeRehydrate)
+}
+
+func spawnBudget(start time.Time) time.Duration {
+	budget := startupBudget - time.Since(start)
+	if budget < minSpawnBudget {
+		return minSpawnBudget
+	}
+	return budget
+}
 
 func bringUpChild(spawn spawner, live *liveValues, prefetch <-chan error, env []string, budget time.Duration) (*nodeChild, error) {
 	child, err := spawn(env, budget, live.attach, live.prefetchFailed())
@@ -124,11 +141,7 @@ func bringUpChildWithBytecode(
 		cancel()
 	}
 
-	spawnBudget := startupBudget - time.Since(start)
-	if spawnBudget < minSpawnBudget {
-		spawnBudget = minSpawnBudget
-	}
-	child, err := bringUpChild(spawn, live, prefetch, env, spawnBudget)
+	child, err := bringUpChild(spawn, live, prefetch, env, spawnBudget(start))
 	if err != nil {
 		return nil, err
 	}
