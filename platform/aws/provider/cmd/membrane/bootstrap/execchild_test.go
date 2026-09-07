@@ -126,6 +126,7 @@ func TestStartExecutable(t *testing.T) {
 	})
 
 	t.Run("reports the exit of a command that dies before it listens", func(t *testing.T) {
+		t.Setenv("LAMBDA_TASK_ROOT", t.TempDir())
 		_, err := startExecutable([]string{"sh", "-c", "exit 3"}, freePort(t), nil, 20*time.Second)
 		if err == nil {
 			t.Fatal("startExecutable() error = nil, want the child's exit reported")
@@ -136,6 +137,7 @@ func TestStartExecutable(t *testing.T) {
 	})
 
 	t.Run("refuses a command that never listens within the budget", func(t *testing.T) {
+		t.Setenv("LAMBDA_TASK_ROOT", t.TempDir())
 		_, err := startExecutable([]string{"sh", "-c", "sleep 1"}, freePort(t), nil, 150*time.Millisecond)
 		if err == nil {
 			t.Fatal("startExecutable() error = nil, want a budget-expiry error")
@@ -146,6 +148,7 @@ func TestStartExecutable(t *testing.T) {
 	})
 
 	t.Run("kills and reaps a command it gave up waiting on", func(t *testing.T) {
+		t.Setenv("LAMBDA_TASK_ROOT", t.TempDir())
 		pidFile := filepath.Join(t.TempDir(), "pid")
 		_, err := startExecutable(
 			[]string{"sh", "-c", "echo $$ > " + pidFile + "; exec sleep 30"},
