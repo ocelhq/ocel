@@ -59,8 +59,23 @@ func warmLoadDeadline(ctx context.Context) (time.Time, bool) {
 	return load, true
 }
 
+func answerWarm(ctx context.Context, c controlledChild, rw *responseWriter) error {
+	if c == nil {
+		return writeWarmSummary(rw, warmSummary{
+			State:  warmStateDisabled,
+			Source: bytecodeSourceNone,
+			Error:  "this app carries no compile cache to warm",
+		})
+	}
+	return c.answerWarmInvocation(ctx, rw)
+}
+
 func (m *nodeChild) answerWarmInvocation(ctx context.Context, rw *responseWriter) error {
-	summary, err := json.Marshal(m.warmBytecodeCache(ctx))
+	return writeWarmSummary(rw, m.warmBytecodeCache(ctx))
+}
+
+func writeWarmSummary(rw *responseWriter, s warmSummary) error {
+	summary, err := json.Marshal(s)
 	if err != nil {
 		return rw.closeWithError(errTypeUpstream, err.Error())
 	}

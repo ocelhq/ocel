@@ -112,6 +112,16 @@ func TestStartExecutable(t *testing.T) {
 		if summary.State != warmStateDisabled {
 			t.Errorf("state = %q, want %q", summary.State, warmStateDisabled)
 		}
+		if summary.Source != bytecodeSourceNone {
+			t.Errorf("source = %q, want %q", summary.Source, bytecodeSourceNone)
+		}
+	})
+
+	t.Run("carries none of the hooks the membrane holds a control channel for", func(t *testing.T) {
+		var c child = &execChild{}
+		if _, controlled := c.(controlledChild); controlled {
+			t.Error("an exec'd child answers hooks that exist only for a child the membrane drives over a control socket")
+		}
 	})
 
 	t.Run("reports the exit of a command that dies before it listens", func(t *testing.T) {
