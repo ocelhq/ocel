@@ -21,9 +21,11 @@ const (
 	RuntimeNode = "node"
 	RuntimeNext = "next"
 	RuntimeGo   = "go"
+
+	RuntimePython = "python"
 )
 
-func Runtimes() []string { return []string{RuntimeNode, RuntimeNext, RuntimeGo} }
+func Runtimes() []string { return []string{RuntimeNode, RuntimeNext, RuntimeGo, RuntimePython} }
 
 func KnownRuntime(name string) bool { return slices.Contains(Runtimes(), name) }
 
@@ -45,6 +47,18 @@ func GoArch(declared string) (string, bool) {
 		return "amd64", true
 	case ArchARM64:
 		return "arm64", true
+	}
+	return "", false
+}
+
+const PythonVersion = "3.13"
+
+func PythonPlatformTag(declared string) (string, bool) {
+	switch Architecture(declared) {
+	case ArchX8664:
+		return "manylinux2014_x86_64", true
+	case ArchARM64:
+		return "manylinux2014_aarch64", true
 	}
 	return "", false
 }
