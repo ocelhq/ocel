@@ -18,8 +18,8 @@ import (
 
 const (
 	retiring = "shop-web-older00000"
-	retired  = retiring + ":" + AppPort
-	flipTo   = physical + ":" + AppPort
+	retired  = retiring + ":" + providerkit.InjectedPort
+	flipTo   = physical + ":" + providerkit.InjectedPort
 )
 
 type watched struct {
@@ -676,12 +676,12 @@ func TestAHungAppIsDiagnosedByTheCombinationAndNeverByOneLine(t *testing.T) {
 	t.Parallel()
 
 	said := diagnosed(t,
-		session.Result{Code: 4, Stderr: physical + ":" + AppPort + " never answered /healthz within 30s"},
+		session.Result{Code: 4, Stderr: physical + ":" + providerkit.InjectedPort + " never answered /healthz within 30s"},
 		"Status=running ExitCode=0 OOMKilled=false Error= StartedAt=2026-01-01T00:00:00Z FinishedAt=0001-01-01T00:00:00Z RestartCount=0", "")
 
 	for what, wanted := range map[string]string{
 		"the verdict the helper reached":      "never answered",
-		"the exact target it probed":          physical + ":" + AppPort,
+		"the exact target it probed":          physical + ":" + providerkit.InjectedPort,
 		"the path it probed":                  "/healthz",
 		"the config key that changes it":      healthKey,
 		"the deploy timeout that expired":     "30s",

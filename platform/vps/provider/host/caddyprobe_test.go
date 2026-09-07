@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 type answered struct {
@@ -188,12 +190,12 @@ func standingAppOn(t *testing.T, network, named, body string) string {
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
 		"--network", network, ProxyImage,
-		"caddy", "respond", "--listen", ":"+AppPort, body).CombinedOutput()
+		"caddy", "respond", "--listen", ":"+providerkit.InjectedPort, body).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
 	}
 	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
-	return name + ":" + AppPort
+	return name + ":" + providerkit.InjectedPort
 }
 
 func standingApp(t *testing.T, body string) (network, upstream string) {

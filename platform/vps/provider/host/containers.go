@@ -12,8 +12,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-const AppPort = providerkit.InjectedPort
-
 const (
 	LabelApp     = "ocel.app"
 	LabelProject = "ocel.project"
@@ -70,7 +68,7 @@ func containerRun(spec Container, held handoff) []string {
 	if held.path != "" {
 		argv = append(argv, "--env-file", held.path)
 	}
-	return append(argv, "--env", providerkit.InjectedPortName+"="+AppPort, spec.Image)
+	return append(argv, "--env", providerkit.InjectedPortName+"="+providerkit.InjectedPort, spec.Image)
 }
 
 func LabelSelector(label string) string {

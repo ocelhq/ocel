@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func engineOrSkip(t *testing.T) {
@@ -199,7 +201,7 @@ func (p standingProxy) standsApp(t *testing.T, upstream, body string) {
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
 		"--network", p.network, ProxyImage,
-		"caddy", "respond", "--listen", ":"+AppPort, body).CombinedOutput()
+		"caddy", "respond", "--listen", ":"+providerkit.InjectedPort, body).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
 	}

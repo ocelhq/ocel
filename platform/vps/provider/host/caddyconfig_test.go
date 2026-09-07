@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 )
 
@@ -40,8 +41,8 @@ func servers(t *testing.T, read map[string]any) map[string]any {
 func releasing() ProxyState {
 	return ProxyState{
 		Grace:    30 * time.Second,
-		Routes:   []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + AppPort}},
-		Retiring: "shop-web-1111:" + AppPort,
+		Routes:   []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + providerkit.InjectedPort}},
+		Retiring: "shop-web-1111:" + providerkit.InjectedPort,
 	}
 }
 
@@ -113,12 +114,12 @@ func TestARedeployThatChangesNothingRendersTheSameBytes(t *testing.T) {
 	t.Parallel()
 
 	scrambled := ProxyState{Grace: 30 * time.Second, Routes: []AppRoute{
-		{RouteKey: keyed("worker"), Upstream: "shop-worker-1:" + AppPort},
-		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + AppPort},
+		{RouteKey: keyed("worker"), Upstream: "shop-worker-1:" + providerkit.InjectedPort},
+		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + providerkit.InjectedPort},
 	}}
 	ordered := ProxyState{Grace: 30 * time.Second, Routes: []AppRoute{
-		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + AppPort},
-		{RouteKey: keyed("worker"), Upstream: "shop-worker-1:" + AppPort},
+		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + providerkit.InjectedPort},
+		{RouteKey: keyed("worker"), Upstream: "shop-worker-1:" + providerkit.InjectedPort},
 	}}
 	if !bytes.Equal(mustRender(t, scrambled), mustRender(t, ordered)) {
 		t.Error("two renders of the same set of apps differ by the order they were handed in, and a no-op deploy then rewrites the box's config")

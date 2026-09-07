@@ -422,7 +422,7 @@ func (j journey) underLoad(t *testing.T, hostname, retiring string, flipping fun
 	t.Helper()
 
 	const beat = 500 * time.Millisecond
-	address := retiring + ":" + host.AppPort
+	address := retiring + ":" + providerkit.InjectedPort
 	stop := make(chan struct{})
 	var mu sync.Mutex
 	watched := crossing{drained: -1, stopped: -1}
