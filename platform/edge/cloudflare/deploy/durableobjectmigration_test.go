@@ -40,7 +40,7 @@ func settingsProvider(t *testing.T, status int, body string) *provider {
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
-	return &provider{client: cf.NewClient(
+	return &provider{namespace: "ocel", client: cf.NewClient(
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}

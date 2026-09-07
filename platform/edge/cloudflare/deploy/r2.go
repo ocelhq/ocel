@@ -38,12 +38,9 @@ const (
 	tokenPageSize = 50
 )
 
-var cacheStoreNameByClass = map[edge.Class]string{
-	edge.ClassProduction: "ocel-edge-cache",
-	edge.ClassPreview:    "ocel-edge-cache-preview",
+func cacheStoreNameFor(namespace string, class edge.Class) (string, error) {
+	return accountNameFor("edge cache store", namespace, class, "edge-cache")
 }
-
-func cacheStoreName(class edge.Class) string { return cacheStoreNameByClass[class] }
 
 func adoptedValues(cacheBucket string) map[string]string {
 	return map[string]string{valueKeyCacheBucket: cacheBucket}
@@ -76,6 +73,7 @@ type permissionGroupAPI interface {
 }
 
 type cacheStore struct {
+	namespace   string
 	buckets     bucketAPI
 	tokens      tokenAPI
 	groups      permissionGroupAPI
@@ -84,8 +82,9 @@ type cacheStore struct {
 	wait        func(context.Context, time.Duration) error
 }
 
-func newCacheStore(client *cf.Client) cacheStore {
+func newCacheStore(client *cf.Client, namespace string) cacheStore {
 	return cacheStore{
+		namespace:   namespace,
 		buckets:     client.R2.Buckets,
 		tokens:      client.User.Tokens,
 		groups:      client.User.Tokens.PermissionGroups,
@@ -119,9 +118,9 @@ type cacheStoreState struct {
 }
 
 func (s cacheStore) read(ctx context.Context, accountID string, class edge.Class) (cacheStoreState, error) {
-	name, ok := cacheStoreNameByClass[class]
-	if !ok {
-		return cacheStoreState{}, fmt.Errorf("cloudflare: unknown class %q", class)
+	name, err := cacheStoreNameFor(s.namespace, class)
+	if err != nil {
+		return cacheStoreState{}, err
 	}
 	bucketHeld, err := s.bucketPresent(ctx, accountID, name)
 	if err != nil {
@@ -181,9 +180,9 @@ func (s cacheStore) bootstrap(ctx context.Context, accountID string, state cache
 }
 
 func (s cacheStore) teardown(ctx context.Context, accountID string, class edge.Class) error {
-	name, ok := cacheStoreNameByClass[class]
-	if !ok {
-		return fmt.Errorf("cloudflare: unknown class %q", class)
+	name, err := cacheStoreNameFor(s.namespace, class)
+	if err != nil {
+		return err
 	}
 	token, held, err := s.findToken(ctx, name)
 	if err != nil {

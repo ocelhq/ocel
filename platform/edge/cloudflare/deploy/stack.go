@@ -24,31 +24,33 @@ const bootstrapSecretBinding = "BOOTSTRAP_SECRET"
 
 const secretBytes = 32
 
-const (
-	sharedStoreScriptName  = "ocel-deployments-store"
-	previewStoreScriptName = "ocel-deployments-store-preview"
+const longestAccountName = 63
 
-	isrWriterScriptName        = "ocel-isr-writer"
-	previewISRWriterScriptName = "ocel-isr-writer-preview"
-)
-
-func storeScriptNameFor(class edge.Class) (string, error) {
-	return accountScriptNameFor("deployments store", class, sharedStoreScriptName, previewStoreScriptName)
+func storeScriptNameFor(namespace string, class edge.Class) (string, error) {
+	return accountNameFor("deployments store", namespace, class, "deployments-store")
 }
 
-func isrWriterScriptNameFor(class edge.Class) (string, error) {
-	return accountScriptNameFor("isr writer", class, isrWriterScriptName, previewISRWriterScriptName)
+func isrWriterScriptNameFor(namespace string, class edge.Class) (string, error) {
+	return accountNameFor("isr writer", namespace, class, "isr-writer")
 }
 
-func accountScriptNameFor(worker string, class edge.Class, production, preview string) (string, error) {
+func accountNameFor(what, namespace string, class edge.Class, stem string) (string, error) {
+	if namespace == "" {
+		return "", fmt.Errorf("%s: the cloudflare edge was opened without a bootstrap namespace, so it cannot name what this class stands on", what)
+	}
+	var name string
 	switch class {
 	case edge.ClassProduction:
-		return production, nil
+		name = namespace + "-" + stem
 	case edge.ClassPreview:
-		return preview, nil
+		name = namespace + "-" + stem + "-preview"
 	default:
-		return "", fmt.Errorf("%s: unknown class %q", worker, class)
+		return "", fmt.Errorf("%s: unknown class %q", what, class)
 	}
+	if len(name) > longestAccountName {
+		return "", fmt.Errorf("%s: %q is %d characters, and a Cloudflare worker or bucket name holds %d; shorten the bootstrap namespace %q", what, name, len(name), longestAccountName, namespace)
+	}
+	return name, nil
 }
 
 type durableObjectClass struct {

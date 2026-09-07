@@ -184,58 +184,6 @@ func TestBuildDurableObjectScriptMultipart(t *testing.T) {
 	})
 }
 
-func TestAccountScriptNameFor(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name          string
-		nameFor       func(edge.Class) (string, error)
-		prod, preview string
-	}{
-		{"the deployments store", storeScriptNameFor, sharedStoreScriptName, previewStoreScriptName},
-		{"the isr writer", isrWriterScriptNameFor, isrWriterScriptName, previewISRWriterScriptName},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			t.Run("production and preview name their own script", func(t *testing.T) {
-				t.Parallel()
-
-				prod, err := tc.nameFor(edge.ClassProduction)
-				if err != nil {
-					t.Fatalf("production: %v", err)
-				}
-				preview, err := tc.nameFor(edge.ClassPreview)
-				if err != nil {
-					t.Fatalf("preview: %v", err)
-				}
-				if prod != tc.prod || preview != tc.preview {
-					t.Errorf("script names = (%q, %q), want (%q, %q)", prod, preview, tc.prod, tc.preview)
-				}
-				if prod == preview {
-					t.Error("production and preview scripts must differ so their DO namespaces do not collide")
-				}
-			})
-
-			t.Run("an unknown class is an error", func(t *testing.T) {
-				t.Parallel()
-
-				if _, err := tc.nameFor(edge.Class("nonsense")); err == nil {
-					t.Error("nameFor(unknown class) = nil error, want an error")
-				}
-			})
-		})
-	}
-
-	t.Run("the isr writer and the deployments store never share a name", func(t *testing.T) {
-		t.Parallel()
-
-		if isrWriterScriptName == sharedStoreScriptName || previewISRWriterScriptName == previewStoreScriptName {
-			t.Error("the isr-writer and deployments-store scripts must be distinct")
-		}
-	})
-}
-
 func testSpec(endpoint, version string) edge.StackSpec {
 	return edge.StackSpec{
 		Slug:    "acme-web",

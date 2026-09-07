@@ -424,7 +424,7 @@ func matchingRecords(records []map[string]any, query url.Values) []map[string]an
 
 func (m *cfMock) provider(t *testing.T) *provider {
 	srv := m.server(t)
-	return &provider{client: cf.NewClient(
+	return &provider{namespace: "ocel", client: cf.NewClient(
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}

@@ -53,7 +53,8 @@ func observability() map[string]any {
 }
 
 type provider struct {
-	client *cf.Client
+	client    *cf.Client
+	namespace string
 
 	zoneMu    sync.Mutex
 	zonesSeen map[string][]zoneRef
@@ -67,12 +68,12 @@ var (
 	_ edge.Programmable = (*provider)(nil)
 )
 
-func New() edge.Edge {
-	return &provider{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries))}
+func New(namespace string) edge.Edge {
+	return &provider{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries)), namespace: namespace}
 }
 
-func NewAt(baseURL string) edge.Edge {
-	return &provider{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries), option.WithBaseURL(baseURL))}
+func NewAt(namespace, baseURL string) edge.Edge {
+	return &provider{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries), option.WithBaseURL(baseURL)), namespace: namespace}
 }
 
 const clientMaxRetries = 5
@@ -156,11 +157,11 @@ func (p *provider) SharedPreviewRemoval() edge.PlanGroup {
 func (p *provider) CodeRuntime() (string, []string) { return compatDate, compatFlags }
 
 func (p *provider) Adoption(_ context.Context, class edge.Class) (edge.Adoption, error) {
-	name, ok := cacheStoreNameByClass[class]
-	if !ok {
-		return edge.Adoption{}, fmt.Errorf("cloudflare: unknown class %q", class)
+	name, err := cacheStoreNameFor(p.namespace, class)
+	if err != nil {
+		return edge.Adoption{}, err
 	}
-	workers, err := bootstrapWorkers(class)
+	workers, err := bootstrapWorkers(p.namespace, class)
 	if err != nil {
 		return edge.Adoption{}, err
 	}
@@ -183,7 +184,7 @@ func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.Bootst
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	out, err := newCacheStore(p.client).bootstrap(ctx, accountID, state.store)
+	out, err := newCacheStore(p.client, p.namespace).bootstrap(ctx, accountID, state.store)
 	if err != nil {
 		return out, err
 	}
@@ -202,11 +203,11 @@ func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
 	if accountID == "" {
 		return fmt.Errorf("%s is not set; it is required to tear the Cloudflare edge down", envAccountID)
 	}
-	storeScript, err := storeScriptNameFor(class)
+	storeScript, err := storeScriptNameFor(p.namespace, class)
 	if err != nil {
 		return err
 	}
-	writerScript, err := isrWriterScriptNameFor(class)
+	writerScript, err := isrWriterScriptNameFor(p.namespace, class)
 	if err != nil {
 		return err
 	}
@@ -216,7 +217,7 @@ func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
 			errs = append(errs, fmt.Errorf("delete worker %q: %w", name, err))
 		}
 	}
-	if err := newCacheStore(p.client).teardown(ctx, accountID, class); err != nil {
+	if err := newCacheStore(p.client, p.namespace).teardown(ctx, accountID, class); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
@@ -237,8 +238,8 @@ type offerKeys struct {
 	cred       string
 }
 
-func bootstrapWorkers(class edge.Class) ([]bootstrapWorker, error) {
-	storeScript, err := storeScriptNameFor(class)
+func bootstrapWorkers(namespace string, class edge.Class) ([]bootstrapWorker, error) {
+	storeScript, err := storeScriptNameFor(namespace, class)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +247,7 @@ func bootstrapWorkers(class edge.Class) ([]bootstrapWorker, error) {
 	if err != nil {
 		return nil, err
 	}
-	writerScript, err := isrWriterScriptNameFor(class)
+	writerScript, err := isrWriterScriptNameFor(namespace, class)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +255,11 @@ func bootstrapWorkers(class edge.Class) ([]bootstrapWorker, error) {
 	if err != nil {
 		return nil, err
 	}
-	writerWorker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: cacheStoreName(class)}
+	bucket, err := cacheStoreNameFor(namespace, class)
+	if err != nil {
+		return nil, err
+	}
+	writerWorker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: bucket}
 
 	return []bootstrapWorker{
 		{

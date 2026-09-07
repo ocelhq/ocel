@@ -52,7 +52,7 @@ func writeAppArtifacts(t *testing.T) edge.WorkerSource {
 
 func assembleFor(t *testing.T) func(edge.WorkerSource, edge.Resolver) (edge.Worker, error) {
 	t.Helper()
-	return New().(edge.Programmable).AssembleApp
+	return New("ocel").(edge.Programmable).AssembleApp
 }
 
 func TestAssembleApp(t *testing.T) {

@@ -30,7 +30,7 @@ func entitlementProvider(t *testing.T, subscriptions string, status int) *provid
 	}))
 	t.Cleanup(srv.Close)
 
-	return &provider{client: cf.NewClient(
+	return &provider{namespace: "ocel", client: cf.NewClient(
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}

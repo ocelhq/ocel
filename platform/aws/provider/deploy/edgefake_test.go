@@ -120,7 +120,7 @@ func (f *recordingEdge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOu
 func (f *recordingEdge) Teardown(context.Context, edge.Class) error { return nil }
 
 func (f *recordingEdge) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Worker, error) {
-	return cloudflare.New().(edge.Programmable).AssembleApp(src, r)
+	return cloudflare.New("ocel").(edge.Programmable).AssembleApp(src, r)
 }
 
 func (f *recordingEdge) DeployApp(_ context.Context, app edge.AppDeployment) (edge.AppResult, error) {
