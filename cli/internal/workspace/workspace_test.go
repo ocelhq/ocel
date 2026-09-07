@@ -280,6 +280,58 @@ func TestTheMembersOfAWorkspaceAreTheNamesItsPackagesGoBy(t *testing.T) {
 	}
 }
 
+func TestWhatMakesAnAppAPythonProjectIsTheFileThatDeclaresItOne(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		declares map[string]string
+		python   bool
+		member   bool
+	}{
+		{
+			name:     "a script beside a node app declares nothing",
+			declares: map[string]string{"apps/svc/main.py": "print('hi')\n"},
+		},
+		{
+			name:     "requirements.txt declares a python project",
+			declares: map[string]string{"apps/svc/main.py": "print('hi')\n", "apps/svc/requirements.txt": "six==1.17.0\n"},
+			python:   true,
+		},
+		{
+			name:     "pyproject.toml declares a python project",
+			declares: map[string]string{"apps/svc/main.py": "print('hi')\n", "apps/svc/pyproject.toml": "[project]\nname = \"svc\"\n"},
+			python:   true,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, dir, map[string]string{
+				"pnpm-workspace.yaml":   "packages:\n  - apps/*\n",
+				"pnpm-lock.yaml":        "lockfileVersion: '9.0'\n",
+				"package.json":          `{"name":"root"}`,
+				"apps/svc/package.json": `{"name":"@acme/svc"}`,
+			})
+			write(t, dir, tt.declares)
+			app := filepath.Join(dir, "apps", "svc")
+
+			loc := located(t, app)
+
+			if loc.Python != tt.python {
+				t.Errorf("Python = %v, want %v — a python app is told by the file that declares the project, the way a go one is told by its go.mod", loc.Python, tt.python)
+			}
+			wantRoot, wantMember := dir, true
+			if tt.python {
+				wantRoot, wantMember = app, false
+			}
+			if loc.Root != wantRoot {
+				t.Errorf("Root = %s, want %s — an app with no python project file is built from the workspace it installs with", loc.Root, wantRoot)
+			}
+			if loc.InWorkspace() != wantMember {
+				t.Errorf("InWorkspace() = %v, want %v", loc.InWorkspace(), wantMember)
+			}
+		})
+	}
+}
+
 func TestAnAppInNoWorkspaceHasNoMembersToTellApartFromTheRegistry(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, map[string]string{

@@ -15,12 +15,13 @@ import (
 )
 
 const (
-	manifestName      = "package.json"
-	goModuleName      = "go.mod"
-	pythonEntryName   = "main.py"
-	pnpmWorkspaceFile = "pnpm-workspace.yaml"
-	gitEntry          = ".git"
-	vendorDir         = "node_modules"
+	manifestName       = "package.json"
+	goModuleName       = "go.mod"
+	pythonRequirements = "requirements.txt"
+	pythonProjectName  = "pyproject.toml"
+	pnpmWorkspaceFile  = "pnpm-workspace.yaml"
+	gitEntry           = ".git"
+	vendorDir          = "node_modules"
 )
 
 type App struct {
@@ -114,7 +115,7 @@ func locatedAt(dir, root string) (Location, error) {
 		Path:    filepath.ToSlash(rel),
 		Node:    regular(filepath.Join(dir, manifestName)),
 		Go:      regular(filepath.Join(dir, goModuleName)),
-		Python:  regular(filepath.Join(dir, pythonEntryName)),
+		Python:  pythonProject(dir),
 		App:     describe(dir, app),
 		Manager: detect(root),
 	}
@@ -169,7 +170,11 @@ func (l Location) Members() []string {
 }
 
 func standsAlone(dir string) bool {
-	return regular(filepath.Join(dir, goModuleName)) || regular(filepath.Join(dir, pythonEntryName))
+	return regular(filepath.Join(dir, goModuleName)) || pythonProject(dir)
+}
+
+func pythonProject(dir string) bool {
+	return regular(filepath.Join(dir, pythonRequirements)) || regular(filepath.Join(dir, pythonProjectName))
 }
 
 func regular(path string) bool {
