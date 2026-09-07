@@ -184,7 +184,7 @@ func bootstrapAccess() []grantStatement {
 			actions:   []string{"kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey"},
 			resources: []string{anyKeyARN},
 			condition: map[string]any{
-				"ForAnyValue:StringLike": map[string]any{"kms:ResourceAliases": varsKeyAliasFor("*")},
+				"StringEquals": map[string]any{"aws:ResourceTag/" + varsKeyComponentTagKey: varsKeyComponentTagValue},
 			},
 		},
 		{
@@ -432,7 +432,7 @@ func bootstrapProvisioning() []grantStatement {
 			resources: []string{bootstrapTableARN, bootstrapTablePartARN},
 		},
 		{
-			actions:   []string{"kms:CreateKey", "kms:TagResource"},
+			actions:   []string{"kms:CreateKey"},
 			resources: []string{unscopedResource},
 			condition: map[string]any{
 				"StringEquals": map[string]any{"aws:RequestTag/" + varsKeyComponentTagKey: varsKeyComponentTagValue},

@@ -49,6 +49,13 @@ describe("awsProvider", () => {
     });
   });
 
+  it("carries the arn of a key the account brought through to the provider", () => {
+    expect(awsProvider({ varsKey: "arn:aws:kms:eu-west-1:111122223333:key/abcd-1234" })).toEqual({
+      package: "@ocel/provider-aws",
+      options: { varsKey: "arn:aws:kms:eu-west-1:111122223333:key/abcd-1234" },
+    });
+  });
+
   it("defaults options to an empty object when called with none", () => {
     expect(awsProvider()).toEqual({
       package: "@ocel/provider-aws",

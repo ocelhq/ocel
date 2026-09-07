@@ -127,7 +127,7 @@ func edgeUserResource(userName, class string, optimizer bool) string {
 		paramRevalidateQueueARN, invoke)
 }
 
-func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, class string) ([]providerkit.Change, error) {
+func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, class string, _ Request) ([]providerkit.Change, error) {
 	names, err := edgeNamesFor(class, KindCloudflare)
 	if err != nil {
 		return nil, err
@@ -159,7 +159,7 @@ func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, class string) (
 	}, nil
 }
 
-func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, class string) ([]providerkit.Change, error) {
+func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, class string, _ Request) ([]providerkit.Change, error) {
 	names, err := edgeNamesFor(class, KindCloudflare)
 	if err != nil {
 		return nil, err

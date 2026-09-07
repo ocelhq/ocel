@@ -41,6 +41,7 @@ const artifactRootDirName = ".ocel/output"
 
 type Options struct {
 	Region       string            `json:"region,omitempty"`
+	VarsKey      string            `json:"varsKey,omitempty"`
 	Transforms   []string          `json:"transforms,omitempty"`
 	Certificates map[string]string `json:"certificates,omitempty"`
 }
@@ -94,7 +95,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
 	if err != nil {
 		return nil, err
 	}
-	return settling{Bootstrapper: control.BootstrapperFor(p.aws, front, p.edges()), settled: p.forget}, nil
+	return settling{Bootstrapper: control.BootstrapperFor(p.aws, front, p.edges(), p.options.VarsKey), settled: p.forget}, nil
 }
 
 func (p *Provider) forget() {

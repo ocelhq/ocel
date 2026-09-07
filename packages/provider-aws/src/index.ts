@@ -20,6 +20,14 @@ export interface AwsProviderOptions {
    * renewed or deleted here.
    */
   certificates?: Record<string, string>;
+  /**
+   * ARN of a KMS key to encrypt this account's variables under. Optional: omit
+   * it and `ocel bootstrap --features vars-key` makes a key ocel owns. Name one
+   * and ocel makes no key, sealing every value under yours — its key policy must
+   * admit the principal that bootstraps and the app execution roles that read a
+   * value, and ocel never edits a key policy it does not own.
+   */
+  varsKey?: string;
 }
 
 /** Declares AWS as the provider `ocel deploy` provisions into. */

@@ -224,10 +224,10 @@ func TestPlanParametersAsksEveryFeatureThatManagesOne(t *testing.T) {
 	t.Cleanup(func() { featureRegistry = standing })
 	featureRegistry = append(slices.Clone(standing), feature{
 		name: "test-edge",
-		afterPlan: func(context.Context, ParamAPIs, string) ([]providerkit.Change, error) {
+		afterPlan: func(context.Context, ParamAPIs, string, Request) ([]providerkit.Change, error) {
 			return []providerkit.Change{{Kind: kindParameter, Name: "/ocel/test/written", Action: providerkit.ActionCreate}}, nil
 		},
-		dropPlan: func(context.Context, ParamAPIs, string) ([]providerkit.Change, error) {
+		dropPlan: func(context.Context, ParamAPIs, string, Request) ([]providerkit.Change, error) {
 			return []providerkit.Change{{Kind: kindParameter, Name: "/ocel/test/severed", Action: providerkit.ActionDelete}}, nil
 		},
 	})

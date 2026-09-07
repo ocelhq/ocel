@@ -36,10 +36,12 @@ type stackRefs struct {
 }
 
 type featureInputs struct {
-	class     string
-	code      stackPayloads
-	refs      stackRefs
-	alongside FeatureSet
+	class          string
+	artifactBucket string
+	code           stackPayloads
+	refs           stackRefs
+	alongside      FeatureSet
+	varsKey        string
 }
 
 type featureStack struct {
@@ -65,22 +67,27 @@ type feature struct {
 	payloads   func(context.Context, ObjectStore, string) (stackPayloads, error)
 	placements func(string) stackPayloads
 	after      func(context.Context, stepDeps) error
-	afterPlan  func(context.Context, ParamAPIs, string) ([]providerkit.Change, error)
+	afterPlan  func(context.Context, ParamAPIs, string, Request) ([]providerkit.Change, error)
 	drop       func(context.Context, stepDeps) error
-	dropPlan   func(context.Context, ParamAPIs, string) ([]providerkit.Change, error)
+	dropPlan   func(context.Context, ParamAPIs, string, Request) ([]providerkit.Change, error)
 }
 
-func (f feature) render(class, artifactBucket string, refs stackRefs, alongside FeatureSet) featureStack {
-	var code stackPayloads
+func (f feature) planned(in featureInputs) featureStack {
 	if f.placements != nil {
-		code = f.placements(artifactBucket)
+		in.code = f.placements(in.artifactBucket)
 	}
-	return f.template(featureInputs{
-		class:     class,
-		code:      code,
-		refs:      refs,
-		alongside: alongside,
-	})
+	return f.template(in)
+}
+
+func (f feature) staged(ctx context.Context, store ObjectStore, in featureInputs) (featureStack, error) {
+	if f.payloads != nil {
+		code, err := f.payloads(ctx, store, in.artifactBucket)
+		if err != nil {
+			return featureStack{}, err
+		}
+		in.code = code
+	}
+	return f.template(in), nil
 }
 
 func (f feature) edgeKind() (edge.Kind, bool) {

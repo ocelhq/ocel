@@ -185,16 +185,16 @@ func healStack(ctx context.Context, apis APIs, class string, stale StackStamp, d
 		return false, waitOutRun(ctx, apis.CFN, stale, log)
 	}
 
-	code, err := f.payloads(ctx, apis.Store, deployed.ArtifactBucket)
+	stack, err := f.staged(ctx, apis.Store, featureInputs{
+		class:          class,
+		artifactBucket: deployed.ArtifactBucket,
+		refs:           refs,
+		alongside:      deployed.Features,
+		varsKey:        broughtVarsKey(deployed.Outputs),
+	})
 	if err != nil {
 		return false, err
 	}
-	stack := f.template(featureInputs{
-		class:     class,
-		code:      code,
-		refs:      refs,
-		alongside: deployed.Features,
-	})
 	tags := stampTags(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(stack.body), WrittenBy: writer.String()})
 	capabilities := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 	if err := updateCFNStack(ctx, apis.CFN, stale.Name, stack.body, stack.params, capabilities, tags, healable); err != nil {

@@ -341,3 +341,29 @@ func TestPlanFallsBackToTheTemplateWhenItCannotReadTheStandingStack(t *testing.T
 		t.Errorf("%s reads %q, want it to own up to reading the listing off a template rather than the account", stack, group.Reason)
 	}
 }
+
+func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
+	ctx := context.Background()
+	cfn := newFakeCFN()
+	frontedBy(t, &fakeEdge{kind: "cloudflare"})
+	apis := apisOf(cfn, newFakeSSM(), &fakeIAM{}, preloadedStore())
+	req := Request{Features: []string{FeatureVarsKey}, VarsKey: broughtKeyARN}
+	if err := Run(ctx, apis, ClassProduction, req, nil, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	read, err := Read(ctx, cfn, ClassProduction)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	groups, err := PlanRemoval(ctx, unlistable{cfn}, read)
+	if err != nil {
+		t.Fatalf("PlanRemoval: %v", err)
+	}
+	group := groupNamed(t, groups, FeatureStackName(FeatureVarsKey, ClassProduction))
+	for _, change := range group.Changes {
+		if change.Name == "VarsKey" || change.Name == "VarsKeyAlias" {
+			t.Errorf("the removal plan takes %s from a stack that owns no key, and a destroy must not claim to take a key this account brought", change.Name)
+		}
+	}
+}

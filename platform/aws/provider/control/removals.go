@@ -24,7 +24,7 @@ func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 		return providerkit.Plan{}, err
 	}
 	params, err := bootstrap.PlanParameterRemoval(ctx,
-		bootstrap.ParamAPIs{SSM: b.SSM, IAM: b.IAM}, string(class), shared)
+		b.paramAPIs(), string(class), shared)
 	if err != nil {
 		return providerkit.Plan{}, err
 	}

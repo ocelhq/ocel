@@ -376,6 +376,11 @@ func syntheticOutput(stackName, key, declared string) string {
 		return "ocel-assets-test"
 	case outputStateTable:
 		return "ocel-statetable-test"
+	case outputVarsKeyBrought:
+		return declared
+	}
+	if strings.HasPrefix(declared, "arn:") {
+		return declared
 	}
 	if strings.HasSuffix(key, "Arn") {
 		return "arn:aws:test:us-east-1:111122223333:" + stackName + "/" + key

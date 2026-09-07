@@ -362,6 +362,39 @@ func TestEveryMutatingGrantCarriesAnOcelScope(t *testing.T) {
 	}
 }
 
+func TestNoTierTagsAKeyItDoesNotAlreadyOwn(t *testing.T) {
+	for tier, document := range bothTiers(t) {
+		for _, statement := range parsePolicy(t, document).Statement {
+			actions := stringsOf(t, statement.Action, "Action")
+			tagging := slices.DeleteFunc(slices.Clone(actions), func(action string) bool {
+				return action != "kms:TagResource" && action != "kms:UntagResource"
+			})
+			if len(tagging) == 0 {
+				continue
+			}
+			if !conditionNames(statement.Condition, "aws:ResourceTag/"+varsKeyComponentTagKey) {
+				t.Errorf(
+					"the %s tier grants %s on %s with no aws:ResourceTag condition, so it may tag a key ocel never made and then open what that key seals",
+					tier, strings.Join(tagging, ", "), strings.Join(stringsOf(t, statement.Resource, "Resource"), ", "),
+				)
+			}
+		}
+	}
+}
+
+func conditionNames(condition map[string]any, key string) bool {
+	for _, operands := range condition {
+		keyed, ok := operands.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, named := keyed[key]; named {
+			return true
+		}
+	}
+	return false
+}
+
 func mustRender(t *testing.T, render func() (string, error)) string {
 	t.Helper()
 	document, err := render()

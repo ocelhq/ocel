@@ -9,8 +9,9 @@ import (
 const (
 	VarsTableIndexName = tagclock.IndexName
 
-	outputVarsTable  = "VarsTableName"
-	outputVarsKeyARN = "VarsKeyArn"
+	outputVarsTable      = "VarsTableName"
+	outputVarsKeyARN     = "VarsKeyArn"
+	outputVarsKeyBrought = "VarsKeyBrought"
 
 	varsKeyComponentTagKey   = "ocel:component"
 	varsKeyComponentTagValue = "vars-key"
