@@ -11,6 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	smithy "github.com/aws/smithy-go"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func TestCoreRefusesReplacementWhateverTheCallerAccepts(t *testing.T) {
@@ -75,6 +77,106 @@ func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
 			t.Errorf("a re-run restamped %d stacks, want none", cfn.restamps-before)
 		}
 	})
+}
+
+func TestADevRebuildLeavesAStackItDidNotChangeAlone(t *testing.T) {
+	cfn, apis := standingBootstrap(t)
+	built := everything()
+	built.Writer = "1.4.0"
+	if err := Run(context.Background(), apis, ClassProduction, built, nil, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, sha := range []string{"dev+1111111", "dev+2222222"} {
+		rebuilt := everything()
+		rebuilt.Writer = providerkit.Writer(sha)
+		if err := Run(context.Background(), apis, ClassProduction, rebuilt, nil, nil); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	}
+	before := cfn.restamps
+
+	rebuilt := everything()
+	rebuilt.Writer = "dev+3333333"
+	if err := Run(context.Background(), apis, ClassProduction, rebuilt, nil, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if cfn.restamps != before {
+		t.Errorf("a rebuild restamped %d stacks; a development build's git sha is not a reason to write CloudFormation", cfn.restamps-before)
+	}
+	if got := cfn.stampOf(StackName).WrittenBy; got != "dev+1111111" {
+		t.Errorf("written by %q, want the sha that last actually wrote the stack", got)
+	}
+}
+
+func TestRestampingTurnsOnlyOnWhatTheStackHolds(t *testing.T) {
+	const digest = "beef"
+	for _, tc := range []struct {
+		name      string
+		standing  Stamp
+		unwritten bool
+		incoming  Stamp
+		writes    bool
+	}{
+		{
+			name:     "one development build to the next",
+			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
+			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
+		},
+		{
+			name:     "a development build gives way to a release",
+			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
+			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "1.4.0"},
+			writes:   true,
+		},
+		{
+			name:     "a release gives way to a development build",
+			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "1.4.0"},
+			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
+			writes:   true,
+		},
+		{
+			name:     "the template moved under two development builds",
+			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
+			incoming: Stamp{Schema: RequiredSchema, Digest: "cafe", WrittenBy: "dev+2222222"},
+			writes:   true,
+		},
+		{
+			name:     "the schema moved under two development builds",
+			standing: Stamp{Schema: RequiredSchema - 1, Digest: digest, WrittenBy: "dev+1111111"},
+			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
+			writes:   true,
+		},
+		{
+			name:      "the stack carries no writer tag at all",
+			standing:  Stamp{Schema: RequiredSchema, Digest: digest},
+			unwritten: true,
+			incoming:  Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
+			writes:    true,
+		},
+		{
+			name:     "the stack was written by an unknown writer",
+			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: providerkit.Writer("").String()},
+			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
+			writes:   true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfn, _ := standingBootstrap(t)
+			tags := stampTags(tc.standing)
+			if tc.unwritten {
+				tags = withoutTag(tags, TagBootstrappedBy)
+			}
+			cfn.stamped(StackName, tags)
+			before := cfn.restamps
+
+			if err := restampCFNStack(context.Background(), cfn, StackName, nil, nil, stampTags(tc.incoming)); err != nil {
+				t.Fatalf("restampCFNStack: %v", err)
+			}
+			if wrote := cfn.restamps > before; wrote != tc.writes {
+				t.Errorf("restamped = %t, want %t", wrote, tc.writes)
+			}
+		})
+	}
 }
 
 func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {

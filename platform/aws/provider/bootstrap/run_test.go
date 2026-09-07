@@ -313,6 +313,12 @@ func (f *fakeCFN) stampOf(stackName string) Stamp {
 	return readStamp(f.tags[stackName])
 }
 
+func (f *fakeCFN) stamped(stackName string, tags []cfntypes.Tag) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.tags[stackName] = tags
+}
+
 func declaredUser(template string) (string, bool) {
 	var tmpl struct {
 		Resources map[string]struct {

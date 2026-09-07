@@ -8,6 +8,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const (
@@ -61,6 +63,25 @@ func stampTags(s Stamp) []cfntypes.Tag {
 		{Key: aws.String(TagDigest), Value: aws.String(s.Digest)},
 		{Key: aws.String(TagBootstrappedBy), Value: aws.String(s.WrittenBy)},
 	}
+}
+
+func onlyDevWriterMoved(have, want []cfntypes.Tag) bool {
+	from := providerkit.Writer(readStamp(have).WrittenBy)
+	to := providerkit.Writer(readStamp(want).WrittenBy)
+	if from == to || !from.Development() || !to.Development() {
+		return false
+	}
+	return sameStackTags(withoutTag(have, TagBootstrappedBy), withoutTag(want, TagBootstrappedBy))
+}
+
+func withoutTag(tags []cfntypes.Tag, key string) []cfntypes.Tag {
+	out := make([]cfntypes.Tag, 0, len(tags))
+	for _, tag := range tags {
+		if aws.ToString(tag.Key) != key {
+			out = append(out, tag)
+		}
+	}
+	return out
 }
 
 func readStamp(tags []cfntypes.Tag) Stamp {
