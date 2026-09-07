@@ -58,6 +58,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  packages: read
   pull-requests: write
 
 concurrency:
@@ -65,7 +66,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
 
 env:
-  OCEL_FLOCI_IMAGE: floci/floci:2.0.1
+  OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.0.1-ocel.1
   NODE_VERSION: "22"
   PNPM_VERSION: "11.10.0"
   BUN_VERSION: "1.4.0"
@@ -275,6 +276,14 @@ jobs:
 
       - name: Take the binaries this lane drives
         uses: ./.github/actions/journey-binaries
+
+      - name: Log in to the registry the emulator image lives in
+        if: ${{ needs.binary.outputs.aws == 'true' && needs.binary.outputs.real != 'true' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull the emulator this lane deploys into
         if: ${{ needs.binary.outputs.aws == 'true' && needs.binary.outputs.real != 'true' }}

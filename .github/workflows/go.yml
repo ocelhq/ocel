@@ -26,6 +26,10 @@ concurrency:
 permissions:
   contents: read
   id-token: write
+  packages: read
+
+env:
+  OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.0.1-ocel.1
 
 jobs:
   go:
@@ -119,9 +123,17 @@ jobs:
       - name: go test -race
         run: go test -race -count=1 $PACKAGES
 
+      - name: Log in to the registry the emulator image lives in
+        if: matrix.group.name == 'aws'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Pull the emulator both suites run against
         if: matrix.group.name == 'aws'
-        run: docker pull floci/floci:latest
+        run: docker pull "$OCEL_FLOCI_IMAGE"
 
       - name: Run the live conformance suite
         if: matrix.group.name == 'aws'

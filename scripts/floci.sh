@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="${OCEL_FLOCI_IMAGE:-floci/floci:latest}"
+IMAGE="${OCEL_FLOCI_IMAGE:-ghcr.io/ocelhq/floci:2.0.1-ocel.1}"
 DOCKER_SOCK="${OCEL_FLOCI_DOCKER_SOCK:-/var/run/docker.sock}"
 READY_WAIT_SECS="${OCEL_FLOCI_READY_WAIT:-180}"
 
