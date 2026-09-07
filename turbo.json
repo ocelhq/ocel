@@ -1,25 +1,32 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "envMode": "loose",
+  "envMode": "strict",
   "globalDependencies": ["pnpm-lock.yaml", "pnpm-workspace.yaml"],
+  "globalPassThroughEnv": ["GO*"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "zip": {
       "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": ["dist/**"]
     },
     "generate": {
       "dependsOn": ["^build", "^zip"],
+      "env": ["GOFLAGS", "GOOS", "GOARCH", "CGO_ENABLED"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"],
       "outputs": ["dist/**"]
     },
     "typecheck": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.md"]
     }
   }
 }
