@@ -33,6 +33,7 @@ func manifestAppFunctions(functions []*contractv1.ManifestFunction) []appFunctio
 
 type appStackFunctions struct {
 	Project   string
+	Region    string
 	Stack     naming.StackName
 	Functions []appFunction
 	Args      func(appFunction) functionArgs
@@ -50,9 +51,13 @@ type appStackFunctions struct {
 }
 
 func (a appStackFunctions) register(ctx *pulumi.Context) error {
-	layer, err := newMembraneLayer(ctx, membraneLayerCoordinate(a.Project, a.Stack), a.Layer)
-	if err != nil {
-		return err
+	var membrane pulumi.StringInput
+	if a.bootsThroughTheMembrane() {
+		layer, err := newMembraneLayer(ctx, membraneLayerCoordinate(a.Project, a.Stack), a.Layer)
+		if err != nil {
+			return err
+		}
+		membrane = layer.Arn
 	}
 	siblings := pulumi.StringMap{}
 	var arns []pulumi.StringInput
@@ -62,7 +67,7 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 			entry = &fn
 			continue
 		}
-		ref, err := a.declare(ctx, fn, layer.Arn, a.Env, nil, functionURLAuthIAM)
+		ref, err := a.declare(ctx, fn, membrane, a.Env, nil, functionURLAuthIAM)
 		if err != nil {
 			return err
 		}
@@ -79,8 +84,24 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 		}
 		resolved = map[string]pulumi.StringInput{functionURLsEnv: siblingFunctionURLs(siblings)}
 	}
-	_, err = a.declare(ctx, *entry, layer.Arn, a.Guard.entryEnv(a.Router.entryEnv(a.Env)), resolved, a.Guard.entryURLAuth())
+	_, err := a.declare(ctx, *entry, membrane, a.Guard.entryEnv(a.Router.entryEnv(a.Env)), resolved, a.Guard.entryURLAuth())
 	return err
+}
+
+func (a appStackFunctions) bootsThroughTheMembrane() bool {
+	for _, fn := range a.Functions {
+		if !a.Args(fn).Adapter {
+			return true
+		}
+	}
+	return false
+}
+
+func (a appStackFunctions) layersFor(args functionArgs, membrane pulumi.StringInput) pulumi.StringArray {
+	if args.Adapter {
+		return pulumi.StringArray{pulumi.String(adapterLayerARN(a.Region, args.Arch))}
+	}
+	return pulumi.StringArray{membrane}
 }
 
 func (a appStackFunctions) grantInvoke(ctx *pulumi.Context, arns []pulumi.StringInput) error {
@@ -117,14 +138,15 @@ func (a appStackFunctions) grantInvoke(ctx *pulumi.Context, arns []pulumi.String
 func (a appStackFunctions) declare(
 	ctx *pulumi.Context,
 	fn appFunction,
-	layerARN pulumi.StringInput,
+	membrane pulumi.StringInput,
 	env map[string]string,
 	resolved map[string]pulumi.StringInput,
 	urlAuth string,
 ) (functionRef, error) {
 	logical := fn.Logical
+	args := a.Args(fn)
 	ref, err := registerFunction(ctx, logical, functionCoordinate(a.Project, a.Stack, logical),
-		fn.RouteID, a.Args(fn), a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn, layerARN, urlAuth,
+		fn.RouteID, args, a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn, a.layersFor(args, membrane), urlAuth,
 		a.shippedTo(logical)...)
 	if err != nil {
 		return ref, fmt.Errorf("declare %s: %w", logical, err)

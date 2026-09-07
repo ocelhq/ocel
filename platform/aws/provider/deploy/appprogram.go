@@ -151,6 +151,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 		role:        role,
 		functions: appStackFunctions{
 			Project:   project,
+			Region:    r.cfg.Region,
 			Stack:     stack,
 			Functions: functions,
 			Args:      func(fn appFunction) functionArgs { return args[fn.Logical] },

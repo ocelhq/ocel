@@ -103,18 +103,18 @@ func TestTranslateFunctionSpec(t *testing.T) {
 	})
 }
 
-func TestLambdaRuntimeFor(t *testing.T) {
+func TestExecutionFor(t *testing.T) {
 	t.Parallel()
 
-	t.Run("every neutral name lands on the pinned Node runtime", func(t *testing.T) {
+	t.Run("every neutral name lands on the pinned Node runtime, on x86_64, through the membrane", func(t *testing.T) {
 		t.Parallel()
 		for _, name := range []string{"", providerkit.RuntimeNode, providerkit.RuntimeNext} {
-			got, err := lambdaRuntimeFor(providerkit.Runtime{Name: name})
+			got, err := executionFor(providerkit.Runtime{Name: name})
 			if err != nil {
-				t.Fatalf("lambdaRuntimeFor(%q): %v", name, err)
+				t.Fatalf("executionFor(%q): %v", name, err)
 			}
-			if got != "nodejs24.x" {
-				t.Errorf("lambdaRuntimeFor(%q) = %q, want nodejs24.x", name, got)
+			if want := (execution{Runtime: "nodejs24.x", Arch: archX8664}); got != want {
+				t.Errorf("executionFor(%q) = %+v, want %+v", name, got, want)
 			}
 		}
 	})
@@ -122,34 +122,134 @@ func TestLambdaRuntimeFor(t *testing.T) {
 	t.Run("an unset or x86_64 arch is taken", func(t *testing.T) {
 		t.Parallel()
 		for _, arch := range []string{"", archX8664} {
-			if _, err := lambdaRuntimeFor(providerkit.Runtime{Name: providerkit.RuntimeNext, Arch: arch}); err != nil {
-				t.Fatalf("lambdaRuntimeFor(arch %q): %v", arch, err)
+			if _, err := executionFor(providerkit.Runtime{Name: providerkit.RuntimeNext, Arch: arch}); err != nil {
+				t.Fatalf("executionFor(arch %q): %v", arch, err)
 			}
 		}
 	})
 
-	t.Run("arm64 is refused by name", func(t *testing.T) {
+	t.Run("arm64 is refused for a runtime that boots through the membrane", func(t *testing.T) {
 		t.Parallel()
-		_, err := lambdaRuntimeFor(providerkit.Runtime{Name: providerkit.RuntimeNext, Arch: "arm64"})
+		_, err := executionFor(providerkit.Runtime{Name: providerkit.RuntimeNext, Arch: archARM64})
 		var refusal providerkit.Refusal
 		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-			t.Fatalf("lambdaRuntimeFor(arm64) = %v, want a %s refusal", err, providerkit.CodeInvalid)
+			t.Fatalf("executionFor(arm64) = %v, want a %s refusal", err, providerkit.CodeInvalid)
 		}
-		for _, want := range []string{"arm64", archX8664} {
+		for _, want := range []string{archARM64, archX8664} {
 			if !strings.Contains(refusal.Error(), want) {
 				t.Errorf("refusal %q does not name %q", refusal.Error(), want)
 			}
 		}
 	})
 
-	t.Run("a runtime this provider does not have is refused", func(t *testing.T) {
+	t.Run("go runs on the adapter runtime, on either architecture", func(t *testing.T) {
 		t.Parallel()
-		_, err := lambdaRuntimeFor(providerkit.Runtime{Name: "deno"})
-		var refusal providerkit.Refusal
-		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-			t.Fatalf("lambdaRuntimeFor(deno) = %v, want a %s refusal", err, providerkit.CodeInvalid)
+		for arch, want := range map[string]execution{
+			"":        {Runtime: adapterFunctionRuntime, Arch: archX8664, Adapter: true},
+			archX8664: {Runtime: adapterFunctionRuntime, Arch: archX8664, Adapter: true},
+			archARM64: {Runtime: adapterFunctionRuntime, Arch: archARM64, Adapter: true},
+		} {
+			got, err := executionFor(providerkit.Runtime{Name: providerkit.RuntimeGo, Arch: arch})
+			if err != nil {
+				t.Fatalf("executionFor(go, %q): %v", arch, err)
+			}
+			if got != want {
+				t.Errorf("executionFor(go, %q) = %+v, want %+v — a go binary boots through the adapter, not the membrane", arch, got, want)
+			}
 		}
 	})
+
+	t.Run("an architecture nothing runs on is refused by name", func(t *testing.T) {
+		t.Parallel()
+		_, err := executionFor(providerkit.Runtime{Name: providerkit.RuntimeGo, Arch: "riscv"})
+		var refusal providerkit.Refusal
+		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+			t.Fatalf("executionFor(riscv) = %v, want a %s refusal", err, providerkit.CodeInvalid)
+		}
+		if !strings.Contains(refusal.Error(), "riscv") {
+			t.Errorf("refusal %q does not name riscv", refusal.Error())
+		}
+	})
+
+	t.Run("a runtime this provider does not have is refused", func(t *testing.T) {
+		t.Parallel()
+		_, err := executionFor(providerkit.Runtime{Name: "deno"})
+		var refusal providerkit.Refusal
+		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+			t.Fatalf("executionFor(deno) = %v, want a %s refusal", err, providerkit.CodeInvalid)
+		}
+	})
+}
+
+func TestAGoFunctionBootsThroughTheWebAdapterLayerAndNotTheMembrane(t *testing.T) {
+	t.Parallel()
+
+	rec := &inputRecorder{}
+	program := func(pctx *pulumi.Context) error {
+		stack := testStack(t, "prod", "api")
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api"})
+		if err != nil {
+			return err
+		}
+		args, err := translateFunctionSpec(providerkit.RuntimeGo, providerkit.FunctionSpec{
+			Runtime: providerkit.Runtime{Name: providerkit.RuntimeGo, Arch: archARM64},
+			Handler: "bootstrap",
+		})
+		if err != nil {
+			return err
+		}
+		stackFunctions := appStackFunctions{Region: "eu-west-1", Args: func(appFunction) functionArgs { return args }}
+		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", stack, "fn--api--users"),
+			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"},
+			nil, nil, nil, nil, role.Arn, stackFunctions.layersFor(args, nil), functionURLAuthIAM)
+		return err
+	}
+	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
+		t.Fatalf("run program: %v", err)
+	}
+
+	inputs := rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90")
+	want := "arn:aws:lambda:eu-west-1:753240598075:layer:LambdaAdapterLayerArm64:28"
+	if got := stringsAt(inputs, "layers"); !slices.Equal(got, []string{want}) {
+		t.Errorf("the function's layers = %v, want [%s]", got, want)
+	}
+	if got := stringsAt(inputs, "architectures"); !slices.Equal(got, []string{archARM64}) {
+		t.Errorf("architectures = %v, want [%s] — the adapter layer and the binary are built for one machine", got, archARM64)
+	}
+	for key, want := range map[string]string{"runtime": adapterFunctionRuntime, "handler": "bootstrap"} {
+		got, ok := inputs[resource.PropertyKey(key)]
+		if !ok || !got.IsString() || got.StringValue() != want {
+			t.Errorf("%s = %v, want %q", key, got, want)
+		}
+	}
+}
+
+func TestAGoFunctionIsToldWhichPortToBindAndIsHandedNoMembraneWrapper(t *testing.T) {
+	t.Parallel()
+
+	args, err := translateFunctionSpec(providerkit.RuntimeGo, providerkit.FunctionSpec{
+		Runtime: providerkit.Runtime{Name: providerkit.RuntimeGo},
+		Handler: "bootstrap",
+	})
+	if err != nil {
+		t.Fatalf("translateFunctionSpec: %v", err)
+	}
+	env := functionEnv(map[string]string{providerkit.InjectedPortName: "3000"}, args, nil, nil)
+
+	for key, want := range map[string]string{
+		adapterPortEnv:               providerkit.InjectedPort,
+		providerkit.InjectedPortName: providerkit.InjectedPort,
+		adapterInvokeModeEnv:         adapterInvokeModeStream,
+	} {
+		if env[key] != want {
+			t.Errorf("%s = %q, want %q — the port the provider injects outranks anything the app declares", key, env[key], want)
+		}
+	}
+	for _, owned := range []string{"AWS_LAMBDA_EXEC_WRAPPER", "OCEL_HANDLER"} {
+		if _, wired := env[owned]; wired {
+			t.Errorf("a go function carries %s, and it boots no membrane", owned)
+		}
+	}
 }
 
 func argsFor(functions []*contractv1.ManifestFunction) func(appFunction) functionArgs {
@@ -214,7 +314,7 @@ func TestMembraneLayer(t *testing.T) {
 		}
 		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", stack, "fn--api--users"),
 			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"},
-			nil, nil, nil, nil, role.Arn, layer.Arn, functionURLAuthIAM)
+			nil, nil, nil, nil, role.Arn, pulumi.StringArray{layer.Arn}, functionURLAuthIAM)
 		return err
 	}
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
@@ -690,7 +790,7 @@ func TestFunctionLogGroup(t *testing.T) {
 		}
 		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", stack, "fn--api--users"),
 			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"},
-			nil, nil, nil, nil, role.Arn, pulumi.String(mockAccountARN("lambda", "layer:membrane:1")), functionURLAuthIAM)
+			nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:membrane:1"))}, functionURLAuthIAM)
 		return err
 	}
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {

@@ -15,10 +15,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
-const archX8664 = "x86_64"
+const (
+	archX8664 = "x86_64"
+	archARM64 = "arm64"
+)
 
 const (
 	defaultFunctionRuntime = "nodejs24.x"
@@ -33,6 +37,17 @@ const (
 	lambdaConfigHandler = "index.handler"
 
 	execWrapper = "/opt/ocel/bootstrap"
+
+	adapterFunctionRuntime = "provided.al2023"
+
+	adapterLayerAccount = "753240598075"
+	adapterLayerVersion = "28"
+	adapterLayerX8664   = "LambdaAdapterLayerX86"
+	adapterLayerARM64   = "LambdaAdapterLayerArm64"
+
+	adapterPortEnv          = "AWS_LWA_PORT"
+	adapterInvokeModeEnv    = "AWS_LWA_INVOKE_MODE"
+	adapterInvokeModeStream = "response_stream"
 
 	membraneLayerLocalName = "membrane"
 
@@ -93,11 +108,28 @@ func bytecodeEmbedEnabled() bool {
 type functionArgs struct {
 	Runtime        string
 	Handler        string
+	Arch           string
+	Adapter        bool
 	MemorySizeMB   int
 	TimeoutSeconds int
 	InvokeMode     string
 	VPC            functionVPC
 	Tags           map[string]string
+}
+
+func (a functionArgs) handlerConfig() string {
+	if a.Adapter {
+		return a.Handler
+	}
+	return lambdaConfigHandler
+}
+
+func adapterLayerARN(region, arch string) string {
+	name := adapterLayerX8664
+	if arch == archARM64 {
+		name = adapterLayerARM64
+	}
+	return "arn:aws:lambda:" + region + ":" + adapterLayerAccount + ":layer:" + name + ":" + adapterLayerVersion
 }
 
 type functionVPC struct {
@@ -473,8 +505,14 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 func functionEnv(base map[string]string, args functionArgs, isr *isrConfig, bytecode *bytecodeConfig) map[string]string {
 	env := make(map[string]string, len(base))
 	maps.Copy(env, base)
-	env["AWS_LAMBDA_EXEC_WRAPPER"] = execWrapper
-	env["OCEL_HANDLER"] = "/var/task/" + args.Handler
+	if args.Adapter {
+		env[adapterPortEnv] = providerkit.InjectedPort
+		env[providerkit.InjectedPortName] = providerkit.InjectedPort
+		env[adapterInvokeModeEnv] = adapterInvokeModeStream
+	} else {
+		env["AWS_LAMBDA_EXEC_WRAPPER"] = execWrapper
+		env["OCEL_HANDLER"] = "/var/task/" + args.Handler
+	}
 	if isr != nil {
 		maps.Copy(env, isr.env())
 	}
@@ -519,7 +557,7 @@ func lambdaLogging(group *cloudwatch.LogGroup) lambda.FunctionLoggingConfigPtrIn
 	}
 }
 
-func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn, layerARN pulumi.StringInput, urlAuth string, opts ...pulumi.ResourceOption) (functionRef, error) {
+func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput, layers pulumi.StringArrayInput, urlAuth string, opts ...pulumi.ResourceOption) (functionRef, error) {
 	var none functionRef
 
 	env := pulumi.StringMap{}
@@ -548,7 +586,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 	fn, err := lambda.NewFunction(ctx, resourceName, &lambda.FunctionArgs{
 		Description: describe(coord, "route "+route),
 		Runtime:     pulumi.String(args.Runtime),
-		Handler:     pulumi.String(lambdaConfigHandler),
+		Handler:     pulumi.String(args.handlerConfig()),
 		Role:        roleArn,
 		S3Bucket:    pulumi.String(artifact.Bucket),
 		S3Key:       pulumi.String(artifact.Key),
@@ -562,7 +600,9 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 
 		Tags: resourceTags(coord.Kind, route, args.Tags),
 
-		Layers: pulumi.StringArray{layerARN},
+		Architectures: pulumi.StringArray{pulumi.String(args.Arch)},
+
+		Layers: layers,
 	}, opts...)
 	if err != nil {
 		return none, err
