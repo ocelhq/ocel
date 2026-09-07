@@ -78,7 +78,7 @@ func siblingAppPlan(t *testing.T, app string) providerkit.StackPlan {
 			ISR:         &providerkit.ISRPlan{Prefix: isrPrefixOf(coord), TagNamespace: "tag:shop"},
 			Bytecode:    &providerkit.BytecodePlan{Prefix: bytecodePrefixOf(coord)},
 			AssetPrefix: coord.AssetKey(""),
-			Membrane:    providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: providerkit.MembraneKey("abc123")},
+			Membranes:   map[string]providerkit.ArtifactRef{providerkit.ArchX8664: {Bucket: providerkit.StoreFunctions, Key: providerkit.MembraneKey("abc123")}},
 		},
 	}
 }

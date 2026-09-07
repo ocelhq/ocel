@@ -132,8 +132,12 @@ func (p *Provider) DNS() providerkit.DNSRegistry {
 	return dns.Registry{Deps: dns.Deps{AWS: p.aws}}
 }
 
-func (p *Provider) Membrane(context.Context) ([]byte, error) {
-	return payloads.MembraneLayer().Bytes, nil
+func (p *Provider) Membrane(_ context.Context, arch string) ([]byte, error) {
+	layer, err := payloads.MembraneLayer(arch)
+	if err != nil {
+		return nil, err
+	}
+	return layer.Bytes, nil
 }
 
 func (p *Provider) Warm(ctx context.Context, targets []string, report providerkit.Reporter) error {

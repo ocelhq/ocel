@@ -29,7 +29,7 @@ type packingProvider struct {
 	packed []providerkit.AppPacking
 }
 
-func (p *packingProvider) Membrane(context.Context) ([]byte, error) {
+func (p *packingProvider) Membrane(context.Context, string) ([]byte, error) {
 	return []byte(fake.Membrane), nil
 }
 

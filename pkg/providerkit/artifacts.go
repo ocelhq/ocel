@@ -133,31 +133,52 @@ func (r *deployRun) upload(ctx context.Context, report Reporter) error {
 		return nil
 	}
 	if r.dry {
-		return r.drawMembrane(ctx, source, report)
+		return r.drawMembranes(ctx, source, report)
 	}
-	ref, err := PlaceMembrane(ctx, source, r.plan.Class, r.provider.Artifacts(), report)
-	if err != nil {
-		return err
+	placed := map[string]ArtifactRef{}
+	for _, arch := range r.membraneArches() {
+		ref, err := PlaceMembrane(ctx, source, r.plan.Class, arch, r.provider.Artifacts(), report)
+		if err != nil {
+			return err
+		}
+		placed[arch] = ref
 	}
-	r.membrane = ref
+	r.membranes = placed
 	return nil
 }
 
-func (r *deployRun) drawMembrane(ctx context.Context, source MembraneSource, report Reporter) error {
+func (r *deployRun) membraneArches() []string {
+	var arches []string
+	for _, fn := range r.manifest.GetFunctions() {
+		if arch := Architecture(fn.GetRuntime().GetArch()); !slices.Contains(arches, arch) {
+			arches = append(arches, arch)
+		}
+	}
+	slices.Sort(arches)
+	return arches
+}
+
+func (r *deployRun) drawMembranes(ctx context.Context, source MembraneSource, report Reporter) error {
 	report.Say("Reading the membrane the app's functions boot through")
-	ref, _, err := MembraneRef(ctx, source, r.plan.Class)
-	if err != nil {
-		return err
+	drawn := map[string]ArtifactRef{}
+	stands := true
+	for _, arch := range r.membraneArches() {
+		ref, _, err := MembraneRef(ctx, source, r.plan.Class, arch)
+		if err != nil {
+			return err
+		}
+		held, err := r.provider.Artifacts().Has(ctx, ref)
+		if err != nil {
+			return fmt.Errorf("look for the membrane: %w", err)
+		}
+		drawn[arch] = ref
+		stands = stands && held
 	}
-	held, err := r.provider.Artifacts().Has(ctx, ref)
-	if err != nil {
-		return fmt.Errorf("look for the membrane: %w", err)
-	}
-	r.membrane = ref
+	r.membranes = drawn
 	r.draft.membrane = ChangeGroup{
 		Kind:   UploadKind,
 		Name:   membraneGroupName,
-		Action: standsOrCreates(held),
+		Action: standsOrCreates(stands),
 		Reason: reasonMembrane,
 	}
 	return nil

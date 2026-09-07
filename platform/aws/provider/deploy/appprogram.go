@@ -111,7 +111,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 		}
 	}
 
-	layer, err := r.membranePlacement(app.Membrane)
+	layers, err := r.membranePlacements(app.Membranes)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,6 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 		role:        role,
 		functions: appStackFunctions{
 			Project:   project,
-			Region:    r.cfg.Region,
 			Stack:     stack,
 			Functions: functions,
 			Args:      func(fn appFunction) functionArgs { return args[fn.Logical] },
@@ -161,7 +160,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 			Bytecode:  bytecode,
 			Router:    router,
 			Guard:     guard,
-			Layer:     layer,
+			Layers:    layers,
 		},
 	}, nil
 }
@@ -198,16 +197,20 @@ func (r *release) store(name string) (string, error) {
 	return "", fmt.Errorf("this provider keeps no %q store", name)
 }
 
-func (r *release) membranePlacement(ref providerkit.ArtifactRef) (payloads.Placement, error) {
-	if ref.Key == "" {
-		return payloads.Placement{}, nil
+func (r *release) membranePlacements(refs map[string]providerkit.ArtifactRef) (map[string]payloads.Placement, error) {
+	placed := make(map[string]payloads.Placement, len(refs))
+	for arch, ref := range refs {
+		if ref.Key == "" {
+			continue
+		}
+		bucket, err := r.store(ref.Bucket)
+		if err != nil {
+			return nil, fmt.Errorf("read the membrane: %w", err)
+		}
+		digest := strings.TrimSuffix(strings.TrimPrefix(ref.Key, providerkit.MembranePrefix+"/"), ".zip")
+		placed[providerkit.Architecture(arch)] = payloads.Placement{Bucket: bucket, Key: ref.Key, SHA256: digest}
 	}
-	bucket, err := r.store(ref.Bucket)
-	if err != nil {
-		return payloads.Placement{}, fmt.Errorf("read the membrane: %w", err)
-	}
-	digest := strings.TrimSuffix(strings.TrimPrefix(ref.Key, providerkit.MembranePrefix+"/"), ".zip")
-	return payloads.Placement{Bucket: bucket, Key: ref.Key, SHA256: digest}, nil
+	return placed, nil
 }
 
 func (r *release) routerHost(plan providerkit.StackPlan) (*routerHost, error) {

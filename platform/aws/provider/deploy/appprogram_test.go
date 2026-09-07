@@ -40,7 +40,7 @@ func plannedAppStack(t *testing.T) (Config, providerkit.StackPlan) {
 			ISR:         &providerkit.ISRPlan{Prefix: "shop/prod/web/r1/isr", TagNamespace: "tag:shop"},
 			Bytecode:    &providerkit.BytecodePlan{Prefix: "shop/prod/web/r1/bytecode"},
 			AssetPrefix: coord.AssetKey(""),
-			Membrane:    providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: providerkit.MembraneKey("abc123")},
+			Membranes:   map[string]providerkit.ArtifactRef{providerkit.ArchX8664: {Bucket: providerkit.StoreFunctions, Key: providerkit.MembraneKey("abc123")}},
 		},
 	}
 	return cfg, plan
@@ -97,12 +97,12 @@ func TestThePlannedAppBootsThroughTheMembraneItWasHandedAndNoOther(t *testing.T)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
-	layer := work.functions.Layer
+	layer := work.functions.Layers[providerkit.ArchX8664]
 	if layer.Bucket != cfg.ArtifactBucket {
 		t.Errorf("membrane bucket = %q, want the account's artifact bucket", layer.Bucket)
 	}
-	if layer.Key != plan.App.Membrane.Key {
-		t.Errorf("membrane key = %q, want the one the plan named", layer.Key)
+	if layer.Key != plan.App.Membranes[providerkit.ArchX8664].Key {
+		t.Errorf("membrane key = %q, want the one the plan named for the architecture its functions run on", layer.Key)
 	}
 	if layer.SHA256 != "abc123" {
 		t.Errorf("membrane source hash = %q, want the digest its key is addressed by", layer.SHA256)

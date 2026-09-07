@@ -52,7 +52,7 @@ func GoArch(declared string) (string, bool) {
 const MembranePrefix = "ocel-membrane-layer"
 
 type MembraneSource interface {
-	Membrane(ctx context.Context) ([]byte, error)
+	Membrane(ctx context.Context, arch string) ([]byte, error)
 }
 
 type ServingQuery struct {
@@ -146,11 +146,11 @@ func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*Routi
 	return &RoutingPlan{Entry: desc.Entry, Manifest: raw}, nil
 }
 
-func MembraneRef(ctx context.Context, source MembraneSource, class Class) (ArtifactRef, []byte, error) {
+func MembraneRef(ctx context.Context, source MembraneSource, class Class, arch string) (ArtifactRef, []byte, error) {
 	if source == nil {
 		return ArtifactRef{}, nil, nil
 	}
-	body, err := source.Membrane(ctx)
+	body, err := source.Membrane(ctx, arch)
 	if err != nil {
 		return ArtifactRef{}, nil, fmt.Errorf("read the membrane the app's functions boot through: %w", err)
 	}
@@ -162,8 +162,8 @@ func MembraneRef(ctx context.Context, source MembraneSource, class Class) (Artif
 	return ArtifactRef{Class: class, Bucket: StoreFunctions, Key: MembraneKey(hex.EncodeToString(sum[:]))}, body, nil
 }
 
-func PlaceMembrane(ctx context.Context, source MembraneSource, class Class, store ArtifactStore, report Reporter) (ArtifactRef, error) {
-	ref, body, err := MembraneRef(ctx, source, class)
+func PlaceMembrane(ctx context.Context, source MembraneSource, class Class, arch string, store ArtifactStore, report Reporter) (ArtifactRef, error) {
+	ref, body, err := MembraneRef(ctx, source, class, arch)
 	if err != nil || len(body) == 0 {
 		return ref, err
 	}

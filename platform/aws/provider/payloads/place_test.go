@@ -11,6 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const (
@@ -79,8 +81,16 @@ func (f *fakeObjectStore) PutObject(_ context.Context, in *s3.PutObjectInput, _ 
 	return &s3.PutObjectOutput{}, nil
 }
 
+func fixturePayload() Payload {
+	layer, err := MembraneLayer(providerkit.ArchX8664)
+	if err != nil {
+		panic(err)
+	}
+	return layer
+}
+
 func placeFixture(store ObjectStore) (Placement, error) {
-	return Place(context.Background(), store, fixtureBucket, fixturePrefix, fixtureLabel, MembraneLayer())
+	return Place(context.Background(), store, fixtureBucket, fixturePrefix, fixtureLabel, fixturePayload())
 }
 
 func TestPlace(t *testing.T) {
@@ -94,10 +104,10 @@ func TestPlace(t *testing.T) {
 		if at.Bucket != fixtureBucket {
 			t.Errorf("uploaded into %q, want the account's own artifact bucket", at.Bucket)
 		}
-		if want := Key(fixturePrefix, MembraneLayer().SHA256); at.Key != want {
+		if want := Key(fixturePrefix, fixturePayload().SHA256); at.Key != want {
 			t.Errorf("key = %q, want %q — content-addressed on the embedded digest", at.Key, want)
 		}
-		if !bytes.Equal(store.objects[at.Key], MembraneLayer().Bytes) {
+		if !bytes.Equal(store.objects[at.Key], fixturePayload().Bytes) {
 			t.Error("the account holds bytes other than the embedded payload")
 		}
 	})
@@ -108,12 +118,12 @@ func TestPlace(t *testing.T) {
 		if _, err := placeFixture(store); err != nil {
 			t.Fatalf("Place: %v", err)
 		}
-		want := MembraneLayer().ChecksumSHA256
+		want := fixturePayload().ChecksumSHA256
 		if len(store.putChecksums) != 1 || store.putChecksums[0] != want {
 			t.Errorf("uploaded with checksums %v, want [%s] — base64 of the raw digest, not the hex", store.putChecksums, want)
 		}
 		for _, got := range store.putChecksums {
-			if got == MembraneLayer().SHA256 {
+			if got == fixturePayload().SHA256 {
 				t.Error("sent the hex digest as ChecksumSHA256; S3 wants base64 of the raw bytes")
 			}
 		}
@@ -121,7 +131,7 @@ func TestPlace(t *testing.T) {
 
 	t.Run("skips a payload S3 verified against the digest", func(t *testing.T) {
 		store := newFakeObjectStore()
-		store.putVerified(Key(fixturePrefix, MembraneLayer().SHA256), MembraneLayer().Bytes)
+		store.putVerified(Key(fixturePrefix, fixturePayload().SHA256), fixturePayload().Bytes)
 
 		at, err := placeFixture(store)
 		if err != nil {
@@ -139,7 +149,7 @@ func TestPlace(t *testing.T) {
 	})
 
 	t.Run("distrusts bytes at the payload's key", func(t *testing.T) {
-		key := Key(fixturePrefix, MembraneLayer().SHA256)
+		key := Key(fixturePrefix, fixturePayload().SHA256)
 		planted := []byte("MZ\x90\x00 an executable nobody reviewed")
 
 		for _, tc := range []struct {
@@ -160,7 +170,7 @@ func TestPlace(t *testing.T) {
 				if store.puts != 1 {
 					t.Errorf("uploaded %d times, want the planted object overwritten once", store.puts)
 				}
-				if !bytes.Equal(store.objects[at.Key], MembraneLayer().Bytes) {
+				if !bytes.Equal(store.objects[at.Key], fixturePayload().Bytes) {
 					t.Error("the account still holds the planted bytes")
 				}
 			})
@@ -168,7 +178,7 @@ func TestPlace(t *testing.T) {
 	})
 
 	t.Run("refuses without somewhere to put it", func(t *testing.T) {
-		if _, err := Place(context.Background(), newFakeObjectStore(), "", fixturePrefix, fixtureLabel, MembraneLayer()); err == nil {
+		if _, err := Place(context.Background(), newFakeObjectStore(), "", fixturePrefix, fixtureLabel, fixturePayload()); err == nil {
 			t.Error("uploaded into no bucket at all")
 		}
 		if _, err := placeFixture(nil); err == nil {

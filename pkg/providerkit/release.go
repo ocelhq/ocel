@@ -85,7 +85,7 @@ type AppPlan struct {
 
 	AssetPrefix string
 
-	Membrane ArtifactRef
+	Membranes map[string]ArtifactRef
 
 	Packed any
 

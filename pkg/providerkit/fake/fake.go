@@ -290,7 +290,7 @@ func (CodeEmbedder) EmbedCode(context.Context, string, providerkit.ArtifactRef, 
 
 type MembraneSource struct{ *Provider }
 
-func (MembraneSource) Membrane(context.Context) ([]byte, error) { return []byte(Membrane), nil }
+func (MembraneSource) Membrane(context.Context, string) ([]byte, error) { return []byte(Membrane), nil }
 
 type StackInspector struct{ *Provider }
 
@@ -316,7 +316,7 @@ func (f Full) Inspect(_ context.Context, ref providerkit.StackRef) (providerkit.
 
 func (Full) VerifyGrants(context.Context, providerkit.Link) error { return nil }
 
-func (Full) Membrane(context.Context) ([]byte, error) { return []byte(Membrane), nil }
+func (Full) Membrane(context.Context, string) ([]byte, error) { return []byte(Membrane), nil }
 
 func (f Full) PreflightDeploy(_ context.Context, pre providerkit.DeployPreflight) error {
 	return f.preflight(pre)

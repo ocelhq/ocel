@@ -28,7 +28,7 @@ pack() {
 build_lambda() {
   (
     cd "$provider_dir"
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    CGO_ENABLED=0 GOOS=linux GOARCH="${3:-amd64}" \
       go build -trimpath -buildvcs=false -tags lambda.norpc -ldflags="-s -w" -o "$2" "$1"
   )
   chmod 755 "$2"
@@ -37,10 +37,13 @@ build_lambda() {
 rm -rf "$dist"
 mkdir -p "$dist"
 
-mkdir -p "$stage/layer/ocel"
-build_lambda ./cmd/membrane/bootstrap "$stage/layer/ocel/bootstrap"
-cp -R "$root/platform/aws/membrane/dist/." "$stage/layer/ocel/"
-pack "$stage/layer" "$dist/membrane-layer.zip"
+for goarch in amd64 arm64; do
+  layer="$stage/membrane-$goarch"
+  mkdir -p "$layer/ocel"
+  build_lambda ./cmd/membrane/bootstrap "$layer/ocel/bootstrap" "$goarch"
+  cp -R "$root/platform/aws/membrane/dist/." "$layer/ocel/"
+  pack "$layer" "$dist/membrane-layer-$goarch.zip"
+done
 
 mkdir -p "$stage/upload-completer"
 build_lambda ./cmd/uploadcompleter "$stage/upload-completer/bootstrap"

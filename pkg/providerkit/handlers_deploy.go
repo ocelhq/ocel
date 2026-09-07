@@ -105,7 +105,7 @@ type deployRun struct {
 
 	mu        sync.Mutex
 	artifacts map[string]ArtifactRef
-	membrane  ArtifactRef
+	membranes map[string]ArtifactRef
 	needs     NeedRecords
 	links     []Link
 	functions map[string][]Function
@@ -705,7 +705,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 					ISR:             facts.ISR,
 					Bytecode:        facts.Bytecode,
 					AssetPrefix:     facts.AssetPrefix,
-					Membrane:        r.membrane,
+					Membranes:       r.membranes,
 					Guard:           facts.Guard,
 					Packed:          pack.Carry,
 					CrossesMembrane: crossesMembrane(r.crossesMembrane, grants),
