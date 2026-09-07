@@ -51,10 +51,11 @@ type Target struct {
 }
 
 type functionConfig struct {
-	Runtime Runtime `json:"runtime"`
-	Handler string  `json:"handler"`
-	ID      string  `json:"id"`
-	App     string  `json:"app"`
+	Runtime Runtime  `json:"runtime"`
+	Handler string   `json:"handler"`
+	Command []string `json:"command,omitempty"`
+	ID      string   `json:"id"`
+	App     string   `json:"app"`
 }
 
 func Bundle(t Target) error {
@@ -103,13 +104,14 @@ func Bundle(t Target) error {
 	if err := native.copyInto(t.FuncDir); err != nil {
 		return err
 	}
-	return describeArtifact(t.App, t.Runtime, HandlerFile, t.FuncDir, t.AppDir)
+	return describeArtifact(t.App, t.Runtime, HandlerFile, nil, t.FuncDir, t.AppDir)
 }
 
-func describeArtifact(app string, runtime Runtime, handler, funcDir, appDir string) error {
+func describeArtifact(app string, runtime Runtime, handler string, command []string, funcDir, appDir string) error {
 	if err := writeJSON(filepath.Join(funcDir, configFileName), functionConfig{
 		Runtime: runtime,
 		Handler: handler,
+		Command: command,
 		ID:      entryRouteID,
 		App:     app,
 	}); err != nil {

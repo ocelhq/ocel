@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/appbundler"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func writeGoApp(t *testing.T, root, path string) {
@@ -57,15 +57,15 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	}
 	assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{{
 		Route:        "index",
-		Runtime:      manifestbuilder.Runtime{Name: "go", Arch: projectconfig.ArchX8664},
-		Handler:      appbundler.BootstrapFile,
+		Runtime:      manifestbuilder.Runtime{Name: "go", Arch: providerkit.ArchX8664},
+		Handler:      "api",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",
 		App:          "api",
 	}})
 
-	binary := filepath.Join(root, ".ocel", "output", "apps", "api", "functions", "index.func", appbundler.BootstrapFile)
+	binary := filepath.Join(root, ".ocel", "output", "apps", "api", "functions", "index.func", "api")
 	if _, err := os.Stat(binary); err != nil {
-		t.Fatalf("the build wrote no %s for the function to boot: %v", appbundler.BootstrapFile, err)
+		t.Fatalf("the build wrote no binary for the function to boot: %v", err)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -110,7 +111,7 @@ func TestBundle(t *testing.T) {
 			t.Fatal(err)
 		}
 		want := functionConfig{Runtime: Runtime{Name: "node"}, Handler: HandlerFile, ID: entryRouteID, App: "api"}
-		if cfg != want {
+		if !reflect.DeepEqual(cfg, want) {
 			t.Errorf("%s = %+v, want %+v", configFileName, cfg, want)
 		}
 
