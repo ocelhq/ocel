@@ -21,7 +21,7 @@ import { place } from "./place";
 import { awaitServing } from "./serving";
 import { reclaimable, sweepable } from "./slugs";
 import { awsStore, cliAt, namespacesStanding, type Store, said } from "./store";
-import { expectationEnvironmentFor, type World } from "./world";
+import { expectationEnvironmentFor } from "./world";
 
 const LEG_TIMEOUT_MS = process.env.AWS_ENDPOINT_URL ? 600_000 : 1_800_000;
 
@@ -120,10 +120,6 @@ async function awaitEdge(cell: CellContext, leg: Leg, deployed: Deployment): Pro
   await cell.evidence.write(leg, "serving.json", `${JSON.stringify(served, null, 2)}\n`);
 }
 
-export function bootstrapFeatures(world: World): string {
-  return world === "floci" ? FLOCI_FEATURES.join(",") : EVERY_FEATURE;
-}
-
 async function awaitDefaultVpc(endpoint: string): Promise<void> {
   const cli = cliAt(endpoint);
   let last = "";
@@ -170,7 +166,7 @@ async function prepare(): Promise<PrepareFailures> {
     await writeJourneyConfig(dir, { base: AWS_BASE, slug });
     await ocel(
       dir,
-      ["bootstrap", "production", "--yes", "--features", bootstrapFeatures(where.world)],
+      ["bootstrap", "production", "--yes", "--features", FLOCI_FEATURES.join(",")],
       childEnv(dir),
     );
   } catch (error) {
