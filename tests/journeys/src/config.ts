@@ -90,7 +90,7 @@ export function renderConfig(overlay: Overlay): string {
   const fields = [`  ...base,`, `  slug: ${JSON.stringify(overlay.slug)},`];
   if (overlay.varsKey) {
     fields.push(
-      `  provider: { ...base.provider, options: { ...(base.provider as { options?: object })?.options, varsKey: ${JSON.stringify(overlay.varsKey)} } },`,
+      `  provider: { package: "@ocel/provider-aws", options: { ...(base.provider as { options?: object } | undefined)?.options, varsKey: ${JSON.stringify(overlay.varsKey)} } },`,
     );
   }
   if (overlay.edge) {

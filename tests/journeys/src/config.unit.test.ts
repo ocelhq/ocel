@@ -118,7 +118,7 @@ export default defineConfig({
     expect(
       renderConfig({ base: AWS_BASE, slug: "j-1-node", varsKey: "arn:aws:kms:key/k" }),
     ).toContain(
-      `  provider: { ...base.provider, options: { ...(base.provider as { options?: object })?.options, varsKey: "arn:aws:kms:key/k" } },`,
+      `  provider: { package: "@ocel/provider-aws", options: { ...(base.provider as { options?: object } | undefined)?.options, varsKey: "arn:aws:kms:key/k" } },`,
     );
   });
 
