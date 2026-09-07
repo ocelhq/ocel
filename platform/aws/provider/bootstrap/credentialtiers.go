@@ -164,7 +164,7 @@ func varsKeyLifecycleActions() []string {
 	}
 }
 
-func bootstrapAccess(ns Namespace, r scopedARNs) []grantStatement {
+func bootstrapAccess(r scopedARNs) []grantStatement {
 	return []grantStatement{
 		{
 			actions: []string{
@@ -593,7 +593,7 @@ func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 	}
 }
 
-func edgePrincipal(ns Namespace, r scopedARNs) []grantStatement {
+func edgePrincipal(r scopedARNs) []grantStatement {
 	return []grantStatement{
 		{
 			actions: []string{
@@ -619,12 +619,12 @@ func edgePrincipal(ns Namespace, r scopedARNs) []grantStatement {
 
 func deployTier(ns Namespace) []grantStatement {
 	r := ns.scopedARNs()
-	return slices.Concat(bootstrapAccess(ns, r), appProvisioning(ns, r))
+	return slices.Concat(bootstrapAccess(r), appProvisioning(ns, r))
 }
 
 func bootstrapTier(ns Namespace) []grantStatement {
 	r := ns.scopedARNs()
-	return slices.Concat(bootstrapAccess(ns, r), appProvisioning(ns, r), bootstrapProvisioning(ns, r), edgePrincipal(ns, r))
+	return slices.Concat(bootstrapAccess(r), appProvisioning(ns, r), bootstrapProvisioning(ns, r), edgePrincipal(r))
 }
 
 func DeployCredentialPermissions(ns Namespace) (string, error) {

@@ -15,8 +15,6 @@ const (
 	MaxNamespaceLength = 44
 
 	NamespaceEnvVar = "OCEL_NAMESPACE"
-
-	NamespaceTagKey = "ocel:namespace"
 )
 
 func ParseNamespace(given string) (Namespace, error) {
@@ -40,7 +38,7 @@ func ParseNamespace(given string) (Namespace, error) {
 
 func (n Namespace) String() string { return string(n) }
 
-func (n Namespace) suffixed(class, base string) string {
+func suffixed(class, base string) string {
 	if class == ClassPreview {
 		return base + "-preview"
 	}
@@ -52,14 +50,14 @@ func (n Namespace) CoreStackName() string { return string(n) + "-bootstrap" }
 func (n Namespace) StackNameFor(class string) (string, error) {
 	switch class {
 	case ClassProduction, ClassPreview:
-		return n.suffixed(class, n.CoreStackName()), nil
+		return suffixed(class, n.CoreStackName()), nil
 	default:
 		return "", fmt.Errorf("bootstrap: unknown class %q", class)
 	}
 }
 
 func (n Namespace) featureStackName(feature, class string) string {
-	return n.suffixed(class, n.CoreStackName()+"-"+feature)
+	return suffixed(class, n.CoreStackName()+"-"+feature)
 }
 
 func (n Namespace) FeatureStackName(name, class string) string {
@@ -78,14 +76,14 @@ func (n Namespace) stackRecordRoot() string { return n.paramRoot() + "/rootstack
 func (n Namespace) EdgeUserNameFor(class string) (string, error) {
 	switch class {
 	case ClassProduction, ClassPreview:
-		return n.suffixed(class, string(n)+"-edge"), nil
+		return suffixed(class, string(n)+"-edge"), nil
 	default:
 		return "", fmt.Errorf("edge: unknown class %q", class)
 	}
 }
 
 func (n Namespace) AppBoundaryNameFor(class string) string {
-	return n.suffixed(class, string(n)+"-app-boundary")
+	return suffixed(class, string(n)+"-app-boundary")
 }
 
 func (n Namespace) OriginSecretParamFor(class string) (string, error) {
@@ -105,7 +103,7 @@ func (n Namespace) EdgeParamPrefix(class string, kind edge.Kind) (string, error)
 	}
 	switch class {
 	case ClassProduction, ClassPreview:
-		return n.suffixed(class, n.paramRoot()+"/edge/"+string(kind)), nil
+		return suffixed(class, n.paramRoot()+"/edge/"+string(kind)), nil
 	default:
 		return "", fmt.Errorf("edge: unknown class %q", class)
 	}
@@ -144,11 +142,11 @@ func (n Namespace) edgeAssetAccessName(class edge.Class) string {
 }
 
 func (n Namespace) edgeSetName(what string, class edge.Class) string {
-	return n.suffixed(string(class), string(n)+"-"+what)
+	return suffixed(string(class), string(n)+"-"+what)
 }
 
 func (n Namespace) revalidateQueueNames(class string) (queue, dlq string) {
-	base := n.suffixed(class, string(n)+"-revalidate")
+	base := suffixed(class, string(n)+"-revalidate")
 	return base + ".fifo", base + "-dlq.fifo"
 }
 
