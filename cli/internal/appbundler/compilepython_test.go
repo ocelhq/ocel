@@ -115,6 +115,26 @@ func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
 	}
 }
 
+func TestCompileRefusesAPythonAppThatNamesAnEntrypointOfItsOwn(t *testing.T) {
+	t.Parallel()
+
+	source := pythonApp(t, map[string]string{
+		"main.py":     "print('hi')\n",
+		"api/main.py": "print('hi')\n",
+	})
+	err := Compile(context.Background(), Compilation{
+		App:        "web",
+		Runtime:    Runtime{Name: "python", Arch: "x86_64"},
+		Source:     source,
+		Entrypoint: "api",
+		FuncDir:    filepath.Join(t.TempDir(), "index.func"),
+		AppDir:     t.TempDir(),
+	})
+	if err == nil || !strings.Contains(err.Error(), pythonEntryFile) {
+		t.Fatalf("err = %v, want a refusal naming %s — an entrypoint the build ignores would ship a different app than the one it names", err, pythonEntryFile)
+	}
+}
+
 func TestVendoringAsksPipOnlyForWheelsTheDeclaredArchitectureCanImport(t *testing.T) {
 	t.Parallel()
 
