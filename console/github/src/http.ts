@@ -68,6 +68,14 @@ export function verifySignature(
   return expected.length === given.length && timingSafeEqual(expected, given);
 }
 
+const PEM = /-----BEGIN ([A-Z ]+)-----([\s\S]*?)-----END \1-----/;
+
 export function privateKey(raw: string): string {
-  return raw.replace(/\\n/g, "\n");
+  const unescaped = raw.replace(/\\n/g, "\n").trim();
+  const match = PEM.exec(unescaped);
+  if (!match) return unescaped;
+  const [, label, body] = match;
+  const base64 = body.replace(/\s+/g, "");
+  const lines = base64.match(/.{1,64}/g) ?? [];
+  return [`-----BEGIN ${label}-----`, ...lines, `-----END ${label}-----`, ""].join("\n");
 }
