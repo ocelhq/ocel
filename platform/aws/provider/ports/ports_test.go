@@ -190,6 +190,29 @@ func TestAnAccountWithNoBootstrapHoldsNoRecords(t *testing.T) {
 	}
 }
 
+func TestATableDeletedMidTeardownHoldsNoRecords(t *testing.T) {
+	t.Parallel()
+
+	dynamo := newFakeDynamo()
+	dynamo.gone = true
+	records := awsports.Records{Dynamo: dynamo, Tables: awsports.Table("ocel-bootstrap-state")}
+	name := kit.RecordName{"bootstrap", "production"}
+
+	if _, err := records.Read(context.Background(), name); !errors.Is(err, kit.ErrNoRecord) {
+		t.Errorf("Read() against a deleted table = %v, want ErrNoRecord", err)
+	}
+	held, err := records.List(context.Background(), kit.RecordName{"projects", "production"})
+	if err != nil || len(held) != 0 {
+		t.Errorf("List() against a deleted table = %v, %v, want nothing", held, err)
+	}
+	if err := records.Remove(context.Background(), name, "whatever"); !errors.Is(err, kit.ErrNoRecord) {
+		t.Errorf("Remove() against a deleted table = %v, want ErrNoRecord", err)
+	}
+	if _, err := records.Write(context.Background(), kit.Record{Name: name, Bytes: []byte("{}")}); err == nil {
+		t.Error("Write() against a deleted table = nil, want the failure surfaced")
+	}
+}
+
 func TestNoRootKeepsAWholeAccountInOnePartition(t *testing.T) {
 	for _, name := range []kit.RecordName{
 		providerkit.ProjectsRecord(providerkit.ClassProduction),

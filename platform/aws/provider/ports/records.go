@@ -95,6 +95,11 @@ func unbootstrapped(name kit.RecordName) error {
 		"this account has no Ocel bootstrap, so there is nowhere to keep a record.\nRun `%s` to create it, then try again", providerkit.BootstrapCommand(class))
 }
 
+func tableGone(err error) bool {
+	var missing *ddbtypes.ResourceNotFoundException
+	return errors.As(err, &missing)
+}
+
 func (r Records) Read(ctx context.Context, name kit.RecordName) (kit.Record, error) {
 	table, err := r.table(ctx, name)
 	if err != nil {
@@ -113,6 +118,9 @@ func (r Records) Read(ctx context.Context, name kit.RecordName) (kit.Record, err
 		ConsistentRead: aws.Bool(true),
 	})
 	if err != nil {
+		if tableGone(err) {
+			return kit.Record{}, kit.ErrNoRecord
+		}
 		return kit.Record{}, fmt.Errorf("read %s: %w", name, err)
 	}
 	if len(out.Item) == 0 {
@@ -263,6 +271,9 @@ func (r Records) Remove(ctx context.Context, name kit.RecordName, expected kit.R
 	if err == nil {
 		return nil
 	}
+	if tableGone(err) {
+		return kit.ErrNoRecord
+	}
 	var failed *ddbtypes.ConditionalCheckFailedException
 	if errors.As(err, &failed) {
 		if len(failed.Item) == 0 {
@@ -307,6 +318,9 @@ func (r Records) List(ctx context.Context, under kit.RecordName) ([]kit.Record, 
 			ExclusiveStartKey:         start,
 		})
 		if err != nil {
+			if tableGone(err) {
+				return nil, nil
+			}
 			return nil, fmt.Errorf("read everything under %s: %w", under, err)
 		}
 		for _, item := range page.Items {
