@@ -10,6 +10,7 @@ import {
   groupKeyOf,
   groups,
   LIVES,
+  legsKept,
   legsOf,
   preferredOf,
   SERVES,
@@ -206,5 +207,16 @@ describe("the legs a cell runs", () => {
 
   it("drops a leg the fixture does not ask for, whatever the target offers", () => {
     expect(legsOf(sdkNext, LIVES)).toEqual(SERVES);
+  });
+});
+
+describe("the legs a run drives when it keeps the cell standing", () => {
+  it("hands back every leg the target can drive when it destroys", () => {
+    expect(legsKept(LIVES, false)).toEqual(LIVES);
+  });
+
+  it("drops only destroy when it keeps", () => {
+    expect(legsKept(LIVES, true)).toEqual(["up", "contract", "redeploy", "rollback"]);
+    expect(legsKept(SERVES, true)).toEqual(["up", "contract"]);
   });
 });

@@ -7,6 +7,8 @@ import {
   environmentFrom,
   FIXTURES_ENV,
   fixturesFor,
+  KEEP_ENV,
+  keepsStanding,
   SKIPS_ENV,
   selectionFor,
   skipsLifted,
@@ -182,5 +184,23 @@ describe("lifting the skips", () => {
 
   it("refuses a word it does not know", () => {
     expect(() => skipsLifted({ [SKIPS_ENV]: "maybe" })).toThrow(/OCEL_JOURNEY_SKIPS is maybe/);
+  });
+});
+
+describe("a lane that leaves its cells standing", () => {
+  it("destroys unless it is asked to keep", () => {
+    expect(keepsStanding({})).toBe(false);
+    expect(keepsStanding({ [KEEP_ENV]: "  " })).toBe(false);
+  });
+
+  it("keeps on every word for yes", () => {
+    for (const asked of ["1", "true", "TRUE", "yes", " Yes "]) {
+      expect(keepsStanding({ [KEEP_ENV]: asked })).toBe(true);
+    }
+  });
+
+  it("refuses a word it does not know", () => {
+    expect(() => keepsStanding({ [KEEP_ENV]: "maybe" })).toThrow(/OCEL_JOURNEY_KEEP is maybe/);
+    expect(() => keepsStanding({ [KEEP_ENV]: "0" })).toThrow(/OCEL_JOURNEY_KEEP is 0/);
   });
 });

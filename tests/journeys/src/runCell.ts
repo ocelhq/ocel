@@ -17,9 +17,10 @@ import {
   UP_TITLE,
 } from "./plan";
 import { readPrepareFailure } from "./prepare";
-import { cellNamed, environmentFrom, selectionFor } from "./selection";
-import { type Cell, type Leg, ladderTitle, legsOf } from "./spec";
+import { cellNamed, environmentFrom, keepsStanding, selectionFor } from "./selection";
+import { type Cell, type Leg, ladderTitle, legsKept, legsOf } from "./spec";
 import { selectedTarget } from "./targets";
+import { namespaceOfSlug } from "./targets/aws/namespace";
 import type { CellContext, Deployment } from "./targets/types";
 
 type Once<T> = () => Promise<T>;
@@ -93,7 +94,8 @@ function describeSelected({ name, fixture, variant }: Cell) {
     );
   }
 
-  const legs = legsOf(fixture, target.legs);
+  const keep = keepsStanding(process.env);
+  const legs = legsOf(fixture, legsKept(target.legs, keep));
   const rows = fixture.rows;
   const hooks = fixture.hooks;
   const publishRows = hooks?.rows?.filter((row) => row.phase === "publish") ?? [];
@@ -128,7 +130,7 @@ function describeSelected({ name, fixture, variant }: Cell) {
   });
 
   const triggerAfterDestroy = once(async () => {
-    if (hooks?.afterDestroy) {
+    if (!keep && hooks?.afterDestroy) {
       await hooks.afterDestroy(cell);
     }
   });
@@ -195,7 +197,20 @@ function describeSelected({ name, fixture, variant }: Cell) {
 
     afterAll(
       async () => {
-        await tearDown().catch(() => undefined);
+        if (!keep) {
+          await tearDown().catch(() => undefined);
+          return;
+        }
+        const [last] = legs.slice(-1);
+        if (last) {
+          await cell.evidence
+            .write(
+              last,
+              "kept.json",
+              `${JSON.stringify({ slug, namespace: namespaceOfSlug(slug) }, null, 2)}\n`,
+            )
+            .catch(() => undefined);
+        }
       },
       { timeout },
     );
@@ -250,13 +265,15 @@ function describeSelected({ name, fixture, variant }: Cell) {
       contractPerApp("rollback");
     }
 
-    perApp(DESTROY_TITLE, async () => {
-      await tearDown();
-      assert.ok(
-        !(await target.stands(slug)),
-        `${slug} still exists on ${target.name} after destroy`,
-      );
-    });
+    if (legs.includes("destroy")) {
+      perApp(DESTROY_TITLE, async () => {
+        await tearDown();
+        assert.ok(
+          !(await target.stands(slug)),
+          `${slug} still exists on ${target.name} after destroy`,
+        );
+      });
+    }
 
     perAppDescribe((app) => {
       for (const row of outliveRows) {

@@ -21,6 +21,7 @@ export const VARIANTS_ENV = "OCEL_JOURNEY_VARIANTS";
 export const SKIPS_ENV = "OCEL_JOURNEY_SKIPS";
 export const CONCERN_ENV = "OCEL_JOURNEY_CONCERN";
 export const FIXTURES_ENV = "OCEL_JOURNEY_FIXTURES";
+export const KEEP_ENV = "OCEL_JOURNEY_KEEP";
 
 export type Selection = {
   fixtures: FixtureSpec[];
@@ -80,6 +81,17 @@ export function skipsLifted(env: NodeJS.ProcessEnv): boolean {
     return true;
   }
   throw new Error(`${SKIPS_ENV} is ${asked}, and a skipped cell is either skipped or run`);
+}
+
+export function keepsStanding(env: NodeJS.ProcessEnv): boolean {
+  const asked = (env[KEEP_ENV] ?? "").trim().toLowerCase();
+  if (asked === "") {
+    return false;
+  }
+  if (asked === "1" || asked === "true" || asked === "yes") {
+    return true;
+  }
+  throw new Error(`${KEEP_ENV} is ${asked}, and a cell is either kept standing or destroyed`);
 }
 
 export function selectionFor(

@@ -57,9 +57,23 @@ describe("what a lane plans from the environment its children read", () => {
         OCEL_JOURNEY_FIXTURES: "deploy/node,sdk/next",
         OCEL_JOURNEY_SKIPS: "run",
       }),
+      false,
     );
     const fixtures = new Set(planned.map((entry) => entry.fixture));
     expect([...fixtures].sort()).toEqual(["deploy/node", "sdk/next"]);
+  });
+
+  it("plans no destroy for a lane that keeps its cells standing", () => {
+    const aws = targetNamed("aws");
+    const selection = selectionFor(aws, "aws", {
+      OCEL_JOURNEY_FIXTURES: "deploy/node",
+      OCEL_JOURNEY_SKIPS: "run",
+    });
+    const legs = (keep: boolean) =>
+      new Set(plannedFrom(aws, selection, keep).map((entry) => entry.leg));
+    expect(legs(false)).toContain("destroy");
+    expect(legs(true)).not.toContain("destroy");
+    expect(legs(true)).toContain("up");
   });
 });
 
