@@ -16,7 +16,7 @@ const (
 	TagSchema         = "ocel:schema"
 	TagDigest         = "ocel:digest"
 	TagBootstrappedBy = "ocel:bootstrapped-by"
-	TagNamespace      = NamespaceTagKey
+	TagNamespace      = "ocel:namespace"
 )
 
 type Stamp struct {

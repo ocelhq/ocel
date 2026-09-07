@@ -142,7 +142,7 @@ func TestTheLengthBoundIsTheTightestAWSAllows(t *testing.T) {
 		"vars key alias":        256,
 		"edge invoke role":      64,
 		"preview invoke role":   64,
-		"not found api":         1024,
+		"not found api":         128,
 		"routes store":          64,
 		"preview routes store":  64,
 		"resolver":              64,
