@@ -68,17 +68,3 @@ func awaitListening(port int, exited <-chan error, budget time.Duration) (alive 
 		}
 	}
 }
-
-func bringUpExecutable(command []string, port int, live *liveValues, prefetch <-chan error, env []string, budget time.Duration) (*execChild, error) {
-	child, err := startExecutable(command, port, env, budget)
-	if err != nil {
-		if prefetchErr := live.prefetchError(); prefetchErr != nil {
-			return nil, fmt.Errorf("failed to resolve this deployment's live variables: %w", prefetchErr)
-		}
-		return nil, err
-	}
-	if err := live.join(prefetch); err != nil {
-		return nil, fmt.Errorf("failed to resolve this deployment's live variables: %w", err)
-	}
-	return child, nil
-}

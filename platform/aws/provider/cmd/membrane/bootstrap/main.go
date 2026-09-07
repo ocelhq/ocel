@@ -64,7 +64,9 @@ type spawner func(extraEnv []string, budget time.Duration, onControl func(io.Wri
 
 func bringUp(ctx context.Context, served artifact, live *liveValues, prefetch <-chan error, env []string, start time.Time, bytecodeReady <-chan *bytecodeResolution) (child, error) {
 	if served.executable() {
-		return bringUpExecutable(served.Command, providerkit.InjectedPort, live, prefetch, env, spawnBudget(start))
+		return bringUpChild(func() (*execChild, error) {
+			return startExecutable(served.Command, providerkit.InjectedPort, env, spawnBudget(start))
+		}, live, prefetch)
 	}
 	return bringUpChildWithBytecode(ctx, startNode(entrypointPath(served)), live, prefetch, env, start, bytecodeReady, bytecodeEmbedded, bytecodeRehydrate)
 }
@@ -77,20 +79,30 @@ func spawnBudget(start time.Time) time.Duration {
 	return budget
 }
 
-func bringUpChild(spawn spawner, live *liveValues, prefetch <-chan error, env []string, budget time.Duration) (*nodeChild, error) {
-	child, err := spawn(env, budget, live.attach, live.prefetchFailed())
+func bringUpChild[C child](start func() (C, error), live *liveValues, prefetch <-chan error) (C, error) {
+	var none C
+	child, err := start()
 	if err != nil {
 		if prefetchErr := live.prefetchError(); prefetchErr != nil {
-			return nil, fmt.Errorf("failed to resolve this deployment's live variables: %w", prefetchErr)
+			return none, fmt.Errorf("failed to resolve this deployment's live variables: %w", prefetchErr)
 		}
-		return nil, fmt.Errorf("failed to start node runtime: %w", err)
+		return none, err
 	}
-	child.live = live
-
 	if err := live.join(prefetch); err != nil {
-		return nil, fmt.Errorf("failed to resolve this deployment's live variables: %w", err)
+		return none, fmt.Errorf("failed to resolve this deployment's live variables: %w", err)
 	}
 	return child, nil
+}
+
+func bringUpNode(spawn spawner, live *liveValues, prefetch <-chan error, env []string, budget time.Duration) (*nodeChild, error) {
+	return bringUpChild(func() (*nodeChild, error) {
+		child, err := spawn(env, budget, live.attach, live.prefetchFailed())
+		if err != nil {
+			return nil, fmt.Errorf("failed to start node runtime: %w", err)
+		}
+		child.live = live
+		return child, nil
+	}, live, prefetch)
 }
 
 func bytecodeRehydrate(ctx context.Context, r *bytecodeResolution) bool {
@@ -139,7 +151,7 @@ func bringUpChildWithBytecode(
 		cancel()
 	}
 
-	child, err := bringUpChild(spawn, live, prefetch, env, spawnBudget(start))
+	child, err := bringUpNode(spawn, live, prefetch, env, spawnBudget(start))
 	if err != nil {
 		return nil, err
 	}
