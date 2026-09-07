@@ -56,11 +56,18 @@ type Records struct {
 
 type Tables interface {
 	Table(ctx context.Context, class kit.Class) (string, error)
+	ValuesTable(ctx context.Context, class kit.Class) (string, error)
 }
 
 type Table string
 
 func (t Table) Table(context.Context, kit.Class) (string, error) { return string(t), nil }
+
+func (t Table) ValuesTable(context.Context, kit.Class) (string, error) { return string(t), nil }
+
+func holdsValues(name kit.RecordName) bool {
+	return len(name) > 0 && (name[0] == kit.RootValues || name[0] == kit.RootValueRefs)
+}
 
 func (r Records) table(ctx context.Context, name kit.RecordName) (string, error) {
 	class, named := providerkit.ClassOf(name)
@@ -70,6 +77,9 @@ func (r Records) table(ctx context.Context, name kit.RecordName) (string, error)
 	}
 	if r.Tables == nil {
 		return "", nil
+	}
+	if holdsValues(name) {
+		return r.Tables.ValuesTable(ctx, class)
 	}
 	return r.Tables.Table(ctx, class)
 }

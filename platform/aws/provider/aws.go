@@ -205,6 +205,14 @@ func (p *Provider) Table(ctx context.Context, class providerkit.Class) (string, 
 	return held.StateTable, nil
 }
 
+func (p *Provider) ValuesTable(ctx context.Context, class providerkit.Class) (string, error) {
+	held, err := p.bootstrapped(ctx, class)
+	if err != nil {
+		return "", err
+	}
+	return held.VarsTable, nil
+}
+
 func (p *Provider) Key(ctx context.Context, class providerkit.Class) (string, error) {
 	held, err := p.bootstrapped(ctx, class)
 	if err != nil {
@@ -307,7 +315,9 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		Slug:           scope.Slug,
 		Env:            scope.Env,
 		StateTable:     held.StateTable,
-		StateTableARN:  stateTableARN(p.aws.Region, account, held.StateTable),
+		StateTableARN:  tableARN(p.aws.Region, account, held.StateTable),
+		VarsTable:      held.VarsTable,
+		VarsTableARN:   tableARN(p.aws.Region, account, held.VarsTable),
 		VarsKeyARN:     held.VarsKeyARN,
 		AppBoundaryARN: held.AppBoundaryARN,
 		VarsReferenced: referenced,
@@ -377,7 +387,7 @@ func (p *Provider) transforms(root string) transform.Evaluator {
 	return transform.NodePass{Root: root, Modules: p.options.Transforms}
 }
 
-func stateTableARN(region, account, table string) string {
+func tableARN(region, account, table string) string {
 	return fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", region, account, table)
 }
 

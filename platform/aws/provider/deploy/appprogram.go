@@ -126,7 +126,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 		Tags: roleTags, LinkPolicies: policies, VPCAccess: vpcAccess, Router: router,
 	}
 	if bundle.hasLive() {
-		role.ValuesTableARN = r.cfg.StateTableARN
+		role.ValuesTableARN = r.cfg.VarsTableARN
 		role.VarsReferenced = bundle.Referenced
 		role.Slug = r.cfg.Slug
 		role.VarsClass = string(r.cfg.Class)

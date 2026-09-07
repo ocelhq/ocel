@@ -370,7 +370,7 @@ type executionRole struct {
 func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []linkPolicy, vpcAccess bool, router *routerHost) executionRole {
 	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN, Boundary: cfg.AppBoundaryARN, Tags: tags, LinkPolicies: policies, VPCAccess: vpcAccess, Router: router}
 	if bundle.hasLive() {
-		role.ValuesTableARN = cfg.StateTableARN
+		role.ValuesTableARN = cfg.VarsTableARN
 		role.VarsReferenced = bundle.Referenced
 		role.Slug = cfg.Slug
 		role.VarsClass = string(cfg.Class)
