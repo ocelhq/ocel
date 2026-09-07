@@ -18,6 +18,7 @@ import { pulumiSweep } from "./ladder-pulumi";
 import { sstSweep } from "./ladder-sst";
 import { NAMESPACE_ENV, namespaceFor, namespaceOfSlug, strayNamespaces } from "./namespace";
 import { place } from "./place";
+import { githubRuns, livelyRuns, runIdOf } from "./runs";
 import { awaitServing } from "./serving";
 import { reclaimable, sweepable } from "./slugs";
 import { awsStore, cliAt, namespacesStanding, type Store, said } from "./store";
@@ -368,11 +369,41 @@ async function inFixture(
   }
 }
 
+type Busy = (names: string[]) => Promise<Set<string>>;
+
+function busyRuns(real: boolean, complaints: string[]): Busy {
+  if (!real) {
+    return async () => new Set<string>();
+  }
+  const look = githubRuns(process.env);
+  const told = new Set<string>();
+  return async (names) => {
+    const ids = names.flatMap((name) => runIdOf(name) ?? []);
+    const { keep, unreadable } = await livelyRuns(ids, look);
+    for (const { id, reason } of unreadable) {
+      if (told.has(id)) {
+        continue;
+      }
+      told.add(id);
+      complaints.push(
+        `run ${id} could not be read (${reason}), so its slugs and namespace were kept`,
+      );
+    }
+    return keep;
+  };
+}
+
+function underway(name: string, live: Set<string>): boolean {
+  const id = runIdOf(name);
+  return id !== undefined && live.has(id);
+}
+
 async function sweepNamespaces(
   runId: string,
   cells: Cell[],
   byPart: Map<string, Cell>,
   complaints: string[],
+  busy: Busy,
 ): Promise<void> {
   const where = await place();
   if (where.world !== "real") {
@@ -380,7 +411,8 @@ async function sweepNamespaces(
   }
   const mine = cells.map((cell) => namespaceFor(cell.name, runId));
   const stray = strayNamespaces(await namespacesStanding(cliAt(where.endpoint)), mine);
-  for (const namespace of stray) {
+  const live = await busy(stray);
+  for (const namespace of stray.filter((name) => !underway(name, live))) {
     await despite(complaints, `${namespace} sweep`, () =>
       sweepStrayNamespace(runId, namespace, byPart, complaints),
     );
@@ -398,7 +430,10 @@ async function sweep(runId: string): Promise<void> {
   const complaints: string[] = unreadable.map(
     (slug) => `${slug} carries the harness prefix and names no cell in the spec table`,
   );
-  for (const stranded of reclaim) {
+  const busy = busyRuns(where.world === "real", complaints);
+  const live = await busy(reclaim.map((entry) => entry.slug));
+  const strandedSlugs = reclaim.filter((entry) => !underway(entry.slug, live));
+  for (const stranded of strandedSlugs) {
     const cell = byPart.get(stranded.cell);
     if (!cell) {
       continue;
@@ -419,14 +454,14 @@ async function sweep(runId: string): Promise<void> {
   }
 
   const left = new Set(await list());
-  for (const stranded of reclaim) {
+  for (const stranded of strandedSlugs) {
     if (left.has(stranded.slug)) {
       complaints.push(`${stranded.slug} still stands after the sweep destroyed it`);
     }
   }
 
   await despite(complaints, "namespace sweep", () =>
-    sweepNamespaces(runId, cells, byPart, complaints),
+    sweepNamespaces(runId, cells, byPart, complaints, busy),
   );
 
   const ladderSweeps: Array<[string, (runId: string) => Promise<void>]> = [
