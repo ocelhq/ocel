@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 
 const root = import.meta.dirname;
 
@@ -15,7 +15,7 @@ export default {
 
 function modulesOf(files) {
   const grouped = new Map();
-  for (const file of files) {
+  for (const file of files.filter((one) => !relative(root, one).split(sep).includes("testdata"))) {
     const module = moduleOf(dirname(file));
     const pkg = relative(module, dirname(file));
     grouped.set(module, (grouped.get(module) ?? new Set()).add(pkg === "" ? "." : `./${pkg}`));
