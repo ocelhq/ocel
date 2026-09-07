@@ -3,6 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "generate": "sh ./generate.sh"
+    "generate": "sh ./generate.sh",
+    "live": "go test -C .. -race -count=1 -timeout 30m -run '^TestLive' ./...",
+    "lifecycle": "go test -C .. -race -count=1 -timeout 45m -run '^TestLifecycle' ./..."
   }
 }

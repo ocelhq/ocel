@@ -18,6 +18,47 @@
         "$TURBO_ROOT$/platform/edge/contract/go.sum",
         "!$TURBO_ROOT$/**/*_test.go"
       ]
+    },
+    "live": {
+      "dependsOn": ["generate"],
+      "cache": false,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/pkg/**",
+        "$TURBO_ROOT$/proto/**",
+        "$TURBO_ROOT$/platform/aws/**",
+        "$TURBO_ROOT$/platform/edge/**",
+        "$TURBO_ROOT$/scripts/floci.sh",
+        "$TURBO_ROOT$/scripts/assert-ran.sh",
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/go.work.sum",
+        "$TURBO_ROOT$/.github/workflows/go.yml",
+        "$TURBO_ROOT$/.github/actions/**",
+        "!$TURBO_ROOT$/**/*.md"
+      ]
+    },
+    "lifecycle": {
+      "dependsOn": ["generate"],
+      "cache": false,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/cli/**",
+        "$TURBO_ROOT$/sdk/**",
+        "$TURBO_ROOT$/pkg/**",
+        "$TURBO_ROOT$/proto/**",
+        "$TURBO_ROOT$/packages/**",
+        "$TURBO_ROOT$/frameworks/**",
+        "$TURBO_ROOT$/platform/aws/**",
+        "$TURBO_ROOT$/platform/edge/**",
+        "$TURBO_ROOT$/scripts/floci.sh",
+        "$TURBO_ROOT$/scripts/assert-ran.sh",
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/go.work.sum",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/.github/workflows/go.yml",
+        "$TURBO_ROOT$/.github/actions/**",
+        "!$TURBO_ROOT$/**/*.md"
+      ]
     }
   }
 }

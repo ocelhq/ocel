@@ -1,0 +1,67 @@
+name: suite-gate
+description: >-
+  Whether the inputs a suite reads have already passed it. turbo hashes the
+  task that names the suite's inputs, and a cache entry under that hash is the
+  record of a green run on this ref or its base; when one exists, the suite
+  has nothing new to prove and the caller skips it. The task itself never
+  caches, so a pass is only ever recorded by suite-passed after a real run.
+
+inputs:
+  suite:
+    description: Names the suite in the cache key, e.g. journey-aws.
+    required: true
+  task:
+    description: The turbo task whose hash is the fingerprint, as package#script.
+    required: true
+
+outputs:
+  green:
+    description: "true when this fingerprint already passed."
+    value: ${{ steps.result.outputs.green }}
+  key:
+    description: The cache key under which suite-passed records a pass of this fingerprint.
+    value: ${{ steps.hash.outputs.key }}
+
+runs:
+  using: composite
+  steps:
+    - name: Hash what the suite reads
+      id: hash
+      shell: bash
+      env:
+        SUITE: ${{ inputs.suite }}
+        TASK: ${{ inputs.task }}
+      run: |
+        set -euo pipefail
+        hash=$(pnpm exec turbo run "${TASK#*#}" --filter="${TASK%#*}" --dry-run=json \
+          | jq -er --arg id "$TASK" '.tasks[] | select(.taskId == $id) | .hash')
+        echo "$SUITE reads inputs hashing to $hash"
+        echo "key=suite-$SUITE-$hash" >> "$GITHUB_OUTPUT"
+
+    - name: Look for a run that already passed them
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/suite-green/${{ inputs.suite }}
+        key: ${{ steps.hash.outputs.key }}
+
+    - name: Say so
+      id: result
+      shell: bash
+      env:
+        SUITE: ${{ inputs.suite }}
+        HIT: ${{ steps.restore.outputs.cache-hit }}
+        MARKER: ${{ runner.temp }}/suite-green/${{ inputs.suite }}
+        EVENT: ${{ github.event_name }}
+      run: |
+        set -euo pipefail
+        if [ "$EVENT" = workflow_dispatch ]; then
+          echo "green=false" >> "$GITHUB_OUTPUT"
+          echo "- **$SUITE** runs: dispatched by hand" >> "$GITHUB_STEP_SUMMARY"
+        elif [ "$HIT" = true ]; then
+          echo "green=true" >> "$GITHUB_OUTPUT"
+          echo "- **$SUITE** skipped: nothing it reads changed since it passed in $(cat "$MARKER")" >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "green=false" >> "$GITHUB_OUTPUT"
+          echo "- **$SUITE** runs: no pass recorded for what it reads now" >> "$GITHUB_STEP_SUMMARY"
+        fi

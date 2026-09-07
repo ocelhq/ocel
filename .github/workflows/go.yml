@@ -17,6 +17,8 @@ on:
       - ".github/workflows/go.yml"
       - ".github/actions/gobuildcache/**"
       - ".github/actions/node-workspace/**"
+      - ".github/actions/suite-gate/**"
+      - ".github/actions/suite-passed/**"
   workflow_dispatch:
 
 concurrency:
@@ -91,6 +93,22 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
+      - name: Has the live suite already passed what it reads
+        id: gate-live
+        if: matrix.group.name == 'aws'
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: aws-live
+          task: "@platform/aws-payloads#live"
+
+      - name: Has the lifecycle suite already passed what it reads
+        id: gate-lifecycle
+        if: matrix.group.name == 'aws'
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: aws-lifecycle
+          task: "@platform/aws-payloads#lifecycle"
+
       - name: The ocel package the cli e2e deploys against
         if: matrix.group.name == 'cli'
         run: pnpm turbo run build --filter=ocel
@@ -124,7 +142,7 @@ jobs:
         run: go test -race -count=1 $PACKAGES
 
       - name: Log in to the registry the emulator image lives in
-        if: matrix.group.name == 'aws'
+        if: matrix.group.name == 'aws' && (steps.gate-live.outputs.green != 'true' || steps.gate-lifecycle.outputs.green != 'true')
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -132,35 +150,49 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull the emulator both suites run against
-        if: matrix.group.name == 'aws'
+        if: matrix.group.name == 'aws' && (steps.gate-live.outputs.green != 'true' || steps.gate-lifecycle.outputs.green != 'true')
         run: docker pull "$OCEL_FLOCI_IMAGE"
 
       - name: Run the live conformance suite
-        if: matrix.group.name == 'aws'
+        if: matrix.group.name == 'aws' && steps.gate-live.outputs.green != 'true'
         run: |
           set -euo pipefail
           scripts/floci.sh run "ocel-aws-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -C platform/aws/provider -race -count=1 -timeout 30m -run '^TestLive' -json ./... | tee live.json
 
       - name: Assert the live suite ran
-        if: matrix.group.name == 'aws'
+        if: matrix.group.name == 'aws' && steps.gate-live.outputs.green != 'true'
         run: scripts/assert-ran.sh live.json TestLive
 
+      - name: Record that what the live suite reads has passed
+        if: matrix.group.name == 'aws' && steps.gate-live.outputs.green != 'true'
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: aws-live
+          key: ${{ steps.gate-live.outputs.key }}
+
       - name: The node bundle the CLI binary is built around
-        if: matrix.group.name == 'aws'
+        if: matrix.group.name == 'aws' && steps.gate-lifecycle.outputs.green != 'true'
         run: |
           set -euo pipefail
           pnpm turbo run build --filter=ocel
           go generate -C cli ./...
 
       - name: Run the lifecycle suite on an emulator of its own
-        if: matrix.group.name == 'aws'
+        if: matrix.group.name == 'aws' && steps.gate-lifecycle.outputs.green != 'true'
         run: |
           set -euo pipefail
           scripts/floci.sh run "ocel-aws-lifecycle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -C platform/aws/provider -race -count=1 -timeout 30m -run '^TestLifecycle' -json ./... | tee lifecycle.json
 
       - name: Assert the lifecycle suite ran
-        if: matrix.group.name == 'aws'
+        if: matrix.group.name == 'aws' && steps.gate-lifecycle.outputs.green != 'true'
         run: scripts/assert-ran.sh lifecycle.json TestLifecycle
+
+      - name: Record that what the lifecycle suite reads has passed
+        if: matrix.group.name == 'aws' && steps.gate-lifecycle.outputs.green != 'true'
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: aws-lifecycle
+          key: ${{ steps.gate-lifecycle.outputs.key }}
 
       - name: No emulator left behind
         if: ${{ always() && matrix.group.name == 'aws' }}
