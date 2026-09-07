@@ -41,11 +41,24 @@ describe("reclaimable", () => {
   it("reads nothing out of a slug no harness run made", () => {
     assert.equal(reclaimable("deploy-node", CELLS), undefined);
     assert.equal(reclaimable("jobs-deploy-node", CELLS), undefined);
-    assert.equal(reclaimable("j--deploy-node", CELLS), undefined);
   });
 
-  it("reads nothing out of a harness slug naming a cell nobody has", () => {
-    assert.equal(reclaimable("j-1874-nowhere", CELLS), undefined);
+  it("claims a harness slug whose cell left the spec table, naming no cell", () => {
+    assert.deepEqual(reclaimable("j-1874-nowhere", CELLS), {
+      slug: "j-1874-nowhere",
+      cell: undefined,
+    });
+    assert.deepEqual(reclaimable("j-local-apigw3-hello-express", CELLS), {
+      slug: "j-local-apigw3-hello-express",
+      cell: undefined,
+    });
+  });
+
+  it("reads the cell out of a harness slug whose run identity came out empty", () => {
+    assert.deepEqual(reclaimable("j--deploy-node", CELLS), {
+      slug: "j--deploy-node",
+      cell: "deploy-node",
+    });
   });
 });
 
@@ -57,22 +70,19 @@ describe("sweepable", () => {
       "j-1874-sdk-node",
       "j-local-vndaba-sdk-node",
     ];
-    const { reclaim, unreadable } = sweepable(found, ["j-1874-sdk-node"], CELLS);
     assert.deepEqual(
-      reclaim.map((entry) => entry.slug),
+      sweepable(found, ["j-1874-sdk-node"], CELLS).map((entry) => entry.slug),
       ["j-local-vndaba-sdk-node"],
     );
-    assert.deepEqual(unreadable, []);
   });
 
-  it("reports a prefixed slug it cannot place rather than reclaiming it", () => {
-    const { reclaim, unreadable } = sweepable(["j-1874-gone"], [], CELLS);
-    assert.deepEqual(reclaim, []);
-    assert.deepEqual(unreadable, ["j-1874-gone"]);
+  it("reclaims a prefixed slug whose cell left the spec table", () => {
+    assert.deepEqual(sweepable(["j-1874-gone"], [], CELLS), [
+      { slug: "j-1874-gone", cell: undefined },
+    ]);
   });
 
   it("names a slug listed twice once", () => {
-    const { reclaim } = sweepable(["j-9-sdk-node", "j-9-sdk-node"], [], CELLS);
-    assert.equal(reclaim.length, 1);
+    assert.equal(sweepable(["j-9-sdk-node", "j-9-sdk-node"], [], CELLS).length, 1);
   });
 });
