@@ -111,3 +111,24 @@ func TestGoReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 		t.Errorf("usage = %+v, want main granted to web from entry server", usages[0])
 	}
 }
+
+func TestGoReachStopsAtTheModuleTheAppLivesIn(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "go.work"), "go 1.27.0\n\nuse (\n\t./server\n\t./shared\n)\n")
+	write(t, filepath.Join(root, "server", "go.mod"), "module example.com/web\n\ngo 1.27.0\n\nrequire example.com/shared v0.0.0\n")
+	write(t, filepath.Join(root, "server", "main.go"), "package main\n\nimport _ \"example.com/shared/infra\"\n\nfunc main() {}\n")
+	write(t, filepath.Join(root, "shared", "go.mod"), "module example.com/shared\n\ngo 1.27.0\n")
+	write(t, filepath.Join(root, "shared", "infra", "infra.go"), "package infra\n")
+
+	usages, err := Compute(root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, []Declaration{{
+		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Name:   "main",
+		Source: filepath.Join(root, "shared", "infra", "infra.go") + ":1",
+	}})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	if len(usages) != 0 {
+		t.Errorf("usages = %+v, want none: the declaration lives outside the app's module", usages)
+	}
+}
