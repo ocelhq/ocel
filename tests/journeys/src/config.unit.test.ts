@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { AWS_BASE, journeyZone, renderConfig, shapeFor, VPS_BASE } from "./config";
+import { AWS_BASE, journeyZone, renderConfig, shapeFor, sweepShapeFor, VPS_BASE } from "./config";
 import { evidence } from "./evidence";
 import { type Concern, specByName } from "./spec";
 import type { CellContext } from "./targets/types";
@@ -25,6 +25,23 @@ describe("journeyZone", () => {
 
   it("takes the zone named", () => {
     expect(journeyZone({ OCEL_JOURNEY_ZONE: "journeys.example" })).toBe("journeys.example");
+  });
+});
+
+describe("sweepShapeFor", () => {
+  it("destroys a cell through the edge its variant stood it up behind", () => {
+    expect(sweepShapeFor(cell("sdk", "workspace", cloudflare), "j-9-sdk-workspace")).toEqual({
+      base: AWS_BASE,
+      slug: "j-9-sdk-workspace",
+      edge: "cloudflare",
+    });
+  });
+
+  it("names no edge for a base cell", () => {
+    expect(sweepShapeFor(cell("deploy", "node"), "j-9-deploy-node")).toEqual({
+      base: AWS_BASE,
+      slug: "j-9-deploy-node",
+    });
   });
 });
 

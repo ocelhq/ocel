@@ -1,7 +1,7 @@
 import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
-import { AWS_BASE, JOURNEY_CONFIG, writeJourneyConfig } from "../../config";
+import { AWS_BASE, JOURNEY_CONFIG, sweepShapeFor, writeJourneyConfig } from "../../config";
 import { type Fetch, INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
 import { appHostname, currentRunIdentity, projectSlug, slugPart } from "../../identity";
@@ -338,7 +338,7 @@ async function sweepStrayNamespace(
       continue;
     }
     await inFixture(cell.fixture.dir, runId, `sweep-${slug}`, async (dir) => {
-      await writeJourneyConfig(dir, { base: AWS_BASE, slug });
+      await writeJourneyConfig(dir, sweepShapeFor(cell, slug));
       await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir, namespace));
       process.stdout.write(`swept ${slug} from the ${namespace} bootstrap\n`);
     }).catch((error) => complaints.push(`${slug}: ${String(error)}`));
@@ -431,7 +431,7 @@ async function reclaimSlugs(
       continue;
     }
     await inFixture(cell.fixture.dir, runId, `sweep-${entry.slug}`, async (dir) => {
-      await writeJourneyConfig(dir, { base: AWS_BASE, slug: entry.slug });
+      await writeJourneyConfig(dir, sweepShapeFor(cell, entry.slug));
       await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir));
       process.stdout.write(`swept ${entry.slug}\n`);
     }).catch((error) => complaints.push(`${entry.slug}: ${String(error)}`));

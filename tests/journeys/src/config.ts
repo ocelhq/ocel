@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { appHostname } from "./identity";
-import type { Compute, Edge, TargetName } from "./spec";
+import type { Cell, Compute, Edge, TargetName } from "./spec";
 import type { CellContext } from "./targets/types";
 
 export const JOURNEY_CONFIG = "ocel.journey.config.ts";
@@ -40,6 +40,10 @@ function hostnamesOf(cell: CellContext, zone: string): Record<string, string> {
     }
   }
   return named;
+}
+
+export function sweepShapeFor(cell: Cell, slug: string): Overlay {
+  return { base: AWS_BASE, slug, ...cell.variant?.config };
 }
 
 export function shapeFor(cell: CellContext, target: TargetName, env: NodeJS.ProcessEnv): Overlay {
