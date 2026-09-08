@@ -325,19 +325,6 @@ func workspaceMembers(inAnImage bool, appDir string) []string {
 	return located.Members()
 }
 
-func appLanguage(app projectconfig.App, configDir string) discovery.Language {
-	switch app.Runtime.Name {
-	case providerkit.RuntimeGo:
-		return discovery.Go
-	case providerkit.RuntimePython:
-		return discovery.Python
-	}
-	if _, err := os.Stat(filepath.Join(configDir, app.Path, "Cargo.toml")); err == nil {
-		return discovery.Rust
-	}
-	return discovery.JS
-}
-
 func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Function, compute, configName string) ([]attribution.App, error) {
 	detected := detectedApps(functions)
 	apps := cfg.Apps
@@ -355,7 +342,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 			out = append(out, attribution.App{
 				Name:      name,
 				Path:      ".",
-				Language:  appLanguage(projectconfig.App{Path: "."}, cfg.Dir),
+				Language:  discovery.LanguageOf(cfg.Dir),
 				Container: container,
 				Members:   workspaceMembers(container, cfg.Dir),
 			})
@@ -371,7 +358,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 		out = append(out, attribution.App{
 			Name:      a.Name,
 			Path:      a.Path,
-			Language:  appLanguage(a, cfg.Dir),
+			Language:  discovery.LanguageOf(filepath.Join(cfg.Dir, a.Path)),
 			Container: inAnImage,
 			Members:   workspaceMembers(inAnImage, filepath.Join(cfg.Dir, a.Path)),
 		})

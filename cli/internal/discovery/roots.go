@@ -101,6 +101,22 @@ func defaultRootDirs(configDir string, appPaths []string) []string {
 	return dirs
 }
 
+func LanguageOf(dir string) Language {
+	if language, ok := manifestLanguage(dir); ok {
+		return language
+	}
+	return JS
+}
+
+func manifestLanguage(dir string) (Language, bool) {
+	for _, m := range manifestLanguages {
+		if _, err := os.Stat(filepath.Join(dir, m.file)); err == nil {
+			return m.language, true
+		}
+	}
+	return "", false
+}
+
 func languageOf(configDir, dir string) (Language, error) {
 	stop, err := filepath.Abs(configDir)
 	if err != nil {
@@ -112,10 +128,8 @@ func languageOf(configDir, dir string) (Language, error) {
 	}
 
 	for {
-		for _, m := range manifestLanguages {
-			if _, err := os.Stat(filepath.Join(at, m.file)); err == nil {
-				return m.language, nil
-			}
+		if language, ok := manifestLanguage(at); ok {
+			return language, nil
 		}
 		if at == stop {
 			return JS, nil
