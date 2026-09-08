@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
+	"strconv"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -11,14 +12,17 @@ import (
 type Kind string
 
 const (
-	KindDatabase Kind = "firestore:database"
-	KindBucket   Kind = "storage:bucket"
-	KindKeyRing  Kind = "kms:keyring"
-	KindKey      Kind = "kms:key"
-	KindSecret   Kind = "secretmanager:secret"
+	KindDatabase   Kind = "firestore:database"
+	KindBucket     Kind = "storage:bucket"
+	KindKeyRing    Kind = "kms:keyring"
+	KindKey        Kind = "kms:key"
+	KindSecret     Kind = "secretmanager:secret"
+	KindRepository Kind = "artifactregistry:repository"
 )
 
 const StampObject = "ocel/bootstrap.json"
+
+const keptImages = 20
 
 var BootstrapAPIs = []string{
 	"firestore.googleapis.com",
@@ -38,8 +42,10 @@ type item struct {
 
 func (i item) ID() string { return string(i.Kind) + "/" + i.Name }
 
-func stackItems(names Names, class providerkit.Class) []item {
-	return []item{
+func stands(kind Kind, emulated bool) bool { return !emulated || kind != KindRepository }
+
+func stackItems(names Names, class providerkit.Class, emulated bool) []item {
+	items := []item{
 		{
 			Kind: KindDatabase, Name: names.Database(), Shared: true, Slow: true,
 			Note: "every record this project holds, and both classes keep theirs in it",
@@ -60,7 +66,12 @@ func stackItems(names Names, class providerkit.Class) []item {
 			Kind: KindKey, Name: string(class),
 			Note: "the key every value this class holds is sealed under",
 		},
+		{
+			Kind: KindRepository, Name: names.Repository(class),
+			Note: "the images this class runs, kept to the last " + strconv.Itoa(keptImages) + " untagged versions",
+		},
 	}
+	return slices.DeleteFunc(items, func(held item) bool { return !stands(held.Kind, emulated) })
 }
 
 func parameterItems(names Names, class providerkit.Class) []item {
@@ -70,8 +81,8 @@ func parameterItems(names Names, class providerkit.Class) []item {
 	}}
 }
 
-func bootstrapItems(names Names, class providerkit.Class) []item {
-	return slices.Concat(stackItems(names, class), parameterItems(names, class))
+func bootstrapItems(names Names, class providerkit.Class, emulated bool) []item {
+	return slices.Concat(stackItems(names, class, emulated), parameterItems(names, class))
 }
 
 func digestOf(namespace providerkit.Namespace, items []item) string {

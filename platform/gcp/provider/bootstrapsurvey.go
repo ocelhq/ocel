@@ -73,7 +73,7 @@ func (b bootstrapper) survey(ctx context.Context, class providerkit.Class) (surv
 		standing: map[string]bool{},
 		mending:  map[string]string{},
 	}
-	for _, item := range bootstrapItems(read.Names, class) {
+	for _, item := range bootstrapItems(read.Names, class, read.Emulated) {
 		stands, err := b.stands(ctx, item)
 		if err != nil {
 			return survey{}, err
@@ -175,6 +175,8 @@ func (b bootstrapper) stands(ctx context.Context, held item) (standing, error) {
 		return stood(b.keyStands(ctx, held.Name))
 	case KindSecret:
 		return stood(b.secretStands(ctx, held.Name))
+	case KindRepository:
+		return stood(b.repositoryStands(ctx, held.Name))
 	}
 	return standing{}, providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing surveys a %s", held.Kind)
 }
@@ -299,6 +301,29 @@ func (b bootstrapper) passphraseHeld(ctx context.Context, name string) (bool, er
 		return false, fmt.Errorf("read whether the %s secret holds a passphrase: %w", name, err)
 	}
 	return held.State == enabledVersion, nil
+}
+
+func (b bootstrapper) repositoryStands(ctx context.Context, name string) (bool, error) {
+	service, err := b.clients.Repositories()
+	if err != nil {
+		return false, err
+	}
+	_, err = attempted(ctx, service.Projects.Locations.Repositories.Get(repositoryPath(b.clients, name)).Context(ctx).Do)
+	if absent(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read the %s image repository: %w", name, err)
+	}
+	return true, nil
+}
+
+func repositoryParent(c *clients) string {
+	return fmt.Sprintf("projects/%s/locations/%s", c.project, c.region)
+}
+
+func repositoryPath(c *clients, name string) string {
+	return repositoryParent(c) + "/repositories/" + name
 }
 
 func secretPath(project, name string) string {

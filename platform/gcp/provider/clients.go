@@ -10,6 +10,7 @@ import (
 	kms "cloud.google.com/go/kms/apiv1"
 	"cloud.google.com/go/storage"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/artifactregistry/v1"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 	"google.golang.org/api/secretmanager/v1"
@@ -40,6 +41,7 @@ type clients struct {
 	databases memo[*firestoreadmin.Service]
 	secrets   memo[*secretmanager.Service]
 	services  memo[*serviceusage.Service]
+	images    memo[*artifactregistry.Service]
 	projects  memo[*cloudresourcemanager.Service]
 }
 
@@ -100,6 +102,12 @@ func (c *clients) Secrets() (*secretmanager.Service, error) {
 func (c *clients) Services() (*serviceusage.Service, error) {
 	return opened(c, &c.services, "Service Usage", func() (*serviceusage.Service, error) {
 		return serviceusage.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+	})
+}
+
+func (c *clients) Repositories() (*artifactregistry.Service, error) {
+	return opened(c, &c.images, "Artifact Registry", func() (*artifactregistry.Service, error) {
+		return artifactregistry.NewService(context.Background(), EmulatorREST(c.endpoint)...)
 	})
 }
 
