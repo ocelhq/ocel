@@ -190,9 +190,13 @@ func TestAThrottledTokenEndpointIsRetriedAndThenSaidToBeBusy(t *testing.T) {
 		}
 	})
 
-	for name, status := range map[string]int{
-		"throttled throughout": http.StatusTooManyRequests,
-		"broken throughout":    http.StatusInternalServerError,
+	for name, answer := range map[string]struct {
+		status  int
+		retried bool
+	}{
+		"throttled throughout":   {status: http.StatusTooManyRequests, retried: true},
+		"unavailable throughout": {status: http.StatusServiceUnavailable, retried: true},
+		"broken throughout":      {status: http.StatusInternalServerError},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -200,7 +204,7 @@ func TestAThrottledTokenEndpointIsRetriedAndThenSaidToBeBusy(t *testing.T) {
 			var asked atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				asked.Add(1)
-				w.WriteHeader(status)
+				w.WriteHeader(answer.status)
 			}))
 			t.Cleanup(server.Close)
 
@@ -213,8 +217,12 @@ func TestAThrottledTokenEndpointIsRetriedAndThenSaidToBeBusy(t *testing.T) {
 			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
 				t.Fatalf("Whoami() = %v, want a %s refusal: the credential is good, the endpoint is not", err, providerkit.CodeBusy)
 			}
-			if got := asked.Load(); got < 2 {
-				t.Errorf("the token endpoint was asked %d time(s), want a bounded retry before the refusal", got)
+			want := int32(1)
+			if answer.retried {
+				want = 2
+			}
+			if got := asked.Load(); got < want {
+				t.Errorf("the token endpoint was asked %d time(s), want at least %d before the refusal", got, want)
 			}
 		})
 	}
