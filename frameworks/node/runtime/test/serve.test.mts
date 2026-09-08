@@ -45,13 +45,7 @@ function freePort(): Promise<number> {
   });
 }
 
-async function serve(handler: string): Promise<number> {
-  const port = await freePort();
-  const child = spawn(process.execPath, [serveBundle], {
-    env: { ...process.env, OCEL_HANDLER: handler, PORT: String(port) },
-    stdio: ["ignore", "inherit", "inherit"],
-  });
-  children.push(child);
+async function reachable(port: number): Promise<number> {
   for (let attempt = 0; attempt < 200; attempt++) {
     try {
       await fetch(`http://127.0.0.1:${port}/ping`);
@@ -61,6 +55,21 @@ async function serve(handler: string): Promise<number> {
     }
   }
   throw new Error(`nothing answered on port ${port}`);
+}
+
+function start(handler: string, port: number, stdio: "inherit" | "pipe"): ChildProcess {
+  const child = spawn(process.execPath, [serveBundle], {
+    env: { ...process.env, OCEL_HANDLER: handler, PORT: String(port) },
+    stdio: ["ignore", stdio, stdio],
+  });
+  children.push(child);
+  return child;
+}
+
+async function serve(handler: string): Promise<number> {
+  const port = await freePort();
+  start(handler, port, "inherit");
+  return reachable(port);
 }
 
 async function handlerFile(body: string): Promise<string> {
@@ -131,4 +140,36 @@ test("refuses to boot without the port to serve on", async () => {
 
   expect(failed.code).toBe(1);
   expect(failed.stderr).toContain("PORT");
+});
+
+test("refuses to boot without the handler to serve", async () => {
+  const failed = await execFileAsync(process.execPath, [serveBundle], {
+    env: { ...process.env, OCEL_HANDLER: "", PORT: String(await freePort()) },
+  }).catch((err) => err);
+
+  expect(failed.code).toBe(1);
+  expect(failed.stderr).toContain("OCEL_HANDLER");
+});
+
+test("stops on SIGTERM where no control socket holds the other end", async () => {
+  const handler = await handlerFile(`export default (req, res) => res.end("ok");
+`);
+  const port = await freePort();
+  const child = start(handler, port, "pipe");
+  let output = "";
+  child.stdout?.on("data", (chunk) => {
+    output += chunk;
+  });
+  child.stderr?.on("data", (chunk) => {
+    output += chunk;
+  });
+  await reachable(port);
+
+  const stopped = new Promise<NodeJS.Signals | null>((done) =>
+    child.once("exit", (_code, signal) => done(signal)),
+  );
+  child.kill("SIGTERM");
+
+  expect(await stopped).toBe("SIGTERM");
+  expect(output).toBe("");
 });

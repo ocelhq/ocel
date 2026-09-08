@@ -16,10 +16,21 @@ function bind(env: NodeJS.ProcessEnv): Bind {
   return { host: everyNetwork, port };
 }
 
+function handler(env: NodeJS.ProcessEnv): string {
+  const declared = env.OCEL_HANDLER;
+  if (!declared) {
+    throw new Error(
+      "ocel: nothing set OCEL_HANDLER, so there is no function for this runtime to serve",
+    );
+  }
+  return declared;
+}
+
 async function boot(): Promise<void> {
   const address = bind(process.env);
+  const entrypoint = handler(process.env);
   await awaitLiveValues();
-  const loaded = await loadUserApp(process.env.OCEL_HANDLER!);
+  const loaded = await loadUserApp(entrypoint);
   if (loaded.kind === "server") {
     await serveServer(loaded.value, undefined, address);
   } else {
