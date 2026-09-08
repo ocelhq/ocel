@@ -26,12 +26,11 @@ export default defineConfig({
 });
 ```
 
-Default: `infra` next to the config file, plus an `infra` folder inside each app's
-`path`. Setting `discovery.paths` replaces both.
+Default: `infra` next to the config file. Setting `discovery.paths` replaces it.
 
 A path is relative to the config file and may be a glob. It names a folder, and every
 source file under that folder runs during discovery.
 
-Each folder's language is the one the nearest manifest names, searching from the folder
-up to the config file: `Cargo.toml` is rust, `go.mod` is go, `pyproject.toml` or
-`requirements.txt` is python, and anything else is js.
+Each folder's language is the one the source files in it are written in, not the one a
+manifest names: `.go` is go, `.py` is python, `.rs` is rust, and `.ts`, `.tsx`, `.js`,
+`.jsx`, `.mjs` or `.cjs` is js. A folder holding two of them is an error.
