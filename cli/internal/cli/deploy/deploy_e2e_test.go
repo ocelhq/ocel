@@ -95,9 +95,9 @@ func setUpRealProviderExpressFixture(t *testing.T) (root, binPath, funcLogicalNa
 
 	repoRoot := requireRealProviderEnv(t)
 
-	fixtureDir := filepath.Join(repoRoot, "tests", "fixtures", "sdk", "express")
+	fixtureDir := filepath.Join(repoRoot, "tests", "fixtures", "sdk", "node")
 	if _, err := os.Stat(filepath.Join(fixtureDir, "node_modules")); err != nil {
-		t.Skipf("tests/fixtures/sdk/express is not installed (missing %s); run `pnpm install` first", filepath.Join(fixtureDir, "node_modules"))
+		t.Skipf("tests/fixtures/sdk/node is not installed (missing %s); run `pnpm install` first", filepath.Join(fixtureDir, "node_modules"))
 	}
 
 	root = t.TempDir()
@@ -116,7 +116,7 @@ export default {
 };
 `, appName, filepath.ToSlash(appPath)))
 
-	resourceModule, err := filepath.Rel(filepath.Join(root, "infra"), filepath.Join(fixtureDir, "ocel", "index"))
+	resourceModule, err := filepath.Rel(filepath.Join(root, "infra"), filepath.Join(fixtureDir, "infra", "index"))
 	if err != nil {
 		t.Fatalf("compute resource module path: %v", err)
 	}
