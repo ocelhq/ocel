@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -290,6 +291,46 @@ func TestFunctionImageTellsTheMembraneWhichHandlerToServe(t *testing.T) {
 	want := "OCEL_HANDLER=" + providerkit.FunctionImageRoot + "/index.mjs"
 	if !slices.Contains(config.Env, want) {
 		t.Errorf("the image carries env %v and never %s, so the membrane has no handler to serve", config.Env, want)
+	}
+}
+
+func TestFunctionImageRefusesAnOverlayThatWritesOutsideTheFunctionAndItsMembrane(t *testing.T) {
+	dir := stagedFunc(t, map[string]string{
+		"index.mjs":   "export default () => {}",
+		"config.json": functionConfig(t, nil),
+	})
+
+	for _, rel := range []string{"/etc/passwd", "../../../etc/passwd", "/ocel/membranes/entrypoint.mjs"} {
+		_, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir,
+			map[string][]byte{rel: []byte("root::0:0::/:/bin/sh")})
+		if err == nil {
+			t.Fatalf("FunctionImage() carried an overlay at %s, want it refused: a function's image may not write over the base image it is built on", rel)
+		}
+		if !strings.Contains(err.Error(), rel) {
+			t.Errorf("FunctionImage() = %v, want it to name %s as the path it refuses", err, rel)
+		}
+	}
+}
+
+func TestFunctionImageCarriesAnOverlayAlongsideTheMembraneItBootsFrom(t *testing.T) {
+	dir := stagedFunc(t, map[string]string{
+		"index.mjs":   "export default () => {}",
+		"config.json": functionConfig(t, nil),
+	})
+	beside := path.Join(path.Dir(providerkit.NodeMembranePath), "lib/shim.mjs")
+
+	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir,
+		map[string][]byte{beside: []byte("export const shim = 1")})
+	if err != nil {
+		t.Fatalf("FunctionImage() error = %v, want the membrane's own directory carried: it is the one place outside the function's tree the image is built to hold", err)
+	}
+
+	layers, err := image.Layers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if held := tarNames(t, layers[0]); !slices.Contains(held, strings.TrimPrefix(beside, "/")) {
+		t.Errorf("the layer holds %v and nothing at %s", held, beside)
 	}
 }
 

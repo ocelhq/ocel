@@ -70,7 +70,9 @@ func functionStaging(dir string) (FunctionConfig, error) {
 	return staged, nil
 }
 
-const NodeMembranePath = "/ocel/membrane/entrypoint.mjs"
+const NodeMembraneRoot = "/ocel/membrane"
+
+const NodeMembranePath = NodeMembraneRoot + "/entrypoint.mjs"
 
 const HandlerName = "OCEL_HANDLER"
 
@@ -115,6 +117,9 @@ func functionLayer(dir string, rels []string, overlay map[string][]byte) ([]byte
 		}
 	}
 	for _, rel := range overlayFiles(overlay) {
+		if err := refuseStrayOverlay(rel); err != nil {
+			return nil, err
+		}
 		if err := tarBody(archive, rel, overlay[rel], 0o644); err != nil {
 			return nil, err
 		}
@@ -163,6 +168,18 @@ func tarBody(archive *tar.Writer, rel string, body []byte, mode int64) error {
 	}
 	_, err := archive.Write(body)
 	return err
+}
+
+func refuseStrayOverlay(rel string) error {
+	full := "/" + imagePath(rel)
+	for _, root := range []string{FunctionImageRoot, NodeMembraneRoot} {
+		if strings.HasPrefix(full, root+"/") {
+			return nil
+		}
+	}
+	return Refuse(CodeInvalid,
+		"a function's image was handed %s to carry, and it lands at %s, outside both %s, which holds the function's own tree, and %s, which holds the membrane it boots through: an image ocel builds writes nowhere else in the base it is built on",
+		rel, full, FunctionImageRoot, NodeMembraneRoot)
 }
 
 func imagePath(rel string) string {
