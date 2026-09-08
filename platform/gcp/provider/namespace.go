@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -15,6 +16,8 @@ const (
 	maxBucketName = 63
 	minDatabaseID = 4
 )
+
+var uuidLike = regexp.MustCompile(`[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}`)
 
 type Names struct {
 	namespace providerkit.Namespace
@@ -61,6 +64,12 @@ func (n Names) fit() error {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"the %q Firestore database this bootstrap names ends in a dash, and a Firestore database id ends in a letter or a digit.\n"+
 				"Name a namespace in %s that ends in one",
+			n.Database(), providerkit.NamespaceEnvVar)
+	}
+	if uuidLike.MatchString(n.Database()) {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"the %q Firestore database this bootstrap names reads as a UUID, and a Firestore database id may not.\n"+
+				"Name a namespace in %s that does not",
 			n.Database(), providerkit.NamespaceEnvVar)
 	}
 	return nil
