@@ -473,3 +473,63 @@ func assertViewerCertificate(t *testing.T, what string, config *cftypes.Distribu
 		t.Errorf("%s names an ACM certificate and no MinimumProtocolVersion, and CloudFront insists on one", what)
 	}
 }
+
+func storeless(t *testing.T, e *provider, stack edge.EdgeStack) edge.EdgeStack {
+	t.Helper()
+	held := stack.State()
+	held.Adapter = edge.Private{}
+	reopened, err := e.Open(held)
+	if err != nil {
+		t.Fatalf("Open a state that names no store: %v", err)
+	}
+	return reopened
+}
+
+func TestUnbindDomainOnAStateThatNamesNoStoreTakesTheRouteFromTheStandingBootstrap(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	e := bootstrapped(t, w)
+	stack, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	bound(t, stack)
+	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	arn := ownState(t, stack).KeyValueStore
+
+	if err := storeless(t, e, stack).UnbindDomain(context.Background(), boundHost); err != nil {
+		t.Fatalf("UnbindDomain on a state that names no store: %v", err)
+	}
+
+	if _, held := w.store.held(arn)[boundHost]; held {
+		t.Errorf("%q still answers on the edge, want its route withdrawn: the store the bootstrap stands up is the one to reach for when the record names none", boundHost)
+	}
+}
+
+func TestARemovalRunsThroughWhenTheBootstrapItWasFrontedByIsGone(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	e := bootstrapped(t, w)
+	stack, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	bound(t, stack)
+	orphaned := storeless(t, e, stack)
+	w.cfn.absent = true
+
+	if err := orphaned.UnbindDomain(context.Background(), boundHost); err != nil {
+		t.Errorf("UnbindDomain with no bootstrap standing = %v, want the hostname let go: there is no store left to withdraw it from", err)
+	}
+	if _, err := orphaned.RemovePointer(context.Background(), "", edge.DiscardReporter()); err != nil {
+		t.Errorf("RemovePointer with no bootstrap standing = %v, want no complaint: there is no ledger left to read", err)
+	}
+	if err := orphaned.Destroy(context.Background()); err != nil {
+		t.Errorf("Destroy with no bootstrap standing = %v, want the stack given up: nothing it owned outlives the bootstrap", err)
+	}
+}

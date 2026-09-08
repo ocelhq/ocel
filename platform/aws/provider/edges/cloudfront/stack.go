@@ -61,6 +61,34 @@ func (s *stack) plan() distributionPlan {
 	}
 }
 
+func (s *stack) provisioned() bool {
+	return s.own.StateTable != "" && s.own.KeyValueStore != ""
+}
+
+func (s *stack) clients(ctx context.Context) (Clients, error) {
+	c, err := s.p.clientsFor(ctx)
+	if err != nil || s.provisioned() {
+		return c, err
+	}
+	deployed, err := s.p.bootstrap(ctx, c, s.class())
+	if err != nil || !deployed.Present {
+		return c, err
+	}
+	set, err := edgeSetOf(deployed, s.class())
+	if err != nil {
+		return c, nil
+	}
+	s.own.StateTable = deployed.StateTable
+	s.own.AssetBucket = deployed.AssetBucket
+	s.own.Region = c.Region
+	s.own.Function = set.functionARN
+	s.own.KeyValueStore = set.keyValueStoreARN
+	s.own.CachePolicy = set.cachePolicy
+	s.own.HeadersPolicy = set.headersPolicy
+	s.own.OriginAccessControl = set.originAccessControl
+	return c, nil
+}
+
 func (s *stack) ledger(c Clients) *kitledger.Ledger {
 	return awsports.Ledger(c.Dynamo, awsports.Table(s.own.StateTable), s.class(), s.slug())
 }
@@ -74,7 +102,7 @@ type lazyLedger struct{ s *stack }
 var _ edge.Ledger = (*lazyLedger)(nil)
 
 func (l *lazyLedger) resolve(ctx context.Context) (*kitledger.Ledger, error) {
-	c, err := l.s.p.clientsFor(ctx)
+	c, err := l.s.clients(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +196,7 @@ func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string)
 }
 
 func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
-	c, err := s.p.clientsFor(ctx)
+	c, err := s.clients(ctx)
 	if err != nil {
 		return err
 	}
@@ -237,7 +265,7 @@ func (s *stack) previewHost(pointer string) string {
 }
 
 func (s *stack) unroutePreviews(ctx context.Context, c Clients) error {
-	if !s.previewSite().Serves() {
+	if !s.provisioned() || !s.previewSite().Serves() {
 		return nil
 	}
 	pointers, err := s.ledger(c).Pointers(ctx)
@@ -316,9 +344,12 @@ func (s *stack) originSecret(ctx context.Context, c Clients) (string, error) {
 }
 
 func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
-	c, err := s.p.clientsFor(ctx)
+	c, err := s.clients(ctx)
 	if err != nil {
 		return edge.PruneResult{}, err
+	}
+	if !s.provisioned() {
+		return edge.PruneResult{}, nil
 	}
 	if host := s.previewHost(pointer); host != "" {
 		if err := s.routes(c).apply(ctx, nil, []string{host}); err != nil {
@@ -329,7 +360,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Report
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
-	c, err := s.p.clientsFor(ctx)
+	c, err := s.clients(ctx)
 	if err != nil {
 		return err
 	}
@@ -345,12 +376,14 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 }
 
 func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
-	c, err := s.p.clientsFor(ctx)
+	c, err := s.clients(ctx)
 	if err != nil {
 		return err
 	}
-	if err := s.routes(c).apply(ctx, nil, []string{hostname}); err != nil {
-		return err
+	if s.provisioned() {
+		if err := s.routes(c).apply(ctx, nil, []string{hostname}); err != nil {
+			return err
+		}
 	}
 	if id := s.own.Distribution; id != "" {
 		if err := dropAlias(ctx, c, s.plan(), id, hostname); err != nil {
@@ -361,8 +394,15 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	return nil
 }
 
+func (s *stack) forgetInvalidationTarget(ctx context.Context, c Clients, distribution string) error {
+	if !s.provisioned() {
+		return nil
+	}
+	return s.ledger(c).ForgetInvalidationTarget(ctx, distribution)
+}
+
 func (s *stack) Destroy(ctx context.Context) error {
-	c, err := s.p.clientsFor(ctx)
+	c, err := s.clients(ctx)
 	if err != nil {
 		return err
 	}
@@ -387,13 +427,13 @@ func (s *stack) Destroy(ctx context.Context) error {
 			if err := s.p.deleteDistribution(ctx, c, kindDistribution, held.id); err != nil {
 				errs = append(errs, err)
 				gone = false
-			} else if err := s.ledger(c).ForgetInvalidationTarget(ctx, held.id); err != nil {
+			} else if err := s.forgetInvalidationTarget(ctx, c, held.id); err != nil {
 				errs = append(errs, err)
 			}
 		}
 	}
 	s.own.Distribution, s.state.Front = "", ""
-	if unrouted == nil && gone {
+	if unrouted == nil && gone && s.provisioned() {
 		if err := s.ledger(c).Destroy(ctx); err != nil {
 			errs = append(errs, err)
 		}
