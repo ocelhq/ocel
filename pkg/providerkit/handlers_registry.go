@@ -27,6 +27,10 @@ func (h *handlers) ResolveImageRegistry(ctx context.Context, req *contractv1.Res
 	if err != nil {
 		return nil, RefusalError(err)
 	}
+	if target == (RegistryTarget{}) {
+		return nil, connect.NewError(connect.CodeUnimplemented,
+			errors.New("this provider hosts no image registry for this deploy, so images stay where the build left them"))
+	}
 	if target.Server == "" {
 		return nil, connect.NewError(connect.CodeInternal,
 			errors.New("the provider answered an image registry with no server, which names nowhere to push to"))
