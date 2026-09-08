@@ -214,23 +214,25 @@ func TestLiveRemovingAPrefixLeavesEveryStoreItDoesNotName(t *testing.T) {
 	}
 }
 
-func TestLiveRemovingNoPrefixRemovesNothing(t *testing.T) {
-	provider := live(t)
+func TestLiveRemovingNoPrefixIsRefusedRatherThanSweepingTheBucket(t *testing.T) {
+	held := live(t)
 	bucketsStanding(t)
 
 	ctx := context.Background()
-	artifacts := provider.Artifacts()
+	artifacts := held.Artifacts()
 	ref := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
 	if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte("a build artifact"))); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := artifacts.RemovePrefix(ctx, providerkit.ClassProduction, "", nil); err != nil {
-		t.Fatalf("RemovePrefix(\"\") = %v, want nothing done and nothing said", err)
+	var refusal providerkit.Refusal
+	err := artifacts.RemovePrefix(ctx, providerkit.ClassProduction, "", nil)
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("RemovePrefix(\"\") = %v, want an %s refusal: an empty prefix names every artifact the class keeps", err, providerkit.CodeInvalid)
 	}
-	held, err := artifacts.Has(ctx, ref)
-	if err != nil || !held {
-		t.Fatalf("Has() after RemovePrefix(\"\") = %v, %v, want an empty prefix to name nothing rather than everything", held, err)
+	stored, err := artifacts.Has(ctx, ref)
+	if err != nil || !stored {
+		t.Fatalf("Has() after RemovePrefix(\"\") = %v, %v, want the artifact left where it was", stored, err)
 	}
 }
 
