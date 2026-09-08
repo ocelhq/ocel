@@ -14,16 +14,15 @@ import (
 	"testing"
 )
 
-func pythonFixture(t *testing.T, manifest string) string {
+func pythonFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	write(t, filepath.Join(root, manifest), "")
 	write(t, filepath.Join(root, "infra", "__init__.py"), "")
 	return root
 }
 
 func TestThePythonLauncherRunsAScriptThatImportsTheInfraPackage(t *testing.T) {
-	configDir := pythonFixture(t, "requirements.txt")
+	configDir := pythonFixture(t)
 	root := Root{Dir: filepath.Join(configDir, "infra"), Language: Python}
 
 	cmd, err := launchers[Python].Command(context.Background(), configDir, root, "http://127.0.0.1:1234")
