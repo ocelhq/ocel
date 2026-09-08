@@ -308,6 +308,17 @@ func (b bootstrapper) makeKey(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("give the %s key a version to seal under again: %w", name, err)
 	}
+	if _, err := until(ctx, fmt.Sprintf("the material the %s key seals under", name),
+		func() (*kmspb.CryptoKeyVersion, error) {
+			return dialled(ctx, func() (*kmspb.CryptoKeyVersion, error) {
+				return client.GetCryptoKeyVersion(ctx, &kmspb.GetCryptoKeyVersionRequest{Name: minted.GetName()})
+			})
+		},
+		func(version *kmspb.CryptoKeyVersion) bool {
+			return version.GetState() == kmspb.CryptoKeyVersion_ENABLED
+		}); err != nil {
+		return err
+	}
 	if _, err := dialled(ctx, func() (*kmspb.CryptoKey, error) {
 		return client.UpdateCryptoKeyPrimaryVersion(ctx, &kmspb.UpdateCryptoKeyPrimaryVersionRequest{
 			Name:               keyPath(b.clients, name),
