@@ -475,6 +475,8 @@ message PreflightResponse {
 
 message ResolveImageRegistryRequest {
   repeated string repositories = 1 [(buf.validate.field).repeated = {min_items: 1, items: {string: {pattern: "^[a-z0-9]+([._-][a-z0-9]+)*$", max_len: 255}}}];
+
+  common.environment.v1.Tier tier = 2 [(buf.validate.field).enum.defined_only = true];
 }
 
 message ResolveImageRegistryResponse {

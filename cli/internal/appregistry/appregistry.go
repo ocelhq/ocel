@@ -7,10 +7,10 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/cli/internal/appimages"
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/naming"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -20,9 +20,8 @@ type Host interface {
 }
 
 func repositories(cfg *projectconfig.Config) ([]string, error) {
-	apps := appimages.Apps(cfg)
-	repositories := make([]string, 0, len(apps))
-	for _, app := range apps {
+	repositories := make([]string, 0, len(cfg.Apps))
+	for _, app := range cfg.Apps {
 		repository, err := imagebuild.Repository(cfg.Slug, app.Name)
 		if err != nil {
 			return nil, err
@@ -33,14 +32,14 @@ func repositories(cfg *projectconfig.Config) ([]string, error) {
 }
 
 func RequireSecret(cfg *projectconfig.Config) error {
-	if cfg.Registry == nil || len(appimages.Apps(cfg)) == 0 {
+	if cfg.Registry == nil || len(cfg.Apps) == 0 {
 		return nil
 	}
 	_, err := secret(cfg.Registry)
 	return err
 }
 
-func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host) (providerkit.RegistryTarget, bool, error) {
+func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host, tier environmentv1.Tier) (providerkit.RegistryTarget, bool, error) {
 	if cfg.Registry != nil {
 		password, err := secret(cfg.Registry)
 		if err != nil {
@@ -60,7 +59,7 @@ func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host) (provide
 	if len(pushing) == 0 {
 		return providerkit.RegistryTarget{}, false, nil
 	}
-	resp, err := host.ResolveImageRegistry(ctx, &contractv1.ResolveImageRegistryRequest{Repositories: pushing})
+	resp, err := host.ResolveImageRegistry(ctx, &contractv1.ResolveImageRegistryRequest{Repositories: pushing, Tier: tier})
 	if connect.CodeOf(err) == connect.CodeUnimplemented {
 		return providerkit.RegistryTarget{}, false, nil
 	}

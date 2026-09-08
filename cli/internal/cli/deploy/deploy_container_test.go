@@ -211,7 +211,7 @@ func TestADeployThatNamesNoRegistryCarriesNone(t *testing.T) {
 	}
 }
 
-func TestAServerlessOnlyDeployAsksForNoRegistryAtAll(t *testing.T) {
+func TestAServerlessOnlyDeployStillCarriesTheRegistryItsFunctionsMayBeRunFrom(t *testing.T) {
 	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
@@ -234,7 +234,8 @@ export default {
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	if strings.Contains(stdout.String(), "REGISTRY ") {
-		t.Errorf("stdout = %q, want a deploy that pushes no image to carry no registry token across the boundary", stdout.String())
+	want := "REGISTRY server=ghcr.io"
+	if !strings.Contains(stdout.String(), want) {
+		t.Errorf("stdout = %q, want %q — a provider that runs its functions from images pushes them somewhere too", stdout.String(), want)
 	}
 }

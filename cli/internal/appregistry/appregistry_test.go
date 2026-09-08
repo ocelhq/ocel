@@ -10,12 +10,14 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 type provider struct {
 	mu     sync.Mutex
 	asked  [][]string
+	asking []environmentv1.Tier
 	answer *contractv1.ResolveImageRegistryResponse
 	err    error
 }
@@ -24,10 +26,17 @@ func (p *provider) ResolveImageRegistry(_ context.Context, req *contractv1.Resol
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.asked = append(p.asked, req.GetRepositories())
+	p.asking = append(p.asking, req.GetTier())
 	if p.err != nil {
 		return nil, p.err
 	}
 	return p.answer, nil
+}
+
+func (p *provider) tiers() []environmentv1.Tier {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.asking
 }
 
 func (p *provider) calls() [][]string {
@@ -64,7 +73,7 @@ func TestAProjectRegistryIsUsedWithoutAskingTheProvider(t *testing.T) {
 
 	target, named, err := Resolve(context.Background(), project(&projectconfig.Registry{
 		Server: "ghcr.io", Username: "acme-bot", Password: "GHCR_TOKEN",
-	}), native)
+	}), native, environmentv1.Tier_TIER_PRODUCTION)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -85,7 +94,7 @@ func TestAProjectRegistryCarriesTheNamespaceItsImagesLandUnder(t *testing.T) {
 
 	target, _, err := Resolve(context.Background(), project(&projectconfig.Registry{
 		Server: "ghcr.io", Namespace: "acme", Password: "GHCR_TOKEN",
-	}), hosting())
+	}), hosting(), environmentv1.Tier_TIER_PRODUCTION)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -100,7 +109,7 @@ func TestAProviderNativeRegistryIsUsedWhenTheProjectNamesNone(t *testing.T) {
 	cfg := project(nil)
 	cfg.Apps = append(cfg.Apps, projectconfig.App{Name: "api", Path: "services/api", Compute: "container"})
 
-	target, named, err := Resolve(context.Background(), cfg, native)
+	target, named, err := Resolve(context.Background(), cfg, native, environmentv1.Tier_TIER_PRODUCTION)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -118,7 +127,7 @@ func TestAProviderNativeRegistryIsUsedWhenTheProjectNamesNone(t *testing.T) {
 }
 
 func TestAProviderThatHostsNoRegistryLeavesTheDeployWithNone(t *testing.T) {
-	target, named, err := Resolve(context.Background(), project(nil), hostless())
+	target, named, err := Resolve(context.Background(), project(nil), hostless(), environmentv1.Tier_TIER_PRODUCTION)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v, want an unimplemented resolve read as no registry", err)
 	}
@@ -130,17 +139,17 @@ func TestAProviderThatHostsNoRegistryLeavesTheDeployWithNone(t *testing.T) {
 func TestAProviderThatFailsTheResolveFailsTheDeploy(t *testing.T) {
 	broken := &provider{err: connect.NewError(connect.CodeInternal, errors.New("the repository could not be created"))}
 
-	if _, _, err := Resolve(context.Background(), project(nil), broken); err == nil {
+	if _, _, err := Resolve(context.Background(), project(nil), broken, environmentv1.Tier_TIER_PRODUCTION); err == nil {
 		t.Fatal("Resolve() swallowed a provider that failed to answer, want the deploy stopped")
 	}
 }
 
-func TestAProjectPushingNoImageAsksTheProviderForNoRegistry(t *testing.T) {
+func TestAProjectWithNoAppAsksTheProviderForNoRegistry(t *testing.T) {
 	native := hosting()
 	cfg := project(nil)
-	cfg.Apps = []projectconfig.App{{Name: "api", Compute: "serverless"}}
+	cfg.Apps = nil
 
-	target, named, err := Resolve(context.Background(), cfg, native)
+	target, named, err := Resolve(context.Background(), cfg, native, environmentv1.Tier_TIER_PRODUCTION)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v, want a deploy that pushes nothing to want no registry", err)
 	}
@@ -149,6 +158,34 @@ func TestAProjectPushingNoImageAsksTheProviderForNoRegistry(t *testing.T) {
 	}
 	if calls := native.calls(); len(calls) != 0 {
 		t.Errorf("the provider was asked %v to resolve a registry for no repository at all", calls)
+	}
+}
+
+func TestAServerlessAppStillAsksTheProviderWhereItsImagesGo(t *testing.T) {
+	native := hosting()
+	cfg := project(nil)
+	cfg.Apps = []projectconfig.App{{Name: "api", Compute: "serverless"}}
+
+	_, named, err := Resolve(context.Background(), cfg, native, environmentv1.Tier_TIER_PRODUCTION)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if !named {
+		t.Error("Resolve() found no registry, and a provider that runs its functions from images pushes them somewhere")
+	}
+	if calls := native.calls(); len(calls) != 1 {
+		t.Errorf("the provider was asked %v times, want one resolve naming the app's repository", len(calls))
+	}
+}
+
+func TestTheClassTheDeployTargetsReachesTheProvider(t *testing.T) {
+	native := hosting()
+
+	if _, _, err := Resolve(context.Background(), project(nil), native, environmentv1.Tier_TIER_PREVIEW); err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if tiers := native.tiers(); len(tiers) != 1 || tiers[0] != environmentv1.Tier_TIER_PREVIEW {
+		t.Errorf("the provider resolved a registry for %v, want the tier the deploy targets", tiers)
 	}
 }
 
@@ -175,9 +212,9 @@ func TestARegistryWhoseVariableIsEmptyIsRefusedToo(t *testing.T) {
 	}
 }
 
-func TestAProjectWithNoContainerAppIsAskedForNoSecret(t *testing.T) {
+func TestAProjectWithNoAppIsAskedForNoSecret(t *testing.T) {
 	cfg := project(&projectconfig.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
-	cfg.Apps = []projectconfig.App{{Name: "api", Compute: "serverless"}}
+	cfg.Apps = nil
 
 	if err := RequireSecret(cfg); err != nil {
 		t.Errorf("RequireSecret() = %v, want a deploy that pushes no image to demand no secret", err)
@@ -190,7 +227,7 @@ func TestAProjectWithNoRegistryIsAskedForNoSecret(t *testing.T) {
 	}
 }
 
-func TestTheRepositoriesADeployPushesAreItsContainerApps(t *testing.T) {
+func TestTheRepositoriesADeployPushesAreItsApps(t *testing.T) {
 	cfg := project(nil)
 	cfg.Apps = append(cfg.Apps,
 		projectconfig.App{Name: "api", Compute: "serverless"},
@@ -201,8 +238,8 @@ func TestTheRepositoriesADeployPushesAreItsContainerApps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repositories() error = %v", err)
 	}
-	if strings.Join(pushing, ",") != "web,worker-queue" {
-		t.Errorf("repositories() = %v, want one repository per container app and none for a serverless one", pushing)
+	if strings.Join(pushing, ",") != "web,api,worker-queue" {
+		t.Errorf("repositories() = %v, want one repository per app: a provider may run a serverless app from an image too", pushing)
 	}
 }
 
@@ -215,7 +252,7 @@ func TestThePasswordIsReadWhereTheTargetIsBuiltAndNowhereEarlier(t *testing.T) {
 	}
 
 	t.Setenv("GHCR_TOKEN", "the-one-the-push-uses")
-	target, _, err := Resolve(context.Background(), cfg, hosting())
+	target, _, err := Resolve(context.Background(), cfg, hosting(), environmentv1.Tier_TIER_PRODUCTION)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}

@@ -337,7 +337,7 @@ func (Full) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _
 	return StoodUpContainers(plan), nil
 }
 
-func (Full) ImageRegistry(context.Context, []string) (providerkit.RegistryTarget, error) {
+func (Full) ImageRegistry(context.Context, providerkit.Class, []string) (providerkit.RegistryTarget, error) {
 	return providerkit.RegistryTarget{Server: RegistryServer, Namespace: RegistryNamespace, Username: "fake", Password: "fake-token"}, nil
 }
 
