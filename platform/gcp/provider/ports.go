@@ -1,38 +1,14 @@
 package gcp
 
 import (
-	"context"
-
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func notReady(thing string) error {
-	return providerkit.Refuse(providerkit.CodeNotReady, "gcp: %s is not implemented", thing)
-}
-
 func classless(what any) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
 		"%s names no class, and this project keeps each class's state apart from the other class's", what)
-}
-
-type releaser struct{}
-
-func (releaser) Plan(context.Context, providerkit.StackPlan, providerkit.Reporter) (providerkit.Plan, error) {
-	return providerkit.Plan{}, notReady("releasing a stack")
-}
-
-func (releaser) Provision(context.Context, providerkit.StackPlan, providerkit.Reporter) (providerkit.StackResult, error) {
-	return providerkit.StackResult{}, notReady("releasing a stack")
-}
-
-func (releaser) PlanDestroy(context.Context, providerkit.StackRef, providerkit.Reporter) (providerkit.Plan, error) {
-	return providerkit.Plan{}, notReady("destroying a stack")
-}
-
-func (releaser) Destroy(context.Context, providerkit.StackRef, providerkit.Reporter) error {
-	return notReady("destroying a stack")
 }
 
 type edges struct {
@@ -73,7 +49,6 @@ func (dns) Open(kind providerkit.DNSKind, zone string) (edge.DNSWriter, error) {
 
 var (
 	_ providerkit.Bootstrapper  = bootstrapper{}
-	_ providerkit.Releaser      = releaser{}
 	_ providerkit.ArtifactStore = artifacts{}
 	_ providerkit.RecordStore   = records{}
 	_ providerkit.Sealer        = sealer{}
