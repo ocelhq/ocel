@@ -19,5 +19,6 @@ runs:
         set -euo pipefail
         chmod +x packages/native-lib/cli-linux-x64/bin/ocel
         chmod +x packages/native-lib/provider-aws-linux-x64/bin/deploy
+        chmod +x packages/native-lib/provider-gcp-linux-x64/bin/deploy
         chmod +x packages/native-lib/provider-vps-linux-x64/bin/deploy
         echo "OCEL_BIN=$GITHUB_WORKSPACE/packages/native-lib/cli-linux-x64/bin/ocel" >> "$GITHUB_ENV"
