@@ -341,6 +341,10 @@ func appLanguage(runtime projectconfig.Runtime, appDir string) discovery.Languag
 
 func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Function, compute, configName string) ([]attribution.App, error) {
 	detected := detectedApps(functions)
+	roots, err := discovery.RootsOf(cfg)
+	if err != nil {
+		return nil, err
+	}
 	apps := cfg.Apps
 	container := compute == string(providerkit.ComputeContainer)
 
@@ -357,6 +361,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 				Name:      name,
 				Path:      ".",
 				Language:  discovery.LanguageOfApp(cfg.Dir),
+				Roots:     roots,
 				Container: container,
 				Members:   workspaceMembers(container, cfg.Dir),
 			})
@@ -374,6 +379,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 			Name:      a.Name,
 			Path:      a.Path,
 			Language:  appLanguage(a.Runtime, appDir),
+			Roots:     roots,
 			Container: inAnImage,
 			Members:   workspaceMembers(inAnImage, appDir),
 		})

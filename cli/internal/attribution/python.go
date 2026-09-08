@@ -29,12 +29,8 @@ type pythonWalk struct {
 type pythonReach struct{}
 
 func (pythonReach) Entries(ctx context.Context, root string, app App) (map[string]Reachability, error) {
-	search, err := pythonSearchDirs(root)
-	if err != nil {
-		return nil, err
-	}
 	dir := filepath.Join(root, filepath.FromSlash(app.Path))
-	walked, err := walkPythonImports(ctx, app.Name, dir, search)
+	walked, err := walkPythonImports(ctx, app.Name, dir, pythonSearchDirs(app.Roots))
 	if err != nil {
 		return nil, err
 	}
@@ -65,18 +61,14 @@ func (pythonReach) Entries(ctx context.Context, root string, app App) (map[strin
 	return entries, nil
 }
 
-func pythonSearchDirs(root string) ([]string, error) {
-	roots, err := discovery.Roots(root, nil)
-	if err != nil {
-		return nil, err
-	}
+func pythonSearchDirs(roots []discovery.Root) []string {
 	var dirs []string
 	for _, r := range roots {
 		if r.Language == discovery.Python {
 			dirs = append(dirs, filepath.Dir(r.Dir))
 		}
 	}
-	return dirs, nil
+	return dirs
 }
 
 func walkPythonImports(ctx context.Context, app, dir string, search []string) (pythonWalk, error) {

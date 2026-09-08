@@ -13,16 +13,24 @@ import (
 func pythonApp(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	write(t, filepath.Join(root, "requirements.txt"), "")
 	write(t, filepath.Join(root, "infra", "__init__.py"), "db = 1\n")
 	write(t, filepath.Join(root, "server", "main.py"), "from infra import db\n\nprint(db)\n")
 	write(t, filepath.Join(root, "unused", "__init__.py"), "other = 1\n")
 	return root
 }
 
+func pythonRoots(t *testing.T, root string, paths []string) []discovery.Root {
+	t.Helper()
+	roots, err := discovery.Roots(root, paths)
+	if err != nil {
+		t.Fatalf("Roots: %v", err)
+	}
+	return roots
+}
+
 func TestPythonReachGrantsAResourceTheAppsEntryImports(t *testing.T) {
 	root := pythonApp(t)
-	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python}}, []Declaration{{
+	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "infra", "__init__.py") + ":1",
@@ -40,7 +48,7 @@ func TestPythonReachGrantsAResourceTheAppsEntryImports(t *testing.T) {
 
 func TestPythonReachGrantsNothingFromAModuleNoEntryImports(t *testing.T) {
 	root := pythonApp(t)
-	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python}}, []Declaration{{
+	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "unused", "__init__.py") + ":1",
@@ -57,7 +65,7 @@ func TestPythonReachRefusesAnImportOnlyRunningTheAppWouldResolve(t *testing.T) {
 	root := pythonApp(t)
 	write(t, filepath.Join(root, "server", "main.py"), "import importlib\n\nname = \"infra\"\nmodule = importlib.import_module(name)\n")
 
-	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python}}, []Declaration{{
+	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "infra", "__init__.py") + ":1",
@@ -77,7 +85,7 @@ func TestPythonReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 		t.Fatalf("locate the fixture: %v", err)
 	}
 
-	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python}}, []Declaration{{
+	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "infra", "__init__.py") + ":3",
@@ -90,5 +98,24 @@ func TestPythonReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 	}
 	if usages[0].App != "web" || usages[0].Name != "main" || !slices.Equal(usages[0].Files, []string{"server/main.py"}) {
 		t.Errorf("usage = %+v, want main granted to web from entry server/main.py", usages[0])
+	}
+}
+
+func TestPythonReachSearchesTheDiscoveryPathsTheProjectConfigures(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "decls", "__init__.py"), "db = 1\n")
+	write(t, filepath.Join(root, "server", "main.py"), "from decls import db\n\nprint(db)\n")
+
+	app := App{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, []string{"decls"})}
+	usages, err := Compute(t.Context(), root, []App{app}, []Declaration{{
+		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Name:   "main",
+		Source: filepath.Join(root, "decls", "__init__.py") + ":1",
+	}})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	if len(usages) != 1 || !slices.Equal(usages[0].Files, []string{"server/main.py"}) {
+		t.Fatalf("usages = %+v, want main granted to web from entry server/main.py", usages)
 	}
 }
