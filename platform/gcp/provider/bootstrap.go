@@ -173,15 +173,14 @@ func stampHolder(items []item, holder item) item {
 }
 
 func (b bootstrapper) stand(ctx context.Context, read survey, held item, report providerkit.Reporter) error {
-	emulated := read.Emulated && held.Kind == KindDatabase
-	if mends := read.mends(held); mends != "" && !emulated {
+	if mends := read.mends(held); mends != "" {
 		if err := b.mend(ctx, read, held); err != nil {
 			return err
 		}
 		say(report, "mended "+held.ID()+": "+mends)
 		return nil
 	}
-	if read.holds(held) || emulated {
+	if read.holds(held) {
 		say(report, held.ID()+": "+reasonStanding)
 		return nil
 	}
