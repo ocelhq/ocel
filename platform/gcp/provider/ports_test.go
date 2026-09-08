@@ -29,27 +29,27 @@ func TestEveryPortThisPhaseHasNotBuiltSaysSoRatherThanReadingAsDone(t *testing.T
 	}
 
 	for name, refused := range map[string]error{
-		"Bootstrapper.Plan":        second(bootstrapper.Plan(ctx, providerkit.BootstrapRequest{})),
+		"Bootstrapper.Plan":        errorOf(bootstrapper.Plan(ctx, providerkit.BootstrapRequest{})),
 		"Bootstrapper.Apply":       bootstrapper.Apply(ctx, providerkit.BootstrapRequest{}, nil),
-		"Bootstrapper.PlanRemoval": second(bootstrapper.PlanRemoval(ctx, providerkit.ClassProduction)),
+		"Bootstrapper.PlanRemoval": errorOf(bootstrapper.PlanRemoval(ctx, providerkit.ClassProduction)),
 		"Bootstrapper.Remove":      bootstrapper.Remove(ctx, providerkit.ClassProduction, nil),
 
-		"Releaser.Plan":        second(p.Releases().Plan(ctx, providerkit.StackPlan{Ref: ref}, nil)),
-		"Releaser.Provision":   second(p.Releases().Provision(ctx, providerkit.StackPlan{Ref: ref}, nil)),
-		"Releaser.PlanDestroy": second(p.Releases().PlanDestroy(ctx, ref, nil)),
+		"Releaser.Plan":        errorOf(p.Releases().Plan(ctx, providerkit.StackPlan{Ref: ref}, nil)),
+		"Releaser.Provision":   errorOf(p.Releases().Provision(ctx, providerkit.StackPlan{Ref: ref}, nil)),
+		"Releaser.PlanDestroy": errorOf(p.Releases().PlanDestroy(ctx, ref, nil)),
 		"Releaser.Destroy":     p.Releases().Destroy(ctx, ref, nil),
 
 		"ArtifactStore.Put":             p.Artifacts().Put(ctx, providerkit.ArtifactRef{}, bytes.NewReader(nil)),
-		"ArtifactStore.Has":             second(p.Artifacts().Has(ctx, providerkit.ArtifactRef{})),
-		"ArtifactStore.Open":            second(p.Artifacts().Open(ctx, providerkit.ArtifactRef{})),
+		"ArtifactStore.Has":             errorOf(p.Artifacts().Has(ctx, providerkit.ArtifactRef{})),
+		"ArtifactStore.Open":            errorOf(p.Artifacts().Open(ctx, providerkit.ArtifactRef{})),
 		"ArtifactStore.RemovePrefix":    p.Artifacts().RemovePrefix(ctx, providerkit.ClassProduction, "", nil),
-		"RecordStore.Write":             second(p.Records().Write(ctx, providerkit.Record{Name: providerkit.RecordName{"a"}})),
+		"RecordStore.Write":             errorOf(p.Records().Write(ctx, providerkit.Record{Name: providerkit.RecordName{"a"}})),
 		"RecordStore.WritePair":         p.Records().WritePair(ctx, providerkit.Record{}, providerkit.Record{}),
 		"RecordStore.Remove":            p.Records().Remove(ctx, providerkit.RecordName{"a"}, ""),
-		"Sealer.Seal":                   second(p.Sealer().Seal(ctx, providerkit.Coordinate{}, nil)),
-		"Sealer.Open":                   second(p.Sealer().Open(ctx, providerkit.Coordinate{}, nil)),
-		"Credentials.Permissions":       second(p.Credentials().Permissions(providerkit.TierBootstrap)),
-		"Credentials.PermissionsDeploy": second(p.Credentials().Permissions(providerkit.TierDeploy)),
+		"Sealer.Seal":                   errorOf(p.Sealer().Seal(ctx, providerkit.Coordinate{}, nil)),
+		"Sealer.Open":                   errorOf(p.Sealer().Open(ctx, providerkit.Coordinate{}, nil)),
+		"Credentials.Permissions":       errorOf(p.Credentials().Permissions(providerkit.TierBootstrap)),
+		"Credentials.PermissionsDeploy": errorOf(p.Credentials().Permissions(providerkit.TierDeploy)),
 	} {
 		var refusal providerkit.Refusal
 		if !errors.As(refused, &refusal) || refusal.Code != providerkit.CodeNotReady {
@@ -110,4 +110,4 @@ func TestServesNothingUntilAResourcePrimitiveExists(t *testing.T) {
 	}
 }
 
-func second[T any](_ T, err error) error { return err }
+func errorOf[T any](_ T, err error) error { return err }
