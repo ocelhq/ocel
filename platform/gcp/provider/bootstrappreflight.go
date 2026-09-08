@@ -38,6 +38,15 @@ var bootstrapPermissions = []string{
 	"secretmanager.versions.add",
 	"secretmanager.versions.get",
 	"secretmanager.versions.access",
+	"artifactregistry.repositories.create",
+	"artifactregistry.repositories.get",
+	"artifactregistry.repositories.update",
+	"artifactregistry.repositories.delete",
+	"iam.serviceAccounts.create",
+	"iam.serviceAccounts.get",
+	"iam.serviceAccounts.delete",
+	"iam.serviceAccounts.getIamPolicy",
+	"iam.serviceAccounts.setIamPolicy",
 }
 
 var bootstrapRoles = []string{
@@ -45,6 +54,32 @@ var bootstrapRoles = []string{
 	"roles/storage.admin",
 	"roles/cloudkms.admin",
 	"roles/secretmanager.admin",
+	"roles/artifactregistry.admin",
+	"roles/iam.serviceAccountAdmin",
+}
+
+var deployRoles = []string{
+	"roles/datastore.user",
+	"roles/storage.admin",
+	"roles/cloudkms.cryptoKeyEncrypterDecrypter",
+	"roles/secretmanager.secretAccessor",
+	"roles/artifactregistry.writer",
+	"roles/iam.serviceAccountUser",
+	"roles/run.developer",
+	"roles/run.admin",
+}
+
+func rolesFor(tier providerkit.CredentialTier) []string {
+	if tier != providerkit.TierBootstrap {
+		return deployRoles
+	}
+	granted := slices.Clone(deployRoles)
+	for _, role := range bootstrapRoles {
+		if !slices.Contains(granted, role) {
+			granted = append(granted, role)
+		}
+	}
+	return granted
 }
 
 func (b bootstrapper) preflight(ctx context.Context, read survey) error {

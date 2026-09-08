@@ -3,7 +3,9 @@ package gcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2/google"
@@ -134,10 +136,13 @@ func askTokenInfo(ctx context.Context, endpoint, token string) (string, int, err
 	return said.Email, resp.StatusCode, nil
 }
 
-func (Credentials) Permissions(tier providerkit.CredentialTier) (edge.CredentialDocument, error) {
+func (c Credentials) Permissions(tier providerkit.CredentialTier) (edge.CredentialDocument, error) {
 	switch tier {
 	case providerkit.TierBootstrap, providerkit.TierDeploy:
-		return edge.CredentialDocument{}, notReady("the permissions a credential needs")
+		return edge.CredentialDocument{
+			Heading:  fmt.Sprintf("the roles a %s credential is granted on project %s", tier, c.Project),
+			Document: strings.Join(rolesFor(tier), "\n"),
+		}, nil
 	default:
 		return edge.CredentialDocument{}, providerkit.Refuse(providerkit.CodeInvalid,
 			"credential permissions are rendered for the bootstrap tier or the deploy tier; this request named neither")

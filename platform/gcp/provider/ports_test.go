@@ -37,9 +37,6 @@ func TestEveryPortThisPhaseHasNotBuiltSaysSoRatherThanReadingAsDone(t *testing.T
 		"Releaser.Provision":   errorOf(p.Releases().Provision(ctx, providerkit.StackPlan{Ref: ref}, nil)),
 		"Releaser.PlanDestroy": errorOf(p.Releases().PlanDestroy(ctx, ref, nil)),
 		"Releaser.Destroy":     p.Releases().Destroy(ctx, ref, nil),
-
-		"Credentials.Permissions":       errorOf(p.Credentials().Permissions(providerkit.TierBootstrap)),
-		"Credentials.PermissionsDeploy": errorOf(p.Credentials().Permissions(providerkit.TierDeploy)),
 	} {
 		var refusal providerkit.Refusal
 		if !errors.As(refused, &refusal) || refusal.Code != providerkit.CodeNotReady {
@@ -127,3 +124,47 @@ func TestServesNothingUntilAResourcePrimitiveExists(t *testing.T) {
 }
 
 func errorOf[T any](_ T, err error) error { return err }
+
+func TestTheCredentialsPortNamesTheRolesEachTierIsGranted(t *testing.T) {
+	t.Parallel()
+
+	credentials := standing(t).Credentials()
+	for tier, named := range map[providerkit.CredentialTier][]string{
+		providerkit.TierDeploy: {
+			"roles/run.developer",
+			"roles/run.admin",
+			"roles/artifactregistry.writer",
+			"roles/iam.serviceAccountUser",
+		},
+		providerkit.TierBootstrap: {
+			"roles/run.developer",
+			"roles/artifactregistry.admin",
+			"roles/iam.serviceAccountAdmin",
+			"roles/cloudkms.admin",
+		},
+	} {
+		document, err := credentials.Permissions(tier)
+		if err != nil {
+			t.Errorf("Permissions(%s) = %v, want the roles that tier is granted", tier, err)
+			continue
+		}
+		if document.Heading == "" {
+			t.Errorf("Permissions(%s) returned a document under no heading, so nothing says what the run is looking at", tier)
+		}
+		for _, role := range named {
+			if !strings.Contains(document.Document, role) {
+				t.Errorf("Permissions(%s) does not name %s, and a credential granted what it renders would fail on the resources that role covers", tier, role)
+			}
+		}
+	}
+}
+
+func TestACredentialTierNobodyDefinedIsRefusedRatherThanRendered(t *testing.T) {
+	t.Parallel()
+
+	var refusal providerkit.Refusal
+	_, err := standing(t).Credentials().Permissions(providerkit.CredentialTier("root"))
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Permissions(root) = %v, want an %s refusal", err, providerkit.CodeInvalid)
+	}
+}
