@@ -31,7 +31,7 @@ func live(t *testing.T) *gcp.Provider {
 	if os.Getenv("OCEL_FLOCI_GCP_ENDPOINT") == "" {
 		t.Skip("no floci-gcp emulator in the environment; run under `scripts/floci.sh --cloud gcp run <name> -- go test ./...`")
 	}
-	return gcp.NewProvider(gcp.Options{Project: liveProject, Region: liveRegion})
+	return newProvider(t, gcp.Options{Project: liveProject, Region: liveRegion})
 }
 
 func TestLiveCredentials(t *testing.T) {
@@ -119,7 +119,7 @@ func TestLiveSealer(t *testing.T) {
 func TestLiveSealingWhereNoKeyRingStandsSaysWhatToRun(t *testing.T) {
 	live(t)
 
-	elsewhere := gcp.NewProvider(gcp.Options{Project: liveProject, Region: "australia-southeast2"})
+	elsewhere := newProvider(t, gcp.Options{Project: liveProject, Region: "australia-southeast2"})
 	var refusal providerkit.Refusal
 	_, err := elsewhere.Sealer().Seal(context.Background(), providerkit.Coordinate{
 		Project: "shop",
@@ -166,7 +166,7 @@ func TestLiveArtifactStore(t *testing.T) {
 func TestLiveArtifactsWhereNoBucketStandsSayWhatToRun(t *testing.T) {
 	live(t)
 
-	nowhere := gcp.NewProvider(gcp.Options{Project: "floci-nowhere", Region: liveRegion})
+	nowhere := newProvider(t, gcp.Options{Project: "floci-nowhere", Region: liveRegion})
 	ref := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "conformance/bundle.zip"}
 
 	var refusal providerkit.Refusal
