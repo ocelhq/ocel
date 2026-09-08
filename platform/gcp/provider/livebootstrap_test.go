@@ -167,10 +167,13 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 
 func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) {
 	p := live(t)
+	if !emulated() {
+		t.Skip("a second namespace stands up a second key ring, and Google never deletes one, so this runs against the emulator only")
+	}
 	class := providerkit.ClassProduction
 	here := bootstrapped(t, p, class)
 
-	t.Setenv(providerkit.NamespaceEnvVar, "beside")
+	t.Setenv(providerkit.NamespaceEnvVar, p.Names().Namespace().String()+"-beside")
 	beside := newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
 	if beside.Names().Bucket(class) == p.Names().Bucket(class) {
 		t.Fatalf("both namespaces name the bucket %s, and this test turns on them naming different ones", beside.Names().Bucket(class))
