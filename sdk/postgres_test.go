@@ -82,7 +82,7 @@ func TestVersionOverridesTheDeclaredVersion(t *testing.T) {
 	t.Setenv("OCEL_PHASE", "discovery")
 	t.Setenv("OCEL_DEV_SERVER", srv.URL)
 
-	sdk.Postgres("main", sdk.Version("16"))
+	sdk.Postgres("main", sdk.PostgresVersion("16"))
 
 	if len(seen) != 1 {
 		t.Fatalf("declares = %d, want 1", len(seen))

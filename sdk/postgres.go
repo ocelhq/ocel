@@ -20,8 +20,8 @@ const defaultPostgresVersion = "17"
 // A PostgresOption tunes the database [Postgres] declares.
 type PostgresOption func(*resourcesv1.PostgresConfig)
 
-// Version declares the major postgres version to provision, "17" by default.
-func Version(v string) PostgresOption {
+// PostgresVersion declares the major postgres version to provision, "17" by default.
+func PostgresVersion(v string) PostgresOption {
 	return func(c *resourcesv1.PostgresConfig) { c.Version = v }
 }
 
