@@ -220,7 +220,7 @@ func TestDeployRefusedByPreflightUploadsNothing(t *testing.T) {
 
 type unaddressed struct{ *fake.Provider }
 
-func (unaddressed) FunctionURLs() bool { return false }
+func (unaddressed) ServesFunctionURLs() bool { return false }
 
 func TestAFunctionCarriesItsOwnURLUnlessTheProviderSaysOtherwise(t *testing.T) {
 	builtProject(t)
