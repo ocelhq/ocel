@@ -18,7 +18,7 @@ func standing(t *testing.T) *gcp.Provider {
 
 func newProvider(t *testing.T, options gcp.Options) *gcp.Provider {
 	t.Helper()
-	p, err := gcp.NewProvider(options)
+	p, err := gcp.NewProvider(context.Background(), options)
 	if err != nil {
 		t.Fatalf("NewProvider(%+v) = %v", options, err)
 	}

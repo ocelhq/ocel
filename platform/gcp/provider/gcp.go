@@ -25,36 +25,37 @@ type Provider struct {
 	clients  *clients
 }
 
-func New(_ context.Context, options providerkit.Options) (providerkit.Provider, error) {
+func New(ctx context.Context, options providerkit.Options) (providerkit.Provider, error) {
 	decoded, err := providerkit.Decode[Options](options)
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(decoded.Project) == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"option %q names no Google Cloud project, and every name this provider reads or writes is scoped to one", "project")
-	}
-	if strings.TrimSpace(decoded.Region) == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"option %q names no region, and a project spans them all: name the one this deploy runs in", "region")
-	}
-	provider, err := NewProvider(decoded)
+	provider, err := NewProvider(ctx, decoded)
 	if err != nil {
 		return nil, err
 	}
 	return provider, nil
 }
 
-func NewProvider(options Options) (*Provider, error) {
+func NewProvider(ctx context.Context, options Options) (*Provider, error) {
+	if strings.TrimSpace(options.Region) == "" {
+		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			"option %q names no region, and a project spans them all: name the one this deploy runs in", "region")
+	}
 	endpoint, err := emulatorEndpoint()
 	if err != nil {
 		return nil, err
 	}
+	project, err := resolveProject(ctx, options.Project)
+	if err != nil {
+		return nil, err
+	}
+	options.Project = project
 	return &Provider{
 		options:  options,
 		tokens:   ApplicationDefault{},
 		endpoint: endpoint,
-		clients:  &clients{project: options.Project, region: options.Region, endpoint: endpoint},
+		clients:  &clients{project: project, region: options.Region, endpoint: endpoint},
 	}, nil
 }
 
