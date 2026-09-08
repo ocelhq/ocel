@@ -338,13 +338,13 @@ func TestComputeRefusesAnAppInALanguageThisBuildCannotRead(t *testing.T) {
 	root := fixtureRoot(t, "monorepo")
 
 	apps := monorepoApps()
-	apps[0].Language = discovery.Rust
+	apps[0].Language = discovery.Language("ruby")
 
 	_, err := Compute(t.Context(), root, apps, monorepoDeclarations(root))
 	if err == nil {
-		t.Fatal("Compute succeeded on a rust app, want an error")
+		t.Fatal("Compute succeeded on an app in a language ocel has no reach for, want an error")
 	}
-	want := "is a rust app, and this build of ocel attributes only go, js and python apps"
+	want := "is a ruby app, and this build of ocel attributes only go, js, python and rust apps"
 	if !strings.Contains(err.Error(), want) {
 		t.Errorf("err = %v, want it to contain %q", err, want)
 	}
