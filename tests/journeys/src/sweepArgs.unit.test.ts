@@ -6,23 +6,23 @@ describe("sweepAsk", () => {
     expect(sweepAsk(["--target", "aws"], "34220477331")).toEqual({
       target: "aws",
       runId: "34220477331",
-      own: false,
+      oneRun: false,
     });
   });
 
-  it("reaps this run's own when asked", () => {
+  it("reaps only the run it runs under when asked", () => {
     expect(sweepAsk(["--target", "aws", "--own"], "34220477331")).toEqual({
       target: "aws",
       runId: "34220477331",
-      own: true,
+      oneRun: true,
     });
   });
 
-  it("reaps the run named rather than the one it runs under", () => {
+  it("reaps only the run named rather than the one it runs under", () => {
     expect(sweepAsk(["--target", "aws", "--run", "34214860916"], "34220477331")).toEqual({
       target: "aws",
       runId: "34214860916",
-      own: true,
+      oneRun: true,
     });
   });
 
