@@ -117,6 +117,11 @@ Real clouds are reached by workflow dispatch, or by putting the `journey:real` l
 pull request — one shot, the label comes off again as the run starts. From here only
 `scripts/ec2.sh` spends a real account.
 
+`gcp` is not one of them: a real dispatch drives `aws` and `vps` only. The gcp lane runs
+against the floci-gcp emulator on a pull request that touches it, and against the real
+project once a night, in `GCP nightly`, which owns that project's namespace and takes it
+down again.
+
 Every known gap is one entry in `journeys/src/expectations/gaps.ts`: a slug, a reason,
 the issue that owns it when one does, and the environments, edges, cells and tests it
 affects. A test can sit under several gaps and a gap under many tests; the run resolves the
