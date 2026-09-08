@@ -9,7 +9,11 @@ pub static CACHE: ocel::Postgres = ocel::postgres!("cache", version = "16");
 #[test]
 fn discovery_posts_a_declaration_carrying_an_absolute_source() {
     let (url, requests) = collector(2);
+    let workspace = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("the workspace above the crate");
     std::env::set_var("OCEL_PHASE", "discovery");
+    std::env::set_var("OCEL_SOURCE_ROOT", workspace);
     std::env::set_var("OCEL_DEV_SERVER", &url);
 
     assert!(
@@ -37,8 +41,9 @@ fn discovery_posts_a_declaration_carrying_an_absolute_source() {
         std::path::Path::new(file).is_absolute(),
         "source = {source}, want an absolute path"
     );
-    assert!(
-        file.ends_with("tests/declare.rs"),
+    assert_eq!(
+        std::path::Path::new(file),
+        workspace.join("ocel/tests/declare.rs"),
         "source = {source}, want the file the declaration is written in"
     );
     assert_eq!(line, "6");

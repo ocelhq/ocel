@@ -100,7 +100,7 @@ macro_rules! postgres {
                 kind: "postgres",
                 name: $name,
                 version: "17",
-                file: concat!(env!("CARGO_MANIFEST_DIR"), "/", file!()),
+                file: file!(),
                 line: line!(),
             }
         }
@@ -112,7 +112,7 @@ macro_rules! postgres {
                 kind: "postgres",
                 name: $name,
                 version: $version,
-                file: concat!(env!("CARGO_MANIFEST_DIR"), "/", file!()),
+                file: file!(),
                 line: line!(),
             }
         }

@@ -2,6 +2,7 @@ use crate::Error;
 
 const PHASE_ENV: &str = "OCEL_PHASE";
 const DEV_SERVER_ENV: &str = "OCEL_DEV_SERVER";
+const SOURCE_ROOT_ENV: &str = "OCEL_SOURCE_ROOT";
 const DISCOVERY_PHASE: &str = "discovery";
 const DECLARE_PATH: &str = "/app.resources.v1.ResourceService/Declare";
 
@@ -13,7 +14,7 @@ pub struct Declaration {
     pub name: &'static str,
     /// The version to provision.
     pub version: &'static str,
-    /// The absolute path of the file the declaration is written in.
+    /// The path of the file the declaration is written in, as the compiler saw it.
     pub file: &'static str,
     /// The line the declaration is written on.
     pub line: u32,
@@ -55,10 +56,7 @@ fn post(declaration: &Declaration) -> Result<(), Error> {
         declaration.kind.to_string(),
         serde_json::json!({"version": declaration.version}),
     );
-    body.insert(
-        "source".to_string(),
-        serde_json::json!(format!("{}:{}", declaration.file, declaration.line)),
-    );
+    body.insert("source".to_string(), serde_json::json!(source(declaration)));
 
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .http_status_as_error(false)
@@ -78,6 +76,23 @@ fn post(declaration: &Declaration) -> Result<(), Error> {
         ));
     }
     Ok(())
+}
+
+fn source(declaration: &Declaration) -> String {
+    let file = std::path::Path::new(declaration.file);
+    let absolute = if file.is_absolute() {
+        file.to_path_buf()
+    } else {
+        source_root().join(file)
+    };
+    format!("{}:{}", absolute.display(), declaration.line)
+}
+
+fn source_root() -> std::path::PathBuf {
+    match std::env::var(SOURCE_ROOT_ENV) {
+        Ok(root) if !root.is_empty() => std::path::PathBuf::from(root),
+        _ => std::env::current_dir().unwrap_or_default(),
+    }
 }
 
 fn failed(declaration: &Declaration, said: String) -> Error {
