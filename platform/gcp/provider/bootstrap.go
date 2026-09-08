@@ -14,7 +14,6 @@ import (
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"cloud.google.com/go/storage"
 	firestoreadmin "google.golang.org/api/firestore/v1"
-	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/secretmanager/v1"
 	"google.golang.org/grpc/codes"
@@ -101,22 +100,22 @@ func (b bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 
 func planned(read survey, items []item) []providerkit.Change {
 	changes := make([]providerkit.Change, 0, len(items))
-	for _, held := range items {
+	for _, item := range items {
 		change := providerkit.Change{
-			Kind:   held.Kind,
-			Name:   held.Name,
+			Kind:   string(item.Kind),
+			Name:   item.Name,
 			Action: providerkit.ActionCreate,
-			Reason: held.Note,
-			Slow:   held.Slow,
+			Reason: item.Note,
+			Slow:   item.Slow,
 		}
 		switch {
-		case read.mends(held) != "":
-			change.Action, change.Reason = providerkit.ActionUpdate, read.mends(held)
-		case held.Shared && read.sibling && read.holds(held):
+		case read.mends(item) != "":
+			change.Action, change.Reason = providerkit.ActionUpdate, read.mends(item)
+		case item.Shared && read.sibling && read.holds(item):
 			change.Action, change.Reason, change.Slow = providerkit.ActionKeep, sharedWith(read.Class), false
-		case read.Emulated && held.Kind == KindDatabase:
+		case read.Emulated && item.Kind == KindDatabase:
 			change.Action, change.Reason, change.Slow = providerkit.ActionKeep, reasonEmulated, false
-		case read.holds(held):
+		case read.holds(item):
 			change.Action, change.Reason, change.Slow = providerkit.ActionKeep, reasonStanding, false
 		}
 		changes = append(changes, change)
@@ -153,11 +152,11 @@ func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err != nil {
 		return err
 	}
-	for _, held := range items {
-		if held.ID() == holder.ID() {
+	for _, item := range items {
+		if item.ID() == holder.ID() {
 			continue
 		}
-		if err := b.stand(ctx, read, held, report); err != nil {
+		if err := b.stand(ctx, read, item, report); err != nil {
 			return err
 		}
 	}
@@ -167,7 +166,7 @@ func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 }
 
 func stampHolder(items []item, holder item) item {
-	if at := slices.IndexFunc(items, func(held item) bool { return held.ID() == holder.ID() }); at >= 0 {
+	if at := slices.IndexFunc(items, func(each item) bool { return each.ID() == holder.ID() }); at >= 0 {
 		return items[at]
 	}
 	return holder
@@ -283,10 +282,7 @@ func (b bootstrapper) makeBucket(ctx context.Context, read survey, held item) er
 	return nil
 }
 
-func taken(err error) bool {
-	var answered *googleapi.Error
-	return errors.As(err, &answered) && answered.Code == http.StatusConflict
-}
+func taken(err error) bool { return answeredCode(err) == http.StatusConflict }
 
 func (b bootstrapper) makeKeyRing(ctx context.Context) error {
 	client, err := b.clients.KMS()
@@ -364,7 +360,7 @@ func (b bootstrapper) makeSecret(ctx context.Context, name string) error {
 	_, err = attempted(ctx, service.Projects.Secrets.Create(parent, &secretmanager.Secret{
 		Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
 	}).SecretId(name).Context(ctx).Do)
-	if err != nil && answeredCode(err) != http.StatusConflict {
+	if err != nil && !taken(err) {
 		return fmt.Errorf("create the %s secret: %w", name, err)
 	}
 
@@ -399,7 +395,7 @@ func (b bootstrapper) makeDatabase(ctx context.Context, read survey) error {
 		Type:                  nativeFirestore,
 		DeleteProtectionState: protectionOn,
 	}).DatabaseId(recordDatabase).Context(ctx).Do)
-	if answeredCode(err) == http.StatusConflict {
+	if taken(err) {
 		return b.databaseServesThisRegion(ctx, read)
 	}
 	if err != nil {
@@ -487,7 +483,7 @@ func (b bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 	}
 	for _, taking := range removals(read) {
 		change := providerkit.Change{
-			Kind:   taking.item.Kind,
+			Kind:   string(taking.item.Kind),
 			Name:   taking.item.Name,
 			Action: taking.action,
 			Reason: taking.reason,
@@ -505,14 +501,12 @@ func (b bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 
 func removals(read survey) []removal {
 	items := bootstrapItems(read.Project, read.Class)
-	byKind := map[string]item{}
-	for _, held := range items {
-		byKind[held.Kind] = held
-	}
+	byKind := map[Kind]item{}
 	buckets := map[string]item{}
-	for _, held := range items {
-		if held.Kind == KindBucket {
-			buckets[held.Name] = held
+	for _, item := range items {
+		byKind[item.Kind] = item
+		if item.Kind == KindBucket {
+			buckets[item.Name] = item
 		}
 	}
 	ordered := []item{
@@ -525,8 +519,8 @@ func removals(read survey) []removal {
 	}
 
 	out := make([]removal, 0, len(ordered))
-	for _, held := range ordered {
-		out = append(out, removing(read, held))
+	for _, item := range ordered {
+		out = append(out, removing(read, item))
 	}
 	return out
 }
