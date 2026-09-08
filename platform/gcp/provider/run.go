@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
@@ -28,6 +31,8 @@ const (
 
 const releaseAttempts = 4
 
+const maxRequestTimeout = 3600 * time.Second
+
 type policyBinding = run.GoogleIamV1Binding
 
 type serving struct {
@@ -38,16 +43,22 @@ type serving struct {
 	compute providerkit.Compute
 	health  string
 	public  bool
+	memory  int
+	timeout time.Duration
 }
 
-func serviceOf(s serving) *run.GoogleCloudRunV2Service {
+func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
+	memory := revisionMemory
+	if s.memory > 0 {
+		memory = strconv.Itoa(s.memory) + "Mi"
+	}
 	container := &run.GoogleCloudRunV2Container{
 		Image: s.image,
 		Ports: []*run.GoogleCloudRunV2ContainerPort{{ContainerPort: providerkit.InjectedPort}},
 		Env:   environmentOf(s.env),
 		Resources: &run.GoogleCloudRunV2ResourceRequirements{
 			CpuIdle:         s.compute == providerkit.ComputeServerless,
-			Limits:          map[string]string{"cpu": revisionCPU, "memory": revisionMemory},
+			Limits:          map[string]string{"cpu": revisionCPU, "memory": memory},
 			ForceSendFields: []string{"CpuIdle"},
 		},
 	}
@@ -58,13 +69,21 @@ func serviceOf(s serving) *run.GoogleCloudRunV2Service {
 			HttpGet: &run.GoogleCloudRunV2HTTPGetAction{Path: s.health, Port: providerkit.InjectedPort},
 		}
 	}
-	return &run.GoogleCloudRunV2Service{
-		Template: &run.GoogleCloudRunV2RevisionTemplate{
-			Containers:     []*run.GoogleCloudRunV2Container{container},
-			Scaling:        scaling,
-			ServiceAccount: s.account,
-		},
+	template := &run.GoogleCloudRunV2RevisionTemplate{
+		Containers:     []*run.GoogleCloudRunV2Container{container},
+		Scaling:        scaling,
+		ServiceAccount: s.account,
 	}
+	if s.timeout > 0 {
+		if s.timeout > maxRequestTimeout {
+			return nil, providerkit.Refuse(providerkit.CodeInvalid,
+				"%s asks for a request to run for %s, and Cloud Run cuts one off at %s: "+
+					"ask for less, or move work that outlives a request off the request",
+				s.service, s.timeout, maxRequestTimeout)
+		}
+		template.Timeout = strconv.Itoa(int(math.Ceil(s.timeout.Seconds()))) + "s"
+	}
+	return &run.GoogleCloudRunV2Service{Template: template}, nil
 }
 
 func environmentOf(values map[string]string) []*run.GoogleCloudRunV2EnvVar {
@@ -118,7 +137,10 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 	}
 	path := p.servicePath(s.service)
 	s.image = p.runnable(s.image)
-	desired := serviceOf(s)
+	desired, err := serviceOf(s)
+	if err != nil {
+		return "", err
+	}
 
 	_, err = attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(path).Context(ctx).Do(call...)
