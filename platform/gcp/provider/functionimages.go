@@ -32,10 +32,8 @@ type base struct {
 }
 
 func functionBases() map[string]base {
-	node := base{ref: nodeImage, bins: []string{nodeBinDir}}
 	return map[string]base{
-		providerkit.RuntimeNode:   node,
-		providerkit.RuntimeNext:   node,
+		providerkit.RuntimeNode:   {ref: nodeImage, bins: []string{nodeBinDir}},
 		providerkit.RuntimeGo:     {ref: staticImage},
 		providerkit.RuntimePython: {ref: pythonImage},
 	}
