@@ -143,6 +143,20 @@ func TestAResolveNamingNoRepositoryNeverReachesTheProvider(t *testing.T) {
 	}
 }
 
+func TestAProviderThatHostsNoRegistryForThisDeployLeavesTheResolveUnimplemented(t *testing.T) {
+	provider := &hosting{Provider: fake.NewProvider(fake.Options{})}
+	client := registryServed(t, provider)
+
+	_, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
+		Repositories: []string{"web"},
+	})
+
+	if got := connect.CodeOf(err); got != connect.CodeUnimplemented {
+		t.Errorf("ResolveImageRegistry() error code = %v, want %v: a provider hosting a registry on a real account and none "+
+			"against an emulator says which by answering an empty target, and the deploy then keeps its images where they were built", got, connect.CodeUnimplemented)
+	}
+}
+
 func TestARegistryWithNoServerIsRefusedRatherThanPassedOn(t *testing.T) {
 	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: providerkit.RegistryTarget{Namespace: "ocel/acme"}}
 	client := registryServed(t, provider)
