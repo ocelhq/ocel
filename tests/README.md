@@ -149,6 +149,27 @@ mints, or the assume fails outright.
 | `E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID` | secret | the only Cloudflare account the guard lets a run touch       |
 | `E2E_PREVIEW_DOMAIN`                 | var    | the zone a dispatched run may take hostnames under           |
 
+The `gcp` lane runs against the floci-gcp emulator, which serves one implicit Firestore
+database and no Firestore Admin API. The database row, its delete protection and the
+region check are therefore only exercised against a real project, by hand, until CI has
+one:
+
+```bash
+gcloud auth application-default login
+gcloud services enable firestore.googleapis.com storage.googleapis.com \
+  cloudkms.googleapis.com secretmanager.googleapis.com --project <project>
+OCEL_GCP_LIVE_PROJECT=<project> go test -C platform/gcp/provider -count=1 -run '^TestLive' ./...
+```
+
+| name                    | kind | what it holds                                                        |
+| ----------------------- | ---- | -------------------------------------------------------------------- |
+| `OCEL_GCP_LIVE_PROJECT` | env  | the real project a by-hand `TestLive` run bootstraps into and tears down |
+| `OCEL_GCP_LIVE_REGION`  | env  | the region that run uses; `europe-west1` when unset                  |
+
+The run creates and destroys buckets, a Firestore database, a key ring and a secret in
+that project, and schedules its KMS key material for destruction, so name a project you
+are willing to lose. Unset, and with no emulator answering, every `TestLive` skips.
+
 The `vps` lane points at an incus VM on a pull request, and on a real run brings up a
 throwaway EC2 box with `scripts/ec2.sh` under the same role and account guard as the `aws`
 lane, so it needs no secrets of its own. The job destroys the box when it ends, whether the

@@ -15,16 +15,36 @@ import (
 )
 
 const (
-	liveProject = "floci-local"
-	liveRegion  = "europe-west1"
+	liveProjectVariable = "OCEL_GCP_LIVE_PROJECT"
+	liveRegionVariable  = "OCEL_GCP_LIVE_REGION"
+
+	emulatedProject = "floci-local"
+	emulatedRegion  = "europe-west1"
 )
+
+func emulated() bool { return endpoint() != "" }
+
+func liveProject() string {
+	if project := os.Getenv(liveProjectVariable); project != "" {
+		return project
+	}
+	return emulatedProject
+}
+
+func liveRegion() string {
+	if region := os.Getenv(liveRegionVariable); region != "" {
+		return region
+	}
+	return emulatedRegion
+}
 
 func live(t *testing.T) *gcp.Provider {
 	t.Helper()
-	if os.Getenv("OCEL_FLOCI_GCP_ENDPOINT") == "" {
-		t.Skip("no floci-gcp emulator in the environment; run under `scripts/floci.sh --cloud gcp run <name> -- go test ./...`")
+	if !emulated() && os.Getenv(liveProjectVariable) == "" {
+		t.Skipf("no floci-gcp emulator in the environment and %s names no project; run under `scripts/floci.sh --cloud gcp run <name> -- go test ./...`, or name a real project to run against",
+			liveProjectVariable)
 	}
-	return newProvider(t, gcp.Options{Project: liveProject, Region: liveRegion})
+	return newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
 }
 
 func TestLiveCredentials(t *testing.T) {
@@ -36,8 +56,8 @@ func TestLiveCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Whoami() against the emulator = %v, want an identity: the project the run targets answers there", err)
 	}
-	if identity.Provider != gcp.Vendor || identity.Account != liveProject {
-		t.Errorf("Whoami() = %+v, want %s naming project %s", identity, gcp.Vendor, liveProject)
+	if identity.Provider != gcp.Vendor || identity.Account != liveProject() {
+		t.Errorf("Whoami() = %+v, want %s naming project %s", identity, gcp.Vendor, liveProject())
 	}
 }
 
@@ -85,7 +105,7 @@ func TestLiveSealer(t *testing.T) {
 func TestLiveSealingWhereNoKeyRingStandsSaysWhatToRun(t *testing.T) {
 	live(t)
 
-	elsewhere := newProvider(t, gcp.Options{Project: liveProject, Region: "australia-southeast2"})
+	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: "australia-southeast2"})
 	var refusal providerkit.Refusal
 	_, err := elsewhere.Sealer().Seal(context.Background(), providerkit.Coordinate{
 		Project: "shop",
@@ -119,7 +139,7 @@ func TestLiveArtifactStore(t *testing.T) {
 func TestLiveArtifactsWhereNoBucketStandsSayWhatToRun(t *testing.T) {
 	live(t)
 
-	nowhere := newProvider(t, gcp.Options{Project: "floci-nowhere", Region: liveRegion})
+	nowhere := newProvider(t, gcp.Options{Project: "floci-nowhere", Region: liveRegion()})
 	ref := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "conformance/bundle.zip"}
 
 	var refusal providerkit.Refusal
