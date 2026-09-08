@@ -786,7 +786,7 @@ jobs:
     needs: reapable
     if: ${{ needs.reapable.outputs.ids != '' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     permissions:
       contents: read
       id-token: write
