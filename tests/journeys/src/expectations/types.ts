@@ -6,6 +6,8 @@ export type ExpectationEnvironment =
   | "aws.floci"
   | "dev"
   | "dev-local"
+  | "gcp"
+  | "gcp.floci"
   | "vps"
   | "vps.incus";
 
@@ -14,6 +16,8 @@ export const ENVIRONMENTS: ExpectationEnvironment[] = [
   "aws.floci",
   "dev",
   "dev-local",
+  "gcp",
+  "gcp.floci",
   "vps",
   "vps.incus",
 ];

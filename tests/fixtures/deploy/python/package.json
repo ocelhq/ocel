@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@ocel/provider-aws": "workspace:^",
+    "@ocel/provider-gcp": "workspace:^",
     "@ocel/provider-vps": "workspace:^",
     "ocel": "workspace:^",
     "zod": "^4.4.3"
