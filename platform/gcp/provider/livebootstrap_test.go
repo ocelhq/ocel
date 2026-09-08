@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"cloud.google.com/go/storage"
+	firestoreadmin "google.golang.org/api/firestore/v1"
 	"google.golang.org/api/secretmanager/v1"
 	"google.golang.org/api/serviceusage/v1"
 
@@ -22,6 +23,9 @@ func endpoint() string { return os.Getenv("OCEL_FLOCI_GCP_ENDPOINT") }
 
 func servicesEnabled(t *testing.T) {
 	t.Helper()
+	if !emulated() {
+		return
+	}
 
 	ctx := context.Background()
 	service, err := serviceusage.NewService(ctx, gcp.EmulatorREST(endpoint())...)
@@ -29,7 +33,7 @@ func servicesEnabled(t *testing.T) {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
 	for _, api := range gcp.BootstrapAPIs {
-		name := "projects/" + liveProject + "/services/" + api
+		name := "projects/" + liveProject() + "/services/" + api
 		if _, err := service.Services.Enable(name, &serviceusage.EnableServiceRequest{}).Context(ctx).Do(); err != nil {
 			t.Fatalf("enable %s: %v", api, err)
 		}
@@ -143,12 +147,12 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 		}
 	}
 	for row, group := range map[string]string{
-		"firestore:database/ocel":                                   providerkit.StackGroupKind,
-		"storage:bucket/" + gcp.BucketName(liveProject, class):      providerkit.StackGroupKind,
-		"storage:bucket/" + gcp.StateBucketName(liveProject, class): providerkit.StackGroupKind,
-		"kms:keyring/" + gcp.KeyRing:                                providerkit.StackGroupKind,
-		"kms:key/" + string(class):                                  providerkit.StackGroupKind,
-		"secretmanager:secret/" + gcp.PassphraseSecret(class):       providerkit.ParameterGroupKind,
+		"firestore:database/ocel":                                     providerkit.StackGroupKind,
+		"storage:bucket/" + gcp.BucketName(liveProject(), class):      providerkit.StackGroupKind,
+		"storage:bucket/" + gcp.StateBucketName(liveProject(), class): providerkit.StackGroupKind,
+		"kms:keyring/" + gcp.KeyRing:                                  providerkit.StackGroupKind,
+		"kms:key/" + string(class):                                    providerkit.StackGroupKind,
+		"secretmanager:secret/" + gcp.PassphraseSecret(class):         providerkit.ParameterGroupKind,
 	} {
 		if _, shown := kinds[row]; !shown {
 			t.Errorf("Plan() shows no row for %s, and what the plan does not show, the apply may not do", row)
@@ -176,13 +180,16 @@ func TestLiveAPlanIsRefusedWhileAnApiTheStackNeedsIsOff(t *testing.T) {
 
 func servicesDisabled(t *testing.T, api string) {
 	t.Helper()
+	if !emulated() {
+		t.Skipf("switching %s off is a real change to a real project, so this runs against the emulator only", api)
+	}
 
 	ctx := context.Background()
 	service, err := serviceusage.NewService(ctx, gcp.EmulatorREST(endpoint())...)
 	if err != nil {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
-	name := "projects/" + liveProject + "/services/" + api
+	name := "projects/" + liveProject() + "/services/" + api
 	if _, err := service.Services.Disable(name, &serviceusage.DisableServiceRequest{}).Context(ctx).Do(); err != nil {
 		t.Fatalf("disable %s: %v", api, err)
 	}
@@ -241,7 +248,7 @@ func interrupt(t *testing.T, p *gcp.Provider, class providerkit.Class) {
 	}
 	t.Cleanup(func() { client.Close() })
 
-	writer := client.Bucket(gcp.BucketName(liveProject, class)).Object(gcp.StampObject).NewWriter(ctx)
+	writer := client.Bucket(gcp.BucketName(liveProject(), class)).Object(gcp.StampObject).NewWriter(ctx)
 	if _, err := writer.Write([]byte(`{"schema":1,"state":"applying","writer":"live-suite","digest":"halfway"}`)); err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +269,7 @@ func TestLiveAStateBucketHoldingAStackIsNotSweptOutFromUnderIt(t *testing.T) {
 	}
 	defer client.Close()
 
-	object := client.Bucket(gcp.StateBucketName(liveProject, class)).Object(".pulumi/stacks/ocel/shop.json")
+	object := client.Bucket(gcp.StateBucketName(liveProject(), class)).Object(".pulumi/stacks/ocel/shop.json")
 	writer := object.NewWriter(ctx)
 	if _, err := writer.Write([]byte("{}")); err != nil {
 		t.Fatal(err)
@@ -337,7 +344,7 @@ func passphraseHeld(t *testing.T, class providerkit.Class) []byte {
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
-	name := "projects/" + liveProject + "/secrets/" + gcp.PassphraseSecret(class) + "/versions/latest"
+	name := "projects/" + liveProject() + "/secrets/" + gcp.PassphraseSecret(class) + "/versions/latest"
 	held, err := service.Projects.Secrets.Versions.Access(name).Context(ctx).Do()
 	if err != nil {
 		t.Fatalf("read %s: %v", name, err)
@@ -347,4 +354,50 @@ func passphraseHeld(t *testing.T, class providerkit.Class) []byte {
 		t.Fatalf("decode the passphrase: %v", err)
 	}
 	return decoded
+}
+
+func onRealGoogleCloud(t *testing.T) {
+	t.Helper()
+	if emulated() {
+		t.Skip("the emulator serves no Firestore admin API: it has one implicit database, no delete protection and no list of locations")
+	}
+}
+
+func TestLiveTheDatabaseIsARowOfItsOwnHeldUnderDeleteProtection(t *testing.T) {
+	p := live(t)
+	onRealGoogleCloud(t)
+	bootstrapped(t, p, providerkit.ClassProduction)
+
+	ctx := context.Background()
+	service, err := firestoreadmin.NewService(ctx)
+	if err != nil {
+		t.Fatalf("reach the Firestore admin API: %v", err)
+	}
+	held, err := service.Projects.Databases.Get("projects/" + liveProject() + "/databases/ocel").Context(ctx).Do()
+	if err != nil {
+		t.Fatalf("read the database the bootstrap stood up: %v", err)
+	}
+	if held.DeleteProtectionState != "DELETE_PROTECTION_ENABLED" {
+		t.Errorf("the ocel database stands with delete protection %q, want it on: every record both classes hold lives in it",
+			held.DeleteProtectionState)
+	}
+	if held.LocationId != liveRegion() {
+		t.Errorf("the database stands in %q, want the one region the bootstrap was given, %q", held.LocationId, liveRegion())
+	}
+}
+
+func TestLiveARegionFirestoreDoesNotServeIsRefusedNamingTheOnesItDoes(t *testing.T) {
+	live(t)
+	onRealGoogleCloud(t)
+
+	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: "no-such-region1"})
+	var refusal providerkit.Refusal
+	_, err := bootstrapperOf(t, elsewhere).Plan(context.Background(),
+		providerkit.BootstrapRequest{Class: providerkit.ClassProduction})
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Plan() in a region Firestore does not serve = %v, want an %s refusal", err, providerkit.CodeInvalid)
+	}
+	if !strings.Contains(refusal.Message, liveRegion()) {
+		t.Errorf("Plan() refused with %q, want it to list the regions Firestore does serve", refusal.Message)
+	}
 }
