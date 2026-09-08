@@ -21,9 +21,9 @@ const unsetProject = "(unset)"
 func resolveProject(ctx context.Context, named string) (string, error) {
 	for _, ambient := range []func() string{
 		func() string { return named },
-		func() string { return quotaProject(ctx) },
 		func() string { return os.Getenv(projectVariable) },
 		func() string { return os.Getenv(cloudSDKVariable) },
+		func() string { return credentialProject(ctx) },
 		func() string { return gcloudProject(ctx) },
 	} {
 		if project := strings.TrimSpace(ambient()); project != "" {
@@ -37,7 +37,7 @@ func resolveProject(ctx context.Context, named string) (string, error) {
 		"project", projectVariable, cloudSDKVariable)
 }
 
-func quotaProject(ctx context.Context) string {
+func credentialProject(ctx context.Context) string {
 	found, err := google.FindDefaultCredentials(ctx, cloudPlatformScope)
 	if err != nil {
 		return ""
