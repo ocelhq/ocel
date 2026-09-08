@@ -217,3 +217,35 @@ func TestDeployRefusedByPreflightUploadsNothing(t *testing.T) {
 		t.Errorf("the deploy uploaded %v after a refusing preflight, want nothing put in the store", uploaded)
 	}
 }
+
+type unaddressed struct{ *fake.Provider }
+
+func (unaddressed) FunctionURLs() bool { return false }
+
+func TestAFunctionCarriesItsOwnURLUnlessTheProviderSaysOtherwise(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+
+	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	plans := provider.Releaser().Plans()
+	if spec := plans[len(plans)-1].App.Functions[0]; !spec.URL {
+		t.Error("the function spec asks for no url of its own, and a provider that says nothing serves each function on one")
+	}
+}
+
+func TestAProviderThatServesNoFunctionURLIsAskedForNone(t *testing.T) {
+	builtProject(t)
+	base := fake.NewProvider(fake.Options{})
+	client := servedBy(t, unaddressed{Provider: base})
+	standsBootstrapped(t, client)
+
+	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	plans := base.Releaser().Plans()
+	if spec := plans[len(plans)-1].App.Functions[0]; spec.URL {
+		t.Error("the function spec asks for a url of its own from a provider that reaches its functions another way")
+	}
+}
