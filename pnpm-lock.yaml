@@ -655,6 +655,14 @@ importers:
 
   packages/native-lib/provider-aws-win32-x64: {}
 
+  packages/native-lib/provider-gcp-darwin-arm64: {}
+
+  packages/native-lib/provider-gcp-darwin-x64: {}
+
+  packages/native-lib/provider-gcp-linux-x64: {}
+
+  packages/native-lib/provider-gcp-win32-x64: {}
+
   packages/native-lib/provider-vps-darwin-arm64: {}
 
   packages/native-lib/provider-vps-darwin-x64: {}
@@ -757,6 +765,37 @@ importers:
       '@ocel/provider-aws-win32-x64':
         specifier: workspace:^
         version: link:../native-lib/provider-aws-win32-x64
+
+  packages/provider-gcp:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      ocel:
+        specifier: workspace:^
+        version: link:../ocel
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^8.1.3
+        version: 8.1.3(@types/node@26.1.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(vite@8.1.3(@types/node@26.1.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
+    optionalDependencies:
+      '@ocel/provider-gcp-darwin-arm64':
+        specifier: workspace:^
+        version: link:../native-lib/provider-gcp-darwin-arm64
+      '@ocel/provider-gcp-darwin-x64':
+        specifier: workspace:^
+        version: link:../native-lib/provider-gcp-darwin-x64
+      '@ocel/provider-gcp-linux-x64':
+        specifier: workspace:^
+        version: link:../native-lib/provider-gcp-linux-x64
+      '@ocel/provider-gcp-win32-x64':
+        specifier: workspace:^
+        version: link:../native-lib/provider-gcp-win32-x64
 
   packages/provider-vps:
     devDependencies:
