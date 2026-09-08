@@ -82,6 +82,21 @@ func installedFromARegistry(path string, members []string) bool {
 	return true
 }
 
+type jsReach struct{}
+
+func (jsReach) Entries(root string, app App) (map[string]Reachability, error) {
+	survivors, err := shakenSurvivors(root, app)
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make(map[string]Reachability, len(survivors))
+	for entry, kept := range survivors {
+		entries[entry] = func(file string) bool { return kept[file] }
+	}
+	return entries, nil
+}
+
 func shakenSurvivors(root string, app App) (map[string]map[string]bool, error) {
 	entries, err := discovery.Discover(root, []string{app.Path})
 	if err != nil {

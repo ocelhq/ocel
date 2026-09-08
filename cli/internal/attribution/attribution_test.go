@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
@@ -331,4 +332,20 @@ func TestCompute(t *testing.T) {
 			t.Fatalf("Compute err = %v, want an *UnresolvedDeclarationError", err)
 		}
 	})
+}
+
+func TestComputeRefusesAnAppInALanguageThisBuildCannotRead(t *testing.T) {
+	root := fixtureRoot(t, "monorepo")
+
+	apps := monorepoApps()
+	apps[0].Language = discovery.Go
+
+	_, err := Compute(root, apps, monorepoDeclarations(root))
+	if err == nil {
+		t.Fatal("Compute succeeded on a go app, want an error")
+	}
+	want := "is a go app, and this build of ocel attributes only js apps"
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("err = %v, want it to contain %q", err, want)
+	}
 }
