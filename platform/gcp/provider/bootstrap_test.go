@@ -5,7 +5,7 @@ import "testing"
 func TestTheRepositoryPrunesOnlyUntaggedImagesOlderThanAWeek(t *testing.T) {
 	t.Parallel()
 
-	policies := pruningUntaggedImages()
+	policies := imageRepository().CleanupPolicies
 	if len(policies) != 1 {
 		t.Fatalf("the repository is created under %d cleanup policies, want the one: a KEEP window beside a DELETE lets the window fill with tagged versions and the DELETE take every untagged one", len(policies))
 	}
@@ -25,5 +25,14 @@ func TestTheRepositoryPrunesOnlyUntaggedImagesOlderThanAWeek(t *testing.T) {
 	if policy.Condition.OlderThan != untaggedLifetime {
 		t.Errorf("the %s policy matches versions older than %q, want %q: without it an in-flight push's untagged child manifests are deleted under it",
 			dropUntaggedPolicy, policy.Condition.OlderThan, untaggedLifetime)
+	}
+}
+
+func TestTheRepositoryIsCreatedUnderAModeAnOrgPolicyCanAllow(t *testing.T) {
+	t.Parallel()
+
+	if got := imageRepository().Mode; got != standardImages {
+		t.Errorf("the repository is created in %q mode, want %q: unset reads as MODE_UNSPECIFIED, and an org holding disallowUnspecifiedMode refuses the create outright",
+			got, standardImages)
 	}
 }
