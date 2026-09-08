@@ -42,6 +42,7 @@ const runAsRole = "roles/iam.serviceAccountUser"
 
 const (
 	dockerImages     = "DOCKER"
+	standardImages   = "STANDARD_REPOSITORY"
 	deleteImages     = "DELETE"
 	untaggedImages   = "UNTAGGED"
 	untaggedLifetime = "604800s"
@@ -461,11 +462,8 @@ func (b bootstrapper) makeRepository(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	creating, err := attempted(ctx, service.Projects.Locations.Repositories.Create(repositoryParent(b.clients), &artifactregistry.Repository{
-		Format:          dockerImages,
-		Description:     "the images ocel deploys into this project",
-		CleanupPolicies: pruningUntaggedImages(),
-	}).RepositoryId(name).Context(ctx).Do)
+	creating, err := attempted(ctx, service.Projects.Locations.Repositories.Create(
+		repositoryParent(b.clients), imageRepository()).RepositoryId(name).Context(ctx).Do)
 	if taken(err) {
 		return nil
 	}
@@ -473,6 +471,15 @@ func (b bootstrapper) makeRepository(ctx context.Context, name string) error {
 		return fmt.Errorf("create the %s image repository: %w", name, err)
 	}
 	return b.repositoryAwaited(ctx, fmt.Sprintf("creating the %s image repository", name), creating)
+}
+
+func imageRepository() *artifactregistry.Repository {
+	return &artifactregistry.Repository{
+		Format:          dockerImages,
+		Mode:            standardImages,
+		Description:     "the images ocel deploys into this project",
+		CleanupPolicies: pruningUntaggedImages(),
+	}
 }
 
 func pruningUntaggedImages() map[string]artifactregistry.CleanupPolicy {
