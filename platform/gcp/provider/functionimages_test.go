@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -153,6 +154,29 @@ func TestTheMembraneIsCarriedForTheRuntimeThatBootsThroughOne(t *testing.T) {
 	}
 	if len(carried) != 0 {
 		t.Error("FunctionMembrane(go) carried a node membrane into an image that runs a compiled binary")
+	}
+}
+
+func TestOneBaseIsFetchedOnceHoweverManyFunctionsRunOnIt(t *testing.T) {
+	var fetches atomic.Int64
+	image, err := mutate.Config(empty.Image, v1.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &Provider{bases: functionBases(), pull: func(context.Context, string) (v1.Image, error) {
+		fetches.Add(1)
+		return image, nil
+	}}
+
+	ctx := context.Background()
+	for range 2 {
+		if _, err := p.FunctionBase(ctx, providerkit.Runtime{Name: providerkit.RuntimeNode}); err != nil {
+			t.Fatalf("FunctionBase() = %v", err)
+		}
+	}
+
+	if got := fetches.Load(); got != 1 {
+		t.Errorf("the base was fetched %d times for 2 functions, want once: an app with many functions pays a registry round trip for each", got)
 	}
 }
 

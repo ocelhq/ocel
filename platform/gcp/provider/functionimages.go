@@ -66,11 +66,16 @@ func (p *Provider) FunctionBase(ctx context.Context, runtime providerkit.Runtime
 			"a function on Cloud Run is a container, and this provider carries no base image a %s function could run in: it carries one for %s",
 			runtime.Name, strings.Join(slices.Sorted(maps.Keys(p.bases)), ", "))
 	}
-	image, err := p.pull(ctx, on.ref)
+	image, err := p.based(ctx, on.ref)
 	if err != nil {
 		return nil, err
 	}
 	return commandable(image, on.bins)
+}
+
+func (p *Provider) based(ctx context.Context, ref string) (v1.Image, error) {
+	held, _ := p.pulled.LoadOrStore(ref, &memo[v1.Image]{})
+	return held.(*memo[v1.Image]).held(func() (v1.Image, error) { return p.pull(ctx, ref) })
 }
 
 func commandable(image v1.Image, bins []string) (v1.Image, error) {
