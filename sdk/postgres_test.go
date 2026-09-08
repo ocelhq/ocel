@@ -157,3 +157,30 @@ func TestALinkOfAnotherTypeIsRefused(t *testing.T) {
 		t.Errorf("ConnectionString() error = %v, want %q", err, want)
 	}
 }
+
+func TestAMalformedLinkKeepsTheValueOutOfTheError(t *testing.T) {
+	t.Setenv("OCEL_RESOURCE_POSTGRES_main", `{"name":"main","postgres":{"password":s3cretpassword}}`)
+
+	_, err := sdk.Postgres("main").ConnectionString()
+	if err == nil {
+		t.Fatal("ConnectionString() succeeded on a malformed link, want error")
+	}
+	if strings.Contains(err.Error(), "s3cretpassword") {
+		t.Errorf("ConnectionString() error = %q, want it to keep the value out", err)
+	}
+	if !strings.Contains(err.Error(), "OCEL_RESOURCE_POSTGRES_main") {
+		t.Errorf("ConnectionString() error = %q, want it to name the key", err)
+	}
+}
+
+func TestAMissingLinkIsAMissingLinkError(t *testing.T) {
+	_, err := sdk.Postgres("main").ConnectionString()
+
+	var missing *sdk.MissingLinkError
+	if !errors.As(err, &missing) {
+		t.Fatalf("ConnectionString() error = %v, want a *sdk.MissingLinkError", err)
+	}
+	if missing.Key != "OCEL_RESOURCE_POSTGRES_main" {
+		t.Errorf("Key = %q, want the env var the link arrives in", missing.Key)
+	}
+}
