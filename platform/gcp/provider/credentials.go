@@ -100,7 +100,7 @@ func (c Credentials) principal(ctx context.Context, token string) (string, error
 	if err == nil && status == http.StatusOK {
 		return principal, nil
 	}
-	if throttling(status) {
+	if unreachable(status) {
 		return "", providerkit.Refuse(providerkit.CodeBusy,
 			"Google's token endpoint is throttling or down: it answered neither a principal nor a refusal in %d attempts, and this credential may well be good", askAttempts)
 	}
