@@ -177,7 +177,7 @@ func (p *Provider) Computes() []providerkit.Compute {
 }
 
 func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
-	return elevating{Bootstrapper: host.Bootstrap(p.host), elevated: p.elevated}, nil
+	return elevating{Bootstrapper: host.Bootstrap(p.host, Vendor), elevated: p.elevated}, nil
 }
 
 func (p *Provider) elevated(ctx context.Context) error {

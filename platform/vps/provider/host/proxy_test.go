@@ -664,7 +664,7 @@ func TestTheDestroyReportsThePinRootItKeptRatherThanTheOneItNeverTook(t *testing
 		}
 
 		var said []string
-		if err := Bootstrap(stood.host()).Remove(context.Background(), class, saying(&said)); err != nil {
+		if err := Bootstrap(stood.host(), testVendor).Remove(context.Background(), class, saying(&said)); err != nil {
 			t.Fatalf("destroying over %s = %v", what, err)
 		}
 
@@ -804,7 +804,7 @@ func TestABoxOcelBuildsNoHelperForIsStillABoxOcelCanDestroy(t *testing.T) {
 	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
 	stood.facts.Arch = "riscv64"
 
-	if _, err := Bootstrap(stood.host()).PlanRemoval(context.Background(), class); err != nil {
+	if _, err := Bootstrap(stood.host(), testVendor).PlanRemoval(context.Background(), class); err != nil {
 		t.Fatalf("PlanRemoval() over a host ocel builds no flip helper for = %v, want what ocel wrote still taken back: the paths it wrote are the same whatever the box runs", err)
 	}
 	if _, err := stood.host().Read(context.Background(), class); err == nil {
@@ -956,7 +956,7 @@ func TestTheProxyIsWrittenAgainstTheBoxTheEngineWriteLeftBehind(t *testing.T) {
 	}
 
 	report := &said{}
-	if err := Bootstrap(stood.host()).Apply(context.Background(),
+	if err := Bootstrap(stood.host(), testVendor).Apply(context.Background(),
 		providerkit.BootstrapRequest{Class: class, Writer: "the-suite"}, report); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}

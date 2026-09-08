@@ -21,7 +21,7 @@ func TestIdentityEvent(t *testing.T) {
 		t.Parallel()
 
 		got := IdentityEvent(cfg, environmentv1.Tier_TIER_PRODUCTION, &contractv1.Identity{
-			Provider:  "AWS",
+			Provider:  "aws",
 			Account:   "123456789012",
 			Principal: "deploy",
 			Location:  "us-east-1",

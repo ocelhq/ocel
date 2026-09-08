@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -260,5 +261,27 @@ func TestStandingWithoutAVarsKey(t *testing.T) {
 
 	if err := p.standing(held, providerkit.ClassProduction); err != nil {
 		t.Errorf("standing = %v, want a bootstrap with no key ready: a release with no sealed value needs none", err)
+	}
+}
+
+type callerIdentity struct{}
+
+func (callerIdentity) GetCallerIdentity(context.Context, *sts.GetCallerIdentityInput, ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error) {
+	return &sts.GetCallerIdentityOutput{
+		Account: aws.String("123456789012"),
+		Arn:     aws.String("arn:aws:iam::123456789012:user/deployer"),
+	}, nil
+}
+
+func TestTheIdentityNamesTheVendorTheProviderNamesItself(t *testing.T) {
+	t.Parallel()
+
+	identity, err := control.Credentials{STS: callerIdentity{}, Region: "us-east-1"}.Whoami(context.Background())
+	if err != nil {
+		t.Fatalf("Whoami() = %v", err)
+	}
+	named := providerkit.IdentityProto(Vendor, identity).GetProvider()
+	if named != string(Vendor) {
+		t.Errorf("the identity names %q and the provider names itself %q; the CLI matches a credential problem to its section by that string, so a mismatch loses the problem", named, Vendor)
 	}
 }

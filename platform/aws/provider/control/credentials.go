@@ -13,8 +13,6 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const Vendor providerkit.Vendor = "AWS"
-
 const credentialHeading = "AWS credentials"
 
 const credentialHint = "configure AWS credentials (set AWS_PROFILE, run `aws sso login`, or export access keys)"
@@ -48,7 +46,6 @@ func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 	}
 	arn := aws.ToString(out.Arn)
 	return providerkit.Identity{
-		Provider:  Vendor,
 		Account:   aws.ToString(out.Account),
 		Principal: principalOf(arn),
 		Location:  c.Region,
