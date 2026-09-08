@@ -648,7 +648,7 @@ func addAppToFixtureConfig(t *testing.T, root string) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { package: "@ocel/provider-aws", options: { region: "eu-west-2" } },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", runtime: "node" }],
 };
