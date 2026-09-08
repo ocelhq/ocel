@@ -5,24 +5,15 @@ import (
 	"os"
 )
 
-// Namespace is the prefix every name a bootstrap stands up is derived from, so
-// two bootstraps of the same project never name the same resource.
 type Namespace string
 
+const DefaultNamespace Namespace = "ocel"
+
 const (
-	// DefaultNamespace is the namespace a run that names none deploys under.
-	DefaultNamespace Namespace = "ocel"
-
-	// MaxNamespaceLength is the longest namespace every provider can derive
-	// its names from and still fit the shortest limit they land under.
 	MaxNamespaceLength = 44
-
-	// NamespaceEnvVar names the namespace a run deploys under.
-	NamespaceEnvVar = "OCEL_NAMESPACE"
+	NamespaceEnvVar    = "OCEL_NAMESPACE"
 )
 
-// ParseNamespace reads the namespace a run deploys under, defaulting to
-// [DefaultNamespace] when nothing names one.
 func ParseNamespace(given string) (Namespace, error) {
 	if given == "" {
 		return DefaultNamespace, nil
@@ -42,8 +33,6 @@ func ParseNamespace(given string) (Namespace, error) {
 	return Namespace(given), nil
 }
 
-// NamespaceFromEnv reads the namespace [NamespaceEnvVar] names, refusing in the
-// provider's own voice when it names one no cloud would take.
 func NamespaceFromEnv() (Namespace, error) {
 	ns, err := ParseNamespace(os.Getenv(NamespaceEnvVar))
 	if err != nil {
@@ -52,5 +41,4 @@ func NamespaceFromEnv() (Namespace, error) {
 	return ns, nil
 }
 
-// String returns the namespace as the prefix names are derived from.
 func (n Namespace) String() string { return string(n) }
