@@ -3,15 +3,13 @@ package discovery
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
+
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
 func needsCargo(t *testing.T) {
@@ -117,22 +115,7 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 		t.Fatalf("roots = %+v, want the rust infra folder of the project", roots)
 	}
 
-	var mu sync.Mutex
-	var declares []map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/Declare") {
-			var body map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Errorf("decode declare: %v", err)
-			}
-			mu.Lock()
-			declares = append(declares, body)
-			mu.Unlock()
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("{}"))
-	}))
-	defer server.Close()
+	collected, url := declareCollector(t)
 
 	prepared, err := Prepare(configDir, roots)
 	if err != nil {
@@ -140,20 +123,19 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), configDir, prepared, server.URL, &stdout, &stderr); err != nil {
+	if err := Run(context.Background(), configDir, prepared, url, &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
+	declares := collected.declared()
 	if len(declares) != 1 {
 		t.Fatalf("declares = %v, want exactly one", declares)
 	}
-	resource, _ := declares[0]["resource"].(map[string]any)
-	if resource["name"] != "main" || resource["type"] != "LINK_TYPE_POSTGRES" {
+	resource := declares[0].GetResource()
+	if resource.GetName() != "main" || resource.GetType() != linksv1.LinkType_LINK_TYPE_POSTGRES {
 		t.Errorf("resource = %v, want the postgres named main", resource)
 	}
-	source, _ := declares[0]["source"].(string)
+	source := declares[0].GetSource()
 	colon := strings.LastIndex(source, ":")
 	if colon <= 0 {
 		t.Fatalf("source = %q, want a file and a line", source)

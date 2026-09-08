@@ -3,15 +3,13 @@ package discovery
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
+
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
 func pythonFixture(t *testing.T) string {
@@ -92,56 +90,42 @@ func TestRunDeclaresWhatThePythonFixtureDeclares(t *testing.T) {
 		t.Fatalf("roots = %+v, want the python infra folder of the project", roots)
 	}
 
-	var mu sync.Mutex
-	var declares []map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/Declare") {
-			var body map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Errorf("decode declare: %v", err)
-			}
-			mu.Lock()
-			declares = append(declares, body)
-			mu.Unlock()
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("{}"))
-	}))
-	defer server.Close()
+	collected, url := declareCollector(t)
 
 	prepared, err := Prepare(configDir, roots)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
 
-	t.Setenv("PYTHONPATH", pythonSDKPath(t))
+	t.Setenv("PATH", pythonSDKEnvironment(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), configDir, prepared, server.URL, &stdout, &stderr); err != nil {
+	if err := Run(context.Background(), configDir, prepared, url, &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
+	declares := collected.declared()
 	if len(declares) != 1 {
 		t.Fatalf("declares = %v, want exactly one", declares)
 	}
-	resource, _ := declares[0]["resource"].(map[string]any)
-	if resource["name"] != "main" || resource["type"] != "LINK_TYPE_POSTGRES" {
+	resource := declares[0].GetResource()
+	if resource.GetName() != "main" || resource.GetType() != linksv1.LinkType_LINK_TYPE_POSTGRES {
 		t.Errorf("resource = %v, want the postgres named main", resource)
 	}
-	source, _ := declares[0]["source"].(string)
 	want := filepath.ToSlash(filepath.Join("infra", "__init__.py")) + ":3"
-	if !strings.HasSuffix(filepath.ToSlash(source), want) {
+	if source := filepath.ToSlash(declares[0].GetSource()); !strings.HasSuffix(source, want) {
 		t.Errorf("source = %q, want it to end with %q", source, want)
 	}
 }
 
-func pythonSDKPath(t *testing.T) string {
+func pythonSDKEnvironment(t *testing.T) string {
 	t.Helper()
-	dir, err := filepath.Abs(filepath.Join("..", "..", "..", "python", "ocel", "src"))
+	dir, err := filepath.Abs(filepath.Join("..", "..", "..", "python", ".venv", "bin"))
 	if err != nil {
-		t.Fatalf("locate the python sdk: %v", err)
+		t.Fatalf("locate the python workspace: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "python3")); err != nil {
+		t.Fatalf("the python sdk and its dependencies are not installed: run `uv sync --all-extras` in python/ (%v)", err)
 	}
 	return dir
 }

@@ -13,6 +13,7 @@ on:
       - "tests/fixtures/sdk/python/**"
       - "tests/fixtures/sdk/rust/**"
       - "crates/**"
+      - "python/**"
       - "pnpm-lock.yaml"
       - "turbo.json"
       - "scripts/floci.sh"
@@ -127,6 +128,17 @@ jobs:
         with:
           suite: gcp-live
           task: "@platform/gcp-suite#live"
+
+      - name: Setup uv
+        if: matrix.group.name == 'cli'
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: The python sdk the discovery suite runs
+        if: matrix.group.name == 'cli'
+        run: uv sync --all-extras --frozen --directory python
 
       - name: The ocel package the cli e2e deploys against
         if: matrix.group.name == 'cli'
