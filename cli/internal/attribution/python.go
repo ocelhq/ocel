@@ -21,8 +21,9 @@ const pythonProgram = "python3"
 type pythonWalk struct {
 	Entries map[string][]string `json:"entries"`
 	Error   *struct {
-		File string `json:"file"`
-		Line int    `json:"line"`
+		File    string `json:"file"`
+		Line    int    `json:"line"`
+		Message string `json:"message"`
 	} `json:"error"`
 }
 
@@ -36,6 +37,9 @@ func (pythonReach) Entries(ctx context.Context, root string, app App) (map[strin
 	}
 	if walked.Error != nil {
 		file, _ := relativeToRoot(root, walked.Error.File)
+		if walked.Error.Message != "" {
+			return nil, fmt.Errorf("attribution: app %q: %s:%d: %s", app.Name, file, walked.Error.Line, walked.Error.Message)
+		}
 		return nil, &UnresolvedImportError{
 			App:    app.Name,
 			File:   file,
@@ -77,18 +81,17 @@ func walkPythonImports(ctx context.Context, app, dir string, search []string) (p
 		return pythonWalk{}, fmt.Errorf("attribution: app %q is a python app and no %s is on PATH to read its imports with: %w", app, pythonProgram, err)
 	}
 
-	var stdout, stderr bytes.Buffer
+	var stdout bytes.Buffer
 	cmd := exec.CommandContext(ctx, program, append([]string{"-", dir}, search...)...)
 	cmd.Stdin = strings.NewReader(pythonReachScript)
 	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return pythonWalk{}, fmt.Errorf("attribution: app %q: read its imports: %s", app, strings.TrimSpace(stderr.String()))
+		return pythonWalk{}, fmt.Errorf("attribution: app %q: read its imports with %s: %w", app, program, err)
 	}
 
 	var walked pythonWalk
 	if err := json.Unmarshal(stdout.Bytes(), &walked); err != nil {
-		return pythonWalk{}, fmt.Errorf("attribution: app %q: read what the import walk said: %w", app, err)
+		return pythonWalk{}, fmt.Errorf("attribution: app %q: the import walker reported nothing ocel reads", app)
 	}
 	return walked, nil
 }
