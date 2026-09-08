@@ -13,6 +13,7 @@ import (
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/artifactregistry/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/secretmanager/v1"
@@ -35,6 +36,16 @@ const (
 const passphraseBytes = 32
 
 const (
+	dockerImages   = "DOCKER"
+	keepImages     = "KEEP"
+	deleteImages   = "DELETE"
+	untaggedImages = "UNTAGGED"
+
+	keepRecentPolicy   = "keep-recent"
+	dropUntaggedPolicy = "drop-untagged"
+)
+
+const (
 	nativeFirestore = "FIRESTORE_NATIVE"
 	protectionOn    = "DELETE_PROTECTION_ENABLED"
 	protectionOff   = "DELETE_PROTECTION_DISABLED"
@@ -55,7 +66,7 @@ func (b bootstrapper) Describe(ctx context.Context, class providerkit.Class) (pr
 }
 
 func described(read survey) providerkit.Bootstrap {
-	items := bootstrapItems(read.Names, read.Class)
+	items := bootstrapItems(read.Names, read.Class, read.Emulated)
 	return providerkit.Bootstrap{
 		Class:      read.Class,
 		Present:    read.Present,
@@ -87,7 +98,7 @@ func (b bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 		return providerkit.Plan{}, err
 	}
 	groups := providerkit.DeriveGroups(described(read), nil, req)
-	groups[0].Changes = planned(read, stackItems(read.Names, read.Class))
+	groups[0].Changes = planned(read, stackItems(read.Names, read.Class, read.Emulated))
 
 	params := providerkit.ChangeGroup{
 		Kind:    providerkit.ParameterGroupKind,
@@ -136,7 +147,7 @@ func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 		return err
 	}
 
-	items := bootstrapItems(read.Names, req.Class)
+	items := bootstrapItems(read.Names, req.Class, read.Emulated)
 	holder := item{Kind: KindBucket, Name: read.Names.Bucket(req.Class)}
 	if err := b.stand(ctx, read, stampHolder(items, holder), report); err != nil {
 		return err
@@ -210,6 +221,8 @@ func (b bootstrapper) make(ctx context.Context, read survey, held item) error {
 		return b.makeKey(ctx, held.Name)
 	case KindSecret:
 		return b.makeSecret(ctx, held.Name)
+	case KindRepository:
+		return b.makeRepository(ctx, held.Name)
 	default:
 		return providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing stands up a %s", held.Kind)
 	}
@@ -384,6 +397,79 @@ func (b bootstrapper) makeSecret(ctx context.Context, name string) error {
 	return nil
 }
 
+func (b bootstrapper) makeRepository(ctx context.Context, name string) error {
+	service, err := b.clients.Repositories()
+	if err != nil {
+		return err
+	}
+	creating, err := attempted(ctx, service.Projects.Locations.Repositories.Create(repositoryParent(b.clients), &artifactregistry.Repository{
+		Format:          dockerImages,
+		Description:     "the images ocel deploys into this project",
+		CleanupPolicies: keepingRecentImages(),
+	}).RepositoryId(name).Context(ctx).Do)
+	if taken(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("create the %s image repository: %w", name, err)
+	}
+	return b.repositoryAwaited(ctx, fmt.Sprintf("creating the %s image repository", name), creating)
+}
+
+func keepingRecentImages() map[string]artifactregistry.CleanupPolicy {
+	return map[string]artifactregistry.CleanupPolicy{
+		keepRecentPolicy: {
+			Id:                 keepRecentPolicy,
+			Action:             keepImages,
+			MostRecentVersions: &artifactregistry.CleanupPolicyMostRecentVersions{KeepCount: keptImages},
+		},
+		dropUntaggedPolicy: {
+			Id:        dropUntaggedPolicy,
+			Action:    deleteImages,
+			Condition: &artifactregistry.CleanupPolicyCondition{TagState: untaggedImages},
+		},
+	}
+}
+
+func (b bootstrapper) takeRepository(ctx context.Context, name string) error {
+	service, err := b.clients.Repositories()
+	if err != nil {
+		return err
+	}
+	deleting, err := attempted(ctx, service.Projects.Locations.Repositories.Delete(repositoryPath(b.clients, name)).Context(ctx).Do)
+	if absent(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("delete the %s image repository: %w", name, err)
+	}
+	return b.repositoryAwaited(ctx, fmt.Sprintf("deleting the %s image repository", name), deleting)
+}
+
+func (b bootstrapper) repositoryAwaited(ctx context.Context, doing string, operation *artifactregistry.Operation) error {
+	if operation == nil || operation.Done || operation.Name == "" {
+		return repositoryFailed(doing, operation)
+	}
+	service, err := b.clients.Repositories()
+	if err != nil {
+		return err
+	}
+	finished, err := until(ctx, doing, func() (*artifactregistry.Operation, error) {
+		return attempted(ctx, service.Projects.Locations.Operations.Get(operation.Name).Context(ctx).Do)
+	}, func(held *artifactregistry.Operation) bool { return held.Done })
+	if err != nil {
+		return err
+	}
+	return repositoryFailed(doing, finished)
+}
+
+func repositoryFailed(doing string, operation *artifactregistry.Operation) error {
+	if operation == nil || operation.Error == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %s", doing, operation.Error.Message)
+}
+
 func (b bootstrapper) makeDatabase(ctx context.Context, read survey) error {
 	service, err := b.clients.Databases()
 	if err != nil {
@@ -499,7 +585,7 @@ func (b bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 }
 
 func removals(read survey) []removal {
-	items := bootstrapItems(read.Names, read.Class)
+	items := bootstrapItems(read.Names, read.Class, read.Emulated)
 	byKind := map[Kind]item{}
 	buckets := map[string]item{}
 	for _, item := range items {
@@ -513,12 +599,16 @@ func removals(read survey) []removal {
 		byKind[KindKey],
 		byKind[KindKeyRing],
 		byKind[KindDatabase],
+		byKind[KindRepository],
 		buckets[read.Names.StateBucket(read.Class)],
 		buckets[read.Names.Bucket(read.Class)],
 	}
 
 	out := make([]removal, 0, len(ordered))
 	for _, item := range ordered {
+		if item.Kind == "" {
+			continue
+		}
 		out = append(out, removing(read, item))
 	}
 	return out
@@ -594,6 +684,8 @@ func (b bootstrapper) take(ctx context.Context, read survey, held item) error {
 		return b.takeDatabase(ctx, read)
 	case KindBucket:
 		return b.takeBucket(ctx, held.Name)
+	case KindRepository:
+		return b.takeRepository(ctx, held.Name)
 	default:
 		return providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing takes down a %s", held.Kind)
 	}
