@@ -110,16 +110,22 @@ func planned(read survey, items []item) []providerkit.Change {
 			Slow:   held.Slow,
 		}
 		switch {
+		case read.mends(held) != "":
+			change.Action, change.Reason = providerkit.ActionUpdate, read.mends(held)
+		case held.Shared && read.sibling && read.holds(held):
+			change.Action, change.Reason, change.Slow = providerkit.ActionKeep, sharedWith(read.Class), false
 		case read.Emulated && held.Kind == KindDatabase:
 			change.Action, change.Reason, change.Slow = providerkit.ActionKeep, reasonEmulated, false
-		case read.holds(held) && read.mends(held) != "":
-			change.Action, change.Reason = providerkit.ActionUpdate, read.mends(held)
 		case read.holds(held):
 			change.Action, change.Reason, change.Slow = providerkit.ActionKeep, reasonStanding, false
 		}
 		changes = append(changes, change)
 	}
 	return changes
+}
+
+func sharedWith(class providerkit.Class) string {
+	return fmt.Sprintf(reasonShared, siblingOf(class))
 }
 
 func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
@@ -503,13 +509,19 @@ func removals(read survey) []removal {
 	for _, held := range items {
 		byKind[held.Kind] = held
 	}
+	buckets := map[string]item{}
+	for _, held := range items {
+		if held.Kind == KindBucket {
+			buckets[held.Name] = held
+		}
+	}
 	ordered := []item{
 		byKind[KindSecret],
 		byKind[KindKey],
 		byKind[KindKeyRing],
 		byKind[KindDatabase],
-		{Kind: KindBucket, Name: StateBucketName(read.Project, read.Class)},
-		{Kind: KindBucket, Name: BucketName(read.Project, read.Class)},
+		buckets[StateBucketName(read.Project, read.Class)],
+		buckets[BucketName(read.Project, read.Class)],
 	}
 
 	out := make([]removal, 0, len(ordered))
@@ -524,14 +536,16 @@ func removing(read survey, held item) removal {
 	switch {
 	case held.Kind == KindKeyRing:
 		taking.action, taking.reason = providerkit.ActionKeep, reasonRingKept
-	case held.Kind == KindDatabase && read.sibling:
-		taking.action, taking.reason = providerkit.ActionKeep, fmt.Sprintf(reasonShared, siblingOf(read.Class))
+	case held.Shared && read.sibling:
+		taking.action, taking.reason = providerkit.ActionKeep, sharedWith(read.Class)
 	case held.Kind == KindDatabase && read.Emulated:
 		taking.action, taking.reason = providerkit.ActionKeep, reasonEmulated
 	case held.Kind == KindDatabase:
 		taking.action = providerkit.ActionDisableThenDelete
 	case held.Kind == KindKey:
 		taking.reason, taking.item.Slow = reasonDestroy, true
+	case held.Name == BucketName(read.Project, read.Class):
+		taking.item.Slow = true
 	}
 	if taking.action != providerkit.ActionKeep && !read.holds(taking.item) {
 		taking.action, taking.reason = providerkit.ActionKeep, "nothing stands here"
