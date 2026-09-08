@@ -1,35 +1,37 @@
+use crate::r#gen::common::links::v1::link::Properties;
+use crate::r#gen::common::links::v1::{Link, PostgresProperties};
 use crate::Error;
 
-pub(crate) fn link(name: &str, kind: &str) -> Result<serde_json::Value, Error> {
+pub(crate) fn postgres(name: &str, kind: &str) -> Result<PostgresProperties, Error> {
     let key = format!("OCEL_RESOURCE_{}_{}", kind.to_uppercase(), name);
     let raw = match std::env::var(&key) {
         Ok(raw) if !raw.is_empty() => raw,
         _ => return Err(Error::MissingLink { key }),
     };
 
-    let delivered: serde_json::Value = serde_json::from_str(&raw).map_err(|_| Error::Link {
+    let delivered: Link = serde_json::from_str(&raw).map_err(|_| Error::Link {
         key: key.clone(),
         expected: kind.to_uppercase(),
     })?;
 
-    match delivered.get(kind) {
-        Some(properties) if properties.is_object() => Ok(properties.clone()),
-        _ => Err(Error::WrongLinkType {
+    match delivered.properties {
+        Some(Properties::Postgres(properties)) => Ok(*properties),
+        other => Err(Error::WrongLinkType {
             key,
-            carried: carried(&delivered),
+            carried: carried(&other),
             expected: kind.to_uppercase(),
         }),
     }
 }
 
-fn carried(delivered: &serde_json::Value) -> String {
-    delivered
-        .as_object()
-        .into_iter()
-        .flatten()
-        .find(|(field, _)| *field != "name")
-        .map(|(field, _)| field.to_uppercase())
-        .unwrap_or_else(|| "UNSPECIFIED".to_string())
+fn carried(properties: &Option<Properties>) -> String {
+    match properties {
+        Some(Properties::Postgres(_)) => "POSTGRES",
+        Some(Properties::Bucket(_)) => "BUCKET",
+        Some(Properties::Custom(_)) => "CUSTOM",
+        None => "UNSPECIFIED",
+    }
+    .to_string()
 }
 
 pub(crate) fn encoded(value: &str) -> String {

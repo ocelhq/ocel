@@ -4,6 +4,8 @@ use std::sync::{Mutex, MutexGuard};
 static DELIVERED: Postgres = Postgres::new("delivered");
 static ABSENT: Postgres = Postgres::new("absent");
 static MISTYPED: Postgres = Postgres::new("mistyped");
+static EMPTY: Postgres = Postgres::new("empty");
+static FIXTURE: Postgres = Postgres::new("fixture");
 static UNREADABLE: Postgres = Postgres::new("unreadable");
 
 static ENV: Mutex<()> = Mutex::new(());
@@ -42,7 +44,7 @@ fn a_link_of_another_kind_says_what_it_carries() {
     let _env = env();
     std::env::set_var(
         "OCEL_RESOURCE_POSTGRES_mistyped",
-        r#"{"name":"mistyped","bucket":{"name":"uploads"}}"#,
+        r#"{"name":"mistyped","bucket":{"bucket":"uploads"}}"#,
     );
     let err = MISTYPED.connection_string().expect_err("a bucket link");
     assert_eq!(
@@ -50,6 +52,32 @@ fn a_link_of_another_kind_says_what_it_carries() {
         "OCEL_RESOURCE_POSTGRES_mistyped carries a BUCKET link, and this app reads it as a POSTGRES"
     );
     assert!(matches!(err, Error::WrongLinkType { .. }));
+}
+
+#[test]
+fn a_link_carrying_nothing_at_all_says_what_it_carries() {
+    let _env = env();
+    std::env::set_var("OCEL_RESOURCE_POSTGRES_empty", r#"{"name":"empty"}"#);
+    let err = EMPTY.connection_string().expect_err("no properties");
+    assert_eq!(
+        err.to_string(),
+        "OCEL_RESOURCE_POSTGRES_empty carries a UNSPECIFIED link, and this app reads it as a POSTGRES"
+    );
+}
+
+#[test]
+fn a_link_the_deploy_delivers_is_read_past_the_fields_this_app_uses() {
+    let _env = env();
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../proto/common/links/v1/fixtures/postgres.json");
+    std::env::set_var(
+        "OCEL_RESOURCE_POSTGRES_fixture",
+        std::fs::read_to_string(fixture).expect("the postgres link fixture"),
+    );
+    assert_eq!(
+        FIXTURE.connection_string().expect("a connection string"),
+        "postgres://fixture_operator:fixture-password-not-a-secret@shop-prod-main-r1a2b3c4.cluster-cxyz.us-east-1.rds.amazonaws.com:5433/fixture_catalog"
+    );
 }
 
 #[test]

@@ -1,8 +1,9 @@
 use crate::declare::discovering;
-use crate::link::{encoded, link};
+use crate::link::{encoded, postgres};
+use crate::r#gen::common::links::v1::PostgresProperties;
 use crate::Error;
 
-const KIND: &str = "postgres";
+pub(crate) const KIND: &str = "postgres";
 
 /// A postgres database an app declares and reads its link from.
 pub struct Postgres {
@@ -31,24 +32,13 @@ impl Postgres {
     /// fails when no link was delivered for the name, and during discovery.
     pub fn connection_string(&self) -> Result<String, Error> {
         let properties = self.properties("connection_string")?;
-        let field = |key: &str| {
-            properties
-                .get(key)
-                .and_then(|value| value.as_str())
-                .unwrap_or_default()
-                .to_string()
-        };
-        let port = properties
-            .get("port")
-            .and_then(|value| value.as_u64())
-            .unwrap_or_default();
         Ok(format!(
             "postgres://{}:{}@{}:{}/{}",
-            encoded(&field("username")),
-            encoded(&field("password")),
-            field("host"),
-            port,
-            encoded(&field("database")),
+            encoded(&properties.username),
+            encoded(&properties.password),
+            properties.host,
+            properties.port,
+            encoded(&properties.database),
         ))
     }
 
@@ -67,11 +57,11 @@ impl Postgres {
             .await
     }
 
-    fn properties(&self, access: &str) -> Result<serde_json::Value, Error> {
+    fn properties(&self, access: &str) -> Result<PostgresProperties, Error> {
         if discovering() {
             return Err(self.unprovisioned(access));
         }
-        link(self.name, KIND)
+        postgres(self.name, KIND)
     }
 
     fn unprovisioned(&self, access: &str) -> Error {
@@ -100,7 +90,6 @@ macro_rules! postgres {
     ($name:literal, version = $version:literal) => {{
         $crate::inventory::submit! {
             $crate::Declaration {
-                kind: "postgres",
                 name: $name,
                 version: $version,
                 file: file!(),
