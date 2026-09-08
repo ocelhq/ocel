@@ -31,7 +31,6 @@ func basedOn(t *testing.T, config v1.Config) (*Provider, *string) {
 func TestTheBaseAFunctionRunsOnIsPinnedByDigestPerRuntime(t *testing.T) {
 	for _, runtime := range []string{
 		providerkit.RuntimeNode,
-		providerkit.RuntimeNext,
 		providerkit.RuntimeGo,
 		providerkit.RuntimePython,
 	} {
@@ -116,6 +115,21 @@ func TestARuntimeNoBaseIsCarriedForIsRefused(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "deno") {
 		t.Errorf("FunctionBase(deno) = %v, want the runtime named", err)
+	}
+}
+
+func TestANextFunctionIsRefusedLikeAnyOtherRuntimeNoBaseIsCarriedFor(t *testing.T) {
+	p, _ := basedOn(t, v1.Config{})
+
+	_, err := p.FunctionBase(context.Background(), providerkit.Runtime{Name: providerkit.RuntimeNext})
+	if err == nil {
+		t.Fatal("FunctionBase(next) built an image, and Next on Cloud Run is not something this provider serves")
+	}
+	if code, refused := providerkit.RefusedCode(err); !refused || code != providerkit.CodeInvalid {
+		t.Errorf("FunctionBase(next) code = %v, want %v", code, providerkit.CodeInvalid)
+	}
+	if !strings.Contains(err.Error(), providerkit.RuntimeNext) {
+		t.Errorf("FunctionBase(next) = %v, want the runtime named", err)
 	}
 }
 
