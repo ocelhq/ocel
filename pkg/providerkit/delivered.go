@@ -23,8 +23,16 @@ func ResourceEnvName(kind LinkType, resource string) string {
 	return naming.ResourceEnvName(WireLinkType(kind), resource)
 }
 
+func (r *deployRun) delivers(entry AppEntry) bool {
+	if entry.Compute() == ComputeContainer {
+		return true
+	}
+	_, images := r.provider.(FunctionImager)
+	return images
+}
+
 func (r *deployRun) deliver(ctx context.Context, entry AppEntry, held AppValues) (map[string]string, error) {
-	if entry.Compute() != ComputeContainer {
+	if !r.delivers(entry) {
 		return nil, nil
 	}
 	delivered := make(map[string]string, len(held.Plain)+len(held.Sensitive)+len(held.Secrets)+len(held.Links))
@@ -79,7 +87,7 @@ func (r *deployRun) refuseUnsetSecret(app, key string) error {
 func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 	var stored map[values.Cell]bool
 	for _, entry := range r.plan.Apps {
-		if entry.Compute() != ComputeContainer {
+		if !r.delivers(entry) {
 			continue
 		}
 		held, err := r.manifestValues(entry, nil)
