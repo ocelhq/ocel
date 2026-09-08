@@ -34,7 +34,7 @@ type Reach interface {
 	Entries(ctx context.Context, root string, app App) (map[string]Reachability, error)
 }
 
-var reaches = map[discovery.Language]Reach{discovery.JS: jsReach{}, discovery.Go: goReach{}}
+var reaches = map[discovery.Language]Reach{discovery.JS: jsReach{}, discovery.Go: goReach{}, discovery.Python: pythonReach{}}
 
 type Usage struct {
 	App   string
