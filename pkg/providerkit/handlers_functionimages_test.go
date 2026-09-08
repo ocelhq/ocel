@@ -11,6 +11,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -104,5 +105,61 @@ func TestDeployShipsAFunctionAsAnImageWhereTheProviderTakesItThatWay(t *testing.
 	}
 	if spec.Artifact.Key != "" {
 		t.Errorf("the function spec names artifact %q as well as an image, want the image alone", spec.Artifact.Key)
+	}
+}
+
+func TestAFunctionRunAsAnImageIsHandedItsValuesAtDeployTime(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	base := fake.NewProvider(fake.Options{})
+	served := servedBy(t, imaging{Provider: base})
+	standsBootstrapped(t, served)
+
+	req := imagingDeployRequest()
+	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
+	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, "DATABASE_URL", "")
+	sealValue(t, base, "DATABASE_URL", "postgres://sealed")
+
+	result, _ := deploy(t, served, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	plans := base.Releaser().Plans()
+	delivered := plans[len(plans)-1].App.Values.Delivered
+	for key, want := range map[string]string{"REGION": "eu-west-1", "DATABASE_URL": "postgres://sealed"} {
+		if delivered[key] != want {
+			t.Errorf("the function is handed %s=%q, want %q: an image reads its values off its own environment", key, delivered[key], want)
+		}
+	}
+	linked := providerkit.ResourceEnvName(providerkit.LinkPostgres, "orders")
+	if delivered[linked] == "" {
+		t.Errorf("the function is handed %v and nothing under %s, so the resource it links to is unreachable", delivered, linked)
+	}
+}
+
+func TestAFunctionRunAsAnImageRefusesTheNameThePortIsInjectedUnder(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	served, _ := imagingServed(t)
+
+	req := declaring(imagingDeployRequest(), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "PORT", "3000")
+	stream, err := served.Deploy(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Deploy() error = %v", err)
+	}
+	defer stream.Close()
+	refusal := ""
+	for stream.Receive() {
+		result := stream.Msg().GetResult()
+		if result.GetSuccess() {
+			t.Fatal("Deploy() stood up an app declaring PORT, want it refused: the image is told which port to bind under that very name")
+		}
+		if result.GetError() != "" {
+			refusal = result.GetError()
+		}
+	}
+	for _, want := range []string{"PORT", "web"} {
+		if !strings.Contains(refusal+connectMessage(stream.Err()), want) {
+			t.Errorf("the refusal reads %q and never names %q", refusal, want)
+		}
 	}
 }
