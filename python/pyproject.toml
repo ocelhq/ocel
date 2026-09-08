@@ -6,6 +6,7 @@ dev = ["pytest>=8", "pytest-asyncio>=1", "ruff>=0.14"]
 
 [tool.ruff]
 line-length = 100
+src = ["ocel/src"]
 extend-exclude = ["ocel/src/ocel/gen"]
 
 [tool.ruff.lint]

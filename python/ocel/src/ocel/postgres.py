@@ -2,8 +2,16 @@ import asyncio
 import inspect
 from urllib.parse import quote
 
+from protobuf import Oneof
+
 from ocel._declare import declare, discovering
 from ocel._link import link, unprovisioned
+from ocel.gen.app.resources.v1.resources_pb import (
+    DeclareRequest,
+    PostgresConfig,
+    ResourceIdentifier,
+)
+from ocel.gen.common.links.v1.links_pb import LinkType
 
 _KIND = "postgres"
 _DEFAULT_VERSION = "17"
@@ -26,12 +34,10 @@ class Postgres:
     def connection_string(self) -> str:
         """The postgres URL of the delivered link, with the credentials percent-encoded."""
         properties = link(self.name, _KIND)
-        user = quote(properties.get("username", ""), safe="")
-        password = quote(properties.get("password", ""), safe="")
-        host = properties.get("host", "")
-        port = properties.get("port", "")
-        database = quote(properties.get("database", ""), safe="")
-        return f"postgres://{user}:{password}@{host}:{port}/{database}"
+        user = quote(properties.username, safe="")
+        password = quote(properties.password, safe="")
+        database = quote(properties.database, safe="")
+        return f"postgres://{user}:{password}@{properties.host}:{properties.port}/{database}"
 
     async def pool(self):
         """The asyncpg pool over the delivered link, opened on the first call and returned
@@ -66,9 +72,10 @@ def postgres(name: str, *, version: str | None = None) -> Postgres:
         return Postgres(name)
     caller = inspect.stack(0)[1]
     declare(
-        _KIND,
-        name,
-        {"version": version or _DEFAULT_VERSION},
-        f"{caller.filename}:{caller.lineno}",
+        DeclareRequest(
+            resource=ResourceIdentifier(type=LinkType.POSTGRES, name=name),
+            config=Oneof(_KIND, PostgresConfig(version=version or _DEFAULT_VERSION)),
+            source=f"{caller.filename}:{caller.lineno}",
+        )
     )
     return _Unprovisioned(name)
