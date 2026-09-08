@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/rand/v2"
 	"net"
 	"net/http"
@@ -13,12 +14,19 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const (
 	askAttempts = 4
 	askBackoff  = 100 * time.Millisecond
 	askCeiling  = 2 * time.Second
+)
+
+const (
+	waitAttempts = 60
+	waitCeiling  = 5 * time.Second
 )
 
 func asked[T any](ctx context.Context, ask func() (T, int, error)) (T, int, error) {
@@ -114,8 +122,29 @@ func answeredCode(err error) int {
 	return 0
 }
 
-func waited(ctx context.Context, attempt int) bool {
-	backoff := min(askBackoff<<(attempt-1), askCeiling)
+func until[T any](ctx context.Context, doing string, ask func() (T, error), settled func(T) bool) (T, error) {
+	var nothing T
+	for attempt := range waitAttempts {
+		if attempt > 0 && !waitedFor(ctx, attempt, waitCeiling) {
+			return nothing, fmt.Errorf("wait for %s: %w", doing, ctx.Err())
+		}
+		value, err := ask()
+		if err != nil {
+			return nothing, err
+		}
+		if settled(value) {
+			return value, nil
+		}
+	}
+	return nothing, providerkit.Refuse(providerkit.CodeNotReady,
+		"%s is still not done after %d attempts, and going on before it is leaves a bootstrap half made.\nTry again once Google has caught up",
+		doing, waitAttempts)
+}
+
+func waited(ctx context.Context, attempt int) bool { return waitedFor(ctx, attempt, askCeiling) }
+
+func waitedFor(ctx context.Context, attempt int, ceiling time.Duration) bool {
+	backoff := min(askBackoff<<(attempt-1), ceiling)
 	timer := time.NewTimer(backoff/2 + rand.N(backoff/2))
 	defer timer.Stop()
 	select {

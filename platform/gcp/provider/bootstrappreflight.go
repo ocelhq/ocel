@@ -30,6 +30,7 @@ var bootstrapPermissions = []string{
 	"cloudkms.cryptoKeys.create",
 	"cloudkms.cryptoKeys.get",
 	"cloudkms.cryptoKeyVersions.create",
+	"cloudkms.cryptoKeyVersions.get",
 	"cloudkms.cryptoKeyVersions.destroy",
 	"secretmanager.secrets.create",
 	"secretmanager.secrets.get",
