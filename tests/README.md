@@ -158,13 +158,20 @@ one:
 gcloud auth application-default login
 gcloud services enable firestore.googleapis.com storage.googleapis.com \
   cloudkms.googleapis.com secretmanager.googleapis.com --project <project>
-OCEL_GCP_LIVE_PROJECT=<project> go test -C platform/gcp/provider -count=1 -run '^Test(Live|Project)' ./...
+OCEL_NAMESPACE=ocel-live OCEL_GCP_LIVE_PROJECT=<project> \
+  go test -C platform/gcp/provider -count=1 -run '^Test(Live|Project)' ./...
 ```
 
 | name                    | kind | what it holds                                                        |
 | ----------------------- | ---- | -------------------------------------------------------------------- |
 | `OCEL_GCP_LIVE_PROJECT` | env  | the real project a by-hand `TestLive` and `TestProject` run bootstraps into and tears down |
 | `OCEL_GCP_LIVE_REGION`  | env  | the region that run uses; `europe-west1` when unset                  |
+| `OCEL_NAMESPACE`        | env  | the namespace every name the run derives carries; `ocel` when unset  |
+
+Name one fixed namespace for a real project and keep using it. Google never deletes a key
+ring, so a run under a fresh namespace leaves one behind for good, and a namespace shorter
+than four characters or ending in a dash is refused at construction because no Firestore
+database can be named after it.
 
 The run creates and destroys buckets, a Firestore database, a key ring and a secret in
 that project, and schedules its KMS key material for destruction, so name a project you
