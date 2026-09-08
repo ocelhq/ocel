@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
-import { UNSUPPORTED_WARM } from "../src/shared/membrane.mjs";
+import { UNSUPPORTED_WARM } from "../src/membrane.mjs";
 
 const appModule = `export default (req, res) => res.end("ok");
 `;
@@ -65,7 +65,7 @@ beforeAll(async () => {
 
   process.env.OCEL_CONTROL_SOCKET = sockPath;
   process.env.OCEL_HANDLER = handler;
-  await import("../src/node/entrypoint.mjs");
+  await import("../src/entrypoint.mjs");
   await waitFor(() => messages.some((m) => m.type === "server-ready"));
   port = messages.find((m) => m.type === "server-ready")!.payload.httpPort;
 });

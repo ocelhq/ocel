@@ -81,7 +81,7 @@ afterEach(async () => {
 test("holds the application's import until the first push, then runs it with the values in hand", async () => {
   vi.stubEnv("OCEL_LIVE_KEYS", "API_TOKEN");
 
-  void import("../src/node/entrypoint.mjs");
+  void import("@framework/node-runtime/entrypoint");
   await waitForConnection();
   await settle();
 
@@ -121,7 +121,7 @@ module.exports = { handler(req, res) { res.end("ok"); } };
 });
 
 test("runs the application straight away when the function declares nothing live", async () => {
-  void import("../src/node/entrypoint.mjs");
+  void import("@framework/node-runtime/entrypoint");
 
   await waitFor(() => messages.some((m) => m.type === "server-ready"), "server-ready");
   expect((globalThis as any).__appImportedAt).toBe(1);

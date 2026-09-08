@@ -87,8 +87,9 @@ const specs = [
     "noiseTier": "precise",
     "filePatterns": [
       "platform/aws/membrane/src/**/entrypoint.mts",
-      "platform/aws/membrane/src/node/fetch-bridge.mts",
-      "platform/aws/membrane/src/shared/membrane.mts",
+      "frameworks/node/runtime/src/entrypoint.mts",
+      "frameworks/node/runtime/src/fetch-bridge.mts",
+      "frameworks/node/runtime/src/membrane.mts",
       "platform/aws/functions/image-optimizer/src/*.mts",
       "platform/aws/provider/cmd/membrane/bootstrap/*.go",
       "platform/aws/provider/deploy/function.go"
@@ -393,10 +394,10 @@ const specs = [
     "description": "Ocel AWS Function URL event dispatch into Node and Next.js origin runtimes.",
     "noiseTier": "precise",
     "filePatterns": [
-      "platform/aws/membrane/src/node/entrypoint.mts",
-      "platform/aws/membrane/src/node/fetch-bridge.mts",
+      "frameworks/node/runtime/src/entrypoint.mts",
+      "frameworks/node/runtime/src/fetch-bridge.mts",
       "platform/aws/membrane/src/next/entrypoint.mts",
-      "platform/aws/membrane/src/shared/membrane.mts",
+      "frameworks/node/runtime/src/membrane.mts",
       "platform/aws/provider/cmd/membrane/bootstrap/*.go",
       "platform/aws/provider/deploy/function.go"
     ],

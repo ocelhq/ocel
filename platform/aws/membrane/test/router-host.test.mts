@@ -2,6 +2,7 @@ import http from "node:http";
 import v8 from "node:v8";
 import vm from "node:vm";
 import type { RoutingManifest } from "@framework/next-protocol/routing-manifest";
+import { edgeHeader, routerMode } from "@framework/node-runtime/edge-kind";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { s3AssetBucket } from "../src/next/router-assets.mjs";
 import {
@@ -12,7 +13,6 @@ import {
   withoutClientControl,
 } from "../src/next/router-host.mjs";
 import { isLoopback, siblingOriginFetch } from "../src/next/router-signing.mjs";
-import { edgeHeader, routerMode } from "../src/shared/edge-kind.mjs";
 
 const LOCAL_BUNDLE = "local-bundle";
 const SIBLING_BUNDLE = "other-bundle";

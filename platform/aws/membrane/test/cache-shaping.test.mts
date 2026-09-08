@@ -1,3 +1,4 @@
+import { invalidatesByCacheTag, routerMode } from "@framework/node-runtime/edge-kind";
 import { expect, test } from "vitest";
 import {
   type OriginShaping,
@@ -7,7 +8,6 @@ import {
 } from "../src/next/cache-shaping.mjs";
 import { noteTags } from "../src/next/origin-tags.mjs";
 import type { ProjectManifest } from "../src/next/project-manifest.mjs";
-import { invalidatesByCacheTag, routerMode } from "../src/shared/edge-kind.mjs";
 
 const prefix = "prod/shop/web/r0a1b2c3d/isr";
 

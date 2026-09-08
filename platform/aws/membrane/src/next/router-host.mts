@@ -3,13 +3,13 @@ import type { RoutingManifest } from "@framework/next-protocol/routing-manifest"
 import { CONTROL_HEADERS, type RouteDeps, serve } from "@framework/next-router";
 import type { AssetBucket } from "@framework/next-router/assets";
 import { functionUrlImageOrigin } from "@framework/next-router/image";
-import { fetchToNodeHandler } from "../node/fetch-bridge.mjs";
 import {
   invalidatesByCacheTag,
   routingManifestPathVar,
   withEdgeHeader,
-} from "../shared/edge-kind.mjs";
-import type { Invoke } from "../shared/membrane.mjs";
+} from "@framework/node-runtime/edge-kind";
+import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
+import type { Invoke } from "@framework/node-runtime/membrane";
 import { s3AssetBucket, uncachedResponses } from "./router-assets.mjs";
 import { credentialsOf, s3ObjectFetch, siblingOriginFetch } from "./router-signing.mjs";
 

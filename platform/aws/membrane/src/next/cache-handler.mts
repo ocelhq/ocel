@@ -8,7 +8,7 @@ import {
   tagsOf,
   variantHeadersFile,
 } from "@framework/next-cache";
-import { background } from "../shared/background.mjs";
+import { background } from "@framework/node-runtime/background";
 import {
   awsCacheStore,
   type CacheEntryFile,

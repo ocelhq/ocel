@@ -5,7 +5,7 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { background, runWithWaitUntil } from "../src/shared/background.mjs";
+import { background, runWithWaitUntil } from "../src/background.mjs";
 
 type Msg = { type: string; payload: any };
 
@@ -40,11 +40,11 @@ async function start(invoke: Invoke): Promise<number> {
   return messages.filter((m) => m.type === "server-ready").at(-1)!.payload.httpPort;
 }
 
-let serveInvoke: typeof import("../src/shared/membrane.mts").serveInvoke;
-let serveServer: typeof import("../src/shared/membrane.mts").serveServer;
-let drainWaitUntil: typeof import("../src/shared/membrane.mts").drainWaitUntil;
-let startServer: typeof import("../src/shared/membrane.mts").startServer;
-type Invoke = import("../src/shared/membrane.mts").Invoke;
+let serveInvoke: typeof import("../src/membrane.mjs").serveInvoke;
+let serveServer: typeof import("../src/membrane.mjs").serveServer;
+let drainWaitUntil: typeof import("../src/membrane.mjs").drainWaitUntil;
+let startServer: typeof import("../src/membrane.mjs").startServer;
+type Invoke = import("../src/membrane.mjs").Invoke;
 
 beforeAll(async () => {
   sockDir = await mkdtemp(join(tmpdir(), "ocel-ctrl-"));
@@ -70,7 +70,7 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => controlServer.listen(sockPath, resolve));
 
   process.env.OCEL_CONTROL_SOCKET = sockPath;
-  const mod = await import("../src/shared/membrane.mts");
+  const mod = await import("../src/membrane.mjs");
   serveInvoke = mod.serveInvoke;
   serveServer = mod.serveServer;
   drainWaitUntil = mod.drainWaitUntil;
@@ -174,7 +174,9 @@ describe("onListening", () => {
     let seen: number | undefined;
 
     await serveInvoke(
-      (_req, res) => res.end("ok"),
+      (_req, res) => {
+        res.end("ok");
+      },
       (port) => {
         seen = port;
       },

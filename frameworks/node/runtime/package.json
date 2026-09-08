@@ -1,0 +1,24 @@
+{
+  "name": "@framework/node-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "the host-neutral runtime a node function is served through",
+  "exports": {
+    "./background": "./src/background.mts",
+    "./edge-kind": "./src/edge-kind.mts",
+    "./entrypoint": "./src/entrypoint.mts",
+    "./fetch-bridge": "./src/fetch-bridge.mts",
+    "./live-values": "./src/live-values.mts",
+    "./membrane": "./src/membrane.mts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

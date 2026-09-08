@@ -1,9 +1,9 @@
 import type http from "node:http";
 import { dirname, isAbsolute, relative } from "node:path";
 import { pathToFileURL } from "node:url";
-import { runWithWaitUntil } from "../shared/background.mjs";
-import { routerMode } from "../shared/edge-kind.mjs";
-import { awaitLiveValues } from "../shared/live-values.mjs";
+import { runWithWaitUntil } from "@framework/node-runtime/background";
+import { routerMode } from "@framework/node-runtime/edge-kind";
+import { awaitLiveValues } from "@framework/node-runtime/live-values";
 import {
   type Invoke,
   installCompileCacheFlush,
@@ -12,7 +12,7 @@ import {
   serveEntry,
   serveInvoke,
   serveLocal,
-} from "../shared/membrane.mjs";
+} from "@framework/node-runtime/membrane";
 import { originShaping, shapeOriginCache } from "./cache-shaping.mjs";
 import { loadIncrementalCacheFactory } from "./incremental-cache.mjs";
 import { loadProjectManifest } from "./project-manifest.mjs";

@@ -1,7 +1,8 @@
 import http from "node:http";
 import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
-import { awaitLiveValues } from "../shared/live-values.mjs";
+import { type FetchHandler, fetchToNodeHandler } from "./fetch-bridge.mjs";
+import { awaitLiveValues } from "./live-values.mjs";
 import {
   type Invoke,
   installCompileCacheFlush,
@@ -9,8 +10,7 @@ import {
   reportFatalBoot,
   serveInvoke,
   serveServer,
-} from "../shared/membrane.mjs";
-import { type FetchHandler, fetchToNodeHandler } from "./fetch-bridge.mjs";
+} from "./membrane.mjs";
 
 type Loaded = { kind: "server"; value: http.Server } | { kind: "export"; value: unknown };
 
