@@ -81,7 +81,8 @@ When you are running the CLI (`ocel dev`, `ocel deploy` or `ocel preview`) this 
 
 <Callout>
   TIP: The CLI discovers resources from an `infra` folder at the same level as
-  the config file. For monorepos, this can be customized using the
+  the config file, and reads the folder's language from the source files in it
+  rather than from any manifest. For monorepos, this can be customized using the
   `discovery.paths` option in the [config](../configuration.mdx).
 </Callout>
 
