@@ -55,7 +55,7 @@ func (b bootstrapper) Describe(ctx context.Context, class providerkit.Class) (pr
 }
 
 func described(read survey) providerkit.Bootstrap {
-	items := bootstrapItems(read.Project, read.Class)
+	items := bootstrapItems(read.Names, read.Class)
 	return providerkit.Bootstrap{
 		Class:      read.Class,
 		Present:    read.Present,
@@ -65,7 +65,7 @@ func described(read survey) providerkit.Bootstrap {
 			Name:          read.Project + "/" + string(read.Class),
 			Present:       read.Present,
 			Schema:        uint32(read.Stamp.Schema),
-			DigestCurrent: read.Stamp.Digest == digestOf(items) && read.current(items),
+			DigestCurrent: read.Stamp.Digest == digestOf(read.Names.Namespace(), items) && read.current(items),
 			Writer:        read.Stamp.Writer,
 		}},
 	}
@@ -87,12 +87,12 @@ func (b bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 		return providerkit.Plan{}, err
 	}
 	groups := providerkit.DeriveGroups(described(read), nil, req)
-	groups[0].Changes = planned(read, stackItems(read.Project, read.Class))
+	groups[0].Changes = planned(read, stackItems(read.Names, read.Class))
 
 	params := providerkit.ChangeGroup{
 		Kind:    providerkit.ParameterGroupKind,
 		Name:    providerkit.ParameterGroupKind,
-		Changes: planned(read, parameterItems(read.Class)),
+		Changes: planned(read, parameterItems(read.Names, read.Class)),
 	}
 	params.Action, params.Reason = providerkit.RollUp(params.Changes)
 	return providerkit.Plan{Groups: providerkit.Vendored(Vendor, append(groups, params))}, nil
@@ -136,17 +136,18 @@ func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 		return err
 	}
 
-	items := bootstrapItems(read.Project, req.Class)
-	holder := item{Kind: KindBucket, Name: BucketName(read.Project, req.Class)}
+	items := bootstrapItems(read.Names, req.Class)
+	holder := item{Kind: KindBucket, Name: read.Names.Bucket(req.Class)}
 	if err := b.stand(ctx, read, stampHolder(items, holder), report); err != nil {
 		return err
 	}
 
 	written := stamp{
-		Schema: providerkit.BootstrapSchema,
-		State:  stateApplying,
-		Writer: req.Writer.String(),
-		Digest: digestOf(items),
+		Schema:    providerkit.BootstrapSchema,
+		Namespace: read.Names.Namespace().String(),
+		State:     stateApplying,
+		Writer:    req.Writer.String(),
+		Digest:    digestOf(read.Names.Namespace(), items),
 	}
 	generation, err := b.stampWith(ctx, read, written, read.Generation)
 	if err != nil {
@@ -224,7 +225,7 @@ func (b bootstrapper) stampWith(ctx context.Context, read survey, written stamp,
 	if err != nil {
 		return 0, fmt.Errorf("write %s: %w", StampObject, err)
 	}
-	object := client.Bucket(BucketName(read.Project, read.Class)).Object(StampObject).If(onlyWriter(generation))
+	object := client.Bucket(read.Names.Bucket(read.Class)).Object(StampObject).If(onlyWriter(generation))
 	writer := object.NewWriter(ctx)
 	if _, err := writer.Write(append(body, '\n')); err != nil {
 		writer.Close()
@@ -251,11 +252,11 @@ func (b bootstrapper) stampRefusal(ctx context.Context, read survey, err error) 
 	return providerkit.Refuse(providerkit.CodeBusy,
 		"%s wrote %s in %s while this run was writing it, and two bootstraps of the same class interleaving leave a stack neither of them describes.\n"+
 			"Wait for that run to finish, then try again",
-		writerNamed(read.Stamp.Writer), StampObject, BucketName(read.Project, read.Class))
+		writerNamed(read.Stamp.Writer), StampObject, read.Names.Bucket(read.Class))
 }
 
 func (b bootstrapper) writerNow(ctx context.Context, read survey) string {
-	now, err := b.stamped(ctx, BucketName(read.Project, read.Class))
+	now, err := b.stamped(ctx, read.Names.Bucket(read.Class))
 	if err != nil || !now.held {
 		return read.Stamp.Writer
 	}
@@ -291,12 +292,12 @@ func (b bootstrapper) makeKeyRing(ctx context.Context) error {
 	_, err = dialled(ctx, func() (*kmspb.KeyRing, error) {
 		return client.CreateKeyRing(ctx, &kmspb.CreateKeyRingRequest{
 			Parent:    fmt.Sprintf("projects/%s/locations/%s", b.clients.project, b.clients.region),
-			KeyRingId: KeyRing,
+			KeyRingId: b.clients.KeyRing(),
 			KeyRing:   &kmspb.KeyRing{},
 		})
 	})
 	if err != nil && status.Code(err) != codes.AlreadyExists {
-		return fmt.Errorf("create the %s key ring: %w", KeyRing, err)
+		return fmt.Errorf("create the %s key ring: %w", b.clients.KeyRing(), err)
 	}
 	return nil
 }
@@ -393,14 +394,14 @@ func (b bootstrapper) makeDatabase(ctx context.Context, read survey) error {
 		LocationId:            read.Region,
 		Type:                  nativeFirestore,
 		DeleteProtectionState: protectionOn,
-	}).DatabaseId(recordDatabase).Context(ctx).Do)
+	}).DatabaseId(b.clients.Database()).Context(ctx).Do)
 	if taken(err) {
 		return b.databaseServesThisRegion(ctx, read)
 	}
 	if err != nil {
-		return fmt.Errorf("create the %q Firestore database: %w", recordDatabase, err)
+		return fmt.Errorf("create the %q Firestore database: %w", b.clients.Database(), err)
 	}
-	return b.awaited(ctx, fmt.Sprintf("creating the %q Firestore database", recordDatabase), operation)
+	return b.awaited(ctx, fmt.Sprintf("creating the %q Firestore database", b.clients.Database()), operation)
 }
 
 func (b bootstrapper) databaseServesThisRegion(ctx context.Context, read survey) error {
@@ -408,9 +409,9 @@ func (b bootstrapper) databaseServesThisRegion(ctx context.Context, read survey)
 	if err != nil {
 		return err
 	}
-	held, err := attempted(ctx, service.Projects.Databases.Get(databasePath(read.Project)).Context(ctx).Do)
+	held, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients)).Context(ctx).Do)
 	if err != nil {
-		return fmt.Errorf("read the %q Firestore database that already stands: %w", recordDatabase, err)
+		return fmt.Errorf("read the %q Firestore database that already stands: %w", b.clients.Database(), err)
 	}
 	if held.LocationId == read.Region {
 		return b.protectDatabase(ctx)
@@ -419,7 +420,7 @@ func (b bootstrapper) databaseServesThisRegion(ctx context.Context, read survey)
 		"project %s already holds the %q Firestore database in %s and Firestore never moves one, "+
 			"so the records this bootstrap writes would sit a continent away from the buckets and keys it names %s for.\n"+
 			"Bootstrap this project in %s, or deploy into a project with no %q database",
-		read.Project, recordDatabase, held.LocationId, read.Region, held.LocationId, recordDatabase)
+		read.Project, b.clients.Database(), held.LocationId, read.Region, held.LocationId, b.clients.Database())
 }
 
 func (b bootstrapper) protectDatabase(ctx context.Context) error {
@@ -427,13 +428,13 @@ func (b bootstrapper) protectDatabase(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	operation, err := attempted(ctx, service.Projects.Databases.Patch(databasePath(b.clients.project),
+	operation, err := attempted(ctx, service.Projects.Databases.Patch(databasePath(b.clients),
 		&firestoreadmin.GoogleFirestoreAdminV1Database{DeleteProtectionState: protectionOn}).
 		UpdateMask("deleteProtectionState").Context(ctx).Do)
 	if err != nil {
-		return fmt.Errorf("hold the %q Firestore database under delete protection: %w", recordDatabase, err)
+		return fmt.Errorf("hold the %q Firestore database under delete protection: %w", b.clients.Database(), err)
 	}
-	return b.awaited(ctx, fmt.Sprintf("holding the %q Firestore database under delete protection", recordDatabase), operation)
+	return b.awaited(ctx, fmt.Sprintf("holding the %q Firestore database under delete protection", b.clients.Database()), operation)
 }
 
 func (b bootstrapper) awaited(ctx context.Context, doing string, operation *firestoreadmin.GoogleLongrunningOperation) error {
@@ -499,7 +500,7 @@ func (b bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 }
 
 func removals(read survey) []removal {
-	items := bootstrapItems(read.Project, read.Class)
+	items := bootstrapItems(read.Names, read.Class)
 	byKind := map[Kind]item{}
 	buckets := map[string]item{}
 	for _, item := range items {
@@ -513,8 +514,8 @@ func removals(read survey) []removal {
 		byKind[KindKey],
 		byKind[KindKeyRing],
 		byKind[KindDatabase],
-		buckets[StateBucketName(read.Project, read.Class)],
-		buckets[BucketName(read.Project, read.Class)],
+		buckets[read.Names.StateBucket(read.Class)],
+		buckets[read.Names.Bucket(read.Class)],
 	}
 
 	out := make([]removal, 0, len(ordered))
@@ -537,7 +538,7 @@ func removing(read survey, held item) removal {
 		taking.action = providerkit.ActionDisableThenDelete
 	case held.Kind == KindKey:
 		taking.reason, taking.item.Slow = reasonDestroy, true
-	case held.Name == BucketName(read.Project, read.Class):
+	case held.Name == read.Names.Bucket(read.Class):
 		taking.item.Slow = true
 	}
 	if taking.action != providerkit.ActionKeep && !read.holds(taking.item) {
@@ -555,7 +556,7 @@ func (b bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"%s still holds the state of %s, and removing the bucket a stack is recorded in strands what that stack stood up.\n"+
 				"Run `%s` in every project deployed here first",
-			StateBucketName(read.Project, class), read.stateOf, destroyIn(class))
+			read.Names.StateBucket(class), read.stateOf, destroyIn(class))
 	}
 	if read.Present {
 		leaving := read.Stamp
@@ -640,7 +641,7 @@ func (b bootstrapper) takeDatabase(ctx context.Context, read survey) error {
 	if err != nil {
 		return err
 	}
-	path := databasePath(read.Project)
+	path := databasePath(b.clients)
 	lifting, err := attempted(ctx, service.Projects.Databases.Patch(path, &firestoreadmin.GoogleFirestoreAdminV1Database{
 		DeleteProtectionState: protectionOff,
 	}).UpdateMask("deleteProtectionState").Context(ctx).Do)
@@ -648,9 +649,9 @@ func (b bootstrapper) takeDatabase(ctx context.Context, read survey) error {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("lift delete protection from the %q Firestore database: %w", recordDatabase, err)
+		return fmt.Errorf("lift delete protection from the %q Firestore database: %w", b.clients.Database(), err)
 	}
-	lifted := fmt.Sprintf("lifting delete protection from the %q Firestore database", recordDatabase)
+	lifted := fmt.Sprintf("lifting delete protection from the %q Firestore database", b.clients.Database())
 	if err := b.awaited(ctx, lifted, lifting); err != nil {
 		return err
 	}
@@ -660,9 +661,9 @@ func (b bootstrapper) takeDatabase(ctx context.Context, read survey) error {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("delete the %q Firestore database: %w", recordDatabase, err)
+		return fmt.Errorf("delete the %q Firestore database: %w", b.clients.Database(), err)
 	}
-	return b.awaited(ctx, fmt.Sprintf("deleting the %q Firestore database", recordDatabase), deleting)
+	return b.awaited(ctx, fmt.Sprintf("deleting the %q Firestore database", b.clients.Database()), deleting)
 }
 
 func (b bootstrapper) takeBucket(ctx context.Context, name string) error {

@@ -148,12 +148,12 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 		}
 	}
 	for row, group := range map[string]string{
-		"firestore:database/ocel":                                     providerkit.StackGroupKind,
-		"storage:bucket/" + gcp.BucketName(liveProject(), class):      providerkit.StackGroupKind,
-		"storage:bucket/" + gcp.StateBucketName(liveProject(), class): providerkit.StackGroupKind,
-		"kms:keyring/" + gcp.KeyRing:                                  providerkit.StackGroupKind,
-		"kms:key/" + string(class):                                    providerkit.StackGroupKind,
-		"secretmanager:secret/" + gcp.PassphraseSecret(class):         providerkit.ParameterGroupKind,
+		"firestore:database/" + liveNames(t).Database():                providerkit.StackGroupKind,
+		"storage:bucket/" + liveNames(t).Bucket(class):                 providerkit.StackGroupKind,
+		"storage:bucket/" + liveNames(t).StateBucket(class):            providerkit.StackGroupKind,
+		"kms:keyring/" + liveNames(t).KeyRing():                        providerkit.StackGroupKind,
+		"kms:key/" + string(class):                                     providerkit.StackGroupKind,
+		"secretmanager:secret/" + liveNames(t).PassphraseSecret(class): providerkit.ParameterGroupKind,
 	} {
 		if _, shown := kinds[row]; !shown {
 			t.Errorf("Plan() shows no row for %s, and what the plan does not show, the apply may not do", row)
@@ -249,7 +249,7 @@ func interrupt(t *testing.T, p *gcp.Provider, class providerkit.Class) {
 	}
 	t.Cleanup(func() { client.Close() })
 
-	writer := client.Bucket(gcp.BucketName(liveProject(), class)).Object(gcp.StampObject).NewWriter(ctx)
+	writer := client.Bucket(liveNames(t).Bucket(class)).Object(gcp.StampObject).NewWriter(ctx)
 	if _, err := writer.Write([]byte(`{"schema":1,"state":"applying","writer":"live-suite","digest":"halfway"}`)); err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestLiveAStateBucketHoldingAStackIsNotSweptOutFromUnderIt(t *testing.T) {
 	}
 	defer client.Close()
 
-	object := client.Bucket(gcp.StateBucketName(liveProject(), class)).Object(".pulumi/stacks/ocel/shop.json")
+	object := client.Bucket(liveNames(t).StateBucket(class)).Object(".pulumi/stacks/ocel/shop.json")
 	writer := object.NewWriter(ctx)
 	if _, err := writer.Write([]byte("{}")); err != nil {
 		t.Fatal(err)
@@ -308,11 +308,11 @@ func TestLiveASharedResourceStaysWhileTheSiblingClassStands(t *testing.T) {
 			kept[change.Kind+"/"+change.Name] = change
 		}
 	}
-	ring := kept["kms:keyring/"+gcp.KeyRing]
+	ring := kept["kms:keyring/"+liveNames(t).KeyRing()]
 	if ring.Action != providerkit.ActionKeep || ring.Reason == "" {
 		t.Errorf("PlanRemoval() shows the key ring as %q (%q), want it kept with a reason: Google never deletes a key ring", ring.Action, ring.Reason)
 	}
-	database := kept["firestore:database/ocel"]
+	database := kept["firestore:database/"+liveNames(t).Database()]
 	if database.Action != providerkit.ActionKeep || !strings.Contains(database.Reason, string(providerkit.ClassProduction)) {
 		t.Errorf("PlanRemoval() shows the database as %q (%q), want it kept with a reason naming the sibling class still standing",
 			database.Action, database.Reason)
@@ -345,7 +345,7 @@ func passphraseHeld(t *testing.T, class providerkit.Class) []byte {
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
-	name := "projects/" + liveProject() + "/secrets/" + gcp.PassphraseSecret(class) + "/versions/latest"
+	name := "projects/" + liveProject() + "/secrets/" + liveNames(t).PassphraseSecret(class) + "/versions/latest"
 	held, err := service.Projects.Secrets.Versions.Access(name).Context(ctx).Do()
 	if err != nil {
 		t.Fatalf("read %s: %v", name, err)
@@ -422,7 +422,7 @@ func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) 
 		t.Fatalf("reach the emulator's object store: %v", err)
 	}
 	defer client.Close()
-	if err := client.Bucket(gcp.StateBucketName(liveProject(), class)).Delete(ctx); err != nil {
+	if err := client.Bucket(liveNames(t).StateBucket(class)).Delete(ctx); err != nil {
 		t.Fatalf("delete the state bucket out of band: %v", err)
 	}
 
@@ -519,7 +519,7 @@ func stamped(t *testing.T, class providerkit.Class, body string) {
 	}
 	defer client.Close()
 
-	writer := client.Bucket(gcp.BucketName(liveProject(), class)).Object(gcp.StampObject).NewWriter(ctx)
+	writer := client.Bucket(liveNames(t).Bucket(class)).Object(gcp.StampObject).NewWriter(ctx)
 	if _, err := writer.Write([]byte(body)); err != nil {
 		t.Fatal(err)
 	}
@@ -538,7 +538,7 @@ func TestLiveASecretWithNoVersionInItIsNotStandingAndAReApplyMintsOne(t *testing
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
-	name := gcp.PassphraseSecret(class)
+	name := liveNames(t).PassphraseSecret(class)
 	parent := "projects/" + liveProject()
 	if _, err := service.Projects.Secrets.Delete(parent + "/secrets/" + name).Context(ctx).Do(); err != nil {
 		t.Fatalf("delete the passphrase secret out of band: %v", err)
@@ -688,12 +688,12 @@ func TestLiveTheArtifactBucketIsRemovedSlowlyBecauseItIsEmptiedFirst(t *testing.
 		t.Fatalf("PlanRemoval() = %v", err)
 	}
 	rows := rowsOf(t, plan)
-	artifacts := rows["storage:bucket/"+gcp.BucketName(liveProject(), class)]
+	artifacts := rows["storage:bucket/"+liveNames(t).Bucket(class)]
 	if artifacts.Action != providerkit.ActionDelete || !artifacts.Slow {
 		t.Errorf("PlanRemoval() shows the artifact bucket as %q (slow %v), want a delete marked slow: every artifact in it is deleted one by one first",
 			artifacts.Action, artifacts.Slow)
 	}
-	state := rows["storage:bucket/"+gcp.StateBucketName(liveProject(), class)]
+	state := rows["storage:bucket/"+liveNames(t).StateBucket(class)]
 	if state.Slow {
 		t.Error("PlanRemoval() marks the state bucket slow, and it is refused unless it is already empty")
 	}
@@ -710,7 +710,7 @@ func TestLiveASharedRowNamesTheSiblingClassInEveryPlanItAppearsIn(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
-	database := rowsOf(t, plan)["firestore:database/ocel"]
+	database := rowsOf(t, plan)["firestore:database/"+liveNames(t).Database()]
 	if database.Action != providerkit.ActionKeep || !strings.Contains(database.Reason, string(providerkit.ClassProduction)) {
 		t.Errorf("Plan() shows the database as %q (%q), want it kept for a reason naming the sibling class that shares it, as the removal plan does",
 			database.Action, database.Reason)

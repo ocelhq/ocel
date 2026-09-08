@@ -11,8 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-const KeyRing = "ocel"
-
 type sealer struct {
 	clients *clients
 }
@@ -21,8 +19,7 @@ func (s sealer) key(at providerkit.Coordinate) (string, error) {
 	if at.Class == "" {
 		return "", classless("a value")
 	}
-	return fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s",
-		s.clients.project, s.clients.region, KeyRing, at.Class), nil
+	return keyPath(s.clients, string(at.Class)), nil
 }
 
 func (s sealer) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
@@ -40,7 +37,7 @@ func (s sealer) Seal(ctx context.Context, at providerkit.Coordinate, plaintext [
 		AdditionalAuthenticatedData: at.Binding(),
 	})
 	if err != nil {
-		return nil, keyless(at.Class, "encrypt value", err)
+		return nil, s.keyless(at.Class, "encrypt value", err)
 	}
 	return sealed.GetCiphertext(), nil
 }
@@ -60,16 +57,16 @@ func (s sealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []by
 		AdditionalAuthenticatedData: at.Binding(),
 	})
 	if err != nil {
-		return nil, keyless(at.Class, "decrypt value", err)
+		return nil, s.keyless(at.Class, "decrypt value", err)
 	}
 	return opened.GetPlaintext(), nil
 }
 
-func keyless(class providerkit.Class, doing string, err error) error {
+func (s sealer) keyless(class providerkit.Class, doing string, err error) error {
 	if status.Code(err) == codes.NotFound {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"this project holds no key to seal a %s value under, and a key is the one bootstrap item with a standing cost.\nRun `%s` to add one, then try again",
-			class, providerkit.BootstrapVarsKeyCommand(class))
+			"this project holds no %s key on the %s ring to seal a %s value under, and a key is the one bootstrap item with a standing cost.\nRun `%s` to add one, then try again",
+			class, s.clients.KeyRing(), class, providerkit.BootstrapVarsKeyCommand(class))
 	}
 	return fmt.Errorf("%s: %w", doing, err)
 }

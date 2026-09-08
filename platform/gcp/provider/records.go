@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	recordDatabase    = "ocel"
 	recordCollection  = "records-"
 	segmentSeparator  = "#"
 	segmentCeiling    = "$"
@@ -46,7 +45,7 @@ func (r records) absent(ctx context.Context, collection *firestore.CollectionRef
 	documents := collection.Select().Limit(1).Documents(ctx)
 	defer documents.Stop()
 	if _, err := documents.Next(); status.Code(err) == codes.NotFound {
-		return unbootstrapped(class)
+		return r.unbootstrapped(class)
 	}
 	return providerkit.ErrNoRecord
 }
@@ -83,7 +82,7 @@ func (r records) Write(ctx context.Context, record providerkit.Record) (provider
 		return writeInto(tx, collection, record, next)
 	})
 	if err != nil {
-		return "", writeFailed(record.Name, class, err)
+		return "", r.writeFailed(record.Name, class, err)
 	}
 	return next, nil
 }
@@ -126,7 +125,7 @@ func (r records) WritePair(ctx context.Context, first, second providerkit.Record
 		return nil
 	})
 	if err != nil {
-		return writeFailed(first.Name, class, err)
+		return r.writeFailed(first.Name, class, err)
 	}
 	return nil
 }
@@ -155,7 +154,7 @@ func (r records) Remove(ctx context.Context, name providerkit.RecordName, expect
 		return tx.Delete(reference)
 	})
 	if err != nil {
-		return writeFailed(name, class, err)
+		return r.writeFailed(name, class, err)
 	}
 	return nil
 }
@@ -183,7 +182,7 @@ func (r records) List(ctx context.Context, under providerkit.RecordName) ([]prov
 		}
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
-				return nil, unbootstrapped(class)
+				return nil, r.unbootstrapped(class)
 			}
 			return nil, fmt.Errorf("read everything under %s: %w", under, err)
 		}
@@ -238,20 +237,20 @@ func revisionHeld(tx *firestore.Transaction, reference *firestore.DocumentRef) (
 	return revisionOf(snapshot), true, nil
 }
 
-func writeFailed(name providerkit.RecordName, class providerkit.Class, err error) error {
+func (r records) writeFailed(name providerkit.RecordName, class providerkit.Class, err error) error {
 	if errors.Is(err, providerkit.ErrStale) || errors.Is(err, providerkit.ErrNoRecord) {
 		return err
 	}
 	if status.Code(err) == codes.NotFound {
-		return unbootstrapped(class)
+		return r.unbootstrapped(class)
 	}
 	return fmt.Errorf("write %s: %w", name, err)
 }
 
-func unbootstrapped(class providerkit.Class) error {
+func (r records) unbootstrapped(class providerkit.Class) error {
 	return providerkit.Refuse(providerkit.CodeNotReady,
 		"this project keeps no %q Firestore database, so there is nowhere to hold a record.\nRun `%s` to create it, then try again",
-		recordDatabase, providerkit.BootstrapCommand(class))
+		r.clients.Database(), providerkit.BootstrapCommand(class))
 }
 
 func recordOf(name providerkit.RecordName, snapshot *firestore.DocumentSnapshot) providerkit.Record {
