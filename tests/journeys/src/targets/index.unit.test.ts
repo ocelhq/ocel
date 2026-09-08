@@ -21,11 +21,11 @@ describe("laneWorkers", () => {
 
 describe("targetNamed", () => {
   it("names every target and refuses one it does not run", () => {
-    for (const name of ["aws", "dev", "dev-local", "vps"]) {
-      expect(targetNamed(name).name).toBe(name as "aws" | "dev" | "dev-local" | "vps");
+    for (const name of ["aws", "dev", "dev-local", "gcp", "vps"]) {
+      expect(targetNamed(name).name).toBe(name as "aws" | "dev" | "dev-local" | "gcp" | "vps");
     }
-    expect(() => targetNamed("gcp")).toThrow(
-      /no journey target named gcp \(aws, dev, dev-local, vps\)/,
+    expect(() => targetNamed("azure")).toThrow(
+      /no journey target named azure \(aws, dev, dev-local, gcp, vps\)/,
     );
   });
 });

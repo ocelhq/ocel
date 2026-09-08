@@ -2,6 +2,7 @@ import type { TargetName } from "../spec";
 import { awsTarget } from "./aws";
 import { devTarget } from "./dev";
 import { devLocalTarget } from "./devLocal";
+import { gcpTarget } from "./gcp";
 import type { Target } from "./types";
 import { vpsTarget } from "./vps";
 
@@ -11,6 +12,7 @@ const targets: Partial<Record<TargetName, Target>> = {
   aws: awsTarget,
   dev: devTarget,
   "dev-local": devLocalTarget,
+  gcp: gcpTarget,
   vps: vpsTarget,
 };
 

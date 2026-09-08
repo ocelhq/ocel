@@ -38,7 +38,7 @@ describe("the environment a run says it is on", () => {
 
   it("refuses to guess", () => {
     expect(() => environmentFrom({})).toThrow(/OCEL_JOURNEY_ENVIRONMENT is ""/);
-    expect(() => environmentFrom({ [ENVIRONMENT_ENV]: "gcp" })).toThrow(/aws, aws.floci, dev/);
+    expect(() => environmentFrom({ [ENVIRONMENT_ENV]: "azure" })).toThrow(/aws, aws.floci, dev/);
   });
 });
 

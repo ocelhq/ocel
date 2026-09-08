@@ -18,7 +18,7 @@ function variant(name: string, shape: Omit<Variant, "name">): Variant {
 }
 
 export const container = variant("container", {
-  on: ["aws"],
+  on: ["aws", "gcp"],
   config: { compute: "container" },
 });
 

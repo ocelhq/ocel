@@ -169,6 +169,19 @@ export const gaps: Gap[] = [
     affects: [{ on: ["aws.floci"], variants: ["container"], tests: [UP_TITLE], skip: true }],
   },
   {
+    id: "next-on-cloud-run",
+    reason: "gcp phase 3 serves node, go and python; a Next app has no router in front of it there",
+    issue: 1097,
+    affects: [
+      {
+        on: ["gcp", "gcp.floci"],
+        cells: DEPLOY_NEXT_BEARING,
+        tests: [UP_TITLE],
+        skip: true,
+      },
+    ],
+  },
+  {
     id: "cloudfront-stub",
     reason: "floci's CloudFront bootstrap resources are not backed by the CloudFront API",
     issue: 852,

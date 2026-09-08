@@ -34,7 +34,7 @@ export type { Compute };
 
 export type Group = { concern: Concern; name: string; preferred: string };
 
-export type TargetName = "dev" | "dev-local" | "aws" | "vps";
+export type TargetName = "dev" | "dev-local" | "aws" | "vps" | "gcp";
 
 export type Leg = "up" | "contract" | "redeploy" | "rollback" | "destroy";
 
@@ -109,7 +109,7 @@ export const spec: FixtureSpec[] = [
     rows: SERVED,
     apps: ["web"],
     legs: SERVES,
-    base: ["dev", "dev-local", "vps"],
+    base: ["dev", "dev-local", "vps", "gcp"],
     variants: HTTP_VARIANTS,
   },
   {
@@ -121,8 +121,8 @@ export const spec: FixtureSpec[] = [
     rows: RUNTIME_NEUTRAL,
     apps: ["web"],
     legs: SERVES,
-    targets: ["aws", "vps"],
-    base: ["vps"],
+    targets: ["aws", "vps", "gcp"],
+    base: ["vps", "gcp"],
     variants: HTTP_VARIANTS,
   },
   {
@@ -134,8 +134,8 @@ export const spec: FixtureSpec[] = [
     rows: [...RUNTIME_NEUTRAL, ...vendoredRows],
     apps: ["web"],
     legs: SERVES,
-    targets: ["aws", "vps"],
-    base: ["vps"],
+    targets: ["aws", "vps", "gcp"],
+    base: ["vps", "gcp"],
     variants: HTTP_VARIANTS,
   },
   {
@@ -182,6 +182,7 @@ export const spec: FixtureSpec[] = [
     rows: STORED,
     apps: ["web"],
     legs: SERVES,
+    targets: ["dev", "dev-local", "aws", "vps"],
     base: ["dev", "dev-local", "vps"],
     variants: HTTP_VARIANTS,
   },
@@ -194,6 +195,7 @@ export const spec: FixtureSpec[] = [
     rows: [...STORED, ...NEXT_SERVED, ...NEXT_STORED],
     apps: ["web"],
     legs: SERVES,
+    targets: ["dev", "dev-local", "aws", "vps"],
     variants: NEXT_VARIANTS,
   },
   {
@@ -205,6 +207,7 @@ export const spec: FixtureSpec[] = [
     rows: STORED,
     apps: ["next", "express"],
     legs: SERVES,
+    targets: ["dev", "dev-local", "aws", "vps"],
     variants: NEXT_VARIANTS,
   },
   {

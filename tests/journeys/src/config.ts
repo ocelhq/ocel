@@ -2,12 +2,14 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { appHostname } from "./identity";
 import type { Cell, Compute, Edge, TargetName } from "./spec";
+import { gcpSlug } from "./targets/gcp/names";
 import type { CellContext } from "./targets/types";
 
 export const JOURNEY_CONFIG = "ocel.journey.config.ts";
 
 export const AWS_BASE = "./ocel.config.ts";
 export const VPS_BASE = "./ocel.vps.config.ts";
+export const GCP_BASE = "./ocel.gcp.config.ts";
 
 const VPS_DEFAULT_ZONE = "localhost";
 
@@ -68,6 +70,8 @@ export function shapeFor(cell: CellContext, target: TargetName, env: NodeJS.Proc
         ...(varsKey ? { varsKey } : {}),
       };
     }
+    case "gcp":
+      return { base: GCP_BASE, slug: gcpSlug(cell, env), ...cell.variant?.config };
     case "vps":
       return { base: VPS_BASE, slug: cell.slug, hostnames: hostnamesOf(cell, journeyZone(env)) };
     case "dev":
