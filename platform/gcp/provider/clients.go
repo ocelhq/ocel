@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"cloud.google.com/go/firestore"
@@ -9,51 +10,54 @@ import (
 	"cloud.google.com/go/storage"
 )
 
+type memo[T any] struct {
+	once  sync.Once
+	value T
+	err   error
+}
+
+func (m *memo[T]) held(open func() (T, error)) (T, error) {
+	m.once.Do(func() { m.value, m.err = open() })
+	return m.value, m.err
+}
+
 type clients struct {
 	project  string
 	region   string
 	endpoint string
 
-	firestoreOnce sync.Once
-	firestore     *firestore.Client
-	firestoreErr  error
-
-	kmsOnce sync.Once
-	kms     *kms.KeyManagementClient
-	kmsErr  error
-
-	storageOnce sync.Once
-	storage     *storage.Client
-	storageErr  error
+	firestore memo[*firestore.Client]
+	kms       memo[*kms.KeyManagementClient]
+	storage   memo[*storage.Client]
 }
 
 func (c *clients) Firestore() (*firestore.Client, error) {
-	c.firestoreOnce.Do(func() {
-		c.firestore, c.firestoreErr = firestore.NewClientWithDatabase(
+	client, err := c.firestore.held(func() (*firestore.Client, error) {
+		return firestore.NewClientWithDatabase(
 			context.Background(), c.project, recordDatabase, EmulatorGRPC(c.endpoint)...)
 	})
-	if c.firestoreErr != nil {
-		return nil, unauthenticated()
+	if err != nil {
+		return nil, fmt.Errorf("open the %q Firestore database in project %s: %w", recordDatabase, c.project, err)
 	}
-	return c.firestore, nil
+	return client, nil
 }
 
 func (c *clients) KMS() (*kms.KeyManagementClient, error) {
-	c.kmsOnce.Do(func() {
-		c.kms, c.kmsErr = kms.NewKeyManagementClient(context.Background(), EmulatorGRPC(c.endpoint)...)
+	client, err := c.kms.held(func() (*kms.KeyManagementClient, error) {
+		return kms.NewKeyManagementClient(context.Background(), EmulatorGRPC(c.endpoint)...)
 	})
-	if c.kmsErr != nil {
-		return nil, unauthenticated()
+	if err != nil {
+		return nil, fmt.Errorf("open the Cloud KMS client for project %s: %w", c.project, err)
 	}
-	return c.kms, nil
+	return client, nil
 }
 
 func (c *clients) Storage() (*storage.Client, error) {
-	c.storageOnce.Do(func() {
-		c.storage, c.storageErr = storage.NewClient(context.Background(), EmulatorStorage(c.endpoint)...)
+	client, err := c.storage.held(func() (*storage.Client, error) {
+		return storage.NewClient(context.Background(), EmulatorStorage(c.endpoint)...)
 	})
-	if c.storageErr != nil {
-		return nil, unauthenticated()
+	if err != nil {
+		return nil, fmt.Errorf("open the Cloud Storage client for project %s: %w", c.project, err)
 	}
-	return c.storage, nil
+	return client, nil
 }

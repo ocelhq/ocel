@@ -24,13 +24,12 @@ func (r resourceManager) Reaches(ctx context.Context, project string) error {
 	if err != nil {
 		return unauthenticated()
 	}
-	held, err := service.Projects.Get(project).Context(ctx).Do()
+	_, _, err = asked(ctx, func() (*cloudresourcemanager.Project, int, error) {
+		held, err := service.Projects.Get(project).Context(ctx).Do()
+		return held, answeredCode(err), err
+	})
 	if err != nil {
 		return unreachableProject(project, err)
-	}
-	if held.LifecycleState == "DELETE_REQUESTED" {
-		return providerkit.Refuse(providerkit.CodeDenied,
-			"project %s is scheduled for deletion, and nothing this run creates in it would outlive the deploy", project)
 	}
 	return nil
 }
