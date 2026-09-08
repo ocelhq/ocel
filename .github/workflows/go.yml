@@ -11,6 +11,8 @@ on:
       - "packages/ocel/**"
       - "tests/fixtures/sdk/go/**"
       - "tests/fixtures/sdk/python/**"
+      - "tests/fixtures/sdk/rust/**"
+      - "crates/**"
       - "pnpm-lock.yaml"
       - "turbo.json"
       - "scripts/floci.sh"
