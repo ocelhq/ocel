@@ -8,12 +8,19 @@ import (
 )
 
 const (
-	stateBucketSuffix = "-state"
-	passphraseSuffix  = "-pulumi-passphrase"
+	stateBucketSuffix    = "-state"
+	passphraseSuffix     = "-pulumi-passphrase"
+	runtimeAccountSuffix = "-run"
+)
+
+const (
+	accountDomain      = ".iam.gserviceaccount.com"
+	dockerRegistryHost = "-docker.pkg.dev"
 )
 
 const (
 	maxBucketName = 63
+	maxAccountID  = 30
 	minDatabaseID = 4
 )
 
@@ -32,6 +39,20 @@ func (n Names) Bucket(class providerkit.Class) string {
 
 func (n Names) StateBucket(class providerkit.Class) string {
 	return n.Bucket(class) + stateBucketSuffix
+}
+
+func (n Names) Repository(class providerkit.Class) string { return n.Bucket(class) }
+
+func (n Names) RepositoryPath(region string, class providerkit.Class) string {
+	return region + dockerRegistryHost + "/" + n.project + "/" + n.Repository(class)
+}
+
+func (n Names) RuntimeAccount(class providerkit.Class) string {
+	return string(n.namespace) + "-" + string(class) + runtimeAccountSuffix
+}
+
+func (n Names) RuntimeAccountEmail(class providerkit.Class) string {
+	return n.RuntimeAccount(class) + "@" + n.project + accountDomain
 }
 
 func (n Names) Database() string { return string(n.namespace) }
@@ -71,6 +92,15 @@ func (n Names) fit() error {
 			"the %q Firestore database this bootstrap names reads as a UUID, and a Firestore database id may not.\n"+
 				"Name a namespace in %s that does not",
 			n.Database(), providerkit.NamespaceEnvVar)
+	}
+	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+		if account := n.RuntimeAccount(class); len(account) > maxAccountID {
+			return providerkit.Refuse(providerkit.CodeInvalid,
+				"the %s service account this bootstrap names is %d characters and Google takes %d: "+
+					"every app in the %s class runs as it, so the class is part of its name.\n"+
+					"Name a shorter namespace in %s",
+				account, len(account), maxAccountID, class, providerkit.NamespaceEnvVar)
+		}
 	}
 	return nil
 }
