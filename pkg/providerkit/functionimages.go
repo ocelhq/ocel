@@ -72,7 +72,7 @@ func (r *deployRun) imageFunction(
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, runtime.Name, err)
 	}
-	image, err := FunctionImage(base, filepath.Join(root, filepath.FromSlash(fn.GetArtifactPath())), overlay)
+	image, err := FunctionImage(base, runtime, filepath.Join(root, filepath.FromSlash(fn.GetArtifactPath())), overlay)
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
 	}

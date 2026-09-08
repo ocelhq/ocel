@@ -17,7 +17,7 @@ import (
 
 const FunctionImageRoot = "/ocel/app"
 
-func FunctionImage(base v1.Image, dir string, overlay map[string][]byte) (v1.Image, error) {
+func FunctionImage(base v1.Image, runtime Runtime, dir string, overlay map[string][]byte) (v1.Image, error) {
 	rels, err := artifactFiles(dir)
 	if err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func FunctionImage(base v1.Image, dir string, overlay map[string][]byte) (v1.Ima
 	if err != nil {
 		return nil, err
 	}
-	command, err := functionCommand(staged)
+	command, err := functionCommand(runtime, staged)
 	if err != nil {
 		return nil, err
 	}
@@ -91,16 +91,16 @@ func boundPort(env []string) []string {
 	return append(kept, InjectedPortName+"="+InjectedPortText)
 }
 
-func functionCommand(staged functionStaged) ([]string, error) {
+func functionCommand(runtime Runtime, staged functionStaged) ([]string, error) {
 	switch {
 	case len(staged.Command) > 0:
 		return staged.Command, nil
-	case staged.Runtime.Name == RuntimeNode || staged.Runtime.Name == RuntimeNext:
+	case runtime.Name == RuntimeNode || runtime.Name == RuntimeNext:
 		return []string{"node", NodeMembranePath}, nil
 	default:
 		return nil, Refuse(CodeInvalid,
 			"the %s function staged at %s names no command to run, and only a node function boots through a membrane this image could run in its place",
-			staged.Runtime.Name, staged.ID)
+			runtime.Name, staged.ID)
 	}
 }
 

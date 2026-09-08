@@ -17,6 +17,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
+var (
+	nodeRuntime = providerkit.Runtime{Name: providerkit.RuntimeNode, Arch: "x86_64"}
+	goRuntime   = providerkit.Runtime{Name: providerkit.RuntimeGo, Arch: "x86_64"}
+)
+
 func stagedFunc(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -34,8 +39,13 @@ func stagedFunc(t *testing.T, files map[string]string) string {
 
 func functionConfig(t *testing.T, command []string) string {
 	t.Helper()
+	return runtimeConfig(t, providerkit.RuntimeNode, command)
+}
+
+func runtimeConfig(t *testing.T, runtime string, command []string) string {
+	t.Helper()
 	raw, err := json.Marshal(map[string]any{
-		"runtime": map[string]string{"name": "node", "arch": "x86_64"},
+		"runtime": map[string]string{"name": runtime, "arch": "x86_64"},
 		"handler": "index.handler",
 		"command": command,
 		"id":      "server",
@@ -80,7 +90,7 @@ func TestFunctionImageCarriesTheStagedTreeUnderTheRootTheRuntimeRunsFrom(t *test
 		"config.json":  functionConfig(t, nil),
 	})
 
-	image, err := providerkit.FunctionImage(empty.Image, dir, nil)
+	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir, nil)
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -105,7 +115,7 @@ func TestFunctionImageBootsANodeFunctionThroughTheMembrane(t *testing.T) {
 		"config.json": functionConfig(t, nil),
 	})
 
-	image, err := providerkit.FunctionImage(empty.Image, dir, nil)
+	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir, nil)
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -117,15 +127,29 @@ func TestFunctionImageBootsANodeFunctionThroughTheMembrane(t *testing.T) {
 }
 
 func TestFunctionImageRefusesAFunctionThatNamesNoCommandAndBootsThroughNoMembrane(t *testing.T) {
-	staged := functionConfig(t, nil)
 	dir := stagedFunc(t, map[string]string{
 		"server":      "a built binary",
-		"config.json": strings.Replace(staged, `"name":"node"`, `"name":"go"`, 1),
+		"config.json": runtimeConfig(t, providerkit.RuntimeGo, nil),
 	})
 
-	_, err := providerkit.FunctionImage(empty.Image, dir, nil)
+	_, err := providerkit.FunctionImage(empty.Image, goRuntime, dir, nil)
 	if err == nil {
 		t.Fatal("FunctionImage() built an image for a go function with no command, want it refused: the image would boot node over a binary that is never run")
+	}
+	if !strings.Contains(err.Error(), "command") {
+		t.Errorf("FunctionImage() = %v, want it to name the command the artifact carries none of", err)
+	}
+}
+
+func TestFunctionImageRunsWhatTheRuntimeItIsBuiltAgainstNames(t *testing.T) {
+	dir := stagedFunc(t, map[string]string{
+		"server":      "a built binary",
+		"config.json": runtimeConfig(t, providerkit.RuntimeNode, nil),
+	})
+
+	_, err := providerkit.FunctionImage(empty.Image, goRuntime, dir, nil)
+	if err == nil {
+		t.Fatal("FunctionImage() built a go image booting the node membrane because the staged config said node, want the runtime the base was chosen for to decide")
 	}
 	if !strings.Contains(err.Error(), "command") {
 		t.Errorf("FunctionImage() = %v, want it to name the command the artifact carries none of", err)
@@ -142,7 +166,7 @@ func TestFunctionImageTellsTheFunctionWhichPortToBind(t *testing.T) {
 		"config.json": functionConfig(t, nil),
 	})
 
-	image, err := providerkit.FunctionImage(base, dir, nil)
+	image, err := providerkit.FunctionImage(base, nodeRuntime, dir, nil)
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -162,7 +186,7 @@ func TestFunctionImageTellsTheFunctionWhichPortToBind(t *testing.T) {
 
 func builtDigest(t *testing.T, files map[string]string) string {
 	t.Helper()
-	image, err := providerkit.FunctionImage(empty.Image, stagedFunc(t, files), nil)
+	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, stagedFunc(t, files), nil)
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -208,7 +232,7 @@ func TestFunctionImageRunsTheCommandTheFunctionsConfigNames(t *testing.T) {
 		"config.json": functionConfig(t, []string{"./server"}),
 	})
 
-	image, err := providerkit.FunctionImage(empty.Image, dir, nil)
+	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir, nil)
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
