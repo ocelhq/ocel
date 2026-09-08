@@ -1,8 +1,12 @@
 package gcp
 
 import (
+	"context"
+	"slices"
 	"strings"
 	"testing"
+
+	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -118,5 +122,59 @@ func TestThePublicIsBoundToInvokeAServiceOnceAndNotTwice(t *testing.T) {
 	}
 	if _, again := invokable(bound); again {
 		t.Error("binding the public a second time changed the policy again, so every deploy would write one")
+	}
+}
+
+func released(t *testing.T, server *runServer, s serving) string {
+	t.Helper()
+	if s.image == "" {
+		s.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:abc"
+	}
+	uri, err := server.open(t).stand(context.Background(), s, nil)
+	if err != nil {
+		t.Fatalf("stand(%s) = %v", s.service, err)
+	}
+	return uri
+}
+
+func publicly(policies []*run.GoogleIamV1Policy) bool {
+	for _, policy := range policies {
+		for _, binding := range policy.Bindings {
+			if binding.Role == invokerRole && slices.Contains(binding.Members, everyone) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func TestAFunctionThePlanGivesNoURLOfItsOwnIsLeftPrivate(t *testing.T) {
+	server := &runServer{}
+
+	released(t, server, serving{service: "ocel-shop-prod-fn", compute: providerkit.ComputeServerless})
+
+	if publicly(server.bound()) {
+		t.Error("a function the plan says has no url was bound for anyone on the internet to invoke, " +
+			"and a function reached only through its app is reachable by everybody instead")
+	}
+}
+
+func TestAFunctionThePlanGivesAURLIsOpenedToThePublic(t *testing.T) {
+	server := &runServer{}
+
+	released(t, server, serving{service: "ocel-shop-prod-fn", compute: providerkit.ComputeServerless, public: true})
+
+	if !publicly(server.bound()) {
+		t.Error("a function the plan gives a url of its own was left private, and a service nobody may invoke answers nothing")
+	}
+}
+
+func TestAContainerAppIsAlwaysOpenedToThePublic(t *testing.T) {
+	server := &runServer{}
+
+	released(t, server, serving{service: "ocel-shop-prod-app", compute: providerkit.ComputeContainer, health: "/", public: true})
+
+	if !publicly(server.bound()) {
+		t.Error("the app's own front was left private, and nothing else stands between the internet and it")
 	}
 }
