@@ -1,9 +1,11 @@
 package attribution
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -116,5 +118,27 @@ func TestRustReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 	}
 	if usages[0].App != "web" || usages[0].Name != "main" || !slices.Equal(usages[0].Files, []string{"src/main.rs"}) {
 		t.Errorf("usage = %+v, want main granted to web from entry src/main.rs", usages[0])
+	}
+}
+
+func TestRustReachReadsCargoMetadataWithoutReachingTheRegistry(t *testing.T) {
+	bin := t.TempDir()
+	recorded := filepath.Join(bin, "args")
+	fake := filepath.Join(bin, "cargo")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > "+recorded+"\necho '{\"packages\":[],\"workspace_members\":[],\"workspace_root\":\"\"}'\n"), 0o755); err != nil {
+		t.Fatalf("write the fake cargo: %v", err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	root := t.TempDir()
+	write(t, filepath.Join(root, "Cargo.toml"), "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition = \"2021\"\n")
+	_, _ = rustReach{}.Entries(t.Context(), root, App{Name: "web", Path: ".", Language: discovery.Rust})
+
+	args, err := os.ReadFile(recorded)
+	if err != nil {
+		t.Fatalf("read what cargo was called with: %v", err)
+	}
+	if !slices.Contains(strings.Fields(string(args)), "--offline") {
+		t.Errorf("cargo metadata args = %q, want --offline among them", args)
 	}
 }
