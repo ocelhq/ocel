@@ -118,7 +118,7 @@ type DeclareRequest struct {
 	//	*DeclareRequest_Postgres
 	//	*DeclareRequest_Bucket
 	Config        isDeclareRequest_Config `protobuf_oneof:"config"`
-	Source        string                  `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
+	Source        string                  `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -309,7 +309,7 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\bresource\x18\x01 \x01(\v2$.app.resources.v1.ResourceIdentifierR\bresource\x12>\n" +
 	"\bpostgres\x18\x02 \x01(\v2 .app.resources.v1.PostgresConfigH\x00R\bpostgres\x128\n" +
 	"\x06bucket\x18\x03 \x01(\v2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x12\x16\n" +
-	"\x06source\x18\x05 \x01(\tR\x06sourceB\b\n" +
+	"\x06source\x18\x04 \x01(\tR\x06sourceB\b\n" +
 	"\x06config\"*\n" +
 	"\x0ePostgresConfig\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\"7\n" +
