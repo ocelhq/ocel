@@ -9,13 +9,12 @@ import (
 const registryUser = "oauth2accesstoken"
 
 func (p *Provider) ImageRegistry(ctx context.Context, class providerkit.Class, _ []string) (providerkit.RegistryTarget, error) {
-	var token string
-	if !p.clients.emulated() {
-		held, err := p.tokens.Token(ctx)
-		if err != nil {
-			return providerkit.RegistryTarget{}, err
-		}
-		token = held
+	if p.clients.emulated() {
+		return providerkit.RegistryTarget{}, nil
+	}
+	token, err := p.tokens.Token(ctx)
+	if err != nil {
+		return providerkit.RegistryTarget{}, err
 	}
 	names := p.Names()
 	return providerkit.RegistryTarget{
@@ -27,9 +26,6 @@ func (p *Provider) ImageRegistry(ctx context.Context, class providerkit.Class, _
 }
 
 func (p *Provider) Images(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
-	if p.clients.emulated() {
-		return providerkit.DaemonImages(), nil
-	}
 	return providerkit.RegistryImages(target), nil
 }
 
