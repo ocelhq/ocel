@@ -143,11 +143,10 @@ func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	}
 
 	written := stamp{
-		Schema:    providerkit.BootstrapSchema,
-		Namespace: read.Names.Namespace().String(),
-		State:     stateApplying,
-		Writer:    req.Writer.String(),
-		Digest:    digestOf(read.Names.Namespace(), items),
+		Schema: providerkit.BootstrapSchema,
+		State:  stateApplying,
+		Writer: req.Writer.String(),
+		Digest: digestOf(read.Names.Namespace(), items),
 	}
 	generation, err := b.stampWith(ctx, read, written, read.Generation)
 	if err != nil {
