@@ -52,7 +52,7 @@ class Postgres:
 
 class _Unprovisioned(Postgres):
     def __getattribute__(self, access: str):
-        if access == "name":
+        if access == "name" or (access.startswith("__") and access.endswith("__")):
             return object.__getattribute__(self, access)
         raise unprovisioned(f'postgres("{object.__getattribute__(self, "name")}")', access)
 
