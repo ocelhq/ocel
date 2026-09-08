@@ -42,8 +42,12 @@ function hostnamesOf(cell: CellContext, zone: string): Record<string, string> {
   return named;
 }
 
-export function sweepShapeFor(cell: Cell, slug: string): Overlay {
-  return { base: AWS_BASE, slug, ...cell.variant?.config };
+function dnsOf(env: NodeJS.ProcessEnv): { dns?: "cloudflare" } {
+  return env.OCEL_JOURNEY_DNS === "cloudflare" ? { dns: "cloudflare" } : {};
+}
+
+export function sweepShapeFor(cell: Cell, slug: string, env: NodeJS.ProcessEnv): Overlay {
+  return { base: AWS_BASE, slug, ...cell.variant?.config, ...dnsOf(env) };
 }
 
 export function shapeFor(cell: CellContext, target: TargetName, env: NodeJS.ProcessEnv): Overlay {
@@ -55,7 +59,7 @@ export function shapeFor(cell: CellContext, target: TargetName, env: NodeJS.Proc
         base: AWS_BASE,
         slug: cell.slug,
         ...cell.variant?.config,
-        ...(env.OCEL_JOURNEY_DNS === "cloudflare" ? { dns: "cloudflare" as const } : {}),
+        ...dnsOf(env),
         ...(zone ? { hostnames: hostnamesOf(cell, zone) } : {}),
         ...(varsKey ? { varsKey } : {}),
       };

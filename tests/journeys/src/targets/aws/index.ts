@@ -338,7 +338,7 @@ async function sweepStrayNamespace(
       continue;
     }
     await inFixture(cell.fixture.dir, runId, `sweep-${slug}`, async (dir) => {
-      await writeJourneyConfig(dir, sweepShapeFor(cell, slug));
+      await writeJourneyConfig(dir, sweepShapeFor(cell, slug, process.env));
       await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir, namespace));
       process.stdout.write(`swept ${slug} from the ${namespace} bootstrap\n`);
     }).catch((error) => complaints.push(`${slug}: ${String(error)}`));
@@ -431,7 +431,7 @@ async function reclaimSlugs(
       continue;
     }
     await inFixture(cell.fixture.dir, runId, `sweep-${entry.slug}`, async (dir) => {
-      await writeJourneyConfig(dir, sweepShapeFor(cell, entry.slug));
+      await writeJourneyConfig(dir, sweepShapeFor(cell, entry.slug, process.env));
       await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir));
       process.stdout.write(`swept ${entry.slug}\n`);
     }).catch((error) => complaints.push(`${entry.slug}: ${String(error)}`));
