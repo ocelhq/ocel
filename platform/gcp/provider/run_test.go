@@ -5,14 +5,24 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
+func desiredOf(t *testing.T, s serving) *run.GoogleCloudRunV2Service {
+	t.Helper()
+	desired, err := serviceOf(s)
+	if err != nil {
+		t.Fatalf("serviceOf(%s) = %v", s.service, err)
+	}
+	return desired
+}
+
 func TestAServerlessRevisionScalesToNothingAndIsBilledPerRequest(t *testing.T) {
-	desired := serviceOf(serving{
+	desired := desiredOf(t, serving{
 		service: "ocel-shop-prod-web",
 		image:   "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
 		account: "ocel-production@acme.iam.gserviceaccount.com",
@@ -43,7 +53,7 @@ func TestAServerlessRevisionScalesToNothingAndIsBilledPerRequest(t *testing.T) {
 }
 
 func TestAContainerRevisionKeepsAnInstanceUpAndIsProbedOnItsOwnPath(t *testing.T) {
-	desired := serviceOf(serving{
+	desired := desiredOf(t, serving{
 		service: "ocel-shop-prod-api",
 		image:   "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc",
 		compute: providerkit.ComputeContainer,
@@ -67,7 +77,7 @@ func TestAContainerRevisionKeepsAnInstanceUpAndIsProbedOnItsOwnPath(t *testing.T
 }
 
 func TestARevisionCarriesEveryValueTheDeployResolvedInOneOrder(t *testing.T) {
-	desired := serviceOf(serving{
+	desired := desiredOf(t, serving{
 		service: "ocel-shop-prod-web",
 		image:   "web@sha256:abc",
 		compute: providerkit.ComputeServerless,
@@ -80,6 +90,57 @@ func TestARevisionCarriesEveryValueTheDeployResolvedInOneOrder(t *testing.T) {
 	}
 	if got := strings.Join(carried, " "); got != "API_KEY=k DATABASE_URL=postgres://" {
 		t.Errorf("a revision carries %q, want every value in one order, so an unchanged deploy asks for no new revision", got)
+	}
+}
+
+func TestAFunctionAsksForTheMemoryAndTheTimeoutItsSpecNamed(t *testing.T) {
+	desired := desiredOf(t, serving{
+		service: "ocel-shop-prod-fn",
+		image:   "fn@sha256:abc",
+		compute: providerkit.ComputeServerless,
+		memory:  1024,
+		timeout: 90 * time.Second,
+	})
+
+	if got := desired.Template.Containers[0].Resources.Limits["memory"]; got != "1024Mi" {
+		t.Errorf("a revision asks for %q of memory, want the 1024Mi its spec named", got)
+	}
+	if got := desired.Template.Timeout; got != "90s" {
+		t.Errorf("a request is cut off after %q, want the 90s its spec named: a function that outruns its own timeout is killed by whatever this provider chose instead", got)
+	}
+}
+
+func TestAFunctionThatNamesNoMemoryOrTimeoutKeepsTheProfileTheClassRunsOn(t *testing.T) {
+	desired := desiredOf(t, serving{
+		service: "ocel-shop-prod-fn",
+		image:   "fn@sha256:abc",
+		compute: providerkit.ComputeServerless,
+	})
+
+	if got := desired.Template.Containers[0].Resources.Limits["memory"]; got != revisionMemory {
+		t.Errorf("a revision that named no memory asks for %q, want the profile's %q", got, revisionMemory)
+	}
+	if got := desired.Template.Timeout; got != "" {
+		t.Errorf("a revision that named no timeout asks for %q, want Cloud Run's own", got)
+	}
+}
+
+func TestATimeoutLongerThanARequestMayRunIsRefused(t *testing.T) {
+	_, err := serviceOf(serving{
+		service: "ocel-shop-prod-fn",
+		image:   "fn@sha256:abc",
+		compute: providerkit.ComputeServerless,
+		timeout: maxRequestTimeout + time.Second,
+	})
+
+	if err == nil {
+		t.Fatal("serviceOf() asked for a timeout longer than Cloud Run allows, and Cloud Run would refuse the release with its own words")
+	}
+	if code, refused := providerkit.RefusedCode(err); !refused || code != providerkit.CodeInvalid {
+		t.Errorf("serviceOf() code = %v, want %v", code, providerkit.CodeInvalid)
+	}
+	if !strings.Contains(err.Error(), "ocel-shop-prod-fn") {
+		t.Errorf("serviceOf() = %v, want the service that asked for it named", err)
 	}
 }
 

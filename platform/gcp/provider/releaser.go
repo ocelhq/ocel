@@ -40,6 +40,8 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 			account: account,
 			compute: providerkit.ComputeServerless,
 			public:  spec.URL,
+			memory:  spec.Memory,
+			timeout: spec.Timeout,
 		}, report)
 		if err != nil {
 			return nil, err
