@@ -246,7 +246,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		}
 		ui.BuildOK()
 
-		registry, err := imageRegistry(ctx, runner, cfg)
+		registry, err := imageRegistry(ctx, runner, cfg, env.GetTier())
 		if err != nil {
 			return err
 		}

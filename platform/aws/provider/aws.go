@@ -96,7 +96,7 @@ func (p *Provider) Computes() []providerkit.Compute {
 	return []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer}
 }
 
-func (p *Provider) ImageRegistry(ctx context.Context, _ []string) (providerkit.RegistryTarget, error) {
+func (p *Provider) ImageRegistry(ctx context.Context, _ providerkit.Class, _ []string) (providerkit.RegistryTarget, error) {
 	return registry.Resolve(ctx, ecr.NewFromConfig(p.aws))
 }
 
@@ -515,6 +515,8 @@ var (
 	_ providerkit.MembraneSource = (*Provider)(nil)
 	_ providerkit.StackInspector = (*Provider)(nil)
 	_ providerkit.Certifier      = (*Provider)(nil)
+	_ providerkit.ImageRegistry  = (*Provider)(nil)
+	_ providerkit.ImagePusher    = (*Provider)(nil)
 	_ providerkit.Bootstrapper   = settling{}
 	_ awsports.Tables            = (*Provider)(nil)
 	_ awsports.Keys              = (*Provider)(nil)

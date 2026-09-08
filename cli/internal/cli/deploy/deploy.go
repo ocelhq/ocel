@@ -134,7 +134,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 			Tier:      environmentv1.Tier_TIER_PRODUCTION,
 			Lifecycle: environmentv1.Lifecycle_LIFECYCLE_UNSPECIFIED,
 		}
-		registry, err := imageRegistry(ctx, runner, cfg)
+		registry, err := imageRegistry(ctx, runner, cfg, env.GetTier())
 		if err != nil {
 			return err
 		}

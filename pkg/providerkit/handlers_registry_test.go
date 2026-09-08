@@ -9,6 +9,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -18,18 +19,26 @@ import (
 type hosting struct {
 	*fake.Provider
 
-	mu    sync.Mutex
-	asked [][]string
+	mu      sync.Mutex
+	asked   [][]string
+	classes []providerkit.Class
 
 	target  providerkit.RegistryTarget
 	refusal error
 }
 
-func (h *hosting) ImageRegistry(_ context.Context, repositories []string) (providerkit.RegistryTarget, error) {
+func (h *hosting) ImageRegistry(_ context.Context, class providerkit.Class, repositories []string) (providerkit.RegistryTarget, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.asked = append(h.asked, repositories)
+	h.classes = append(h.classes, class)
 	return h.target, h.refusal
+}
+
+func (h *hosting) asking() []providerkit.Class {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.classes
 }
 
 func (h *hosting) repositories() [][]string {
@@ -101,6 +110,24 @@ func TestTheProviderIsToldWhichRepositoriesTheDeployIntendsToPush(t *testing.T) 
 	}
 	if strings.Join(asked[0], ",") != "web,api" {
 		t.Errorf("the provider was asked for %v, want the repositories the deploy intends to push, so it can ensure they exist", asked[0])
+	}
+}
+
+func TestTheProviderIsToldWhichClassTheDeployPushesFor(t *testing.T) {
+	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: providerkit.RegistryTarget{Server: "registry.invalid"}}
+	client := registryServed(t, provider)
+
+	if _, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
+		Repositories: []string{"web"},
+		Tier:         environmentv1.Tier_TIER_PREVIEW,
+	}); err != nil {
+		t.Fatalf("ResolveImageRegistry() error = %v", err)
+	}
+
+	asking := provider.asking()
+	if len(asking) != 1 || asking[0] != providerkit.ClassPreview {
+		t.Errorf("the provider resolved a registry for %v, want %v: a class keeps its images apart from the other class's",
+			asking, providerkit.ClassPreview)
 	}
 }
 

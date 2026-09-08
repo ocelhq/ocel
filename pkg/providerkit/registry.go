@@ -28,5 +28,5 @@ func (t RegistryTarget) Coordinate(repository, tag string) string {
 }
 
 type ImageRegistry interface {
-	ImageRegistry(ctx context.Context, repositories []string) (RegistryTarget, error)
+	ImageRegistry(ctx context.Context, class Class, repositories []string) (RegistryTarget, error)
 }
