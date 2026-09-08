@@ -60,7 +60,7 @@ func newLayout(t *testing.T, files tree) layout {
 func (l layout) target(entry string) Target {
 	return Target{
 		App:        "api",
-		Runtime:    Runtime{Name: "node"},
+		Runtime:    providerkit.Runtime{Name: "node"},
 		Entrypoint: filepath.Join(l.appSrc, filepath.FromSlash(entry)),
 		FuncDir:    l.funcDir,
 		AppDir:     l.appDir,
@@ -117,16 +117,16 @@ func TestBundle(t *testing.T) {
 			names = append(names, entry.Name())
 		}
 		if len(names) != 2 {
-			t.Errorf("function directory holds %v, want only the bundle and %s", names, configFileName)
+			t.Errorf("function directory holds %v, want only the bundle and %s", names, providerkit.FunctionConfigFile)
 		}
 
-		var cfg functionConfig
-		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.funcDir, configFileName))), &cfg); err != nil {
+		var cfg providerkit.FunctionConfig
+		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.funcDir, providerkit.FunctionConfigFile))), &cfg); err != nil {
 			t.Fatal(err)
 		}
-		want := functionConfig{Runtime: Runtime{Name: "node"}, Handler: HandlerFile, ID: entryRouteID, App: "api"}
+		want := providerkit.FunctionConfig{Runtime: providerkit.Runtime{Name: "node"}, Handler: HandlerFile, ID: entryRouteID, App: "api"}
 		if !reflect.DeepEqual(cfg, want) {
-			t.Errorf("%s = %+v, want %+v", configFileName, cfg, want)
+			t.Errorf("%s = %+v, want %+v", providerkit.FunctionConfigFile, cfg, want)
 		}
 
 		var descriptor edge.ServeDescriptor
@@ -359,7 +359,7 @@ func TestBundle(t *testing.T) {
 			name:  "an unnamed runtime fails the build",
 			files: tree{"package.json": appPkg, "server.js": "console.log('hi');\n"},
 			entry: "server.js",
-			mut:   func(target *Target) { target.Runtime = Runtime{} },
+			mut:   func(target *Target) { target.Runtime = providerkit.Runtime{} },
 			wants: []string{"runtime"},
 		},
 		{

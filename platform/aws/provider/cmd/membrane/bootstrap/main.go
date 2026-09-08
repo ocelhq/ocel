@@ -20,7 +20,7 @@ func main() {
 	served := readArtifact()
 
 	var bytecodeReady chan *bytecodeResolution
-	if !served.executable() {
+	if !executable(served) {
 		bytecodeReady = make(chan *bytecodeResolution, 1)
 		go func() {
 			resolveCtx, cancel := context.WithTimeout(ctx, bytecodeResolveBudget)
@@ -62,8 +62,8 @@ func main() {
 
 type spawner func(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeChild, error)
 
-func bringUp(ctx context.Context, served artifact, live *liveValues, prefetch <-chan error, env []string, start time.Time, bytecodeReady <-chan *bytecodeResolution) (child, error) {
-	if served.executable() {
+func bringUp(ctx context.Context, served providerkit.FunctionConfig, live *liveValues, prefetch <-chan error, env []string, start time.Time, bytecodeReady <-chan *bytecodeResolution) (child, error) {
+	if executable(served) {
 		return bringUpChild(func() (*execChild, error) {
 			return startExecutable(served.Command, providerkit.InjectedPort, env, spawnBudget(start))
 		}, live, prefetch)

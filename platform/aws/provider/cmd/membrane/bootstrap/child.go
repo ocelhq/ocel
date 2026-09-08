@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 type child interface {
@@ -47,23 +49,16 @@ func supervise(what string, exited <-chan error) {
 	os.Exit(1)
 }
 
-type artifact struct {
-	Runtime struct {
-		Name string `json:"name"`
-	} `json:"runtime"`
-	Command []string `json:"command"`
-}
+func executable(a providerkit.FunctionConfig) bool { return len(a.Command) > 0 }
 
-func (a artifact) executable() bool { return len(a.Command) > 0 }
-
-func readArtifact() artifact {
-	var a artifact
-	data, err := os.ReadFile(filepath.Join(taskRoot(), "config.json"))
+func readArtifact() providerkit.FunctionConfig {
+	var a providerkit.FunctionConfig
+	data, err := os.ReadFile(filepath.Join(taskRoot(), providerkit.FunctionConfigFile))
 	if err != nil {
 		return a
 	}
 	if json.Unmarshal(data, &a) != nil {
-		return artifact{}
+		return providerkit.FunctionConfig{}
 	}
 	return a
 }

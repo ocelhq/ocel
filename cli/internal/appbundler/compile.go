@@ -17,7 +17,7 @@ const goModuleFile = "go.mod"
 
 type Compilation struct {
 	App            string
-	Runtime        Runtime
+	Runtime        providerkit.Runtime
 	Source         string
 	Entrypoint     string
 	FuncDir        string

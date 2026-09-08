@@ -21,13 +21,6 @@ const HandlerFile = "index.mjs"
 
 var engine = api.Engine{Name: api.EngineNode, Version: "24"}
 
-type Runtime struct {
-	Name string `json:"name"`
-	Arch string `json:"arch,omitempty"`
-}
-
-const configFileName = "config.json"
-
 const entryRouteID = "/"
 
 const nativeDirName = "native"
@@ -45,19 +38,11 @@ const banner = `import { createRequire as __ocelCreateRequire } from "node:modul
 
 type Target struct {
 	App        string
-	Runtime    Runtime
+	Runtime    providerkit.Runtime
 	Entrypoint string
 	FuncDir    string
 	AppDir     string
 	Log        io.Writer
-}
-
-type functionConfig struct {
-	Runtime Runtime  `json:"runtime"`
-	Handler string   `json:"handler"`
-	Command []string `json:"command,omitempty"`
-	ID      string   `json:"id"`
-	App     string   `json:"app"`
 }
 
 func Bundle(t Target) error {
@@ -112,8 +97,8 @@ func Bundle(t Target) error {
 	return describeArtifact(t.App, t.Runtime, HandlerFile, nil, t.FuncDir, t.AppDir)
 }
 
-func describeArtifact(app string, runtime Runtime, handler string, command []string, funcDir, appDir string) error {
-	if err := writeJSON(filepath.Join(funcDir, configFileName), functionConfig{
+func describeArtifact(app string, runtime providerkit.Runtime, handler string, command []string, funcDir, appDir string) error {
+	if err := writeJSON(filepath.Join(funcDir, providerkit.FunctionConfigFile), providerkit.FunctionConfig{
 		Runtime: runtime,
 		Handler: handler,
 		Command: command,
