@@ -53,20 +53,22 @@ func appStage(n byte) []byte {
 	return []byte{n, 0, 0, 0, 0, 0, 0, 0}
 }
 
-func liveStream(t *testing.T) (*Stream, *safeBuffer) {
+func drivenStream(t *testing.T, present Presentation) (*Stream, *safeBuffer) {
 	t.Helper()
 	var out safeBuffer
-	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
+	s := newStream(&out, present)
 	t.Cleanup(func() { _ = s.Close() })
 	return s, &out
 }
 
-func liveStreamOfHeight(t *testing.T, height int) (*Stream, *safeBuffer) {
+func drivenLiveStream(t *testing.T) (*Stream, *safeBuffer) {
 	t.Helper()
-	var out safeBuffer
-	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: 200, Height: height})
-	t.Cleanup(func() { _ = s.Close() })
-	return s, &out
+	return drivenStream(t, Presentation{Format: FormatHuman, TTY: true, Width: defaultWidth, Height: defaultHeight})
+}
+
+func drivenLiveStreamOfHeight(t *testing.T, height int) (*Stream, *safeBuffer) {
+	t.Helper()
+	return drivenStream(t, Presentation{Format: FormatHuman, TTY: true, Width: 200, Height: height})
 }
 
 func liveRegion(t *testing.T, s *Stream, out *safeBuffer) []string {
@@ -127,7 +129,7 @@ func diagnosticEvent(message string) *streamv1.RunEvent {
 
 func TestAnInRunNoticeIsCommittedAboveALiveFrameThatStillErasesExactly(t *testing.T) {
 	t.Parallel()
-	s, out := liveStreamOfHeight(t, 40)
+	s, out := drivenLiveStreamOfHeight(t, 40)
 
 	unit, phase := appStage(1), appStage(2)
 	s.Emit(stagePlanEvent(
@@ -155,7 +157,7 @@ func TestAnInRunNoticeIsCommittedAboveALiveFrameThatStillErasesExactly(t *testin
 
 func TestASpinnerRaisedThroughTheRunUIBecomesARowOfTheLiveFrame(t *testing.T) {
 	t.Parallel()
-	s, out := liveStreamOfHeight(t, 40)
+	s, out := drivenLiveStreamOfHeight(t, 40)
 
 	unit, phase := appStage(1), appStage(2)
 	s.Emit(stagePlanEvent(
@@ -178,7 +180,7 @@ func TestASpinnerRaisedThroughTheRunUIBecomesARowOfTheLiveFrame(t *testing.T) {
 
 func TestNoRawSpinnerCanTouchATerminalALiveFrameOwns(t *testing.T) {
 	t.Parallel()
-	s, out := liveStreamOfHeight(t, 40)
+	s, out := drivenLiveStreamOfHeight(t, 40)
 
 	unit, phase := appStage(1), appStage(2)
 	s.Emit(stagePlanEvent(
@@ -189,11 +191,13 @@ func TestNoRawSpinnerCanTouchATerminalALiveFrameOwns(t *testing.T) {
 
 	var elsewhere safeBuffer
 	spinner := StartSpinner(Presentation{Format: FormatHuman, TTY: true, Width: 200, Height: 40}, &elsewhere, "Checking credentials")
-	time.Sleep(3 * frameRate)
+	for i := 0; i < 3; i++ {
+		spinner.tick()
+	}
 	spinner.Stop()
 
 	if elsewhere.Len() != 0 {
-		t.Errorf("the fallback spinner wrote %q, want it inert while a live frame owns the terminal", elsewhere.String())
+		t.Errorf("the fallback spinner wrote %q on three ticks, want it inert while a live frame owns the terminal", elsewhere.String())
 	}
 	if rows := liveRegion(t, s, out); len(rows) != 1 {
 		t.Errorf("live region = %q, want the frame untouched by a spinner raised behind its back", rows)
@@ -202,7 +206,7 @@ func TestNoRawSpinnerCanTouchATerminalALiveFrameOwns(t *testing.T) {
 
 func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 	t.Parallel()
-	s, out := liveStream(t)
+	s, out := drivenLiveStream(t)
 	r := s.r
 
 	unit, phase := appStage(1), appStage(2)
@@ -232,7 +236,7 @@ func TestSuspendClearsTheLiveRegionAndPutsItBack(t *testing.T) {
 func TestTheRegionThatRedrawsInPlace(t *testing.T) {
 	t.Run("a parallel deploy shows one line per app, each with its own stage", func(t *testing.T) {
 		t.Parallel()
-		s, out := liveStream(t)
+		s, out := drivenLiveStream(t)
 
 		appA, appB := appStage(1), appStage(2)
 		s.Emit(stagePlanEvent(
@@ -253,7 +257,7 @@ func TestTheRegionThatRedrawsInPlace(t *testing.T) {
 
 	t.Run("one app finishing does not stop the other's line from updating", func(t *testing.T) {
 		t.Parallel()
-		s, out := liveStream(t)
+		s, out := drivenLiveStream(t)
 
 		appA, appB := appStage(1), appStage(2)
 		s.Emit(stagePlanEvent(
@@ -391,7 +395,7 @@ func TestFormatDurationRoundsToWholeSeconds(t *testing.T) {
 
 func TestAPhaseCommitsWhenItsSpanArrives(t *testing.T) {
 	t.Parallel()
-	s, out := liveStream(t)
+	s, out := drivenLiveStream(t)
 
 	unit, slow, quick := appStage(1), appStage(2), appStage(3)
 	s.Emit(stagePlanEvent(
@@ -419,7 +423,7 @@ func TestAPhaseCommitsWhenItsSpanArrives(t *testing.T) {
 
 func TestAPhaseRowStaysLiveUntilItsSpanArrives(t *testing.T) {
 	t.Parallel()
-	s, out := liveStream(t)
+	s, out := drivenLiveStream(t)
 
 	unit, uploading := appStage(1), appStage(2)
 	s.Emit(stagePlanEvent(
@@ -443,7 +447,7 @@ func TestAPhaseRowStaysLiveUntilItsSpanArrives(t *testing.T) {
 
 func TestChildStageHoldsUnderItsParentUntilTheParentEnds(t *testing.T) {
 	t.Parallel()
-	s, out := liveStream(t)
+	s, out := drivenLiveStream(t)
 	r := s.r
 
 	provisioning, app := appStage(1), appStage(2)
@@ -492,9 +496,7 @@ func TestRawEngineOutputIsShownOnlyWhenVerboseOrWhenThePhaseFailed(t *testing.T)
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			var out safeBuffer
-			s := NewStream(&out, tc.present)
-			t.Cleanup(func() { _ = s.Close() })
+			s, out := drivenStream(t, tc.present)
 
 			unit, phase := appStage(1), appStage(2)
 			s.Emit(stagePlanEvent(
@@ -523,7 +525,7 @@ func TestRawEngineOutputIsShownOnlyWhenVerboseOrWhenThePhaseFailed(t *testing.T)
 
 func TestProgressWithoutAStageIsDropped(t *testing.T) {
 	t.Parallel()
-	s, out := liveStream(t)
+	s, out := drivenLiveStream(t)
 
 	s.Emit(progressEvent(nil, "Reclaimed 3 promotion(s): a, b, c", 0, nil))
 
@@ -533,4 +535,59 @@ func TestProgressWithoutAStageIsDropped(t *testing.T) {
 	if out.Len() != 0 {
 		t.Errorf("output = %q, want nothing drawn for a stageless progress event", out.String())
 	}
+}
+
+func TestAFrameTickAdvancesTheSpinnerWhileWorkIsInFlight(t *testing.T) {
+	t.Parallel()
+	s, out := drivenLiveStreamOfHeight(t, 40)
+
+	unit, phase := appStage(1), appStage(2)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: unit, Title: "web"},
+		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
+	))
+	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
+
+	before := liveRegion(t, s, out)
+	if len(before) != 1 {
+		t.Fatalf("live region = %q, want the unit on one row", before)
+	}
+	s.r.tick()
+	after := liveRegion(t, s, out)
+	if len(after) != 1 {
+		t.Fatalf("live region = %q, want the unit still on one row", after)
+	}
+	if rowGlyph(t, before[0]) == rowGlyph(t, after[0]) {
+		t.Errorf("row glyph stayed %q across a frame tick, want the spinner advanced by the frame the test drove", rowGlyph(t, before[0]))
+	}
+}
+
+func TestALiveStreamRunsItsOwnTicker(t *testing.T) {
+	var out safeBuffer
+	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: 200, Height: 40})
+	t.Cleanup(func() { _ = s.Close() })
+
+	unit, phase := appStage(1), appStage(2)
+	s.Emit(stagePlanEvent(
+		&progressv1.Stage{Id: unit, Title: "web"},
+		&progressv1.Stage{Id: phase, ParentId: unit, Title: "Building"},
+	))
+	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
+
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+		if strings.Contains(out.String(), spinnerFrame(1)) {
+			return
+		}
+		time.Sleep(frameRate / 5)
+	}
+	t.Fatalf("the frame never drew %q, want the stream's own ticker advancing the spinner with nobody driving it", spinnerFrame(1))
+}
+
+func rowGlyph(t *testing.T, row string) string {
+	t.Helper()
+	glyphs := []rune(row)
+	if len(glyphs) == 0 {
+		t.Fatalf("live row is empty, want a row opening on its spinner glyph")
+	}
+	return string(glyphs[0])
 }

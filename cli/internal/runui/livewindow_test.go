@@ -35,9 +35,7 @@ func TestOnlyTheProjectionWithoutAWindowCommitsPhaseStartLines(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			var out safeBuffer
-			s := NewStream(&out, tc.present)
-			t.Cleanup(func() { _ = s.Close() })
+			s, out := drivenStream(t, tc.present)
 
 			unit, phase := appStage(1), appStage(2)
 			s.Emit(stagePlanEvent(
@@ -55,7 +53,7 @@ func TestOnlyTheProjectionWithoutAWindowCommitsPhaseStartLines(t *testing.T) {
 
 func TestAUnitIsOneRowCarryingWhatItIsDoingNow(t *testing.T) {
 	t.Parallel()
-	s, out := liveStreamOfHeight(t, 40)
+	s, out := drivenLiveStreamOfHeight(t, 40)
 
 	unit, phase := appStage(1), appStage(2)
 	s.Emit(stagePlanEvent(
@@ -83,9 +81,7 @@ var elapsedTail = regexp.MustCompile(`  (<1s|\d+s|\d+m\d\ds)$`)
 
 func TestADetailIsCutSoTheElapsedTimeAlwaysFits(t *testing.T) {
 	t.Parallel()
-	var out safeBuffer
-	s := NewStream(&out, Presentation{Format: FormatHuman, TTY: true, Width: 60, Height: 40})
-	t.Cleanup(func() { _ = s.Close() })
+	s, out := drivenStream(t, Presentation{Format: FormatHuman, TTY: true, Width: 60, Height: 40})
 
 	unit, phase := appStage(1), appStage(2)
 	s.Emit(stagePlanEvent(
@@ -94,7 +90,7 @@ func TestADetailIsCutSoTheElapsedTimeAlwaysFits(t *testing.T) {
 	))
 	s.Emit(progressEvent(phase, strings.Repeat("compiling every module in the project ", 4), 0, nil))
 
-	rows := liveRegion(t, s, &out)
+	rows := liveRegion(t, s, out)
 	if len(rows) != 1 {
 		t.Fatalf("live region = %q, want the unit on one row", rows)
 	}
@@ -108,7 +104,7 @@ func TestADetailIsCutSoTheElapsedTimeAlwaysFits(t *testing.T) {
 
 func TestTheRendererNeverInventsCountsAProducerDidNotDeclare(t *testing.T) {
 	t.Parallel()
-	s, out := liveStreamOfHeight(t, 40)
+	s, out := drivenLiveStreamOfHeight(t, 40)
 
 	unit, phase := appStage(1), appStage(2)
 	s.Emit(stagePlanEvent(
@@ -128,7 +124,7 @@ func TestTheRendererNeverInventsCountsAProducerDidNotDeclare(t *testing.T) {
 
 func TestATwentyFirstUnitStaysOnScreenWhenTheTerminalIsTallEnough(t *testing.T) {
 	t.Parallel()
-	s, out := liveStreamOfHeight(t, 60)
+	s, out := drivenLiveStreamOfHeight(t, 60)
 	spineOf(t, s, 21)
 
 	rows := liveRegion(t, s, out)
@@ -142,7 +138,7 @@ func TestATwentyFirstUnitStaysOnScreenWhenTheTerminalIsTallEnough(t *testing.T) 
 
 func TestUnitsBeyondTheTerminalHeightFallIntoTheOverflowLineAndComeBack(t *testing.T) {
 	t.Parallel()
-	s, out := liveStreamOfHeight(t, 9)
+	s, out := drivenLiveStreamOfHeight(t, 9)
 	spineOf(t, s, 21)
 
 	rows := liveRegion(t, s, out)
@@ -168,7 +164,7 @@ func TestUnitsBeyondTheTerminalHeightFallIntoTheOverflowLineAndComeBack(t *testi
 
 func TestAUnitDeclaredButNotYetStartedIsAbsentFromTheWindow(t *testing.T) {
 	t.Parallel()
-	s, out := liveStreamOfHeight(t, 40)
+	s, out := drivenLiveStreamOfHeight(t, 40)
 	spineOf(t, s, 1)
 
 	s.Emit(stagePlanEvent(&progressv1.Stage{Id: appStage(60), Title: "api"}))
@@ -184,7 +180,7 @@ func TestAUnitDeclaredButNotYetStartedIsAbsentFromTheWindow(t *testing.T) {
 
 func TestTheOutputLineFollowsDeclarationOrderNotActivationOrder(t *testing.T) {
 	t.Parallel()
-	s, out := liveStreamOfHeight(t, 40)
+	s, out := drivenLiveStreamOfHeight(t, 40)
 
 	unit := appStage(1)
 	first, second, third := appStage(2), appStage(3), appStage(4)
@@ -206,7 +202,7 @@ func TestTheOutputLineFollowsDeclarationOrderNotActivationOrder(t *testing.T) {
 
 func TestARunningBuildKeepsItsDetailWhileTheRestOfTheSpineWaits(t *testing.T) {
 	t.Parallel()
-	s, out := liveStreamOfHeight(t, 20)
+	s, out := drivenLiveStreamOfHeight(t, 20)
 	spineOf(t, s, 2)
 	for i := 1; i <= 14; i++ {
 		s.Emit(stagePlanEvent(&progressv1.Stage{Id: appStage(byte(20 + i)), Title: fmt.Sprintf("waiting-%02d", i)}))
@@ -226,7 +222,7 @@ func TestARunningBuildKeepsItsDetailWhileTheRestOfTheSpineWaits(t *testing.T) {
 
 func TestAFinishedUnitLeavesTheWindow(t *testing.T) {
 	t.Parallel()
-	s, out := liveStreamOfHeight(t, 40)
+	s, out := drivenLiveStreamOfHeight(t, 40)
 	spineOf(t, s, 2)
 
 	s.Emit(spanEvent(appStage(3), false, time.Second))
@@ -249,7 +245,7 @@ func TestAFinishedUnitLeavesTheWindow(t *testing.T) {
 
 func TestTheOverflowLineCountsOnlyWhatIsStillOnTheSpine(t *testing.T) {
 	t.Parallel()
-	s, out := liveStreamOfHeight(t, 9)
+	s, out := drivenLiveStreamOfHeight(t, 9)
 	spineOf(t, s, 8)
 
 	s.Emit(spanEvent(appStage(3), false, time.Second))
@@ -263,7 +259,7 @@ func TestTheOverflowLineCountsOnlyWhatIsStillOnTheSpine(t *testing.T) {
 
 func TestAFailedUnitStaysPinnedWhileItsSiblingsRun(t *testing.T) {
 	t.Parallel()
-	s, out := liveStreamOfHeight(t, 40)
+	s, out := drivenLiveStreamOfHeight(t, 40)
 	spineOf(t, s, 3)
 
 	s.Emit(spanEvent(appStage(3), true, time.Second))

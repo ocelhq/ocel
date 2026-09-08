@@ -28,10 +28,18 @@ type Stream struct {
 }
 
 func NewStream(w io.Writer, present Presentation) *Stream {
+	s := newStream(w, present)
+	if s.r != nil {
+		s.r.startTicking()
+	}
+	return s
+}
+
+func newStream(w io.Writer, present Presentation) *Stream {
 	s := &Stream{present: present, w: w}
 	if present.Format == FormatHuman {
 		s.proj = newProjector(present)
-		s.r = NewRenderer(w, present)
+		s.r = newRenderer(w, present)
 	}
 	return s
 }
