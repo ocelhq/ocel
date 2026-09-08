@@ -10,6 +10,7 @@ use (
 	./platform/aws/provider
 	./platform/edge/cloudflare/deploy
 	./platform/edge/contract
+	./platform/gcp/provider
 	./platform/vps/provider
 	./sdk
 	./tests/fixtures/deploy/go/server
