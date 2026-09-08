@@ -91,21 +91,20 @@ func TestRoots(t *testing.T) {
 		}
 	})
 
-	t.Run("the nearest manifest names the language", func(t *testing.T) {
+	t.Run("the source files in a folder name its language", func(t *testing.T) {
 		for _, tc := range []struct {
-			manifest string
-			want     Language
+			file string
+			want Language
 		}{
-			{"Cargo.toml", Rust},
-			{"go.mod", Go},
-			{"pyproject.toml", Python},
-			{"requirements.txt", Python},
-			{"package.json", JS},
+			{"main.ts", JS},
+			{"infra.go", Go},
+			{"infra.py", Python},
+			{"infra.rs", Rust},
 		} {
-			t.Run(tc.manifest, func(t *testing.T) {
+			t.Run(tc.file, func(t *testing.T) {
 				root := t.TempDir()
-				write(t, filepath.Join(root, tc.manifest), "")
-				write(t, filepath.Join(root, "infra", "keep"), "")
+				write(t, filepath.Join(root, "infra", "nested", tc.file), "")
+				write(t, filepath.Join(root, "infra", "README.md"), "")
 
 				roots, err := Roots(root, nil)
 				if err != nil {
@@ -118,18 +117,86 @@ func TestRoots(t *testing.T) {
 		}
 	})
 
-	t.Run("a nested manifest wins over the one beside the config", func(t *testing.T) {
+	t.Run("a manifest beside the config does not name the folder's language", func(t *testing.T) {
 		root := t.TempDir()
 		write(t, filepath.Join(root, "package.json"), "{}")
-		write(t, filepath.Join(root, "server", "go.mod"), "module example.com/web")
-		write(t, filepath.Join(root, "server", "infra", "infra.go"), "package infra")
+		write(t, filepath.Join(root, "infra", "infra.go"), "package infra")
 
-		roots, err := Roots(root, []string{"server/infra"})
+		roots, err := Roots(root, nil)
 		if err != nil {
 			t.Fatalf("Roots: %v", err)
 		}
 		if len(roots) != 1 || roots[0].Language != Go {
 			t.Fatalf("roots = %v, want one go root", roots)
+		}
+	})
+
+	t.Run("a folder of two languages is an error naming both", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "infra", "infra.go"), "package infra")
+		write(t, filepath.Join(root, "infra", "main.ts"), "export {};")
+
+		_, err := Roots(root, nil)
+		if err == nil {
+			t.Fatal("Roots succeeded on a folder of two languages, want an error")
+		}
+		for _, want := range []string{"mixes", string(Go), string(JS)} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to contain %q", err, want)
+			}
+		}
+	})
+
+	t.Run("a folder with no source files is skipped", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "infra", "README.md"), "")
+		write(t, filepath.Join(root, "infra", "node_modules", "dep", "index.js"), "")
+
+		roots, err := Roots(root, nil)
+		if err != nil {
+			t.Fatalf("Roots: %v", err)
+		}
+		if len(roots) != 0 {
+			t.Fatalf("roots = %v, want none", rootDirs(t, roots, root))
+		}
+	})
+}
+
+func TestLanguageOfApp(t *testing.T) {
+	for _, tc := range []struct {
+		manifest string
+		want     Language
+	}{
+		{"Cargo.toml", Rust},
+		{"go.mod", Go},
+		{"pyproject.toml", Python},
+		{"requirements.txt", Python},
+		{"package.json", JS},
+		{"", JS},
+	} {
+		name := tc.manifest
+		if name == "" {
+			name = "no manifest at all"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tc.manifest != "" {
+				write(t, filepath.Join(dir, tc.manifest), "")
+			}
+
+			if got := LanguageOfApp(dir); got != tc.want {
+				t.Errorf("LanguageOfApp = %q, want %q", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("a manifest above the app dir does not name the app's language", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "go.mod"), "module example.com/web")
+		write(t, filepath.Join(root, "apps", "web", "keep"), "")
+
+		if got := LanguageOfApp(filepath.Join(root, "apps", "web")); got != JS {
+			t.Errorf("LanguageOfApp = %q, want %q", got, JS)
 		}
 	})
 }
