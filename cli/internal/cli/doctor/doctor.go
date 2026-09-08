@@ -476,7 +476,7 @@ func credentialSections(cfg *projectconfig.Config, got *answers) []section {
 	take := func(owner string) []check {
 		var taken []check
 		for i, problem := range got.problems {
-			if claimed[i] || !strings.EqualFold(problem.GetProvider(), owner) {
+			if claimed[i] || problem.GetProvider() != owner {
 				continue
 			}
 			claimed[i] = true

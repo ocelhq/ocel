@@ -56,7 +56,7 @@ func TestDescribingAHostNeedsNoPowerToWriteToIt(t *testing.T) {
 	conn := &sudoless{}
 	ctx := context.Background()
 
-	described, err := Bootstrap(hostFor(conn)).Describe(ctx, providerkit.ClassProduction)
+	described, err := Bootstrap(hostFor(conn), testVendor).Describe(ctx, providerkit.ClassProduction)
 	if err != nil {
 		t.Fatalf("Describe() = %v, want what this login can see of the host: the preflight reports bootstrap standing through Describe, and a Describe that demands root turns every deploy under %s into a refusal that carries no claims, no standing and no known slugs",
 			err, "ocel-deploy")

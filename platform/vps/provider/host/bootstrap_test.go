@@ -11,6 +11,8 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
+const testVendor providerkit.Vendor = "vps"
+
 func standingHost() Reading {
 	class := providerkit.ClassProduction
 	keys := []byte(aKey + "\n")
@@ -206,7 +208,7 @@ func TestHealAsALoginThatIsNeitherRootNorSudoAsksForNeither(t *testing.T) {
 		return session.Result{Stdout: aKey + "\n"}, true
 	}
 
-	err := Bootstrap(stood.host()).Apply(context.Background(),
+	err := Bootstrap(stood.host(), testVendor).Apply(context.Background(),
 		providerkit.BootstrapRequest{Class: class, Writer: "the-suite", Heal: true, Unattended: true}, nil)
 	if err != nil {
 		t.Fatalf("heal driven by the deploy login = %v, want what that login owns reasserted without asking for root", err)

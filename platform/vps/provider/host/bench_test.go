@@ -268,7 +268,7 @@ func TestABoxStandingAtTheStampAWriteLeftDescribesItselfAsCurrent(t *testing.T) 
 	class := providerkit.ClassProduction
 	stood := settledOn(t, class)
 
-	described, err := Bootstrap(stood.host()).Describe(context.Background(), class)
+	described, err := Bootstrap(stood.host(), testVendor).Describe(context.Background(), class)
 	if err != nil {
 		t.Fatalf("Describe() = %v", err)
 	}

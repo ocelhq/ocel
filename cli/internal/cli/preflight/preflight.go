@@ -155,7 +155,7 @@ func IdentityEvent(cfg *projectconfig.Config, tier environmentv1.Tier, id *contr
 	ev := &streamv1.IdentityEvent{Project: cfg.Slug, Tier: tier}
 	if id.GetProvider() != "" || id.GetAccount() != "" || id.GetPrincipal() != "" || id.GetLocation() != "" {
 		ev.Origin = &streamv1.Party{
-			Vendor:    strings.ToLower(id.GetProvider()),
+			Vendor:    id.GetProvider(),
 			Account:   id.GetAccount(),
 			Principal: id.GetPrincipal(),
 			Location:  id.GetLocation(),

@@ -422,7 +422,7 @@ func TestDescribingABoxAssertsItsProxyDeclaresNoOnDemandTls(t *testing.T) {
 	} {
 		stood := &claimBench{bench: machine(nil), held: held}
 		stood.answer = servesProxy(stood.bench, &stood.held)
-		_, err := Bootstrap(stood.host()).described(context.Background(), standingHost())
+		_, err := Bootstrap(stood.host(), testVendor).described(context.Background(), standingHost())
 		if refused := err != nil; refused != strings.Contains(held, "on_demand") {
 			t.Errorf("describing %s = %v: caddy only warns about an on-demand policy carrying no permission module and serves anyway, so `ocel doctor` and the bootstrap assert its absence rather than trusting a refusal that never comes", what, err)
 		}

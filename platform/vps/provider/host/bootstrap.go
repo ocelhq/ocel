@@ -8,13 +8,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-const groupVendor providerkit.Vendor = "vps"
-
 const reasonStanding = "already current"
 
-type Bootstrapper struct{ host *Host }
+type Bootstrapper struct {
+	host   *Host
+	vendor providerkit.Vendor
+}
 
-func Bootstrap(h *Host) Bootstrapper { return Bootstrapper{host: h} }
+func Bootstrap(h *Host, vendor providerkit.Vendor) Bootstrapper {
+	return Bootstrapper{host: h, vendor: vendor}
+}
 
 func (b Bootstrapper) Catalogue() []providerkit.Feature { return nil }
 
@@ -67,7 +70,7 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	}
 	groups := providerkit.DeriveGroups(described, b.Catalogue(), req)
 	groups[0].Changes = planned(read)
-	return providerkit.Plan{Groups: providerkit.Vendored(groupVendor, groups)}, nil
+	return providerkit.Plan{Groups: providerkit.Vendored(b.vendor, groups)}, nil
 }
 
 func planned(read Reading) []providerkit.Change {
@@ -377,7 +380,7 @@ func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 		Action:  providerkit.ActionDelete,
 		Changes: changes,
 	}
-	return providerkit.Plan{Groups: providerkit.Vendored(groupVendor, []providerkit.ChangeGroup{group})}, nil
+	return providerkit.Plan{Groups: providerkit.Vendored(b.vendor, []providerkit.ChangeGroup{group})}, nil
 }
 
 func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
