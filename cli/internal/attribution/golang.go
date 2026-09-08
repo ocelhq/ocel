@@ -1,0 +1,77 @@
+package attribution
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os/exec"
+	"path"
+	"path/filepath"
+	"strings"
+)
+
+type goPackage struct {
+	ImportPath string
+	Name       string
+	Dir        string
+	Deps       []string
+}
+
+type goReach struct{}
+
+func (goReach) Entries(root string, app App) (map[string]Reachability, error) {
+	dir := filepath.Join(root, filepath.FromSlash(app.Path))
+	packages, err := goList(app.Name, dir)
+	if err != nil {
+		return nil, err
+	}
+
+	dirs := make(map[string]string, len(packages))
+	for _, p := range packages {
+		dirs[p.ImportPath] = p.Dir
+	}
+
+	entries := map[string]Reachability{}
+	for _, p := range packages {
+		if p.Name != "main" {
+			continue
+		}
+		entry, inside := relativeToRoot(root, p.Dir)
+		if !inside {
+			continue
+		}
+		reached := map[string]bool{}
+		for _, importPath := range append([]string{p.ImportPath}, p.Deps...) {
+			if rel, inside := relativeToRoot(root, dirs[importPath]); inside {
+				reached[rel] = true
+			}
+		}
+		entries[entry] = func(file string) bool { return reached[path.Dir(file)] }
+	}
+	return entries, nil
+}
+
+func goList(app, dir string) ([]goPackage, error) {
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command("go", "list", "-json", "-deps", "./...")
+	cmd.Dir = dir
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("attribution: app %q: go list: %s", app, strings.TrimSpace(stderr.String()))
+	}
+
+	var packages []goPackage
+	decoder := json.NewDecoder(&stdout)
+	for {
+		var p goPackage
+		if err := decoder.Decode(&p); err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, fmt.Errorf("attribution: app %q: read what go list said: %w", app, err)
+		}
+		packages = append(packages, p)
+	}
+	return packages, nil
+}

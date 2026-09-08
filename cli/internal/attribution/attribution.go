@@ -33,7 +33,7 @@ type Reach interface {
 	Entries(root string, app App) (map[string]Reachability, error)
 }
 
-var reaches = map[discovery.Language]Reach{discovery.JS: jsReach{}}
+var reaches = map[discovery.Language]Reach{discovery.JS: jsReach{}, discovery.Go: goReach{}}
 
 type Usage struct {
 	App   string
@@ -74,6 +74,15 @@ func (e *UnresolvedImportError) Error() string {
 	)
 }
 
+func attributableLanguages() string {
+	languages := make([]string, 0, len(reaches))
+	for language := range reaches {
+		languages = append(languages, string(language))
+	}
+	slices.Sort(languages)
+	return strings.Join(languages, " and ")
+}
+
 func Compute(root string, apps []App, declarations []Declaration) ([]Usage, error) {
 	if len(declarations) == 0 {
 		return nil, nil
@@ -89,7 +98,7 @@ func Compute(root string, apps []App, declarations []Declaration) ([]Usage, erro
 		}
 		reach, ok := reaches[app.Language]
 		if !ok {
-			return nil, fmt.Errorf("attribution: app %q is a %s app, and this build of ocel attributes only js apps", app.Name, app.Language)
+			return nil, fmt.Errorf("attribution: app %q is a %s app, and this build of ocel attributes only %s apps", app.Name, app.Language, attributableLanguages())
 		}
 		entries, err := reach.Entries(root, app)
 		if err != nil {

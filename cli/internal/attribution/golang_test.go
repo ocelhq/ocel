@@ -1,0 +1,85 @@
+package attribution
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/discovery"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+)
+
+func write(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func goApp(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	write(t, filepath.Join(root, "server", "go.mod"), "module example.com/web\n\ngo 1.27.0\n")
+	write(t, filepath.Join(root, "server", "main.go"), "package main\n\nimport _ \"example.com/web/infra\"\n\nfunc main() {}\n")
+	write(t, filepath.Join(root, "server", "infra", "infra.go"), "package infra\n")
+	write(t, filepath.Join(root, "server", "unused", "unused.go"), "package unused\n")
+	return root
+}
+
+func TestGoReachGrantsAResourceTheAppsMainImports(t *testing.T) {
+	root := goApp(t)
+	apps := []App{{Name: "web", Path: "server", Language: discovery.Go}}
+	declarations := []Declaration{{
+		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Name:   "main",
+		Source: filepath.Join(root, "server", "infra", "infra.go") + ":1",
+	}}
+
+	usages, err := Compute(root, apps, declarations)
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	want := []Usage{{App: "web", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"server"}}}
+	if !slices.EqualFunc(usages, want, func(a, b Usage) bool {
+		return a.App == b.App && a.Type == b.Type && a.Name == b.Name && slices.Equal(a.Files, b.Files)
+	}) {
+		t.Errorf("usages = %+v, want %+v", usages, want)
+	}
+}
+
+func TestGoReachGrantsNothingFromAPackageNoMainImports(t *testing.T) {
+	root := goApp(t)
+	apps := []App{{Name: "web", Path: "server", Language: discovery.Go}}
+	declarations := []Declaration{{
+		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Name:   "main",
+		Source: filepath.Join(root, "server", "unused", "unused.go") + ":1",
+	}}
+
+	usages, err := Compute(root, apps, declarations)
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	if len(usages) != 0 {
+		t.Errorf("usages = %+v, want none", usages)
+	}
+}
+
+func TestGoReachReportsWhatGoListSaid(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "server", "go.mod"), "module example.com/web\n\ngo 1.27.0\n")
+	write(t, filepath.Join(root, "server", "main.go"), "package main\n\nimport _ \"example.com/web/missing\"\n\nfunc main() {}\n")
+
+	_, err := Compute(root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, nil)
+	if err == nil {
+		t.Fatal("Compute succeeded on a module that does not build, want error")
+	}
+	if !strings.Contains(err.Error(), `attribution: app "web": go list:`) {
+		t.Errorf("error = %q, want it to name the app and go list", err)
+	}
+}
