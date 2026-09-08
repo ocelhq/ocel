@@ -64,7 +64,7 @@ func (n Names) RuntimeAccountEmail(class providerkit.Class) string {
 func (n Names) Service(project, env, app, function string) (string, error) {
 	parts := []string{string(n.namespace), naming.Sanitize(project), naming.Sanitize(env), naming.Sanitize(app)}
 	if function != app {
-		parts = append(parts, naming.Sanitize(providerkit.FunctionRoute(app, function)))
+		parts = append(parts, providerkit.FunctionRoute(app, function))
 	}
 	service := strings.Join(parts, "-") + "-" + serviceHash(string(n.namespace), project, env, app, function)
 	if len(service) > maxServiceName {

@@ -124,14 +124,14 @@ func membraneOverlay(
 
 func FunctionRoute(app, function string) string {
 	lead := naming.Join(naming.FieldSeparator, string(naming.KindFunction), app) + naming.FieldSeparator
-	return strings.TrimPrefix(function, lead)
+	return naming.Sanitize(strings.TrimPrefix(function, lead))
 }
 
 func functionRepository(app, function string) string {
 	if function == app {
 		return app
 	}
-	return app + "-" + naming.Sanitize(FunctionRoute(app, function))
+	return app + "-" + FunctionRoute(app, function)
 }
 
 func pinnedCoordinate(target, digest string) string {
