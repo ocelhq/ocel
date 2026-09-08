@@ -131,13 +131,14 @@ func TestTheCredentialsPortNamesTheRolesEachTierIsGranted(t *testing.T) {
 	credentials := standing(t).Credentials()
 	for tier, named := range map[providerkit.CredentialTier][]string{
 		providerkit.TierDeploy: {
-			"roles/run.developer",
 			"roles/run.admin",
+			"roles/storage.objectAdmin",
 			"roles/artifactregistry.writer",
 			"roles/iam.serviceAccountUser",
 		},
 		providerkit.TierBootstrap: {
-			"roles/run.developer",
+			"roles/run.admin",
+			"roles/storage.admin",
 			"roles/artifactregistry.admin",
 			"roles/iam.serviceAccountAdmin",
 			"roles/cloudkms.admin",
@@ -155,6 +156,23 @@ func TestTheCredentialsPortNamesTheRolesEachTierIsGranted(t *testing.T) {
 			if !strings.Contains(document.Document, role) {
 				t.Errorf("Permissions(%s) does not name %s, and a credential granted what it renders would fail on the resources that role covers", tier, role)
 			}
+		}
+	}
+}
+
+func TestTheRolesRenderedForADeployAreTheOnesADeployUses(t *testing.T) {
+	t.Parallel()
+
+	document, err := standing(t).Credentials().Permissions(providerkit.TierDeploy)
+	if err != nil {
+		t.Fatalf("Permissions(deploy) = %v", err)
+	}
+	for role, why := range map[string]string{
+		"roles/run.developer": "roles/run.admin covers every permission it holds, so granting it says something the grant beside it did not",
+		"roles/storage.admin": "a deploy reads and writes objects in buckets the bootstrap already made, and never makes or deletes one",
+	} {
+		if strings.Contains(document.Document, role) {
+			t.Errorf("Permissions(deploy) names %s: %s", role, why)
 		}
 	}
 }

@@ -60,12 +60,11 @@ var bootstrapRoles = []string{
 
 var deployRoles = []string{
 	"roles/datastore.user",
-	"roles/storage.admin",
+	"roles/storage.objectAdmin",
 	"roles/cloudkms.cryptoKeyEncrypterDecrypter",
 	"roles/secretmanager.secretAccessor",
 	"roles/artifactregistry.writer",
 	"roles/iam.serviceAccountUser",
-	"roles/run.developer",
 	"roles/run.admin",
 }
 
