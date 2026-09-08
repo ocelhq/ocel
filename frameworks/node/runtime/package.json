@@ -6,6 +6,7 @@
   "description": "the host-neutral runtime a node function is served through",
   "exports": {
     "./background": "./src/background.mts",
+    "./boot": "./src/boot.mts",
     "./edge-kind": "./src/edge-kind.mts",
     "./entrypoint": "./src/entrypoint.mts",
     "./fetch-bridge": "./src/fetch-bridge.mts",
