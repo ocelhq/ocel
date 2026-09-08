@@ -1,6 +1,6 @@
 import os
 
-from ocel.gen.common.links.v1.links_pb import Link
+from ocel.gen.common.links.v1.links_pb import Link, PostgresProperties
 
 
 class UnprovisionedResourceError(RuntimeError):
@@ -17,8 +17,8 @@ def unprovisioned(what: str, access: str) -> UnprovisionedResourceError:
     )
 
 
-def link(name: str, kind: str):
-    key = f"OCEL_RESOURCE_{kind.upper()}_{name}"
+def link(name: str) -> PostgresProperties:
+    key = f"OCEL_RESOURCE_POSTGRES_{name}"
     raw = os.environ.get(key)
     if not raw:
         raise RuntimeError(
@@ -29,12 +29,10 @@ def link(name: str, kind: str):
         delivered = Link.from_json(raw, ignore_unknown_fields=True)
     except Exception:
         raise RuntimeError(
-            f"{key} does not carry a link record, so this app cannot read it as a {kind.upper()}"
+            f"{key} does not carry a link record, so this app cannot read it as a POSTGRES"
         ) from None
     properties = delivered.properties
-    if properties is None or properties.field != kind:
+    if properties is None or properties.field != "postgres":
         carried = properties.field.upper() if properties else "UNSPECIFIED"
-        raise RuntimeError(
-            f"{key} carries a {carried} link, and this app reads it as a {kind.upper()}"
-        )
+        raise RuntimeError(f"{key} carries a {carried} link, and this app reads it as a POSTGRES")
     return properties.value

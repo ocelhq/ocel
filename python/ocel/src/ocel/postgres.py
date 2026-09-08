@@ -33,7 +33,7 @@ class Postgres:
     @property
     def connection_string(self) -> str:
         """The postgres URL of the delivered link, with the credentials percent-encoded."""
-        properties = link(self.name, _KIND)
+        properties = link(self.name)
         user = quote(properties.username, safe="")
         password = quote(properties.password, safe="")
         database = quote(properties.database, safe="")
