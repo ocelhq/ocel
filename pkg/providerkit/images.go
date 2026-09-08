@@ -18,7 +18,8 @@ type ImagePush struct {
 	Target string
 	Digest string
 
-	Built v1.Image
+	Function bool
+	Built    v1.Image
 }
 
 type ImageStore interface {
@@ -91,7 +92,7 @@ func (p ImagePlan) Ship(ctx context.Context, report Reporter) error {
 
 func (p ImagePlan) Coordinate(app string) string {
 	for _, push := range p.Pushes {
-		if push.App == app {
+		if !push.Function && push.App == app {
 			return push.Target
 		}
 	}

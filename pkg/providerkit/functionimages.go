@@ -83,11 +83,12 @@ func (r *deployRun) imageFunction(
 	repository := functionRepository(entry.App, name)
 	target := coordinate(repository, naming.DigestTag(digest.String()), r.registry)
 	return ImagePush{
-		App:    name,
-		Source: pinnedCoordinate(target, digest.String()),
-		Target: target,
-		Digest: digest.String(),
-		Built:  image,
+		App:      name,
+		Source:   pinnedCoordinate(target, digest.String()),
+		Target:   target,
+		Digest:   digest.String(),
+		Function: true,
+		Built:    image,
 	}, nil
 }
 

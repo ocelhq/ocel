@@ -108,6 +108,29 @@ func TestDeployShipsAFunctionAsAnImageWhereTheProviderTakesItThatWay(t *testing.
 	}
 }
 
+func TestAFunctionsImageIsNeverMistakenForTheAppsOwn(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	served, provider := imagingServed(t)
+
+	req := imagingDeployRequest()
+	req.Manifest.Functions[0].LogicalName = "web"
+
+	result, _ := deploy(t, served, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	plans := provider.Releaser().Plans()
+	app := plans[len(plans)-1]
+	if app.App.Image != "" {
+		t.Errorf("the app plan runs the image %q, want none: the app is serverless and only its functions travel as images", app.App.Image)
+	}
+	spec := app.App.Functions[0]
+	if !strings.Contains(spec.Image, "@sha256:") {
+		t.Errorf("the function spec runs %q, want a digest-pinned ref of its own", spec.Image)
+	}
+}
+
 func TestAFunctionRunAsAnImageIsHandedItsValuesAtDeployTime(t *testing.T) {
 	stagedProject(t, "web", "admin")
 	base := fake.NewProvider(fake.Options{})
