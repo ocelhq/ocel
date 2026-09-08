@@ -113,7 +113,7 @@ jobs:
         run: echo "OCEL_BIN=$GITHUB_WORKSPACE/packages/native-lib/cli-linux-x64/bin/ocel" >> "$GITHUB_ENV"
 
       - name: Reclaim what a run that died left behind
-        run: pnpm --filter @ocel-tests/journeys sweep --target gcp --own
+        run: pnpm --filter @ocel-tests/journeys sweep --target gcp
 
       - name: Run the journey
         run: pnpm --filter @ocel-tests/journeys journey
