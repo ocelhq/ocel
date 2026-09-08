@@ -34,6 +34,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 			env:     carried(app.Values.Delivered, spec.Env),
 			account: account,
 			compute: providerkit.ComputeServerless,
+			public:  spec.URL,
 		}, report)
 		if err != nil {
 			return nil, err
@@ -79,6 +80,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 		account: p.Names().RuntimeAccountEmail(plan.Ref.Class),
 		compute: providerkit.ComputeContainer,
 		health:  app.HealthCheckPath,
+		public:  true,
 	}, report)
 	if err != nil {
 		return nil, err

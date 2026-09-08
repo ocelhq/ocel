@@ -35,6 +35,7 @@ type serving struct {
 	account string
 	compute providerkit.Compute
 	health  string
+	public  bool
 }
 
 func serviceOf(s serving) *run.GoogleCloudRunV2Service {
@@ -147,8 +148,10 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 	if err != nil {
 		return "", err
 	}
-	if err := p.open(ctx, services, path, s.service); err != nil {
-		return "", err
+	if s.public {
+		if err := p.open(ctx, services, path, s.service); err != nil {
+			return "", err
+		}
 	}
 	return stood.Uri, nil
 }
