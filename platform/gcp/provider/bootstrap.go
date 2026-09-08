@@ -332,6 +332,14 @@ func (b bootstrapper) makeSecret(ctx context.Context, name string) error {
 		return fmt.Errorf("create the %s secret: %w", name, err)
 	}
 
+	held, err := b.passphraseHeld(ctx, name)
+	if err != nil {
+		return err
+	}
+	if held {
+		return nil
+	}
+
 	minted := make([]byte, passphraseBytes)
 	if _, err := rand.Read(minted); err != nil {
 		return fmt.Errorf("mint the passphrase %s holds: %w", name, err)
