@@ -232,7 +232,7 @@ export default {
 	clitest.WriteFile(t, filepath.Join(root, "shared", "files.ts"), `
 import { declareBucket } from "./declare.js";
 
-export const uploads = declareBucket("uploads", new Error().stack ?? "");
+export const uploads = declareBucket("uploads");
 `)
 	clitest.WriteFile(t, filepath.Join(root, "shared", "index.ts"), `
 export * from "./db.js";

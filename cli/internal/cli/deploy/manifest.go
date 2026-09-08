@@ -398,8 +398,8 @@ func toDeclarations(configDir string, resources []declare.Resource) []manifestbu
 	decls := make([]manifestbuilder.Declaration, len(resources))
 	for i, r := range resources {
 		var source string
-		if frame, ok := attribution.DeclaringFrame(configDir, r.Stack); ok {
-			source = frame.String()
+		if site, ok := attribution.DeclaringSite(configDir, r.Source); ok {
+			source = site.String()
 		}
 		decls[i] = manifestbuilder.Declaration{
 			Type:     r.Type,
@@ -415,7 +415,7 @@ func toDeclarations(configDir string, resources []declare.Resource) []manifestbu
 func toAttributionDeclarations(resources []declare.Resource) []attribution.Declaration {
 	decls := make([]attribution.Declaration, len(resources))
 	for i, r := range resources {
-		decls[i] = attribution.Declaration{Type: r.Type, Name: r.Name, Stack: r.Stack}
+		decls[i] = attribution.Declaration{Type: r.Type, Name: r.Name, Source: r.Source}
 	}
 	return decls
 }
