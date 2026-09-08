@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -117,5 +118,59 @@ func TestPythonReachSearchesTheDiscoveryPathsTheProjectConfigures(t *testing.T) 
 	}
 	if len(usages) != 1 || !slices.Equal(usages[0].Files, []string{"server/main.py"}) {
 		t.Fatalf("usages = %+v, want main granted to web from entry server/main.py", usages)
+	}
+}
+
+func TestPythonReachFollowsAnImportModuleCallThatWritesTheModuleOut(t *testing.T) {
+	root := pythonApp(t)
+	write(t, filepath.Join(root, "server", "main.py"), "import importlib\n\nmodule = importlib.import_module(\"infra\")\n")
+
+	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
+		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Name:   "main",
+		Source: filepath.Join(root, "infra", "__init__.py") + ":1",
+	}})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	if len(usages) != 1 || !slices.Equal(usages[0].Files, []string{"server/main.py"}) {
+		t.Fatalf("usages = %+v, want main granted to web from entry server/main.py", usages)
+	}
+}
+
+func TestPythonReachReadsNoEntryFromTheAppsTestFiles(t *testing.T) {
+	root := pythonApp(t)
+	write(t, filepath.Join(root, "server", "conftest.py"), "import importlib\n\nname = \"infra\"\nmodule = importlib.import_module(name)\n")
+
+	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
+		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Name:   "main",
+		Source: filepath.Join(root, "infra", "__init__.py") + ":1",
+	}})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	if len(usages) != 1 || !slices.Equal(usages[0].Files, []string{"server/main.py"}) {
+		t.Fatalf("usages = %+v, want main granted to web from entry server/main.py", usages)
+	}
+}
+
+func TestPythonReachReportsASyntaxErrorWithoutTheLineItIsOn(t *testing.T) {
+	root := pythonApp(t)
+	write(t, filepath.Join(root, "server", "settings.py"), "password = \"s3cretpassword\" if\n")
+
+	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
+		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Name:   "main",
+		Source: filepath.Join(root, "infra", "__init__.py") + ":1",
+	}})
+	if err == nil {
+		t.Fatal("Compute succeeded on a file python cannot parse, want an error")
+	}
+	if strings.Contains(err.Error(), "s3cretpassword") {
+		t.Errorf("error = %q, want it to name the file and line without the source on it", err)
+	}
+	if !strings.Contains(err.Error(), "server/settings.py:1") {
+		t.Errorf("error = %q, want it to name server/settings.py:1", err)
 	}
 }

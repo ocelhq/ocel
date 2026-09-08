@@ -3,7 +3,8 @@ import json
 import os
 import sys
 
-COMPUTED = {"import_module", "__import__"}
+DYNAMIC = {"import_module", "__import__"}
+NOT_AN_ENTRY = ("conftest.py",)
 
 
 class Unresolved(Exception):
@@ -12,13 +13,29 @@ class Unresolved(Exception):
         self.line = line
 
 
+class Unparsed(Exception):
+    def __init__(self, file, line, message):
+        self.file = file
+        self.line = line
+        self.message = message
+
+
 def entries(app_dir):
     found = []
     for name in sorted(os.listdir(app_dir)):
         path = os.path.join(app_dir, name)
-        if name.endswith(".py") and name != "__init__.py" and os.path.isfile(path):
+        if name.endswith(".py") and not run_by_a_test_runner(name) and os.path.isfile(path):
             found.append(path)
     return found
+
+
+def run_by_a_test_runner(name):
+    return (
+        name == "__init__.py"
+        or name in NOT_AN_ENTRY
+        or name.startswith("test_")
+        or name.endswith("_test.py")
+    )
 
 
 def module_files(module, search):
@@ -44,21 +61,26 @@ def package_of(file, level):
     return directory
 
 
-def computed(call):
+def dynamic(call):
     if isinstance(call.func, ast.Attribute):
-        name = call.func.attr
-    elif isinstance(call.func, ast.Name):
-        name = call.func.id
-    else:
-        return False
-    if name not in COMPUTED:
-        return False
-    return not (call.args and isinstance(call.args[0], ast.Constant) and isinstance(call.args[0].value, str))
+        return call.func.attr in DYNAMIC
+    if isinstance(call.func, ast.Name):
+        return call.func.id in DYNAMIC
+    return False
+
+
+def written_out(call):
+    if call.args and isinstance(call.args[0], ast.Constant) and isinstance(call.args[0].value, str):
+        return call.args[0].value
+    return None
 
 
 def imported(file, search):
-    with open(file, "rb") as source:
-        tree = ast.parse(source.read(), filename=file)
+    try:
+        with open(file, "rb") as source:
+            tree = ast.parse(source.read(), filename=file)
+    except SyntaxError as error:
+        raise Unparsed(file, error.lineno or 0, error.msg) from None
 
     reached = []
 
@@ -69,8 +91,11 @@ def imported(file, search):
                 reached.append(found)
 
     for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and computed(node):
-            raise Unresolved(file, node.lineno)
+        if isinstance(node, ast.Call) and dynamic(node):
+            module = written_out(node)
+            if module is None:
+                raise Unresolved(file, node.lineno)
+            resolve(module, search)
         if isinstance(node, ast.Import):
             for alias in node.names:
                 resolve(alias.name, search)
@@ -108,6 +133,12 @@ def main():
             reached[entry] = closure(entry, search)
     except Unresolved as unresolved:
         json.dump({"error": {"file": unresolved.file, "line": unresolved.line}}, sys.stdout)
+        return
+    except Unparsed as unparsed:
+        json.dump(
+            {"error": {"file": unparsed.file, "line": unparsed.line, "message": unparsed.message}},
+            sys.stdout,
+        )
         return
     json.dump({"entries": reached}, sys.stdout)
 
