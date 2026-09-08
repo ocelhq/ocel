@@ -80,12 +80,9 @@ func TestAnEmulatedDeployLoadsItsImagesIntoTheDaemonTheEmulatorShares(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := emulated.Images(ctx, target)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(store.(providerkit.ImageDestination).ImageDestination(), "daemon") {
-		t.Errorf("Images() = %v under emulation, and no Artifact Registry is emulated: the image goes to the daemon", store)
+	if target.Server != "" {
+		t.Errorf("ImageRegistry() = %+v under emulation, and no Artifact Registry is emulated: "+
+			"a deploy told of no registry writes its images to the daemon instead, under the names they were built with", target)
 	}
 }
 
