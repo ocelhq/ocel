@@ -24,7 +24,9 @@ test("a deployed report renders the comment the app would post", () => {
   const body = renderReport(report);
 
   expect(body.startsWith(MARKER)).toBe(true);
-  expect(body).toContain('<img src="https://ocel.dev/providers/aws.svg" alt="AWS" height="14">');
+  expect(body).toContain(
+    '<img src="https://raw.githubusercontent.com/ocelhq/ocel/main/www/public/providers/aws.svg" alt="AWS" height="14">',
+  );
   expect(body).toContain("| web | [Visit preview ↗](https://web.preview.example) | ✅ Ready |");
   expect(body).toContain("[Run log](https://github.com/ocelhq/ocel/actions/runs/42)");
 });

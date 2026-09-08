@@ -128,7 +128,7 @@ export function firstUrl(result: DeployResult | undefined): string | undefined {
   return undefined;
 }
 
-const LOGO_BASE = "https://ocel.dev/providers";
+const LOGO_BASE = "https://raw.githubusercontent.com/ocelhq/ocel/main/www/public/providers";
 
 interface ProviderLook {
   name: string;

@@ -40,7 +40,7 @@ test("deployed leads with the provider mark and lands each app beside its checkm
 
   expect(body.startsWith(MARKER)).toBe(true);
   expect(body).toContain(
-    '<img src="https://ocel.dev/providers/aws.svg" alt="AWS" height="14"> Deployed [`0123456`]',
+    '<img src="https://raw.githubusercontent.com/ocelhq/ocel/main/www/public/providers/aws.svg" alt="AWS" height="14"> Deployed [`0123456`]',
   );
   expect(body).toContain("to your AWS account · eu-west-2 · Sep 6, 2026, 10:11 UTC");
   expect(body).toContain("| App | Preview | Status |");
