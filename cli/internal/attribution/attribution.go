@@ -1,10 +1,13 @@
 package attribution
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -203,4 +206,12 @@ func relativeToRoot(root, path string) (string, bool) {
 
 func isVendored(rel string) bool {
 	return slices.Contains(strings.Split(rel, "/"), "node_modules")
+}
+
+func runJSON(cmd *exec.Cmd) (*json.Decoder, string, error) {
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	return json.NewDecoder(&stdout), strings.TrimSpace(stderr.String()), err
 }

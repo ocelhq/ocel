@@ -50,27 +50,17 @@ func (pythonLauncher) Command(ctx context.Context, configDir string, root Root, 
 }
 
 func pythonRunRoot(configDir, dir string) (string, error) {
-	stop, err := filepath.Abs(configDir)
-	if err != nil {
-		return "", err
-	}
-	at, err := filepath.Abs(dir)
-	if err != nil {
-		return "", err
-	}
+	runRoot, _, err := walkUp(configDir, dir, holdsAPythonProject)
+	return runRoot, err
+}
 
-	for {
-		for _, name := range pythonProjectFiles {
-			if info, err := os.Stat(filepath.Join(at, name)); err == nil && info.Mode().IsRegular() {
-				return at, nil
-			}
+func holdsAPythonProject(at string) bool {
+	for _, name := range pythonProjectFiles {
+		if info, err := os.Stat(filepath.Join(at, name)); err == nil && info.Mode().IsRegular() {
+			return true
 		}
-		parent := filepath.Dir(at)
-		if at == stop || parent == at {
-			return stop, nil
-		}
-		at = parent
 	}
+	return false
 }
 
 func pythonPackage(runRoot, dir string) (string, error) {
