@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -34,6 +35,19 @@ var manifestLanguages = []struct {
 	{"go.mod", Go},
 	{"pyproject.toml", Python},
 	{"requirements.txt", Python},
+	{"package.json", JS},
+}
+
+var languageExtensions = map[string]Language{
+	".go":  Go,
+	".py":  Python,
+	".rs":  Rust,
+	".ts":  JS,
+	".tsx": JS,
+	".js":  JS,
+	".jsx": JS,
+	".mjs": JS,
+	".cjs": JS,
 }
 
 func RootsOf(cfg *projectconfig.Config) ([]Root, error) {
@@ -48,9 +62,12 @@ func Roots(configDir string, paths []string) ([]Root, error) {
 
 	roots := make([]Root, 0, len(dirs))
 	for _, dir := range dirs {
-		language, err := languageOf(configDir, dir)
+		language, err := languageOf(dir)
 		if err != nil {
 			return nil, err
+		}
+		if language == "" {
+			continue
 		}
 		roots = append(roots, Root{Dir: dir, Language: language})
 	}
@@ -93,43 +110,42 @@ func defaultRootDirs(configDir string) []string {
 	return []string{dir}
 }
 
-func LanguageOf(dir string) Language {
-	if language, ok := manifestLanguage(dir); ok {
-		return language
+func LanguageOfApp(dir string) Language {
+	for _, m := range manifestLanguages {
+		if _, err := os.Stat(filepath.Join(dir, m.file)); err == nil {
+			return m.language
+		}
 	}
 	return JS
 }
 
-func manifestLanguage(dir string) (Language, bool) {
-	for _, m := range manifestLanguages {
-		if _, err := os.Stat(filepath.Join(dir, m.file)); err == nil {
-			return m.language, true
+func languageOf(dir string) (Language, error) {
+	var found []Language
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-	}
-	return "", false
-}
-
-func languageOf(configDir, dir string) (Language, error) {
-	stop, err := filepath.Abs(configDir)
+		if d.IsDir() {
+			if path != dir && skipDir(d.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		language, ok := languageExtensions[filepath.Ext(path)]
+		if !ok || slices.Contains(found, language) {
+			return nil
+		}
+		found = append(found, language)
+		if len(found) > 1 {
+			return fmt.Errorf("discovery: %s mixes %s and %s files, and a discovery folder holds one language", dir, found[0], found[1])
+		}
+		return nil
+	})
 	if err != nil {
 		return "", err
 	}
-	at, err := filepath.Abs(dir)
-	if err != nil {
-		return "", err
+	if len(found) == 0 {
+		return "", nil
 	}
-
-	for {
-		if language, ok := manifestLanguage(at); ok {
-			return language, nil
-		}
-		if at == stop {
-			return JS, nil
-		}
-		parent := filepath.Dir(at)
-		if parent == at {
-			return JS, nil
-		}
-		at = parent
-	}
+	return found[0], nil
 }

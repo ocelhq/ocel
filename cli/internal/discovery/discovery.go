@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+var skippedDirs = []string{"node_modules", "venv", "__pycache__", "target"}
+
 var sourceExtensions = map[string]bool{
 	".ts":  true,
 	".tsx": true,
@@ -154,7 +156,7 @@ func walkDirs(root string) ([]string, error) {
 }
 
 func skipDir(name string) bool {
-	return strings.HasPrefix(name, ".") || name == "node_modules"
+	return strings.HasPrefix(name, ".") || slices.Contains(skippedDirs, name)
 }
 
 func isSourceFile(path string) bool {

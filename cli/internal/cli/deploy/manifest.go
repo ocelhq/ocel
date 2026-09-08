@@ -342,7 +342,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 			out = append(out, attribution.App{
 				Name:      name,
 				Path:      ".",
-				Language:  discovery.LanguageOf(cfg.Dir),
+				Language:  discovery.LanguageOfApp(cfg.Dir),
 				Container: container,
 				Members:   workspaceMembers(container, cfg.Dir),
 			})
@@ -355,12 +355,13 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 	for _, a := range apps {
 		named[a.Name] = true
 		inAnImage := cmp.Or(a.Compute, compute) == string(providerkit.ComputeContainer)
+		appDir := filepath.Join(cfg.Dir, a.Path)
 		out = append(out, attribution.App{
 			Name:      a.Name,
 			Path:      a.Path,
-			Language:  discovery.LanguageOf(filepath.Join(cfg.Dir, a.Path)),
+			Language:  discovery.LanguageOfApp(appDir),
 			Container: inAnImage,
-			Members:   workspaceMembers(inAnImage, filepath.Join(cfg.Dir, a.Path)),
+			Members:   workspaceMembers(inAnImage, appDir),
 		})
 	}
 
