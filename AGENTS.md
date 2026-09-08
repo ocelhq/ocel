@@ -25,9 +25,9 @@
      regression test.
   2. Elsewhere, and the fix is ≤50 changed lines (insertions + deletions of the fix
      itself, tests excluded) → fix it now, in its own commit.
-  3. Anything larger → file a GitHub issue before the task ends: what you observed,
+  3. Anything larger → file a GitHub issue (if none already exists) before the task ends: what you observed,
      where (`file:line`), why it is wrong — and link it from the PR body or report.
-  A fix attempted under 1 or 2 that grows past 50 lines is reverted and filed under 3.
+     A fix attempted under 1 or 2 that grows past 50 lines is reverted and filed under 3.
 
 ## About Ocel
 
