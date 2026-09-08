@@ -533,3 +533,21 @@ func TestARemovalRunsThroughWhenTheBootstrapItWasFrontedByIsGone(t *testing.T) {
 		t.Errorf("Destroy with no bootstrap standing = %v, want the stack given up: nothing it owned outlives the bootstrap", err)
 	}
 }
+
+func TestARemovalSaysSoWhenTheStandingBootstrapFrontsNoEdge(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	e := bootstrapped(t, w)
+	stack, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	bound(t, stack)
+	orphaned := storeless(t, e, stack)
+	w.cfn.otherEdge = true
+
+	if err := orphaned.UnbindDomain(context.Background(), boundHost); err == nil {
+		t.Error("UnbindDomain against a bootstrap that fronts no edge = nil, want the refusal said out loud: a bootstrap standing without the edge feature is not an account with none")
+	}
+}
