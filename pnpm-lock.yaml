@@ -1509,6 +1509,22 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  tests/fixtures/sdk/rust:
+    dependencies:
+      '@ocel/provider-aws':
+        specifier: workspace:^
+        version: link:../../../../packages/provider-aws
+      ocel:
+        specifier: workspace:^
+        version: link:../../../../packages/ocel
+    devDependencies:
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   tests/fixtures/sdk/with-pulumi:
     dependencies:
       '@ocel/provider-aws':
