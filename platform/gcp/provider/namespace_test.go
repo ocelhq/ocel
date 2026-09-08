@@ -51,10 +51,10 @@ func TestEveryNameThisProviderDerivesCarriesTheNamespace(t *testing.T) {
 			if got, want := names.RepositoryPath("europe-west1", providerkit.ClassPreview), "europe-west1-docker.pkg.dev/acme-prod/"+tc.stem+"-acme-prod-preview"; got != want {
 				t.Errorf("RepositoryPath() = %q, want %q: the deploy pushes images to that host", got, want)
 			}
-			if got, want := names.RuntimeAccount(providerkit.ClassProduction), tc.stem+"-production-run"; got != want {
+			if got, want := names.RuntimeAccount(providerkit.ClassProduction), tc.stem+"-production"; got != want {
 				t.Errorf("RuntimeAccount() = %q, want %q", got, want)
 			}
-			if got, want := names.RuntimeAccountEmail(providerkit.ClassProduction), tc.stem+"-production-run@acme-prod.iam.gserviceaccount.com"; got != want {
+			if got, want := names.RuntimeAccountEmail(providerkit.ClassProduction), tc.stem+"-production@acme-prod.iam.gserviceaccount.com"; got != want {
 				t.Errorf("RuntimeAccountEmail() = %q, want %q: a service runs as the account that address names", got, want)
 			}
 			if names.Database() != tc.stem || names.KeyRing() != tc.stem {
@@ -85,9 +85,9 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 		},
 		{
 			name:      "a namespace too long for a runtime service account",
-			namespace: strings.Repeat("a", 16),
+			namespace: strings.Repeat("a", 20),
 			project:   "acme-prod",
-			names:     "-production-run",
+			names:     "-production",
 		},
 		{
 			name:      "a namespace too short for a Firestore database",
@@ -120,5 +120,13 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 				t.Errorf("NewProvider() refused with %q, want it to name %q", refusal.Message, tc.names)
 			}
 		})
+	}
+}
+
+func TestTheLongestNamespaceARuntimeAccountLeavesRoomForIsTaken(t *testing.T) {
+	t.Setenv(providerkit.NamespaceEnvVar, strings.Repeat("a", 19))
+
+	if _, err := gcp.NewProvider(context.Background(), gcp.Options{Project: "acme-prod", Region: "europe-west1"}); err != nil {
+		t.Fatalf("NewProvider() under a 19 character namespace = %v, want it taken: Google gives a service account id 30 characters and the longest class is 10", err)
 	}
 }

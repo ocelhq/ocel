@@ -8,9 +8,8 @@ import (
 )
 
 const (
-	stateBucketSuffix    = "-state"
-	passphraseSuffix     = "-pulumi-passphrase"
-	runtimeAccountSuffix = "-run"
+	stateBucketSuffix = "-state"
+	passphraseSuffix  = "-pulumi-passphrase"
 )
 
 const (
@@ -23,6 +22,8 @@ const (
 	maxAccountID  = 30
 	minDatabaseID = 4
 )
+
+const longestClass = providerkit.ClassProduction
 
 var uuidLike = regexp.MustCompile(`[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}`)
 
@@ -48,7 +49,7 @@ func (n Names) RepositoryPath(region string, class providerkit.Class) string {
 }
 
 func (n Names) RuntimeAccount(class providerkit.Class) string {
-	return string(n.namespace) + "-" + string(class) + runtimeAccountSuffix
+	return string(n.namespace) + "-" + string(class)
 }
 
 func (n Names) RuntimeAccountEmail(class providerkit.Class) string {
@@ -93,14 +94,12 @@ func (n Names) fit() error {
 				"Name a namespace in %s that does not",
 			n.Database(), providerkit.NamespaceEnvVar)
 	}
-	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
-		if account := n.RuntimeAccount(class); len(account) > maxAccountID {
-			return providerkit.Refuse(providerkit.CodeInvalid,
-				"the %s service account this bootstrap names is %d characters and Google takes %d: "+
-					"every app in the %s class runs as it, so the class is part of its name.\n"+
-					"Name a shorter namespace in %s",
-				account, len(account), maxAccountID, class, providerkit.NamespaceEnvVar)
-		}
+	if account := n.RuntimeAccount(longestClass); len(account) > maxAccountID {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"the %s service account this bootstrap names is %d characters and Google takes %d: "+
+				"every app in the %s class runs as it, so the class is part of its name.\n"+
+				"Name a shorter namespace in %s",
+			account, len(account), maxAccountID, longestClass, providerkit.NamespaceEnvVar)
 	}
 	return nil
 }
