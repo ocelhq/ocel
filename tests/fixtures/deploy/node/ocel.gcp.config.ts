@@ -2,7 +2,6 @@ import gcpProvider from "@ocel/provider-gcp";
 import { buildEnv, defineConfig } from "ocel/config";
 import { z } from "zod";
 
-// What the config itself needs while it is evaluated, read from the shell or the project's .env.
 const gcp = buildEnv({
   OCEL_GCP_PROJECT: z.string().min(1),
   OCEL_GCP_REGION: z.string().min(1),
