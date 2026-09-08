@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { GCP_BASE, JOURNEY_CONFIG, writeJourneyConfig } from "../../config";
+import { GCP_BASE, JOURNEY_CONFIG, type Overlay, writeJourneyConfig } from "../../config";
 import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
 import { currentRunIdentity, projectSlug, slugPart } from "../../identity";
@@ -14,7 +14,7 @@ import { type Cell, cellsOf, type Leg, specForTarget, variantNameOf } from "../.
 import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
-import { fittedSlug, namespaceOf, roomForSlug, serviceLead } from "./names";
+import { fittedSlug, gcpSlug, namespaceOf, roomForSlug, serviceLead } from "./names";
 import {
   deleteService,
   listServices,
@@ -260,6 +260,14 @@ async function list(): Promise<string[]> {
     .map(({ slug }) => slug);
 }
 
+export function sweepOverlay(cell: Cell, slug: string, env: NodeJS.ProcessEnv): Overlay {
+  return {
+    base: GCP_BASE,
+    slug: gcpSlug({ slug, fixture: cell.fixture }, env),
+    ...cell.variant?.config,
+  };
+}
+
 async function sweepOwn(runId: string): Promise<void> {
   const complaints: string[] = [];
   for (const slug of await list()) {
@@ -269,7 +277,7 @@ async function sweepOwn(runId: string): Promise<void> {
       treeDir(runId, "gcp", `sweep-${slug}`),
     );
     try {
-      await writeJourneyConfig(dir, { base: GCP_BASE, slug, ...cell.variant?.config });
+      await writeJourneyConfig(dir, sweepOverlay(cell, slug, process.env));
       await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir));
       process.stdout.write(`swept ${slug}\n`);
     } catch (error) {
