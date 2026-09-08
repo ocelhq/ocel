@@ -4,7 +4,7 @@
 - The code is the documentation — get context from it, and don't restate it. Prose may
   name what a human types, never what the code contains.
 - Zero comments by default. Comment only to mark a gap — `TODO`/`FIXME` with a why.
-  Doc-comments only under the literal paths `packages/`, `sdk/` and `python/` — no other
+  Doc-comments only under the literal paths `packages/`, `sdk/`, `python/` and `crates/` — no other
   directory qualifies, however public its surface feels. An existing comment elsewhere is debt,
   not precedent: never match it, never extend it, delete it when touching nearby code.
   One exception: a fixture config shows a variant that conflicts with what is live
@@ -77,6 +77,8 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
   Deliberately lean; never depends on the CLI.
 - **`python/`** — the uv workspace of everything published to PyPI, and nothing else.
   `ocel` is public API.
+- **`crates/`** — the cargo workspace of everything published to crates.io, and nothing
+  else. `ocel` is public API.
 - **`pkg/`** — small shared Go modules any module may depend on. They may import each other
   and `platform/edge/contract`, the one `platform/` path open to them, and nothing else in
   the repo — never a vendor SDK, the CLI, the SDK or the console.
