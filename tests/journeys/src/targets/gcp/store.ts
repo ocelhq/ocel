@@ -1,3 +1,5 @@
+import { HARNESS_PREFIX } from "../../identity";
+
 export type Service = { name: string; uri: string };
 
 type Listing = { services?: Array<{ name?: string; uri?: string }> };
@@ -35,6 +37,15 @@ export function standing(services: Service[], leads: string[]): boolean {
   return leads.some((lead) => under(services, lead).length > 0);
 }
 
+export function strayServices(names: string[], namespace: string, mine: string[]): string[] {
+  const harness = `${namespace}-${HARNESS_PREFIX}`;
+  return names.filter(
+    (name) =>
+      name.startsWith(harness) &&
+      !mine.some((lead) => name === lead || name.startsWith(`${lead}-`)),
+  );
+}
+
 export function reachable(uri: string, endpoint: string | undefined): string {
   if (!endpoint) {
     return uri;
@@ -68,19 +79,35 @@ export async function switchOn(endpoint: string, project: string): Promise<void>
   }
 }
 
-export async function listServices(
-  endpoint: string | undefined,
-  project: string,
-  region: string,
-  token: string | undefined,
-): Promise<Service[]> {
-  const host = endpoint ?? "https://run.googleapis.com";
-  const at = `${host}/v2/projects/${project}/locations/${region}/services`;
-  const answered = await fetch(at, {
-    headers: token ? { authorization: `Bearer ${token}` } : {},
-  });
+export type Where = {
+  endpoint: string | undefined;
+  project: string;
+  region: string;
+  token: string | undefined;
+};
+
+function servicesUrl(where: Where): string {
+  const host = where.endpoint ?? "https://run.googleapis.com";
+  return `${host}/v2/projects/${where.project}/locations/${where.region}/services`;
+}
+
+function bearer(where: Where): Record<string, string> {
+  return where.token ? { authorization: `Bearer ${where.token}` } : {};
+}
+
+export async function listServices(where: Where): Promise<Service[]> {
+  const at = servicesUrl(where);
+  const answered = await fetch(at, { headers: bearer(where) });
   if (!answered.ok) {
     throw new Error(`GET ${at} = ${answered.status} ${await answered.text()}`);
   }
   return servicesIn(await answered.json());
+}
+
+export async function deleteService(where: Where, name: string): Promise<void> {
+  const at = `${servicesUrl(where)}/${name}`;
+  const answered = await fetch(at, { method: "DELETE", headers: bearer(where) });
+  if (!answered.ok && answered.status !== 404) {
+    throw new Error(`DELETE ${at} = ${answered.status} ${await answered.text()}`);
+  }
 }

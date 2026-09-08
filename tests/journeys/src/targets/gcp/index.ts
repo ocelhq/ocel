@@ -15,7 +15,16 @@ import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
 import { fittedSlug, namespaceOf, roomForSlug, serviceLead } from "./names";
-import { listServices, reachable, servedBy, standing, switchOn } from "./store";
+import {
+  deleteService,
+  listServices,
+  reachable,
+  servedBy,
+  standing,
+  strayServices,
+  switchOn,
+  type Where,
+} from "./store";
 
 const ENDPOINT_ENV = "OCEL_FLOCI_GCP_ENDPOINT";
 const PROJECT_ENV = "OCEL_GCP_PROJECT";
@@ -78,8 +87,12 @@ async function token(): Promise<string | undefined> {
   return minted;
 }
 
+async function where(): Promise<Where> {
+  return { endpoint: endpoint(), project: project(), region: region(), token: await token() };
+}
+
 async function services() {
-  return listServices(endpoint(), project(), region(), await token());
+  return listServices(await where());
 }
 
 function childEnv(dir: string): NodeJS.ProcessEnv {
@@ -270,6 +283,35 @@ async function sweepOwn(runId: string): Promise<void> {
   }
 }
 
+async function sweep(runId: string): Promise<void> {
+  const complaints: string[] = [];
+  try {
+    await sweepOwn(runId);
+  } catch (error) {
+    complaints.push(error instanceof Error ? error.message : String(error));
+  }
+  const mine = gcpCells().flatMap((cell) =>
+    leadsFor(projectSlug(cell.name, runId), cell.fixture.apps),
+  );
+  const found = await services();
+  const at = await where();
+  for (const name of strayServices(
+    found.map((service) => service.name),
+    namespaceOf(process.env),
+    mine,
+  )) {
+    try {
+      await deleteService(at, name);
+      process.stdout.write(`swept ${name}\n`);
+    } catch (error) {
+      complaints.push(`${name}: ${String(error)}`);
+    }
+  }
+  if (complaints.length > 0) {
+    throw new Error(`the gcp sweep left work behind:\n${complaints.join("\n")}`);
+  }
+}
+
 export const gcpTarget: Target = {
   name: "gcp",
   concurrency: 2,
@@ -287,6 +329,6 @@ export const gcpTarget: Target = {
   destroy,
   list,
   stands,
-  sweep: sweepOwn,
+  sweep,
   sweepOwn,
 };
