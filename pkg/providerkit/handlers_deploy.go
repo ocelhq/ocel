@@ -271,6 +271,9 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 				"declare a project-level domains.preview wildcard, or run `ocel domain use '*.preview.example.com' --preview` to serve every project's previews on one wildcard")
 	}
 	if len(hosts) == 0 {
+		if r.front.Facts().AddressesItself {
+			return nil
+		}
 		return Refuse(CodeNotReady,
 			"no domains.production declared on the project or any app — declare one, then run `ocel domain add`")
 	}

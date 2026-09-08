@@ -20,7 +20,7 @@ func New(records providerkit.RecordStore) *Edge { return &Edge{records: records}
 
 func (e *Edge) Kind() edge.Kind { return Kind }
 
-func (e *Edge) Facts() edge.Facts { return edge.Facts{} }
+func (e *Edge) Facts() edge.Facts { return edge.Facts{AddressesItself: true} }
 
 var supported = []edge.Need{edge.NeedStreaming}
 

@@ -64,6 +64,10 @@ func TestTheDirectEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !front.Facts().AddressesItself {
+		t.Error("Facts() says the origin does not address itself, and a deploy would then demand a hostname " +
+			"the direct edge has no way to bind")
+	}
 	err = stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.example.com", App: "web"})
 	if err == nil {
 		t.Fatal("BindDomain() bound a hostname to an edge that claims none")
