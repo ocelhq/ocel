@@ -200,6 +200,24 @@ func TestRunInit(t *testing.T) {
 		}
 	})
 
+	t.Run("the gcp provider is scaffolded with the project and region it refuses to run without", func(t *testing.T) {
+		t.Parallel()
+
+		deps := newDeps()
+		stubPackageManager(&deps, nil)
+		dir := initTestDir(t, "proj")
+
+		opts := initOptions{provider: "@ocel/provider-gcp"}
+		if err := runInit(context.Background(), deps, dir, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+			t.Fatalf("runInit err = %v", err)
+		}
+
+		content := readConfig(t, dir)
+		if !strings.Contains(content, `provider: gcpProvider({ project: "my-project", region: "europe-west1" })`) {
+			t.Fatalf("config = %q, want the gcp provider given a project and a region to edit", content)
+		}
+	})
+
 	t.Run("it installs the SDK alongside the provider", func(t *testing.T) {
 		t.Parallel()
 
