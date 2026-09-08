@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"strings"
+	"sync"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
@@ -24,8 +25,9 @@ type Provider struct {
 	endpoint string
 	clients  *clients
 
-	bases map[string]base
-	pull  func(ctx context.Context, ref string) (v1.Image, error)
+	bases  map[string]base
+	pull   func(ctx context.Context, ref string) (v1.Image, error)
+	pulled sync.Map
 }
 
 func New(ctx context.Context, options providerkit.Options) (providerkit.Provider, error) {
