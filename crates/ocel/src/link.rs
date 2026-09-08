@@ -2,8 +2,8 @@ use crate::r#gen::common::links::v1::link::Properties;
 use crate::r#gen::common::links::v1::{Link, PostgresProperties};
 use crate::Error;
 
-pub(crate) fn postgres(name: &str, kind: &str) -> Result<PostgresProperties, Error> {
-    let key = format!("OCEL_RESOURCE_{}_{}", kind.to_uppercase(), name);
+pub(crate) fn postgres(name: &str) -> Result<PostgresProperties, Error> {
+    let key = format!("OCEL_RESOURCE_POSTGRES_{name}");
     let raw = match std::env::var(&key) {
         Ok(raw) if !raw.is_empty() => raw,
         _ => return Err(Error::MissingLink { key }),
@@ -11,7 +11,7 @@ pub(crate) fn postgres(name: &str, kind: &str) -> Result<PostgresProperties, Err
 
     let delivered: Link = serde_json::from_str(&raw).map_err(|_| Error::Link {
         key: key.clone(),
-        expected: kind.to_uppercase(),
+        expected: "POSTGRES".to_string(),
     })?;
 
     match delivered.properties {
@@ -19,7 +19,7 @@ pub(crate) fn postgres(name: &str, kind: &str) -> Result<PostgresProperties, Err
         other => Err(Error::WrongLinkType {
             key,
             carried: carried(&other),
-            expected: kind.to_uppercase(),
+            expected: "POSTGRES".to_string(),
         }),
     }
 }
