@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,7 +26,11 @@ import (
 
 var liveRelease = naming.NewRelease("live", "wp4")
 
-var nodeRuntime = providerkit.Runtime{Name: providerkit.RuntimeNode, Arch: providerkit.ArchX8664}
+var (
+	nodeRuntime   = providerkit.Runtime{Name: providerkit.RuntimeNode, Arch: providerkit.ArchX8664}
+	goRuntime     = providerkit.Runtime{Name: providerkit.RuntimeGo, Arch: providerkit.ArchX8664}
+	pythonRuntime = providerkit.Runtime{Name: providerkit.RuntimePython, Arch: providerkit.ArchX8664}
+)
 
 func runnable(t *testing.T) *gcp.Provider {
 	t.Helper()
@@ -93,21 +98,70 @@ func asked(t *testing.T, uri string) (int, string) {
 	return resp.StatusCode, strings.TrimSpace(string(said))
 }
 
-func stagedFunction(t *testing.T, body string) string {
+func staged(t *testing.T, dir string, runtime providerkit.Runtime, handler string, command []string, files map[string]string) string {
 	t.Helper()
-	dir := t.TempDir()
 	config, err := json.Marshal(providerkit.FunctionConfig{
-		Runtime: nodeRuntime, Handler: "index.mjs", ID: "live", App: "live",
+		Runtime: runtime, Handler: handler, Command: command, ID: "live", App: "live",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, content := range map[string]string{"index.mjs": body, providerkit.FunctionConfigFile: string(config)} {
+	files[providerkit.FunctionConfigFile] = string(config)
+	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
 	return dir
+}
+
+func stagedNode(t *testing.T, body string) string {
+	t.Helper()
+	return staged(t, t.TempDir(), nodeRuntime, "index.mjs", nil, map[string]string{"index.mjs": body})
+}
+
+func stagedPython(t *testing.T) string {
+	t.Helper()
+	body := "import os\n" +
+		"from http.server import BaseHTTPRequestHandler, HTTPServer\n" +
+		"\n" +
+		"class Answering(BaseHTTPRequestHandler):\n" +
+		"    def do_GET(self):\n" +
+		"        self.send_response(200)\n" +
+		"        self.end_headers()\n" +
+		"        self.wfile.write(os.environ['MARK'].encode())\n" +
+		"\n" +
+		"HTTPServer(('0.0.0.0', int(os.environ['PORT'])), Answering).serve_forever()\n"
+	return staged(t, t.TempDir(), pythonRuntime, "main.py", []string{"python3", "main.py"},
+		map[string]string{"main.py": body})
+}
+
+func stagedGo(t *testing.T) string {
+	t.Helper()
+	source := t.TempDir()
+	body := "package main\n\n" +
+		"import (\n\t\"net/http\"\n\t\"os\"\n)\n\n" +
+		"func main() {\n" +
+		"\thttp.HandleFunc(\"/\", func(w http.ResponseWriter, _ *http.Request) {\n" +
+		"\t\tw.Write([]byte(os.Getenv(\"MARK\")))\n" +
+		"\t})\n" +
+		"\tif err := http.ListenAndServe(\":\"+os.Getenv(\"PORT\"), nil); err != nil {\n" +
+		"\t\tpanic(err)\n" +
+		"\t}\n" +
+		"}\n"
+	for name, content := range map[string]string{"main.go": body, "go.mod": "module live\n\ngo 1.24\n"} {
+		if err := os.WriteFile(filepath.Join(source, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dir := t.TempDir()
+	build := exec.Command("go", "build", "-o", filepath.Join(dir, "server"), ".")
+	build.Dir = source
+	build.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH=amd64", "GOWORK=off")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build the go function this test serves: %v\n%s", err, out)
+	}
+	return staged(t, dir, goRuntime, "server", []string{"./server"}, map[string]string{})
 }
 
 func held(t *testing.T, repository string, image v1.Image) string {
@@ -124,21 +178,24 @@ func held(t *testing.T, repository string, image v1.Image) string {
 	return strings.TrimSuffix(target, ":"+naming.DigestTag(digest.String())) + "@" + digest.String()
 }
 
-func functionImage(t *testing.T, p *gcp.Provider, repository, body string) string {
+func functionImage(t *testing.T, p *gcp.Provider, repository string, runtime providerkit.Runtime, dir string) string {
 	t.Helper()
 	ctx := context.Background()
-	base, err := p.FunctionBase(ctx, nodeRuntime)
+	base, err := p.FunctionBase(ctx, runtime)
 	if err != nil {
-		t.Fatalf("read the base a node function is built on: %v", err)
+		t.Fatalf("read the base a %s function is built on: %v", runtime.Name, err)
 	}
-	membrane, err := p.FunctionMembrane(ctx, nodeRuntime)
+	membrane, err := p.FunctionMembrane(ctx, runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
-	image, err := providerkit.FunctionImage(base, nodeRuntime, stagedFunction(t, body),
-		map[string][]byte{providerkit.NodeMembranePath: membrane})
+	overlay := map[string][]byte{}
+	if len(membrane) > 0 {
+		overlay[providerkit.NodeMembranePath] = membrane
+	}
+	image, err := providerkit.FunctionImage(base, runtime, dir, overlay)
 	if err != nil {
-		t.Fatalf("build the function's image: %v", err)
+		t.Fatalf("build the %s function's image: %v", runtime.Name, err)
 	}
 	return held(t, repository, image)
 }
@@ -188,6 +245,10 @@ func serverImage(t *testing.T, p *gcp.Provider, repository, mark string) string 
 }
 
 func serverlessPlan(app, image string, values map[string]string) providerkit.StackPlan {
+	return serverlessPlanOn(app, image, nodeRuntime, values)
+}
+
+func serverlessPlanOn(app, image string, runtime providerkit.Runtime, values map[string]string) providerkit.StackPlan {
 	return providerkit.StackPlan{
 		Ref: providerkit.StackRef{
 			Project: "live",
@@ -200,7 +261,7 @@ func serverlessPlan(app, image string, values map[string]string) providerkit.Sta
 			Compute: providerkit.ComputeServerless,
 			Values:  providerkit.AppValues{Delivered: values},
 			Functions: []providerkit.FunctionSpec{
-				{Name: app, Runtime: nodeRuntime, Image: image, URL: true},
+				{Name: app, Runtime: runtime, Image: image, URL: true},
 			},
 		},
 	}
@@ -218,7 +279,8 @@ func containerPlan(app, image string, values map[string]string) providerkit.Stac
 func TestLiveAFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
 	ctx := context.Background()
 	p := runnable(t)
-	image := functionImage(t, p, "ocel-live/fn", "export default { fetch: () => new Response(process.env.MARK) };")
+	image := functionImage(t, p, "ocel-live/fn", nodeRuntime,
+		stagedNode(t, "export default { fetch: () => new Response(process.env.MARK) };"))
 	plan := serverlessPlan("fn", image, map[string]string{"MARK": "membrane-one"})
 	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, plan.Ref, runningAs(t, p, plan), nil) })
 
@@ -314,4 +376,39 @@ func TestLiveAServiceTakenDownAnswersNothingAndIsTakenDownOnlyOnce(t *testing.T)
 	if err := p.RemoveContainers(ctx, plan.Ref, containers, nil); err != nil {
 		t.Errorf("RemoveContainers() a second time = %v, want a teardown that is safe to re-run", err)
 	}
+}
+
+func servesItsOwn(t *testing.T, app string, runtime providerkit.Runtime, stage func(*testing.T) string, mark string) {
+	t.Helper()
+	ctx := context.Background()
+	p := runnable(t)
+	image := functionImage(t, p, "ocel-live/"+app, runtime, stage(t))
+	plan := serverlessPlanOn(app, image, runtime, map[string]string{"MARK": mark})
+	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, plan.Ref, runningAs(t, p, plan), nil) })
+
+	functions, err := p.ProvisionFunctions(ctx, plan, nil)
+	if err != nil {
+		t.Fatalf("ProvisionFunctions() = %v", err)
+	}
+	if len(functions) != 1 || functions[0].URL == "" {
+		t.Fatalf("ProvisionFunctions() = %+v, want one function reachable at a url of its own", functions)
+	}
+
+	at := reachable(t, functions[0].URL)
+	status, said := answering(t, at)
+	if status != http.StatusOK {
+		t.Fatalf("GET %s = %d %q, want the %s function to answer", at, status, said, runtime.Name)
+	}
+	if said != mark {
+		t.Errorf("GET %s said %q, want %q: a %s function is its own server, and the deploy hands it its values",
+			at, said, mark, runtime.Name)
+	}
+}
+
+func TestLiveAGoFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
+	servesItsOwn(t, "gofn", goRuntime, stagedGo, "go-answered")
+}
+
+func TestLiveAPythonFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
+	servesItsOwn(t, "pyfn", pythonRuntime, stagedPython, "python-answered")
 }
