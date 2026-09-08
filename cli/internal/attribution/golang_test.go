@@ -24,10 +24,10 @@ func write(t *testing.T, path, body string) {
 func goApp(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	write(t, filepath.Join(root, "server", "go.mod"), "module example.com/web\n\ngo 1.27.0\n")
+	write(t, filepath.Join(root, "go.mod"), "module example.com/web\n\ngo 1.27.0\n")
 	write(t, filepath.Join(root, "server", "main.go"), "package main\n\nimport _ \"example.com/web/infra\"\n\nfunc main() {}\n")
-	write(t, filepath.Join(root, "server", "infra", "infra.go"), "package infra\n")
-	write(t, filepath.Join(root, "server", "unused", "unused.go"), "package unused\n")
+	write(t, filepath.Join(root, "infra", "infra.go"), "package infra\n")
+	write(t, filepath.Join(root, "unused", "unused.go"), "package unused\n")
 	return root
 }
 
@@ -37,7 +37,7 @@ func TestGoReachGrantsAResourceTheAppsMainImports(t *testing.T) {
 	declarations := []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
-		Source: filepath.Join(root, "server", "infra", "infra.go") + ":1",
+		Source: filepath.Join(root, "infra", "infra.go") + ":1",
 	}}
 
 	usages, err := Compute(root, apps, declarations)
@@ -58,7 +58,7 @@ func TestGoReachGrantsNothingFromAPackageNoMainImports(t *testing.T) {
 	declarations := []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
-		Source: filepath.Join(root, "server", "unused", "unused.go") + ":1",
+		Source: filepath.Join(root, "unused", "unused.go") + ":1",
 	}}
 
 	usages, err := Compute(root, apps, declarations)
@@ -72,7 +72,7 @@ func TestGoReachGrantsNothingFromAPackageNoMainImports(t *testing.T) {
 
 func TestGoReachReportsWhatGoListSaid(t *testing.T) {
 	root := t.TempDir()
-	write(t, filepath.Join(root, "server", "go.mod"), "module example.com/web\n\ngo 1.27.0\n")
+	write(t, filepath.Join(root, "go.mod"), "module example.com/web\n\ngo 1.27.0\n")
 	write(t, filepath.Join(root, "server", "main.go"), "package main\n\nimport _ \"example.com/web/missing\"\n\nfunc main() {}\n")
 
 	_, err := Compute(root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, nil)
@@ -93,7 +93,7 @@ func TestGoReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 	usages, err := Compute(root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
-		Source: filepath.Join(root, "server", "infra", "infra.go") + ":5",
+		Source: filepath.Join(root, "infra", "infra.go") + ":5",
 	}})
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
