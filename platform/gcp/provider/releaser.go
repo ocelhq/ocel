@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -28,10 +29,14 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 		if err != nil {
 			return nil, err
 		}
+		values, err := carried(spec.Name, app.Values.Delivered, spec.Env)
+		if err != nil {
+			return nil, err
+		}
 		uri, err := p.stand(ctx, serving{
 			service: service,
 			image:   spec.Image,
-			env:     carried(app.Values.Delivered, spec.Env),
+			env:     values,
 			account: account,
 			compute: providerkit.ComputeServerless,
 			public:  spec.URL,
@@ -73,10 +78,14 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	if err != nil {
 		return nil, err
 	}
+	values, err := carried(app.App, app.Values.Delivered, nil)
+	if err != nil {
+		return nil, err
+	}
 	uri, err := p.stand(ctx, serving{
 		service: service,
 		image:   app.Image,
-		env:     carried(app.Values.Delivered, nil),
+		env:     values,
 		account: p.Names().RuntimeAccountEmail(plan.Ref.Class),
 		compute: providerkit.ComputeContainer,
 		health:  app.HealthCheckPath,
@@ -100,11 +109,20 @@ func (p *Provider) RemoveContainers(ctx context.Context, _ providerkit.StackRef,
 	return nil
 }
 
-func carried(delivered, own map[string]string) map[string]string {
+func carried(what string, delivered, own map[string]string) (map[string]string, error) {
 	values := make(map[string]string, len(delivered)+len(own))
 	maps.Copy(values, delivered)
-	maps.Copy(values, own)
-	return values
+	for _, name := range slices.Sorted(maps.Keys(own)) {
+		if _, taken := values[name]; taken {
+			return nil, providerkit.Refuse(providerkit.CodeInvalid,
+				"%s carries %s in the environment its own spec names, and the deploy already resolved a value for %s: "+
+					"a revision holds one entry per name, so the spec's would silently take the place of what the deploy delivered "+
+					"and the app would read a value nothing in it declared. Rename one of them",
+				what, name, name)
+		}
+		values[name] = own[name]
+	}
+	return values, nil
 }
 
 var (
