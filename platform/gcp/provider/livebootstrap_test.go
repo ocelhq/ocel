@@ -364,7 +364,7 @@ func onRealGoogleCloud(t *testing.T) {
 	}
 }
 
-func TestLiveTheDatabaseIsARowOfItsOwnHeldUnderDeleteProtection(t *testing.T) {
+func TestProjectTheDatabaseIsARowOfItsOwnHeldUnderDeleteProtection(t *testing.T) {
 	p := live(t)
 	onRealGoogleCloud(t)
 	bootstrapped(t, p, providerkit.ClassProduction)
@@ -387,7 +387,7 @@ func TestLiveTheDatabaseIsARowOfItsOwnHeldUnderDeleteProtection(t *testing.T) {
 	}
 }
 
-func TestLiveARegionFirestoreDoesNotServeIsRefusedNamingTheOnesItDoes(t *testing.T) {
+func TestProjectARegionFirestoreDoesNotServeIsRefusedNamingTheOnesItDoes(t *testing.T) {
 	live(t)
 	onRealGoogleCloud(t)
 
@@ -599,7 +599,7 @@ func protectionLifted(t *testing.T) {
 	t.Fatal("delete protection never came off, so this test never got to say anything")
 }
 
-func TestLiveADatabaseLeftUnprotectedIsAnUpdateRowAnApplyMends(t *testing.T) {
+func TestProjectADatabaseLeftUnprotectedIsAnUpdateRowAnApplyMends(t *testing.T) {
 	p := live(t)
 	onRealGoogleCloud(t)
 	class := providerkit.ClassProduction
@@ -648,7 +648,7 @@ func elsewhereRegion() string {
 	return "us-east1"
 }
 
-func TestLiveADatabaseStandingInAnotherRegionIsRefusedRatherThanUsed(t *testing.T) {
+func TestProjectADatabaseStandingInAnotherRegionIsRefusedRatherThanUsed(t *testing.T) {
 	p := live(t)
 	onRealGoogleCloud(t)
 	class := providerkit.ClassProduction

@@ -158,12 +158,12 @@ one:
 gcloud auth application-default login
 gcloud services enable firestore.googleapis.com storage.googleapis.com \
   cloudkms.googleapis.com secretmanager.googleapis.com --project <project>
-OCEL_GCP_LIVE_PROJECT=<project> go test -C platform/gcp/provider -count=1 -run '^TestLive' ./...
+OCEL_GCP_LIVE_PROJECT=<project> go test -C platform/gcp/provider -count=1 -run '^Test(Live|Project)' ./...
 ```
 
 | name                    | kind | what it holds                                                        |
 | ----------------------- | ---- | -------------------------------------------------------------------- |
-| `OCEL_GCP_LIVE_PROJECT` | env  | the real project a by-hand `TestLive` run bootstraps into and tears down |
+| `OCEL_GCP_LIVE_PROJECT` | env  | the real project a by-hand `TestLive` and `TestProject` run bootstraps into and tears down |
 | `OCEL_GCP_LIVE_REGION`  | env  | the region that run uses; `europe-west1` when unset                  |
 
 The run creates and destroys buckets, a Firestore database, a key ring and a secret in
