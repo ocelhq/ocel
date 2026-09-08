@@ -108,7 +108,8 @@ func (a artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.Re
 
 func (a artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, prefix string, report providerkit.Reporter) error {
 	if prefix == "" {
-		return nil
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"an empty prefix names every artifact this project keeps")
 	}
 	bucket, err := a.bucket(class)
 	if err != nil {
