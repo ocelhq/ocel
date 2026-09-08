@@ -60,6 +60,13 @@ func (h *handlers) edgeFor(provider Provider, sel *contractv1.EdgeSelection) (ed
 	return provider.Edges().Open(kind)
 }
 
+func (h *handlers) removalEdge(provider Provider, state EdgeStackState, sel *contractv1.EdgeSelection) (edge.Edge, error) {
+	if state.Kind == "" {
+		return h.edgeFor(provider, sel)
+	}
+	return provider.Edges().Open(state.Kind)
+}
+
 func (h *handlers) dnsFor(provider Provider, sel *contractv1.EdgeSelection) (edge.DNSWriter, error) {
 	kind := DNSKind(sel.GetDns().GetKind())
 	if kind == "" {
@@ -106,6 +113,7 @@ func (h *handlers) openStack(ctx context.Context, class Class, slug string, sel 
 }
 
 func (s *stackSession) checkpoint(ctx context.Context) error {
+	s.state.Kind = s.front.Kind()
 	s.state.Edge = s.stack.State()
 	return s.store.write(ctx, s.state)
 }

@@ -357,3 +357,22 @@ func TestARemovalRunsTheConsentedProjectPlanItWasHanded(t *testing.T) {
 		t.Fatalf("RemoveProject() = %q, want the plan the human saw to run", result.GetError())
 	}
 }
+
+func TestARemovalOpensTheEdgeTheProjectStandsOnRatherThanTheDefault(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	plan, err := client.PlanRemoveProject(context.Background(), projectRequest())
+	if err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+	if plan.GetEdgeKind() != string(fake.KindDirect) {
+		t.Errorf("the removal plans against the %q edge, want the %q edge the project stands on",
+			plan.GetEdgeKind(), fake.KindDirect)
+	}
+}

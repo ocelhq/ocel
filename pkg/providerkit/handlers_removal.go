@@ -48,7 +48,12 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	if err != nil {
 		return nil, err
 	}
-	front, err := h.edgeFor(provider, req.GetEdge())
+	store := stackStore{records: provider.Records(), name: EdgeStackRecord(class, req.GetSlug())}
+	state, err := store.read(ctx)
+	if err != nil {
+		return nil, err
+	}
+	front, err := h.removalEdge(provider, state, req.GetEdge())
 	if err != nil {
 		return nil, err
 	}
@@ -60,13 +65,11 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 		provider: provider,
 		front:    front,
 		settle:   newSettler(front, writer, req.GetEdge().GetDns().GetZone(), servedResolver{kind: front.Kind()}),
-		store:    stackStore{records: provider.Records(), name: EdgeStackRecord(class, req.GetSlug())},
+		store:    store,
+		state:    state,
 		slug:     req.GetSlug(),
 		class:    class,
 		scope:    scope,
-	}
-	if removal.state, err = removal.store.read(ctx); err != nil {
-		return nil, err
 	}
 	if !removal.state.Edge.Empty() {
 		if removal.stack, err = front.Open(removal.state.Edge); err != nil {
