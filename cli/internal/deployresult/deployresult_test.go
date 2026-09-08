@@ -20,6 +20,7 @@ func TestWrite(t *testing.T) {
 		err := Write(dir, Result{
 			Slug:        "proj-123",
 			Environment: Environment{Class: "preview", Identity: "e2e-42"},
+			Provider:    Provider{Package: "@ocel/provider-aws", Region: "eu-west-2"},
 			PromotionID: "dep_abc",
 			Tag:         "v1",
 			Apps:        []App{{Name: "web", BuildID: "bld_1", DeploymentID: "3f7c1b9a5e2d4c8f", URLs: []string{"https://app.example.com"}}},
@@ -42,6 +43,7 @@ func TestWrite(t *testing.T) {
 			"schemaVersion": float64(SchemaVersion),
 			"slug":          "proj-123",
 			"environment":   map[string]any{"class": "preview", "identity": "e2e-42"},
+			"provider":      map[string]any{"package": "@ocel/provider-aws", "region": "eu-west-2"},
 			"promotionId":   "dep_abc",
 			"tag":           "v1",
 			"apps":          []any{map[string]any{"name": "web", "buildId": "bld_1", "deploymentId": "3f7c1b9a5e2d4c8f", "urls": []any{"https://app.example.com"}}},

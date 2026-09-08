@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
@@ -30,6 +31,7 @@ func recordDeployResult(cfg *projectconfig.Config, manifest *contractv1.Manifest
 			Class:    environmentClassKey(env.GetTier()),
 			Identity: env.GetIdentity(),
 		},
+		Provider:    providerOf(cfg),
 		PromotionID: promotionID,
 		Tag:         tag,
 		Apps:        apps,
@@ -37,6 +39,17 @@ func recordDeployResult(cfg *projectconfig.Config, manifest *contractv1.Manifest
 		return fmt.Errorf("write deploy result: %w", err)
 	}
 	return nil
+}
+
+func providerOf(cfg *projectconfig.Config) deployresult.Provider {
+	if cfg.Provider == nil {
+		return deployresult.Provider{}
+	}
+	var options struct {
+		Region string `json:"region"`
+	}
+	_ = json.Unmarshal(cfg.Provider.Options, &options)
+	return deployresult.Provider{Package: cfg.Provider.Package, Region: options.Region}
 }
 
 func appURLs(results []*progressv1.AppResult, name string) []string {

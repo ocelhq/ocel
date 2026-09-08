@@ -7,6 +7,10 @@ export const deployResultSchema = z.looseObject({
     class: z.string(),
     identity: z.string().optional(),
   }),
+  provider: z.looseObject({
+    package: z.string(),
+    region: z.string().optional(),
+  }),
   promotionId: z.string(),
   tag: z.string().optional(),
   apps: z.array(

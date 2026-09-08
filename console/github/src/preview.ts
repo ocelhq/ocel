@@ -128,27 +128,67 @@ export function firstUrl(result: DeployResult | undefined): string | undefined {
   return undefined;
 }
 
+const LOGO_BASE = "https://ocel.dev/providers";
+
+interface ProviderLook {
+  name: string;
+  logo: string;
+  home: string;
+}
+
+const PROVIDERS: Record<string, ProviderLook> = {
+  "@ocel/provider-aws": { name: "AWS", logo: "aws", home: "your AWS account" },
+  "@ocel/provider-vps": { name: "VPS", logo: "vps", home: "your own server" },
+};
+
 export function renderComment(phase: Phase, ctx: PreviewInput): string {
   const lines = [MARKER, "", "### Ocel preview", ""];
 
   if (phase === "started") {
-    lines.push(`Deploying… commit ${commitLink(ctx)} on \`${ctx.ref}\`.`);
-  } else if (phase === "deployed") {
-    lines.push("| App | URL | Commit | Updated |", "| --- | --- | --- | --- |");
-    for (const app of ctx.result?.apps ?? []) {
-      const url = app.urls[0] ?? "no url";
-      lines.push(`| ${app.name} | ${url} | ${commitLink(ctx)} | ${ctx.result?.deployedAt ?? ""} |`);
+    lines.push(`🔄 Deploying ${commitLink(ctx)} on \`${ctx.ref}\`…`);
+  } else if (phase === "deployed" && ctx.result) {
+    lines.push(deployedHeadline(ctx, ctx.result), "");
+    lines.push("| App | Preview | Status |", "| --- | --- | --- |");
+    for (const app of ctx.result.apps) {
+      const url = app.urls[0];
+      const preview = url ? `[Visit preview ↗](${url})` : "no url";
+      lines.push(`| ${app.name} | ${preview} | ${url ? "✅ Ready" : "❌ No URL"} |`);
     }
   } else if (phase === "failed") {
-    lines.push(`Preview failed for commit ${commitLink(ctx)}.`);
+    lines.push(`❌ Preview failed for ${commitLink(ctx)} on \`${ctx.ref}\`.`);
     if (ctx.error) lines.push("", "```", ctx.error, "```");
   } else {
-    lines.push(`Preview torn down for \`${ctx.ref}\`.`);
+    lines.push(`💤 Preview torn down for \`${ctx.ref}\`.`);
   }
 
   if (ctx.runUrl) lines.push("", `[Run log](${ctx.runUrl})`);
 
   return `${lines.join("\n")}\n`;
+}
+
+function deployedHeadline(ctx: PreviewInput, result: DeployResult): string {
+  const look = PROVIDERS[result.provider.package];
+  const where = [look?.home ?? result.provider.package, result.provider.region]
+    .filter(Boolean)
+    .join(" · ");
+  const line = `Deployed ${commitLink(ctx)} to ${where} · ${formatTime(result.deployedAt)}`;
+  if (!look) return line;
+  return `<img src="${LOGO_BASE}/${look.logo}.svg" alt="${look.name}" height="14"> ${line}`;
+}
+
+export function formatTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const text = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+  return `${text} UTC`;
 }
 
 function commitLink(ctx: PreviewInput): string {

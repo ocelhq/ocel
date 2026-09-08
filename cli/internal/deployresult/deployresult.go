@@ -20,10 +20,16 @@ type Result struct {
 	SchemaVersion int         `json:"schemaVersion"`
 	Slug          string      `json:"slug"`
 	Environment   Environment `json:"environment"`
+	Provider      Provider    `json:"provider"`
 	PromotionID   string      `json:"promotionId"`
 	Tag           string      `json:"tag,omitempty"`
 	Apps          []App       `json:"apps"`
 	DeployedAt    time.Time   `json:"deployedAt"`
+}
+
+type Provider struct {
+	Package string `json:"package"`
+	Region  string `json:"region,omitempty"`
 }
 
 type Environment struct {
