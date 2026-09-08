@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/containerd/errdefs"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/daemon"
 )
@@ -24,11 +25,17 @@ func (daemonImages) Has(ctx context.Context, push ImagePush) (bool, error) {
 		return false, fmt.Errorf("%q names nowhere the daemon can hold an image: %w", push.Target, err)
 	}
 	held, err := daemon.Image(ref, daemon.WithContext(ctx))
-	if err != nil {
+	if errdefs.IsNotFound(err) {
 		return false, nil
 	}
+	if err != nil {
+		return false, fmt.Errorf("ask the local docker daemon for %s: %w", push.Target, err)
+	}
 	digest, err := held.Digest()
-	return err == nil && digest.String() == push.Digest, nil
+	if err != nil {
+		return false, fmt.Errorf("read the digest of the %s the local docker daemon holds: %w", push.Target, err)
+	}
+	return digest.String() == push.Digest, nil
 }
 
 func (daemonImages) Push(ctx context.Context, push ImagePush, _ Reporter) error {
