@@ -27,7 +27,7 @@ inventory::collect!(Declaration);
 ///
 /// [`macro@main`] calls this, so an app that carries the attribute never calls it itself.
 pub fn discover() -> Result<bool, Error> {
-    if std::env::var(PHASE_ENV).as_deref() != Ok(DISCOVERY_PHASE) {
+    if !discovering() {
         return Ok(false);
     }
     for declaration in inventory::iter::<Declaration> {
