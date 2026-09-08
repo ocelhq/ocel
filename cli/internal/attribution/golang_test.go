@@ -83,3 +83,25 @@ func TestGoReachReportsWhatGoListSaid(t *testing.T) {
 		t.Errorf("error = %q, want it to name the app and go list", err)
 	}
 }
+
+func TestGoReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", "tests", "fixtures", "sdk", "go"))
+	if err != nil {
+		t.Fatalf("locate the fixture: %v", err)
+	}
+
+	usages, err := Compute(root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, []Declaration{{
+		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Name:   "main",
+		Source: filepath.Join(root, "server", "infra", "infra.go") + ":5",
+	}})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	if len(usages) != 1 {
+		t.Fatalf("usages = %+v, want one", usages)
+	}
+	if usages[0].App != "web" || usages[0].Name != "main" || !slices.Equal(usages[0].Files, []string{"server"}) {
+		t.Errorf("usage = %+v, want main granted to web from entry server", usages[0])
+	}
+}
