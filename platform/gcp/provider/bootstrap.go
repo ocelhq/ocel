@@ -29,6 +29,8 @@ const (
 	reasonRingKept = "Google never deletes a key ring, so this one outlives every bootstrap that used it"
 	reasonShared   = "the %s bootstrap still stands and shares it"
 	reasonDestroy  = "scheduled, destroyed after 24h"
+
+	reasonUnprotected = "it stands with delete protection off, and one call would take every record both classes hold with it"
 )
 
 const passphraseBytes = 32
@@ -64,7 +66,7 @@ func described(read survey) providerkit.Bootstrap {
 			Name:          read.Project + "/" + string(read.Class),
 			Present:       read.Present,
 			Schema:        uint32(read.Stamp.Schema),
-			DigestCurrent: read.Stamp.Digest == digestOf(items) && read.holdsEvery(items),
+			DigestCurrent: read.Stamp.Digest == digestOf(items) && read.current(items),
 			Writer:        read.Stamp.Writer,
 		}},
 	}
@@ -110,6 +112,8 @@ func planned(read survey, items []item) []providerkit.Change {
 		switch {
 		case read.Emulated && held.Kind == KindDatabase:
 			change.Action, change.Reason, change.Slow = providerkit.ActionKeep, reasonEmulated, false
+		case read.holds(held) && read.mends(held) != "":
+			change.Action, change.Reason = providerkit.ActionUpdate, read.mends(held)
 		case read.holds(held):
 			change.Action, change.Reason, change.Slow = providerkit.ActionKeep, reasonStanding, false
 		}
@@ -119,7 +123,7 @@ func planned(read survey, items []item) []providerkit.Change {
 }
 
 func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
-	read, err := b.survey(ctx, req.Class)
+	read, err := b.held(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -164,7 +168,15 @@ func stampHolder(items []item, holder item) item {
 }
 
 func (b bootstrapper) stand(ctx context.Context, read survey, held item, report providerkit.Reporter) error {
-	if read.holds(held) || (read.Emulated && held.Kind == KindDatabase) {
+	emulated := read.Emulated && held.Kind == KindDatabase
+	if mends := read.mends(held); mends != "" && !emulated {
+		if err := b.mend(ctx, read, held); err != nil {
+			return err
+		}
+		say(report, "mended "+held.ID()+": "+mends)
+		return nil
+	}
+	if read.holds(held) || emulated {
 		say(report, held.ID()+": "+reasonStanding)
 		return nil
 	}
@@ -173,6 +185,13 @@ func (b bootstrapper) stand(ctx context.Context, read survey, held item, report 
 	}
 	say(report, "created "+held.ID())
 	return nil
+}
+
+func (b bootstrapper) mend(ctx context.Context, read survey, held item) error {
+	if held.Kind == KindDatabase {
+		return b.protectDatabase(ctx)
+	}
+	return b.make(ctx, read, held)
 }
 
 func (b bootstrapper) make(ctx context.Context, read survey, held item) error {
@@ -369,15 +388,75 @@ func (b bootstrapper) makeDatabase(ctx context.Context, read survey) error {
 	if err != nil {
 		return err
 	}
-	_, err = attempted(ctx, service.Projects.Databases.Create("projects/"+read.Project, &firestoreadmin.GoogleFirestoreAdminV1Database{
+	operation, err := attempted(ctx, service.Projects.Databases.Create("projects/"+read.Project, &firestoreadmin.GoogleFirestoreAdminV1Database{
 		LocationId:            read.Region,
 		Type:                  nativeFirestore,
 		DeleteProtectionState: protectionOn,
 	}).DatabaseId(recordDatabase).Context(ctx).Do)
-	if err != nil && answeredCode(err) != http.StatusConflict {
+	if answeredCode(err) == http.StatusConflict {
+		return b.databaseServesThisRegion(ctx, read)
+	}
+	if err != nil {
 		return fmt.Errorf("create the %q Firestore database: %w", recordDatabase, err)
 	}
-	return nil
+	return b.awaited(ctx, fmt.Sprintf("creating the %q Firestore database", recordDatabase), operation)
+}
+
+func (b bootstrapper) databaseServesThisRegion(ctx context.Context, read survey) error {
+	service, err := b.clients.Databases()
+	if err != nil {
+		return err
+	}
+	held, err := attempted(ctx, service.Projects.Databases.Get(databasePath(read.Project)).Context(ctx).Do)
+	if err != nil {
+		return fmt.Errorf("read the %q Firestore database that already stands: %w", recordDatabase, err)
+	}
+	if held.LocationId == read.Region {
+		return b.protectDatabase(ctx)
+	}
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"project %s already holds the %q Firestore database in %s and Firestore never moves one, "+
+			"so the records this bootstrap writes would sit a continent away from the buckets and keys it names %s for.\n"+
+			"Bootstrap this project in %s, or deploy into a project with no %q database",
+		read.Project, recordDatabase, held.LocationId, read.Region, held.LocationId, recordDatabase)
+}
+
+func (b bootstrapper) protectDatabase(ctx context.Context) error {
+	service, err := b.clients.Databases()
+	if err != nil {
+		return err
+	}
+	operation, err := attempted(ctx, service.Projects.Databases.Patch(databasePath(b.clients.project),
+		&firestoreadmin.GoogleFirestoreAdminV1Database{DeleteProtectionState: protectionOn}).
+		UpdateMask("deleteProtectionState").Context(ctx).Do)
+	if err != nil {
+		return fmt.Errorf("hold the %q Firestore database under delete protection: %w", recordDatabase, err)
+	}
+	return b.awaited(ctx, fmt.Sprintf("holding the %q Firestore database under delete protection", recordDatabase), operation)
+}
+
+func (b bootstrapper) awaited(ctx context.Context, doing string, operation *firestoreadmin.GoogleLongrunningOperation) error {
+	if operation == nil || operation.Done || operation.Name == "" {
+		return operationFailed(doing, operation)
+	}
+	service, err := b.clients.Databases()
+	if err != nil {
+		return err
+	}
+	finished, err := until(ctx, doing, func() (*firestoreadmin.GoogleLongrunningOperation, error) {
+		return attempted(ctx, service.Projects.Databases.Operations.Get(operation.Name).Context(ctx).Do)
+	}, func(held *firestoreadmin.GoogleLongrunningOperation) bool { return held.Done })
+	if err != nil {
+		return fmt.Errorf("wait for %s: %w", doing, err)
+	}
+	return operationFailed(doing, finished)
+}
+
+func operationFailed(doing string, operation *firestoreadmin.GoogleLongrunningOperation) error {
+	if operation == nil || operation.Error == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %s", doing, operation.Error.Message)
 }
 
 type removal struct {
@@ -555,15 +634,28 @@ func (b bootstrapper) takeDatabase(ctx context.Context, read survey) error {
 		return err
 	}
 	path := databasePath(read.Project)
-	if _, err := attempted(ctx, service.Projects.Databases.Patch(path, &firestoreadmin.GoogleFirestoreAdminV1Database{
+	lifting, err := attempted(ctx, service.Projects.Databases.Patch(path, &firestoreadmin.GoogleFirestoreAdminV1Database{
 		DeleteProtectionState: protectionOff,
-	}).UpdateMask("deleteProtectionState").Context(ctx).Do); err != nil && !absent(err) {
+	}).UpdateMask("deleteProtectionState").Context(ctx).Do)
+	if absent(err) {
+		return nil
+	}
+	if err != nil {
 		return fmt.Errorf("lift delete protection from the %q Firestore database: %w", recordDatabase, err)
 	}
-	if _, err := attempted(ctx, service.Projects.Databases.Delete(path).Context(ctx).Do); err != nil && !absent(err) {
+	lifted := fmt.Sprintf("lifting delete protection from the %q Firestore database", recordDatabase)
+	if err := b.awaited(ctx, lifted, lifting); err != nil {
+		return err
+	}
+
+	deleting, err := attempted(ctx, service.Projects.Databases.Delete(path).Context(ctx).Do)
+	if absent(err) {
+		return nil
+	}
+	if err != nil {
 		return fmt.Errorf("delete the %q Firestore database: %w", recordDatabase, err)
 	}
-	return nil
+	return b.awaited(ctx, fmt.Sprintf("deleting the %q Firestore database", recordDatabase), deleting)
 }
 
 func (b bootstrapper) takeBucket(ctx context.Context, name string) error {

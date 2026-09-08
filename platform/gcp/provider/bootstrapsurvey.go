@@ -42,15 +42,18 @@ type survey struct {
 	Emulated   bool
 
 	standing map[string]bool
+	mending  map[string]string
 	sibling  bool
 	stateOf  string
 }
 
 func (s survey) holds(held item) bool { return s.standing[held.ID()] }
 
-func (s survey) holdsEvery(items []item) bool {
+func (s survey) mends(held item) string { return s.mending[held.ID()] }
+
+func (s survey) current(items []item) bool {
 	for _, held := range items {
-		if !s.holds(held) {
+		if !s.holds(held) || s.mends(held) != "" {
 			return false
 		}
 	}
@@ -64,17 +67,20 @@ func (b bootstrapper) survey(ctx context.Context, class providerkit.Class) (surv
 		Region:   b.clients.region,
 		Emulated: b.clients.endpoint != "",
 		standing: map[string]bool{},
+		mending:  map[string]string{},
 	}
-	beside := siblingOf(class)
-	for _, held := range append(bootstrapItems(read.Project, class), bootstrapItems(read.Project, beside)...) {
+	for _, held := range bootstrapItems(read.Project, class) {
 		stands, err := b.stands(ctx, held)
 		if err != nil {
 			return survey{}, err
 		}
-		read.standing[held.ID()] = stands
+		read.standing[held.ID()] = stands.held
+		if stands.mends != "" {
+			read.mending[held.ID()] = stands.mends
+		}
 	}
 
-	sibling, err := b.stamped(ctx, BucketName(read.Project, beside))
+	sibling, err := b.stamped(ctx, BucketName(read.Project, siblingOf(class)))
 	if err != nil {
 		return survey{}, err
 	}
@@ -148,39 +154,49 @@ func stackNamed(object string) string {
 	return name
 }
 
-func (b bootstrapper) stands(ctx context.Context, held item) (bool, error) {
+type standing struct {
+	held  bool
+	mends string
+}
+
+func (b bootstrapper) stands(ctx context.Context, held item) (standing, error) {
 	switch held.Kind {
 	case KindDatabase:
 		return b.databaseStands(ctx)
 	case KindBucket:
-		return b.bucketStands(ctx, held.Name)
+		return stood(b.bucketStands(ctx, held.Name))
 	case KindKeyRing:
-		return b.keyRingStands(ctx)
+		return stood(b.keyRingStands(ctx))
 	case KindKey:
-		return b.keyStands(ctx, held.Name)
+		return stood(b.keyStands(ctx, held.Name))
 	case KindSecret:
-		return b.secretStands(ctx, held.Name)
+		return stood(b.secretStands(ctx, held.Name))
 	default:
-		return false, providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing surveys a %s", held.Kind)
+		return standing{}, providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing surveys a %s", held.Kind)
 	}
 }
 
-func (b bootstrapper) databaseStands(ctx context.Context) (bool, error) {
+func stood(held bool, err error) (standing, error) { return standing{held: held}, err }
+
+func (b bootstrapper) databaseStands(ctx context.Context) (standing, error) {
 	if b.clients.endpoint != "" {
-		return true, nil
+		return standing{held: true}, nil
 	}
 	service, err := b.clients.Databases()
 	if err != nil {
-		return false, err
+		return standing{}, err
 	}
-	_, err = attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients.project)).Context(ctx).Do)
+	held, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients.project)).Context(ctx).Do)
 	if absent(err) {
-		return false, nil
+		return standing{}, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("read the %q Firestore database: %w", recordDatabase, err)
+		return standing{}, fmt.Errorf("read the %q Firestore database: %w", recordDatabase, err)
 	}
-	return true, nil
+	if held.DeleteProtectionState != protectionOn {
+		return standing{held: true, mends: reasonUnprotected}, nil
+	}
+	return standing{held: true}, nil
 }
 
 func databasePath(project string) string {

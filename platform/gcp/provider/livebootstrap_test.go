@@ -571,3 +571,98 @@ func TestLiveASecretWithNoVersionInItIsNotStandingAndAReApplyMintsOne(t *testing
 		t.Error("the apply left the passphrase secret empty, and every Pulumi stack in this class is encrypted under it")
 	}
 }
+
+func protectionLifted(t *testing.T) {
+	t.Helper()
+
+	ctx := context.Background()
+	service, err := firestoreadmin.NewService(ctx)
+	if err != nil {
+		t.Fatalf("reach the Firestore admin API: %v", err)
+	}
+	path := "projects/" + liveProject() + "/databases/ocel"
+	operation, err := service.Projects.Databases.Patch(path, &firestoreadmin.GoogleFirestoreAdminV1Database{
+		DeleteProtectionState: "DELETE_PROTECTION_DISABLED",
+	}).UpdateMask("deleteProtectionState").Context(ctx).Do()
+	if err != nil {
+		t.Fatalf("lift delete protection out of band: %v", err)
+	}
+	for range 60 {
+		if operation.Done {
+			return
+		}
+		time.Sleep(time.Second)
+		if operation, err = service.Projects.Databases.Operations.Get(operation.Name).Context(ctx).Do(); err != nil {
+			t.Fatalf("wait for delete protection to come off: %v", err)
+		}
+	}
+	t.Fatal("delete protection never came off, so this test never got to say anything")
+}
+
+func TestLiveADatabaseLeftUnprotectedIsAnUpdateRowAnApplyMends(t *testing.T) {
+	p := live(t)
+	onRealGoogleCloud(t)
+	class := providerkit.ClassProduction
+	bootstrapper := bootstrapped(t, p, class)
+
+	ctx := context.Background()
+	protectionLifted(t)
+
+	plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class})
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	shown := providerkit.Change{}
+	for _, group := range plan.Groups {
+		for _, change := range group.Changes {
+			if change.Kind == "firestore:database" {
+				shown = change
+			}
+		}
+	}
+	if shown.Action != providerkit.ActionUpdate || shown.Reason == "" {
+		t.Errorf("Plan() shows the database as %q (%q) with delete protection off, want an update row saying why",
+			shown.Action, shown.Reason)
+	}
+
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+		t.Fatalf("Apply() over an unprotected database = %v", err)
+	}
+	service, err := firestoreadmin.NewService(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, err := service.Projects.Databases.Get("projects/" + liveProject() + "/databases/ocel").Context(ctx).Do()
+	if err != nil {
+		t.Fatalf("read the database the apply mended: %v", err)
+	}
+	if held.DeleteProtectionState != "DELETE_PROTECTION_ENABLED" {
+		t.Errorf("the ocel database stands with delete protection %q after an apply, want it back on", held.DeleteProtectionState)
+	}
+}
+
+func elsewhereRegion() string {
+	if liveRegion() == "us-east1" {
+		return "europe-west1"
+	}
+	return "us-east1"
+}
+
+func TestLiveADatabaseStandingInAnotherRegionIsRefusedRatherThanUsed(t *testing.T) {
+	p := live(t)
+	onRealGoogleCloud(t)
+	class := providerkit.ClassProduction
+	bootstrapped(t, p, class)
+
+	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: elsewhereRegion()})
+	var refusal providerkit.Refusal
+	err := bootstrapperOf(t, elsewhere).Apply(context.Background(),
+		providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil)
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Apply() against a database Firestore holds in another region = %v, want an %s refusal: the conflict is not a success",
+			err, providerkit.CodeInvalid)
+	}
+	if !strings.Contains(refusal.Message, liveRegion()) {
+		t.Errorf("Apply() refused with %q, want it to name the region the database actually stands in", refusal.Message)
+	}
+}
