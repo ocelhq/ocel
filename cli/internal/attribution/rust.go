@@ -15,7 +15,7 @@ type rustReach struct{}
 
 func (rustReach) Entries(ctx context.Context, root string, app App) (map[string]Reachability, error) {
 	dir := filepath.Join(root, filepath.FromSlash(app.Path))
-	workspace, err := cargo.Metadata(ctx, dir)
+	workspace, err := cargo.Metadata(ctx, dir, "--offline")
 	if err != nil {
 		return nil, fmt.Errorf("attribution: app %q: %w", app.Name, err)
 	}
