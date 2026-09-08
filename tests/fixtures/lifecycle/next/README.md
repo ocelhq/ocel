@@ -3,7 +3,7 @@
 The lifecycle fixture, a todos-and-documents app on Next.js App Router. It declares a
 postgres database, a blob uploader named `document` that takes images and PDFs under
 `documents/` and writes a row when an upload completes, a plain `GREETING` and a secret
-`SECRET_TOKEN`. The declarations sit in `ocel/`, and each one is the provisioning step.
+`SECRET_TOKEN`. The declarations sit in `infra/`, and each one is the provisioning step.
 
 It doubles as the fixture the journey suites under [`tests/journeys`](../../../journeys) drive through
 the real binary, so it also carries a test surface of no use to the product.

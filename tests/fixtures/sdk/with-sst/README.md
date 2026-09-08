@@ -4,7 +4,7 @@ Rung three of the [fixture ladder](../with-transforms), and the only fixture sta
 at once: SST owns the database and the network it sits in, and ocel still deploys the app —
 into that network. Links are how the app reaches what SST provisioned; transforms are how ocel
 renders what it provisions itself. `sst.config.ts`, `ocel.config.ts` and
-`infra/network.transform.ts` are the three files that carry it.
+`transforms/network.transform.ts` are the three files that carry it.
 
 ## Run it
 

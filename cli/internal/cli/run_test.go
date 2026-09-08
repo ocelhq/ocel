@@ -62,7 +62,7 @@ func TestRunRun(t *testing.T) {
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -121,7 +121,7 @@ export default { slug: "test-app" };
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()

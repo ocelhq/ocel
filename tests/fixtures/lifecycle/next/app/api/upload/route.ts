@@ -1,5 +1,5 @@
 import { createRouteHandler } from "ocel/blob/next";
-import { uploads } from "../../../ocel/index";
+import { uploads } from "../../../infra/index";
 
 export const runtime = "nodejs";
 

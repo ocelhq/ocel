@@ -175,7 +175,7 @@ func TestRunDev(t *testing.T) {
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -225,7 +225,7 @@ func TestRunDev(t *testing.T) {
 		t.Cleanup(func() { _ = lockfile.Remove(root) })
 
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
 
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), deps, nil, root, []string{"sh", "-c", "exit 7"}, &stdout, &stderr, strings.NewReader(""))
@@ -263,7 +263,7 @@ func TestRunDev(t *testing.T) {
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -335,12 +335,12 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		firstClone := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(firstClone) })
 		writeLink(t, firstClone, resolveServer.URL, projectID)
-		clitest.WriteFile(t, filepath.Join(firstClone, "ocel", "main.ts"), declareResourceScript("first"))
+		clitest.WriteFile(t, filepath.Join(firstClone, "infra", "main.ts"), declareResourceScript("first"))
 
 		secondClone := t.TempDir()
 		t.Cleanup(func() { _ = lockfile.Remove(secondClone) })
 		writeLink(t, secondClone, resolveServer.URL, projectID)
-		clitest.WriteFile(t, filepath.Join(secondClone, "ocel", "main.ts"), declareResourceScript("second"))
+		clitest.WriteFile(t, filepath.Join(secondClone, "infra", "main.ts"), declareResourceScript("second"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -406,7 +406,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
 		defer cancelLeader()
@@ -433,7 +433,7 @@ export default { slug: "test-app" };
 
 		waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_main")
 
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "second.ts"), declareResourceScript("second"))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "second.ts"), declareResourceScript("second"))
 
 		waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_second")
 
@@ -469,7 +469,7 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -532,7 +532,7 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -607,7 +607,7 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -669,7 +669,7 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())

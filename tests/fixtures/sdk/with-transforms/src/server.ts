@@ -1,6 +1,6 @@
 import express from "express";
-import { pg } from "../ocel/index";
-import { env } from "../ocel/vars";
+import { pg } from "../infra/index";
+import { env } from "../infra/vars";
 
 const APP_NAME = "web";
 const PORT = Number(process.env.PORT ?? 3106);

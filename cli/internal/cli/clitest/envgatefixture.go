@@ -74,6 +74,6 @@ func SetUpEnvGateFixtureWith(t *testing.T, definitions, script string) string {
 	t.Setenv(FakeVarsStoreEnvVar, filepath.Join(t.TempDir(), "vars.json"))
 	t.Setenv("OCEL_TEST_ENV_DEFINITIONS", definitions)
 	t.Setenv("OCEL_TEST_ENV_PROBLEMS", "[]")
-	WriteFile(t, filepath.Join(root, "ocel", "env.ts"), script)
+	WriteFile(t, filepath.Join(root, "infra", "env.ts"), script)
 	return root
 }

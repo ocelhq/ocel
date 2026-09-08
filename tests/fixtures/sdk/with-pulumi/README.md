@@ -4,7 +4,7 @@ Rung three of the [fixture ladder](../with-transforms), in Pulumi rather than
 [SST](../with-sst), and standing on the same two rungs: Pulumi owns the database and the
 network it sits in, and ocel still deploys the app — into that network. Links are how the
 app reaches what Pulumi provisioned; transforms are how ocel renders what it provisions
-itself. `index.ts`, `ocel.config.ts` and `infra/network.transform.ts` are the three files
+itself. `index.ts`, `ocel.config.ts` and `transforms/network.transform.ts` are the three files
 that carry it.
 
 ## Run it

@@ -3,7 +3,35 @@ title: Configuration
 description: The one file ocel reads.
 ---
 
-```toml
-name = "my-app"
-provider = "aws"
+Every option lives in `ocel.config.ts`, next to your `package.json`.
+
+```ts title="ocel.config.ts"
+import awsProvider from "@ocel/provider-aws";
+import { defineConfig } from "ocel/config";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+  apps: [{ name: "web", path: "." }],
+});
 ```
+
+## discovery.paths
+
+The folders discovery runs to collect your resource declarations.
+
+```ts title="ocel.config.ts"
+export default defineConfig({
+  discovery: { paths: ["packages/*/infra"] },
+});
+```
+
+Default: `infra` next to the config file, plus an `infra` folder inside each app's
+`path`. Setting `discovery.paths` replaces both.
+
+A path is relative to the config file and may be a glob. It names a folder, and every
+source file under that folder runs during discovery.
+
+Each folder's language is the one the nearest manifest names, searching from the folder
+up to the config file: `Cargo.toml` is rust, `go.mod` is go, `pyproject.toml` or
+`requirements.txt` is python, and anything else is js.

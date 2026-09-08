@@ -3,7 +3,7 @@ import { defineConfig } from "ocel/config";
 
 export default defineConfig({
   slug: "with-transforms",
-  provider: awsProvider({ transforms: ["./infra/defaults.transform.ts"] }),
+  provider: awsProvider({ transforms: ["./transforms/defaults.transform.ts"] }),
 
   // The provider fronts the deployment with its own default edge. Name one instead:
   // edge: cloudfront(), // or apiGateway(), both from "@ocel/provider-aws/edge"

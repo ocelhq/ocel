@@ -16,9 +16,9 @@ import (
 func bundleFixture(t *testing.T, source string) string {
 	t.Helper()
 	root := t.TempDir()
-	write(t, filepath.Join(root, "ocel", "main.ts"), source)
+	write(t, filepath.Join(root, "infra", "main.ts"), source)
 
-	files, err := Discover(root, []string{"ocel"})
+	files, err := Discover(root, []string{"infra"})
 	if err != nil {
 		t.Fatalf("Discover: %v", err)
 	}

@@ -97,7 +97,7 @@ func TestProcessTreeDiesWithTheCLI(t *testing.T) {
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
 
 		appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "run")
 
@@ -136,7 +136,7 @@ export default { slug: "test-app" };
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
 
 		appArgs, startedPath, leafPidPath := fixtureDeepWorkerTree(t, root, "run-deep")
 
@@ -175,7 +175,7 @@ export default { slug: "test-app" };
 export default { slug: "test-app" };
 `)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
 
 		appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "leader")
 

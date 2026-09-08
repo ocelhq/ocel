@@ -3,7 +3,7 @@
 A todos-and-documents app on Node, served by Express 5. It declares a postgres database, a
 blob uploader named `document` that takes images and PDFs under `documents/` and writes a
 row when an upload completes, a plain `GREETING` and a secret `SECRET_TOKEN`. The
-declarations sit in `ocel/`, and each one is the provisioning step.
+declarations sit in `infra/`, and each one is the provisioning step.
 
 ## Run it
 

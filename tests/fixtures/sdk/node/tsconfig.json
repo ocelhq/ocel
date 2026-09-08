@@ -15,7 +15,7 @@
   "include": [
     "src/**/*.ts",
     "scripts/**/*.ts",
-    "ocel/**/*.ts",
+    "infra/**/*.ts",
     "ocel.config.ts",
     "ocel.vps.config.ts"
   ],

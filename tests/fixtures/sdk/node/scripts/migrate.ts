@@ -1,4 +1,4 @@
-import { pg } from "../ocel/index";
+import { pg } from "../infra/index";
 
 async function main() {
   await pg.query(`

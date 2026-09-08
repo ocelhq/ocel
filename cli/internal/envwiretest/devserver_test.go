@@ -32,7 +32,7 @@ func TestDevserverDiscover(t *testing.T) {
 		cfg := &projectconfig.Config{
 			Slug:      "devserver",
 			Dir:       root,
-			Discovery: projectconfig.Discovery{Paths: []string{"ocel"}},
+			Discovery: projectconfig.Discovery{Paths: []string{"infra"}},
 		}
 
 		var stdout, stderr strings.Builder

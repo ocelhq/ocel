@@ -55,31 +55,31 @@ func TestDiscover(t *testing.T) {
 		{
 			name: "finds files under the default path",
 			files: map[string]string{
-				"ocel/main.ts":       "export {};",
-				"ocel/sub/nested.ts": "export {};",
-				"other.ts":           "export {};",
+				"infra/main.ts":       "export {};",
+				"infra/sub/nested.ts": "export {};",
+				"other.ts":            "export {};",
 			},
-			paths: []string{"ocel"},
-			want:  []string{"ocel/main.ts", "ocel/sub/nested.ts"},
+			paths: []string{"infra"},
+			want:  []string{"infra/main.ts", "infra/sub/nested.ts"},
 		},
 		{
 			name: "ignores node_modules and hidden dirs",
 			files: map[string]string{
-				"ocel/main.ts":             "export {};",
-				"ocel/node_modules/dep.ts": "export {};",
-				"ocel/.hidden/skip.ts":     "export {};",
+				"infra/main.ts":             "export {};",
+				"infra/node_modules/dep.ts": "export {};",
+				"infra/.hidden/skip.ts":     "export {};",
 			},
-			paths: []string{"ocel"},
-			want:  []string{"ocel/main.ts"},
+			paths: []string{"infra"},
+			want:  []string{"infra/main.ts"},
 		},
 		{
 			name: "filters non-source extensions",
 			files: map[string]string{
-				"ocel/main.ts":   "export {};",
-				"ocel/README.md": "# not source",
+				"infra/main.ts":   "export {};",
+				"infra/README.md": "# not source",
 			},
-			paths: []string{"ocel"},
-			want:  []string{"ocel/main.ts"},
+			paths: []string{"infra"},
+			want:  []string{"infra/main.ts"},
 		},
 		{
 			name: "supports glob patterns across packages",
@@ -92,7 +92,7 @@ func TestDiscover(t *testing.T) {
 		},
 		{
 			name:  "a missing path yields no files and no error",
-			paths: []string{"ocel"},
+			paths: []string{"infra"},
 		},
 	}, Discover)
 }
@@ -104,21 +104,21 @@ func TestDirs(t *testing.T) {
 		{
 			name: "returns the root and its subdirs, not files",
 			files: map[string]string{
-				"ocel/main.ts":       "export {};",
-				"ocel/sub/nested.ts": "export {};",
+				"infra/main.ts":       "export {};",
+				"infra/sub/nested.ts": "export {};",
 			},
-			paths: []string{"ocel"},
-			want:  []string{"ocel", "ocel/sub"},
+			paths: []string{"infra"},
+			want:  []string{"infra", "infra/sub"},
 		},
 		{
 			name: "ignores node_modules and hidden dirs",
 			files: map[string]string{
-				"ocel/main.ts":             "export {};",
-				"ocel/node_modules/dep.ts": "export {};",
-				"ocel/.hidden/skip.ts":     "export {};",
+				"infra/main.ts":             "export {};",
+				"infra/node_modules/dep.ts": "export {};",
+				"infra/.hidden/skip.ts":     "export {};",
 			},
-			paths: []string{"ocel"},
-			want:  []string{"ocel"},
+			paths: []string{"infra"},
+			want:  []string{"infra"},
 		},
 		{
 			name: "supports glob patterns across packages",
@@ -131,7 +131,7 @@ func TestDirs(t *testing.T) {
 		},
 		{
 			name:  "a missing path yields no dirs and no error",
-			paths: []string{"ocel"},
+			paths: []string{"infra"},
 		},
 	}, Dirs)
 }

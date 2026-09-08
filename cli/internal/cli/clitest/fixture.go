@@ -114,7 +114,7 @@ export default {
   domains: { preview: "*.preview.acme.com" },
 };
 `)
-	WriteFile(t, filepath.Join(root, "ocel", "main.ts"), `
+	WriteFile(t, filepath.Join(root, "infra", "main.ts"), `
 declare global {
   var __ocelRegister: Promise<unknown>[];
 }
@@ -223,7 +223,7 @@ export default {
   apps: [{ name: "api", path: "apps/api", runtime: "node" }],
 };
 `)
-	WriteFile(t, filepath.Join(root, "ocel", "main.ts"), `
+	WriteFile(t, filepath.Join(root, "infra", "main.ts"), `
 export * from "../shared/index.js";
 `)
 	WriteFile(t, filepath.Join(root, "shared", "declare.ts"), `

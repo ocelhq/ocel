@@ -80,7 +80,7 @@ export default {
   provider: { package: "@ocel/provider-aws", options: {} },
 };
 `)
-	clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), `
+	clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), `
 import { postgres } from "ocel/postgres";
 
 postgres("main", { version: "15" });
@@ -116,11 +116,11 @@ export default {
 };
 `, appName, filepath.ToSlash(appPath)))
 
-	resourceModule, err := filepath.Rel(filepath.Join(root, "ocel"), filepath.Join(fixtureDir, "ocel", "index"))
+	resourceModule, err := filepath.Rel(filepath.Join(root, "infra"), filepath.Join(fixtureDir, "ocel", "index"))
 	if err != nil {
 		t.Fatalf("compute resource module path: %v", err)
 	}
-	clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), fmt.Sprintf("export * from %q;\n", filepath.ToSlash(resourceModule)))
+	clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), fmt.Sprintf("export * from %q;\n", filepath.ToSlash(resourceModule)))
 
 	binPath = installRealProvider(t, repoRoot, root)
 	return root, binPath, appName

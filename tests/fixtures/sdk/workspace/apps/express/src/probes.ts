@@ -3,7 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import linuxArm64 from "better-sqlite3/linux-arm64";
 import linuxX64 from "better-sqlite3/linux-x64";
 import express, { Router } from "express";
-import { env } from "../../../ocel/vars";
+import { env } from "../../../infra/vars";
 
 const MAX_SLEEP_MS = 30_000;
 const MAX_BODY = "8mb";
