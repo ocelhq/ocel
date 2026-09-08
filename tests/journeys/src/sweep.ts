@@ -1,29 +1,12 @@
 import { currentRunIdentity } from "./identity";
+import { sweepAsk } from "./sweepArgs";
 import { targetNamed } from "./targets";
 
-const USAGE = "pnpm sweep --target <name> [--own]";
-
-function flag(argv: string[], name: string): string | undefined {
-  const index = argv.indexOf(`--${name}`);
-  if (index === -1) {
-    return undefined;
-  }
-  const value = argv[index + 1];
-  if (value === undefined || value.startsWith("--")) {
-    throw new Error(`--${name} needs a value\n${USAGE}`);
-  }
-  return value;
-}
-
 async function main(argv: string[]): Promise<void> {
-  const targetName = flag(argv, "target");
-  if (!targetName) {
-    throw new Error(USAGE);
-  }
-  const target = targetNamed(targetName);
+  const ask = sweepAsk(argv, currentRunIdentity());
+  const target = targetNamed(ask.target);
   await target.guard();
-  const runId = currentRunIdentity();
-  await (argv.includes("--own") ? target.sweepOwn(runId) : target.sweep(runId));
+  await (ask.own ? target.sweepOwn(ask.runId) : target.sweep(ask.runId));
 }
 
 main(process.argv.slice(2)).then(
