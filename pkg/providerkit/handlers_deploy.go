@@ -917,6 +917,10 @@ func (r *deployRun) manifestValues(entry AppEntry, grants []Link) (AppValues, er
 }
 
 func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
+	url := true
+	if addressed, says := r.provider.(FunctionURLs); says {
+		url = addressed.FunctionURLs()
+	}
 	var specs []FunctionSpec
 	for _, fn := range r.manifest.GetFunctions() {
 		if fn.GetApp() != entry.App {
@@ -930,7 +934,7 @@ func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
 			Runtime:  Runtime{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()},
 			Artifact: artifact,
 			Image:    r.functionImage(fn.GetLogicalName()),
-			URL:      true,
+			URL:      url,
 		})
 	}
 	return specs
