@@ -174,15 +174,15 @@ export {};
 
 func TestRunRefusesARootThisBuildCannotDiscover(t *testing.T) {
 	root := t.TempDir()
-	write(t, filepath.Join(root, "go.mod"), "module example.com/web")
-	write(t, filepath.Join(root, "infra", "infra.go"), "package infra")
+	write(t, filepath.Join(root, "pyproject.toml"), "[project]\nname = \"web\"\n")
+	write(t, filepath.Join(root, "infra", "infra.py"), "")
 
 	var stdout, stderr bytes.Buffer
 	err := Run(context.Background(), root, prepare(t, root), okServer(t), &stdout, &stderr)
 	if err == nil {
-		t.Fatal("Run succeeded on a go root, want an error")
+		t.Fatal("Run succeeded on a python root, want an error")
 	}
-	want := "is a go folder, and this build of ocel discovers only js folders"
+	want := "is a python folder, and this build of ocel discovers only go and js folders"
 	if !strings.Contains(err.Error(), want) {
 		t.Errorf("err = %v, want it to contain %q", err, want)
 	}
@@ -203,16 +203,16 @@ func TestRunBuildsNoBundleAndRunsNoNodeWithoutAJSRoot(t *testing.T) {
 	}
 }
 
-func TestRunRefusesAGoRootWithoutBundlingForIt(t *testing.T) {
+func TestRunBundlesNothingForARootItCannotDiscover(t *testing.T) {
 	root := t.TempDir()
-	write(t, filepath.Join(root, "go.mod"), "module example.com/web")
-	write(t, filepath.Join(root, "infra", "infra.go"), "package infra")
+	write(t, filepath.Join(root, "pyproject.toml"), "[project]\nname = \"web\"\n")
+	write(t, filepath.Join(root, "infra", "infra.py"), "")
 
 	var stdout, stderr bytes.Buffer
 	if err := Run(context.Background(), root, prepare(t, root), okServer(t), &stdout, &stderr); err == nil {
-		t.Fatal("Run succeeded on a go root, want an error")
+		t.Fatal("Run succeeded on a python root, want an error")
 	}
 	if _, err := os.Stat(filepath.Join(root, buildDirName, "entry.mjs")); !os.IsNotExist(err) {
-		t.Errorf("stat entry.mjs = %v, want a go-only project to bundle nothing", err)
+		t.Errorf("stat entry.mjs = %v, want a python-only project to bundle nothing", err)
 	}
 }
