@@ -1,0 +1,150 @@
+name: GCP nightly
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: gcp-nightly
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "11.10.0"
+  BUN_VERSION: "1.4.0"
+  FORCE_COLOR: "1"
+  OCEL_NAMESPACE: ocel-nightly
+  OCEL_GCP_PROJECT: ${{ vars.GCP_LIVE_PROJECT }}
+  OCEL_GCP_LIVE_PROJECT: ${{ vars.GCP_LIVE_PROJECT }}
+  OCEL_GCP_REGION: ${{ vars.GCP_LIVE_REGION }}
+  OCEL_GCP_LIVE_REGION: ${{ vars.GCP_LIVE_REGION }}
+  OCEL_TARGET: gcp
+  OCEL_JOURNEY_CONCERN: deploy
+  OCEL_JOURNEY_COVERAGE: full
+
+jobs:
+  live:
+    name: live
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Name the project this run may spend
+        env:
+          PROJECT: ${{ vars.GCP_LIVE_PROJECT }}
+          WIF: ${{ vars.GCP_WIF_PROVIDER }}
+          ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          for named in PROJECT WIF ACCOUNT; do
+            if [ -z "${!named}" ]; then
+              echo "the repository variable behind $named is unset, and this run bootstraps a real project" >&2
+              exit 1
+            fi
+          done
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Take the identity this run acts as
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ vars.GCP_LIVE_PROJECT }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: The gcloud the harness mints a token with
+        uses: google-github-actions/setup-gcloud@v2
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: |
+            cli/go.sum
+            platform/gcp/provider/go.sum
+            pkg/proto/go.sum
+            sdk/go.sum
+
+      - name: Setup gobuildcache
+        uses: ./.github/actions/gobuildcache
+        with:
+          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+
+      - name: The payloads the provider embeds
+        run: go generate -C platform/gcp/provider ./...
+
+      - name: Run the suites a real project answers differently
+        run: |
+          set -euo pipefail
+          go test -C platform/gcp/provider -count=1 -timeout 60m \
+            -run '^Test(Live|Project)' -json ./... | tee live-gcp.json
+
+      - name: Assert they ran
+        run: |
+          set -euo pipefail
+          scripts/assert-ran.sh live-gcp.json TestLive
+          scripts/assert-ran.sh live-gcp.json TestProject
+
+      - name: The node bundle the fixtures import
+        run: pnpm turbo run build --filter=ocel
+
+      - name: The Docker the container images are built with
+        uses: ./.github/actions/containerd-docker
+
+      - name: Build the binaries the journey drives
+        run: |
+          set -euo pipefail
+          node scripts/build-native.mjs --host --target cli
+          node scripts/build-native.mjs --host --target provider-gcp
+
+      - name: Name the binary the journey drives
+        run: echo "OCEL_BIN=$GITHUB_WORKSPACE/packages/native-lib/cli-linux-x64/bin/ocel" >> "$GITHUB_ENV"
+
+      - name: Reclaim what a run that died left behind
+        run: pnpm --filter @ocel-tests/journeys sweep --target gcp --own
+
+      - name: Run the journey
+        run: pnpm --filter @ocel-tests/journeys journey
+
+      - name: Take down what this run stood up
+        if: always()
+        run: |
+          set -uo pipefail
+          if [ -z "${OCEL_BIN:-}" ]; then
+            echo "no binary was built, so this run stood nothing up to take down"
+            exit 0
+          fi
+          pnpm --filter @ocel-tests/journeys sweep --target gcp --own || echo "the sweep left projects behind"
+          (cd tests/fixtures/deploy/node && "$OCEL_BIN" --config ocel.gcp.config.ts bootstrap destroy production --yes) \
+            || echo "the bootstrap of $OCEL_NAMESPACE is still standing"
+
+      - name: Pack the evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p tests/journeys/output
+          tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
+            --exclude='*/node_modules' \
+            --exclude='*/node_modules/*' \
+            --exclude='*/trees/*/packages' \
+            -C tests/journeys output
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gcp-nightly-evidence
+          path: ${{ runner.temp }}/journey-evidence.tgz
+          if-no-files-found: warn

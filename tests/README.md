@@ -55,6 +55,25 @@ addresses its endpoint as `<account>.<host>`, and `<account>.127.0.0.1` resolves
 so a bootstrap against the printed form fails where the named form works (#888). A
 bootstrap cannot be updated on floci (#853), so a second run wants a fresh emulator.
 
+For `gcp` that is a floci-gcp emulator, which runs one real container per Cloud Run
+revision out of the docker daemon the script mounts into it, so the daemon that builds the
+images is the daemon that runs them:
+
+```
+go -C cli build -o bin/ocel ./ocel
+node scripts/build-native.mjs --host --target provider-gcp
+scripts/floci.sh --cloud gcp create ocel-journeys
+export OCEL_FLOCI_GCP_ENDPOINT=http://127.0.0.1:<the port it printed>
+pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture node --target gcp
+scripts/floci.sh --cloud gcp destroy ocel-journeys
+```
+
+`pnpm --filter @ocel-tests/journeys journey:gcp` runs every gcp cell instead of one. The
+project is `floci-local` and the region `europe-west1` under the emulator, and both are
+named by `OCEL_GCP_PROJECT` and `OCEL_GCP_REGION` against a real project. The apps are
+served on the url Cloud Run gives each service, not on a hostname, so the lane binds no
+domain and needs no zone. `python3` must have `pip` on it, as the aws and vps lanes need.
+
 For `vps` that is a box the run can reach over SSH, and on a laptop that is an incus VM:
 
 ```
@@ -132,7 +151,7 @@ baseline and reclaiming a stranded project.
 
 ## One-time human setup
 
-Both real lanes need a human to prepare an account once.
+Each real lane needs a human to prepare an account once.
 
 The `aws` lane assumes a role over GitHub OIDC — no access key is stored — and hard-fails
 if the session or the Cloudflare token resolves to an account other than the one named. The
@@ -149,23 +168,26 @@ mints, or the assume fails outright.
 | `E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID` | secret | the only Cloudflare account the guard lets a run touch       |
 | `E2E_PREVIEW_DOMAIN`                 | var    | the zone a dispatched run may take hostnames under           |
 
-The `gcp` lane runs against the floci-gcp emulator, which serves one implicit Firestore
-database and no Firestore Admin API. The database row, its delete protection and the
-region check are therefore only exercised against a real project, by hand, until CI has
-one:
+The `gcp` lane on a pull request runs against the floci-gcp emulator, which serves one
+implicit Firestore database and no Firestore Admin API. The database row, its delete
+protection and the region check are therefore exercised only against a real project,
+which the nightly `GCP nightly` workflow drives and which you can drive by hand:
 
 ```bash
 gcloud auth application-default login
 gcloud services enable firestore.googleapis.com storage.googleapis.com \
-  cloudkms.googleapis.com secretmanager.googleapis.com --project <project>
+  cloudkms.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com \
+  iam.googleapis.com run.googleapis.com --project <project>
 OCEL_NAMESPACE=ocel-live OCEL_GCP_LIVE_PROJECT=<project> \
   go test -C platform/gcp/provider -count=1 -run '^Test(Live|Project)' ./...
 ```
 
 | name                    | kind | what it holds                                                        |
 | ----------------------- | ---- | -------------------------------------------------------------------- |
-| `OCEL_GCP_LIVE_PROJECT` | env  | the real project a by-hand `TestLive` and `TestProject` run bootstraps into and tears down |
+| `OCEL_GCP_LIVE_PROJECT` | env  | the real project a `TestLive` and `TestProject` run bootstraps into and tears down |
 | `OCEL_GCP_LIVE_REGION`  | env  | the region that run uses; `europe-west1` when unset                  |
+| `OCEL_GCP_PROJECT`      | env  | the project the `gcp` journey target deploys into; the emulator's `floci-local` when unset |
+| `OCEL_GCP_REGION`       | env  | the region it deploys into; `europe-west1` when unset                |
 | `OCEL_NAMESPACE`        | env  | the namespace every name the run derives carries; `ocel` when unset  |
 
 Name one fixed namespace for a real project and keep using it. Google never deletes a key
@@ -176,6 +198,48 @@ database can be named after it.
 The run creates and destroys buckets, a Firestore database, a key ring and a secret in
 that project, and schedules its KMS key material for destruction, so name a project you
 are willing to lose. Unset, and with no emulator answering, every `TestLive` skips.
+
+`GCP nightly` runs the same two suites and then the `gcp` journey against that project,
+every night and on dispatch. It signs in over workload identity federation — no key is
+stored — and takes down the projects it deployed and the bootstrap under its namespace
+whether the run passed or not.
+
+| name                  | kind | what it holds                                                                   |
+| --------------------- | ---- | ------------------------------------------------------------------------------- |
+| `GCP_WIF_PROVIDER`    | var  | the workload identity provider the job exchanges its GitHub token at, in full    |
+| `GCP_SERVICE_ACCOUNT` | var  | the email of the service account the job impersonates                            |
+| `GCP_LIVE_PROJECT`    | var  | the project the nightly bootstraps into and tears down                           |
+| `GCP_LIVE_REGION`     | var  | the region it deploys into; `europe-west1` when unset                            |
+
+The nightly runs under the fixed namespace `ocel-nightly`, not one per run: a key ring
+Google never deletes would otherwise be stranded every night, and a namespace long enough
+to carry a run id leaves no room for a service name inside Cloud Run's 49 characters.
+
+Preparing the project is a human's one-time job:
+
+1. Create (or pick) the project, and enable the seven services a bootstrap reads:
+   `gcloud services enable firestore.googleapis.com storage.googleapis.com
+   cloudkms.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com
+   iam.googleapis.com run.googleapis.com --project <project>`.
+2. Create a workload identity pool and a provider for GitHub's OIDC issuer
+   (`https://token.actions.githubusercontent.com`), with the attribute condition pinning
+   `assertion.repository` to this repository, and put the provider's full resource name
+   (`projects/<number>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`)
+   in `GCP_WIF_PROVIDER`.
+3. Create a service account for the nightly, grant it
+   `roles/iam.workloadIdentityUser` for that pool's principal set, and put its email in
+   `GCP_SERVICE_ACCOUNT`.
+4. Grant that service account, on the project, what a deploy uses —
+   `roles/datastore.user`, `roles/storage.objectAdmin`,
+   `roles/cloudkms.cryptoKeyEncrypterDecrypter`, `roles/secretmanager.secretAccessor`,
+   `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser`, `roles/run.admin` —
+   and what a bootstrap adds on top: `roles/datastore.owner`, `roles/storage.admin`,
+   `roles/cloudkms.admin`, `roles/secretmanager.admin`, `roles/artifactregistry.admin`,
+   `roles/iam.serviceAccountAdmin`. `ocel doctor` and the bootstrap's own preflight name
+   the exact permissions when one is missing.
+5. Make sure the org policy `constraints/iam.allowedPolicyMemberDomains` does not deny
+   `allUsers`: a deploy opens each service to the internet with `roles/run.invoker`, and
+   is refused outright where the policy forbids it.
 
 The `vps` lane points at an incus VM on a pull request, and on a real run brings up a
 throwaway EC2 box with `scripts/ec2.sh` under the same role and account guard as the `aws`
