@@ -21,8 +21,8 @@ env:
   OCEL_NAMESPACE: ocel-nightly
   OCEL_GCP_PROJECT: ${{ vars.GCP_LIVE_PROJECT }}
   OCEL_GCP_LIVE_PROJECT: ${{ vars.GCP_LIVE_PROJECT }}
-  OCEL_GCP_REGION: ${{ vars.GCP_LIVE_REGION }}
-  OCEL_GCP_LIVE_REGION: ${{ vars.GCP_LIVE_REGION }}
+  OCEL_GCP_REGION: ${{ vars.GCP_LIVE_REGION || 'europe-west1' }}
+  OCEL_GCP_LIVE_REGION: ${{ vars.GCP_LIVE_REGION || 'europe-west1' }}
   OCEL_TARGET: gcp
   OCEL_JOURNEY_CONCERN: deploy
   OCEL_JOURNEY_COVERAGE: full
@@ -126,9 +126,11 @@ jobs:
             echo "no binary was built, so this run stood nothing up to take down"
             exit 0
           fi
-          pnpm --filter @ocel-tests/journeys sweep --target gcp --own || echo "the sweep left projects behind"
+          left=0
+          pnpm --filter @ocel-tests/journeys sweep --target gcp --own || left=1
           (cd tests/fixtures/deploy/node && "$OCEL_BIN" --config ocel.gcp.config.ts bootstrap destroy production --yes) \
-            || echo "the bootstrap of $OCEL_NAMESPACE is still standing"
+            || left=1
+          exit "$left"
 
       - name: Pack the evidence
         if: always()
