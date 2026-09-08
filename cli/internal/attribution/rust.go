@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/cargo"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 )
 
@@ -14,16 +15,16 @@ type rustReach struct{}
 
 func (rustReach) Entries(ctx context.Context, root string, app App) (map[string]Reachability, error) {
 	dir := filepath.Join(root, filepath.FromSlash(app.Path))
-	metadata, err := discovery.CargoMetadata(ctx, dir)
+	workspace, err := cargo.Metadata(ctx, dir)
 	if err != nil {
 		return nil, fmt.Errorf("attribution: app %q: %w", app.Name, err)
 	}
-	crate, ok := metadata.PackageAt(dir)
+	crate, ok := workspace.PackageAt(dir)
 	if !ok {
 		return nil, fmt.Errorf("attribution: app %q: the Cargo.toml at %s names no package", app.Name, dir)
 	}
 
-	reached := reachedDirs(root, metadata, crate, app.Roots)
+	reached := reachedDirs(root, workspace, crate, app.Roots)
 	entries := map[string]Reachability{}
 	for _, bin := range crate.Bins() {
 		entry, inside := relativeToRoot(root, bin.SrcPath)
@@ -35,9 +36,9 @@ func (rustReach) Entries(ctx context.Context, root string, app App) (map[string]
 	return entries, nil
 }
 
-func reachedDirs(root string, metadata discovery.Cargo, crate discovery.CargoPackage, roots []discovery.Root) []string {
+func reachedDirs(root string, workspace cargo.Workspace, crate cargo.Package, roots []discovery.Root) []string {
 	dirs := []string{crate.Dir()}
-	for _, member := range workspaceDependencies(metadata, crate) {
+	for _, member := range workspaceDependencies(workspace, crate) {
 		dirs = append(dirs, member.Dir())
 	}
 	for _, r := range roots {
@@ -55,28 +56,32 @@ func reachedDirs(root string, metadata discovery.Cargo, crate discovery.CargoPac
 	return relative
 }
 
-func workspaceDependencies(metadata discovery.Cargo, crate discovery.CargoPackage) []discovery.CargoPackage {
-	if metadata.Resolve == nil {
+func workspaceDependencies(workspace cargo.Workspace, crate cargo.Package) []cargo.Package {
+	if workspace.Resolve == nil {
 		return nil
 	}
-	nodes := make(map[string]discovery.CargoNode, len(metadata.Resolve.Nodes))
-	for _, node := range metadata.Resolve.Nodes {
+	nodes := make(map[string]cargo.Node, len(workspace.Resolve.Nodes))
+	for _, node := range workspace.Resolve.Nodes {
 		nodes[node.ID] = node
 	}
+	inWorkspace := map[string]bool{}
+	for _, member := range workspace.WorkspaceMembers() {
+		inWorkspace[member.ID] = true
+	}
 
-	var members []discovery.CargoPackage
+	var members []cargo.Package
 	seen := map[string]bool{crate.ID: true}
 	queue := []string{crate.ID}
 	for len(queue) > 0 {
 		id := queue[0]
 		queue = queue[1:]
 		for _, dep := range nodes[id].Deps {
-			if seen[dep.Pkg] || !slices.Contains(metadata.WorkspaceMembers, dep.Pkg) {
+			if seen[dep.Pkg] || !inWorkspace[dep.Pkg] {
 				continue
 			}
 			seen[dep.Pkg] = true
 			queue = append(queue, dep.Pkg)
-			if member, ok := metadata.PackageByID(dep.Pkg); ok {
+			if member, ok := workspace.PackageByID(dep.Pkg); ok {
 				members = append(members, member)
 			}
 		}
