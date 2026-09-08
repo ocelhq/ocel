@@ -1,4 +1,4 @@
-import { pg } from "../ocel/index";
+import { pg } from "../infra/index";
 
 export type Todo = { id: number; title: string; done: boolean };
 

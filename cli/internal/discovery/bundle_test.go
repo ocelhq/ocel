@@ -21,9 +21,9 @@ export {};
 func TestBundle(t *testing.T) {
 	t.Run("runs imports and posts sync exactly once", func(t *testing.T) {
 		root := t.TempDir()
-		write(t, filepath.Join(root, "ocel", "main.ts"), registerSideEffect)
+		write(t, filepath.Join(root, "infra", "main.ts"), registerSideEffect)
 
-		files, err := Discover(root, []string{"ocel"})
+		files, err := Discover(root, []string{"infra"})
 		if err != nil {
 			t.Fatalf("Discover: %v", err)
 		}
@@ -56,9 +56,9 @@ func TestBundle(t *testing.T) {
 
 	t.Run("a failed sync fails the process", func(t *testing.T) {
 		root := t.TempDir()
-		write(t, filepath.Join(root, "ocel", "main.ts"), registerSideEffect)
+		write(t, filepath.Join(root, "infra", "main.ts"), registerSideEffect)
 
-		files, err := Discover(root, []string{"ocel"})
+		files, err := Discover(root, []string{"infra"})
 		if err != nil {
 			t.Fatalf("Discover: %v", err)
 		}
@@ -88,9 +88,9 @@ func TestBundle(t *testing.T) {
 			`const { EventEmitter } = require("events");
 module.exports = { emitter: new EventEmitter() };
 `)
-		write(t, filepath.Join(root, "ocel", "main.ts"), `import "cjsdep";`+registerSideEffect)
+		write(t, filepath.Join(root, "infra", "main.ts"), `import "cjsdep";`+registerSideEffect)
 
-		files, err := Discover(root, []string{"ocel"})
+		files, err := Discover(root, []string{"infra"})
 		if err != nil {
 			t.Fatalf("Discover: %v", err)
 		}

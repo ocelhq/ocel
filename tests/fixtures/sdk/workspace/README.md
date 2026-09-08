@@ -1,6 +1,6 @@
 # workspace
 
-One project, two apps, one set of declarations. `ocel/` at the root declares a postgres
+One project, two apps, one set of declarations. `infra/` at the root declares a postgres
 database, a blob uploader named `document`, a plain `GREETING` and a secret `SECRET_TOKEN`
 once, and `apps/next` and `apps/express` import from it. Each app mounts the uploader with
 its own route handler, and ocel works out from each app's imports which resources it is

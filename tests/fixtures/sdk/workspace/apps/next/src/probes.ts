@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import linuxArm64 from "better-sqlite3/linux-arm64";
 import linuxX64 from "better-sqlite3/linux-x64";
-import { env } from "../../../ocel/vars";
+import { env } from "../../../infra/vars";
 
 const MOUNT = "/api/probes";
 const MAX_SLEEP_MS = 30_000;

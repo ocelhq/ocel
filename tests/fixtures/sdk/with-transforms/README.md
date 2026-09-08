@@ -23,7 +23,7 @@ the one thing it always provisions, and transforms are how you shape it even her
 why a shared-VPC setup needs both rungs at once.
 
 The app on this rung is modeled on the [express](../express) example, with a `postgres`
-resource; what it adds is `ocel.config.ts` and `infra/defaults.transform.ts`. The module is
+resource; what it adds is `ocel.config.ts` and `transforms/defaults.transform.ts`. The module is
 the whole of what it has to show.
 
 ## Run it

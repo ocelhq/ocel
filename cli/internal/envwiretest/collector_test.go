@@ -34,7 +34,7 @@ func TestDefineEnv(t *testing.T) {
 		runDiscovery(t, root, gate)
 
 		definitions := byKey(t, gate.Definitions())
-		source := filepath.Join(root, "ocel", "env.ts")
+		source := filepath.Join(root, "infra", "env.ts")
 
 		t.Run("every declared key arrives", func(t *testing.T) {
 			var keys []string
@@ -148,7 +148,7 @@ func runDiscovery(t *testing.T, root string, gate *envgate.Gate) {
 	cfg := &projectconfig.Config{
 		Slug:      "collector",
 		Dir:       root,
-		Discovery: projectconfig.Discovery{Paths: []string{"ocel"}},
+		Discovery: projectconfig.Discovery{Paths: []string{"infra"}},
 	}
 
 	var stdout, stderr strings.Builder

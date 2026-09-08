@@ -1,6 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { createRouteHandler } from "ocel/blob/express";
-import { pg, uploads } from "../../../ocel/index";
+import { pg, uploads } from "../../../infra/index";
 import { probes } from "./probes";
 
 const APP_NAME = "express";

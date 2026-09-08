@@ -283,7 +283,7 @@ func TestRunEnvSet(t *testing.T) {
 
 		envSet(t, root, "POSTHOG_ID", "ph_root", envOptions{})
 
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "env.ts"),
+		clitest.WriteFile(t, filepath.Join(root, "infra", "env.ts"),
 			envDeclaringScript(`[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`))
 
 		var stdout, stderr bytes.Buffer

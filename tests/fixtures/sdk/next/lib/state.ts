@@ -1,4 +1,4 @@
-import { pg } from "../ocel/index";
+import { pg } from "../infra/index";
 
 export type StateRow = {
   key: string;

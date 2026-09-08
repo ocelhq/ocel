@@ -440,7 +440,7 @@ func TestRunDevEnvironment(t *testing.T) {
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "NEXT_PUBLIC_SITE_URL=https://example.com\nAWS_PROFILE=dev\napi_base=lower\nAPI_BASE=http://localhost:3000\nnot an assignment\n")
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -501,7 +501,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath}
@@ -538,7 +538,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath}
@@ -575,7 +575,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "NOBODY=x\n")
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
@@ -607,7 +607,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		withCredentials(&deps, resolveServer.URL)
 		calls := withProjectEnv(&deps, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -650,7 +650,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		withProjectEnv(&deps, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "STRIPE_API_KEY=sk_from_file\n")
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -692,7 +692,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -734,7 +734,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"DB_PASSWORD","class":"VARIABLE_CLASS_SECRET","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"DB_PASSWORD","class":"VARIABLE_CLASS_SECRET","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
@@ -770,7 +770,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n")
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "PUBLIC_SITE_URL=https://local.example.com\nSTRIPE_API_KEY=sk_local\n")
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(
 			`{"key":"PUBLIC_SITE_URL","class":"VARIABLE_CLASS_PLAIN","required":true,"clientAccessible":true}`,
 			`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`,
 		))
@@ -833,7 +833,7 @@ func TestRunRunEnvironment(t *testing.T) {
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "NOBODY=x\n")
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
@@ -868,7 +868,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(
 			`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
@@ -912,7 +912,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath}
@@ -949,7 +949,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		withCredentials(&deps, resolveServer.URL)
 		withProjectEnv(&deps, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}

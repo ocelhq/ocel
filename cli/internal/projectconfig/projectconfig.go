@@ -29,7 +29,7 @@ const scratchDirName = ".ocel"
 
 const initHint = "run `ocel init` to create one"
 
-var defaultDiscoveryPaths = []string{"ocel"}
+var defaultDiscoveryPaths = []string{"infra"}
 
 type Discovery struct {
 	Paths []string

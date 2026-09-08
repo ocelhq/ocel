@@ -22,7 +22,7 @@ func TestCollect(t *testing.T) {
 		cfg := &projectconfig.Config{
 			Slug:      "test-app",
 			Dir:       t.TempDir(),
-			Discovery: projectconfig.Discovery{Paths: []string{"ocel"}},
+			Discovery: projectconfig.Discovery{Paths: []string{"infra"}},
 		}
 
 		var stdout, stderr bytes.Buffer
@@ -41,7 +41,7 @@ func TestCollect(t *testing.T) {
 		}
 
 		root := t.TempDir()
-		writeFile(t, filepath.Join(root, "ocel", "main.ts"), `
+		writeFile(t, filepath.Join(root, "infra", "main.ts"), `
 declare global {
   var __ocelRegister: Promise<unknown>[];
 }
@@ -71,7 +71,7 @@ export {};
 		cfg := &projectconfig.Config{
 			Slug:      "test-app",
 			Dir:       root,
-			Discovery: projectconfig.Discovery{Paths: []string{"ocel"}},
+			Discovery: projectconfig.Discovery{Paths: []string{"infra"}},
 		}
 
 		var stdout, stderr bytes.Buffer
