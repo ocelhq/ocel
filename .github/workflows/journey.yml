@@ -67,6 +67,7 @@ concurrency:
 
 env:
   OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.0.1-ocel.1
+  OCEL_FLOCI_GCP_IMAGE: floci/floci-gcp:0.8.0
   NODE_VERSION: "22"
   PNPM_VERSION: "11.10.0"
   BUN_VERSION: "1.4.0"
@@ -83,6 +84,7 @@ jobs:
       dev: ${{ steps.gate.outputs.dev }}
       dev_local: ${{ steps.gate.outputs.dev_local }}
       aws: ${{ steps.gate.outputs.aws }}
+      gcp: ${{ steps.gate.outputs.gcp }}
       vps: ${{ steps.gate.outputs.vps }}
       next: ${{ steps.gate.outputs.next }}
       variants: ${{ steps.lanes.outputs.variants }}
@@ -94,6 +96,7 @@ jobs:
       touched: ${{ steps.lanes.outputs.touched }}
       real: ${{ steps.lanes.outputs.real }}
       aws_key: ${{ steps.gate-aws.outputs.key }}
+      gcp_key: ${{ steps.gate-gcp.outputs.key }}
       vps_key: ${{ steps.gate-vps.outputs.key }}
       dev_key: ${{ steps.gate-dev.outputs.key }}
       next_key: ${{ steps.gate-next.outputs.key }}
@@ -151,15 +154,17 @@ jobs:
           fi
 
           if [ -n "$forced" ]; then
-            lanes=${forced/all/dev dev-local aws vps}
+            lanes=${forced/all/dev dev-local aws gcp vps}
             dev=$(named dev "$lanes")
             dev_local=$(named dev-local "$lanes")
             aws=$(named aws "$lanes")
+            gcp=$(named gcp "$lanes")
             vps=$(named vps "$lanes")
           elif [ "$real" = true ]; then
             dev=false
             dev_local=false
             aws=$(named aws "$TARGETS")
+            gcp=false
             vps=$(named vps "$TARGETS")
           else
             files=$(git diff --name-only "$BASE" "$HEAD")
@@ -173,6 +178,7 @@ jobs:
             dev=$(hit "$shared"'|^console/(resources|api|auth|db|web)/')
             dev_local=$(hit "$shared")
             aws=$(hit "$shared"'|^platform/(aws|edge)/|^scripts/floci\.sh$')
+            gcp=$(hit "$shared"'|^platform/gcp/|^scripts/floci\.sh$')
             vps=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$')
             next=$(hit "$shared"'|^platform/(aws|edge)/')
           fi
@@ -191,6 +197,7 @@ jobs:
             echo "dev=$dev"
             echo "dev_local=$dev_local"
             echo "aws=$aws"
+            echo "gcp=$gcp"
             echo "vps=$vps"
             echo "next=$next"
             echo "variants=${VARIANTS:-}"
@@ -225,6 +232,14 @@ jobs:
         with:
           suite: journey-aws
           task: "@ocel-tests/journeys#journey:aws"
+
+      - name: Has gcp already passed what it reads
+        id: gate-gcp
+        if: ${{ steps.lanes.outputs.gcp == 'true' && steps.lanes.outputs.real != 'true' }}
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: journey-gcp
+          task: "@ocel-tests/journeys#journey:gcp"
 
       - name: Has vps already passed what it reads
         id: gate-vps
@@ -263,11 +278,13 @@ jobs:
         id: gate
         env:
           AWS: ${{ steps.lanes.outputs.aws }}
+          GCP: ${{ steps.lanes.outputs.gcp }}
           VPS: ${{ steps.lanes.outputs.vps }}
           DEV: ${{ steps.lanes.outputs.dev }}
           DEV_LOCAL: ${{ steps.lanes.outputs.dev_local }}
           NEXT: ${{ steps.lanes.outputs.next }}
           AWS_GREEN: ${{ steps.gate-aws.outputs.green }}
+          GCP_GREEN: ${{ steps.gate-gcp.outputs.green }}
           VPS_GREEN: ${{ steps.gate-vps.outputs.green }}
           DEV_GREEN: ${{ steps.gate-dev.outputs.green }}
           NEXT_GREEN: ${{ steps.gate-next.outputs.green }}
@@ -275,14 +292,16 @@ jobs:
           set -euo pipefail
           runs() { if [ "$1" = true ] && [ "$2" != true ]; then echo true; else echo false; fi; }
           aws=$(runs "$AWS" "$AWS_GREEN")
+          gcp=$(runs "$GCP" "$GCP_GREEN")
           vps=$(runs "$VPS" "$VPS_GREEN")
           dev=$(runs "$DEV" "$DEV_GREEN")
           dev_local=$DEV_LOCAL
           next=$(runs "$NEXT" "$NEXT_GREEN")
           any=false
-          [ "$aws$vps$dev$dev_local$next" = falsefalsefalsefalsefalse ] || any=true
+          [ "$aws$gcp$vps$dev$dev_local$next" = falsefalsefalsefalsefalsefalse ] || any=true
           {
             echo "aws=$aws"
+            echo "gcp=$gcp"
             echo "vps=$vps"
             echo "dev=$dev"
             echo "dev_local=$dev_local"
@@ -297,6 +316,7 @@ jobs:
           cache-dependency-path: |
             cli/go.sum
             platform/aws/provider/go.sum
+            platform/gcp/provider/go.sum
             platform/vps/provider/go.sum
             pkg/proto/go.sum
             sdk/go.sum
@@ -315,8 +335,10 @@ jobs:
         if: ${{ steps.gate.outputs.any == 'true' }}
         run: |
           set -euo pipefail
+          go generate -C platform/gcp/provider ./...
           node scripts/build-native.mjs --host --target cli
           node scripts/build-native.mjs --host --target provider-aws
+          node scripts/build-native.mjs --host --target provider-gcp
           node scripts/build-native.mjs --host --target provider-vps
 
       - name: Upload them for the lanes
@@ -328,6 +350,7 @@ jobs:
           path: |
             ${{ env.BINARIES }}/cli-linux-x64/bin/ocel
             ${{ env.BINARIES }}/provider-aws-linux-x64/bin/deploy
+            ${{ env.BINARIES }}/provider-gcp-linux-x64/bin/deploy
             ${{ env.BINARIES }}/provider-vps-linux-x64/bin/deploy
 
   aws:
@@ -529,6 +552,78 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: journey-evidence-aws
+          path: ${{ runner.temp }}/journey-evidence.tgz
+          if-no-files-found: warn
+
+  gcp:
+    name: gcp
+    needs: binary
+    if: ${{ needs.binary.outputs.gcp == 'true' && needs.binary.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency:
+      group: journey-gcp-${{ github.event.pull_request.number || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
+    env:
+      OCEL_TARGET: gcp
+      OCEL_JOURNEY_CONCERN: ${{ needs.binary.outputs.concern }}
+      OCEL_JOURNEY_FIXTURES: ${{ needs.binary.outputs.fixtures }}
+      OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
+      OCEL_JOURNEY_TOUCHED: ${{ needs.binary.outputs.touched }}
+      OCEL_JOURNEY_COVERAGE: ${{ needs.binary.outputs.coverage }}
+      OCEL_JOURNEY_VARIANTS: ${{ needs.binary.outputs.variants }}
+      OCEL_JOURNEY_SKIPS: ${{ needs.binary.outputs.skips }}
+      EMULATOR: ocel-journey-gcp-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: The node bundle the fixtures import
+        run: pnpm turbo run build --filter=ocel
+
+      - name: The Docker the image build and the emulator share
+        uses: ./.github/actions/containerd-docker
+
+      - name: Take the binaries this lane drives
+        uses: ./.github/actions/journey-binaries
+
+      - name: Pull the emulator this lane deploys into
+        run: docker pull "$OCEL_FLOCI_GCP_IMAGE"
+
+      - name: Run the journey
+        run: scripts/floci.sh --cloud gcp run "$EMULATOR" -- pnpm --filter @ocel-tests/journeys journey
+
+      - name: Record that what gcp reads has passed
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: journey-gcp
+          key: ${{ needs.binary.outputs.gcp_key }}
+
+      - name: No emulator left behind
+        if: always()
+        run: scripts/floci.sh --cloud gcp destroy "$EMULATOR" || echo "could not destroy $EMULATOR"
+
+      - name: Pack the evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p tests/journeys/output
+          tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
+            --exclude='*/node_modules' \
+            --exclude='*/node_modules/*' \
+            --exclude='*/trees/*/packages' \
+            -C tests/journeys output
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-evidence-gcp
           path: ${{ runner.temp }}/journey-evidence.tgz
           if-no-files-found: warn
 
