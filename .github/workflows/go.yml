@@ -178,7 +178,9 @@ jobs:
 
       - name: No gcp emulator left behind
         if: ${{ always() && matrix.group.name == 'gcp' }}
-        run: scripts/floci.sh --cloud gcp destroy "ocel-gcp-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        run: |
+          name="ocel-gcp-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          scripts/floci.sh --cloud gcp destroy "$name" || echo "could not destroy $name"
 
       - name: Log in to the registry the emulator image lives in
         if: matrix.group.name == 'aws' && (steps.gate-live.outputs.green != 'true' || steps.gate-lifecycle.outputs.green != 'true')
