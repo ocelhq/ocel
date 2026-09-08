@@ -43,7 +43,7 @@ type item struct {
 
 func (i item) ID() string { return string(i.Kind) + "/" + i.Name }
 
-func stands(kind Kind, emulated bool) bool { return !emulated || kind != KindRepository }
+func provisioned(kind Kind, emulated bool) bool { return !emulated || kind != KindRepository }
 
 func stackItems(names Names, class providerkit.Class, emulated bool) []item {
 	items := []item{
@@ -76,7 +76,7 @@ func stackItems(names Names, class providerkit.Class, emulated bool) []item {
 			Note: "the images this class runs, and an untagged image lives at least a week",
 		},
 	}
-	return slices.DeleteFunc(items, func(held item) bool { return !stands(held.Kind, emulated) })
+	return slices.DeleteFunc(items, func(held item) bool { return !provisioned(held.Kind, emulated) })
 }
 
 func parameterItems(names Names, class providerkit.Class) []item {
