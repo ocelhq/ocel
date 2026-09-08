@@ -130,7 +130,7 @@ func TestDirs(t *testing.T) {
 			want:  []string{"packages/a/ocel", "packages/b/ocel"},
 		},
 	}, func(configDir string, paths []string) ([]string, error) {
-		roots, err := Roots(configDir, paths, nil)
+		roots, err := Roots(configDir, paths)
 		if err != nil {
 			return nil, err
 		}

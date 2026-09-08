@@ -37,11 +37,11 @@ var manifestLanguages = []struct {
 }
 
 func RootsOf(cfg *projectconfig.Config) ([]Root, error) {
-	return Roots(cfg.Dir, cfg.Discovery.Paths, cfg.AppPaths())
+	return Roots(cfg.Dir, cfg.Discovery.Paths)
 }
 
-func Roots(configDir string, paths []string, appPaths []string) ([]Root, error) {
-	dirs, err := rootDirsOf(configDir, paths, appPaths)
+func Roots(configDir string, paths []string) ([]Root, error) {
+	dirs, err := rootDirsOf(configDir, paths)
 	if err != nil {
 		return nil, err
 	}
@@ -57,11 +57,11 @@ func Roots(configDir string, paths []string, appPaths []string) ([]Root, error) 
 	return roots, nil
 }
 
-func rootDirsOf(configDir string, paths []string, appPaths []string) ([]string, error) {
+func rootDirsOf(configDir string, paths []string) ([]string, error) {
 	if paths != nil {
 		return configuredRootDirs(configDir, paths)
 	}
-	return defaultRootDirs(configDir, appPaths), nil
+	return defaultRootDirs(configDir), nil
 }
 
 func configuredRootDirs(configDir string, paths []string) ([]string, error) {
@@ -85,26 +85,12 @@ func configuredRootDirs(configDir string, paths []string) ([]string, error) {
 	return dirs, nil
 }
 
-func defaultRootDirs(configDir string, appPaths []string) []string {
-	candidates := []string{filepath.Join(configDir, defaultRootName)}
-	for _, p := range appPaths {
-		if p == "" {
-			continue
-		}
-		candidates = append(candidates, filepath.Join(configDir, p, defaultRootName))
+func defaultRootDirs(configDir string) []string {
+	dir := filepath.Join(configDir, defaultRootName)
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return nil
 	}
-
-	var dirs []string
-	for _, dir := range candidates {
-		if slices.Contains(dirs, dir) {
-			continue
-		}
-		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-			continue
-		}
-		dirs = append(dirs, dir)
-	}
-	return dirs
+	return []string{dir}
 }
 
 func LanguageOf(dir string) Language {
