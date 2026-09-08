@@ -16,8 +16,6 @@ import (
 //go:embed reach.py
 var pythonReachScript string
 
-const pythonProgram = "python3"
-
 type pythonWalk struct {
 	Entries map[string][]string `json:"entries"`
 	Error   *struct {
@@ -76,10 +74,7 @@ func pythonSearchDirs(roots []discovery.Root) []string {
 }
 
 func walkPythonImports(ctx context.Context, app, dir string, search []string) (pythonWalk, error) {
-	program, err := exec.LookPath(pythonProgram)
-	if err != nil {
-		return pythonWalk{}, fmt.Errorf("attribution: app %q is a python app and no %s is on PATH to read its imports with: %w", app, pythonProgram, err)
-	}
+	program := discovery.PythonInterpreter(dir)
 
 	var stdout bytes.Buffer
 	cmd := exec.CommandContext(ctx, program, append([]string{"-", dir}, search...)...)

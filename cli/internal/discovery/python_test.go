@@ -145,3 +145,16 @@ func pythonSDKPath(t *testing.T) string {
 	}
 	return dir
 }
+
+func TestPythonInterpreterPrefersTheVirtualenvBesideTheRunRoot(t *testing.T) {
+	runRoot := t.TempDir()
+	if got := PythonInterpreter(runRoot); got != "python3" {
+		t.Errorf("PythonInterpreter = %q, want the interpreter on PATH where the run root holds no virtualenv", got)
+	}
+
+	venv := filepath.Join(runRoot, ".venv", "bin", "python")
+	write(t, venv, "")
+	if got := PythonInterpreter(runRoot); got != venv {
+		t.Errorf("PythonInterpreter = %q, want %q", got, venv)
+	}
+}
