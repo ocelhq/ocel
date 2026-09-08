@@ -3,6 +3,7 @@
   "extends": ["//"],
   "tasks": {
     "live": {
+      "dependsOn": ["@platform/gcp-payloads#generate"],
       "cache": false,
       "inputs": [
         "$TURBO_DEFAULT$",

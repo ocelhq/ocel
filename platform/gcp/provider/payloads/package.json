@@ -1,0 +1,11 @@
+{
+  "name": "@platform/gcp-payloads",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "generate": "sh ./generate.sh"
+  },
+  "devDependencies": {
+    "@framework/node-runtime": "workspace:*"
+  }
+}

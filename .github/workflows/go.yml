@@ -152,6 +152,10 @@ jobs:
         if: matrix.group.name == 'cli' || matrix.group.name == 'aws'
         run: go generate -C platform/aws/provider ./...
 
+      - name: go generate (the gcp provider's embedded membrane)
+        if: matrix.group.name == 'gcp'
+        run: go generate -C platform/gcp/provider ./...
+
       - name: go generate (the vps provider's embedded dist)
         if: matrix.group.name == 'providerkit'
         run: go generate -C platform/vps/provider ./...
