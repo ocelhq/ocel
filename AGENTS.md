@@ -71,8 +71,9 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 - **`frameworks/<name>/`** — framework support, holding only what is **not** a branch of
   some host: shared protocol, the build-time adapter, and the host-neutral serving
   runtime a host drives through ports. Host-specific glue lives with the host.
-- **`frameworks/node/`** — the `<name>` that is a runtime rather than a framework: what
-  every host needs to serve a plain node function. It names no host and no framework.
+- **`frameworks/node/`** — the `<name>` that is a runtime rather than a framework. It takes
+  what more than one host must run to serve a plain node function, and nothing that knows
+  which host is running it: a host's own entry, packaging and paths stay with that host.
 - **`cli/`** — the `ocel` binary: Go internals plus the Node half that is bundled and
   embedded into it.
 - **`sdk/`** — the Go SDK apps import to declare resources and talk to the dev server.
