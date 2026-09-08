@@ -51,6 +51,12 @@ var liveOwners atomic.Int64
 func TerminalIsOwned() bool { return liveOwners.Load() > 0 }
 
 func NewRenderer(w io.Writer, present Presentation) *Renderer {
+	r := newRenderer(w, present)
+	r.startTicking()
+	return r
+}
+
+func newRenderer(w io.Writer, present Presentation) *Renderer {
 	r := &Renderer{
 		w:       w,
 		present: present,
@@ -58,11 +64,17 @@ func NewRenderer(w io.Writer, present Presentation) *Renderer {
 	}
 	if r.present.Live() {
 		liveOwners.Add(1)
-		r.tickStop = make(chan struct{})
-		r.tickDone = make(chan struct{})
-		go r.tickLoop()
 	}
 	return r
+}
+
+func (r *Renderer) startTicking() {
+	if !r.present.Live() {
+		return
+	}
+	r.tickStop = make(chan struct{})
+	r.tickDone = make(chan struct{})
+	go r.tickLoop()
 }
 
 func (r *Renderer) Live() bool { return r.present.Live() }
@@ -184,22 +196,27 @@ func (r *Renderer) tickLoop() {
 		case <-r.tickStop:
 			return
 		case <-t.C:
-			r.mu.Lock()
-			if !r.waiting && (r.plan.animating() || r.spinning) {
-				for _, id := range r.plan.activeOrder {
-					if n := r.plan.nodes[id]; n != nil {
-						n.frame++
-					}
-				}
-				if r.spinning {
-					r.spinFrame++
-				}
-				r.eraseLiveLocked()
-				r.drawLiveLocked()
-			}
-			r.mu.Unlock()
+			r.tick()
 		}
 	}
+}
+
+func (r *Renderer) tick() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.waiting || (!r.plan.animating() && !r.spinning) {
+		return
+	}
+	for _, id := range r.plan.activeOrder {
+		if n := r.plan.nodes[id]; n != nil {
+			n.frame++
+		}
+	}
+	if r.spinning {
+		r.spinFrame++
+	}
+	r.eraseLiveLocked()
+	r.drawLiveLocked()
 }
 
 func (r *Renderer) Close() error {

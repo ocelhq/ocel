@@ -27,6 +27,7 @@ type Spinner struct {
 	stopFn    func()
 	suspendFn func() func()
 	stopped   bool
+	frame     int
 }
 
 func StartSpinner(present Presentation, out io.Writer, msg string) *Spinner {
@@ -58,24 +59,30 @@ func (s *Spinner) eraseLocked() {
 
 func (s *Spinner) loop(stop, done chan struct{}) {
 	defer close(done)
+	t := time.NewTicker(frameRate)
+	defer t.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-t.C:
+			s.tick()
+		}
+	}
+}
+
+func (s *Spinner) tick() {
+	if s.out == nil {
+		return
+	}
 	glyph := color.New(color.FgCyan)
 	if s.colored {
 		glyph.EnableColor()
 	} else {
 		glyph.DisableColor()
 	}
-	t := time.NewTicker(frameRate)
-	defer t.Stop()
-	frame := 0
-	for {
-		select {
-		case <-stop:
-			return
-		case <-t.C:
-			fmt.Fprintf(s.out, "\r\033[K%s %s", glyph.Sprint(spinnerFrame(frame)), s.msg)
-			frame++
-		}
-	}
+	fmt.Fprintf(s.out, "\r\033[K%s %s", glyph.Sprint(spinnerFrame(s.frame)), s.msg)
+	s.frame++
 }
 
 func (s *Spinner) Stop() {
