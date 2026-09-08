@@ -28,14 +28,16 @@ const (
 )
 
 type stamp struct {
-	Schema int    `json:"schema"`
-	State  state  `json:"state"`
-	Writer string `json:"writer"`
-	Digest string `json:"digest"`
+	Schema    int    `json:"schema"`
+	Namespace string `json:"namespace"`
+	State     state  `json:"state"`
+	Writer    string `json:"writer"`
+	Digest    string `json:"digest"`
 }
 
 type survey struct {
 	Class      providerkit.Class
+	Names      Names
 	Project    string
 	Region     string
 	Present    bool
@@ -65,13 +67,14 @@ func (s survey) current(items []item) bool {
 func (b bootstrapper) survey(ctx context.Context, class providerkit.Class) (survey, error) {
 	read := survey{
 		Class:    class,
+		Names:    b.clients.Names,
 		Project:  b.clients.project,
 		Region:   b.clients.region,
 		Emulated: b.clients.emulated(),
 		standing: map[string]bool{},
 		mending:  map[string]string{},
 	}
-	for _, item := range bootstrapItems(read.Project, class) {
+	for _, item := range bootstrapItems(read.Names, class) {
 		stands, err := b.stands(ctx, item)
 		if err != nil {
 			return survey{}, err
@@ -82,19 +85,19 @@ func (b bootstrapper) survey(ctx context.Context, class providerkit.Class) (surv
 		}
 	}
 
-	sibling, err := b.stamped(ctx, BucketName(read.Project, siblingOf(class)))
+	sibling, err := b.stamped(ctx, read.Names.Bucket(siblingOf(class)))
 	if err != nil {
 		return survey{}, err
 	}
 	read.sibling = sibling.held
 
-	own, err := b.stamped(ctx, BucketName(read.Project, class))
+	own, err := b.stamped(ctx, read.Names.Bucket(class))
 	if err != nil {
 		return survey{}, err
 	}
 	read.Present, read.Stamp, read.Generation = own.held, own.stamp, own.generation
 
-	if read.stateOf, err = b.stateHeldIn(ctx, StateBucketName(read.Project, class)); err != nil {
+	if read.stateOf, err = b.stateHeldIn(ctx, read.Names.StateBucket(class)); err != nil {
 		return survey{}, err
 	}
 	return read, nil
@@ -187,12 +190,12 @@ func (b bootstrapper) databaseStands(ctx context.Context) (standing, error) {
 	if err != nil {
 		return standing{}, err
 	}
-	held, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients.project)).Context(ctx).Do)
+	held, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients)).Context(ctx).Do)
 	if absent(err) {
 		return standing{}, nil
 	}
 	if err != nil {
-		return standing{}, fmt.Errorf("read the %q Firestore database: %w", recordDatabase, err)
+		return standing{}, fmt.Errorf("read the %q Firestore database: %w", b.clients.Database(), err)
 	}
 	if held.DeleteProtectionState != protectionOn {
 		return standing{held: true, mends: reasonUnprotected}, nil
@@ -200,8 +203,8 @@ func (b bootstrapper) databaseStands(ctx context.Context) (standing, error) {
 	return standing{held: true}, nil
 }
 
-func databasePath(project string) string {
-	return "projects/" + project + "/databases/" + recordDatabase
+func databasePath(c *clients) string {
+	return "projects/" + c.project + "/databases/" + c.Database()
 }
 
 func (b bootstrapper) bucketStands(ctx context.Context, name string) (bool, error) {
@@ -229,7 +232,7 @@ func (b bootstrapper) keyRingStands(ctx context.Context) (bool, error) {
 		if status.Code(err) == codes.NotFound {
 			return false, nil
 		}
-		return false, fmt.Errorf("read the %s key ring: %w", KeyRing, err)
+		return false, fmt.Errorf("read the %s key ring: %w", b.clients.KeyRing(), err)
 	}
 	return true, nil
 }
@@ -304,7 +307,7 @@ func secretPath(project, name string) string {
 }
 
 func keyRingPath(c *clients) string {
-	return fmt.Sprintf("projects/%s/locations/%s/keyRings/%s", c.project, c.region, KeyRing)
+	return fmt.Sprintf("projects/%s/locations/%s/keyRings/%s", c.project, c.region, c.KeyRing())
 }
 
 func keyPath(c *clients, name string) string {

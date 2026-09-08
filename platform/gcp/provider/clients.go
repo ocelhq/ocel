@@ -30,7 +30,7 @@ func (m *memo[T]) held(open func() (T, error)) (T, error) {
 }
 
 type clients struct {
-	project  string
+	Names
 	region   string
 	endpoint string
 
@@ -69,7 +69,7 @@ func opened[T any](c *clients, held *memo[T], doing string, open func() (T, erro
 func (c *clients) Firestore() (*firestore.Client, error) {
 	return opened(c, &c.firestore, "Firestore", func() (*firestore.Client, error) {
 		return firestore.NewClientWithDatabase(
-			context.Background(), c.project, recordDatabase, EmulatorGRPC(c.endpoint)...)
+			context.Background(), c.project, c.Database(), EmulatorGRPC(c.endpoint)...)
 	})
 }
 

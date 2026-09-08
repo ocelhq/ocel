@@ -11,8 +11,6 @@ import (
 
 const Vendor providerkit.Vendor = "gcp"
 
-const edgeNamespace = "ocel"
-
 type Options struct {
 	Project string `json:"project"`
 	Region  string `json:"region"`
@@ -46,8 +44,16 @@ func NewProvider(ctx context.Context, options Options) (*Provider, error) {
 	if err != nil {
 		return nil, err
 	}
+	namespace, err := providerkit.NamespaceFromEnv()
+	if err != nil {
+		return nil, err
+	}
 	project, err := resolveProject(ctx, options.Project)
 	if err != nil {
+		return nil, err
+	}
+	names := Names{namespace: namespace, project: project}
+	if err := names.fit(); err != nil {
 		return nil, err
 	}
 	options.Project = project
@@ -55,9 +61,11 @@ func NewProvider(ctx context.Context, options Options) (*Provider, error) {
 		options:  options,
 		tokens:   ApplicationDefault{},
 		endpoint: endpoint,
-		clients:  &clients{project: project, region: options.Region, endpoint: endpoint},
+		clients:  &clients{Names: names, region: options.Region, endpoint: endpoint},
 	}, nil
 }
+
+func (p *Provider) Names() Names { return p.clients.Names }
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
 
@@ -89,7 +97,7 @@ func (p *Provider) Credentials() providerkit.Credentials {
 	}
 }
 
-func (p *Provider) Edges() providerkit.EdgeRegistry { return edges{} }
+func (p *Provider) Edges() providerkit.EdgeRegistry { return edges{namespace: p.clients.namespace} }
 
 func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
 

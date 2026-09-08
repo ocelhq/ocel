@@ -47,6 +47,11 @@ func live(t *testing.T) *gcp.Provider {
 	return newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
 }
 
+func liveNames(t *testing.T) gcp.Names {
+	t.Helper()
+	return live(t).Names()
+}
+
 func TestLiveCredentials(t *testing.T) {
 	credentials := live(t).Credentials()
 

@@ -35,18 +35,20 @@ func (releaser) Destroy(context.Context, providerkit.StackRef, providerkit.Repor
 	return notReady("destroying a stack")
 }
 
-type edges struct{}
+type edges struct {
+	namespace providerkit.Namespace
+}
 
 func (edges) Supported() []edge.Kind { return []edge.Kind{cloudflare.Kind} }
 
 func (edges) Default() edge.Kind { return cloudflare.Kind }
 
-func (edges) Open(kind edge.Kind) (edge.Edge, error) {
+func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 	if kind != cloudflare.Kind {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"this provider cannot front deployments with the %q edge; it fronts them with %s", kind, cloudflare.Kind)
 	}
-	return cloudflare.New(edgeNamespace), nil
+	return cloudflare.New(string(e.namespace)), nil
 }
 
 type dns struct{}
