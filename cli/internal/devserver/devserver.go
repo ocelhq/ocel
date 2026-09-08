@@ -292,12 +292,17 @@ func (s *Server) bucketResources(buckets []resourceregistry.Entry) []resolve.Res
 }
 
 func (s *Server) Discover(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer) error {
-	roots, err := discovery.Roots(cfg.Dir, cfg.Discovery.Paths, cfg.AppPaths())
+	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return err
 	}
 
-	return discovery.Run(ctx, cfg.Dir, roots, s.devServerAddr, stdout, stderr)
+	prepared, err := discovery.Prepare(cfg.Dir, roots)
+	if err != nil {
+		return err
+	}
+
+	return discovery.Run(ctx, cfg.Dir, prepared, s.devServerAddr, stdout, stderr)
 }
 
 func (s *Server) ClientKeys() ([]clientenv.Key, error) {

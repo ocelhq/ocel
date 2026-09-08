@@ -38,7 +38,7 @@ func NewDeps() cmddeps.Deps {
 		BuildAppImages:      appimages.Build,
 		CollectAppFunctions: appbuilder.CollectFunctions,
 		DeploymentID:        appbuilder.DeploymentID,
-		CollectDeclarations: deploycollector.Collect,
+		CollectDeclarations: deploycollector.PrepareAndCollect,
 		ServeVarsUI:         envwire.ServeVarsUI,
 		DiscoverPRNumber:    func() string { return os.Getenv("OCEL_PR_NUMBER") },
 		StdinIsTerminal:     func(io.Reader) bool { return false },

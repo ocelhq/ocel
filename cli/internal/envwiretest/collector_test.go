@@ -152,7 +152,7 @@ func runDiscovery(t *testing.T, root string, gate *envgate.Gate) {
 	}
 
 	var stdout, stderr strings.Builder
-	if _, err := deploycollector.Collect(context.Background(), cfg, gate, &stdout, &stderr); err != nil {
+	if _, err := deploycollector.PrepareAndCollect(context.Background(), cfg, gate, &stdout, &stderr); err != nil {
 		t.Fatalf("discovery: %v\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String())
 	}
 }

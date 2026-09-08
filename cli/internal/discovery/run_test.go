@@ -14,16 +14,25 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 )
 
-func jsFixture(t *testing.T, source string) (string, []Root) {
+func jsFixture(t *testing.T, source string) (string, Prepared) {
 	t.Helper()
 	root := t.TempDir()
 	write(t, filepath.Join(root, "infra", "main.ts"), source)
 
+	return root, prepare(t, root)
+}
+
+func prepare(t *testing.T, root string) Prepared {
+	t.Helper()
 	roots, err := Roots(root, nil, nil)
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}
-	return root, roots
+	prepared, err := Prepare(root, roots)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	return prepared
 }
 
 func okServer(t *testing.T) string {
@@ -36,10 +45,10 @@ func okServer(t *testing.T) string {
 }
 
 func TestRunReportsTheActualErrorFromAThrowingDeclareFile(t *testing.T) {
-	root, roots := jsFixture(t, `throw new Error("resource declared twice: db");`)
+	root, prepared := jsFixture(t, `throw new Error("resource declared twice: db");`)
 
 	var stdout, stderr bytes.Buffer
-	err := Run(context.Background(), root, roots, okServer(t), &stdout, &stderr)
+	err := Run(context.Background(), root, prepared, okServer(t), &stdout, &stderr)
 	if err == nil {
 		t.Fatal("Run succeeded on a throwing declare file, want error")
 	}
@@ -49,14 +58,14 @@ func TestRunReportsTheActualErrorFromAThrowingDeclareFile(t *testing.T) {
 }
 
 func TestRunForwardsOutputThatIsNotPartOfTheProtocol(t *testing.T) {
-	root, roots := jsFixture(t, `console.log("hello from user code");
+	root, prepared := jsFixture(t, `console.log("hello from user code");
 declare global { var __ocelRegister: Promise<unknown>[]; }
 globalThis.__ocelRegister ??= [];
 export {};
 `)
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), root, roots, okServer(t), &stdout, &stderr); err != nil {
+	if err := Run(context.Background(), root, prepared, okServer(t), &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "hello from user code") {
@@ -68,7 +77,7 @@ export {};
 }
 
 func TestRunWritesToStdoutAndStderrConcurrentlyWithoutRacingWhenTheyAreTheSameWriter(t *testing.T) {
-	root, roots := jsFixture(t, `declare global { var __ocelRegister: Promise<unknown>[]; }
+	root, prepared := jsFixture(t, `declare global { var __ocelRegister: Promise<unknown>[]; }
 globalThis.__ocelRegister ??= [];
 for (let i = 0; i < 4000; i++) {
   console.log("out", i);
@@ -78,13 +87,13 @@ export {};
 `)
 
 	var shared bytes.Buffer
-	if err := Run(context.Background(), root, roots, okServer(t), &shared, &shared); err != nil {
+	if err := Run(context.Background(), root, prepared, okServer(t), &shared, &shared); err != nil {
 		t.Fatalf("Run: %v; output=%s", err, shared.String())
 	}
 }
 
 func TestRunProducesADiscoverySpan(t *testing.T) {
-	root, roots := jsFixture(t, `declare global { var __ocelRegister: Promise<unknown>[]; }
+	root, prepared := jsFixture(t, `declare global { var __ocelRegister: Promise<unknown>[]; }
 globalThis.__ocelRegister ??= [];
 export {};
 `)
@@ -96,7 +105,7 @@ export {};
 	}
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(ctx, root, roots, okServer(t), &stdout, &stderr); err != nil {
+	if err := Run(ctx, root, prepared, okServer(t), &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	if err := run.Close(); err != nil {
@@ -133,7 +142,7 @@ func TestRunDeclaresAgainstTheCollectorAndSyncsOnceAfterTheChildExits(t *testing
 	}))
 	t.Cleanup(server.Close)
 
-	root, roots := jsFixture(t, `declare global { var __ocelRegister: Promise<unknown>[]; }
+	root, prepared := jsFixture(t, `declare global { var __ocelRegister: Promise<unknown>[]; }
 globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
   fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
@@ -146,7 +155,7 @@ export {};
 `)
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), root, roots, server.URL, &stdout, &stderr); err != nil {
+	if err := Run(context.Background(), root, prepared, server.URL, &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -168,13 +177,8 @@ func TestRunRefusesARootThisBuildCannotDiscover(t *testing.T) {
 	write(t, filepath.Join(root, "go.mod"), "module example.com/web")
 	write(t, filepath.Join(root, "infra", "infra.go"), "package infra")
 
-	roots, err := Roots(root, nil, nil)
-	if err != nil {
-		t.Fatalf("Roots: %v", err)
-	}
-
 	var stdout, stderr bytes.Buffer
-	err = Run(context.Background(), root, roots, okServer(t), &stdout, &stderr)
+	err := Run(context.Background(), root, prepare(t, root), okServer(t), &stdout, &stderr)
 	if err == nil {
 		t.Fatal("Run succeeded on a go root, want an error")
 	}
@@ -191,7 +195,7 @@ func TestRunBuildsNoBundleAndRunsNoNodeWithoutAJSRoot(t *testing.T) {
 	root := t.TempDir()
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), root, nil, okServer(t), &stdout, &stderr); err != nil {
+	if err := Run(context.Background(), root, prepare(t, root), okServer(t), &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
 	}
 	if _, err := os.Stat(filepath.Join(root, buildDirName, "entry.mjs")); !os.IsNotExist(err) {
@@ -204,13 +208,8 @@ func TestRunRefusesAGoRootWithoutBundlingForIt(t *testing.T) {
 	write(t, filepath.Join(root, "go.mod"), "module example.com/web")
 	write(t, filepath.Join(root, "infra", "infra.go"), "package infra")
 
-	roots, err := Roots(root, nil, nil)
-	if err != nil {
-		t.Fatalf("Roots: %v", err)
-	}
-
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), root, roots, okServer(t), &stdout, &stderr); err == nil {
+	if err := Run(context.Background(), root, prepare(t, root), okServer(t), &stdout, &stderr); err == nil {
 		t.Fatal("Run succeeded on a go root, want an error")
 	}
 	if _, err := os.Stat(filepath.Join(root, buildDirName, "entry.mjs")); !os.IsNotExist(err) {

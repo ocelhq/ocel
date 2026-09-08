@@ -102,7 +102,7 @@ func newDeps() cmddeps.Deps {
 		BuildAppImages:      appimages.Build,
 		CollectAppFunctions: appbuilder.CollectFunctions,
 		DeploymentID:        appbuilder.DeploymentID,
-		CollectDeclarations: deploycollector.Collect,
+		CollectDeclarations: deploycollector.PrepareAndCollect,
 		OpenBrowser:         browser.OpenURL,
 		ServeVarsUI:         envwire.ServeVarsUI,
 		CurrentGitBranch:    gitBranch,

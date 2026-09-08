@@ -25,7 +25,7 @@ func TestCollect(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		resources, err := Collect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
+		resources, err := PrepareAndCollect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 		}
@@ -74,7 +74,7 @@ export {};
 		}
 
 		var stdout, stderr bytes.Buffer
-		resources, err := Collect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
+		resources, err := PrepareAndCollect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 		}
@@ -98,6 +98,44 @@ export {};
 			}
 		}
 	})
+}
+
+func TestCollectRunsTheBundlePrepareAlreadyBuilt(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX-style fixture entrypoint")
+	}
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "infra", "main.ts"), "export {};\n")
+
+	cfg := &projectconfig.Config{Slug: "test-app", Dir: root}
+	prepared, err := Prepare(cfg)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	if prepared.Fingerprint() == "" {
+		t.Fatal("Fingerprint() is empty, want the hash of the bundle Prepare built")
+	}
+
+	writeFile(t, filepath.Join(root, ".ocel", "entry.mjs"), `
+await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    resource: { type: "LINK_TYPE_POSTGRES", name: "prepared-once" },
+    postgres: { version: "17" },
+  }),
+});
+`)
+
+	var stdout, stderr bytes.Buffer
+	resources, err := Collect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), prepared, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
+	}
+	if len(resources) != 1 || resources[0].Name != "prepared-once" {
+		t.Fatalf("Collect() returned %+v, want the declare of the bundle Prepare built rather than a second bundle", resources)
+	}
 }
 
 func writeFile(t *testing.T, path, contents string) {

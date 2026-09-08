@@ -83,7 +83,7 @@ func serveAndOpenVarsUI(
 
 func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, opts envOptions, stderr io.Writer) (*envgate.Gate, error) {
 	gate := envGate(cfg, runner, opts)
-	if _, err := deploycollector.Collect(ctx, cfg, gate, io.Discard, stderr); err != nil {
+	if _, err := deploycollector.PrepareAndCollect(ctx, cfg, gate, io.Discard, stderr); err != nil {
 		return nil, err
 	}
 	return gate, nil
