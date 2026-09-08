@@ -18,7 +18,7 @@ type Launcher interface {
 	Command(ctx context.Context, configDir string, root Root, serverURL string) (*exec.Cmd, error)
 }
 
-var launchers = map[Language]Launcher{Go: goLauncher{}, Python: pythonLauncher{}}
+var launchers = map[Language]Launcher{Go: goLauncher{}, Python: pythonLauncher{}, Rust: rustLauncher{}}
 
 type Prepared struct {
 	Roots []Root

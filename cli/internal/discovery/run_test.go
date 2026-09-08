@@ -174,19 +174,18 @@ export {};
 
 func TestRunRefusesARootThisBuildCannotDiscover(t *testing.T) {
 	root := t.TempDir()
-	write(t, filepath.Join(root, "Cargo.toml"), "[package]\nname = \"web\"\n")
-	write(t, filepath.Join(root, "infra", "infra.rs"), "")
+	unknown := Root{Dir: filepath.Join(root, "infra"), Language: Language("ruby")}
 
 	var stdout, stderr bytes.Buffer
-	err := Run(context.Background(), root, prepare(t, root), okServer(t), &stdout, &stderr)
+	err := Run(context.Background(), root, Prepared{Roots: []Root{unknown}}, okServer(t), &stdout, &stderr)
 	if err == nil {
-		t.Fatal("Run succeeded on a rust root, want an error")
+		t.Fatal("Run succeeded on a root written in a language ocel has no launcher for, want an error")
 	}
-	want := "is a rust folder, and this build of ocel discovers only go, js and python folders"
+	want := "is a ruby folder, and this build of ocel discovers only go, js, python and rust folders"
 	if !strings.Contains(err.Error(), want) {
 		t.Errorf("err = %v, want it to contain %q", err, want)
 	}
-	if !strings.Contains(err.Error(), filepath.Join(root, "infra")) {
+	if !strings.Contains(err.Error(), unknown.Dir) {
 		t.Errorf("err = %v, want it to name the root", err)
 	}
 }
