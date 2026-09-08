@@ -32,6 +32,7 @@ permissions:
 
 env:
   OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.0.1-ocel.1
+  OCEL_FLOCI_GCP_IMAGE: floci/floci-gcp:0.8.0
 
 jobs:
   go:
@@ -59,6 +60,11 @@ jobs:
             sums: |
               platform/aws/provider/go.sum
               cli/go.sum
+          - name: gcp
+            dirs: platform/gcp/provider
+            packages: ./platform/gcp/provider/...
+            sums: |
+              platform/gcp/provider/go.sum
           - name: providerkit
             dirs: platform/vps/provider pkg/providerkit pkg/providerkit/pulumi platform/edge/cloudflare/deploy platform/edge/contract
             packages: ./platform/vps/provider/... ./pkg/providerkit/... ./pkg/providerkit/pulumi/... ./platform/edge/cloudflare/deploy/... ./platform/edge/contract/...
@@ -140,6 +146,18 @@ jobs:
 
       - name: go test -race
         run: go test -race -count=1 $PACKAGES
+
+      - name: Pull the gcp emulator
+        if: matrix.group.name == 'gcp'
+        run: docker pull "$OCEL_FLOCI_GCP_IMAGE"
+
+      - name: The gcp emulator answers before anything is written against it
+        if: matrix.group.name == 'gcp'
+        run: scripts/floci.sh --cloud gcp create "ocel-gcp-boot-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+      - name: No gcp emulator left behind
+        if: ${{ always() && matrix.group.name == 'gcp' }}
+        run: scripts/floci.sh --cloud gcp destroy "ocel-gcp-boot-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Log in to the registry the emulator image lives in
         if: matrix.group.name == 'aws' && (steps.gate-live.outputs.green != 'true' || steps.gate-lifecycle.outputs.green != 'true')
