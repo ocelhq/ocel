@@ -94,18 +94,9 @@ impl Postgres {
 /// so the file is never run to be read.
 #[macro_export]
 macro_rules! postgres {
-    ($name:literal) => {{
-        $crate::inventory::submit! {
-            $crate::Declaration {
-                kind: "postgres",
-                name: $name,
-                version: "17",
-                file: file!(),
-                line: line!(),
-            }
-        }
-        $crate::Postgres::new($name)
-    }};
+    ($name:literal) => {
+        $crate::postgres!($name, version = "17")
+    };
     ($name:literal, version = $version:literal) => {{
         $crate::inventory::submit! {
             $crate::Declaration {
