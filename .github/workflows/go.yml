@@ -10,6 +10,7 @@ on:
       - "platform/**"
       - "packages/ocel/**"
       - "tests/fixtures/sdk/go/**"
+      - "tests/fixtures/sdk/python/**"
       - "pnpm-lock.yaml"
       - "turbo.json"
       - "scripts/floci.sh"
