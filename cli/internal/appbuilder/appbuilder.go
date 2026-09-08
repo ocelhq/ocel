@@ -16,6 +16,7 @@ import (
 	"unicode"
 
 	"github.com/ocelhq/ocel/cli/internal/appbundler"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -242,15 +243,37 @@ func compiledFromSource(runtime string) bool {
 
 func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App, outputDir string, stderr io.Writer) error {
 	appDir := filepath.Join(outputDir, appsDirName, a.Name)
+	roots, err := discoveryRootsFor(cfg, a.Runtime.Name)
+	if err != nil {
+		return err
+	}
 	return appbundler.Compile(ctx, appbundler.Compilation{
-		App:        a.Name,
-		Runtime:    appbundler.Runtime{Name: a.Runtime.Name, Arch: a.Runtime.Architecture()},
-		Source:     filepath.Join(cfg.Dir, a.Path),
-		Entrypoint: a.Entrypoint,
-		FuncDir:    filepath.Join(appDir, functionsDirName, entryFuncDirName),
-		AppDir:     appDir,
-		Log:        stderr,
+		App:            a.Name,
+		Runtime:        appbundler.Runtime{Name: a.Runtime.Name, Arch: a.Runtime.Architecture()},
+		Source:         filepath.Join(cfg.Dir, a.Path),
+		Entrypoint:     a.Entrypoint,
+		FuncDir:        filepath.Join(appDir, functionsDirName, entryFuncDirName),
+		AppDir:         appDir,
+		DiscoveryRoots: roots,
+		Log:            stderr,
 	})
+}
+
+func discoveryRootsFor(cfg *projectconfig.Config, runtime string) ([]string, error) {
+	if runtime != providerkit.RuntimePython {
+		return nil, nil
+	}
+	roots, err := discovery.RootsOf(cfg)
+	if err != nil {
+		return nil, err
+	}
+	var dirs []string
+	for _, root := range roots {
+		if root.Language == discovery.Python {
+			dirs = append(dirs, root.Dir)
+		}
+	}
+	return dirs, nil
 }
 
 func packable(apps []projectconfig.App) []projectconfig.App {

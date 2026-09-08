@@ -42,10 +42,25 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	if err := copySourceTree(c.Source, c.FuncDir); err != nil {
 		return fmt.Errorf("carry app %q into its artifact: %w", c.App, err)
 	}
+	if err := c.carryDiscoveryRoots(); err != nil {
+		return err
+	}
 	if err := c.installRequirements(ctx, platform); err != nil {
 		return err
 	}
 	return describeArtifact(c.App, c.Runtime, pythonEntryFile, []string{pythonProgram, pythonEntryFile}, c.FuncDir, c.AppDir)
+}
+
+func (c Compilation) carryDiscoveryRoots() error {
+	for _, root := range c.DiscoveryRoots {
+		if rel, err := filepath.Rel(c.Source, root); err == nil && !strings.HasPrefix(rel, "..") {
+			continue
+		}
+		if err := copySourceTree(root, filepath.Join(c.FuncDir, filepath.Base(root))); err != nil {
+			return fmt.Errorf("carry the %s app %q imports into its artifact: %w", filepath.Base(root), c.App, err)
+		}
+	}
+	return nil
 }
 
 func (c Compilation) installRequirements(ctx context.Context, platform string) error {

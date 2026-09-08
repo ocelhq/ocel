@@ -22,7 +22,10 @@ type Compilation struct {
 	Entrypoint string
 	FuncDir    string
 	AppDir     string
-	Log        io.Writer
+	// DiscoveryRoots are the project's discovery folders: an app that imports one
+	// carries it into its artifact.
+	DiscoveryRoots []string
+	Log            io.Writer
 }
 
 func (c Compilation) pkg() string {
