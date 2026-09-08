@@ -918,8 +918,8 @@ func (r *deployRun) manifestValues(entry AppEntry, grants []Link) (AppValues, er
 
 func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
 	url := true
-	if addressed, says := r.provider.(FunctionURLs); says {
-		url = addressed.FunctionURLs()
+	if addressed, says := r.provider.(ServesFunctionURLs); says {
+		url = addressed.ServesFunctionURLs()
 	}
 	var specs []FunctionSpec
 	for _, fn := range r.manifest.GetFunctions() {

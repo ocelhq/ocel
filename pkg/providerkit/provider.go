@@ -92,8 +92,8 @@ type GrantVerifier interface {
 	VerifyGrants(ctx context.Context, link Link) error
 }
 
-type FunctionURLs interface {
-	FunctionURLs() bool
+type ServesFunctionURLs interface {
+	ServesFunctionURLs() bool
 }
 
 type MembraneCrosser interface {
