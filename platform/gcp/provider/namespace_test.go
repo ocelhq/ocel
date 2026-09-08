@@ -29,6 +29,8 @@ func TestEveryNameThisProviderDerivesCarriesTheNamespace(t *testing.T) {
 				"record database":   names.Database(),
 				"key ring":          names.KeyRing(),
 				"passphrase secret": names.PassphraseSecret(providerkit.ClassProduction),
+				"image repository":  names.Repository(providerkit.ClassProduction),
+				"runtime account":   names.RuntimeAccount(providerkit.ClassProduction),
 			} {
 				if !strings.HasPrefix(got, tc.stem) {
 					t.Errorf("the %s is %q, want it derived from namespace %q", what, got, tc.stem)
@@ -42,6 +44,18 @@ func TestEveryNameThisProviderDerivesCarriesTheNamespace(t *testing.T) {
 			}
 			if got, want := names.PassphraseSecret(providerkit.ClassProduction), tc.stem+"-production-pulumi-passphrase"; got != want {
 				t.Errorf("PassphraseSecret() = %q, want %q", got, want)
+			}
+			if got, want := names.Repository(providerkit.ClassPreview), tc.stem+"-acme-prod-preview"; got != want {
+				t.Errorf("Repository() = %q, want %q", got, want)
+			}
+			if got, want := names.RepositoryPath("europe-west1", providerkit.ClassPreview), "europe-west1-docker.pkg.dev/acme-prod/"+tc.stem+"-acme-prod-preview"; got != want {
+				t.Errorf("RepositoryPath() = %q, want %q: the deploy pushes images to that host", got, want)
+			}
+			if got, want := names.RuntimeAccount(providerkit.ClassProduction), tc.stem+"-production-run"; got != want {
+				t.Errorf("RuntimeAccount() = %q, want %q", got, want)
+			}
+			if got, want := names.RuntimeAccountEmail(providerkit.ClassProduction), tc.stem+"-production-run@acme-prod.iam.gserviceaccount.com"; got != want {
+				t.Errorf("RuntimeAccountEmail() = %q, want %q: a service runs as the account that address names", got, want)
 			}
 			if names.Database() != tc.stem || names.KeyRing() != tc.stem {
 				t.Errorf("Database() = %q and KeyRing() = %q, want both %q", names.Database(), names.KeyRing(), tc.stem)
@@ -68,6 +82,12 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 			namespace: strings.Repeat("a", providerkit.MaxNamespaceLength),
 			project:   "acme-prod-" + strings.Repeat("b", 20),
 			names:     "-production-state",
+		},
+		{
+			name:      "a namespace too long for a runtime service account",
+			namespace: strings.Repeat("a", 16),
+			project:   "acme-prod",
+			names:     "-production-run",
 		},
 		{
 			name:      "a namespace too short for a Firestore database",
