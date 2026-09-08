@@ -43,9 +43,11 @@ type clients struct {
 	projects  memo[*cloudresourcemanager.Service]
 }
 
+func (c *clients) emulated() bool { return c.endpoint != "" }
+
 func opened[T any](c *clients, held *memo[T], doing string, open func() (T, error)) (T, error) {
 	client, err := held.held(func() (T, error) {
-		if c.endpoint == "" {
+		if !c.emulated() {
 			if _, err := google.FindDefaultCredentials(context.Background(), cloudPlatformScope); err != nil {
 				var nothing T
 				return nothing, unauthenticated()

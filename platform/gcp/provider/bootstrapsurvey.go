@@ -19,15 +19,17 @@ import (
 
 const enabledVersion = "ENABLED"
 
+type state string
+
 const (
-	stateApplying = "applying"
-	stateRemoving = "removing"
-	stateComplete = "complete"
+	stateApplying state = "applying"
+	stateRemoving state = "removing"
+	stateComplete state = "complete"
 )
 
 type stamp struct {
 	Schema int    `json:"schema"`
-	State  string `json:"state"`
+	State  state  `json:"state"`
 	Writer string `json:"writer"`
 	Digest string `json:"digest"`
 }
@@ -52,8 +54,8 @@ func (s survey) holds(held item) bool { return s.standing[held.ID()] }
 func (s survey) mends(held item) string { return s.mending[held.ID()] }
 
 func (s survey) current(items []item) bool {
-	for _, held := range items {
-		if !s.holds(held) || s.mends(held) != "" {
+	for _, item := range items {
+		if !s.holds(item) || s.mends(item) != "" {
 			return false
 		}
 	}
@@ -65,18 +67,18 @@ func (b bootstrapper) survey(ctx context.Context, class providerkit.Class) (surv
 		Class:    class,
 		Project:  b.clients.project,
 		Region:   b.clients.region,
-		Emulated: b.clients.endpoint != "",
+		Emulated: b.clients.emulated(),
 		standing: map[string]bool{},
 		mending:  map[string]string{},
 	}
-	for _, held := range bootstrapItems(read.Project, class) {
-		stands, err := b.stands(ctx, held)
+	for _, item := range bootstrapItems(read.Project, class) {
+		stands, err := b.stands(ctx, item)
 		if err != nil {
 			return survey{}, err
 		}
-		read.standing[held.ID()] = stands.held
+		read.standing[item.ID()] = stands.held
 		if stands.mends != "" {
-			read.mending[held.ID()] = stands.mends
+			read.mending[item.ID()] = stands.mends
 		}
 	}
 
@@ -171,15 +173,14 @@ func (b bootstrapper) stands(ctx context.Context, held item) (standing, error) {
 		return stood(b.keyStands(ctx, held.Name))
 	case KindSecret:
 		return stood(b.secretStands(ctx, held.Name))
-	default:
-		return standing{}, providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing surveys a %s", held.Kind)
 	}
+	return standing{}, providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing surveys a %s", held.Kind)
 }
 
 func stood(held bool, err error) (standing, error) { return standing{held: held}, err }
 
 func (b bootstrapper) databaseStands(ctx context.Context) (standing, error) {
-	if b.clients.endpoint != "" {
+	if b.clients.emulated() {
 		return standing{held: true}, nil
 	}
 	service, err := b.clients.Databases()

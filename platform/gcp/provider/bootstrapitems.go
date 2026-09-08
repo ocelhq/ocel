@@ -8,12 +8,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
+type Kind string
+
 const (
-	KindDatabase = "firestore:database"
-	KindBucket   = "storage:bucket"
-	KindKeyRing  = "kms:keyring"
-	KindKey      = "kms:key"
-	KindSecret   = "secretmanager:secret"
+	KindDatabase Kind = "firestore:database"
+	KindBucket   Kind = "storage:bucket"
+	KindKeyRing  Kind = "kms:keyring"
+	KindKey      Kind = "kms:key"
+	KindSecret   Kind = "secretmanager:secret"
 )
 
 const StampObject = "ocel/bootstrap.json"
@@ -39,7 +41,7 @@ func PassphraseSecret(class providerkit.Class) string {
 }
 
 type item struct {
-	Kind      string
+	Kind      Kind
 	Name      string
 	Note      string
 	Slow      bool
@@ -47,7 +49,7 @@ type item struct {
 	Versioned bool
 }
 
-func (i item) ID() string { return i.Kind + "/" + i.Name }
+func (i item) ID() string { return string(i.Kind) + "/" + i.Name }
 
 func stackItems(project string, class providerkit.Class) []item {
 	return []item{
@@ -87,8 +89,8 @@ func bootstrapItems(project string, class providerkit.Class) []item {
 
 func digestOf(items []item) string {
 	sum := sha256.New()
-	for _, held := range items {
-		sum.Write([]byte(held.ID() + "\n"))
+	for _, item := range items {
+		sum.Write([]byte(item.ID() + "\n"))
 	}
 	return hex.EncodeToString(sum.Sum(nil))
 }
