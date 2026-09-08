@@ -177,7 +177,9 @@ jobs:
           vars-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
 
       - name: Tear the preview down
-        run: ocel preview rm --ref "${{ github.event.pull_request.head.ref }}" --yes
+        env:
+          REF: ${{ github.event.pull_request.head.ref }}
+        run: ocel preview rm --ref "$REF" --yes
 
       - name: Tell the app the preview is gone
         continue-on-error: true
