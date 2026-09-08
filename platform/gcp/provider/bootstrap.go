@@ -280,9 +280,9 @@ func (b bootstrapper) makeSecret(ctx context.Context, name string) error {
 		return err
 	}
 	parent := "projects/" + b.clients.project
-	_, err = service.Projects.Secrets.Create(parent, &secretmanager.Secret{
+	_, err = attempted(ctx, service.Projects.Secrets.Create(parent, &secretmanager.Secret{
 		Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
-	}).SecretId(name).Context(ctx).Do()
+	}).SecretId(name).Context(ctx).Do)
 	if err != nil && answeredCode(err) != http.StatusConflict {
 		return fmt.Errorf("create the %s secret: %w", name, err)
 	}
@@ -291,9 +291,9 @@ func (b bootstrapper) makeSecret(ctx context.Context, name string) error {
 	if _, err := rand.Read(minted); err != nil {
 		return fmt.Errorf("mint the passphrase %s holds: %w", name, err)
 	}
-	_, err = service.Projects.Secrets.AddVersion(secretPath(b.clients.project, name), &secretmanager.AddSecretVersionRequest{
+	_, err = attempted(ctx, service.Projects.Secrets.AddVersion(secretPath(b.clients.project, name), &secretmanager.AddSecretVersionRequest{
 		Payload: &secretmanager.SecretPayload{Data: base64.StdEncoding.EncodeToString(minted)},
-	}).Context(ctx).Do()
+	}).Context(ctx).Do)
 	if err != nil {
 		return fmt.Errorf("write the passphrase into %s: %w", name, err)
 	}
@@ -305,11 +305,11 @@ func (b bootstrapper) makeDatabase(ctx context.Context, read survey) error {
 	if err != nil {
 		return err
 	}
-	_, err = service.Projects.Databases.Create("projects/"+read.Project, &firestoreadmin.GoogleFirestoreAdminV1Database{
+	_, err = attempted(ctx, service.Projects.Databases.Create("projects/"+read.Project, &firestoreadmin.GoogleFirestoreAdminV1Database{
 		LocationId:            read.Region,
 		Type:                  nativeFirestore,
 		DeleteProtectionState: protectionOn,
-	}).DatabaseId(recordDatabase).Context(ctx).Do()
+	}).DatabaseId(recordDatabase).Context(ctx).Do)
 	if err != nil && answeredCode(err) != http.StatusConflict {
 		return fmt.Errorf("create the %q Firestore database: %w", recordDatabase, err)
 	}
@@ -447,7 +447,7 @@ func (b bootstrapper) takeSecret(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := service.Projects.Secrets.Delete(secretPath(b.clients.project, name)).Context(ctx).Do(); err != nil && !absent(err) {
+	if _, err := attempted(ctx, service.Projects.Secrets.Delete(secretPath(b.clients.project, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the %s secret: %w", name, err)
 	}
 	return nil
@@ -482,12 +482,12 @@ func (b bootstrapper) takeDatabase(ctx context.Context, read survey) error {
 		return err
 	}
 	path := databasePath(read.Project)
-	if _, err := service.Projects.Databases.Patch(path, &firestoreadmin.GoogleFirestoreAdminV1Database{
+	if _, err := attempted(ctx, service.Projects.Databases.Patch(path, &firestoreadmin.GoogleFirestoreAdminV1Database{
 		DeleteProtectionState: protectionOff,
-	}).UpdateMask("deleteProtectionState").Context(ctx).Do(); err != nil && !absent(err) {
+	}).UpdateMask("deleteProtectionState").Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("lift delete protection from the %q Firestore database: %w", recordDatabase, err)
 	}
-	if _, err := service.Projects.Databases.Delete(path).Context(ctx).Do(); err != nil && !absent(err) {
+	if _, err := attempted(ctx, service.Projects.Databases.Delete(path).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the %q Firestore database: %w", recordDatabase, err)
 	}
 	return nil
