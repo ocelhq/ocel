@@ -210,3 +210,10 @@ async def test_two_calls_racing_for_the_pool_open_one_between_them(monkeypatch):
 
     assert len(opened) == 1
     assert first is second
+
+
+def test_an_unprovisioned_database_reprs_like_any_other_object(collector):
+    db = postgres("main")
+
+    assert repr(db)
+    assert db.__class__ is not None
