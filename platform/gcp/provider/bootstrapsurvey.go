@@ -192,7 +192,9 @@ func (b bootstrapper) keyRingStands(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if _, err := client.GetKeyRing(ctx, &kmspb.GetKeyRingRequest{Name: keyRingPath(b.clients)}); err != nil {
+	if _, err := dialled(ctx, func() (*kmspb.KeyRing, error) {
+		return client.GetKeyRing(ctx, &kmspb.GetKeyRingRequest{Name: keyRingPath(b.clients)})
+	}); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return false, nil
 		}
@@ -202,18 +204,28 @@ func (b bootstrapper) keyRingStands(ctx context.Context) (bool, error) {
 }
 
 func (b bootstrapper) keyStands(ctx context.Context, name string) (bool, error) {
-	client, err := b.clients.KMS()
+	key, err := b.keyHeld(ctx, name)
 	if err != nil {
 		return false, err
 	}
-	key, err := client.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: keyPath(b.clients, name)})
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return false, nil
-		}
-		return false, fmt.Errorf("read the %s key: %w", name, err)
-	}
 	return usable(key.GetPrimary()), nil
+}
+
+func (b bootstrapper) keyHeld(ctx context.Context, name string) (*kmspb.CryptoKey, error) {
+	client, err := b.clients.KMS()
+	if err != nil {
+		return nil, err
+	}
+	key, err := dialled(ctx, func() (*kmspb.CryptoKey, error) {
+		return client.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: keyPath(b.clients, name)})
+	})
+	if status.Code(err) == codes.NotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read the %s key: %w", name, err)
+	}
+	return key, nil
 }
 
 func usable(version *kmspb.CryptoKeyVersion) bool {

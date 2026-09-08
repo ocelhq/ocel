@@ -231,10 +231,12 @@ func (b bootstrapper) makeKeyRing(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	_, err = client.CreateKeyRing(ctx, &kmspb.CreateKeyRingRequest{
-		Parent:    fmt.Sprintf("projects/%s/locations/%s", b.clients.project, b.clients.region),
-		KeyRingId: KeyRing,
-		KeyRing:   &kmspb.KeyRing{},
+	_, err = dialled(ctx, func() (*kmspb.KeyRing, error) {
+		return client.CreateKeyRing(ctx, &kmspb.CreateKeyRingRequest{
+			Parent:    fmt.Sprintf("projects/%s/locations/%s", b.clients.project, b.clients.region),
+			KeyRingId: KeyRing,
+			KeyRing:   &kmspb.KeyRing{},
+		})
 	})
 	if err != nil && status.Code(err) != codes.AlreadyExists {
 		return fmt.Errorf("create the %s key ring: %w", KeyRing, err)
@@ -247,10 +249,12 @@ func (b bootstrapper) makeKey(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	_, err = client.CreateCryptoKey(ctx, &kmspb.CreateCryptoKeyRequest{
-		Parent:      keyRingPath(b.clients),
-		CryptoKeyId: name,
-		CryptoKey:   &kmspb.CryptoKey{Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT},
+	_, err = dialled(ctx, func() (*kmspb.CryptoKey, error) {
+		return client.CreateCryptoKey(ctx, &kmspb.CreateCryptoKeyRequest{
+			Parent:      keyRingPath(b.clients),
+			CryptoKeyId: name,
+			CryptoKey:   &kmspb.CryptoKey{Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT},
+		})
 	})
 	if status.Code(err) != codes.AlreadyExists {
 		if err != nil {
@@ -258,16 +262,20 @@ func (b bootstrapper) makeKey(ctx context.Context, name string) error {
 		}
 		return nil
 	}
-	minted, err := client.CreateCryptoKeyVersion(ctx, &kmspb.CreateCryptoKeyVersionRequest{
-		Parent:           keyPath(b.clients, name),
-		CryptoKeyVersion: &kmspb.CryptoKeyVersion{},
+	minted, err := dialled(ctx, func() (*kmspb.CryptoKeyVersion, error) {
+		return client.CreateCryptoKeyVersion(ctx, &kmspb.CreateCryptoKeyVersionRequest{
+			Parent:           keyPath(b.clients, name),
+			CryptoKeyVersion: &kmspb.CryptoKeyVersion{},
+		})
 	})
 	if err != nil {
 		return fmt.Errorf("give the %s key a version to seal under again: %w", name, err)
 	}
-	if _, err := client.UpdateCryptoKeyPrimaryVersion(ctx, &kmspb.UpdateCryptoKeyPrimaryVersionRequest{
-		Name:               keyPath(b.clients, name),
-		CryptoKeyVersionId: path.Base(minted.GetName()),
+	if _, err := dialled(ctx, func() (*kmspb.CryptoKey, error) {
+		return client.UpdateCryptoKeyPrimaryVersion(ctx, &kmspb.UpdateCryptoKeyPrimaryVersionRequest{
+			Name:               keyPath(b.clients, name),
+			CryptoKeyVersionId: path.Base(minted.GetName()),
+		})
 	}); err != nil {
 		return fmt.Errorf("point the %s key at the version it seals under now: %w", name, err)
 	}
@@ -458,18 +466,20 @@ func (b bootstrapper) takeKey(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	key, err := client.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: keyPath(b.clients, name)})
+	key, err := b.keyHeld(ctx, name)
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return nil
-		}
-		return fmt.Errorf("read the %s key: %w", name, err)
+		return err
+	}
+	if key == nil {
+		return nil
 	}
 	if !usable(key.GetPrimary()) {
 		return nil
 	}
-	if _, err := client.DestroyCryptoKeyVersion(ctx, &kmspb.DestroyCryptoKeyVersionRequest{
-		Name: key.GetPrimary().GetName(),
+	if _, err := dialled(ctx, func() (*kmspb.CryptoKeyVersion, error) {
+		return client.DestroyCryptoKeyVersion(ctx, &kmspb.DestroyCryptoKeyVersionRequest{
+			Name: key.GetPrimary().GetName(),
+		})
 	}); err != nil {
 		return fmt.Errorf("schedule the %s key's material for destruction: %w", name, err)
 	}
@@ -515,11 +525,13 @@ func (b bootstrapper) takeBucket(ctx context.Context, name string) error {
 		if attrs.Generation != 0 {
 			object = object.Generation(attrs.Generation)
 		}
-		if err := object.Delete(ctx); err != nil && !errors.Is(err, storage.ErrObjectNotExist) && !absent(err) {
+		if err := done(ctx, func() error { return object.Delete(ctx) }); err != nil &&
+			!errors.Is(err, storage.ErrObjectNotExist) && !absent(err) {
 			return fmt.Errorf("empty %s: %w", name, err)
 		}
 	}
-	if err := bucket.Delete(ctx); err != nil && !errors.Is(err, storage.ErrBucketNotExist) && !absent(err) {
+	if err := done(ctx, func() error { return bucket.Delete(ctx) }); err != nil &&
+		!errors.Is(err, storage.ErrBucketNotExist) && !absent(err) {
 		return fmt.Errorf("delete the %s bucket: %w", name, err)
 	}
 	return nil
