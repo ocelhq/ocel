@@ -12,6 +12,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	firestoreadmin "google.golang.org/api/firestore/v1"
+	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/secretmanager/v1"
 	"google.golang.org/api/serviceusage/v1"
 
@@ -147,14 +148,19 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 			groups[change.Kind+"/"+change.Name] = group.Kind
 		}
 	}
-	for row, group := range map[string]string{
+	rows := map[string]string{
 		"firestore:database/" + liveNames(t).Database():                providerkit.StackGroupKind,
+		"iam:serviceaccount/" + liveNames(t).RuntimeAccount(class):     providerkit.StackGroupKind,
 		"storage:bucket/" + liveNames(t).Bucket(class):                 providerkit.StackGroupKind,
 		"storage:bucket/" + liveNames(t).StateBucket(class):            providerkit.StackGroupKind,
 		"kms:keyring/" + liveNames(t).KeyRing():                        providerkit.StackGroupKind,
 		"kms:key/" + string(class):                                     providerkit.StackGroupKind,
 		"secretmanager:secret/" + liveNames(t).PassphraseSecret(class): providerkit.ParameterGroupKind,
-	} {
+	}
+	if !emulated() {
+		rows["artifactregistry:repository/"+liveNames(t).Repository(class)] = providerkit.StackGroupKind
+	}
+	for row, group := range rows {
 		if _, shown := kinds[row]; !shown {
 			t.Errorf("Plan() shows no row for %s, and what the plan does not show, the apply may not do", row)
 			continue
@@ -774,5 +780,62 @@ func TestLiveASharedRowNamesTheSiblingClassInEveryPlanItAppearsIn(t *testing.T) 
 	if database.Action != providerkit.ActionKeep || !strings.Contains(database.Reason, string(providerkit.ClassProduction)) {
 		t.Errorf("Plan() shows the database as %q (%q), want it kept for a reason naming the sibling class that shares it, as the removal plan does",
 			database.Action, database.Reason)
+	}
+}
+
+func accounts(t *testing.T) *iam.Service {
+	t.Helper()
+	service, err := iam.NewService(context.Background(), gcp.EmulatorREST(endpoint())...)
+	if err != nil {
+		t.Fatalf("reach the IAM API: %v", err)
+	}
+	return service
+}
+
+func TestLiveTheRuntimeAccountStandsWithTheGrantADeployNeeds(t *testing.T) {
+	p := live(t)
+	class := providerkit.ClassProduction
+	bootstrapped(t, p, class)
+
+	ctx := context.Background()
+	service := accounts(t)
+	path := "projects/" + liveProject() + "/serviceAccounts/" + p.Names().RuntimeAccountEmail(class)
+	if _, err := service.Projects.ServiceAccounts.Get(path).Context(ctx).Do(); err != nil {
+		t.Fatalf("Get(%s) after a bootstrap = %v, want the account every app in the class runs as", path, err)
+	}
+
+	policy, err := service.Projects.ServiceAccounts.GetIamPolicy(path).Context(ctx).Do()
+	if err != nil {
+		t.Fatalf("GetIamPolicy(%s) = %v", path, err)
+	}
+	granted := false
+	for _, binding := range policy.Bindings {
+		if binding.Role == "roles/iam.serviceAccountUser" && len(binding.Members) > 0 {
+			granted = true
+		}
+	}
+	if !granted {
+		t.Errorf("the policy on %s is %+v, want the bootstrapping principal bound to roles/iam.serviceAccountUser: without it no deploy may hand an app to Cloud Run to run as this account",
+			path, policy.Bindings)
+	}
+}
+
+func TestLiveRemovingABootstrapTakesTheRuntimeAccountWithIt(t *testing.T) {
+	p := live(t)
+	servicesEnabled(t)
+	class := providerkit.ClassPreview
+
+	ctx := context.Background()
+	bootstrapper := bootstrapperOf(t, p)
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+		t.Fatalf("Apply(%s) = %v", class, err)
+	}
+	if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+		t.Fatalf("Remove(%s) = %v", class, err)
+	}
+
+	path := "projects/" + liveProject() + "/serviceAccounts/" + p.Names().RuntimeAccountEmail(class)
+	if _, err := accounts(t).Projects.ServiceAccounts.Get(path).Context(ctx).Do(); err == nil {
+		t.Errorf("%s still stands after the bootstrap that named it was removed, and an identity nothing runs as is one more thing to explain", path)
 	}
 }

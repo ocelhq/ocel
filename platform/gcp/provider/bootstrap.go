@@ -15,6 +15,7 @@ import (
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/artifactregistry/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
+	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/secretmanager/v1"
 	"google.golang.org/grpc/codes"
@@ -30,10 +31,14 @@ const (
 	reasonShared   = "the %s bootstrap still stands and shares it"
 	reasonDestroy  = "scheduled, destroyed after 24h"
 
+	reasonUngranted = "it stands, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
+
 	reasonUnprotected = "it stands with delete protection off, and one call would take every record both classes hold with it"
 )
 
 const passphraseBytes = 32
+
+const runAsRole = "roles/iam.serviceAccountUser"
 
 const (
 	dockerImages   = "DOCKER"
@@ -223,6 +228,8 @@ func (b bootstrapper) make(ctx context.Context, read survey, held item) error {
 		return b.makeSecret(ctx, held.Name)
 	case KindRepository:
 		return b.makeRepository(ctx, held.Name)
+	case KindServiceAccount:
+		return b.makeAccount(ctx, read, held.Name)
 	default:
 		return providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing stands up a %s", held.Kind)
 	}
@@ -393,6 +400,59 @@ func (b bootstrapper) makeSecret(ctx context.Context, name string) error {
 	}).Context(ctx).Do)
 	if err != nil {
 		return fmt.Errorf("write the passphrase into %s: %w", name, err)
+	}
+	return nil
+}
+
+func (b bootstrapper) makeAccount(ctx context.Context, read survey, name string) error {
+	service, err := b.clients.Accounts()
+	if err != nil {
+		return err
+	}
+	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+b.clients.project, &iam.CreateServiceAccountRequest{
+		AccountId: name,
+		ServiceAccount: &iam.ServiceAccount{
+			DisplayName: "ocel " + string(read.Class) + " apps",
+			Description: "the identity every app ocel deploys in the " + string(read.Class) + " class runs as",
+		},
+	}).Context(ctx).Do)
+	if err != nil && !taken(err) {
+		return fmt.Errorf("create the %s service account: %w", name, err)
+	}
+	return b.grantRunAs(ctx, name)
+}
+
+func (b bootstrapper) grantRunAs(ctx context.Context, name string) error {
+	member, err := b.clients.Principal(ctx)
+	if err != nil {
+		return err
+	}
+	policy, err := b.accountPolicy(ctx, name)
+	if err != nil {
+		return err
+	}
+	if granted(policy, memberOf(member)) {
+		return nil
+	}
+	policy.Bindings = append(policy.Bindings, &iam.Binding{Role: runAsRole, Members: []string{memberOf(member)}})
+	service, err := b.clients.Accounts()
+	if err != nil {
+		return err
+	}
+	if _, err := attempted(ctx, service.Projects.ServiceAccounts.SetIamPolicy(accountPath(b.clients, name),
+		&iam.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do); err != nil {
+		return fmt.Errorf("let %s deploy apps that run as the %s service account: %w", member, name, err)
+	}
+	return nil
+}
+
+func (b bootstrapper) takeAccount(ctx context.Context, name string) error {
+	service, err := b.clients.Accounts()
+	if err != nil {
+		return err
+	}
+	if _, err := attempted(ctx, service.Projects.ServiceAccounts.Delete(accountPath(b.clients, name)).Context(ctx).Do); err != nil && !absent(err) {
+		return fmt.Errorf("delete the %s service account: %w", name, err)
 	}
 	return nil
 }
@@ -599,6 +659,7 @@ func removals(read survey) []removal {
 		byKind[KindKey],
 		byKind[KindKeyRing],
 		byKind[KindDatabase],
+		byKind[KindServiceAccount],
 		byKind[KindRepository],
 		buckets[read.Names.StateBucket(read.Class)],
 		buckets[read.Names.Bucket(read.Class)],
@@ -686,6 +747,8 @@ func (b bootstrapper) take(ctx context.Context, read survey, held item) error {
 		return b.takeBucket(ctx, held.Name)
 	case KindRepository:
 		return b.takeRepository(ctx, held.Name)
+	case KindServiceAccount:
+		return b.takeAccount(ctx, held.Name)
 	default:
 		return providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing takes down a %s", held.Kind)
 	}

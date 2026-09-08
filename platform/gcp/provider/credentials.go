@@ -94,6 +94,10 @@ func (c Credentials) principal(ctx context.Context, token string) (string, error
 	if endpoint == "" {
 		endpoint = tokenInfoURL
 	}
+	return principalNamed(ctx, endpoint, token)
+}
+
+func principalNamed(ctx context.Context, endpoint, token string) (string, error) {
 	principal, status, err := asked(ctx, func() (string, int, error) {
 		return askTokenInfo(ctx, endpoint, token)
 	})
