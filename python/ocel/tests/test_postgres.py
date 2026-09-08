@@ -1,3 +1,4 @@
+import gzip
 import json
 import os
 import threading
@@ -6,6 +7,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 from ocel import UnprovisionedResourceError, postgres
+from ocel.gen.app.resources.v1.resources_pb import DeclareRequest
+from ocel.gen.common.links.v1.links_pb import LinkType
 
 
 class Collector:
@@ -25,12 +28,17 @@ class Collector:
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
-                length = int(self.headers["Content-Length"])
-                declares.append((self.path, json.loads(self.rfile.read(length))))
+                body = self.rfile.read(int(self.headers["Content-Length"]))
+                if self.headers.get("Content-Encoding") == "gzip":
+                    body = gzip.decompress(body)
+                kind = self.headers.get("Content-Type", "")
+                declares.append(
+                    (self.path, self.headers.get("Connect-Protocol-Version"), decode(kind, body))
+                )
                 self.send_response(200)
-                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Type", kind)
                 self.end_headers()
-                self.wfile.write(b"{}")
+                self.wfile.write(b"{}" if kind.endswith("json") else b"")
 
             def log_message(self, *_args):
                 pass
@@ -40,6 +48,12 @@ class Collector:
     def close(self):
         self.server.shutdown()
         self.server.server_close()
+
+
+def decode(content_type: str, body: bytes) -> DeclareRequest:
+    if content_type.endswith("json"):
+        return DeclareRequest.from_json(body)
+    return DeclareRequest.from_binary(body)
 
 
 @pytest.fixture
@@ -55,11 +69,14 @@ def test_a_declared_database_reaches_the_dev_server_with_the_file_that_declared_
     postgres("main")
 
     assert len(collector.declares) == 1
-    path, body = collector.declares[0]
+    path, protocol, declared = collector.declares[0]
     assert path == "/app.resources.v1.ResourceService/Declare"
-    assert body["resource"] == {"type": "LINK_TYPE_POSTGRES", "name": "main"}
-    assert body["postgres"] == {"version": "17"}
-    file, _, line = body["source"].rpartition(":")
+    assert protocol == "1"
+    assert declared.resource.type is LinkType.POSTGRES
+    assert declared.resource.name == "main"
+    assert declared.config.field == "postgres"
+    assert declared.config.value.version == "17"
+    file, _, line = declared.source.rpartition(":")
     assert os.path.basename(file) == "test_postgres.py"
     assert int(line) > 0
 
@@ -79,7 +96,7 @@ def test_a_database_reached_during_discovery_says_it_is_not_provisioned_yet(coll
 def test_a_declared_version_replaces_the_one_ocel_picks(collector):
     postgres("main", version="16")
 
-    assert collector.declares[0][1]["postgres"] == {"version": "16"}
+    assert collector.declares[0][2].config.value.version == "16"
 
 
 def test_a_declaration_the_server_refuses_says_what_it_said(monkeypatch):
@@ -108,13 +125,52 @@ def test_a_link_of_another_type_is_refused_for_the_type_it_carries(monkeypatch):
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.setenv(
         "OCEL_RESOURCE_POSTGRES_main",
-        json.dumps({"name": "main", "bucket": {"name": "b"}}),
+        json.dumps({"name": "main", "bucket": {"bucket": "uploads"}}),
     )
 
     with pytest.raises(RuntimeError) as raised:
         _ = postgres("main").connection_string
     assert str(raised.value) == (
         "OCEL_RESOURCE_POSTGRES_main carries a BUCKET link, and this app reads it as a POSTGRES"
+    )
+
+
+def test_a_link_carrying_nothing_at_all_is_refused_for_the_type_it_carries(monkeypatch):
+    monkeypatch.delenv("OCEL_PHASE", raising=False)
+    monkeypatch.setenv("OCEL_RESOURCE_POSTGRES_main", json.dumps({"name": "main"}))
+
+    with pytest.raises(RuntimeError) as raised:
+        _ = postgres("main").connection_string
+    assert str(raised.value) == (
+        "OCEL_RESOURCE_POSTGRES_main carries a UNSPECIFIED link, "
+        "and this app reads it as a POSTGRES"
+    )
+
+
+def test_a_value_that_is_not_a_link_record_is_reported_without_quoting_what_it_held(monkeypatch):
+    monkeypatch.delenv("OCEL_PHASE", raising=False)
+    monkeypatch.setenv("OCEL_RESOURCE_POSTGRES_main", "s3cret-not-json")
+
+    with pytest.raises(RuntimeError) as raised:
+        _ = postgres("main").connection_string
+    assert "s3cret" not in str(raised.value)
+    assert str(raised.value) == (
+        "OCEL_RESOURCE_POSTGRES_main does not carry a link record, "
+        "so this app cannot read it as a POSTGRES"
+    )
+
+
+def test_a_link_the_deploy_delivers_is_read_past_the_fields_this_app_uses(monkeypatch):
+    monkeypatch.delenv("OCEL_PHASE", raising=False)
+    fixtures = os.path.join(
+        os.path.dirname(__file__), "..", "..", "..", "proto", "common", "links", "v1", "fixtures"
+    )
+    with open(os.path.join(fixtures, "postgres.json")) as delivered:
+        monkeypatch.setenv("OCEL_RESOURCE_POSTGRES_main", delivered.read())
+
+    assert postgres("main").connection_string == (
+        "postgres://fixture_operator:fixture-password-not-a-secret"
+        "@shop-prod-main-r1a2b3c4.cluster-cxyz.us-east-1.rds.amazonaws.com:5433/fixture_catalog"
     )
 
 

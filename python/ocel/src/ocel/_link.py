@@ -1,5 +1,6 @@
-import json
 import os
+
+from ocel.gen.common.links.v1.links_pb import Link
 
 
 class UnprovisionedResourceError(RuntimeError):
@@ -16,7 +17,7 @@ def unprovisioned(what: str, access: str) -> UnprovisionedResourceError:
     )
 
 
-def link(name: str, kind: str) -> dict:
+def link(name: str, kind: str):
     key = f"OCEL_RESOURCE_{kind.upper()}_{name}"
     raw = os.environ.get(key)
     if not raw:
@@ -25,21 +26,15 @@ def link(name: str, kind: str) -> dict:
             f"or `ocel deploy` to have it delivered from the resource this app links."
         )
     try:
-        delivered = json.loads(raw)
-    except json.JSONDecodeError:
+        delivered = Link.from_json(raw, ignore_unknown_fields=True)
+    except Exception:
         raise RuntimeError(
             f"{key} does not carry a link record, so this app cannot read it as a {kind.upper()}"
         ) from None
-    properties = delivered.get(kind)
-    if not isinstance(properties, dict):
+    properties = delivered.properties
+    if properties is None or properties.field != kind:
+        carried = properties.field.upper() if properties else "UNSPECIFIED"
         raise RuntimeError(
-            f"{key} carries a {_carried(delivered)} link, and this app reads it as a {kind.upper()}"
+            f"{key} carries a {carried} link, and this app reads it as a {kind.upper()}"
         )
-    return properties
-
-
-def _carried(delivered: dict) -> str:
-    for field in delivered:
-        if field != "name":
-            return field.upper()
-    return "UNSPECIFIED"
+    return properties.value
