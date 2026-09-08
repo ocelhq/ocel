@@ -115,20 +115,14 @@ func (b bootstrapper) stateHeldIn(ctx context.Context, bucket string) (string, e
 	if err != nil {
 		return "", err
 	}
-	held := client.Bucket(bucket).Objects(ctx, nil)
-	for {
-		attrs, err := held.Next()
-		if errors.Is(err, iterator.Done) {
-			return "", nil
-		}
-		if err != nil {
-			if errors.Is(err, storage.ErrBucketNotExist) || absent(err) {
-				return "", nil
-			}
-			return "", fmt.Errorf("list what %s holds: %w", bucket, err)
-		}
-		return stackNamed(attrs.Name), nil
+	attrs, err := client.Bucket(bucket).Objects(ctx, nil).Next()
+	if errors.Is(err, iterator.Done) || errors.Is(err, storage.ErrBucketNotExist) || absent(err) {
+		return "", nil
 	}
+	if err != nil {
+		return "", fmt.Errorf("list what %s holds: %w", bucket, err)
+	}
+	return stackNamed(attrs.Name), nil
 }
 
 func stackNamed(object string) string {
