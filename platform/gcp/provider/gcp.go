@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -21,6 +23,9 @@ type Provider struct {
 	tokens   TokenSource
 	endpoint string
 	clients  *clients
+
+	bases map[string]base
+	pull  func(ctx context.Context, ref string) (v1.Image, error)
 }
 
 func New(ctx context.Context, options providerkit.Options) (providerkit.Provider, error) {
@@ -62,6 +67,8 @@ func NewProvider(ctx context.Context, options Options) (*Provider, error) {
 		tokens:   ApplicationDefault{},
 		endpoint: endpoint,
 		clients:  &clients{Names: names, region: options.Region, endpoint: endpoint},
+		bases:    functionBases(),
+		pull:     pullBase,
 	}, nil
 }
 

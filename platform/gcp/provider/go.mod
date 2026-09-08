@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go/firestore v1.24.0
 	cloud.google.com/go/kms v1.32.0
 	cloud.google.com/go/storage v1.56.0
+	github.com/google/go-containerregistry v0.21.7
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
@@ -60,7 +61,6 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/cel-go v0.26.1 // indirect
-	github.com/google/go-containerregistry v0.21.7 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.20 // indirect
