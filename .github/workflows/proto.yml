@@ -1,6 +1,21 @@
 name: Proto
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "proto/**"
+      - "buf.yaml"
+      - "buf.lock"
+      - "buf.gen.yaml"
+      - "buf.gen.go.yaml"
+      - "pkg/proto/**"
+      - "packages/ocel/src/gen/**"
+      - "python/ocel/src/ocel/gen/**"
+      - "crates/ocel/src/gen/**"
+      - "package.json"
+      - ".github/workflows/proto.yml"
+      - ".github/actions/node-workspace/**"
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
@@ -37,7 +52,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: cli/go.mod
+          go-version-file: go.work
           cache-dependency-path: cli/go.sum
 
       - run: pnpm gen
