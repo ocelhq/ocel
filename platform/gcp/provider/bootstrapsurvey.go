@@ -19,6 +19,7 @@ import (
 
 const (
 	stateApplying = "applying"
+	stateRemoving = "removing"
 	stateComplete = "complete"
 )
 
@@ -30,12 +31,13 @@ type stamp struct {
 }
 
 type survey struct {
-	Class    providerkit.Class
-	Project  string
-	Region   string
-	Present  bool
-	Stamp    stamp
-	Emulated bool
+	Class      providerkit.Class
+	Project    string
+	Region     string
+	Present    bool
+	Stamp      stamp
+	Generation int64
+	Emulated   bool
 
 	standing map[string]bool
 	sibling  bool
@@ -43,6 +45,15 @@ type survey struct {
 }
 
 func (s survey) holds(held item) bool { return s.standing[held.ID()] }
+
+func (s survey) holdsEvery(items []item) bool {
+	for _, held := range items {
+		if !s.holds(held) {
+			return false
+		}
+	}
+	return true
+}
 
 func (b bootstrapper) survey(ctx context.Context, class providerkit.Class) (survey, error) {
 	read := survey{
@@ -71,7 +82,7 @@ func (b bootstrapper) survey(ctx context.Context, class providerkit.Class) (surv
 	if err != nil {
 		return survey{}, err
 	}
-	read.Present, read.Stamp = own.held, own.stamp
+	read.Present, read.Stamp, read.Generation = own.held, own.stamp, own.generation
 
 	if read.stateOf, err = b.stateHeldIn(ctx, StateBucketName(read.Project, class)); err != nil {
 		return survey{}, err
@@ -80,8 +91,9 @@ func (b bootstrapper) survey(ctx context.Context, class providerkit.Class) (surv
 }
 
 type stamped struct {
-	held  bool
-	stamp stamp
+	held       bool
+	stamp      stamp
+	generation int64
 }
 
 func (b bootstrapper) stamped(ctx context.Context, bucket string) (stamped, error) {
@@ -105,7 +117,7 @@ func (b bootstrapper) stamped(ctx context.Context, bucket string) (stamped, erro
 	if err := json.Unmarshal(written, &read); err != nil {
 		return stamped{}, fmt.Errorf("read %s in %s: %w", StampObject, bucket, err)
 	}
-	return stamped{held: true, stamp: read}, nil
+	return stamped{held: true, stamp: read, generation: reader.Attrs.Generation}, nil
 }
 
 const stateRoot = ".pulumi/stacks/"

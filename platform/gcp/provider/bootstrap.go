@@ -54,16 +54,17 @@ func (b bootstrapper) Describe(ctx context.Context, class providerkit.Class) (pr
 }
 
 func described(read survey) providerkit.Bootstrap {
+	items := bootstrapItems(read.Project, read.Class)
 	return providerkit.Bootstrap{
 		Class:      read.Class,
 		Present:    read.Present,
-		Unfinished: read.Stamp.State == stateApplying,
+		Unfinished: read.Present && read.Stamp.State != stateComplete,
 		Held:       read,
 		Stacks: []providerkit.BootstrapStack{{
 			Name:          read.Project + "/" + string(read.Class),
 			Present:       read.Present,
 			Schema:        uint32(read.Stamp.Schema),
-			DigestCurrent: read.Stamp.Digest == digestOf(bootstrapItems(read.Project, read.Class)),
+			DigestCurrent: read.Stamp.Digest == digestOf(items) && read.holdsEvery(items),
 			Writer:        read.Stamp.Writer,
 		}},
 	}
@@ -138,7 +139,8 @@ func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 		Writer: req.Writer.String(),
 		Digest: digestOf(items),
 	}
-	if err := b.stampWith(ctx, read, written); err != nil {
+	generation, err := b.stampWith(ctx, read, written, read.Generation)
+	if err != nil {
 		return err
 	}
 	for _, held := range items {
@@ -150,7 +152,8 @@ func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 		}
 	}
 	written.State = stateComplete
-	return b.stampWith(ctx, read, written)
+	_, err = b.stampWith(ctx, read, written, generation)
+	return err
 }
 
 func stampHolder(items []item, holder item) item {
@@ -189,24 +192,58 @@ func (b bootstrapper) make(ctx context.Context, read survey, held item) error {
 	}
 }
 
-func (b bootstrapper) stampWith(ctx context.Context, read survey, written stamp) error {
+func (b bootstrapper) stampWith(ctx context.Context, read survey, written stamp, generation int64) (int64, error) {
 	client, err := b.clients.Storage()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	body, err := json.MarshalIndent(written, "", "  ")
 	if err != nil {
-		return fmt.Errorf("write %s: %w", StampObject, err)
+		return 0, fmt.Errorf("write %s: %w", StampObject, err)
 	}
-	writer := client.Bucket(BucketName(read.Project, read.Class)).Object(StampObject).NewWriter(ctx)
+	object := client.Bucket(BucketName(read.Project, read.Class)).Object(StampObject).If(onlyWriter(generation))
+	writer := object.NewWriter(ctx)
 	if _, err := writer.Write(append(body, '\n')); err != nil {
 		writer.Close()
-		return fmt.Errorf("write %s: %w", StampObject, err)
+		return 0, b.stampRefusal(ctx, read, err)
 	}
 	if err := writer.Close(); err != nil {
+		return 0, b.stampRefusal(ctx, read, err)
+	}
+	return writer.Attrs().Generation, nil
+}
+
+func onlyWriter(generation int64) storage.Conditions {
+	if generation == 0 {
+		return storage.Conditions{DoesNotExist: true}
+	}
+	return storage.Conditions{GenerationMatch: generation}
+}
+
+func (b bootstrapper) stampRefusal(ctx context.Context, read survey, err error) error {
+	if answeredCode(err) != http.StatusPreconditionFailed {
 		return fmt.Errorf("write %s: %w", StampObject, err)
 	}
-	return nil
+	read.Stamp.Writer = b.writerNow(ctx, read)
+	return providerkit.Refuse(providerkit.CodeBusy,
+		"%s wrote %s in %s while this run was writing it, and two bootstraps of the same class interleaving leave a stack neither of them describes.\n"+
+			"Wait for that run to finish, then try again",
+		writerNamed(read.Stamp.Writer), StampObject, BucketName(read.Project, read.Class))
+}
+
+func (b bootstrapper) writerNow(ctx context.Context, read survey) string {
+	now, err := b.stamped(ctx, BucketName(read.Project, read.Class))
+	if err != nil || !now.held {
+		return read.Stamp.Writer
+	}
+	return now.stamp.Writer
+}
+
+func writerNamed(writer string) string {
+	if writer == "" {
+		return "another run"
+	}
+	return writer
 }
 
 func (b bootstrapper) makeBucket(ctx context.Context, read survey, held item) error {
@@ -414,6 +451,13 @@ func (b bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 			"%s still holds the state of %s, and removing the bucket a stack is recorded in strands what that stack stood up.\n"+
 				"Run `%s` in every project deployed here first",
 			StateBucketName(read.Project, class), read.stateOf, destroyIn(class))
+	}
+	if read.Present {
+		leaving := read.Stamp
+		leaving.State = stateRemoving
+		if _, err := b.stampWith(ctx, read, leaving, read.Generation); err != nil {
+			return err
+		}
 	}
 	for _, taking := range removals(read) {
 		if taking.action == providerkit.ActionKeep {
