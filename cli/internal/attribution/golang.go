@@ -2,6 +2,7 @@ package attribution
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,9 +26,9 @@ type goPackage struct {
 
 type goReach struct{}
 
-func (goReach) Entries(root string, app App) (map[string]Reachability, error) {
+func (goReach) Entries(ctx context.Context, root string, app App) (map[string]Reachability, error) {
 	dir := filepath.Join(root, filepath.FromSlash(app.Path))
-	packages, err := goList(app.Name, dir)
+	packages, err := goList(ctx, app.Name, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -60,9 +61,9 @@ func (goReach) Entries(root string, app App) (map[string]Reachability, error) {
 	return entries, nil
 }
 
-func goList(app, dir string) ([]goPackage, error) {
+func goList(ctx context.Context, app, dir string) ([]goPackage, error) {
 	var stdout, stderr bytes.Buffer
-	cmd := exec.Command("go", "list", "-json", "-deps", "./...")
+	cmd := exec.CommandContext(ctx, "go", "list", "-json", "-deps", "./...")
 	cmd.Dir = dir
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

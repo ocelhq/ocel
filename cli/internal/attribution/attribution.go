@@ -2,6 +2,7 @@ package attribution
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -30,7 +31,7 @@ type App struct {
 type Reachability func(file string) bool
 
 type Reach interface {
-	Entries(root string, app App) (map[string]Reachability, error)
+	Entries(ctx context.Context, root string, app App) (map[string]Reachability, error)
 }
 
 var reaches = map[discovery.Language]Reach{discovery.JS: jsReach{}, discovery.Go: goReach{}}
@@ -83,7 +84,7 @@ func attributableLanguages() string {
 	return strings.Join(languages, " and ")
 }
 
-func Compute(root string, apps []App, declarations []Declaration) ([]Usage, error) {
+func Compute(ctx context.Context, root string, apps []App, declarations []Declaration) ([]Usage, error) {
 	if len(declarations) == 0 {
 		return nil, nil
 	}
@@ -100,7 +101,7 @@ func Compute(root string, apps []App, declarations []Declaration) ([]Usage, erro
 		if !ok {
 			return nil, fmt.Errorf("attribution: app %q is a %s app, and this build of ocel attributes only %s apps", app.Name, app.Language, attributableLanguages())
 		}
-		entries, err := reach.Entries(root, app)
+		entries, err := reach.Entries(ctx, root, app)
 		if err != nil {
 			return nil, err
 		}

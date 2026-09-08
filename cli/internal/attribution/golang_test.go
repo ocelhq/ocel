@@ -40,7 +40,7 @@ func TestGoReachGrantsAResourceTheAppsMainImports(t *testing.T) {
 		Source: filepath.Join(root, "infra", "infra.go") + ":1",
 	}}
 
-	usages, err := Compute(root, apps, declarations)
+	usages, err := Compute(t.Context(), root, apps, declarations)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestGoReachGrantsNothingFromAPackageNoMainImports(t *testing.T) {
 		Source: filepath.Join(root, "unused", "unused.go") + ":1",
 	}}
 
-	usages, err := Compute(root, apps, declarations)
+	usages, err := Compute(t.Context(), root, apps, declarations)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestGoReachReportsWhatGoListSaid(t *testing.T) {
 		Source: filepath.Join(root, "server", "main.go") + ":1",
 	}}
 
-	_, err := Compute(root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, declarations)
+	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, declarations)
 	if err == nil {
 		t.Fatal("Compute succeeded on a module that does not build, want error")
 	}
@@ -96,7 +96,7 @@ func TestGoReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 		t.Fatalf("locate the fixture: %v", err)
 	}
 
-	usages, err := Compute(root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, []Declaration{{
+	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "infra", "infra.go") + ":5",
@@ -120,7 +120,7 @@ func TestGoReachStopsAtTheModuleTheAppLivesIn(t *testing.T) {
 	write(t, filepath.Join(root, "shared", "go.mod"), "module example.com/shared\n\ngo 1.27.0\n")
 	write(t, filepath.Join(root, "shared", "infra", "infra.go"), "package infra\n")
 
-	usages, err := Compute(root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, []Declaration{{
+	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "shared", "infra", "infra.go") + ":1",
