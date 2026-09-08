@@ -75,6 +75,9 @@ func (e *UnresolvedImportError) Error() string {
 }
 
 func Compute(root string, apps []App, declarations []Declaration) ([]Usage, error) {
+	if len(declarations) == 0 {
+		return nil, nil
+	}
 	entriesByApp := make(map[string]map[string]Reachability, len(apps))
 	attributable := false
 	for _, app := range apps {
