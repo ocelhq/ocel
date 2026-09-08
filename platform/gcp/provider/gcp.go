@@ -38,17 +38,24 @@ func New(_ context.Context, options providerkit.Options) (providerkit.Provider, 
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"option %q names no region, and a project spans them all: name the one this deploy runs in", "region")
 	}
-	return NewProvider(decoded), nil
+	provider, err := NewProvider(decoded)
+	if err != nil {
+		return nil, err
+	}
+	return provider, nil
 }
 
-func NewProvider(options Options) *Provider {
-	endpoint := emulatorEndpoint()
+func NewProvider(options Options) (*Provider, error) {
+	endpoint, err := emulatorEndpoint()
+	if err != nil {
+		return nil, err
+	}
 	return &Provider{
 		options:  options,
 		tokens:   ApplicationDefault{},
 		endpoint: endpoint,
 		clients:  &clients{project: options.Project, region: options.Region, endpoint: endpoint},
-	}
+	}, nil
 }
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }

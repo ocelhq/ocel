@@ -30,19 +30,19 @@ func TestGCPProvider(t *testing.T) {
 func TestTheCredentialsPortAnswersOrSaysWhyItCannot(t *testing.T) {
 	withoutApplicationDefaultCredentials(t)
 
-	conformance.RunCredentials(t, gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Credentials())
+	conformance.RunCredentials(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Credentials())
 }
 
 func TestTheEdgeRegistryOpensTheCloudflareEdge(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
-	conformance.RunEdgeRegistry(t, gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Edges())
+	conformance.RunEdgeRegistry(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Edges())
 }
 
 func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
-	conformance.RunDNSRegistry(t, gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"}).DNS())
+	conformance.RunDNSRegistry(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).DNS())
 }
 
 func buildProvider(t *testing.T) string {

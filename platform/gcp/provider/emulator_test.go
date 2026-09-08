@@ -116,7 +116,7 @@ func TestTheEmulatorEndpointIsReadOnceWhenTheProviderIsMade(t *testing.T) {
 	endpoint := "http://127.0.0.1:4588"
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", endpoint)
 
-	p := gcp.NewProvider(gcp.Options{Project: "floci-local", Region: "europe-west1"})
+	p := newProvider(t, gcp.Options{Project: "floci-local", Region: "europe-west1"})
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "http://127.0.0.1:9999")
 
 	credentials, held := p.Credentials().(gcp.Credentials)
@@ -131,11 +131,43 @@ func TestTheEmulatorEndpointIsReadOnceWhenTheProviderIsMade(t *testing.T) {
 func TestWithoutTheEmulatorEveryClientAddressesGoogle(t *testing.T) {
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "")
 
-	credentials, held := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Credentials().(gcp.Credentials)
+	credentials, held := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Credentials().(gcp.Credentials)
 	if !held {
 		t.Fatal("Credentials() is not this provider's own")
 	}
 	if credentials.Endpoint != "" {
 		t.Errorf("the provider reaches %q, want Google's own endpoints", credentials.Endpoint)
+	}
+}
+
+func TestAnEmulatorEndpointBeyondLoopbackIsRefusedRatherThanAddressedWithoutCredentials(t *testing.T) {
+	for _, endpoint := range []string{"http://firestore.googleapis.com", "https://10.0.0.4:4588", "10.0.0.4:4588", "http://127.0.0.1.evil.example:4588"} {
+		t.Run(endpoint, func(t *testing.T) {
+			t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", endpoint)
+
+			var refusal providerkit.Refusal
+			_, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+				t.Fatalf("NewProvider() with %s naming %q = %v, want an %s refusal: every client at that endpoint is built with no authentication at all",
+					"OCEL_FLOCI_GCP_ENDPOINT", endpoint, err, providerkit.CodeInvalid)
+			}
+		})
+	}
+}
+
+func TestAnEmulatorEndpointOnLoopbackIsAddressed(t *testing.T) {
+	for _, endpoint := range []string{"http://127.0.0.1:4588", "localhost:4588", "http://[::1]:4588"} {
+		t.Run(endpoint, func(t *testing.T) {
+			t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", endpoint)
+
+			p, err := gcp.NewProvider(gcp.Options{Project: "floci-local", Region: "europe-west1"})
+			if err != nil {
+				t.Fatalf("NewProvider() against %q = %v, want the emulator addressed", endpoint, err)
+			}
+			credentials, held := p.Credentials().(gcp.Credentials)
+			if !held || credentials.Endpoint != endpoint {
+				t.Errorf("the provider reaches %q, want %q", credentials.Endpoint, endpoint)
+			}
+		})
 	}
 }
