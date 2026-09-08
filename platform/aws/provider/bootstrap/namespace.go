@@ -4,39 +4,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type Namespace string
-
-const (
-	DefaultNamespace Namespace = "ocel"
-
-	MaxNamespaceLength = 44
-
-	NamespaceEnvVar = "OCEL_NAMESPACE"
-)
-
-func ParseNamespace(given string) (Namespace, error) {
-	if given == "" {
-		return DefaultNamespace, nil
-	}
-	if len(given) > MaxNamespaceLength {
-		return "", fmt.Errorf("namespace %q is %d characters; every name a bootstrap derives from it has to fit the shortest AWS limit it lands under, which leaves %d", given, len(given), MaxNamespaceLength)
-	}
-	for i := range len(given) {
-		c := given[i]
-		switch {
-		case c >= 'a' && c <= 'z':
-		case i > 0 && (c >= '0' && c <= '9' || c == '-'):
-		default:
-			return "", fmt.Errorf("namespace %q is not a name AWS accepts everywhere it lands: start with a lowercase letter and carry only lowercase letters, digits and dashes", given)
-		}
-	}
-	return Namespace(given), nil
-}
-
-func (n Namespace) String() string { return string(n) }
+type Namespace providerkit.Namespace
 
 func suffixed(class, base string) string {
 	if class == ClassPreview {

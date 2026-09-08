@@ -189,7 +189,7 @@ func TestLifecycleTheWholeBootstrapRunsOnTheRealBinaryAndGivesTheAccountBack(t *
 	if status := run.account.stackStatus(t, coreStackName); status != "CREATE_COMPLETE" {
 		t.Fatalf("%s stands at %q after the CLI applied it, want CREATE_COMPLETE", coreStackName, status)
 	}
-	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(run.account.aws), bootstrap.DefaultNamespace, string(class))
+	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(run.account.aws), defaultNamespace, string(class))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -52,7 +52,7 @@ func newWorld() *world {
 }
 
 func (w *world) clients() Clients {
-	return Clients{APIGateway: w.gateway, Routing: w.routing, Dynamo: w.dynamo, CFN: w.cfn, Region: fakeRegion, Namespace: bootstrap.DefaultNamespace}
+	return Clients{APIGateway: w.gateway, Routing: w.routing, Dynamo: w.dynamo, CFN: w.cfn, Region: fakeRegion, Namespace: defaultNamespace}
 }
 
 func (w *world) edge() *provider {

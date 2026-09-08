@@ -23,28 +23,28 @@ func standingParams(t *testing.T) (*fakeSSM, *fakeIAM) {
 
 	ctx := context.Background()
 	ssmc, iamc := newFakeSSM(), &fakeIAM{}
-	if _, err := ensureOriginSecret(ctx, ssmc, DefaultNamespace, ClassProduction); err != nil {
+	if _, err := ensureOriginSecret(ctx, ssmc, defaultNamespace, ClassProduction); err != nil {
 		t.Fatalf("ensureOriginSecret: %v", err)
 	}
-	if _, err := ensurePassphrase(ctx, ssmc, DefaultNamespace); err != nil {
+	if _, err := ensurePassphrase(ctx, ssmc, defaultNamespace); err != nil {
 		t.Fatalf("ensurePassphrase: %v", err)
 	}
-	if _, err := ensureEdgeCredentials(ctx, iamc, ssmc, DefaultNamespace, ClassProduction, KindCloudflare); err != nil {
+	if _, err := ensureEdgeCredentials(ctx, iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare); err != nil {
 		t.Fatalf("ensureEdgeCredentials: %v", err)
 	}
-	if err := adoptCacheStore(ctx, ssmc, DefaultNamespace, ClassProduction, KindCloudflare, offeredStore()); err != nil {
+	if err := adoptCacheStore(ctx, ssmc, defaultNamespace, ClassProduction, KindCloudflare, offeredStore()); err != nil {
 		t.Fatalf("adoptCacheStore: %v", err)
 	}
-	if err := adoptDeploymentsStore(ctx, ssmc, DefaultNamespace, ClassProduction, KindCloudflare, offeredDeploymentsStore()); err != nil {
+	if err := adoptDeploymentsStore(ctx, ssmc, defaultNamespace, ClassProduction, KindCloudflare, offeredDeploymentsStore()); err != nil {
 		t.Fatalf("adoptDeploymentsStore: %v", err)
 	}
-	if err := adoptISRWriter(ctx, ssmc, DefaultNamespace, ClassProduction, KindCloudflare, offeredISRWriter("", "cred-prod")); err != nil {
+	if err := adoptISRWriter(ctx, ssmc, defaultNamespace, ClassProduction, KindCloudflare, offeredISRWriter("", "cred-prod")); err != nil {
 		t.Fatalf("adoptISRWriter: %v", err)
 	}
-	if _, err := ensureISRWriterSeed(ctx, ssmc, DefaultNamespace, ClassProduction, KindCloudflare); err != nil {
+	if _, err := ensureISRWriterSeed(ctx, ssmc, defaultNamespace, ClassProduction, KindCloudflare); err != nil {
 		t.Fatalf("ensureISRWriterSeed: %v", err)
 	}
-	if err := writeEdgeValues(ctx, ssmc, DefaultNamespace, ClassProduction, KindCloudflare, cloudflareAdoption().Values); err != nil {
+	if err := writeEdgeValues(ctx, ssmc, defaultNamespace, ClassProduction, KindCloudflare, cloudflareAdoption().Values); err != nil {
 		t.Fatalf("writeEdgeValues: %v", err)
 	}
 	return ssmc, iamc
@@ -57,7 +57,7 @@ func plannedParams(t *testing.T, ssmc *fakeSSM, iamc *fakeIAM, req Request) prov
 	if slices.Contains(req.Features, FeatureCloudflareEdge) {
 		adoptions = []EdgeAdoption{{Kind: KindCloudflare, Adoption: cloudflareAdoption()}}
 	}
-	group, err := PlanParameters(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc}, DefaultNamespace,
+	group, err := PlanParameters(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc}, defaultNamespace,
 		ClassProduction, adoptions, req)
 	if err != nil {
 		t.Fatalf("PlanParameters: %v", err)
@@ -135,7 +135,7 @@ func TestPlanParametersOnAConvergedAccountKeepsEverything(t *testing.T) {
 
 func TestPlanParametersUpdatesOnlyTheValuesTheEdgeWouldRewrite(t *testing.T) {
 	ssmc, iamc := standingParams(t)
-	if err := writeEdgeValues(context.Background(), ssmc, DefaultNamespace, ClassProduction, KindCloudflare, map[string]string{"cacheBucket": "stale"}); err != nil {
+	if err := writeEdgeValues(context.Background(), ssmc, defaultNamespace, ClassProduction, KindCloudflare, map[string]string{"cacheBucket": "stale"}); err != nil {
 		t.Fatalf("writeEdgeValues: %v", err)
 	}
 
@@ -160,7 +160,7 @@ func TestPlanParametersUpdatesOnlyTheValuesTheEdgeWouldRewrite(t *testing.T) {
 }
 
 func TestPlanParametersLeavesOutWhatAnEdgeThatAdoptsNothingNeverWrites(t *testing.T) {
-	group, err := PlanParameters(context.Background(), ParamAPIs{SSM: newFakeSSM(), IAM: &fakeIAM{}}, DefaultNamespace,
+	group, err := PlanParameters(context.Background(), ParamAPIs{SSM: newFakeSSM(), IAM: &fakeIAM{}}, defaultNamespace,
 		ClassProduction, []EdgeAdoption{{Kind: KindCloudFront}}, Request{Features: []string{FeatureCloudFrontEdge}})
 	if err != nil {
 		t.Fatalf("PlanParameters: %v", err)
@@ -255,7 +255,7 @@ func TestPlanParameterRemovalReadsTheAccountInBatches(t *testing.T) {
 	ssmc, iamc := standingParams(t)
 	ssmc.batches = 0
 
-	group, err := PlanParameterRemoval(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc}, DefaultNamespace, ClassProduction, false)
+	group, err := PlanParameterRemoval(context.Background(), ParamAPIs{SSM: ssmc, IAM: iamc}, defaultNamespace, ClassProduction, false)
 	if err != nil {
 		t.Fatalf("PlanParameterRemoval: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestPlanParameterRemovalReadsTheAccountInBatches(t *testing.T) {
 		t.Fatal("the removal plan names nothing, and this account holds parameters")
 	}
 
-	names, err := ClassParamNames(DefaultNamespace, ClassProduction)
+	names, err := ClassParamNames(defaultNamespace, ClassProduction)
 	if err != nil {
 		t.Fatal(err)
 	}

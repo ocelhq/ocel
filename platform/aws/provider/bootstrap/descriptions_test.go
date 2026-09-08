@@ -54,8 +54,8 @@ func propertyDescriptionLimit(resourceType string) int {
 
 func everyRenderedTemplate() map[string]string {
 	rendered := map[string]string{
-		"core/" + ClassProduction: coreStackTemplate(DefaultNamespace, ClassProduction),
-		"core/" + ClassPreview:    coreStackTemplate(DefaultNamespace, ClassPreview),
+		"core/" + ClassProduction: coreStackTemplate(defaultNamespace, ClassProduction),
+		"core/" + ClassPreview:    coreStackTemplate(defaultNamespace, ClassPreview),
 	}
 	for _, name := range featureNames() {
 		for _, class := range []string{ClassProduction, ClassPreview} {
@@ -105,7 +105,7 @@ func TestSSMDescriptionsFitTheirLimits(t *testing.T) {
 			cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 			frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-			if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), DefaultNamespace, class, everything(), nil, nil); err != nil {
+			if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), defaultNamespace, class, everything(), nil, nil); err != nil {
 				t.Fatalf("Run: %v", err)
 			}
 			if len(ssmc.descriptions) == 0 {

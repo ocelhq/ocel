@@ -319,7 +319,7 @@ func TestRunOptimizer(t *testing.T) {
 		store := newFakeObjectStore()
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionBootstrap(DefaultNamespace)); err != nil {
+		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionBootstrap(defaultNamespace)); err != nil {
 			t.Fatalf("run: %v", err)
 		}
 		if want := 1 + len(featureNames()); cfn.creates != want || cfn.updates != 0 {
@@ -339,7 +339,7 @@ func TestRunOptimizer(t *testing.T) {
 		store := preloadedStore()
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionBootstrap(DefaultNamespace)); err != nil {
+		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionBootstrap(defaultNamespace)); err != nil {
 			t.Fatalf("run: %v", err)
 		}
 		if store.puts != 0 {
@@ -354,7 +354,7 @@ func TestCheckDeployedOptimizer(t *testing.T) {
 		cfn.seed(coreStackName, "Outputs:\n")
 		cfn.seed(optStack(ClassProduction), "Outputs:\n  "+outputImageOptimizerURL+":\n    Value: 'https://abc.lambda-url.us-east-1.on.aws/'\n")
 
-		deployed, err := CheckDeployed(context.Background(), cfn, DefaultNamespace)
+		deployed, err := CheckDeployed(context.Background(), cfn, defaultNamespace)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
@@ -364,7 +364,7 @@ func TestCheckDeployedOptimizer(t *testing.T) {
 
 		bare := newFakeCFN()
 		bare.seed(coreStackName, "Outputs:\n")
-		deployed, err = CheckDeployed(context.Background(), bare, DefaultNamespace)
+		deployed, err = CheckDeployed(context.Background(), bare, defaultNamespace)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}

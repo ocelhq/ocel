@@ -19,7 +19,7 @@ func planned(t *testing.T, cfn CFNAPI, class string, req Request) []providerkit.
 	t.Helper()
 
 	ctx := context.Background()
-	read, err := Read(ctx, cfn, DefaultNamespace, class)
+	read, err := Read(ctx, cfn, defaultNamespace, class)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -35,7 +35,7 @@ func planned(t *testing.T, cfn CFNAPI, class string, req Request) []providerkit.
 		})
 	}
 	groups, err := PlanChanges(ctx, cfn, read, req, providerkit.DeriveGroups(
-		NameStacks(DefaultNamespace, described), Catalogue(),
+		NameStacks(defaultNamespace, described), Catalogue(),
 		providerkit.BootstrapRequest{Class: providerkit.Class(class), Features: req.Features, Remove: req.Remove}))
 	if err != nil {
 		t.Fatalf("PlanChanges: %v", err)
@@ -70,7 +70,7 @@ func changeNamed(t *testing.T, group providerkit.ChangeGroup, name string) provi
 func (f *fakeCFN) misstamp(stackName string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.tags[stackName] = stampTags(DefaultNamespace, Stamp{Schema: RequiredSchema, Digest: "beef", WrittenBy: "1.0.0"})
+	f.tags[stackName] = stampTags(defaultNamespace, Stamp{Schema: RequiredSchema, Digest: "beef", WrittenBy: "1.0.0"})
 }
 
 func TestPlanOnAFreshAccountReadsEveryResourceOffTheTemplates(t *testing.T) {
@@ -210,7 +210,7 @@ func (g *gatedPlans) CreateChangeSet(ctx context.Context, in *cloudformation.Cre
 func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
 	cfn, _ := standingBootstrap(t)
 	ctx := context.Background()
-	read, err := Read(ctx, cfn, DefaultNamespace, ClassProduction)
+	read, err := Read(ctx, cfn, defaultNamespace, ClassProduction)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
 	for _, feature := range append([]string{""}, featureNames()...) {
 		stack := coreStackName
 		if feature != "" {
-			stack = DefaultNamespace.FeatureStackName(feature, ClassProduction)
+			stack = defaultNamespace.FeatureStackName(feature, ClassProduction)
 		}
 		cfn.fallBehind(stack)
 		groups = append(groups, providerkit.ChangeGroup{
@@ -348,11 +348,11 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	frontedBy(t, &fakeEdge{kind: "cloudflare"})
 	apis := apisOf(cfn, newFakeSSM(), &fakeIAM{}, preloadedStore())
 	req := Request{Features: []string{FeatureVarsKey}, VarsKey: broughtKeyARN}
-	if err := Run(ctx, apis, DefaultNamespace, ClassProduction, req, nil, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, ClassProduction, req, nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
-	read, err := Read(ctx, cfn, DefaultNamespace, ClassProduction)
+	read, err := Read(ctx, cfn, defaultNamespace, ClassProduction)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -360,7 +360,7 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
-	group := groupNamed(t, groups, DefaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction))
+	group := groupNamed(t, groups, defaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction))
 	for _, change := range group.Changes {
 		if change.Name == "VarsKey" || change.Name == "VarsKeyAlias" {
 			t.Errorf("the removal plan takes %s from a stack that owns no key, and a destroy must not claim to take a key this account brought", change.Name)

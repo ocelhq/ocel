@@ -29,15 +29,15 @@ import (
 func standingBootstrapper(t *testing.T, class string) Bootstrapper {
 	t.Helper()
 
-	stackName, err := bootstrap.DefaultNamespace.StackNameFor(class)
+	stackName, err := defaultNamespace.StackNameFor(class)
 	if err != nil {
 		t.Fatalf("StackNameFor(%s): %v", class, err)
 	}
-	params, err := bootstrap.ClassParamNames(bootstrap.DefaultNamespace, class)
+	params, err := bootstrap.ClassParamNames(defaultNamespace, class)
 	if err != nil {
 		t.Fatalf("ClassParamNames(%s): %v", class, err)
 	}
-	userName, err := bootstrap.DefaultNamespace.EdgeUserNameFor(class)
+	userName, err := defaultNamespace.EdgeUserNameFor(class)
 	if err != nil {
 		t.Fatalf("EdgeUserNameFor(%s): %v", class, err)
 	}
@@ -63,7 +63,7 @@ func standingBootstrapper(t *testing.T, class string) Bootstrapper {
 		Edge:    front,
 		Edges:   registryOf(front),
 
-		Namespace: bootstrap.DefaultNamespace,
+		Namespace: defaultNamespace,
 	}
 }
 
@@ -281,7 +281,7 @@ func planningBootstrapper(front edge.Edge) Bootstrapper {
 		Edge:  front,
 		Edges: registryOf(front),
 
-		Namespace: bootstrap.DefaultNamespace,
+		Namespace: defaultNamespace,
 	}
 }
 
