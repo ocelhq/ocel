@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
-
 	"slices"
 	"strconv"
 	"strings"
@@ -82,10 +81,12 @@ func Compute(root string, apps []App, declarations []Declaration) ([]Usage, erro
 		if app.Path == "" {
 			continue
 		}
-		language := cmp.Or(app.Language, discovery.JS)
-		reach, ok := reaches[language]
+		if app.Language == "" {
+			return nil, fmt.Errorf("attribution: app %q names no language", app.Name)
+		}
+		reach, ok := reaches[app.Language]
 		if !ok {
-			return nil, fmt.Errorf("attribution: app %q is a %s app, and this build of ocel attributes only js apps", app.Name, language)
+			return nil, fmt.Errorf("attribution: app %q is a %s app, and this build of ocel attributes only js apps", app.Name, app.Language)
 		}
 		entries, err := reach.Entries(root, app)
 		if err != nil {

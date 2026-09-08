@@ -40,8 +40,8 @@ func monorepoDeclarations(root string) []Declaration {
 
 func monorepoApps() []App {
 	return []App{
-		{Name: "api", Path: "apps/api"},
-		{Name: "worker", Path: "apps/worker"},
+		{Name: "api", Path: "apps/api", Language: discovery.JS},
+		{Name: "worker", Path: "apps/worker", Language: discovery.JS},
 	}
 }
 
@@ -58,12 +58,12 @@ func TestAContainerAppIsAttributedWithoutASecondInstallOnTheDevelopersDisk(t *te
 	root := fixtureRoot(t, "uninstalled")
 	declarations := []Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "shared/db.ts")}}
 
-	serverless := []App{{Name: "web", Path: "apps/web"}}
+	serverless := []App{{Name: "web", Path: "apps/web", Language: discovery.JS}}
 	if _, err := Compute(root, serverless, declarations); err == nil {
 		t.Fatal("Compute() over a serverless app read an import graph its node_modules cannot resolve, so the fixture proves nothing")
 	}
 
-	usages, err := Compute(root, []App{{Name: "web", Path: "apps/web", Container: true}}, declarations)
+	usages, err := Compute(root, []App{{Name: "web", Path: "apps/web", Language: discovery.JS, Container: true}}, declarations)
 	if err != nil {
 		t.Fatalf("Compute() over a container app = %v — the image installs the app's dependencies, and the deploy already proved it", err)
 	}
@@ -110,7 +110,7 @@ func TestAContainerAppsWorkspaceMembersAreReadRatherThanAssumedInstalled(t *test
 	t.Run("a member the developer has not installed stops the deploy", func(t *testing.T) {
 		root := workspaceFixture(t, false)
 
-		_, err := Compute(root, []App{{Name: "web", Path: "apps/web", Container: true, Members: members}},
+		_, err := Compute(root, []App{{Name: "web", Path: "apps/web", Language: discovery.JS, Container: true, Members: members}},
 			[]Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "packages/shared/index.ts")}})
 		if err == nil {
 			t.Fatal("Compute() read a workspace member as a registry package the image installs, so every resource the member declares reaches the app with no edge and no complaint")
@@ -123,7 +123,7 @@ func TestAContainerAppsWorkspaceMembersAreReadRatherThanAssumedInstalled(t *test
 	t.Run("a member linked into node_modules is followed to what it declares", func(t *testing.T) {
 		root := workspaceFixture(t, true)
 
-		usages, err := Compute(root, []App{{Name: "web", Path: "apps/web", Container: true, Members: members}},
+		usages, err := Compute(root, []App{{Name: "web", Path: "apps/web", Language: discovery.JS, Container: true, Members: members}},
 			[]Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "packages/shared/index.ts")}})
 		if err != nil {
 			t.Fatalf("Compute() = %v", err)
@@ -136,7 +136,7 @@ func TestAContainerAppsWorkspaceMembersAreReadRatherThanAssumedInstalled(t *test
 	t.Run("a package from the registry is still left to the image to install", func(t *testing.T) {
 		root := workspaceFixture(t, true)
 
-		if _, err := Compute(root, []App{{Name: "web", Path: "apps/web", Container: true, Members: members}}, nil); err != nil {
+		if _, err := Compute(root, []App{{Name: "web", Path: "apps/web", Language: discovery.JS, Container: true, Members: members}}, nil); err != nil {
 			t.Errorf("Compute() = %v, and express is installed by the image rather than declared by this workspace", err)
 		}
 	})
@@ -223,7 +223,7 @@ func TestCompute(t *testing.T) {
 	t.Run("JSX in a .js file reads as the bundler reads it", func(t *testing.T) {
 		root := fixtureRoot(t, "jsx-in-js")
 
-		usages, err := Compute(root, []App{{Name: "web", Path: "apps/web"}}, []Declaration{
+		usages, err := Compute(root, []App{{Name: "web", Path: "apps/web", Language: discovery.JS}}, []Declaration{
 			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "metrics-db", Source: sourceAt(root, "shared/metrics.ts")},
 		})
 		if err != nil {
@@ -239,7 +239,7 @@ func TestCompute(t *testing.T) {
 	t.Run("a runtime-computed import specifier fails closed", func(t *testing.T) {
 		root := fixtureRoot(t, "computed-import")
 
-		_, err := Compute(root, []App{{Name: "worker", Path: "apps/worker"}}, []Declaration{
+		_, err := Compute(root, []App{{Name: "worker", Path: "apps/worker", Language: discovery.JS}}, []Declaration{
 			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "metrics-db", Source: sourceAt(root, "shared/metrics.ts")},
 		})
 
@@ -347,5 +347,18 @@ func TestComputeRefusesAnAppInALanguageThisBuildCannotRead(t *testing.T) {
 	want := "is a go app, and this build of ocel attributes only js apps"
 	if !strings.Contains(err.Error(), want) {
 		t.Errorf("err = %v, want it to contain %q", err, want)
+	}
+}
+
+func TestComputeRefusesAnAppThatNamesNoLanguage(t *testing.T) {
+	root := fixtureRoot(t, "monorepo")
+
+	apps := monorepoApps()
+	apps[0].Language = ""
+
+	_, err := Compute(root, apps, monorepoDeclarations(root))
+	want := `attribution: app "api" names no language`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("Compute err = %v, want it to contain %q", err, want)
 	}
 }
