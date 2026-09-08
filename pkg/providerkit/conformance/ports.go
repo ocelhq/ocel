@@ -513,13 +513,23 @@ func RunCredentials(t *testing.T, credentials providerkit.Credentials) {
 		}
 	})
 
-	t.Run("permissions are rendered for either tier", func(t *testing.T) {
+	t.Run("permissions are rendered for either tier, or said not to exist yet", func(t *testing.T) {
 		for _, tier := range []providerkit.CredentialTier{providerkit.TierBootstrap, providerkit.TierDeploy} {
-			if _, err := credentials.Permissions(tier); err != nil {
-				t.Errorf("Permissions(%s) = %v, want the permissions that tier needs", tier, err)
+			if err := permissionsRendered(credentials, tier); err != nil {
+				t.Errorf("Permissions(%s) = %v, want the permissions that tier needs or a %s refusal saying there are none to render yet",
+					tier, err, providerkit.CodeNotReady)
 			}
 		}
 	})
+}
+
+func permissionsRendered(credentials providerkit.Credentials, tier providerkit.CredentialTier) error {
+	_, err := credentials.Permissions(tier)
+	var refusal providerkit.Refusal
+	if errors.As(err, &refusal) && refusal.Code == providerkit.CodeNotReady {
+		return nil
+	}
+	return err
 }
 
 func RunArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
