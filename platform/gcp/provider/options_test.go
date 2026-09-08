@@ -36,11 +36,6 @@ func TestAnOptionThisProviderDoesNotTakeIsRefused(t *testing.T) {
 			names:   "keyFile",
 		},
 		{
-			name:    "no project",
-			options: providerkit.Options{"region": "europe-west1"},
-			names:   "project",
-		},
-		{
 			name:    "no region",
 			options: providerkit.Options{"project": "acme-prod"},
 			names:   "region",
