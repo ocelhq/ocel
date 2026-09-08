@@ -2,6 +2,11 @@ package gcp_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"os"
 	"path/filepath"
@@ -86,5 +91,59 @@ func TestAProjectNeitherNamedNorAmbientIsRefusedNamingWhereItIsRead(t *testing.T
 		if !strings.Contains(refusal.Message, named) {
 			t.Errorf("New() refused with %q, want it to name %s among the places a project is read from", refusal.Message, named)
 		}
+	}
+}
+
+func withApplicationDefaultCredentials(t *testing.T, project string) {
+	t.Helper()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	written, err := json.Marshal(map[string]string{
+		"type":         "service_account",
+		"project_id":   project,
+		"private_key":  string(block),
+		"client_email": "deployer@" + project + ".iam.gserviceaccount.com",
+		"token_uri":    "https://oauth2.googleapis.com/token",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "adc.json")
+	if err := os.WriteFile(path, written, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", path)
+}
+
+func TestAProjectNamedInTheEnvironmentBeatsTheOneTheCredentialsCarry(t *testing.T) {
+	withoutAnAmbientProject(t)
+	withApplicationDefaultCredentials(t, "credential-project")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "ambient-prod")
+
+	if got := targeted(t, providerkit.Options{"region": "europe-west1"}); got != "ambient-prod" {
+		t.Errorf("the run targets %q, want the project the environment names: on GCE the credentials always carry the metadata project, and naming one is how an operator overrides it", got)
+	}
+}
+
+func TestTheCloudSDKProjectBeatsTheOneTheCredentialsCarry(t *testing.T) {
+	withoutAnAmbientProject(t)
+	withApplicationDefaultCredentials(t, "credential-project")
+	t.Setenv("CLOUDSDK_CORE_PROJECT", "sdk-prod")
+
+	if got := targeted(t, providerkit.Options{"region": "europe-west1"}); got != "sdk-prod" {
+		t.Errorf("the run targets %q, want the project CLOUDSDK_CORE_PROJECT names", got)
+	}
+}
+
+func TestTheCredentialsAreReadWhenNothingAroundTheRunNamesAProject(t *testing.T) {
+	withoutAnAmbientProject(t)
+	withApplicationDefaultCredentials(t, "credential-project")
+
+	if got := targeted(t, providerkit.Options{"region": "europe-west1"}); got != "credential-project" {
+		t.Errorf("the run targets %q, want the project the credentials carry", got)
 	}
 }
