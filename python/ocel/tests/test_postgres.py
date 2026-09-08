@@ -172,3 +172,41 @@ async def test_the_pool_is_opened_once_however_often_it_is_asked_for(monkeypatch
     db = postgres("main")
     assert await db.pool() is await db.pool()
     assert opened == ["postgres://u:p@db.internal:5432/app"]
+
+
+@pytest.mark.asyncio
+async def test_two_calls_racing_for_the_pool_open_one_between_them(monkeypatch):
+    monkeypatch.delenv("OCEL_PHASE", raising=False)
+    monkeypatch.setenv(
+        "OCEL_RESOURCE_POSTGRES_main",
+        json.dumps(
+            {
+                "name": "main",
+                "postgres": {
+                    "host": "db.internal",
+                    "port": 5432,
+                    "database": "app",
+                    "username": "u",
+                    "password": "p",
+                },
+            }
+        ),
+    )
+    import asyncio
+
+    import asyncpg
+
+    opened = []
+
+    async def create_pool(dsn):
+        opened.append(dsn)
+        await asyncio.sleep(0)
+        return object()
+
+    monkeypatch.setattr(asyncpg, "create_pool", create_pool)
+
+    db = postgres("main")
+    first, second = await asyncio.gather(db.pool(), db.pool())
+
+    assert len(opened) == 1
+    assert first is second

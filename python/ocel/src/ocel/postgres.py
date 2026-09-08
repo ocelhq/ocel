@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 from urllib.parse import quote
 
@@ -11,9 +12,15 @@ _DEFAULT_VERSION = "17"
 class Postgres:
     """A postgres database an app declares and reads its link from."""
 
+    #: The name the database was declared under, and the name its link is delivered as.
+    name: str
+
     def __init__(self, name: str):
+        """Take the handle for the database named ``name``. Prefer :func:`postgres`,
+        which declares the database as well as handing back its handle."""
         self.name = name
         self._pool = None
+        self._opening = asyncio.Lock()
 
     @property
     def connection_string(self) -> str:
@@ -30,9 +37,11 @@ class Postgres:
         """The asyncpg pool over the delivered link, opened on the first call and returned
         as it stands on every one after."""
         if self._pool is None:
-            import asyncpg
+            async with self._opening:
+                if self._pool is None:
+                    import asyncpg
 
-            self._pool = await asyncpg.create_pool(self.connection_string)
+                    self._pool = await asyncpg.create_pool(self.connection_string)
         return self._pool
 
     async def fetch(self, query: str, *args):
