@@ -122,11 +122,16 @@ func membraneOverlay(
 	return carried, nil
 }
 
+func FunctionRoute(app, function string) string {
+	lead := naming.Join(naming.FieldSeparator, string(naming.KindFunction), app) + naming.FieldSeparator
+	return strings.TrimPrefix(function, lead)
+}
+
 func functionRepository(app, function string) string {
 	if function == app {
 		return app
 	}
-	return app + "-" + function
+	return app + "-" + naming.Sanitize(FunctionRoute(app, function))
 }
 
 func pinnedCoordinate(target, digest string) string {
