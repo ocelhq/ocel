@@ -269,6 +269,14 @@ func routeOf(fn *contractv1.ManifestFunction) string {
 	return fn.GetLogicalName()
 }
 
+func stagedDir(root string, fn *contractv1.ManifestFunction) (string, error) {
+	if fn.GetArtifactPath() == "" {
+		return "", Refuse(CodeInvalid,
+			"function %s names no build artifact, so there is nothing to ship", fn.GetLogicalName())
+	}
+	return filepath.Join(root, filepath.FromSlash(fn.GetArtifactPath())), nil
+}
+
 func (r *deployRun) stageArtifact(
 	root string,
 	entry AppEntry,
@@ -276,10 +284,10 @@ func (r *deployRun) stageArtifact(
 	overlay map[string][]byte,
 ) (Upload, error) {
 	name := fn.GetLogicalName()
-	if fn.GetArtifactPath() == "" {
-		return Upload{}, Refuse(CodeInvalid, "function %s names no build artifact, so there is nothing to ship", name)
+	dir, err := stagedDir(root, fn)
+	if err != nil {
+		return Upload{}, err
 	}
-	dir := filepath.Join(root, filepath.FromSlash(fn.GetArtifactPath()))
 	rels, err := artifactFiles(dir)
 	if err != nil {
 		return Upload{}, fmt.Errorf("read %s's artifact: %w", name, err)

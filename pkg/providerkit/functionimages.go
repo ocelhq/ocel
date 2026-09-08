@@ -3,7 +3,6 @@ package providerkit
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -64,15 +63,16 @@ func (r *deployRun) imageFunction(
 	overlay map[string][]byte,
 ) (ImagePush, error) {
 	name := fn.GetLogicalName()
-	if fn.GetArtifactPath() == "" {
-		return ImagePush{}, Refuse(CodeInvalid, "function %s names no build artifact, so there is nothing to ship", name)
+	dir, err := stagedDir(root, fn)
+	if err != nil {
+		return ImagePush{}, err
 	}
 	runtime := Runtime{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()}
 	base, err := imager.FunctionBase(ctx, runtime)
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, runtime.Name, err)
 	}
-	image, err := FunctionImage(base, runtime, filepath.Join(root, filepath.FromSlash(fn.GetArtifactPath())), overlay)
+	image, err := FunctionImage(base, runtime, dir, overlay)
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
 	}
