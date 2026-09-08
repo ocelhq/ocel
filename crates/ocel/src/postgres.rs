@@ -61,7 +61,7 @@ impl Postgres {
         if discovering() {
             return Err(self.unprovisioned(access));
         }
-        postgres(self.name, KIND)
+        postgres(self.name)
     }
 
     fn unprovisioned(&self, access: &str) -> Error {
