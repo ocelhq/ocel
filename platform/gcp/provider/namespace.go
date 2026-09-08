@@ -1,6 +1,8 @@
 package gcp
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"regexp"
 	"strings"
 
@@ -23,6 +25,7 @@ const (
 	maxAccountID   = 30
 	minDatabaseID  = 4
 	maxServiceName = 49
+	serviceHashLen = 6
 )
 
 const longestClass = providerkit.ClassProduction
@@ -63,15 +66,21 @@ func (n Names) Service(project, env, app, function string) (string, error) {
 	if function != app {
 		parts = append(parts, naming.Sanitize(strings.TrimPrefix(function, app+"-")))
 	}
-	service := strings.Join(parts, "-")
+	service := strings.Join(parts, "-") + "-" + serviceHash(string(n.namespace), project, env, app, function)
 	if len(service) > maxServiceName {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
 			"the Cloud Run service %s would be named %s, which is %d characters and Cloud Run builds a url from %d: "+
-				"a service is named for the namespace, the project, the environment and the app it serves.\n"+
+				"a service is named for the namespace, the project, the environment and the app it serves, "+
+				"and carries %d characters of a hash of the four, because every one of them may hold a dash and a name joined by dashes alone would read two ways.\n"+
 				"Name a shorter namespace in %s, a shorter project slug, or a shorter app",
-			app, service, len(service), maxServiceName, providerkit.NamespaceEnvVar)
+			app, service, len(service), maxServiceName, serviceHashLen, providerkit.NamespaceEnvVar)
 	}
 	return service, nil
+}
+
+func serviceHash(parts ...string) string {
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:])[:serviceHashLen]
 }
 
 func (n Names) Database() string { return string(n.namespace) }

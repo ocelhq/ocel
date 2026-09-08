@@ -23,7 +23,7 @@ func TestAServiceIsNamedForTheProjectEnvironmentAndAppItServes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Service() = %v", err)
 	}
-	if !strings.HasSuffix(service, "-shop-prod-web") {
+	if !strings.Contains(service, "-shop-prod-web-") {
 		t.Errorf("Service() = %q, want the project, the environment and the app in the name a url is built from", service)
 	}
 	if !strings.HasPrefix(service, names.Namespace().String()+"-") {
@@ -64,7 +64,7 @@ func TestAFunctionThatIsNotTheAppItselfIsNamedApart(t *testing.T) {
 	if whole == part {
 		t.Errorf("both functions are served by %q, and each function on Cloud Run is a service of its own", whole)
 	}
-	if !strings.HasSuffix(part, "-checkout") {
+	if !strings.Contains(part, "-checkout-") {
 		t.Errorf("Service() = %q, want the function it runs named in it", part)
 	}
 }
@@ -93,5 +93,57 @@ func TestAnAppNamedWithWhatCloudRunRefusesIsCarriedIntoANameItTakes(t *testing.T
 	}
 	if !cloudRunName.MatchString(service) {
 		t.Errorf("Service() = %q, which Cloud Run will not take as a service name", service)
+	}
+}
+
+func TestAnEnvironmentAndAnAppThatSplitTheSameLettersAreTwoServices(t *testing.T) {
+	names := serviceNames(t)
+
+	preview, err := names.Service("shop", "prod-1", "web", "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	beside, err := names.Service("shop", providerkit.ProductionEnv, "1-web", "1-web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview == beside {
+		t.Errorf("both are served by %q, and a name joined by dashes alone reads two ways when every part may hold one: "+
+			"a preview of one app would take another app's production service", preview)
+	}
+}
+
+func TestAFunctionOfOneAppAndAnAppNamedForItAreTwoServices(t *testing.T) {
+	names := serviceNames(t)
+
+	part, err := names.Service("shop", providerkit.ProductionEnv, "web", "web-checkout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	whole, err := names.Service("shop", providerkit.ProductionEnv, "web-checkout", "web-checkout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if part == whole {
+		t.Errorf("both are served by %q, and one app's function would release over another app entirely", part)
+	}
+}
+
+func TestOneAppIsNamedTheSameServiceEveryRelease(t *testing.T) {
+	names := serviceNames(t)
+
+	first, err := names.Service("shop", providerkit.ProductionEnv, "web", "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := names.Service("shop", providerkit.ProductionEnv, "web", "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != again {
+		t.Errorf("Service() named %q and then %q, and a release that renames its service strands the one standing", first, again)
+	}
+	if !cloudRunName.MatchString(first) {
+		t.Errorf("Service() = %q, which Cloud Run will not take as a service name", first)
 	}
 }
