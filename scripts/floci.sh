@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-IMAGE="${OCEL_FLOCI_IMAGE:-ghcr.io/ocelhq/floci:2.0.1-ocel.1}"
+AWS_IMAGE="${OCEL_FLOCI_IMAGE:-ghcr.io/ocelhq/floci:2.0.1-ocel.1}"
+GCP_IMAGE="${OCEL_FLOCI_GCP_IMAGE:-floci/floci-gcp:0.8.0}"
 DOCKER_SOCK="${OCEL_FLOCI_DOCKER_SOCK:-/var/run/docker.sock}"
 READY_WAIT_SECS="${OCEL_FLOCI_READY_WAIT:-180}"
 
+GCP_PROJECT=floci-local
+
 usage() {
     cat <<'EOF'
-usage: scripts/floci.sh <command> [args]
+usage: scripts/floci.sh [--cloud aws|gcp] <command> [args]
 
   create <name>          run a floci container on a port of its own, wait for
                          every service to answer, print info lines
   status <name>          print OCEL_FLOCI_{NAME,ENDPOINT}= lines (eval-able)
   destroy <name>         remove the container (docker rm -f), idempotent
-  run <name> -- cmd...   create, run cmd with OCEL_FLOCI_ENDPOINT exported,
-                         destroy on exit no matter what
+  run <name> -- cmd...   create, run cmd with the endpoint exported, destroy on
+                         exit no matter what
+
+The aws emulator answers on 4566 and exports OCEL_FLOCI_ENDPOINT; the gcp one
+answers on 4588 and exports OCEL_FLOCI_GCP_ENDPOINT. They are separate images
+and a run of one is invisible to the other.
 EOF
     exit 2
 }
@@ -24,16 +31,46 @@ die() {
     exit 1
 }
 
+CLOUD=aws
+if [ "${1:-}" = "--cloud" ]; then
+    CLOUD=${2:-}
+    shift 2 || usage
+fi
+
+case "$CLOUD" in
+aws)
+    IMAGE=$AWS_IMAGE
+    PORT=4566
+    ENDPOINT_VAR=OCEL_FLOCI_ENDPOINT
+    MOUNTS_DOCKER=yes
+    ;;
+gcp)
+    IMAGE=$GCP_IMAGE
+    PORT=4588
+    ENDPOINT_VAR=OCEL_FLOCI_GCP_ENDPOINT
+    MOUNTS_DOCKER=no
+    ;;
+*) die "unknown cloud: $CLOUD (expected aws or gcp)" ;;
+esac
+
 endpoint_of() {
     local mapped
-    mapped=$(docker port "$1" 4566/tcp 2>/dev/null | head -n1) || return 1
+    mapped=$(docker port "$1" "$PORT/tcp" 2>/dev/null | head -n1) || return 1
     [ -n "$mapped" ] || return 1
     printf 'http://127.0.0.1:%s\n' "${mapped##*:}"
 }
 
 answering() {
-    curl -sf --max-time 5 "$1/_localstack/health" |
-        grep -qE '"(cloudformation|s3|dynamodb|ssm|iam)":'
+    case "$CLOUD" in
+    aws)
+        curl -sf --max-time 5 "$1/_localstack/health" |
+            grep -qE '"(cloudformation|s3|dynamodb|ssm|iam)":'
+        ;;
+    gcp)
+        curl -sf --max-time 5 "$1/storage/v1/b?project=$GCP_PROJECT" |
+            grep -q '"kind": *"storage#buckets"'
+        ;;
+    esac
 }
 
 wait_ready() {
@@ -51,7 +88,7 @@ wait_ready() {
         sleep 1
     done
     diagnose_dead "$name" >&2
-    die "$name: nothing answered on 4566 after ${READY_WAIT_SECS}s"
+    die "$name: nothing answered on $PORT after ${READY_WAIT_SECS}s"
 }
 
 diagnose_dead() {
@@ -61,7 +98,7 @@ diagnose_dead() {
 
 print_info() {
     printf 'OCEL_FLOCI_NAME=%s\n' "$1"
-    printf 'OCEL_FLOCI_ENDPOINT=%s\n' "$2"
+    printf '%s=%s\n' "$ENDPOINT_VAR" "$2"
 }
 
 cmd_create() {
@@ -70,10 +107,10 @@ cmd_create() {
     trap 'exit 130' INT
     trap 'exit 143' TERM
     local mounts=()
-    if [ -S "$DOCKER_SOCK" ]; then
+    if [ "$MOUNTS_DOCKER" = yes ] && [ -S "$DOCKER_SOCK" ]; then
         mounts=(-v "$DOCKER_SOCK:/var/run/docker.sock")
     fi
-    docker run -d --name "$name" -p 127.0.0.1::4566 "${mounts[@]}" "$IMAGE" >/dev/null
+    docker run -d --name "$name" -p "127.0.0.1::$PORT" "${mounts[@]}" "$IMAGE" >/dev/null
     local endpoint
     endpoint=$(wait_ready "$name")
     trap - EXIT
@@ -116,9 +153,9 @@ cmd_run() {
     trap 'exit 130' INT
     trap 'exit 143' TERM
     local endpoint
-    endpoint=$(cmd_create "$name" | sed -n 's/^OCEL_FLOCI_ENDPOINT=//p')
+    endpoint=$(cmd_create "$name" | sed -n "s/^$ENDPOINT_VAR=//p")
     [ -n "$endpoint" ] || die "$name: created without an endpoint, so there is nothing to hand the command"
-    OCEL_FLOCI_ENDPOINT=$endpoint "$@"
+    env "$ENDPOINT_VAR=$endpoint" "$@"
 }
 
 [ $# -ge 2 ] || usage
