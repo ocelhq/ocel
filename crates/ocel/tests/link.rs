@@ -1,12 +1,20 @@
 use ocel::{Error, Postgres};
+use std::sync::{Mutex, MutexGuard};
 
 static DELIVERED: Postgres = Postgres::new("delivered");
 static ABSENT: Postgres = Postgres::new("absent");
 static MISTYPED: Postgres = Postgres::new("mistyped");
 static UNREADABLE: Postgres = Postgres::new("unreadable");
 
+static ENV: Mutex<()> = Mutex::new(());
+
+fn env() -> MutexGuard<'static, ()> {
+    ENV.lock().unwrap_or_else(|held| held.into_inner())
+}
+
 #[test]
 fn a_connection_string_carries_credentials_percent_encoded() {
+    let _env = env();
     std::env::set_var(
         "OCEL_RESOURCE_POSTGRES_delivered",
         r#"{"name":"delivered","postgres":{"host":"db.internal","port":5432,"database":"app","username":"user name","password":"p@ss:word/with#odd?chars"}}"#,
@@ -19,6 +27,7 @@ fn a_connection_string_carries_credentials_percent_encoded() {
 
 #[test]
 fn a_link_that_was_never_delivered_names_the_commands_that_deliver_it() {
+    let _env = env();
     let err = ABSENT
         .connection_string()
         .expect_err("no link was delivered");
@@ -30,6 +39,7 @@ fn a_link_that_was_never_delivered_names_the_commands_that_deliver_it() {
 
 #[test]
 fn a_link_of_another_kind_says_what_it_carries() {
+    let _env = env();
     std::env::set_var(
         "OCEL_RESOURCE_POSTGRES_mistyped",
         r#"{"name":"mistyped","bucket":{"name":"uploads"}}"#,
@@ -44,6 +54,7 @@ fn a_link_of_another_kind_says_what_it_carries() {
 
 #[test]
 fn a_value_that_is_not_a_link_record_is_reported_without_quoting_what_it_held() {
+    let _env = env();
     std::env::set_var("OCEL_RESOURCE_POSTGRES_unreadable", "s3cret-not-json");
     let err = UNREADABLE
         .connection_string()
@@ -60,6 +71,7 @@ fn a_value_that_is_not_a_link_record_is_reported_without_quoting_what_it_held() 
 
 #[test]
 fn a_run_that_is_not_discovery_leaves_the_app_to_serve() {
+    let _env = env();
     assert!(!ocel::discover().expect("discover"));
 }
 
@@ -67,6 +79,7 @@ fn a_run_that_is_not_discovery_leaves_the_app_to_serve() {
 #[test]
 #[ignore = "needs a postgres at DATABASE_URL"]
 fn a_pool_is_opened_once_over_the_delivered_link() {
+    let _env = env();
     let runtime = tokio::runtime::Runtime::new().expect("a runtime");
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL");
     std::env::set_var(
