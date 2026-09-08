@@ -111,7 +111,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	if err != nil {
 		return nil, err
 	}
-	usages, err := attribution.Compute(cfg.Dir, attributionApps, toAttributionDeclarations(resources))
+	usages, err := attribution.Compute(ctx, cfg.Dir, attributionApps, toAttributionDeclarations(resources))
 	if err != nil {
 		return nil, err
 	}

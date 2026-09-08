@@ -1,6 +1,7 @@
 package attribution
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -84,7 +85,7 @@ func installedFromARegistry(path string, members []string) bool {
 
 type jsReach struct{}
 
-func (jsReach) Entries(root string, app App) (map[string]Reachability, error) {
+func (jsReach) Entries(_ context.Context, root string, app App) (map[string]Reachability, error) {
 	survivors, err := shakenSurvivors(root, app)
 	if err != nil {
 		return nil, err
