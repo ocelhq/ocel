@@ -33,6 +33,9 @@ func (rustLauncher) Command(ctx context.Context, configDir string, root Root, se
 	if len(bins) == 0 {
 		return nil, fmt.Errorf("discovery: %s declares resources but %s builds no binary to run them from", root.Dir, crate.Name)
 	}
+	if len(bins) > 1 {
+		return nil, fmt.Errorf("discovery: %s builds %d binaries, and ocel runs one binary per infra folder: keep one bin target in the crate that owns %s", crate.Name, len(bins), root.Dir)
+	}
 
 	cmd := exec.CommandContext(ctx, "cargo", "run", "--quiet", "--manifest-path", crate.ManifestPath, "--bin", bins[0].Name)
 	cmd.Dir = workspace.Root

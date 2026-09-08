@@ -142,3 +142,20 @@ func TestRustReachReadsCargoMetadataWithoutReachingTheRegistry(t *testing.T) {
 		t.Errorf("cargo metadata args = %q, want --offline among them", args)
 	}
 }
+
+func TestRustReachRefusesAnAppThatBuildsSeveralBinaries(t *testing.T) {
+	needsCargo(t)
+	root := t.TempDir()
+	write(t, filepath.Join(root, "Cargo.toml"), "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n\n[[bin]]\nname = \"web\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"worker\"\npath = \"src/worker.rs\"\n")
+	write(t, filepath.Join(root, "src", "main.rs"), "fn main() {}\n")
+	write(t, filepath.Join(root, "src", "worker.rs"), "fn main() {}\n")
+
+	_, err := rustReach{}.Entries(t.Context(), root, App{Name: "web", Path: ".", Language: discovery.Rust})
+	if err == nil {
+		t.Fatal("Entries succeeded on an app with two binaries, want an error")
+	}
+	want := `attribution: app "web" builds 2 binaries, and ocel attributes one binary per app`
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err, want)
+	}
+}
