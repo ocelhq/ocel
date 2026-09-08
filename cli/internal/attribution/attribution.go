@@ -85,7 +85,14 @@ func attributableLanguages() string {
 		languages = append(languages, string(language))
 	}
 	slices.Sort(languages)
-	return strings.Join(languages, " and ")
+	return listed(languages)
+}
+
+func listed(items []string) string {
+	if len(items) < 2 {
+		return strings.Join(items, "")
+	}
+	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
 
 func Compute(ctx context.Context, root string, apps []App, declarations []Declaration) ([]Usage, error) {
