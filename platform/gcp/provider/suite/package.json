@@ -1,0 +1,8 @@
+{
+  "name": "@platform/gcp-suite",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "live": "go test -C .. -race -count=1 -timeout 30m -run '^TestLive' ./..."
+  }
+}

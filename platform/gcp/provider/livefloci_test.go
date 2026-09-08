@@ -34,6 +34,20 @@ func live(t *testing.T) *gcp.Provider {
 	return gcp.NewProvider(gcp.Options{Project: liveProject, Region: liveRegion})
 }
 
+func TestLiveCredentials(t *testing.T) {
+	credentials := live(t).Credentials()
+
+	conformance.RunCredentials(t, credentials)
+
+	identity, err := credentials.Whoami(context.Background())
+	if err != nil {
+		t.Fatalf("Whoami() against the emulator = %v, want an identity: the project the run targets answers there", err)
+	}
+	if identity.Provider != gcp.Vendor || identity.Account != liveProject {
+		t.Errorf("Whoami() = %+v, want %s naming project %s", identity, gcp.Vendor, liveProject)
+	}
+}
+
 func TestLiveRecordStore(t *testing.T) {
 	conformance.RunRecordStore(t, live(t).Records())
 }

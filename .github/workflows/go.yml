@@ -115,6 +115,14 @@ jobs:
           suite: aws-lifecycle
           task: "@platform/aws-payloads#lifecycle"
 
+      - name: Has the gcp live suite already passed what it reads
+        id: gate-gcp-live
+        if: matrix.group.name == 'gcp'
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: gcp-live
+          task: "@platform/gcp-suite#live"
+
       - name: The ocel package the cli e2e deploys against
         if: matrix.group.name == 'cli'
         run: pnpm turbo run build --filter=ocel
@@ -148,16 +156,29 @@ jobs:
         run: go test -race -count=1 $PACKAGES
 
       - name: Pull the gcp emulator
-        if: matrix.group.name == 'gcp'
+        if: matrix.group.name == 'gcp' && steps.gate-gcp-live.outputs.green != 'true'
         run: docker pull "$OCEL_FLOCI_GCP_IMAGE"
 
-      - name: The gcp emulator answers before anything is written against it
-        if: matrix.group.name == 'gcp'
-        run: scripts/floci.sh --cloud gcp create "ocel-gcp-boot-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+      - name: Run the gcp live suite
+        if: matrix.group.name == 'gcp' && steps.gate-gcp-live.outputs.green != 'true'
+        run: |
+          set -euo pipefail
+          scripts/floci.sh --cloud gcp run "ocel-gcp-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -C platform/gcp/provider -race -count=1 -timeout 30m -run '^TestLive' -json ./... | tee live-gcp.json
+
+      - name: Assert the gcp live suite ran
+        if: matrix.group.name == 'gcp' && steps.gate-gcp-live.outputs.green != 'true'
+        run: scripts/assert-ran.sh live-gcp.json TestLive
+
+      - name: Record that what the gcp live suite reads has passed
+        if: matrix.group.name == 'gcp' && steps.gate-gcp-live.outputs.green != 'true'
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: gcp-live
+          key: ${{ steps.gate-gcp-live.outputs.key }}
 
       - name: No gcp emulator left behind
         if: ${{ always() && matrix.group.name == 'gcp' }}
-        run: scripts/floci.sh --cloud gcp destroy "ocel-gcp-boot-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        run: scripts/floci.sh --cloud gcp destroy "ocel-gcp-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Log in to the registry the emulator image lives in
         if: matrix.group.name == 'aws' && (steps.gate-live.outputs.green != 'true' || steps.gate-lifecycle.outputs.green != 'true')
