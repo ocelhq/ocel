@@ -46,11 +46,11 @@ jobs:
         group:
           - name: cli
             dirs: cli sdk pkg/naming pkg/proto pkg/channel
-            packages: ./cli/... ./sdk/... ./pkg/naming/... ./pkg/proto/... ./pkg/channel/... ./tests/fixtures/sdk/go/server/...
+            packages: ./cli/... ./sdk/... ./pkg/naming/... ./pkg/proto/... ./pkg/channel/... ./tests/fixtures/sdk/go/...
             sums: |
               cli/go.sum
               sdk/go.sum
-              tests/fixtures/sdk/go/server/go.sum
+              tests/fixtures/sdk/go/go.sum
               pkg/naming/go.sum
               pkg/proto/go.sum
               pkg/channel/go.sum

@@ -17,6 +17,6 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 )
 
-replace github.com/ocelhq/ocel/sdk => ../../../../../sdk
+replace github.com/ocelhq/ocel/sdk => ../../../../sdk
 
-replace github.com/ocelhq/ocel/pkg/proto => ../../../../../pkg/proto
+replace github.com/ocelhq/ocel/pkg/proto => ../../../../pkg/proto
