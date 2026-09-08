@@ -165,6 +165,63 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 	}
 }
 
+func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) {
+	p := live(t)
+	class := providerkit.ClassProduction
+	here := bootstrapped(t, p, class)
+
+	t.Setenv(providerkit.NamespaceEnvVar, "beside")
+	beside := newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
+	if beside.Names().Bucket(class) == p.Names().Bucket(class) {
+		t.Fatalf("both namespaces name the bucket %s, and this test turns on them naming different ones", beside.Names().Bucket(class))
+	}
+
+	ctx := context.Background()
+	elsewhere := bootstrapperOf(t, beside)
+	described, err := elsewhere.Describe(ctx, class)
+	if err != nil {
+		t.Fatalf("Describe() under a second namespace = %v", err)
+	}
+	if described.Present {
+		t.Errorf("Describe() under namespace %s reads the bootstrap standing under %s as its own", beside.Names().Namespace(), p.Names().Namespace())
+	}
+
+	plan, err := elsewhere.Plan(ctx, providerkit.BootstrapRequest{Class: class})
+	if err != nil {
+		t.Fatalf("Plan() under a second namespace = %v", err)
+	}
+	rows := 0
+	for _, group := range plan.Groups {
+		for _, change := range group.Changes {
+			rows++
+			if change.Kind == string(gcp.KindDatabase) && emulated() {
+				continue
+			}
+			if change.Action != providerkit.ActionCreate {
+				t.Errorf("Plan() under namespace %s shows %s %s as %q, want a create: nothing of it stands yet",
+					beside.Names().Namespace(), change.Kind, change.Name, change.Action)
+			}
+		}
+	}
+	if rows == 0 {
+		t.Fatal("Plan() showed no rows at all, and a plan with nothing in it consents to nothing")
+	}
+
+	bootstrapped(t, beside, class)
+	for what, bootstrapper := range map[string]providerkit.Bootstrapper{
+		p.Names().Namespace().String():      here,
+		beside.Names().Namespace().String(): elsewhere,
+	} {
+		standing, err := bootstrapper.Describe(ctx, class)
+		if err != nil {
+			t.Fatalf("Describe() under namespace %s = %v", what, err)
+		}
+		if !standing.Present || standing.Unfinished || !standing.Stacks[0].DigestCurrent {
+			t.Errorf("Describe() under namespace %s = %+v, want a bootstrap that stands beside the other, not under it", what, standing)
+		}
+	}
+}
+
 func TestLiveAPlanIsRefusedWhileAnApiTheStackNeedsIsOff(t *testing.T) {
 	p := live(t)
 	servicesDisabled(t, "cloudkms.googleapis.com")
