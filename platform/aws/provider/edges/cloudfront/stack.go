@@ -76,7 +76,7 @@ func (s *stack) clients(ctx context.Context) (Clients, error) {
 	}
 	set, err := edgeSetOf(deployed, s.class())
 	if err != nil {
-		return c, nil
+		return c, err
 	}
 	s.own.StateTable = deployed.StateTable
 	s.own.AssetBucket = deployed.AssetBucket
