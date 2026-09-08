@@ -53,6 +53,7 @@ func TestWhoamiNamesTheProjectTheRegionAndWhoTheTokenBelongsTo(t *testing.T) {
 		Region:       "europe-west1",
 		Tokens:       heldToken{token: heldAccessToken},
 		TokenInfoURL: server.URL,
+		Projects:     &reachedProject{},
 	}.Whoami(context.Background())
 	if err != nil {
 		t.Fatalf("Whoami() = %v, want the identity the ADC token belongs to", err)
@@ -179,6 +180,7 @@ func TestAThrottledTokenEndpointIsRetriedAndThenSaidToBeBusy(t *testing.T) {
 			Project:      "acme-prod",
 			Tokens:       heldToken{token: heldAccessToken},
 			TokenInfoURL: server.URL,
+			Projects:     &reachedProject{},
 		}.Whoami(context.Background())
 		if err != nil {
 			t.Fatalf("Whoami() = %v, want a throttle waited out rather than read as a dead credential", err)
