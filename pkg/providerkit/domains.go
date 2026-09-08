@@ -10,6 +10,7 @@ import (
 )
 
 type EdgeStackState struct {
+	Kind  edge.Kind          `json:"kind,omitempty"`
 	Edge  edge.StackState    `json:"edge"`
 	Hosts map[string]Settled `json:"hosts,omitempty"`
 }

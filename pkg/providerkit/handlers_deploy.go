@@ -483,6 +483,7 @@ func (r *deployRun) servedHostnames() [][]string {
 }
 
 func (r *deployRun) checkpoint(ctx context.Context) error {
+	r.state.Kind = r.front.Kind()
 	r.state.Edge = r.stack.State()
 	if r.plan.Class == ClassPreview {
 		r.state.Edge.GlobalPreview = r.globalPreview()
