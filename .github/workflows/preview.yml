@@ -101,7 +101,7 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          ERROR=$(tail -n 20 "$RUNNER_TEMP/preview.log" 2>/dev/null || echo "the run left no log")
+          ERROR=$(scripts/preview-error.sh)
           export ERROR
           scripts/preview-report.sh failed
 
@@ -120,14 +120,11 @@ jobs:
           OUTCOME: ${{ steps.up.outcome }}
         run: |
           set -euo pipefail
-          marker='<!-- ocel-preview -->'
           if [ "$OUTCOME" = success ] && [ -f .ocel/deploy-result.json ]; then
-            rows=$(jq -r --arg sha "${SHA:0:7}" \
-              '.deployedAt as $at | .apps[] | "| \(.name) | \(.urls[0] // "not served") | `\($sha)` | \($at) |"' \
-              .ocel/deploy-result.json)
-            body=$(printf '%s\n\n| App | URL | Commit | Updated |\n| --- | --- | --- | --- |\n%s\n' "$marker" "$rows")
+            body=$(scripts/preview-comment.sh deployed .ocel/deploy-result.json)
           else
-            body=$(printf '%s\n\nThe preview did not deploy. [See the run](%s).\n' "$marker" "$RUN_URL")
+            ERROR=$(scripts/preview-error.sh)
+            body=$(ERROR="$ERROR" scripts/preview-comment.sh failed)
           fi
           existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
             --jq 'map(select(.body | contains("<!-- ocel-preview -->"))) | first | .id // empty')

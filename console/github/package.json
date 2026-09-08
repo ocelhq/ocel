@@ -6,6 +6,7 @@
   "scripts": {
     "start": "tsx src/server.ts",
     "dev": "tsx src/server.ts",
+    "render": "tsx src/render.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
