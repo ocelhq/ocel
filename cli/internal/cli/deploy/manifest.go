@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
@@ -324,6 +325,19 @@ func workspaceMembers(inAnImage bool, appDir string) []string {
 	return located.Members()
 }
 
+func appLanguage(app projectconfig.App, configDir string) discovery.Language {
+	switch app.Runtime.Name {
+	case providerkit.RuntimeGo:
+		return discovery.Go
+	case providerkit.RuntimePython:
+		return discovery.Python
+	}
+	if _, err := os.Stat(filepath.Join(configDir, app.Path, "Cargo.toml")); err == nil {
+		return discovery.Rust
+	}
+	return discovery.JS
+}
+
 func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Function, compute, configName string) ([]attribution.App, error) {
 	detected := detectedApps(functions)
 	apps := cfg.Apps
@@ -338,7 +352,13 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 		}
 		out := make([]attribution.App, 0, len(detected))
 		for _, name := range detected {
-			out = append(out, attribution.App{Name: name, Path: ".", Container: container, Members: workspaceMembers(container, cfg.Dir)})
+			out = append(out, attribution.App{
+				Name:      name,
+				Path:      ".",
+				Language:  appLanguage(projectconfig.App{Path: "."}, cfg.Dir),
+				Container: container,
+				Members:   workspaceMembers(container, cfg.Dir),
+			})
 		}
 		return out, nil
 	}
@@ -351,6 +371,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 		out = append(out, attribution.App{
 			Name:      a.Name,
 			Path:      a.Path,
+			Language:  appLanguage(a, cfg.Dir),
 			Container: inAnImage,
 			Members:   workspaceMembers(inAnImage, filepath.Join(cfg.Dir, a.Path)),
 		})

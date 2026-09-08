@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
@@ -22,9 +23,18 @@ type Declaration struct {
 type App struct {
 	Name      string
 	Path      string
+	Language  discovery.Language
 	Container bool
 	Members   []string
 }
+
+type Reachability func(file string) bool
+
+type Reach interface {
+	Entries(root string, app App) (map[string]Reachability, error)
+}
+
+var reaches = map[discovery.Language]Reach{discovery.JS: jsReach{}}
 
 type Usage struct {
 	App   string
@@ -66,18 +76,23 @@ func (e *UnresolvedImportError) Error() string {
 }
 
 func Compute(root string, apps []App, declarations []Declaration) ([]Usage, error) {
-	survivorsByApp := make(map[string]map[string]map[string]bool, len(apps))
+	entriesByApp := make(map[string]map[string]Reachability, len(apps))
 	attributable := false
 	for _, app := range apps {
 		if app.Path == "" {
 			continue
 		}
-		survivors, err := shakenSurvivors(root, app)
+		language := cmp.Or(app.Language, discovery.JS)
+		reach, ok := reaches[language]
+		if !ok {
+			return nil, fmt.Errorf("attribution: app %q is a %s app, and this build of ocel attributes only js apps", app.Name, language)
+		}
+		entries, err := reach.Entries(root, app)
 		if err != nil {
 			return nil, err
 		}
-		survivorsByApp[app.Name] = survivors
-		attributable = attributable || len(survivors) > 0
+		entriesByApp[app.Name] = entries
+		attributable = attributable || len(entries) > 0
 	}
 	if !attributable {
 		return nil, nil
@@ -94,12 +109,15 @@ func Compute(root string, apps []App, declarations []Declaration) ([]Usage, erro
 
 	var usages []Usage
 	for _, app := range apps {
-		survivors := survivorsByApp[app.Name]
+		entries := entriesByApp[app.Name]
 
 		byResource := map[identity]*Usage{}
-		for _, entry := range slices.Sorted(maps.Keys(survivors)) {
-			for file := range survivors[entry] {
-				for _, d := range declaringFiles[file] {
+		for _, entry := range slices.Sorted(maps.Keys(entries)) {
+			for file, declared := range declaringFiles {
+				if !entries[entry](file) {
+					continue
+				}
+				for _, d := range declared {
 					key := identity{d.Type, d.Name}
 					u, ok := byResource[key]
 					if !ok {
