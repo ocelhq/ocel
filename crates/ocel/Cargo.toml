@@ -1,0 +1,23 @@
+[package]
+name = "ocel"
+description = "Declare the infrastructure a Rust app needs from the app itself"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+postgres = ["dep:sqlx", "dep:tokio"]
+
+[dependencies]
+ocel-macros = { path = "../ocel-macros", version = "0.0.1-alpha.0" }
+inventory = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+ureq = { version = "3", default-features = false, features = ["json"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres"], optional = true }
+tokio = { version = "1", default-features = false, features = ["sync"], optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread"] }

@@ -186,6 +186,8 @@ __pycache__/
 
 # custom
 .ocel
+crates/target/
+tests/fixtures/sdk/rust/target/
 
 .workflow-data
 packages/native-lib/*/bin/

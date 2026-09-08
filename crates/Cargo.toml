@@ -1,0 +1,10 @@
+[workspace]
+members = ["*"]
+exclude = ["target"]
+resolver = "2"
+
+[workspace.package]
+version = "0.0.1-alpha.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/ocelhq/ocel"
