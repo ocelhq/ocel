@@ -41,12 +41,11 @@ const passphraseBytes = 32
 const runAsRole = "roles/iam.serviceAccountUser"
 
 const (
-	dockerImages   = "DOCKER"
-	keepImages     = "KEEP"
-	deleteImages   = "DELETE"
-	untaggedImages = "UNTAGGED"
+	dockerImages     = "DOCKER"
+	deleteImages     = "DELETE"
+	untaggedImages   = "UNTAGGED"
+	untaggedLifetime = "604800s"
 
-	keepRecentPolicy   = "keep-recent"
 	dropUntaggedPolicy = "drop-untagged"
 )
 
@@ -465,7 +464,7 @@ func (b bootstrapper) makeRepository(ctx context.Context, name string) error {
 	creating, err := attempted(ctx, service.Projects.Locations.Repositories.Create(repositoryParent(b.clients), &artifactregistry.Repository{
 		Format:          dockerImages,
 		Description:     "the images ocel deploys into this project",
-		CleanupPolicies: keepingRecentImages(),
+		CleanupPolicies: pruningUntaggedImages(),
 	}).RepositoryId(name).Context(ctx).Do)
 	if taken(err) {
 		return nil
@@ -476,17 +475,15 @@ func (b bootstrapper) makeRepository(ctx context.Context, name string) error {
 	return b.repositoryAwaited(ctx, fmt.Sprintf("creating the %s image repository", name), creating)
 }
 
-func keepingRecentImages() map[string]artifactregistry.CleanupPolicy {
+func pruningUntaggedImages() map[string]artifactregistry.CleanupPolicy {
 	return map[string]artifactregistry.CleanupPolicy{
-		keepRecentPolicy: {
-			Id:                 keepRecentPolicy,
-			Action:             keepImages,
-			MostRecentVersions: &artifactregistry.CleanupPolicyMostRecentVersions{KeepCount: keptImages},
-		},
 		dropUntaggedPolicy: {
-			Id:        dropUntaggedPolicy,
-			Action:    deleteImages,
-			Condition: &artifactregistry.CleanupPolicyCondition{TagState: untaggedImages},
+			Id:     dropUntaggedPolicy,
+			Action: deleteImages,
+			Condition: &artifactregistry.CleanupPolicyCondition{
+				TagState:  untaggedImages,
+				OlderThan: untaggedLifetime,
+			},
 		},
 	}
 }
