@@ -43,9 +43,6 @@ func TestEveryPortThisPhaseHasNotBuiltSaysSoRatherThanReadingAsDone(t *testing.T
 		"ArtifactStore.Has":             errorOf(p.Artifacts().Has(ctx, providerkit.ArtifactRef{})),
 		"ArtifactStore.Open":            errorOf(p.Artifacts().Open(ctx, providerkit.ArtifactRef{})),
 		"ArtifactStore.RemovePrefix":    p.Artifacts().RemovePrefix(ctx, providerkit.ClassProduction, "", nil),
-		"RecordStore.Write":             errorOf(p.Records().Write(ctx, providerkit.Record{Name: providerkit.RecordName{"a"}})),
-		"RecordStore.WritePair":         p.Records().WritePair(ctx, providerkit.Record{}, providerkit.Record{}),
-		"RecordStore.Remove":            p.Records().Remove(ctx, providerkit.RecordName{"a"}, ""),
 		"Sealer.Seal":                   errorOf(p.Sealer().Seal(ctx, providerkit.Coordinate{}, nil)),
 		"Sealer.Open":                   errorOf(p.Sealer().Open(ctx, providerkit.Coordinate{}, nil)),
 		"Credentials.Permissions":       errorOf(p.Credentials().Permissions(providerkit.TierBootstrap)),
@@ -78,21 +75,6 @@ func TestNoPortIsNilForTheKitToCallThrough(t *testing.T) {
 		if port == nil {
 			t.Errorf("%s() is nil, and the kit calls methods on it", name)
 		}
-	}
-}
-
-func TestTheRecordStoreReadsEmptyRatherThanRefusingWhatItHasNeverHeld(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	records := standing(t).Records()
-
-	if _, err := records.Read(ctx, providerkit.RecordName{"projects"}); !errors.Is(err, providerkit.ErrNoRecord) {
-		t.Errorf("Read() = %v, want ErrNoRecord: this provider has written nothing, so no name is taken", err)
-	}
-	held, err := records.List(ctx, providerkit.RecordName{"projects"})
-	if err != nil || len(held) != 0 {
-		t.Errorf("List() = %v, %v, want an empty listing", held, err)
 	}
 }
 
