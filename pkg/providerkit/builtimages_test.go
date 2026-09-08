@@ -34,6 +34,19 @@ func TestTheDaemonStoreRefusesAnImageItWasNeverHanded(t *testing.T) {
 	}
 }
 
+func TestTheDaemonStoreSaysSoWhenItCannotReachTheDaemon(t *testing.T) {
+	t.Setenv("DOCKER_HOST", "tcp://127.0.0.1:1")
+	push := providerkit.ImagePush{App: "server", Target: "web-server:sha256-abc", Digest: "sha256:abc"}
+
+	held, err := providerkit.DaemonImages().Has(context.Background(), push)
+	if err == nil {
+		t.Fatalf("Has() = %v, nil against a daemon nothing answers on, want the failure surfaced: a deploy would take silence for an absent image and push over nothing", held)
+	}
+	if held {
+		t.Error("Has() answered that a daemon it never reached holds the image")
+	}
+}
+
 func TestABuiltImageReachesTheRegistryWithoutADaemon(t *testing.T) {
 	host := servingRegistry(t)
 	dir := stagedFunc(t, map[string]string{
