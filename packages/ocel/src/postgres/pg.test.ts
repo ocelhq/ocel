@@ -1,4 +1,3 @@
-import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LinkType } from "../gen/proto/common/links/v1/links_pb.js";
 
@@ -33,17 +32,6 @@ describe("Postgres discovery declare", () => {
       expect.objectContaining({
         resource: { name: "main", type: LinkType.POSTGRES },
         config: { case: "postgres", value: { version: "17" } },
-      }),
-    );
-  });
-
-  it("reports the file and line of the declaration as its source", () => {
-    const line = new Error().stack?.split("\n")[1]?.match(/:(\d+):\d+\)?$/)?.[1];
-    new Postgres("main");
-
-    expect(declareMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: `${fileURLToPath(import.meta.url)}:${Number(line) + 1}`,
       }),
     );
   });

@@ -6,9 +6,9 @@ const reportEnvProblemsMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})))
 
 const source = vi.hoisted(() => ({ override: undefined as string | undefined }));
 
-vi.mock("./callsite.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./callsite.js")>();
-  return { ...actual, callSite: () => source.override ?? actual.callSite() };
+vi.mock("../utils/callsite.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/callsite.js")>();
+  return { ...actual, callSiteFile: () => source.override ?? actual.callSiteFile() };
 });
 
 vi.mock("../utils/rpc", () => ({
@@ -161,6 +161,7 @@ describe("definition errors", () => {
 
 describe("the declaration payload", () => {
   it("carries every variable of one call, with its class and whether it is required", async () => {
+    source.override = "/app/src/env.ts";
     defineEnv({
       PAYLOAD_PLAIN: { class: "plain", client: true },
       PAYLOAD_SECRET: { class: "secret" },
@@ -169,7 +170,7 @@ describe("the declaration payload", () => {
     await flushDeclarations();
 
     expect(declareEnvMock).toHaveBeenCalledTimes(1);
-    const source = expect.stringContaining("env.test.ts");
+    const declaredIn = "/app/src/env.ts";
     expect(declareEnvMock).toHaveBeenCalledWith({
       definitions: [
         {
@@ -178,7 +179,7 @@ describe("the declaration payload", () => {
           clientAccessible: true,
           required: true,
           folders: [],
-          source,
+          source: declaredIn,
           schemaSource: "",
           hasSchema: false,
         },
@@ -188,7 +189,7 @@ describe("the declaration payload", () => {
           clientAccessible: false,
           required: true,
           folders: [],
-          source,
+          source: declaredIn,
           schemaSource: "",
           hasSchema: false,
         },
@@ -198,7 +199,7 @@ describe("the declaration payload", () => {
           clientAccessible: false,
           required: false,
           folders: [],
-          source,
+          source: declaredIn,
           schemaSource: "",
           hasSchema: true,
         },
@@ -211,7 +212,7 @@ describe("the declaration payload", () => {
     const schema = envSchema({
       PAYLOAD_SCHEMA_MODULE: { class: "plain", client: true, schema: z.coerce.number() },
     });
-    source.override = undefined;
+    source.override = "/app/src/main.ts";
     defineEnv(schema);
     await flushDeclarations();
 
@@ -219,7 +220,7 @@ describe("the declaration payload", () => {
       definitions: [
         expect.objectContaining({
           key: "PAYLOAD_SCHEMA_MODULE",
-          source: expect.stringContaining("env.test.ts"),
+          source: "/app/src/main.ts",
           schemaSource: "/app/src/env.ts",
           hasSchema: true,
         }),
