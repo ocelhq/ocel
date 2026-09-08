@@ -20,7 +20,7 @@ type resourceManager struct {
 }
 
 func (r resourceManager) Reaches(ctx context.Context, project string) error {
-	service, err := cloudresourcemanager.NewService(ctx, restOptions(r.endpoint)...)
+	service, err := cloudresourcemanager.NewService(ctx, EmulatorREST(r.endpoint)...)
 	if err != nil {
 		return unauthenticated()
 	}

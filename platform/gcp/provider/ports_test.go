@@ -43,8 +43,6 @@ func TestEveryPortThisPhaseHasNotBuiltSaysSoRatherThanReadingAsDone(t *testing.T
 		"ArtifactStore.Has":             errorOf(p.Artifacts().Has(ctx, providerkit.ArtifactRef{})),
 		"ArtifactStore.Open":            errorOf(p.Artifacts().Open(ctx, providerkit.ArtifactRef{})),
 		"ArtifactStore.RemovePrefix":    p.Artifacts().RemovePrefix(ctx, providerkit.ClassProduction, "", nil),
-		"Sealer.Seal":                   errorOf(p.Sealer().Seal(ctx, providerkit.Coordinate{}, nil)),
-		"Sealer.Open":                   errorOf(p.Sealer().Open(ctx, providerkit.Coordinate{}, nil)),
 		"Credentials.Permissions":       errorOf(p.Credentials().Permissions(providerkit.TierBootstrap)),
 		"Credentials.PermissionsDeploy": errorOf(p.Credentials().Permissions(providerkit.TierDeploy)),
 	} {
@@ -74,6 +72,24 @@ func TestNoPortIsNilForTheKitToCallThrough(t *testing.T) {
 	} {
 		if port == nil {
 			t.Errorf("%s() is nil, and the kit calls methods on it", name)
+		}
+	}
+}
+
+func TestSealingAValueThatNamesNoClassIsTheCallersMistake(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	p := standing(t)
+
+	for name, refused := range map[string]error{
+		"Seal": errorOf(p.Sealer().Seal(ctx, providerkit.Coordinate{}, nil)),
+		"Open": errorOf(p.Sealer().Open(ctx, providerkit.Coordinate{}, nil)),
+	} {
+		var refusal providerkit.Refusal
+		if !errors.As(refused, &refusal) || refusal.Code != providerkit.CodeInvalid {
+			t.Errorf("%s() at a coordinate naming no class = %v, want an %s refusal: each class is sealed under a key of its own, so a classless value names no key",
+				name, refused, providerkit.CodeInvalid)
 		}
 	}
 }

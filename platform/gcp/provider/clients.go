@@ -5,8 +5,7 @@ import (
 	"sync"
 
 	"cloud.google.com/go/firestore"
-
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	kms "cloud.google.com/go/kms/apiv1"
 )
 
 type clients struct {
@@ -14,18 +13,32 @@ type clients struct {
 	region   string
 	endpoint string
 
-	once      sync.Once
-	firestore *firestore.Client
-	err       error
+	firestoreOnce sync.Once
+	firestore     *firestore.Client
+	firestoreErr  error
+
+	kmsOnce sync.Once
+	kms     *kms.KeyManagementClient
+	kmsErr  error
 }
 
 func (c *clients) Firestore() (*firestore.Client, error) {
-	c.once.Do(func() {
-		c.firestore, c.err = firestore.NewClientWithDatabase(
-			context.Background(), c.project, recordDatabase, grpcOptions(c.endpoint)...)
+	c.firestoreOnce.Do(func() {
+		c.firestore, c.firestoreErr = firestore.NewClientWithDatabase(
+			context.Background(), c.project, recordDatabase, EmulatorGRPC(c.endpoint)...)
 	})
-	if c.err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeDenied, "%s", credentialHint)
+	if c.firestoreErr != nil {
+		return nil, unauthenticated()
 	}
 	return c.firestore, nil
+}
+
+func (c *clients) KMS() (*kms.KeyManagementClient, error) {
+	c.kmsOnce.Do(func() {
+		c.kms, c.kmsErr = kms.NewKeyManagementClient(context.Background(), EmulatorGRPC(c.endpoint)...)
+	})
+	if c.kmsErr != nil {
+		return nil, unauthenticated()
+	}
+	return c.kms, nil
 }

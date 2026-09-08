@@ -73,16 +73,6 @@ func (artifacts) RemovePrefix(context.Context, providerkit.Class, string, provid
 	return notReady("the artifact store")
 }
 
-type sealer struct{}
-
-func (sealer) Seal(context.Context, providerkit.Coordinate, []byte) ([]byte, error) {
-	return nil, notReady("sealing a value")
-}
-
-func (sealer) Open(context.Context, providerkit.Coordinate, []byte) ([]byte, error) {
-	return nil, notReady("opening a sealed value")
-}
-
 type edges struct{}
 
 func (edges) Supported() []edge.Kind { return []edge.Kind{cloudflare.Kind} }
