@@ -6,10 +6,12 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 
 	"google.golang.org/api/googleapi"
 	run "google.golang.org/api/run/v2"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -90,6 +92,14 @@ func invokable(held []*policyBinding) ([]*policyBinding, bool) {
 	return append(held, &policyBinding{Role: invokerRole, Members: []string{everyone}}), true
 }
 
+func (p *Provider) runnable(image string) string {
+	repository, digest, pinned := strings.Cut(image, "@")
+	if !pinned || !p.clients.emulated() {
+		return image
+	}
+	return repository + ":" + naming.DigestTag(digest)
+}
+
 func (p *Provider) location() string {
 	return "projects/" + p.options.Project + "/locations/" + p.options.Region
 }
@@ -104,6 +114,7 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 		return "", err
 	}
 	path := p.servicePath(s.service)
+	s.image = p.runnable(s.image)
 	desired := serviceOf(s)
 
 	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {

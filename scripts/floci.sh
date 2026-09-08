@@ -50,7 +50,7 @@ gcp)
     IMAGE=$GCP_IMAGE
     PORT=4588
     ENDPOINT_VAR=OCEL_FLOCI_GCP_ENDPOINT
-    MOUNTS_DOCKER=no
+    MOUNTS_DOCKER=yes
     READY_PATH="/storage/v1/b?project=$GCP_PROJECT"
     READY_BODY='"kind": *"storage#buckets"'
     ;;

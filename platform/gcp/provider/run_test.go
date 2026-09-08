@@ -94,6 +94,21 @@ func TestTrafficIsPinnedToOneRevisionByName(t *testing.T) {
 	}
 }
 
+func TestAnEmulatedRunFindsTheImageUnderTheNameTheDaemonHoldsItBy(t *testing.T) {
+	pinned := "europe-west1-docker.pkg.dev/floci/ocel-preview/web@sha256:abc123"
+
+	real := pushing(t, "").runnable(pinned)
+	if real != pinned {
+		t.Errorf("runnable() = %q against a registry, want the digest the release pinned", real)
+	}
+
+	emulated := pushing(t, "http://127.0.0.1:4588").runnable(pinned)
+	if emulated != "europe-west1-docker.pkg.dev/floci/ocel-preview/web:sha256-abc123" {
+		t.Errorf("runnable() = %q under emulation, want the tag the image was written into the daemon under: "+
+			"a docker daemon resolves nothing by the digest a registry would have given it", emulated)
+	}
+}
+
 func TestThePublicIsBoundToInvokeAServiceOnceAndNotTwice(t *testing.T) {
 	held := []*policyBinding{{Role: invokerRole, Members: []string{"user:someone@acme.com"}}}
 
