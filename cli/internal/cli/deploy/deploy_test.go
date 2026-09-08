@@ -51,14 +51,14 @@ func TestToDeclarations(t *testing.T) {
 		}
 	})
 
-	t.Run("reads the declaring file out of the reported stack", func(t *testing.T) {
+	t.Run("reads the declaring file out of the reported source", func(t *testing.T) {
 		t.Parallel()
 
 		configDir := t.TempDir()
 		resources := []declare.Resource{{
-			Name:  "main",
-			Type:  linksv1.LinkType_LINK_TYPE_POSTGRES,
-			Stack: "Error\n    at Postgres (" + filepath.Join(configDir, "shared", "db.ts") + ":3:15)",
+			Name:   "main",
+			Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+			Source: filepath.Join(configDir, "shared", "db.ts") + ":3",
 		}}
 
 		decls := toDeclarations(configDir, resources)

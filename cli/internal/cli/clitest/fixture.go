@@ -118,7 +118,7 @@ export default {
 declare global {
   var __ocelRegister: Promise<unknown>[];
 }
-const stack = new Error().stack ?? "";
+const source = declarationSite();
 globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
   fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
@@ -127,10 +127,14 @@ globalThis.__ocelRegister.push(
     body: JSON.stringify({
       resource: { type: "LINK_TYPE_POSTGRES", name: "main" },
       postgres: { version: "17" },
-      stack,
+      source,
     }),
   }),
 );
+function declarationSite(): string {
+  const at = /\(?((?:\/|file:)[^()]+?):(\d+):\d+\)?$/.exec(((new Error().stack ?? "").split("\n")[2] ?? "").trim());
+  return at ? at[1].replace(/^file:\/\//, "") + ":" + at[2] : "";
+}
 export {};
 `)
 
@@ -242,20 +246,25 @@ function register(body: Record<string, unknown>) {
   );
 }
 
-export function declarePostgres(name: string, stack: string) {
-  register({ resource: { type: "LINK_TYPE_POSTGRES", name }, postgres: { version: "17" }, stack });
+function site(): string {
+  const at = /\(?((?:\/|file:)[^()]+?):(\d+):\d+\)?$/.exec(((new Error().stack ?? "").split("\n")[3] ?? "").trim());
+  return at ? at[1].replace(/^file:\/\//, "") + ":" + at[2] : "";
+}
+
+export function declarePostgres(name: string) {
+  register({ resource: { type: "LINK_TYPE_POSTGRES", name }, postgres: { version: "17" }, source: site() });
   return { name };
 }
 
-export function declareBucket(name: string, stack: string) {
-  register({ resource: { type: "LINK_TYPE_BUCKET", name }, bucket: {}, stack });
+export function declareBucket(name: string) {
+  register({ resource: { type: "LINK_TYPE_BUCKET", name }, bucket: {}, source: site() });
   return { name };
 }
 `)
 	WriteFile(t, filepath.Join(root, "shared", "db.ts"), `
 import { declarePostgres } from "./declare.js";
 
-export const db = declarePostgres("main", new Error().stack ?? "");
+export const db = declarePostgres("main");
 `)
 	WriteFile(t, filepath.Join(root, "shared", "index.ts"), `
 export * from "./db.js";

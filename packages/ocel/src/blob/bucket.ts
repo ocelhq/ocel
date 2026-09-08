@@ -1,4 +1,5 @@
 import { type BucketProperties, LinkType } from "../gen/proto/common/links/v1/links_pb.js";
+import { declarationSite } from "../utils/callsite.js";
 import { defer } from "../utils/defer.js";
 import { getConfig } from "../utils/get-config.js";
 import { unprovisioned, unprovisionedPhase } from "../utils/phase.js";
@@ -21,7 +22,6 @@ export class Bucket<TUploaders extends Record<string, AnyUploader> = Record<stri
     public allowedOrigins: string[],
   ) {
     if (process.env.OCEL_PHASE === "discovery") {
-      const stack = new Error().stack ?? "";
       defer(
         rpc.resource.declare({
           resource: { name, type: this.type },
@@ -29,7 +29,7 @@ export class Bucket<TUploaders extends Record<string, AnyUploader> = Record<stri
             case: "bucket",
             value: { allowedOrigins },
           },
-          stack,
+          source: declarationSite(),
         }),
       );
     }

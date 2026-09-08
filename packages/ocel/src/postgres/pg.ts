@@ -1,4 +1,5 @@
 import { LinkType, type PostgresProperties } from "../gen/proto/common/links/v1/links_pb.js";
+import { declarationSite } from "../utils/callsite.js";
 import type { Component } from "../utils/component.js";
 import { defer } from "../utils/defer.js";
 import { getConfig } from "../utils/get-config.js";
@@ -16,7 +17,6 @@ export class Postgres implements Component {
     config?: PostgresConfig,
   ) {
     if (process.env.OCEL_PHASE === "discovery") {
-      const stack = new Error().stack ?? "";
       defer(
         rpc.resource.declare({
           resource: { name: id, type: this.type },
@@ -24,7 +24,7 @@ export class Postgres implements Component {
             case: "postgres",
             value: { version: config?.version ?? "17" },
           },
-          stack,
+          source: declarationSite(),
         }),
       );
     }

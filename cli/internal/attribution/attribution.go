@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
-	"regexp"
+
 	"slices"
 	"strconv"
 	"strings"
@@ -14,9 +14,9 @@ import (
 )
 
 type Declaration struct {
-	Type  linksv1.LinkType
-	Name  string
-	Stack string
+	Type   linksv1.LinkType
+	Name   string
+	Source string
 }
 
 type App struct {
@@ -39,23 +39,16 @@ type identity struct {
 }
 
 type UnresolvedDeclarationError struct {
-	Type  linksv1.LinkType
-	Name  string
-	Stack string
+	Type   linksv1.LinkType
+	Name   string
+	Source string
 }
 
 func (e *UnresolvedDeclarationError) Error() string {
 	return fmt.Sprintf(
-		"attribution: cannot tell which project file declares %s %q, so no app can be granted it: %s",
-		e.Type, e.Name, describeStack(e.Stack),
+		"attribution: cannot tell which project file declares %s %q, so no app can be granted it: the declaration names %q, which is not a project file",
+		e.Type, e.Name, e.Source,
 	)
-}
-
-func describeStack(stack string) string {
-	if strings.TrimSpace(stack) == "" {
-		return "the declaration reported no source location"
-	}
-	return "no frame of the reported source location names a project file outside node_modules"
 }
 
 type UnresolvedImportError struct {
@@ -92,11 +85,11 @@ func Compute(root string, apps []App, declarations []Declaration) ([]Usage, erro
 
 	declaringFiles := make(map[string][]Declaration, len(declarations))
 	for _, d := range declarations {
-		frame, ok := DeclaringFrame(root, d.Stack)
+		site, ok := DeclaringSite(root, d.Source)
 		if !ok {
-			return nil, &UnresolvedDeclarationError{Type: d.Type, Name: d.Name, Stack: d.Stack}
+			return nil, &UnresolvedDeclarationError{Type: d.Type, Name: d.Name, Source: d.Source}
 		}
-		declaringFiles[frame.File] = append(declaringFiles[frame.File], d)
+		declaringFiles[site.File] = append(declaringFiles[site.File], d)
 	}
 
 	var usages []Usage
@@ -138,30 +131,33 @@ func Compute(root string, apps []App, declarations []Declaration) ([]Usage, erro
 	return usages, nil
 }
 
-var frameRE = regexp.MustCompile(`\(?((?:file://)?/[^):\s]+\.(?:ts|tsx|js|jsx|mjs|cjs)):(\d+):(\d+)\)?`)
-
-type Frame struct {
+type Site struct {
 	File string
 	Line int
 }
 
-func (f Frame) String() string {
-	return fmt.Sprintf("%s:%d", f.File, f.Line)
+func (s Site) String() string {
+	return fmt.Sprintf("%s:%d", s.File, s.Line)
 }
 
-func DeclaringFrame(root, stack string) (Frame, bool) {
-	for _, m := range frameRE.FindAllStringSubmatch(stack, -1) {
-		rel, ok := relativeToRoot(root, strings.TrimPrefix(m[1], "file://"))
-		if !ok || isVendored(rel) {
-			continue
-		}
-		line, err := strconv.Atoi(m[2])
-		if err != nil {
-			continue
-		}
-		return Frame{File: rel, Line: line}, true
+func DeclaringSite(root, source string) (Site, bool) {
+	colon := strings.LastIndex(source, ":")
+	if colon <= 0 {
+		return Site{}, false
 	}
-	return Frame{}, false
+	path := source[:colon]
+	line, err := strconv.Atoi(source[colon+1:])
+	if err != nil {
+		return Site{}, false
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(root, path)
+	}
+	rel, inside := relativeToRoot(root, filepath.Clean(path))
+	if !inside || isVendored(rel) {
+		return Site{}, false
+	}
+	return Site{File: rel, Line: line}, true
 }
 
 func relativeToRoot(root, path string) (string, bool) {

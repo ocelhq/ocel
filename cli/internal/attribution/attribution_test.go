@@ -23,18 +23,17 @@ func fixtureRoot(t *testing.T, name string) string {
 	return root
 }
 
-func stackAt(root, file string) string {
-	abs := filepath.Join(root, filepath.FromSlash(file))
-	return fmt.Sprintf("Error\n    at declare (%s:3:15)\n    at ModuleJob.run (node:internal/modules/esm/module_job:271:25)", abs)
+func sourceAt(root, file string) string {
+	return fmt.Sprintf("%s:3", filepath.Join(root, filepath.FromSlash(file)))
 }
 
 func monorepoDeclarations(root string) []Declaration {
 	return []Declaration{
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Stack: stackAt(root, "shared/db.ts")},
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "analytics-db", Stack: stackAt(root, "shared/analytics.ts")},
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "audit-db", Stack: stackAt(root, "shared/audit.ts")},
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "tenant-db", Stack: stackAt(root, "shared/tenant.ts")},
-		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Stack: stackAt(root, "shared/files.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "shared/db.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "analytics-db", Source: sourceAt(root, "shared/analytics.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "audit-db", Source: sourceAt(root, "shared/audit.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "tenant-db", Source: sourceAt(root, "shared/tenant.ts")},
+		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Source: sourceAt(root, "shared/files.ts")},
 	}
 }
 
@@ -56,7 +55,7 @@ func edgeStrings(usages []Usage) []string {
 
 func TestAContainerAppIsAttributedWithoutASecondInstallOnTheDevelopersDisk(t *testing.T) {
 	root := fixtureRoot(t, "uninstalled")
-	declarations := []Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Stack: stackAt(root, "shared/db.ts")}}
+	declarations := []Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "shared/db.ts")}}
 
 	serverless := []App{{Name: "web", Path: "apps/web"}}
 	if _, err := Compute(root, serverless, declarations); err == nil {
@@ -111,7 +110,7 @@ func TestAContainerAppsWorkspaceMembersAreReadRatherThanAssumedInstalled(t *test
 		root := workspaceFixture(t, false)
 
 		_, err := Compute(root, []App{{Name: "web", Path: "apps/web", Container: true, Members: members}},
-			[]Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Stack: stackAt(root, "packages/shared/index.ts")}})
+			[]Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "packages/shared/index.ts")}})
 		if err == nil {
 			t.Fatal("Compute() read a workspace member as a registry package the image installs, so every resource the member declares reaches the app with no edge and no complaint")
 		}
@@ -124,7 +123,7 @@ func TestAContainerAppsWorkspaceMembersAreReadRatherThanAssumedInstalled(t *test
 		root := workspaceFixture(t, true)
 
 		usages, err := Compute(root, []App{{Name: "web", Path: "apps/web", Container: true, Members: members}},
-			[]Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Stack: stackAt(root, "packages/shared/index.ts")}})
+			[]Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "packages/shared/index.ts")}})
 		if err != nil {
 			t.Fatalf("Compute() = %v", err)
 		}
@@ -224,7 +223,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "jsx-in-js")
 
 		usages, err := Compute(root, []App{{Name: "web", Path: "apps/web"}}, []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "metrics-db", Stack: stackAt(root, "shared/metrics.ts")},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "metrics-db", Source: sourceAt(root, "shared/metrics.ts")},
 		})
 		if err != nil {
 			t.Fatalf("Compute err = %v", err)
@@ -240,7 +239,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "computed-import")
 
 		_, err := Compute(root, []App{{Name: "worker", Path: "apps/worker"}}, []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "metrics-db", Stack: stackAt(root, "shared/metrics.ts")},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "metrics-db", Source: sourceAt(root, "shared/metrics.ts")},
 		})
 
 		var unresolved *UnresolvedImportError
@@ -258,11 +257,11 @@ func TestCompute(t *testing.T) {
 		}
 	})
 
-	t.Run("a declaration with no locatable source fails closed", func(t *testing.T) {
+	t.Run("a source carrying no line number fails closed", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(root, monorepoApps(), []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Stack: "Error\n    at node:internal/modules/esm/module_job:271:25"},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: "shared/db.ts"},
 		})
 
 		var unresolved *UnresolvedDeclarationError
@@ -277,7 +276,7 @@ func TestCompute(t *testing.T) {
 		}
 	})
 
-	t.Run("an empty stack fails closed", func(t *testing.T) {
+	t.Run("an empty source fails closed", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(root, monorepoApps(), []Declaration{
@@ -290,11 +289,41 @@ func TestCompute(t *testing.T) {
 		}
 	})
 
+	t.Run("a relative source is resolved against the project root", func(t *testing.T) {
+		root := fixtureRoot(t, "monorepo")
+
+		usages, err := Compute(root, monorepoApps(), []Declaration{
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: "shared/db.ts:3"},
+		})
+		if err != nil {
+			t.Fatalf("Compute: %v", err)
+		}
+		if len(usages) == 0 {
+			t.Fatal("usages is empty, want the relative source to name shared/db.ts")
+		}
+	})
+
+	t.Run("a declaration inside node_modules fails closed", func(t *testing.T) {
+		root := fixtureRoot(t, "monorepo")
+
+		_, err := Compute(root, monorepoApps(), []Declaration{
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "node_modules/dep/index.ts")},
+		})
+
+		var unresolved *UnresolvedDeclarationError
+		if !errors.As(err, &unresolved) {
+			t.Fatalf("Compute err = %v, want an *UnresolvedDeclarationError", err)
+		}
+		if !strings.Contains(err.Error(), "which is not a project file") {
+			t.Errorf("err = %v, want it to say the declaration names something that is not a project file", err)
+		}
+	})
+
 	t.Run("a declaration outside the project root fails closed", func(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(root, monorepoApps(), []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Stack: stackAt(t.TempDir(), "elsewhere.ts")},
+			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(t.TempDir(), "elsewhere.ts")},
 		})
 
 		var unresolved *UnresolvedDeclarationError

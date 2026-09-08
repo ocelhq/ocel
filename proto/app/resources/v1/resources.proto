@@ -30,7 +30,7 @@ message DeclareRequest {
     BucketConfig bucket = 3;
   }
 
-  string stack = 4;
+  string source = 5;
 }
 
 message PostgresConfig {
