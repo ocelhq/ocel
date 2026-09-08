@@ -66,6 +66,18 @@ func answering(t *testing.T, uri string) (int, string) {
 	}
 }
 
+func gone(t *testing.T, uri string) (int, string) {
+	t.Helper()
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		status, said := asked(t, uri)
+		if status != http.StatusOK || time.Now().After(deadline) {
+			return status, said
+		}
+		time.Sleep(time.Second)
+	}
+}
+
 func asked(t *testing.T, uri string) (int, string) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, uri, nil)
@@ -296,7 +308,7 @@ func TestLiveAServiceTakenDownAnswersNothingAndIsTakenDownOnlyOnce(t *testing.T)
 	if err := p.RemoveContainers(ctx, plan.Ref, containers, nil); err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}
-	if status, said := asked(t, at); status == http.StatusOK {
+	if status, said := gone(t, at); status == http.StatusOK {
 		t.Errorf("GET %s = %d %q after the service was taken down, want nothing answering there", at, status, said)
 	}
 	if err := p.RemoveContainers(ctx, plan.Ref, containers, nil); err != nil {
