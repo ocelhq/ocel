@@ -1,9 +1,12 @@
 package gcp
 
 import (
+	"slices"
+
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 )
 
 func classless(what any) error {
@@ -13,18 +16,25 @@ func classless(what any) error {
 
 type edges struct {
 	namespace providerkit.Namespace
+	records   providerkit.RecordStore
 }
 
-func (edges) Supported() []edge.Kind { return []edge.Kind{cloudflare.Kind} }
+var supportedEdges = []edge.Kind{direct.Kind, cloudflare.Kind}
 
-func (edges) Default() edge.Kind { return cloudflare.Kind }
+func (edges) Supported() []edge.Kind { return slices.Clone(supportedEdges) }
+
+func (edges) Default() edge.Kind { return direct.Kind }
 
 func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
-	if kind != cloudflare.Kind {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"this provider cannot front deployments with the %q edge; it fronts them with %s", kind, cloudflare.Kind)
+	switch kind {
+	case direct.Kind:
+		return direct.New(e.records), nil
+	case cloudflare.Kind:
+		return cloudflare.New(string(e.namespace)), nil
 	}
-	return cloudflare.New(string(e.namespace)), nil
+	return nil, providerkit.Refuse(providerkit.CodeInvalid,
+		"this provider cannot front deployments with the %q edge; it fronts them with %s and %s",
+		kind, direct.Kind, cloudflare.Kind)
 }
 
 type dns struct{}

@@ -1,14 +1,20 @@
 package gcp_test
 
 import (
+	"context"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 )
 
 func withoutApplicationDefaultCredentials(t *testing.T) {
@@ -33,10 +39,38 @@ func TestTheCredentialsPortAnswersOrSaysWhyItCannot(t *testing.T) {
 	conformance.RunCredentials(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Credentials())
 }
 
-func TestTheEdgeRegistryOpensTheCloudflareEdge(t *testing.T) {
+func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
+	registry := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Edges()
 
-	conformance.RunEdgeRegistry(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Edges())
+	conformance.RunEdgeRegistry(t, registry)
+
+	if got := registry.Supported(); !slices.Equal(got, []edge.Kind{direct.Kind, cloudflare.Kind}) {
+		t.Errorf("Supported() = %v, want %q and %q", got, direct.Kind, cloudflare.Kind)
+	}
+	if got := registry.Default(); got != direct.Kind {
+		t.Errorf("Default() = %q, want %q: a deploy that names no edge is answered on the url Cloud Run gave it", got, direct.Kind)
+	}
+}
+
+func TestTheDirectEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
+	registry := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Edges()
+
+	front, err := registry.Open(direct.Kind)
+	if err != nil {
+		t.Fatalf("Open(%q) = %v", direct.Kind, err)
+	}
+	stack, err := front.Open(edge.StackState{Slug: "shop", Class: edge.ClassProduction})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.example.com", App: "web"})
+	if err == nil {
+		t.Fatal("BindDomain() bound a hostname to an edge that claims none")
+	}
+	if !strings.Contains(err.Error(), string(cloudflare.Kind)) {
+		t.Errorf("BindDomain() = %v, want it to name the edge that would serve the hostname", err)
+	}
 }
 
 func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
