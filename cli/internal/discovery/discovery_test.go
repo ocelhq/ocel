@@ -1,9 +1,16 @@
 package discovery
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 )
 
 func write(t *testing.T, path, contents string) {
@@ -148,4 +155,42 @@ func assertFiles(t *testing.T, got, want []string) {
 			t.Fatalf("got %v, want %v", got, want)
 		}
 	}
+}
+
+type collector struct {
+	mu       sync.Mutex
+	declares []*resourcesv1.DeclareRequest
+}
+
+func (c *collector) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*resourcesv1.DeclareResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.declares = append(c.declares, req)
+	return &resourcesv1.DeclareResponse{}, nil
+}
+
+func (c *collector) DeclareEnv(_ context.Context, _ *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
+	return &resourcesv1.DeclareEnvResponse{}, nil
+}
+
+func (c *collector) ReportEnvProblems(_ context.Context, _ *resourcesv1.ReportEnvProblemsRequest) (*resourcesv1.ReportEnvProblemsResponse, error) {
+	return &resourcesv1.ReportEnvProblemsResponse{}, nil
+}
+
+func (c *collector) declared() []*resourcesv1.DeclareRequest {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.declares
+}
+
+func declareCollector(t *testing.T) (*collector, string) {
+	t.Helper()
+	c := &collector{}
+	path, handler := resourcesv1connect.NewResourceServiceHandler(c)
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	mux.HandleFunc("/sync", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	return c, server.URL
 }
