@@ -53,22 +53,42 @@ type Credentials struct {
 	Tokens TokenSource
 
 	TokenInfoURL string
+
+	Endpoint string
+
+	Projects ProjectReader
 }
 
+const emulatorPrincipal = "emulator"
+
 func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
-	token, err := c.Tokens.Token(ctx)
-	if err != nil {
-		return providerkit.Identity{}, unauthenticated()
+	identity := providerkit.Identity{
+		Provider:  Vendor,
+		Account:   c.Project,
+		Principal: emulatorPrincipal,
+		Location:  c.Region,
 	}
-	principal, err := c.principal(ctx, token)
-	if err != nil {
+	if c.Endpoint != "" {
+		identity.Details = []providerkit.Detail{{Label: "emulator", Value: c.Endpoint}}
+	} else {
+		token, err := c.Tokens.Token(ctx)
+		if err != nil {
+			return providerkit.Identity{}, unauthenticated()
+		}
+		principal, err := c.principal(ctx, token)
+		if err != nil {
+			return providerkit.Identity{}, err
+		}
+		identity.Principal = principal
+	}
+	if c.Projects == nil {
+		return providerkit.Identity{}, providerkit.Refuse(providerkit.CodeDenied,
+			"nothing here can ask whether this credential reaches project %s, and a credential nothing vouched for deploys nothing", c.Project)
+	}
+	if err := c.Projects.Reaches(ctx, c.Project); err != nil {
 		return providerkit.Identity{}, err
 	}
-	return providerkit.Identity{
-		Account:   c.Project,
-		Principal: principal,
-		Location:  c.Region,
-	}, nil
+	return identity, nil
 }
 
 func unauthenticated() error {

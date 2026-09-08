@@ -19,8 +19,9 @@ type Options struct {
 }
 
 type Provider struct {
-	options Options
-	tokens  TokenSource
+	options  Options
+	tokens   TokenSource
+	endpoint string
 }
 
 func New(_ context.Context, options providerkit.Options) (providerkit.Provider, error) {
@@ -40,7 +41,7 @@ func New(_ context.Context, options providerkit.Options) (providerkit.Provider, 
 }
 
 func NewProvider(options Options) *Provider {
-	return &Provider{options: options, tokens: ApplicationDefault{}}
+	return &Provider{options: options, tokens: ApplicationDefault{}, endpoint: emulatorEndpoint()}
 }
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
@@ -64,7 +65,13 @@ func (p *Provider) Records() providerkit.RecordStore { return records{} }
 func (p *Provider) Sealer() providerkit.Sealer { return sealer{} }
 
 func (p *Provider) Credentials() providerkit.Credentials {
-	return Credentials{Project: p.options.Project, Region: p.options.Region, Tokens: p.tokens}
+	return Credentials{
+		Project:  p.options.Project,
+		Region:   p.options.Region,
+		Tokens:   p.tokens,
+		Endpoint: p.endpoint,
+		Projects: resourceManager{endpoint: p.endpoint},
+	}
 }
 
 func (p *Provider) Edges() providerkit.EdgeRegistry { return edges{} }
