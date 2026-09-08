@@ -3,6 +3,7 @@ go 1.27.0
 use (
 	./cli
 	./pkg/channel
+	./pkg/configdoc
 	./pkg/naming
 	./pkg/proto
 	./pkg/providerkit
