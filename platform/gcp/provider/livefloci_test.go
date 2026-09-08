@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
 
 	kms "cloud.google.com/go/kms/apiv1"
 	"cloud.google.com/go/kms/apiv1/kmspb"
+	"cloud.google.com/go/storage"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -116,5 +119,102 @@ func TestLiveSealingWhereNoKeyRingStandsSaysWhatToRun(t *testing.T) {
 	}
 	if !strings.Contains(refusal.Message, "ocel bootstrap") {
 		t.Errorf("Seal() refused with %q, want it to name the command that creates the key", refusal.Message)
+	}
+}
+
+func bucketsStanding(t *testing.T) {
+	t.Helper()
+
+	ctx := context.Background()
+	client, err := storage.NewClient(ctx, gcp.EmulatorStorage(os.Getenv("OCEL_FLOCI_GCP_ENDPOINT"))...)
+	if err != nil {
+		t.Fatalf("reach the emulator's object store: %v", err)
+	}
+	t.Cleanup(func() { client.Close() })
+
+	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+		bucket := client.Bucket(gcp.BucketName(liveProject, class))
+		var answered *googleapi.Error
+		if err := bucket.Create(ctx, liveProject, nil); err != nil &&
+			(!errors.As(err, &answered) || answered.Code != http.StatusConflict) {
+			t.Fatalf("create the %s bucket: %v", class, err)
+		}
+	}
+}
+
+func TestLiveArtifactStore(t *testing.T) {
+	provider := live(t)
+	bucketsStanding(t)
+
+	conformance.RunArtifactStore(t, provider.Artifacts())
+}
+
+func TestLiveArtifactsWhereNoBucketStandsSayWhatToRun(t *testing.T) {
+	live(t)
+
+	nowhere := gcp.NewProvider(gcp.Options{Project: "floci-nowhere", Region: liveRegion})
+	ref := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "conformance/bundle.zip"}
+
+	var refusal providerkit.Refusal
+	err := nowhere.Artifacts().Put(context.Background(), ref, bytes.NewReader([]byte("a build artifact")))
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+		t.Fatalf("Put() where no bucket stands = %v, want a %s refusal", err, providerkit.CodeNotReady)
+	}
+	if !strings.Contains(refusal.Message, "ocel bootstrap") {
+		t.Errorf("Put() refused with %q, want it to name the command that creates the bucket", refusal.Message)
+	}
+}
+
+func TestLiveRemovingAPrefixLeavesEveryStoreItDoesNotName(t *testing.T) {
+	provider := live(t)
+	bucketsStanding(t)
+
+	ctx := context.Background()
+	artifacts := provider.Artifacts()
+	class := providerkit.ClassProduction
+	swept, kept := "conformance/"+t.Name()+"/", "conformance/"+t.Name()+"-beside/"
+
+	for _, store := range []string{providerkit.StoreFunctions, providerkit.StoreAssets, providerkit.StoreCache} {
+		for _, prefix := range []string{swept, kept} {
+			ref := providerkit.ArtifactRef{Class: class, Bucket: store, Key: prefix + "bundle.zip"}
+			if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte(store))); err != nil {
+				t.Fatalf("Put(%s/%s) = %v", store, prefix, err)
+			}
+		}
+	}
+
+	if err := artifacts.RemovePrefix(ctx, class, swept, nil); err != nil {
+		t.Fatalf("RemovePrefix(%s) = %v", swept, err)
+	}
+
+	for _, store := range []string{providerkit.StoreFunctions, providerkit.StoreAssets, providerkit.StoreCache} {
+		gone, err := artifacts.Has(ctx, providerkit.ArtifactRef{Class: class, Bucket: store, Key: swept + "bundle.zip"})
+		if err != nil || gone {
+			t.Errorf("Has(%s/%s) = %v, %v, want it swept: one prefix names the same run in every store", store, swept, gone, err)
+		}
+		held, err := artifacts.Has(ctx, providerkit.ArtifactRef{Class: class, Bucket: store, Key: kept + "bundle.zip"})
+		if err != nil || !held {
+			t.Errorf("Has(%s/%s) = %v, %v, want it left alone", store, kept, held, err)
+		}
+	}
+}
+
+func TestLiveRemovingNoPrefixRemovesNothing(t *testing.T) {
+	provider := live(t)
+	bucketsStanding(t)
+
+	ctx := context.Background()
+	artifacts := provider.Artifacts()
+	ref := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
+	if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte("a build artifact"))); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := artifacts.RemovePrefix(ctx, providerkit.ClassProduction, "", nil); err != nil {
+		t.Fatalf("RemovePrefix(\"\") = %v, want nothing done and nothing said", err)
+	}
+	held, err := artifacts.Has(ctx, ref)
+	if err != nil || !held {
+		t.Fatalf("Has() after RemovePrefix(\"\") = %v, %v, want an empty prefix to name nothing rather than everything", held, err)
 	}
 }

@@ -65,7 +65,7 @@ func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
 
 func (p *Provider) Releases() providerkit.Releaser { return releaser{} }
 
-func (p *Provider) Artifacts() providerkit.ArtifactStore { return artifacts{} }
+func (p *Provider) Artifacts() providerkit.ArtifactStore { return artifacts{clients: p.clients} }
 
 func (p *Provider) Records() providerkit.RecordStore { return records{clients: p.clients} }
 

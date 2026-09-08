@@ -6,6 +6,7 @@ import (
 
 	"cloud.google.com/go/firestore"
 	kms "cloud.google.com/go/kms/apiv1"
+	"cloud.google.com/go/storage"
 )
 
 type clients struct {
@@ -20,6 +21,10 @@ type clients struct {
 	kmsOnce sync.Once
 	kms     *kms.KeyManagementClient
 	kmsErr  error
+
+	storageOnce sync.Once
+	storage     *storage.Client
+	storageErr  error
 }
 
 func (c *clients) Firestore() (*firestore.Client, error) {
@@ -41,4 +46,14 @@ func (c *clients) KMS() (*kms.KeyManagementClient, error) {
 		return nil, unauthenticated()
 	}
 	return c.kms, nil
+}
+
+func (c *clients) Storage() (*storage.Client, error) {
+	c.storageOnce.Do(func() {
+		c.storage, c.storageErr = storage.NewClient(context.Background(), EmulatorStorage(c.endpoint)...)
+	})
+	if c.storageErr != nil {
+		return nil, unauthenticated()
+	}
+	return c.storage, nil
 }

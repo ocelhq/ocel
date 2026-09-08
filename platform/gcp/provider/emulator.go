@@ -34,3 +34,13 @@ func EmulatorGRPC(endpoint string) []option.ClientOption {
 func hostPort(endpoint string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
 }
+
+func EmulatorStorage(endpoint string) []option.ClientOption {
+	if endpoint == "" {
+		return nil
+	}
+	return []option.ClientOption{
+		option.WithEndpoint(endpoint + "/storage/v1/"),
+		option.WithoutAuthentication(),
+	}
+}

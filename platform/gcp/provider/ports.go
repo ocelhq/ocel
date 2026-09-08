@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"context"
-	"io"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -53,24 +52,6 @@ func (releaser) PlanDestroy(context.Context, providerkit.StackRef, providerkit.R
 
 func (releaser) Destroy(context.Context, providerkit.StackRef, providerkit.Reporter) error {
 	return notReady("destroying a stack")
-}
-
-type artifacts struct{}
-
-func (artifacts) Put(context.Context, providerkit.ArtifactRef, io.Reader) error {
-	return notReady("the artifact store")
-}
-
-func (artifacts) Has(context.Context, providerkit.ArtifactRef) (bool, error) {
-	return false, notReady("the artifact store")
-}
-
-func (artifacts) Open(context.Context, providerkit.ArtifactRef) (io.ReadCloser, error) {
-	return nil, notReady("the artifact store")
-}
-
-func (artifacts) RemovePrefix(context.Context, providerkit.Class, string, providerkit.Reporter) error {
-	return notReady("the artifact store")
 }
 
 type edges struct{}
