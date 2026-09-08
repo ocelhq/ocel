@@ -43,14 +43,23 @@ func (r records) collection(name providerkit.RecordName) (*firestore.CollectionR
 	return client.Collection(recordCollection + string(class)), class, nil
 }
 
+func (r records) absent(ctx context.Context, collection *firestore.CollectionRef, class providerkit.Class) error {
+	documents := collection.Select().Limit(1).Documents(ctx)
+	defer documents.Stop()
+	if _, err := documents.Next(); status.Code(err) == codes.NotFound {
+		return unbootstrapped(class)
+	}
+	return providerkit.ErrNoRecord
+}
+
 func (r records) Read(ctx context.Context, name providerkit.RecordName) (providerkit.Record, error) {
-	collection, _, err := r.collection(name)
+	collection, class, err := r.collection(name)
 	if err != nil {
 		return providerkit.Record{}, err
 	}
 	snapshot, err := collection.Doc(documentID(name)).Get(ctx)
 	if status.Code(err) == codes.NotFound {
-		return providerkit.Record{}, providerkit.ErrNoRecord
+		return providerkit.Record{}, r.absent(ctx, collection, class)
 	}
 	if err != nil {
 		return providerkit.Record{}, fmt.Errorf("read %s: %w", name, err)
@@ -157,13 +166,14 @@ func (r records) List(ctx context.Context, under providerkit.RecordName) ([]prov
 	if err != nil {
 		return nil, err
 	}
-	prefix := documentID(under) + segmentSeparator
-	ceiling := documentID(under) + segmentCeiling
+	at := documentID(under)
+	beneath := at + segmentSeparator
+	ceiling := at + segmentCeiling
 
 	var held []providerkit.Record
 	documents := collection.
 		OrderBy(firestore.DocumentID, firestore.Asc).
-		StartAt(prefix).
+		StartAt(at).
 		EndBefore(ceiling).
 		Documents(ctx)
 	defer documents.Stop()
@@ -178,7 +188,9 @@ func (r records) List(ctx context.Context, under providerkit.RecordName) ([]prov
 			}
 			return nil, fmt.Errorf("read everything under %s: %w", under, err)
 		}
-		held = append(held, recordOf(nameOf(snapshot.Ref.ID), snapshot))
+		if id := snapshot.Ref.ID; id == at || strings.HasPrefix(id, beneath) {
+			held = append(held, recordOf(nameOf(id), snapshot))
+		}
 	}
 }
 

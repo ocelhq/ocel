@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -230,5 +231,25 @@ func TestLiveRemovingNoPrefixRemovesNothing(t *testing.T) {
 	held, err := artifacts.Has(ctx, ref)
 	if err != nil || !held {
 		t.Fatalf("Has() after RemovePrefix(\"\") = %v, %v, want an empty prefix to name nothing rather than everything", held, err)
+	}
+}
+
+func TestLiveListingUnderANameReturnsTheRecordStoredAtIt(t *testing.T) {
+	ctx := context.Background()
+	records := live(t).Records()
+
+	under := providerkit.RecordName{providerkit.RootConformance, string(providerkit.ClassProduction), t.Name()}
+	for _, name := range []providerkit.RecordName{under, append(slices.Clone(under), "beneath")} {
+		if _, err := records.Write(ctx, providerkit.Record{Name: name, Bytes: []byte(name.String())}); err != nil {
+			t.Fatalf("Write(%s) = %v", name, err)
+		}
+	}
+
+	held, err := records.List(ctx, under)
+	if err != nil {
+		t.Fatalf("List(%s) = %v", under, err)
+	}
+	if len(held) != 2 {
+		t.Fatalf("List(%s) returned %d records, want the record at the name and the one beneath it: the sibling store answers with both", under, len(held))
 	}
 }
