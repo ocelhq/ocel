@@ -37,13 +37,15 @@ func TestProjectTheImageRepositoryStandsWhereTheDeployPushesTo(t *testing.T) {
 	if held.Format != "DOCKER" {
 		t.Errorf("the repository holds %s packages, want DOCKER: Cloud Run runs container images", held.Format)
 	}
-	kept := 0
-	for _, policy := range held.CleanupPolicies {
-		if policy.MostRecentVersions != nil {
-			kept = int(policy.MostRecentVersions.KeepCount)
-		}
+	if len(held.CleanupPolicies) != 1 {
+		t.Fatalf("the repository stands under %d cleanup policies, want the one that prunes untagged versions: %+v", len(held.CleanupPolicies), held.CleanupPolicies)
 	}
-	if kept == 0 {
-		t.Error("the repository keeps every version ever pushed, and a repository nothing prunes grows without end")
+	policy, named := held.CleanupPolicies["drop-untagged"]
+	if !named {
+		t.Fatalf("the repository stands under %+v, want a drop-untagged policy: a repository nothing prunes grows without end", held.CleanupPolicies)
+	}
+	if policy.Action != "DELETE" || policy.Condition == nil ||
+		policy.Condition.TagState != "UNTAGGED" || policy.Condition.OlderThan != "604800s" {
+		t.Errorf("the drop-untagged policy is %+v, want DELETE on untagged versions older than a week: anything sooner takes the child manifests of a push still in flight", policy)
 	}
 }

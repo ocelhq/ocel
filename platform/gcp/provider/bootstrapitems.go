@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
-	"strconv"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -22,8 +21,6 @@ const (
 )
 
 const StampObject = "ocel/bootstrap.json"
-
-const keptImages = 20
 
 var BootstrapAPIs = []string{
 	"firestore.googleapis.com",
@@ -76,7 +73,7 @@ func stackItems(names Names, class providerkit.Class, emulated bool) []item {
 		},
 		{
 			Kind: KindRepository, Name: names.Repository(class),
-			Note: "the images this class runs, kept to the last " + strconv.Itoa(keptImages) + " untagged versions",
+			Note: "the images this class runs, and an untagged image lives at least a week",
 		},
 	}
 	return slices.DeleteFunc(items, func(held item) bool { return !stands(held.Kind, emulated) })
