@@ -73,28 +73,6 @@ func (artifacts) RemovePrefix(context.Context, providerkit.Class, string, provid
 	return notReady("the artifact store")
 }
 
-type records struct{}
-
-func (records) Read(context.Context, providerkit.RecordName) (providerkit.Record, error) {
-	return providerkit.Record{}, providerkit.ErrNoRecord
-}
-
-func (records) List(context.Context, providerkit.RecordName) ([]providerkit.Record, error) {
-	return nil, nil
-}
-
-func (records) Write(context.Context, providerkit.Record) (providerkit.Revision, error) {
-	return "", notReady("the record store")
-}
-
-func (records) WritePair(context.Context, providerkit.Record, providerkit.Record) error {
-	return notReady("the record store")
-}
-
-func (records) Remove(context.Context, providerkit.RecordName, providerkit.Revision) error {
-	return notReady("the record store")
-}
-
 type sealer struct{}
 
 func (sealer) Seal(context.Context, providerkit.Coordinate, []byte) ([]byte, error) {

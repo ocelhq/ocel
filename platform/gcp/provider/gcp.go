@@ -22,6 +22,7 @@ type Provider struct {
 	options  Options
 	tokens   TokenSource
 	endpoint string
+	clients  *clients
 }
 
 func New(_ context.Context, options providerkit.Options) (providerkit.Provider, error) {
@@ -41,7 +42,13 @@ func New(_ context.Context, options providerkit.Options) (providerkit.Provider, 
 }
 
 func NewProvider(options Options) *Provider {
-	return &Provider{options: options, tokens: ApplicationDefault{}, endpoint: emulatorEndpoint()}
+	endpoint := emulatorEndpoint()
+	return &Provider{
+		options:  options,
+		tokens:   ApplicationDefault{},
+		endpoint: endpoint,
+		clients:  &clients{project: options.Project, region: options.Region, endpoint: endpoint},
+	}
 }
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
@@ -60,7 +67,7 @@ func (p *Provider) Releases() providerkit.Releaser { return releaser{} }
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return artifacts{} }
 
-func (p *Provider) Records() providerkit.RecordStore { return records{} }
+func (p *Provider) Records() providerkit.RecordStore { return records{clients: p.clients} }
 
 func (p *Provider) Sealer() providerkit.Sealer { return sealer{} }
 
