@@ -644,6 +644,9 @@ importers:
       '@types/node':
         specifier: ^24
         version: 24.13.2
+      express:
+        specifier: ~5.0.0
+        version: 5.0.1
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

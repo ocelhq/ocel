@@ -1,121 +1,12 @@
-import http from "node:http";
-import { isAbsolute } from "node:path";
-import { pathToFileURL } from "node:url";
-import { type FetchHandler, fetchToNodeHandler } from "./fetch-bridge.mjs";
 import { awaitLiveValues } from "./live-values.mjs";
 import {
-  type Invoke,
   installCompileCacheFlush,
   installCompileCacheWarm,
   reportFatalBoot,
   serveInvoke,
   serveServer,
 } from "./membrane.mjs";
-
-type Loaded = { kind: "server"; value: http.Server } | { kind: "export"; value: unknown };
-
-async function loadUserApp(entrypoint: string): Promise<Loaded> {
-  const href = isAbsolute(entrypoint) ? pathToFileURL(entrypoint).href : entrypoint;
-
-  const listenHook = interceptListen();
-
-  const importPromise: Promise<Loaded> = import(href).then((mod) => {
-    let exported: any = mod;
-    for (let i = 0; i < 5; i++) {
-      if (exported.default) exported = exported.default;
-    }
-    return { kind: "export", value: exported };
-  });
-
-  const serverPromise: Promise<Loaded> = listenHook
-    .waitForServer()
-    .then((server) => ({ kind: "server", value: server }));
-
-  const result = await Promise.race([
-    serverPromise,
-    importPromise.then((r) => {
-      const v = r.value as any;
-      if (v && (typeof v === "function" || typeof v.listen === "function")) {
-        return r;
-      }
-      return serverPromise;
-    }),
-  ]);
-
-  listenHook.restore();
-  return result;
-}
-
-type NodeHandler = (req: http.IncomingMessage, res: http.ServerResponse) => void;
-
-type Resolved =
-  | { type: "server"; server: http.Server }
-  | { type: "node-handler"; handler: NodeHandler }
-  | { type: "web-handler"; fetch: FetchHandler };
-
-function resolveHandler(exported: any): Resolved {
-  if (typeof exported === "function") {
-    return { type: "node-handler", handler: exported };
-  }
-  if (exported && typeof exported.listen === "function") {
-    return { type: "server", server: exported };
-  }
-  if (exported && typeof exported.fetch === "function") {
-    return { type: "web-handler", fetch: exported.fetch };
-  }
-  const methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"];
-  if (exported && methods.some((m) => typeof exported[m] === "function")) {
-    return { type: "web-handler", fetch: dispatchByMethod(exported) };
-  }
-  throw new Error(
-    "Default export must be an Express app, a (req,res) handler, or a fetch handler.",
-  );
-}
-
-function invokeFor(resolved: Resolved): Invoke {
-  if (resolved.type === "node-handler") return resolved.handler;
-  if (resolved.type === "web-handler") return fetchToNodeHandler(resolved.fetch);
-  throw new Error(`cannot build an invoke for resolved type: ${resolved.type}`);
-}
-
-function dispatchByMethod(exported: any): FetchHandler {
-  return (request) => {
-    const fn = exported[request.method];
-    if (typeof fn !== "function") return new Response(null, { status: 405 });
-    return fn(request);
-  };
-}
-
-interface ListenHook {
-  waitForServer: () => Promise<http.Server>;
-  restore: () => void;
-}
-
-function interceptListen(): ListenHook {
-  const realListen = http.Server.prototype.listen;
-  let captured: http.Server | null = null;
-  const waiters: Array<(server: http.Server) => void> = [];
-
-  http.Server.prototype.listen = function (this: http.Server, ...args: any[]) {
-    http.Server.prototype.listen = realListen;
-    captured = this;
-    const cb = args.find((a) => typeof a === "function");
-    if (cb) setImmediate(cb);
-    for (const w of waiters) w(this);
-    return this;
-  } as typeof http.Server.prototype.listen;
-
-  return {
-    waitForServer: () =>
-      new Promise((resolve) => {
-        if (captured) resolve(captured);
-        else waiters.push(resolve);
-      }),
-    restore: () => {
-      http.Server.prototype.listen = realListen;
-    },
-  };
-}
+import { invokeFor, loadUserApp, resolveHandler } from "./user-app.mjs";
 
 async function boot(): Promise<void> {
   installCompileCacheFlush();
