@@ -12,6 +12,8 @@
 
 mod declare;
 mod error;
+#[doc(hidden)]
+pub mod r#gen;
 mod link;
 mod postgres;
 
