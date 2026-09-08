@@ -178,3 +178,33 @@ func TestAContainerAppIsAlwaysOpenedToThePublic(t *testing.T) {
 		t.Error("the app's own front was left private, and nothing else stands between the internet and it")
 	}
 }
+
+func TestAReleaseOntoAStandingServiceNeverHandsTrafficBackToTheLatestRevision(t *testing.T) {
+	server := &runServer{}
+	first := serving{
+		service: "ocel-shop-prod-app",
+		image:   "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one",
+		compute: providerkit.ComputeContainer,
+		health:  "/",
+		public:  true,
+	}
+	released(t, server, first)
+
+	second := first
+	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	released(t, server, second)
+
+	for _, patched := range server.releases() {
+		if len(patched.Traffic) == 0 {
+			t.Fatal("a patch named no traffic, and Cloud Run replaces the body it is handed: " +
+				"the allocation this release held would go back to the latest revision, which is whatever ran last")
+		}
+		if patched.Traffic[0].Type != trafficByRevision || patched.Traffic[0].Revision == "" {
+			t.Errorf("a patch allocated traffic by %q, want it by the name of a revision", patched.Traffic[0].Type)
+		}
+	}
+	standing := server.serving()
+	if !servedBy(standing.Traffic, revisionName(standing.LatestReadyRevision)) {
+		t.Errorf("the service serves %+v, want all of it on the revision the second release stood up", standing.Traffic)
+	}
+}

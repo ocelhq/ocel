@@ -137,6 +137,7 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 			report.Say("Releasing " + s.service + " onto Cloud Run")
 		}
 		desired.Etag = held.Etag
+		desired.Traffic = held.Traffic
 		err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 			return services.Projects.Locations.Services.Patch(path, desired).Context(ctx).Do(call...)
 		})
