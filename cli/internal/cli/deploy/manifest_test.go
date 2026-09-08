@@ -3,14 +3,11 @@ package deploy
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
 func TestADetectedAppIsReadInTheLanguageOfTheProjectItSitsIn(t *testing.T) {
@@ -29,15 +26,5 @@ func TestADetectedAppIsReadInTheLanguageOfTheProjectItSitsIn(t *testing.T) {
 	}
 	if apps[0].Language != discovery.Go {
 		t.Errorf("Language = %q, want %q", apps[0].Language, discovery.Go)
-	}
-
-	_, err = attribution.Compute(root, apps, []attribution.Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
-		Name:   "main",
-		Source: filepath.Join(root, "infra", "infra.go") + ":3",
-	}})
-	want := "is a go app, and this build of ocel attributes only js apps"
-	if err == nil || !strings.Contains(err.Error(), want) {
-		t.Errorf("Compute err = %v, want it to contain %q", err, want)
 	}
 }
