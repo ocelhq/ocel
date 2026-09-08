@@ -1,12 +1,16 @@
 package bootstrap
 
-var (
-	coreStackName, _       = DefaultNamespace.StackNameFor(ClassProduction)
-	previewStackName, _    = DefaultNamespace.StackNameFor(ClassPreview)
-	edgeUserName, _        = DefaultNamespace.EdgeUserNameFor(ClassProduction)
-	previewEdgeUser, _     = DefaultNamespace.EdgeUserNameFor(ClassPreview)
-	originSecretParam, _   = DefaultNamespace.OriginSecretParamFor(ClassProduction)
-	previewOriginSecret, _ = DefaultNamespace.OriginSecretParamFor(ClassPreview)
+import "github.com/ocelhq/ocel/pkg/providerkit"
 
-	passphraseParam = DefaultNamespace.PassphraseParamName()
+var (
+	defaultNamespace = Namespace(providerkit.DefaultNamespace)
+
+	coreStackName, _       = defaultNamespace.StackNameFor(ClassProduction)
+	previewStackName, _    = defaultNamespace.StackNameFor(ClassPreview)
+	edgeUserName, _        = defaultNamespace.EdgeUserNameFor(ClassProduction)
+	previewEdgeUser, _     = defaultNamespace.EdgeUserNameFor(ClassPreview)
+	originSecretParam, _   = defaultNamespace.OriginSecretParamFor(ClassProduction)
+	previewOriginSecret, _ = defaultNamespace.OriginSecretParamFor(ClassPreview)
+
+	passphraseParam = defaultNamespace.PassphraseParamName()
 )

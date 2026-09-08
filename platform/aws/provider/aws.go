@@ -68,15 +68,15 @@ func New(ctx context.Context, options providerkit.Options) (providerkit.Provider
 	if err != nil {
 		return nil, err
 	}
-	ns, err := bootstrap.ParseNamespace(os.Getenv(bootstrap.NamespaceEnvVar))
+	ns, err := providerkit.NamespaceFromEnv()
 	if err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid, "%s: %s", bootstrap.NamespaceEnvVar, err.Error())
+		return nil, err
 	}
 	cfg, err := sdkconfig.Control(ctx, decoded.Region)
 	if err != nil {
 		return nil, err
 	}
-	return NewProvider(decoded, cfg, ns), nil
+	return NewProvider(decoded, cfg, bootstrap.Namespace(ns)), nil
 }
 
 func NewProvider(options Options, cfg aws.Config, ns bootstrap.Namespace) *Provider {

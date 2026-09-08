@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -106,7 +107,7 @@ func TestDefaultNamespaceKeepsEveryNameAsItStands(t *testing.T) {
 		"preview dlq":           "ocel-revalidate-preview-dlq.fifo",
 		"cache policy name":     "ocel-edge-cache",
 	}
-	for what, got := range namesOf(t, DefaultNamespace) {
+	for what, got := range namesOf(t, defaultNamespace) {
 		if want[what] != got {
 			t.Errorf("the %s is %q under the default namespace, want %q", what, got, want[what])
 		}
@@ -156,7 +157,7 @@ func TestTheLengthBoundIsTheTightestAWSAllows(t *testing.T) {
 		"cache policy name":     128,
 	}
 
-	longest := Namespace(strings.Repeat("a", MaxNamespaceLength))
+	longest := Namespace(strings.Repeat("a", providerkit.MaxNamespaceLength))
 	tight := false
 	for what, got := range namesOf(t, longest) {
 		limit, known := limits[what]
@@ -171,6 +172,6 @@ func TestTheLengthBoundIsTheTightestAWSAllows(t *testing.T) {
 		}
 	}
 	if !tight {
-		t.Errorf("no name reaches its AWS limit at a namespace of %d characters, so the bound is shorter than it needs to be", MaxNamespaceLength)
+		t.Errorf("no name reaches its AWS limit at a namespace of %d characters, so the bound is shorter than it needs to be", providerkit.MaxNamespaceLength)
 	}
 }

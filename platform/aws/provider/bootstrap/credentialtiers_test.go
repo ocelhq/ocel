@@ -133,13 +133,13 @@ func actionsOf(t *testing.T, document string) map[string]bool {
 
 func renderedTiers(t *testing.T) (string, string) {
 	t.Helper()
-	bootstrapDoc, err := BootstrapCredentialPermissions(DefaultNamespace)
+	bootstrapDoc, err := BootstrapCredentialPermissions(defaultNamespace)
 	if err != nil {
-		t.Fatalf("BootstrapCredentialPermissions(DefaultNamespace) error = %v", err)
+		t.Fatalf("BootstrapCredentialPermissions(defaultNamespace) error = %v", err)
 	}
-	deployDoc, err := DeployCredentialPermissions(DefaultNamespace)
+	deployDoc, err := DeployCredentialPermissions(defaultNamespace)
 	if err != nil {
-		t.Fatalf("DeployCredentialPermissions(DefaultNamespace) error = %v", err)
+		t.Fatalf("DeployCredentialPermissions(defaultNamespace) error = %v", err)
 	}
 	return bootstrapDoc, deployDoc
 }
@@ -195,7 +195,7 @@ func boundaryScopes(condition map[string]any) bool {
 		}
 		arns = append(arns, arn)
 	}
-	return slices.Equal(arns, []string{appBoundaryARNFor(DefaultNamespace, ClassProduction), appBoundaryARNFor(DefaultNamespace, ClassPreview)})
+	return slices.Equal(arns, []string{appBoundaryARNFor(defaultNamespace, ClassProduction), appBoundaryARNFor(defaultNamespace, ClassPreview)})
 }
 
 func conditionScopes(actions []string, condition map[string]any) bool {
@@ -231,7 +231,7 @@ func TestNoTierMintsARoleThatCanOutgrowItsBoundary(t *testing.T) {
 					continue
 				}
 				for _, resource := range stringsOf(t, statement.Resource, "Resource") {
-					if resource == DefaultNamespace.scopedARNs().bootstrapRole {
+					if resource == defaultNamespace.scopedARNs().bootstrapRole {
 						continue
 					}
 					if !boundaryScopes(statement.Condition) {
@@ -329,7 +329,7 @@ func TestOnlyTheEdgeUserIsMintedAndItCarriesNoManagedPolicy(t *testing.T) {
 			if !strings.HasPrefix(g.action, "iam:") || !strings.Contains(g.action, "User") && !strings.Contains(g.action, "AccessKey") {
 				continue
 			}
-			if g.resource != DefaultNamespace.scopedARNs().edgeUser {
+			if g.resource != defaultNamespace.scopedARNs().edgeUser {
 				t.Errorf("the %s tier grants %s on %q, which is not the edge user", tier, g.action, g.resource)
 			}
 		}
@@ -424,7 +424,7 @@ func conditionNames(condition map[string]any, key string) bool {
 
 func mustRender(t *testing.T, render func(Namespace) (string, error)) string {
 	t.Helper()
-	document, err := render(DefaultNamespace)
+	document, err := render(defaultNamespace)
 	if err != nil {
 		t.Fatalf("render policy: %v", err)
 	}

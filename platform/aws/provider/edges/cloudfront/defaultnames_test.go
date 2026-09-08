@@ -1,7 +1,12 @@
 package cloudfront
 
-import "github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+import (
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+)
 
 var (
-	coreStackName, _ = bootstrap.DefaultNamespace.StackNameFor(bootstrap.ClassProduction)
+	defaultNamespace = bootstrap.Namespace(providerkit.DefaultNamespace)
+
+	coreStackName, _ = defaultNamespace.StackNameFor(bootstrap.ClassProduction)
 )

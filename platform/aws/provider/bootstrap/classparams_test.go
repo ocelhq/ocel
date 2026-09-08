@@ -57,7 +57,7 @@ func fullProductionParams() map[string]string {
 func TestReadClassParamsBatches(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: fullProductionParams()}
 
-	got, err := ReadClassParams(context.Background(), ssmc, DefaultNamespace, ClassProduction, KindCloudflare)
+	got, err := ReadClassParams(context.Background(), ssmc, defaultNamespace, ClassProduction, KindCloudflare)
 	if err != nil {
 		t.Fatalf("ReadClassParams: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestReadClassParamsPreviewNames(t *testing.T) {
 		preview.isrWriterSeedParam: "seed-prev",
 	}}
 
-	got, err := ReadClassParams(context.Background(), ssmc, DefaultNamespace, ClassPreview, KindCloudflare)
+	got, err := ReadClassParams(context.Background(), ssmc, defaultNamespace, ClassPreview, KindCloudflare)
 	if err != nil {
 		t.Fatalf("ReadClassParams(preview): %v", err)
 	}
@@ -140,7 +140,7 @@ func TestReadClassParamsPreviewNames(t *testing.T) {
 
 func TestReadClassParamsUnknownClass(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: fullProductionParams()}
-	if _, err := ReadClassParams(context.Background(), ssmc, DefaultNamespace, "nonsense", KindCloudflare); err == nil {
+	if _, err := ReadClassParams(context.Background(), ssmc, defaultNamespace, "nonsense", KindCloudflare); err == nil {
 		t.Fatal("ReadClassParams(unknown class) = nil error, want an error")
 	}
 	if ssmc.calls != 0 {
@@ -152,7 +152,7 @@ func TestReadClassParamsMissingPassphrase(t *testing.T) {
 	params := fullProductionParams()
 	delete(params, passphraseParam)
 
-	_, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, DefaultNamespace, ClassProduction, KindCloudflare)
+	_, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
 	if err == nil {
 		t.Fatal("ReadClassParams without a passphrase = nil error, want an error")
 	}
@@ -163,7 +163,7 @@ func TestReadClassParamsMissingPassphrase(t *testing.T) {
 
 func TestReadClassParamsCallFailure(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: fullProductionParams(), err: errors.New("throttled")}
-	if _, err := ReadClassParams(context.Background(), ssmc, DefaultNamespace, ClassProduction, KindCloudflare); err == nil {
+	if _, err := ReadClassParams(context.Background(), ssmc, defaultNamespace, ClassProduction, KindCloudflare); err == nil {
 		t.Fatal("ReadClassParams with a failing GetParameters = nil error, want an error")
 	}
 }
@@ -173,7 +173,7 @@ func TestReadClassParamsEdgeFailures(t *testing.T) {
 		params := fullProductionParams()
 		delete(params, cloudflareNames(ClassProduction).credentialsParam)
 
-		got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, DefaultNamespace, ClassProduction, KindCloudflare)
+		got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
 		if err != nil {
 			t.Fatalf("ReadClassParams: %v", err)
 		}
@@ -192,7 +192,7 @@ func TestReadClassParamsEdgeFailures(t *testing.T) {
 		params := fullProductionParams()
 		params[cloudflareNames(ClassProduction).credentialsParam] = "{not json"
 
-		got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, DefaultNamespace, ClassProduction, KindCloudflare)
+		got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
 		if err != nil {
 			t.Fatalf("ReadClassParams: %v", err)
 		}
@@ -208,7 +208,7 @@ func TestReadClassParamsEdgeFailures(t *testing.T) {
 		params := fullProductionParams()
 		delete(params, cloudflareNames(ClassProduction).valuesParam)
 
-		got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, DefaultNamespace, ClassProduction, KindCloudflare)
+		got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
 		if err != nil {
 			t.Fatalf("ReadClassParams: %v", err)
 		}
@@ -224,7 +224,7 @@ func TestReadClassParamsEdgeFailures(t *testing.T) {
 		params := fullProductionParams()
 		params[cloudflareNames(ClassProduction).valuesParam] = "{not json"
 
-		got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, DefaultNamespace, ClassProduction, KindCloudflare)
+		got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
 		if err != nil {
 			t.Fatalf("ReadClassParams: %v", err)
 		}
@@ -240,7 +240,7 @@ func TestReadClassParamsEdgeFailures(t *testing.T) {
 func TestReadClassParamsAbsentOptional(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: map[string]string{passphraseParam: "pass-1"}}
 
-	got, err := ReadClassParams(context.Background(), ssmc, DefaultNamespace, ClassProduction, KindCloudflare)
+	got, err := ReadClassParams(context.Background(), ssmc, defaultNamespace, ClassProduction, KindCloudflare)
 	if err != nil {
 		t.Fatalf("ReadClassParams: %v", err)
 	}
@@ -269,7 +269,7 @@ func TestReadClassParamsUnparsableStores(t *testing.T) {
 			params := fullProductionParams()
 			params[name] = "{not json"
 
-			if _, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, DefaultNamespace, ClassProduction, KindCloudflare); err == nil {
+			if _, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare); err == nil {
 				t.Fatalf("ReadClassParams with an unparsable %s = nil error, want an error", name)
 			}
 		})
@@ -310,7 +310,7 @@ func teardownProductionParams() map[string]string {
 func TestReadTeardownParamsBatches(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: teardownProductionParams()}
 
-	got, err := ReadTeardownParams(context.Background(), ssmc, DefaultNamespace, ClassProduction, KindCloudflare)
+	got, err := ReadTeardownParams(context.Background(), ssmc, defaultNamespace, ClassProduction, KindCloudflare)
 	if err != nil {
 		t.Fatalf("ReadTeardownParams: %v", err)
 	}
@@ -352,7 +352,7 @@ func TestReadTeardownParamsPreviewNames(t *testing.T) {
 		cloudflareNames(ClassPreview).cacheStoreParam: `{"bucket":"cache-prev"}`,
 	}}
 
-	got, err := ReadTeardownParams(context.Background(), ssmc, DefaultNamespace, ClassPreview, KindCloudflare)
+	got, err := ReadTeardownParams(context.Background(), ssmc, defaultNamespace, ClassPreview, KindCloudflare)
 	if err != nil {
 		t.Fatalf("ReadTeardownParams(preview): %v", err)
 	}
@@ -368,7 +368,7 @@ func TestReadTeardownParamsPreviewNames(t *testing.T) {
 
 func TestReadTeardownParamsUnknownClass(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: teardownProductionParams()}
-	if _, err := ReadTeardownParams(context.Background(), ssmc, DefaultNamespace, "nonsense", KindCloudflare); err == nil {
+	if _, err := ReadTeardownParams(context.Background(), ssmc, defaultNamespace, "nonsense", KindCloudflare); err == nil {
 		t.Fatal("ReadTeardownParams(unknown class) = nil error, want an error")
 	}
 	if ssmc.calls != 0 {
@@ -378,7 +378,7 @@ func TestReadTeardownParamsUnknownClass(t *testing.T) {
 
 func TestReadTeardownParamsCallFailure(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: teardownProductionParams(), err: errors.New("throttled")}
-	if _, err := ReadTeardownParams(context.Background(), ssmc, DefaultNamespace, ClassProduction, KindCloudflare); err == nil {
+	if _, err := ReadTeardownParams(context.Background(), ssmc, defaultNamespace, ClassProduction, KindCloudflare); err == nil {
 		t.Fatal("ReadTeardownParams with a failing GetParameters = nil error, want an error")
 	}
 }
@@ -387,7 +387,7 @@ func TestReadTeardownParamsMissingPassphrase(t *testing.T) {
 	params := teardownProductionParams()
 	delete(params, passphraseParam)
 
-	got, err := ReadTeardownParams(context.Background(), &fakeBatchSSM{params: params}, DefaultNamespace, ClassProduction, KindCloudflare)
+	got, err := ReadTeardownParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
 	if err != nil {
 		t.Fatalf("ReadTeardownParams: %v", err)
 	}
@@ -405,7 +405,7 @@ func TestReadTeardownParamsMissingPassphrase(t *testing.T) {
 func TestReadTeardownParamsAbsentOptional(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: map[string]string{passphraseParam: "pass-1"}}
 
-	got, err := ReadTeardownParams(context.Background(), ssmc, DefaultNamespace, ClassProduction, KindCloudflare)
+	got, err := ReadTeardownParams(context.Background(), ssmc, defaultNamespace, ClassProduction, KindCloudflare)
 	if err != nil {
 		t.Fatalf("ReadTeardownParams: %v", err)
 	}
@@ -422,7 +422,7 @@ func TestReadTeardownParamsUnparsable(t *testing.T) {
 		params := teardownProductionParams()
 		params[cloudflareNames(ClassProduction).cacheStoreParam] = "{not json"
 
-		got, err := ReadTeardownParams(context.Background(), &fakeBatchSSM{params: params}, DefaultNamespace, ClassProduction, KindCloudflare)
+		got, err := ReadTeardownParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
 		if err != nil {
 			t.Fatalf("ReadTeardownParams: %v", err)
 		}
@@ -435,7 +435,7 @@ func TestReadTeardownParamsUnparsable(t *testing.T) {
 		params := teardownProductionParams()
 		params[cloudflareNames(ClassProduction).isrWriterParam] = "{not json"
 
-		got, err := ReadTeardownParams(context.Background(), &fakeBatchSSM{params: params}, DefaultNamespace, ClassProduction, KindCloudflare)
+		got, err := ReadTeardownParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
 		if err != nil {
 			t.Fatalf("ReadTeardownParams: %v", err)
 		}

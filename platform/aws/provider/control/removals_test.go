@@ -21,7 +21,7 @@ const (
 
 func edgeParam(t *testing.T, class, leaf string) string {
 	t.Helper()
-	prefix, err := bootstrap.DefaultNamespace.EdgeParamPrefix(class, cloudflareKind)
+	prefix, err := defaultNamespace.EdgeParamPrefix(class, cloudflareKind)
 	if err != nil {
 		t.Fatalf("EdgeParamPrefix(%s): %v", class, err)
 	}
@@ -36,12 +36,12 @@ func removingBootstrapper(t *testing.T, class string) Bootstrapper {
 	t.Helper()
 
 	b := standingBootstrapper(t, class)
-	stackName, err := bootstrap.DefaultNamespace.StackNameFor(class)
+	stackName, err := defaultNamespace.StackNameFor(class)
 	if err != nil {
 		t.Fatalf("StackNameFor(%s): %v", class, err)
 	}
-	isrStack := bootstrap.DefaultNamespace.FeatureStackName(bootstrap.FeatureISR, class)
-	varsKeyStack := bootstrap.DefaultNamespace.FeatureStackName(bootstrap.FeatureVarsKey, class)
+	isrStack := defaultNamespace.FeatureStackName(bootstrap.FeatureISR, class)
+	varsKeyStack := defaultNamespace.FeatureStackName(bootstrap.FeatureVarsKey, class)
 	cfn := b.CFN.(*teardownCFN)
 	cfn.present[isrStack] = bootstrap.Deployed{Present: true}
 	cfn.present[varsKeyStack] = bootstrap.Deployed{Present: true}
@@ -101,7 +101,7 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
 
-	isr := groupNamed(plan, "aws/"+bootstrap.DefaultNamespace.FeatureStackName(bootstrap.FeatureISR, bootstrap.ClassProduction))
+	isr := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(bootstrap.FeatureISR, bootstrap.ClassProduction))
 	core := groupNamed(plan, "aws/"+coreStackName)
 	if isr == nil || core == nil {
 		t.Fatalf("plan groups = %s, want the isr stack and the core it stands on", groupNames(plan))
@@ -325,9 +325,9 @@ func TestRemoveTearsDownAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 func severed(t *testing.T, b Bootstrapper, class string) {
 	t.Helper()
 
-	b.CFN.(*teardownCFN).present[bootstrap.DefaultNamespace.FeatureStackName(bootstrap.FeatureCloudflareEdge, class)] =
+	b.CFN.(*teardownCFN).present[defaultNamespace.FeatureStackName(bootstrap.FeatureCloudflareEdge, class)] =
 		bootstrap.Deployed{Present: true}
-	prefix, err := bootstrap.DefaultNamespace.EdgeParamPrefix(class, cloudflareKind)
+	prefix, err := defaultNamespace.EdgeParamPrefix(class, cloudflareKind)
 	if err != nil {
 		t.Fatalf("EdgeParamPrefix(%s): %v", class, err)
 	}
@@ -379,7 +379,7 @@ func TestPlanRemovalSaysWhatDroppingTheVarsKeyStrands(t *testing.T) {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
 
-	group := groupNamed(plan, "aws/"+bootstrap.DefaultNamespace.FeatureStackName(bootstrap.FeatureVarsKey, bootstrap.ClassProduction))
+	group := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(bootstrap.FeatureVarsKey, bootstrap.ClassProduction))
 	if group == nil {
 		t.Fatalf("plan groups = %s, want the stack the vars key stands in", groupNames(plan))
 	}

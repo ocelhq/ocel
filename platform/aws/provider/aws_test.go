@@ -18,6 +18,8 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+var defaultNamespace = bootstrap.Namespace(providerkit.DefaultNamespace)
+
 func TestStateBackendURLCarriesTheEndpointTheAccountIsReachedOn(t *testing.T) {
 	t.Setenv("AWS_ENDPOINT_URL", "")
 	t.Setenv("AWS_ENDPOINT_URL_S3", "")
@@ -109,7 +111,7 @@ func standing(t *testing.T, p *Provider) (string, string) {
 }
 
 func TestBootstrapApplyForgetsWhatItStoodUp(t *testing.T) {
-	p := NewProvider(Options{}, aws.Config{}, bootstrap.DefaultNamespace)
+	p := NewProvider(Options{}, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
 	if err := (settling{Bootstrapper: stubBootstrapper{}, settled: settledBy(t, p)}).
@@ -124,7 +126,7 @@ func TestBootstrapApplyForgetsWhatItStoodUp(t *testing.T) {
 }
 
 func TestBootstrapRemoveForgetsWhatItTookDown(t *testing.T) {
-	p := NewProvider(Options{}, aws.Config{}, bootstrap.DefaultNamespace)
+	p := NewProvider(Options{}, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
 	if err := (settling{Bootstrapper: stubBootstrapper{}, settled: settledBy(t, p)}).
@@ -139,7 +141,7 @@ func TestBootstrapRemoveForgetsWhatItTookDown(t *testing.T) {
 }
 
 func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
-	p := NewProvider(Options{}, aws.Config{}, bootstrap.DefaultNamespace)
+	p := NewProvider(Options{}, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
 	refused := errors.New("refused")
@@ -155,7 +157,7 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 }
 
 func TestBootstrapFrontsTheEdgeItWasAsked(t *testing.T) {
-	p := NewProvider(Options{}, aws.Config{}, bootstrap.DefaultNamespace)
+	p := NewProvider(Options{}, aws.Config{}, defaultNamespace)
 	for _, kind := range edges.SupportedEdges() {
 		bootstrapper, err := p.Bootstrap(kind)
 		if err != nil {
@@ -175,7 +177,7 @@ func TestBootstrapFrontsTheEdgeItWasAsked(t *testing.T) {
 }
 
 func TestClassParamsReadTheEdgeTheyAreGiven(t *testing.T) {
-	p := NewProvider(Options{}, aws.Config{}, bootstrap.DefaultNamespace)
+	p := NewProvider(Options{}, aws.Config{}, defaultNamespace)
 	wanted := classEdge{class: providerkit.ClassProduction, kind: cloudflare.Kind}
 	if _, err := p.params.resolve(wanted, func() (bootstrap.ClassParams, error) {
 		return bootstrap.ClassParams{Passphrase: string(cloudflare.Kind)}, nil
@@ -200,7 +202,7 @@ func TestClassParamsReadTheEdgeTheyAreGiven(t *testing.T) {
 }
 
 func TestBucketsSweepTheCacheStoreOfEveryStandingEdge(t *testing.T) {
-	p := NewProvider(Options{}, aws.Config{}, bootstrap.DefaultNamespace)
+	p := NewProvider(Options{}, aws.Config{}, defaultNamespace)
 	if _, err := p.deployed.resolve(providerkit.ClassProduction, func() (bootstrap.Deployed, error) {
 		return bootstrap.Deployed{
 			ArtifactBucket: "functions",
@@ -250,7 +252,7 @@ func TestBucketsSweepTheCacheStoreOfEveryStandingEdge(t *testing.T) {
 }
 
 func TestStandingWithoutAVarsKey(t *testing.T) {
-	p := NewProvider(Options{}, aws.Config{}, bootstrap.DefaultNamespace)
+	p := NewProvider(Options{}, aws.Config{}, defaultNamespace)
 	held := bootstrap.Deployed{
 		StateBucket:    "state",
 		ArtifactBucket: "artifacts",

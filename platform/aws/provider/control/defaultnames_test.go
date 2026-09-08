@@ -1,10 +1,15 @@
 package control
 
-import "github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+import (
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+)
 
 var (
-	coreStackName, _ = bootstrap.DefaultNamespace.StackNameFor(bootstrap.ClassProduction)
-	edgeUserName, _  = bootstrap.DefaultNamespace.EdgeUserNameFor(bootstrap.ClassProduction)
+	defaultNamespace = bootstrap.Namespace(providerkit.DefaultNamespace)
 
-	passphraseParam = bootstrap.DefaultNamespace.PassphraseParamName()
+	coreStackName, _ = defaultNamespace.StackNameFor(bootstrap.ClassProduction)
+	edgeUserName, _  = defaultNamespace.EdgeUserNameFor(bootstrap.ClassProduction)
+
+	passphraseParam = defaultNamespace.PassphraseParamName()
 )

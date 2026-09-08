@@ -38,7 +38,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 			t.Errorf("Plan() shows %s as %q, want it created", want, planned.Action)
 		}
 	}
-	origin, err := bootstrap.DefaultNamespace.OriginSecretParamFor(string(class))
+	origin, err := defaultNamespace.OriginSecretParamFor(string(class))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 	if status := a.stackStatus(t, coreStackName); status != "CREATE_COMPLETE" {
 		t.Errorf("%s stands at %q in CloudFormation, want CREATE_COMPLETE", coreStackName, status)
 	}
-	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), bootstrap.DefaultNamespace, string(class))
+	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(class))
 	if err != nil {
 		t.Fatalf("reading back what the bootstrap deployed = %v", err)
 	}
@@ -137,7 +137,7 @@ func TestLiveApplyingTheImageOptimizerStandsItsOwnStackBesideTheCore(t *testing.
 		t.Fatalf("Apply(%s) = %v", feature, err)
 	}
 
-	name := bootstrap.DefaultNamespace.FeatureStackName(feature, string(class))
+	name := defaultNamespace.FeatureStackName(feature, string(class))
 	if status := a.stackStatus(t, name); status != "CREATE_COMPLETE" {
 		t.Errorf("%s stands at %q in CloudFormation, want CREATE_COMPLETE", name, status)
 	}
@@ -149,7 +149,7 @@ func TestLiveApplyingTheImageOptimizerStandsItsOwnStackBesideTheCore(t *testing.
 	if !stack.Present || !stack.DigestCurrent {
 		t.Errorf("Describe() = %+v, want the feature stack standing at the digest applied", stack)
 	}
-	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), bootstrap.DefaultNamespace, string(class))
+	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(class))
 	if err != nil {
 		t.Fatal(err)
 	}

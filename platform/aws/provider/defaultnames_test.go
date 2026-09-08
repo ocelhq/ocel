@@ -1,10 +1,15 @@
 package provider_test
 
-import "github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+import (
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+)
 
 var (
-	coreStackName, _    = bootstrap.DefaultNamespace.StackNameFor(bootstrap.ClassProduction)
-	previewStackName, _ = bootstrap.DefaultNamespace.StackNameFor(bootstrap.ClassPreview)
+	defaultNamespace = bootstrap.Namespace(providerkit.DefaultNamespace)
 
-	passphraseParam = bootstrap.DefaultNamespace.PassphraseParamName()
+	coreStackName, _    = defaultNamespace.StackNameFor(bootstrap.ClassProduction)
+	previewStackName, _ = defaultNamespace.StackNameFor(bootstrap.ClassPreview)
+
+	passphraseParam = defaultNamespace.PassphraseParamName()
 )
