@@ -133,14 +133,14 @@ func imagePush(app, ref string, target RegistryTarget) (ImagePush, error) {
 }
 
 func coordinate(repository, tag string, target RegistryTarget) string {
-	if target.Server == "" {
+	if !target.Named() {
 		return repository + ":" + tag
 	}
 	return target.Coordinate(naming.RepositorySegment(repository), tag)
 }
 
 func imageStoreFor(ctx context.Context, provider Provider, target RegistryTarget) (ImageStore, error) {
-	if target.Server == "" {
+	if !target.Named() {
 		loading, takes := provider.(ImageLoader)
 		if !takes {
 			return nil, nil

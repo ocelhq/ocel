@@ -19,6 +19,8 @@ func (t RegistryTarget) String() string {
 
 func (t RegistryTarget) GoString() string { return t.String() }
 
+func (t RegistryTarget) Named() bool { return t.Server != "" }
+
 func (t RegistryTarget) Coordinate(repository, tag string) string {
 	parts := []string{t.Server}
 	if t.Namespace != "" {
