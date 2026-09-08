@@ -3,7 +3,6 @@ package gcp
 import (
 	"context"
 	"encoding/json"
-	"math/rand/v2"
 	"net/http"
 	"time"
 
@@ -19,12 +18,7 @@ const tokenInfoURL = "https://oauth2.googleapis.com/tokeninfo"
 
 const credentialHint = "authenticate with Google Cloud: run `gcloud auth application-default login`"
 
-const (
-	tokenInfoTimeout  = 10 * time.Second
-	tokenInfoAttempts = 4
-	tokenInfoBackoff  = 100 * time.Millisecond
-	tokenInfoCeiling  = 2 * time.Second
-)
+const tokenInfoTimeout = 10 * time.Second
 
 var tokenInfoClient = &http.Client{Timeout: tokenInfoTimeout}
 
@@ -100,26 +94,15 @@ func (c Credentials) principal(ctx context.Context, token string) (string, error
 	if endpoint == "" {
 		endpoint = tokenInfoURL
 	}
-	throttled := false
-	for attempt := range tokenInfoAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
-			return "", unauthenticated()
-		}
-		principal, status, err := askTokenInfo(ctx, endpoint, token)
-		switch {
-		case err == nil && status == http.StatusOK:
-			return principal, nil
-		case status == http.StatusTooManyRequests || status >= http.StatusInternalServerError:
-			throttled = true
-		case err != nil:
-			throttled = false
-		default:
-			return "", unauthenticated()
-		}
+	principal, status, err := asked(ctx, func() (string, int, error) {
+		return askTokenInfo(ctx, endpoint, token)
+	})
+	if err == nil && status == http.StatusOK {
+		return principal, nil
 	}
-	if throttled {
+	if throttling(status) {
 		return "", providerkit.Refuse(providerkit.CodeBusy,
-			"Google's token endpoint is throttling or down: it answered neither a principal nor a refusal in %d attempts, and this credential may well be good", tokenInfoAttempts)
+			"Google's token endpoint is throttling or down: it answered neither a principal nor a refusal in %d attempts, and this credential may well be good", askAttempts)
 	}
 	return "", unauthenticated()
 }
@@ -145,18 +128,6 @@ func askTokenInfo(ctx context.Context, endpoint, token string) (string, int, err
 		return "", 0, err
 	}
 	return said.Email, resp.StatusCode, nil
-}
-
-func waited(ctx context.Context, attempt int) bool {
-	backoff := min(tokenInfoBackoff<<(attempt-1), tokenInfoCeiling)
-	timer := time.NewTimer(backoff/2 + rand.N(backoff/2))
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
 }
 
 func (Credentials) Permissions(tier providerkit.CredentialTier) (edge.CredentialDocument, error) {
