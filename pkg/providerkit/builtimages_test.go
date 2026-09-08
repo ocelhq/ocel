@@ -40,7 +40,7 @@ func TestABuiltImageReachesTheRegistryWithoutADaemon(t *testing.T) {
 		"index.mjs":   "export const handler = () => {}",
 		"config.json": functionConfig(t, nil),
 	})
-	image, err := providerkit.FunctionImage(empty.Image, dir, nil)
+	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
