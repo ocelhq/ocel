@@ -39,10 +39,6 @@ func TestEveryPortThisPhaseHasNotBuiltSaysSoRatherThanReadingAsDone(t *testing.T
 		"Releaser.PlanDestroy": errorOf(p.Releases().PlanDestroy(ctx, ref, nil)),
 		"Releaser.Destroy":     p.Releases().Destroy(ctx, ref, nil),
 
-		"ArtifactStore.Put":             p.Artifacts().Put(ctx, providerkit.ArtifactRef{}, bytes.NewReader(nil)),
-		"ArtifactStore.Has":             errorOf(p.Artifacts().Has(ctx, providerkit.ArtifactRef{})),
-		"ArtifactStore.Open":            errorOf(p.Artifacts().Open(ctx, providerkit.ArtifactRef{})),
-		"ArtifactStore.RemovePrefix":    p.Artifacts().RemovePrefix(ctx, providerkit.ClassProduction, "", nil),
 		"Credentials.Permissions":       errorOf(p.Credentials().Permissions(providerkit.TierBootstrap)),
 		"Credentials.PermissionsDeploy": errorOf(p.Credentials().Permissions(providerkit.TierDeploy)),
 	} {
@@ -72,6 +68,29 @@ func TestNoPortIsNilForTheKitToCallThrough(t *testing.T) {
 	} {
 		if port == nil {
 			t.Errorf("%s() is nil, and the kit calls methods on it", name)
+		}
+	}
+}
+
+func TestAnArtifactThatNamesNoClassOrNoStoreIsTheCallersMistake(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	p := standing(t)
+	classless := providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "bundle.zip"}
+	storeless := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: "somewhere-else", Key: "bundle.zip"}
+
+	for name, refused := range map[string]error{
+		"Put with no class":  p.Artifacts().Put(ctx, classless, bytes.NewReader(nil)),
+		"Has with no class":  errorOf(p.Artifacts().Has(ctx, classless)),
+		"Open with no class": errorOf(p.Artifacts().Open(ctx, classless)),
+		"Put with no store":  p.Artifacts().Put(ctx, storeless, bytes.NewReader(nil)),
+		"Has with no store":  errorOf(p.Artifacts().Has(ctx, storeless)),
+		"Open with no store": errorOf(p.Artifacts().Open(ctx, storeless)),
+	} {
+		var refusal providerkit.Refusal
+		if !errors.As(refused, &refusal) || refusal.Code != providerkit.CodeInvalid {
+			t.Errorf("%s = %v, want an %s refusal", name, refused, providerkit.CodeInvalid)
 		}
 	}
 }
