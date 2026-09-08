@@ -211,7 +211,12 @@ func reportLiveValues(stdout io.Writer, liveKeys []string) {
 }
 
 func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, stdout, stderr io.Writer) (*watcher.Watcher, error) {
-	dirs, err := discovery.Dirs(cfg.Dir, cfg.Discovery.Paths)
+	roots, err := discovery.Roots(cfg.Dir, cfg.Discovery.Paths, cfg.AppPaths())
+	if err != nil {
+		return nil, fmt.Errorf("resolve watch directories: %w", err)
+	}
+
+	dirs, err := discovery.Dirs(roots)
 	if err != nil {
 		return nil, fmt.Errorf("resolve watch directories: %w", err)
 	}

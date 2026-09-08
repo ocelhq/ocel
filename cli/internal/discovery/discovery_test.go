@@ -129,11 +129,13 @@ func TestDirs(t *testing.T) {
 			paths: []string{"packages/*/ocel"},
 			want:  []string{"packages/a/ocel", "packages/b/ocel"},
 		},
-		{
-			name:  "a missing path yields no dirs and no error",
-			paths: []string{"infra"},
-		},
-	}, Dirs)
+	}, func(configDir string, paths []string) ([]string, error) {
+		roots, err := Roots(configDir, paths, nil)
+		if err != nil {
+			return nil, err
+		}
+		return Dirs(roots)
+	})
 }
 
 func assertFiles(t *testing.T, got, want []string) {

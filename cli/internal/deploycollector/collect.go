@@ -8,33 +8,18 @@ import (
 	"net/http"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/declcache"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
 func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error) {
-	entry, err := Bundle(cfg)
+	roots, err := discovery.Roots(cfg.Dir, cfg.Discovery.Paths, cfg.AppPaths())
 	if err != nil {
 		return nil, err
 	}
-	return CollectBundled(ctx, cfg, gate, entry, stdout, stderr)
-}
 
-func Bundle(cfg *projectconfig.Config) (string, error) {
-	files, err := discovery.Discover(cfg.Dir, cfg.Discovery.Paths)
-	if err != nil {
-		return "", fmt.Errorf("discover resources: %w", err)
-	}
-
-	entry, err := discovery.Bundle(cfg.Dir, files)
-	if err != nil {
-		return "", fmt.Errorf("bundle discovery entrypoint: %w", err)
-	}
-	return entry, nil
-}
-
-func CollectBundled(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, entry string, stdout, stderr io.Writer) ([]declare.Resource, error) {
 	c := New(gate)
 
 	if err := gate.Prefetch(ctx); err != nil {
@@ -51,9 +36,22 @@ func CollectBundled(ctx context.Context, cfg *projectconfig.Config, gate *envgat
 
 	collectorAddr := "http://" + listener.Addr().String()
 
-	if err := discovery.Run(ctx, entry, collectorAddr, stdout, stderr); err != nil {
+	if err := discovery.Run(ctx, cfg.Dir, roots, collectorAddr, stdout, stderr); err != nil {
 		return nil, err
 	}
 
 	return c.Snapshot(), nil
+}
+
+func Fingerprint(cfg *projectconfig.Config) (string, error) {
+	roots, err := discovery.Roots(cfg.Dir, cfg.Discovery.Paths, cfg.AppPaths())
+	if err != nil {
+		return "", err
+	}
+
+	entry, err := discovery.BundleRoots(cfg.Dir, roots)
+	if err != nil {
+		return "", err
+	}
+	return declcache.ContentHash(entry)
 }

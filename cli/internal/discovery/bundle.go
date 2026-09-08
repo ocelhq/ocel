@@ -31,18 +31,13 @@ process.on("unhandledRejection", __ocelFail);
 __ocelEmit({ type: "span_start", id: "discovery", stage: "discovery" });
 `
 
-func importsAndSync(files []string) string {
+func importsOf(files []string) string {
 	var body strings.Builder
 	body.WriteString("try {\n")
 	for _, f := range files {
 		fmt.Fprintf(&body, "  await import(%q);\n", f)
 	}
 	body.WriteString(`  await Promise.all(globalThis.__ocelRegister ?? []);
-
-  const __ocelSyncRes = await fetch(new URL("/sync", process.env.OCEL_DEV_SERVER), { method: "POST" });
-  if (!__ocelSyncRes.ok) {
-    throw new Error("sync failed: " + __ocelSyncRes.status + " " + (await __ocelSyncRes.text()));
-  }
   __ocelEmit({ type: "span_end", id: "discovery", ok: true });
 } catch (err) {
   __ocelFail(err);
@@ -60,7 +55,7 @@ func Bundle(configDir string, files []string) (string, error) {
 
 	var entry strings.Builder
 	entry.WriteString(protocolBanner)
-	entry.WriteString(importsAndSync(files))
+	entry.WriteString(importsOf(files))
 
 	result := api.Build(api.BuildOptions{
 		Stdin: &api.StdinOptions{

@@ -163,15 +163,15 @@ export default {
 			},
 		},
 		{
-			name: "defaults the discovery paths",
+			name: "leaves the discovery paths unset when the config does not name them",
 			config: `
 export default {
   slug: "test-app",
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
-				if len(cfg.Discovery.Paths) != 1 || cfg.Discovery.Paths[0] != "infra" {
-					t.Fatalf("Discovery.Paths = %v, want [infra]", cfg.Discovery.Paths)
+				if cfg.Discovery.Paths != nil {
+					t.Fatalf("Discovery.Paths = %v, want them unset so discovery uses its defaults", cfg.Discovery.Paths)
 				}
 			},
 		},
@@ -1398,8 +1398,8 @@ func TestResolveOptional(t *testing.T) {
 		if cfg.Dir != root {
 			t.Fatalf("Dir = %q, want %q", cfg.Dir, root)
 		}
-		if len(cfg.Discovery.Paths) != 1 || cfg.Discovery.Paths[0] != "infra" {
-			t.Fatalf("Discovery.Paths = %v, want [infra]", cfg.Discovery.Paths)
+		if cfg.Discovery.Paths != nil {
+			t.Fatalf("Discovery.Paths = %v, want them unset so discovery uses its defaults", cfg.Discovery.Paths)
 		}
 		if cfg.Slug != "" || cfg.Provider != nil || len(cfg.Apps) != 0 {
 			t.Fatalf("cfg = %+v, want the deploy-only fields empty", cfg)
