@@ -1,6 +1,7 @@
 package providerkit_test
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -309,4 +310,51 @@ func TestPreviewDeployRefusesTwoPreviewDomains(t *testing.T) {
 	if !strings.Contains(said, "*.preview.shop.example") || !strings.Contains(said, "*.preview.acme.example") {
 		t.Fatalf("Deploy() = %q, want it refused by both domains the project claims", said)
 	}
+}
+
+func productionStack(t *testing.T, provider *fake.Provider) edge.StackSpec {
+	t.Helper()
+	stacks := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks()
+	if len(stacks) != 1 {
+		t.Fatalf("the edge reconciled %d stacks, want the one this deploy stands up", len(stacks))
+	}
+	return stacks[0]
+}
+
+func TestDeployTellsTheEdgeWhichAppEachProductionHostnameAnswersFrom(t *testing.T) {
+	t.Run("a project hostname answers from the first app alone", func(t *testing.T) {
+		builtProject(t)
+		client, provider := deployServed(t)
+
+		req := twoAppRequest()
+		req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+		if result, _ := deploy(t, client, req); !result.GetSuccess() {
+			t.Fatalf("Deploy() = %q", result.GetError())
+		}
+
+		want := map[string]string{"shop.example": "web"}
+		if got := productionStack(t, provider).DomainApps; !maps.Equal(got, want) {
+			t.Errorf("DomainApps = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("an app hostname answers from the app that declares it", func(t *testing.T) {
+		builtProject(t)
+		client, provider := deployServed(t)
+
+		req := twoAppRequest()
+		req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+		req.GetManifest().GetApps()[1].Domains = []*contractv1.TierDomains{{
+			Tier:      environmentv1.Tier_TIER_PRODUCTION,
+			Hostnames: []string{"admin.shop.example"},
+		}}
+		if result, _ := deploy(t, client, req); !result.GetSuccess() {
+			t.Fatalf("Deploy() = %q", result.GetError())
+		}
+
+		want := map[string]string{"shop.example": "web", "admin.shop.example": "admin"}
+		if got := productionStack(t, provider).DomainApps; !maps.Equal(got, want) {
+			t.Errorf("DomainApps = %v, want %v", got, want)
+		}
+	})
 }

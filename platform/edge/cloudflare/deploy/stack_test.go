@@ -828,3 +828,52 @@ func TestWorkerDecoration(t *testing.T) {
 		}
 	})
 }
+
+func TestGenericWorkerCarriesTheHostnamesEachAppAnswersFor(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the map reaches the entry worker as canonical json", func(t *testing.T) {
+		t.Parallel()
+
+		spec := edge.StackSpec{
+			Program:    &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-deployments-store"},
+			DomainApps: map[string]string{"shop.example": "web", "admin.shop.example": "admin"},
+		}
+
+		worker := genericWorker(spec, "acme-web")
+
+		want := `{"admin.shop.example":"admin","shop.example":"web"}`
+		if worker.Vars[genericDomainAppsBinding] != want {
+			t.Errorf("Vars[%s] = %q, want %q", genericDomainAppsBinding, worker.Vars[genericDomainAppsBinding], want)
+		}
+	})
+
+	t.Run("a project that binds no hostname to an app leaves the var unset", func(t *testing.T) {
+		t.Parallel()
+
+		spec := edge.StackSpec{Program: &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-deployments-store"}}
+
+		worker := genericWorker(spec, "acme-web")
+
+		if _, bound := worker.Vars[genericDomainAppsBinding]; bound {
+			t.Errorf("Vars = %v, want no %s: the entry falls back to the pointer", worker.Vars, genericDomainAppsBinding)
+		}
+	})
+
+	t.Run("a changed map restamps the spec", func(t *testing.T) {
+		t.Parallel()
+
+		spec := edge.StackSpec{
+			Version:    "v2",
+			Slug:       "acme-web",
+			Program:    &edge.ProgramSpec{Name: "ocel-web", Worker: testStoreWorker(), StoreScriptName: "ocel-deployments-store"},
+			DomainApps: map[string]string{"shop.example": "web"},
+		}
+		moved := spec
+		moved.DomainApps = map[string]string{"shop.example": "admin"}
+
+		if specStampFor(t, spec) == specStampFor(t, moved) {
+			t.Error("the stamp holds still while the hostname moves app, so the entry worker is never re-uploaded")
+		}
+	})
+}

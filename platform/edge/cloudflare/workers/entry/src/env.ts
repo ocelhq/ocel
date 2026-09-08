@@ -12,6 +12,7 @@ export interface Env {
   DEPLOYMENTS: DeploymentsBinding;
   OCEL_SLUG: string;
   OCEL_APP?: string;
+  OCEL_DOMAIN_APPS?: string;
   OCEL_PREVIEW?: string;
   OCEL_PREVIEW_GLOBAL?: string;
   OCEL_PREVIEW_BASE_DOMAIN?: string;

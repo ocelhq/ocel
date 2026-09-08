@@ -9,6 +9,7 @@ import type { AssetStoreDeps } from "@framework/next-router/assets";
 import { functionUrlImageOrigin } from "@framework/next-router/image";
 import { type CacheDeps, deploymentScope } from "./cache";
 import { type DeploymentRecord, type DeploymentsDeps, resolveDeployment } from "./deployments";
+import { domainApp } from "./domains";
 import { createEdgeInvoker, type EdgeCacheStub, type EdgeObjectStore } from "./edge";
 import type { CacheEntrypointProps, Env } from "./env";
 import { coloImageCache } from "./image";
@@ -263,7 +264,7 @@ export default {
     const global = env.OCEL_PREVIEW === "1" && env.OCEL_PREVIEW_GLOBAL === "1";
 
     let pointer: string | undefined;
-    let app = env.OCEL_APP;
+    let app = env.OCEL_APP ?? domainApp(env.OCEL_DOMAIN_APPS, host);
     let slug = env.OCEL_SLUG;
     const baseDomain =
       env.OCEL_PREVIEW === "1" ? normalizeBaseDomain(env.OCEL_PREVIEW_BASE_DOMAIN) : "";
