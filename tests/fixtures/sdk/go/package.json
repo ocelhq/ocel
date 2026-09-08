@@ -8,8 +8,7 @@
   },
   "dependencies": {
     "@ocel/provider-aws": "workspace:^",
-    "ocel": "workspace:^",
-    "zod": "^4.4.3"
+    "ocel": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^20",
