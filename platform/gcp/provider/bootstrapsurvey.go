@@ -28,11 +28,10 @@ const (
 )
 
 type stamp struct {
-	Schema    int    `json:"schema"`
-	Namespace string `json:"namespace"`
-	State     state  `json:"state"`
-	Writer    string `json:"writer"`
-	Digest    string `json:"digest"`
+	Schema int    `json:"schema"`
+	State  state  `json:"state"`
+	Writer string `json:"writer"`
+	Digest string `json:"digest"`
 }
 
 type survey struct {

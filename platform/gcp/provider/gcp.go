@@ -97,7 +97,9 @@ func (p *Provider) Credentials() providerkit.Credentials {
 	}
 }
 
-func (p *Provider) Edges() providerkit.EdgeRegistry { return edges{namespace: p.clients.namespace} }
+func (p *Provider) Edges() providerkit.EdgeRegistry {
+	return edges{namespace: p.clients.Namespace()}
+}
 
 func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
 
