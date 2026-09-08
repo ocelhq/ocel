@@ -350,6 +350,21 @@ func TestComputeRefusesAnAppInALanguageThisBuildCannotRead(t *testing.T) {
 	}
 }
 
+func TestComputeGrantsNothingWhenNothingWasDeclaredWhateverTheApp(t *testing.T) {
+	root := fixtureRoot(t, "monorepo")
+
+	apps := monorepoApps()
+	apps[0].Language = discovery.Python
+
+	usages, err := Compute(root, apps, nil)
+	if err != nil {
+		t.Fatalf("Compute with no declarations: %v", err)
+	}
+	if usages != nil {
+		t.Errorf("usages = %v, want none", usages)
+	}
+}
+
 func TestComputeRefusesAnAppThatNamesNoLanguage(t *testing.T) {
 	root := fixtureRoot(t, "monorepo")
 
