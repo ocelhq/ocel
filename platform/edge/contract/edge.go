@@ -49,6 +49,7 @@ type FlipBound struct {
 
 type Facts struct {
 	RunsCode              bool
+	AddressesItself       bool
 	ServesUnbound         bool
 	SignsOriginForwards   bool
 	InvalidatesByCacheTag bool
