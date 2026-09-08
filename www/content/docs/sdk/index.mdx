@@ -86,6 +86,8 @@ When you are running the CLI (`ocel dev`, `ocel deploy` or `ocel preview`) this 
   `discovery.paths` option in the [config](../configuration.mdx).
 </Callout>
 
+The `infra` folder does not have to be TypeScript. When the nearest manifest above it is a `go.mod`, the folder is a Go package: put `var DB = sdk.Postgres("main")` in it, import [`github.com/ocelhq/ocel/sdk`](https://pkg.go.dev/github.com/ocelhq/ocel/sdk), and discovery generates a `main` under `.ocel/` that imports the package and nothing else, then runs it with `go run`. Your app's own `main` is never built, and your `go.work` is left alone.
+
 ### The magic, distilled
 
 As magical as it may be made to seem, put plainly, the SDK combines the following steps into one:
