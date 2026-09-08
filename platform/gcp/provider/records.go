@@ -33,8 +33,7 @@ type records struct {
 func (r records) collection(name providerkit.RecordName) (*firestore.CollectionRef, providerkit.Class, error) {
 	class, named := providerkit.ClassOf(name)
 	if !named {
-		return nil, "", providerkit.Refuse(providerkit.CodeInvalid,
-			"%s names no class, and this project keeps each class's records in a collection of its own", name)
+		return nil, "", classless(name)
 	}
 	client, err := r.clients.Firestore()
 	if err != nil {

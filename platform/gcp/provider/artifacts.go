@@ -28,8 +28,7 @@ type artifacts struct {
 
 func (a artifacts) bucket(class providerkit.Class) (*storage.BucketHandle, error) {
 	if class == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"an artifact names no class, and this project keeps each class's artifacts in a bucket of its own")
+		return nil, classless("an artifact")
 	}
 	client, err := a.clients.Storage()
 	if err != nil {
