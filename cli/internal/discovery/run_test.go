@@ -182,7 +182,7 @@ func TestRunRefusesARootThisBuildCannotDiscover(t *testing.T) {
 	if err == nil {
 		t.Fatal("Run succeeded on a rust root, want an error")
 	}
-	want := "is a rust folder, and this build of ocel discovers only go and js and python folders"
+	want := "is a rust folder, and this build of ocel discovers only go, js and python folders"
 	if !strings.Contains(err.Error(), want) {
 		t.Errorf("err = %v, want it to contain %q", err, want)
 	}
