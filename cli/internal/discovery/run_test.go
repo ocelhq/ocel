@@ -24,7 +24,7 @@ func jsFixture(t *testing.T, source string) (string, Prepared) {
 
 func prepare(t *testing.T, root string) Prepared {
 	t.Helper()
-	roots, err := Roots(root, nil, nil)
+	roots, err := Roots(root, nil)
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}

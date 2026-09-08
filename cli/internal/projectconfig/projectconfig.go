@@ -97,14 +97,6 @@ type Config struct {
 	Path          string
 }
 
-func (c *Config) AppPaths() []string {
-	paths := make([]string, 0, len(c.Apps))
-	for _, app := range c.Apps {
-		paths = append(paths, app.Path)
-	}
-	return paths
-}
-
 func (c *Config) EdgeKind() edge.Kind {
 	if c.Edge == nil {
 		return ""
