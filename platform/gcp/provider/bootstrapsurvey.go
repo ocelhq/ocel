@@ -17,6 +17,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
+const enabledVersion = "ENABLED"
+
 const (
 	stateApplying = "applying"
 	stateRemoving = "removing"
@@ -261,7 +263,23 @@ func (b bootstrapper) secretStands(ctx context.Context, name string) (bool, erro
 	if err != nil {
 		return false, fmt.Errorf("read the %s secret: %w", name, err)
 	}
-	return true, nil
+	return b.passphraseHeld(ctx, name)
+}
+
+func (b bootstrapper) passphraseHeld(ctx context.Context, name string) (bool, error) {
+	service, err := b.clients.Secrets()
+	if err != nil {
+		return false, err
+	}
+	held, err := attempted(ctx, service.Projects.Secrets.Versions.Get(
+		secretPath(b.clients.project, name)+"/versions/latest").Context(ctx).Do)
+	if absent(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read whether the %s secret holds a passphrase: %w", name, err)
+	}
+	return held.State == enabledVersion, nil
 }
 
 func secretPath(project, name string) string {

@@ -527,3 +527,47 @@ func stamped(t *testing.T, class providerkit.Class, body string) {
 		t.Fatal(err)
 	}
 }
+
+func TestLiveASecretWithNoVersionInItIsNotStandingAndAReApplyMintsOne(t *testing.T) {
+	p := live(t)
+	class := providerkit.ClassPreview
+	bootstrapper := bootstrapped(t, p, class)
+
+	ctx := context.Background()
+	service, err := secretmanager.NewService(ctx, gcp.EmulatorREST(endpoint())...)
+	if err != nil {
+		t.Fatalf("reach the emulator's secret manager: %v", err)
+	}
+	name := gcp.PassphraseSecret(class)
+	parent := "projects/" + liveProject()
+	if _, err := service.Projects.Secrets.Delete(parent + "/secrets/" + name).Context(ctx).Do(); err != nil {
+		t.Fatalf("delete the passphrase secret out of band: %v", err)
+	}
+	if _, err := service.Projects.Secrets.Create(parent, &secretmanager.Secret{
+		Replication: &secretmanager.Replication{Automatic: &secretmanager.Automatic{}},
+	}).SecretId(name).Context(ctx).Do(); err != nil {
+		t.Fatalf("put the secret back with nothing in it: %v", err)
+	}
+
+	plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class})
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	for _, group := range plan.Groups {
+		for _, change := range group.Changes {
+			if change.Kind != "secretmanager:secret" {
+				continue
+			}
+			if change.Action != providerkit.ActionCreate {
+				t.Errorf("Plan() shows the passphrase secret as %q while it holds no version at all, and nothing would ever put one in it", change.Action)
+			}
+		}
+	}
+
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+		t.Fatalf("Apply() over a secret with no version = %v", err)
+	}
+	if len(passphraseHeld(t, class)) == 0 {
+		t.Error("the apply left the passphrase secret empty, and every Pulumi stack in this class is encrypted under it")
+	}
+}

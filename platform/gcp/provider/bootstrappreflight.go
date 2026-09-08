@@ -35,6 +35,7 @@ var bootstrapPermissions = []string{
 	"secretmanager.secrets.get",
 	"secretmanager.secrets.delete",
 	"secretmanager.versions.add",
+	"secretmanager.versions.get",
 	"secretmanager.versions.access",
 }
 
