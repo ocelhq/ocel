@@ -120,6 +120,7 @@ func resolveSlug(projectDir, requested string) (string, error) {
 }
 
 var providerPlaceholders = map[string]string{
+	"@ocel/provider-gcp": `{ project: "my-project", region: "europe-west1" }`,
 	"@ocel/provider-vps": `{ ssh: "my-vps" }`,
 }
 
