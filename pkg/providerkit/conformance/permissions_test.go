@@ -9,13 +9,13 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type saying struct{ err error }
+type permissionsPort struct{ err error }
 
-func (saying) Whoami(context.Context) (providerkit.Identity, error) {
+func (permissionsPort) Whoami(context.Context) (providerkit.Identity, error) {
 	return providerkit.Identity{Provider: "test"}, nil
 }
 
-func (s saying) Permissions(providerkit.CredentialTier) (edge.CredentialDocument, error) {
+func (s permissionsPort) Permissions(providerkit.CredentialTier) (edge.CredentialDocument, error) {
 	return edge.CredentialDocument{}, s.err
 }
 
@@ -34,7 +34,7 @@ func TestPermissionsMayBeUnwrittenSoLongAsTheProviderSaysSo(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			err := permissionsRendered(saying{err: tc.err}, providerkit.TierBootstrap)
+			err := permissionsRendered(permissionsPort{err: tc.err}, providerkit.TierBootstrap)
 			if held := err == nil; held != tc.held {
 				t.Errorf("permissionsRendered() = %v, want held = %v", err, tc.held)
 			}

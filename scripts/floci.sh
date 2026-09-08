@@ -43,12 +43,16 @@ aws)
     PORT=4566
     ENDPOINT_VAR=OCEL_FLOCI_ENDPOINT
     MOUNTS_DOCKER=yes
+    READY_PATH=/_localstack/health
+    READY_BODY='"(cloudformation|s3|dynamodb|ssm|iam)":'
     ;;
 gcp)
     IMAGE=$GCP_IMAGE
     PORT=4588
     ENDPOINT_VAR=OCEL_FLOCI_GCP_ENDPOINT
     MOUNTS_DOCKER=no
+    READY_PATH="/storage/v1/b?project=$GCP_PROJECT"
+    READY_BODY='"kind": *"storage#buckets"'
     ;;
 *) die "unknown cloud: $CLOUD (expected aws or gcp)" ;;
 esac
@@ -61,16 +65,7 @@ endpoint_of() {
 }
 
 answering() {
-    case "$CLOUD" in
-    aws)
-        curl -sf --max-time 5 "$1/_localstack/health" |
-            grep -qE '"(cloudformation|s3|dynamodb|ssm|iam)":'
-        ;;
-    gcp)
-        curl -sf --max-time 5 "$1/storage/v1/b?project=$GCP_PROJECT" |
-            grep -q '"kind": *"storage#buckets"'
-        ;;
-    esac
+    curl -sf --max-time 5 "$1$READY_PATH" | grep -qE "$READY_BODY"
 }
 
 wait_ready() {

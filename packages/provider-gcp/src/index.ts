@@ -12,8 +12,7 @@ export interface GcpProviderOptions {
  * Declares Google Cloud as the provider `ocel deploy` provisions into.
  *
  * Credentials are read from Application Default Credentials in the environment
- * the provider runs in: `gcloud auth application-default login`, or
- * `GOOGLE_APPLICATION_CREDENTIALS` pointing at a service account key.
+ * the provider runs in: `gcloud auth application-default login`.
  */
 export default function gcpProvider(options: GcpProviderOptions): ProviderDescriptor {
   return { package: "@ocel/provider-gcp", options };
