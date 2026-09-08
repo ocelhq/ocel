@@ -1,0 +1,52 @@
+name: Proto
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "proto/**"
+      - "buf.yaml"
+      - "buf.lock"
+      - "buf.gen.yaml"
+      - "buf.gen.go.yaml"
+      - "pkg/proto/**"
+      - "packages/ocel/src/gen/**"
+      - "python/ocel/src/ocel/gen/**"
+      - "crates/ocel/src/gen/**"
+      - "package.json"
+      - ".github/workflows/proto.yml"
+      - ".github/actions/node-workspace/**"
+  workflow_dispatch:
+
+concurrency:
+  group: proto-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  generated:
+    name: generated code is current
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/node-workspace
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      - run: pnpm gen
+
+      - name: Report what regeneration changed
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::The committed bindings do not match the protos. Run \`pnpm gen\` and commit the result."
+            git status --porcelain
+            git diff
+            exit 1
+          fi
