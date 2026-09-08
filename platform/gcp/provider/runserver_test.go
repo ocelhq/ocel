@@ -13,10 +13,13 @@ import (
 	run "google.golang.org/api/run/v2"
 )
 
+const trafficByLatest = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
+
 type runServer struct {
 	mu       sync.Mutex
 	held     *run.GoogleCloudRunV2Service
 	revision int
+	writes   int
 
 	created  []*run.GoogleCloudRunV2Service
 	patched  []*run.GoogleCloudRunV2Service
@@ -70,10 +73,10 @@ func (s *runServer) create(w http.ResponseWriter, r *http.Request) {
 	s.held = &run.GoogleCloudRunV2Service{
 		Name:     strings.TrimPrefix(r.URL.Path, "/v2/") + "/" + name,
 		Template: desired.Template,
-		Traffic:  desired.Traffic,
+		Traffic:  allocated(desired.Traffic),
 		Uri:      "https://" + name + ".run.app",
 	}
-	s.ready(name)
+	s.revised()
 	writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/stand", Done: true})
 }
 
@@ -88,18 +91,35 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.patched = append(s.patched, desired)
+	replaced := !sameTemplate(s.held.Template, desired.Template)
 	s.held.Template = desired.Template
-	if desired.Traffic != nil {
-		s.held.Traffic = desired.Traffic
+	s.held.Traffic = allocated(desired.Traffic)
+	s.writes++
+	s.held.Etag = "etag-" + strconv.Itoa(s.writes)
+	if replaced {
+		s.revised()
 	}
-	s.ready(revisionName(s.held.Name))
 	writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/release", Done: true})
 }
 
-func (s *runServer) ready(service string) {
+func (s *runServer) revised() {
 	s.revision++
-	s.held.LatestReadyRevision = s.held.Name + "/revisions/" + service + "-0000" + strconv.Itoa(s.revision)
-	s.held.Etag = "etag-" + strconv.Itoa(s.revision)
+	s.writes++
+	s.held.LatestReadyRevision = s.held.Name + "/revisions/" + revisionName(s.held.Name) + "-0000" + strconv.Itoa(s.revision)
+	s.held.Etag = "etag-" + strconv.Itoa(s.writes)
+}
+
+func allocated(traffic []*run.GoogleCloudRunV2TrafficTarget) []*run.GoogleCloudRunV2TrafficTarget {
+	if len(traffic) > 0 {
+		return traffic
+	}
+	return []*run.GoogleCloudRunV2TrafficTarget{{Type: trafficByLatest, Percent: 100}}
+}
+
+func sameTemplate(held, desired *run.GoogleCloudRunV2RevisionTemplate) bool {
+	was, _ := json.Marshal(held)
+	is, _ := json.Marshal(desired)
+	return string(was) == string(is)
 }
 
 func (s *runServer) get(w http.ResponseWriter) {
@@ -149,4 +169,16 @@ func (s *runServer) bound() []*run.GoogleIamV1Policy {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return slices.Clone(s.policies)
+}
+
+func (s *runServer) serving() *run.GoogleCloudRunV2Service {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.held
+}
+
+func (s *runServer) releases() []*run.GoogleCloudRunV2Service {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.patched)
 }
