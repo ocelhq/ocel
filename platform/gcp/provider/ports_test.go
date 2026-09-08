@@ -25,30 +25,6 @@ func newProvider(t *testing.T, options gcp.Options) *gcp.Provider {
 	return p
 }
 
-func TestEveryPortThisPhaseHasNotBuiltSaysSoRatherThanReadingAsDone(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	p := standing(t)
-	ref := providerkit.StackRef{Project: "acme", Class: providerkit.ClassProduction}
-
-	for name, refused := range map[string]error{
-		"Releaser.Plan":        errorOf(p.Releases().Plan(ctx, providerkit.StackPlan{Ref: ref}, nil)),
-		"Releaser.Provision":   errorOf(p.Releases().Provision(ctx, providerkit.StackPlan{Ref: ref}, nil)),
-		"Releaser.PlanDestroy": errorOf(p.Releases().PlanDestroy(ctx, ref, nil)),
-		"Releaser.Destroy":     p.Releases().Destroy(ctx, ref, nil),
-	} {
-		var refusal providerkit.Refusal
-		if !errors.As(refused, &refusal) || refusal.Code != providerkit.CodeNotReady {
-			t.Errorf("%s() = %v, want a %s refusal so a run stops here rather than continuing against nothing", name, refused, providerkit.CodeNotReady)
-			continue
-		}
-		if !strings.HasPrefix(refusal.Message, "gcp: ") {
-			t.Errorf("%s() refused with %q, want it to name the provider the refusal came from", name, refusal.Message)
-		}
-	}
-}
-
 func TestNoPortIsNilForTheKitToCallThrough(t *testing.T) {
 	t.Parallel()
 

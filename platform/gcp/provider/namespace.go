@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -18,9 +19,10 @@ const (
 )
 
 const (
-	maxBucketName = 63
-	maxAccountID  = 30
-	minDatabaseID = 4
+	maxBucketName  = 63
+	maxAccountID   = 30
+	minDatabaseID  = 4
+	maxServiceName = 49
 )
 
 const longestClass = providerkit.ClassProduction
@@ -54,6 +56,22 @@ func (n Names) RuntimeAccount(class providerkit.Class) string {
 
 func (n Names) RuntimeAccountEmail(class providerkit.Class) string {
 	return n.RuntimeAccount(class) + "@" + n.project + accountDomain
+}
+
+func (n Names) Service(project, env, app, function string) (string, error) {
+	parts := []string{string(n.namespace), naming.Sanitize(project), naming.Sanitize(env), naming.Sanitize(app)}
+	if function != app {
+		parts = append(parts, naming.Sanitize(strings.TrimPrefix(function, app+"-")))
+	}
+	service := strings.Join(parts, "-")
+	if len(service) > maxServiceName {
+		return "", providerkit.Refuse(providerkit.CodeInvalid,
+			"the Cloud Run service %s would be named %s, which is %d characters and Cloud Run builds a url from %d: "+
+				"a service is named for the namespace, the project, the environment and the app it serves.\n"+
+				"Name a shorter namespace in %s, a shorter project slug, or a shorter app",
+			app, service, len(service), maxServiceName, providerkit.NamespaceEnvVar)
+	}
+	return service, nil
 }
 
 func (n Names) Database() string { return string(n.namespace) }

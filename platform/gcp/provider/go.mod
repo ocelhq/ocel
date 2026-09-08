@@ -7,6 +7,7 @@ require (
 	cloud.google.com/go/kms v1.32.0
 	cloud.google.com/go/storage v1.56.0
 	github.com/google/go-containerregistry v0.21.7
+	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
@@ -70,7 +71,6 @@ require (
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
 	github.com/ocelhq/ocel/pkg/channel v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/naming v0.0.0 // indirect
 	github.com/ocelhq/ocel/pkg/proto v0.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect

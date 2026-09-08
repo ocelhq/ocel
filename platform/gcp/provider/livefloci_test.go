@@ -66,6 +66,12 @@ func TestLiveCredentials(t *testing.T) {
 	}
 }
 
+func TestLiveReleaser(t *testing.T) {
+	p := live(t)
+
+	conformance.RunReleaser(t, p.Releases(), p.Artifacts(), p.Serves())
+}
+
 func TestLiveRecordStore(t *testing.T) {
 	conformance.RunRecordStore(t, live(t).Records())
 }
