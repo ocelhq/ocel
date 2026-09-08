@@ -18,6 +18,22 @@ func TestTheCoordinateIsTheTargetPlusTheAppRepositoryAndTheDigestTag(t *testing.
 	}
 }
 
+func TestATargetNamesARegistryOnlyWhenItNamesAServer(t *testing.T) {
+	for _, held := range []struct {
+		target providerkit.RegistryTarget
+		named  bool
+	}{
+		{providerkit.RegistryTarget{}, false},
+		{providerkit.RegistryTarget{Namespace: "acme/ocel"}, false},
+		{providerkit.RegistryTarget{Server: "ghcr.io"}, true},
+	} {
+		if got := held.target.Named(); got != held.named {
+			t.Errorf("%v Named() = %v, want %v: a target names a registry when it says where to push, "+
+				"and the resolve and the push must read that the same way", held.target, got, held.named)
+		}
+	}
+}
+
 func TestACoordinateUnderARegistryWithNoNamespaceSitsDirectlyOnTheServer(t *testing.T) {
 	target := providerkit.RegistryTarget{Server: "registry.fly.io"}
 
