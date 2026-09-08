@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
@@ -17,7 +18,7 @@ type Launcher interface {
 	Command(ctx context.Context, configDir string, root Root, serverURL string) (*exec.Cmd, error)
 }
 
-var launchers = map[Language]Launcher{}
+var launchers = map[Language]Launcher{Go: goLauncher{}}
 
 type Prepared struct {
 	Roots []Root
@@ -61,7 +62,7 @@ func commandsFor(ctx context.Context, configDir string, roots []Root, entry, ser
 		}
 		launcher, ok := launchers[root.Language]
 		if !ok {
-			return nil, fmt.Errorf("discovery: %s is a %s folder, and this build of ocel discovers only js folders", root.Dir, root.Language)
+			return nil, fmt.Errorf("discovery: %s is a %s folder, and this build of ocel discovers only %s folders", root.Dir, root.Language, discoverable())
 		}
 		cmd, err := launcher.Command(ctx, configDir, root, serverURL)
 		if err != nil {
@@ -70,6 +71,15 @@ func commandsFor(ctx context.Context, configDir string, roots []Root, entry, ser
 		commands = append(commands, cmd)
 	}
 	return commands, nil
+}
+
+func discoverable() string {
+	languages := []string{string(JS)}
+	for language := range launchers {
+		languages = append(languages, string(language))
+	}
+	slices.Sort(languages)
+	return strings.Join(languages, " and ")
 }
 
 func BundleRoots(configDir string, roots []Root) (string, error) {
