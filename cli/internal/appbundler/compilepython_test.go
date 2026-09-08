@@ -316,3 +316,36 @@ func TestCompileLeavesTheBuildHostsOwnDirectoriesOutOfThePythonArtifact(t *testi
 		}
 	}
 }
+
+func TestCompileCarriesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *testing.T) {
+	t.Parallel()
+
+	project := pythonApp(t, map[string]string{
+		"server/main.py":     "from infra import db\n",
+		"infra/__init__.py":  "db = 1\n",
+		"infra/nested/db.py": "handle = 2\n",
+	})
+	out := t.TempDir()
+	appDir := filepath.Join(out, "apps", "web")
+	funcDir := filepath.Join(appDir, "functions", "index.func")
+	err := Compile(context.Background(), Compilation{
+		App:            "web",
+		Runtime:        Runtime{Name: "python", Arch: "x86_64"},
+		Source:         filepath.Join(project, "server"),
+		DiscoveryRoots: []string{filepath.Join(project, "infra"), filepath.Join(project, "server")},
+		FuncDir:        funcDir,
+		AppDir:         appDir,
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	for _, rel := range []string{filepath.Join("infra", "__init__.py"), filepath.Join("infra", "nested", "db.py")} {
+		if _, err := os.Stat(filepath.Join(funcDir, rel)); err != nil {
+			t.Errorf("the artifact holds no %s: `from infra import db` resolves at runtime only if the folder that declared it travels with the app: %v", rel, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(funcDir, "server")); err == nil {
+		t.Error("the artifact holds a server/ of its own: a root already inside the app dir is carried by the app's own tree")
+	}
+}
