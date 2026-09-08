@@ -81,6 +81,12 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 			project:   "acme-prod",
 			names:     "Firestore",
 		},
+		{
+			name:      "a namespace that reads as a UUID",
+			namespace: "ab2c3d45-6789-4abc-8def-0123456789ab",
+			project:   "acme-prod",
+			names:     "Firestore",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(providerkit.NamespaceEnvVar, tc.namespace)
