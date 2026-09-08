@@ -1,5 +1,5 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { callSite } from "./callsite.js";
+import { callSiteFile } from "../utils/callsite.js";
 import {
   type Definitions,
   isLive,
@@ -31,7 +31,7 @@ const ENTRY_GLOBAL = "__OCEL_EDGE_ENTRY";
 export function defineEnv<const TDefinitions extends Definitions>(
   definitions: TDefinitions,
 ): Env<TDefinitions> {
-  validateDefinitions(definitions, callSite());
+  validateDefinitions(definitions, callSiteFile());
 
   const resolved = new Map<string, unknown>();
   return new Proxy({} as Env<TDefinitions>, {

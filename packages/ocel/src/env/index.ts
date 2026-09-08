@@ -1,6 +1,6 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { callSiteFile } from "../utils/callsite.js";
 import { defer } from "../utils/defer.js";
-import { callSite } from "./callsite.js";
 import { declareEnv } from "./declare.js";
 import {
   type Definitions,
@@ -32,7 +32,7 @@ export type Env<TDefinitions extends Definitions> = {
 export function defineEnv<const TDefinitions extends Definitions>(
   definitions: TDefinitions,
 ): Env<TDefinitions> {
-  const source = callSite();
+  const source = callSiteFile();
   validateDefinitions(definitions, source);
 
   if (process.env.OCEL_PHASE === "discovery") {

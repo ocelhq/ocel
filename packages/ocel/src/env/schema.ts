@@ -1,5 +1,5 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { callSite } from "./callsite.js";
+import { callSiteFile } from "../utils/callsite.js";
 import { EnvClientError } from "./client.js";
 import type { Definitions } from "./definition.js";
 import { parse } from "./standard.js";
@@ -20,7 +20,7 @@ export function envSchema<const TDefinitions extends Definitions>(
   definitions: TDefinitions,
 ): EnvSchema<TDefinitions> {
   return Object.defineProperty(definitions, SOURCE, {
-    value: callSite(),
+    value: callSiteFile(),
     enumerable: false,
   }) as EnvSchema<TDefinitions>;
 }

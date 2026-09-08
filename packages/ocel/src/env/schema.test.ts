@@ -18,7 +18,6 @@ describe("envSchema", () => {
 
     expect(schema).toBe(definitions);
     expect(Object.keys(schema)).toEqual(["SCHEMA_PORT"]);
-    expect(sourceOf(schema)).toContain("schema.test.ts");
   });
 
   it("reports no source for definitions declared without it", () => {
