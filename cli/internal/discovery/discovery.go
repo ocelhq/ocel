@@ -45,26 +45,19 @@ func Discover(configDir string, paths []string) ([]string, error) {
 	return files, nil
 }
 
-func Dirs(configDir string, paths []string) ([]string, error) {
+func Dirs(roots []Root) ([]string, error) {
 	seen := make(map[string]bool)
 	var dirs []string
 
-	for _, p := range paths {
-		roots, err := resolveRoots(configDir, p)
+	for _, root := range roots {
+		found, err := walkDirs(root.Dir)
 		if err != nil {
 			return nil, err
 		}
-
-		for _, root := range roots {
-			found, err := walkDirs(root)
-			if err != nil {
-				return nil, err
-			}
-			for _, d := range found {
-				if !seen[d] {
-					seen[d] = true
-					dirs = append(dirs, d)
-				}
+		for _, d := range found {
+			if !seen[d] {
+				seen[d] = true
+				dirs = append(dirs, d)
 			}
 		}
 	}

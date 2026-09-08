@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -28,8 +27,6 @@ const ConfigFileName = "ocel.config.ts"
 const scratchDirName = ".ocel"
 
 const initHint = "run `ocel init` to create one"
-
-var defaultDiscoveryPaths = []string{"infra"}
 
 type Discovery struct {
 	Paths []string
@@ -98,6 +95,14 @@ type Config struct {
 	Registry      *Registry
 	Dir           string
 	Path          string
+}
+
+func (c *Config) AppPaths() []string {
+	paths := make([]string, 0, len(c.Apps))
+	for _, app := range c.Apps {
+		paths = append(paths, app.Path)
+	}
+	return paths
 }
 
 func (c *Config) EdgeKind() edge.Kind {
@@ -310,9 +315,8 @@ func resolve(ctx context.Context, startDir, explicitPath string, optional bool) 
 	if !isFile(configPath) {
 		if optional {
 			return &Config{
-				Discovery: Discovery{Paths: defaultDiscoveryPaths},
-				Dir:       root,
-				Path:      configPath,
+				Dir:  root,
+				Path: configPath,
 			}, nil
 		}
 		return nil, fmt.Errorf("no %s found in %s or any parent directory — %s", ConfigFileName, startDir, initHint)
@@ -388,11 +392,6 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
 	}
-	paths := raw.Discovery.Paths
-	if len(paths) == 0 {
-		paths = slices.Clone(defaultDiscoveryPaths)
-	}
-
 	domains, err := normalizeDomains(raw.Domains)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
@@ -410,7 +409,7 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 
 	return &Config{
 		Slug:          raw.Slug,
-		Discovery:     Discovery{Paths: paths},
+		Discovery:     Discovery{Paths: raw.Discovery.Paths},
 		Provider:      provider,
 		Edge:          edge,
 		DNS:           dns,

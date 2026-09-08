@@ -166,11 +166,7 @@ func runEnvSet(ctx context.Context, deps cmddeps.Deps, cwd, key, value string, o
 }
 
 func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, runner *provider.Runner, key string, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, error) {
-	entry, err := deploycollector.Bundle(cfg)
-	if err != nil {
-		return nil, err
-	}
-	fingerprint, err := declcache.ContentHash(entry)
+	fingerprint, err := deploycollector.Fingerprint(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +179,7 @@ func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfi
 	}
 
 	gate := envGate(cfg, runner, opts)
-	if _, err := deploycollector.CollectBundled(ctx, cfg, gate, entry, io.Discard, stderr); err != nil {
+	if _, err := deploycollector.Collect(ctx, cfg, gate, io.Discard, stderr); err != nil {
 		return nil, err
 	}
 

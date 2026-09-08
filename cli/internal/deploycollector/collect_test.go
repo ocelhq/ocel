@@ -20,9 +20,8 @@ func TestCollect(t *testing.T) {
 		}
 
 		cfg := &projectconfig.Config{
-			Slug:      "test-app",
-			Dir:       t.TempDir(),
-			Discovery: projectconfig.Discovery{Paths: []string{"infra"}},
+			Slug: "test-app",
+			Dir:  t.TempDir(),
 		}
 
 		var stdout, stderr bytes.Buffer

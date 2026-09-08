@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -19,9 +20,11 @@ export {};
 `
 
 func TestBundle(t *testing.T) {
-	t.Run("runs imports and posts sync exactly once", func(t *testing.T) {
+	t.Run("runs its imports and leaves sync to the caller", func(t *testing.T) {
 		root := t.TempDir()
-		write(t, filepath.Join(root, "infra", "main.ts"), registerSideEffect)
+		write(t, filepath.Join(root, "infra", "main.ts"), registerSideEffect+`
+console.log("declared");
+`)
 
 		files, err := Discover(root, []string{"infra"})
 		if err != nil {
@@ -33,11 +36,9 @@ func TestBundle(t *testing.T) {
 			t.Fatalf("Bundle: %v", err)
 		}
 
-		var syncCalls int32
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/sync" && r.Method == http.MethodPost {
-				atomic.AddInt32(&syncCalls, 1)
-			}
+		var calls int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			atomic.AddInt32(&calls, 1)
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
@@ -49,34 +50,11 @@ func TestBundle(t *testing.T) {
 			t.Fatalf("run bundled entry: %v\n%s", err, out)
 		}
 
-		if got := atomic.LoadInt32(&syncCalls); got != 1 {
-			t.Fatalf("sync calls = %d, want 1", got)
+		if !strings.Contains(string(out), "declared") {
+			t.Errorf("output = %s, want the imported file to have run", out)
 		}
-	})
-
-	t.Run("a failed sync fails the process", func(t *testing.T) {
-		root := t.TempDir()
-		write(t, filepath.Join(root, "infra", "main.ts"), registerSideEffect)
-
-		files, err := Discover(root, []string{"infra"})
-		if err != nil {
-			t.Fatalf("Discover: %v", err)
-		}
-
-		entry, err := Bundle(root, files)
-		if err != nil {
-			t.Fatalf("Bundle: %v", err)
-		}
-
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "provisioning failed", http.StatusInternalServerError)
-		}))
-		defer server.Close()
-
-		cmd := exec.Command("node", entry)
-		cmd.Env = append(cmd.Environ(), "OCEL_DEV_SERVER="+server.URL)
-		if err := cmd.Run(); err == nil {
-			t.Fatal("expected non-zero exit when /sync fails, got nil error")
+		if got := atomic.LoadInt32(&calls); got != 0 {
+			t.Fatalf("requests = %d, want the bundle to post nothing of its own", got)
 		}
 	})
 
