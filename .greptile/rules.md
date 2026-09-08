@@ -152,7 +152,7 @@ The code carries the explanation; comments carry only what the code cannot. Zero
 is the baseline. A comment is justified only as a marker of an intentional gap — `TODO`,
 `FIXME`, `HACK`, a known breakage — never as a description of the code beneath it.
  
-Exception: published packages (`packages/`, the Go `sdk/`) carry public, user-facing
+Exception: published packages (`packages/`, the Go `sdk/`, the Python `python/`) carry public, user-facing
 doc-comments on their exported surface. Those document the API for a consumer, not the
 implementation for a maintainer. A fixture config is the other exception: it shows a
 variant that conflicts with what is live as a commented-out line, with one line saying when
@@ -166,7 +166,7 @@ Fails when:
 - A comment explains code that should instead be renamed, split, or simplified until it
   needs no explanation.
 - A gap marker carries no actionable content — a bare `TODO` with no what or why.
-- An exported symbol in `packages/` or `sdk/` lacks a doc-comment, or its doc-comment
+- An exported symbol in `packages/`, `sdk/` or `python/` lacks a doc-comment, or its doc-comment
   describes internals rather than the contract a user consumes.
 
 ## Clean break
