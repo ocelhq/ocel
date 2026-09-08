@@ -39,6 +39,13 @@ pub enum Error {
         expected: String,
     },
 
+    /// The address discovery was told to post declarations to is not a URL.
+    #[error("ocel: OCEL_DEV_SERVER does not hold a URL discovery can post to: '{server}'")]
+    DevServer {
+        /// The address the environment carried.
+        server: String,
+    },
+
     /// Discovery could not tell the CLI about a declaration.
     #[error("ocel: declare {kind} '{name}': {said}")]
     Declare {

@@ -56,20 +56,18 @@ pub(crate) fn discovering() -> bool {
 }
 
 async fn post_all() -> Result<(), Error> {
-    let mut declarations = inventory::iter::<Declaration>.into_iter();
-    let Some(first) = declarations.next() else {
+    if inventory::iter::<Declaration>.into_iter().next().is_none() {
         return Ok(());
-    };
+    }
     let server = std::env::var(DEV_SERVER_ENV).unwrap_or_default();
-    let base = server
-        .trim_end_matches('/')
-        .parse()
-        .map_err(|err| failed(first, format!("{server}: {err}")))?;
+    let Ok(base) = server.trim_end_matches('/').parse() else {
+        return Err(Error::DevServer { server });
+    };
     let client = ResourceServiceClient::new(
         connectrpc::client::HttpClient::plaintext(),
         connectrpc::client::ClientConfig::new(base),
     );
-    for declaration in std::iter::once(first).chain(declarations) {
+    for declaration in inventory::iter::<Declaration> {
         client
             .declare(request(declaration))
             .await
