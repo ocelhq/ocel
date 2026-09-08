@@ -349,3 +349,30 @@ func TestCompileCarriesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *te
 		t.Error("the artifact holds a server/ of its own: a root already inside the app dir is carried by the app's own tree")
 	}
 }
+
+func TestCompileCarriesNoDiscoveryRootTheAppsOwnDirectoryAlreadyHolds(t *testing.T) {
+	t.Parallel()
+
+	project := pythonApp(t, map[string]string{
+		"server/main.py":             "print('hi')\n",
+		"server/..infra/__init__.py": "db = 1\n",
+	})
+	out := t.TempDir()
+	appDir := filepath.Join(out, "apps", "web")
+	funcDir := filepath.Join(appDir, "functions", "index.func")
+	err := Compile(context.Background(), Compilation{
+		App:            "web",
+		Runtime:        Runtime{Name: "python", Arch: "x86_64"},
+		Source:         filepath.Join(project, "server"),
+		DiscoveryRoots: []string{filepath.Join(project, "server", "..infra")},
+		FuncDir:        funcDir,
+		AppDir:         appDir,
+	})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(funcDir, "..infra")); err == nil {
+		t.Error("the artifact carries ..infra: a root under the app directory is left to the app's own tree, whatever its name begins with")
+	}
+}

@@ -54,7 +54,7 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 
 func (c Compilation) carryDiscoveryRoots() error {
 	for _, root := range c.DiscoveryRoots {
-		if rel, err := filepath.Rel(c.Source, root); err == nil && !strings.HasPrefix(rel, "..") {
+		if rel, err := filepath.Rel(c.Source, root); err == nil && rel != ".." && !strings.HasPrefix(rel, "../") {
 			continue
 		}
 		if err := copySourceTree(root, filepath.Join(c.FuncDir, filepath.Base(root))); err != nil {

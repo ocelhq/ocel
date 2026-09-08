@@ -16,14 +16,12 @@ import (
 const goModuleFile = "go.mod"
 
 type Compilation struct {
-	App        string
-	Runtime    Runtime
-	Source     string
-	Entrypoint string
-	FuncDir    string
-	AppDir     string
-	// DiscoveryRoots are the project's discovery folders: an app that imports one
-	// carries it into its artifact.
+	App            string
+	Runtime        Runtime
+	Source         string
+	Entrypoint     string
+	FuncDir        string
+	AppDir         string
 	DiscoveryRoots []string
 	Log            io.Writer
 }
