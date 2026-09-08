@@ -35,6 +35,14 @@ func asked[T any](ctx context.Context, ask func() (T, int, error)) (T, int, erro
 	return value, status, err
 }
 
+func attempted[T any](ctx context.Context, call func(...googleapi.CallOption) (T, error)) (T, error) {
+	value, _, err := asked(ctx, func() (T, int, error) {
+		held, err := call()
+		return held, answeredCode(err), err
+	})
+	return value, err
+}
+
 func retryable(status int, err error) bool {
 	return throttling(status) || (err != nil && status == 0)
 }

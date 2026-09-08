@@ -63,7 +63,7 @@ func (b bootstrapper) servicesOn(ctx context.Context) error {
 	var off []string
 	for _, api := range BootstrapAPIs {
 		name := "projects/" + b.clients.project + "/services/" + api
-		held, err := service.Services.Get(name).Context(ctx).Do()
+		held, err := attempted(ctx, service.Services.Get(name).Context(ctx).Do)
 		if err != nil {
 			return fmt.Errorf("read whether %s is on in project %s: %w", api, b.clients.project, err)
 		}
@@ -85,8 +85,8 @@ func (b bootstrapper) permitted(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	granted, err := service.Projects.TestIamPermissions(b.clients.project,
-		&cloudresourcemanager.TestIamPermissionsRequest{Permissions: bootstrapPermissions}).Context(ctx).Do()
+	granted, err := attempted(ctx, service.Projects.TestIamPermissions(b.clients.project,
+		&cloudresourcemanager.TestIamPermissionsRequest{Permissions: bootstrapPermissions}).Context(ctx).Do)
 	if err != nil {
 		return fmt.Errorf("ask project %s what this credential may do in it: %w", b.clients.project, err)
 	}
@@ -113,7 +113,7 @@ func (b bootstrapper) regionServed(ctx context.Context, read survey) error {
 	if err != nil {
 		return err
 	}
-	held, err := service.Projects.Locations.List("projects/" + b.clients.project).Context(ctx).Do()
+	held, err := attempted(ctx, service.Projects.Locations.List("projects/"+b.clients.project).Context(ctx).Do)
 	if err != nil {
 		return fmt.Errorf("ask which locations Firestore serves project %s from: %w", b.clients.project, err)
 	}

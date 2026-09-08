@@ -159,7 +159,7 @@ func (b bootstrapper) databaseStands(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, err = service.Projects.Databases.Get(databasePath(b.clients.project)).Context(ctx).Do()
+	_, err = attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients.project)).Context(ctx).Do)
 	if absent(err) {
 		return false, nil
 	}
@@ -230,7 +230,7 @@ func (b bootstrapper) secretStands(ctx context.Context, name string) (bool, erro
 	if err != nil {
 		return false, err
 	}
-	_, err = service.Projects.Secrets.Get(secretPath(b.clients.project, name)).Context(ctx).Do()
+	_, err = attempted(ctx, service.Projects.Secrets.Get(secretPath(b.clients.project, name)).Context(ctx).Do)
 	if absent(err) {
 		return false, nil
 	}
