@@ -114,7 +114,7 @@ func invokable(held []*policyBinding) ([]*policyBinding, bool) {
 	return append(held, &policyBinding{Role: invokerRole, Members: []string{everyone}}), true
 }
 
-func (p *Provider) runnable(image string) string {
+func (p *Provider) heldAs(image string) string {
 	repository, digest, pinned := strings.Cut(image, "@")
 	if !pinned || !p.clients.emulated() {
 		return image
@@ -136,7 +136,7 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 		return "", err
 	}
 	path := p.servicePath(s.service)
-	s.image = p.runnable(s.image)
+	s.image = p.heldAs(s.image)
 	desired, err := serviceOf(s)
 	if err != nil {
 		return "", err
