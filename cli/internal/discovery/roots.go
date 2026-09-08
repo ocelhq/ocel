@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
 type Language string
@@ -32,6 +34,10 @@ var manifestLanguages = []struct {
 	{"go.mod", Go},
 	{"pyproject.toml", Python},
 	{"requirements.txt", Python},
+}
+
+func RootsOf(cfg *projectconfig.Config) ([]Root, error) {
+	return Roots(cfg.Dir, cfg.Discovery.Paths, cfg.AppPaths())
 }
 
 func Roots(configDir string, paths []string, appPaths []string) ([]Root, error) {

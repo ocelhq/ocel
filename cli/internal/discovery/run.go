@@ -19,13 +19,23 @@ type Launcher interface {
 
 var launchers = map[Language]Launcher{}
 
-func Run(ctx context.Context, configDir string, roots []Root, serverURL string, stdout, stderr io.Writer) error {
+type Prepared struct {
+	Roots []Root
+	entry string
+}
+
+func Prepare(configDir string, roots []Root) (Prepared, error) {
 	entry, err := BundleRoots(configDir, roots)
 	if err != nil {
-		return err
+		return Prepared{}, err
 	}
+	return Prepared{Roots: roots, entry: entry}, nil
+}
 
-	commands, err := commandsFor(ctx, configDir, roots, entry, serverURL)
+func (p Prepared) Entry() string { return p.entry }
+
+func Run(ctx context.Context, configDir string, prepared Prepared, serverURL string, stdout, stderr io.Writer) error {
+	commands, err := commandsFor(ctx, configDir, prepared.Roots, prepared.entry, serverURL)
 	if err != nil {
 		return err
 	}

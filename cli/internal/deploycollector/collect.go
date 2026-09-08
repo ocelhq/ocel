@@ -14,12 +14,43 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
-func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error) {
-	roots, err := discovery.Roots(cfg.Dir, cfg.Discovery.Paths, cfg.AppPaths())
+type Prepared struct {
+	discovery   discovery.Prepared
+	fingerprint string
+}
+
+func (p Prepared) Fingerprint() string { return p.fingerprint }
+
+func Prepare(cfg *projectconfig.Config) (Prepared, error) {
+	roots, err := discovery.RootsOf(cfg)
+	if err != nil {
+		return Prepared{}, err
+	}
+
+	prepared, err := discovery.Prepare(cfg.Dir, roots)
+	if err != nil {
+		return Prepared{}, err
+	}
+	if prepared.Entry() == "" {
+		return Prepared{discovery: prepared}, nil
+	}
+
+	fingerprint, err := declcache.ContentHash(prepared.Entry())
+	if err != nil {
+		return Prepared{}, err
+	}
+	return Prepared{discovery: prepared, fingerprint: fingerprint}, nil
+}
+
+func PrepareAndCollect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error) {
+	prepared, err := Prepare(cfg)
 	if err != nil {
 		return nil, err
 	}
+	return Collect(ctx, cfg, gate, prepared, stdout, stderr)
+}
 
+func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, prepared Prepared, stdout, stderr io.Writer) ([]declare.Resource, error) {
 	c := New(gate)
 
 	if err := gate.Prefetch(ctx); err != nil {
@@ -36,22 +67,9 @@ func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate,
 
 	collectorAddr := "http://" + listener.Addr().String()
 
-	if err := discovery.Run(ctx, cfg.Dir, roots, collectorAddr, stdout, stderr); err != nil {
+	if err := discovery.Run(ctx, cfg.Dir, prepared.discovery, collectorAddr, stdout, stderr); err != nil {
 		return nil, err
 	}
 
 	return c.Snapshot(), nil
-}
-
-func Fingerprint(cfg *projectconfig.Config) (string, error) {
-	roots, err := discovery.Roots(cfg.Dir, cfg.Discovery.Paths, cfg.AppPaths())
-	if err != nil {
-		return "", err
-	}
-
-	entry, err := discovery.BundleRoots(cfg.Dir, roots)
-	if err != nil {
-		return "", err
-	}
-	return declcache.ContentHash(entry)
 }
