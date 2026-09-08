@@ -11,11 +11,16 @@ import (
 	"strings"
 )
 
+type goModule struct {
+	Dir string
+}
+
 type goPackage struct {
 	ImportPath string
 	Name       string
 	Dir        string
 	Deps       []string
+	Module     *goModule
 }
 
 type goReach struct{}
@@ -38,11 +43,14 @@ func (goReach) Entries(root string, app App) (map[string]Reachability, error) {
 			continue
 		}
 		entry, inside := relativeToRoot(root, p.Dir)
-		if !inside {
+		if !inside || p.Module == nil {
 			continue
 		}
 		reached := map[string]bool{}
 		for _, importPath := range append([]string{p.ImportPath}, p.Deps...) {
+			if _, inside := relativeToRoot(p.Module.Dir, dirs[importPath]); !inside {
+				continue
+			}
 			if rel, inside := relativeToRoot(root, dirs[importPath]); inside {
 				reached[rel] = true
 			}
