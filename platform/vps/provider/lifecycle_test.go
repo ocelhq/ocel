@@ -128,7 +128,7 @@ func (j journey) declares(t *testing.T, release string) {
 	write(t, filepath.Join(j.project, "app", "package.json"), lifecycleManifest)
 	j.fixture(t, release)
 	write(t, filepath.Join(j.project, "app", "server.js"), lifecycleServer)
-	write(t, filepath.Join(j.project, "ocel", "vars.ts"), fmt.Sprintf(
+	write(t, filepath.Join(j.project, "infra", "vars.ts"), fmt.Sprintf(
 		"import { defineEnv } from \"ocel/env\";\n\nexport const env = defineEnv({\n  %s: { class: \"sensitive\" },\n});\n", lifecycleSensitive))
 	if err := os.Symlink(filepath.Join(repoRoot(t), "packages", "ocel"), filepath.Join(j.project, "node_modules", "ocel")); err != nil && !os.IsExist(err) {
 		t.Fatal(err)
