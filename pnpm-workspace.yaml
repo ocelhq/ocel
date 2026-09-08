@@ -8,6 +8,7 @@ packages:
   - platform/aws/membrane
   - platform/aws/provider/edges/cloudfront/resolver
   - platform/aws/provider/payloads
+  - platform/gcp/provider/suite
   - platform/vps/provider/host
   - platform/edge/contract
   - platform/edge/cloudflare/workers/*
