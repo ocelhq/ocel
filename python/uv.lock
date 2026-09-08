@@ -91,6 +91,7 @@ version = "0.0.1a0"
 source = { editable = "ocel" }
 dependencies = [
     { name = "connectrpc" },
+    { name = "protobuf-py" },
 ]
 
 [package.optional-dependencies]
@@ -101,7 +102,8 @@ postgres = [
 [package.metadata]
 requires-dist = [
     { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.30" },
-    { name = "connectrpc", specifier = ">=0.12.1" },
+    { name = "connectrpc", specifier = ">=0.12.1,<0.13" },
+    { name = "protobuf-py", specifier = ">=0.4,<0.5" },
 ]
 provides-extras = ["postgres"]
 
