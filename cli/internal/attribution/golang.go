@@ -1,15 +1,12 @@
 package attribution
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
 	"path"
 	"path/filepath"
-	"strings"
 )
 
 type goModule struct {
@@ -62,17 +59,14 @@ func (goReach) Entries(ctx context.Context, root string, app App) (map[string]Re
 }
 
 func goList(ctx context.Context, app, dir string) ([]goPackage, error) {
-	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "go", "list", "-json", "-deps", "./...")
 	cmd.Dir = dir
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("attribution: app %q: go list: %s", app, strings.TrimSpace(stderr.String()))
+	decoder, said, err := runJSON(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("attribution: app %q: go list: %s", app, said)
 	}
 
 	var packages []goPackage
-	decoder := json.NewDecoder(&stdout)
 	for {
 		var p goPackage
 		if err := decoder.Decode(&p); err == io.EOF {

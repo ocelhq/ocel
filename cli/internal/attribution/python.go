@@ -1,10 +1,8 @@
 package attribution
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -76,16 +74,15 @@ func pythonSearchDirs(roots []discovery.Root) []string {
 func walkPythonImports(ctx context.Context, app, dir string, search []string) (pythonWalk, error) {
 	program := discovery.PythonInterpreter(dir)
 
-	var stdout bytes.Buffer
 	cmd := exec.CommandContext(ctx, program, append([]string{"-", dir}, search...)...)
 	cmd.Stdin = strings.NewReader(pythonReachScript)
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
+	decoder, _, err := runJSON(cmd)
+	if err != nil {
 		return pythonWalk{}, fmt.Errorf("attribution: app %q: read its imports with %s: %w", app, program, err)
 	}
 
 	var walked pythonWalk
-	if err := json.Unmarshal(stdout.Bytes(), &walked); err != nil {
+	if err := decoder.Decode(&walked); err != nil {
 		return pythonWalk{}, fmt.Errorf("attribution: app %q: the import walker reported nothing ocel reads", app)
 	}
 	return walked, nil

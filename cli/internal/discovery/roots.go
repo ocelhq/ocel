@@ -149,3 +149,25 @@ func languageOf(dir string) (Language, error) {
 	}
 	return found[0], nil
 }
+
+func walkUp(configDir, dir string, holds func(at string) bool) (string, bool, error) {
+	stop, err := filepath.Abs(configDir)
+	if err != nil {
+		return "", false, err
+	}
+	at, err := filepath.Abs(dir)
+	if err != nil {
+		return "", false, err
+	}
+
+	for {
+		if holds(at) {
+			return at, true, nil
+		}
+		parent := filepath.Dir(at)
+		if at == stop || parent == at {
+			return stop, false, nil
+		}
+		at = parent
+	}
+}

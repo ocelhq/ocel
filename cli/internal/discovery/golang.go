@@ -45,28 +45,25 @@ func (goLauncher) Command(ctx context.Context, configDir string, root Root, serv
 var goModulePathRE = regexp.MustCompile(`(?m)^\s*module\s+(\S+)`)
 
 func goModule(configDir, dir string) (string, string, error) {
-	stop, err := filepath.Abs(configDir)
+	var declaration []byte
+	moduleRoot, found, err := walkUp(configDir, dir, func(at string) bool {
+		contents, err := os.ReadFile(filepath.Join(at, "go.mod"))
+		if err != nil {
+			return false
+		}
+		declaration = contents
+		return true
+	})
 	if err != nil {
 		return "", "", err
 	}
-	at, err := filepath.Abs(dir)
-	if err != nil {
-		return "", "", err
+	if !found {
+		return "", "", fmt.Errorf("discovery: %s is a go folder, but no go.mod stands between it and %s", dir, configDir)
 	}
 
-	for {
-		contents, err := os.ReadFile(filepath.Join(at, "go.mod"))
-		if err == nil {
-			match := goModulePathRE.FindSubmatch(contents)
-			if match == nil {
-				return "", "", fmt.Errorf("discovery: the go.mod at %s names no module", at)
-			}
-			return at, string(match[1]), nil
-		}
-		parent := filepath.Dir(at)
-		if at == stop || parent == at {
-			return "", "", fmt.Errorf("discovery: %s is a go folder, but no go.mod stands between it and %s", dir, configDir)
-		}
-		at = parent
+	match := goModulePathRE.FindSubmatch(declaration)
+	if match == nil {
+		return "", "", fmt.Errorf("discovery: the go.mod at %s names no module", moduleRoot)
 	}
+	return moduleRoot, string(match[1]), nil
 }
