@@ -170,3 +170,22 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 		t.Errorf("source = %q, want %q line 1", source, want)
 	}
 }
+
+func TestTheRustLauncherRefusesACrateThatBuildsSeveralBinaries(t *testing.T) {
+	needsCargo(t)
+	configDir := t.TempDir()
+	write(t, filepath.Join(configDir, "Cargo.toml"), rustBinManifest+"\n[[bin]]\nname = \"web\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"worker\"\npath = \"src/worker.rs\"\n")
+	write(t, filepath.Join(configDir, "src", "main.rs"), "fn main() {}\n")
+	write(t, filepath.Join(configDir, "src", "worker.rs"), "fn main() {}\n")
+	root := filepath.Join(configDir, "infra")
+	write(t, filepath.Join(root, "mod.rs"), "pub const NAME: &str = \"main\";\n")
+
+	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: root, Language: Rust}, "http://127.0.0.1:1234")
+	if err == nil {
+		t.Fatal("Command succeeded on a crate with two binaries, want an error")
+	}
+	want := "discovery: web builds 2 binaries, and ocel runs one binary per infra folder: keep one bin target in the crate that owns " + root
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err, want)
+	}
+}

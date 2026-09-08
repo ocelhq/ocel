@@ -24,9 +24,14 @@ func (rustReach) Entries(ctx context.Context, root string, app App) (map[string]
 		return nil, fmt.Errorf("attribution: app %q: the Cargo.toml at %s names no package", app.Name, dir)
 	}
 
+	bins := crate.Bins()
+	if len(bins) > 1 {
+		return nil, fmt.Errorf("attribution: app %q builds %d binaries, and ocel attributes one binary per app", app.Name, len(bins))
+	}
+
 	reached := reachedDirs(root, workspace, crate, app.Roots)
 	entries := map[string]Reachability{}
-	for _, bin := range crate.Bins() {
+	for _, bin := range bins {
 		entry, inside := relativeToRoot(root, bin.SrcPath)
 		if !inside {
 			continue
