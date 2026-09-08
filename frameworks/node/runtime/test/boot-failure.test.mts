@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
 const execFileAsync = promisify(execFile);
-const membraneSrc = resolve(dirname(fileURLToPath(import.meta.url)), "../src/shared/membrane.mts");
+const membraneSrc = resolve(dirname(fileURLToPath(import.meta.url)), "../src/membrane.mts");
 
 let dir: string;
 

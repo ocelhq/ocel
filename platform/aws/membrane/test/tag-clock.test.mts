@@ -143,7 +143,7 @@ async function loadBoth(store: ReturnType<typeof fakeStore>, published = true) {
 }
 
 async function invocation(fn: () => Promise<unknown>): Promise<Promise<unknown>[]> {
-  const { runWithWaitUntil } = await import("../src/shared/background.mjs");
+  const { runWithWaitUntil } = await import("@framework/node-runtime/background");
   const deferred: Promise<unknown>[] = [];
   await runWithWaitUntil((task) => {
     deferred.push(task);

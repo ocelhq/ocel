@@ -1,6 +1,6 @@
 import http from "node:http";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { fetchToNodeHandler } from "../src/node/fetch-bridge.mjs";
+import { fetchToNodeHandler } from "../src/fetch-bridge.mjs";
 
 const invoke = fetchToNodeHandler(
   (request) =>

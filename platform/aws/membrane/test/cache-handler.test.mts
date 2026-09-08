@@ -2,13 +2,13 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { refreshHeader, type TagRecord, variantHeadersFile } from "@framework/next-cache";
+import { runWithWaitUntil } from "@framework/node-runtime/background";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import OcelCacheHandler from "../src/next/cache-handler.mjs";
 import type { CacheEntryFile, CacheStore } from "../src/next/cache-store.mjs";
 import { collectTags, notedTags } from "../src/next/origin-tags.mjs";
 import { revalidationTicks } from "../src/next/revalidation-signal.mjs";
 import { setTagClockStore } from "../src/next/tag-clock.mjs";
-import { runWithWaitUntil } from "../src/shared/background.mjs";
 
 function fakeStore() {
   const entries = new Map<string, CacheEntryFile>();

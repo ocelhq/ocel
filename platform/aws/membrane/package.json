@@ -12,6 +12,7 @@
     "@framework/next-cache": "workspace:*",
     "@framework/next-protocol": "workspace:*",
     "@framework/next-router": "workspace:*",
+    "@framework/node-runtime": "workspace:*",
     "aws4fetch": "^1.0.20"
   },
   "devDependencies": {

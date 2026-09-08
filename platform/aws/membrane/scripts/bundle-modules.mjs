@@ -7,6 +7,9 @@ import { fileURLToPath } from "node:url";
 const pkgDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = process.argv[2] ? join(process.cwd(), process.argv[2]) : join(pkgDir, "dist");
 const distNext = join(dist, "next");
+const distNode = join(dist, "node");
+
+const nodeEntrypoint = join(distNode, "entrypoint.mjs");
 
 const handlers = ["cache-handler", "use-cache-default", "use-cache-remote"];
 
@@ -74,6 +77,10 @@ await Promise.all(
   ),
 );
 
+await bundle(Bun.resolveSync("@framework/node-runtime/entrypoint", pkgDir), nodeEntrypoint, {
+  format: "esm",
+});
+
 await Promise.all(
   bundledInternals.map((name) => rm(join(distNext, `${name}.mjs`), { force: true })),
 );
@@ -92,7 +99,10 @@ const looseImports = {
   },
 };
 
-const bundledOutputs = new Set(bundledModules.map((name) => join(distNext, `${name}.mjs`)));
+const bundledOutputs = new Set([
+  ...bundledModules.map((name) => join(distNext, `${name}.mjs`)),
+  nodeEntrypoint,
+]);
 const loose = (await readdir(dist, { recursive: true, withFileTypes: true }))
   .filter((entry) => entry.isFile() && entry.name.endsWith(".mjs"))
   .map((entry) => join(entry.parentPath, entry.name))

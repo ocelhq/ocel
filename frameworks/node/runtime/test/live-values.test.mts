@@ -33,7 +33,7 @@ async function settle(): Promise<void> {
 
 async function load() {
   vi.resetModules();
-  return import("../src/shared/live-values.mts");
+  return import("../src/live-values.mjs");
 }
 
 beforeEach(async () => {

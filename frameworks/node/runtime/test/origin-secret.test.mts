@@ -16,8 +16,8 @@ const controlConns = new Set<net.Socket>();
 let controlServer: net.Server;
 let sockDir: string;
 
-type Membrane = typeof import("../src/shared/membrane.mts");
-type Invoke = import("../src/shared/membrane.mts").Invoke;
+type Membrane = typeof import("../src/membrane.mjs");
+type Invoke = import("../src/membrane.mjs").Invoke;
 
 let membrane: Membrane;
 
@@ -97,7 +97,7 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => controlServer.listen(sockPath, resolve));
 
   process.env.OCEL_CONTROL_SOCKET = sockPath;
-  membrane = await import("../src/shared/membrane.mts");
+  membrane = await import("../src/membrane.mjs");
 });
 
 afterEach(() => {
