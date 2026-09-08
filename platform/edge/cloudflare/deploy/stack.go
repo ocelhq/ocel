@@ -99,6 +99,8 @@ const genericISRWriterBinding = "ISR_WRITER"
 
 const genericSlugBinding = "OCEL_SLUG"
 
+const genericDomainAppsBinding = "OCEL_DOMAIN_APPS"
+
 type private struct {
 	EntryWorkers []string `json:"entryWorkers,omitempty"`
 }
@@ -489,6 +491,11 @@ func genericWorker(spec edge.StackSpec, slug string) edge.Worker {
 	)
 	if spec.Program.ISRWriterScriptName != "" {
 		worker = withService(worker, genericISRWriterBinding, spec.Program.ISRWriterScriptName)
+	}
+	if len(spec.DomainApps) > 0 {
+		if encoded, err := json.Marshal(spec.DomainApps); err == nil {
+			worker = withVar(worker, genericDomainAppsBinding, string(encoded))
+		}
 	}
 	return bindCodeLoader(bindObjectStore(worker, spec.Values))
 }

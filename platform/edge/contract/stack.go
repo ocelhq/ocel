@@ -28,6 +28,7 @@ type StackSpec struct {
 	Class       Class
 	Slug        string
 	Domains     []string
+	DomainApps  map[string]string
 	Values      map[string]string
 	PruneOnly   bool
 	PruneRoutes bool

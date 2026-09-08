@@ -346,6 +346,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context) error {
 	switch r.world() {
 	case hostingProduction:
 		spec.Domains = r.hostnames()
+		spec.DomainApps = r.domainApps()
 	case hostingGlobalPreview:
 		spec.PruneOnly = true
 	default:
@@ -410,6 +411,24 @@ func (r *deployRun) appNames() []string {
 		}
 	}
 	return names
+}
+
+func (r *deployRun) domainApps() map[string]string {
+	served := r.servedHostnames()
+	owners := make(map[string]string, len(served))
+	for slot, hosts := range served {
+		name := strings.ToLower(strings.TrimSpace(r.plan.Apps[slot].App))
+		if name == "" {
+			continue
+		}
+		for _, host := range hosts {
+			owners[strings.ToLower(host)] = name
+		}
+	}
+	if len(owners) == 0 {
+		return nil
+	}
+	return owners
 }
 
 func (r *deployRun) hostnames() []string {
