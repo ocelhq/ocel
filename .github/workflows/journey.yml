@@ -758,9 +758,33 @@ jobs:
           path: ${{ runner.temp }}/journey-evidence.tgz
           if-no-files-found: warn
 
+  reapable:
+    name: runs this pull request stood cells up under
+    if: ${{ github.event.action == 'closed' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      ids: ${{ steps.runs.outputs.ids }}
+    steps:
+      - name: Name the runs this pull request stood cells up under
+        id: runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          ids=$(gh run list --workflow journey.yml --branch "$HEAD_REF" \
+            --limit 100 --json databaseId --jq '.[].databaseId' | sort -u | paste -sd' ' -)
+          echo "ids=$ids" >> "$GITHUB_OUTPUT"
+          echo "${ids:-no journey run} stood cells up for this pull request"
+
   reap:
     name: cells this pull request left standing
-    if: ${{ github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: reapable
+    if: ${{ needs.reapable.outputs.ids != '' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -774,34 +798,19 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
       OCEL_AWS_VARS_KEY: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
       GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Name the runs this pull request stood cells up under
-        id: runs
-        env:
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: |
-          set -euo pipefail
-          ids=$(gh run list --workflow journey.yml --branch "$HEAD_REF" --event pull_request \
-            --limit 100 --json databaseId --jq '.[].databaseId' | sort -u | paste -sd' ' -)
-          echo "ids=$ids" >> "$GITHUB_OUTPUT"
-          echo "${ids:-no journey run} stood cells up for this pull request"
-
       - uses: ./.github/actions/node-workspace
-        if: ${{ steps.runs.outputs.ids != '' }}
         with:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
       - name: The node bundles the fixtures and the ladders import
-        if: ${{ steps.runs.outputs.ids != '' }}
         run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
 
       - name: Setup Go
-        if: ${{ steps.runs.outputs.ids != '' }}
         uses: actions/setup-go@v5
         with:
           go-version-file: cli/go.mod
@@ -813,7 +822,6 @@ jobs:
             sdk/go.sum
 
       - name: Setup gobuildcache
-        if: ${{ steps.runs.outputs.ids != '' }}
         uses: ./.github/actions/gobuildcache
         with:
           bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
@@ -821,7 +829,6 @@ jobs:
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
       - name: Build the binaries this reaping drives
-        if: ${{ steps.runs.outputs.ids != '' }}
         run: |
           set -euo pipefail
           node scripts/build-native.mjs --host --target cli
@@ -829,7 +836,6 @@ jobs:
           echo "OCEL_BIN=$GITHUB_WORKSPACE/packages/native-lib/cli-linux-x64/bin/ocel" >> "$GITHUB_ENV"
 
       - name: Assume the session that may spend the real account
-        if: ${{ steps.runs.outputs.ids != '' }}
         uses: ./.github/actions/real-aws-session
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -844,7 +850,6 @@ jobs:
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Name the account and the zone this reaping may touch
-        if: ${{ steps.runs.outputs.ids != '' }}
         env:
           EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           ZONE: ${{ vars.E2E_PREVIEW_DOMAIN }}
@@ -859,9 +864,8 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Reclaim the cells and namespaces those runs left standing
-        if: ${{ steps.runs.outputs.ids != '' }}
         env:
-          IDS: ${{ steps.runs.outputs.ids }}
+          IDS: ${{ needs.reapable.outputs.ids }}
         run: |
           set -uo pipefail
           status=0
