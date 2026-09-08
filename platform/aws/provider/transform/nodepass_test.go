@@ -141,9 +141,9 @@ func TestNodePassEvaluate(t *testing.T) {
 		t.Parallel()
 
 		root := transformtest.Root(t, map[string]string{
-			"infra/defaults.transform.ts": transformtest.FixtureModule(t, "with-transforms", "infra/defaults.transform.ts"),
+			"transforms/defaults.transform.ts": transformtest.FixtureModule(t, "with-transforms", "transforms/defaults.transform.ts"),
 		})
-		pass := NodePass{Root: root, Modules: []string{"./infra/defaults.transform.ts"}}
+		pass := NodePass{Root: root, Modules: []string{"./transforms/defaults.transform.ts"}}
 
 		results, err := pass.Evaluate(t.Context(), exampleRequest("production"))
 		if err != nil {
@@ -183,9 +183,9 @@ func TestNodePassEvaluate(t *testing.T) {
 		t.Parallel()
 
 		root := transformtest.Root(t, map[string]string{
-			"infra/network.transform.ts": transformtest.FixtureModule(t, "with-sst", "infra/network.transform.ts"),
+			"transforms/network.transform.ts": transformtest.FixtureModule(t, "with-sst", "transforms/network.transform.ts"),
 		})
-		pass := NodePass{Root: root, Modules: []string{"./infra/network.transform.ts"}}
+		pass := NodePass{Root: root, Modules: []string{"./transforms/network.transform.ts"}}
 
 		results, err := pass.Evaluate(t.Context(), exampleRequest("production"))
 		if err != nil {
