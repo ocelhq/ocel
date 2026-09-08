@@ -81,7 +81,7 @@ func TestABuiltImageReachesTheRegistryWithoutADaemon(t *testing.T) {
 		t.Fatalf("Push() error = %v", err)
 	}
 
-	ref, err := name.NewDigest(strings.TrimSuffix(push.Target, ":"+naming.DigestTag(digest.String()))+"@"+digest.String(), name.Insecure)
+	ref, err := name.NewDigest(host+"/ocel/web-server@"+digest.String(), name.Insecure)
 	if err != nil {
 		t.Fatal(err)
 	}
