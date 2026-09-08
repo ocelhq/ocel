@@ -19,30 +19,12 @@ if [ -z "${OCEL_REPORT_SECRET:-}" ]; then
   exit 1
 fi
 
-payload=null
-if [ -n "$result" ]; then
-  if [ ! -f "$result" ]; then
-    echo "$result does not exist" >&2
-    exit 1
-  fi
-  payload=$(cat "$result")
-fi
+. "$(dirname "${BASH_SOURCE[0]}")/preview-report-body.sh"
 
 body=$(mktemp)
 trap 'rm -f "$body"' EXIT
 
-jq -n \
-  --arg repo "${GITHUB_REPOSITORY:-}" \
-  --argjson pr "${PR:-0}" \
-  --arg sha "${SHA:-}" \
-  --arg ref "${REF:-}" \
-  --arg run_url "${RUN_URL:-}" \
-  --arg phase "$phase" \
-  --arg error "${ERROR:-}" \
-  --argjson result "$payload" \
-  '{repo: $repo, pr: $pr, sha: $sha, ref: $ref, run_url: $run_url, phase: $phase}
-   + (if $result == null then {} else {result: $result} end)
-   + (if $error == "" then {} else {error: $error} end)' > "$body"
+preview_report_body "$phase" "$result" > "$body"
 
 signature=$(openssl dgst -sha256 -hmac "$OCEL_REPORT_SECRET" "$body" | awk '{print $NF}')
 
