@@ -3,6 +3,7 @@ package providerkit
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -13,6 +14,7 @@ import (
 
 type FunctionImager interface {
 	FunctionBase(ctx context.Context, runtime Runtime) (v1.Image, error)
+	FunctionMembrane(ctx context.Context, runtime Runtime) ([]byte, error)
 }
 
 func (r *deployRun) recordFunctionImage(logical, ref string) {
@@ -72,7 +74,11 @@ func (r *deployRun) imageFunction(
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, runtime.Name, err)
 	}
-	image, err := FunctionImage(base, runtime, dir, overlay)
+	carried, err := membraneOverlay(ctx, imager, runtime, name, overlay)
+	if err != nil {
+		return ImagePush{}, err
+	}
+	image, err := FunctionImage(base, runtime, dir, carried)
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
 	}
@@ -90,6 +96,30 @@ func (r *deployRun) imageFunction(
 		Function: true,
 		Built:    image,
 	}, nil
+}
+
+func membraneOverlay(
+	ctx context.Context,
+	imager FunctionImager,
+	runtime Runtime,
+	name string,
+	overlay map[string][]byte,
+) (map[string][]byte, error) {
+	if !BootsThroughMembrane(runtime) {
+		return overlay, nil
+	}
+	body, err := imager.FunctionMembrane(ctx, runtime)
+	if err != nil {
+		return nil, fmt.Errorf("read the membrane %s boots through: %w", name, err)
+	}
+	if len(body) == 0 {
+		return nil, Refuse(CodeNotReady,
+			"this provider carries no membrane for a %s function to boot through, and %s is one", runtime.Name, name)
+	}
+	carried := make(map[string][]byte, len(overlay)+1)
+	maps.Copy(carried, overlay)
+	carried[NodeMembranePath] = body
+	return carried, nil
 }
 
 func functionRepository(app, function string) string {

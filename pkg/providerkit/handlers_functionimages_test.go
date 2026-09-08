@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -29,6 +30,10 @@ func (i imaging) FunctionBase(context.Context, providerkit.Runtime) (v1.Image, e
 		return i.base, nil
 	}
 	return empty.Image, nil
+}
+
+func (imaging) FunctionMembrane(context.Context, providerkit.Runtime) ([]byte, error) {
+	return []byte("export const membrane = 1"), nil
 }
 
 func stagedProject(t *testing.T, apps ...string) {
@@ -183,6 +188,52 @@ func TestAFunctionRunAsAnImageRefusesTheNameThePortIsInjectedUnder(t *testing.T)
 	for _, want := range []string{"PORT", "web"} {
 		if !strings.Contains(refusal+connectMessage(stream.Err()), want) {
 			t.Errorf("the refusal reads %q and never names %q", refusal, want)
+		}
+	}
+}
+
+func TestANodeFunctionsImageCarriesTheMembraneTheProviderHandsIt(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	served, provider := imagingServed(t)
+
+	result, _ := deploy(t, served, imagingDeployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	pushed := provider.Registry().Pushed()
+	if len(pushed) != 1 {
+		t.Fatalf("the deploy pushed %v, want the one image the app's function runs", pushed)
+	}
+	layers, err := pushed[0].Built.Layers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	held := tarNames(t, layers[len(layers)-1])
+	want := strings.TrimPrefix(providerkit.NodeMembranePath, "/")
+	if !slices.Contains(held, want) {
+		t.Errorf("the image holds %v and nothing at %s, so nothing serves the node function it was built for", held, providerkit.NodeMembranePath)
+	}
+}
+
+type imagingWithoutMembrane struct{ imaging }
+
+func (imagingWithoutMembrane) FunctionMembrane(context.Context, providerkit.Runtime) ([]byte, error) {
+	return nil, nil
+}
+
+func TestANodeFunctionIsRefusedWhereTheProviderCarriesNoMembrane(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	served := servedBy(t, imagingWithoutMembrane{imaging{Provider: fake.NewProvider(fake.Options{})}})
+	standsBootstrapped(t, served)
+
+	result, _ := deploy(t, served, imagingDeployRequest())
+	if result.GetSuccess() {
+		t.Fatal("Deploy() shipped a node function with no membrane in its image, want it refused: the image would run node over a file that is not there")
+	}
+	for _, want := range []string{"membrane", "node"} {
+		if !strings.Contains(result.GetError(), want) {
+			t.Errorf("the refusal reads %q and never names %q", result.GetError(), want)
 		}
 	}
 }
