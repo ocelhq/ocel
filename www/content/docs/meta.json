@@ -10,6 +10,7 @@
     "frameworks",
     "---Providers---",
     "providers/aws",
+    "providers/gcp",
     "providers/vps",
     "providers/cloudflare",
     "---Console---",

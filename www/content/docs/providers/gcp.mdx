@@ -1,0 +1,45 @@
+---
+title: Google Cloud
+description: Deploy to your own Google Cloud project, on Cloud Run.
+---
+
+```bash
+ocel init --provider @ocel/provider-gcp
+```
+
+Name the project and the region in `ocel.config.ts`:
+
+```ts
+provider: gcpProvider({ project: "my-project", region: "europe-west1" });
+```
+
+Credentials come from Application Default Credentials:
+
+```bash
+gcloud auth application-default login
+```
+
+Then:
+
+```bash
+ocel bootstrap production
+ocel deploy
+```
+
+## What to grant
+
+Turn the services on once:
+
+```bash
+gcloud services enable firestore.googleapis.com storage.googleapis.com \
+  cloudkms.googleapis.com secretmanager.googleapis.com artifactregistry.googleapis.com \
+  iam.googleapis.com run.googleapis.com --project my-project
+```
+
+A deploy needs `roles/datastore.user`, `roles/storage.objectAdmin`,
+`roles/cloudkms.cryptoKeyEncrypterDecrypter`, `roles/secretmanager.secretAccessor`,
+`roles/artifactregistry.writer`, `roles/iam.serviceAccountUser` and `roles/run.admin`.
+A bootstrap needs those plus `roles/datastore.owner`, `roles/storage.admin`,
+`roles/cloudkms.admin`, `roles/secretmanager.admin`, `roles/artifactregistry.admin` and
+`roles/iam.serviceAccountAdmin`. Anything missing is named back to you before anything is
+created.
