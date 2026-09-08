@@ -20,7 +20,12 @@ type Launcher interface {
 var launchers = map[Language]Launcher{}
 
 func Run(ctx context.Context, configDir string, roots []Root, serverURL string, stdout, stderr io.Writer) error {
-	commands, err := commandsFor(ctx, configDir, roots, serverURL)
+	entry, err := BundleRoots(configDir, roots)
+	if err != nil {
+		return err
+	}
+
+	commands, err := commandsFor(ctx, configDir, roots, entry, serverURL)
 	if err != nil {
 		return err
 	}
@@ -34,13 +39,14 @@ func Run(ctx context.Context, configDir string, roots []Root, serverURL string, 
 	return postSync(ctx, serverURL)
 }
 
-func commandsFor(ctx context.Context, configDir string, roots []Root, serverURL string) ([]*exec.Cmd, error) {
-	var jsRoots []Root
+func commandsFor(ctx context.Context, configDir string, roots []Root, entry, serverURL string) ([]*exec.Cmd, error) {
 	var commands []*exec.Cmd
+	if entry != "" {
+		commands = append(commands, nodeCommand(ctx, entry, serverURL))
+	}
 
 	for _, root := range roots {
 		if root.Language == JS {
-			jsRoots = append(jsRoots, root)
 			continue
 		}
 		launcher, ok := launchers[root.Language]
@@ -53,26 +59,27 @@ func commandsFor(ctx context.Context, configDir string, roots []Root, serverURL 
 		}
 		commands = append(commands, cmd)
 	}
-
-	entry, err := BundleRoots(configDir, jsRoots)
-	if err != nil {
-		return nil, err
-	}
-	return append([]*exec.Cmd{nodeCommand(ctx, entry, serverURL)}, commands...), nil
+	return commands, nil
 }
 
 func BundleRoots(configDir string, roots []Root) (string, error) {
 	var files []string
+	var js bool
 	for _, root := range roots {
 		if root.Language != JS {
 			continue
 		}
+		js = true
 		found, err := walkSourceFiles(root.Dir)
 		if err != nil {
 			return "", fmt.Errorf("discover resources: %w", err)
 		}
 		files = append(files, found...)
 	}
+	if !js {
+		return "", nil
+	}
+
 	entry, err := Bundle(configDir, files)
 	if err != nil {
 		return "", fmt.Errorf("bundle discovery entrypoint: %w", err)
