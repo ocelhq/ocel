@@ -325,6 +325,20 @@ func workspaceMembers(inAnImage bool, appDir string) []string {
 	return located.Members()
 }
 
+var runtimeLanguages = map[string]discovery.Language{
+	providerkit.RuntimePython: discovery.Python,
+	providerkit.RuntimeGo:     discovery.Go,
+	providerkit.RuntimeNode:   discovery.JS,
+	providerkit.RuntimeNext:   discovery.JS,
+}
+
+func appLanguage(runtime projectconfig.Runtime, appDir string) discovery.Language {
+	if language, ok := runtimeLanguages[runtime.Name]; ok {
+		return language
+	}
+	return discovery.LanguageOfApp(appDir)
+}
+
 func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Function, compute, configName string) ([]attribution.App, error) {
 	detected := detectedApps(functions)
 	apps := cfg.Apps
@@ -359,7 +373,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 		out = append(out, attribution.App{
 			Name:      a.Name,
 			Path:      a.Path,
-			Language:  discovery.LanguageOfApp(appDir),
+			Language:  appLanguage(a.Runtime, appDir),
 			Container: inAnImage,
 			Members:   workspaceMembers(inAnImage, appDir),
 		})
