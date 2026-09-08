@@ -131,3 +131,26 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 		t.Errorf("source = %q, want it to end with %q", source, want)
 	}
 }
+
+func TestRunReportsWhatAGoRootThatDoesNotCompileSaid(t *testing.T) {
+	configDir := goFixture(t, "example.com/web")
+	write(t, filepath.Join(configDir, "infra", "infra.go"), "package infra\n\nvar DB = undeclared()\n")
+
+	roots, err := Roots(configDir, nil)
+	if err != nil {
+		t.Fatalf("Roots: %v", err)
+	}
+	prepared, err := Prepare(configDir, roots)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err = Run(context.Background(), configDir, prepared, "http://127.0.0.1:1", &stdout, &stderr)
+	if err == nil {
+		t.Fatal("Run succeeded on a root that does not compile, want error")
+	}
+	if !strings.Contains(err.Error(), "undeclared") {
+		t.Errorf("error = %q, want it to carry the compile error", err)
+	}
+}
