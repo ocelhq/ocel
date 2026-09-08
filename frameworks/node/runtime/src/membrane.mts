@@ -6,7 +6,12 @@ import net from "node:net";
 let controlSocket: net.Socket | null = null;
 const controlHandlers = new Set<(message: unknown) => void>();
 
-function control(): net.Socket {
+export function hasControl(): boolean {
+  return Boolean(process.env.OCEL_CONTROL_SOCKET);
+}
+
+function control(): net.Socket | null {
+  if (!hasControl()) return null;
   if (!controlSocket) {
     controlSocket = net.createConnection(process.env.OCEL_CONTROL_SOCKET!);
     receive(controlSocket);
@@ -15,7 +20,7 @@ function control(): net.Socket {
 }
 
 export function sendControl(type: string, payload: unknown): void {
-  control().write(`${JSON.stringify({ type, payload })}\n`);
+  control()?.write(`${JSON.stringify({ type, payload })}\n`);
 }
 
 export function onControlMessage(handler: (message: unknown) => void): void {
@@ -259,13 +264,14 @@ function wrapWithOcelContext(invoke: Invoke, trust: Trust): http.RequestListener
   };
 }
 
-export function serveInvoke(invoke: Invoke, onListening?: OnListening): Promise<void> {
+export function serveInvoke(invoke: Invoke, onListening?: OnListening, bind?: Bind): Promise<void> {
   return startServer(
     http.createServer(
       wrapWithOcelContext(invoke, { forwarded: true, guard: originGuard(process.env) }),
     ),
     onListening,
     true,
+    bind,
   );
 }
 
@@ -278,10 +284,17 @@ export function serveEntry(invoke: Invoke): Promise<void> {
 }
 
 export function serveLocal(invoke: Invoke): Promise<number> {
-  return listen(http.createServer(wrapWithOcelContext(invoke, { entry: true, forwarded: true })));
+  return listen(
+    http.createServer(wrapWithOcelContext(invoke, { entry: true, forwarded: true })),
+    loopback,
+  );
 }
 
-export function serveServer(server: http.Server, onListening?: OnListening): Promise<void> {
+export function serveServer(
+  server: http.Server,
+  onListening?: OnListening,
+  bind?: Bind,
+): Promise<void> {
   const lifted = server.listeners("request") as http.RequestListener[];
   server.removeAllListeners("request");
 
@@ -360,17 +373,24 @@ export function serveServer(server: http.Server, onListening?: OnListening): Pro
   }) as typeof server.removeListener;
   server.off = server.removeListener as typeof server.off;
 
-  return startServer(server, onListening, true);
+  return startServer(server, onListening, true, bind);
 }
 
 export type OnListening = (port: number) => void;
 
-function listen(server: http.Server): Promise<number> {
+export interface Bind {
+  host: string;
+  port: number;
+}
+
+const loopback: Bind = { host: "127.0.0.1", port: 0 };
+
+function listen(server: http.Server, bind: Bind): Promise<number> {
   server.keepAliveTimeout = 0;
   server.headersTimeout = 0;
   return new Promise((resolve, reject) => {
     server.on("error", reject);
-    server.listen({ host: "127.0.0.1", port: 0 }, () => {
+    server.listen(bind, () => {
       const addr = server.address();
       if (!addr || typeof addr === "string") {
         reject(new Error(`unexpected server.address(): ${JSON.stringify(addr)}`));
@@ -385,8 +405,9 @@ export async function startServer(
   server: http.Server,
   onListening?: OnListening,
   lifecycle = false,
+  bind: Bind = loopback,
 ): Promise<void> {
-  const port = await listen(server);
+  const port = await listen(server, bind);
   onListening?.(port);
   sendControl("server-ready", { httpPort: port, lifecycle });
 }

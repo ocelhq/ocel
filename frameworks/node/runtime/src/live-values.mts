@@ -1,4 +1,4 @@
-import { onControlMessage } from "./membrane.mjs";
+import { hasControl, onControlMessage } from "./membrane.mjs";
 
 const LIVE_VALUES_MESSAGE = "liveValues";
 
@@ -49,7 +49,7 @@ export function applyLiveValues(message: unknown): boolean {
 let firstPush: Promise<void> | undefined;
 
 export function awaitLiveValues(): Promise<void> {
-  if (declaredLiveKeys().length === 0) return Promise.resolve();
+  if (!hasControl() || declaredLiveKeys().length === 0) return Promise.resolve();
 
   firstPush ??= new Promise<void>((resolve) => {
     onControlMessage((message) => {
