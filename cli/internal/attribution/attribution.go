@@ -24,6 +24,7 @@ type App struct {
 	Name      string
 	Path      string
 	Language  discovery.Language
+	Roots     []discovery.Root
 	Container bool
 	Members   []string
 }
