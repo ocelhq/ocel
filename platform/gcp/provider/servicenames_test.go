@@ -57,7 +57,7 @@ func TestAFunctionThatIsNotTheAppItselfIsNamedApart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	part, err := names.Service("shop", providerkit.ProductionEnv, "web", "web-checkout")
+	part, err := names.Service("shop", providerkit.ProductionEnv, "web", "fn--web--checkout")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,6 +66,22 @@ func TestAFunctionThatIsNotTheAppItselfIsNamedApart(t *testing.T) {
 	}
 	if !strings.Contains(part, "-checkout-") {
 		t.Errorf("Service() = %q, want the function it runs named in it", part)
+	}
+}
+
+func TestAFunctionIsNamedByItsRouteAndNotByTheCoordinateItCarries(t *testing.T) {
+	names := serviceNames(t)
+
+	service, err := names.Service("j-1874-deploy-node", providerkit.ProductionEnv, "web", "fn--web--index")
+	if err != nil {
+		t.Fatalf("Service() = %v", err)
+	}
+	if strings.Contains(service, "fn-") {
+		t.Errorf("Service() = %q, and a function's logical coordinate says fn and the app a second time: "+
+			"the service is already named for the app, and the 49 characters Cloud Run builds a url from go on the route", service)
+	}
+	if !strings.Contains(service, "-index-") {
+		t.Errorf("Service() = %q, want the route the function serves named in it", service)
 	}
 }
 
@@ -116,7 +132,7 @@ func TestAnEnvironmentAndAnAppThatSplitTheSameLettersAreTwoServices(t *testing.T
 func TestAFunctionOfOneAppAndAnAppNamedForItAreTwoServices(t *testing.T) {
 	names := serviceNames(t)
 
-	part, err := names.Service("shop", providerkit.ProductionEnv, "web", "web-checkout")
+	part, err := names.Service("shop", providerkit.ProductionEnv, "web", "fn--web--checkout")
 	if err != nil {
 		t.Fatal(err)
 	}
