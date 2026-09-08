@@ -30,7 +30,7 @@ describe("journeyZone", () => {
 
 describe("sweepShapeFor", () => {
   it("destroys a cell through the edge its variant stood it up behind", () => {
-    expect(sweepShapeFor(cell("sdk", "workspace", cloudflare), "j-9-sdk-workspace")).toEqual({
+    expect(sweepShapeFor(cell("sdk", "workspace", cloudflare), "j-9-sdk-workspace", {})).toEqual({
       base: AWS_BASE,
       slug: "j-9-sdk-workspace",
       edge: "cloudflare",
@@ -38,9 +38,23 @@ describe("sweepShapeFor", () => {
   });
 
   it("names no edge for a base cell", () => {
-    expect(sweepShapeFor(cell("deploy", "node"), "j-9-deploy-node")).toEqual({
+    expect(sweepShapeFor(cell("deploy", "node"), "j-9-deploy-node", {})).toEqual({
       base: AWS_BASE,
       slug: "j-9-deploy-node",
+    });
+  });
+
+  it("unbinds through the dns the cell was bound under", () => {
+    expect(
+      sweepShapeFor(cell("deploy", "node"), "j-9-deploy-node", {
+        OCEL_JOURNEY_DNS: "cloudflare",
+        OCEL_JOURNEY_ZONE: "j.example",
+        OCEL_AWS_VARS_KEY: "arn:aws:kms:key/k",
+      }),
+    ).toEqual({
+      base: AWS_BASE,
+      slug: "j-9-deploy-node",
+      dns: "cloudflare",
     });
   });
 });
