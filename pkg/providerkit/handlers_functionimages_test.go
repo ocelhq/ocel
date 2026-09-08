@@ -165,11 +165,12 @@ func TestAFunctionRunAsAnImageIsHandedItsValuesAtDeployTime(t *testing.T) {
 	}
 }
 
-func TestAFunctionRunAsAnImageRefusesTheNameThePortIsInjectedUnder(t *testing.T) {
+func refusedImagedDeploy(t *testing.T, name, value, stood string) string {
+	t.Helper()
 	stagedProject(t, "web", "admin")
 	served, _ := imagingServed(t)
 
-	req := declaring(imagingDeployRequest(), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "PORT", "3000")
+	req := declaring(imagingDeployRequest(), resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, name, value)
 	stream, err := served.Deploy(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Deploy() error = %v", err)
@@ -179,14 +180,32 @@ func TestAFunctionRunAsAnImageRefusesTheNameThePortIsInjectedUnder(t *testing.T)
 	for stream.Receive() {
 		result := stream.Msg().GetResult()
 		if result.GetSuccess() {
-			t.Fatal("Deploy() stood up an app declaring PORT, want it refused: the image is told which port to bind under that very name")
+			t.Fatal(stood)
 		}
 		if result.GetError() != "" {
 			refusal = result.GetError()
 		}
 	}
+	return refusal + connectMessage(stream.Err())
+}
+
+func TestAFunctionRunAsAnImageRefusesTheNameThePortIsInjectedUnder(t *testing.T) {
+	refusal := refusedImagedDeploy(t, "PORT", "3000",
+		"Deploy() stood up an app declaring PORT, want it refused: the image is told which port to bind under that very name")
+
 	for _, want := range []string{"PORT", "web"} {
-		if !strings.Contains(refusal+connectMessage(stream.Err()), want) {
+		if !strings.Contains(refusal, want) {
+			t.Errorf("the refusal reads %q and never names %q", refusal, want)
+		}
+	}
+}
+
+func TestAFunctionRunAsAnImageRefusesTheNameItsHandlerIsInjectedUnder(t *testing.T) {
+	refusal := refusedImagedDeploy(t, providerkit.HandlerName, "/tmp/theirs.mjs",
+		"Deploy() stood up an app declaring OCEL_HANDLER, want it refused: the image tells its membrane which file to serve under that very name")
+
+	for _, want := range []string{providerkit.HandlerName, "web", "membrane"} {
+		if !strings.Contains(refusal, want) {
 			t.Errorf("the refusal reads %q and never names %q", refusal, want)
 		}
 	}
