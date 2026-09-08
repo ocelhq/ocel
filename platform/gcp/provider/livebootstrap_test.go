@@ -666,3 +666,53 @@ func TestLiveADatabaseStandingInAnotherRegionIsRefusedRatherThanUsed(t *testing.
 		t.Errorf("Apply() refused with %q, want it to name the region the database actually stands in", refusal.Message)
 	}
 }
+
+func rowsOf(t *testing.T, plan providerkit.Plan) map[string]providerkit.Change {
+	t.Helper()
+	rows := map[string]providerkit.Change{}
+	for _, group := range plan.Groups {
+		for _, change := range group.Changes {
+			rows[change.Kind+"/"+change.Name] = change
+		}
+	}
+	return rows
+}
+
+func TestLiveTheArtifactBucketIsRemovedSlowlyBecauseItIsEmptiedFirst(t *testing.T) {
+	p := live(t)
+	class := providerkit.ClassPreview
+	bootstrapper := bootstrapped(t, p, class)
+
+	plan, err := bootstrapper.PlanRemoval(context.Background(), class)
+	if err != nil {
+		t.Fatalf("PlanRemoval() = %v", err)
+	}
+	rows := rowsOf(t, plan)
+	artifacts := rows["storage:bucket/"+gcp.BucketName(liveProject(), class)]
+	if artifacts.Action != providerkit.ActionDelete || !artifacts.Slow {
+		t.Errorf("PlanRemoval() shows the artifact bucket as %q (slow %v), want a delete marked slow: every artifact in it is deleted one by one first",
+			artifacts.Action, artifacts.Slow)
+	}
+	state := rows["storage:bucket/"+gcp.StateBucketName(liveProject(), class)]
+	if state.Slow {
+		t.Error("PlanRemoval() marks the state bucket slow, and it is refused unless it is already empty")
+	}
+}
+
+func TestLiveASharedRowNamesTheSiblingClassInEveryPlanItAppearsIn(t *testing.T) {
+	p := live(t)
+	class := providerkit.ClassPreview
+	bootstrapped(t, p, providerkit.ClassProduction)
+	bootstrapper := bootstrapped(t, p, class)
+
+	ctx := context.Background()
+	plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class})
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	database := rowsOf(t, plan)["firestore:database/ocel"]
+	if database.Action != providerkit.ActionKeep || !strings.Contains(database.Reason, string(providerkit.ClassProduction)) {
+		t.Errorf("Plan() shows the database as %q (%q), want it kept for a reason naming the sibling class that shares it, as the removal plan does",
+			database.Action, database.Reason)
+	}
+}
