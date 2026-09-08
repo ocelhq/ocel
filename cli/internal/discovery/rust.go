@@ -124,7 +124,7 @@ func (rustLauncher) Command(ctx context.Context, configDir string, root Root, se
 
 	cmd := exec.CommandContext(ctx, "cargo", "run", "--quiet", "--manifest-path", crate.ManifestPath, "--bin", bins[0].Name)
 	cmd.Dir = metadata.WorkspaceRoot
-	cmd.Env = append(os.Environ(), "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+serverURL)
+	cmd.Env = append(os.Environ(), "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+serverURL, "OCEL_SOURCE_ROOT="+metadata.WorkspaceRoot)
 	return cmd, nil
 }
 
