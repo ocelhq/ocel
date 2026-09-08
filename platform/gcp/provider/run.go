@@ -26,6 +26,8 @@ const (
 	revisionMemory = "512Mi"
 )
 
+const releaseAttempts = 4
+
 type policyBinding = run.GoogleIamV1Binding
 
 type serving struct {
@@ -118,7 +120,7 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 	s.image = p.runnable(s.image)
 	desired := serviceOf(s)
 
-	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+	_, err = attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(path).Context(ctx).Do(call...)
 	})
 	switch {
@@ -136,10 +138,16 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 		if report != nil {
 			report.Say("Releasing " + s.service + " onto Cloud Run")
 		}
-		desired.Etag = held.Etag
-		desired.Traffic = held.Traffic
-		err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-			return services.Projects.Locations.Services.Patch(path, desired).Context(ctx).Do(call...)
+		err = p.settled(ctx, "release "+s.service+" onto Cloud Run", func() error {
+			held, err := p.read(ctx, services, path, s.service)
+			if err != nil {
+				return err
+			}
+			desired.Etag = held.Etag
+			desired.Traffic = held.Traffic
+			return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+				return services.Projects.Locations.Services.Patch(path, desired).Context(ctx).Do(call...)
+			})
 		})
 	}
 	if err != nil {
@@ -158,32 +166,66 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 }
 
 func (p *Provider) pin(ctx context.Context, services *run.Service, path, service string) (*run.GoogleCloudRunV2Service, error) {
-	stood, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
-		return services.Projects.Locations.Services.Get(path).Context(ctx).Do(call...)
+	var stood *run.GoogleCloudRunV2Service
+	err := p.settled(ctx, "pin the traffic of "+service+" to the revision this release stood up", func() error {
+		held, err := p.read(ctx, services, path, service)
+		if err != nil {
+			return err
+		}
+		stood = held
+		revision := revisionName(held.LatestReadyRevision)
+		if revision == "" {
+			return providerkit.Refuse(providerkit.CodeNotReady,
+				"%s stood up no revision that came ready, and a release routes traffic to the revision it made rather than to whatever ran last",
+				service)
+		}
+		if servedBy(held.Traffic, revision) {
+			return nil
+		}
+		routed := &run.GoogleCloudRunV2Service{
+			Etag:     held.Etag,
+			Template: held.Template,
+			Traffic:  trafficTo(revision),
+		}
+		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+			return services.Projects.Locations.Services.Patch(path, routed).Context(ctx).Do(call...)
+		})
 	})
 	if err != nil {
-		return nil, fmt.Errorf("read the Cloud Run service %s this release stood up: %w", service, err)
-	}
-	revision := revisionName(stood.LatestReadyRevision)
-	if revision == "" {
-		return nil, providerkit.Refuse(providerkit.CodeNotReady,
-			"%s stood up no revision that came ready, and a release routes traffic to the revision it made rather than to whatever ran last",
-			service)
-	}
-	if servedBy(stood.Traffic, revision) {
-		return stood, nil
-	}
-	routed := &run.GoogleCloudRunV2Service{
-		Etag:     stood.Etag,
-		Template: stood.Template,
-		Traffic:  trafficTo(revision),
-	}
-	if err := p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-		return services.Projects.Locations.Services.Patch(path, routed).Context(ctx).Do(call...)
-	}); err != nil {
 		return nil, err
 	}
 	return stood, nil
+}
+
+func (p *Provider) read(ctx context.Context, services *run.Service, path, service string) (*run.GoogleCloudRunV2Service, error) {
+	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+		return services.Projects.Locations.Services.Get(path).Context(ctx).Do(call...)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read the Cloud Run service %s: %w", service, err)
+	}
+	return held, nil
+}
+
+func (p *Provider) settled(ctx context.Context, doing string, write func() error) error {
+	var refused error
+	for attempt := range releaseAttempts {
+		if attempt > 0 && !waited(ctx, attempt) {
+			return ctx.Err()
+		}
+		if refused = write(); refused == nil || !stale(refused) {
+			return refused
+		}
+	}
+	return fmt.Errorf("%s, and it kept changing under this release: %w", doing, refused)
+}
+
+func stale(err error) bool {
+	switch answeredCode(err) {
+	case http.StatusConflict, http.StatusPreconditionFailed:
+		return true
+	}
+	return false
 }
 
 func servedBy(traffic []*run.GoogleCloudRunV2TrafficTarget, revision string) bool {
@@ -203,24 +245,27 @@ func revisionName(path string) string {
 }
 
 func (p *Provider) open(ctx context.Context, services *run.Service, path, service string) error {
-	policy, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
-		return services.Projects.Locations.Services.GetIamPolicy(path).Context(ctx).Do(call...)
+	return p.settled(ctx, "open "+service+" to the internet", func() error {
+		policy, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
+			return services.Projects.Locations.Services.GetIamPolicy(path).Context(ctx).Do(call...)
+		})
+		if err != nil {
+			return deniedPolicy(service, err)
+		}
+		bound, changed := invokable(policy.Bindings)
+		if !changed {
+			return nil
+		}
+		policy.Bindings = bound
+		_, err = attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
+			return services.Projects.Locations.Services.
+				SetIamPolicy(path, &run.GoogleIamV1SetIamPolicyRequest{Policy: policy}).Context(ctx).Do(call...)
+		})
+		if err == nil || stale(err) {
+			return err
+		}
+		return deniedPolicy(service, err)
 	})
-	if err != nil {
-		return deniedPolicy(service, err)
-	}
-	bound, changed := invokable(policy.Bindings)
-	if !changed {
-		return nil
-	}
-	policy.Bindings = bound
-	if _, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
-		return services.Projects.Locations.Services.
-			SetIamPolicy(path, &run.GoogleIamV1SetIamPolicyRequest{Policy: policy}).Context(ctx).Do(call...)
-	}); err != nil {
-		return deniedPolicy(service, err)
-	}
-	return nil
 }
 
 func deniedPolicy(service string, err error) error {

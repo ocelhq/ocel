@@ -208,3 +208,74 @@ func TestAReleaseOntoAStandingServiceNeverHandsTrafficBackToTheLatestRevision(t 
 		t.Errorf("the service serves %+v, want all of it on the revision the second release stood up", standing.Traffic)
 	}
 }
+
+func serves(service string) serving {
+	return serving{
+		service: service,
+		image:   "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one",
+		compute: providerkit.ComputeContainer,
+		health:  "/",
+		public:  true,
+	}
+}
+
+func TestAServiceChangedUnderAReleaseIsReadAgainAndPatchedAgain(t *testing.T) {
+	server := &runServer{}
+	released(t, server, serves("ocel-shop-prod-app"))
+
+	server.patchConflicts = 1
+	again := serves("ocel-shop-prod-app")
+	again.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	released(t, server, again)
+
+	standing := server.serving()
+	if !servedBy(standing.Traffic, revisionName(standing.LatestReadyRevision)) {
+		t.Errorf("the service serves %+v after a patch a concurrent write refused, want the release it asked for", standing.Traffic)
+	}
+	if got := standing.Template.Containers[0].Image; !strings.HasSuffix(got, "sha256-two") {
+		t.Errorf("the service runs %q, want the image the second release named: a 409 says the read the write was built on is stale", got)
+	}
+}
+
+func TestAServiceThatKeepsChangingUnderAReleaseIsRefusedRatherThanRetriedForever(t *testing.T) {
+	server := &runServer{}
+	released(t, server, serves("ocel-shop-prod-app"))
+
+	server.patchConflicts = releaseAttempts + 1
+	before, _ := server.tries()
+	_, err := server.open(t).stand(context.Background(), serves("ocel-shop-prod-app"), nil)
+	if err == nil {
+		t.Fatal("stand() over a service that never settles = nil, want the release refused")
+	}
+	if !strings.Contains(err.Error(), "ocel-shop-prod-app") {
+		t.Errorf("stand() = %v, want the service it was releasing named", err)
+	}
+	if patched, _ := server.tries(); patched-before != releaseAttempts {
+		t.Errorf("the release patched %d times, want %d: a retry that never gives up holds a deploy open", patched-before, releaseAttempts)
+	}
+}
+
+func TestAPolicyChangedUnderAReleaseIsReadAgainAndWrittenAgain(t *testing.T) {
+	server := &runServer{policyConflicts: 1}
+
+	released(t, server, serves("ocel-shop-prod-app"))
+
+	if !publicly(server.bound()) {
+		t.Error("the binding a concurrent policy write refused was never made again, and a service nobody may invoke answers nothing")
+	}
+	if _, policies := server.tries(); policies != 2 {
+		t.Errorf("the release wrote the policy %d times, want 2: a 409 says the read the write was built on is stale", policies)
+	}
+}
+
+func TestAPolicyThatKeepsChangingUnderAReleaseIsRefusedRatherThanRetriedForever(t *testing.T) {
+	server := &runServer{policyConflicts: releaseAttempts + 1}
+
+	_, err := server.open(t).stand(context.Background(), serves("ocel-shop-prod-app"), nil)
+	if err == nil {
+		t.Fatal("stand() over a policy that never settles = nil, want the release refused rather than left private")
+	}
+	if _, policies := server.tries(); policies != releaseAttempts {
+		t.Errorf("the release wrote the policy %d times, want %d: a retry that never gives up holds a deploy open", policies, releaseAttempts)
+	}
+}
