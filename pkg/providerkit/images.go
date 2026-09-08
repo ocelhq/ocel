@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
@@ -15,6 +17,8 @@ type ImagePush struct {
 	Source string
 	Target string
 	Digest string
+
+	Built v1.Image
 }
 
 type ImageStore interface {

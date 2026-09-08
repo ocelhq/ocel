@@ -103,6 +103,11 @@ var optionalSets = []struct {
 		onPort: func(port any) bool { _, ok := port.(providerkit.ImageLoader); return ok },
 	},
 	{
+		name:   "FunctionImager",
+		onRoot: func(p providerkit.Provider) bool { _, ok := p.(providerkit.FunctionImager); return ok },
+		onPort: func(port any) bool { _, ok := port.(providerkit.FunctionImager); return ok },
+	},
+	{
 		name:   resources.FunctionsPrimitive,
 		onRoot: func(p providerkit.Provider) bool { _, ok := p.(resources.Functions); return ok },
 		onPort: func(port any) bool { _, ok := port.(resources.Functions); return ok },

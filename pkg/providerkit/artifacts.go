@@ -201,6 +201,20 @@ func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, 
 	return pack, nil
 }
 
+func (r *deployRun) stageFunctions(
+	ctx context.Context,
+	entry AppEntry,
+	pack AppPack,
+	routing *RoutingPlan,
+) ([]Upload, []ImagePush, error) {
+	if imager, images := r.provider.(FunctionImager); images {
+		pushes, err := r.imageFunctions(ctx, imager, entry, pack, routing)
+		return nil, pushes, err
+	}
+	staged, err := r.stageApp(entry, pack, routing)
+	return staged, nil, err
+}
+
 func (r *deployRun) stageApp(entry AppEntry, pack AppPack, routing *RoutingPlan) ([]Upload, error) {
 	root := ArtifactRoot()
 	var shipping []*contractv1.ManifestFunction

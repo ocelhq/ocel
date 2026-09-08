@@ -179,6 +179,7 @@ type FunctionSpec struct {
 	Handler  string
 	Runtime  Runtime
 	Artifact ArtifactRef
+	Image    string
 	Env      map[string]string
 	Memory   int
 	Timeout  time.Duration

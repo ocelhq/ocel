@@ -103,12 +103,13 @@ type deployRun struct {
 
 	outcomes []*progressv1.AppResult
 
-	mu        sync.Mutex
-	artifacts map[string]ArtifactRef
-	membranes map[string]ArtifactRef
-	needs     NeedRecords
-	links     []Link
-	functions map[string][]Function
+	mu             sync.Mutex
+	artifacts      map[string]ArtifactRef
+	functionImages map[string]string
+	membranes      map[string]ArtifactRef
+	needs          NeedRecords
+	links          []Link
+	functions      map[string][]Function
 }
 
 func (r *deployRun) recordArtifact(logical string, ref ArtifactRef) {
@@ -152,19 +153,20 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		return nil, RefusalError(err)
 	}
 	run := &deployRun{
-		provider:  provider,
-		gate:      gate,
-		features:  features,
-		sender:    sender,
-		tracked:   newStageScope(sender),
-		manifest:  req.GetManifest(),
-		plan:      plan,
-		front:     front,
-		store:     stackStore{records: provider.Records(), name: EdgeStackRecord(plan.Class, plan.Slug)},
-		values:    values.Store{Records: provider.Records(), Sealer: provider.Sealer()},
-		scope:     values.Scope{Project: plan.Slug, Class: plan.Class},
-		artifacts: map[string]ArtifactRef{},
-		functions: map[string][]Function{},
+		provider:       provider,
+		gate:           gate,
+		features:       features,
+		sender:         sender,
+		tracked:        newStageScope(sender),
+		manifest:       req.GetManifest(),
+		plan:           plan,
+		front:          front,
+		store:          stackStore{records: provider.Records(), name: EdgeStackRecord(plan.Class, plan.Slug)},
+		values:         values.Store{Records: provider.Records(), Sealer: provider.Sealer()},
+		scope:          values.Scope{Project: plan.Slug, Class: plan.Class},
+		artifacts:      map[string]ArtifactRef{},
+		functionImages: map[string]string{},
+		functions:      map[string][]Function{},
 
 		dry:           req.GetDry(),
 		allowDegraded: req.GetEdge().GetAllowDegraded(),
@@ -693,12 +695,12 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 			if err != nil {
 				return err
 			}
-			staged, err := r.stageApp(entry, pack, facts.Routing)
+			staged, functions, err := r.stageFunctions(ctx, entry, pack, facts.Routing)
 			if err != nil {
 				return err
 			}
 			defer discardStaged(staged)
-			images, err := r.imagePlan(entry)
+			images, err := r.imagePlan(entry, functions)
 			if err != nil {
 				return err
 			}
@@ -927,6 +929,7 @@ func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
 			Handler:  fn.GetHandler(),
 			Runtime:  Runtime{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()},
 			Artifact: artifact,
+			Image:    r.functionImage(fn.GetLogicalName()),
 			URL:      true,
 		})
 	}
@@ -1374,7 +1377,10 @@ func runs(images ImagePlan, entry AppEntry) string {
 	return entry.Image
 }
 
-func (r *deployRun) imagePlan(entry AppEntry) (ImagePlan, error) {
+func (r *deployRun) imagePlan(entry AppEntry, functions []ImagePush) (ImagePlan, error) {
+	if len(functions) > 0 {
+		return ImagePlan{Store: r.images, Pushes: functions}, nil
+	}
 	if entry.Compute() != ComputeContainer || entry.Image == "" {
 		return ImagePlan{}, nil
 	}
