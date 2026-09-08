@@ -12,6 +12,11 @@ func notReady(thing string) error {
 	return providerkit.Refuse(providerkit.CodeNotReady, "gcp: %s is not implemented", thing)
 }
 
+func classless(what any) error {
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"%s names no class, and this project keeps each class's state apart from the other class's", what)
+}
+
 type bootstrapper struct{}
 
 func (bootstrapper) Catalogue() []providerkit.Feature { return nil }

@@ -19,8 +19,7 @@ type sealer struct {
 
 func (s sealer) key(at providerkit.Coordinate) (string, error) {
 	if at.Class == "" {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"a value names no class, and this project seals each class's values under a key of its own")
+		return "", classless("a value")
 	}
 	return fmt.Sprintf("projects/%s/locations/%s/keyRings/%s/cryptoKeys/%s",
 		s.clients.project, s.clients.region, KeyRing, at.Class), nil
