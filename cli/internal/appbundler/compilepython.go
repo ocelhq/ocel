@@ -12,13 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const (
 	pythonEntryFile        = "main.py"
 	pythonRequirementsFile = "requirements.txt"
-	pythonProgram          = "python3"
+	pythonRuntimeCommand   = "python3"
 	pythonBytecodeDir      = "__pycache__"
 	pythonVirtualenvDir    = "venv"
 	nodeVendorDir          = "node_modules"
@@ -48,7 +49,7 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	if err := c.installRequirements(ctx, platform); err != nil {
 		return err
 	}
-	return describeArtifact(c.App, c.Runtime, pythonEntryFile, []string{pythonProgram, pythonEntryFile}, c.FuncDir, c.AppDir)
+	return describeArtifact(c.App, c.Runtime, pythonEntryFile, []string{pythonRuntimeCommand, pythonEntryFile}, c.FuncDir, c.AppDir)
 }
 
 func (c Compilation) carryDiscoveryRoots() error {
@@ -74,11 +75,7 @@ func (c Compilation) installRequirements(ctx context.Context, platform string) e
 	case !declared.Mode().IsRegular():
 		return fmt.Errorf("app %q holds %s as %s, and pip reads the dependencies it vendors from a file", c.App, requirements, declared.Mode().Type())
 	}
-	program, err := exec.LookPath(pythonProgram)
-	if err != nil {
-		return fmt.Errorf("app %q declares dependencies in %s and no %s is on PATH to vendor them with: %w", c.App, pythonRequirementsFile, pythonProgram, err)
-	}
-	cmd := exec.CommandContext(ctx, program, pipArgs(c.FuncDir, requirements, platform)...)
+	cmd := exec.CommandContext(ctx, discovery.PythonInterpreter(c.Source), pipArgs(c.FuncDir, requirements, platform)...)
 	cmd.Dir = c.Source
 	var said bytes.Buffer
 	cmd.Stdout = &said

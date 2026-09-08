@@ -12,7 +12,7 @@ import (
 
 const (
 	pythonEntryFile = ".ocel/discovery.py"
-	pythonProgram   = "python3"
+	pythonOnPath    = "python3"
 )
 
 var pythonProjectFiles = []string{"pyproject.toml", "requirements.txt"}
@@ -43,11 +43,7 @@ func (pythonLauncher) Command(ctx context.Context, configDir string, root Root, 
 		return nil, fmt.Errorf("discovery: %w", err)
 	}
 
-	interpreter, err := pythonInterpreter(runRoot)
-	if err != nil {
-		return nil, err
-	}
-	cmd := exec.CommandContext(ctx, interpreter, "./"+pythonEntryFile)
+	cmd := exec.CommandContext(ctx, PythonInterpreter(runRoot), "./"+pythonEntryFile)
 	cmd.Dir = runRoot
 	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1", "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+serverURL)
 	return cmd, nil
@@ -89,16 +85,12 @@ func pythonPackage(runRoot, dir string) (string, error) {
 	return segments[0], nil
 }
 
-func pythonInterpreter(runRoot string) (string, error) {
+func PythonInterpreter(runRoot string) string {
 	for _, candidate := range pythonInterpreters {
 		path := filepath.Join(runRoot, filepath.FromSlash(candidate))
 		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
-			return path, nil
+			return path
 		}
 	}
-	found, err := exec.LookPath(pythonProgram)
-	if err != nil {
-		return "", fmt.Errorf("discovery: %s is a python folder and no %s is on PATH to run it with: %w", runRoot, pythonProgram, err)
-	}
-	return found, nil
+	return pythonOnPath
 }

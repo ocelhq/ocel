@@ -92,7 +92,7 @@ func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
 	if config.Handler != pythonEntryFile {
 		t.Errorf("handler = %q, want %q — Lambda refuses a package whose handler names no file in it", config.Handler, pythonEntryFile)
 	}
-	if len(config.Command) != 2 || config.Command[0] != pythonProgram || config.Command[1] != pythonEntryFile {
+	if len(config.Command) != 2 || config.Command[0] != pythonRuntimeCommand || config.Command[1] != pythonEntryFile {
 		t.Errorf("command = %q, want the interpreter and the module it runs, which whatever hosts the artifact execs", config.Command)
 	}
 	if config.Runtime != (Runtime{Name: "python", Arch: "arm64"}) {
@@ -190,8 +190,8 @@ func TestCompileRefusesAPythonAppWithDependenciesAndNoInterpreterToVendorThemWit
 		FuncDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:  t.TempDir(),
 	})
-	if err == nil || !strings.Contains(err.Error(), pythonProgram) || !strings.Contains(err.Error(), pythonRequirementsFile) {
-		t.Fatalf("err = %v, want a refusal naming %s and %s — a package shipped without its dependencies fails at the app's first import instead", err, pythonProgram, pythonRequirementsFile)
+	if err == nil || !strings.Contains(err.Error(), pythonRuntimeCommand) || !strings.Contains(err.Error(), pythonRequirementsFile) {
+		t.Fatalf("err = %v, want a refusal naming %s and %s — a package shipped without its dependencies fails at the app's first import instead", err, pythonRuntimeCommand, pythonRequirementsFile)
 	}
 }
 
@@ -213,7 +213,7 @@ func TestCompileVendorsWhatTheAppDeclaresIntoTheArtifact(t *testing.T) {
 }
 
 func pipAvailable() bool {
-	program, err := exec.LookPath(pythonProgram)
+	program, err := exec.LookPath(pythonRuntimeCommand)
 	if err != nil {
 		return false
 	}
