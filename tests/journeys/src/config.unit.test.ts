@@ -1,5 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { AWS_BASE, journeyZone, renderConfig, shapeFor, sweepShapeFor, VPS_BASE } from "./config";
+import {
+  AWS_BASE,
+  GCP_BASE,
+  journeyZone,
+  renderConfig,
+  shapeFor,
+  sweepShapeFor,
+  VPS_BASE,
+} from "./config";
 import { evidence } from "./evidence";
 import { type Concern, specByName } from "./spec";
 import type { CellContext } from "./targets/types";
@@ -124,6 +132,22 @@ describe("shapeFor", () => {
       base: AWS_BASE,
       slug: "j-1-deploy-node",
     });
+  });
+});
+
+describe("a container cell", () => {
+  it("carries no runtime on any target, because a container runs the image it is given", () => {
+    for (const base of [AWS_BASE, GCP_BASE, VPS_BASE]) {
+      expect(renderConfig({ base, slug: "j-1-deploy-node", compute: "container" })).toContain(
+        "runtime: undefined,",
+      );
+    }
+  });
+
+  it("leaves the runtime the fixture declares where the cell runs serverless", () => {
+    expect(
+      renderConfig({ base: GCP_BASE, slug: "j-1-deploy-node", compute: "serverless" }),
+    ).not.toContain("runtime:");
   });
 });
 
