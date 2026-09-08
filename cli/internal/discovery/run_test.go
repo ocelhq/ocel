@@ -186,3 +186,34 @@ func TestRunRefusesARootThisBuildCannotDiscover(t *testing.T) {
 		t.Errorf("err = %v, want it to name the root", err)
 	}
 }
+
+func TestRunBuildsNoBundleAndRunsNoNodeWithoutAJSRoot(t *testing.T) {
+	root := t.TempDir()
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), root, nil, okServer(t), &stdout, &stderr); err != nil {
+		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, buildDirName, "entry.mjs")); !os.IsNotExist(err) {
+		t.Errorf("stat entry.mjs = %v, want a project with no js root to bundle nothing and run no node", err)
+	}
+}
+
+func TestRunRefusesAGoRootWithoutBundlingForIt(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "go.mod"), "module example.com/web")
+	write(t, filepath.Join(root, "infra", "infra.go"), "package infra")
+
+	roots, err := Roots(root, nil, nil)
+	if err != nil {
+		t.Fatalf("Roots: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), root, roots, okServer(t), &stdout, &stderr); err == nil {
+		t.Fatal("Run succeeded on a go root, want an error")
+	}
+	if _, err := os.Stat(filepath.Join(root, buildDirName, "entry.mjs")); !os.IsNotExist(err) {
+		t.Errorf("stat entry.mjs = %v, want a go-only project to bundle nothing", err)
+	}
+}
