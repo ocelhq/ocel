@@ -32,6 +32,7 @@ const (
 	reasonDestroy  = "scheduled, destroyed after 24h"
 
 	reasonUngranted = "it stands, and the credential bootstrapping here may not hand an app to Cloud Run to run as it"
+	reasonUnpruned  = "it stands under cleanup policies this bootstrap did not name, and what prunes the images a deploy pushes would then be rules nothing here wrote"
 
 	reasonUnprotected = "it stands with delete protection off, and one call would take every record both classes hold with it"
 )
@@ -208,10 +209,14 @@ func (b bootstrapper) stand(ctx context.Context, read survey, held item, report 
 }
 
 func (b bootstrapper) mend(ctx context.Context, read survey, held item) error {
-	if held.Kind == KindDatabase {
+	switch held.Kind {
+	case KindDatabase:
 		return b.protectDatabase(ctx)
+	case KindRepository:
+		return b.pruneRepository(ctx, held.Name)
+	default:
+		return b.make(ctx, read, held)
 	}
-	return b.make(ctx, read, held)
 }
 
 func (b bootstrapper) make(ctx context.Context, read survey, held item) error {
@@ -465,12 +470,25 @@ func (b bootstrapper) makeRepository(ctx context.Context, name string) error {
 	creating, err := attempted(ctx, service.Projects.Locations.Repositories.Create(
 		repositoryParent(b.clients), imageRepository()).RepositoryId(name).Context(ctx).Do)
 	if taken(err) {
-		return nil
+		return b.pruneRepository(ctx, name)
 	}
 	if err != nil {
 		return fmt.Errorf("create the %s image repository: %w", name, err)
 	}
 	return b.repositoryAwaited(ctx, fmt.Sprintf("creating the %s image repository", name), creating)
+}
+
+func (b bootstrapper) pruneRepository(ctx context.Context, name string) error {
+	service, err := b.clients.Repositories()
+	if err != nil {
+		return err
+	}
+	if _, err := attempted(ctx, service.Projects.Locations.Repositories.Patch(repositoryPath(b.clients, name),
+		&artifactregistry.Repository{CleanupPolicies: pruningUntaggedImages()}).
+		UpdateMask("cleanup_policies").Context(ctx).Do); err != nil {
+		return fmt.Errorf("hold the %s image repository to the cleanup policy this bootstrap names: %w", name, err)
+	}
+	return nil
 }
 
 func imageRepository() *artifactregistry.Repository {

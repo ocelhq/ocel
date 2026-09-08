@@ -11,6 +11,7 @@ import (
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/artifactregistry/v1"
 	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
@@ -178,7 +179,7 @@ func (b bootstrapper) stands(ctx context.Context, held item) (standing, error) {
 	case KindSecret:
 		return stood(b.secretStands(ctx, held.Name))
 	case KindRepository:
-		return stood(b.repositoryStands(ctx, held.Name))
+		return b.repositoryStands(ctx, held.Name)
 	case KindServiceAccount:
 		return b.accountStands(ctx, held.Name)
 	}
@@ -307,19 +308,42 @@ func (b bootstrapper) passphraseHeld(ctx context.Context, name string) (bool, er
 	return held.State == enabledVersion, nil
 }
 
-func (b bootstrapper) repositoryStands(ctx context.Context, name string) (bool, error) {
+func (b bootstrapper) repositoryStands(ctx context.Context, name string) (standing, error) {
 	service, err := b.clients.Repositories()
 	if err != nil {
-		return false, err
+		return standing{}, err
 	}
-	_, err = attempted(ctx, service.Projects.Locations.Repositories.Get(repositoryPath(b.clients, name)).Context(ctx).Do)
+	held, err := attempted(ctx, service.Projects.Locations.Repositories.Get(repositoryPath(b.clients, name)).Context(ctx).Do)
 	if absent(err) {
-		return false, nil
+		return standing{}, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("read the %s image repository: %w", name, err)
+		return standing{}, fmt.Errorf("read the %s image repository: %w", name, err)
 	}
-	return true, nil
+	return repositoryStanding(name, held)
+}
+
+func repositoryStanding(name string, held *artifactregistry.Repository) (standing, error) {
+	if held.Format != dockerImages {
+		return standing{}, providerkit.Refuse(providerkit.CodeInvalid,
+			"the %s repository already stands and holds %s packages, and Artifact Registry never changes the format of one: "+
+				"Cloud Run runs %s images and nothing this bootstrap does would make it hold them.\n"+
+				"Delete that repository, or bootstrap under a namespace naming another in %s",
+			name, held.Format, dockerImages, providerkit.NamespaceEnvVar)
+	}
+	if !pruned(held.CleanupPolicies) {
+		return standing{held: true, mends: reasonUnpruned}, nil
+	}
+	return standing{held: true}, nil
+}
+
+func pruned(policies map[string]artifactregistry.CleanupPolicy) bool {
+	if len(policies) != len(pruningUntaggedImages()) {
+		return false
+	}
+	policy, named := policies[dropUntaggedPolicy]
+	return named && policy.Action == deleteImages && policy.Condition != nil &&
+		policy.Condition.TagState == untaggedImages && policy.Condition.OlderThan == untaggedLifetime
 }
 
 func (b bootstrapper) accountStands(ctx context.Context, name string) (standing, error) {
