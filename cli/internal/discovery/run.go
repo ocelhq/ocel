@@ -113,8 +113,26 @@ func nodeCommand(ctx context.Context, entry, serverURL string) *exec.Cmd {
 	return cmd
 }
 
+const stderrTailBytes = 4 << 10
+
+type tailWriter struct {
+	limit int
+	buf   []byte
+}
+
+func (t *tailWriter) Write(p []byte) (int, error) {
+	t.buf = append(t.buf, p...)
+	if extra := len(t.buf) - t.limit; extra > 0 {
+		t.buf = t.buf[extra:]
+	}
+	return len(p), nil
+}
+
+func (t *tailWriter) String() string { return strings.TrimSpace(string(t.buf)) }
+
 func runOne(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Writer) error {
-	cmd.Stderr = stderr
+	tail := &tailWriter{limit: stderrTailBytes}
+	cmd.Stderr = io.MultiWriter(stderr, tail)
 
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -132,6 +150,9 @@ func runOne(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Writer) error 
 	if runErr != nil {
 		proc.Abort()
 		if msg := proc.Failure(); msg != "" {
+			return fmt.Errorf("discovery failed (%w): %s", runErr, msg)
+		}
+		if msg := tail.String(); msg != "" {
 			return fmt.Errorf("discovery failed (%w): %s", runErr, msg)
 		}
 		return fmt.Errorf("discovery failed: %w", runErr)
