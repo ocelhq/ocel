@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/storage"
 	firestoreadmin "google.golang.org/api/firestore/v1"
@@ -399,5 +400,130 @@ func TestLiveARegionFirestoreDoesNotServeIsRefusedNamingTheOnesItDoes(t *testing
 	}
 	if !strings.Contains(refusal.Message, liveRegion()) {
 		t.Errorf("Plan() refused with %q, want it to list the regions Firestore does serve", refusal.Message)
+	}
+}
+
+type watcher struct{ said func(string) }
+
+func (w watcher) Say(message string) { w.said(message) }
+
+func (watcher) Detail(string) {}
+
+func (watcher) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+
+func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) {
+	p := live(t)
+	class := providerkit.ClassPreview
+	bootstrapper := bootstrapped(t, p, class)
+
+	ctx := context.Background()
+	client, err := storage.NewClient(ctx, gcp.EmulatorStorage(endpoint())...)
+	if err != nil {
+		t.Fatalf("reach the emulator's object store: %v", err)
+	}
+	defer client.Close()
+	if err := client.Bucket(gcp.StateBucketName(liveProject(), class)).Delete(ctx); err != nil {
+		t.Fatalf("delete the state bucket out of band: %v", err)
+	}
+
+	described, err := bootstrapper.Describe(ctx, class)
+	if err != nil {
+		t.Fatalf("Describe() = %v", err)
+	}
+	if len(described.Stacks) != 1 || described.Stacks[0].DigestCurrent {
+		t.Errorf("Describe().Stacks = %+v with a bucket gone, want the stack read as behind", described.Stacks)
+	}
+
+	plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class})
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	for _, group := range plan.Groups {
+		if group.Kind != providerkit.StackGroupKind {
+			continue
+		}
+		if group.Action == providerkit.ActionKeep {
+			t.Errorf("Plan() shows %s as %q with a bucket gone while its rows create it, and the group is what the operator consents to",
+				group.Name, group.Action)
+		}
+	}
+}
+
+func TestLiveARemovalUnderWayReadsAsUnfinishedRatherThanDone(t *testing.T) {
+	p := live(t)
+	servicesEnabled(t)
+	class := providerkit.ClassPreview
+	bootstrapper := bootstrapperOf(t, p)
+
+	ctx := context.Background()
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+		t.Fatalf("Apply() = %v", err)
+	}
+
+	read, taken := false, false
+	watch := watcher{said: func(message string) {
+		if read || !strings.HasPrefix(message, "removed ") {
+			return
+		}
+		read = true
+		described, err := bootstrapper.Describe(ctx, class)
+		if err != nil {
+			t.Errorf("Describe() while the removal runs = %v", err)
+			return
+		}
+		taken = described.Unfinished
+	}}
+	if err := bootstrapper.Remove(ctx, class, watch); err != nil {
+		t.Fatalf("Remove() = %v", err)
+	}
+	if !read {
+		t.Fatal("Remove() took nothing down at all, so nothing here was tested")
+	}
+	if !taken {
+		t.Error("Describe() reads a bootstrap whose key is already destroyed as finished: the next apply mints a new key version and every value sealed under the old one stays shut")
+	}
+}
+
+func TestLiveAnApplyRefusesRatherThanWriteOverAnotherRunsStamp(t *testing.T) {
+	p := live(t)
+	class := providerkit.ClassProduction
+	bootstrapper := bootstrapped(t, p, class)
+
+	ctx := context.Background()
+	written := false
+	watch := watcher{said: func(string) {
+		if written {
+			return
+		}
+		written = true
+		stamped(t, class, `{"schema":1,"state":"applying","writer":"the-other-run","digest":"elsewhere"}`)
+	}}
+
+	var refusal providerkit.Refusal
+	err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, watch)
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
+		t.Fatalf("Apply() over a stamp another run wrote = %v, want a %s refusal", err, providerkit.CodeBusy)
+	}
+	if !strings.Contains(refusal.Message, "the-other-run") {
+		t.Errorf("Apply() refused with %q, want it to name the run it collided with", refusal.Message)
+	}
+}
+
+func stamped(t *testing.T, class providerkit.Class, body string) {
+	t.Helper()
+
+	ctx := context.Background()
+	client, err := storage.NewClient(ctx, gcp.EmulatorStorage(endpoint())...)
+	if err != nil {
+		t.Fatalf("reach the emulator's object store: %v", err)
+	}
+	defer client.Close()
+
+	writer := client.Bucket(gcp.BucketName(liveProject(), class)).Object(gcp.StampObject).NewWriter(ctx)
+	if _, err := writer.Write([]byte(body)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
