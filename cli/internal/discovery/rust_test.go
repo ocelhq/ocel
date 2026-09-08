@@ -1,11 +1,16 @@
 package discovery
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -97,5 +102,71 @@ func TestTheRustLauncherRefusesACrateThatBuildsNoBinary(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), root) || !strings.Contains(err.Error(), "web") {
 		t.Errorf("error = %q, want it to name the root and the crate", err)
+	}
+}
+
+func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
+	needsCargo(t)
+	configDir := repoFixture(t, filepath.Join("sdk", "rust"))
+
+	roots, err := Roots(configDir, nil)
+	if err != nil {
+		t.Fatalf("Roots: %v", err)
+	}
+	if len(roots) != 1 || roots[0].Language != Rust || roots[0].Dir != filepath.Join(configDir, "infra") {
+		t.Fatalf("roots = %+v, want the rust infra folder of the project", roots)
+	}
+
+	var mu sync.Mutex
+	var declares []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/Declare") {
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode declare: %v", err)
+			}
+			mu.Lock()
+			declares = append(declares, body)
+			mu.Unlock()
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer server.Close()
+
+	prepared, err := Prepare(configDir, roots)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), configDir, prepared, server.URL, &stdout, &stderr); err != nil {
+		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(declares) != 1 {
+		t.Fatalf("declares = %v, want exactly one", declares)
+	}
+	resource, _ := declares[0]["resource"].(map[string]any)
+	if resource["name"] != "main" || resource["type"] != "LINK_TYPE_POSTGRES" {
+		t.Errorf("resource = %v, want the postgres named main", resource)
+	}
+	source, _ := declares[0]["source"].(string)
+	colon := strings.LastIndex(source, ":")
+	if colon <= 0 {
+		t.Fatalf("source = %q, want a file and a line", source)
+	}
+	file, line := filepath.Clean(source[:colon]), source[colon+1:]
+	if !filepath.IsAbs(file) {
+		t.Errorf("source = %q, want the file as an absolute path", source)
+	}
+	rel, err := filepath.Rel(configDir, file)
+	if err != nil {
+		t.Fatalf("source = %q is not a file of the project at %s", source, configDir)
+	}
+	if want := filepath.Join("infra", "mod.rs"); rel != want || line != "1" {
+		t.Errorf("source = %q, want %q line 1", source, want)
 	}
 }

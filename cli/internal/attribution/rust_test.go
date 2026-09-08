@@ -90,3 +90,31 @@ func TestRustReachSearchesTheDiscoveryPathsTheProjectConfigures(t *testing.T) {
 		t.Errorf("usages = %+v, want main granted to web from entry app/src/main.rs", usages)
 	}
 }
+
+func TestRustReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
+	needsCargo(t)
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", "tests", "fixtures", "sdk", "rust"))
+	if err != nil {
+		t.Fatalf("locate the fixture: %v", err)
+	}
+	roots, err := discovery.Roots(root, nil)
+	if err != nil {
+		t.Fatalf("Roots: %v", err)
+	}
+
+	app := App{Name: "web", Path: ".", Language: discovery.Rust, Roots: roots}
+	usages, err := Compute(t.Context(), root, []App{app}, []Declaration{{
+		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Name:   "main",
+		Source: filepath.Join(root, "infra", "mod.rs") + ":1",
+	}})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+	if len(usages) != 1 {
+		t.Fatalf("usages = %+v, want one", usages)
+	}
+	if usages[0].App != "web" || usages[0].Name != "main" || !slices.Equal(usages[0].Files, []string{"src/main.rs"}) {
+		t.Errorf("usage = %+v, want main granted to web from entry src/main.rs", usages[0])
+	}
+}
