@@ -3,8 +3,15 @@ package gcp_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
+	"strings"
 	"testing"
+
+	kms "cloud.google.com/go/kms/apiv1"
+	"cloud.google.com/go/kms/apiv1/kmspb"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
@@ -55,5 +62,59 @@ func TestLiveRecordNamesSurviveTheCharactersTheDocumentIdIsBuiltFrom(t *testing.
 		if !bytes.Equal(record.Bytes, []byte(record.Name[3])) {
 			t.Errorf("List() returned %s carrying %q, want the segment read back as it was written", record.Name, record.Bytes)
 		}
+	}
+}
+
+func keysStanding(t *testing.T, region string) {
+	t.Helper()
+
+	ctx := context.Background()
+	client, err := kms.NewKeyManagementClient(ctx, gcp.EmulatorGRPC(os.Getenv("OCEL_FLOCI_GCP_ENDPOINT"))...)
+	if err != nil {
+		t.Fatalf("reach the emulator's key manager: %v", err)
+	}
+	t.Cleanup(func() { client.Close() })
+
+	parent := "projects/" + liveProject + "/locations/" + region
+	if _, err := client.CreateKeyRing(ctx, &kmspb.CreateKeyRingRequest{
+		Parent: parent, KeyRingId: gcp.KeyRing, KeyRing: &kmspb.KeyRing{},
+	}); err != nil && status.Code(err) != codes.AlreadyExists {
+		t.Fatalf("create the %s key ring: %v", gcp.KeyRing, err)
+	}
+	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
+		if _, err := client.CreateCryptoKey(ctx, &kmspb.CreateCryptoKeyRequest{
+			Parent:      parent + "/keyRings/" + gcp.KeyRing,
+			CryptoKeyId: string(class),
+			CryptoKey:   &kmspb.CryptoKey{Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT},
+		}); err != nil && status.Code(err) != codes.AlreadyExists {
+			t.Fatalf("create the %s key: %v", class, err)
+		}
+	}
+}
+
+func TestLiveSealer(t *testing.T) {
+	provider := live(t)
+	keysStanding(t, liveRegion)
+
+	conformance.RunSealer(t, provider.Sealer())
+}
+
+func TestLiveSealingWhereNoKeyRingStandsSaysWhatToRun(t *testing.T) {
+	live(t)
+
+	elsewhere := gcp.NewProvider(gcp.Options{Project: liveProject, Region: "australia-southeast2"})
+	var refusal providerkit.Refusal
+	_, err := elsewhere.Sealer().Seal(context.Background(), providerkit.Coordinate{
+		Project: "shop",
+		Class:   providerkit.ClassProduction,
+		Env:     "*",
+		Folder:  "/",
+		Name:    "DATABASE_URL",
+	}, []byte("postgres://example"))
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+		t.Fatalf("Seal() where no key ring stands = %v, want a %s refusal", err, providerkit.CodeNotReady)
+	}
+	if !strings.Contains(refusal.Message, "ocel bootstrap") {
+		t.Errorf("Seal() refused with %q, want it to name the command that creates the key", refusal.Message)
 	}
 }

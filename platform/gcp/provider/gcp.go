@@ -69,7 +69,7 @@ func (p *Provider) Artifacts() providerkit.ArtifactStore { return artifacts{} }
 
 func (p *Provider) Records() providerkit.RecordStore { return records{clients: p.clients} }
 
-func (p *Provider) Sealer() providerkit.Sealer { return sealer{} }
+func (p *Provider) Sealer() providerkit.Sealer { return sealer{clients: p.clients} }
 
 func (p *Provider) Credentials() providerkit.Credentials {
 	return Credentials{
