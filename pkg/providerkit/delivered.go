@@ -130,14 +130,21 @@ func (r *deployRun) storedCells(ctx context.Context) (map[values.Cell]bool, erro
 }
 
 func refuseOwnedNames(app string, held AppValues) error {
-	var injected, owned []string
+	var injected, served, owned []string
 	for _, key := range declaredNames(held) {
 		switch {
 		case key == InjectedPortName:
 			injected = append(injected, key)
+		case key == HandlerName:
+			served = append(served, key)
 		case strings.HasPrefix(key, ownedPrefix):
 			owned = append(owned, key)
 		}
+	}
+	if len(served) > 0 {
+		return Refuse(CodeInvalid,
+			"app %s declares %s, and %s is the name a function's image sets to the file its membrane serves: a value declared under it would take the place of the app's own entrypoint and leave the release gated on a function that never boots. Rename it",
+			app, strings.Join(served, ", "), HandlerName)
 	}
 	if len(injected) > 0 {
 		return Refuse(CodeInvalid,
