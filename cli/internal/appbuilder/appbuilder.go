@@ -38,7 +38,7 @@ const funcDirSuffix = ".func"
 
 const entryFuncDirName = "index" + funcDirSuffix
 
-const configFileName = "config.json"
+const configFileName = providerkit.FunctionConfigFile
 
 const buildPlanFileName = "build-plan.json"
 
@@ -51,12 +51,12 @@ type buildPlan struct {
 }
 
 type functionSummary struct {
-	Name         string             `json:"name"`
-	Runtime      appbundler.Runtime `json:"runtime"`
-	Handler      string             `json:"handler"`
-	ArtifactPath string             `json:"artifactPath"`
-	Strategy     string             `json:"strategy"`
-	Entrypoint   string             `json:"entrypoint,omitempty"`
+	Name         string              `json:"name"`
+	Runtime      providerkit.Runtime `json:"runtime"`
+	Handler      string              `json:"handler"`
+	ArtifactPath string              `json:"artifactPath"`
+	Strategy     string              `json:"strategy"`
+	Entrypoint   string              `json:"entrypoint,omitempty"`
 }
 
 type builderRequest struct {
@@ -86,13 +86,6 @@ func runtimeInputOf(runtime projectconfig.Runtime) *runtimeInput {
 type runtimeInput struct {
 	Name string `json:"name,omitempty"`
 	Arch string `json:"arch,omitempty"`
-}
-
-type functionConfig struct {
-	Runtime appbundler.Runtime `json:"runtime"`
-	Handler string             `json:"handler"`
-	App     string             `json:"app"`
-	ID      string             `json:"id,omitempty"`
 }
 
 const adapterPathEnv = "NEXT_ADAPTER_PATH"
@@ -249,7 +242,7 @@ func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App
 	}
 	return appbundler.Compile(ctx, appbundler.Compilation{
 		App:            a.Name,
-		Runtime:        appbundler.Runtime{Name: a.Runtime.Name, Arch: a.Runtime.Architecture()},
+		Runtime:        providerkit.Runtime{Name: a.Runtime.Name, Arch: a.Runtime.Architecture()},
 		Source:         filepath.Join(cfg.Dir, a.Path),
 		Entrypoint:     a.Entrypoint,
 		FuncDir:        filepath.Join(appDir, functionsDirName, entryFuncDirName),
@@ -492,7 +485,7 @@ func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Func
 		return manifestbuilder.Function{}, err
 	}
 
-	var fc functionConfig
+	var fc providerkit.FunctionConfig
 	if err := json.Unmarshal(data, &fc); err != nil {
 		return manifestbuilder.Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, configFileName, err)
 	}

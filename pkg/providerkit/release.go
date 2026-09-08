@@ -169,8 +169,8 @@ type SecretRef struct {
 }
 
 type Runtime struct {
-	Name string
-	Arch string
+	Name string `json:"name"`
+	Arch string `json:"arch,omitempty"`
 }
 
 type FunctionSpec struct {

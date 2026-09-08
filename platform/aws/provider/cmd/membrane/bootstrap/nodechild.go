@@ -11,6 +11,8 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const completionMargin = 500 * time.Millisecond
@@ -401,7 +403,7 @@ func nodeChildEnv(sockPath string, extraEnv []string) []string {
 	return append(env, extraEnv...)
 }
 
-func entrypointPath(a artifact) string {
+func entrypointPath(a providerkit.FunctionConfig) string {
 	if a.Runtime.Name == "next" {
 		return "/opt/ocel/next/entrypoint.mjs"
 	}

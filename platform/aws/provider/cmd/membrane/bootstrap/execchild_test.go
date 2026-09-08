@@ -204,7 +204,7 @@ func TestReadArtifactCarriesTheCommandItIsServedBy(t *testing.T) {
 		t.Fatal(err)
 	}
 	served := readArtifact()
-	if !served.executable() {
+	if !executable(served) {
 		t.Fatalf("artifact %+v is not read as one the membrane execs", served)
 	}
 	if len(served.Command) != 1 || served.Command[0] != "./web" {
@@ -222,7 +222,7 @@ func TestAnArtifactWithoutACommandIsHostedByNode(t *testing.T) {
 		[]byte(`{"runtime":{"name":"node"},"handler":"index.mjs"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if readArtifact().executable() {
+	if executable(readArtifact()) {
 		t.Error("a bundled artifact declares no command, and the membrane hosts it in node")
 	}
 }
