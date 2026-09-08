@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	"cloud.google.com/go/storage"
+	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -177,6 +179,8 @@ func (b bootstrapper) stands(ctx context.Context, held item) (standing, error) {
 		return stood(b.secretStands(ctx, held.Name))
 	case KindRepository:
 		return stood(b.repositoryStands(ctx, held.Name))
+	case KindServiceAccount:
+		return b.accountStands(ctx, held.Name)
 	}
 	return standing{}, providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing surveys a %s", held.Kind)
 }
@@ -316,6 +320,64 @@ func (b bootstrapper) repositoryStands(ctx context.Context, name string) (bool, 
 		return false, fmt.Errorf("read the %s image repository: %w", name, err)
 	}
 	return true, nil
+}
+
+func (b bootstrapper) accountStands(ctx context.Context, name string) (standing, error) {
+	service, err := b.clients.Accounts()
+	if err != nil {
+		return standing{}, err
+	}
+	_, err = attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(b.clients, name)).Context(ctx).Do)
+	if absent(err) {
+		return standing{}, nil
+	}
+	if err != nil {
+		return standing{}, fmt.Errorf("read the %s service account: %w", name, err)
+	}
+	policy, err := b.accountPolicy(ctx, name)
+	if err != nil {
+		return standing{}, err
+	}
+	member, err := b.clients.Principal(ctx)
+	if err != nil {
+		return standing{}, err
+	}
+	if !granted(policy, memberOf(member)) {
+		return standing{held: true, mends: reasonUngranted}, nil
+	}
+	return standing{held: true}, nil
+}
+
+func (b bootstrapper) accountPolicy(ctx context.Context, name string) (*iam.Policy, error) {
+	service, err := b.clients.Accounts()
+	if err != nil {
+		return nil, err
+	}
+	policy, err := attempted(ctx, service.Projects.ServiceAccounts.GetIamPolicy(accountPath(b.clients, name)).Context(ctx).Do)
+	if err != nil {
+		return nil, fmt.Errorf("read who may run apps as the %s service account: %w", name, err)
+	}
+	return policy, nil
+}
+
+func granted(policy *iam.Policy, member string) bool {
+	for _, binding := range policy.Bindings {
+		if binding.Role == runAsRole && slices.Contains(binding.Members, member) {
+			return true
+		}
+	}
+	return false
+}
+
+func memberOf(principal string) string {
+	if strings.HasSuffix(principal, accountDomain) {
+		return "serviceAccount:" + principal
+	}
+	return "user:" + principal
+}
+
+func accountPath(c *clients, name string) string {
+	return "projects/" + c.project + "/serviceAccounts/" + name + "@" + c.project + accountDomain
 }
 
 func repositoryParent(c *clients) string {

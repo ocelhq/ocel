@@ -13,6 +13,7 @@ import (
 	"google.golang.org/api/artifactregistry/v1"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
+	"google.golang.org/api/iam/v1"
 	"google.golang.org/api/secretmanager/v1"
 	"google.golang.org/api/serviceusage/v1"
 
@@ -42,6 +43,8 @@ type clients struct {
 	secrets   memo[*secretmanager.Service]
 	services  memo[*serviceusage.Service]
 	images    memo[*artifactregistry.Service]
+	accounts  memo[*iam.Service]
+	principal memo[string]
 	projects  memo[*cloudresourcemanager.Service]
 }
 
@@ -108,6 +111,25 @@ func (c *clients) Services() (*serviceusage.Service, error) {
 func (c *clients) Repositories() (*artifactregistry.Service, error) {
 	return opened(c, &c.images, "Artifact Registry", func() (*artifactregistry.Service, error) {
 		return artifactregistry.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+	})
+}
+
+func (c *clients) Accounts() (*iam.Service, error) {
+	return opened(c, &c.accounts, "IAM", func() (*iam.Service, error) {
+		return iam.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+	})
+}
+
+func (c *clients) Principal(ctx context.Context) (string, error) {
+	return c.principal.held(func() (string, error) {
+		if c.emulated() {
+			return emulatorPrincipal, nil
+		}
+		token, err := ApplicationDefault{}.Token(ctx)
+		if err != nil {
+			return "", unauthenticated()
+		}
+		return principalNamed(ctx, tokenInfoURL, token)
 	})
 }
 

@@ -44,3 +44,17 @@ func TestTheEmulatorLeavesOutTheRepositoryItDoesNotServe(t *testing.T) {
 			emulated[KindRepository])
 	}
 }
+
+func TestTheRuntimeAccountStandsWhereverTheBootstrapDoes(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassPreview
+	names := Names{namespace: "ocel", project: "acme-prod"}
+
+	for _, emulated := range []bool{false, true} {
+		if got := kindsOf(bootstrapItems(names, class, emulated))[KindServiceAccount]; got != names.RuntimeAccount(class) {
+			t.Errorf("a bootstrap with emulated=%t names %q as its runtime account, want %q: an app has to run as something wherever it runs",
+				emulated, got, names.RuntimeAccount(class))
+		}
+	}
+}

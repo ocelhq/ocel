@@ -12,12 +12,13 @@ import (
 type Kind string
 
 const (
-	KindDatabase   Kind = "firestore:database"
-	KindBucket     Kind = "storage:bucket"
-	KindKeyRing    Kind = "kms:keyring"
-	KindKey        Kind = "kms:key"
-	KindSecret     Kind = "secretmanager:secret"
-	KindRepository Kind = "artifactregistry:repository"
+	KindDatabase       Kind = "firestore:database"
+	KindBucket         Kind = "storage:bucket"
+	KindKeyRing        Kind = "kms:keyring"
+	KindKey            Kind = "kms:key"
+	KindSecret         Kind = "secretmanager:secret"
+	KindRepository     Kind = "artifactregistry:repository"
+	KindServiceAccount Kind = "iam:serviceaccount"
 )
 
 const StampObject = "ocel/bootstrap.json"
@@ -29,6 +30,9 @@ var BootstrapAPIs = []string{
 	"storage.googleapis.com",
 	"cloudkms.googleapis.com",
 	"secretmanager.googleapis.com",
+	"artifactregistry.googleapis.com",
+	"iam.googleapis.com",
+	"run.googleapis.com",
 }
 
 type item struct {
@@ -65,6 +69,10 @@ func stackItems(names Names, class providerkit.Class, emulated bool) []item {
 		{
 			Kind: KindKey, Name: string(class),
 			Note: "the key every value this class holds is sealed under",
+		},
+		{
+			Kind: KindServiceAccount, Name: names.RuntimeAccount(class),
+			Note: "the identity every app in this class runs as, and the one the deploy hands Cloud Run",
 		},
 		{
 			Kind: KindRepository, Name: names.Repository(class),
