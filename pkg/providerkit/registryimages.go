@@ -14,6 +14,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/go-containerregistry/pkg/authn"
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 )
 
 type registryImages struct {
@@ -287,6 +291,9 @@ func registryScheme(server string) string {
 }
 
 func (r registryImages) Push(ctx context.Context, push ImagePush, report Reporter) error {
+	if push.Built != nil {
+		return r.write(ctx, push)
+	}
 	host, err := OpenDockerHost()
 	if err != nil {
 		return err
@@ -319,6 +326,25 @@ func (r registryImages) Push(ctx context.Context, push ImagePush, report Reporte
 		}
 	}
 	return err
+}
+
+func (r registryImages) write(ctx context.Context, push ImagePush) error {
+	options := []name.Option{}
+	if registryScheme(r.target.Server) == "http" {
+		options = append(options, name.Insecure)
+	}
+	ref, err := name.NewTag(push.Target, options...)
+	if err != nil {
+		return fmt.Errorf("%q names nowhere an image can be pushed: %w", push.Target, err)
+	}
+	written := []remote.Option{remote.WithContext(ctx)}
+	if r.target.Username != "" || r.target.Password != "" {
+		written = append(written, remote.WithAuth(&authn.Basic{Username: r.target.Username, Password: r.target.Password}))
+	}
+	if err := remote.Write(ref, push.Built, written...); err != nil {
+		return fmt.Errorf("push %s to %s: %w", push.App, push.Target, err)
+	}
+	return nil
 }
 
 func (r registryImages) upload(ctx context.Context, client *http.Client, host DockerHost, named, tag string, report Reporter) (again bool, after time.Duration, err error) {
