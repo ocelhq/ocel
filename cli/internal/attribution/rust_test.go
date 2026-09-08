@@ -93,12 +93,22 @@ func TestRustReachSearchesTheDiscoveryPathsTheProjectConfigures(t *testing.T) {
 	}
 }
 
+func fetched(t *testing.T, crate string) {
+	t.Helper()
+	fetch := exec.Command("cargo", "fetch", "--quiet")
+	fetch.Dir = crate
+	if out, err := fetch.CombinedOutput(); err != nil {
+		t.Fatalf("cargo fetch in %s: %v\n%s", crate, err, out)
+	}
+}
+
 func TestRustReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 	needsCargo(t)
 	root, err := filepath.Abs(filepath.Join("..", "..", "..", "tests", "fixtures", "sdk", "rust"))
 	if err != nil {
 		t.Fatalf("locate the fixture: %v", err)
 	}
+	fetched(t, root)
 	roots, err := discovery.Roots(root, nil)
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
