@@ -52,6 +52,9 @@ func FunctionImage(base v1.Image, runtime Runtime, dir string, overlay map[strin
 	config.Cmd = command
 	config.WorkingDir = FunctionImageRoot
 	config.Env = boundPort(config.Env)
+	if BootsThroughMembrane(runtime) {
+		config.Env = append(config.Env, servedHandler(staged))
+	}
 	return mutate.Config(appended, config)
 }
 
@@ -67,9 +70,17 @@ func functionStaging(dir string) (FunctionConfig, error) {
 	return staged, nil
 }
 
-// TODO(WP2): the host-neutral node membrane moves to frameworks/node and lands in the
-// base image at this path; nothing writes it there yet.
 const NodeMembranePath = "/ocel/membrane/entrypoint.mjs"
+
+const HandlerName = "OCEL_HANDLER"
+
+func BootsThroughMembrane(runtime Runtime) bool {
+	return runtime.Name == RuntimeNode || runtime.Name == RuntimeNext
+}
+
+func servedHandler(staged FunctionConfig) string {
+	return HandlerName + "=" + path.Join(FunctionImageRoot, staged.Handler)
+}
 
 func boundPort(env []string) []string {
 	kept := make([]string, 0, len(env)+1)
@@ -86,7 +97,7 @@ func functionCommand(runtime Runtime, staged FunctionConfig) ([]string, error) {
 	switch {
 	case len(staged.Command) > 0:
 		return staged.Command, nil
-	case runtime.Name == RuntimeNode || runtime.Name == RuntimeNext:
+	case BootsThroughMembrane(runtime):
 		return []string{"node", NodeMembranePath}, nil
 	default:
 		return nil, Refuse(CodeInvalid,
@@ -155,5 +166,8 @@ func tarBody(archive *tar.Writer, rel string, body []byte, mode int64) error {
 }
 
 func imagePath(rel string) string {
+	if path.IsAbs(rel) {
+		return strings.TrimPrefix(path.Clean(rel), "/")
+	}
 	return strings.TrimPrefix(path.Join(FunctionImageRoot, rel), "/")
 }

@@ -2,7 +2,9 @@ package providerkit_test
 
 import (
 	"archive/tar"
+	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -46,7 +48,7 @@ func runtimeConfig(t *testing.T, runtime string, command []string) string {
 	t.Helper()
 	raw, err := json.Marshal(map[string]any{
 		"runtime": map[string]string{"name": runtime, "arch": "x86_64"},
-		"handler": "index.handler",
+		"handler": "index.mjs",
 		"command": command,
 		"id":      "server",
 		"app":     "web",
@@ -243,5 +245,77 @@ func TestFunctionImageRunsTheCommandTheFunctionsConfigNames(t *testing.T) {
 	}
 	if config.WorkingDir != providerkit.FunctionImageRoot {
 		t.Errorf("the image runs from %q, want %q, where the command's relative path resolves", config.WorkingDir, providerkit.FunctionImageRoot)
+	}
+}
+
+func TestFunctionImageCarriesTheMembraneAtThePathItBootsFrom(t *testing.T) {
+	dir := stagedFunc(t, map[string]string{
+		"index.mjs":   "export default () => {}",
+		"config.json": functionConfig(t, nil),
+	})
+	membrane := []byte("export const membrane = 1")
+
+	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir,
+		map[string][]byte{providerkit.NodeMembranePath: membrane})
+	if err != nil {
+		t.Fatalf("FunctionImage() error = %v", err)
+	}
+
+	layers, err := image.Layers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	held := tarNames(t, layers[0])
+	want := strings.TrimPrefix(providerkit.NodeMembranePath, "/")
+	if !slices.Contains(held, want) {
+		t.Fatalf("the layer holds %v and nothing at %s, so the image runs a membrane it does not carry", held, providerkit.NodeMembranePath)
+	}
+	if body := tarBody(t, layers[0], want); !bytes.Equal(body, membrane) {
+		t.Errorf("the image carries %q at %s, want the membrane it was handed", body, providerkit.NodeMembranePath)
+	}
+}
+
+func TestFunctionImageTellsTheMembraneWhichHandlerToServe(t *testing.T) {
+	dir := stagedFunc(t, map[string]string{
+		"index.mjs":   "export default () => {}",
+		"config.json": functionConfig(t, nil),
+	})
+
+	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir, nil)
+	if err != nil {
+		t.Fatalf("FunctionImage() error = %v", err)
+	}
+
+	config := configOf(t, image)
+	want := "OCEL_HANDLER=" + providerkit.FunctionImageRoot + "/index.mjs"
+	if !slices.Contains(config.Env, want) {
+		t.Errorf("the image carries env %v and never %s, so the membrane has no handler to serve", config.Env, want)
+	}
+}
+
+func tarBody(t *testing.T, layer v1.Layer, name string) []byte {
+	t.Helper()
+	body, err := layer.Uncompressed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer body.Close()
+	reader := tar.NewReader(body)
+	for {
+		header, err := reader.Next()
+		if errors.Is(err, io.EOF) {
+			t.Fatalf("the layer holds nothing at %s", name)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if header.Name != name {
+			continue
+		}
+		held, err := io.ReadAll(reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return held
 	}
 }
