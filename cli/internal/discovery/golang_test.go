@@ -81,7 +81,7 @@ func repoFixture(t *testing.T, name string) string {
 func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 	configDir := repoFixture(t, filepath.Join("sdk", "go"))
 
-	roots, err := Roots(configDir, nil, nil)
+	roots, err := Roots(configDir, nil)
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}

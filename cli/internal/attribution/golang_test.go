@@ -75,7 +75,13 @@ func TestGoReachReportsWhatGoListSaid(t *testing.T) {
 	write(t, filepath.Join(root, "go.mod"), "module example.com/web\n\ngo 1.27.0\n")
 	write(t, filepath.Join(root, "server", "main.go"), "package main\n\nimport _ \"example.com/web/missing\"\n\nfunc main() {}\n")
 
-	_, err := Compute(root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, nil)
+	declarations := []Declaration{{
+		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Name:   "main",
+		Source: filepath.Join(root, "server", "main.go") + ":1",
+	}}
+
+	_, err := Compute(root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, declarations)
 	if err == nil {
 		t.Fatal("Compute succeeded on a module that does not build, want error")
 	}
