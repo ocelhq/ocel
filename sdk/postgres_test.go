@@ -2,6 +2,7 @@ package sdk_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -89,5 +90,70 @@ func TestVersionOverridesTheDeclaredVersion(t *testing.T) {
 	postgres, _ := seen[0]["postgres"].(map[string]any)
 	if postgres["version"] != "16" {
 		t.Errorf("postgres = %v", postgres)
+	}
+}
+
+func TestAccessorsRefuseDuringDiscovery(t *testing.T) {
+	var seen []map[string]any
+	srv := collector(t, &seen)
+	t.Setenv("OCEL_PHASE", "discovery")
+	t.Setenv("OCEL_DEV_SERVER", srv.URL)
+
+	db := sdk.Postgres("main")
+
+	for _, tc := range []struct {
+		access string
+		err    error
+	}{
+		{"ConnectionString", second(db.ConnectionString())},
+		{"Pool", second(db.Pool(t.Context()))},
+	} {
+		var unprovisioned *sdk.UnprovisionedError
+		if !errors.As(tc.err, &unprovisioned) {
+			t.Fatalf("%s() error = %v, want an *UnprovisionedError", tc.access, tc.err)
+		}
+		want := fmt.Sprintf(
+			"'postgres(\"main\")' cannot be used during discovery: tried to access '%s' before the resource was provisioned",
+			tc.access,
+		)
+		if unprovisioned.Error() != want {
+			t.Errorf("%s() error = %q, want %q", tc.access, unprovisioned, want)
+		}
+	}
+}
+
+func second[T any](_ T, err error) error { return err }
+
+func TestConnectionStringPercentEncodesCredentials(t *testing.T) {
+	t.Setenv("OCEL_RESOURCE_POSTGRES_main", `{"name":"main","postgres":{"host":"h","port":5432,"database":"d","username":"user name","password":"p@ss:word/with#odd?chars"}}`)
+
+	got, err := sdk.Postgres("main").ConnectionString()
+	if err != nil {
+		t.Fatalf("ConnectionString() error = %v", err)
+	}
+	want := "postgres://user%20name:p%40ss%3Aword%2Fwith%23odd%3Fchars@h:5432/d"
+	if got != want {
+		t.Errorf("ConnectionString() = %q, want %q", got, want)
+	}
+}
+
+func TestAMissingLinkNamesTheCommandsThatDeliverIt(t *testing.T) {
+	_, err := sdk.Postgres("main").ConnectionString()
+
+	want := "Value for OCEL_RESOURCE_POSTGRES_main is not defined. " +
+		"Run `ocel dev` to resolve it locally, or `ocel deploy` to have it delivered from the resource this app links."
+	if err == nil || err.Error() != want {
+		t.Errorf("ConnectionString() error = %v, want %q", err, want)
+	}
+}
+
+func TestALinkOfAnotherTypeIsRefused(t *testing.T) {
+	t.Setenv("OCEL_RESOURCE_POSTGRES_main", `{"name":"main","bucket":{"bucket":"b"}}`)
+
+	_, err := sdk.Postgres("main").ConnectionString()
+
+	want := "OCEL_RESOURCE_POSTGRES_main carries a BUCKET link, and this app reads it as a POSTGRES"
+	if err == nil || err.Error() != want {
+		t.Errorf("ConnectionString() error = %v, want %q", err, want)
 	}
 }
