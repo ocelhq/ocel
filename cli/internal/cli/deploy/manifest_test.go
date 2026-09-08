@@ -1,0 +1,43 @@
+package deploy
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/attribution"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+)
+
+func TestADetectedAppIsReadInTheLanguageOfTheProjectItSitsIn(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/web\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+
+	cfg := &projectconfig.Config{Dir: root}
+	apps, err := toAttributionApps(cfg, []manifestbuilder.Function{{App: "web"}}, "", "ocel.config.ts")
+	if err != nil {
+		t.Fatalf("toAttributionApps: %v", err)
+	}
+	if len(apps) != 1 {
+		t.Fatalf("toAttributionApps returned %d apps, want 1", len(apps))
+	}
+	if apps[0].Language != discovery.Go {
+		t.Errorf("Language = %q, want %q", apps[0].Language, discovery.Go)
+	}
+
+	_, err = attribution.Compute(root, apps, []attribution.Declaration{{
+		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Name:   "main",
+		Source: filepath.Join(root, "infra", "infra.go") + ":3",
+	}})
+	want := "is a go app, and this build of ocel attributes only js apps"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("Compute err = %v, want it to contain %q", err, want)
+	}
+}
