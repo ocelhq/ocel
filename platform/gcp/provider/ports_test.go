@@ -32,17 +32,7 @@ func TestEveryPortThisPhaseHasNotBuiltSaysSoRatherThanReadingAsDone(t *testing.T
 	p := standing(t)
 	ref := providerkit.StackRef{Project: "acme", Class: providerkit.ClassProduction}
 
-	bootstrapper, err := p.Bootstrap(p.Edges().Default())
-	if err != nil {
-		t.Fatalf("Bootstrap() = %v, want a bootstrapper whose own calls refuse", err)
-	}
-
 	for name, refused := range map[string]error{
-		"Bootstrapper.Plan":        errorOf(bootstrapper.Plan(ctx, providerkit.BootstrapRequest{})),
-		"Bootstrapper.Apply":       bootstrapper.Apply(ctx, providerkit.BootstrapRequest{}, nil),
-		"Bootstrapper.PlanRemoval": errorOf(bootstrapper.PlanRemoval(ctx, providerkit.ClassProduction)),
-		"Bootstrapper.Remove":      bootstrapper.Remove(ctx, providerkit.ClassProduction, nil),
-
 		"Releaser.Plan":        errorOf(p.Releases().Plan(ctx, providerkit.StackPlan{Ref: ref}, nil)),
 		"Releaser.Provision":   errorOf(p.Releases().Provision(ctx, providerkit.StackPlan{Ref: ref}, nil)),
 		"Releaser.PlanDestroy": errorOf(p.Releases().PlanDestroy(ctx, ref, nil)),

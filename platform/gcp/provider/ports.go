@@ -17,30 +17,6 @@ func classless(what any) error {
 		"%s names no class, and this project keeps each class's state apart from the other class's", what)
 }
 
-type bootstrapper struct{}
-
-func (bootstrapper) Catalogue() []providerkit.Feature { return nil }
-
-func (bootstrapper) Describe(_ context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
-	return providerkit.Bootstrap{Class: class}, nil
-}
-
-func (bootstrapper) Plan(context.Context, providerkit.BootstrapRequest) (providerkit.Plan, error) {
-	return providerkit.Plan{}, notReady("bootstrapping a project")
-}
-
-func (bootstrapper) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Reporter) error {
-	return notReady("bootstrapping a project")
-}
-
-func (bootstrapper) PlanRemoval(context.Context, providerkit.Class) (providerkit.Plan, error) {
-	return providerkit.Plan{}, notReady("removing a bootstrap")
-}
-
-func (bootstrapper) Remove(context.Context, providerkit.Class, providerkit.Reporter) error {
-	return notReady("removing a bootstrap")
-}
-
 type releaser struct{}
 
 func (releaser) Plan(context.Context, providerkit.StackPlan, providerkit.Reporter) (providerkit.Plan, error) {

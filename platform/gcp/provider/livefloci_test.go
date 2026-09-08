@@ -4,18 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"net/http"
 	"os"
 	"slices"
 	"strings"
 	"testing"
-
-	kms "cloud.google.com/go/kms/apiv1"
-	"cloud.google.com/go/kms/apiv1/kmspb"
-	"cloud.google.com/go/storage"
-	"google.golang.org/api/googleapi"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
@@ -83,36 +75,9 @@ func TestLiveRecordNamesSurviveTheCharactersTheDocumentIdIsBuiltFrom(t *testing.
 	}
 }
 
-func keysStanding(t *testing.T, region string) {
-	t.Helper()
-
-	ctx := context.Background()
-	client, err := kms.NewKeyManagementClient(ctx, gcp.EmulatorGRPC(os.Getenv("OCEL_FLOCI_GCP_ENDPOINT"))...)
-	if err != nil {
-		t.Fatalf("reach the emulator's key manager: %v", err)
-	}
-	t.Cleanup(func() { client.Close() })
-
-	parent := "projects/" + liveProject + "/locations/" + region
-	if _, err := client.CreateKeyRing(ctx, &kmspb.CreateKeyRingRequest{
-		Parent: parent, KeyRingId: gcp.KeyRing, KeyRing: &kmspb.KeyRing{},
-	}); err != nil && status.Code(err) != codes.AlreadyExists {
-		t.Fatalf("create the %s key ring: %v", gcp.KeyRing, err)
-	}
-	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
-		if _, err := client.CreateCryptoKey(ctx, &kmspb.CreateCryptoKeyRequest{
-			Parent:      parent + "/keyRings/" + gcp.KeyRing,
-			CryptoKeyId: string(class),
-			CryptoKey:   &kmspb.CryptoKey{Purpose: kmspb.CryptoKey_ENCRYPT_DECRYPT},
-		}); err != nil && status.Code(err) != codes.AlreadyExists {
-			t.Fatalf("create the %s key: %v", class, err)
-		}
-	}
-}
-
 func TestLiveSealer(t *testing.T) {
 	provider := live(t)
-	keysStanding(t, liveRegion)
+	bootstrapped(t, provider, providerkit.ClassProduction)
 
 	conformance.RunSealer(t, provider.Sealer())
 }
@@ -137,29 +102,16 @@ func TestLiveSealingWhereNoKeyRingStandsSaysWhatToRun(t *testing.T) {
 	}
 }
 
-func bucketsStanding(t *testing.T) {
+func bucketsStanding(t *testing.T, p *gcp.Provider) {
 	t.Helper()
-
-	ctx := context.Background()
-	client, err := storage.NewClient(ctx, gcp.EmulatorStorage(os.Getenv("OCEL_FLOCI_GCP_ENDPOINT"))...)
-	if err != nil {
-		t.Fatalf("reach the emulator's object store: %v", err)
-	}
-	t.Cleanup(func() { client.Close() })
-
 	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
-		bucket := client.Bucket(gcp.BucketName(liveProject, class))
-		var answered *googleapi.Error
-		if err := bucket.Create(ctx, liveProject, nil); err != nil &&
-			(!errors.As(err, &answered) || answered.Code != http.StatusConflict) {
-			t.Fatalf("create the %s bucket: %v", class, err)
-		}
+		bootstrapped(t, p, class)
 	}
 }
 
 func TestLiveArtifactStore(t *testing.T) {
 	provider := live(t)
-	bucketsStanding(t)
+	bucketsStanding(t, provider)
 
 	conformance.RunArtifactStore(t, provider.Artifacts())
 }
@@ -182,7 +134,7 @@ func TestLiveArtifactsWhereNoBucketStandsSayWhatToRun(t *testing.T) {
 
 func TestLiveRemovingAPrefixLeavesEveryStoreItDoesNotName(t *testing.T) {
 	provider := live(t)
-	bucketsStanding(t)
+	bucketsStanding(t, provider)
 
 	ctx := context.Background()
 	artifacts := provider.Artifacts()
@@ -216,7 +168,7 @@ func TestLiveRemovingAPrefixLeavesEveryStoreItDoesNotName(t *testing.T) {
 
 func TestLiveRemovingNoPrefixIsRefusedRatherThanSweepingTheBucket(t *testing.T) {
 	held := live(t)
-	bucketsStanding(t)
+	bucketsStanding(t, held)
 
 	ctx := context.Background()
 	artifacts := held.Artifacts()
