@@ -9,6 +9,7 @@ on:
       - "pkg/**"
       - "platform/**"
       - "packages/ocel/**"
+      - "tests/fixtures/sdk/go/**"
       - "pnpm-lock.yaml"
       - "turbo.json"
       - "scripts/floci.sh"
