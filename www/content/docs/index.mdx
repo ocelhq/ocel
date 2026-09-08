@@ -58,18 +58,19 @@ Compute is a setting too. On providers that support it, the same app runs as fun
 
 ## Application defined infrastructure
 
-A database or a bucket is a function call in your app, and the call is what provisions it. There is no other definition of it anywhere.
+A database or a bucket is a function call in your app. Declare it once in an `infra` folder, import it where you use it, and the call is what provisions it. There is no other definition of it anywhere.
 
-<Tabs items={["Node", "Python", "Go", "Rust"]}>
-
-<Tab value="Node">
-
-```ts title="server.ts"
-import express from "express";
+```ts title="infra/index.ts"
 import { postgres } from "ocel/postgres";
 
 // infrastructure in your app code!
-const db = postgres("main");
+export const db = postgres("main");
+```
+
+```ts title="src/server.ts"
+import express from "express";
+import { db } from "../infra";
+
 const app = express();
 
 app.get("/documents", async (_req, res) => {
@@ -79,72 +80,6 @@ app.get("/documents", async (_req, res) => {
 
 app.listen(3000);
 ```
-
-</Tab>
-
-<Tab value="Python">
-
-```py title="main.py"
-from fastapi import FastAPI
-from ocel import postgres
-
-# infrastructure in your app code!
-db = postgres("main")
-app = FastAPI()
-
-@app.get("/documents")
-async def documents():
-    return await db.fetch("select * from documents")
-```
-
-</Tab>
-
-<Tab value="Go">
-
-```go title="main.go"
-package main
-
-import (
-	"net/http"
-
-	"github.com/ocelhq/ocel/sdk"
-)
-
-// infrastructure in your app code!
-var db = sdk.Postgres("main")
-
-func main() {
-	http.HandleFunc("/documents", func(w http.ResponseWriter, r *http.Request) {
-		rows, _ := db.Query(r.Context(), "select * from documents")
-		sdk.JSON(w, rows)
-	})
-	http.ListenAndServe(":3000", nil)
-}
-```
-
-</Tab>
-
-<Tab value="Rust">
-
-```rust title="main.rs"
-use axum::{routing::get, Json, Router};
-use ocel::postgres;
-
-// infrastructure in your app code!
-static DB: Postgres = postgres!("main");
-
-#[tokio::main]
-async fn main() {
-    let app = Router::new().route("/documents", get(|| async {
-        Json(DB.query("select * from documents").await)
-    }));
-    axum::serve(tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap(), app).await.unwrap();
-}
-```
-
-</Tab>
-
-</Tabs>
 
 This works whether you deploy to a cloud like AWS or VPS. [Learn more about the SDK](/docs/sdk).
 

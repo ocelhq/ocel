@@ -1,8 +1,131 @@
 ---
-title: SDK
-description: Infrastructure as function calls.
+title: Overview
+description: Application defined Infrastructure
+icon: BookOpenIcon
 ---
 
-```go
-import "github.com/ocelhq/ocel/sdk"
+The Ocel SDK lets you define the infrastructure your app needs as variables in that app. Declare a resource once in an `infra` folder, then import it wherever you use it.
+
+```ts title="infra/index.ts"
+import { postgres } from "ocel/postgres";
+
+// infrastructure in your app code!
+export const db = postgres("main");
 ```
+
+```ts title="src/server.ts"
+import express from "express";
+import { db } from "../infra";
+
+const app = express();
+
+app.get("/documents", async (_req, res) => {
+  const { rows } = await db.query("select * from documents");
+  res.json(rows);
+});
+
+app.listen(3000);
+```
+
+This is not exactly a new concept. Infrastructure from code (IfC) has been around for a while now. Each implementation, however, differs slightly. Let's break down ours.
+
+## How it works
+
+There's generally two ways to approach IfC:
+
+- Static analysis: parse the code, traverse the AST, find infra declarations
+- Code execution: run the code, SDKs make RPC calls to declare themselves
+
+Ocel declares resources with approach two. Rather than running your whole app, it runs only the `infra` folder, so the code that executes is exactly the code you chose to put there.
+
+<Callout>
+  FYI: Tools like [Encore](https://encore.dev) use approach one, while others
+  like [Nitric](https://nitric.io/docs) also use the second.
+</Callout>
+
+What the flow looks like, when you call `postgres("main")`, is this:
+
+```bash
+# (simplified)
+ocel dev / deploy / preview -> starts an rpc server
+    |
+    |
+(runs the infra folder)
+postgres("main")
+    |
+    |
+rpc DeclareResource { ... }
+    |
+    |
+resources collected
+    |
+    |
+dev:    resolved locally, app started with the links injected
+deploy: provisioned in your account, app shipped with the links injected
+```
+
+We call this process of running your declarations to collect resource definitions `discovery`.
+
+When you are running the CLI (`ocel dev`, `ocel deploy` or `ocel preview`) this is abstracted from you and happens in one continuous flow. You generally don't have to think about it.
+
+<Files>
+  <Folder name="infra" defaultOpen>
+    <File name="index.ts" />
+  </Folder>
+  <Folder name="src" defaultOpen>
+    <File name="server.ts" />
+  </Folder>
+  <File name="ocel.config.ts" />
+  <File name="package.json" />
+</Files>
+
+<Callout>
+  TIP: The CLI discovers resources from an `infra` folder at the same level as
+  the config file. For monorepos, this can be customized using the
+  `discovery.paths` option in the [config](../configuration.mdx).
+</Callout>
+
+### The magic, distilled
+
+As magical as it may be made to seem, put plainly, the SDK combines the following steps into one:
+
+- Resource definition (usually separate IaC code)
+- Resource creation
+- Resource linking
+
+It sees what resources your app declares, sends that to the CLI, which provisions, and injects the outputs of provisioning as links the SDK understands.
+
+## Gotchas
+
+Building software is making trade-offs. Going with code execution for declarations avoids building an AST parser for each language we support (which comes with its own set of problems, believe me!). Running only the `infra` folder avoids the other half of the trade: your server, migrations and startup hooks never run at deploy time.
+
+That leaves two constraints.
+
+### Define, don't read
+
+The `infra` folder runs during discovery, before anything exists. Declaring a resource there is fine. Reading from it is not.
+
+```ts title="infra/index.ts"
+import { postgres } from "ocel/postgres";
+
+// ✅ define and export
+export const db = postgres("main");
+
+// ❌ this runs during discovery, and nothing exists yet. It will error out
+console.log(db.connectionString);
+```
+
+Anything outside the `infra` folder only runs once the app starts, so it can read freely:
+
+```ts title="src/server.ts"
+import { db } from "../infra";
+
+// ✅ runtime, the link is already injected
+console.log(db.connectionString);
+```
+
+### An app links what it imports
+
+On deploy, each app is granted a resource only if that app imports the file declaring it. Ocel follows the app's import graph to decide this, so a resource declared in `infra` that no app imports is provisioned but linked to nothing. Reaching it at runtime fails with a missing link error.
+
+The same walk needs to resolve every import statically. An app that reaches a project file through a dynamic `import()` or `require()` with a computed path refuses to deploy rather than guess which resources it uses.

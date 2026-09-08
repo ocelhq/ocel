@@ -1,6 +1,7 @@
 import { Callout } from "fumadocs-ui/components/callout";
 import { Card, Cards } from "fumadocs-ui/components/card";
 import { CodeBlock, Pre } from "fumadocs-ui/components/codeblock";
+import * as FileComponents from "fumadocs-ui/components/files";
 import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import type { MDXComponents } from "mdx/types";
@@ -78,6 +79,7 @@ export function getMDXComponents(components?: MDXComponents) {
     DevTerminal,
     Tabs,
     Tab,
+    ...FileComponents,
     ...components,
   } satisfies MDXComponents;
 }
