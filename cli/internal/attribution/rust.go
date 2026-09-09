@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/cargo"
-	"github.com/ocelhq/ocel/cli/internal/discovery"
 )
 
 type rustReach struct{}
@@ -29,7 +28,7 @@ func (rustReach) Entries(ctx context.Context, root string, app App) (map[string]
 		return nil, fmt.Errorf("attribution: app %q builds %d binaries, and ocel attributes one binary per app", app.Name, len(bins))
 	}
 
-	reached := reachedDirs(root, workspace, crate, app.Roots)
+	reached := reachedDirs(root, workspace, crate)
 	entries := map[string]Reachability{}
 	for _, bin := range bins {
 		entry, inside := relativeToRoot(root, bin.SrcPath)
@@ -41,15 +40,10 @@ func (rustReach) Entries(ctx context.Context, root string, app App) (map[string]
 	return entries, nil
 }
 
-func reachedDirs(root string, workspace cargo.Workspace, crate cargo.Package, roots []discovery.Root) []string {
+func reachedDirs(root string, workspace cargo.Workspace, crate cargo.Package) []string {
 	dirs := []string{crate.Dir()}
 	for _, member := range workspaceDependencies(workspace, crate) {
 		dirs = append(dirs, member.Dir())
-	}
-	for _, r := range roots {
-		if r.Language == discovery.Rust {
-			dirs = append(dirs, r.Dir)
-		}
 	}
 
 	var relative []string

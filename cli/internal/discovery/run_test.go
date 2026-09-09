@@ -204,14 +204,22 @@ func TestRunBuildsNoBundleAndRunsNoNodeWithoutAJSRoot(t *testing.T) {
 
 func TestRunBundlesNothingForARootItCannotDiscover(t *testing.T) {
 	root := t.TempDir()
-	write(t, filepath.Join(root, "Cargo.toml"), "[package]\nname = \"web\"\n")
-	write(t, filepath.Join(root, "infra", "infra.rs"), "")
+	write(t, filepath.Join(root, "infra", "infra.rb"), "")
+
+	roots, err := Roots(root, nil)
+	if err != nil {
+		t.Fatalf("Roots: %v", err)
+	}
+	prepared, err := Prepare(root, append(roots, Root{Dir: filepath.Join(root, "infra"), Language: "ruby"}))
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), root, prepare(t, root), okServer(t), &stdout, &stderr); err == nil {
-		t.Fatal("Run succeeded on a rust root, want an error")
+	if err := Run(context.Background(), root, prepared, okServer(t), &stdout, &stderr); err == nil {
+		t.Fatal("Run succeeded on a root of a language ocel does not discover, want an error")
 	}
 	if _, err := os.Stat(filepath.Join(root, buildDirName, "entry.mjs")); !os.IsNotExist(err) {
-		t.Errorf("stat entry.mjs = %v, want a rust-only project to bundle nothing", err)
+		t.Errorf("stat entry.mjs = %v, want a project with no js root to bundle nothing", err)
 	}
 }
