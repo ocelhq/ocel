@@ -15,7 +15,6 @@ packages:
   - platform/edge/contract
   - platform/edge/cloudflare/workers/*
   - platform/edge/cloudflare/lib/*
-  - packages/native-lib/*
   - scripts/*
   - tests/fixtures/*/*
   - tests/fixtures/*/*/apps/*

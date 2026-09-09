@@ -1,0 +1,31 @@
+{
+  "name": "@ocel/cli",
+  "version": "0.0.1-alpha.0",
+  "type": "module",
+  "description": "the ocel cli — deploys apps into your own cloud",
+  "bin": {
+    "ocel": "./bin/ocel.js"
+  },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "optionalDependencies": {
+    "@ocel/cli-darwin-arm64": "workspace:^",
+    "@ocel/cli-darwin-x64": "workspace:^",
+    "@ocel/cli-linux-arm64": "workspace:^",
+    "@ocel/cli-linux-x64": "workspace:^",
+    "@ocel/cli-win32-x64": "workspace:^"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

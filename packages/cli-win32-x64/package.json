@@ -1,16 +1,13 @@
 {
-  "name": "@ocel/linux-x64",
+  "name": "@ocel/cli-win32-x64",
   "version": "0.0.1-alpha.0",
-  "description": "Ocel CLI prebuilt binary for linux-x64",
+  "description": "The ocel binary for win32-x64",
   "os": [
-    "linux"
+    "win32"
   ],
   "cpu": [
     "x64"
   ],
-  "bin": {
-    "ocel-native": "bin/ocel"
-  },
   "files": [
     "bin"
   ],
