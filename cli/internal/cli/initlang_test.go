@@ -40,7 +40,7 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 			argv := stubPackageManager(&deps, nil)
 
 			var stdout bytes.Buffer
-			if err := runInit(context.Background(), deps, dir, "acme", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+			if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "acme"}, &stdout, &bytes.Buffer{}); err != nil {
 				t.Fatalf("runInit: %v — %s", err, stdout.String())
 			}
 
@@ -48,7 +48,7 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 			if err != nil {
 				t.Fatalf("the config init wrote does not load: %v", err)
 			}
-			if cfg.Slug != "acme" || cfg.Provider == nil || cfg.Provider.Name != "aws" {
+			if cfg.Slug != "acme" || cfg.Provider == nil || cfg.Provider.Name != "acme" {
 				t.Fatalf("config = %+v", cfg)
 			}
 			if strings.Join(*argv, " ") != strings.Join(want.add, " ") {
@@ -63,7 +63,7 @@ func TestInitWritesTheSchemaThisCLIShipsWith(t *testing.T) {
 	deps := newDeps()
 	stubPackageManager(&deps, nil)
 
-	if err := runInit(context.Background(), deps, dir, "acme", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "acme"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 
@@ -87,7 +87,7 @@ func TestInitWritesTypeScriptOnRequest(t *testing.T) {
 	deps := newDeps()
 	stubPackageManager(&deps, nil)
 
-	if err := runInit(context.Background(), deps, dir, "acme", initOptions{ts: true}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "acme", ts: true}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 
@@ -98,7 +98,7 @@ func TestInitWritesTypeScriptOnRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	if !strings.Contains(string(written), `from "ocel/providers/aws"`) {
+	if !strings.Contains(string(written), `from "ocel/providers/acme"`) {
 		t.Fatalf("config =\n%s", written)
 	}
 }
@@ -111,7 +111,7 @@ func TestInitRefusesADirectoryOfSeveralLanguages(t *testing.T) {
 	deps := newDeps()
 	stubPackageManager(&deps, nil)
 
-	err := runInit(context.Background(), deps, dir, "acme", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
+	err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "acme"}, &bytes.Buffer{}, &bytes.Buffer{})
 	if err == nil {
 		t.Fatal("init picked a language from two manifests")
 	}
@@ -130,7 +130,7 @@ func TestInitTakesTheLanguageItIsGiven(t *testing.T) {
 	deps := newDeps()
 	argv := stubPackageManager(&deps, nil)
 
-	if err := runInit(context.Background(), deps, dir, "acme", initOptions{language: "rust"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+	if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "acme", language: "rust"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 	if strings.Join(*argv, " ") != "cargo add ocel" {
@@ -144,7 +144,7 @@ func TestInitWritesOnlyTheConfigWhenNoManifestNamesALanguage(t *testing.T) {
 	argv := stubPackageManager(&deps, nil)
 
 	var stdout bytes.Buffer
-	if err := runInit(context.Background(), deps, dir, "acme", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+	if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "acme"}, &stdout, &bytes.Buffer{}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
 	if len(*argv) != 0 {

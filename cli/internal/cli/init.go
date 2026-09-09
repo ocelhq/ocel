@@ -21,8 +21,6 @@ const sdkPackage = "ocel"
 
 const goSDKModule = "github.com/ocelhq/ocel/sdk"
 
-const defaultProviderName = "aws"
-
 type initOptions struct {
 	provider   string
 	language   string
@@ -61,7 +59,7 @@ var initCmd = &cobra.Command{
 }
 
 func init() {
-	initCmd.Flags().StringVar(&initOpts.provider, "provider", defaultProviderName, "Provider to scaffold with")
+	initCmd.Flags().StringVar(&initOpts.provider, "provider", "", "Provider this project deploys through")
 	initCmd.Flags().StringVar(&initOpts.language, "lang", "", "Language of this project ("+strings.Join(languageNames(), ", ")+"), when the manifests do not say")
 	initCmd.Flags().BoolVar(&initOpts.ts, "ts", false, "Write ocel.config.ts instead of ocel.json — it compiles to the same document and needs node")
 }
@@ -140,7 +138,7 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 
 	provider := strings.TrimSpace(opts.provider)
 	if provider == "" {
-		provider = defaultProviderName
+		return errors.New("name the provider this project deploys through, e.g. `ocel init --provider <name>` — the providers ocel ships are listed at https://ocel.dev/docs/providers")
 	}
 
 	lang, detected, err := languageOfProject(projectDir, opts)
@@ -214,11 +212,6 @@ func resolveSlug(projectDir, requested string) (string, error) {
 	return requested, nil
 }
 
-var providerPlaceholders = map[string]string{
-	"gcp": `{ "project": "my-project", "region": "europe-west1" }`,
-	"vps": `{ "ssh": "my-vps" }`,
-}
-
 func schemaURL() string {
 	return "https://ocel.dev/schema/" + version + "/ocel.schema.json"
 }
@@ -227,31 +220,23 @@ func configTemplate(name, slug, provider string) string {
 	if strings.HasSuffix(name, ".ts") {
 		return typescriptTemplate(slug, provider)
 	}
-	options := providerPlaceholders[provider]
-	if options == "" {
-		options = "{}"
-	}
 	return fmt.Sprintf(`{
   "$schema": %q,
   "slug": %q,
-  "provider": { "name": %q, "options": %s }
+  "provider": { "name": %q, "options": {} }
 }
-`, schemaURL(), slug, provider, options)
+`, schemaURL(), slug, provider)
 }
 
 func typescriptTemplate(slug, provider string) string {
-	options := providerPlaceholders[provider]
-	if options == "" {
-		options = ""
-	}
 	return fmt.Sprintf(`import { defineConfig } from "ocel/config";
 import %s from "ocel/providers/%s";
 
 export default defineConfig({
   slug: %q,
-  provider: %s(%s),
+  provider: %s({}),
 });
-`, providerIdentifier(provider), provider, slug, providerIdentifier(provider), options)
+`, providerIdentifier(provider), provider, slug, providerIdentifier(provider))
 }
 
 func providerIdentifier(provider string) string {
