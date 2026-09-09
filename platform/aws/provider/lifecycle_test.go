@@ -85,7 +85,7 @@ func (j journey) manifest(t *testing.T) string {
 func (j journey) declaration(t *testing.T) string {
 	t.Helper()
 	options, err := json.Marshal(map[string]any{
-		"package": "@ocel/provider-aws",
+		"name":    "aws",
 		"options": map[string]any{"region": liveRegion},
 	})
 	if err != nil {
