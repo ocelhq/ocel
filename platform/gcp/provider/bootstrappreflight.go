@@ -81,8 +81,8 @@ func rolesFor(tier providerkit.CredentialTier) []string {
 	return granted
 }
 
-func (b bootstrapper) preflight(ctx context.Context, read survey) error {
-	if err := b.servicesOn(ctx); err != nil {
+func (b bootstrapper) preflight(ctx context.Context, read survey, features []string) error {
+	if err := b.servicesOn(ctx, features); err != nil {
 		return err
 	}
 	if err := b.permitted(ctx); err != nil {
@@ -91,13 +91,13 @@ func (b bootstrapper) preflight(ctx context.Context, read survey) error {
 	return b.regionServed(ctx, read)
 }
 
-func (b bootstrapper) servicesOn(ctx context.Context) error {
+func (b bootstrapper) servicesOn(ctx context.Context, features []string) error {
 	service, err := b.clients.Services()
 	if err != nil {
 		return err
 	}
 	var off []string
-	for _, api := range BootstrapAPIs {
+	for _, api := range apisFor(features) {
 		name := "projects/" + b.clients.project + "/services/" + api
 		held, err := attempted(ctx, service.Services.Get(name).Context(ctx).Do)
 		if err != nil {
