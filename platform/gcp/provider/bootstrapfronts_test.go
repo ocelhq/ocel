@@ -2,7 +2,9 @@ package gcp
 
 import (
 	"context"
+	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -29,7 +31,12 @@ type countingFront struct {
 	raised   []edge.Class
 	torn     []edge.Class
 	standing bool
+	bound    []string
 	refusal  error
+}
+
+func (f *countingFront) Bound(_ context.Context, _ edge.Class) ([]string, error) {
+	return f.bound, nil
 }
 
 func (f *countingFront) Standing(_ context.Context, _ edge.Class) (bool, error) {
@@ -131,6 +138,66 @@ func TestABootstrapThatStoodTheLoadBalancerUpTakesItDownAgain(t *testing.T) {
 	}
 	if !slices.Contains(registry.front.torn, providerkit.ClassProduction) {
 		t.Errorf("the removal tore down %v, want the production front: a forwarding rule left standing keeps billing", registry.front.torn)
+	}
+}
+
+func TestRemovingTheFeatureTakesTheLoadBalancerDownRatherThanJustForgettingIt(t *testing.T) {
+	t.Parallel()
+
+	b, registry := fronting(t)
+	req := providerkit.BootstrapRequest{Class: providerkit.ClassProduction, Remove: []string{albFeature}}
+	if err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil); err != nil {
+		t.Fatalf("dropFronts = %v", err)
+	}
+	if !slices.Contains(registry.front.torn, providerkit.ClassProduction) {
+		t.Errorf("removing %q tore down %v, and un-stamping a feature whose address, forwarding rule and maps are still standing bills "+
+			"for a front nothing will ever take down again", albFeature, registry.front.torn)
+	}
+}
+
+func TestAFeatureWhoseFrontRefusedToComeDownStaysStamped(t *testing.T) {
+	t.Parallel()
+
+	b, registry := fronting(t)
+	registry.front.refusal = providerkit.Refuse(providerkit.CodeInvalid, "shop.example.com is still bound")
+	req := providerkit.BootstrapRequest{Class: providerkit.ClassProduction, Remove: []string{albFeature}}
+
+	if err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil); err == nil {
+		t.Fatal("dropFronts = nil though the front refused, and the apply would go on to un-stamp a feature that is still standing")
+	}
+	if held := standingFeatures(b.Catalogue(), []string{albFeature}, req); slices.Contains(held, albFeature) {
+		t.Errorf("the stamp would still carry %v after a removal, which is only correct because the apply stops on the refusal above", held)
+	}
+}
+
+func TestRemovingTheFeatureIsRefusedWhileAHostnameIsStillBoundToItsFront(t *testing.T) {
+	t.Parallel()
+
+	b, registry := fronting(t)
+	registry.front.bound = []string{"shop.example.com"}
+	req := providerkit.BootstrapRequest{Class: providerkit.ClassProduction, Remove: []string{albFeature}}
+
+	var refusal providerkit.Refusal
+	err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil)
+	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "shop.example.com") {
+		t.Fatalf("dropFronts with a hostname still bound = %v, want a refusal naming it", err)
+	}
+	if len(registry.front.torn) != 0 {
+		t.Errorf("the refused removal tore down %v: a certificate map with entries cannot be deleted, so the destroy fails partway",
+			registry.front.torn)
+	}
+}
+
+func TestAFeatureNothingStoodUpIsNotTornDownOnRemoval(t *testing.T) {
+	t.Parallel()
+
+	b, registry := fronting(t)
+	req := providerkit.BootstrapRequest{Class: providerkit.ClassProduction, Remove: []string{albFeature}}
+	if err := b.dropFronts(context.Background(), surveyed(), req, nil); err != nil {
+		t.Fatalf("dropFronts = %v", err)
+	}
+	if len(registry.opened) != 0 {
+		t.Errorf("removing a feature the stamp never recorded opened %v, and there is no state sealed under a passphrase to read", registry.opened)
 	}
 }
 
