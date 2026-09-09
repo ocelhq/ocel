@@ -1,5 +1,5 @@
 import { chmodSync, copyFileSync, mkdirSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 const [dist, packages] = process.argv.slice(2);
 if (!dist || !packages) {
@@ -18,6 +18,7 @@ const wanted = new Set(
   ),
 );
 
+const projectRoot = dirname(resolve(dist));
 const artifacts = JSON.parse(readFileSync(join(dist, "artifacts.json"), "utf8"));
 
 for (const artifact of artifacts) {
@@ -28,12 +29,13 @@ for (const artifact of artifacts) {
   if (!wanted.delete(target)) {
     continue;
   }
+  const built = resolve(projectRoot, artifact.path);
   const bin = join(packages, target, "bin");
   mkdirSync(bin, { recursive: true });
-  const placed = join(bin, basename(artifact.path));
-  copyFileSync(artifact.path, placed);
+  const placed = join(bin, basename(built));
+  copyFileSync(built, placed);
   chmodSync(placed, 0o755);
-  console.log(`${artifact.path} -> ${placed}`);
+  console.log(`${built} -> ${placed}`);
 }
 
 if (wanted.size > 0) {
