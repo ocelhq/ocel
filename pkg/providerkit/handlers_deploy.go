@@ -1026,10 +1026,12 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFact
 		physicalByLogical[fn.Name] = fn.Physical
 	}
 	urls := make(map[string]string, len(result.Functions))
+	var logical []string
 	for _, fn := range r.manifest.GetFunctions() {
 		if fn.GetApp() != entry.App {
 			continue
 		}
+		logical = append(logical, fn.GetLogicalName())
 		if url := urlByLogical[fn.GetLogicalName()]; url != "" {
 			urls[routeOf(fn)] = url
 		}
@@ -1049,7 +1051,7 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFact
 		EntryFunction:    physicalByLogical[entryLogicalName(r.manifest, entry.App, facts.Entry)],
 		Image:            images.Coordinate(entry.App),
 		Physical:         physicalOf(result.Containers, entry.App),
-		Revisions:        revisionsOf(result),
+		Revisions:        revisionsOf(result, entry.App, logical),
 		Origin:           originOf(result.Containers, entry.App),
 		HealthPath:       entry.HealthCheckPath,
 		FunctionURLs:     urls,
@@ -1360,15 +1362,15 @@ func (r *deployRun) openImages(ctx context.Context, wired *contractv1.ImageRegis
 	return nil
 }
 
-func revisionsOf(result StackResult) map[string]string {
-	revisions := make(map[string]string, len(result.Containers)+len(result.Functions))
+func revisionsOf(result StackResult, app string, logical []string) map[string]string {
+	revisions := make(map[string]string, len(logical)+1)
 	for _, container := range result.Containers {
-		if container.Physical != "" && container.Revision != "" {
+		if container.Name == app && container.Physical != "" && container.Revision != "" {
 			revisions[container.Physical] = container.Revision
 		}
 	}
 	for _, fn := range result.Functions {
-		if fn.Physical != "" && fn.Revision != "" {
+		if slices.Contains(logical, fn.Name) && fn.Physical != "" && fn.Revision != "" {
 			revisions[fn.Physical] = fn.Revision
 		}
 	}
