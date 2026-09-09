@@ -78,15 +78,31 @@ archives:
   - id: cli
     ids: [ocel]
     name_template: "ocel_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE*, README*]
+    files: []
     format_overrides:
       - goos: windows
         formats: [zip]
 
-  - id: providers
-    ids: [provider-aws, provider-gcp, provider-vps]
+  - id: provider-aws
+    ids: [provider-aws]
     name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE*]
+    files: []
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+  - id: provider-gcp
+    ids: [provider-gcp]
+    name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: []
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+  - id: provider-vps
+    ids: [provider-vps]
+    name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: []
     format_overrides:
       - goos: windows
         formats: [zip]
