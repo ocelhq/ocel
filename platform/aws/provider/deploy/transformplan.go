@@ -143,10 +143,13 @@ func executionFor(runtime providerkit.Runtime) (execution, error) {
 }
 
 func managedRuntime(name string) string {
-	if name == providerkit.RuntimePython {
+	switch name {
+	case providerkit.RuntimePython:
 		return pythonFunctionRuntime
+	case "", providerkit.RuntimeNode, providerkit.RuntimeNext:
+		return defaultFunctionRuntime
 	}
-	return defaultFunctionRuntime
+	return providedFunctionRuntime
 }
 
 func resolvePlanOutputs(ctx context.Context, plan providerkit.StackPlan, candidates []transformCandidate, results []transform.Result) ([]placedOutput, error) {

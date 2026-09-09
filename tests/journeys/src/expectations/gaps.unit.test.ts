@@ -172,7 +172,7 @@ describe("the gap list", () => {
   it("lists nothing past up on floci api-gateway, and up under the issue that refuses it", () => {
     const listed = expectationsFor("aws.floci");
     assert.deepEqual(upIssues(listed, cellsOfVariant("api-gateway")), {
-      "deploy/go-api-gateway/web": [],
+      "deploy/go-api-gateway/web": [1146],
       "deploy/node-api-gateway/web": [],
       "deploy/python-api-gateway/web": [],
       "sdk/node-api-gateway/web": [884],
@@ -275,11 +275,7 @@ describe("the gap list", () => {
       "deploy/workspace-cloudflare",
       "sdk/with-transforms-api-gateway",
     ]);
-    assert.deepEqual(alive("aws.floci"), [
-      "deploy/node-api-gateway",
-      "deploy/go-api-gateway",
-      "deploy/python-api-gateway",
-    ]);
+    assert.deepEqual(alive("aws.floci"), ["deploy/node-api-gateway", "deploy/python-api-gateway"]);
     assert.deepEqual(alive("dev"), [
       "deploy/node",
       "deploy/next",

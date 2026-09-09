@@ -24,6 +24,10 @@ const (
 
 	pythonFunctionRuntime = "python" + providerkit.PythonVersion
 
+	providedFunctionRuntime = "provided.al2023"
+
+	providedHandler = "bootstrap"
+
 	defaultFunctionEntry = "src/server.js"
 
 	defaultFunctionMemoryMB       = 1024
@@ -31,7 +35,7 @@ const (
 
 	nextBundleFunctionMemoryMB = 1769
 
-	execWrapper = "/opt/ocel/runtime"
+	execWrapper = "/opt/" + providedHandler
 
 	runtimeLayerLocalName = "runtime"
 
@@ -74,7 +78,7 @@ const (
 	outputKeyFunctionName = "functionName"
 )
 
-var layerManagedRuntimes = []string{defaultFunctionRuntime, pythonFunctionRuntime}
+var layerManagedRuntimes = []string{defaultFunctionRuntime, pythonFunctionRuntime, providedFunctionRuntime}
 
 func bytecodeCacheEnabled() bool {
 	return os.Getenv(bytecodeCacheEnv) == "1"
@@ -467,10 +471,19 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 	return role, nil
 }
 
+func lambdaHandler(args functionArgs) string {
+	if args.Runtime == providedFunctionRuntime {
+		return providedHandler
+	}
+	return args.Handler
+}
+
 func functionEnv(base map[string]string, args functionArgs, isr *isrConfig, bytecode *bytecodeConfig) map[string]string {
 	env := make(map[string]string, len(base))
 	maps.Copy(env, base)
-	env["AWS_LAMBDA_EXEC_WRAPPER"] = execWrapper
+	if args.Runtime != providedFunctionRuntime {
+		env["AWS_LAMBDA_EXEC_WRAPPER"] = execWrapper
+	}
 	env["OCEL_HANDLER"] = "/var/task/" + args.Handler
 	if isr != nil {
 		maps.Copy(env, isr.env())
@@ -545,7 +558,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 	fn, err := lambda.NewFunction(ctx, resourceName, &lambda.FunctionArgs{
 		Description: describe(coord, "route "+route),
 		Runtime:     pulumi.String(args.Runtime),
-		Handler:     pulumi.String(args.Handler),
+		Handler:     pulumi.String(lambdaHandler(args)),
 		Role:        roleArn,
 		S3Bucket:    pulumi.String(artifact.Bucket),
 		S3Key:       pulumi.String(artifact.Key),
