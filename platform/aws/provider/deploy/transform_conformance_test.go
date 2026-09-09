@@ -11,7 +11,7 @@ import (
 )
 
 const conformanceModule = `
-	import { defineTransform } from "@ocel/provider-aws/transform"
+	import { defineTransform } from "ocel/providers/aws/transform"
 	const identity = (args) => args
 	export default defineTransform({
 		function: { lambda: identity, url: identity, vpc: identity },
