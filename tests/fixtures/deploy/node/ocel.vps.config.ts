@@ -2,7 +2,6 @@ import { buildEnv, defineConfig } from "ocel/config";
 import vpsProvider from "ocel/providers/vps";
 import { z } from "zod";
 
-// What the config itself needs while it is evaluated, read from the shell or the project's .env.
 const ssh = buildEnv({
   OCEL_VPS_HOST: z.string().min(1),
   OCEL_VPS_USER: z.string().min(1),
@@ -24,8 +23,6 @@ export default defineConfig({
       path: ".",
       compute: "container",
       health: { path: "/health" },
-      // The hostname production serves on, bound with `ocel domain add`:
-      // domains: { production: "web.example.com" },
     },
   ],
 });

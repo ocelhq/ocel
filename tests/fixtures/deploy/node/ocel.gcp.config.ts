@@ -14,8 +14,6 @@ export default defineConfig({
     {
       name: "web",
       path: ".",
-      // Serverless unless told otherwise; a container is one image serving every route:
-      // compute: "container",
     },
   ],
 });

@@ -17,8 +17,6 @@
       "path": ".",
       "compute": "container",
       "health": { "path": "/health" }
-      // The hostname production serves on, bound with `ocel domain add`:
-      // "domains": { "production": "web.example.com" }
     }
   ]
 }

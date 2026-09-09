@@ -1,18 +1,22 @@
-package projectconfig
+package projectconfig_test
 
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/tailscale/hujson"
+
+	"github.com/ocelhq/ocel/cli/internal/fixturetest"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
 const committedSchemaFile = "www/public/schema/ocel.schema.json"
@@ -26,17 +30,6 @@ var skippedDirs = map[string]bool{
 	"dist":         true,
 	"output":       true,
 	".git":         true,
-}
-
-var jsSuffixes = []string{".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
-
-func repoDir(t *testing.T) string {
-	t.Helper()
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("locate the test source")
-	}
-	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", ".."))
 }
 
 func schemaID(t *testing.T, root string) string {
@@ -77,106 +70,89 @@ func committedSchema(t *testing.T, root string) *jsonschema.Schema {
 
 func documentOf(t *testing.T, name string, source []byte) any {
 	t.Helper()
-	standard, err := hujson.Standardize(source)
+	value, err := parseConfig(source)
 	if err != nil {
-		t.Fatalf("%s is not valid JSON: %v", name, err)
-	}
-	filled := interpolated.ReplaceAll(standard, []byte("filled-in"))
-	value, err := jsonschema.UnmarshalJSON(bytes.NewReader(filled))
-	if err != nil {
-		t.Fatalf("%s does not parse: %v", name, err)
+		t.Fatalf("%s: %v", name, err)
 	}
 	return value
 }
 
-func fixtureDirs(t *testing.T, root string) []string {
-	t.Helper()
-	var dirs []string
-	fixtures := filepath.Join(root, "tests", "fixtures")
-	concerns, err := os.ReadDir(fixtures)
+func parseConfig(source []byte) (any, error) {
+	standard, err := hujson.Standardize(source)
 	if err != nil {
-		t.Fatalf("read the fixtures: %v", err)
+		return nil, fmt.Errorf("is not valid JSON: %w", err)
 	}
-	for _, concern := range concerns {
-		if !concern.IsDir() {
-			continue
-		}
-		named, err := os.ReadDir(filepath.Join(fixtures, concern.Name()))
-		if err != nil {
-			t.Fatalf("read the %s fixtures: %v", concern.Name(), err)
-		}
-		for _, fixture := range named {
-			if fixture.IsDir() {
-				dirs = append(dirs, filepath.Join(fixtures, concern.Name(), fixture.Name()))
-			}
-		}
-	}
-	return dirs
-}
-
-func configsIn(t *testing.T, dir string) []string {
-	t.Helper()
-	var found []string
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("read %s: %v", dir, err)
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		if _, _, ok := formOf(entry.Name()); ok {
-			found = append(found, filepath.Join(dir, entry.Name()))
-		}
-	}
-	return found
+	filled := interpolated.ReplaceAll(standard, []byte("filled-in"))
+	return jsonschema.UnmarshalJSON(bytes.NewReader(filled))
 }
 
 func committedConfigs(t *testing.T, root string) []string {
 	t.Helper()
-	found := configsIn(t, root)
-	for _, dir := range fixtureDirs(t, root) {
-		found = append(found, configsIn(t, dir)...)
+	found := fixturetest.ConfigsIn(t, root)
+	for _, dir := range fixturetest.Dirs(t) {
+		found = append(found, fixturetest.ConfigsIn(t, dir)...)
 	}
-	found = append(found, configsIn(t, filepath.Join(root, "console", "web"))...)
-	return found
+	return append(found, fixturetest.ConfigsIn(t, filepath.Join(root, "console", "web"))...)
 }
 
-func holdsJavaScript(t *testing.T, dir string) bool {
-	t.Helper()
-	held := false
-	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			if path != dir && skippedDirs[entry.Name()] {
-				return fs.SkipDir
+type commentBlock struct{ first, last int }
+
+func commentBlocksIn(lines []string) []commentBlock {
+	var blocks []commentBlock
+	open := -1
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "//") {
+			if open < 0 {
+				open = i
 			}
-			return nil
+			continue
 		}
-		if _, _, isConfig := formOf(entry.Name()); isConfig {
-			return nil
+		if open >= 0 {
+			blocks = append(blocks, commentBlock{open, i - 1})
+			open = -1
 		}
-		for _, suffix := range jsSuffixes {
-			if strings.HasSuffix(entry.Name(), suffix) {
-				held = true
-				return fs.SkipAll
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk %s: %v", dir, err)
 	}
-	return held
+	if open >= 0 {
+		blocks = append(blocks, commentBlock{open, len(lines) - 1})
+	}
+	return blocks
+}
+
+func uncommented(lines []string, at commentBlock) []byte {
+	variant := lines[at.last]
+	indent := variant[:len(variant)-len(strings.TrimLeft(variant, " \t"))]
+	out := slices.Clone(lines[:at.first])
+	out = append(out, indent+strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(variant), "//")))
+	return []byte(strings.Join(append(out, lines[at.last+1:]...), "\n"))
+}
+
+func keyPaths(prefix string, value any) []string {
+	switch held := value.(type) {
+	case map[string]any:
+		var paths []string
+		for key, item := range held {
+			at := prefix + "." + key
+			paths = append(paths, at)
+			paths = append(paths, keyPaths(at, item)...)
+		}
+		slices.Sort(paths)
+		return paths
+	case []any:
+		var paths []string
+		for i, item := range held {
+			paths = append(paths, keyPaths(fmt.Sprintf("%s[%d]", prefix, i), item)...)
+		}
+		return paths
+	default:
+		return nil
+	}
 }
 
 func TestEveryCommittedConfigValidatesAgainstTheSchema(t *testing.T) {
-	root := repoDir(t)
+	root := fixturetest.RepoDir(t)
 	schema := committedSchema(t, root)
 	for _, path := range committedConfigs(t, root) {
-		if strings.HasSuffix(path, ".config.ts") {
+		if projectconfig.IsProgram(path) {
 			continue
 		}
 		source, err := os.ReadFile(path)
@@ -190,10 +166,10 @@ func TestEveryCommittedConfigValidatesAgainstTheSchema(t *testing.T) {
 }
 
 func TestEveryCommittedConfigNamesTheCommittedSchema(t *testing.T) {
-	root := repoDir(t)
+	root := fixturetest.RepoDir(t)
 	want := schemaID(t, root)
 	for _, path := range committedConfigs(t, root) {
-		if strings.HasSuffix(path, ".config.ts") {
+		if projectconfig.IsProgram(path) {
 			continue
 		}
 		source, err := os.ReadFile(path)
@@ -216,58 +192,109 @@ func TestEveryCommittedConfigNamesTheCommittedSchema(t *testing.T) {
 	}
 }
 
-func TestExactlyOneFixtureCarriesTheTypeScriptConfig(t *testing.T) {
-	root := repoDir(t)
+func TestACommittedConfigCommentsOneVariantAndOneLineSayingWhenToPickIt(t *testing.T) {
+	root := fixturetest.RepoDir(t)
+	for _, path := range committedConfigs(t, root) {
+		source, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		blocks := commentBlocksIn(strings.Split(string(source), "\n"))
+		if len(blocks) > 1 {
+			t.Errorf("%s comments %d separate things, and a config comments at most one variant", path, len(blocks))
+			continue
+		}
+		for _, at := range blocks {
+			if at.last-at.first != 1 {
+				t.Errorf("%s comments %d lines, and a variant is one line under one line saying when to pick it", path, at.last-at.first+1)
+			}
+		}
+	}
+}
+
+func TestACommentedVariantUncommentsIntoAConfigThatOnlyDiffers(t *testing.T) {
+	root := fixturetest.RepoDir(t)
+	schema := committedSchema(t, root)
+	for _, path := range committedConfigs(t, root) {
+		if projectconfig.IsProgram(path) {
+			continue
+		}
+		source, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		lines := strings.Split(string(source), "\n")
+		for _, at := range commentBlocksIn(lines) {
+			picked, err := parseConfig(uncommented(lines, at))
+			if err != nil {
+				t.Errorf("%s picked at line %d %v", path, at.last+1, err)
+				continue
+			}
+			if err := schema.Validate(picked); err != nil {
+				t.Errorf("%s picked at line %d does not validate against the committed schema: %v", path, at.last+1, err)
+			}
+			live := documentOf(t, path, source)
+			if want, got := keyPaths("", live), keyPaths("", picked); !slices.Equal(want, got) {
+				t.Errorf("%s picked at line %d holds keys %v, and a commented variant conflicts with a live key rather than adding %v", path, at.last+1, got, want)
+			}
+		}
+	}
+}
+
+func TestOnlyTheNodeFixtureCarriesTheTypeScriptConfig(t *testing.T) {
+	want := filepath.Join(fixturetest.RepoDir(t), "tests", "fixtures", "deploy", "node")
 	var carrying []string
-	for _, dir := range fixtureDirs(t, root) {
-		for _, path := range configsIn(t, dir) {
-			if strings.HasSuffix(path, ".config.ts") {
+	for _, dir := range fixturetest.Dirs(t) {
+		for _, path := range fixturetest.ConfigsIn(t, dir) {
+			if projectconfig.IsProgram(path) {
 				carrying = append(carrying, dir)
 				break
 			}
 		}
 	}
-	if len(carrying) != 1 {
-		t.Fatalf("the fixtures carrying a typescript config are %v, want exactly one", carrying)
+	if !slices.Equal(carrying, []string{want}) {
+		t.Fatalf("the fixtures carrying a typescript config are %v, want only %s", carrying, want)
 	}
 }
 
-func TestAFixtureWithNoJavaScriptOfItsOwnCarriesNoNodeFiles(t *testing.T) {
-	root := repoDir(t)
-	for _, dir := range fixtureDirs(t, root) {
-		if holdsJavaScript(t, dir) {
+func TestAFixtureOfAnotherLanguageCarriesNoNodeFiles(t *testing.T) {
+	for _, dir := range fixturetest.Dirs(t) {
+		if fixturetest.IsNode(t, dir) {
 			continue
 		}
-		for _, name := range []string{"package.json", "tsconfig.json", "node_modules"} {
-			if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
-				t.Errorf("%s holds no javascript of its own and still carries %s", dir, name)
+		err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return err
 			}
+			if entry.IsDir() && path != dir && skippedDirs[entry.Name()] {
+				return fs.SkipDir
+			}
+			switch entry.Name() {
+			case "package.json", "tsconfig.json", "node_modules":
+				t.Errorf("%s is not a node fixture and still carries %s", dir, path)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", dir, err)
 		}
 	}
 }
 
 func TestTheGoFixtureDeploysFromJSONAlone(t *testing.T) {
-	dir := filepath.Join(repoDir(t), "tests", "fixtures", "deploy", "go")
-	if _, err := os.Stat(dir); err != nil {
-		t.Skipf("the go fixture is not checked out: %v", err)
-	}
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("read the fixture: %v", err)
-	}
-	for _, entry := range entries {
-		if _, form, ok := formOf(entry.Name()); ok && form.suffix == ".config.ts" {
-			t.Fatalf("the go fixture still carries %s", entry.Name())
+	dir := filepath.Join(fixturetest.RepoDir(t), "tests", "fixtures", "deploy", "go")
+	for _, path := range fixturetest.ConfigsIn(t, dir) {
+		if projectconfig.IsProgram(path) {
+			t.Fatalf("the go fixture still carries %s", filepath.Base(path))
 		}
 	}
 
 	t.Setenv("PATH", "")
-	cfg, err := Resolve(t.Context(), dir, "")
+	cfg, err := projectconfig.Resolve(t.Context(), dir, "")
 	if err != nil {
 		t.Fatalf("resolve the go fixture with no node on PATH: %v", err)
 	}
-	if cfg.Path != filepath.Join(dir, DefaultFileName) {
+	if cfg.Path != filepath.Join(dir, projectconfig.DefaultFileName) {
 		t.Fatalf("path = %q", cfg.Path)
 	}
 	if cfg.Provider == nil || cfg.Provider.Name != "aws" {
