@@ -59,6 +59,9 @@ runs:
       shell: bash
       run: pnpm turbo run build --filter=ocel
 
+    - uses: ./.github/actions/goreleaser
+      if: inputs.source != 'release'
+
     - name: Build the binaries this deploy drives
       if: inputs.source != 'release'
       shell: bash
