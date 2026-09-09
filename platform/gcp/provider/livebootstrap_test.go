@@ -72,7 +72,7 @@ func TestLiveBootstrapper(t *testing.T) {
 	p := live(t)
 	servicesEnabled(t)
 
-	conformance.RunBootstrapper(t, bootstrapperOf(t, p))
+	conformance.RunBootstrapper(t, bootstrapperOf(t, p), p.Edges().Default())
 }
 
 func TestLiveTheBootstrapStandsUpTheStackTheDataPortsRead(t *testing.T) {

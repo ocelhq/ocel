@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func runPorts(t *testing.T, suite Suite) {
@@ -36,7 +37,9 @@ func RunPorts(t *testing.T, provider providerkit.Provider) {
 
 	t.Run("RecordStore", func(t *testing.T) { RunRecordStore(t, provider.Records()) })
 	t.Run("Sealer", func(t *testing.T) { RunSealer(t, provider.Sealer()) })
-	t.Run("Bootstrapper", func(t *testing.T) { RunBootstrapper(t, bootstrapperOf(t, provider)) })
+	t.Run("Bootstrapper", func(t *testing.T) {
+		RunBootstrapper(t, bootstrapperOf(t, provider), provider.Edges().Default())
+	})
 	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, provider.Artifacts()) })
 	t.Run("Releaser", func(t *testing.T) { RunReleaser(t, provider.Releases(), provider.Artifacts(), provider.Serves()) })
 	t.Run("Credentials", func(t *testing.T) { RunCredentials(t, provider.Credentials()) })
@@ -288,11 +291,15 @@ func RunSealer(t *testing.T, sealer providerkit.Sealer) {
 	}
 }
 
-func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
+func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper, kind edge.Kind) {
 	t.Helper()
 
 	ctx := context.Background()
 	catalogue := bootstrapper.Catalogue()
+	wanted, err := applicable(catalogue, kind)
+	if err != nil {
+		t.Fatalf("the features the %q edge stands up = %v", kind, err)
+	}
 
 	t.Run("every feature is one the catalogue can stand up", func(t *testing.T) {
 		named := make([]string, 0, len(catalogue))
@@ -375,11 +382,11 @@ func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
 	})
 
 	t.Run("Plan shows a dropped feature leaving", func(t *testing.T) {
-		if len(catalogue) == 0 {
-			t.Skip("this provider offers no features, so nothing can be dropped")
+		if len(wanted) == 0 {
+			t.Skipf("the %q edge stands no feature of this provider up, so nothing can be dropped", kind)
 		}
 		class := providerkit.ClassProduction
-		drop := featureNames(catalogue)
+		drop := wanted
 		plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Remove: drop})
 		if err != nil {
 			t.Fatalf("Plan(%s, drop %v) = %v", class, drop, err)
@@ -404,16 +411,12 @@ func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
 
 	t.Run("what Apply stands up, Describe reports and Remove takes down", func(t *testing.T) {
 		class := providerkit.ClassPreview
-		levels, err := providerkit.FeatureLevels(catalogue, featureNames(catalogue))
+		raising, err := ordered(catalogue, wanted)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var wanted []string
-		for _, level := range levels {
-			wanted = append(wanted, level...)
-		}
-		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Features: wanted}, nil); err != nil {
-			t.Fatalf("Apply() of the whole catalogue = %v", err)
+		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Features: raising}, nil); err != nil {
+			t.Fatalf("Apply() of what the %q edge stands up (%v) = %v", kind, raising, err)
 		}
 
 		described, err := bootstrapper.Describe(ctx, class)
@@ -421,7 +424,7 @@ func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
 			t.Fatalf("Describe() after Apply() = %v", err)
 		}
 		for _, stack := range described.Stacks {
-			if stack.Feature != "" && !slices.Contains(wanted, stack.Feature) {
+			if stack.Feature != "" && !slices.Contains(raising, stack.Feature) {
 				t.Errorf("Describe() reports a stack for %q, which Apply() was never asked for", stack.Feature)
 			}
 		}
@@ -461,16 +464,16 @@ func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
 
 	t.Run("Apply takes a drop in delete order", func(t *testing.T) {
 		class := providerkit.ClassPreview
-		drop, err := providerkit.FeatureLevels(catalogue, featureNames(catalogue))
+		levels, err := providerkit.FeatureLevels(catalogue, wanted)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var ordered []string
-		for i := len(drop) - 1; i >= 0; i-- {
-			ordered = append(ordered, drop[i]...)
+		var dropping []string
+		for i := len(levels) - 1; i >= 0; i-- {
+			dropping = append(dropping, levels[i]...)
 		}
-		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Remove: ordered}, nil); err != nil {
-			t.Fatalf("Apply() dropping every feature = %v", err)
+		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Remove: dropping}, nil); err != nil {
+			t.Fatalf("Apply() dropping what the %q edge stands up (%v) = %v", kind, dropping, err)
 		}
 		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
 			t.Fatalf("Remove() = %v", err)
@@ -478,12 +481,52 @@ func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper) {
 	})
 }
 
-func featureNames(catalogue []providerkit.Feature) []string {
-	out := make([]string, 0, len(catalogue))
-	for _, f := range catalogue {
-		out = append(out, f.Name)
+func applicable(catalogue []providerkit.Feature, kind edge.Kind) ([]string, error) {
+	required, err := providerkit.RequiredFeatures(catalogue, nil, string(kind))
+	if err != nil {
+		return nil, err
 	}
-	return out
+	standing := map[string]bool{}
+	for _, name := range required {
+		standing[name] = true
+	}
+	for _, f := range catalogue {
+		if len(f.Needs) == 0 {
+			standing[f.Name] = true
+		}
+	}
+	for grew := true; grew; {
+		grew = false
+		for _, f := range catalogue {
+			if !standing[f.Name] {
+				continue
+			}
+			for _, dep := range f.DependsOn {
+				if !standing[dep] {
+					standing[dep], grew = true, true
+				}
+			}
+		}
+	}
+	wanted := make([]string, 0, len(standing))
+	for _, f := range catalogue {
+		if standing[f.Name] {
+			wanted = append(wanted, f.Name)
+		}
+	}
+	return wanted, nil
+}
+
+func ordered(catalogue []providerkit.Feature, wanted []string) ([]string, error) {
+	levels, err := providerkit.FeatureLevels(catalogue, wanted)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, level := range levels {
+		out = append(out, level...)
+	}
+	return out, nil
 }
 
 func RunCredentials(t *testing.T, credentials providerkit.Credentials) {
