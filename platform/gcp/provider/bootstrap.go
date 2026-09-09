@@ -119,6 +119,9 @@ func (b bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	if err := b.preflight(ctx, read, req.Features); err != nil {
 		return providerkit.Plan{}, err
 	}
+	if err := b.frontsFree(ctx, req.Class, droppedFeatures(read.Stamp.Features, req)); err != nil {
+		return providerkit.Plan{}, err
+	}
 	standing, err := b.described(ctx, read)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -176,6 +179,9 @@ func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	items := bootstrapItems(read.Names, req.Class, read.Emulated)
 	holder := item{Kind: KindBucket, Name: read.Names.Bucket(req.Class)}
 	if err := b.stand(ctx, read, stampHolder(items, holder), report); err != nil {
+		return err
+	}
+	if err := b.dropFronts(ctx, read, req, report); err != nil {
 		return err
 	}
 

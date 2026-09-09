@@ -85,6 +85,32 @@ func (b bootstrapper) raiseFronts(ctx context.Context, req providerkit.Bootstrap
 	})
 }
 
+func droppedFeatures(held []string, req providerkit.BootstrapRequest) []string {
+	var dropping []string
+	for _, name := range req.Remove {
+		if slices.Contains(held, name) && !slices.Contains(req.Features, name) {
+			dropping = append(dropping, name)
+		}
+	}
+	return dropping
+}
+
+func (b bootstrapper) dropFronts(
+	ctx context.Context,
+	read survey,
+	req providerkit.BootstrapRequest,
+	report providerkit.Reporter,
+) error {
+	dropping := droppedFeatures(read.Stamp.Features, req)
+	if err := b.frontsFree(ctx, req.Class, dropping); err != nil {
+		return err
+	}
+	return b.eachFront(dropping, func(feature providerkit.Feature, front edge.Edge) error {
+		say(report, "taking the front of the "+string(front.Kind())+" edge down for "+string(req.Class)+": "+feature.Name+" was removed")
+		return front.Teardown(ctx, req.Class)
+	})
+}
+
 func (b bootstrapper) tearFronts(ctx context.Context, class providerkit.Class, features []string) error {
 	return b.eachFront(features, func(_ providerkit.Feature, front edge.Edge) error {
 		return front.Teardown(ctx, class)
