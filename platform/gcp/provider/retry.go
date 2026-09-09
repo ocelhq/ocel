@@ -123,9 +123,24 @@ func answeredCode(err error) int {
 }
 
 func until[T any](ctx context.Context, doing string, ask func() (T, error), settled func(T) bool) (T, error) {
+	return waiting(ctx, patience{attempts: waitAttempts, ceiling: waitCeiling}, doing, ask, settled)
+}
+
+type patience struct {
+	attempts int
+	ceiling  time.Duration
+}
+
+func waiting[T any](
+	ctx context.Context,
+	held patience,
+	doing string,
+	ask func() (T, error),
+	settled func(T) bool,
+) (T, error) {
 	var nothing T
-	for attempt := range waitAttempts {
-		if attempt > 0 && !waitedFor(ctx, attempt, waitCeiling) {
+	for attempt := range held.attempts {
+		if attempt > 0 && !waitedFor(ctx, attempt, held.ceiling) {
 			return nothing, fmt.Errorf("wait for %s: %w", doing, ctx.Err())
 		}
 		value, err := ask()
@@ -137,8 +152,9 @@ func until[T any](ctx context.Context, doing string, ask func() (T, error), sett
 		}
 	}
 	return nothing, providerkit.Refuse(providerkit.CodeNotReady,
-		"%s is still not done after %d attempts, and going on before it is leaves a bootstrap half made.\nTry again once Google has caught up",
-		doing, waitAttempts)
+		"%s is still not done after %d attempts, and going on before it is leaves the work half made.\n"+
+			"It may still be provisioning: run the same command again once Google has caught up",
+		doing, held.attempts)
 }
 
 func waited(ctx context.Context, attempt int) bool { return waitedFor(ctx, attempt, askCeiling) }

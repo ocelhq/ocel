@@ -25,6 +25,8 @@ const certificateRenewal = "Certificate Manager renews it while the authorizatio
 
 const certificateExpiry = 30 * 24 * time.Hour
 
+var issuance = patience{attempts: 100, ceiling: 15 * time.Second}
+
 func (p *Provider) certificatesGlobal() string {
 	return "projects/" + p.options.Project + "/locations/global"
 }
@@ -152,7 +154,7 @@ func (p *Provider) issued(
 	req providerkit.CertificateRequest,
 	name string,
 ) error {
-	settled, err := until(ctx, "Certificate Manager to issue a certificate for "+req.Hostname,
+	settled, err := waiting(ctx, issuance, "Certificate Manager to issue a certificate for "+req.Hostname,
 		func() (*certmanager.Certificate, error) {
 			return attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 				return certificates.Projects.Locations.Certificates.Get(name).Context(ctx).Do(call...)
