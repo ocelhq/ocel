@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
 func rootDirs(t *testing.T, roots []Root, base string) []string {
@@ -158,6 +160,35 @@ func TestRoots(t *testing.T) {
 		}
 		if len(roots) != 0 {
 			t.Fatalf("roots = %v, want none", rootDirs(t, roots, root))
+		}
+	})
+}
+
+func TestHoldsJS(t *testing.T) {
+	t.Run("a declaration root written in JS holds JS", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "infra", "main.ts"), "export {};")
+
+		held, err := HoldsJS(&projectconfig.Config{Dir: root})
+		if err != nil {
+			t.Fatalf("HoldsJS: %v", err)
+		}
+		if !held {
+			t.Error("HoldsJS = false, want the ts declaration root read as JS")
+		}
+	})
+
+	t.Run("a discovery path that is not there is an error, not a JS project", func(t *testing.T) {
+		root := t.TempDir()
+		cfg := &projectconfig.Config{Dir: root}
+		cfg.Discovery.Paths = []string{"nowhere"}
+
+		held, err := HoldsJS(cfg)
+		if err == nil {
+			t.Fatalf("HoldsJS = %v, nil error, want the unreadable roots reported", held)
+		}
+		if held {
+			t.Error("HoldsJS = true for roots it could not read")
 		}
 	})
 }

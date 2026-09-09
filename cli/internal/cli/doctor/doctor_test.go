@@ -142,7 +142,7 @@ func TestRunDoctorWithoutAConfig(t *testing.T) {
 
 	out := rendered(t, stdout.String())
 	for _, want := range []string{
-		"  ✗ no ocel.json found in this directory or any parent",
+		"  ✗ no ocel.json or ocel.config.ts found in this directory or any parent",
 		"    → run `ocel init` to set up this project",
 		"1 problem.",
 	} {

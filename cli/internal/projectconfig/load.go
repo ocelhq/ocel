@@ -24,6 +24,15 @@ const scratchDirName = ".ocel"
 
 const initHint = "run `ocel init` to create one"
 
+type NoConfigError struct {
+	Names    []string
+	StartDir string
+}
+
+func (e NoConfigError) Error() string {
+	return fmt.Sprintf("no %s found in %s or any parent directory — %s", strings.Join(e.Names, " or "), e.StartDir, initHint)
+}
+
 type form struct {
 	suffix string
 	read   func(ctx context.Context, path string) ([]byte, error)
@@ -101,7 +110,7 @@ func resolve(ctx context.Context, startDir, explicitPath string, optional bool) 
 		if optional {
 			return &Config{Dir: root, Path: filepath.Join(root, DefaultFileName)}, nil
 		}
-		return nil, fmt.Errorf("no %s or %s found in %s or any parent directory — %s", DefaultFileName, TSFileName, startDir, initHint)
+		return nil, NoConfigError{Names: []string{DefaultFileName, TSFileName}, StartDir: startDir}
 	}
 	return load(ctx, configPath)
 }

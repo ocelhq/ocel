@@ -3,6 +3,7 @@ package doctor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -255,8 +256,9 @@ func nodeCheck(ctx context.Context) check {
 
 func configFailure(err error) (string, string) {
 	message := firstLine(err.Error())
-	if strings.Contains(message, "no "+projectconfig.DefaultFileName+" or "+projectconfig.TSFileName+" found") {
-		return "no " + projectconfig.DefaultFileName + " found in this directory or any parent",
+	var missing projectconfig.NoConfigError
+	if errors.As(err, &missing) {
+		return "no " + strings.Join(missing.Names, " or ") + " found in this directory or any parent",
 			"run `ocel init` to set up this project"
 	}
 	if head, hint, ok := splitHint(message); ok {
