@@ -122,3 +122,22 @@ release:
     owner: ocelhq
     name: ocel
   prerelease: auto
+
+brews:
+  - name: ocel
+    ids: [cli]
+    repository:
+      owner: ocelhq
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://ocel.dev
+    description: Deploys apps into your own cloud
+    license: MIT
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
+    install: |
+      bin.install "ocel"
+    test: |
+      system bin/"ocel", "--version"

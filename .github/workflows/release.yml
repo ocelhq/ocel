@@ -110,17 +110,15 @@ jobs:
           GORELEASER_CURRENT_TAG: v${{ steps.version.outputs.version }}
         run: goreleaser build --clean --skip=validate
 
-      - name: Upload the CLI binaries the npm packages carry
+      - name: Fill the platform packages with this version's binaries
+        run: node scripts/platform-packages.mjs dist packages
+
+      - name: Upload the binaries the platform packages carry
         uses: actions/upload-artifact@v4
         with:
           name: cli-binaries
           if-no-files-found: error
-          path: |
-            dist/ocel_darwin_amd64_v1/ocel
-            dist/ocel_darwin_arm64/ocel
-            dist/ocel_linux_amd64_v1/ocel
-            dist/ocel_linux_arm64/ocel
-            dist/ocel_windows_amd64_v1/ocel.exe
+          path: packages/cli-*/bin/ocel*
 
   publish:
     needs: build-binaries
@@ -161,20 +159,14 @@ jobs:
 
       - uses: ./.github/actions/goreleaser
 
-      - name: Download the CLI binaries
+      - name: Download the binaries the platform packages carry
         uses: actions/download-artifact@v4
         with:
           name: cli-binaries
-          path: dist
+          path: packages
 
-      - name: Assemble binaries into the platform packages
-        run: |
-          set -euo pipefail
-          install -D -m 0755 dist/ocel_darwin_arm64/ocel packages/cli-darwin-arm64/bin/ocel
-          install -D -m 0755 dist/ocel_darwin_amd64_v1/ocel packages/cli-darwin-x64/bin/ocel
-          install -D -m 0755 dist/ocel_linux_arm64/ocel packages/cli-linux-arm64/bin/ocel
-          install -D -m 0755 dist/ocel_linux_amd64_v1/ocel packages/cli-linux-x64/bin/ocel
-          install -D -m 0644 dist/ocel_windows_amd64_v1/ocel.exe packages/cli-win32-x64/bin/ocel.exe
+      - name: Make the platform binaries executable
+        run: chmod 0755 packages/cli-*/bin/ocel*
 
       - name: Build the published packages
         run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
@@ -197,7 +189,10 @@ jobs:
           git tag -a "v$version" -m "v$version"
           git push origin "v$version"
 
-      - name: Publish the archives a CLI fetches its providers from
+      # TODO(alpha): HOMEBREW_TAP_TOKEN is a hand-made PAT with contents:write on
+      # ocelhq/homebrew-tap; drop this once the tap is provisioned from code.
+      - name: Publish the archives a CLI fetches, and the Homebrew formula
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: goreleaser release --clean
