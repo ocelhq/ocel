@@ -6,7 +6,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/lockfile"
+	"github.com/ocelhq/ocel/cli/internal/devlock"
 )
 
 func TestRoleString(t *testing.T) {
@@ -47,8 +47,8 @@ func TestElect(t *testing.T) {
 
 		root := root(t)
 		addr := liveAddr(t)
-		if err := lockfile.Create(root, addr); err != nil {
-			t.Fatalf("lockfile.Create: %v", err)
+		if err := devlock.Create(root, addr); err != nil {
+			t.Fatalf("devlock.Create: %v", err)
 		}
 
 		result := elect(t, root)
@@ -58,8 +58,8 @@ func TestElect(t *testing.T) {
 		if result.LeaderAddr != addr {
 			t.Fatalf("LeaderAddr = %q, want %q", result.LeaderAddr, addr)
 		}
-		if _, err := lockfile.Read(root); err != nil {
-			t.Fatalf("lockfile.Read after Elect: %v", err)
+		if _, err := devlock.Read(root); err != nil {
+			t.Fatalf("devlock.Read after Elect: %v", err)
 		}
 	})
 
@@ -67,16 +67,16 @@ func TestElect(t *testing.T) {
 		t.Parallel()
 
 		root := root(t)
-		if err := lockfile.Create(root, deadAddr(t)); err != nil {
-			t.Fatalf("lockfile.Create: %v", err)
+		if err := devlock.Create(root, deadAddr(t)); err != nil {
+			t.Fatalf("devlock.Create: %v", err)
 		}
 
 		result := elect(t, root)
 		if result.Role != Leader {
 			t.Fatalf("Role = %v, want leader", result.Role)
 		}
-		if _, err := lockfile.Read(root); !errors.Is(err, fs.ErrNotExist) {
-			t.Fatalf("lockfile.Read after reclaim err = %v, want a not-exist error", err)
+		if _, err := devlock.Read(root); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("devlock.Read after reclaim err = %v, want a not-exist error", err)
 		}
 	})
 
@@ -84,8 +84,8 @@ func TestElect(t *testing.T) {
 		t.Parallel()
 
 		elsewhere, here := root(t), root(t)
-		if err := lockfile.Create(elsewhere, liveAddr(t)); err != nil {
-			t.Fatalf("lockfile.Create: %v", err)
+		if err := devlock.Create(elsewhere, liveAddr(t)); err != nil {
+			t.Fatalf("devlock.Create: %v", err)
 		}
 
 		result := elect(t, here)
@@ -107,9 +107,9 @@ func TestResultClaim(t *testing.T) {
 		if err := result.Claim("127.0.0.1:4242"); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
-		got, err := lockfile.Read(root)
+		got, err := devlock.Read(root)
 		if err != nil {
-			t.Fatalf("lockfile.Read: %v", err)
+			t.Fatalf("devlock.Read: %v", err)
 		}
 		if got != "127.0.0.1:4242" {
 			t.Fatalf("lockfile holds %q, want the claiming leader's address %q", got, "127.0.0.1:4242")
@@ -132,9 +132,9 @@ func TestResultClaim(t *testing.T) {
 			t.Fatalf("second Claim err = %v, want ErrLost", err)
 		}
 
-		got, err := lockfile.Read(root)
+		got, err := devlock.Read(root)
 		if err != nil {
-			t.Fatalf("lockfile.Read: %v", err)
+			t.Fatalf("devlock.Read: %v", err)
 		}
 		if got != "127.0.0.1:1" {
 			t.Fatalf("lockfile holds %q, want the winner's address %q", got, "127.0.0.1:1")
@@ -146,17 +146,17 @@ func TestResultClaim(t *testing.T) {
 
 		root := root(t)
 		addr := liveAddr(t)
-		if err := lockfile.Create(root, addr); err != nil {
-			t.Fatalf("lockfile.Create: %v", err)
+		if err := devlock.Create(root, addr); err != nil {
+			t.Fatalf("devlock.Create: %v", err)
 		}
 
 		result := elect(t, root)
 		if err := result.Claim("127.0.0.1:9"); !errors.Is(err, ErrLost) {
 			t.Fatalf("Claim from a follower err = %v, want ErrLost", err)
 		}
-		got, err := lockfile.Read(root)
+		got, err := devlock.Read(root)
 		if err != nil {
-			t.Fatalf("lockfile.Read: %v", err)
+			t.Fatalf("devlock.Read: %v", err)
 		}
 		if got != addr {
 			t.Fatalf("lockfile holds %q, want the standing leader's address %q", got, addr)
@@ -186,8 +186,8 @@ func TestResultRelease(t *testing.T) {
 		if err := result.Release(); err != nil {
 			t.Fatalf("Release: %v", err)
 		}
-		if _, err := lockfile.Read(root); !errors.Is(err, fs.ErrNotExist) {
-			t.Fatalf("lockfile.Read after Release err = %v, want a not-exist error", err)
+		if _, err := devlock.Read(root); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("devlock.Read after Release err = %v, want a not-exist error", err)
 		}
 	})
 
@@ -196,17 +196,17 @@ func TestResultRelease(t *testing.T) {
 
 		root := root(t)
 		addr := liveAddr(t)
-		if err := lockfile.Create(root, addr); err != nil {
-			t.Fatalf("lockfile.Create: %v", err)
+		if err := devlock.Create(root, addr); err != nil {
+			t.Fatalf("devlock.Create: %v", err)
 		}
 
 		result := elect(t, root)
 		if err := result.Release(); err != nil {
 			t.Fatalf("Release: %v", err)
 		}
-		got, err := lockfile.Read(root)
+		got, err := devlock.Read(root)
 		if err != nil {
-			t.Fatalf("lockfile.Read after a follower released: %v", err)
+			t.Fatalf("devlock.Read after a follower released: %v", err)
 		}
 		if got != addr {
 			t.Fatalf("lockfile holds %q, want the standing leader's address %q", got, addr)
@@ -226,7 +226,7 @@ func elect(t *testing.T, root string) Result {
 func root(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	t.Cleanup(func() { _ = lockfile.Remove(root) })
+	t.Cleanup(func() { _ = devlock.Remove(root) })
 	return root
 }
 

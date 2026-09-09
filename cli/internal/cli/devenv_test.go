@@ -15,10 +15,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
+	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
-	"github.com/ocelhq/ocel/cli/internal/lockfile"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
@@ -469,7 +469,7 @@ func TestRunDevEnvironment(t *testing.T) {
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -534,7 +534,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -567,7 +567,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -604,7 +604,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -639,7 +639,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -681,7 +681,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -720,7 +720,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -767,7 +767,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -801,7 +801,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -862,7 +862,7 @@ func TestRunRunEnvironment(t *testing.T) {
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -897,7 +897,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -945,7 +945,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -981,7 +981,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)

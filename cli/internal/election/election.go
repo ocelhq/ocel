@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/lockfile"
+	"github.com/ocelhq/ocel/cli/internal/devlock"
 )
 
 type Role int
@@ -40,7 +40,7 @@ type Result struct {
 const dialTimeout = 500 * time.Millisecond
 
 func Elect(root string) (Result, error) {
-	addr, err := lockfile.Read(root)
+	addr, err := devlock.Read(root)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return Result{Role: Leader, root: root}, nil
@@ -53,7 +53,7 @@ func Elect(root string) (Result, error) {
 		return Result{Role: Follower, LeaderAddr: addr, root: root}, nil
 	}
 
-	if err := lockfile.Remove(root); err != nil {
+	if err := devlock.Remove(root); err != nil {
 		return Result{}, fmt.Errorf("reclaim stale leader lockfile: %w", err)
 	}
 	return Result{Role: Leader, root: root}, nil
@@ -63,7 +63,7 @@ func (r Result) Claim(addr string) error {
 	if r.Role != Leader || r.root == "" {
 		return ErrLost
 	}
-	if err := lockfile.Create(r.root, addr); err != nil {
+	if err := devlock.Create(r.root, addr); err != nil {
 		if errors.Is(err, fs.ErrExist) {
 			return ErrLost
 		}
@@ -76,5 +76,5 @@ func (r Result) Release() error {
 	if r.Role != Leader || r.root == "" {
 		return nil
 	}
-	return lockfile.Remove(r.root)
+	return devlock.Remove(r.root)
 }
