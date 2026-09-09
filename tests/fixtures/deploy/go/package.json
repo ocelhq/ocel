@@ -3,18 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "scripts": {
-    "typecheck": "tsc --noEmit"
-  },
   "dependencies": {
     "@ocel/provider-aws": "workspace:^",
     "@ocel/provider-gcp": "workspace:^",
-    "@ocel/provider-vps": "workspace:^",
-    "ocel": "workspace:^",
-    "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "@types/node": "^20",
-    "typescript": "^5"
+    "@ocel/provider-vps": "workspace:^"
   }
 }

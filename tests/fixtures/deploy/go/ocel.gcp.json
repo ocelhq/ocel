@@ -1,0 +1,9 @@
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "go",
+  "provider": {
+    "name": "gcp",
+    "options": { "project": "${OCEL_GCP_PROJECT}", "region": "${OCEL_GCP_REGION}" }
+  },
+  "apps": [{ "name": "web", "path": "./server", "runtime": "go" }]
+}
