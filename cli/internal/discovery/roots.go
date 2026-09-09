@@ -51,7 +51,30 @@ var languageExtensions = map[string]Language{
 }
 
 func RootsOf(cfg *projectconfig.Config) ([]Root, error) {
-	return Roots(cfg.Dir, cfg.Discovery.Paths)
+	roots, err := Roots(cfg.Dir, cfg.Discovery.Paths)
+	if err != nil {
+		return nil, err
+	}
+	return append(roots, crateRoots(cfg)...), nil
+}
+
+func crateRoots(cfg *projectconfig.Config) []Root {
+	dirs := []string{filepath.Clean(cfg.Dir)}
+	for _, app := range cfg.Apps {
+		dirs = append(dirs, filepath.Join(cfg.Dir, app.Path))
+	}
+
+	var roots []Root
+	for _, dir := range dirs {
+		if !declaresThroughOcel(dir) {
+			continue
+		}
+		if slices.ContainsFunc(roots, func(r Root) bool { return r.Dir == dir }) {
+			continue
+		}
+		roots = append(roots, Root{Dir: dir, Language: Rust})
+	}
+	return roots
 }
 
 func Roots(configDir string, paths []string) ([]Root, error) {
@@ -68,6 +91,9 @@ func Roots(configDir string, paths []string) ([]Root, error) {
 		}
 		if language == "" {
 			continue
+		}
+		if language == Rust {
+			return nil, fmt.Errorf("discovery: %s holds rust files, and a rust app declares from its own crate: delete the folder and derive ocel::Resources or ocel::Env on a struct in the crate", dir)
 		}
 		roots = append(roots, Root{Dir: dir, Language: language})
 	}

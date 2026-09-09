@@ -7,34 +7,30 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/pelletier/go-toml/v2"
+
 	"github.com/ocelhq/ocel/cli/internal/cargo"
 )
 
+const ocelCrate = "ocel"
+
 type rustLauncher struct{}
 
-func (rustLauncher) Command(ctx context.Context, configDir string, root Root, serverURL string) (*exec.Cmd, error) {
-	crateDir, found, err := walkUp(configDir, root.Dir, holdsACrate)
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return nil, fmt.Errorf("discovery: %s is a rust folder, but no Cargo.toml stands between it and %s", root.Dir, configDir)
-	}
-
-	workspace, err := cargo.Metadata(ctx, crateDir, "--no-deps")
+func (rustLauncher) Command(ctx context.Context, _ string, root Root, serverURL string) (*exec.Cmd, error) {
+	workspace, err := cargo.Metadata(ctx, root.Dir, "--no-deps")
 	if err != nil {
 		return nil, fmt.Errorf("discovery: %w", err)
 	}
-	crate, ok := workspace.PackageAt(crateDir)
+	crate, ok := workspace.PackageAt(root.Dir)
 	if !ok {
-		return nil, fmt.Errorf("discovery: the Cargo.toml at %s names no package to run %s from", crateDir, root.Dir)
+		return nil, fmt.Errorf("discovery: %s holds no Cargo.toml naming a package to declare from", root.Dir)
 	}
 	bins := crate.Bins()
 	if len(bins) == 0 {
-		return nil, fmt.Errorf("discovery: %s declares resources but %s builds no binary to run them from", root.Dir, crate.Name)
+		return nil, fmt.Errorf("discovery: %s holds %s, which builds no binary to declare from", root.Dir, crate.Name)
 	}
 	if len(bins) > 1 {
-		return nil, fmt.Errorf("discovery: %s builds %d binaries, and ocel runs one binary per infra folder: keep one bin target in the crate that owns %s", crate.Name, len(bins), root.Dir)
+		return nil, fmt.Errorf("discovery: %s builds %d binaries, and ocel runs one binary per crate: keep one bin target in the crate at %s", crate.Name, len(bins), root.Dir)
 	}
 
 	cmd := exec.CommandContext(ctx, "cargo", "run", "--quiet", "--manifest-path", crate.ManifestPath, "--bin", bins[0].Name)
@@ -43,7 +39,27 @@ func (rustLauncher) Command(ctx context.Context, configDir string, root Root, se
 	return cmd, nil
 }
 
-func holdsACrate(at string) bool {
-	info, err := os.Stat(filepath.Join(at, "Cargo.toml"))
-	return err == nil && info.Mode().IsRegular()
+func declaresThroughOcel(at string) bool {
+	manifest, err := os.ReadFile(filepath.Join(at, "Cargo.toml"))
+	if err != nil {
+		return false
+	}
+	var crate struct {
+		Dependencies map[string]any `toml:"dependencies"`
+		Target       map[string]struct {
+			Dependencies map[string]any `toml:"dependencies"`
+		} `toml:"target"`
+	}
+	if err := toml.Unmarshal(manifest, &crate); err != nil {
+		return false
+	}
+	if _, declares := crate.Dependencies[ocelCrate]; declares {
+		return true
+	}
+	for _, target := range crate.Target {
+		if _, declares := target.Dependencies[ocelCrate]; declares {
+			return true
+		}
+	}
+	return false
 }

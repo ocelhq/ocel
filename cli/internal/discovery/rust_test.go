@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
@@ -24,7 +25,6 @@ func rustFixture(t *testing.T, manifest string) string {
 	root := t.TempDir()
 	write(t, filepath.Join(root, "Cargo.toml"), manifest)
 	write(t, filepath.Join(root, "src", "main.rs"), "fn main() {}\n")
-	write(t, filepath.Join(root, "infra", "mod.rs"), "pub const NAME: &str = \"main\";\n")
 	return root
 }
 
@@ -33,7 +33,7 @@ const rustBinManifest = "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition
 func TestTheRustLauncherRunsTheCratesBinaryFromTheWorkspaceRoot(t *testing.T) {
 	needsCargo(t)
 	configDir := rustFixture(t, rustBinManifest)
-	root := Root{Dir: filepath.Join(configDir, "infra"), Language: Rust}
+	root := Root{Dir: configDir, Language: Rust}
 
 	cmd, err := launchers[Rust].Command(context.Background(), configDir, root, "http://127.0.0.1:1234")
 	if err != nil {
@@ -54,16 +54,15 @@ func TestTheRustLauncherRunsTheCratesBinaryFromTheWorkspaceRoot(t *testing.T) {
 	}
 }
 
-func TestTheRustLauncherRunsTheCrateThatOwnsTheNearestCargoToml(t *testing.T) {
+func TestTheRustLauncherRunsTheAppCrateAndNotTheProjectAroundIt(t *testing.T) {
 	needsCargo(t)
 	configDir := t.TempDir()
 	write(t, filepath.Join(configDir, "package.json"), "{}\n")
 	crate := filepath.Join(configDir, "server")
 	write(t, filepath.Join(crate, "Cargo.toml"), rustBinManifest)
 	write(t, filepath.Join(crate, "src", "main.rs"), "fn main() {}\n")
-	write(t, filepath.Join(crate, "infra", "mod.rs"), "pub const NAME: &str = \"main\";\n")
 
-	cmd, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: filepath.Join(crate, "infra"), Language: Rust}, "http://127.0.0.1:1234")
+	cmd, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: crate, Language: Rust}, "http://127.0.0.1:1234")
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -72,14 +71,15 @@ func TestTheRustLauncherRunsTheCrateThatOwnsTheNearestCargoToml(t *testing.T) {
 	}
 }
 
-func TestTheRustLauncherRefusesARootWithNoCrateAboveIt(t *testing.T) {
+func TestTheRustLauncherRefusesADirThatIsNoCrate(t *testing.T) {
+	needsCargo(t)
 	configDir := t.TempDir()
-	root := filepath.Join(configDir, "infra")
-	write(t, filepath.Join(root, "mod.rs"), "pub const NAME: &str = \"main\";\n")
+	root := filepath.Join(configDir, "server")
+	write(t, filepath.Join(root, "src", "main.rs"), "fn main() {}\n")
 
 	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: root, Language: Rust}, "http://127.0.0.1:1234")
 	if err == nil {
-		t.Fatal("Command succeeded with no Cargo.toml above the root, want an error")
+		t.Fatal("Command succeeded on a dir with no Cargo.toml, want an error")
 	}
 	if !strings.Contains(err.Error(), root) {
 		t.Errorf("error = %q, want it to name the root", err)
@@ -89,17 +89,32 @@ func TestTheRustLauncherRefusesARootWithNoCrateAboveIt(t *testing.T) {
 func TestTheRustLauncherRefusesACrateThatBuildsNoBinary(t *testing.T) {
 	needsCargo(t)
 	configDir := t.TempDir()
-	write(t, filepath.Join(configDir, "Cargo.toml"), "[package]\nname = \"web\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n")
+	write(t, filepath.Join(configDir, "Cargo.toml"), rustBinManifest)
 	write(t, filepath.Join(configDir, "src", "lib.rs"), "")
-	root := filepath.Join(configDir, "infra")
-	write(t, filepath.Join(root, "mod.rs"), "pub const NAME: &str = \"main\";\n")
 
-	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: root, Language: Rust}, "http://127.0.0.1:1234")
+	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: configDir, Language: Rust}, "http://127.0.0.1:1234")
 	if err == nil {
 		t.Fatal("Command succeeded on a crate with no binary, want an error")
 	}
-	if !strings.Contains(err.Error(), root) || !strings.Contains(err.Error(), "web") {
-		t.Errorf("error = %q, want it to name the root and the crate", err)
+	if !strings.Contains(err.Error(), configDir) || !strings.Contains(err.Error(), "web") {
+		t.Errorf("error = %q, want it to name the crate dir and the crate", err)
+	}
+}
+
+func TestTheRustLauncherRefusesACrateThatBuildsSeveralBinaries(t *testing.T) {
+	needsCargo(t)
+	configDir := t.TempDir()
+	write(t, filepath.Join(configDir, "Cargo.toml"), rustBinManifest+"\n[[bin]]\nname = \"web\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"worker\"\npath = \"src/worker.rs\"\n")
+	write(t, filepath.Join(configDir, "src", "main.rs"), "fn main() {}\n")
+	write(t, filepath.Join(configDir, "src", "worker.rs"), "fn main() {}\n")
+
+	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: configDir, Language: Rust}, "http://127.0.0.1:1234")
+	if err == nil {
+		t.Fatal("Command succeeded on a crate with two binaries, want an error")
+	}
+	want := "discovery: web builds 2 binaries, and ocel runs one binary per crate: keep one bin target in the crate at " + configDir
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err, want)
 	}
 }
 
@@ -107,12 +122,12 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 	needsCargo(t)
 	configDir := repoFixture(t, filepath.Join("sdk", "rust"))
 
-	roots, err := Roots(configDir, nil)
+	roots, err := RootsOf(&projectconfig.Config{Dir: configDir, Apps: []projectconfig.App{{Name: "web", Path: "."}}})
 	if err != nil {
-		t.Fatalf("Roots: %v", err)
+		t.Fatalf("RootsOf: %v", err)
 	}
-	if len(roots) != 1 || roots[0].Language != Rust || roots[0].Dir != filepath.Join(configDir, "infra") {
-		t.Fatalf("roots = %+v, want the rust infra folder of the project", roots)
+	if len(roots) != 1 || roots[0].Language != Rust || roots[0].Dir != configDir {
+		t.Fatalf("roots = %+v, want the app crate of the project", roots)
 	}
 
 	collected, url := declareCollector(t)
@@ -140,7 +155,7 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 	if colon <= 0 {
 		t.Fatalf("source = %q, want a file and a line", source)
 	}
-	file, line := filepath.Clean(source[:colon]), source[colon+1:]
+	file := filepath.Clean(source[:colon])
 	if !filepath.IsAbs(file) {
 		t.Errorf("source = %q, want the file as an absolute path", source)
 	}
@@ -148,26 +163,7 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 	if err != nil {
 		t.Fatalf("source = %q is not a file of the project at %s", source, configDir)
 	}
-	if want := filepath.Join("infra", "mod.rs"); rel != want || line != "1" {
-		t.Errorf("source = %q, want %q line 1", source, want)
-	}
-}
-
-func TestTheRustLauncherRefusesACrateThatBuildsSeveralBinaries(t *testing.T) {
-	needsCargo(t)
-	configDir := t.TempDir()
-	write(t, filepath.Join(configDir, "Cargo.toml"), rustBinManifest+"\n[[bin]]\nname = \"web\"\npath = \"src/main.rs\"\n\n[[bin]]\nname = \"worker\"\npath = \"src/worker.rs\"\n")
-	write(t, filepath.Join(configDir, "src", "main.rs"), "fn main() {}\n")
-	write(t, filepath.Join(configDir, "src", "worker.rs"), "fn main() {}\n")
-	root := filepath.Join(configDir, "infra")
-	write(t, filepath.Join(root, "mod.rs"), "pub const NAME: &str = \"main\";\n")
-
-	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: root, Language: Rust}, "http://127.0.0.1:1234")
-	if err == nil {
-		t.Fatal("Command succeeded on a crate with two binaries, want an error")
-	}
-	want := "discovery: web builds 2 binaries, and ocel runs one binary per infra folder: keep one bin target in the crate that owns " + root
-	if err.Error() != want {
-		t.Errorf("error = %q, want %q", err, want)
+	if want := filepath.Join("src", "main.rs"); rel != want {
+		t.Errorf("source = %q, want it in %q", source, want)
 	}
 }
