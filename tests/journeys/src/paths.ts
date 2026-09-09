@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,7 +9,22 @@ export const repoRoot = path.resolve(packageRoot, "..", "..");
 export const fixturesDir = path.join(repoRoot, "tests", "fixtures");
 export const outputRoot = path.join(packageRoot, "output");
 
-export const ocelBin = process.env.OCEL_BIN ?? path.join(repoRoot, "cli", "bin", "ocel");
+const snapshotDir = path.join(repoRoot, "dist");
+
+function snapshotCli(): string {
+  try {
+    const artifacts = JSON.parse(
+      readFileSync(path.join(snapshotDir, "artifacts.json"), "utf8"),
+    ) as { type: string; path: string; extra: { ID: string } }[];
+    const built = artifacts.find((a) => a.type === "Binary" && a.extra.ID === "ocel");
+    if (built) return path.join(repoRoot, built.path);
+  } catch {}
+  return path.join(snapshotDir, "ocel");
+}
+
+export const ocelBin = process.env.OCEL_BIN ?? snapshotCli();
+
+export const providersDir = process.env.OCEL_PROVIDERS_DIR ?? path.join(snapshotDir, "providers");
 
 export function fixtureMember(dir: string): string {
   return path.posix.join("tests", "fixtures", dir);
