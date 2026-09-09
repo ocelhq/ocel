@@ -189,10 +189,17 @@ jobs:
           git tag -a "v$version" -m "v$version"
           git push origin "v$version"
 
-      # TODO(alpha): HOMEBREW_TAP_TOKEN is a hand-made PAT with contents:write on
-      # ocelhq/homebrew-tap; drop this once the tap is provisioned from code.
+      - name: Mint a token that reaches only the tap
+        id: tap-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.HOMEBREW_TAP_APP_ID }}
+          private-key: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}
+          owner: ocelhq
+          repositories: homebrew-tap
+
       - name: Publish the archives a CLI fetches, and the Homebrew formula
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ steps.tap-token.outputs.token }}
         run: goreleaser release --clean
