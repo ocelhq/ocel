@@ -1,7 +1,7 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
 import { contractTitle, DESTROY_TITLE, planTests, UP_TITLE } from "../plan";
-import { nextCacheRows } from "../rows";
+import { EMPTY_BODY_ROW, nextCacheRows } from "../rows";
 import { cellsOf, specForTarget } from "../spec";
 import { gaps } from "./gaps";
 import {
@@ -134,7 +134,7 @@ describe("the gap list", () => {
     for (const cell of ["deploy/next/web", "deploy/workspace/next", "sdk/next/web"]) {
       assert.equal(listed[on("api-gateway", cell)], undefined, cell);
     }
-    assert.equal(listed["deploy/node-api-gateway/web"], undefined);
+    assert.deepEqual(issues(listed, "deploy/node-api-gateway/web", EMPTY_BODY_ROW), [1145]);
     assert.deepEqual(
       Object.fromEntries(
         Object.entries(listed["sdk/with-transforms-api-gateway/web"] ?? {}).map(
@@ -172,6 +172,9 @@ describe("the gap list", () => {
   it("lists nothing past up on floci api-gateway, and up under the issue that refuses it", () => {
     const listed = expectationsFor("aws.floci");
     assert.deepEqual(upIssues(listed, cellsOfVariant("api-gateway")), {
+      "deploy/go-api-gateway/web": [],
+      "deploy/node-api-gateway/web": [],
+      "deploy/python-api-gateway/web": [],
       "sdk/node-api-gateway/web": [884],
       "sdk/with-pulumi-api-gateway/web": [856],
       "sdk/with-sst-api-gateway/web": [857],
@@ -179,11 +182,11 @@ describe("the gap list", () => {
     });
     const gateway = new Set(cellsOfVariant("api-gateway"));
     for (const [name, cell] of Object.entries(listed)) {
-      if (gateway.has(name)) {
+      if (gateway.has(name) && UP_TITLE in cell) {
         assert.deepEqual(Object.keys(cell), [UP_TITLE], name);
       }
     }
-    assert.equal(listed["deploy/node-api-gateway/web"], undefined);
+    assert.deepEqual(issues(listed, "deploy/node-api-gateway/web", EMPTY_BODY_ROW), [1145]);
   });
 
   it("lists no leg marker, refuse or publish title on floci, on any edge", () => {

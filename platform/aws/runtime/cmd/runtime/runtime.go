@@ -21,6 +21,7 @@ import (
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 	"github.com/ocelhq/ocel/platform/aws/runtime/live"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func main() {
@@ -281,10 +282,10 @@ func (u upstream) forward(ctx context.Context, inv *invocation, rw *responseWrit
 	if err != nil && !errors.Is(err, io.EOF) {
 		return true, u.failBeforeFirstByte(ctx, rw, fmt.Sprintf("read upstream body: %v", err))
 	}
-	empty := n == 0
-	sentinel := empty && !selfTerminating(resp.StatusCode)
+	sentinel := n == 0 && !selfTerminating(resp.StatusCode)
 	if sentinel {
 		resp.Header.Set(emptyBodyHeader, "1")
+		resp.Header.Del("Content-Length")
 	}
 
 	prelude, err := encodePrelude(resp.StatusCode, resp.Header)
@@ -295,7 +296,7 @@ func (u upstream) forward(ctx context.Context, inv *invocation, rw *responseWrit
 		return true, err
 	}
 
-	if empty {
+	if n == 0 {
 		if sentinel {
 			if _, err := rw.Write([]byte(emptyBodySentinel)); err != nil {
 				return true, err
@@ -402,9 +403,10 @@ const (
 
 	errTypeUpstream = "Ocel.UpstreamError"
 
-	emptyBodyHeader   = "X-Ocel-Empty-Body"
 	emptyBodySentinel = "\n"
 )
+
+var emptyBodyHeader = http.CanonicalHeaderKey(edge.HeaderEmptyBody)
 
 type prelude struct {
 	StatusCode int               `json:"statusCode"`
@@ -429,7 +431,7 @@ func flattenHeaders(h http.Header) map[string]string {
 	out := make(map[string]string, len(h))
 	for k := range h {
 		ck := http.CanonicalHeaderKey(k)
-		if ck == "Set-Cookie" || strings.HasPrefix(ck, "X-Amzn-") {
+		if ck == "Set-Cookie" || ck == "Transfer-Encoding" || strings.HasPrefix(ck, "X-Amzn-") {
 			continue
 		}
 		out[k] = h.Get(k)

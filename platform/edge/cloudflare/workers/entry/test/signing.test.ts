@@ -82,6 +82,27 @@ describe("edgeOriginFetch", () => {
     expect(signed?.headers.get("next-resume")).toBe("1");
   });
 
+  it("drops the sentinel byte the origin marks an empty body with", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response("\n", {
+        status: 302,
+        headers: { "x-ocel-empty-body": "1", location: "/elsewhere" },
+      })) as typeof fetch;
+    let answered: Response;
+    try {
+      const origin = edgeOriginFetch("AKIAEXAMPLE", "secretkey")!;
+      answered = await origin(new Request("https://abc123.lambda-url.us-east-1.on.aws/api/x"));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(answered.status).toBe(302);
+    expect(await answered.text()).toBe("");
+    expect(answered.headers.get("x-ocel-empty-body")).toBeNull();
+    expect(answered.headers.get("location")).toBe("/elsewhere");
+  });
+
   it("fails loudly rather than mis-signing a non-Function-URL host", async () => {
     const origin = edgeOriginFetch("AKIAEXAMPLE", "secretkey")!;
     await expect(origin(new Request("https://fn.example.com/x"))).rejects.toThrow(

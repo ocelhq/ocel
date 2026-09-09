@@ -57,18 +57,32 @@ func (c *runtimeClient) next(ctx context.Context) (*invocation, error) {
 }
 
 type responseWriter struct {
-	pw   *io.PipeWriter
-	req  *http.Request
-	done chan error
+	ctx    context.Context
+	client *http.Client
+	url    string
+
+	pw      *io.PipeWriter
+	trailer http.Header
+	done    chan error
 }
 
 func (c *runtimeClient) startResponse(ctx context.Context, requestID string) (*responseWriter, error) {
+	return &responseWriter{
+		ctx:    ctx,
+		client: c.http,
+		url:    c.baseURL + "/invocation/" + requestID + "/response",
+	}, nil
+}
+
+func (w *responseWriter) stream() error {
+	if w.pw != nil {
+		return nil
+	}
 	pr, pw := io.Pipe()
-	url := c.baseURL + "/invocation/" + requestID + "/response"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, pr)
+	req, err := http.NewRequestWithContext(w.ctx, http.MethodPost, w.url, pr)
 	if err != nil {
 		pw.Close()
-		return nil, err
+		return err
 	}
 	req.Header.Set(headerResponseMode, responseModeStreaming)
 	req.Header.Set("Content-Type", contentTypeHTTPIntegration)
@@ -77,23 +91,29 @@ func (c *runtimeClient) startResponse(ctx context.Context, requestID string) (*r
 		headerErrorBody: nil,
 	}
 
-	w := &responseWriter{pw: pw, req: req, done: make(chan error, 1)}
+	w.pw, w.trailer, w.done = pw, req.Trailer, make(chan error, 1)
 	go func() {
-		resp, err := c.http.Do(req)
+		resp, err := w.client.Do(req)
 		if err == nil {
 			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 		}
 		w.done <- err
 	}()
-	return w, nil
+	return nil
 }
 
 func (w *responseWriter) Write(p []byte) (int, error) {
+	if err := w.stream(); err != nil {
+		return 0, err
+	}
 	return w.pw.Write(p)
 }
 
 func (w *responseWriter) Close() error {
+	if err := w.stream(); err != nil {
+		return err
+	}
 	if err := w.pw.Close(); err != nil {
 		return err
 	}
@@ -101,8 +121,11 @@ func (w *responseWriter) Close() error {
 }
 
 func (w *responseWriter) closeWithError(errType, message string) error {
-	w.req.Trailer.Set(headerErrorType, errType)
-	w.req.Trailer.Set(headerErrorBody, base64.StdEncoding.EncodeToString([]byte(message)))
+	if err := w.stream(); err != nil {
+		return err
+	}
+	w.trailer.Set(headerErrorType, errType)
+	w.trailer.Set(headerErrorBody, base64.StdEncoding.EncodeToString([]byte(message)))
 	if err := w.pw.Close(); err != nil {
 		return err
 	}

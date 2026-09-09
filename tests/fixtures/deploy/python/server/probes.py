@@ -23,6 +23,8 @@ CHECKSUM_FIELD = "x-ocel-sha256"
 
 STATUS_PATH = re.compile(r"^/api/probes/status/(\d+)$")
 
+EMPTY_PATH = re.compile(r"^/api/probes/empty/([^/]+)$")
+
 
 def stream(req):
     req.start_chunks(
@@ -42,6 +44,17 @@ def status(req):
         return
     extra = {"location": "/api/probes/status/204"} if 300 <= code < 400 else None
     req.write_bytes(code, "application/json", json.dumps({"status": code}).encode(), extra)
+
+
+def empty(req):
+    kind = EMPTY_PATH.match(path_of(req)).group(1)
+    if kind == "redirect":
+        req.write_status(302, {"location": "/api/probes/status/204", "content-length": "0"})
+        return
+    if kind == "ok":
+        req.write_status(200, {"content-length": "0"})
+        return
+    req.write_json(404, {"error": f"no empty probe called {kind}"})
 
 
 def echo(req):
@@ -149,6 +162,7 @@ def under(path):
 PROBES = [
     (at("GET", "/api/probes/stream"), stream),
     (lambda seen, asked: seen == "GET" and STATUS_PATH.match(asked) is not None, status),
+    (lambda seen, asked: seen == "GET" and EMPTY_PATH.match(asked) is not None, empty),
     (under("/api/probes/echo"), echo),
     (at("POST", "/api/probes/large"), take_large),
     (at("GET", "/api/probes/large"), send_large),

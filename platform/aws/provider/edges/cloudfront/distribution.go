@@ -35,6 +35,7 @@ type distributionPlan struct {
 	name          string
 	assetOrigin   string
 	function      string
+	emptyBody     string
 	cachePolicy   string
 	headersPolicy string
 	oac           string
@@ -52,6 +53,7 @@ func (p distributionPlan) ready() error {
 	for name, value := range map[string]string{
 		"asset bucket":            p.assetOrigin,
 		"resolver function":       p.function,
+		"empty-body function":     p.emptyBody,
 		"cache policy":            p.cachePolicy,
 		"response headers policy": p.headersPolicy,
 		"origin access control":   p.oac,
@@ -136,11 +138,17 @@ func (p distributionPlan) config(aliases []string, certificate string) *cftypes.
 				},
 			},
 			FunctionAssociations: &cftypes.FunctionAssociations{
-				Quantity: ptr(int32(1)),
-				Items: []cftypes.FunctionAssociation{{
-					EventType:   cftypes.EventTypeViewerRequest,
-					FunctionARN: aws.String(p.function),
-				}},
+				Quantity: ptr(int32(2)),
+				Items: []cftypes.FunctionAssociation{
+					{
+						EventType:   cftypes.EventTypeViewerRequest,
+						FunctionARN: aws.String(p.function),
+					},
+					{
+						EventType:   cftypes.EventTypeViewerResponse,
+						FunctionARN: aws.String(p.emptyBody),
+					},
+				},
 			},
 		},
 		ViewerCertificate: viewerCertificate(certificate),

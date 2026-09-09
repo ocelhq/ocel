@@ -23,6 +23,7 @@ type private struct {
 	AssetBucket         string `json:"assetBucket,omitempty"`
 	Region              string `json:"region,omitempty"`
 	Function            string `json:"function,omitempty"`
+	EmptyBodyFunction   string `json:"emptyBodyFunction,omitempty"`
 	KeyValueStore       string `json:"keyValueStore,omitempty"`
 	CachePolicy         string `json:"cachePolicy,omitempty"`
 	HeadersPolicy       string `json:"headersPolicy,omitempty"`
@@ -55,6 +56,7 @@ func (s *stack) plan() distributionPlan {
 		name:          distributionName(s.slug(), s.class()),
 		assetOrigin:   assetOriginDomain(s.own.AssetBucket, s.own.Region),
 		function:      s.own.Function,
+		emptyBody:     s.own.EmptyBodyFunction,
 		cachePolicy:   s.own.CachePolicy,
 		headersPolicy: s.own.HeadersPolicy,
 		oac:           s.own.OriginAccessControl,
@@ -82,6 +84,7 @@ func (s *stack) clients(ctx context.Context) (Clients, error) {
 	s.own.AssetBucket = deployed.AssetBucket
 	s.own.Region = c.Region
 	s.own.Function = set.functionARN
+	s.own.EmptyBodyFunction = set.emptyBodyFunctionARN
 	s.own.KeyValueStore = set.keyValueStoreARN
 	s.own.CachePolicy = set.cachePolicy
 	s.own.HeadersPolicy = set.headersPolicy

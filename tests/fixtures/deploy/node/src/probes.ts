@@ -55,6 +55,20 @@ probes.get("/status/:code", (req, res) => {
   res.status(code).json({ status: code });
 });
 
+probes.get("/empty/:kind", (req, res) => {
+  const kind = req.params.kind;
+  if (kind === "redirect") {
+    res.setHeader("location", "/api/probes/status/204");
+    res.status(302).end();
+    return;
+  }
+  if (kind === "ok") {
+    res.status(200).end();
+    return;
+  }
+  res.status(404).json({ error: `no empty probe called ${kind}` });
+});
+
 probes.all(
   ["/echo", "/echo/{*rest}"],
   express.json({ limit: MAX_BODY, strict: false }),

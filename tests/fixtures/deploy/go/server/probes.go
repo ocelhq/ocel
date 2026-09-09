@@ -26,6 +26,7 @@ const (
 func probes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/probes/stream", stream)
 	mux.HandleFunc("GET /api/probes/status/{code}", status)
+	mux.HandleFunc("GET /api/probes/empty/{kind}", empty)
 	mux.HandleFunc("/api/probes/echo", echo)
 	mux.HandleFunc("/api/probes/echo/", echo)
 	mux.HandleFunc("POST /api/probes/large", takeLarge)
@@ -67,6 +68,22 @@ func status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, code, map[string]any{"status": code})
+}
+
+func empty(w http.ResponseWriter, r *http.Request) {
+	switch r.PathValue("kind") {
+	case "redirect":
+		w.Header().Set("location", "/api/probes/status/204")
+		w.Header().Set("content-length", "0")
+		w.WriteHeader(http.StatusFound)
+	case "ok":
+		w.Header().Set("content-length", "0")
+		w.WriteHeader(http.StatusOK)
+	default:
+		writeJSON(w, http.StatusNotFound, map[string]any{
+			"error": fmt.Sprintf("no empty probe called %s", r.PathValue("kind")),
+		})
+	}
 }
 
 func echo(w http.ResponseWriter, r *http.Request) {

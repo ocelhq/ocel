@@ -26,7 +26,8 @@
   "dependencies": {
     "@framework/next-cache": "workspace:*",
     "@framework/next-protocol": "workspace:*",
-    "@next/routing": "^16.2.10"
+    "@next/routing": "^16.2.10",
+    "@platform/edge-contract": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24",

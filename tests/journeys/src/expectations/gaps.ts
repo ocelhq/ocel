@@ -1,5 +1,11 @@
 import { UP_TITLE } from "../plan";
-import { LINK_QUERY_ROW, LINK_ROW, nextCacheRows, nextDataCacheRows } from "../rows";
+import {
+  EMPTY_BODY_ROW,
+  LINK_QUERY_ROW,
+  LINK_ROW,
+  nextCacheRows,
+  nextDataCacheRows,
+} from "../rows";
 import type { Gap } from "./types";
 
 const SDK_NODE_HTTP = ["sdk/node/web"];
@@ -117,6 +123,20 @@ export const gaps: Gap[] = [
         skip: true,
       },
       { on: ["aws"], variants: CONTAINER, tests: [UP_TITLE], skip: true },
+    ],
+  },
+  {
+    id: "api-gateway-keeps-the-sentinel",
+    reason:
+      "the api-gateway edge invokes lambda over a streaming invoke and drops neither the empty-body byte nor its marker",
+    issue: 1145,
+    affects: [
+      {
+        on: ["aws", "aws.floci"],
+        cells: ["deploy/node/web", "deploy/python/web", "deploy/go/web"],
+        variants: GATEWAY,
+        tests: [{ row: EMPTY_BODY_ROW }],
+      },
     ],
   },
   {

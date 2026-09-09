@@ -1,3 +1,4 @@
+import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
 import { AwsClient } from "aws4fetch";
 
 export function lambdaRegion(host: string): string | undefined {
@@ -43,13 +44,15 @@ export function edgeOriginFetch(
       if (value) headers.set(name, value);
     }
 
-    return fetch(
-      new Request(request.url, {
-        method: request.method,
-        headers,
-        body,
-        redirect: "manual",
-      }),
+    return dropEmptyBodySentinel(
+      await fetch(
+        new Request(request.url, {
+          method: request.method,
+          headers,
+          body,
+          redirect: "manual",
+        }),
+      ),
     );
   }) as typeof fetch;
 }
