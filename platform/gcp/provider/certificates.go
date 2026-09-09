@@ -29,11 +29,17 @@ func (p *Provider) certificatesGlobal() string {
 	return "projects/" + p.options.Project + "/locations/global"
 }
 
-func certificateID(hostname string) string {
-	return "ocel-" + naming.Sanitize(strings.TrimPrefix(hostname, "*."))
-}
+const maxCertificateName = 63
 
-func authorizationID(hostname string) string { return certificateID(hostname) + "-auth" }
+func authorizationID(hostname string) string { return certificateName(hostname, "auth") }
+
+func certificateName(hostname string, role ...string) string {
+	segments := []naming.Segment{naming.Fixed("ocel"), naming.Compressible(naming.SanitizeHost(hostname))}
+	for _, each := range role {
+		segments = append(segments, naming.Fixed(each))
+	}
+	return naming.Fit(maxCertificateName, naming.WordSeparator, segments...)
+}
 
 func authorizedDomain(hostname string) string { return strings.TrimPrefix(hostname, "*.") }
 
@@ -42,7 +48,7 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 	if err != nil {
 		return providerkit.Certificate{}, err
 	}
-	name := p.certificatesGlobal() + "/certificates/" + certificateID(req.Hostname)
+	name := p.certificatesGlobal() + "/certificates/" + certificateName(req.Hostname)
 	held := providerkit.Certificate{ID: name, Requested: true, Written: req.Held.Written, Owed: req.Held.Owed}
 
 	authorization, err := p.authorized(ctx, certificates, req)
@@ -131,7 +137,7 @@ func (p *Provider) certified(
 							DnsAuthorizations: []string{authorization},
 						},
 					}).
-					CertificateId(certificateID(req.Hostname)).Context(ctx).Do(call...)
+					CertificateId(certificateName(req.Hostname)).Context(ctx).Do(call...)
 			})
 		if err != nil {
 			return err

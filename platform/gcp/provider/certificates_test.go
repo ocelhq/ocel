@@ -87,6 +87,28 @@ func TestAWildcardIsAuthorizedOnTheDomainUnderneathIt(t *testing.T) {
 	}
 }
 
+func TestAWildcardAndTheDomainUnderneathItAreTwoCertificates(t *testing.T) {
+	t.Parallel()
+
+	server := newCertServer()
+	under, _ := requested(t, server, "preview.example.com")
+	wildcard, _ := requested(t, server, "*.preview.example.com")
+
+	if under.ID == wildcard.ID {
+		t.Fatalf("both hostnames were certified as %q, and the second bind would serve the first's certificate", under.ID)
+	}
+	held := server.certified()
+	if len(held) != 2 {
+		t.Fatalf("the project holds %v, want a certificate each: one covering the domain and one covering everything under it", held)
+	}
+	if !slices.Equal(held[wildcard.ID].Managed.Domains, []string{"*.preview.example.com"}) {
+		t.Errorf("the wildcard's certificate covers %v, want the wildcard alone", held[wildcard.ID].Managed.Domains)
+	}
+	if got := server.authorized(); len(got) != 2 {
+		t.Errorf("the requests left %v standing, want a dns authorization each: they are renewed apart", got)
+	}
+}
+
 func TestACertificateManagerRefusedToIssueIsReportedRatherThanWaitedOutForever(t *testing.T) {
 	t.Parallel()
 
