@@ -100,7 +100,7 @@ func TestRunPermissions(t *testing.T) {
 	})
 
 	t.Run("it heads each group where the edge carries credentials of its own", func(t *testing.T) {
-		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\", options: {} },\n")
+		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\" },\n")
 
 		var stdout, stderr bytes.Buffer
 		if err := Run(context.Background(), deps, root, contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY, &stdout, &stderr); err != nil {

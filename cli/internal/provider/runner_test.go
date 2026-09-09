@@ -17,7 +17,6 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -192,7 +191,7 @@ func TestConfigure(t *testing.T) {
 			t.Fatal("Ready() error = nil, want the provider's refusal")
 		}
 		for _, want := range []string{
-			projectconfig.DefaultFileName + " configures @ocel/provider-aws with options it does not accept",
+			`configures provider "aws" with options it does not accept`,
 			`"regionn"`,
 		} {
 			if !strings.Contains(err.Error(), want) {

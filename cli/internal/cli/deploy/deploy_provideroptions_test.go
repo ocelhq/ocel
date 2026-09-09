@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -67,7 +66,7 @@ func TestDeployRendersTheProviderRefusalAgainstTheConfigFile(t *testing.T) {
 	}
 	rendered := stdout.String() + stderr.String()
 	for _, want := range []string{
-		projectconfig.DefaultFileName + " configures @ocel/provider-aws with options it does not accept",
+		`configures provider "aws" with options it does not accept`,
 		`"regionn"`,
 	} {
 		if !strings.Contains(rendered, want) {

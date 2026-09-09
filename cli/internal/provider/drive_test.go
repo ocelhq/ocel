@@ -29,8 +29,8 @@ func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
 	if err == nil {
 		t.Fatal("providerConfig err = nil, want a non-object options value refused")
 	}
-	if !strings.Contains(err.Error(), "not a JSON object") {
-		t.Errorf("err = %v, want it to say the options are not a JSON object", err)
+	if !strings.Contains(err.Error(), "are not an object") {
+		t.Errorf("err = %v, want it to say the options are not an object", err)
 	}
 }
 

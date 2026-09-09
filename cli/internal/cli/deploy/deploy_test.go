@@ -688,7 +688,7 @@ export default {
 		t.Fatalf("runDeploy err = nil, want the deploy refused; stdout=%s stderr=%s", stdout.String(), stderr.String())
 	}
 	out := stdout.String()
-	for _, want := range []string{`"api"`, `"container"`, "@ocel/provider-aws", "serverless"} {
+	for _, want := range []string{`"api"`, `"container"`, "aws", "serverless"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout = %q, want the refusal to name %s", out, want)
 		}

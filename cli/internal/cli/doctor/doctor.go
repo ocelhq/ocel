@@ -255,7 +255,7 @@ func nodeCheck(ctx context.Context) check {
 
 func configFailure(err error) (string, string) {
 	message := firstLine(err.Error())
-	if strings.Contains(message, "no "+projectconfig.DefaultFileName+" found") {
+	if strings.Contains(message, "no "+projectconfig.DefaultFileName+" or "+projectconfig.TSFileName+" found") {
 		return "no " + projectconfig.DefaultFileName + " found in this directory or any parent",
 			"run `ocel init` to set up this project"
 	}

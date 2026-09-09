@@ -45,8 +45,8 @@ func TestDeployResult(t *testing.T) {
 		if got.Environment.Class != "production" {
 			t.Errorf("environment.class = %q, want %q", got.Environment.Class, "production")
 		}
-		if got.Provider.Name != "@ocel/provider-aws" || got.Provider.Region != "eu-west-2" {
-			t.Errorf("provider = %+v, want the config's package and region", got.Provider)
+		if got.Provider.Name != "aws" || got.Provider.Region != "eu-west-2" {
+			t.Errorf("provider = %+v, want the config's provider and region", got.Provider)
 		}
 		if got.PromotionID != clitest.FakePromotionID {
 			t.Errorf("promotionId = %q, want the provider's %q", got.PromotionID, clitest.FakePromotionID)

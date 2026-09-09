@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -18,10 +19,14 @@ import (
 
 const sdkPackage = "ocel"
 
-const defaultProviderPackage = "@ocel/provider-aws"
+const goSDKModule = "github.com/ocelhq/ocel/sdk"
+
+const defaultProviderName = "aws"
 
 type initOptions struct {
 	provider   string
+	language   string
+	ts         bool
 	configPath string
 }
 
@@ -30,7 +35,7 @@ var initOpts initOptions
 var initCmd = &cobra.Command{
 	Use:   "init [slug]",
 	Short: "Make this directory deployable",
-	Long: "Writes ocel.config.ts and adds ocel and the provider package to your dependencies.\n\n" +
+	Long: "Writes ocel.json and adds the ocel SDK with your language's own package manager.\n\n" +
 		"Runs entirely offline: it neither signs you in nor contacts the Ocel console.\n\n" +
 		"The slug is the project's deployment identity — every stack and resource\n" +
 		"ocel creates in your own provider account is keyed on it, so changing it later\n" +
@@ -56,11 +61,69 @@ var initCmd = &cobra.Command{
 }
 
 func init() {
-	initCmd.Flags().StringVar(&initOpts.provider, "provider", defaultProviderPackage, "Provider package to scaffold with")
+	initCmd.Flags().StringVar(&initOpts.provider, "provider", defaultProviderName, "Provider to scaffold with")
+	initCmd.Flags().StringVar(&initOpts.language, "lang", "", "Language of this project ("+strings.Join(languageNames(), ", ")+"), when the manifests do not say")
+	initCmd.Flags().BoolVar(&initOpts.ts, "ts", false, "Write ocel.config.ts instead of ocel.json — it compiles to the same document and needs node")
+}
+
+type language struct {
+	name     string
+	manifest string
+	add      []string
+}
+
+var languages = []language{
+	{name: "go", manifest: "go.mod", add: []string{"go", "get", goSDKModule}},
+	{name: "rust", manifest: "Cargo.toml", add: []string{"cargo", "add", sdkPackage}},
+	{name: "python", manifest: "pyproject.toml", add: []string{"uv", "add", sdkPackage}},
+	{name: "node", manifest: "package.json"},
+}
+
+func languageNames() []string {
+	names := make([]string, 0, len(languages))
+	for _, l := range languages {
+		names = append(names, l.name)
+	}
+	return names
+}
+
+func languageNamed(name string) (language, error) {
+	for _, l := range languages {
+		if l.name == name {
+			return l, nil
+		}
+	}
+	return language{}, fmt.Errorf("%q is no language ocel ships an SDK for — name one of %s", name, strings.Join(languageNames(), ", "))
+}
+
+func detectLanguage(dir string) (language, bool, error) {
+	var found []language
+	for _, l := range languages {
+		if _, err := os.Stat(filepath.Join(dir, l.manifest)); err == nil {
+			found = append(found, l)
+		}
+	}
+	switch len(found) {
+	case 0:
+		return language{}, false, nil
+	case 1:
+		return found[0], true, nil
+	default:
+		names := make([]string, 0, len(found))
+		manifests := make([]string, 0, len(found))
+		for _, l := range found {
+			names = append(names, l.name)
+			manifests = append(manifests, l.manifest)
+		}
+		return language{}, false, fmt.Errorf(
+			"this directory holds %s, so it could be a %s project: name the one this is with `--lang %s`",
+			strings.Join(manifests, " and "), strings.Join(names, " or "), names[0],
+		)
+	}
 }
 
 func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts initOptions, stdout, stderr io.Writer) error {
-	configPath := filepath.Join(cwd, projectconfig.DefaultFileName)
+	configPath := filepath.Join(cwd, configFileName(opts))
 	if opts.configPath != "" {
 		configPath = opts.configPath
 		if !filepath.IsAbs(configPath) {
@@ -75,9 +138,14 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 		return err
 	}
 
-	providerPkg := strings.TrimSpace(opts.provider)
-	if providerPkg == "" {
-		providerPkg = defaultProviderPackage
+	provider := strings.TrimSpace(opts.provider)
+	if provider == "" {
+		provider = defaultProviderName
+	}
+
+	lang, detected, err := languageOfProject(projectDir, opts)
+	if err != nil {
+		return err
 	}
 
 	if _, err := os.Stat(configPath); err == nil {
@@ -89,17 +157,44 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return fmt.Errorf("create directory for %s: %w", name, err)
 	}
-	if err := os.WriteFile(configPath, []byte(configTemplate(slug, providerPkg)), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configTemplate(name, slug, provider)), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", name, err)
 	}
 	fmt.Fprintf(stdout, "✓ Wrote %s (slug: %s)\n", name, slug)
 
-	addDependencies(ctx, deps, projectDir, []string{sdkPackage, providerPkg}, stdout, stderr)
+	if detected {
+		addSDK(ctx, deps, projectDir, lang, stdout, stderr)
+	} else {
+		fmt.Fprintf(stdout, "! No %s here — add the ocel SDK once this directory holds one.\n", strings.Join(manifestNames(), ", "))
+	}
 
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Run `ocel deploy` to deploy to your own infrastructure, or `ocel dev` to develop against the Ocel console.")
 
 	return nil
+}
+
+func manifestNames() []string {
+	names := make([]string, 0, len(languages))
+	for _, l := range languages {
+		names = append(names, l.manifest)
+	}
+	return names
+}
+
+func languageOfProject(projectDir string, opts initOptions) (language, bool, error) {
+	if opts.language != "" {
+		lang, err := languageNamed(opts.language)
+		return lang, err == nil, err
+	}
+	return detectLanguage(projectDir)
+}
+
+func configFileName(opts initOptions) string {
+	if opts.ts {
+		return projectconfig.TSFileName
+	}
+	return projectconfig.DefaultFileName
 }
 
 func resolveSlug(projectDir, requested string) (string, error) {
@@ -120,25 +215,47 @@ func resolveSlug(projectDir, requested string) (string, error) {
 }
 
 var providerPlaceholders = map[string]string{
-	"@ocel/provider-gcp": `{ project: "my-project", region: "europe-west1" }`,
-	"@ocel/provider-vps": `{ ssh: "my-vps" }`,
+	"gcp": `{ "project": "my-project", "region": "europe-west1" }`,
+	"vps": `{ "ssh": "my-vps" }`,
 }
 
-func configTemplate(slug, providerPkg string) string {
-	provider := providerIdentifier(providerPkg)
+func schemaURL() string {
+	return "https://ocel.dev/schema/" + version + "/ocel.schema.json"
+}
+
+func configTemplate(name, slug, provider string) string {
+	if strings.HasSuffix(name, ".ts") {
+		return typescriptTemplate(slug, provider)
+	}
+	options := providerPlaceholders[provider]
+	if options == "" {
+		options = "{}"
+	}
+	return fmt.Sprintf(`{
+  "$schema": %q,
+  "slug": %q,
+  "provider": { "name": %q, "options": %s }
+}
+`, schemaURL(), slug, provider, options)
+}
+
+func typescriptTemplate(slug, provider string) string {
+	options := providerPlaceholders[provider]
+	if options == "" {
+		options = ""
+	}
 	return fmt.Sprintf(`import { defineConfig } from "ocel/config";
-import %s from %q;
+import %s from "ocel/providers/%s";
 
 export default defineConfig({
   slug: %q,
   provider: %s(%s),
 });
-`, provider, providerPkg, slug, provider, providerPlaceholders[providerPkg])
+`, providerIdentifier(provider), provider, slug, providerIdentifier(provider), options)
 }
 
-func providerIdentifier(pkg string) string {
-	base := pkg[strings.LastIndex(pkg, "/")+1:]
-	name := slugify(strings.TrimPrefix(strings.ToLower(base), "provider-"))
+func providerIdentifier(provider string) string {
+	name := slugify(provider)
 	if name == "" || (name[0] >= '0' && name[0] <= '9') {
 		return "provider"
 	}
@@ -175,23 +292,24 @@ func detectPackageManager(dir string) packageManager {
 	return npmPackageManager
 }
 
-func addDependencies(ctx context.Context, deps cmddeps.Deps, dir string, pkgs []string, stdout, stderr io.Writer) {
-	pm := detectPackageManager(dir)
-	argv := append([]string{pm.name, pm.addCommand}, pkgs...)
-	command := strings.Join(argv, " ")
-	added := strings.Join(pkgs, " ")
-
-	if _, err := os.Stat(filepath.Join(dir, "package.json")); err != nil {
-		fmt.Fprintf(stdout, "! No package.json here — run `%s` once you have one.\n", command)
-		return
+func addCommand(dir string, lang language) []string {
+	if len(lang.add) > 0 {
+		return slices.Clone(lang.add)
 	}
+	pm := detectPackageManager(dir)
+	return []string{pm.name, pm.addCommand, sdkPackage}
+}
 
-	err := withSpinner(stdout, fmt.Sprintf("Adding %s...", added), func() error {
+func addSDK(ctx context.Context, deps cmddeps.Deps, dir string, lang language, stdout, stderr io.Writer) {
+	argv := addCommand(dir, lang)
+	command := strings.Join(argv, " ")
+
+	err := withSpinner(stdout, fmt.Sprintf("Adding %s...", sdkPackage), func() error {
 		return deps.RunPackageManager(ctx, dir, argv, stderr)
 	})
 	if err != nil {
-		fmt.Fprintf(stdout, "! Could not add %s (%v) — run `%s` yourself.\n", added, err, command)
+		fmt.Fprintf(stdout, "! Could not add %s (%v) — run `%s` yourself.\n", sdkPackage, err, command)
 		return
 	}
-	fmt.Fprintf(stdout, "✓ Added %s\n", added)
+	fmt.Fprintf(stdout, "✓ Added %s\n", sdkPackage)
 }

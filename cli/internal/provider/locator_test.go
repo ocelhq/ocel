@@ -78,7 +78,7 @@ func TestLocate(t *testing.T) {
 	t.Run("errors when node is not on PATH", func(t *testing.T) {
 		t.Setenv("PATH", t.TempDir())
 
-		_, err := Locate(context.Background(), t.TempDir(), "@ocel/provider-aws")
+		_, err := Locate(context.Background(), t.TempDir(), "aws")
 		if err == nil {
 			t.Fatal("Locate() err = nil, want an error")
 		}
@@ -96,7 +96,7 @@ func TestLocate(t *testing.T) {
 		platformPkg := "@ocel/provider-aws-" + suffix
 		want := writeFakeBinary(t, projectDir, platformPkg, "deploy")
 
-		got, err := Locate(context.Background(), projectDir, "@ocel/provider-aws")
+		got, err := Locate(context.Background(), projectDir, "aws")
 		if err != nil {
 			t.Fatalf("Locate: %v", err)
 		}
@@ -125,7 +125,7 @@ func TestLocate(t *testing.T) {
 			t.Fatalf("symlink: %v", err)
 		}
 
-		got, err := Locate(context.Background(), projectDir, "@ocel/provider-aws")
+		got, err := Locate(context.Background(), projectDir, "aws")
 		if err != nil {
 			t.Fatalf("Locate: %v", err)
 		}
@@ -153,7 +153,7 @@ func TestLocate(t *testing.T) {
 			t.Fatalf("symlink: %v", err)
 		}
 
-		got, err := Locate(context.Background(), projectDir, "@ocel/provider-aws")
+		got, err := Locate(context.Background(), projectDir, "aws")
 		if err != nil {
 			t.Fatalf("Locate: %v", err)
 		}
@@ -167,7 +167,7 @@ func TestLocate(t *testing.T) {
 		requireNode(t)
 		suffix := hostPlatformSuffix(t)
 
-		_, err := Locate(context.Background(), t.TempDir(), "@ocel/provider-aws")
+		_, err := Locate(context.Background(), t.TempDir(), "aws")
 		if err == nil {
 			t.Fatal("Locate() err = nil, want an error")
 		}
@@ -203,7 +203,7 @@ func TestLocate(t *testing.T) {
 			t.Fatalf("go build the aws provider: %v\n%s", err, out)
 		}
 
-		got, err := Locate(context.Background(), projectDir, "@ocel/provider-aws")
+		got, err := Locate(context.Background(), projectDir, "aws")
 		if err != nil {
 			t.Fatalf("Locate: %v", err)
 		}
@@ -232,7 +232,7 @@ func TestLocateReturnsPromptlyOnCancellation(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := Locate(ctx, t.TempDir(), "@ocel/provider-aws")
+		_, err := Locate(ctx, t.TempDir(), "aws")
 		done <- err
 	}()
 

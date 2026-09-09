@@ -193,7 +193,7 @@ func TestPrintRequired(t *testing.T) {
 	for _, want := range []string{
 		"Required by this project:",
 		"✓ " + featureCloudFrontEdge + "   a CloudFront front",
-		"Your edge is cloudfront. Change it in ocel.config.ts.",
+		"Your edge is cloudfront. Change it in ocel.json.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("printRequired = %q, want it to carry %q", got, want)
