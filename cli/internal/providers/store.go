@@ -25,10 +25,10 @@ const DefaultBaseURL = "https://github.com/ocelhq/ocel/releases/download"
 const ChecksumsAsset = "checksums.txt"
 
 const (
-	attempts      = 5
-	firstBackoff  = 500 * time.Millisecond
-	maxBackoff    = 8 * time.Second
-	archiveCeling = 512 << 20
+	attempts       = 5
+	firstBackoff   = 500 * time.Millisecond
+	maxBackoff     = 8 * time.Second
+	archiveCeiling = 512 << 20
 )
 
 type Doer interface {
@@ -39,8 +39,7 @@ type Store struct {
 	Dir      string
 	Override string
 	Version  string
-	GOOS     string
-	GOARCH   string
+	Platform Platform
 	BaseURL  string
 	Token    string
 	HTTP     Doer
@@ -64,8 +63,7 @@ func New(version string) (*Store, error) {
 		Dir:      dir,
 		Override: os.Getenv(OverrideEnvVar),
 		Version:  version,
-		GOOS:     runtime.GOOS,
-		GOARCH:   runtime.GOARCH,
+		Platform: Platform{GOOS: runtime.GOOS, GOARCH: runtime.GOARCH},
 		BaseURL:  DefaultBaseURL,
 		Token:    os.Getenv(TokenEnvVar),
 		HTTP:     &http.Client{Timeout: 10 * time.Minute},
@@ -73,23 +71,21 @@ func New(version string) (*Store, error) {
 	}, nil
 }
 
-func (s *Store) Platform() Platform { return Platform{GOOS: s.GOOS, GOARCH: s.GOARCH} }
-
 func (s *Store) Fetches() bool { return s.Override == "" }
 
 func (s *Store) Binary(ctx context.Context, name, digest string) (string, error) {
-	executable := ExecutableName(name, s.GOOS)
+	executable := ExecutableName(name, s.Platform.GOOS)
 
 	if s.Override != "" {
-		path := filepath.Join(s.Override, name, s.Version, s.Platform().Dir(), executable)
+		path := filepath.Join(s.Override, name, s.Version, s.Platform.Dir(), executable)
 		if _, err := os.Stat(path); err != nil {
 			return "", fmt.Errorf("%s is %s, which holds no %s provider %s for %s — build the providers this CLI's own version needs, or unset %s to fetch them",
-				OverrideEnvVar, s.Override, name, s.Version, s.Platform().Dir(), OverrideEnvVar)
+				OverrideEnvVar, s.Override, name, s.Version, s.Platform.Dir(), OverrideEnvVar)
 		}
 		return path, nil
 	}
 
-	dir := filepath.Join(s.Dir, name, s.Version, s.Platform().Dir())
+	dir := filepath.Join(s.Dir, name, s.Version, s.Platform.Dir())
 	path := filepath.Join(dir, executable)
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
@@ -112,10 +108,10 @@ func (s *Store) Checksums(ctx context.Context) (map[string]string, error) {
 
 func (s *Store) install(ctx context.Context, name, digest, dir, executable string) error {
 	if digest == "" {
-		return fmt.Errorf("no lock pins the %s provider %s for %s", name, s.Version, s.Platform().Dir())
+		return fmt.Errorf("no lock pins the %s provider %s for %s", name, s.Version, s.Platform.Dir())
 	}
 
-	asset := AssetName(name, s.Version, s.GOOS, s.GOARCH)
+	asset := AssetName(name, s.Version, s.Platform.GOOS, s.Platform.GOARCH)
 	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
 		return fmt.Errorf("make the provider cache at %s: %w", s.Dir, err)
 	}
@@ -131,7 +127,7 @@ func (s *Store) install(ctx context.Context, name, digest, dir, executable strin
 	}
 
 	unpacked := filepath.Join(staged, "unpacked")
-	if err := unpack(archive, s.GOOS, unpacked); err != nil {
+	if err := unpack(archive, s.Platform.GOOS, unpacked); err != nil {
 		return fmt.Errorf("unpack %s: %w", asset, err)
 	}
 	if _, err := os.Stat(filepath.Join(unpacked, executable)); err != nil {
@@ -164,7 +160,7 @@ func (s *Store) download(ctx context.Context, asset, into, digest string) error 
 	defer file.Close()
 
 	sum := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(file, sum), io.LimitReader(body, archiveCeling)); err != nil {
+	if _, err := io.Copy(io.MultiWriter(file, sum), io.LimitReader(body, archiveCeiling)); err != nil {
 		return fmt.Errorf("download %s: %w", asset, err)
 	}
 	if got := hex.EncodeToString(sum.Sum(nil)); got != digest {
@@ -189,7 +185,7 @@ func (s *Store) get(ctx context.Context, asset string) (io.ReadCloser, error) {
 	var last error
 	for attempt := range attempts {
 		if attempt > 0 {
-			s.sleep(backoff(attempt, retryAfter(last)))
+			s.Sleep(backoff(attempt, retryAfter(last)))
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
@@ -244,12 +240,4 @@ func backoff(attempt int, asked time.Duration) time.Duration {
 		ceiling = min(asked, maxBackoff)
 	}
 	return ceiling/2 + time.Duration(rand.Int64N(int64(ceiling/2)))
-}
-
-func (s *Store) sleep(d time.Duration) {
-	if s.Sleep != nil {
-		s.Sleep(d)
-		return
-	}
-	time.Sleep(d)
 }

@@ -27,7 +27,7 @@ func locate(ctx context.Context, store *providers.Store, projectDir, name string
 		return "", err
 	}
 
-	platform := store.Platform().Dir()
+	platform := store.Platform.Dir()
 	digest, pinned := lock.Digest(name, platform)
 	if !pinned {
 		return "", fmt.Errorf("%s pins no %s provider %s for %s — release %s ships no such archive", lockfile.Name, name, store.Version, platform, store.Version)
