@@ -21,7 +21,11 @@ import (
 
 const committedSchemaFile = "www/public/schema/ocel.schema.json"
 
+const compareTable = "www/components/compare/data.ts"
+
 var interpolated = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*\}`)
+
+var sampleNamed = regexp.MustCompile("filename: \"([^\"]+)\",\\s*code: `([^`]*)`")
 
 var skippedDirs = map[string]bool{
 	"node_modules": true,
@@ -145,6 +149,35 @@ func keyPaths(prefix string, value any) []string {
 		return paths
 	default:
 		return nil
+	}
+}
+
+func TestEverySampleConfigTheCompareTableShowsValidatesAgainstTheSchema(t *testing.T) {
+	root := fixturetest.RepoDir(t)
+	schema := committedSchema(t, root)
+	want := schemaID(t, root)
+	source, err := os.ReadFile(filepath.Join(root, compareTable))
+	if err != nil {
+		t.Fatalf("read the compare table: %v", err)
+	}
+	shown := 0
+	for _, sample := range sampleNamed.FindAllStringSubmatch(string(source), -1) {
+		if !configTitled(sample[1]) {
+			continue
+		}
+		shown++
+		name := compareTable + " › " + sample[1]
+		document := documentOf(t, name, []byte(sample[2]))
+		named, _ := document.(map[string]any)["$schema"].(string)
+		if named != want {
+			t.Errorf("%s names %q, want the committed schema %q", name, named, want)
+		}
+		if err := schema.Validate(document); err != nil {
+			t.Errorf("%s does not validate against the committed schema: %v", name, err)
+		}
+	}
+	if shown == 0 {
+		t.Fatal("the compare table shows no ocel.json")
 	}
 }
 
