@@ -191,7 +191,7 @@ func (s *stack) stagePatch(ctx context.Context, c Clients, promotion edge.Promot
 	case len(apps) == 0:
 		return nil, fmt.Errorf("promote %s: it names no app, and the %s stage serves one app's entry function; deploy an app before promoting", promotion.PromotionID, stageName)
 	case len(apps) > 1:
-		return nil, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the %q edge fronts a project with a single REST API whose %s stage names one entry function, so it cannot serve more than one of them. Split the apps into one project each, or put an edge that routes by hostname in front by naming one in ocel.config.ts, such as `edge: cloudflare()`", promotion.PromotionID, len(apps), strings.Join(apps, ", "), Kind, stageName)
+		return nil, fmt.Errorf("promote %s: this project deploys %d apps (%s), and the %q edge fronts a project with a single REST API whose %s stage names one entry function, so it cannot serve more than one of them. Split the apps into one project each, or put an edge that routes by hostname in front by naming one in your config, such as `\"edge\": { \"kind\": \"cloudflare\" }`", promotion.PromotionID, len(apps), strings.Join(apps, ", "), Kind, stageName)
 	}
 
 	app := apps[0]
@@ -204,7 +204,7 @@ func (s *stack) stagePatch(ctx context.Context, c Clients, promotion edge.Promot
 		return nil, fmt.Errorf("promote %s: the deployments ledger holds no record for %s/%s, so nothing names the function the %s stage would serve; re-run the deploy that built it", promotion.PromotionID, app, identity, stageName)
 	}
 	if record.Origin != "" {
-		return nil, fmt.Errorf("promote %s: %s/%s runs as a container at %s, and the %q edge invokes a release's entry function rather than reaching a URL, so it cannot front it; name an edge that reaches an origin by URL in ocel.config.ts, such as `edge: cloudfront()`", promotion.PromotionID, app, identity, record.Origin, Kind)
+		return nil, fmt.Errorf("promote %s: %s/%s runs as a container at %s, and the %q edge invokes a release's entry function rather than reaching a URL, so it cannot front it; name an edge that reaches an origin by URL in your config, such as `\"edge\": { \"kind\": \"cloudfront\" }`", promotion.PromotionID, app, identity, record.Origin, Kind)
 	}
 	if record.EntryFunction == "" {
 		return nil, fmt.Errorf("promote %s: the deployment record for %s/%s names no entry function, so the %s stage has nothing to invoke. That record was written by an older CLI than the one that serves it; re-run the deploy to write it again", promotion.PromotionID, app, identity, stageName)

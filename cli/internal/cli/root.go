@@ -70,7 +70,7 @@ func init() {
 	s := newDeps()
 
 	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")
-	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else nearest ocel.config.ts)")
+	rootCmd.PersistentFlags().StringVarP(&configFlag, "config", "c", "", "Project config `file` (default: $OCEL_CONFIG, else the nearest ocel.json or ocel.config.ts)")
 	rootCmd.PersistentFlags().StringVar(&logFormatFlag, "log-format", string(runui.FormatHuman), "Log output format: human or json")
 
 	rootCmd.AddCommand(devCmd)
