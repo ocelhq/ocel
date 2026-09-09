@@ -986,6 +986,12 @@ importers:
         specifier: workspace:*
         version: link:../../functions/tag-publisher
 
+  platform/aws/provider/transform:
+    devDependencies:
+      ocel:
+        specifier: workspace:^
+        version: link:../../../../packages/ocel
+
   platform/edge/cloudflare/lib/auth:
     devDependencies:
       '@types/node':
