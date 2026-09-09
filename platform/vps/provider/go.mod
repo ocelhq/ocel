@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	connectrpc.com/connect v1.20.0
 	github.com/creack/pty v1.1.24
+	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
 	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/proto v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
@@ -49,7 +50,6 @@ require (
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
 	github.com/ocelhq/ocel/pkg/channel v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
