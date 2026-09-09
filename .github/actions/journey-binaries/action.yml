@@ -17,9 +17,9 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        chmod +x dist/ocel_linux_amd64_v1/ocel
+        chmod +x dist/journey/ocel
         find dist/providers -type f -exec chmod +x {} +
         {
-          echo "OCEL_BIN=$GITHUB_WORKSPACE/dist/ocel_linux_amd64_v1/ocel"
+          echo "OCEL_BIN=$GITHUB_WORKSPACE/dist/journey/ocel"
           echo "OCEL_PROVIDERS_DIR=$GITHUB_WORKSPACE/dist/providers"
         } >> "$GITHUB_ENV"

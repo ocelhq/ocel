@@ -104,8 +104,9 @@ jobs:
         working-directory: adapter
         run: |
           set -euo pipefail
-          node scripts/snapshot.mjs >/dev/null
-          install -D -m 0755 dist/ocel_linux_amd64_v1/ocel packages/cli-linux-x64/bin/ocel
+          node scripts/snapshot.mjs > "$RUNNER_TEMP/snapshot.env"
+          . "$RUNNER_TEMP/snapshot.env"
+          install -D -m 0755 "$OCEL_BIN" packages/cli-linux-x64/bin/ocel
 
       - name: Build the ocel sidecar
         working-directory: adapter
