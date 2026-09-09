@@ -138,7 +138,7 @@ for pkg in ocel @ocel/linux-x64; do
 done
 cd "$SIDECAR" && npm init -y >/dev/null
 npm install --no-audit --no-fund "$TARBALLS"/*.tgz
-test -d node_modules/ocel && test -x node_modules/@ocel/provider-aws-linux-x64/bin/deploy
+test -d node_modules/ocel
 ```
 
 A worker-source or Next-adapter change needs a rebuild of the CLI binary in the

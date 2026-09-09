@@ -22,7 +22,7 @@ is provisioned, linked and usable, from `fixtures/sdk/`. The harness starts noth
 control-plane schema and the console:
 
 ```
-go -C cli build -o bin/ocel ./ocel
+node scripts/snapshot.mjs
 docker compose up -d postgres ocel-cloud minio
 pnpm --filter @console/db db:push
 pnpm --filter @console/web dev
@@ -60,7 +60,6 @@ revision out of the docker daemon the script mounts into it, so the daemon that 
 images is the daemon that runs them:
 
 ```
-go -C cli build -o bin/ocel ./ocel
 node scripts/snapshot.mjs
 scripts/floci.sh --cloud gcp create ocel-journeys
 export OCEL_FLOCI_GCP_ENDPOINT=http://127.0.0.1:<the port it printed>
@@ -77,7 +76,6 @@ domain and needs no zone. `python3` must have `pip` on it, as the aws and vps la
 For `vps` that is a box the run can reach over SSH, and on a laptop that is an incus VM:
 
 ```
-go -C cli build -o bin/ocel ./ocel
 node scripts/snapshot.mjs
 scripts/incus.sh create journey
 eval "$(scripts/incus.sh info journey)"
