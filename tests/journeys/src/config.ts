@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { appHostname } from "./identity";
@@ -28,8 +29,8 @@ export type Overlay = {
 };
 
 const EDGE_IMPORTS: Record<Edge, { name: string; from: string }> = {
-  cloudfront: { name: "cloudfront", from: "@ocel/provider-aws/edge" },
-  "api-gateway": { name: "apiGateway", from: "@ocel/provider-aws/edge" },
+  cloudfront: { name: "cloudfront", from: "ocel/providers/aws/edge" },
+  "api-gateway": { name: "apiGateway", from: "ocel/providers/aws/edge" },
   cloudflare: { name: "cloudflare", from: "ocel/edge" },
 };
 
@@ -110,7 +111,7 @@ export function renderConfig(overlay: Overlay): string {
   const fields = [`  ...base,`, `  slug: ${JSON.stringify(overlay.slug)},`];
   if (overlay.varsKey) {
     fields.push(
-      `  provider: { package: "@ocel/provider-aws", options: { ...(base.provider as { options?: object } | undefined)?.options, varsKey: ${JSON.stringify(overlay.varsKey)} } },`,
+      `  provider: { name: "aws", options: { ...(base.provider as { options?: object } | undefined)?.options, varsKey: ${JSON.stringify(overlay.varsKey)} } },`,
     );
   }
   if (overlay.edge) {
@@ -131,8 +132,17 @@ export function renderConfig(overlay: Overlay): string {
   return `${imports.join("\n")}\n${hostnames}\nexport default defineConfig({\n${fields.join("\n")}\n});\n`;
 }
 
+/** The base a fixture actually carries: a JSON config where one has replaced the TypeScript. */
+export function baseIn(dir: string, base: string): string {
+  const asJson = base.replace(/\.config\.ts$/, ".json");
+  if (asJson !== base && !existsSync(path.join(dir, base)) && existsSync(path.join(dir, asJson))) {
+    return asJson;
+  }
+  return base;
+}
+
 export async function writeJourneyConfig(dir: string, overlay: Overlay): Promise<string> {
   const file = path.join(dir, JOURNEY_CONFIG);
-  await writeFile(file, renderConfig(overlay), "utf8");
+  await writeFile(file, renderConfig({ ...overlay, base: baseIn(dir, overlay.base) }), "utf8");
   return file;
 }

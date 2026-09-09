@@ -88,6 +88,8 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 - **`proto/`** — source of truth for the wire format. Bindings are **generated** — never
   hand-edit generated output.
 - **`scripts/`** — development and release tooling, and the emulator and ladder scripts.
+- **`www/`** — the docs site at ocel.dev, and what it serves alongside the docs: the
+  generated JSON Schema under `public/schema/`.
 - **`tests/`** — the suites that drive the real binary — the journeys, the dev-server
   suite and the Next compatibility harness — and under `tests/fixtures/<concern>/` the
   apps they drive. A fixture directory exercises one concern and nothing else.

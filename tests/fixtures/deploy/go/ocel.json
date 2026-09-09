@@ -1,0 +1,14 @@
+{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "go",
+  "provider": { "name": "aws" },
+  "apps": [
+    {
+      "name": "web",
+      "path": "./server",
+      // The architecture the binary is built for, x86_64 unless named:
+      // "runtime": { "name": "go", "arch": "arm64" },
+      "runtime": "go"
+    }
+  ]
+}

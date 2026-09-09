@@ -24,6 +24,21 @@ jobs:
 
       - run: pnpm exec biome ci
 
+  schema:
+    name: schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/node-workspace
+
+      - name: The published schema and the types it generates are what is committed
+        run: node scripts/schema/build.mjs
+
+      - name: Nothing regenerated differs from what is committed
+        run: git diff --exit-code
+
   commits:
     name: commit messages
     if: github.event_name == 'pull_request'

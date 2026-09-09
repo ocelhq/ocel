@@ -58,7 +58,7 @@ runs:
 
     - name: Build the node halves the binaries embed
       shell: bash
-      run: pnpm turbo run build --filter=ocel --filter=@ocel/provider-aws
+      run: pnpm turbo run build --filter=ocel
 
     - name: Build the provider this deploy drives
       shell: bash

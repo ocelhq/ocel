@@ -173,16 +173,16 @@ export default defineConfig({
     expect(
       renderConfig({ base: AWS_BASE, slug: "j-1-node", varsKey: "arn:aws:kms:key/k" }),
     ).toContain(
-      `  provider: { package: "@ocel/provider-aws", options: { ...(base.provider as { options?: object } | undefined)?.options, varsKey: "arn:aws:kms:key/k" } },`,
+      `  provider: { name: "aws", options: { ...(base.provider as { options?: object } | undefined)?.options, varsKey: "arn:aws:kms:key/k" } },`,
     );
   });
 
   it("imports each edge from where the product ships it", () => {
     expect(renderConfig({ base: AWS_BASE, slug: "s", edge: "api-gateway" })).toContain(
-      'import { apiGateway } from "@ocel/provider-aws/edge";',
+      'import { apiGateway } from "ocel/providers/aws/edge";',
     );
     expect(renderConfig({ base: AWS_BASE, slug: "s", edge: "cloudfront" })).toContain(
-      'import { cloudfront } from "@ocel/provider-aws/edge";',
+      'import { cloudfront } from "ocel/providers/aws/edge";',
     );
     expect(renderConfig({ base: AWS_BASE, slug: "s", edge: "cloudflare" })).toContain(
       'import { cloudflare } from "ocel/edge";',
