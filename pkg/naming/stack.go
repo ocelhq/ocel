@@ -66,6 +66,6 @@ func PulumiProject(project string) string {
 	return Join(WordSeparator, pulumiProjectNS, project)
 }
 
-func StateBackendURL(bucket, project string) string {
-	return "s3://" + bucket + PathSeparator + SanitizeAlpha(project)
+func StateBackendURL(scheme, bucket, project string) string {
+	return scheme + "://" + bucket + PathSeparator + SanitizeAlpha(project)
 }

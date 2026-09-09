@@ -1,0 +1,223 @@
+package alb
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"maps"
+	"slices"
+
+	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
+)
+
+type stack struct {
+	e     *Edge
+	state edge.StackState
+	held  held
+}
+
+func (s *stack) State() edge.StackState { return s.state }
+
+func (s *stack) ledger() *kitledger.Ledger {
+	return ledgerFor(s.e.deps.Records, s.state.Class, s.state.Slug)
+}
+
+func (s *stack) Ledger() edge.Ledger { return s.ledger() }
+
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
+	return pin.Promote(ctx, s.ledger(), s.e.deps.Pins, promotion, pointer, report)
+}
+
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
+	return s.ledger().RemovePointer(ctx, pointer)
+}
+
+func (s *stack) adopt(front Front) error {
+	if err := s.state.Adapter.Into(&s.held); err != nil {
+		return err
+	}
+	s.held.Front = front
+	return s.keep()
+}
+
+func (s *stack) keep() error {
+	s.state.Adapter = edge.Own(s.held)
+	return nil
+}
+
+func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
+	if binding.Hostname == "" {
+		return providerkit.Refuse(providerkit.CodeInvalid, "the %q edge is asked to bind a hostname nothing named", Kind)
+	}
+	if !s.held.Front.standing() {
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"no %s load balancer stands for class %s, and %s is served by writing a host rule into its url map: run `ocel bootstrap` for this class first",
+			Kind, s.state.Class, binding.Hostname)
+	}
+	service, err := s.serving(ctx, binding.App)
+	if err != nil {
+		return err
+	}
+	hosts := maps.Clone(s.held.Hosts)
+	if hosts == nil {
+		hosts = map[string]Host{}
+	}
+	hosts[binding.Hostname] = Host{
+		App:         binding.App,
+		Certificate: binding.Certificate,
+		Service:     service,
+		Backend:     backendName(s.state.Slug, s.state.Class, binding.Hostname),
+	}
+	if err := s.raise(ctx, hosts); err != nil {
+		return err
+	}
+	if err := s.e.deps.Routes.Route(ctx, s.held.Front.URLMap, binding.Hostname, hosts[binding.Hostname].Backend); err != nil {
+		return err
+	}
+	if err := s.claim(ctx, binding.Hostname); err != nil {
+		return err
+	}
+	s.held.Hosts = hosts
+	if err := s.keep(); err != nil {
+		return err
+	}
+	s.state.Bind(binding.Hostname)
+	s.state.PublishFront(binding.Hostname, s.held.Front.Address)
+	return nil
+}
+
+func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
+	if _, bound := s.held.Hosts[hostname]; !bound {
+		s.state.Release(hostname)
+		s.state.PublishFront(hostname, "")
+		return nil
+	}
+	hosts := maps.Clone(s.held.Hosts)
+	delete(hosts, hostname)
+	if err := s.e.deps.Routes.Unroute(ctx, s.held.Front.URLMap, hostname); err != nil {
+		return err
+	}
+	if err := s.raise(ctx, hosts); err != nil {
+		return err
+	}
+	if err := s.disown(ctx, hostname); err != nil {
+		return err
+	}
+	if len(hosts) == 0 {
+		hosts = nil
+	}
+	s.held.Hosts = hosts
+	if err := s.keep(); err != nil {
+		return err
+	}
+	s.state.Release(hostname)
+	s.state.PublishFront(hostname, "")
+	return nil
+}
+
+func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
+	name := BindingStack(s.state.Slug, s.state.Class)
+	if len(hosts) == 0 {
+		return s.e.deps.Stacks.Destroy(ctx, s.state.Class, name, edge.DiscardReporter())
+	}
+	_, err := s.e.deps.Stacks.Up(ctx, s.state.Class, name, bindingProgram(bindingSpec{
+		Project:        s.e.deps.Project,
+		Region:         s.e.deps.Region,
+		Slug:           s.state.Slug,
+		Class:          s.state.Class,
+		CertificateMap: s.held.Front.CertificateMap,
+		Hosts:          hosts,
+	}), edge.DiscardReporter())
+	return err
+}
+
+func (s *stack) serving(ctx context.Context, app string) (string, error) {
+	if app == "" {
+		return "", nil
+	}
+	history, err := s.ledger().History(ctx, "")
+	if err != nil {
+		return "", err
+	}
+	at := slices.IndexFunc(history, func(entry edge.HistoryEntry) bool { return entry.Active })
+	if at < 0 {
+		return "", nil
+	}
+	identity, released := history[at].Builds[app]
+	if !released {
+		return "", nil
+	}
+	record, staged, err := s.ledger().Record(ctx, app, identity)
+	if err != nil || !staged {
+		return "", err
+	}
+	return record.Physical, nil
+}
+
+func (s *stack) claim(ctx context.Context, hostname string) error {
+	name := s.e.claim(s.state.Class, hostname)
+	record, err := providerkit.Held(ctx, s.e.deps.Records, name)
+	if err != nil {
+		return fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
+	}
+	encoded, err := json.Marshal(claim{Owner: Surface(s.state.Slug, s.state.Class)})
+	if err != nil {
+		return fmt.Errorf("encode what serves %s on the %s edge: %w", hostname, Kind, err)
+	}
+	record.Bytes = encoded
+	if _, err := s.e.deps.Records.Write(ctx, record); err != nil {
+		return fmt.Errorf("record what serves %s on the %s edge: %w", hostname, Kind, err)
+	}
+	return nil
+}
+
+func (s *stack) disown(ctx context.Context, hostname string) error {
+	if err := providerkit.Forget(ctx, s.e.deps.Records, s.e.claim(s.state.Class, hostname)); err != nil {
+		return fmt.Errorf("release what served %s on the %s edge: %w", hostname, Kind, err)
+	}
+	return nil
+}
+
+func (s *stack) Destroy(ctx context.Context) error {
+	for _, hostname := range slices.Sorted(maps.Keys(s.held.Hosts)) {
+		if err := s.e.deps.Routes.Unroute(ctx, s.held.Front.URLMap, hostname); err != nil {
+			return err
+		}
+		if err := s.disown(ctx, hostname); err != nil {
+			return err
+		}
+	}
+	if len(s.held.Hosts) > 0 {
+		if err := s.e.deps.Stacks.Destroy(ctx, s.state.Class, BindingStack(s.state.Slug, s.state.Class), edge.DiscardReporter()); err != nil {
+			return err
+		}
+	}
+	if err := s.ledger().Destroy(ctx); err != nil {
+		return err
+	}
+	s.held.Hosts = nil
+	if err := s.keep(); err != nil {
+		return err
+	}
+	for _, hostname := range s.state.Bound {
+		s.state.PublishFront(hostname, "")
+	}
+	s.state.Bound = nil
+	return nil
+}
+
+func backendName(slug string, class edge.Class, hostname string) string {
+	return dashed("ocel", string(Kind), naming.Sanitize(slug), string(class), naming.Sanitize(hostname))
+}
+
+func entryName(slug string, class edge.Class, hostname string) string {
+	return backendName(slug, class, hostname) + "-cert"
+}
+
+func negName(slug string, class edge.Class, hostname string) string {
+	return backendName(slug, class, hostname) + "-neg"
+}

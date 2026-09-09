@@ -21,12 +21,14 @@ func promote(t *testing.T, stack edge.EdgeStack, promotion edge.Promotion, point
 
 	ctx := context.Background()
 	for app, identity := range promotion.Builds {
+		entry := "conformance-prod-" + app + "-r0a1b2c3d"
 		staged := edge.DeploymentRecord{
 			App:           app,
 			Identity:      identity,
 			Entry:         "/",
-			EntryFunction: "conformance-prod-" + app + "-r0a1b2c3d",
+			EntryFunction: entry,
 			FunctionURLs:  map[string]string{"/": "https://conformance-" + app + ".example.com/"},
+			Revisions:     map[string]string{entry: entry + "-" + identity},
 		}
 		if err := stack.Ledger().PutStaged(ctx, staged); err != nil {
 			t.Fatalf("PutStaged(%s/%s): %v", app, identity, err)

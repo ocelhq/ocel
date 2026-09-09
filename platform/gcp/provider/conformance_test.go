@@ -15,6 +15,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 func withoutApplicationDefaultCredentials(t *testing.T) {
@@ -45,8 +46,8 @@ func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 
 	conformance.RunEdgeRegistry(t, registry)
 
-	if got := registry.Supported(); !slices.Equal(got, []edge.Kind{direct.Kind, cloudflare.Kind}) {
-		t.Errorf("Supported() = %v, want %q and %q", got, direct.Kind, cloudflare.Kind)
+	if got := registry.Supported(); !slices.Equal(got, []edge.Kind{direct.Kind, alb.Kind, cloudflare.Kind}) {
+		t.Errorf("Supported() = %v, want %q, %q and %q", got, direct.Kind, alb.Kind, cloudflare.Kind)
 	}
 	if got := registry.Default(); got != direct.Kind {
 		t.Errorf("Default() = %q, want %q: a deploy that names no edge is answered on the url Cloud Run gave it", got, direct.Kind)

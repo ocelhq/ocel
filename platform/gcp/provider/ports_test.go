@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 func standing(t *testing.T) *gcp.Provider {
@@ -23,6 +27,67 @@ func newProvider(t *testing.T, options gcp.Options) *gcp.Provider {
 		t.Fatalf("NewProvider(%+v) = %v", options, err)
 	}
 	return p
+}
+
+func TestTheAlbEdgeIsRegisteredAndOpensWithTheProvidersOwnPorts(t *testing.T) {
+	t.Parallel()
+
+	registry := standing(t).Edges()
+	if got := registry.Supported(); !slices.Contains(got, alb.Kind) {
+		t.Fatalf("Supported() = %v, want the %q edge among them: a config that names it would be refused", got, alb.Kind)
+	}
+	front, err := registry.Open(alb.Kind)
+	if err != nil {
+		t.Fatalf("Open(%q) = %v", alb.Kind, err)
+	}
+	if front.Kind() != alb.Kind {
+		t.Errorf("Open(%q) opened the %q edge", alb.Kind, front.Kind())
+	}
+	if !front.Facts().InvalidatesByCacheTag {
+		t.Error("Facts() says the alb edge does not invalidate by cache tag, and Cloud CDN invalidates by Cache-Tag")
+	}
+	if front.Facts().AddressesItself {
+		t.Error("Facts() says the alb edge addresses itself, and a deploy would then never be asked for the hostname it fronts")
+	}
+	for _, need := range []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming} {
+		if !edge.Supports(front, need) {
+			t.Errorf("Supported() does not name %q, and the load balancer with Cloud CDN in front of Cloud Run serves it", need)
+		}
+	}
+}
+
+func TestAnEdgeThisProviderCannotFrontWithIsRefusedWithThePriceOfTheOneThatCan(t *testing.T) {
+	t.Parallel()
+
+	var refusal providerkit.Refusal
+	_, err := standing(t).Edges().Open(edge.Kind("firebase"))
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Open(firebase) = %v, want an %s refusal", err, providerkit.CodeInvalid)
+	}
+	for _, said := range []string{string(alb.Kind), "$18", "cloudflare"} {
+		if !strings.Contains(refusal.Message, said) {
+			t.Errorf("the refusal reads %q, want it to name %q so the reader knows what to name instead and what it costs", refusal.Message, said)
+		}
+	}
+}
+
+func TestAFrontedServiceStopsAnsweringOnItsOwnCloudRunUrl(t *testing.T) {
+	t.Parallel()
+
+	front, err := standing(t).Edges().Open(alb.Kind)
+	if err != nil {
+		t.Fatalf("Open(%q) = %v", alb.Kind, err)
+	}
+	direct, err := standing(t).Edges().Open(direct.Kind)
+	if err != nil {
+		t.Fatalf("Open(direct) = %v", err)
+	}
+	if got := gcp.IngressFor(front); got != "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" {
+		t.Errorf("a service fronted by the %q edge takes ingress %q, want the load balancer only: the run.app url would otherwise answer past the front's certificate, cache and host rules", alb.Kind, got)
+	}
+	if got := gcp.IngressFor(direct); got != "INGRESS_TRAFFIC_ALL" {
+		t.Errorf("a service under the direct edge takes ingress %q, want every caller: its run.app url is the whole of what serves it", got)
+	}
 }
 
 func TestNoPortIsNilForTheKitToCallThrough(t *testing.T) {
