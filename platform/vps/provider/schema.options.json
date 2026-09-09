@@ -44,18 +44,24 @@
                   "type": "string"
                 }
               },
-              "required": ["host"],
+              "required": [
+                "host"
+              ],
               "title": "Target",
               "type": "object"
             }
           ]
         }
       },
-      "required": ["ssh"],
+      "required": [
+        "ssh"
+      ],
       "title": "VpsProviderOptions",
       "type": "object"
     }
   },
-  "required": ["name"],
+  "required": [
+    "name"
+  ],
   "type": "object"
 }

@@ -16,11 +16,16 @@
           "type": "string"
         }
       },
-      "required": ["project", "region"],
+      "required": [
+        "project",
+        "region"
+      ],
       "title": "GcpProviderOptions",
       "type": "object"
     }
   },
-  "required": ["name"],
+  "required": [
+    "name"
+  ],
   "type": "object"
 }

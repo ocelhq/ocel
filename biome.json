@@ -19,6 +19,8 @@
       "!**/testdata",
       "!**/drizzle/meta",
       "!**/fixtures/**/*.json",
+      "!**/schema.core.json",
+      "!**/schema.options.json",
       "!**/*_pb.ts",
       "!**/*_pb.js",
       "!**/next-env.d.ts",
