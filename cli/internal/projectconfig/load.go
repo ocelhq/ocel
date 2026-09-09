@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/tailscale/hujson"
@@ -14,11 +15,31 @@ import (
 )
 
 const (
-	DefaultFileName = "ocel.json"
-	TSFileName      = "ocel.config.ts"
+	DefaultFileName = configStem + jsonSuffix
+	TSFileName      = configStem + tsSuffix
 )
 
-const configStem = "ocel"
+const (
+	configStem = "ocel"
+	jsonSuffix = ".json"
+	tsSuffix   = ".config.ts"
+)
+
+var programNamed = regexp.MustCompile(regexp.QuoteMeta(configStem) + `(\.[^.\s"'` + "`" + `]+)?` + regexp.QuoteMeta(tsSuffix))
+
+func IsConfig(path string) bool {
+	_, _, ok := formOf(filepath.Base(path))
+	return ok
+}
+
+func IsProgram(path string) bool {
+	_, f, ok := formOf(filepath.Base(path))
+	return ok && f.suffix == tsSuffix
+}
+
+func ProgramNamedIn(source string) string {
+	return programNamed.FindString(source)
+}
 
 const scratchDirName = ".ocel"
 
@@ -40,8 +61,8 @@ type form struct {
 
 func forms() []form {
 	return []form{
-		{suffix: ".json", read: readJSON},
-		{suffix: ".config.ts", read: readTS},
+		{suffix: jsonSuffix, read: readJSON},
+		{suffix: tsSuffix, read: readTS},
 	}
 }
 
