@@ -28,9 +28,9 @@ func TestGCPProvider(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
 	conformance.Run(t, conformance.Suite{
-		Spec:    providerkit.Spec{Version: "test", New: gcp.New},
-		Options: providerkit.Options{"project": "conformance", "region": "europe-west1"},
-		Binary:  buildProvider(t),
+		Spec:      providerkit.Spec{Version: "test", New: gcp.New},
+		Options:   providerkit.Options{"project": "conformance", "region": "europe-west1"},
+		Binary:    buildProvider(t),
 		Certifier: &conformance.CertifierChecks{Kind: alb.Kind},
 	})
 }

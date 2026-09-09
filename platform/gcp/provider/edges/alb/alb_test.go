@@ -93,6 +93,33 @@ func TestUnbindingTheLastHostnameTakesTheProjectsStackDownRatherThanLeavingItSta
 	}
 }
 
+func TestAPromotionUnderTheLoadBalancerPinsCloudRunBecauseTheUrlMapNeverMoves(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	_, w, stack := reconciled(t)
+	for _, build := range []struct{ identity, revision string }{{"b1", "web-00001-abc"}, {"b2", "web-00002-def"}} {
+		if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
+			App: "web", Identity: build.identity, Physical: "ocel-shop-prod-web",
+			Revisions: map[string]string{"ocel-shop-prod-web": build.revision},
+		}); err != nil {
+			t.Fatalf("PutStaged(%s) = %v", build.identity, err)
+		}
+	}
+	for _, step := range []struct{ id, identity string }{{"p1", "b1"}, {"p2", "b2"}, {"p3", "b1"}} {
+		err := stack.Promote(ctx, edge.Promotion{PromotionID: step.id, Builds: map[string]string{"web": step.identity}},
+			"", edge.DiscardReporter())
+		if err != nil {
+			t.Fatalf("Promote(%s) = %v", step.id, err)
+		}
+	}
+
+	want := []string{"ocel-shop-prod-web@web-00001-abc", "ocel-shop-prod-web@web-00002-def", "ocel-shop-prod-web@web-00001-abc"}
+	if got := w.pins(); !slices.Equal(got, want) {
+		t.Errorf("the promotions pinned %v, want %v: this edge writes no host rule on promote, so the flip is the traffic pin or it is nothing", got, want)
+	}
+}
+
 func TestAProjectReconciledBeforeItsClassHasALoadBalancerIsToldToBootstrapIt(t *testing.T) {
 	t.Parallel()
 

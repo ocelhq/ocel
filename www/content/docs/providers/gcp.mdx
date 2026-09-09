@@ -34,6 +34,47 @@ ocel bootstrap production
 ocel deploy
 ```
 
+## Edge
+
+By default a deployment is answered on the URL Cloud Run gives each service. That edge is
+called `direct`, it costs nothing while it serves nothing, and it binds no hostname of
+your own.
+
+A hostname on Google Cloud costs a load balancer. Name the `alb` edge and `ocel bootstrap`
+stands up one global external Application Load Balancer per class — one address, one
+certificate map, one URL map, Cloud CDN on every backend — and every project in that class
+is answered by it. It is the only thing ocel provisions on Google Cloud that bills while
+it serves no traffic: about $18 a month per class for the forwarding rule, plus
+Premium-tier egress. The bootstrap plan says so before it stands anything up.
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "name": "gcp",
+    "options": { "project": "my-project", "region": "europe-west1" }
+  },
+  "edge": { "kind": "alb" },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+Certificates are issued by Certificate Manager against a DNS authorization: ocel hands you
+the CNAME to write and renews through it. Every service behind the load balancer takes
+ingress `internal-and-cloud-load-balancing`, so its `run.app` URL stops answering from the
+internet.
+
+Preview hostnames are not routed by this edge yet, and
+[`cloudflare`](/docs/providers/cloudflare) is the edge bought independently of Google.
+
+Standing the load balancer up needs two more services on:
+
+```bash
+gcloud services enable compute.googleapis.com certificatemanager.googleapis.com \
+  --project my-project
+```
+
 ## What to grant
 
 Turn the services on once:

@@ -44,6 +44,10 @@
       "types": "./dist/providers/gcp/index.d.ts",
       "import": "./dist/providers/gcp/index.js"
     },
+    "./providers/gcp/edge": {
+      "types": "./dist/providers/gcp/edge.d.ts",
+      "import": "./dist/providers/gcp/edge.js"
+    },
     "./providers/vps": {
       "types": "./dist/providers/vps/index.d.ts",
       "import": "./dist/providers/vps/index.js"
