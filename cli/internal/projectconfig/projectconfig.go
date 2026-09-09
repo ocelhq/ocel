@@ -133,7 +133,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Config, error) {
 		return nil, fmt.Errorf("%s has an invalid \"allowDegraded\": %w", configPath, err)
 	}
 
-	apps, err := normalizeApps(doc.Apps)
+	apps, err := normalizeApps(doc.Apps, filepath.Dir(configPath))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
 	}
@@ -379,7 +379,7 @@ func validAppName(name string) bool {
 	return dnsLabelPattern.MatchString(name)
 }
 
-func normalizeApps(raw []configdoc.AppConfig) ([]App, error) {
+func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
@@ -421,7 +421,7 @@ func normalizeApps(raw []configdoc.AppConfig) ([]App, error) {
 		if err != nil {
 			return nil, fmt.Errorf("app %q: %w", a.Name, err)
 		}
-		runtime, err := normalizeRuntime(a.Name, a.Runtime)
+		runtime, err := normalizeRuntime(a.Name, filepath.Join(dir, filepath.FromSlash(a.Path)), a)
 		if err != nil {
 			return nil, err
 		}
@@ -482,32 +482,14 @@ func normalizeHealth(a configdoc.AppConfig) (*Health, error) {
 	return &Health{Path: path}, nil
 }
 
-func quoted(values []string) string {
-	said := make([]string, 0, len(values))
-	for _, value := range values {
-		said = append(said, fmt.Sprintf("%q", value))
+func normalizeRuntime(app string, dir string, raw configdoc.AppConfig) (Runtime, error) {
+	name, err := frameworkOf(app, dir, strings.TrimSpace(raw.Framework), strings.TrimSpace(raw.Compute))
+	if err != nil {
+		return Runtime{}, err
 	}
-	if len(said) < 2 {
-		return strings.Join(said, "")
-	}
-	return strings.Join(said[:len(said)-1], ", ") + " and " + said[len(said)-1]
-}
-
-func normalizeRuntime(app string, raw configdoc.Runtime) (Runtime, error) {
-	if !raw.Named {
-		return Runtime{}, nil
-	}
-	name := strings.TrimSpace(raw.Name)
-	known := quoted(providerkit.Runtimes())
-	if name == "" {
-		return Runtime{}, fmt.Errorf("app %q declares a runtime with no name: name one of %s, or drop runtime to have it read from the app's package.json", app, known)
-	}
-	if !providerkit.KnownRuntime(name) {
-		return Runtime{}, fmt.Errorf("app %q declares runtime %q, which nothing runs: the runtimes are %s", app, name, known)
-	}
-	arch := strings.TrimSpace(raw.Arch)
-	if arch != "" && arch != providerkit.ArchX8664 && arch != providerkit.ArchARM64 {
-		return Runtime{}, fmt.Errorf("app %q declares runtime.arch %q, which names no architecture: the architectures are %q and %q", app, arch, providerkit.ArchX8664, providerkit.ArchARM64)
+	arch, err := architectureOf(app, strings.TrimSpace(raw.Arch))
+	if err != nil {
+		return Runtime{}, err
 	}
 	return Runtime{Name: name, Arch: arch}, nil
 }

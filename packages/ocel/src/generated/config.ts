@@ -86,6 +86,8 @@ export interface VpsTarget {
 }
 
 export interface AppConfig {
+  /** The processor architecture a serverless app's functions are built for. Left off, the provider's default architecture. */
+  arch?: "x86_64" | "arm64";
   /** How a container app's image is built. */
   build?: BuildConfig;
   /** What the app runs on: serverless functions packed per route, or one container image serving everything. */
@@ -96,14 +98,14 @@ export interface AppConfig {
   entrypoint?: string;
   /** The variables folder this app reads, when it does not read the project's own. */
   folder?: string;
+  /** What a serverless app is built with, when ocel is not to read it off the app's own manifest. */
+  framework?: "node" | "next" | "go" | "python";
   /** How a container app is checked before it is served. */
   health?: HealthConfig;
   /** The app's name. It is a label of every resource the app deploys and of its preview hostname, so it is a DNS label. */
   name: string;
   /** The app's directory, relative to the config. */
   path: string;
-  /** The runtime a serverless app's functions run on. Named on its own it takes the provider's default architecture. */
-  runtime?: "node" | "next" | "go" | "python" | RuntimeObject;
 }
 
 /** How a container app's image is built. */
@@ -126,13 +128,6 @@ export interface AppDomainConfig {
 export interface HealthConfig {
   /** The path the check requests, off the app's own root. Any 2xx answer means up. Left off, the check requests /. */
   path?: string;
-}
-
-export interface RuntimeObject {
-  /** The processor architecture the functions are built for. */
-  arch?: "x86_64" | "arm64";
-  /** What a serverless app's functions are packed for and run on. */
-  name: "node" | "next" | "go" | "python";
 }
 
 /** Where the resources an app declares are found. */

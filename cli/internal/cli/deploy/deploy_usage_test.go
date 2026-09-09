@@ -196,7 +196,7 @@ export default {
   slug: "test-app",
   provider: { name: "aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/ap1", runtime: "node" }],
+  apps: [{ name: "api", path: "apps/ap1", framework: "node" }],
 };
 `)
 
@@ -224,8 +224,8 @@ export default {
   provider: { name: "aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [
-    { name: "api", path: "apps/api", runtime: "node" },
-    { name: "web", path: "apps/web", runtime: "node" },
+    { name: "api", path: "apps/api", framework: "node" },
+    { name: "web", path: "apps/web", framework: "node" },
   ],
 };
 `)

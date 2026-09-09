@@ -529,7 +529,7 @@ export default {
 export default {
   slug: "test-app",
   provider: { name: "aws", options: {} },
-  apps: [{ name: "api", path: "apps/api", runtime: "node", domains: { production: "Api.Acme.com" } }],
+  apps: [{ name: "api", path: "apps/api", framework: "node", domains: { production: "Api.Acme.com" } }],
 };
 `)
 		writeAppSource(t, root, "api")
@@ -569,8 +569,8 @@ export default {
   slug: "test-app",
   provider: { name: "aws", options: {} },
   apps: [
-    { name: "web", path: "apps/web", runtime: "node", domains: { production: "acme.com" } },
-    { name: "admin", path: "apps/admin", runtime: "node" },
+    { name: "web", path: "apps/web", framework: "node", domains: { production: "acme.com" } },
+    { name: "admin", path: "apps/admin", framework: "node" },
   ],
 };
 `)
@@ -650,7 +650,7 @@ export default {
   slug: "test-app",
   provider: { name: "aws", options: { region: "eu-west-2" } },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", runtime: "node" }],
+  apps: [{ name: "api", path: "apps/api", framework: "node" }],
 };
 `)
 	writeAppSource(t, root, "api")
@@ -677,7 +677,7 @@ export default {
   slug: "test-app",
   provider: { name: "aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", runtime: "node", compute: "container" }],
+  apps: [{ name: "api", path: "apps/api", framework: "node", compute: "container" }],
 };
 `)
 	writeAppSource(t, root, "api")

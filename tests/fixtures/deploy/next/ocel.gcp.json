@@ -5,5 +5,5 @@
     "name": "gcp",
     "options": { "project": "${OCEL_GCP_PROJECT}", "region": "${OCEL_GCP_REGION}" }
   },
-  "apps": [{ "name": "web", "runtime": "next", "path": "." }]
+  "apps": [{ "name": "web", "path": "." }]
 }

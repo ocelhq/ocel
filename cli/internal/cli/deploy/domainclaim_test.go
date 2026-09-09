@@ -172,7 +172,7 @@ export default {
   slug: "test-app",
   provider: { name: "aws", options: {} },
   domains: { production: "acme.com" },
-  apps: [{ name: "api", path: "apps/api", runtime: "node", domains: { production: "api.acme.com" } }],
+  apps: [{ name: "api", path: "apps/api", framework: "node", domains: { production: "api.acme.com" } }],
 };
 `)
 		writeAppSource(t, root, "api")

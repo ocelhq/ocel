@@ -43,7 +43,8 @@ type AppConfig struct {
 	Path       string           `json:"path" doc:"The app's directory, relative to the config."`
 	Entrypoint string           `json:"entrypoint,omitempty" doc:"The file the app is served from, when it is not the one ocel would detect."`
 	Compute    string           `json:"compute,omitempty" doc:"What the app runs on: serverless functions packed per route, or one container image serving everything." enum:"serverless,container"`
-	Runtime    Runtime          `json:"runtime,omitempty" doc:"The runtime a serverless app's functions run on. Named on its own it takes the provider's default architecture."`
+	Framework  string           `json:"framework,omitempty" doc:"What a serverless app is built with, when ocel is not to read it off the app's own manifest." enum:"node,next,go,python"`
+	Arch       string           `json:"arch,omitempty" doc:"The processor architecture a serverless app's functions are built for. Left off, the provider's default architecture." enum:"x86_64,arm64"`
 	Folder     string           `json:"folder,omitempty" doc:"The variables folder this app reads, when it does not read the project's own."`
 	Domains    *AppDomainConfig `json:"domains,omitempty" doc:"The hostnames this app is served on."`
 	Build      *BuildConfig     `json:"build,omitempty" doc:"How a container app's image is built."`
@@ -73,66 +74,6 @@ type RegistryConfig struct {
 	Server   string `json:"server" doc:"The registry host and the namespace images sit under, such as ghcr.io/acme. No scheme, and no credentials."`
 	Username string `json:"username,omitempty" doc:"The username the push authenticates as, where the registry wants one."`
 	Password string `json:"password" doc:"The name of the environment variable holding the password or token — not the secret itself."`
-}
-
-type Runtime struct {
-	Named bool   `json:"-"`
-	Name  string `json:"name"`
-	Arch  string `json:"arch,omitempty"`
-}
-
-func (r *Runtime) UnmarshalJSON(data []byte) error {
-	trimmed := bytes.TrimSpace(data)
-	if len(trimmed) == 0 || string(trimmed) == "null" {
-		*r = Runtime{}
-		return nil
-	}
-	if trimmed[0] == '"' {
-		var name string
-		if err := json.Unmarshal(trimmed, &name); err != nil {
-			return err
-		}
-		*r = Runtime{Named: true, Name: name}
-		return nil
-	}
-	var object struct {
-		Name string `json:"name"`
-		Arch string `json:"arch"`
-	}
-	if err := json.Unmarshal(trimmed, &object); err != nil {
-		return err
-	}
-	*r = Runtime{Named: true, Name: object.Name, Arch: object.Arch}
-	return nil
-}
-
-func (r Runtime) MarshalJSON() ([]byte, error) {
-	if !r.Named {
-		return []byte("null"), nil
-	}
-	if r.Arch == "" {
-		return json.Marshal(r.Name)
-	}
-	return json.Marshal(struct {
-		Name string `json:"name"`
-		Arch string `json:"arch,omitempty"`
-	}{Name: r.Name, Arch: r.Arch})
-}
-
-func (r Runtime) checkShape(path string, value any) error {
-	switch shaped := value.(type) {
-	case string:
-		return nil
-	case map[string]any:
-		return checkStruct(path, RuntimeObject{}, shaped)
-	default:
-		return typeError(path, "a runtime name or an object naming one")
-	}
-}
-
-type RuntimeObject struct {
-	Name string `json:"name" doc:"What a serverless app's functions are packed for and run on." enum:"node,next,go,python"`
-	Arch string `json:"arch,omitempty" doc:"The processor architecture the functions are built for." enum:"x86_64,arm64"`
 }
 
 type StringList []string

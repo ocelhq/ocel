@@ -5,10 +5,7 @@
   "apps": [
     {
       "name": "web",
-      "path": "./server",
-      // The architecture the wheels are vendored for, x86_64 unless named:
-      // "runtime": { "name": "python", "arch": "arm64" },
-      "runtime": "python"
+      "path": "./server"
     }
   ]
 }

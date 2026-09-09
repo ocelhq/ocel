@@ -2,11 +2,11 @@ import { describe, it } from "vitest";
 
 import { defineConfig } from "./config.js";
 
-describe("an app's runtime", () => {
-  it("names what a serverless app's functions run on", () => {
+describe("an app's framework", () => {
+  it("names what a serverless app is built with", () => {
     defineConfig({
       slug: "shop",
-      apps: [{ name: "api", path: "services/api", compute: "serverless", runtime: "node" }],
+      apps: [{ name: "api", path: "services/api", compute: "serverless", framework: "node" }],
     });
   });
 
@@ -18,13 +18,14 @@ describe("an app's runtime", () => {
           name: "web",
           path: "apps/web",
           compute: "serverless",
-          runtime: { name: "next", arch: "arm64" },
+          framework: "next",
+          arch: "arm64",
         },
       ],
     });
   });
 
-  it("is left off by a serverless app that lets the build detect it", () => {
+  it("is left off by a serverless app that lets ocel read it off the app", () => {
     defineConfig({
       slug: "shop",
       apps: [{ name: "api", path: "services/api", compute: "serverless" }],

@@ -22,7 +22,7 @@ export default {
   provider: { name: "aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
   links: [`+links+`],
-  apps: [{ name: "api", path: "apps/api", runtime: "node" }],
+  apps: [{ name: "api", path: "apps/api", framework: "node" }],
 };
 `)
 }

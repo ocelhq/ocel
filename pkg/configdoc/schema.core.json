@@ -25,6 +25,14 @@
       "items": {
         "additionalProperties": false,
         "properties": {
+          "arch": {
+            "description": "The processor architecture a serverless app's functions are built for. Left off, the provider's default architecture.",
+            "enum": [
+              "x86_64",
+              "arm64"
+            ],
+            "type": "string"
+          },
           "build": {
             "additionalProperties": false,
             "description": "How a container app's image is built.",
@@ -83,6 +91,16 @@
             "description": "The variables folder this app reads, when it does not read the project's own.",
             "type": "string"
           },
+          "framework": {
+            "description": "What a serverless app is built with, when ocel is not to read it off the app's own manifest.",
+            "enum": [
+              "node",
+              "next",
+              "go",
+              "python"
+            ],
+            "type": "string"
+          },
           "health": {
             "additionalProperties": false,
             "description": "How a container app is checked before it is served.",
@@ -102,48 +120,6 @@
           "path": {
             "description": "The app's directory, relative to the config.",
             "type": "string"
-          },
-          "runtime": {
-            "description": "The runtime a serverless app's functions run on. Named on its own it takes the provider's default architecture.",
-            "oneOf": [
-              {
-                "enum": [
-                  "node",
-                  "next",
-                  "go",
-                  "python"
-                ],
-                "type": "string"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "arch": {
-                    "description": "The processor architecture the functions are built for.",
-                    "enum": [
-                      "x86_64",
-                      "arm64"
-                    ],
-                    "type": "string"
-                  },
-                  "name": {
-                    "description": "What a serverless app's functions are packed for and run on.",
-                    "enum": [
-                      "node",
-                      "next",
-                      "go",
-                      "python"
-                    ],
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "name"
-                ],
-                "title": "RuntimeObject",
-                "type": "object"
-              }
-            ]
           }
         },
         "required": [

@@ -46,7 +46,7 @@ func TestDecodeRejectsUnknownKeys(t *testing.T) {
 		{"array element", `{"slug":"acme","apps":[{"name":"web","path":".","runtim":"go"}]}`, "apps[0].runtim"},
 		{"registry", `{"slug":"acme","registry":{"server":"ghcr.io","token":"X"}}`, "registry.token"},
 		{"edge", `{"slug":"acme","edge":{"kind":"cloudflare","zone":"x"}}`, "edge.zone"},
-		{"runtime object", `{"slug":"acme","apps":[{"name":"web","path":".","runtime":{"name":"go","cpu":"x"}}]}`, "apps[0].runtime.cpu"},
+		{"a key the app surface dropped", `{"slug":"acme","apps":[{"name":"web","path":".","runtime":"go"}]}`, "apps[0].runtime"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -103,16 +103,16 @@ func TestDecodeEscapesDoubleDollar(t *testing.T) {
 	}
 }
 
-func TestDecodeKeepsRuntimeInEitherForm(t *testing.T) {
-	doc, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","runtime":"go"},{"name":"b","path":".","runtime":{"name":"node","arch":"arm64"}}]}`), env(nil))
+func TestDecodeKeepsTheFrameworkAndArchitectureAnAppNames(t *testing.T) {
+	doc, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"a","path":".","framework":"go"},{"name":"b","path":".","framework":"node","arch":"arm64"}]}`), env(nil))
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if doc.Apps[0].Runtime.Name != "go" || doc.Apps[0].Runtime.Arch != "" {
-		t.Fatalf("runtime = %+v", doc.Apps[0].Runtime)
+	if doc.Apps[0].Framework != "go" || doc.Apps[0].Arch != "" {
+		t.Fatalf("app a = %+v", doc.Apps[0])
 	}
-	if doc.Apps[1].Runtime.Name != "node" || doc.Apps[1].Runtime.Arch != "arm64" {
-		t.Fatalf("runtime = %+v", doc.Apps[1].Runtime)
+	if doc.Apps[1].Framework != "node" || doc.Apps[1].Arch != "arm64" {
+		t.Fatalf("app b = %+v", doc.Apps[1])
 	}
 }
 

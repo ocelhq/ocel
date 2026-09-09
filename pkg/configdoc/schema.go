@@ -58,11 +58,6 @@ func schemaOf(target reflect.Type) object {
 			object{"type": "string"},
 			object{"type": "array", "items": object{"type": "string"}},
 		}}
-	case Runtime:
-		return object{"oneOf": []any{
-			object{"type": "string", "enum": enumOf(RuntimeObject{}, "name")},
-			schemaOf(reflect.TypeOf(RuntimeObject{})),
-		}}
 	case AlsoAString:
 		return object{"oneOf": []any{object{"type": "string"}, objectSchema(target)}}
 	}
@@ -130,15 +125,6 @@ func typeName(target reflect.Type) string {
 		return ""
 	}
 	return name
-}
-
-func enumOf(target any, name string) []any {
-	for _, field := range jsonFields(reflect.TypeOf(target)) {
-		if field.name == name {
-			return toAny(field.enum)
-		}
-	}
-	return nil
 }
 
 func toAny(values []string) []any {

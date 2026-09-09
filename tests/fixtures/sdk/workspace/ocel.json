@@ -5,7 +5,6 @@
   "apps": [
     {
       "name": "next",
-      "runtime": "next",
       "path": "./apps/next",
       "folder": "/next"
     },
