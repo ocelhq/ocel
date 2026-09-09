@@ -41,12 +41,12 @@ func (l Lock) Digest(name, platform string) (string, bool) {
 	return digest, held
 }
 
-func (l Lock) Bytes() []byte {
+func (l Lock) Bytes() ([]byte, error) {
 	raw, err := json.MarshalIndent(l, "", "  ")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("render %s: %w", Name, err)
 	}
-	return append(raw, '\n')
+	return append(raw, '\n'), nil
 }
 
 func Path(dir string) string { return filepath.Join(dir, Name) }
@@ -67,7 +67,29 @@ func Read(dir string) (Lock, bool, error) {
 }
 
 func Write(dir string, lock Lock) error {
-	if err := os.WriteFile(Path(dir), lock.Bytes(), 0o644); err != nil {
+	raw, err := lock.Bytes()
+	if err != nil {
+		return err
+	}
+
+	staged, err := os.CreateTemp(dir, "."+Name+".*")
+	if err != nil {
+		return fmt.Errorf("open a file to write %s through: %w", Name, err)
+	}
+	defer os.Remove(staged.Name())
+
+	if _, err := staged.Write(raw); err != nil {
+		staged.Close()
+		return fmt.Errorf("write %s: %w", Name, err)
+	}
+	if err := staged.Chmod(0o644); err != nil {
+		staged.Close()
+		return fmt.Errorf("write %s: %w", Name, err)
+	}
+	if err := staged.Close(); err != nil {
+		return fmt.Errorf("write %s: %w", Name, err)
+	}
+	if err := os.Rename(staged.Name(), Path(dir)); err != nil {
 		return fmt.Errorf("write %s: %w", Name, err)
 	}
 	return nil
