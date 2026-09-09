@@ -2,7 +2,7 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
-cmd = "node scripts/build-native.mjs --host"
+cmd = "node scripts/snapshot.mjs"
 entrypoint = ["true"]
 include_ext = ["go"]
 exclude_dir = ["tmp"]

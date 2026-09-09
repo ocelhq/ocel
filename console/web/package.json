@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
-    "@ocel/provider-aws": "workspace:^",
     "@phosphor-icons/react": "^2.1.10",
     "@remixicon/react": "^4.9.0",
     "@console/api": "workspace:*",

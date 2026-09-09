@@ -1,0 +1,10 @@
+name: goreleaser
+description: The goreleaser that compiles every binary this repo ships, at the version mise.toml pins.
+
+runs:
+  using: composite
+  steps:
+    - uses: goreleaser/goreleaser-action@v6
+      with:
+        install-only: true
+        version: "2.12.7"

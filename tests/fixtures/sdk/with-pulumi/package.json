@@ -8,7 +8,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ocel/provider-aws": "workspace:^",
     "@ocel/pulumi": "workspace:^",
     "@pulumi/aws": "~7.41.0",
     "@pulumi/pulumi": "~3.252.0",

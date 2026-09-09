@@ -84,12 +84,12 @@ jobs:
           region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
+      - uses: ./.github/actions/goreleaser
+
       - name: Build the binaries this sweep drives
         run: |
           set -euo pipefail
-          node scripts/build-native.mjs --host --target cli
-          node scripts/build-native.mjs --host --target provider-aws
-          echo "OCEL_BIN=$GITHUB_WORKSPACE/packages/native-lib/cli-linux-x64/bin/ocel" >> "$GITHUB_ENV"
+          node scripts/snapshot.mjs | tee -a "$GITHUB_ENV"
 
       - name: Assume the session that may spend the real account
         uses: ./.github/actions/real-aws-session

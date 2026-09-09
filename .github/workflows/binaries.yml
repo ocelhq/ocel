@@ -1,0 +1,54 @@
+name: Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: binaries-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish the archives a CLI fetches its providers from
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: |
+            cli/go.sum
+            platform/aws/provider/go.sum
+            platform/gcp/provider/go.sum
+            platform/vps/provider/go.sum
+            pkg/proto/go.sum
+            sdk/go.sum
+
+      - name: Setup gobuildcache
+        uses: ./.github/actions/gobuildcache
+        with:
+          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - uses: ./.github/actions/goreleaser
+
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: goreleaser release --clean

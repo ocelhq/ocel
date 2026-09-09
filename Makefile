@@ -1,26 +1,22 @@
 .DEFAULT_GOAL := all
 
-.PHONY: all generate cli provider proto clean lint
+.PHONY: all generate snapshot lib proto clean lint
 
-all: cli provider lib
+all: snapshot
 
 generate: proto
 
 lib:
 	pnpm turbo run build --filter=ocel --filter=@cli/node
 
-cli:
-	node scripts/build-native.mjs --host --target cli
-
-provider:
-	node scripts/build-native.mjs --host --target provider-aws
-	node scripts/build-native.mjs --host --target provider-vps
+snapshot:
+	node scripts/snapshot.mjs
 
 proto:
 	pnpm gen
 
 clean:
-	rm -rf platform/aws/provider/payloads/dist cli/node/dist
+	rm -rf dist platform/aws/provider/payloads/dist cli/node/dist
 
 lint:
 	pnpm exec biome check

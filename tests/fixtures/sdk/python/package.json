@@ -7,7 +7,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ocel/provider-aws": "workspace:^",
     "ocel": "workspace:^"
   },
   "devDependencies": {

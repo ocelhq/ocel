@@ -20,6 +20,7 @@ on:
       - "tests/journeys/**"
       - "tests/shared/**"
       - "scripts/**"
+      - ".goreleaser.yaml"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -72,7 +73,6 @@ env:
   PNPM_VERSION: "11.10.0"
   BUN_VERSION: "1.4.0"
   FORCE_COLOR: "1"
-  BINARIES: packages/native-lib
 
 jobs:
   binary:
@@ -333,13 +333,7 @@ jobs:
 
       - name: Build the binaries a journey drives
         if: ${{ steps.gate.outputs.any == 'true' }}
-        run: |
-          set -euo pipefail
-          go generate -C platform/gcp/provider ./...
-          node scripts/build-native.mjs --host --target cli
-          node scripts/build-native.mjs --host --target provider-aws
-          node scripts/build-native.mjs --host --target provider-gcp
-          node scripts/build-native.mjs --host --target provider-vps
+        run: node scripts/snapshot.mjs
 
       - name: Upload them for the lanes
         if: ${{ steps.gate.outputs.any == 'true' }}
@@ -348,10 +342,8 @@ jobs:
           name: journey-binaries
           if-no-files-found: error
           path: |
-            ${{ env.BINARIES }}/cli-linux-x64/bin/ocel
-            ${{ env.BINARIES }}/provider-aws-linux-x64/bin/deploy
-            ${{ env.BINARIES }}/provider-gcp-linux-x64/bin/deploy
-            ${{ env.BINARIES }}/provider-vps-linux-x64/bin/deploy
+            dist/ocel_linux_amd64_v1/ocel
+            dist/providers/**
 
   aws:
     name: aws
@@ -943,9 +935,7 @@ jobs:
       - name: Build the binaries this reaping drives
         run: |
           set -euo pipefail
-          node scripts/build-native.mjs --host --target cli
-          node scripts/build-native.mjs --host --target provider-aws
-          echo "OCEL_BIN=$GITHUB_WORKSPACE/packages/native-lib/cli-linux-x64/bin/ocel" >> "$GITHUB_ENV"
+          node scripts/snapshot.mjs | tee -a "$GITHUB_ENV"
 
       - name: Assume the session that may spend the real account
         uses: ./.github/actions/real-aws-session

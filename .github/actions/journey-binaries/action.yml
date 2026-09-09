@@ -1,8 +1,8 @@
 name: journey-binaries
 description: >-
-  The binaries the binary job built, put back where the workspace links expect
-  them, executable again after the artifact dropped their mode, with OCEL_BIN
-  naming the CLI a journey drives.
+  The snapshot binaries the binary job built, put back under dist/, executable
+  again after the artifact dropped their mode, with OCEL_BIN naming the CLI a
+  journey drives and OCEL_PROVIDERS_DIR the providers of its own version.
 
 runs:
   using: composite
@@ -11,14 +11,15 @@ runs:
       uses: actions/download-artifact@v4
       with:
         name: journey-binaries
-        path: packages/native-lib
+        path: dist
 
     - name: Give them back the bit the artifact dropped
       shell: bash
       run: |
         set -euo pipefail
-        chmod +x packages/native-lib/cli-linux-x64/bin/ocel
-        chmod +x packages/native-lib/provider-aws-linux-x64/bin/deploy
-        chmod +x packages/native-lib/provider-gcp-linux-x64/bin/deploy
-        chmod +x packages/native-lib/provider-vps-linux-x64/bin/deploy
-        echo "OCEL_BIN=$GITHUB_WORKSPACE/packages/native-lib/cli-linux-x64/bin/ocel" >> "$GITHUB_ENV"
+        chmod +x dist/ocel_linux_amd64_v1/ocel
+        find dist/providers -type f -exec chmod +x {} +
+        {
+          echo "OCEL_BIN=$GITHUB_WORKSPACE/dist/ocel_linux_amd64_v1/ocel"
+          echo "OCEL_PROVIDERS_DIR=$GITHUB_WORKSPACE/dist/providers"
+        } >> "$GITHUB_ENV"

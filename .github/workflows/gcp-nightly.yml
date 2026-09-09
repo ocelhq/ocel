@@ -103,14 +103,12 @@ jobs:
       - name: The Docker the container images are built with
         uses: ./.github/actions/containerd-docker
 
+      - uses: ./.github/actions/goreleaser
+
       - name: Build the binaries the journey drives
         run: |
           set -euo pipefail
-          node scripts/build-native.mjs --host --target cli
-          node scripts/build-native.mjs --host --target provider-gcp
-
-      - name: Name the binary the journey drives
-        run: echo "OCEL_BIN=$GITHUB_WORKSPACE/packages/native-lib/cli-linux-x64/bin/ocel" >> "$GITHUB_ENV"
+          node scripts/snapshot.mjs | tee -a "$GITHUB_ENV"
 
       - name: Reclaim what a run that died left behind
         run: pnpm --filter @ocel-tests/journeys sweep --target gcp

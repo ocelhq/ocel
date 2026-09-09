@@ -139,18 +139,17 @@ A fix that never reaches the deployment reads as a fix that failed. Each layer h
 path:
 
 - **Edge worker or Next adapter** — in the fixer's worktree,
-  `pnpm --filter @platform/cf-entry build && node scripts/build-native.mjs --host --target cli`.
+  `pnpm --filter @platform/cf-entry build && node scripts/snapshot.mjs`.
   Previews additionally need the shared entry worker reinstalled with
   `ocel domain use '<wildcard>' --preview`, and that worker is a **global singleton**: it
   serves every preview on the bootstrap, so two worktrees cannot hold different edge
   bundles at once. Serialize edge verification, or stack the edge fixes and verify them
   together.
 - **Membrane** (`platform/aws/provider/cmd/membrane/**`, `platform/aws/membrane/**`) and
-  **bootstrap functions** (`platform/aws/functions/**`) — `make provider`, repack the
+  **bootstrap functions** (`platform/aws/functions/**`) — `make snapshot`, repack the
   sidecar, then redeploy; for the bootstrap functions, `ocel bootstrap` after the repack.
   There is nothing to publish or release by hand.
-- **Sidecar** — repack only for `ocel/config` resolution or the `@ocel/provider-aws*`
-  binaries. Nothing else needs it.
+- **Sidecar** — repack only when `ocel/config` resolution changes. Nothing else needs it.
 
 ## Guardrails
 

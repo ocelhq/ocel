@@ -1,6 +1,6 @@
-import awsProvider from "@ocel/provider-aws";
 import { defineConfig } from "ocel/config";
 import { cloudflare } from "ocel/edge";
+import awsProvider from "ocel/providers/aws";
 
 export default defineConfig({
   slug: "ocel-web",

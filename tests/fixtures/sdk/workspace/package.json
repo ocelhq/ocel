@@ -8,8 +8,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ocel/provider-aws": "workspace:^",
-    "@ocel/provider-vps": "workspace:^",
     "ocel": "workspace:^",
     "pg": "^8.22.0",
     "zod": "^4.4.3"

@@ -62,21 +62,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    strategy:
-      matrix:
-        include:
-          - goos: darwin
-            goarch: arm64
-            pkg: cli-darwin-arm64
-          - goos: darwin
-            goarch: amd64
-            pkg: cli-darwin-x64
-          - goos: linux
-            goarch: amd64
-            pkg: cli-linux-x64
-          - goos: windows
-            goarch: amd64
-            pkg: cli-win32-x64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -118,14 +103,23 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
-        run: node scripts/build-native.mjs --goos ${{ matrix.goos }} --goarch ${{ matrix.goarch }} --version "${{ steps.version.outputs.version }}"
+      - uses: ./.github/actions/goreleaser
 
-      - name: Upload ${{ matrix.pkg }} binary
+      - name: Compile every binary of this version
+        env:
+          GORELEASER_CURRENT_TAG: v${{ steps.version.outputs.version }}
+        run: goreleaser build --clean --skip=validate
+
+      - name: Upload the CLI binaries the npm packages carry
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.pkg }}
-          path: packages/native-lib/${{ matrix.pkg }}/bin
+          name: cli-binaries
+          if-no-files-found: error
+          path: |
+            dist/ocel_darwin_amd64_v1/ocel
+            dist/ocel_darwin_arm64/ocel
+            dist/ocel_linux_amd64_v1/ocel
+            dist/ocel_windows_amd64_v1/ocel.exe
 
   publish:
     needs: build-binaries
@@ -143,22 +137,19 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: Download binary artifacts
+      - name: Download the CLI binaries
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: cli-binaries
+          path: dist
 
       - name: Assemble binaries into native packages
         run: |
           set -euo pipefail
-          for pkg in cli-darwin-arm64 cli-darwin-x64 cli-linux-x64 cli-win32-x64; do
-            dest="packages/native-lib/$pkg/bin"
-            mkdir -p "$dest"
-            cp -r "artifacts/$pkg/." "$dest/"
-          done
-          chmod +x packages/native-lib/cli-darwin-arm64/bin/ocel
-          chmod +x packages/native-lib/cli-darwin-x64/bin/ocel
-          chmod +x packages/native-lib/cli-linux-x64/bin/ocel
+          install -D -m 0755 dist/ocel_darwin_arm64/ocel packages/native-lib/cli-darwin-arm64/bin/ocel
+          install -D -m 0755 dist/ocel_darwin_amd64_v1/ocel packages/native-lib/cli-darwin-x64/bin/ocel
+          install -D -m 0755 dist/ocel_linux_amd64_v1/ocel packages/native-lib/cli-linux-x64/bin/ocel
+          install -D -m 0644 dist/ocel_windows_amd64_v1/ocel.exe packages/native-lib/cli-win32-x64/bin/ocel.exe
 
       - name: Build the published packages
         run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
@@ -172,8 +163,12 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Tag release
-        run: pnpm changeset tag
+      - name: Tag the release the binaries are published under
+        run: |
+          set -euo pipefail
+          pnpm changeset tag
+          version=$(node -p "require('./packages/ocel/package.json').version")
+          git tag "v$version"
 
       - name: Push tags
         run: git push --follow-tags

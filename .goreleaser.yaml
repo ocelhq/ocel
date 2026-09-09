@@ -1,0 +1,108 @@
+version: 2
+
+project_name: ocel
+
+before:
+  hooks:
+    - go generate -C cli ./...
+    - go generate -C platform/aws/provider ./...
+    - go generate -C platform/gcp/provider ./...
+    - go generate -C platform/vps/provider ./...
+
+builds:
+  - id: ocel
+    dir: cli
+    main: ./ocel
+    binary: ocel
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/ocelhq/ocel/cli/internal/version.Version={{ .Version }}
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+  - id: provider-aws
+    dir: platform/aws/provider
+    main: ./cmd/deploy
+    binary: provider-aws
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+  - id: provider-gcp
+    dir: platform/gcp/provider
+    main: ./cmd/deploy
+    binary: provider-gcp
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+  - id: provider-vps
+    dir: platform/vps/provider
+    main: ./cmd/deploy
+    binary: provider-vps
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: cli
+    ids: [ocel]
+    name_template: "ocel_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [LICENSE*, README*]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+  - id: providers
+    ids: [provider-aws, provider-gcp, provider-vps]
+    name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [LICENSE*]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ .Version }}-snapshot-{{ .ShortCommit }}"
+
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: ocelhq
+    name: ocel
+  prerelease: auto
