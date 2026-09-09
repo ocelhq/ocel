@@ -115,7 +115,7 @@ Binding, confirmed by the owner:
 
 ## Evidence on Hand
 
-- Real, runnable code samples: the quick start, `ocel.config.ts` variants, and the
+- Real, runnable code samples: the quick start, `ocel.json` variants, and the
   Node/Go SDK samples in `content/docs/index.mdx`. The Python and Rust tabs there are
   illustrative and not backed by shipped SDKs.
 - Framework and provider logos in `components/logos.tsx`: Next.js, Node, Express, Go,

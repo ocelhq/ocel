@@ -129,7 +129,7 @@ export const customProvider = linkProvider<CustomInputs>(
  * `postgres("orders", …)` here — and the resource is the postgres fields read
  * off whatever provisioned it, each of them an output this update resolves.
  * `class` defaults to production, `environment` names one preview environment,
- * and `project` is the directory holding `ocel.config.ts`, which is the
+ * and `project` is the directory holding `ocel.json`, which is the
  * directory Pulumi runs the program from unless it is given.
  */
 export function postgres(
@@ -147,7 +147,7 @@ export function postgres(
  * The name is the one a transform reads — `link.custom("network", …)` here,
  * `links.network.subnetIds` in a transform module. `class` defaults to
  * production, `environment` names one preview environment, and `project` is the
- * directory holding `ocel.config.ts`, which is the directory Pulumi runs the
+ * directory holding `ocel.json`, which is the directory Pulumi runs the
  * program from unless it is given.
  */
 export function custom(name: string, resource: DescribedCustomResource, opts?: LinkOptions): void {

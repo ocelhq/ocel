@@ -12,20 +12,22 @@ You write one config. It names a target, a cloud or a server, and nothing about 
 
 <Compare>
 
-```ts title="ocel.config.ts" lineNumbers
-export default defineConfig({
-  slug: "acme",
-  provider: awsProvider(), // [!code --]
-  apps: [{ name: "web" }],
-});
+```json title="ocel.json" lineNumbers
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "acme",
+  "provider": { "name": "aws" }, // [!code --]
+  "apps": [{ "name": "web", "path": "." }]
+}
 ```
 
-```ts title="ocel.config.ts" lineNumbers
-export default defineConfig({
-  slug: "acme",
-  provider: vps({ ssh: "my-vps" }), // [!code ++]
-  apps: [{ name: "web" }],
-});
+```json title="ocel.json" lineNumbers
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "acme",
+  "provider": { "name": "vps", "options": { "ssh": "my-vps" } }, // [!code ++]
+  "apps": [{ "name": "web", "path": "." }]
+}
 ```
 
 </Compare>
@@ -34,22 +36,22 @@ Compute is a setting too. On providers that support it, the same app runs as fun
 
 <Compare>
 
-```ts title="ocel.config.ts" lineNumbers=4
-  apps: [
-    {
-      name: "web",
-      compute: "serverless", // [!code --]
-    },
-  ],
+```json title="ocel.json" lineNumbers
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "acme",
+  "provider": { "name": "aws" },
+  "apps": [{ "name": "web", "path": ".", "compute": "serverless" }] // [!code --]
+}
 ```
 
-```ts title="ocel.config.ts" lineNumbers=4
-  apps: [
-    {
-      name: "web",
-      compute: "container", // [!code ++]
-    },
-  ],
+```json title="ocel.json" lineNumbers
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "acme",
+  "provider": { "name": "aws" },
+  "apps": [{ "name": "web", "path": ".", "compute": "container" }] // [!code ++]
+}
 ```
 
 </Compare>

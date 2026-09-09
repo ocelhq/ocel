@@ -120,7 +120,7 @@ export const customProvider = linkProvider<CustomInputs>(
  * `postgres("orders", …)` here — and the resource is either an SST component,
  * whose own link description is passed through, or the postgres fields written
  * out by hand. `class` defaults to production, `environment` names one preview
- * environment, and `project` is the directory holding `ocel.config.ts`, which is
+ * environment, and `project` is the directory holding `ocel.json`, which is
  * the SST config root unless it is given.
  */
 export function postgres(
@@ -164,7 +164,7 @@ export interface DescribedCustomResource {
  * The name is the one a transform reads — `link.custom("network", …)` here,
  * `links.network.subnetIds` in a transform module. `class` defaults to
  * production, `environment` names one preview environment, and `project` is the
- * directory holding `ocel.config.ts`, which is the SST config root unless it is
+ * directory holding `ocel.json`, which is the SST config root unless it is
  * given.
  */
 export function custom(name: string, resource: DescribedCustomResource, opts?: LinkOptions): void {
@@ -249,7 +249,7 @@ function configRoot(): string {
   const root = cli?.paths?.root;
   if (!root) {
     throw new Error(
-      "@ocel/sst publishes into the ocel project holding ocel.config.ts, and SST named no config root here; pass `project` to say which directory holds it",
+      "@ocel/sst publishes into the ocel project holding ocel.json, and SST named no config root here; pass `project` to say which directory holds it",
     );
   }
   return root;

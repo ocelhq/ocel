@@ -7,10 +7,18 @@ description: Deploy to your own Google Cloud project, on Cloud Run.
 ocel init --provider gcp
 ```
 
-Name the project and the region in `ocel.config.ts`:
+Name the project and the region:
 
-```ts
-provider: gcpProvider({ project: "my-project", region: "europe-west1" });
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "name": "gcp",
+    "options": { "project": "my-project", "region": "europe-west1" }
+  },
+  "apps": [{ "name": "web", "path": "." }]
+}
 ```
 
 Credentials come from Application Default Credentials:

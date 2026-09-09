@@ -45,6 +45,6 @@ export function assertInScope(key: string, folders: readonly string[]): void {
   throw new EnvScopeError(
     `'${key}' is scoped to ${folders.join(", ")}, but this app is bound to ${
       binding === "" ? "the project root" : binding
-    }. Bind this app to one of those folders in ocel.config.ts, or widen the variable's scope.`,
+    }. Bind this app to one of those folders in ocel.json, or widen the variable's scope.`,
   );
 }

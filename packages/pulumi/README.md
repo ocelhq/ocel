@@ -10,11 +10,11 @@ pnpm add @ocel/pulumi
 ```
 
 `@pulumi/pulumi` and `ocel` are peer dependencies. `ocel` is resolved from the ocel
-project — the directory holding `ocel.config.ts` — not from the Pulumi program.
+project — the directory holding `ocel.json` — not from the Pulumi program.
 
 ## Use
 
-`ocel.config.ts` beside `Pulumi.yaml` in the same package is the supported layout.
+`ocel.json` beside `Pulumi.yaml` in the same package is the supported layout.
 Declare the link in the Pulumi program:
 
 ```ts
@@ -39,15 +39,16 @@ link.postgres("orders", {
 });
 ```
 
-Name it in `ocel.config.ts`:
+Name it in `ocel.json`:
 
-```ts
-export default defineConfig({
-  slug: "shop",
-  provider: awsProvider(),
-  links: ["orders"],
-  apps: [{ name: "api", path: "." }],
-});
+```json
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "shop",
+  "provider": { "name": "aws" },
+  "links": ["orders"],
+  "apps": [{ "name": "api", "path": "." }]
+}
 ```
 
 Then read it in the app:
@@ -83,7 +84,7 @@ link.postgres("orders", {
 | ------------- | --------------------------- | ------------------------------------------------------------------------------------------ |
 | `class`       | `"production"`              | The ocel class the link is published to.                                                     |
 | `environment` | none                        | One preview environment; `class: "preview"` only. Left off, the link serves every preview.   |
-| `project`     | the program's directory     | The directory holding `ocel.config.ts`.                                                      |
+| `project`     | the program's directory     | The directory holding `ocel.json`.                                                      |
 | `parent`      | none                        | The Pulumi resource this link hangs under.                                                   |
 
 One call is one resource. Remove the call and the published link goes with it. A name

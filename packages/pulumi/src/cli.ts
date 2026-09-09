@@ -29,7 +29,7 @@ export function runLink(args: string[], target: Target, input?: string): void {
 export function checkTarget(target: Target): void {
   if (!target.project) {
     throw new Error(
-      "an ocel project is required: it is the directory holding ocel.config.ts, whose apps consume this link, and it is never read from a Pulumi stack or project name",
+      "an ocel project is required: it is the directory holding ocel.json, whose apps consume this link, and it is never read from a Pulumi stack or project name",
     );
   }
   if (target.class !== "production" && target.class !== "preview") {
@@ -68,7 +68,7 @@ function refusal(stderr: string, status: number | null): string {
 }
 
 function ocelCommand(project: string): [string, string] {
-  const require = createRequire(join(project, "ocel.config.ts"));
+  const require = createRequire(join(project, "ocel.json"));
   let manifest: string;
   try {
     manifest = require.resolve("ocel/package.json");

@@ -10,11 +10,11 @@ pnpm add @ocel/sst
 ```
 
 `ocel` is a peer dependency, and it is resolved from the ocel project — the
-directory holding `ocel.config.ts` — not from the SST app.
+directory holding `ocel.json` — not from the SST app.
 
 ## Use
 
-`ocel.config.ts` beside `sst.config.ts` in the same package is the supported
+`ocel.json` beside `sst.config.ts` in the same package is the supported
 layout. Declare the link in `sst.config.ts`:
 
 ```ts
@@ -32,15 +32,16 @@ export default $config({
 });
 ```
 
-Name it in `ocel.config.ts`:
+Name it in `ocel.json`:
 
-```ts
-export default defineConfig({
-  slug: "shop",
-  provider: awsProvider(),
-  links: ["orders"],
-  apps: [{ name: "api", path: "." }],
-});
+```json
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "shop",
+  "provider": { "name": "aws" },
+  "links": ["orders"],
+  "apps": [{ "name": "api", "path": "." }]
+}
 ```
 
 Then read it in the app:
@@ -76,7 +77,7 @@ link.postgres("orders", {
 | ------------- | -------------------- | ----------------------------------------------------------- |
 | `class`       | `"production"`       | The ocel class the link is published to.                     |
 | `environment` | none                 | One preview environment; `class: "preview"` only. Left off, the link serves every preview. |
-| `project`     | the SST config root  | The directory holding `ocel.config.ts`.                      |
+| `project`     | the SST config root  | The directory holding `ocel.json`.                      |
 
 One call is one resource. Remove the call and the published link goes with it.
 A name belongs to whoever published it, so two stacks publishing `orders` into

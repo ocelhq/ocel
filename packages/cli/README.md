@@ -4,7 +4,7 @@ The `ocel` command line, deploying apps into your own cloud.
 
 ```sh
 npm install -g @ocel/cli
-ocel init
+ocel init --provider aws
 ocel deploy
 ```
 

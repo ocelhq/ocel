@@ -1,8 +1,28 @@
 ---
 title: ocel init
-description: Dummy description for ocel init.
+description: Make this directory deployable.
 ---
 
 ```bash
-ocel init
+ocel init --provider aws
+```
+
+Writes `ocel.json` here, naming the provider you gave and a slug — this directory's name
+unless you pass one — and adds the ocel SDK with your language's own package manager. It
+runs entirely offline: it neither signs you in nor contacts the console.
+
+```bash
+ocel init my-app --provider vps
+```
+
+| Flag | What it does |
+| --- | --- |
+| `--provider` | The provider this project deploys through. Required. |
+| `--lang` | The language of this project (`go`, `rust`, `python`, `node`), when no manifest here says. |
+| `--ts` | Write the config [as a TypeScript program](/docs/typescript-config) instead — it compiles to the same document and needs node. |
+
+Then pin the providers this CLI runs, and commit the result:
+
+```bash
+ocel lock
 ```

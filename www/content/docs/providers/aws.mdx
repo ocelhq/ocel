@@ -4,5 +4,48 @@ description: Deploy to your AWS account.
 ---
 
 ```bash
-ocel deploy --provider aws
+ocel init --provider aws
+```
+
+Credentials come from the shell, the same ones `aws sts get-caller-identity` answers to.
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": { "name": "aws", "options": { "region": "eu-west-1" } },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+Then:
+
+```bash
+ocel bootstrap production
+ocel deploy
+```
+
+## Options
+
+| Option | What it does |
+| --- | --- |
+| `region` | The region to deploy into. |
+| `varsKey` | ARN of a KMS key to encrypt this account's variables under. Omit it and `ocel bootstrap --features vars-key` makes a key ocel owns. |
+| `certificates` | Already-issued ACM certificate ARNs, keyed by hostname. A hostname left off gets a certificate ocel requests, validates and deletes again. |
+| `transforms` | Module paths applied while provisioning, in order — later modules win where their patches collide. |
+
+## Edge
+
+The provider fronts the deployment with its own default edge. Name another instead —
+`cloudfront` and `api-gateway` are its own, [`cloudflare`](/docs/providers/cloudflare) is
+bought independently:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": { "name": "aws" },
+  "edge": { "kind": "cloudfront" },
+  "apps": [{ "name": "web", "path": "." }]
+}
 ```
