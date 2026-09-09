@@ -59,9 +59,10 @@ func (p *Provider) rewrite(ctx context.Context, urlMap, doing string, change fun
 		}
 		return p.settle(ctx, engine, doing, func(call ...googleapi.CallOption) (*compute.Operation, error) {
 			return engine.UrlMaps.Patch(p.options.Project, urlMap, &compute.UrlMap{
-				Fingerprint:  held.Fingerprint,
-				HostRules:    held.HostRules,
-				PathMatchers: held.PathMatchers,
+				Fingerprint:     held.Fingerprint,
+				HostRules:       held.HostRules,
+				PathMatchers:    held.PathMatchers,
+				ForceSendFields: []string{"HostRules", "PathMatchers"},
 			}).Context(ctx).Do(call...)
 		})
 	})
