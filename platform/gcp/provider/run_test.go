@@ -186,16 +186,37 @@ func TestThePublicIsBoundToInvokeAServiceOnceAndNotTwice(t *testing.T) {
 	}
 }
 
-func released(t *testing.T, server *runServer, s serving) string {
+func released(t *testing.T, server *runServer, s serving) (string, string) {
 	t.Helper()
 	if s.image == "" {
 		s.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:abc"
 	}
-	uri, err := server.open(t).stand(context.Background(), s, nil)
+	stood, err := server.open(t).stand(context.Background(), s, nil)
 	if err != nil {
 		t.Fatalf("stand(%s) = %v", s.service, err)
 	}
-	return uri
+	return stood.url, stood.revision
+}
+
+func TestAReleaseReportsTheRevisionItPinnedSoALaterPromoteCanReachIt(t *testing.T) {
+	server := &runServer{}
+	first := serves("ocel-shop-prod-app")
+	_, one := released(t, server, first)
+
+	second := first
+	second.image = "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:two"
+	_, two := released(t, server, second)
+
+	if one == "" || two == "" {
+		t.Fatalf("a release stood revisions %q and %q up, want each named: a rollback pins the revision its promotion recorded", one, two)
+	}
+	if one == two {
+		t.Errorf("both releases stood revision %q up, want a revision apiece: a rollback to the first would pin what the second serves", one)
+	}
+	standing := server.serving()
+	if !servedBy(standing.Traffic, two) {
+		t.Errorf("the service serves %+v, want all of it on %s, the revision the second release reported", standing.Traffic, two)
+	}
 }
 
 func publicly(policies []*run.GoogleIamV1Policy) bool {

@@ -8,15 +8,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
 const Kind edge.Kind = "direct"
 
 type Edge struct {
 	records providerkit.RecordStore
+	pins    pin.Pins
 }
 
-func New(records providerkit.RecordStore) *Edge { return &Edge{records: records} }
+func New(records providerkit.RecordStore, pins pin.Pins) *Edge {
+	return &Edge{records: records, pins: pins}
+}
 
 func (e *Edge) Kind() edge.Kind { return Kind }
 
@@ -115,7 +119,7 @@ func (s *stack) ledger() *kitledger.Ledger {
 func (s *stack) Ledger() edge.Ledger { return s.ledger() }
 
 func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
-	return s.ledger().Promote(ctx, promotion, pointer, report)
+	return pin.Promote(ctx, s.ledger(), s.e.pins, promotion, pointer, report)
 }
 
 func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {

@@ -33,7 +33,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 		if err != nil {
 			return nil, err
 		}
-		uri, err := p.stand(ctx, serving{
+		ran, err := p.stand(ctx, serving{
 			service: service,
 			image:   spec.Image,
 			env:     values,
@@ -46,7 +46,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 		if err != nil {
 			return nil, err
 		}
-		standing = append(standing, providerkit.Function{Name: spec.Name, Physical: service, URL: uri})
+		standing = append(standing, providerkit.Function{
+			Name: spec.Name, Physical: service, URL: ran.url, Revision: ran.revision,
+		})
 	}
 	return standing, nil
 }
@@ -84,7 +86,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	if err != nil {
 		return nil, err
 	}
-	uri, err := p.stand(ctx, serving{
+	ran, err := p.stand(ctx, serving{
 		service: service,
 		image:   app.Image,
 		env:     values,
@@ -96,7 +98,9 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	if err != nil {
 		return nil, err
 	}
-	return []providerkit.AppContainer{{Name: app.App, Physical: service, URL: uri, Image: app.Image}}, nil
+	return []providerkit.AppContainer{{
+		Name: app.App, Physical: service, URL: ran.url, Image: app.Image, Revision: ran.revision,
+	}}, nil
 }
 
 func (p *Provider) RemoveContainers(ctx context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, report providerkit.Reporter) error {

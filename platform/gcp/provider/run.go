@@ -130,16 +130,21 @@ func (p *Provider) servicePath(service string) string {
 	return p.location() + "/services/" + service
 }
 
-func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Reporter) (string, error) {
+type release struct {
+	url      string
+	revision string
+}
+
+func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Reporter) (release, error) {
 	services, err := p.clients.Run()
 	if err != nil {
-		return "", err
+		return release{}, err
 	}
 	path := p.servicePath(s.service)
 	s.image = p.heldAs(s.image)
 	desired, err := serviceOf(s)
 	if err != nil {
-		return "", err
+		return release{}, err
 	}
 
 	_, err = attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
@@ -155,7 +160,7 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 				Create(p.location(), desired).ServiceId(s.service).Context(ctx).Do(call...)
 		})
 	case err != nil:
-		return "", fmt.Errorf("read the Cloud Run service %s: %w", s.service, err)
+		return release{}, fmt.Errorf("read the Cloud Run service %s: %w", s.service, err)
 	default:
 		if report != nil {
 			report.Say("Releasing " + s.service + " onto Cloud Run")
@@ -173,33 +178,70 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 		})
 	}
 	if err != nil {
-		return "", err
+		return release{}, err
 	}
-	stood, err := p.pin(ctx, services, path, s.service)
+	held, revision, err := p.route(ctx, services, path, s.service,
+		"pin the traffic of "+s.service+" to the revision this release stood up", latestReady(s.service))
 	if err != nil {
-		return "", err
+		return release{}, err
 	}
 	if s.public {
 		if err := p.open(ctx, services, path, s.service); err != nil {
-			return "", err
+			return release{}, err
 		}
 	}
-	return stood.Uri, nil
+	return release{url: held.Uri, revision: revision}, nil
 }
 
-func (p *Provider) pin(ctx context.Context, services *run.Service, path, service string) (*run.GoogleCloudRunV2Service, error) {
-	var stood *run.GoogleCloudRunV2Service
-	err := p.settled(ctx, "pin the traffic of "+service+" to the revision this release stood up", func() error {
+func (p *Provider) Pin(ctx context.Context, service, revision string) error {
+	if revision == "" {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"%s is asked to serve a revision nothing named, and traffic is pinned to one revision by name", service)
+	}
+	services, err := p.clients.Run()
+	if err != nil {
+		return err
+	}
+	_, _, err = p.route(ctx, services, p.servicePath(service), service,
+		"pin the traffic of "+service+" to "+revision, named(revision))
+	return err
+}
+
+func latestReady(service string) func(*run.GoogleCloudRunV2Service) (string, error) {
+	return func(held *run.GoogleCloudRunV2Service) (string, error) {
+		revision := revisionName(held.LatestReadyRevision)
+		if revision == "" {
+			return "", providerkit.Refuse(providerkit.CodeNotReady,
+				"%s stood up no revision that came ready, and a release routes traffic to the revision it made rather than to whatever ran last",
+				service)
+		}
+		return revision, nil
+	}
+}
+
+func named(revision string) func(*run.GoogleCloudRunV2Service) (string, error) {
+	return func(*run.GoogleCloudRunV2Service) (string, error) { return revision, nil }
+}
+
+func (p *Provider) route(
+	ctx context.Context,
+	services *run.Service,
+	path, service, doing string,
+	choose func(*run.GoogleCloudRunV2Service) (string, error),
+) (*run.GoogleCloudRunV2Service, string, error) {
+	var (
+		standing *run.GoogleCloudRunV2Service
+		revision string
+	)
+	err := p.settled(ctx, doing, func() error {
 		held, err := p.read(ctx, services, path, service)
 		if err != nil {
 			return err
 		}
-		stood = held
-		revision := revisionName(held.LatestReadyRevision)
-		if revision == "" {
-			return providerkit.Refuse(providerkit.CodeNotReady,
-				"%s stood up no revision that came ready, and a release routes traffic to the revision it made rather than to whatever ran last",
-				service)
+		standing = held
+		revision, err = choose(held)
+		if err != nil {
+			return err
 		}
 		if servedBy(held.Traffic, revision) {
 			return nil
@@ -214,9 +256,9 @@ func (p *Provider) pin(ctx context.Context, services *run.Service, path, service
 		})
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return stood, nil
+	return standing, revision, nil
 }
 
 func (p *Provider) read(ctx context.Context, services *run.Service, path, service string) (*run.GoogleCloudRunV2Service, error) {
