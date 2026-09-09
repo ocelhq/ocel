@@ -7,6 +7,7 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
+	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
 func classless(what any) error {
@@ -17,6 +18,7 @@ func classless(what any) error {
 type edges struct {
 	namespace providerkit.Namespace
 	records   providerkit.RecordStore
+	pins      pin.Pins
 }
 
 var supportedEdges = []edge.Kind{direct.Kind, cloudflare.Kind}
@@ -28,7 +30,7 @@ func (edges) Default() edge.Kind { return direct.Kind }
 func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 	switch kind {
 	case direct.Kind:
-		return direct.New(e.records), nil
+		return direct.New(e.records, e.pins), nil
 	case cloudflare.Kind:
 		return cloudflare.New(string(e.namespace)), nil
 	}

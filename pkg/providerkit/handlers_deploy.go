@@ -1049,6 +1049,7 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFact
 		EntryFunction:    physicalByLogical[entryLogicalName(r.manifest, entry.App, facts.Entry)],
 		Image:            images.Coordinate(entry.App),
 		Physical:         physicalOf(result.Containers, entry.App),
+		Revisions:        revisionsOf(result),
 		Origin:           originOf(result.Containers, entry.App),
 		HealthPath:       entry.HealthCheckPath,
 		FunctionURLs:     urls,
@@ -1357,6 +1358,24 @@ func (r *deployRun) openImages(ctx context.Context, wired *contractv1.ImageRegis
 	}
 	r.images = store
 	return nil
+}
+
+func revisionsOf(result StackResult) map[string]string {
+	revisions := make(map[string]string, len(result.Containers)+len(result.Functions))
+	for _, container := range result.Containers {
+		if container.Physical != "" && container.Revision != "" {
+			revisions[container.Physical] = container.Revision
+		}
+	}
+	for _, fn := range result.Functions {
+		if fn.Physical != "" && fn.Revision != "" {
+			revisions[fn.Physical] = fn.Revision
+		}
+	}
+	if len(revisions) == 0 {
+		return nil
+	}
+	return revisions
 }
 
 func physicalOf(containers []AppContainer, app string) string {
