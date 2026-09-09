@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -141,6 +142,24 @@ func checkObject(path string, target reflect.Type, object map[string]any) error 
 		if err := checkValue(joinPath(path, key), fields[index].kind, object[key]); err != nil {
 			return err
 		}
+		if err := checkPattern(joinPath(path, key), fields[index], object[key]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkPattern(path string, field jsonField, value any) error {
+	text, ok := value.(string)
+	if field.pattern == "" || !ok {
+		return nil
+	}
+	matched, err := regexp.MatchString(field.pattern, text)
+	if err != nil {
+		return fmt.Errorf("%q is checked against %s, which is not a pattern: %w", path, field.pattern, err)
+	}
+	if !matched {
+		return fmt.Errorf("%q must match %s", path, field.pattern)
 	}
 	return nil
 }
@@ -156,6 +175,7 @@ type jsonField struct {
 	name     string
 	doc      string
 	enum     []string
+	pattern  string
 	optional bool
 	kind     reflect.Type
 }
@@ -176,6 +196,7 @@ func jsonFields(target reflect.Type) []jsonField {
 			name:     name,
 			doc:      field.Tag.Get("doc"),
 			enum:     enum,
+			pattern:  field.Tag.Get("pattern"),
 			optional: strings.Contains(options, "omitempty"),
 			kind:     field.Type,
 		})

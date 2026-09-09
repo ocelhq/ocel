@@ -94,6 +94,9 @@ func objectSchema(target reflect.Type) object {
 		if field.doc != "" {
 			property["description"] = field.doc
 		}
+		if field.pattern != "" {
+			property["pattern"] = field.pattern
+		}
 		if len(field.enum) > 0 {
 			if items, ok := property["items"].(object); ok {
 				items["enum"] = toAny(field.enum)
