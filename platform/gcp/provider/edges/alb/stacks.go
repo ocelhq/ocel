@@ -46,6 +46,10 @@ type Routes interface {
 	Unroute(ctx context.Context, urlMap, hostname string) error
 }
 
+type Entries interface {
+	Entered(ctx context.Context, certificateMap string) ([]string, error)
+}
+
 type Front struct {
 	Address        string `json:"address,omitempty"`
 	CertificateMap string `json:"certificateMap,omitempty"`

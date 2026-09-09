@@ -31,10 +31,11 @@ const (
 )
 
 type stamp struct {
-	Schema int    `json:"schema"`
-	State  state  `json:"state"`
-	Writer string `json:"writer"`
-	Digest string `json:"digest"`
+	Schema   int      `json:"schema"`
+	State    state    `json:"state"`
+	Writer   string   `json:"writer"`
+	Digest   string   `json:"digest"`
+	Features []string `json:"features,omitempty"`
 }
 
 type survey struct {

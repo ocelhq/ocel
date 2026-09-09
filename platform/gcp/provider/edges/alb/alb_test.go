@@ -20,6 +20,7 @@ func fronting(t *testing.T) (*Edge, *world) {
 		Records: fake.NewRecords(),
 		Stacks:  w,
 		Routes:  w,
+		Entries: w,
 		Pins:    w,
 		Project: "acme-prod",
 		Region:  "europe-west1",
@@ -169,6 +170,38 @@ func TestARemovalPlanNamesTheStandingCostItLeavesBehind(t *testing.T) {
 	}
 	if !strings.Contains(kept.Reason, "$18") {
 		t.Errorf("the kept group reads %q, want the standing cost named: the load balancer outlives the project it fronted", kept.Reason)
+	}
+}
+
+func TestTheFrontIsNotTakenDownWhileAHostnameIsStillEnteredInItsCertificateMap(t *testing.T) {
+	t.Parallel()
+
+	front, w := fronting(t)
+	w.enter("ocel-alb-production-certs", "shop.example.com")
+
+	var refusal providerkit.Refusal
+	err := front.Teardown(context.Background(), providerkit.ClassProduction)
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Teardown with a hostname still bound = %v, want an %s refusal", err, providerkit.CodeInvalid)
+	}
+	if !strings.Contains(refusal.Message, "shop.example.com") {
+		t.Errorf("the refusal reads %q, want the hostnames that hold the map named: they are what the operator has to release", refusal.Message)
+	}
+	if got := w.torn(); len(got) != 0 {
+		t.Errorf("the refused teardown destroyed %v: a certificate map with entries cannot be deleted, so the destroy fails partway "+
+			"and orphans the forwarding rule and the address it had already reached", got)
+	}
+}
+
+func TestTheFrontComesDownOnceNothingIsBoundToIt(t *testing.T) {
+	t.Parallel()
+
+	front, w := fronting(t)
+	if err := front.Teardown(context.Background(), providerkit.ClassProduction); err != nil {
+		t.Fatalf("Teardown = %v", err)
+	}
+	if want := FrontStack(providerkit.ClassProduction); !slices.Contains(w.torn(), want) {
+		t.Errorf("the teardown destroyed %v, want %q among them", w.torn(), want)
 	}
 }
 

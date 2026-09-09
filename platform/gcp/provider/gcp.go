@@ -115,6 +115,7 @@ func (p *Provider) Edges() providerkit.EdgeRegistry {
 		pins:      p,
 		stacks:    albStacks{p: p},
 		routes:    p,
+		entries:   p,
 		project:   p.options.Project,
 		region:    p.options.Region,
 	}

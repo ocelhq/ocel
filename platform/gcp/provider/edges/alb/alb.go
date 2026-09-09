@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -21,6 +22,7 @@ type Deps struct {
 	Records providerkit.RecordStore
 	Stacks  Stacks
 	Routes  Routes
+	Entries Entries
 	Pins    pin.Pins
 	Project string
 	Region  string
@@ -77,7 +79,32 @@ func (e *Edge) raise(ctx context.Context, class edge.Class, report edge.Reporter
 	return front, nil
 }
 
+func (e *Edge) Bound(ctx context.Context, class edge.Class) ([]string, error) {
+	if e.deps.Entries == nil {
+		return nil, nil
+	}
+	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Class: class})
+	if err != nil {
+		return nil, err
+	}
+	front := frontOf(outputs)
+	if front.CertificateMap == "" {
+		return nil, nil
+	}
+	return e.deps.Entries.Entered(ctx, front.CertificateMap)
+}
+
 func (e *Edge) Teardown(ctx context.Context, class edge.Class) error {
+	bound, err := e.Bound(ctx, class)
+	if err != nil {
+		return err
+	}
+	if len(bound) > 0 {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"the %s front of class %s still serves %s, and Google will not delete a certificate map that holds entries: "+
+				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
+			Kind, class, strings.Join(bound, ", "))
+	}
 	return e.deps.Stacks.Destroy(ctx, Target{Class: class}, edge.DiscardReporter())
 }
 

@@ -74,18 +74,29 @@ func (b bootstrapper) Describe(ctx context.Context, class providerkit.Class) (pr
 
 func described(read survey) providerkit.Bootstrap {
 	items := bootstrapItems(read.Names, read.Class, read.Emulated)
+	stacks := []providerkit.BootstrapStack{{
+		Name:          read.Project + "/" + string(read.Class),
+		Present:       read.Present,
+		Schema:        uint32(read.Stamp.Schema),
+		DigestCurrent: read.Stamp.Digest == digestOf(read.Names.Namespace(), items) && read.current(items),
+		Writer:        read.Stamp.Writer,
+	}}
+	for _, feature := range read.Stamp.Features {
+		stacks = append(stacks, providerkit.BootstrapStack{
+			Name:          read.Project + "/" + string(read.Class) + "/" + feature,
+			Feature:       feature,
+			Present:       true,
+			Schema:        uint32(read.Stamp.Schema),
+			DigestCurrent: true,
+			Writer:        read.Stamp.Writer,
+		})
+	}
 	return providerkit.Bootstrap{
 		Class:      read.Class,
 		Present:    read.Present,
 		Unfinished: read.Present && read.Stamp.State != stateComplete,
 		Held:       read,
-		Stacks: []providerkit.BootstrapStack{{
-			Name:          read.Project + "/" + string(read.Class),
-			Present:       read.Present,
-			Schema:        uint32(read.Stamp.Schema),
-			DigestCurrent: read.Stamp.Digest == digestOf(read.Names.Namespace(), items) && read.current(items),
-			Writer:        read.Stamp.Writer,
-		}},
+		Stacks:     stacks,
 	}
 }
 
@@ -161,10 +172,11 @@ func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	}
 
 	written := stamp{
-		Schema: providerkit.BootstrapSchema,
-		State:  stateApplying,
-		Writer: req.Writer.String(),
-		Digest: digestOf(read.Names.Namespace(), items),
+		Schema:   providerkit.BootstrapSchema,
+		State:    stateApplying,
+		Writer:   req.Writer.String(),
+		Digest:   digestOf(read.Names.Namespace(), items),
+		Features: standingFeatures(b.Catalogue(), read.Stamp.Features, req),
 	}
 	generation, err := b.stampWith(ctx, read, written, read.Generation)
 	if err != nil {
@@ -653,6 +665,9 @@ func (b bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
+	if err := b.frontsFree(ctx, class, read.Stamp.Features); err != nil {
+		return providerkit.Plan{}, err
+	}
 	stack, params := providerkit.ChangeGroup{
 		Kind:   providerkit.StackGroupKind,
 		Name:   read.Project + "/" + string(class),
@@ -744,6 +759,9 @@ func (b bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 				"Run `%s` in every project deployed here first",
 			read.Names.StateBucket(class), read.stateOf, destroyIn(class))
 	}
+	if err := b.frontsFree(ctx, class, read.Stamp.Features); err != nil {
+		return err
+	}
 	if read.Present {
 		leaving := read.Stamp
 		leaving.State = stateRemoving
@@ -751,7 +769,7 @@ func (b bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 			return err
 		}
 	}
-	if err := b.tearFronts(ctx, class); err != nil {
+	if err := b.tearFronts(ctx, class, read.Stamp.Features); err != nil {
 		return err
 	}
 	for _, taking := range removals(read) {
