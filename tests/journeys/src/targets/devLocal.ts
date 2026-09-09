@@ -2,7 +2,7 @@ import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { HARNESS_ONLY_ENV, localPostgresUrl, postgresLink } from "@ocel-tests/shared/env";
 import { SQL } from "bun";
-import { JOURNEY_CONFIG } from "../config";
+import { journeyConfigIn } from "../config";
 import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { HARNESS_PREFIX, isStranded } from "../identity";
@@ -104,7 +104,7 @@ function childEnv(): NodeJS.ProcessEnv {
 
 async function up(cell: CellContext): Promise<Deployment> {
   const dir = await workTree(cell, TARGET);
-  const env = { ...childEnv(), OCEL_CONFIG: path.join(dir, JOURNEY_CONFIG) };
+  const env = { ...childEnv(), OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)) };
 
   await writeDotfile(cell, dir);
   if (migrates(cell.fixture.rows)) {

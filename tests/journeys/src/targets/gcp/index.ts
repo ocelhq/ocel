@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { GCP_BASE, JOURNEY_CONFIG, type Overlay, writeJourneyConfig } from "../../config";
+import { GCP_BASE, journeyConfigIn, type Overlay, writeJourneyConfig } from "../../config";
 import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../../contract";
 import type { ExpectationEnvironment } from "../../expectations/types";
 import { currentRunIdentity, projectSlug, slugPart } from "../../identity";
@@ -98,7 +98,7 @@ async function services() {
 function childEnv(dir: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    OCEL_CONFIG: path.join(dir, JOURNEY_CONFIG),
+    OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)),
     [PROJECT_ENV]: project(),
     [REGION_ENV]: region(),
   };

@@ -1,12 +1,14 @@
 import { existsSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import stripJsonComments from "strip-json-comments";
 import { appHostname } from "./identity";
 import type { Cell, Compute, Edge, TargetName } from "./spec";
 import { gcpSlug } from "./targets/gcp/names";
 import type { CellContext } from "./targets/types";
 
-export const JOURNEY_CONFIG = "ocel.journey.config.ts";
+export const JOURNEY_TS = "ocel.journey.config.ts";
+export const JOURNEY_JSON = "ocel.journey.json";
 
 export const AWS_BASE = "./ocel.config.ts";
 export const VPS_BASE = "./ocel.vps.config.ts";
@@ -132,6 +134,49 @@ export function renderConfig(overlay: Overlay): string {
   return `${imports.join("\n")}\n${hostnames}\nexport default defineConfig({\n${fields.join("\n")}\n});\n`;
 }
 
+type App = Record<string, unknown> & { name?: string };
+
+type Document = Record<string, unknown> & {
+  provider?: { name?: string; options?: Record<string, unknown> };
+  apps?: App[];
+};
+
+function appDocument(app: App, overlay: Overlay): App {
+  const written: App = { ...app };
+  if (overlay.compute) {
+    written.compute = overlay.compute;
+  }
+  if (overlay.compute === "container") {
+    delete written.runtime;
+  }
+  const hostname = app.name === undefined ? undefined : overlay.hostnames?.[app.name];
+  if (hostname) {
+    written.domains = { production: hostname };
+  }
+  return written;
+}
+
+export function renderJsonConfig(base: string, overlay: Overlay): string {
+  const read = JSON.parse(stripJsonComments(base)) as Document;
+  const written: Document = { ...read, slug: overlay.slug };
+  if (overlay.varsKey) {
+    written.provider = {
+      name: "aws",
+      options: { ...read.provider?.options, varsKey: overlay.varsKey },
+    };
+  }
+  if (overlay.edge) {
+    written.edge = { kind: overlay.edge };
+  }
+  if (overlay.dns) {
+    written.dns = { kind: overlay.dns };
+  }
+  if (read.apps) {
+    written.apps = read.apps.map((app) => appDocument(app, overlay));
+  }
+  return `${JSON.stringify(written, null, 2)}\n`;
+}
+
 export function baseIn(dir: string, base: string): string {
   const asJson = base.replace(/\.config\.ts$/, ".json");
   if (asJson !== base && !existsSync(path.join(dir, base)) && existsSync(path.join(dir, asJson))) {
@@ -140,8 +185,19 @@ export function baseIn(dir: string, base: string): string {
   return base;
 }
 
+export function journeyConfigIn(dir: string): string {
+  return existsSync(path.join(dir, JOURNEY_JSON)) ? JOURNEY_JSON : JOURNEY_TS;
+}
+
 export async function writeJourneyConfig(dir: string, overlay: Overlay): Promise<string> {
-  const file = path.join(dir, JOURNEY_CONFIG);
-  await writeFile(file, renderConfig({ ...overlay, base: baseIn(dir, overlay.base) }), "utf8");
+  const base = baseIn(dir, overlay.base);
+  if (!base.endsWith(".json")) {
+    const file = path.join(dir, JOURNEY_TS);
+    await writeFile(file, renderConfig({ ...overlay, base }), "utf8");
+    return file;
+  }
+  const file = path.join(dir, JOURNEY_JSON);
+  const read = await readFile(path.join(dir, base), "utf8");
+  await writeFile(file, renderJsonConfig(read, { ...overlay, base }), "utf8");
   return file;
 }
