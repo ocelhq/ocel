@@ -16,7 +16,7 @@ ocel dev -- pnpm --dir apps/express start
 
 ```bash
 ocel deploy
-OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --config ocel.vps.config.ts
+OCEL_VPS_HOST=… OCEL_VPS_USER=… OCEL_VPS_IDENTITY_FILE=… ocel deploy --config ocel.vps.json
 ```
 
 `ocel destroy` takes it all down again.
