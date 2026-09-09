@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { applyConsoleEnvDefaults, consoleUrl, HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
-import { JOURNEY_CONFIG } from "../config";
+import { journeyConfigIn } from "../config";
 import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { isStranded } from "../identity";
@@ -65,7 +65,7 @@ function childEnv(token: string): NodeJS.ProcessEnv {
 async function up(cell: CellContext): Promise<Deployment> {
   const token = await accessToken();
   const dir = await workTree(cell, "dev");
-  const env = { ...childEnv(token), OCEL_CONFIG: path.join(dir, JOURNEY_CONFIG) };
+  const env = { ...childEnv(token), OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)) };
 
   await runOcel(cell, dir, "up", "console-link", ["console", "link", "--create", cell.slug], env);
   if (setsEnv(cell.fixture.rows)) {

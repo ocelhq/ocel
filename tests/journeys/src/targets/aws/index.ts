@@ -3,7 +3,7 @@ import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import {
   AWS_BASE,
-  JOURNEY_CONFIG,
+  journeyConfigIn,
   type Overlay,
   sweepShapeFor,
   writeJourneyConfig,
@@ -60,7 +60,7 @@ async function guard(): Promise<ExpectationEnvironment> {
 function childEnv(dir: string, namespace?: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    OCEL_CONFIG: path.join(dir, JOURNEY_CONFIG),
+    OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)),
     ...(namespace ? { [NAMESPACE_ENV]: namespace } : {}),
   };
 }

@@ -4,7 +4,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
-import { JOURNEY_CONFIG, journeyZone } from "../config";
+import { journeyConfigIn, journeyZone } from "../config";
 import { INITIAL_GREETING, REDACTED, redact, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { appHostname, HARNESS_PREFIX, isStranded } from "../identity";
@@ -240,7 +240,7 @@ async function bindDomains(cell: CellContext, started: Standing): Promise<void> 
     started.dir,
     "up",
     "domain-add",
-    ["--config", JOURNEY_CONFIG, "domain", "add"],
+    ["--config", journeyConfigIn(started.dir), "domain", "add"],
     {
       ...started.env,
       HTTPS_PROXY: started.gateway.tunnelUrl,
@@ -299,7 +299,14 @@ async function standingFor(cell: CellContext): Promise<Standing> {
 
 function driving(cell: CellContext, started: Standing, leg: Leg) {
   return (name: string, args: string[]) =>
-    runOcel(cell, started.dir, leg, name, ["--config", JOURNEY_CONFIG, ...args], started.env);
+    runOcel(
+      cell,
+      started.dir,
+      leg,
+      name,
+      ["--config", journeyConfigIn(started.dir), ...args],
+      started.env,
+    );
 }
 
 async function up(cell: CellContext): Promise<Deployment> {
@@ -352,7 +359,7 @@ async function destroy(cell: CellContext): Promise<void> {
     return;
   }
   standing.delete(cell.slug);
-  const args = ["--config", JOURNEY_CONFIG, "destroy", "production", "--yes"];
+  const args = ["--config", journeyConfigIn(started.dir), "destroy", "production", "--yes"];
   try {
     await runOcel(cell, started.dir, "destroy", "destroy", args, started.env);
   } catch (refused) {

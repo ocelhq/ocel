@@ -1,12 +1,20 @@
 import { describe, expect, it } from "bun:test";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   AWS_BASE,
   GCP_BASE,
+  JOURNEY_JSON,
+  JOURNEY_TS,
+  journeyConfigIn,
   journeyZone,
   renderConfig,
+  renderJsonConfig,
   shapeFor,
   sweepShapeFor,
   VPS_BASE,
+  writeJourneyConfig,
 } from "./config";
 import { evidence } from "./evidence";
 import { type Concern, specByName } from "./spec";
@@ -221,5 +229,96 @@ export default defineConfig({
 });
 `,
     );
+  });
+});
+
+const COMMENTED_JSON_BASE = `{
+  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "slug": "go",
+  "provider": { "name": "aws" },
+  "apps": [
+    {
+      "name": "web",
+      "path": "./server",
+      // The architecture the binary is built for, x86_64 unless named:
+      // "runtime": { "name": "go", "arch": "arm64" },
+      "runtime": "go"
+    }
+  ]
+}
+`;
+
+describe("renderJsonConfig", () => {
+  it("overlays a base carrying the comments no bundler would read", () => {
+    expect(
+      JSON.parse(renderJsonConfig(COMMENTED_JSON_BASE, { base: "./ocel.json", slug: "j-1-go" })),
+    ).toEqual({
+      $schema: "https://ocel.dev/schema/ocel.schema.json",
+      slug: "j-1-go",
+      provider: { name: "aws" },
+      apps: [{ name: "web", path: "./server", runtime: "go" }],
+    });
+  });
+
+  it("writes every dimension of a full cell as data", () => {
+    expect(
+      JSON.parse(
+        renderJsonConfig(COMMENTED_JSON_BASE, {
+          base: "./ocel.json",
+          slug: "j-1-go",
+          compute: "container",
+          edge: "api-gateway",
+          dns: "cloudflare",
+          hostnames: { web: "web-j-1-go.j.example" },
+          varsKey: "arn:aws:kms:key/k",
+        }),
+      ),
+    ).toEqual({
+      $schema: "https://ocel.dev/schema/ocel.schema.json",
+      slug: "j-1-go",
+      provider: { name: "aws", options: { varsKey: "arn:aws:kms:key/k" } },
+      edge: { kind: "api-gateway" },
+      dns: { kind: "cloudflare" },
+      apps: [
+        {
+          name: "web",
+          path: "./server",
+          compute: "container",
+          domains: { production: "web-j-1-go.j.example" },
+        },
+      ],
+    });
+  });
+
+  it("keeps the options the fixture's own provider carries", () => {
+    expect(
+      JSON.parse(
+        renderJsonConfig(
+          `{"slug":"go","provider":{"name":"aws","options":{"region":"eu-west-1"}}}`,
+          { base: "./ocel.json", slug: "j-1-go", varsKey: "arn:aws:kms:key/k" },
+        ),
+      ).provider,
+    ).toEqual({ name: "aws", options: { region: "eu-west-1", varsKey: "arn:aws:kms:key/k" } });
+  });
+});
+
+describe("writeJourneyConfig", () => {
+  it("writes the overlay in the form the fixture's own base is written in", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "journey-config-"));
+    await writeFile(path.join(dir, "ocel.json"), COMMENTED_JSON_BASE, "utf8");
+    const file = await writeJourneyConfig(dir, { base: AWS_BASE, slug: "j-1-go" });
+
+    expect(file).toBe(path.join(dir, JOURNEY_JSON));
+    expect(journeyConfigIn(dir)).toBe(JOURNEY_JSON);
+    expect(JSON.parse(await readFile(file, "utf8")).slug).toBe("j-1-go");
+  });
+
+  it("writes a program where the fixture's own base is one", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "journey-config-"));
+    await writeFile(path.join(dir, "ocel.config.ts"), "export default {};\n", "utf8");
+    const file = await writeJourneyConfig(dir, { base: AWS_BASE, slug: "j-1-node" });
+
+    expect(file).toBe(path.join(dir, JOURNEY_TS));
+    expect(journeyConfigIn(dir)).toBe(JOURNEY_TS);
   });
 });
