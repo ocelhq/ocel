@@ -145,7 +145,7 @@ path:
   serves every preview on the bootstrap, so two worktrees cannot hold different edge
   bundles at once. Serialize edge verification, or stack the edge fixes and verify them
   together.
-- **Membrane** (`platform/aws/provider/cmd/membrane/**`, `platform/aws/membrane/**`) and
+- **Runtime** (`platform/aws/runtime/**`) and
   **bootstrap functions** (`platform/aws/functions/**`) — `make snapshot`, repack the
   sidecar, then redeploy; for the bootstrap functions, `ocel bootstrap` after the repack.
   There is nothing to publish or release by hand.

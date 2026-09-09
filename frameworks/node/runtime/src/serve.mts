@@ -1,5 +1,5 @@
 import { boot } from "./boot.mjs";
-import type { Bind } from "./membrane.mjs";
+import type { Bind } from "./host.mjs";
 
 const everyNetwork = "0.0.0.0";
 

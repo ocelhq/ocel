@@ -9,6 +9,7 @@ command -v zip >/dev/null || {
 payloads_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 provider_dir=$(CDPATH= cd -- "$payloads_dir/.." && pwd)
 root=$(CDPATH= cd -- "$provider_dir/../../.." && pwd)
+runtime_dir=$(CDPATH= cd -- "$provider_dir/../runtime" && pwd)
 dist="$payloads_dir/dist"
 
 functions="image-optimizer revalidator tag-publisher tag-invalidator"
@@ -27,7 +28,7 @@ pack() {
 
 build_lambda() {
   (
-    cd "$provider_dir"
+    cd "$runtime_dir"
     CGO_ENABLED=0 GOOS=linux GOARCH="${3:-amd64}" \
       go build -trimpath -buildvcs=false -tags lambda.norpc -ldflags="-s -w" -o "$2" "$1"
   )
@@ -40,8 +41,8 @@ mkdir -p "$dist"
 for goarch in amd64 arm64; do
   layer="$stage/runtime-$goarch"
   mkdir -p "$layer/ocel"
-  build_lambda ./cmd/membrane/bootstrap "$layer/ocel/bootstrap" "$goarch"
-  cp -R "$root/platform/aws/membrane/dist/." "$layer/ocel/"
+  build_lambda ./cmd/runtime "$layer/ocel/runtime" "$goarch"
+  cp -R "$root/platform/aws/runtime/dist/." "$layer/ocel/"
   pack "$layer" "$dist/runtime-layer-$goarch.zip"
 done
 

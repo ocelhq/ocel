@@ -4,13 +4,13 @@
   "private": true,
   "scripts": {
     "generate": "sh ./generate.sh",
-    "live": "go test -C .. -race -count=1 -timeout 30m -run '^TestLive' ./...",
-    "lifecycle": "go test -C .. -race -count=1 -timeout 30m -run '^TestLifecycle' ./..."
+    "live": "go test -C ../../../.. -race -count=1 -timeout 30m -run '^TestLive' ./platform/aws/provider/... ./platform/aws/runtime/...",
+    "lifecycle": "go test -C ../../../.. -race -count=1 -timeout 30m -run '^TestLifecycle' ./platform/aws/provider/... ./platform/aws/runtime/..."
   },
   "devDependencies": {
     "@platform/aws-image-optimizer": "workspace:*",
-    "@platform/aws-membrane": "workspace:*",
     "@platform/aws-revalidator": "workspace:*",
+    "@platform/aws-runtime": "workspace:*",
     "@platform/aws-tag-invalidator": "workspace:*",
     "@platform/aws-tag-publisher": "workspace:*"
   }

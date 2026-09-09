@@ -1,4 +1,4 @@
-import { hasControl, onControlMessage } from "./membrane.mjs";
+import { hasControl, onControlMessage } from "./host.mjs";
 
 const LIVE_VALUES_MESSAGE = "liveValues";
 

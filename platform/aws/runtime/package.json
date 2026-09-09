@@ -1,5 +1,5 @@
 {
-  "name": "@platform/aws-membrane",
+  "name": "@platform/aws-runtime",
   "version": "0.0.0",
   "private": true,
   "type": "module",

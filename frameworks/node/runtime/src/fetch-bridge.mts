@@ -1,5 +1,5 @@
 import type http from "node:http";
-import type { Invoke } from "./membrane.mjs";
+import type { Invoke } from "./host.mjs";
 
 export type FetchHandler = (request: Request) => Response | Promise<Response>;
 

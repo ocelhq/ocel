@@ -1,6 +1,6 @@
 export const routingManifestPathVar = "OCEL_ROUTING_MANIFEST";
 
-export { invalidatesByCacheTag, routerMode } from "./membrane.mjs";
+export { invalidatesByCacheTag, routerMode } from "./host.mjs";
 
 export const edgeHeader = "x-ocel-edge";
 

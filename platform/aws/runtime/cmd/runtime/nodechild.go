@@ -424,7 +424,7 @@ func spawnNode(entrypoint string, extraEnv []string, budget time.Duration, onCon
 		return nil, fmt.Errorf("node binary not found: %w", err)
 	}
 
-	// TODO: one path per process, so two membranes in one sandbox cannot take each other's socket
+	// TODO: one path per process, so two runtimes in one sandbox cannot take each other's socket
 	sockPath := "/tmp/ocel-control.sock"
 	_ = os.Remove(sockPath)
 

@@ -3,7 +3,6 @@ import { dirname, isAbsolute, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runWithWaitUntil } from "@framework/node-runtime/background";
 import { routerMode } from "@framework/node-runtime/edge-kind";
-import { awaitLiveValues } from "@framework/node-runtime/live-values";
 import {
   type Invoke,
   installCompileCacheFlush,
@@ -12,7 +11,8 @@ import {
   serveEntry,
   serveInvoke,
   serveLocal,
-} from "@framework/node-runtime/membrane";
+} from "@framework/node-runtime/host";
+import { awaitLiveValues } from "@framework/node-runtime/live-values";
 import { originShaping, shapeOriginCache } from "./cache-shaping.mjs";
 import { loadIncrementalCacheFactory } from "./incremental-cache.mjs";
 import { loadProjectManifest } from "./project-manifest.mjs";

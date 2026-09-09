@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 
-import { UNSUPPORTED_WARM as UNSUPPORTED } from "../src/membrane.mjs";
+import { UNSUPPORTED_WARM as UNSUPPORTED } from "../src/host.mjs";
 
 type Msg = { type: string; payload: unknown };
 
@@ -78,7 +78,7 @@ async function warmOver(
   await new Promise<void>((resolve) => controlServer.listen(sockPath, resolve));
   process.env.OCEL_CONTROL_SOCKET = sockPath;
 
-  const { installCompileCacheWarm } = await import("../src/membrane.mjs");
+  const { installCompileCacheWarm } = await import("../src/host.mjs");
   installCompileCacheWarm(warm);
   await waitFor(() => controlConns.size > 0);
 

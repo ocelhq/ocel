@@ -181,7 +181,7 @@ if (!entries.includes(entryName)) {
   fail(
     `${functionName}'s deployment package has ${entries.length} entries but not ${entryName}` +
       (near.length
-        ? `. It does carry ${near.join(", ")} — an embedded cache under a name the membrane will not look for, which ` +
+        ? `. It does carry ${near.join(", ")} — an embedded cache under a name the runtime will not look for, which ` +
           `leaves every cold start silently falling back to S3.`
         : ` and nothing under .ocel/bytecode/ at all, so the function was moved onto a repackaged artifact that ` +
           `carries no cache.`),
@@ -315,7 +315,7 @@ if (embeddedHits.length === 0) {
               .join(" | ")}`
           : ""
       }. Either every burst request landed on an instance that was already warm (no cold start runs a read leg at all), ` +
-      `or the membrane on this deployment predates the embedded leg and never looks for the tar.`,
+      `or the runtime on this deployment predates the embedded leg and never looks for the tar.`,
   );
 }
 

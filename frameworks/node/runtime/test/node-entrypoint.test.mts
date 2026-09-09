@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
-import { UNSUPPORTED_WARM } from "../src/membrane.mjs";
+import { UNSUPPORTED_WARM } from "../src/host.mjs";
 
 const appModule = `export default (req, res) => res.end("ok");
 `;

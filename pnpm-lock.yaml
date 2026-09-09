@@ -850,7 +850,43 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
 
-  platform/aws/membrane:
+  platform/aws/provider/edges/cloudfront/resolver:
+    devDependencies:
+      '@platform/edge-contract':
+        specifier: workspace:*
+        version: link:../../../../../edge/contract
+      '@types/node':
+        specifier: ^24
+        version: 24.13.2
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
+
+  platform/aws/provider/payloads:
+    devDependencies:
+      '@platform/aws-image-optimizer':
+        specifier: workspace:*
+        version: link:../../functions/image-optimizer
+      '@platform/aws-revalidator':
+        specifier: workspace:*
+        version: link:../../functions/revalidator
+      '@platform/aws-runtime':
+        specifier: workspace:*
+        version: link:../../runtime
+      '@platform/aws-tag-invalidator':
+        specifier: workspace:*
+        version: link:../../functions/tag-invalidator
+      '@platform/aws-tag-publisher':
+        specifier: workspace:*
+        version: link:../../functions/tag-publisher
+
+  platform/aws/provider/transform:
+    devDependencies:
+      ocel:
+        specifier: workspace:^
+        version: link:../../../../packages/ocel
+
+  platform/aws/runtime:
     dependencies:
       '@framework/next-cache':
         specifier: workspace:*
@@ -883,42 +919,6 @@ importers:
       vitest:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
-
-  platform/aws/provider/edges/cloudfront/resolver:
-    devDependencies:
-      '@platform/edge-contract':
-        specifier: workspace:*
-        version: link:../../../../../edge/contract
-      '@types/node':
-        specifier: ^24
-        version: 24.13.2
-      vitest:
-        specifier: ^3.2.7
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
-
-  platform/aws/provider/payloads:
-    devDependencies:
-      '@platform/aws-image-optimizer':
-        specifier: workspace:*
-        version: link:../../functions/image-optimizer
-      '@platform/aws-membrane':
-        specifier: workspace:*
-        version: link:../../membrane
-      '@platform/aws-revalidator':
-        specifier: workspace:*
-        version: link:../../functions/revalidator
-      '@platform/aws-tag-invalidator':
-        specifier: workspace:*
-        version: link:../../functions/tag-invalidator
-      '@platform/aws-tag-publisher':
-        specifier: workspace:*
-        version: link:../../functions/tag-publisher
-
-  platform/aws/provider/transform:
-    devDependencies:
-      ocel:
-        specifier: workspace:^
-        version: link:../../../../packages/ocel
 
   platform/edge/cloudflare/lib/auth:
     devDependencies:
@@ -9012,7 +9012,6 @@ packages:
       '@vitest/ui': 4.1.9
       happy-dom: '*'
       jsdom: '*'
-      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
@@ -17128,13 +17127,13 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.1.3(@types/node@20.19.43)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/node': 20.19.43
     transitivePeerDependencies:
       - msw
+      - vite
 
   vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)):
     dependencies:
@@ -17156,13 +17155,13 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.1.3(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/node': 24.13.2
     transitivePeerDependencies:
       - msw
+      - vite
 
   vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(vite@8.1.3(@types/node@26.1.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)):
     dependencies:
@@ -17184,13 +17183,13 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.1.3(@types/node@26.1.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/node': 26.1.1
     transitivePeerDependencies:
       - msw
+      - vite
 
   walk-up-path@4.0.0: {}
 

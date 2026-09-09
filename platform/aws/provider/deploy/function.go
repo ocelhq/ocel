@@ -31,7 +31,7 @@ const (
 
 	nextBundleFunctionMemoryMB = 1769
 
-	execWrapper = "/opt/ocel/bootstrap"
+	execWrapper = "/opt/ocel/runtime"
 
 	runtimeLayerLocalName = "runtime"
 

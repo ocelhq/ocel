@@ -728,7 +728,7 @@ describe("warmSummaryOutcome", () => {
     uploaded: true,
   };
 
-  it("reads the summary out of the membrane's stderr line", () => {
+  it("reads the summary out of the runtime's stderr line", () => {
     const message = `${WARM_SUMMARY_MARKER} ${JSON.stringify(summary)}`;
     expect(warmSummaryOutcome(message)).toEqual({ kind: "summary", summary, message });
   });

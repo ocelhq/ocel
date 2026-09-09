@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
 const execFileAsync = promisify(execFile);
-const membraneSrc = resolve(dirname(fileURLToPath(import.meta.url)), "../src/membrane.mts");
+const hostSrc = resolve(dirname(fileURLToPath(import.meta.url)), "../src/host.mts");
 
 let dir: string;
 
@@ -23,10 +23,7 @@ async function runChild(
   env: Record<string, string> = {},
 ): Promise<{ code: number; stderr: string }> {
   const file = join(dir, `child-${Math.random().toString(36).slice(2)}.mts`);
-  await writeFile(
-    file,
-    `import { reportFatalBoot } from ${JSON.stringify(membraneSrc)};\n${body}\n`,
-  );
+  await writeFile(file, `import { reportFatalBoot } from ${JSON.stringify(hostSrc)};\n${body}\n`);
   try {
     const { stderr } = await execFileAsync(process.execPath, [file], {
       env: { ...process.env, ...env },

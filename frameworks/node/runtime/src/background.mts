@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 type WaitUntil = (task: Promise<unknown>) => void;
 
-const storageKey = Symbol.for("ocel.membrane.background.v1");
+const storageKey = Symbol.for("ocel.runtime.background.v1");
 
 const host = globalThis as Record<symbol, AsyncLocalStorage<WaitUntil> | undefined>;
 const storage = (host[storageKey] ??= new AsyncLocalStorage<WaitUntil>());

@@ -9,7 +9,7 @@ import {
   withEdgeHeader,
 } from "@framework/node-runtime/edge-kind";
 import { fetchToNodeHandler } from "@framework/node-runtime/fetch-bridge";
-import type { Invoke } from "@framework/node-runtime/membrane";
+import type { Invoke } from "@framework/node-runtime/host";
 import { s3AssetBucket, uncachedResponses } from "./router-assets.mjs";
 import { credentialsOf, s3ObjectFetch, siblingOriginFetch } from "./router-signing.mjs";
 

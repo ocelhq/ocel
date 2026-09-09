@@ -1,4 +1,4 @@
-package membrane
+package proxy
 
 import (
 	"net/http"
