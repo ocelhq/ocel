@@ -23,9 +23,6 @@ var nextConfigNames = []string{"next.config.js", "next.config.mjs", "next.config
 
 func detectFramework(dir string) (string, error) {
 	node := regularFile(filepath.Join(dir, nodeManifest))
-	if node && nextApp(dir) {
-		return providerkit.RuntimeNext, nil
-	}
 	named := make([]string, 0, 3)
 	if node {
 		named = append(named, providerkit.RuntimeNode)
@@ -38,7 +35,17 @@ func detectFramework(dir string) (string, error) {
 	}
 	switch len(named) {
 	case 1:
-		return named[0], nil
+		if !node {
+			return named[0], nil
+		}
+		next, err := nextApp(dir)
+		if err != nil {
+			return "", err
+		}
+		if next {
+			return providerkit.RuntimeNext, nil
+		}
+		return providerkit.RuntimeNode, nil
 	case 0:
 		if regularFile(filepath.Join(dir, rustManifest)) {
 			return "", nil
@@ -55,26 +62,27 @@ func detectFramework(dir string) (string, error) {
 	}
 }
 
-func nextApp(dir string) bool {
+func nextApp(dir string) (bool, error) {
 	for _, name := range nextConfigNames {
 		if regularFile(filepath.Join(dir, name)) {
-			return true
+			return true, nil
 		}
 	}
-	body, err := os.ReadFile(filepath.Join(dir, nodeManifest))
+	path := filepath.Join(dir, nodeManifest)
+	body, err := os.ReadFile(path)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("read %s: %w", path, err)
 	}
 	var manifest struct {
 		Dependencies map[string]string `json:"dependencies"`
 		DevDeps      map[string]string `json:"devDependencies"`
 	}
 	if err := json.Unmarshal(body, &manifest); err != nil {
-		return false
+		return false, fmt.Errorf("%s is not JSON: %w", path, err)
 	}
 	_, dep := manifest.Dependencies[nextDependency]
 	_, devDep := manifest.DevDeps[nextDependency]
-	return dep || devDep
+	return dep || devDep, nil
 }
 
 func regularFile(path string) bool {
