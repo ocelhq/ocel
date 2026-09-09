@@ -3,4 +3,38 @@ title: VPS
 description: Deploy to any Linux box.
 ---
 
-Dummy content.
+```bash
+ocel init --provider vps
+```
+
+Name the machine ocel deploys onto — a `Host` alias from your `ssh_config`, or the
+destination spelled out:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "name": "vps",
+    "options": { "ssh": { "host": "${DEPLOY_HOST}", "user": "deploy" } }
+  },
+  "apps": [{ "name": "web", "path": ".", "compute": "container" }]
+}
+```
+
+Then:
+
+```bash
+ocel bootstrap production
+ocel deploy
+```
+
+Bootstrap creates the `ocel-deploy` login every later deploy acts as.
+
+## Options
+
+| Option | What it does |
+| --- | --- |
+| `ssh` | The machine to deploy onto: a `Host` alias, or an object of `host`, `user`, `port` and `identityFile`. |
+| `deployKey` | The public key the `ocel-deploy` login is to answer to, as a path. Omit it and bootstrap mirrors the keys the login it bootstraps with already answers to. |
+| `certificates` | Paths on the machine to the certificate to serve a hostname with, keyed by hostname. |

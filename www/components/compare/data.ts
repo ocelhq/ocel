@@ -32,29 +32,25 @@ const QUESTIONS = {
 
 const configAws: Pane = {
   code: {
-    lang: "ts",
-    filename: "ocel.config.ts",
-    code: `import { defineConfig } from "ocel/config";
-import awsProvider from "ocel/providers/aws";
-
-export default defineConfig({
-  slug: "my-app",
-  provider: awsProvider(),
-});`,
+    lang: "json",
+    filename: "ocel.json",
+    code: `{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": { "name": "aws" }
+}`,
   },
 };
 
 const configVps: Pane = {
   code: {
-    lang: "ts",
-    filename: "ocel.config.ts",
-    code: `import { defineConfig } from "ocel/config";
-import vpsProvider from "ocel/providers/vps";
-
-export default defineConfig({
-  slug: "my-app",
-  provider: vpsProvider({ ssh: "my-vps" }),
-});`,
+    lang: "json",
+    filename: "ocel.json",
+    code: `{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": { "name": "vps", "options": { "ssh": "my-vps" } }
+}`,
   },
 };
 
@@ -73,13 +69,14 @@ const { rows } = await db.query(
 
 const linkedPostgres: Pane = {
   code: {
-    lang: "ts",
-    filename: "ocel.config.ts",
-    code: `export default defineConfig({
-  slug: "shop",
-  provider: awsProvider(),
-  links: ["orders"],
-});`,
+    lang: "json",
+    filename: "ocel.json",
+    code: `{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "shop",
+  "provider": { "name": "aws" },
+  "links": ["orders"]
+}`,
   },
 };
 

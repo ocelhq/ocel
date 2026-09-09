@@ -1,0 +1,80 @@
+---
+title: TypeScript config
+description: The same document, written as a program.
+---
+
+A project that already builds with node can write its config as `ocel.config.ts` instead
+of `ocel.json`. It compiles to the same document — every field, every default and every
+error message is the one the [configuration](/docs/configuration) page describes — so
+nothing else in ocel knows which form you chose.
+
+```bash
+ocel init --provider aws --ts
+```
+
+```ts title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+One project reads one config: a directory holding both `ocel.json` and `ocel.config.ts` is
+refused, and so is a directory holding both `ocel.vps.json` and `ocel.vps.config.ts`.
+
+## What it costs
+
+Reading it needs `node` on `PATH`, and the `ocel` package as a dependency. Every command
+that reads the config — `ocel deploy`, `ocel dev`, `ocel env`, `ocel destroy` — bundles and
+runs the file first, on every machine and in every CI job. A go, rust or python project
+pays for a node toolchain it otherwise would not have, which is why `ocel init` writes
+`ocel.json` unless you ask for this.
+
+## What it buys
+
+The provider, edge and dns descriptors are functions, so your editor knows which options
+each one takes as you type them rather than after the schema is fetched.
+
+Values may be computed, and `buildEnv` reads what the config itself needs while it is
+evaluated — from the shell or from a `.env` beside the config — through a schema of your
+own, so a missing or malformed variable is named before anything is provisioned:
+
+```ts title="ocel.config.ts"
+import { buildEnv, defineConfig } from "ocel/config";
+import vpsProvider from "ocel/providers/vps";
+import { z } from "zod";
+
+const ssh = buildEnv({
+  DEPLOY_HOST: z.string().min(1),
+  DEPLOY_PORT: z.coerce.number().default(22),
+});
+
+export default defineConfig({
+  slug: "my-app",
+  provider: vpsProvider({ ssh: { host: ssh.DEPLOY_HOST, port: ssh.DEPLOY_PORT } }),
+  apps: [{ name: "web", path: "." }],
+});
+```
+
+`ocel.json` reaches the same variables with `${DEPLOY_HOST}`, unchecked and as a string.
+
+## Transforms are the same either way
+
+A transform is a module path under the provider's options, not a value the config imports,
+so it works from `ocel.json` too:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "name": "aws",
+    "options": { "transforms": ["./transforms/defaults.transform.ts"] }
+  },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```

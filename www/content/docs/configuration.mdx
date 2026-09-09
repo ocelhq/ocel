@@ -3,27 +3,63 @@ title: Configuration
 description: The one file ocel reads.
 ---
 
-Every option lives in `ocel.config.ts`, next to your `package.json`.
+Every option lives in `ocel.json`, at the root of your project. `ocel init` writes it.
 
-```ts title="ocel.config.ts"
-import awsProvider from "ocel/providers/aws";
-import { defineConfig } from "ocel/config";
-
-export default defineConfig({
-  slug: "my-app",
-  provider: awsProvider(),
-  apps: [{ name: "web", path: "." }],
-});
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": { "name": "aws" },
+  "apps": [{ "name": "web", "path": "." }]
+}
 ```
+
+The `$schema` line is what your editor completes and validates against. It names the
+version of the schema the CLI that wrote the file ships; `ocel init` fills it in.
+
+`slug` is the project's identity in your provider account. Every stack and resource ocel
+creates is keyed on it, so changing it forks a new project.
+
+The file is JSON with comments and trailing commas allowed, so a variant you are not using
+can sit beside the one you are.
+
+## Variables
+
+Any string may interpolate an environment variable with `${NAME}`. The value comes from
+your shell, or from a `.env` beside the config. A name nothing sets refuses the deploy
+rather than deploying a config with a hole in it. Write `$$` for a literal dollar.
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "name": "vps",
+    "options": { "ssh": { "host": "${DEPLOY_HOST}", "user": "deploy" } }
+  }
+}
+```
+
+This is for values that differ per machine, not for secrets. Secrets belong in
+[variables](/docs/environments), which are stored in your own account.
+
+## ocel.lock
+
+`ocel lock` writes `ocel.lock` beside the config: this CLI's version, and the sha256 of
+every provider archive of that release on every platform. Commit it. Every machine and
+every CI run then fetches the same bytes, and a CLI of another version is refused until
+you run `ocel lock` again.
 
 ## discovery.paths
 
 The folders discovery runs to collect your resource declarations.
 
-```ts title="ocel.config.ts"
-export default defineConfig({
-  discovery: { paths: ["packages/*/infra"] },
-});
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "discovery": { "paths": ["packages/*/infra"] }
+}
 ```
 
 Default: `infra` next to the config file. Setting `discovery.paths` replaces it.
@@ -34,3 +70,18 @@ source file under that folder runs during discovery.
 Each folder's language is the one the source files in it are written in, not the one a
 manifest names: `.go` is go, `.py` is python, `.rs` is rust, and `.ts`, `.tsx`, `.js`,
 `.jsx`, `.mjs` or `.cjs` is js. A folder holding two of them is an error.
+
+## Another config per target
+
+A file named `ocel.<target>.json` is the same project deployed somewhere else — a box of
+your own beside the cloud you ship to. Point any command at one with `--config` or
+`OCEL_CONFIG`:
+
+```bash
+ocel deploy --config ocel.vps.json
+```
+
+## Writing it in TypeScript
+
+A project that already builds with node can write the same document as a program instead.
+See [TypeScript config](/docs/typescript-config).
