@@ -11,3 +11,5 @@ var Addressable = addressable
 var RegistryTimeout = &registryTimeout
 
 var LoaderID = loaderID
+
+var RevisionsOf = revisionsOf
