@@ -160,7 +160,7 @@ func (s *Store) download(ctx context.Context, asset, into, digest string) error 
 	defer file.Close()
 
 	sum := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(file, sum), io.LimitReader(body, archiveCeiling)); err != nil {
+	if err := fill(io.MultiWriter(file, sum), body); err != nil {
 		return fmt.Errorf("download %s: %w", asset, err)
 	}
 	if got := hex.EncodeToString(sum.Sum(nil)); got != digest {
