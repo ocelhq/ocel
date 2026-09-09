@@ -23,9 +23,9 @@ type Payload struct {
 }
 
 var (
-	membraneLayers = map[string]Payload{
-		"amd64": load("membrane-layer-amd64.zip"),
-		"arm64": load("membrane-layer-arm64.zip"),
+	runtimeLayers = map[string]Payload{
+		"amd64": load("runtime-layer-amd64.zip"),
+		"arm64": load("runtime-layer-arm64.zip"),
 	}
 	uploadCompleter = load("upload-completer.zip")
 	imageOptimizer  = load("image-optimizer.zip")
@@ -34,12 +34,12 @@ var (
 	tagInvalidator  = load("tag-invalidator.zip")
 )
 
-func MembraneLayer(arch string) (Payload, error) {
+func RuntimeLayer(arch string) (Payload, error) {
 	goarch, builds := providerkit.GoArch(arch)
 	if !builds {
-		return Payload{}, fmt.Errorf("this provider carries no membrane built for %q", arch)
+		return Payload{}, fmt.Errorf("this provider carries no runtime built for %q", arch)
 	}
-	return membraneLayers[goarch], nil
+	return runtimeLayers[goarch], nil
 }
 
 func UploadCompleter() Payload { return uploadCompleter }

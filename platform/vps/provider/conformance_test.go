@@ -98,13 +98,13 @@ func TestTheRootCarriesTheVendorAndNoOptionalSetYet(t *testing.T) {
 
 	var root providerkit.Provider = p
 	for name, held := range map[string]bool{
-		"Warmer":          held[providerkit.Warmer](root),
-		"CodeEmbedder":    held[providerkit.CodeEmbedder](root),
-		"StackInspector":  held[providerkit.StackInspector](root),
-		"GrantVerifier":   held[providerkit.GrantVerifier](root),
-		"MembraneCrosser": held[providerkit.MembraneCrosser](root),
-		"MembraneSource":  held[providerkit.MembraneSource](root),
-		"ArtifactPacker":  held[providerkit.ArtifactPacker](root),
+		"Warmer":               held[providerkit.Warmer](root),
+		"CodeEmbedder":         held[providerkit.CodeEmbedder](root),
+		"StackInspector":       held[providerkit.StackInspector](root),
+		"GrantVerifier":        held[providerkit.GrantVerifier](root),
+		"ProxiedLinker":        held[providerkit.ProxiedLinker](root),
+		"RuntimePayloadSource": held[providerkit.RuntimePayloadSource](root),
+		"ArtifactPacker":       held[providerkit.ArtifactPacker](root),
 	} {
 		if held {
 			t.Errorf("the root carries %s, which the optional-set tier must be told to expect on it", name)

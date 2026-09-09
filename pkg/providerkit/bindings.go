@@ -42,21 +42,21 @@ func (r *deployRun) admitLinks(ctx context.Context, report Reporter) error {
 		if !resource.Linked {
 			continue
 		}
-		if err := ReadableAs(published[resource.Declared], resource.Type, r.crossesMembrane); err != nil {
+		if err := ReadableAs(published[resource.Declared], resource.Type, r.proxied); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *deployRun) crossesMembrane(kind LinkType) bool {
-	if crosser, asks := r.provider.(MembraneCrosser); asks {
-		return crosser.CrossesMembrane(kind)
+func (r *deployRun) proxied(kind LinkType) bool {
+	if linker, asks := r.provider.(ProxiedLinker); asks {
+		return linker.Proxied(kind)
 	}
-	return CrossesMembrane(kind)
+	return Proxied(kind)
 }
 
-func ReadableAs(link Link, declared LinkType, crosses func(LinkType) bool) error {
+func ReadableAs(link Link, declared LinkType, proxied func(LinkType) bool) error {
 	switch {
 	case link.Type == LinkCustom:
 		return Refuse(CodeInvalid,
@@ -70,7 +70,7 @@ func ReadableAs(link Link, declared LinkType, crosses func(LinkType) bool) error
 				"Every app that uses %q would fail at its first cold start, so this deploy stops here. "+
 				"Declare it as what was published, or republish it as a %s",
 			link.Name, declared, link.Type, link.Name, declared)
-	case link.Source != "" && crosses(declared):
+	case link.Source != "" && proxied(declared):
 		return Refuse(CodeInvalid,
 			"`links` binds %q to a %s record published by %s, and ocel's %s client cannot serve one it did not provision. "+
 				"Hand the app its name as an env var (`ocel env set`) instead",

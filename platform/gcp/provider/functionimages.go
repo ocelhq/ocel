@@ -104,11 +104,11 @@ func onPath(env []string, bins []string) []string {
 	return append(kept, pathVariable+"="+held)
 }
 
-func (p *Provider) FunctionMembrane(_ context.Context, runtime providerkit.Runtime) ([]byte, error) {
-	if !providerkit.BootsThroughMembrane(runtime) {
+func (p *Provider) FunctionRuntimePayload(_ context.Context, runtime providerkit.Runtime) ([]byte, error) {
+	if !providerkit.BootsThroughRuntime(runtime) {
 		return nil, nil
 	}
-	return payloads.NodeMembrane(), nil
+	return payloads.NodeRuntime(), nil
 }
 
 func runsX8664(arch, what string) error {

@@ -185,13 +185,13 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, runtime pro
 	if err != nil {
 		t.Fatalf("read the base a %s function is built on: %v", runtime.Name, err)
 	}
-	membrane, err := p.FunctionMembrane(ctx, runtime)
+	payload, err := p.FunctionRuntimePayload(ctx, runtime)
 	if err != nil {
 		t.Fatal(err)
 	}
 	overlay := map[string][]byte{}
-	if len(membrane) > 0 {
-		overlay[providerkit.NodeMembranePath] = membrane
+	if len(payload) > 0 {
+		overlay[providerkit.NodeRuntimePath] = payload
 	}
 	image, err := providerkit.FunctionImage(base, runtime, dir, overlay)
 	if err != nil {
@@ -281,7 +281,7 @@ func TestLiveAFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
 	p := runnable(t)
 	image := functionImage(t, p, "ocel-live/fn", nodeRuntime,
 		stagedNode(t, "export default { fetch: () => new Response(process.env.MARK) };"))
-	plan := serverlessPlan("fn", image, map[string]string{"MARK": "membrane-one"})
+	plan := serverlessPlan("fn", image, map[string]string{"MARK": "runtime-one"})
 	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, plan.Ref, runningAs(t, p, plan), nil) })
 
 	functions, err := p.ProvisionFunctions(ctx, plan, nil)
@@ -299,8 +299,8 @@ func TestLiveAFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("GET %s = %d %q, want the function to answer", functions[0].URL, status, said)
 	}
-	if said != "membrane-one" {
-		t.Errorf("GET %s said %q, want the value the deploy delivered, served through the membrane", functions[0].URL, said)
+	if said != "runtime-one" {
+		t.Errorf("GET %s said %q, want the value the deploy delivered, served through the runtime", functions[0].URL, said)
 	}
 }
 

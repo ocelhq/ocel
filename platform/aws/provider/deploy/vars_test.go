@@ -120,7 +120,7 @@ func renderAppBundles(cfg Config, manifest *contractv1.Manifest) (map[string]app
 }
 
 func TestFunctionEnvVariables(t *testing.T) {
-	t.Run("accounts resources, variables and the membrane together", func(t *testing.T) {
+	t.Run("accounts resources, variables and the runtime together", func(t *testing.T) {
 		base := map[string]string{
 			"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"postgres://x"}`,
 			"POSTHOG_ID":                  "ph-123",

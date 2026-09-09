@@ -152,12 +152,12 @@ func TestAnAppThatRoutesAtItsOriginAndNamesNoEntryIsRefused(t *testing.T) {
 	}
 }
 
-type membraneCarrier struct {
+type runtimeCarrier struct {
 	body []byte
 	err  error
 }
 
-func (m membraneCarrier) Membrane(_ context.Context, arch string) ([]byte, error) {
+func (m runtimeCarrier) RuntimePayload(_ context.Context, arch string) ([]byte, error) {
 	if len(m.body) == 0 || m.err != nil {
 		return nil, m.err
 	}
@@ -199,33 +199,33 @@ func (s *memoryStore) RemovePrefix(context.Context, providerkit.Class, string, p
 	return nil
 }
 
-func TestTheMembraneIsPlacedOnceAndAddressedByItsContent(t *testing.T) {
+func TestTheRuntimeIsPlacedOnceAndAddressedByItsContent(t *testing.T) {
 	store := &memoryStore{}
-	source := membraneCarrier{body: []byte("membrane")}
+	source := runtimeCarrier{body: []byte("runtime")}
 
-	first, err := providerkit.PlaceMembrane(context.Background(), source, providerkit.ClassProduction, providerkit.ArchX8664, store, nil)
+	first, err := providerkit.PlaceRuntimePayload(context.Background(), source, providerkit.ClassProduction, providerkit.ArchX8664, store, nil)
 	if err != nil {
-		t.Fatalf("PlaceMembrane() = %v", err)
+		t.Fatalf("PlaceRuntimePayload() = %v", err)
 	}
 	if first.Bucket != providerkit.StoreFunctions {
-		t.Errorf("membrane placed in %q, want the %q store the functions read their code from", first.Bucket, providerkit.StoreFunctions)
+		t.Errorf("runtime placed in %q, want the %q store the functions read their code from", first.Bucket, providerkit.StoreFunctions)
 	}
-	second, err := providerkit.PlaceMembrane(context.Background(), source, providerkit.ClassProduction, providerkit.ArchX8664, store, nil)
+	second, err := providerkit.PlaceRuntimePayload(context.Background(), source, providerkit.ClassProduction, providerkit.ArchX8664, store, nil)
 	if err != nil {
-		t.Fatalf("PlaceMembrane() a second time = %v", err)
+		t.Fatalf("PlaceRuntimePayload() a second time = %v", err)
 	}
 	if second != first {
-		t.Errorf("the same membrane landed at %+v then %+v, want one content-addressed placement", first, second)
+		t.Errorf("the same runtime landed at %+v then %+v, want one content-addressed placement", first, second)
 	}
 	if store.puts != 1 {
-		t.Errorf("the same membrane was uploaded %d times, want the second deploy to find the first one", store.puts)
+		t.Errorf("the same runtime was uploaded %d times, want the second deploy to find the first one", store.puts)
 	}
 }
 
-func TestAProviderCarryingNoMembraneIsRefusedRatherThanShippingAnEmptyOne(t *testing.T) {
-	_, err := providerkit.PlaceMembrane(context.Background(), membraneCarrier{}, providerkit.ClassProduction, providerkit.ArchX8664, &memoryStore{}, nil)
+func TestAProviderCarryingNoRuntimeIsRefusedRatherThanShippingAnEmptyOne(t *testing.T) {
+	_, err := providerkit.PlaceRuntimePayload(context.Background(), runtimeCarrier{}, providerkit.ClassProduction, providerkit.ArchX8664, &memoryStore{}, nil)
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
-		t.Fatalf("PlaceMembrane() with no membrane = %v, want a %s refusal", err, providerkit.CodeNotReady)
+		t.Fatalf("PlaceRuntimePayload() with no runtime = %v, want a %s refusal", err, providerkit.CodeNotReady)
 	}
 }

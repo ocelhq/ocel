@@ -288,9 +288,11 @@ func (CodeEmbedder) EmbedCode(context.Context, string, providerkit.ArtifactRef, 
 	return nil
 }
 
-type MembraneSource struct{ *Provider }
+type RuntimePayloadSource struct{ *Provider }
 
-func (MembraneSource) Membrane(context.Context, string) ([]byte, error) { return []byte(Membrane), nil }
+func (RuntimePayloadSource) RuntimePayload(context.Context, string) ([]byte, error) {
+	return []byte(RuntimePayload), nil
+}
 
 type StackInspector struct{ *Provider }
 
@@ -316,7 +318,9 @@ func (f Full) Inspect(_ context.Context, ref providerkit.StackRef) (providerkit.
 
 func (Full) VerifyGrants(context.Context, providerkit.Link) error { return nil }
 
-func (Full) Membrane(context.Context, string) ([]byte, error) { return []byte(Membrane), nil }
+func (Full) RuntimePayload(context.Context, string) ([]byte, error) {
+	return []byte(RuntimePayload), nil
+}
 
 func (f Full) PreflightDeploy(_ context.Context, pre providerkit.DeployPreflight) error {
 	return f.preflight(pre)
@@ -349,18 +353,18 @@ func (f Full) RemoveContainers(_ context.Context, _ providerkit.StackRef, contai
 }
 
 var (
-	_ providerkit.Provider          = (*Provider)(nil)
-	_ providerkit.Warmer            = Warmer{}
-	_ providerkit.CodeEmbedder      = CodeEmbedder{}
-	_ providerkit.StackInspector    = StackInspector{}
-	_ providerkit.GrantVerifier     = GrantVerifier{}
-	_ providerkit.MembraneSource    = MembraneSource{}
-	_ providerkit.DeployPreflighter = DeployPreflighter{}
-	_ providerkit.Certifier         = (*Provider)(nil)
-	_ providerkit.EdgeProgrammer    = (*Provider)(nil)
-	_ providerkit.ImageRegistry     = Full{}
-	_ resources.Functions           = Full{}
-	_ resources.AppContainers       = Full{}
+	_ providerkit.Provider             = (*Provider)(nil)
+	_ providerkit.Warmer               = Warmer{}
+	_ providerkit.CodeEmbedder         = CodeEmbedder{}
+	_ providerkit.StackInspector       = StackInspector{}
+	_ providerkit.GrantVerifier        = GrantVerifier{}
+	_ providerkit.RuntimePayloadSource = RuntimePayloadSource{}
+	_ providerkit.DeployPreflighter    = DeployPreflighter{}
+	_ providerkit.Certifier            = (*Provider)(nil)
+	_ providerkit.EdgeProgrammer       = (*Provider)(nil)
+	_ providerkit.ImageRegistry        = Full{}
+	_ resources.Functions              = Full{}
+	_ resources.AppContainers          = Full{}
 )
 
 const (
@@ -368,4 +372,4 @@ const (
 	RegistryNamespace = "ocel"
 )
 
-const Membrane = "fake-membrane"
+const RuntimePayload = "fake-runtime-payload"

@@ -63,9 +63,9 @@ var optionalSets = []struct {
 		onPort: func(port any) bool { _, ok := port.(providerkit.GrantVerifier); return ok },
 	},
 	{
-		name:   "MembraneCrosser",
-		onRoot: func(p providerkit.Provider) bool { _, ok := p.(providerkit.MembraneCrosser); return ok },
-		onPort: func(port any) bool { _, ok := port.(providerkit.MembraneCrosser); return ok },
+		name:   "ProxiedLinker",
+		onRoot: func(p providerkit.Provider) bool { _, ok := p.(providerkit.ProxiedLinker); return ok },
+		onPort: func(port any) bool { _, ok := port.(providerkit.ProxiedLinker); return ok },
 	},
 	{
 		name:   "DeployPreflighter",
@@ -73,9 +73,9 @@ var optionalSets = []struct {
 		onPort: func(port any) bool { _, ok := port.(providerkit.DeployPreflighter); return ok },
 	},
 	{
-		name:   "MembraneSource",
-		onRoot: func(p providerkit.Provider) bool { _, ok := p.(providerkit.MembraneSource); return ok },
-		onPort: func(port any) bool { _, ok := port.(providerkit.MembraneSource); return ok },
+		name:   "RuntimePayloadSource",
+		onRoot: func(p providerkit.Provider) bool { _, ok := p.(providerkit.RuntimePayloadSource); return ok },
+		onPort: func(port any) bool { _, ok := port.(providerkit.RuntimePayloadSource); return ok },
 	},
 	{
 		name:   "ArtifactPacker",

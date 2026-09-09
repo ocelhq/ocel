@@ -147,8 +147,8 @@ func (p *Provider) DNS() providerkit.DNSRegistry {
 	return dns.Registry{Deps: dns.Deps{AWS: p.aws}}
 }
 
-func (p *Provider) Membrane(_ context.Context, arch string) ([]byte, error) {
-	layer, err := payloads.MembraneLayer(arch)
+func (p *Provider) RuntimePayload(_ context.Context, arch string) ([]byte, error) {
+	layer, err := payloads.RuntimeLayer(arch)
 	if err != nil {
 		return nil, err
 	}
@@ -510,18 +510,18 @@ func (s settling) Remove(ctx context.Context, class providerkit.Class, report pr
 }
 
 var (
-	_ providerkit.Provider       = (*Provider)(nil)
-	_ providerkit.Warmer         = (*Provider)(nil)
-	_ providerkit.CodeEmbedder   = (*Provider)(nil)
-	_ providerkit.MembraneSource = (*Provider)(nil)
-	_ providerkit.StackInspector = (*Provider)(nil)
-	_ providerkit.Certifier      = (*Provider)(nil)
-	_ providerkit.ImageRegistry  = (*Provider)(nil)
-	_ providerkit.ImagePusher    = (*Provider)(nil)
-	_ providerkit.Bootstrapper   = settling{}
-	_ awsports.Tables            = (*Provider)(nil)
-	_ awsports.Keys              = (*Provider)(nil)
-	_ awsports.Stores            = (*Provider)(nil)
+	_ providerkit.Provider             = (*Provider)(nil)
+	_ providerkit.Warmer               = (*Provider)(nil)
+	_ providerkit.CodeEmbedder         = (*Provider)(nil)
+	_ providerkit.RuntimePayloadSource = (*Provider)(nil)
+	_ providerkit.StackInspector       = (*Provider)(nil)
+	_ providerkit.Certifier            = (*Provider)(nil)
+	_ providerkit.ImageRegistry        = (*Provider)(nil)
+	_ providerkit.ImagePusher          = (*Provider)(nil)
+	_ providerkit.Bootstrapper         = settling{}
+	_ awsports.Tables                  = (*Provider)(nil)
+	_ awsports.Keys                    = (*Provider)(nil)
+	_ awsports.Stores                  = (*Provider)(nil)
 )
 
 const s3Scheme = "s3"

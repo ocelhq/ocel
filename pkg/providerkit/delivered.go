@@ -143,7 +143,7 @@ func refuseOwnedNames(app string, held AppValues) error {
 	}
 	if len(served) > 0 {
 		return Refuse(CodeInvalid,
-			"app %s declares %s, and %s is the name a function's image sets to the file its membrane serves: a value declared under it would take the place of the app's own entrypoint and leave the release gated on a function that never boots. Rename it",
+			"app %s declares %s, and %s is the name a function's image sets to the file its runtime serves: a value declared under it would take the place of the app's own entrypoint and leave the release gated on a function that never boots. Rename it",
 			app, strings.Join(served, ", "), HandlerName)
 	}
 	if len(injected) > 0 {

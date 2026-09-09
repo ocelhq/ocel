@@ -32,8 +32,8 @@ func (i imaging) FunctionBase(context.Context, providerkit.Runtime) (v1.Image, e
 	return empty.Image, nil
 }
 
-func (imaging) FunctionMembrane(context.Context, providerkit.Runtime) ([]byte, error) {
-	return []byte("export const membrane = 1"), nil
+func (imaging) FunctionRuntimePayload(context.Context, providerkit.Runtime) ([]byte, error) {
+	return []byte("export const runtime = 1"), nil
 }
 
 func stagedProject(t *testing.T, apps ...string) {
@@ -202,16 +202,16 @@ func TestAFunctionRunAsAnImageRefusesTheNameThePortIsInjectedUnder(t *testing.T)
 
 func TestAFunctionRunAsAnImageRefusesTheNameItsHandlerIsInjectedUnder(t *testing.T) {
 	refusal := refusedImagedDeploy(t, providerkit.HandlerName, "/tmp/theirs.mjs",
-		"Deploy() stood up an app declaring OCEL_HANDLER, want it refused: the image tells its membrane which file to serve under that very name")
+		"Deploy() stood up an app declaring OCEL_HANDLER, want it refused: the image tells its runtime which file to serve under that very name")
 
-	for _, want := range []string{providerkit.HandlerName, "web", "membrane"} {
+	for _, want := range []string{providerkit.HandlerName, "web", "runtime"} {
 		if !strings.Contains(refusal, want) {
 			t.Errorf("the refusal reads %q and never names %q", refusal, want)
 		}
 	}
 }
 
-func TestANodeFunctionsImageCarriesTheMembraneTheProviderHandsIt(t *testing.T) {
+func TestANodeFunctionsImageCarriesTheRuntimeTheProviderHandsIt(t *testing.T) {
 	stagedProject(t, "web", "admin")
 	served, provider := imagingServed(t)
 
@@ -229,28 +229,28 @@ func TestANodeFunctionsImageCarriesTheMembraneTheProviderHandsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	held := tarNames(t, layers[len(layers)-1])
-	want := strings.TrimPrefix(providerkit.NodeMembranePath, "/")
+	want := strings.TrimPrefix(providerkit.NodeRuntimePath, "/")
 	if !slices.Contains(held, want) {
-		t.Errorf("the image holds %v and nothing at %s, so nothing serves the node function it was built for", held, providerkit.NodeMembranePath)
+		t.Errorf("the image holds %v and nothing at %s, so nothing serves the node function it was built for", held, providerkit.NodeRuntimePath)
 	}
 }
 
-type imagingWithoutMembrane struct{ imaging }
+type imagingWithoutRuntime struct{ imaging }
 
-func (imagingWithoutMembrane) FunctionMembrane(context.Context, providerkit.Runtime) ([]byte, error) {
+func (imagingWithoutRuntime) FunctionRuntimePayload(context.Context, providerkit.Runtime) ([]byte, error) {
 	return nil, nil
 }
 
-func TestANodeFunctionIsRefusedWhereTheProviderCarriesNoMembrane(t *testing.T) {
+func TestANodeFunctionIsRefusedWhereTheProviderCarriesNoRuntime(t *testing.T) {
 	stagedProject(t, "web", "admin")
-	served := servedBy(t, imagingWithoutMembrane{imaging{Provider: fake.NewProvider(fake.Options{})}})
+	served := servedBy(t, imagingWithoutRuntime{imaging{Provider: fake.NewProvider(fake.Options{})}})
 	standsBootstrapped(t, served)
 
 	result, _ := deploy(t, served, imagingDeployRequest())
 	if result.GetSuccess() {
-		t.Fatal("Deploy() shipped a node function with no membrane in its image, want it refused: the image would run node over a file that is not there")
+		t.Fatal("Deploy() shipped a node function with no runtime in its image, want it refused: the image would run node over a file that is not there")
 	}
-	for _, want := range []string{"membrane", "node"} {
+	for _, want := range []string{"runtime", "node"} {
 		if !strings.Contains(result.GetError(), want) {
 			t.Errorf("the refusal reads %q and never names %q", result.GetError(), want)
 		}

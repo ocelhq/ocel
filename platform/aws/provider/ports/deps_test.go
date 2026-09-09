@@ -24,7 +24,7 @@ func TestTheRuntimePortsReachNoControlPlane(t *testing.T) {
 	for _, pkg := range strings.Fields(string(out)) {
 		for _, linked := range controlPlane {
 			if pkg == linked {
-				t.Errorf("the runtime ports reach %s: the membrane links these ports, and a lambda that reads records must not carry the control plane", pkg)
+				t.Errorf("the runtime ports reach %s: the runtime links these ports, and a lambda that reads records must not carry the control plane", pkg)
 			}
 		}
 	}

@@ -151,23 +151,23 @@ func TestAFunctionBuiltForArm64IsRefused(t *testing.T) {
 	}
 }
 
-func TestTheMembraneIsCarriedForTheRuntimeThatBootsThroughOne(t *testing.T) {
+func TestTheRuntimeIsCarriedForTheRuntimeThatBootsThroughOne(t *testing.T) {
 	p, _ := basedOn(t, v1.Config{})
 	ctx := context.Background()
 
-	body, err := p.FunctionMembrane(ctx, providerkit.Runtime{Name: providerkit.RuntimeNode})
+	body, err := p.FunctionRuntimePayload(ctx, providerkit.Runtime{Name: providerkit.RuntimeNode})
 	if err != nil {
-		t.Fatalf("FunctionMembrane(node) = %v", err)
+		t.Fatalf("FunctionRuntimePayload(node) = %v", err)
 	}
 	if len(body) == 0 {
-		t.Fatal("FunctionMembrane(node) carried nothing, and a node function boots through it")
+		t.Fatal("FunctionRuntimePayload(node) carried nothing, and a node function boots through it")
 	}
-	carried, err := p.FunctionMembrane(ctx, providerkit.Runtime{Name: providerkit.RuntimeGo})
+	carried, err := p.FunctionRuntimePayload(ctx, providerkit.Runtime{Name: providerkit.RuntimeGo})
 	if err != nil {
-		t.Fatalf("FunctionMembrane(go) = %v", err)
+		t.Fatalf("FunctionRuntimePayload(go) = %v", err)
 	}
 	if len(carried) != 0 {
-		t.Error("FunctionMembrane(go) carried a node membrane into an image that runs a compiled binary")
+		t.Error("FunctionRuntimePayload(go) carried a node runtime into an image that runs a compiled binary")
 	}
 }
 

@@ -12,16 +12,16 @@ const (
 	promotionGroupKind = "promotion"
 	deploymentKind     = "deployment"
 
-	valuesGroupName   = "values"
-	membraneGroupName = "membrane"
+	valuesGroupName  = "values"
+	runtimeGroupName = "runtime"
 
 	reasonEdgeReconcile = "reconciled to serve this release"
 	reasonPromote       = "the release this pointer would serve"
-	reasonMembrane      = "the runtime this release's functions boot through"
+	reasonRuntime       = "the runtime this release's functions boot through"
 )
 
 type draft struct {
-	membrane   ChangeGroup
+	runtime    ChangeGroup
 	infra      Plan
 	parameters ChangeGroup
 	apps       []Plan
@@ -31,8 +31,8 @@ type draft struct {
 
 func (d *draft) plan() Plan {
 	var held Plan
-	if d.membrane.Name != "" {
-		held.Groups = append(held.Groups, d.membrane)
+	if d.runtime.Name != "" {
+		held.Groups = append(held.Groups, d.runtime)
 	}
 	held.Groups = append(held.Groups, d.infra.Groups...)
 	if len(d.parameters.Changes) > 0 {

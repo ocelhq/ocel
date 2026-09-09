@@ -394,7 +394,7 @@ func TestParseWarmReply(t *testing.T) {
 					t.Fatalf("parseWarmReply: %v", err)
 				}
 				if reply.State != warmStatePublished || reply.Loaded != 51 || !reply.Uploaded {
-					t.Errorf("reply = %+v, want the membrane's own summary", reply)
+					t.Errorf("reply = %+v, want the runtime's own summary", reply)
 				}
 			})
 		}

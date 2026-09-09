@@ -74,7 +74,7 @@ func TestMergeEnv(t *testing.T) {
 
 		for _, kv := range got {
 			if strings.HasPrefix(kv, "OCEL_LIVE_KEYS=") {
-				t.Errorf("dev set %q; there is no membrane here to send the push it promises", kv)
+				t.Errorf("dev set %q; there is no runtime here to send the push it promises", kv)
 			}
 		}
 		if !slices.Contains(got, "WEBHOOK_SECRET=whsec_live") {

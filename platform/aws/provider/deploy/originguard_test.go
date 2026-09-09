@@ -61,7 +61,7 @@ func registerGuarded(t *testing.T, cfg Config, plan providerkit.StackPlan, funct
 			Functions: manifestAppFunctions(functions),
 			Args:      argsFor(functions),
 			Artifacts: map[string]artifactRef{},
-			Layers:    testMembraneLayers(),
+			Layers:    testRuntimeLayers(),
 			Env:       held.appEnv(plan, appBundle{}, sessionScope{}),
 			Router:    host,
 			Guard:     guard,
@@ -104,7 +104,7 @@ func TestTheEntryFunctionAnswersWithoutSigV4AndDemandsTheSecret(t *testing.T) {
 		t.Errorf("%s = %q, want the secret the bootstrap holds", edge.OriginSecretVar, entry[edge.OriginSecretVar])
 	}
 	if _, signed := entry[edge.OriginSignedVar]; signed {
-		t.Errorf("the entry carries %s, which waves its membrane past a URL nothing signs", edge.OriginSignedVar)
+		t.Errorf("the entry carries %s, which waves its runtime past a URL nothing signs", edge.OriginSignedVar)
 	}
 }
 
@@ -126,7 +126,7 @@ func TestASiblingKeepsItsSignedURLAndLearnsNoSecret(t *testing.T) {
 		t.Errorf("a sibling carries %s, want the secret to reach the entry function alone", edge.OriginSecretVar)
 	}
 	if sibling[edge.OriginSignedVar] == "" {
-		t.Errorf("a sibling carries no %s, so its membrane refuses the entry's signed requests", edge.OriginSignedVar)
+		t.Errorf("a sibling carries no %s, so its runtime refuses the entry's signed requests", edge.OriginSignedVar)
 	}
 }
 
@@ -170,7 +170,7 @@ func TestNoneModeReachesItsEntryOverASignedURL(t *testing.T) {
 			t.Errorf("%s carries %s, which an AWS_PROXY integration never presents", logical, edge.OriginSecretVar)
 		}
 		if env[edge.OriginSignedVar] == "" {
-			t.Errorf("%s carries no %s, so its membrane refuses every signed request", logical, edge.OriginSignedVar)
+			t.Errorf("%s carries no %s, so its runtime refuses every signed request", logical, edge.OriginSignedVar)
 		}
 	}
 }

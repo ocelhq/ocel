@@ -24,10 +24,10 @@ func servesBoth() []providerkit.LinkType {
 func TestRefuseUnreachableLinks(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a provider serving every crossing type its plan reaches is let past", func(t *testing.T) {
+	t.Run("a provider serving every proxied type its plan reaches is let past", func(t *testing.T) {
 		t.Parallel()
 
-		if err := providerkit.RefuseUnreachableLinks("aws", servesBoth(), providerkit.CrossesMembrane,
+		if err := providerkit.RefuseUnreachableLinks("aws", servesBoth(), providerkit.Proxied,
 			reachableResources(), nil); err != nil {
 			t.Fatalf("RefuseUnreachableLinks = %v, want nil", err)
 		}
@@ -36,7 +36,7 @@ func TestRefuseUnreachableLinks(t *testing.T) {
 	t.Run("a provider serving no primitive at all refuses by resource, type and vendor", func(t *testing.T) {
 		t.Parallel()
 
-		err := providerkit.RefuseUnreachableLinks(boxVendor, nil, providerkit.CrossesMembrane,
+		err := providerkit.RefuseUnreachableLinks(boxVendor, nil, providerkit.Proxied,
 			reachableResources(), nil)
 
 		var missing *providerkit.UnreachableLinkError
@@ -56,7 +56,7 @@ func TestRefuseUnreachableLinks(t *testing.T) {
 		grants := []providerkit.Link{{Name: "uploads", Resource: "bucket--uploads", Type: providerkit.LinkBucket}}
 
 		var missing *providerkit.UnreachableLinkError
-		if err := providerkit.RefuseUnreachableLinks(boxVendor, nil, providerkit.CrossesMembrane, nil, grants); !errors.As(err, &missing) {
+		if err := providerkit.RefuseUnreachableLinks(boxVendor, nil, providerkit.Proxied, nil, grants); !errors.As(err, &missing) {
 			t.Fatalf("RefuseUnreachableLinks = %v, want an *UnreachableLinkError", err)
 		}
 		if missing.Resource != "bucket--uploads" {
@@ -67,18 +67,18 @@ func TestRefuseUnreachableLinks(t *testing.T) {
 	t.Run("postgres goes direct, so a provider that serves none is still let past", func(t *testing.T) {
 		t.Parallel()
 
-		if err := providerkit.RefuseUnreachableLinks(boxVendor, nil, providerkit.CrossesMembrane,
+		if err := providerkit.RefuseUnreachableLinks(boxVendor, nil, providerkit.Proxied,
 			reachableResources()[:1], nil); err != nil {
 			t.Fatalf("RefuseUnreachableLinks = %v, want postgres to reach its provider directly", err)
 		}
 	})
 
-	t.Run("a provider that crosses nothing at all reaches every type directly", func(t *testing.T) {
+	t.Run("a provider that proxies nothing at all reaches every type directly", func(t *testing.T) {
 		t.Parallel()
 
-		crosses := func(providerkit.LinkType) bool { return false }
-		if err := providerkit.RefuseUnreachableLinks(boxVendor, nil, crosses, reachableResources(), nil); err != nil {
-			t.Fatalf("RefuseUnreachableLinks = %v, want nothing refused where nothing crosses", err)
+		proxied := func(providerkit.LinkType) bool { return false }
+		if err := providerkit.RefuseUnreachableLinks(boxVendor, nil, proxied, reachableResources(), nil); err != nil {
+			t.Fatalf("RefuseUnreachableLinks = %v, want nothing refused where nothing is proxied", err)
 		}
 	})
 }

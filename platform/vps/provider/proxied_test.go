@@ -12,10 +12,10 @@ import (
 func refusingReach(t *testing.T, resources []providerkit.Resource, grants []providerkit.Link) error {
 	t.Helper()
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "box.example", User: "ocel-deploy"}})
-	return providerkit.RefuseUnreachableLinks(p.Vendor(), p.Serves(), providerkit.CrossesMembrane, resources, grants)
+	return providerkit.RefuseUnreachableLinks(p.Vendor(), p.Serves(), providerkit.Proxied, resources, grants)
 }
 
-func TestABoxRefusesALinkItServesNoMembraneFor(t *testing.T) {
+func TestABoxRefusesAProxiedLinkItServesNothingFor(t *testing.T) {
 	t.Parallel()
 
 	grants := []providerkit.Link{{Name: "uploads", Resource: "bucket--uploads", Type: providerkit.LinkBucket}}
@@ -40,6 +40,6 @@ func TestABoxIsLetPastForALinkTypeThatReachesItsProviderDirectly(t *testing.T) {
 
 	resources := []providerkit.Resource{{Name: "database--main", Declared: "database--main", Type: providerkit.LinkPostgres}}
 	if err := refusingReach(t, resources, nil); err != nil {
-		t.Fatalf("a postgres record on a box = %v, want nothing refused: postgres reaches its provider without a membrane", err)
+		t.Fatalf("a postgres record on a box = %v, want nothing refused: postgres reaches its provider without a runtime", err)
 	}
 }

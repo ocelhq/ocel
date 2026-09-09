@@ -52,7 +52,7 @@ func FunctionImage(base v1.Image, runtime Runtime, dir string, overlay map[strin
 	config.Cmd = command
 	config.WorkingDir = FunctionImageRoot
 	config.Env = boundPort(config.Env)
-	if BootsThroughMembrane(runtime) {
+	if BootsThroughRuntime(runtime) {
 		config.Env = append(config.Env, servedHandler(staged))
 	}
 	return mutate.Config(appended, config)
@@ -70,13 +70,13 @@ func functionStaging(dir string) (FunctionConfig, error) {
 	return staged, nil
 }
 
-const NodeMembraneRoot = "/ocel/membrane"
+const NodeRuntimeRoot = "/ocel/runtime"
 
-const NodeMembranePath = NodeMembraneRoot + "/entrypoint.mjs"
+const NodeRuntimePath = NodeRuntimeRoot + "/entrypoint.mjs"
 
 const HandlerName = "OCEL_HANDLER"
 
-func BootsThroughMembrane(runtime Runtime) bool {
+func BootsThroughRuntime(runtime Runtime) bool {
 	return runtime.Name == RuntimeNode || runtime.Name == RuntimeNext
 }
 
@@ -99,11 +99,11 @@ func functionCommand(runtime Runtime, staged FunctionConfig) ([]string, error) {
 	switch {
 	case len(staged.Command) > 0:
 		return staged.Command, nil
-	case BootsThroughMembrane(runtime):
-		return []string{"node", NodeMembranePath}, nil
+	case BootsThroughRuntime(runtime):
+		return []string{"node", NodeRuntimePath}, nil
 	default:
 		return nil, Refuse(CodeInvalid,
-			"the %s function staged at %s names no command to run, and only a node function boots through a membrane this image could run in its place",
+			"the %s function staged at %s names no command to run, and only a node function boots through a runtime this image could run in its place",
 			runtime.Name, staged.ID)
 	}
 }
@@ -172,14 +172,14 @@ func tarBody(archive *tar.Writer, rel string, body []byte, mode int64) error {
 
 func refuseStrayOverlay(rel string) error {
 	full := "/" + imagePath(rel)
-	for _, root := range []string{FunctionImageRoot, NodeMembraneRoot} {
+	for _, root := range []string{FunctionImageRoot, NodeRuntimeRoot} {
 		if strings.HasPrefix(full, root+"/") {
 			return nil
 		}
 	}
 	return Refuse(CodeInvalid,
-		"a function's image was handed %s to carry, and it lands at %s, outside both %s, which holds the function's own tree, and %s, which holds the membrane it boots through: an image ocel builds writes nowhere else in the base it is built on",
-		rel, full, FunctionImageRoot, NodeMembraneRoot)
+		"a function's image was handed %s to carry, and it lands at %s, outside both %s, which holds the function's own tree, and %s, which holds the runtime it boots through: an image ocel builds writes nowhere else in the base it is built on",
+		rel, full, FunctionImageRoot, NodeRuntimeRoot)
 }
 
 func imagePath(rel string) string {

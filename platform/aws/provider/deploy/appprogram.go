@@ -112,7 +112,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 		}
 	}
 
-	layers, err := r.membranePlacements(app.Membranes)
+	layers, err := r.runtimePlacements(app.RuntimePayloads)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +198,7 @@ func (r *release) store(name string) (string, error) {
 	return "", fmt.Errorf("this provider keeps no %q store", name)
 }
 
-func (r *release) membranePlacements(refs map[string]providerkit.ArtifactRef) (map[string]payloads.Placement, error) {
+func (r *release) runtimePlacements(refs map[string]providerkit.ArtifactRef) (map[string]payloads.Placement, error) {
 	placed := make(map[string]payloads.Placement, len(refs))
 	for arch, ref := range refs {
 		if ref.Key == "" {
@@ -206,9 +206,9 @@ func (r *release) membranePlacements(refs map[string]providerkit.ArtifactRef) (m
 		}
 		bucket, err := r.store(ref.Bucket)
 		if err != nil {
-			return nil, fmt.Errorf("read the membrane: %w", err)
+			return nil, fmt.Errorf("read the runtime: %w", err)
 		}
-		digest := strings.TrimSuffix(strings.TrimPrefix(ref.Key, providerkit.MembranePrefix+"/"), ".zip")
+		digest := strings.TrimSuffix(strings.TrimPrefix(ref.Key, providerkit.RuntimeLayerPrefix+"/"), ".zip")
 		placed[providerkit.Architecture(arch)] = payloads.Placement{Bucket: bucket, Key: ref.Key, SHA256: digest}
 	}
 	return placed, nil
@@ -340,7 +340,7 @@ func (r *release) appEnv(plan providerkit.StackPlan, bundle appBundle, sessions 
 			env[edge.CacheTagPurgeVar] = "1"
 		}
 	}
-	if app.CrossesMembrane {
+	if app.Proxied {
 		env[envStateTable] = r.cfg.StateTable
 		env[envSessionPrefix] = sessions.KeyPrefix
 	}

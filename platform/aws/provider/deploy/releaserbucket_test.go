@@ -9,15 +9,15 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
 )
 
-func membraneResources() []providerkit.Resource {
+func runtimeResources() []providerkit.Resource {
 	return []providerkit.Resource{
 		{Name: "database--main", Declared: "database--main", Type: providerkit.LinkPostgres},
 		{Name: "bucket--uploads", Declared: "bucket--uploads", Type: providerkit.LinkBucket},
 	}
 }
 
-func membranePlan() providerkit.StackPlan {
-	return providerkit.StackPlan{Resources: membraneResources()}
+func runtimePlan() providerkit.StackPlan {
+	return providerkit.StackPlan{Resources: runtimeResources()}
 }
 
 func TestProvisionsBucket(t *testing.T) {
@@ -26,7 +26,7 @@ func TestProvisionsBucket(t *testing.T) {
 	t.Run("a bucket of ours completes its own uploads", func(t *testing.T) {
 		t.Parallel()
 
-		if !provisionsBucket(membranePlan()) {
+		if !provisionsBucket(runtimePlan()) {
 			t.Error("provisionsBucket = false, want true for a bucket this deploy provisions")
 		}
 	})
@@ -34,7 +34,7 @@ func TestProvisionsBucket(t *testing.T) {
 	t.Run("postgres alone completes nothing", func(t *testing.T) {
 		t.Parallel()
 
-		plan := membranePlan()
+		plan := runtimePlan()
 		plan.Resources = plan.Resources[:1]
 
 		if provisionsBucket(plan) {
@@ -45,7 +45,7 @@ func TestProvisionsBucket(t *testing.T) {
 	t.Run("a linked bucket completes uploads of its own", func(t *testing.T) {
 		t.Parallel()
 
-		plan := membranePlan()
+		plan := runtimePlan()
 		plan.Resources[1].Linked = true
 
 		if provisionsBucket(plan) {
@@ -54,13 +54,13 @@ func TestProvisionsBucket(t *testing.T) {
 	})
 }
 
-func TestEveryCrossingTypeThisProviderServesIsOneTheMembraneRuns(t *testing.T) {
+func TestEveryProxiedTypeThisProviderServesIsOneTheRuntimeRuns(t *testing.T) {
 	t.Parallel()
 
-	var crossing []linksv1.LinkType
+	var proxied []linksv1.LinkType
 	for _, kind := range Serves() {
-		if providerkit.CrossesMembrane(kind) {
-			crossing = append(crossing, providerkit.WireLinkType(kind))
+		if providerkit.Proxied(kind) {
+			proxied = append(proxied, providerkit.WireLinkType(kind))
 		}
 	}
 	var run []linksv1.LinkType
@@ -70,10 +70,10 @@ func TestEveryCrossingTypeThisProviderServesIsOneTheMembraneRuns(t *testing.T) {
 			run = append(run, kind)
 		}
 	}
-	slices.Sort(crossing)
+	slices.Sort(proxied)
 	slices.Sort(run)
-	if !slices.Equal(crossing, run) {
-		t.Errorf("this provider says it serves %v of the types an app reaches through the membrane and the membrane runs %v: preflight lets a deploy past on the first list, and the app meets the second one at its first call",
-			crossing, run)
+	if !slices.Equal(proxied, run) {
+		t.Errorf("this provider says it serves %v of the types an app reaches through the runtime and the runtime runs %v: preflight lets a deploy past on the first list, and the app meets the second one at its first call",
+			proxied, run)
 	}
 }
