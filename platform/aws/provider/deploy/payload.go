@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	runtimeLayerKeyPrefix    = "ocel-runtime-layer"
 	uploadCompleterKeyPrefix = "ocel-upload-completer"
 )
 

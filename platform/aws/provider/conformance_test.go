@@ -42,13 +42,12 @@ func TestTheRootCarriesTheVendorAndEveryOptionalSet(t *testing.T) {
 
 	var root providerkit.Provider = p
 	for name, held := range map[string]bool{
-		"Warmer":               held[providerkit.Warmer](root),
-		"CodeEmbedder":         held[providerkit.CodeEmbedder](root),
-		"StackInspector":       held[providerkit.StackInspector](root),
-		"RuntimePayloadSource": held[providerkit.RuntimePayloadSource](root),
-		"ArtifactPacker":       held[providerkit.ArtifactPacker](root),
-		"GrantVerifier":        held[providerkit.GrantVerifier](root),
-		"ImageRegistry":        held[providerkit.ImageRegistry](root),
+		"Warmer":         held[providerkit.Warmer](root),
+		"CodeEmbedder":   held[providerkit.CodeEmbedder](root),
+		"StackInspector": held[providerkit.StackInspector](root),
+		"ArtifactPacker": held[providerkit.ArtifactPacker](root),
+		"GrantVerifier":  held[providerkit.GrantVerifier](root),
+		"ImageRegistry":  held[providerkit.ImageRegistry](root),
 	} {
 		if !held {
 			t.Errorf("the root does not carry %s, and a wrapped port would never bring it back", name)

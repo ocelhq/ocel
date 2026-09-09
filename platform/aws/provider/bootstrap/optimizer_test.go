@@ -44,6 +44,13 @@ func (f *fakeObjectStore) putVerified(key string, body []byte) {
 	f.checksums[key] = base64.StdEncoding.EncodeToString(sum[:])
 }
 
+func (f *fakeObjectStore) holds(key string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, held := f.objects[key]
+	return held
+}
+
 func (f *fakeObjectStore) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -87,18 +94,30 @@ func (f *fakeObjectStore) PutObject(_ context.Context, in *s3.PutObjectInput, _ 
 }
 
 func bootstrapPayloads() map[string]payloads.Payload {
-	return map[string]payloads.Payload{
+	held := map[string]payloads.Payload{
 		optimizerKeyPrefix:      payloads.ImageOptimizer(),
 		tagPublisherKeyPrefix:   payloads.TagPublisher(),
 		tagInvalidatorKeyPrefix: payloads.TagInvalidator(),
 		revalidatorKeyPrefix:    payloads.Revalidator(),
 	}
+	carried := map[string]payloads.Payload{}
+	for prefix, p := range held {
+		carried[payloads.Key(prefix, p.SHA256)] = p
+	}
+	for _, arch := range runtimeArches() {
+		p, err := payloads.RuntimeLayer(arch)
+		if err != nil {
+			panic(err)
+		}
+		carried[payloads.Key(runtimeLayerKeyPrefix, p.SHA256)] = p
+	}
+	return carried
 }
 
 func preloadedStore() *fakeObjectStore {
 	store := newFakeObjectStore()
-	for prefix, p := range bootstrapPayloads() {
-		store.putVerified(payloads.Key(prefix, p.SHA256), p.Bytes)
+	for key, p := range bootstrapPayloads() {
+		store.putVerified(key, p.Bytes)
 	}
 	return store
 }
@@ -322,8 +341,8 @@ func TestRunOptimizer(t *testing.T) {
 		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionBootstrap(defaultNamespace)); err != nil {
 			t.Fatalf("run: %v", err)
 		}
-		if want := 1 + len(featureNames()); cfn.creates != want || cfn.updates != 0 {
-			t.Errorf("settled the bootstrap in %d creates + %d updates, want one create each for core and its %d features", cfn.creates, cfn.updates, len(featureNames()))
+		if want := 2 + len(featureNames()); cfn.creates != want || cfn.updates != 0 {
+			t.Errorf("settled the bootstrap in %d creates + %d updates, want one create each for core, its runtime and its %d features", cfn.creates, cfn.updates, len(featureNames()))
 		}
 		final := cfn.template(optStack(ClassProduction))
 		if !strings.Contains(final, "AWS::Lambda::Url") {

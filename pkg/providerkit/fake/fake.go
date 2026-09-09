@@ -288,12 +288,6 @@ func (CodeEmbedder) EmbedCode(context.Context, string, providerkit.ArtifactRef, 
 	return nil
 }
 
-type RuntimePayloadSource struct{ *Provider }
-
-func (RuntimePayloadSource) RuntimePayload(context.Context, string) ([]byte, error) {
-	return []byte(RuntimePayload), nil
-}
-
 type StackInspector struct{ *Provider }
 
 func (s StackInspector) Inspect(_ context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
@@ -317,10 +311,6 @@ func (f Full) Inspect(_ context.Context, ref providerkit.StackRef) (providerkit.
 }
 
 func (Full) VerifyGrants(context.Context, providerkit.Link) error { return nil }
-
-func (Full) RuntimePayload(context.Context, string) ([]byte, error) {
-	return []byte(RuntimePayload), nil
-}
 
 func (f Full) PreflightDeploy(_ context.Context, pre providerkit.DeployPreflight) error {
 	return f.preflight(pre)
@@ -353,23 +343,20 @@ func (f Full) RemoveContainers(_ context.Context, _ providerkit.StackRef, contai
 }
 
 var (
-	_ providerkit.Provider             = (*Provider)(nil)
-	_ providerkit.Warmer               = Warmer{}
-	_ providerkit.CodeEmbedder         = CodeEmbedder{}
-	_ providerkit.StackInspector       = StackInspector{}
-	_ providerkit.GrantVerifier        = GrantVerifier{}
-	_ providerkit.RuntimePayloadSource = RuntimePayloadSource{}
-	_ providerkit.DeployPreflighter    = DeployPreflighter{}
-	_ providerkit.Certifier            = (*Provider)(nil)
-	_ providerkit.EdgeProgrammer       = (*Provider)(nil)
-	_ providerkit.ImageRegistry        = Full{}
-	_ resources.Functions              = Full{}
-	_ resources.AppContainers          = Full{}
+	_ providerkit.Provider          = (*Provider)(nil)
+	_ providerkit.Warmer            = Warmer{}
+	_ providerkit.CodeEmbedder      = CodeEmbedder{}
+	_ providerkit.StackInspector    = StackInspector{}
+	_ providerkit.GrantVerifier     = GrantVerifier{}
+	_ providerkit.DeployPreflighter = DeployPreflighter{}
+	_ providerkit.Certifier         = (*Provider)(nil)
+	_ providerkit.EdgeProgrammer    = (*Provider)(nil)
+	_ providerkit.ImageRegistry     = Full{}
+	_ resources.Functions           = Full{}
+	_ resources.AppContainers       = Full{}
 )
 
 const (
 	RegistryServer    = "registry.fake.invalid"
 	RegistryNamespace = "ocel"
 )
-
-const RuntimePayload = "fake-runtime-payload"

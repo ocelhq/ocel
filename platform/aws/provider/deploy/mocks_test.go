@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"strings"
 	"sync"
 	"testing"
 
@@ -43,6 +44,18 @@ type inputRecorder struct {
 	mu       sync.Mutex
 	recorded map[string]resource.PropertyMap
 	attached []string
+}
+
+func (r *inputRecorder) registered(typeToken string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var names []string
+	for key := range r.recorded {
+		if name, found := strings.CutPrefix(key, typeToken+"::"); found {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func (r *inputRecorder) NewResource(args pulumi.MockResourceArgs) (string, resource.PropertyMap, error) {

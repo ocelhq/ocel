@@ -17,7 +17,6 @@ const (
 	KindBucket          Kind = "bucket"
 	KindRole            Kind = "role"
 	KindQueue           Kind = "queue"
-	KindLayer           Kind = "layer"
 	KindUploadCompleter Kind = "upload-completer"
 	KindService         Kind = "svc"
 )
@@ -29,7 +28,6 @@ var components = map[Kind]string{
 	KindBucket:          "bucket",
 	KindRole:            "role",
 	KindQueue:           "queue",
-	KindLayer:           "layer",
 	KindUploadCompleter: "upload-completer",
 	KindService:         "service",
 }

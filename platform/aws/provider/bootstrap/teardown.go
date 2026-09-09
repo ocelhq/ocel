@@ -189,6 +189,11 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 			}
 		}
 
+		report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", ns.runtimeStackName(class)))
+		if err := deleteRuntimeLayerStack(ctx, apis.CFN, ns, class, func(msg string) { report(log, msg) }); err != nil {
+			return err
+		}
+
 		if deployed.AppBoundaryARN != "" {
 			report(progress, "Releasing the app boundary from every role still under it")
 			if err := releaseAppBoundary(ctx, apis.IAM, deployed.AppBoundaryARN, func(msg string) { report(log, msg) }); err != nil {

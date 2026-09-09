@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -37,11 +38,10 @@ func plannedAppStack(t *testing.T) (Config, providerkit.StackPlan) {
 				{Name: "fn--web--entry", Artifact: providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "entry.zip"}},
 				{Name: "fn--web--admin", Route: "/admin", Artifact: providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "admin.zip"}},
 			},
-			Routing:         &providerkit.RoutingPlan{Entry: "fn--web--entry", Manifest: []byte(routedManifest)},
-			ISR:             &providerkit.ISRPlan{Prefix: "shop/prod/web/r1/isr", TagNamespace: "tag:shop"},
-			Bytecode:        &providerkit.BytecodePlan{Prefix: "shop/prod/web/r1/bytecode"},
-			AssetPrefix:     coord.AssetKey(""),
-			RuntimePayloads: map[string]providerkit.ArtifactRef{providerkit.ArchX8664: {Bucket: providerkit.StoreFunctions, Key: providerkit.RuntimeLayerKey("abc123")}},
+			Routing:     &providerkit.RoutingPlan{Entry: "fn--web--entry", Manifest: []byte(routedManifest)},
+			ISR:         &providerkit.ISRPlan{Prefix: "shop/prod/web/r1/isr", TagNamespace: "tag:shop"},
+			Bytecode:    &providerkit.BytecodePlan{Prefix: "shop/prod/web/r1/bytecode"},
+			AssetPrefix: coord.AssetKey(""),
 		},
 	}
 	return cfg, plan
@@ -98,15 +98,27 @@ func TestThePlannedAppBootsThroughTheRuntimeItWasHandedAndNoOther(t *testing.T) 
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
-	layer := work.functions.Layers[providerkit.ArchX8664]
-	if layer.Bucket != cfg.ArtifactBucket {
-		t.Errorf("runtime bucket = %q, want the account's artifact bucket", layer.Bucket)
+	if len(work.functions.Layers) != 1 {
+		t.Fatalf("the app boots through %v, want the one runtime its functions' architecture names", work.functions.Layers)
 	}
-	if layer.Key != plan.App.RuntimePayloads[providerkit.ArchX8664].Key {
-		t.Errorf("runtime key = %q, want the one the plan named for the architecture its functions run on", layer.Key)
+	if got, want := work.functions.Layers[providerkit.ArchX8664], cfg.RuntimeLayers[providerkit.ArchX8664]; got != want {
+		t.Errorf("runtime layer = %q, want %q: the version the account's bootstrap published", got, want)
 	}
-	if layer.SHA256 != "abc123" {
-		t.Errorf("runtime source hash = %q, want the digest its key is addressed by", layer.SHA256)
+}
+
+func TestAnAppIsRefusedRatherThanDeployedAgainstARuntimeTheAccountDoesNotHold(t *testing.T) {
+	t.Parallel()
+
+	cfg, plan := plannedAppStack(t)
+	cfg.RuntimeLayers = nil
+	release := releasing(t, cfg)
+	_, err := release.appWork(plan, nil)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
+		t.Fatalf("appWork() = %v, want a %s refusal naming the bootstrap to re-run", err, providerkit.CodeNotReady)
+	}
+	if !strings.Contains(refusal.Message, providerkit.BootstrapCommand(cfg.Class)) {
+		t.Errorf("the refusal reads %q, want it to name `%s`", refusal.Message, providerkit.BootstrapCommand(cfg.Class))
 	}
 }
 

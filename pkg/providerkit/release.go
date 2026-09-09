@@ -86,8 +86,6 @@ type AppPlan struct {
 
 	AssetPrefix string
 
-	RuntimePayloads map[string]ArtifactRef
-
 	Packed any
 
 	Proxied bool

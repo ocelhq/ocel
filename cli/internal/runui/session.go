@@ -37,12 +37,6 @@ var (
 			Title:    "Provisioning",
 			Phase:    progressv1.Phase_PHASE_PROVISIONING,
 		},
-		{
-			Id:       naming.PhaseID(naming.UnitEnvironment, naming.PhaseUploading),
-			ParentId: environmentUnitID,
-			Title:    "Uploading",
-			Phase:    progressv1.Phase_PHASE_UPLOADING,
-		},
 	}
 )
 

@@ -18,7 +18,6 @@ import (
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 func TestTranslateFunctionSpec(t *testing.T) {
@@ -170,8 +169,8 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 			Stack:     stack,
 			Functions: []appFunction{{Logical: "fn--api--users", RouteID: "/users"}},
 			Args:      func(appFunction) functionArgs { return args },
-			Layers: map[string]payloads.Placement{
-				providerkit.ArchARM64: testRuntimeLayerPayload(),
+			Layers: map[string]string{
+				providerkit.ArchARM64: testRuntimeLayerARN(providerkit.ArchARM64),
 			},
 			Artifacts: map[string]artifactRef{"fn--api--users": {Bucket: "artifacts", Key: "fn.zip"}},
 			RoleArn:   role.Arn,
@@ -182,20 +181,12 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 		t.Fatalf("run program: %v", err)
 	}
 
-	layer := rec.inputs("aws:lambda/layerVersion:LayerVersion", "layer-runtime-arm64")
-	if len(layer) == 0 {
-		t.Fatal("no arm64 layer version was registered, so an arm64 function has no runtime to boot through")
-	}
-	if got := stringsAt(layer, "compatibleArchitectures"); !slices.Equal(got, []string{providerkit.ArchARM64}) {
-		t.Errorf("the layer's compatibleArchitectures = %v, want [%s]", got, providerkit.ArchARM64)
-	}
-
 	inputs := rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90")
 	if got := stringsAt(inputs, "architectures"); !slices.Equal(got, []string{providerkit.ArchARM64}) {
 		t.Errorf("architectures = %v, want [%s] — the runtime and the app's own binary are built for one machine", got, providerkit.ArchARM64)
 	}
-	if got := stringsAt(inputs, "layers"); len(got) != 1 || !strings.Contains(got[0], "layer-runtime-arm64") {
-		t.Errorf("the function's layers = %v, want the arm64 runtime this stack published", got)
+	if got, want := stringsAt(inputs, "layers"), testRuntimeLayerARN(providerkit.ArchARM64); len(got) != 1 || got[0] != want {
+		t.Errorf("the function's layers = %v, want [%s]: the arm64 runtime the account's bootstrap published", got, want)
 	}
 	if got, ok := inputs[resource.PropertyKey("runtime")]; !ok || got.StringValue() != providedFunctionRuntime {
 		t.Errorf("runtime = %v, want %q: an app with its own binary needs no managed language runtime", got, providedFunctionRuntime)
@@ -306,20 +297,6 @@ func TestAFunctionRunsOnTheManagedRuntimeItsLanguageNeedsAnInterpreterFrom(t *te
 	}
 }
 
-func TestTheRuntimeLayerIsCompatibleWithEveryManagedRuntimeAFunctionTakesIt(t *testing.T) {
-	t.Parallel()
-
-	for _, name := range providerkit.Runtimes() {
-		args, err := translateFunctionSpec(name, providerkit.FunctionSpec{Runtime: providerkit.Runtime{Name: name}})
-		if err != nil {
-			t.Fatalf("translateFunctionSpec(%q): %v", name, err)
-		}
-		if !slices.Contains(layerManagedRuntimes, args.Runtime) {
-			t.Errorf("a %q function runs on %q and the runtime layer declares %v: Lambda refuses a layer the function's runtime is not listed on", name, args.Runtime, layerManagedRuntimes)
-		}
-	}
-}
-
 func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 	t.Parallel()
 
@@ -355,8 +332,8 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 					Stack:     stack,
 					Functions: []appFunction{{Logical: "fn--api--web", RouteID: "/"}},
 					Args:      func(appFunction) functionArgs { return args },
-					Layers: map[string]payloads.Placement{
-						providerkit.ArchX8664: testRuntimeLayerPayload(),
+					Layers: map[string]string{
+						providerkit.ArchX8664: testRuntimeLayerARN(providerkit.ArchX8664),
 					},
 					Artifacts: map[string]artifactRef{"fn--api--web": {Bucket: "artifacts", Key: "fn.zip"}},
 					RoleArn:   role.Arn,
@@ -411,32 +388,23 @@ func TestFunctionDefaults(t *testing.T) {
 	})
 }
 
-func testRuntimeLayers() map[string]payloads.Placement {
-	return map[string]payloads.Placement{
-		providerkit.ArchX8664: testRuntimeLayerPayload(),
-		providerkit.ArchARM64: testRuntimeLayerPayload(),
+func testRuntimeLayers() map[string]string {
+	return map[string]string{
+		providerkit.ArchX8664: testRuntimeLayerARN(providerkit.ArchX8664),
+		providerkit.ArchARM64: testRuntimeLayerARN(providerkit.ArchARM64),
 	}
 }
 
-func testRuntimeLayerPayload() payloads.Placement {
-	return payloads.Placement{
-		Bucket: "ocel-artifacts",
-		Key:    payloads.Key(runtimeLayerKeyPrefix, "beef"),
-		SHA256: "beef",
-	}
+func testRuntimeLayerARN(arch string) string {
+	return "arn:aws:lambda:us-east-1:123456789012:layer:ocel-runtime-" + arch + "-beefbeefbeef:3"
 }
 
-func TestRuntimeLayer(t *testing.T) {
+func TestTheReleaseBootsThroughTheAccountsRuntimeAndPublishesNoneOfItsOwn(t *testing.T) {
 	t.Parallel()
 
-	code := testRuntimeLayerPayload()
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		layer, err := newRuntimeLayer(pctx, runtimeLayerCoordinate("shop", stack, providerkit.ArchX8664), providerkit.ArchX8664, code)
-		if err != nil {
-			return err
-		}
 		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api"})
 		if err != nil {
 			return err
@@ -445,40 +413,26 @@ func TestRuntimeLayer(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", stack, "fn--api--users"),
-			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"},
-			nil, nil, nil, nil, role.Arn, pulumi.StringArray{layer.Arn}, functionURLAuthIAM)
-		return err
+		return appStackFunctions{
+			Project:   "shop",
+			Stack:     stack,
+			Functions: []appFunction{{Logical: "fn--api--users", RouteID: "/users"}},
+			Args:      func(appFunction) functionArgs { return args },
+			Layers:    testRuntimeLayers(),
+			Artifacts: map[string]artifactRef{"fn--api--users": {Bucket: "artifacts", Key: "fn.zip"}},
+			RoleArn:   role.Arn,
+		}.register(pctx)
 	}
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
 		t.Fatalf("run program: %v", err)
 	}
 
-	inputs := rec.inputs("aws:lambda/layerVersion:LayerVersion", "layer-runtime-x86-64")
-	if len(inputs) == 0 {
-		t.Fatal("no layer version was registered")
+	if published := rec.registered("aws:lambda/layerVersion:LayerVersion"); len(published) != 0 {
+		t.Errorf("the release stack publishes %v, want the layers the account's bootstrap already holds", published)
 	}
-	for key, want := range map[string]string{
-		"s3Bucket":       code.Bucket,
-		"s3Key":          code.Key,
-		"sourceCodeHash": code.SHA256,
-		"layerName":      "shop-prod-api-runtime-x86-64-r3f8a1c90",
-	} {
-		got, ok := inputs[resource.PropertyKey(key)]
-		if !ok || !got.IsString() || got.StringValue() != want {
-			t.Errorf("%s on the layer = %v, want %q", key, got, want)
-		}
-	}
-	if got := stringsAt(inputs, "compatibleRuntimes"); !slices.Equal(got, layerManagedRuntimes) {
-		t.Errorf("compatibleRuntimes = %v, want %v", got, layerManagedRuntimes)
-	}
-	if got := stringsAt(inputs, "compatibleArchitectures"); !slices.Equal(got, []string{providerkit.ArchX8664}) {
-		t.Errorf("compatibleArchitectures = %v, want %v", got, []string{providerkit.ArchX8664})
-	}
-
 	layers := stringsAt(rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90"), "layers")
-	if len(layers) != 1 || !strings.Contains(layers[0], "layer-runtime-x86-64") {
-		t.Errorf("the function's layers = %v, want the stack's own layer version", layers)
+	if want := testRuntimeLayerARN(providerkit.ArchX8664); len(layers) != 1 || layers[0] != want {
+		t.Errorf("the function's layers = %v, want [%s]: the version ARN the bootstrap published", layers, want)
 	}
 }
 
