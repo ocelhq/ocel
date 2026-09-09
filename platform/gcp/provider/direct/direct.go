@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
@@ -74,8 +75,8 @@ func (e *Edge) DestroyPreviewWildcard(context.Context, string) error { return ni
 func unbindable(what string) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
 		"the %q edge answers on the url Cloud Run gives each service and claims no hostname of its own, so %s cannot be bound to it: "+
-			"front the project with the cloudflare edge to serve it under a name you own",
-		Kind, what)
+			"name the %q edge, which stands one load balancer up per bootstrap class at %s, or the cloudflare edge, which is bought separately",
+		Kind, what, alb.Kind, alb.StandingCost)
 }
 
 func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {

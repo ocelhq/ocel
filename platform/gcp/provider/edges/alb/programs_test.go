@@ -135,4 +135,3 @@ func TestAHostnameBoundBeforeAnythingWasDeployedDeclaresNoBackendToRouteNowhere(
 		t.Error("the binding declares no certificate for a hostname it can already certify: the certificate outlives the release the backend waits on")
 	}
 }
-
