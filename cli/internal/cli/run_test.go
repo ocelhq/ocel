@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
+	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
-	"github.com/ocelhq/ocel/cli/internal/lockfile"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -56,7 +56,7 @@ func TestRunRun(t *testing.T) {
 		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -97,8 +97,8 @@ export default { slug: "test-app" };
 		})
 
 		t.Run("it leaves no lockfile behind, having never advertised itself as leader", func(t *testing.T) {
-			if _, err := lockfile.Read(root); !errors.Is(err, fs.ErrNotExist) {
-				t.Fatalf("lockfile.Read err = %v, want a not-exist error (ocel run must not advertise as leader)", err)
+			if _, err := devlock.Read(root); !errors.Is(err, fs.ErrNotExist) {
+				t.Fatalf("devlock.Read err = %v, want a not-exist error (ocel run must not advertise as leader)", err)
 			}
 		})
 	})
@@ -115,7 +115,7 @@ export default { slug: "test-app" };
 		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -179,7 +179,7 @@ export default { slug: "test-app" };
 		clitest.SetLoggedIn(&deps)
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		projectID := testProjectID(t)
 		const apiURL = "https://api.example.com"
@@ -194,8 +194,8 @@ export default { slug: "test-app" };
 		go httpSrv.Serve(listener)
 		defer httpSrv.Close()
 
-		if err := lockfile.Create(root, listener.Addr().String()); err != nil {
-			t.Fatalf("lockfile.Write: %v", err)
+		if err := devlock.Create(root, listener.Addr().String()); err != nil {
+			t.Fatalf("devlock.Write: %v", err)
 		}
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `

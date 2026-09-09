@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
-	"github.com/ocelhq/ocel/cli/internal/lockfile"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -91,7 +91,7 @@ func TestProcessTreeDiesWithTheCLI(t *testing.T) {
 		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -130,7 +130,7 @@ export default { slug: "test-app" };
 		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -169,7 +169,7 @@ export default { slug: "test-app" };
 		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -206,7 +206,7 @@ export default { slug: "test-app" };
 		clitest.SetLoggedIn(&deps)
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		projectID := testProjectID(t)
 		const apiURL = "https://api.example.com"
@@ -221,8 +221,8 @@ export default { slug: "test-app" };
 		go httpSrv.Serve(listener)
 		defer httpSrv.Close()
 
-		if err := lockfile.Create(root, listener.Addr().String()); err != nil {
-			t.Fatalf("lockfile.Create: %v", err)
+		if err := devlock.Create(root, listener.Addr().String()); err != nil {
+			t.Fatalf("devlock.Create: %v", err)
 		}
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `

@@ -1,4 +1,4 @@
-package lockfile
+package devlock
 
 import (
 	"errors"
@@ -12,7 +12,7 @@ import (
 func TestCreate(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a created lockfile reads back the address that was written", func(t *testing.T) {
+	t.Run("a created dev lock reads back the address that was written", func(t *testing.T) {
 		t.Parallel()
 
 		root := uniqueRoot(t)
@@ -50,7 +50,7 @@ func TestCreate(t *testing.T) {
 		}
 	})
 
-	t.Run("the lockfile is readable only by its owner", func(t *testing.T) {
+	t.Run("the dev lock is readable only by its owner", func(t *testing.T) {
 		t.Parallel()
 
 		root := uniqueRoot(t)
@@ -67,7 +67,7 @@ func TestCreate(t *testing.T) {
 			t.Fatalf("Stat: %v", err)
 		}
 		if perm := info.Mode().Perm(); perm&0o077 != 0 {
-			t.Fatalf("lockfile mode = %v, want nothing readable or writable outside the owner", perm)
+			t.Fatalf("dev lock mode = %v, want nothing readable or writable outside the owner", perm)
 		}
 	})
 }
@@ -75,7 +75,7 @@ func TestCreate(t *testing.T) {
 func TestRead(t *testing.T) {
 	t.Parallel()
 
-	t.Run("no lockfile reads as a not-exist error", func(t *testing.T) {
+	t.Run("no dev lock reads as a not-exist error", func(t *testing.T) {
 		t.Parallel()
 
 		if _, err := Read(t.TempDir()); !errors.Is(err, fs.ErrNotExist) {
@@ -87,7 +87,7 @@ func TestRead(t *testing.T) {
 func TestRemove(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a removed lockfile reads as a not-exist error", func(t *testing.T) {
+	t.Run("a removed dev lock reads as a not-exist error", func(t *testing.T) {
 		t.Parallel()
 
 		root := uniqueRoot(t)
@@ -102,11 +102,11 @@ func TestRemove(t *testing.T) {
 		}
 	})
 
-	t.Run("removing a lockfile that was never created is not an error", func(t *testing.T) {
+	t.Run("removing a dev lock that was never created is not an error", func(t *testing.T) {
 		t.Parallel()
 
 		if err := Remove(t.TempDir()); err != nil {
-			t.Fatalf("Remove on nonexistent lockfile: %v", err)
+			t.Fatalf("Remove on nonexistent dev lock: %v", err)
 		}
 	})
 }
@@ -114,7 +114,7 @@ func TestRemove(t *testing.T) {
 func TestPath(t *testing.T) {
 	t.Parallel()
 
-	t.Run("two project roots do not share one lockfile", func(t *testing.T) {
+	t.Run("two project roots do not share one dev lock", func(t *testing.T) {
 		t.Parallel()
 
 		parent := t.TempDir()

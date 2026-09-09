@@ -22,10 +22,10 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/console/binding"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
+	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
-	"github.com/ocelhq/ocel/cli/internal/lockfile"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
@@ -188,7 +188,7 @@ func TestRunDev(t *testing.T) {
 		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
@@ -238,7 +238,7 @@ func TestRunDev(t *testing.T) {
 		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
@@ -273,7 +273,7 @@ func TestRunDev(t *testing.T) {
 		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
@@ -349,12 +349,12 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		projectID := "proj_" + t.Name()
 
 		firstClone := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(firstClone) })
+		t.Cleanup(func() { _ = devlock.Remove(firstClone) })
 		writeLink(t, firstClone, resolveServer.URL, projectID)
 		clitest.WriteFile(t, filepath.Join(firstClone, "infra", "main.ts"), declareResourceScript("first"))
 
 		secondClone := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(secondClone) })
+		t.Cleanup(func() { _ = devlock.Remove(secondClone) })
 		writeLink(t, secondClone, resolveServer.URL, projectID)
 		clitest.WriteFile(t, filepath.Join(secondClone, "infra", "main.ts"), declareResourceScript("second"))
 
@@ -416,7 +416,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		withCredentials(&deps, resolveServer.URL)
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
@@ -477,7 +477,7 @@ export default { slug: "test-app" };
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -540,7 +540,7 @@ export default { slug: "test-app" };
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -615,7 +615,7 @@ export default { slug: "test-app" };
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -677,7 +677,7 @@ export default { slug: "test-app" };
 		defer resolveServer.Close()
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
@@ -720,7 +720,7 @@ export default { slug: "test-app" };
 		clitest.SetLoggedIn(&deps)
 
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		projectID := "proj_" + t.Name()
 		const apiURL = "https://api.example.com"
@@ -734,8 +734,8 @@ export default { slug: "test-app" };
 		httpSrv := &http.Server{Handler: srv.Mux()}
 		go httpSrv.Serve(listener)
 
-		if err := lockfile.Create(root, listener.Addr().String()); err != nil {
-			t.Fatalf("lockfile.Create: %v", err)
+		if err := devlock.Create(root, listener.Addr().String()); err != nil {
+			t.Fatalf("devlock.Create: %v", err)
 		}
 
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -839,7 +839,7 @@ func waitForLockfile(t *testing.T, root string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err := lockfile.Read(root); err == nil {
+		if _, err := devlock.Read(root); err == nil {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)

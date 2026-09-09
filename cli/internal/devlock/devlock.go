@@ -1,4 +1,4 @@
-package lockfile
+package devlock
 
 import (
 	"crypto/sha256"
@@ -44,14 +44,14 @@ func Create(root, addr string) error {
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
-		return fmt.Errorf("create lockfile: %w", err)
+		return fmt.Errorf("create the dev lock: %w", err)
 	}
 	if _, err := f.WriteString(addr); err != nil {
 		f.Close()
-		return fmt.Errorf("write lockfile: %w", err)
+		return fmt.Errorf("write the dev lock: %w", err)
 	}
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("write lockfile: %w", err)
+		return fmt.Errorf("write the dev lock: %w", err)
 	}
 	return nil
 }
@@ -75,7 +75,7 @@ func lockDir() (string, error) {
 
 	dir := filepath.Join(base, "ocel", dirName)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("create lockfile directory: %w", err)
+		return "", fmt.Errorf("create the dev lock directory: %w", err)
 	}
 	return dir, nil
 }

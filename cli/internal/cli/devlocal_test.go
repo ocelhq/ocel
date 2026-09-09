@@ -12,9 +12,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
+	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
-	"github.com/ocelhq/ocel/cli/internal/lockfile"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 )
 
@@ -41,7 +41,7 @@ func TestRunDevLocal(t *testing.T) {
 
 	t.Run("an unlinked project resolves its resource from the dotfile and spawns", func(t *testing.T) {
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
 		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "OCEL_RESOURCE_POSTGRES_main="+localLink+"\n")
@@ -72,7 +72,7 @@ func TestRunDevLocal(t *testing.T) {
 
 	t.Run("a declared resource with no entry refuses, naming the entry and an example", func(t *testing.T) {
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
 
@@ -101,7 +101,7 @@ func TestRunRunLocal(t *testing.T) {
 
 	t.Run("a one-off command carries the dotfile's resources with no console", func(t *testing.T) {
 		root := t.TempDir()
-		t.Cleanup(func() { _ = lockfile.Remove(root) })
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
 		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "OCEL_RESOURCE_POSTGRES_main="+localLink+"\n")
