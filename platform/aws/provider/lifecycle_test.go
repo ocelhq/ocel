@@ -25,12 +25,15 @@ const lifecycleSlug = "ocel-aws-e2e"
 const patience = 15 * time.Minute
 
 type journey struct {
-	account  account
-	bin      string
-	project  string
-	settings string
-	cache    string
+	account   account
+	bin       string
+	project   string
+	settings  string
+	cache     string
+	providers string
 }
+
+const unreleasedVersion = "dev"
 
 func lifecycle(t *testing.T) journey {
 	t.Helper()
@@ -38,11 +41,12 @@ func lifecycle(t *testing.T) journey {
 
 	dir := t.TempDir()
 	run := journey{
-		account:  a,
-		bin:      filepath.Join(dir, "ocel"),
-		project:  filepath.Join(dir, "project"),
-		settings: filepath.Join(dir, "config"),
-		cache:    filepath.Join(dir, "cache"),
+		account:   a,
+		bin:       filepath.Join(dir, "ocel"),
+		project:   filepath.Join(dir, "project"),
+		settings:  filepath.Join(dir, "config"),
+		cache:     filepath.Join(dir, "cache"),
+		providers: filepath.Join(dir, "providers"),
 	}
 	if err := os.MkdirAll(run.project, 0o700); err != nil {
 		t.Fatal(err)
@@ -50,36 +54,14 @@ func lifecycle(t *testing.T) journey {
 
 	root := repoRoot(t)
 	build(t, filepath.Join(root, "cli"), run.bin, "./ocel")
-	build(t, ".", filepath.Join(run.installed(), "bin", "deploy"), "./cmd/deploy")
-	write(t, filepath.Join(run.installed(), "package.json"), run.manifest(t))
+	build(t, ".", run.installed(), "./cmd/deploy")
 	write(t, filepath.Join(run.project, "ocel.config.ts"), run.declaration(t))
 
 	return run
 }
 
-func (j journey) platformPackage() string {
-	arch := runtime.GOARCH
-	if arch == "amd64" {
-		arch = "x64"
-	}
-	return "@ocel/provider-aws-" + runtime.GOOS + "-" + arch
-}
-
 func (j journey) installed() string {
-	return filepath.Join(j.project, "node_modules", filepath.FromSlash(j.platformPackage()))
-}
-
-func (j journey) manifest(t *testing.T) string {
-	t.Helper()
-	written, err := json.Marshal(map[string]any{
-		"name":    j.platformPackage(),
-		"version": "0.0.0",
-		"bin":     map[string]any{"ocel-provider-aws-deploy": "bin/deploy"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(written) + "\n"
+	return filepath.Join(j.providers, "aws", unreleasedVersion, runtime.GOOS+"-"+runtime.GOARCH, "provider-aws")
 }
 
 func (j journey) declaration(t *testing.T) string {
@@ -105,6 +87,9 @@ func repoRoot(t *testing.T) string {
 
 func build(t *testing.T, module, out, pkg string) {
 	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(out), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	made := exec.Command("go", "build", "-C", module, "-o", out, pkg)
 	made.Env = append(os.Environ(), "GOCACHEPROG=")
 	if rendered, err := made.CombinedOutput(); err != nil {
@@ -135,6 +120,7 @@ func (j journey) env() []string {
 	return append(kept,
 		"XDG_CONFIG_HOME="+j.settings,
 		"XDG_CACHE_HOME="+j.cache,
+		"OCEL_PROVIDERS_DIR="+j.providers,
 	)
 }
 

@@ -46,17 +46,20 @@ const (
 const patience = 8 * time.Minute
 
 type journey struct {
-	vm       machine
-	bin      string
-	project  string
-	settings string
-	cache    string
-	shims    string
-	config   string
-	store    string
-	trust    string
-	value    string
+	vm        machine
+	bin       string
+	project   string
+	settings  string
+	cache     string
+	providers string
+	shims     string
+	config    string
+	store     string
+	trust     string
+	value     string
 }
+
+const unreleasedVersion = "dev"
 
 func lifecycle(t *testing.T) journey {
 	t.Helper()
@@ -64,10 +67,11 @@ func lifecycle(t *testing.T) journey {
 
 	dir := t.TempDir()
 	run := journey{
-		vm:       vm,
-		project:  filepath.Join(dir, "project"),
-		settings: filepath.Join(dir, "config"),
-		value:    "e2e-" + strconv.FormatInt(time.Now().UnixNano(), 36),
+		vm:        vm,
+		project:   filepath.Join(dir, "project"),
+		settings:  filepath.Join(dir, "config"),
+		providers: filepath.Join(dir, "providers"),
+		value:     "e2e-" + strconv.FormatInt(time.Now().UnixNano(), 36),
 	}
 	if err := os.MkdirAll(run.project, 0o700); err != nil {
 		t.Fatal(err)
@@ -76,8 +80,7 @@ func lifecycle(t *testing.T) journey {
 
 	cli, deploy := binaries(t)
 	run.bin = cli
-	linked(t, deploy, filepath.Join(run.installed(), "bin", "deploy"))
-	write(t, filepath.Join(run.installed(), "package.json"), run.manifest(t))
+	linked(t, deploy, run.installed())
 	write(t, filepath.Join(run.project, "ocel.config.ts"), run.declaration(t, vm.user))
 	write(t, filepath.Join(run.project, lifecycleDeployFile), run.declaration(t, host.DeployUser()))
 
@@ -160,29 +163,8 @@ func (j *journey) apart(t *testing.T) {
 	}
 }
 
-func (j journey) platformPackage() string {
-	arch := runtime.GOARCH
-	if arch == "amd64" {
-		arch = "x64"
-	}
-	return "@ocel/provider-vps-" + runtime.GOOS + "-" + arch
-}
-
 func (j journey) installed() string {
-	return filepath.Join(j.project, "node_modules", filepath.FromSlash(j.platformPackage()))
-}
-
-func (j journey) manifest(t *testing.T) string {
-	t.Helper()
-	written, err := json.Marshal(map[string]any{
-		"name":    j.platformPackage(),
-		"version": "0.0.0",
-		"bin":     map[string]any{"ocel-provider-vps-deploy": "bin/deploy"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(written) + "\n"
+	return filepath.Join(j.providers, "vps", unreleasedVersion, runtime.GOOS+"-"+runtime.GOARCH, "provider-vps")
 }
 
 func (j journey) declaration(t *testing.T, login string) string {
@@ -306,6 +288,7 @@ func (j journey) env() []string {
 		"PATH="+j.shims+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"XDG_CONFIG_HOME="+j.settings,
 		"XDG_CACHE_HOME="+j.cache,
+		"OCEL_PROVIDERS_DIR="+j.providers,
 		"OCEL_NO_BROWSER=1",
 	)
 	if j.trust != "" {
