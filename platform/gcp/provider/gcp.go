@@ -85,7 +85,7 @@ func (p *Provider) Computes() []providerkit.Compute {
 }
 
 func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
-	return bootstrapper{clients: p.clients}, nil
+	return bootstrapper{clients: p.clients, fronts: p.Edges()}, nil
 }
 
 func (p *Provider) Releases() providerkit.Releaser {

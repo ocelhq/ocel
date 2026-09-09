@@ -61,9 +61,8 @@ const (
 
 type bootstrapper struct {
 	clients *clients
+	fronts  providerkit.EdgeRegistry
 }
-
-func (bootstrapper) Catalogue() []providerkit.Feature { return nil }
 
 func (b bootstrapper) Describe(ctx context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
 	read, err := b.survey(ctx, class)
@@ -102,10 +101,10 @@ func (b bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	if err := b.preflight(ctx, read); err != nil {
+	if err := b.preflight(ctx, read, req.Features); err != nil {
 		return providerkit.Plan{}, err
 	}
-	groups := providerkit.DeriveGroups(described(read), nil, req)
+	groups := providerkit.DeriveGroups(described(read), b.Catalogue(), req)
 	groups[0].Changes = planned(read, stackItems(read.Names, read.Class, read.Emulated))
 
 	params := providerkit.ChangeGroup{
@@ -151,7 +150,7 @@ func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err != nil {
 		return err
 	}
-	if err := b.preflight(ctx, read); err != nil {
+	if err := b.preflight(ctx, read, req.Features); err != nil {
 		return err
 	}
 
@@ -178,6 +177,9 @@ func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 		if err := b.stand(ctx, read, item, report); err != nil {
 			return err
 		}
+	}
+	if err := b.raiseFronts(ctx, req, report); err != nil {
+		return err
 	}
 	written.State = stateComplete
 	_, err = b.stampWith(ctx, read, written, generation)
@@ -748,6 +750,9 @@ func (b bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 		if _, err := b.stampWith(ctx, read, leaving, read.Generation); err != nil {
 			return err
 		}
+	}
+	if err := b.tearFronts(ctx, class); err != nil {
+		return err
 	}
 	for _, taking := range removals(read) {
 		if taking.action == providerkit.ActionKeep {
