@@ -21,6 +21,8 @@ import { type Concern, specByName } from "./spec";
 import type { CellContext } from "./targets/types";
 import { cloudflare, container, type Variant } from "./variants";
 
+const TS_BASE = "./ocel.config.ts";
+
 function cell(concern: Concern, name: string, variant?: Variant): CellContext {
   return {
     fixture: specByName(concern, name),
@@ -161,7 +163,7 @@ describe("a container cell", () => {
 
 describe("renderConfig", () => {
   it("spreads the fixture's own config under the cell's slug", () => {
-    expect(renderConfig({ base: AWS_BASE, slug: "j-1-node" })).toBe(
+    expect(renderConfig({ base: TS_BASE, slug: "j-1-node" })).toBe(
       `import { defineConfig } from "ocel/config";
 import base from "./ocel.config.ts";
 
@@ -174,25 +176,25 @@ export default defineConfig({
   });
 
   it("leaves the provider alone when no key is brought", () => {
-    expect(renderConfig({ base: AWS_BASE, slug: "j-1-node" })).not.toContain("provider:");
+    expect(renderConfig({ base: TS_BASE, slug: "j-1-node" })).not.toContain("provider:");
   });
 
   it("keeps the fixture's own provider options under the key it seals vars with", () => {
     expect(
-      renderConfig({ base: AWS_BASE, slug: "j-1-node", varsKey: "arn:aws:kms:key/k" }),
+      renderConfig({ base: TS_BASE, slug: "j-1-node", varsKey: "arn:aws:kms:key/k" }),
     ).toContain(
       `  provider: { name: "aws", options: { ...(base.provider as { options?: object } | undefined)?.options, varsKey: "arn:aws:kms:key/k" } },`,
     );
   });
 
   it("imports each edge from where the product ships it", () => {
-    expect(renderConfig({ base: AWS_BASE, slug: "s", edge: "api-gateway" })).toContain(
+    expect(renderConfig({ base: TS_BASE, slug: "s", edge: "api-gateway" })).toContain(
       'import { apiGateway } from "ocel/providers/aws/edge";',
     );
-    expect(renderConfig({ base: AWS_BASE, slug: "s", edge: "cloudfront" })).toContain(
+    expect(renderConfig({ base: TS_BASE, slug: "s", edge: "cloudfront" })).toContain(
       'import { cloudfront } from "ocel/providers/aws/edge";',
     );
-    expect(renderConfig({ base: AWS_BASE, slug: "s", edge: "cloudflare" })).toContain(
+    expect(renderConfig({ base: TS_BASE, slug: "s", edge: "cloudflare" })).toContain(
       'import { cloudflare } from "ocel/edge";',
     );
   });
@@ -200,7 +202,7 @@ export default defineConfig({
   it("writes every dimension of a full cell", () => {
     expect(
       renderConfig({
-        base: AWS_BASE,
+        base: TS_BASE,
         slug: "j-1-node",
         compute: "container",
         edge: "cloudflare",
@@ -233,7 +235,7 @@ export default defineConfig({
 });
 
 const COMMENTED_JSON_BASE = `{
-  "$schema": "https://ocel.dev/schema/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
   "slug": "go",
   "provider": { "name": "aws" },
   "apps": [
@@ -253,7 +255,7 @@ describe("renderJsonConfig", () => {
     expect(
       JSON.parse(renderJsonConfig(COMMENTED_JSON_BASE, { base: "./ocel.json", slug: "j-1-go" })),
     ).toEqual({
-      $schema: "https://ocel.dev/schema/ocel.schema.json",
+      $schema: "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
       slug: "j-1-go",
       provider: { name: "aws" },
       apps: [{ name: "web", path: "./server", runtime: "go" }],
@@ -274,7 +276,7 @@ describe("renderJsonConfig", () => {
         }),
       ),
     ).toEqual({
-      $schema: "https://ocel.dev/schema/ocel.schema.json",
+      $schema: "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
       slug: "j-1-go",
       provider: { name: "aws", options: { varsKey: "arn:aws:kms:key/k" } },
       edge: { kind: "api-gateway" },

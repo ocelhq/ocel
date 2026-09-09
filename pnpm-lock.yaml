@@ -1055,9 +1055,6 @@ importers:
       react-dom:
         specifier: 19.2.4
         version: 19.2.4(react@19.2.4)
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.13
@@ -1106,37 +1103,15 @@ importers:
         specifier: ^5
         version: 5.9.3
 
-  tests/fixtures/deploy/python:
-    dependencies:
-      ocel:
-        specifier: workspace:^
-        version: link:../../../../packages/ocel
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
   tests/fixtures/deploy/workspace:
     dependencies:
       ocel:
         specifier: workspace:^
         version: link:../../../../packages/ocel
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
     devDependencies:
       '@types/node':
         specifier: ^20
         version: 20.19.43
-      typescript:
-        specifier: ^5
-        version: 5.9.3
 
   tests/fixtures/deploy/workspace/apps/express:
     dependencies:
@@ -1240,19 +1215,6 @@ importers:
         specifier: ^5
         version: 5.9.3
 
-  tests/fixtures/sdk/go:
-    dependencies:
-      ocel:
-        specifier: workspace:^
-        version: link:../../../../packages/ocel
-    devDependencies:
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
   tests/fixtures/sdk/next:
     dependencies:
       better-sqlite3:
@@ -1332,32 +1294,6 @@ importers:
       tsx:
         specifier: ^4.19.2
         version: 4.23.0
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
-  tests/fixtures/sdk/python:
-    dependencies:
-      ocel:
-        specifier: workspace:^
-        version: link:../../../../packages/ocel
-    devDependencies:
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
-  tests/fixtures/sdk/rust:
-    dependencies:
-      ocel:
-        specifier: workspace:^
-        version: link:../../../../packages/ocel
-    devDependencies:
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
       typescript:
         specifier: ^5
         version: 5.9.3

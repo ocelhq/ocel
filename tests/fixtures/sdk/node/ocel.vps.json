@@ -1,6 +1,6 @@
 {
   "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
-  "slug": "go",
+  "slug": "node",
   "provider": {
     "name": "vps",
     "options": {
@@ -14,7 +14,7 @@
   "apps": [
     {
       "name": "web",
-      "path": "./server",
+      "path": ".",
       "compute": "container",
       "health": { "path": "/health" }
       // The hostname production serves on, bound with `ocel domain add`:

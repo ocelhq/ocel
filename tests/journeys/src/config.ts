@@ -10,9 +10,9 @@ import type { CellContext } from "./targets/types";
 export const JOURNEY_TS = "ocel.journey.config.ts";
 export const JOURNEY_JSON = "ocel.journey.json";
 
-export const AWS_BASE = "./ocel.config.ts";
-export const VPS_BASE = "./ocel.vps.config.ts";
-export const GCP_BASE = "./ocel.gcp.config.ts";
+export const AWS_BASE = "./ocel.json";
+export const VPS_BASE = "./ocel.vps.json";
+export const GCP_BASE = "./ocel.gcp.json";
 
 const VPS_DEFAULT_ZONE = "localhost";
 
@@ -178,9 +178,13 @@ export function renderJsonConfig(base: string, overlay: Overlay): string {
 }
 
 export function baseIn(dir: string, base: string): string {
-  const asJson = base.replace(/\.config\.ts$/, ".json");
-  if (asJson !== base && !existsSync(path.join(dir, base)) && existsSync(path.join(dir, asJson))) {
-    return asJson;
+  const asProgram = base.replace(/\.json$/, ".config.ts");
+  if (
+    asProgram !== base &&
+    !existsSync(path.join(dir, base)) &&
+    existsSync(path.join(dir, asProgram))
+  ) {
+    return asProgram;
   }
   return base;
 }
