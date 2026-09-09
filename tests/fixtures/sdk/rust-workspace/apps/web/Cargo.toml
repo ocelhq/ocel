@@ -1,0 +1,8 @@
+[package]
+name = "web"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+infra = { path = "../../crates/infra" }
+ocel = { path = "../../../../../../crates/ocel" }

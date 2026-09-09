@@ -111,6 +111,38 @@ func TestRustReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 	}
 }
 
+func TestRustReachGrantsASharedCrateResourceToEveryAppThatLinksIt(t *testing.T) {
+	needsCargo(t)
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", "tests", "fixtures", "sdk", "rust-workspace"))
+	if err != nil {
+		t.Fatalf("locate the fixture: %v", err)
+	}
+	fetched(t, root)
+
+	apps := []App{
+		{Name: "api", Path: "apps/api", Language: discovery.Rust},
+		{Name: "web", Path: "apps/web", Language: discovery.Rust},
+	}
+	usages, err := Compute(t.Context(), root, apps, []Declaration{{
+		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Name:   "main",
+		Source: filepath.Join(root, "crates", "infra", "src", "lib.rs") + ":4",
+	}})
+	if err != nil {
+		t.Fatalf("Compute: %v", err)
+	}
+
+	want := []Usage{
+		{App: "api", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/main.rs"}},
+		{App: "web", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/main.rs"}},
+	}
+	if !slices.EqualFunc(usages, want, func(a, b Usage) bool {
+		return a.App == b.App && a.Type == b.Type && a.Name == b.Name && slices.Equal(a.Files, b.Files)
+	}) {
+		t.Errorf("usages = %+v, want %+v", usages, want)
+	}
+}
+
 func TestRustReachReadsCargoMetadataWithoutReachingTheRegistry(t *testing.T) {
 	bin := t.TempDir()
 	recorded := filepath.Join(bin, "args")
