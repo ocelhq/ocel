@@ -63,6 +63,8 @@ type scopedARNs struct {
 	bootstrapTablePart string
 	bootstrapStack     string
 	bootstrapChangeSet string
+	runtimeStack       string
+	runtimeChangeSet   string
 	bootstrapRole      string
 	bootstrapFunction  string
 	bootstrapQueue     string
@@ -84,6 +86,8 @@ func (n Namespace) scopedARNs() scopedARNs {
 		bootstrapTable:     "arn:aws:dynamodb:*:*:table/" + core + "*",
 		bootstrapStack:     "arn:aws:cloudformation:*:*:stack/" + core + "*/*",
 		bootstrapChangeSet: "arn:aws:cloudformation:*:*:changeSet/" + string(n) + "-*/*",
+		runtimeStack:       "arn:aws:cloudformation:*:*:stack/" + core + "-runtime*/*",
+		runtimeChangeSet:   "arn:aws:cloudformation:*:*:changeSet/" + core + "-runtime*/*",
 		bootstrapRole:      "arn:aws:iam::*:role/" + core + "*",
 		bootstrapFunction:  "arn:aws:lambda:*:*:function:" + core + "*",
 		bootstrapQueue:     "arn:aws:sqs:*:*:" + string(n) + "-*",
@@ -566,6 +570,27 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 	}
 }
 
+func runtimeProvisioning(r scopedARNs) []grantStatement {
+	return []grantStatement{
+		{
+			actions: []string{
+				"cloudformation:CreateChangeSet",
+				"cloudformation:CreateStack",
+				"cloudformation:DescribeStackEvents",
+			},
+			resources: []string{r.runtimeStack},
+		},
+		{
+			actions: []string{
+				"cloudformation:DeleteChangeSet",
+				"cloudformation:DescribeChangeSet",
+				"cloudformation:ExecuteChangeSet",
+			},
+			resources: []string{r.runtimeStack, r.runtimeChangeSet},
+		},
+	}
+}
+
 func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 	return []grantStatement{
 		{
@@ -799,12 +824,12 @@ func edgePrincipal(r scopedARNs) []grantStatement {
 
 func deployTier(ns Namespace) []grantStatement {
 	r := ns.scopedARNs()
-	return slices.Concat(bootstrapAccess(r), appProvisioning(ns, r))
+	return slices.Concat(bootstrapAccess(r), appProvisioning(ns, r), runtimeProvisioning(r))
 }
 
 func bootstrapTier(ns Namespace) []grantStatement {
 	r := ns.scopedARNs()
-	return slices.Concat(bootstrapAccess(r), appProvisioning(ns, r), bootstrapProvisioning(ns, r), edgePrincipal(r))
+	return slices.Concat(bootstrapAccess(r), appProvisioning(ns, r), runtimeProvisioning(r), bootstrapProvisioning(ns, r), edgePrincipal(r))
 }
 
 func DeployCredentialPermissions(ns Namespace) (string, error) {

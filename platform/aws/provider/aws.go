@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -30,7 +31,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
-	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
@@ -147,14 +147,6 @@ func (p *Provider) DNS() providerkit.DNSRegistry {
 	return dns.Registry{Deps: dns.Deps{AWS: p.aws}}
 }
 
-func (p *Provider) RuntimePayload(_ context.Context, arch string) ([]byte, error) {
-	layer, err := payloads.RuntimeLayer(arch)
-	if err != nil {
-		return nil, err
-	}
-	return layer.Bytes, nil
-}
-
 func (p *Provider) Warm(ctx context.Context, targets []string, report providerkit.Reporter) error {
 	return p.releases.Warm(ctx, targets, report)
 }
@@ -179,7 +171,42 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPr
 	if err := refuseContainersBehindFunctionEdge(pre); err != nil {
 		return err
 	}
+	if err := p.publishRuntimeLayers(ctx, pre); err != nil {
+		return err
+	}
 	return p.releases.Preflight(ctx, pre)
+}
+
+func (p *Provider) publishRuntimeLayers(ctx context.Context, pre providerkit.DeployPreflight) error {
+	if pre.Dry {
+		return nil
+	}
+	class := pre.Plan.Class
+	held, err := p.bootstrapped(ctx, class)
+	if err != nil || !held.Present {
+		return err
+	}
+	published, err := bootstrap.EnsureRuntimeLayers(ctx, bootstrap.APIs{
+		CFN:   cloudformation.NewFromConfig(p.aws),
+		Store: s3.NewFromConfig(p.aws),
+	}, p.namespace, string(class), bootstrap.RuntimeLayerRequest{
+		ArtifactBucket: held.ArtifactBucket,
+		Writer:         pre.Writer,
+	}, saying(pre.Report))
+	if err != nil {
+		return err
+	}
+	if !maps.Equal(published, held.RuntimeLayers) {
+		p.deployed.forget()
+	}
+	return nil
+}
+
+func saying(report providerkit.Reporter) func(string) {
+	if report == nil {
+		return nil
+	}
+	return report.Say
 }
 
 func refuseContainersBehindFunctionEdge(pre providerkit.DeployPreflight) error {
@@ -370,6 +397,8 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		AppBoundaryARN: held.AppBoundaryARN,
 		VarsReferenced: referenced,
 
+		RuntimeLayers: held.RuntimeLayers,
+
 		ArtifactRoot:       filepath.Join(root, artifactRootDirName),
 		ArtifactBucket:     held.ArtifactBucket,
 		AssetBucket:        held.AssetBucket,
@@ -510,18 +539,17 @@ func (s settling) Remove(ctx context.Context, class providerkit.Class, report pr
 }
 
 var (
-	_ providerkit.Provider             = (*Provider)(nil)
-	_ providerkit.Warmer               = (*Provider)(nil)
-	_ providerkit.CodeEmbedder         = (*Provider)(nil)
-	_ providerkit.RuntimePayloadSource = (*Provider)(nil)
-	_ providerkit.StackInspector       = (*Provider)(nil)
-	_ providerkit.Certifier            = (*Provider)(nil)
-	_ providerkit.ImageRegistry        = (*Provider)(nil)
-	_ providerkit.ImagePusher          = (*Provider)(nil)
-	_ providerkit.Bootstrapper         = settling{}
-	_ awsports.Tables                  = (*Provider)(nil)
-	_ awsports.Keys                    = (*Provider)(nil)
-	_ awsports.Stores                  = (*Provider)(nil)
+	_ providerkit.Provider       = (*Provider)(nil)
+	_ providerkit.Warmer         = (*Provider)(nil)
+	_ providerkit.CodeEmbedder   = (*Provider)(nil)
+	_ providerkit.StackInspector = (*Provider)(nil)
+	_ providerkit.Certifier      = (*Provider)(nil)
+	_ providerkit.ImageRegistry  = (*Provider)(nil)
+	_ providerkit.ImagePusher    = (*Provider)(nil)
+	_ providerkit.Bootstrapper   = settling{}
+	_ awsports.Tables            = (*Provider)(nil)
+	_ awsports.Keys              = (*Provider)(nil)
+	_ awsports.Stores            = (*Provider)(nil)
 )
 
 const s3Scheme = "s3"

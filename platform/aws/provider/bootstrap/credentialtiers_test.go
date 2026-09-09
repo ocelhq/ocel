@@ -52,11 +52,7 @@ var actionsAWSGivesNoScopingKey = []string{
 }
 
 var bootstrapOnlyActions = []string{
-	"cloudformation:CreateChangeSet",
-	"cloudformation:CreateStack",
-	"cloudformation:DeleteChangeSet",
 	"cloudformation:DeleteStack",
-	"cloudformation:ExecuteChangeSet",
 	"dynamodb:CreateTable",
 	"dynamodb:DeleteTable",
 	"iam:CreateAccessKey",
@@ -291,6 +287,42 @@ func TestDeployTierWithholdsWhatDefinesTheBootstrapTier(t *testing.T) {
 		}
 		if !bootstrapActions[action] {
 			t.Errorf("the bootstrap tier no longer grants %s, so nothing holds the line at %s", action, action)
+		}
+	}
+}
+
+func TestDeployTierPublishesTheRuntimeStackAndNoOtherStack(t *testing.T) {
+	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
+	r := defaultNamespace.scopedARNs()
+	unconditional := conditionJSON(t, nil)
+
+	for _, action := range []string{
+		"cloudformation:CreateChangeSet",
+		"cloudformation:CreateStack",
+		"cloudformation:DescribeStackEvents",
+	} {
+		if !grants[grant{action: action, resource: r.runtimeStack, condition: unconditional}] {
+			t.Errorf("the deploy tier does not grant %s on %s, so a deploy onto an account an older build bootstrapped cannot publish the runtime its functions boot through", action, r.runtimeStack)
+		}
+	}
+	for _, action := range []string{
+		"cloudformation:DeleteChangeSet",
+		"cloudformation:DescribeChangeSet",
+		"cloudformation:ExecuteChangeSet",
+	} {
+		for _, resource := range []string{r.runtimeStack, r.runtimeChangeSet} {
+			if !grants[grant{action: action, resource: resource, condition: unconditional}] {
+				t.Errorf("the deploy tier does not grant %s on %s, so the runtime it publishes is planned and never executed", action, resource)
+			}
+		}
+	}
+
+	for g := range grants {
+		if !strings.HasPrefix(g.action, "cloudformation:") || readOnly(g.action) {
+			continue
+		}
+		if g.resource != r.runtimeStack && g.resource != r.runtimeChangeSet {
+			t.Errorf("the deploy tier grants %s on %s, which is a bootstrap stack a deploy never writes", g.action, g.resource)
 		}
 	}
 }

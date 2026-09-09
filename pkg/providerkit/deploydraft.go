@@ -12,16 +12,13 @@ const (
 	promotionGroupKind = "promotion"
 	deploymentKind     = "deployment"
 
-	valuesGroupName  = "values"
-	runtimeGroupName = "runtime"
+	valuesGroupName = "values"
 
 	reasonEdgeReconcile = "reconciled to serve this release"
 	reasonPromote       = "the release this pointer would serve"
-	reasonRuntime       = "the runtime this release's functions boot through"
 )
 
 type draft struct {
-	runtime    ChangeGroup
 	infra      Plan
 	parameters ChangeGroup
 	apps       []Plan
@@ -31,9 +28,6 @@ type draft struct {
 
 func (d *draft) plan() Plan {
 	var held Plan
-	if d.runtime.Name != "" {
-		held.Groups = append(held.Groups, d.runtime)
-	}
 	held.Groups = append(held.Groups, d.infra.Groups...)
 	if len(d.parameters.Changes) > 0 {
 		held.Groups = append(held.Groups, d.parameters)

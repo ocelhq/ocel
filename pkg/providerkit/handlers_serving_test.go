@@ -3,10 +3,8 @@ package providerkit_test
 import (
 	"context"
 	"encoding/json"
-	"maps"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 
@@ -15,12 +13,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
-
-type carrying struct{ *fake.Provider }
-
-func (carrying) RuntimePayload(_ context.Context, arch string) ([]byte, error) {
-	return []byte(fake.RuntimePayload + arch), nil
-}
 
 func builtRoutingApp(t *testing.T, app string, desc edge.ServeDescriptor, manifest []byte) {
 	t.Helper()
@@ -47,7 +39,7 @@ func TestTheAppPlanCarriesEveryFactTheStoodUpAppServesFrom(t *testing.T) {
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
 	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", BuildID: "b1"}, routing)
 
-	provider := carrying{fake.NewProvider(fake.Options{})}
+	provider := fake.NewProvider(fake.Options{})
 	client := servedBy(t, provider)
 
 	req := deployRequest()
@@ -74,13 +66,6 @@ func TestTheAppPlanCarriesEveryFactTheStoodUpAppServesFrom(t *testing.T) {
 	}
 	if app.Routing == nil || app.Routing.Entry != "index" || string(app.Routing.Manifest) != string(routing) {
 		t.Errorf("Routing = %+v, want the entry route and manifest the build wrote", app.Routing)
-	}
-	runtime := app.RuntimePayloads[providerkit.ArchX8664]
-	if runtime.Key == "" {
-		t.Errorf("the app plan carries runtimes %v, none of them for the architecture its functions run on", app.RuntimePayloads)
-	}
-	if !strings.HasPrefix(runtime.Key, providerkit.RuntimeLayerPrefix) {
-		t.Errorf("RuntimePayloads[%s].Key = %q, want it under %q", providerkit.ArchX8664, runtime.Key, providerkit.RuntimeLayerPrefix)
 	}
 }
 
@@ -118,94 +103,6 @@ func TestTheStagedRecordCarriesTheManifestAnEdgeRunningCodeRoutesBy(t *testing.T
 	}
 }
 
-func TestAProviderCarryingNoRuntimeStandsAnAppUpWithout(t *testing.T) {
-	builtProject(t)
-	provider := fake.NewProvider(fake.Options{})
-	client := servedBy(t, provider)
-
-	result, _ := deploy(t, client, deployRequest())
-	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want a provider whose functions boot on their own to deploy all the same", result.GetError())
-	}
-	plans := provider.Releases().(*fake.Releaser).Plans()
-	if refs := plans[len(plans)-1].App.RuntimePayloads; len(refs) != 0 {
-		t.Errorf("RuntimePayloads = %+v where the provider carries none, want nothing placed", refs)
-	}
-}
-
-func placedRuntimes(t *testing.T, store providerkit.ArtifactStore) int {
-	t.Helper()
-	objects, holds := store.(*fake.Artifacts)
-	if !holds {
-		t.Fatalf("Artifacts() = %T, want the store the test reads placements back from", store)
-	}
-	placed := 0
-	for _, ref := range objects.Keys() {
-		if strings.HasPrefix(ref.Key, providerkit.RuntimeLayerPrefix) {
-			placed++
-		}
-	}
-	return placed
-}
-
-func TestADryDeployPlacesNoRuntime(t *testing.T) {
-	builtProject(t)
-	provider := carrying{fake.NewProvider(fake.Options{})}
-	client := servedBy(t, provider)
-
-	req := deployRequest()
-	req.Dry = true
-
-	result, _ := deploy(t, client, req)
-	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
-	}
-	if placed := placedRuntimes(t, provider.Artifacts()); placed != 0 {
-		t.Errorf("a dry deploy placed %d runtimes, want a run that asks to write nothing", placed)
-	}
-}
-
-func TestADeployThatIsNotDryPlacesTheRuntime(t *testing.T) {
-	builtProject(t)
-	provider := carrying{fake.NewProvider(fake.Options{})}
-	client := servedBy(t, provider)
-
-	result, _ := deploy(t, client, deployRequest())
-	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
-	}
-	if placed := placedRuntimes(t, provider.Artifacts()); placed != 1 {
-		t.Errorf("an applying deploy placed %d runtimes, want the one its functions boot through", placed)
-	}
-}
-
-func TestTheRuntimePlacedIsTheOneForTheArchitectureTheFunctionsRunOn(t *testing.T) {
-	builtProject(t)
-	provider := carrying{fake.NewProvider(fake.Options{})}
-	client := servedBy(t, provider)
-
-	req := deployRequest()
-	req.Manifest.Functions[0].Runtime.Arch = providerkit.ArchARM64
-	result, _ := deploy(t, client, req)
-	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
-	}
-
-	plans := provider.Releases().(*fake.Releaser).Plans()
-	runtimes := plans[len(plans)-1].App.RuntimePayloads
-	if len(runtimes) != 1 || runtimes[providerkit.ArchARM64].Key == "" {
-		t.Fatalf("RuntimePayloads = %+v, want the one the arm64 functions boot through", runtimes)
-	}
-
-	onX8664, _, err := providerkit.RuntimePayloadRef(context.Background(), provider, providerkit.ClassProduction, providerkit.ArchX8664)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if runtimes[providerkit.ArchARM64] == onX8664 {
-		t.Errorf("an arm64 function boots through %+v, the x86_64 runtime: machine code is not shared across architectures", onX8664)
-	}
-}
-
 type recordingReleaser struct {
 	providerkit.Releaser
 
@@ -237,7 +134,7 @@ func appStacks(plans []providerkit.StackPlan) []providerkit.StackPlan {
 }
 
 type drawing struct {
-	carrying
+	*fake.Provider
 
 	releases *recordingReleaser
 }
@@ -246,7 +143,7 @@ func (d drawing) Releases() providerkit.Releaser { return d.releases }
 
 func drawingProvider() drawing {
 	base := fake.NewProvider(fake.Options{})
-	return drawing{carrying{base}, &recordingReleaser{Releaser: base.Releases()}}
+	return drawing{base, &recordingReleaser{Releaser: base.Releases()}}
 }
 
 func TestADryDeployDrawsTheStackTheApplyWouldProvision(t *testing.T) {
@@ -264,10 +161,6 @@ func TestADryDeployDrawsTheStackTheApplyWouldProvision(t *testing.T) {
 	if len(drawn) != 1 {
 		t.Fatalf("a dry deploy drew %d app stacks, want the one the manifest declares", len(drawn))
 	}
-	if len(drawn[0].App.RuntimePayloads) == 0 {
-		t.Fatal("the drawn app stack carries no runtime, so the plan is drawn of a stack the apply would never provision")
-	}
-
 	if result, _ := deploy(t, client, deployRequest()); result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
@@ -275,57 +168,8 @@ func TestADryDeployDrawsTheStackTheApplyWouldProvision(t *testing.T) {
 	if len(applied) != 1 {
 		t.Fatalf("the apply provisioned %d app stacks, want the one the manifest declares", len(applied))
 	}
-	if !maps.Equal(drawn[0].App.RuntimePayloads, applied[0].App.RuntimePayloads) {
-		t.Errorf("the plan was drawn of a stack booting through %+v but the apply provisions %+v, want one stack",
-			drawn[0].App.RuntimePayloads, applied[0].App.RuntimePayloads)
-	}
-}
-
-func runtimeRow(t *testing.T, plan providerkit.Plan) providerkit.ChangeGroup {
-	t.Helper()
-	for _, group := range plan.Groups {
-		if group.Kind == providerkit.UploadKind && group.Name == "runtime" {
-			return group
-		}
-	}
-	t.Fatalf("the plan shows %v with no runtime row, want the upload the apply would make", plan.Groups)
-	return providerkit.ChangeGroup{}
-}
-
-func TestADryDeployPlansTheRuntimeUploadItDoesNotMake(t *testing.T) {
-	builtProject(t)
-	provider := carrying{fake.NewProvider(fake.Options{})}
-	client := servedBy(t, provider)
-
-	req := deployRequest()
-	req.Dry = true
-	result, events := deploy(t, client, req)
-	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy(dry) = %q, want it to succeed", result.GetError())
-	}
-	drawn, err := providerkit.PlanOf(lastPlan(events))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if action := runtimeRow(t, drawn).Action; action != providerkit.ActionCreate {
-		t.Errorf("the runtime row reads %q against an empty store, want %q", action, providerkit.ActionCreate)
-	}
-	if placed := placedRuntimes(t, provider.Artifacts()); placed != 0 {
-		t.Errorf("planning the runtime placed %d of them, want a row derived by reading alone", placed)
-	}
-
-	if _, err := providerkit.PlaceRuntimePayload(context.Background(), provider, providerkit.ClassProduction, providerkit.ArchX8664, provider.Artifacts(), nil); err != nil {
-		t.Fatal(err)
-	}
-
-	result, events = deploy(t, client, req)
-	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy(dry) = %q, want it to succeed", result.GetError())
-	}
-	if drawn, err = providerkit.PlanOf(lastPlan(events)); err != nil {
-		t.Fatal(err)
-	}
-	if action := runtimeRow(t, drawn).Action; action != providerkit.ActionKeep {
-		t.Errorf("the runtime row reads %q once the runtime stands, want %q", action, providerkit.ActionKeep)
+	if drawn[0].App.App != applied[0].App.App {
+		t.Errorf("the plan was drawn of %s but the apply provisions %s, want one stack",
+			drawn[0].App.App, applied[0].App.App)
 	}
 }

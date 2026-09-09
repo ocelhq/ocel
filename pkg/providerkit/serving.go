@@ -1,10 +1,6 @@
 package providerkit
 
 import (
-	"bytes"
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -86,12 +82,6 @@ func ArchOfELFMachine(machine uint16) (string, bool) {
 		return ArchARM64, true
 	}
 	return "", false
-}
-
-const RuntimeLayerPrefix = "ocel-runtime-layer"
-
-type RuntimePayloadSource interface {
-	RuntimePayload(ctx context.Context, arch string) ([]byte, error)
 }
 
 type ServingQuery struct {
@@ -183,47 +173,6 @@ func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*Routi
 		return nil, fmt.Errorf("read the routing manifest %s routes by: %w", q.App, err)
 	}
 	return &RoutingPlan{Entry: desc.Entry, Manifest: raw}, nil
-}
-
-func RuntimePayloadRef(ctx context.Context, source RuntimePayloadSource, class Class, arch string) (ArtifactRef, []byte, error) {
-	if source == nil {
-		return ArtifactRef{}, nil, nil
-	}
-	body, err := source.RuntimePayload(ctx, arch)
-	if err != nil {
-		return ArtifactRef{}, nil, fmt.Errorf("read the runtime the app's functions boot through: %w", err)
-	}
-	if len(body) == 0 {
-		return ArtifactRef{}, nil, Refuse(CodeNotReady,
-			"this provider carries no runtime for an app's functions to boot through")
-	}
-	sum := sha256.Sum256(body)
-	return ArtifactRef{Class: class, Bucket: StoreFunctions, Key: RuntimeLayerKey(hex.EncodeToString(sum[:]))}, body, nil
-}
-
-func PlaceRuntimePayload(ctx context.Context, source RuntimePayloadSource, class Class, arch string, store ArtifactStore, report Reporter) (ArtifactRef, error) {
-	ref, body, err := RuntimePayloadRef(ctx, source, class, arch)
-	if err != nil || len(body) == 0 {
-		return ref, err
-	}
-	held, err := store.Has(ctx, ref)
-	if err != nil {
-		return ArtifactRef{}, fmt.Errorf("look for the runtime: %w", err)
-	}
-	if held {
-		return ref, nil
-	}
-	if err := store.Put(ctx, ref, bytes.NewReader(body)); err != nil {
-		return ArtifactRef{}, fmt.Errorf("place the runtime: %w", err)
-	}
-	if report != nil {
-		report.Detail("placed the runtime at " + ref.Key)
-	}
-	return ref, nil
-}
-
-func RuntimeLayerKey(digest string) string {
-	return RuntimeLayerPrefix + "/" + digest + ".zip"
 }
 
 func withoutSlash(prefix string) string {

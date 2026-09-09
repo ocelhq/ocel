@@ -74,11 +74,10 @@ func siblingAppPlan(t *testing.T, app string) providerkit.StackPlan {
 			Functions: []providerkit.FunctionSpec{
 				{Name: "fn--" + app + "--entry", Artifact: providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: app + "-entry.zip"}},
 			},
-			Routing:         &providerkit.RoutingPlan{Entry: "fn--" + app + "--entry", Manifest: []byte(routedManifest)},
-			ISR:             &providerkit.ISRPlan{Prefix: isrPrefixOf(coord), TagNamespace: "tag:shop"},
-			Bytecode:        &providerkit.BytecodePlan{Prefix: bytecodePrefixOf(coord)},
-			AssetPrefix:     coord.AssetKey(""),
-			RuntimePayloads: map[string]providerkit.ArtifactRef{providerkit.ArchX8664: {Bucket: providerkit.StoreFunctions, Key: providerkit.RuntimeLayerKey("abc123")}},
+			Routing:     &providerkit.RoutingPlan{Entry: "fn--" + app + "--entry", Manifest: []byte(routedManifest)},
+			ISR:         &providerkit.ISRPlan{Prefix: isrPrefixOf(coord), TagNamespace: "tag:shop"},
+			Bytecode:    &providerkit.BytecodePlan{Prefix: bytecodePrefixOf(coord)},
+			AssetPrefix: coord.AssetKey(""),
 		},
 	}
 }

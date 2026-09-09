@@ -41,6 +41,8 @@ type Config struct {
 	Class          providerkit.Class
 	VarsReferenced map[values.Coordinate]string
 
+	RuntimeLayers map[string]string
+
 	ArtifactRoot   string
 	ArtifactBucket string
 	Uploader       ArtifactUploader

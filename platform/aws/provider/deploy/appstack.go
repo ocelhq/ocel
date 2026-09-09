@@ -8,7 +8,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 type appFunction struct {
@@ -44,16 +43,12 @@ type appStackFunctions struct {
 	Guard     *originGuard
 	RoleArn   pulumi.StringInput
 	RoleName  pulumi.StringInput
-	Layers    map[string]payloads.Placement
+	Layers    map[string]string
 	Shipped   map[string]pulumi.Resource
 	Pushed    []pulumi.Resource
 }
 
 func (a appStackFunctions) register(ctx *pulumi.Context) error {
-	runtime, err := a.runtimeLayers(ctx)
-	if err != nil {
-		return err
-	}
 	siblings := pulumi.StringMap{}
 	var arns []pulumi.StringInput
 	var entry *appFunction
@@ -62,7 +57,7 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 			entry = &fn
 			continue
 		}
-		ref, err := a.declare(ctx, fn, runtime, a.Env, nil, functionURLAuthIAM)
+		ref, err := a.declare(ctx, fn, a.Env, nil, functionURLAuthIAM)
 		if err != nil {
 			return err
 		}
@@ -79,28 +74,8 @@ func (a appStackFunctions) register(ctx *pulumi.Context) error {
 		}
 		resolved = map[string]pulumi.StringInput{functionURLsEnv: siblingFunctionURLs(siblings)}
 	}
-	_, err = a.declare(ctx, *entry, runtime, a.Guard.entryEnv(a.Router.entryEnv(a.Env)), resolved, a.Guard.entryURLAuth())
+	_, err := a.declare(ctx, *entry, a.Guard.entryEnv(a.Router.entryEnv(a.Env)), resolved, a.Guard.entryURLAuth())
 	return err
-}
-
-func (a appStackFunctions) runtimeLayers(ctx *pulumi.Context) (map[string]pulumi.StringInput, error) {
-	layers := map[string]pulumi.StringInput{}
-	for _, fn := range a.Functions {
-		arch := a.Args(fn).Arch
-		if _, published := layers[arch]; published {
-			continue
-		}
-		code := a.Layers[arch]
-		if !code.Present() {
-			return nil, fmt.Errorf("this release places no %s runtime, so the functions built for it have nothing to boot through", arch)
-		}
-		layer, err := newRuntimeLayer(ctx, runtimeLayerCoordinate(a.Project, a.Stack, arch), arch, code)
-		if err != nil {
-			return nil, err
-		}
-		layers[arch] = layer.Arn
-	}
-	return layers, nil
 }
 
 func (a appStackFunctions) grantInvoke(ctx *pulumi.Context, arns []pulumi.StringInput) error {
@@ -137,7 +112,6 @@ func (a appStackFunctions) grantInvoke(ctx *pulumi.Context, arns []pulumi.String
 func (a appStackFunctions) declare(
 	ctx *pulumi.Context,
 	fn appFunction,
-	runtime map[string]pulumi.StringInput,
 	env map[string]string,
 	resolved map[string]pulumi.StringInput,
 	urlAuth string,
@@ -145,7 +119,8 @@ func (a appStackFunctions) declare(
 	logical := fn.Logical
 	args := a.Args(fn)
 	ref, err := registerFunction(ctx, logical, functionCoordinate(a.Project, a.Stack, logical),
-		fn.RouteID, args, a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn, pulumi.StringArray{runtime[args.Arch]}, urlAuth,
+		fn.RouteID, args, a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn,
+		pulumi.StringArray{pulumi.String(a.Layers[args.Arch])}, urlAuth,
 		a.shippedTo(logical)...)
 	if err != nil {
 		return ref, fmt.Errorf("declare %s: %w", logical, err)

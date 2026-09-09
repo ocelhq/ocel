@@ -66,6 +66,8 @@ type Deployed struct {
 	RevalidateQueueURL string
 	AppBoundaryARN     string
 	Class              string
+	RuntimeLayers      map[string]string
+	RuntimeStack       StackStamp
 	Outputs            map[string]string
 }
 
@@ -163,13 +165,17 @@ func readBootstrap(ctx context.Context, api CFNDescriber, ns Namespace, class st
 		return Deployed{Present: false, Features: FeatureSet{}}, stackRefs{}, nil
 	}
 
-	d := Deployed{Present: true, Features: FeatureSet{}, Outputs: outputsOf(core)}
+	d := Deployed{Present: true, Features: FeatureSet{}, RuntimeLayers: map[string]string{}, Outputs: outputsOf(core)}
 	var refs stackRefs
 	if err := absorb(&d, &refs, d.Outputs); err != nil {
 		return Deployed{}, stackRefs{}, err
 	}
 	coreStamp := readStamp(core.Tags)
 	d.Schema = coreStamp.Schema
+
+	if err := readRuntimeLayers(ctx, api, &d, &refs, ns, class); err != nil {
+		return Deployed{}, stackRefs{}, err
+	}
 
 	stamps := make(map[string]Stamp, len(featureRegistry))
 	for _, f := range featureRegistry {
@@ -228,6 +234,28 @@ func readBootstrap(ctx context.Context, api CFNDescriber, ns Namespace, class st
 	return d, refs, nil
 }
 
+func readRuntimeLayers(ctx context.Context, api CFNDescriber, d *Deployed, refs *stackRefs, ns Namespace, class string) error {
+	intended, err := runtimeLayerTemplateAt(ns, class, d.ArtifactBucket)
+	if err != nil {
+		return err
+	}
+	stackName := ns.runtimeStackName(class)
+	d.RuntimeStack = StackStamp{Name: stackName, Intended: TemplateDigest(intended)}
+	stack, err := describeStack(ctx, api, stackName)
+	if err != nil || stack == nil || stackUnusable(stack.StackStatus) {
+		return err
+	}
+	out := outputsOf(stack)
+	maps.Copy(d.Outputs, out)
+	if err := absorb(d, refs, out); err != nil {
+		return err
+	}
+	stamp := readStamp(stack.Tags)
+	d.RuntimeStack.Present = true
+	d.RuntimeStack.Schema, d.RuntimeStack.Digest, d.RuntimeStack.WrittenBy = stamp.Schema, stamp.Digest, stamp.WrittenBy
+	return nil
+}
+
 func broughtVarsKey(outputs map[string]string) string {
 	if outputs[outputVarsKeyBrought] != "true" {
 		return ""
@@ -259,6 +287,7 @@ func stackUnusable(status cfntypes.StackStatus) bool {
 }
 
 func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
+	layers := runtimeLayerArches()
 	for key, value := range out {
 		switch key {
 		case outputStateBucket:
@@ -291,6 +320,13 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 			d.AppBoundaryARN = value
 		case outputInfraClass:
 			d.Class = value
+		default:
+			if arch, carried := layers[key]; carried {
+				if d.RuntimeLayers == nil {
+					d.RuntimeLayers = map[string]string{}
+				}
+				d.RuntimeLayers[arch] = value
+			}
 		}
 	}
 	return nil
@@ -425,6 +461,9 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	}
 	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.ns, target.class)
 	if err != nil {
+		return err
+	}
+	if err := applyRuntimeLayers(ctx, apis, target, req, deployed.ArtifactBucket, progressf, logf); err != nil {
 		return err
 	}
 	steps := stepDeps{ns: target.ns, class: target.class, ssm: apis.SSM, iam: apis.IAM, progress: progressf, log: logf}
@@ -727,7 +766,7 @@ const (
 func planCFNStack(ctx context.Context, cfn CFNAPI, ns Namespace, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) (string, []cfntypes.ResourceChange, error) {
 	out, err := cfn.CreateChangeSet(ctx, &cloudformation.CreateChangeSetInput{
 		StackName:     aws.String(stackName),
-		ChangeSetName: aws.String(ns.changeSetName()),
+		ChangeSetName: aws.String(ns.changeSetNameFor(stackName)),
 		ChangeSetType: cfntypes.ChangeSetTypeUpdate,
 		TemplateBody:  aws.String(template),
 		Parameters:    params,

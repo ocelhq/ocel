@@ -28,6 +28,10 @@ func (n Namespace) StackNameFor(class string) (string, error) {
 	}
 }
 
+func (n Namespace) runtimeStackName(class string) string {
+	return suffixed(class, n.CoreStackName()+"-runtime")
+}
+
 func (n Namespace) featureStackName(feature, class string) string {
 	return suffixed(class, n.CoreStackName()+"-"+feature)
 }
@@ -128,6 +132,6 @@ func (n Namespace) revalidateQueueNames(class string) (queue, dlq string) {
 
 func (n Namespace) policyName(what string) string { return string(n) + "-" + what }
 
-func (n Namespace) changeSetName() string {
-	return fmt.Sprintf("%s-%d", n, time.Now().UnixNano())
+func (n Namespace) changeSetNameFor(stackName string) string {
+	return fmt.Sprintf("%s-%d", stackName, time.Now().UnixNano())
 }

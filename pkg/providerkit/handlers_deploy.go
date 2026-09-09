@@ -53,12 +53,11 @@ type deployStages struct {
 
 func newDeployStages(plan DeployPlan) deployStages {
 	s := deployStages{
-		Environment: UnitStage(naming.UnitEnvironment, environmentUnitTitle,
-			progressv1.Phase_PHASE_PROVISIONING, progressv1.Phase_PHASE_UPLOADING),
-		Infra:     UnitStage(plan.Infra.String(), infraUnitTitle, progressv1.Phase_PHASE_PROVISIONING),
-		Edge:      UnitStage(naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING),
-		Promotion: UnitStage(naming.UnitPromotion, promotionUnitTitle, progressv1.Phase_PHASE_FINALIZING),
-		Apps:      make(map[string]Stage, len(plan.Apps)),
+		Environment: UnitStage(naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISIONING),
+		Infra:       UnitStage(plan.Infra.String(), infraUnitTitle, progressv1.Phase_PHASE_PROVISIONING),
+		Edge:        UnitStage(naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING),
+		Promotion:   UnitStage(naming.UnitPromotion, promotionUnitTitle, progressv1.Phase_PHASE_FINALIZING),
+		Apps:        make(map[string]Stage, len(plan.Apps)),
 	}
 	s.Roster = append(s.Roster, s.Environment)
 	if !plan.Infra.IsZero() {
@@ -107,7 +106,6 @@ type deployRun struct {
 	mu             sync.Mutex
 	artifacts      map[string]ArtifactRef
 	functionImages map[string]string
-	runtimes       map[string]ArtifactRef
 	needs          NeedRecords
 	links          []Link
 	functions      map[string][]Function
@@ -201,13 +199,8 @@ func (r *deployRun) reportApps(result *progressv1.ResultEvent) {
 
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
 	if err := r.tracked.unit(r.stages.Environment, func(env *unitRun) error {
-		if err := env.phase(progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
+		return env.phase(progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
 			return r.settle(ctx, report)
-		}); err != nil {
-			return err
-		}
-		return env.phase(progressv1.Phase_PHASE_UPLOADING, func(report Reporter) error {
-			return r.upload(ctx, report)
 		})
 	}); err != nil {
 		return nil, err
@@ -544,6 +537,8 @@ func (r *deployRun) preflight(ctx context.Context, report Reporter) error {
 		Grants:    grants,
 		Apps:      apps,
 		Report:    report,
+		Writer:    r.gate.Writer,
+		Dry:       r.dry,
 	})
 }
 
@@ -731,7 +726,6 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 					ISR:             facts.ISR,
 					Bytecode:        facts.Bytecode,
 					AssetPrefix:     facts.AssetPrefix,
-					RuntimePayloads: r.runtimes,
 					Guard:           facts.Guard,
 					Packed:          pack.Carry,
 					Proxied:         anyProxied(r.proxied, grants),

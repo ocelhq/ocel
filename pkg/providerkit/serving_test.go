@@ -2,10 +2,7 @@ package providerkit_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,83 +146,5 @@ func TestAnAppThatRoutesAtItsOriginAndNamesNoEntryIsRefused(t *testing.T) {
 	_, err := providerkit.ServingFactsFor(servingQuery(root, "web", providerkit.RuntimeNext))
 	if err == nil || !strings.Contains(err.Error(), "entry route") {
 		t.Fatalf("ServingFactsFor() = %v, want a refusal naming the missing entry route", err)
-	}
-}
-
-type runtimeCarrier struct {
-	body []byte
-	err  error
-}
-
-func (m runtimeCarrier) RuntimePayload(_ context.Context, arch string) ([]byte, error) {
-	if len(m.body) == 0 || m.err != nil {
-		return nil, m.err
-	}
-	return append(append([]byte(nil), m.body...), arch...), nil
-}
-
-type memoryStore struct {
-	held map[string][]byte
-	puts int
-}
-
-func (s *memoryStore) Put(_ context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
-	blob, err := io.ReadAll(body)
-	if err != nil {
-		return err
-	}
-	if s.held == nil {
-		s.held = map[string][]byte{}
-	}
-	s.held[ref.Bucket+"/"+ref.Key] = blob
-	s.puts++
-	return nil
-}
-
-func (s *memoryStore) Has(_ context.Context, ref providerkit.ArtifactRef) (bool, error) {
-	_, held := s.held[ref.Bucket+"/"+ref.Key]
-	return held, nil
-}
-
-func (s *memoryStore) Open(_ context.Context, ref providerkit.ArtifactRef) (io.ReadCloser, error) {
-	blob, held := s.held[ref.Bucket+"/"+ref.Key]
-	if !held {
-		return nil, errors.New("absent")
-	}
-	return io.NopCloser(bytes.NewReader(blob)), nil
-}
-
-func (s *memoryStore) RemovePrefix(context.Context, providerkit.Class, string, providerkit.Reporter) error {
-	return nil
-}
-
-func TestTheRuntimeIsPlacedOnceAndAddressedByItsContent(t *testing.T) {
-	store := &memoryStore{}
-	source := runtimeCarrier{body: []byte("runtime")}
-
-	first, err := providerkit.PlaceRuntimePayload(context.Background(), source, providerkit.ClassProduction, providerkit.ArchX8664, store, nil)
-	if err != nil {
-		t.Fatalf("PlaceRuntimePayload() = %v", err)
-	}
-	if first.Bucket != providerkit.StoreFunctions {
-		t.Errorf("runtime placed in %q, want the %q store the functions read their code from", first.Bucket, providerkit.StoreFunctions)
-	}
-	second, err := providerkit.PlaceRuntimePayload(context.Background(), source, providerkit.ClassProduction, providerkit.ArchX8664, store, nil)
-	if err != nil {
-		t.Fatalf("PlaceRuntimePayload() a second time = %v", err)
-	}
-	if second != first {
-		t.Errorf("the same runtime landed at %+v then %+v, want one content-addressed placement", first, second)
-	}
-	if store.puts != 1 {
-		t.Errorf("the same runtime was uploaded %d times, want the second deploy to find the first one", store.puts)
-	}
-}
-
-func TestAProviderCarryingNoRuntimeIsRefusedRatherThanShippingAnEmptyOne(t *testing.T) {
-	_, err := providerkit.PlaceRuntimePayload(context.Background(), runtimeCarrier{}, providerkit.ClassProduction, providerkit.ArchX8664, &memoryStore{}, nil)
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
-		t.Fatalf("PlaceRuntimePayload() with no runtime = %v, want a %s refusal", err, providerkit.CodeNotReady)
 	}
 }

@@ -235,10 +235,13 @@ func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanChanges: %v", err)
 	}
-	if len(plan) != len(groups) {
-		t.Fatalf("the plan carries %d groups, want %d", len(plan), len(groups))
+	if len(plan) != len(groups)+1 {
+		t.Fatalf("the plan carries %d groups, want %d: every stack asked for, plus the runtime", len(plan), len(groups)+1)
 	}
-	for i, group := range plan {
+	if last := plan[len(plan)-1]; last.Name != runtimeStack(ClassProduction) {
+		t.Errorf("the plan's last group is %s, want the runtime stack %s", last.Name, runtimeStack(ClassProduction))
+	}
+	for i, group := range plan[:len(groups)] {
 		if group.Name != groups[i].Name {
 			t.Errorf("group %d is %s, want %s: a plan reads back in the order it was asked for", i, group.Name, groups[i].Name)
 		}

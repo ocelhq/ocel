@@ -3,7 +3,6 @@ package deploy
 import (
 	"fmt"
 	"maps"
-	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
@@ -12,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -112,7 +110,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 		}
 	}
 
-	layers, err := r.runtimePlacements(app.RuntimePayloads)
+	layers, err := r.runtimeLayers(args)
 	if err != nil {
 		return nil, err
 	}
@@ -198,20 +196,22 @@ func (r *release) store(name string) (string, error) {
 	return "", fmt.Errorf("this provider keeps no %q store", name)
 }
 
-func (r *release) runtimePlacements(refs map[string]providerkit.ArtifactRef) (map[string]payloads.Placement, error) {
-	placed := make(map[string]payloads.Placement, len(refs))
-	for arch, ref := range refs {
-		if ref.Key == "" {
+func (r *release) runtimeLayers(args map[string]functionArgs) (map[string]string, error) {
+	held := map[string]string{}
+	for _, declared := range args {
+		arch := declared.Arch
+		if _, carried := held[arch]; carried {
 			continue
 		}
-		bucket, err := r.store(ref.Bucket)
-		if err != nil {
-			return nil, fmt.Errorf("read the runtime: %w", err)
+		arn := r.cfg.RuntimeLayers[arch]
+		if arn == "" {
+			return nil, providerkit.Refuse(providerkit.CodeNotReady,
+				"this account's bootstrap publishes no %s runtime for this build's functions to boot through; re-run `%s`",
+				arch, providerkit.BootstrapCommand(r.cfg.Class))
 		}
-		digest := strings.TrimSuffix(strings.TrimPrefix(ref.Key, providerkit.RuntimeLayerPrefix+"/"), ".zip")
-		placed[providerkit.Architecture(arch)] = payloads.Placement{Bucket: bucket, Key: ref.Key, SHA256: digest}
+		held[arch] = arn
 	}
-	return placed, nil
+	return held, nil
 }
 
 func (r *release) routerHost(plan providerkit.StackPlan) (*routerHost, error) {

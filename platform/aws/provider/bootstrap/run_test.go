@@ -31,6 +31,8 @@ type fakeCFN struct {
 	reasons    map[string]string
 	holding    map[string]int
 	settling   map[string]int
+	writing    map[string]string
+	claiming   map[string]string
 	planned    map[string][]cfntypes.ResourceChange
 	changeSets map[string]*fakeChangeSet
 	users      *fakeIAM
@@ -56,6 +58,8 @@ func newFakeCFN() *fakeCFN {
 		reasons:    map[string]string{},
 		holding:    map[string]int{},
 		settling:   map[string]int{},
+		writing:    map[string]string{},
+		claiming:   map[string]string{},
 		planned:    map[string][]cfntypes.ResourceChange{},
 		changeSets: map[string]*fakeChangeSet{},
 	}
@@ -87,6 +91,13 @@ func (e validationError) ErrorCode() string             { return "ValidationErro
 func (e validationError) ErrorMessage() string          { return e.msg }
 func (e validationError) ErrorFault() smithy.ErrorFault { return smithy.FaultClient }
 
+type alreadyExistsError struct{ msg string }
+
+func (e alreadyExistsError) Error() string                 { return e.msg }
+func (e alreadyExistsError) ErrorCode() string             { return "AlreadyExistsException" }
+func (e alreadyExistsError) ErrorMessage() string          { return e.msg }
+func (e alreadyExistsError) ErrorFault() smithy.ErrorFault { return smithy.FaultClient }
+
 func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -97,6 +108,10 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	if looks := f.settling[name]; looks > 0 {
 		if f.settling[name] = looks - 1; f.settling[name] == 0 {
 			f.statuses[name] = cfntypes.StackStatusUpdateComplete
+			if body, written := f.writing[name]; written {
+				delete(f.writing, name)
+				f.record(name, body, nil, f.tags[name])
+			}
 		}
 	}
 	var out []cfntypes.Output
@@ -116,6 +131,12 @@ func (f *fakeCFN) CreateStack(_ context.Context, in *cloudformation.CreateStackI
 	defer f.mu.Unlock()
 	f.creates++
 	name := aws.ToString(in.StackName)
+	if body, claimed := f.claiming[name]; claimed {
+		delete(f.claiming, name)
+		f.record(name, body, nil, nil)
+		f.statuses[name] = cfntypes.StackStatusCreateComplete
+		return nil, alreadyExistsError{msg: "Stack [" + name + "] already exists"}
+	}
 	f.record(name, aws.ToString(in.TemplateBody), in.Parameters, in.Tags)
 	if f.holding[name] > 0 {
 		f.holding[name]--
@@ -202,6 +223,19 @@ func (f *fakeCFN) busy(stackName string, looks int) {
 	f.settling[stackName] = looks
 }
 
+func (f *fakeCFN) busyWriting(stackName string, looks int, body string) {
+	f.busy(stackName, looks)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.writing[stackName] = body
+}
+
+func (f *fakeCFN) claimedMidCreate(stackName, body string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.claiming[stackName] = body
+}
+
 const behindTemplate = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n"
 
 func (f *fakeCFN) fallBehind(stackName string) {
@@ -215,6 +249,9 @@ func (f *fakeCFN) CreateChangeSet(_ context.Context, in *cloudformation.CreateCh
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	name, body := aws.ToString(in.StackName), aws.ToString(in.TemplateBody)
+	if stackSettling(f.statuses[name]) {
+		return nil, validationError{msg: "Stack:" + name + " is in " + string(f.statuses[name]) + " state and can not be updated."}
+	}
 	id := fmt.Sprintf("%s/%s", name, aws.ToString(in.ChangeSetName))
 	set := &fakeChangeSet{stack: name, body: body, params: in.Parameters, tags: in.Tags, changes: f.planned[name]}
 	if f.templates[name] == body && sameParams(f.params[name], in.Parameters) {
@@ -275,6 +312,12 @@ func (f *fakeCFN) DeleteChangeSet(ctx context.Context, in *cloudformation.Delete
 	delete(f.changeSets, id)
 	f.discarded = append(f.discarded, id)
 	return &cloudformation.DeleteChangeSetOutput{}, nil
+}
+
+func (f *fakeCFN) changeSetsPlanned() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.planning)
 }
 
 func (f *fakeCFN) leftBehind() []string {
@@ -644,6 +687,10 @@ func isrStack(class string) string { return defaultNamespace.FeatureStackName(Fe
 func edgeStack(class string) string {
 	return defaultNamespace.FeatureStackName(FeatureCloudflareEdge, class)
 }
+func runtimeStack(class string) string {
+	return defaultNamespace.runtimeStackName(class)
+}
+
 func optStack(class string) string {
 	return defaultNamespace.FeatureStackName(FeatureImageOptimization, class)
 }
@@ -657,8 +704,10 @@ func TestRun(t *testing.T) {
 		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, Request{}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		if got := cfn.stacks(); !slices.Equal(got, []string{coreStackName}) {
-			t.Errorf("stacks = %v, want only %s", got, coreStackName)
+		want := []string{coreStackName, runtimeStack(ClassProduction)}
+		slices.Sort(want)
+		if got := cfn.stacks(); !slices.Equal(got, want) {
+			t.Errorf("stacks = %v, want %v", got, want)
 		}
 		if ed.bootstraps != 1 {
 			t.Errorf("the front was bootstrapped %d times for a core-only bootstrap, want 1: the edge is the front, not a feature", ed.bootstraps)
@@ -677,7 +726,7 @@ func TestRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		want := []string{coreStackName, isrStack(ClassProduction), edgeStack(ClassProduction)}
+		want := []string{coreStackName, runtimeStack(ClassProduction), isrStack(ClassProduction), edgeStack(ClassProduction)}
 		slices.Sort(want)
 		if got := cfn.stacks(); !slices.Equal(got, want) {
 			t.Errorf("stacks = %v, want %v", got, want)
@@ -956,10 +1005,10 @@ func TestRun(t *testing.T) {
 		if creds.AccessKeyID != "AKIAEDGE" {
 			t.Errorf("stored key = %q, want the first minted key", creds.AccessKeyID)
 		}
-		if want := 1 + len(featureNames()); cfn.creates != want {
-			t.Errorf("stacks were created %d times across two bootstraps, want one create each for core and its %d features", cfn.creates, len(featureNames()))
+		if want := 2 + len(featureNames()); cfn.creates != want {
+			t.Errorf("stacks were created %d times across two bootstraps, want one create each for core, its runtime and its %d features", cfn.creates, len(featureNames()))
 		}
-		if want := 1 + len(featureNames()); cfn.noops != want {
+		if want := 2 + len(featureNames()); cfn.noops != want {
 			t.Errorf("the second bootstrap submitted %d unchanged templates, want %d: a re-run must converge, not re-provision", cfn.noops, want)
 		}
 	})
@@ -1039,10 +1088,10 @@ func TestRunPreview(t *testing.T) {
 			}
 		}
 
-		if want := 1 + len(featureNames()); cfn.creates != want {
-			t.Errorf("stacks were created %d times across two preview bootstraps, want one create each for core and its %d features", cfn.creates, len(featureNames()))
+		if want := 2 + len(featureNames()); cfn.creates != want {
+			t.Errorf("stacks were created %d times across two preview bootstraps, want one create each for core, its runtime and its %d features", cfn.creates, len(featureNames()))
 		}
-		if want := 1 + len(featureNames()); cfn.noops != want {
+		if want := 2 + len(featureNames()); cfn.noops != want {
 			t.Errorf("the second bootstrap submitted %d unchanged templates, want %d: a re-run must converge, not re-provision", cfn.noops, want)
 		}
 		for _, name := range cfn.stacks() {

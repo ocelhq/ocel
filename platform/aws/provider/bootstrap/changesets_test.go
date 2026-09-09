@@ -326,3 +326,23 @@ func TestAPrincipalWhoseShapeChangesStillStopsAHeal(t *testing.T) {
 		t.Errorf("heal said %v, want it to name what stopped it", log.lines)
 	}
 }
+
+func TestAChangeSetIsNamedAfterTheStackItPlansAgainst(t *testing.T) {
+	cfn, apis := standingBootstrap(t)
+	cfn.fallBehind(isrStack(ClassProduction))
+	cfn.fallBehind(runtimeStack(ClassProduction))
+
+	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	planned := cfn.changeSetsPlanned()
+	if len(planned) == 0 {
+		t.Fatal("a bootstrap over stacks that had fallen behind planned no change set")
+	}
+	for _, id := range planned {
+		stack, name, _ := strings.Cut(id, "/")
+		if !strings.HasPrefix(name, stack+"-") {
+			t.Errorf("the change set planning %s is named %q, and a credential is scoped to the change sets of the stacks it may write by that name", stack, name)
+		}
+	}
+}

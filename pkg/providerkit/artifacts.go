@@ -124,66 +124,6 @@ type AppPack struct {
 	Carry any
 }
 
-func (r *deployRun) upload(ctx context.Context, report Reporter) error {
-	if len(r.manifest.GetFunctions()) == 0 {
-		return nil
-	}
-	source, carries := r.provider.(RuntimePayloadSource)
-	if !carries {
-		return nil
-	}
-	if r.dry {
-		return r.drawRuntimes(ctx, source, report)
-	}
-	placed := map[string]ArtifactRef{}
-	for _, arch := range r.runtimeArches() {
-		ref, err := PlaceRuntimePayload(ctx, source, r.plan.Class, arch, r.provider.Artifacts(), report)
-		if err != nil {
-			return err
-		}
-		placed[arch] = ref
-	}
-	r.runtimes = placed
-	return nil
-}
-
-func (r *deployRun) runtimeArches() []string {
-	var arches []string
-	for _, fn := range r.manifest.GetFunctions() {
-		if arch := Architecture(fn.GetRuntime().GetArch()); !slices.Contains(arches, arch) {
-			arches = append(arches, arch)
-		}
-	}
-	slices.Sort(arches)
-	return arches
-}
-
-func (r *deployRun) drawRuntimes(ctx context.Context, source RuntimePayloadSource, report Reporter) error {
-	report.Say("Reading the runtime the app's functions boot through")
-	drawn := map[string]ArtifactRef{}
-	stands := true
-	for _, arch := range r.runtimeArches() {
-		ref, _, err := RuntimePayloadRef(ctx, source, r.plan.Class, arch)
-		if err != nil {
-			return err
-		}
-		held, err := r.provider.Artifacts().Has(ctx, ref)
-		if err != nil {
-			return fmt.Errorf("look for the runtime: %w", err)
-		}
-		drawn[arch] = ref
-		stands = stands && held
-	}
-	r.runtimes = drawn
-	r.draft.runtime = ChangeGroup{
-		Kind:   UploadKind,
-		Name:   runtimeGroupName,
-		Action: standsOrCreates(stands),
-		Reason: reasonRuntime,
-	}
-	return nil
-}
-
 func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, report Reporter) (AppPack, error) {
 	packer, packs := r.provider.(ArtifactPacker)
 	if !packs {

@@ -121,8 +121,8 @@ func TestDeployDeclaresEveryUnitAndItsPhasesUpFront(t *testing.T) {
 	if strings.Join(roster, ",") != strings.Join(want, ",") {
 		t.Errorf("roster = %v, want %v", roster, want)
 	}
-	if got := strings.Join(phases["Environment"], ","); got != "Provisioning,Uploading" {
-		t.Errorf("Environment declares the phases %q, want both of them before the first one closes", got)
+	if got := strings.Join(phases["Environment"], ","); got != "Provisioning" {
+		t.Errorf("Environment declares the phases %q, want it named before the first one closes", got)
 	}
 }
 

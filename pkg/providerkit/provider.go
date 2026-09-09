@@ -72,6 +72,8 @@ type DeployPreflight struct {
 	Grants    []Link
 	Apps      []AppUsage
 	Report    Reporter
+	Writer    Writer
+	Dry       bool
 }
 
 type AppUsage struct {

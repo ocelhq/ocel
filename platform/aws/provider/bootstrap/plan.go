@@ -76,7 +76,7 @@ func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, req Request, gro
 		}
 	}
 	work.Wait()
-	return planned, nil
+	return append(planned, planRuntimeLayers(ctx, cfn, read, req)), nil
 }
 
 func PlanRemoval(ctx context.Context, cfn CFNAPI, read Reading) ([]providerkit.ChangeGroup, error) {
@@ -101,8 +101,11 @@ func PlanRemoval(ctx context.Context, cfn CFNAPI, read Reading) ([]providerkit.C
 		alongside[name] = true
 	}
 
-	groups := make([]providerkit.ChangeGroup, 0, len(order)+1)
+	groups := make([]providerkit.ChangeGroup, 0, len(order)+2)
 	for _, feature := range append(order, "") {
+		if feature == "" {
+			groups = append(groups, removeRuntimeLayers(ctx, cfn, read))
+		}
 		name := coreStack
 		if feature != "" {
 			name = read.ns.FeatureStackName(feature, read.class)

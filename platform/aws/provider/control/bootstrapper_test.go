@@ -111,10 +111,10 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
 	}
-	if len(plan.Groups) != 5 {
-		t.Fatalf("plan = %v, want the core stack, the isr and edge stacks, the parameters and the edge", plan.Groups)
+	if len(plan.Groups) != 6 {
+		t.Fatalf("plan = %v, want the core stack, the isr and edge stacks, the runtime, the parameters and the edge", plan.Groups)
 	}
-	for _, group := range plan.Groups[:3] {
+	for _, group := range plan.Groups[:4] {
 		if group.Kind != providerkit.StackGroupKind || !strings.HasPrefix(group.Name, "aws/") {
 			t.Errorf("group %+v, want a stack named under the vendor that holds it", group)
 		}
@@ -122,11 +122,14 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	if got := plan.Groups[0].Name; got != "aws/"+coreStackName {
 		t.Errorf("the core group is %q, want %q", got, "aws/"+coreStackName)
 	}
-	params := plan.Groups[3]
+	if got, want := plan.Groups[3].Name, "aws/"+defaultNamespace.CoreStackName()+"-runtime"; got != want {
+		t.Errorf("the runtime group is %q, want %q", got, want)
+	}
+	params := plan.Groups[4]
 	if params.Kind != providerkit.ParameterGroupKind || params.Name != "aws/"+bootstrap.ParamGroupName {
 		t.Errorf("the parameters group = %+v, want it named under the account that holds them", params)
 	}
-	edgeGroup := plan.Groups[4]
+	edgeGroup := plan.Groups[5]
 	if edgeGroup.Kind != providerkit.EdgeGroupKind || edgeGroup.Name != string(cloudflareKind)+"/edge" {
 		t.Errorf("the edge group = %+v, want the edge named under its own vendor", edgeGroup)
 	}

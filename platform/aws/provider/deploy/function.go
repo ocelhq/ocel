@@ -16,7 +16,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 const (
@@ -36,10 +35,6 @@ const (
 	nextBundleFunctionMemoryMB = 1769
 
 	execWrapper = "/opt/" + providedHandler
-
-	runtimeLayerLocalName = "runtime"
-
-	maxLayerNameLen = 64
 
 	bytecodeCacheEnv = "OCEL_BYTECODE_CACHE"
 
@@ -77,8 +72,6 @@ const (
 
 	outputKeyFunctionName = "functionName"
 )
-
-var layerManagedRuntimes = []string{defaultFunctionRuntime, pythonFunctionRuntime, providedFunctionRuntime}
 
 func bytecodeCacheEnabled() bool {
 	return os.Getenv(bytecodeCacheEnv) == "1"
@@ -292,31 +285,6 @@ func roleCoordinate(project string, stack naming.StackName) naming.Coordinate {
 		Name:    naming.Join(naming.WordSeparator, roleLocalName, string(naming.KindRole)),
 		Release: stack.Release,
 	}
-}
-
-func runtimeLayerCoordinate(project string, stack naming.StackName, arch string) naming.Coordinate {
-	return naming.Coordinate{
-		Project: project,
-		Env:     stack.Env,
-		App:     stack.App,
-		Kind:    naming.KindLayer,
-		Name:    naming.Join(naming.WordSeparator, runtimeLayerLocalName, arch),
-		Release: stack.Release,
-	}
-}
-
-func newRuntimeLayer(ctx *pulumi.Context, coord naming.Coordinate, arch string, code payloads.Placement) (*lambda.LayerVersion, error) {
-	return lambda.NewLayerVersion(ctx, naming.ResourceID(naming.KindLayer, runtimeLayerLocalName, arch), &lambda.LayerVersionArgs{
-		LayerName:          pulumi.String(coord.PhysicalName(maxLayerNameLen)),
-		Description:        describe(coord, "runtime the app's "+arch+" functions boot through"),
-		S3Bucket:           pulumi.String(code.Bucket),
-		S3Key:              pulumi.String(code.Key),
-		SourceCodeHash:     pulumi.String(code.SHA256),
-		CompatibleRuntimes: pulumi.ToStringArray(layerManagedRuntimes),
-		CompatibleArchitectures: pulumi.StringArray{
-			pulumi.String(arch),
-		},
-	})
 }
 
 func logicalLocalName(logicalName string) string {
