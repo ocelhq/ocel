@@ -60,33 +60,33 @@ func TestDiscover(t *testing.T) {
 
 	runWalkCases(t, []walkCase{
 		{
-			name: "finds files under the default path",
+			name: "finds files under a configured path",
 			files: map[string]string{
-				"infra/main.ts":       "export {};",
-				"infra/sub/nested.ts": "export {};",
-				"other.ts":            "export {};",
+				"declarations/main.ts":       "export {};",
+				"declarations/sub/nested.ts": "export {};",
+				"other.ts":                   "export {};",
 			},
-			paths: []string{"infra"},
-			want:  []string{"infra/main.ts", "infra/sub/nested.ts"},
+			paths: []string{"declarations"},
+			want:  []string{"declarations/main.ts", "declarations/sub/nested.ts"},
 		},
 		{
 			name: "ignores node_modules and hidden dirs",
 			files: map[string]string{
-				"infra/main.ts":             "export {};",
-				"infra/node_modules/dep.ts": "export {};",
-				"infra/.hidden/skip.ts":     "export {};",
+				"declarations/main.ts":             "export {};",
+				"declarations/node_modules/dep.ts": "export {};",
+				"declarations/.hidden/skip.ts":     "export {};",
 			},
-			paths: []string{"infra"},
-			want:  []string{"infra/main.ts"},
+			paths: []string{"declarations"},
+			want:  []string{"declarations/main.ts"},
 		},
 		{
 			name: "filters non-source extensions",
 			files: map[string]string{
-				"infra/main.ts":   "export {};",
-				"infra/README.md": "# not source",
+				"declarations/main.ts":   "export {};",
+				"declarations/README.md": "# not source",
 			},
-			paths: []string{"infra"},
-			want:  []string{"infra/main.ts"},
+			paths: []string{"declarations"},
+			want:  []string{"declarations/main.ts"},
 		},
 		{
 			name: "supports glob patterns across packages",
@@ -99,7 +99,7 @@ func TestDiscover(t *testing.T) {
 		},
 		{
 			name:  "a missing path yields no files and no error",
-			paths: []string{"infra"},
+			paths: []string{"declarations"},
 		},
 	}, Discover)
 }
@@ -111,21 +111,21 @@ func TestDirs(t *testing.T) {
 		{
 			name: "returns the root and its subdirs, not files",
 			files: map[string]string{
-				"infra/main.ts":       "export {};",
-				"infra/sub/nested.ts": "export {};",
+				"declarations/main.ts":       "export {};",
+				"declarations/sub/nested.ts": "export {};",
 			},
-			paths: []string{"infra"},
-			want:  []string{"infra", "infra/sub"},
+			paths: []string{"declarations"},
+			want:  []string{"declarations", "declarations/sub"},
 		},
 		{
 			name: "ignores node_modules and hidden dirs",
 			files: map[string]string{
-				"infra/main.ts":             "export {};",
-				"infra/node_modules/dep.ts": "export {};",
-				"infra/.hidden/skip.ts":     "export {};",
+				"declarations/main.ts":             "export {};",
+				"declarations/node_modules/dep.ts": "export {};",
+				"declarations/.hidden/skip.ts":     "export {};",
 			},
-			paths: []string{"infra"},
-			want:  []string{"infra"},
+			paths: []string{"declarations"},
+			want:  []string{"declarations"},
 		},
 		{
 			name: "supports glob patterns across packages",

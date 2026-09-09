@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -20,7 +21,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const sealedFile = ".ocel/vars.sealed"
+const sealedFile = constants.ProjectStateDirName + "/vars.sealed"
 
 type packingProvider struct {
 	*fake.Provider

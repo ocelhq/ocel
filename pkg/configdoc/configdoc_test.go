@@ -42,7 +42,7 @@ func TestDecodeRejectsUnknownKeys(t *testing.T) {
 		path string
 	}{
 		{"top level", `{"slug":"acme","slugg":"x"}`, "slugg"},
-		{"nested object", `{"slug":"acme","discovery":{"path":["infra"]}}`, "discovery.path"},
+		{"nested object", `{"slug":"acme","discovery":{"path":["declarations"]}}`, "discovery.path"},
 		{"array element", `{"slug":"acme","apps":[{"name":"web","path":".","runtim":"go"}]}`, "apps[0].runtim"},
 		{"registry", `{"slug":"acme","registry":{"server":"ghcr.io","token":"X"}}`, "registry.token"},
 		{"edge", `{"slug":"acme","edge":{"kind":"cloudflare","zone":"x"}}`, "edge.zone"},

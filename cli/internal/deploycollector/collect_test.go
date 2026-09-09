@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/constants"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
@@ -40,7 +41,7 @@ func TestCollect(t *testing.T) {
 		}
 
 		root := t.TempDir()
-		writeFile(t, filepath.Join(root, "infra", "main.ts"), `
+		writeFile(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), `
 declare global {
   var __ocelRegister: Promise<unknown>[];
 }
@@ -48,7 +49,7 @@ globalThis.__ocelRegister ??= [];
 
 function declareResource(body: unknown) {
   globalThis.__ocelRegister.push(
-    fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
+    fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -70,7 +71,7 @@ export {};
 		cfg := &projectconfig.Config{
 			Slug:      "test-app",
 			Dir:       root,
-			Discovery: projectconfig.Discovery{Paths: []string{"infra"}},
+			Discovery: projectconfig.Discovery{Paths: []string{constants.DefaultDiscoveryDirName}},
 		}
 
 		var stdout, stderr bytes.Buffer
@@ -106,7 +107,7 @@ func TestCollectRunsTheBundlePrepareAlreadyBuilt(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "infra", "main.ts"), "export {};\n")
+	writeFile(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), "export {};\n")
 
 	cfg := &projectconfig.Config{Slug: "test-app", Dir: root}
 	prepared, err := Prepare(cfg)
@@ -117,8 +118,8 @@ func TestCollectRunsTheBundlePrepareAlreadyBuilt(t *testing.T) {
 		t.Fatal("Fingerprint() is empty, want the hash of the bundle Prepare built")
 	}
 
-	writeFile(t, filepath.Join(root, ".ocel", "entry.mjs"), `
-await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
+	writeFile(t, filepath.Join(root, constants.ProjectStateDirName, "entry.mjs"), `
+await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({

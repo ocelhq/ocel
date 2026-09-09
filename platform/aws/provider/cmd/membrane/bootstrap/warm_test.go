@@ -24,14 +24,14 @@ const warmEvent = `{"ocel":{"warm":1}}`
 const warmedReply = `{"type":"compile-cache-warmed","payload":` +
 	`{"ok":true,"state":"warmed","entries":42,"loaded":41,` +
 	`"failures":[{"entry":"app/broken/page.js","message":"boom"}],` +
-	`"stoppedBy":"complete","bytes":1234,"dir":"/tmp/.ocel/compile-cache"}}`
+	`"stoppedBy":"complete","bytes":1234,"dir":"` + compileCacheDir + `"}}`
 
 const unsupportedReply = `{"type":"compile-cache-warmed","payload":{"ok":false,"state":"unsupported","dir":null}}`
 
 const stoppedReply = `{"type":"compile-cache-warmed","payload":` +
 	`{"ok":true,"state":"warmed","entries":42,"loaded":33,"failures":[],` +
 	`"stoppedBy":"ceiling","skipped":["app/a/page","app/b/page"],"skippedCount":9,` +
-	`"bytes":1234,"dir":"/tmp/.ocel/compile-cache"}}`
+	`"bytes":1234,"dir":"` + compileCacheDir + `"}}`
 
 func TestIsWarmInvocation(t *testing.T) {
 	cases := []struct {

@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { envSchema, sourceOf } from "../src/env/schema.js";
 import { LinkType } from "../src/gen/proto/common/links/v1/links_pb.js";
-import { siteOfThisFile } from "./fixtures/infra/postgres/index.js";
+import { siteOfThisFile } from "./fixtures/callsite/postgres/index.js";
 
 const declareMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
@@ -15,7 +15,7 @@ const { Postgres } = await import("../src/postgres/pg.js");
 describe("declarationSite", () => {
   it("names a user file whose path looks like one of the SDK's own modules", () => {
     expect(siteOfThisFile()).toMatch(
-      /[/\\]tests[/\\]fixtures[/\\]infra[/\\]postgres[/\\]index\.ts:\d+$/,
+      /[/\\]tests[/\\]fixtures[/\\]callsite[/\\]postgres[/\\]index\.ts:\d+$/,
     );
   });
 

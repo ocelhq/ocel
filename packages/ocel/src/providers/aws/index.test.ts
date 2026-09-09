@@ -14,14 +14,14 @@ describe("awsProvider", () => {
     const config = defineConfig({
       slug: "test-app",
       provider: awsProvider({
-        transforms: ["./infra/defaults.transform.ts", "./infra/vpc.transform.ts"],
+        transforms: ["./transforms/defaults.transform.ts", "./transforms/vpc.transform.ts"],
       }),
     });
 
     expect(JSON.parse(JSON.stringify(config.provider))).toEqual({
       name: "aws",
       options: {
-        transforms: ["./infra/defaults.transform.ts", "./infra/vpc.transform.ts"],
+        transforms: ["./transforms/defaults.transform.ts", "./transforms/vpc.transform.ts"],
       },
     });
   });

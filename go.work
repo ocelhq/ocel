@@ -4,6 +4,7 @@ use (
 	./cli
 	./pkg/channel
 	./pkg/configdoc
+	./pkg/constants
 	./pkg/naming
 	./pkg/proto
 	./pkg/providerkit

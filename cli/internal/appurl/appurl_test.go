@@ -7,6 +7,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -111,8 +112,8 @@ func TestPrepend(t *testing.T) {
 	for _, v := range byApp["web"] {
 		held[v.Key] = v
 	}
-	if got, want := held[providerkit.URLEnvName].Value, "https://acme.com"; got != want {
-		t.Errorf("%s = %q, want %q", providerkit.URLEnvName, got, want)
+	if got, want := held[constants.AppURLEnvName].Value, "https://acme.com"; got != want {
+		t.Errorf("%s = %q, want %q", constants.AppURLEnvName, got, want)
 	}
 	if got, want := held[providerkit.ClientURLEnvName].Value, "https://acme.com"; got != want {
 		t.Errorf("%s = %q, want the same value mirrored for the browser bundle", providerkit.ClientURLEnvName, got)
@@ -120,8 +121,8 @@ func TestPrepend(t *testing.T) {
 	if !held[providerkit.ClientURLEnvName].ClientAccessible {
 		t.Errorf("%s is not client-accessible, so nothing would inline it into the bundle", providerkit.ClientURLEnvName)
 	}
-	if held[providerkit.URLEnvName].ClientAccessible {
-		t.Errorf("%s is client-accessible, and a bundler inlines only its own public prefix", providerkit.URLEnvName)
+	if held[constants.AppURLEnvName].ClientAccessible {
+		t.Errorf("%s is client-accessible, and a bundler inlines only its own public prefix", constants.AppURLEnvName)
 	}
 	if held["LOG_LEVEL"].Value != "info" {
 		t.Errorf("web variables = %+v, want the declared ones kept", byApp["web"])
@@ -135,7 +136,7 @@ func TestBuildEnv(t *testing.T) {
 	t.Parallel()
 
 	env := appurl.BuildEnv(map[string]string{envwire.RootApp: "https://acme.com"})
-	if got, want := env[""][providerkit.URLEnvName], "https://acme.com"; got != want {
+	if got, want := env[""][constants.AppURLEnvName], "https://acme.com"; got != want {
 		t.Errorf("build env = %v, want the unnamed app keyed as the builder keys it, holding %q", env, want)
 	}
 	if got, want := env[""][providerkit.ClientURLEnvName], "https://acme.com"; got != want {

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 func rootDirs(t *testing.T, roots []Root, base string) []string {
@@ -24,14 +25,14 @@ func rootDirs(t *testing.T, roots []Root, base string) []string {
 func TestRoots(t *testing.T) {
 	t.Run("defaults to the infra folder beside the config", func(t *testing.T) {
 		root := t.TempDir()
-		write(t, filepath.Join(root, "infra", "main.ts"), "export {};")
+		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), "export {};")
 
 		roots, err := Roots(root, nil)
 		if err != nil {
 			t.Fatalf("Roots: %v", err)
 		}
-		if got := rootDirs(t, roots, root); len(got) != 1 || got[0] != "infra" {
-			t.Fatalf("roots = %v, want [infra]", got)
+		if got := rootDirs(t, roots, root); len(got) != 1 || got[0] != constants.DefaultDiscoveryDirName {
+			t.Fatalf("roots = %v, want [%s]", got, constants.DefaultDiscoveryDirName)
 		}
 		if roots[0].Language != JS {
 			t.Errorf("Language = %q, want %q", roots[0].Language, JS)
@@ -40,21 +41,21 @@ func TestRoots(t *testing.T) {
 
 	t.Run("an infra folder inside an app is not a default root", func(t *testing.T) {
 		root := t.TempDir()
-		write(t, filepath.Join(root, "infra", "main.ts"), "export {};")
-		write(t, filepath.Join(root, "apps", "web", "infra", "main.ts"), "export {};")
+		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), "export {};")
+		write(t, filepath.Join(root, "apps", "web", constants.DefaultDiscoveryDirName, "main.ts"), "export {};")
 
 		roots, err := Roots(root, nil)
 		if err != nil {
 			t.Fatalf("Roots: %v", err)
 		}
-		if got := rootDirs(t, roots, root); len(got) != 1 || got[0] != "infra" {
-			t.Fatalf("roots = %v, want [infra]", got)
+		if got := rootDirs(t, roots, root); len(got) != 1 || got[0] != constants.DefaultDiscoveryDirName {
+			t.Fatalf("roots = %v, want [%s]", got, constants.DefaultDiscoveryDirName)
 		}
 	})
 
 	t.Run("the default root is skipped when it does not exist", func(t *testing.T) {
 		root := t.TempDir()
-		write(t, filepath.Join(root, "apps", "web", "infra", "main.ts"), "export {};")
+		write(t, filepath.Join(root, "apps", "web", constants.DefaultDiscoveryDirName, "main.ts"), "export {};")
 
 		roots, err := Roots(root, nil)
 		if err != nil {
@@ -67,7 +68,7 @@ func TestRoots(t *testing.T) {
 
 	t.Run("explicit paths replace the defaults", func(t *testing.T) {
 		root := t.TempDir()
-		write(t, filepath.Join(root, "infra", "main.ts"), "export {};")
+		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), "export {};")
 		write(t, filepath.Join(root, "packages", "one", "res", "main.ts"), "export {};")
 		write(t, filepath.Join(root, "packages", "two", "res", "main.ts"), "export {};")
 
@@ -104,8 +105,8 @@ func TestRoots(t *testing.T) {
 		} {
 			t.Run(tc.file, func(t *testing.T) {
 				root := t.TempDir()
-				write(t, filepath.Join(root, "infra", "nested", tc.file), "")
-				write(t, filepath.Join(root, "infra", "README.md"), "")
+				write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "nested", tc.file), "")
+				write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "README.md"), "")
 
 				roots, err := Roots(root, nil)
 				if err != nil {
@@ -120,13 +121,13 @@ func TestRoots(t *testing.T) {
 
 	t.Run("a folder of rust files is an error sending the declarations to the crate", func(t *testing.T) {
 		root := t.TempDir()
-		write(t, filepath.Join(root, "infra", "mod.rs"), "pub const NAME: &str = \"main\";")
+		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "mod.rs"), "pub const NAME: &str = \"main\";")
 
 		_, err := Roots(root, nil)
 		if err == nil {
 			t.Fatal("Roots succeeded on a folder of rust files, want an error")
 		}
-		for _, want := range []string{filepath.Join(root, "infra"), "crate"} {
+		for _, want := range []string{filepath.Join(root, constants.DefaultDiscoveryDirName), "crate"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to contain %q", err, want)
 			}
@@ -136,7 +137,7 @@ func TestRoots(t *testing.T) {
 	t.Run("a manifest beside the config does not name the folder's language", func(t *testing.T) {
 		root := t.TempDir()
 		write(t, filepath.Join(root, "package.json"), "{}")
-		write(t, filepath.Join(root, "infra", "infra.go"), "package infra")
+		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "infra.go"), "package "+constants.DefaultDiscoveryDirName)
 
 		roots, err := Roots(root, nil)
 		if err != nil {
@@ -149,8 +150,8 @@ func TestRoots(t *testing.T) {
 
 	t.Run("a folder of two languages is an error naming both", func(t *testing.T) {
 		root := t.TempDir()
-		write(t, filepath.Join(root, "infra", "infra.go"), "package infra")
-		write(t, filepath.Join(root, "infra", "main.ts"), "export {};")
+		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "infra.go"), "package "+constants.DefaultDiscoveryDirName)
+		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), "export {};")
 
 		_, err := Roots(root, nil)
 		if err == nil {
@@ -165,8 +166,8 @@ func TestRoots(t *testing.T) {
 
 	t.Run("a folder with no source files is skipped", func(t *testing.T) {
 		root := t.TempDir()
-		write(t, filepath.Join(root, "infra", "README.md"), "")
-		write(t, filepath.Join(root, "infra", "node_modules", "dep", "index.js"), "")
+		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "README.md"), "")
+		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "node_modules", "dep", "index.js"), "")
 
 		roots, err := Roots(root, nil)
 		if err != nil {
@@ -181,7 +182,7 @@ func TestRoots(t *testing.T) {
 func TestHoldsJS(t *testing.T) {
 	t.Run("a declaration root written in JS holds JS", func(t *testing.T) {
 		root := t.TempDir()
-		write(t, filepath.Join(root, "infra", "main.ts"), "export {};")
+		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), "export {};")
 
 		held, err := HoldsJS(&projectconfig.Config{Dir: root})
 		if err != nil {
@@ -296,15 +297,15 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 
 	t.Run("a project with no crate gets no rust root", func(t *testing.T) {
 		root := t.TempDir()
-		write(t, filepath.Join(root, "infra", "main.ts"), "export {};")
+		write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), "export {};")
 		write(t, filepath.Join(root, "apps", "web", "package.json"), "{}")
 
 		roots, err := RootsOf(&projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "web", Path: "apps/web"}}})
 		if err != nil {
 			t.Fatalf("RootsOf: %v", err)
 		}
-		if got := rootDirs(t, roots, root); len(got) != 1 || got[0] != "infra" {
-			t.Fatalf("roots = %v, want [infra]", got)
+		if got := rootDirs(t, roots, root); len(got) != 1 || got[0] != constants.DefaultDiscoveryDirName {
+			t.Fatalf("roots = %v, want [%s]", got, constants.DefaultDiscoveryDirName)
 		}
 	})
 }

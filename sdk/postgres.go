@@ -35,7 +35,7 @@ type PostgresDB struct {
 }
 
 // Postgres declares a postgres database named name and returns the handle an app
-// reads it through. Call it from a file under the project's infra folder: during
+// reads it through. Call it from a file under the project's discovery folder: during
 // discovery the call is the declaration, and at runtime it reads the link the
 // deploy delivered for that name.
 func Postgres(name string, opts ...PostgresOption) *PostgresDB {

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	ocel "github.com/ocelhq/ocel/sdk"
 )
 
@@ -50,8 +51,8 @@ func discover(t *testing.T, cells []cell) *[]map[string]any {
 	t.Helper()
 	var seen []map[string]any
 	srv := variablesServer(t, cells, &seen)
-	t.Setenv("OCEL_PHASE", "discovery")
-	t.Setenv("OCEL_DEV_SERVER", srv.URL)
+	t.Setenv(constants.PhaseEnvName, "discovery")
+	t.Setenv(constants.DevServerEnvName, srv.URL)
 	return &seen
 }
 
@@ -641,7 +642,7 @@ func TestASecretWithNoValueFailsAtInit(t *testing.T) {
 }
 
 func TestEnvRefusesAVariableThisAppsBindingPutsOutOfScope(t *testing.T) {
-	t.Setenv("OCEL_APP_FOLDER", "/apps/api")
+	t.Setenv(constants.AppFolderEnvName, "/apps/api")
 	t.Setenv("KEY", "v")
 	err := caught(t, func() {
 		ocel.Env[struct {
@@ -659,7 +660,7 @@ func TestEnvRefusesAVariableThisAppsBindingPutsOutOfScope(t *testing.T) {
 }
 
 func TestEnvReadsAVariableScopedToTheFolderThisAppIsBoundTo(t *testing.T) {
-	t.Setenv("OCEL_APP_FOLDER", "/apps/web")
+	t.Setenv(constants.AppFolderEnvName, "/apps/web")
 	t.Setenv("KEY", "v")
 	got := ocel.Env[struct {
 		Key string `ocel:"KEY,folders=/apps/api;/apps/web"`
@@ -670,7 +671,7 @@ func TestEnvReadsAVariableScopedToTheFolderThisAppIsBoundTo(t *testing.T) {
 }
 
 func TestDeploymentURLReadsWhatOcelWrote(t *testing.T) {
-	t.Setenv("OCEL_URL", "https://web-j-1.ocel.site")
+	t.Setenv(constants.AppURLEnvName, "https://web-j-1.ocel.site")
 	got, err := ocel.DeploymentURL()
 	if err != nil || got != "https://web-j-1.ocel.site" {
 		t.Errorf("DeploymentURL() = %q, %v", got, err)
@@ -680,7 +681,7 @@ func TestDeploymentURLReadsWhatOcelWrote(t *testing.T) {
 func TestDeploymentURLFailsWhenNoneWasDelivered(t *testing.T) {
 	_, err := ocel.DeploymentURL()
 	var value *ocel.EnvValueError
-	if !errors.As(err, &value) || value.Key != "OCEL_URL" {
-		t.Errorf("DeploymentURL() error = %v, want an *EnvValueError for OCEL_URL", err)
+	if !errors.As(err, &value) || value.Key != constants.AppURLEnvName {
+		t.Errorf("DeploymentURL() error = %v, want an *EnvValueError for %s", err, constants.AppURLEnvName)
 	}
 }

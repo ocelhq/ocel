@@ -17,12 +17,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/node"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 var buildCmd = &cobra.Command{
 	Use:   "build",
-	Short: "Build your project's apps into .ocel/output without deploying",
-	Long: "Build your project's apps into .ocel/output without deploying.\n\n" +
+	Short: "Build your project's apps into " + constants.ProjectStateDirName + "/output without deploying",
+	Long: "Build your project's apps into " + constants.ProjectStateDirName + "/output without deploying.\n\n" +
 		"Express, Fastify and Hono apps are bundled, so only what the entrypoint imports\n" +
 		"reaches the artifact: static directories, view templates and files read at run\n" +
 		"time are left behind. Set OCEL_BUILD_PREFER_TRACING=1 to copy the dependency\n" +
@@ -80,7 +81,7 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 	if len(functions) == 1 {
 		noun = "function"
 	}
-	fmt.Fprintf(stdout, "Built %d %s into .ocel/output\n", len(functions), noun)
+	fmt.Fprintf(stdout, "Built %d %s into %s/output\n", len(functions), noun, constants.ProjectStateDirName)
 	return nil
 }
 

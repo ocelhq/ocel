@@ -10,6 +10,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
@@ -68,9 +69,9 @@ func TestServeMembrane(t *testing.T) {
 			t.Fatal("serveMembrane returned no channel to carry the membrane's terminal error")
 		}
 
-		addr := membraneEnvValue(t, env, runtimeAddressEnvVar)
+		addr := membraneEnvValue(t, env, constants.RuntimeAddressEnvName)
 		if !strings.HasPrefix(addr, "http://127.0.0.1:") {
-			t.Fatalf("%s = %q, want a loopback address the sandbox alone can reach", runtimeAddressEnvVar, addr)
+			t.Fatalf("%s = %q, want a loopback address the sandbox alone can reach", constants.RuntimeAddressEnvName, addr)
 		}
 		token := membraneEnvValue(t, env, channel.SessionTokenEnvVar)
 		if token == "" {

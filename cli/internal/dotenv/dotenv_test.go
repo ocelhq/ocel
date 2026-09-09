@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 func write(t *testing.T, dir, contents string) {
@@ -130,12 +132,12 @@ export EXPORTED=sourced
 		},
 		{
 			name:     "reads a resource entry and no other reserved name",
-			contents: "OCEL_RESOURCE_POSTGRES_main={\"name\":\"main\"}\nOCEL_RESOURCE_BUCKET_uploads={\"name\":\"uploads\"}\nOCEL_RUNTIME_ADDRESS=hijacked\nOCEL_RESOURCE_=short\n",
+			contents: "OCEL_RESOURCE_POSTGRES_main={\"name\":\"main\"}\nOCEL_RESOURCE_BUCKET_uploads={\"name\":\"uploads\"}\n" + constants.RuntimeAddressEnvName + "=hijacked\nOCEL_RESOURCE_=short\n",
 			want: map[string]string{
 				"OCEL_RESOURCE_POSTGRES_main":  `{"name":"main"}`,
 				"OCEL_RESOURCE_BUCKET_uploads": `{"name":"uploads"}`,
 			},
-			absent:     []string{"OCEL_RUNTIME_ADDRESS", "OCEL_RESOURCE_"},
+			absent:     []string{constants.RuntimeAddressEnvName, "OCEL_RESOURCE_"},
 			exhaustive: true,
 			note:       "a run with no console resolves its resources from these entries, and nothing else under OCEL_ is the file's to set",
 		},
@@ -145,7 +147,7 @@ export EXPORTED=sourced
 NEXT_PUBLIC_SITE_URL=https://example.com
 AWS_PROFILE=dev
 LAMBDA_TASK_ROOT=/var/task
-OCEL_DEV_SERVER=hijacked
+` + constants.DevServerEnvName + `=hijacked
 database_url=lower
 DATABASE_URL=postgres://localhost/app
 `,
@@ -155,7 +157,7 @@ DATABASE_URL=postgres://localhost/app
 				"AWS_PROFILE":          "dev",
 				"LAMBDA_TASK_ROOT":     "/var/task",
 			},
-			absent:     []string{"OCEL_DEV_SERVER", "database_url"},
+			absent:     []string{constants.DevServerEnvName, "database_url"},
 			exhaustive: true,
 			note:       "a file Ocel does not own is read past, not refused; a declarable key is still read, and the rest is left to whatever else reads it",
 		},

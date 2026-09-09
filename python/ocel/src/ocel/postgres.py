@@ -65,7 +65,7 @@ class _Unprovisioned(Postgres):
 
 def postgres(name: str, *, version: str | None = None) -> Postgres:
     """Declare a postgres database named ``name`` and return the handle an app reads it
-    through. Call it from a file under the project's infra folder: during discovery the
+    through. Call it from a file under the project's discovery folder: during discovery the
     call is the declaration, and at runtime it reads the link the deploy delivered for
     that name."""
     if not discovering():

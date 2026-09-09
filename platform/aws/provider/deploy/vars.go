@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -68,8 +69,6 @@ func varsReadPolicy(r executionRole) (string, error) {
 func valuePartition(slug, class string) (string, error) {
 	return awsports.Partition(values.Under(values.Scope{Project: slug, Class: edge.Class(class)}))
 }
-
-const appFolderEnv = "OCEL_APP_FOLDER"
 
 type appBundle struct {
 	Envelope    string
@@ -250,7 +249,7 @@ func plainEnv(values providerkit.AppValues) map[string]string {
 	env := make(map[string]string, len(values.Plain)+1)
 	maps.Copy(env, values.Plain)
 	if values.Folder != "" {
-		env[appFolderEnv] = values.Folder
+		env[constants.AppFolderEnvName] = values.Folder
 	}
 	return env
 }

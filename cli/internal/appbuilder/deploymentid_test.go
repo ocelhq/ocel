@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 func TestBuildStampsTheDeploymentID(t *testing.T) {
@@ -158,7 +159,7 @@ func TestDeploymentID(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(root, scratchDirName, outputDirName, appsDirName, "web"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, constants.ProjectStateDirName, outputDirName, appsDirName, "web"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if err := writeDeploymentID(root, "web", "d1a2b3c4d5e6f708192a3b4c5d6e7f80"); err != nil {

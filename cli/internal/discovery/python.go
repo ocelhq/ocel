@@ -8,10 +8,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 const (
-	pythonEntryFile = ".ocel/discovery.py"
+	pythonEntryFile = constants.ProjectStateDirName + "/discovery.py"
 	pythonOnPath    = "python3"
 )
 
@@ -45,7 +47,7 @@ func (pythonLauncher) Command(ctx context.Context, configDir string, root Root, 
 
 	cmd := exec.CommandContext(ctx, PythonInterpreter(runRoot), "./"+pythonEntryFile)
 	cmd.Dir = runRoot
-	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1", "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+serverURL)
+	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1", constants.PhaseEnvName+"=discovery", constants.DevServerEnvName+"="+serverURL)
 	return cmd, nil
 }
 

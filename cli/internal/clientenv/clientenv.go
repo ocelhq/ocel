@@ -13,19 +13,18 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const specifier = "ocel/env/client"
 
-const scratchDirName = ".ocel"
-
 const accessorFile = "env-client.ts"
 
 var configFiles = []string{"tsconfig.json", "jsconfig.json"}
 
-var recordPath = filepath.Join(scratchDirName, "output", "client-digests.json")
+var recordPath = filepath.Join(constants.ProjectStateDirName, "output", "client-digests.json")
 
 type App struct {
 	Name      string
@@ -64,9 +63,9 @@ func GenerateKeys(projectDir string, app App, keys []Key) error {
 
 func accessorPath(projectDir, appName, appDir string) string {
 	if appName != "" && filepath.Clean(appDir) != filepath.Clean(projectDir) {
-		return filepath.Join(projectDir, scratchDirName, "apps", appName, accessorFile)
+		return filepath.Join(projectDir, constants.ProjectStateDirName, "apps", appName, accessorFile)
 	}
-	return filepath.Join(projectDir, scratchDirName, accessorFile)
+	return filepath.Join(projectDir, constants.ProjectStateDirName, accessorFile)
 }
 
 const schemaSpecifier = "ocel/env/schema"
@@ -200,12 +199,12 @@ func CheckFresh(projectDir string, apps []App) error {
 	var causes []string
 	if len(missing) > 0 {
 		causes = append(causes, fmt.Sprintf(
-			"%s %s never inlined — either not client-accessible when .ocel/output was built, or built by `ocel build`, which resolves no values",
+			"%s %s never inlined — either not client-accessible when "+constants.ProjectStateDirName+"/output was built, or built by `ocel build`, which resolves no values",
 			strings.Join(missing, ", "), were(missing),
 		))
 	}
 	if len(changed) > 0 {
-		causes = append(causes, fmt.Sprintf("the client-accessible value of %s changed since .ocel/output was built", strings.Join(changed, ", ")))
+		causes = append(causes, fmt.Sprintf("the client-accessible value of %s changed since "+constants.ProjectStateDirName+"/output was built", strings.Join(changed, ", ")))
 	}
 	return fmt.Errorf(
 		"--prebuilt cannot deploy this build: %s. "+

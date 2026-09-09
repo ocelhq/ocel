@@ -6,10 +6,12 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 const (
-	FilePath = ".ocel/variables.enc"
+	FilePath = constants.ProjectStateDirName + "/variables.enc"
 
 	EnvelopeVar = "OCEL_VARS_ENVELOPE"
 

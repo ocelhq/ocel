@@ -77,7 +77,7 @@ func setUpProcTreeFixtureProject(t *testing.T) (root, apiURL string) {
 export default { slug: "test-app" };
 `)
 	writeLink(t, root, resolveServer.URL, testProjectID(t))
-	clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
+	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 	return root, resolveServer.URL
 }
 

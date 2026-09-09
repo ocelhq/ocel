@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -34,7 +35,7 @@ func TestDefineEnv(t *testing.T) {
 		runDiscovery(t, root, gate)
 
 		definitions := byKey(t, gate.Definitions())
-		source := filepath.Join(root, "infra", "env.ts")
+		source := filepath.Join(clitest.DiscoveryDir(root), "env.ts")
 
 		t.Run("every declared key arrives", func(t *testing.T) {
 			var keys []string
@@ -148,7 +149,7 @@ func runDiscovery(t *testing.T, root string, gate *envgate.Gate) {
 	cfg := &projectconfig.Config{
 		Slug:      "collector",
 		Dir:       root,
-		Discovery: projectconfig.Discovery{Paths: []string{"infra"}},
+		Discovery: projectconfig.Discovery{Paths: []string{filepath.Base(clitest.DiscoveryDir(root))}},
 	}
 
 	var stdout, stderr strings.Builder

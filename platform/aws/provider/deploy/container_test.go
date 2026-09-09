@@ -15,6 +15,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -86,7 +87,7 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	if work.env["GREETING"] != "hello" || work.env["DATABASE_URL"] != "postgres://db" || work.env[providerkit.PhaseEnvName] != "production" {
+	if work.env["GREETING"] != "hello" || work.env["DATABASE_URL"] != "postgres://db" || work.env[constants.PhaseEnvName] != "production" {
 		t.Errorf("env = %v, want every delivered value and the phase: a container reads its values off the environment alone", work.env)
 	}
 	if work.env[containerPortEnv] != containerPort {

@@ -13,15 +13,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 const (
 	envTag          = "ocel"
 	deliveredPrefix = "OCEL_VAR_"
-	appFolderEnv    = "OCEL_APP_FOLDER"
 	reservedPrefix  = "OCEL_"
-	urlKey          = "OCEL_URL"
 	folderSeparator = ";"
 )
 
@@ -155,7 +154,7 @@ func className(class resourcesv1.VariableClass) string {
 
 // Env declares the variables the fields of T name and returns T with every
 // field set from the value delivered for it. Call it from a file under the
-// project's infra folder, the way [Postgres] is called: during discovery the
+// project's discovery folder, the way [Postgres] is called: during discovery the
 // call is the declaration and the struct comes back zero, since no value is
 // resolved before the requirements are declared; at runtime each field is read
 // from the environment the deploy delivered.
@@ -272,7 +271,7 @@ func definition(field reflect.StructField, index int) (variable, error) {
 		}
 	}
 
-	if v.key == urlKey {
+	if v.key == constants.AppURLEnvName {
 		return variable{}, &EnvDefinitionError{Key: v.key, Detail: "is written by Ocel for every app, from the hostname the deploy serves it on, so a declared one would be overwritten before anything read it. Read it with DeploymentURL."}
 	}
 	if !v.confidential() && strings.HasPrefix(v.key, reservedPrefix) {
@@ -395,7 +394,7 @@ func problem(key, folder string, kind resourcesv1.VariableProblem_Kind, detail s
 func resolve(target reflect.Value, vars []variable) error {
 	for _, v := range vars {
 		if !inScope(v.folders) {
-			return &EnvScopeError{Key: v.key, Folders: v.folders, Binding: os.Getenv(appFolderEnv)}
+			return &EnvScopeError{Key: v.key, Folders: v.folders, Binding: os.Getenv(constants.AppFolderEnvName)}
 		}
 		raw, ok := readDelivered(v.key)
 		if ok && v.live() {
@@ -425,7 +424,7 @@ func unset(key string) *EnvValueError {
 }
 
 func inScope(folders []string) bool {
-	return len(folders) == 0 || slices.Contains(folders, os.Getenv(appFolderEnv))
+	return len(folders) == 0 || slices.Contains(folders, os.Getenv(constants.AppFolderEnvName))
 }
 
 func readDelivered(key string) (string, bool) {
@@ -524,10 +523,10 @@ func parse(t reflect.Type, raw string) (reflect.Value, error) {
 // nothing declares it. It fails with an [*EnvValueError] when the deploy gave
 // this app no hostname.
 func DeploymentURL() (string, error) {
-	url, ok := readDelivered(urlKey)
+	url, ok := readDelivered(constants.AppURLEnvName)
 	if !ok {
 		return "", &EnvValueError{
-			Key:    urlKey,
+			Key:    constants.AppURLEnvName,
 			Detail: "was not delivered to this app. Ocel writes it from the hostname the deploy serves the app on, and this app is served on none: add one under `domains.production` on the app, or on the project if this is the first app it names, and deploy again.",
 		}
 	}

@@ -8,11 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 const SchemaVersion = 1
-
-const scratchDirName = ".ocel"
 
 const fileName = "deploy-result.json"
 
@@ -45,7 +45,7 @@ type App struct {
 }
 
 func Path(projectDir string) string {
-	return filepath.Join(projectDir, scratchDirName, fileName)
+	return filepath.Join(projectDir, constants.ProjectStateDirName, fileName)
 }
 
 func Write(projectDir string, r Result) error {

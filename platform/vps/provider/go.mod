@@ -6,6 +6,7 @@ require (
 	connectrpc.com/connect v1.20.0
 	github.com/creack/pty v1.1.24
 	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
+	github.com/ocelhq/ocel/pkg/constants v0.0.0
 	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/proto v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
@@ -85,3 +86,5 @@ replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy
 
 replace github.com/ocelhq/ocel/pkg/configdoc => ../../../pkg/configdoc
+
+replace github.com/ocelhq/ocel/pkg/constants => ../../../pkg/constants

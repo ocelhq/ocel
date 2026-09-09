@@ -32,7 +32,7 @@ func setUpFixture(t *testing.T, fixture string) string {
 	requireSDKBuild(t, repo)
 
 	root := t.TempDir()
-	clitest.WriteFile(t, filepath.Join(root, "infra", "env.ts"), fixture)
+	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "env.ts"), fixture)
 
 	modules := filepath.Join(root, "node_modules")
 	if err := os.MkdirAll(modules, 0o755); err != nil {

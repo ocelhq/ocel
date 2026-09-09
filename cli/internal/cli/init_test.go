@@ -245,30 +245,30 @@ func TestRunInit(t *testing.T) {
 		if err := os.MkdirAll(cwd, 0o755); err != nil {
 			t.Fatalf("create cwd: %v", err)
 		}
-		infra := filepath.Join(root, "infra")
-		if err := os.MkdirAll(infra, 0o755); err != nil {
-			t.Fatalf("create infra dir: %v", err)
+		project := filepath.Join(root, "project")
+		if err := os.MkdirAll(project, 0o755); err != nil {
+			t.Fatalf("create project dir: %v", err)
 		}
 		for _, name := range []string{"package.json", "pnpm-lock.yaml"} {
-			if err := os.WriteFile(filepath.Join(infra, name), []byte("{}\n"), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(project, name), []byte("{}\n"), 0o644); err != nil {
 				t.Fatalf("write %s: %v", name, err)
 			}
 		}
 
 		deps := newDeps()
 		argv := stubPackageManager(&deps, nil)
-		opts := initOptions{provider: "acme", configPath: filepath.Join("..", "infra", projectconfig.DefaultFileName)}
+		opts := initOptions{provider: "acme", configPath: filepath.Join("..", "project", projectconfig.DefaultFileName)}
 
 		var stdout bytes.Buffer
 		if err := runInit(context.Background(), deps, cwd, "", opts, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
-		content, err := os.ReadFile(filepath.Join(infra, projectconfig.DefaultFileName))
+		content, err := os.ReadFile(filepath.Join(project, projectconfig.DefaultFileName))
 		if err != nil {
 			t.Fatalf("read the config --config named: %v", err)
 		}
-		if !strings.Contains(string(content), `"slug": "infra"`) {
+		if !strings.Contains(string(content), `"slug": "project"`) {
 			t.Errorf("config = %q, want the slug derived from the config's own directory", content)
 		}
 		if got := *argv; !slices.Equal(got, []string{"pnpm", "add", sdkPackage}) {

@@ -29,7 +29,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
+
+func DiscoveryDir(root string) string {
+	return filepath.Join(root, constants.DefaultDiscoveryDirName)
+}
 
 func fakeAccount(_ context.Context, apiURL, token, projectID string) (resolve.Account, error) {
 	return resolve.Account{
@@ -65,7 +70,7 @@ func NewDeps() cmddeps.Deps {
 
 func WritePrebuiltFunction(t *testing.T, root, app, route string) {
 	t.Helper()
-	dir := filepath.Join(root, ".ocel", "output", "apps", app, "functions", route+".func")
+	dir := filepath.Join(root, constants.ProjectStateDirName, "output", "apps", app, "functions", route+".func")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -127,14 +132,14 @@ export default {
   domains: { preview: "*.preview.acme.com" },
 };
 `)
-	WriteFile(t, filepath.Join(root, "infra", "main.ts"), `
+	WriteFile(t, filepath.Join(DiscoveryDir(root), "main.ts"), `
 declare global {
   var __ocelRegister: Promise<unknown>[];
 }
 const source = declarationSite();
 globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
-  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
+  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -239,7 +244,7 @@ export default {
   apps: [{ name: "api", path: "apps/api", runtime: "node" }],
 };
 `)
-	WriteFile(t, filepath.Join(root, "infra", "main.ts"), `
+	WriteFile(t, filepath.Join(DiscoveryDir(root), "main.ts"), `
 export * from "../shared/index.js";
 `)
 	WriteFile(t, filepath.Join(root, "shared", "declare.ts"), `
@@ -250,7 +255,7 @@ declare global {
 function register(body: Record<string, unknown>) {
   globalThis.__ocelRegister ??= [];
   globalThis.__ocelRegister.push(
-    fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
+    fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

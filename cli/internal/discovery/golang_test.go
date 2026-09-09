@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
@@ -16,13 +17,13 @@ func goFixture(t *testing.T, module string) string {
 	t.Helper()
 	root := t.TempDir()
 	write(t, filepath.Join(root, "go.mod"), "module "+module+"\n\ngo 1.27.0\n")
-	write(t, filepath.Join(root, "infra", "infra.go"), "package infra\n")
+	write(t, filepath.Join(root, "declarations", "declarations.go"), "package declarations\n")
 	return root
 }
 
-func TestTheGoLauncherRunsAMainThatImportsTheInfraPackage(t *testing.T) {
+func TestTheGoLauncherDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	configDir := goFixture(t, "example.com/web")
-	root := Root{Dir: filepath.Join(configDir, "infra"), Language: Go}
+	root := Root{Dir: filepath.Join(configDir, "declarations"), Language: Go}
 
 	cmd, err := launchers[Go].Command(context.Background(), configDir, root, "http://127.0.0.1:1234")
 	if err != nil {
@@ -33,36 +34,36 @@ func TestTheGoLauncherRunsAMainThatImportsTheInfraPackage(t *testing.T) {
 	if cmd.Dir != moduleRoot {
 		t.Errorf("Dir = %q, want %q", cmd.Dir, moduleRoot)
 	}
-	if want := []string{"go", "run", "./.ocel/discovery"}; !slices.Equal(cmd.Args[1:], want[1:]) || filepath.Base(cmd.Args[0]) != "go" {
+	if want := []string{"go", "run", "./" + constants.ProjectStateDirName + "/discovery"}; !slices.Equal(cmd.Args[1:], want[1:]) || filepath.Base(cmd.Args[0]) != "go" {
 		t.Errorf("Args = %q, want %q", cmd.Args, want)
 	}
-	for _, want := range []string{"OCEL_PHASE=discovery", "OCEL_DEV_SERVER=http://127.0.0.1:1234"} {
+	for _, want := range []string{constants.PhaseEnvName + "=discovery", constants.DevServerEnvName + "=http://127.0.0.1:1234"} {
 		if !slices.Contains(cmd.Env, want) {
 			t.Errorf("Env lacks %q", want)
 		}
 	}
 
-	generated, err := os.ReadFile(filepath.Join(moduleRoot, ".ocel", "discovery", "main.go"))
+	generated, err := os.ReadFile(filepath.Join(moduleRoot, constants.ProjectStateDirName, "discovery", "main.go"))
 	if err != nil {
 		t.Fatalf("read the generated main: %v", err)
 	}
-	if !strings.Contains(string(generated), `_ "example.com/web/infra"`) {
-		t.Errorf("generated main = %q, want it to import the infra package", generated)
+	if !strings.Contains(string(generated), `_ "example.com/web/declarations"`) {
+		t.Errorf("generated main = %q, want it to import the package named by the root", generated)
 	}
 }
 
 func TestTheGoLauncherRefusesARootWithNoModuleAboveIt(t *testing.T) {
 	configDir := t.TempDir()
-	write(t, filepath.Join(configDir, "infra", "infra.go"), "package infra\n")
+	write(t, filepath.Join(configDir, "declarations", "declarations.go"), "package declarations\n")
 
-	_, err := launchers[Go].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "infra"), Language: Go}, "http://127.0.0.1:1234")
+	_, err := launchers[Go].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "declarations"), Language: Go}, "http://127.0.0.1:1234")
 	if err == nil {
 		t.Fatal("Command succeeded with no go.mod above the root, want error")
 	}
 	if !strings.Contains(err.Error(), "go.mod") {
 		t.Errorf("error = %q, want it to name the missing go.mod", err)
 	}
-	if !strings.Contains(err.Error(), filepath.Join(configDir, "infra")) {
+	if !strings.Contains(err.Error(), filepath.Join(configDir, "declarations")) {
 		t.Errorf("error = %q, want it to name the root", err)
 	}
 }
@@ -78,12 +79,19 @@ func repoFixture(t *testing.T, name string) string {
 
 func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 	configDir := repoFixture(t, filepath.Join("sdk", "go"))
+	app, err := os.ReadFile(filepath.Join(configDir, "server", "main.go"))
+	if err != nil {
+		t.Fatalf("read the fixture app: %v", err)
+	}
+	if !strings.Contains(string(app), "example.com/web/"+constants.DefaultDiscoveryDirName) {
+		t.Fatalf("the fixture app does not import the default discovery package")
+	}
 
 	roots, err := Roots(configDir, nil)
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}
-	if len(roots) != 1 || roots[0].Language != Go || roots[0].Dir != filepath.Join(configDir, "infra") {
+	if len(roots) != 1 || roots[0].Language != Go || roots[0].Dir != filepath.Join(configDir, constants.DefaultDiscoveryDirName) {
 		t.Fatalf("roots = %+v, want the go infra folder of the project", roots)
 	}
 
@@ -108,7 +116,7 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 		t.Errorf("resource = %v, want the postgres named main", resource)
 	}
 	source := declares[0].GetSource()
-	want := filepath.ToSlash(filepath.Join("infra", "infra.go")) + ":5"
+	want := filepath.ToSlash(filepath.Join(constants.DefaultDiscoveryDirName, "infra.go")) + ":5"
 	if !strings.HasSuffix(filepath.ToSlash(source), want) {
 		t.Errorf("source = %q, want it to end with %q", source, want)
 	}
@@ -117,16 +125,16 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 	if len(variables) != 1 || variables[0].GetKey() != "GREETING" || variables[0].GetRequired() {
 		t.Fatalf("variables = %v, want the one defaulted GREETING", variables)
 	}
-	if want := filepath.ToSlash(filepath.Join("infra", "infra.go")) + ":9"; !strings.HasSuffix(filepath.ToSlash(variables[0].GetSource()), want) {
+	if want := filepath.ToSlash(filepath.Join(constants.DefaultDiscoveryDirName, "infra.go")) + ":9"; !strings.HasSuffix(filepath.ToSlash(variables[0].GetSource()), want) {
 		t.Errorf("variable source = %q, want it to end with %q", variables[0].GetSource(), want)
 	}
 }
 
 func TestRunReportsWhatAGoRootThatDoesNotCompileSaid(t *testing.T) {
 	configDir := goFixture(t, "example.com/web")
-	write(t, filepath.Join(configDir, "infra", "infra.go"), "package infra\n\nvar DB = undeclared()\n")
+	write(t, filepath.Join(configDir, "declarations", "declarations.go"), "package declarations\n\nvar DB = undeclared()\n")
 
-	roots, err := Roots(configDir, nil)
+	roots, err := Roots(configDir, []string{"declarations"})
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}

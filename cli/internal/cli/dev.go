@@ -30,6 +30,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -132,7 +133,7 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, l
 	var projectCfg resolve.Account
 	if link == nil {
 		reportLocal(stdout)
-		srv = devserver.NewLocal(devServerAddr, filepath.Join(cfg.Dir, scratchDirName, "blob"))
+		srv = devserver.NewLocal(devServerAddr, filepath.Join(cfg.Dir, constants.ProjectStateDirName, "blob"))
 	} else {
 		projectCfg = resolveAccount(ctx, deps, link.apiURL, link.token, link.projectID, stderr)
 		srv = devserver.New(link.apiURL, link.token, link.projectID, devServerAddr)
@@ -389,11 +390,11 @@ func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []
 		}
 	}
 	if runtimeAddress != "" {
-		merged[runtimeAddressEnv] = runtimeAddress
+		merged[constants.RuntimeAddressEnvName] = runtimeAddress
 	}
-	merged[appFolderEnv] = appFolder
-	merged[providerkit.URLEnvName] = localURL(merged[portEnv])
-	merged[providerkit.ClientURLEnvName] = merged[providerkit.URLEnvName]
+	merged[constants.AppFolderEnvName] = appFolder
+	merged[constants.AppURLEnvName] = localURL(merged[portEnv])
+	merged[providerkit.ClientURLEnvName] = merged[constants.AppURLEnvName]
 	return merged
 }
 
@@ -401,15 +402,9 @@ func localURL(port string) string {
 	return "http://localhost:" + cmp.Or(port, os.Getenv(portEnv), defaultDevPort)
 }
 
-const scratchDirName = ".ocel"
-
 const portEnv = "PORT"
 
 const defaultDevPort = "3000"
-
-const appFolderEnv = "OCEL_APP_FOLDER"
-
-const runtimeAddressEnv = "OCEL_RUNTIME_ADDRESS"
 
 func applyEnv(base []string, overrides map[string]string) []string {
 	merged := make(map[string]string, len(base)+len(overrides))

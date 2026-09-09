@@ -2,13 +2,15 @@ package cli
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 var consoleCmd = &cobra.Command{
 	Use:   "console",
 	Short: "Manage this directory's binding to an Ocel console project",
 	Long: "Manage this directory's binding to an Ocel console project.\n\n" +
-		"The binding lives in .ocel/console.json, which is untracked — a clone can be " +
+		"The binding lives in " + constants.ProjectStateDirName + "/console.json, which is untracked — a clone can be " +
 		"bound to a different account or project, or to none at all.",
 	Args: cobra.NoArgs,
 }

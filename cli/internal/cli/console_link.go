@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/console/project"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 type consoleLinkOptions struct {
@@ -33,7 +34,7 @@ var consoleLinkOpts consoleLinkOptions
 var consoleLinkCmd = &cobra.Command{
 	Use:   "link [project]",
 	Short: "Link this directory to an Ocel console project",
-	Long: "Records this working tree's console project in .ocel/console.json,\n" +
+	Long: "Records this working tree's console project in " + constants.ProjectStateDirName + "/console.json,\n" +
 		"which is untracked — a clone can be linked to a different account or\n" +
 		"project, or to none at all.\n\n" +
 		"With no arguments on a terminal, pick from your existing projects or\n" +

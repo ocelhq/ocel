@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -121,22 +122,19 @@ type AppValues struct {
 	Phase     string
 }
 
-const PhaseEnvName = "OCEL_PHASE"
-
 const (
-	URLEnvName       = "OCEL_URL"
 	ClientURLEnvName = "NEXT_PUBLIC_OCEL_URL"
 )
 
 func OcelWritten(key string) bool {
-	return key == URLEnvName || key == ClientURLEnvName
+	return key == constants.AppURLEnvName || key == ClientURLEnvName
 }
 
 func (v AppValues) Injected() map[string]string {
 	if v.Phase == "" {
 		return nil
 	}
-	return map[string]string{PhaseEnvName: v.Phase}
+	return map[string]string{constants.PhaseEnvName: v.Phase}
 }
 
 func (v AppValues) String() string {

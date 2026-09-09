@@ -8,14 +8,15 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/pkg/constants"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
 func pythonApp(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	write(t, filepath.Join(root, "infra", "__init__.py"), "db = 1\n")
-	write(t, filepath.Join(root, "server", "main.py"), "from infra import db\n\nprint(db)\n")
+	write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py"), "db = 1\n")
+	write(t, filepath.Join(root, "server", "main.py"), "from "+constants.DefaultDiscoveryDirName+" import db\n\nprint(db)\n")
 	write(t, filepath.Join(root, "unused", "__init__.py"), "other = 1\n")
 	return root
 }
@@ -34,7 +35,7 @@ func TestPythonReachGrantsAResourceTheAppsEntryImports(t *testing.T) {
 	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
-		Source: filepath.Join(root, "infra", "__init__.py") + ":1",
+		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
@@ -64,12 +65,12 @@ func TestPythonReachGrantsNothingFromAModuleNoEntryImports(t *testing.T) {
 
 func TestPythonReachRefusesAnImportOnlyRunningTheAppWouldResolve(t *testing.T) {
 	root := pythonApp(t)
-	write(t, filepath.Join(root, "server", "main.py"), "import importlib\n\nname = \"infra\"\nmodule = importlib.import_module(name)\n")
+	write(t, filepath.Join(root, "server", "main.py"), "import importlib\n\nname = \""+constants.DefaultDiscoveryDirName+"\"\nmodule = importlib.import_module(name)\n")
 
 	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
-		Source: filepath.Join(root, "infra", "__init__.py") + ":1",
+		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
 	var unresolved *UnresolvedImportError
 	if !errors.As(err, &unresolved) {
@@ -89,7 +90,7 @@ func TestPythonReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
-		Source: filepath.Join(root, "infra", "__init__.py") + ":3",
+		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":3",
 	}})
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
@@ -123,12 +124,12 @@ func TestPythonReachSearchesTheDiscoveryPathsTheProjectConfigures(t *testing.T) 
 
 func TestPythonReachFollowsAnImportModuleCallThatWritesTheModuleOut(t *testing.T) {
 	root := pythonApp(t)
-	write(t, filepath.Join(root, "server", "main.py"), "import importlib\n\nmodule = importlib.import_module(\"infra\")\n")
+	write(t, filepath.Join(root, "server", "main.py"), "import importlib\n\nmodule = importlib.import_module(\""+constants.DefaultDiscoveryDirName+"\")\n")
 
 	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
-		Source: filepath.Join(root, "infra", "__init__.py") + ":1",
+		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
@@ -140,12 +141,12 @@ func TestPythonReachFollowsAnImportModuleCallThatWritesTheModuleOut(t *testing.T
 
 func TestPythonReachReadsNoEntryFromTheAppsTestFiles(t *testing.T) {
 	root := pythonApp(t)
-	write(t, filepath.Join(root, "server", "conftest.py"), "import importlib\n\nname = \"infra\"\nmodule = importlib.import_module(name)\n")
+	write(t, filepath.Join(root, "server", "conftest.py"), "import importlib\n\nname = \""+constants.DefaultDiscoveryDirName+"\"\nmodule = importlib.import_module(name)\n")
 
 	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
-		Source: filepath.Join(root, "infra", "__init__.py") + ":1",
+		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
@@ -162,7 +163,7 @@ func TestPythonReachReportsASyntaxErrorWithoutTheLineItIsOn(t *testing.T) {
 	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
-		Source: filepath.Join(root, "infra", "__init__.py") + ":1",
+		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
 	if err == nil {
 		t.Fatal("Compute succeeded on a file python cannot parse, want an error")

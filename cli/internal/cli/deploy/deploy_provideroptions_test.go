@@ -39,7 +39,7 @@ export default {
 }
 
 func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {
-	root, journal, deps := setUpProviderFixture(t, `{ region: "eu-west-2", transforms: ["./infra/net.transform.ts"], certificates: { "app.acme.com": "arn:aws:acm:eu-west-2:1:certificate/x" } }`)
+	root, journal, deps := setUpProviderFixture(t, `{ region: "eu-west-2", transforms: ["./transforms/net.transform.ts"], certificates: { "app.acme.com": "arn:aws:acm:eu-west-2:1:certificate/x" } }`)
 
 	var stdout, stderr bytes.Buffer
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -50,7 +50,7 @@ func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("the provider was configured %d times, want exactly 1 for the session: %v", len(got), got)
 	}
-	want := "region=eu-west-2 transforms=./infra/net.transform.ts certificates=map[app.acme.com:arn:aws:acm:eu-west-2:1:certificate/x]"
+	want := "region=eu-west-2 transforms=./transforms/net.transform.ts certificates=map[app.acme.com:arn:aws:acm:eu-west-2:1:certificate/x]"
 	if got[0] != want {
 		t.Errorf("provider saw %q, want %q", got[0], want)
 	}

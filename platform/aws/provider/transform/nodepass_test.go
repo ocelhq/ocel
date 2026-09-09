@@ -77,14 +77,14 @@ func TestNodePassEvaluate(t *testing.T) {
 		t.Parallel()
 
 		root := transformtest.Root(t, map[string]string{
-			"infra/defaults.transform.ts": `
+			"modules/defaults.transform.ts": `
 				import { defineTransform } from "ocel/providers/aws/transform"
 				export default defineTransform([
 					{ function: { lambda: { memorySizeMb: 2048, timeoutSeconds: 60 } } },
 					{ if: (ctx) => ctx.envClass === "production", function: { url: { invokeMode: "BUFFERED" } } },
 				])
 			`,
-			"infra/late.transform.ts": `
+			"modules/late.transform.ts": `
 				import { defineTransform } from "ocel/providers/aws/transform"
 				export default defineTransform({
 					function: { lambda: (args, ctx) => ({ ...args, memorySizeMb: ctx.resourceName === "api-users" ? 512 : args.memorySizeMb }) },
@@ -94,7 +94,7 @@ func TestNodePassEvaluate(t *testing.T) {
 
 		results, err := NodePass{
 			Root:    root,
-			Modules: []string{"./infra/defaults.transform.ts", "./infra/late.transform.ts"},
+			Modules: []string{"./modules/defaults.transform.ts", "./modules/late.transform.ts"},
 		}.Evaluate(t.Context(), functionRequest())
 		if err != nil {
 			t.Fatalf("Evaluate: %v", err)
@@ -115,7 +115,7 @@ func TestNodePassEvaluate(t *testing.T) {
 		t.Parallel()
 
 		root := transformtest.Root(t, map[string]string{
-			"infra/preview.transform.ts": `
+			"modules/preview.transform.ts": `
 				import { defineTransform } from "ocel/providers/aws/transform"
 				export default defineTransform({
 					if: (ctx) => ctx.envClass === "preview" || ctx.app === "web",
@@ -126,7 +126,7 @@ func TestNodePassEvaluate(t *testing.T) {
 
 		results, err := NodePass{
 			Root:    root,
-			Modules: []string{"./infra/preview.transform.ts"},
+			Modules: []string{"./modules/preview.transform.ts"},
 		}.Evaluate(t.Context(), functionRequest())
 		if err != nil {
 			t.Fatalf("Evaluate: %v", err)
@@ -213,7 +213,7 @@ func TestNodePassEvaluate(t *testing.T) {
 		t.Parallel()
 
 		root := transformtest.Root(t, map[string]string{
-			"infra/bad.transform.ts": `
+			"modules/bad.transform.ts": `
 				import { defineTransform } from "ocel/providers/aws/transform"
 				export default defineTransform({
 					function: { lambda: { reservedConcurrency: 4 } as never },
@@ -223,12 +223,12 @@ func TestNodePassEvaluate(t *testing.T) {
 
 		_, err := NodePass{
 			Root:    root,
-			Modules: []string{"./infra/bad.transform.ts"},
+			Modules: []string{"./modules/bad.transform.ts"},
 		}.Evaluate(t.Context(), functionRequest())
 		if err == nil {
 			t.Fatal("Evaluate succeeded, want the unknown field rejected")
 		}
-		for _, fact := range []string{"./infra/bad.transform.ts", "function.lambda.reservedConcurrency"} {
+		for _, fact := range []string{"./modules/bad.transform.ts", "function.lambda.reservedConcurrency"} {
 			if !strings.Contains(err.Error(), fact) {
 				t.Errorf("error = %q, missing %q", err, fact)
 			}
@@ -239,17 +239,17 @@ func TestNodePassEvaluate(t *testing.T) {
 		t.Parallel()
 
 		root := transformtest.Root(t, map[string]string{
-			"infra/empty.transform.ts": `export default { function: {} }`,
+			"modules/empty.transform.ts": `export default { function: {} }`,
 		})
 
 		_, err := NodePass{
 			Root:    root,
-			Modules: []string{"./infra/empty.transform.ts"},
+			Modules: []string{"./modules/empty.transform.ts"},
 		}.Evaluate(t.Context(), functionRequest())
 		if err == nil {
 			t.Fatal("Evaluate succeeded, want the malformed module rejected")
 		}
-		if !strings.Contains(err.Error(), "./infra/empty.transform.ts") {
+		if !strings.Contains(err.Error(), "./modules/empty.transform.ts") {
 			t.Errorf("error = %q, missing the module that failed", err)
 		}
 	})

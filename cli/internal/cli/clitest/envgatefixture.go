@@ -3,6 +3,8 @@ package clitest
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 const EnvDeclarationScript = `
@@ -12,7 +14,7 @@ declare global {
 globalThis.__ocelRegister ??= [];
 
 const call = async (method: string, body: unknown) => {
-  const res = await fetch(new URL("/app.resources.v1.ResourceService/" + method, process.env.OCEL_DEV_SERVER), {
+  const res = await fetch(new URL("/app.resources.v1.ResourceService/" + method, process.env.` + constants.DevServerEnvName + `), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -52,7 +54,7 @@ globalThis.__ocelRegister ??= [];
 
 globalThis.__ocelRegister.push(
   (async () => {
-    const res = await fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.OCEL_DEV_SERVER), {
+    const res = await fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.` + constants.DevServerEnvName + `), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ definitions: JSON.parse(process.env.OCEL_TEST_ENV_DEFINITIONS!) }),
@@ -74,6 +76,6 @@ func SetUpEnvGateFixtureWith(t *testing.T, definitions, script string) string {
 	t.Setenv(FakeVarsStoreEnvVar, filepath.Join(t.TempDir(), "vars.json"))
 	t.Setenv("OCEL_TEST_ENV_DEFINITIONS", definitions)
 	t.Setenv("OCEL_TEST_ENV_PROBLEMS", "[]")
-	WriteFile(t, filepath.Join(root, "infra", "env.ts"), script)
+	WriteFile(t, filepath.Join(DiscoveryDir(root), "env.ts"), script)
 	return root
 }

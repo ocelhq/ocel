@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -59,7 +60,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 		App:          "api",
 	}})
 
-	entry := filepath.Join(root, ".ocel", "output", "apps", "api", "functions", "index.func", "main.py")
+	entry := filepath.Join(root, constants.ProjectStateDirName, "output", "apps", "api", "functions", "index.func", "main.py")
 	if _, err := os.Stat(entry); err != nil {
 		t.Fatalf("the build carried no module for the function to boot: %v", err)
 	}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 type Launcher interface {
@@ -116,7 +117,7 @@ func BundleRoots(configDir string, roots []Root) (string, error) {
 
 func nodeCommand(ctx context.Context, entry, serverURL string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "node", "--enable-source-maps", entry)
-	cmd.Env = append(os.Environ(), "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+serverURL)
+	cmd.Env = append(os.Environ(), constants.PhaseEnvName+"=discovery", constants.DevServerEnvName+"="+serverURL)
 	return cmd
 }
 

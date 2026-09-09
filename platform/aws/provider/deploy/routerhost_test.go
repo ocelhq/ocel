@@ -8,6 +8,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -234,12 +235,12 @@ func TestAppEnvCarriesTheDeploymentURLToTheFunction(t *testing.T) {
 
 	app := routedApp()
 	app.Variables = []*contractv1.ManifestVariable{
-		{Key: providerkit.URLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
+		{Key: constants.AppURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
 		{Key: providerkit.ClientURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://shop.example"},
 	}
 
 	env := plannedEnv(t, Config{}, app, nil)
-	for _, key := range []string{providerkit.URLEnvName, providerkit.ClientURLEnvName} {
+	for _, key := range []string{constants.AppURLEnvName, providerkit.ClientURLEnvName} {
 		if got, want := env[key], "https://shop.example"; got != want {
 			t.Errorf("%s = %q, want %q: server code reads the url off its own environment", key, got, want)
 		}

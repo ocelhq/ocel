@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/node"
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -96,7 +97,7 @@ func expressFixture(t *testing.T) string {
 	if _, err := os.Stat(fixtureRoot); err != nil {
 		t.Skipf("fixture not available: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, ".ocel")) })
+	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, constants.ProjectStateDirName)) })
 	if err := node.Ensure(fixtureRoot); err != nil {
 		t.Fatalf("node.Ensure: %v", err)
 	}
@@ -158,7 +159,7 @@ func TestBuild(t *testing.T) {
 			{Route: "index", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/worker/functions/index.func", App: "worker"},
 		})
 
-		if got, want := gotReq.OutDir, filepath.Join(root, ".ocel", "output"); got != want {
+		if got, want := gotReq.OutDir, filepath.Join(root, constants.ProjectStateDirName, "output"); got != want {
 			t.Errorf("request outDir = %q, want %q", got, want)
 		}
 		if got, want := gotReq.ProjectRoot, root; got != want {
@@ -214,7 +215,7 @@ func TestBuild(t *testing.T) {
 
 		root := t.TempDir()
 		writeBuilder(t, root)
-		writeFuncConfig(t, filepath.Join(root, ".ocel", "output"), "stale", "index.func",
+		writeFuncConfig(t, filepath.Join(root, constants.ProjectStateDirName, "output"), "stale", "index.func",
 			providerkit.FunctionConfig{Runtime: providerkit.Runtime{Name: "node"}, Handler: "h", App: "stale"})
 
 		var gotReq builderRequest
@@ -243,7 +244,7 @@ func TestBuild(t *testing.T) {
 		if got, want := gotReq.ProjectRoot, root; got != want {
 			t.Errorf("request projectRoot = %q, want %q", got, want)
 		}
-		if _, err := os.Stat(filepath.Join(root, ".ocel", "output", appsDirName, "stale")); !errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(filepath.Join(root, constants.ProjectStateDirName, "output", appsDirName, "stale")); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("stale .func survived the reset (stat err = %v)", err)
 		}
 	})
@@ -280,7 +281,7 @@ func TestBuild(t *testing.T) {
 		var got []string
 		builder := Builder{Exec: func(_ context.Context, _ string, env []string, _ []byte, _ io.Writer) error {
 			got = env
-			writePlan(t, filepath.Join(root, scratchDirName, outputDirName))
+			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName))
 			return nil
 		}}
 
@@ -301,7 +302,7 @@ func TestBuild(t *testing.T) {
 
 		var got builderRequest
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
-			writePlan(t, filepath.Join(root, scratchDirName, outputDirName))
+			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName))
 			return json.Unmarshal(request, &got)
 		}}
 
@@ -338,7 +339,7 @@ func TestBuild(t *testing.T) {
 
 		var got builderRequest
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
-			writePlan(t, filepath.Join(root, scratchDirName, outputDirName))
+			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName))
 			return json.Unmarshal(request, &got)
 		}}
 
@@ -365,7 +366,7 @@ func TestBuild(t *testing.T) {
 	t.Run("refuses a resolved value the build environment owns", func(t *testing.T) {
 		t.Parallel()
 
-		for _, name := range []string{"PATH", "NEXT_ADAPTER_PATH", "OCEL_APP_FOLDER"} {
+		for _, name := range []string{"PATH", "NEXT_ADAPTER_PATH", constants.AppFolderEnvName} {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 
@@ -400,12 +401,12 @@ func TestBuild(t *testing.T) {
 	t.Run("the builder itself is bound to the project root", func(t *testing.T) {
 		root := t.TempDir()
 		writeBuilder(t, root)
-		t.Setenv("OCEL_APP_FOLDER", "/stale")
+		t.Setenv(constants.AppFolderEnvName, "/stale")
 
 		var got []string
 		builder := Builder{Exec: func(_ context.Context, _ string, env []string, _ []byte, _ io.Writer) error {
 			got = env
-			writePlan(t, filepath.Join(root, scratchDirName, outputDirName))
+			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName))
 			return nil
 		}}
 
@@ -417,12 +418,12 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("Build: %v", err)
 		}
 
-		value, found := lookup(got, "OCEL_APP_FOLDER")
+		value, found := lookup(got, constants.AppFolderEnvName)
 		if !found {
 			t.Fatal("no binding was stated, so a stale one from the parent environment still answers")
 		}
 		if value != "" {
-			t.Errorf("OCEL_APP_FOLDER = %q, want the project root", value)
+			t.Errorf("%s = %q, want the project root", constants.AppFolderEnvName, value)
 		}
 	})
 
@@ -440,7 +441,7 @@ func TestBuild(t *testing.T) {
 		}
 
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
-			writePlan(t, filepath.Join(root, scratchDirName, outputDirName), functionSummary{
+			writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName), functionSummary{
 				Name:         "api",
 				Runtime:      providerkit.Runtime{Name: "node"},
 				Handler:      "index.mjs",
@@ -467,7 +468,7 @@ func TestBuild(t *testing.T) {
 			{Route: "index", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "index.mjs", ArtifactPath: "apps/api/functions/index.func", RouteID: "/", App: "api"},
 		})
 
-		bundle := filepath.Join(root, scratchDirName, outputDirName, appsDirName, "api", functionsDirName, "index.func", "index.mjs")
+		bundle := filepath.Join(root, constants.ProjectStateDirName, outputDirName, appsDirName, "api", functionsDirName, "index.func", "index.mjs")
 		if _, err := os.Stat(bundle); err != nil {
 			t.Errorf("stat %s: %v (the plan asked Go to bundle)", bundle, err)
 		}
@@ -483,7 +484,7 @@ func TestBuild(t *testing.T) {
 		writeBuilder(t, root)
 
 		builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
-			outDir := filepath.Join(root, scratchDirName, outputDirName)
+			outDir := filepath.Join(root, constants.ProjectStateDirName, outputDirName)
 			writeFuncConfig(t, outDir, "web", "index.func",
 				providerkit.FunctionConfig{Runtime: providerkit.Runtime{Name: "next"}, Handler: "server.js", App: "web"})
 			writePlan(t, outDir, functionSummary{
@@ -504,7 +505,7 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("Build: %v", err)
 		}
 
-		funcDir := filepath.Join(root, scratchDirName, outputDirName, appsDirName, "web", functionsDirName, "index.func")
+		funcDir := filepath.Join(root, constants.ProjectStateDirName, outputDirName, appsDirName, "web", functionsDirName, "index.func")
 		entries, err := os.ReadDir(funcDir)
 		if err != nil {
 			t.Fatal(err)
@@ -562,7 +563,7 @@ func TestBuild(t *testing.T) {
 			root := t.TempDir()
 			writeBuilder(t, root)
 			builder := Builder{Exec: func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
-				outDir := filepath.Join(root, scratchDirName, outputDirName)
+				outDir := filepath.Join(root, constants.ProjectStateDirName, outputDirName)
 				if err := os.MkdirAll(outDir, 0o755); err != nil {
 					return err
 				}
@@ -713,7 +714,7 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 
 			var got builderRequest
 			builder := Builder{Exec: func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
-				writePlan(t, filepath.Join(root, scratchDirName, outputDirName))
+				writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName))
 				return json.Unmarshal(request, &got)
 			}}
 
@@ -829,7 +830,7 @@ func TestEdgeApps(t *testing.T) {
 
 func writeAppFile(t *testing.T, root, rel string, contents []byte) {
 	t.Helper()
-	dest := filepath.Join(root, scratchDirName, outputDirName, appsDirName, filepath.FromSlash(rel))
+	dest := filepath.Join(root, constants.ProjectStateDirName, outputDirName, appsDirName, filepath.FromSlash(rel))
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -848,7 +849,7 @@ func TestCollectFunctions(t *testing.T) {
 		if err == nil {
 			t.Fatal("CollectFunctions succeeded with no build output, want error")
 		}
-		if !strings.Contains(err.Error(), filepath.Join(scratchDirName, outputDirName)) {
+		if !strings.Contains(err.Error(), filepath.Join(constants.ProjectStateDirName, outputDirName)) {
 			t.Errorf("error = %q, want it to name the missing output directory", err)
 		}
 		if !strings.Contains(err.Error(), "ocel build") {
@@ -860,7 +861,7 @@ func TestCollectFunctions(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(root, scratchDirName, outputDirName), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(root, constants.ProjectStateDirName, outputDirName), 0o755); err != nil {
 			t.Fatal(err)
 		}
 
@@ -877,7 +878,7 @@ func TestCollectFunctions(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
-		outDir := filepath.Join(root, scratchDirName, outputDirName)
+		outDir := filepath.Join(root, constants.ProjectStateDirName, outputDirName)
 		writeFuncConfig(t, outDir, "web", "index.func",
 			providerkit.FunctionConfig{Runtime: providerkit.Runtime{Name: "next"}, Handler: "index.handler", App: "web"})
 		writeFuncConfig(t, outDir, "web", filepath.Join("api", "todos", "[id].func"),
@@ -1087,15 +1088,15 @@ func TestBuilderEnv(t *testing.T) {
 		t.Parallel()
 
 		env := builderEnv("/adapters/next.js", map[string]string{
-			"NEXT_ADAPTER_PATH": "/evil/adapter.js",
-			"OCEL_APP_FOLDER":   "/admin",
+			"NEXT_ADAPTER_PATH":        "/evil/adapter.js",
+			constants.AppFolderEnvName: "/admin",
 		})
 
 		if got, _ := lookup(env, "NEXT_ADAPTER_PATH"); got != "/adapters/next.js" {
 			t.Errorf("NEXT_ADAPTER_PATH = %q, want the builder's own adapter", got)
 		}
-		if got, _ := lookup(env, "OCEL_APP_FOLDER"); got != "" {
-			t.Errorf("OCEL_APP_FOLDER = %q, want the project root the builder process runs under", got)
+		if got, _ := lookup(env, constants.AppFolderEnvName); got != "" {
+			t.Errorf("%s = %q, want the project root the builder process runs under", constants.AppFolderEnvName, got)
 		}
 	})
 }

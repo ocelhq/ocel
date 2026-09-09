@@ -8,12 +8,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/console/binding"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 var consoleUnlinkCmd = &cobra.Command{
 	Use:   "unlink",
 	Short: "Remove this directory's Ocel console link",
-	Long: "Removes .ocel/console.json, leaving this working tree associated with no\n" +
+	Long: "Removes " + constants.ProjectStateDirName + "/console.json, leaving this working tree associated with no\n" +
 		"console project. Nothing on the control plane is deleted.",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {

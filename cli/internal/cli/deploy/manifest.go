@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -68,7 +69,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
 			return nil, err
 		}
-		ui.Diagnostic("using prebuilt output in .ocel/output")
+		ui.Diagnostic("using prebuilt output in " + constants.ProjectStateDirName + "/output")
 	} else {
 		if err := clientenv.Generate(cfg.Dir, clients); err != nil {
 			return nil, err

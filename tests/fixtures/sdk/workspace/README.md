@@ -1,10 +1,10 @@
 # workspace
 
-One project, two apps, one set of declarations. `infra/` at the root declares a postgres
-database, a blob uploader named `document`, a plain `GREETING` and a secret `SECRET_TOKEN`
-once, and `apps/next` and `apps/express` import from it. Each app mounts the uploader with
-its own route handler, and ocel works out from each app's imports which resources it is
-handed.
+One project, two apps, one set of declarations. The default discovery directory at the
+root declares a postgres database, a blob uploader named `document`, a plain `GREETING`
+and a secret `SECRET_TOKEN` once, and `apps/next` and `apps/express` import from it. Each
+app mounts the uploader with its own route handler, and ocel works out from each app's
+imports which resources it is handed.
 
 The config names each app, points at it under `apps/`, and gives it its own env folder, and
 in production its own hostname. There is one bootstrap and one edge in front of both.

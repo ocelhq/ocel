@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -68,7 +69,7 @@ export default {
 			t.Fatalf("runGenerate: %v", err)
 		}
 
-		accessor, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
+		accessor, err := os.ReadFile(filepath.Join(root, constants.ProjectStateDirName, "env-client.ts"))
 		if err != nil {
 			t.Fatalf("runGenerate wrote no accessor: %v", err)
 		}
@@ -85,7 +86,7 @@ export default {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(tsconfig), ".ocel/env-client.ts") {
+		if !strings.Contains(string(tsconfig), constants.ProjectStateDirName+"/env-client.ts") {
 			t.Errorf("tsconfig.json = %s, want it to map 'ocel/env/client' at the accessor", tsconfig)
 		}
 
@@ -104,7 +105,7 @@ export default {
 		if err := runGenerate(context.Background(), deps, root, &stdout, &stderr); err != nil {
 			t.Fatalf("runGenerate refused a declaration nothing has a value for: %v", err)
 		}
-		if _, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts")); err != nil {
+		if _, err := os.ReadFile(filepath.Join(root, constants.ProjectStateDirName, "env-client.ts")); err != nil {
 			t.Fatalf("runGenerate wrote no accessor: %v", err)
 		}
 	})
@@ -125,7 +126,7 @@ export default {
 			t.Fatalf("runGenerate: %v", err)
 		}
 
-		accessor, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
+		accessor, err := os.ReadFile(filepath.Join(root, constants.ProjectStateDirName, "env-client.ts"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -147,7 +148,7 @@ export default {
 			t.Fatalf("runGenerate: %v", err)
 		}
 
-		accessor, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
+		accessor, err := os.ReadFile(filepath.Join(root, constants.ProjectStateDirName, "env-client.ts"))
 		if err != nil {
 			t.Fatalf("runGenerate wrote no accessor: %v", err)
 		}
@@ -158,7 +159,7 @@ export default {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(string(tsconfig), ".ocel/env-client.ts") {
+		if !strings.Contains(string(tsconfig), constants.ProjectStateDirName+"/env-client.ts") {
 			t.Errorf("tsconfig.json = %s, want it to map 'ocel/env/client' at the accessor", tsconfig)
 		}
 		if got, want := stdout.String(), "Generated the client accessor for 1 client-accessible variable\n"; got != want {
