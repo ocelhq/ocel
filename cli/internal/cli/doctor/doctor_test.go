@@ -15,13 +15,14 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
-var nodeLine = regexp.MustCompile(`(?m)^  ✓ node .* on PATH$`)
+var nodeLine = regexp.MustCompile(`(?m)^(  ✓ node is needed — .*) — node .* on PATH$`)
 
 func rendered(t *testing.T, out string) string {
 	t.Helper()
-	return nodeLine.ReplaceAllString(out, "  ✓ node vX on PATH")
+	return nodeLine.ReplaceAllString(out, "$1 — node vX on PATH")
 }
 
 func exitCode(t *testing.T, err error) int {
@@ -172,7 +173,6 @@ export default {
 `)
 	clitest.WriteFile(t, filepath.Join(root, "apps", "web", "src", "server.ts"), "export function handler() {}\n")
 	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export function handler() {}\n")
-	clitest.WriteFile(t, filepath.Join(root, "node_modules", "@ocel", "provider-aws", "package.json"), `{"name":"@ocel/provider-aws","version":"1.4.0"}`)
 
 	t.Setenv(clitest.FakeIDProviderEnvVar, "aws")
 	t.Setenv(clitest.FakeIDAccountEnvVar, "123456789012")
@@ -196,9 +196,9 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 
 	want := strings.Join([]string{
 		"Project  my-shop · ocel.config.ts",
-		"  ✓ node vX on PATH",
+		"  ✓ node is needed — ocel.config.ts is TypeScript, this project holds JavaScript — node vX on PATH",
 		"  ✓ config loads — 2 apps (web, api)",
-		"  ✓ provider aws 1.4.0",
+		"  ✓ provider aws " + version.Version + "",
 		"  ✓ provider default edge",
 		"",
 		"AWS  123456789012 · eu-west-1 · profile shop",
