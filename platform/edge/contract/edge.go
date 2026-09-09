@@ -52,6 +52,7 @@ type Facts struct {
 	AddressesItself       bool
 	ServesUnbound         bool
 	SignsOriginForwards   bool
+	ShieldsOrigin         bool
 	InvalidatesByCacheTag bool
 	CredentialScope       string
 }
