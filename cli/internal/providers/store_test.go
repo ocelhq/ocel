@@ -113,13 +113,12 @@ func fakeRelease(t *testing.T, names ...string) *release {
 func storeFor(t *testing.T, rel *release) *Store {
 	t.Helper()
 	return &Store{
-		Dir:     t.TempDir(),
-		Version: testVersion,
-		GOOS:    "linux",
-		GOARCH:  "amd64",
-		BaseURL: rel.server.URL,
-		HTTP:    rel.server.Client(),
-		Sleep:   func(time.Duration) {},
+		Dir:      t.TempDir(),
+		Version:  testVersion,
+		Platform: Platform{GOOS: "linux", GOARCH: "amd64"},
+		BaseURL:  rel.server.URL,
+		HTTP:     rel.server.Client(),
+		Sleep:    func(time.Duration) {},
 	}
 }
 

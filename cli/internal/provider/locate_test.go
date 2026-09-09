@@ -43,13 +43,12 @@ func releaseServing(t *testing.T, names ...string) *httptest.Server {
 func storeOn(t *testing.T, server *httptest.Server, goos, goarch string) *providers.Store {
 	t.Helper()
 	return &providers.Store{
-		Dir:     t.TempDir(),
-		Version: locatedVersion,
-		GOOS:    goos,
-		GOARCH:  goarch,
-		BaseURL: server.URL,
-		HTTP:    server.Client(),
-		Sleep:   func(time.Duration) {},
+		Dir:      t.TempDir(),
+		Version:  locatedVersion,
+		Platform: providers.Platform{GOOS: goos, GOARCH: goarch},
+		BaseURL:  server.URL,
+		HTTP:     server.Client(),
+		Sleep:    func(time.Duration) {},
 	}
 }
 

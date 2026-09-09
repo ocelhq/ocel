@@ -128,7 +128,7 @@ func spill(path string, body io.Reader, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(file, io.LimitReader(body, archiveCeling)); err != nil {
+	if _, err := io.Copy(file, io.LimitReader(body, archiveCeiling)); err != nil {
 		file.Close()
 		return err
 	}
