@@ -137,8 +137,8 @@ interface ProviderLook {
 }
 
 const PROVIDERS: Record<string, ProviderLook> = {
-  "@ocel/provider-aws": { name: "AWS", logo: "aws", home: "your AWS account" },
-  "@ocel/provider-vps": { name: "VPS", logo: "vps", home: "your own server" },
+  aws: { name: "AWS", logo: "aws", home: "your AWS account" },
+  vps: { name: "VPS", logo: "vps", home: "your own server" },
 };
 
 export function renderComment(phase: Phase, ctx: PreviewInput): string {
@@ -167,8 +167,8 @@ export function renderComment(phase: Phase, ctx: PreviewInput): string {
 }
 
 function deployedHeadline(ctx: PreviewInput, result: DeployResult): string {
-  const look = PROVIDERS[result.provider.package];
-  const where = [look?.home ?? result.provider.package, result.provider.region]
+  const look = PROVIDERS[result.provider.name];
+  const where = [look?.home ?? result.provider.name, result.provider.region]
     .filter(Boolean)
     .join(" · ");
   const line = `Deployed ${commitLink(ctx)} to ${where} · ${formatTime(result.deployedAt)}`;
