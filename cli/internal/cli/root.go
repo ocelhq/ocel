@@ -77,6 +77,7 @@ func init() {
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(buildCmd)
+	rootCmd.AddCommand(lockCmd)
 	rootCmd.AddCommand(deploy.NewCommand(s))
 	rootCmd.AddCommand(deploy.NewPreviewCommand(s))
 	rootCmd.AddCommand(env.NewCommand(s))

@@ -35,22 +35,36 @@ func locate(ctx context.Context, store *providers.Store, projectDir, name string
 	return store.Binary(ctx, name, digest)
 }
 
+func Pin(ctx context.Context, projectDir string) error {
+	store, err := providers.New(version.Version)
+	if err != nil {
+		return err
+	}
+	return pin(ctx, store, projectDir)
+}
+
 func pins(ctx context.Context, store *providers.Store, projectDir string) (lockfile.Lock, error) {
 	lock, held, err := lockfile.Read(projectDir)
 	if err != nil {
 		return lockfile.Lock{}, err
 	}
-	if held && lock.CLI == store.Version {
-		return lock, nil
+	if !held {
+		if err := pin(ctx, store, projectDir); err != nil {
+			return lockfile.Lock{}, err
+		}
+		lock, _, err = lockfile.Read(projectDir)
+		return lock, err
 	}
-
-	sums, err := store.Checksums(ctx)
-	if err != nil {
-		return lockfile.Lock{}, fmt.Errorf("read the checksums of release %s: %w", store.Version, err)
-	}
-	lock = lockfile.FromChecksums(store.Version, sums)
-	if err := lockfile.Write(projectDir, lock); err != nil {
-		return lockfile.Lock{}, err
+	if lock.CLI != store.Version {
+		return lockfile.Lock{}, fmt.Errorf("%s pins the providers of ocel %s and this is ocel %s — run `ocel lock` to pin the providers this version runs, and commit the change", lockfile.Name, lock.CLI, store.Version)
 	}
 	return lock, nil
+}
+
+func pin(ctx context.Context, store *providers.Store, projectDir string) error {
+	sums, err := store.Checksums(ctx)
+	if err != nil {
+		return fmt.Errorf("read the checksums of release %s: %w", store.Version, err)
+	}
+	return lockfile.Write(projectDir, lockfile.FromChecksums(store.Version, sums))
 }
