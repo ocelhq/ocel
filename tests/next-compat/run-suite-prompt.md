@@ -68,19 +68,20 @@ Hard-stop on any of these; a bad preflight makes the result meaningless.
 4. **`ocel bootstrap preview --features all` and `ocel domain use '<wildcard>' --preview`
    have been run** once on the account. Without the domain, a preview deploy has
    nowhere to serve: no project declares one of its own.
-5. **The sidecar carries `ocel`, and carries it fresh:**
+5. **The sidecar carries `ocel`, and `OCEL_PROVIDERS_DIR` a fresh provider:**
    ```bash
    test -d /home/vndaba/Dev/ocelhq-work/sidecar/node_modules/ocel \
      || echo "STOP: sidecar needs the one-time repack (see README)"
-   ls -l /home/vndaba/Dev/ocelhq-work/sidecar/node_modules/@ocel/provider-aws-linux-x64/bin/deploy
+   ls -l dist/providers/aws/*/linux-amd64/provider-aws
    git log -1 --format=%ad -- platform/aws/provider cli pkg
    ```
-   `linkSidecar` hard-fails on a missing one, failing the deploy at link time. A
-   *stale* one passes that check and then runs superseded Go silently, or rejects
-   a new RPC as `unimplemented: 404`; the binary older than the last Go-touching
-   commit is the tell. Repack only when no other run is using the sidecar, and
-   note that packing does not imply building — the Go binaries come from
-   `node scripts/snapshot.mjs`.
+   `linkSidecar` hard-fails on a missing `ocel`, failing the deploy at link time.
+   A *stale* provider passes every check and then runs superseded Go silently, or
+   rejects a new RPC as `unimplemented: 404`; a binary older than the last
+   Go-touching commit is the tell. Repack the sidecar only when no other run is
+   using it, and note that packing does not imply building — the Go binaries come
+   from `node scripts/snapshot.mjs`, which prints the `OCEL_PROVIDERS_DIR` the
+   run must export.
 
 ## Screen the suite before running it
 
