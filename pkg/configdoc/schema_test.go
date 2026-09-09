@@ -73,3 +73,12 @@ func TestOptionsSchemaNamesTheProvider(t *testing.T) {
 		t.Fatal("options accept keys the provider does not declare")
 	}
 }
+
+func TestOptionsSchemaRefusesAnUnnamedProvider(t *testing.T) {
+	type options struct {
+		Region string `json:"region,omitempty"`
+	}
+	if _, err := OptionsSchema("", options{}); err == nil {
+		t.Fatal("options schema for an unnamed provider = nil error, want a refusal")
+	}
+}

@@ -2,6 +2,7 @@ package configdoc
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 	"slices"
 	"strings"
@@ -10,7 +11,7 @@ import (
 const SchemaDialect = "https://json-schema.org/draft/2020-12/schema"
 
 type AlsoAString interface {
-	AlsoAString() bool
+	AlsoAString()
 }
 
 type object = map[string]any
@@ -23,6 +24,9 @@ func Schema() ([]byte, error) {
 }
 
 func OptionsSchema(name string, options any) ([]byte, error) {
+	if name == "" {
+		return nil, errors.New("an options schema is titled after the provider it belongs to, and this one is unnamed")
+	}
 	shape := schemaOf(reflect.TypeOf(options))
 	shape["title"] = strings.ToUpper(name[:1]) + name[1:] + "ProviderOptions"
 	variant := object{
@@ -46,7 +50,7 @@ func schemaOf(target reflect.Type) object {
 	}
 
 	value := reflect.New(target).Elem().Interface()
-	switch shaped := value.(type) {
+	switch value.(type) {
 	case StringList:
 		return object{"oneOf": []any{
 			object{"type": "string"},
@@ -58,9 +62,7 @@ func schemaOf(target reflect.Type) object {
 			schemaOf(reflect.TypeOf(RuntimeObject{})),
 		}}
 	case AlsoAString:
-		if shaped.AlsoAString() {
-			return object{"oneOf": []any{object{"type": "string"}, objectSchema(target)}}
-		}
+		return object{"oneOf": []any{object{"type": "string"}, objectSchema(target)}}
 	}
 
 	switch target.Kind() {

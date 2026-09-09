@@ -36,7 +36,7 @@ type Target struct {
 	IdentityFile string `json:"identityFile,omitempty" doc:"The private key to authenticate with, as a path."`
 }
 
-func (Target) AlsoAString() bool { return true }
+func (Target) AlsoAString() {}
 
 func (t Target) session() session.Target {
 	return session.Target{

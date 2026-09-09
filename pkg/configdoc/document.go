@@ -126,7 +126,6 @@ func (r Runtime) checkShape(path string, value any) error {
 	case map[string]any:
 		return checkStruct(path, RuntimeObject{}, shaped)
 	default:
-		_ = shaped
 		return typeError(path, "a runtime name or an object naming one")
 	}
 }
