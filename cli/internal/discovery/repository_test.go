@@ -79,7 +79,7 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		}
 		if entry.IsDir() {
 			switch entry.Name() {
-			case ".git", ".venv", constants.ProjectStateDirName, "node_modules", "dist", "target":
+			case ".git", ".next", ".venv", constants.ProjectStateDirName, "node_modules", "dist", "target":
 				return filepath.SkipDir
 			}
 			return nil
@@ -165,7 +165,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		}
 		if entry.IsDir() {
 			switch entry.Name() {
-			case ".git", ".venv", constants.ProjectStateDirName, "node_modules", "dist", "target":
+			case ".git", ".next", ".venv", constants.ProjectStateDirName, "node_modules", "dist", "target":
 				return filepath.SkipDir
 			}
 			return nil
