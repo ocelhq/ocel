@@ -205,6 +205,57 @@ func TestTheFrontComesDownOnceNothingIsBoundToIt(t *testing.T) {
 	}
 }
 
+func TestTheFirstReleaseAfterABindTakesTheHostnameLive(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	_, w, stack := reconciled(t)
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
+		t.Fatalf("BindDomain = %v", err)
+	}
+	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
+		App: "web", Identity: "b1", Physical: "ocel-shop-prod-web",
+		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
+	}); err != nil {
+		t.Fatalf("PutStaged = %v", err)
+	}
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}},
+		"", edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote = %v", err)
+	}
+
+	want := backendName("shop", providerkit.ClassProduction, "shop.example.com")
+	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != want {
+		t.Errorf("the class url map routes shop.example.com onto %q, want the project's own backend %q: the bind held the hostname at a 404 "+
+			"because the app had released nothing, and the release that gives it a service is what takes it live", got, want)
+	}
+}
+
+func TestAPromotionOfAnotherAppLeavesAHeldHostnameHeld(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	_, w, stack := reconciled(t)
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
+		t.Fatalf("BindDomain = %v", err)
+	}
+	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
+		App: "admin", Identity: "b1", Physical: "ocel-shop-prod-admin",
+		Revisions: map[string]string{"ocel-shop-prod-admin": "ocel-shop-prod-admin-00001"},
+	}); err != nil {
+		t.Fatalf("PutStaged = %v", err)
+	}
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Builds: map[string]string{"admin": "b1"}},
+		"", edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote = %v", err)
+	}
+
+	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != notFoundBackend {
+		t.Errorf("the class url map routes shop.example.com onto %q, want it still held at the front's 404: the app it was bound to has "+
+			"still released nothing", got)
+	}
+}
+
 func TestAHostnameBoundBeforeItsAppReleasedIsRoutedToTheFrontsNotFoundBackend(t *testing.T) {
 	t.Parallel()
 
