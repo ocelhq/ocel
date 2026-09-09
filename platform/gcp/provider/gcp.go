@@ -109,7 +109,15 @@ func (p *Provider) Credentials() providerkit.Credentials {
 }
 
 func (p *Provider) Edges() providerkit.EdgeRegistry {
-	return edges{namespace: p.clients.Namespace(), records: p.Records(), pins: p}
+	return edges{
+		namespace: p.clients.Namespace(),
+		records:   p.Records(),
+		pins:      p,
+		stacks:    albStacks{p: p},
+		routes:    p,
+		project:   p.options.Project,
+		region:    p.options.Region,
+	}
 }
 
 func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }

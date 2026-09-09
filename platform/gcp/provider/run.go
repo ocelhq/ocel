@@ -16,6 +16,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 const (
@@ -45,6 +47,19 @@ type serving struct {
 	public  bool
 	memory  int
 	timeout time.Duration
+	ingress string
+}
+
+const (
+	ingressEverywhere   = "INGRESS_TRAFFIC_ALL"
+	ingressLoadBalancer = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+)
+
+func ingressFor(front edge.Edge) string {
+	if front != nil && front.Kind() == alb.Kind {
+		return ingressLoadBalancer
+	}
+	return ingressEverywhere
 }
 
 func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
@@ -83,7 +98,11 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 		}
 		template.Timeout = strconv.Itoa(int(math.Ceil(s.timeout.Seconds()))) + "s"
 	}
-	return &run.GoogleCloudRunV2Service{Template: template}, nil
+	ingress := s.ingress
+	if ingress == "" {
+		ingress = ingressEverywhere
+	}
+	return &run.GoogleCloudRunV2Service{Template: template, Ingress: ingress}, nil
 }
 
 func environmentOf(values map[string]string) []*run.GoogleCloudRunV2EnvVar {

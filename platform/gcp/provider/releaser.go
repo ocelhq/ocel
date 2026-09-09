@@ -40,6 +40,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 			account: account,
 			compute: providerkit.ComputeServerless,
 			public:  spec.URL,
+			ingress: ingressFor(plan.Edge),
 			memory:  spec.Memory,
 			timeout: spec.Timeout,
 		}, report)
@@ -94,6 +95,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 		compute: providerkit.ComputeContainer,
 		health:  app.HealthCheckPath,
 		public:  true,
+		ingress: ingressFor(plan.Edge),
 	}, report)
 	if err != nil {
 		return nil, err

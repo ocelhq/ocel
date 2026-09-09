@@ -7,6 +7,7 @@ import (
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
 
@@ -19,9 +20,13 @@ type edges struct {
 	namespace providerkit.Namespace
 	records   providerkit.RecordStore
 	pins      pin.Pins
+	stacks    alb.Stacks
+	routes    alb.Routes
+	project   string
+	region    string
 }
 
-var supportedEdges = []edge.Kind{direct.Kind, cloudflare.Kind}
+var supportedEdges = []edge.Kind{direct.Kind, alb.Kind, cloudflare.Kind}
 
 func (edges) Supported() []edge.Kind { return slices.Clone(supportedEdges) }
 
@@ -31,12 +36,22 @@ func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 	switch kind {
 	case direct.Kind:
 		return direct.New(e.records, e.pins), nil
+	case alb.Kind:
+		return alb.New(alb.Deps{
+			Records: e.records,
+			Stacks:  e.stacks,
+			Routes:  e.routes,
+			Pins:    e.pins,
+			Project: e.project,
+			Region:  e.region,
+		}), nil
 	case cloudflare.Kind:
 		return cloudflare.New(string(e.namespace)), nil
 	}
 	return nil, providerkit.Refuse(providerkit.CodeInvalid,
-		"this provider cannot front deployments with the %q edge; it fronts them with %s and %s",
-		kind, direct.Kind, cloudflare.Kind)
+		"this provider cannot front deployments with the %q edge; it fronts them with %s, which answers on the url Cloud Run gives each service, "+
+			"with %s, which stands one load balancer up per bootstrap class at %s, and with %s, which is bought separately",
+		kind, direct.Kind, alb.Kind, alb.StandingCost, cloudflare.Kind)
 }
 
 type dns struct{}

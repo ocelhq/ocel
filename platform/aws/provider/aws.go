@@ -523,8 +523,10 @@ var (
 	_ awsports.Stores            = (*Provider)(nil)
 )
 
+const s3Scheme = "s3"
+
 func stateBackendURL(bucket, slug string) string {
-	backend := naming.StateBackendURL(bucket, slug)
+	backend := naming.StateBackendURL(s3Scheme, bucket, slug)
 	endpoint := os.Getenv("AWS_ENDPOINT_URL_S3")
 	if endpoint == "" {
 		endpoint = os.Getenv("AWS_ENDPOINT_URL")

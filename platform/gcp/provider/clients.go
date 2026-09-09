@@ -12,6 +12,7 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/artifactregistry/v1"
 	"google.golang.org/api/cloudresourcemanager/v1"
+	"google.golang.org/api/compute/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 	"google.golang.org/api/iam/v1"
 	run "google.golang.org/api/run/v2"
@@ -46,6 +47,7 @@ type clients struct {
 	images    memo[*artifactregistry.Service]
 	accounts  memo[*iam.Service]
 	runs      memo[*run.Service]
+	compute   memo[*compute.Service]
 	principal memo[string]
 	projects  memo[*cloudresourcemanager.Service]
 }
@@ -119,6 +121,12 @@ func (c *clients) Repositories() (*artifactregistry.Service, error) {
 func (c *clients) Run() (*run.Service, error) {
 	return opened(c, &c.runs, "Cloud Run", func() (*run.Service, error) {
 		return run.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+	})
+}
+
+func (c *clients) Compute() (*compute.Service, error) {
+	return opened(c, &c.compute, "Compute Engine", func() (*compute.Service, error) {
+		return compute.NewService(context.Background(), EmulatorREST(c.endpoint)...)
 	})
 }
 
