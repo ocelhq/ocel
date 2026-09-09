@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -18,6 +19,8 @@ const listenDialTimeout = 250 * time.Millisecond
 
 type execChild struct {
 	upstream
+
+	ready chan struct{}
 }
 
 func startExecutable(command []string, port int, extraEnv []string, budget time.Duration) (*execChild, error) {
@@ -33,15 +36,38 @@ func startExecutable(command []string, port int, extraEnv []string, budget time.
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
 
-	if alive, err := awaitListening(port, exited, budget); err != nil {
-		if alive {
-			_ = cmd.Process.Kill()
-			<-exited
+	what := strings.Join(command, " ")
+	c := &execChild{upstream: upstream{port: port, client: newLoopbackClient()}, ready: make(chan struct{})}
+	listening := watchListening(port, exited)
+
+	select {
+	case err := <-listening:
+		if err != nil {
+			return nil, err
 		}
-		return nil, err
+		c.arm(what, exited)
+	case <-time.After(budget):
+		fmt.Fprintf(os.Stderr,
+			"ocel: the app has not listened on 127.0.0.1:%d within %s; the runtime is serving invocations that wait for it\n",
+			port, budget)
+		go func() {
+			if err := <-listening; err != nil {
+				fmt.Fprintf(os.Stderr, "ocel: %v\n", err)
+				os.Exit(1)
+			}
+			c.arm(what, exited)
+		}()
 	}
-	go supervise(strings.Join(command, " "), exited)
-	return &execChild{upstream{port: port, client: newLoopbackClient()}}, nil
+	return c, nil
+}
+
+func (c *execChild) arm(what string, exited <-chan error) {
+	close(c.ready)
+	go supervise(what, exited)
+}
+
+func (c *execChild) awaitReady(ctx context.Context) error {
+	return awaitChildReady(ctx, c.ready)
 }
 
 func executableEnv(port int, extraEnv []string) []string {
@@ -49,22 +75,24 @@ func executableEnv(port int, extraEnv []string) []string {
 	return append(env, extraEnv...)
 }
 
-func awaitListening(port int, exited <-chan error, budget time.Duration) (alive bool, err error) {
-	address := "127.0.0.1:" + strconv.Itoa(port)
-	deadline := time.Now().Add(budget)
-	for {
-		conn, err := net.DialTimeout("tcp", address, listenDialTimeout)
-		if err == nil {
-			conn.Close()
-			return true, nil
+func watchListening(port int, exited <-chan error) <-chan error {
+	out := make(chan error, 1)
+	go func() {
+		address := "127.0.0.1:" + strconv.Itoa(port)
+		for {
+			conn, err := net.DialTimeout("tcp", address, listenDialTimeout)
+			if err == nil {
+				conn.Close()
+				out <- nil
+				return
+			}
+			select {
+			case err := <-exited:
+				out <- fmt.Errorf("the app exited before it listened on %s: %w", address, err)
+				return
+			case <-time.After(listenPollInterval):
+			}
 		}
-		select {
-		case err := <-exited:
-			return false, fmt.Errorf("the app exited before it listened on %s: %w", address, err)
-		case <-time.After(listenPollInterval):
-		}
-		if time.Now().After(deadline) {
-			return true, fmt.Errorf("the app did not listen on %s within %s", address, budget)
-		}
-	}
+	}()
+	return out
 }

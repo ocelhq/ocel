@@ -28,6 +28,8 @@ const nodeBinaryPath = "/var/lang/bin/node"
 type nodeChild struct {
 	upstream
 
+	ready chan struct{}
+
 	control net.Conn
 
 	live liveValues
@@ -346,33 +348,45 @@ type nodeReady struct {
 	lifecycle bool
 }
 
-func awaitReady(ln net.Listener, exited <-chan error, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeReady, error) {
-	type result struct {
-		ready *nodeReady
-		err   error
-	}
+type readyResult struct {
+	ready *nodeReady
+	err   error
+}
+
+func watchReady(ln net.Listener, exited <-chan error, onControl func(io.Writer), abandon <-chan struct{}) <-chan readyResult {
 	var log lastLog
-	done := make(chan result, 1)
+	shook := make(chan readyResult, 1)
 	go func() {
 		ready, err := handshake(ln, &log, onControl)
-		done <- result{ready: ready, err: err}
+		shook <- readyResult{ready: ready, err: err}
 	}()
 
-	select {
-	case r := <-done:
-		if r.err != nil {
-			return nil, fmt.Errorf("node control handshake failed: %w%s", r.err, log.suffix())
+	out := make(chan readyResult, 1)
+	go func() {
+		select {
+		case r := <-shook:
+			if r.err != nil {
+				out <- readyResult{err: fmt.Errorf("node control handshake failed: %w%s", r.err, log.suffix())}
+				return
+			}
+			out <- r
+		case err := <-exited:
+			ln.Close()
+			out <- readyResult{err: fmt.Errorf("node exited before signalling ready: %w%s", err, log.suffix())}
+		case <-abandon:
+			ln.Close()
+			out <- readyResult{err: fmt.Errorf("node was left waiting on init work that failed%s", log.suffix())}
 		}
-		return r.ready, nil
-	case err := <-exited:
-		ln.Close()
-		return nil, fmt.Errorf("node exited before signalling ready: %w%s", err, log.suffix())
-	case <-abandon:
-		ln.Close()
-		return nil, fmt.Errorf("node was left waiting on init work that failed%s", log.suffix())
+	}()
+	return out
+}
+
+func awaitReady(results <-chan readyResult, budget time.Duration) (readyResult, bool) {
+	select {
+	case r := <-results:
+		return r, true
 	case <-time.After(budget):
-		ln.Close()
-		return nil, fmt.Errorf("node did not signal ready within %s%s", budget, log.suffix())
+		return readyResult{}, false
 	}
 }
 
@@ -468,26 +482,57 @@ func spawnNode(entrypoint string, extraEnv []string, budget time.Duration, onCon
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
 
-	ready, err := awaitReady(ln, exited, budget, onControl, abandon)
-	ln.Close()
-	if err != nil {
-		return nil, err
+	return serveWhenReady(watchReady(ln, exited, onControl, abandon), ln, exited, budget)
+}
+
+func serveWhenReady(results <-chan readyResult, ln net.Listener, exited <-chan error, budget time.Duration) (*nodeChild, error) {
+	m := &nodeChild{ready: make(chan struct{}), pending: map[string]chan struct{}{}}
+
+	if r, shook := awaitReady(results, budget); shook {
+		ln.Close()
+		if r.err != nil {
+			return nil, r.err
+		}
+		m.arm(r.ready, exited)
+		return m, nil
 	}
 
-	m := &nodeChild{
-		upstream:  upstream{port: ready.httpPort, client: newLoopbackClient()},
-		control:   ready.control,
-		lifecycle: ready.lifecycle,
-		pending:   map[string]chan struct{}{},
-	}
+	fmt.Fprintf(os.Stderr,
+		"ocel: node has not signalled ready within %s; the runtime is serving invocations that wait for it\n", budget)
+	go func() {
+		r := <-results
+		ln.Close()
+		if r.err != nil {
+			fmt.Fprintf(os.Stderr, "ocel: %v\n", r.err)
+			os.Exit(1)
+		}
+		m.arm(r.ready, exited)
+	}()
+	return m, nil
+}
+
+func (m *nodeChild) arm(ready *nodeReady, exited <-chan error) {
+	m.upstream = upstream{port: ready.httpPort, client: newLoopbackClient()}
+	m.control = ready.control
+	m.lifecycle = ready.lifecycle
 	if !ready.lifecycle {
 		fmt.Fprintln(os.Stderr,
 			"ocel: this app's entrypoint does not signal when an invocation is over, so waitUntil work is not awaited")
 	}
+	close(m.ready)
 
 	go m.drainControl(ready.reader)
 	go supervise("node", exited)
-	return m, nil
+}
+
+func (m *nodeChild) awaitReady(ctx context.Context) error {
+	return awaitChildReady(ctx, m.ready)
+}
+
+func (m *nodeChild) awaitReadyBy(ctx context.Context, deadline time.Time) error {
+	ctx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+	return awaitChildReady(ctx, m.ready)
 }
 
 func (m *nodeChild) drainControl(reader *bufio.Reader) {

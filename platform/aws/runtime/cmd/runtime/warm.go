@@ -102,6 +102,10 @@ func (m *nodeChild) warmBytecodeCache(ctx context.Context) warmSummary {
 		return warmSummary{State: warmStateFailed, Source: source, Error: "no time left to warm the compile cache"}
 	}
 
+	if err := m.awaitReadyBy(ctx, deadline); err != nil {
+		return warmSummary{State: warmStateFailed, Source: source, Key: m.cache.Key(), Error: err.Error()}
+	}
+
 	report, waiter, answered := m.warmCompileCache(ctx, deadline)
 	defer m.endWarmExchange()
 

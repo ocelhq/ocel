@@ -62,7 +62,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 	t.Run("deadline forces progress", func(t *testing.T) {
 		node := okNode(t)
 		deadline := time.Now().Add(100 * time.Millisecond)
-		rt := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
+		rt, _ := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
 		m := &nodeChild{
 			upstream:  upstream{port: portOf(t, node), client: &http.Client{}},
 			lifecycle: true,
@@ -92,7 +92,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 	t.Run("an entrypoint that cannot signal completion is never waited on", func(t *testing.T) {
 		node := okNode(t)
 		deadline := time.Now().Add(30 * time.Second)
-		rt := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
+		rt, _ := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
 		m := &nodeChild{
 			upstream: upstream{port: portOf(t, node), client: &http.Client{}},
 			pending:  map[string]chan struct{}{},
@@ -123,7 +123,7 @@ func TestHandleInvocationComplete(t *testing.T) {
 		deadPort := l.Addr().(*net.TCPAddr).Port
 		l.Close()
 
-		rt := fakeRuntimeWithDeadline(t, []byte(getEvent), time.Now().Add(30*time.Second))
+		rt, _ := fakeRuntimeWithDeadline(t, []byte(getEvent), time.Now().Add(30*time.Second))
 		m := &nodeChild{
 			upstream: upstream{port: deadPort, client: &http.Client{}},
 			pending:  map[string]chan struct{}{},
@@ -150,8 +150,9 @@ func TestHandleInvocationComplete(t *testing.T) {
 	})
 }
 
-func fakeRuntimeWithDeadline(t *testing.T, event []byte, deadline time.Time) *runtimeClient {
+func fakeRuntimeWithDeadline(t *testing.T, event []byte, deadline time.Time) (*runtimeClient, *capturedResponse) {
 	t.Helper()
+	cap := &capturedResponse{}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/"+runtimeAPIVersion+"/runtime/invocation/next", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Lambda-Runtime-Aws-Request-Id", "req-1")
@@ -160,10 +161,12 @@ func fakeRuntimeWithDeadline(t *testing.T, event []byte, deadline time.Time) *ru
 		w.Write(event)
 	})
 	mux.HandleFunc("/"+runtimeAPIVersion+"/runtime/invocation/req-1/response", func(w http.ResponseWriter, r *http.Request) {
-		io.Copy(io.Discard, r.Body)
+		body, _ := io.ReadAll(r.Body)
+		cap.body = body
+		cap.trailer = r.Trailer.Clone()
 		w.WriteHeader(http.StatusAccepted)
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return newRuntimeClient(strings.TrimPrefix(srv.URL, "http://"))
+	return newRuntimeClient(strings.TrimPrefix(srv.URL, "http://")), cap
 }

@@ -210,6 +210,14 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, c child) error {
 		return nil
 	}
 
+	if err := c.awaitReady(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: %s: %v\n", inv.lc.AwsRequestID, err)
+		if err := rw.closeWithError(errTypeUpstream, err.Error()); err != nil {
+			fmt.Fprintf(os.Stderr, "ocel: deliver response for %s: %v\n", inv.lc.AwsRequestID, err)
+		}
+		return nil
+	}
+
 	var waiter <-chan struct{}
 	if controlled != nil {
 		waiter = controlled.beginInvocation(inv.lc.AwsRequestID)
@@ -236,6 +244,30 @@ func answerBefore(ctx context.Context) (context.Context, context.CancelFunc) {
 
 type child interface {
 	endpoint() upstream
+	awaitReady(ctx context.Context) error
+}
+
+const maxInvocationBudget = 15 * time.Minute
+
+func boundReadiness(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, maxInvocationBudget)
+}
+
+func awaitChildReady(ctx context.Context, ready <-chan struct{}) error {
+	if ready == nil {
+		return nil
+	}
+	ctx, cancel := boundReadiness(ctx)
+	defer cancel()
+	select {
+	case <-ready:
+		return nil
+	case <-ctx.Done():
+		return errors.New("the app has not finished starting, and this invocation ran out of time waiting for it")
+	}
 }
 
 type controlledChild interface {

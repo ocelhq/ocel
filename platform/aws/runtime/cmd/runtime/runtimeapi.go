@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -61,10 +62,36 @@ type responseWriter struct {
 	client *http.Client
 	url    string
 
-	pw      *io.PipeWriter
-	trailer http.Header
-	done    chan error
+	pw   *io.PipeWriter
+	fail chan invocationFailure
+	done chan error
 }
+
+type invocationFailure struct {
+	errType string
+	message string
+}
+
+type failingBody struct {
+	pr      *io.PipeReader
+	trailer http.Header
+	fail    <-chan invocationFailure
+}
+
+func (b *failingBody) Read(p []byte) (int, error) {
+	n, err := b.pr.Read(p)
+	if errors.Is(err, io.EOF) {
+		select {
+		case f := <-b.fail:
+			b.trailer.Set(headerErrorType, f.errType)
+			b.trailer.Set(headerErrorBody, base64.StdEncoding.EncodeToString([]byte(f.message)))
+		default:
+		}
+	}
+	return n, err
+}
+
+func (b *failingBody) Close() error { return b.pr.Close() }
 
 func (c *runtimeClient) startResponse(ctx context.Context, requestID string) (*responseWriter, error) {
 	return &responseWriter{
@@ -79,7 +106,9 @@ func (w *responseWriter) stream() error {
 		return nil
 	}
 	pr, pw := io.Pipe()
-	req, err := http.NewRequestWithContext(w.ctx, http.MethodPost, w.url, pr)
+	fail := make(chan invocationFailure, 1)
+	body := &failingBody{pr: pr, fail: fail}
+	req, err := http.NewRequestWithContext(w.ctx, http.MethodPost, w.url, body)
 	if err != nil {
 		pw.Close()
 		return err
@@ -91,7 +120,8 @@ func (w *responseWriter) stream() error {
 		headerErrorBody: nil,
 	}
 
-	w.pw, w.trailer, w.done = pw, req.Trailer, make(chan error, 1)
+	body.trailer = req.Trailer
+	w.pw, w.fail, w.done = pw, fail, make(chan error, 1)
 	go func() {
 		resp, err := w.client.Do(req)
 		if err == nil {
@@ -124,8 +154,10 @@ func (w *responseWriter) closeWithError(errType, message string) error {
 	if err := w.stream(); err != nil {
 		return err
 	}
-	w.trailer.Set(headerErrorType, errType)
-	w.trailer.Set(headerErrorBody, base64.StdEncoding.EncodeToString([]byte(message)))
+	select {
+	case w.fail <- invocationFailure{errType: errType, message: message}:
+	default:
+	}
 	if err := w.pw.Close(); err != nil {
 		return err
 	}
