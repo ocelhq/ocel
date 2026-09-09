@@ -10,6 +10,8 @@ import (
 
 const SchemaDialect = "https://json-schema.org/draft/2020-12/schema"
 
+const interpolationPattern = `\$\{[^}]+\}`
+
 type AlsoAString interface {
 	AlsoAString()
 }
@@ -95,7 +97,10 @@ func objectSchema(target reflect.Type) object {
 			property["description"] = field.doc
 		}
 		if field.pattern != "" {
-			property["pattern"] = field.pattern
+			property["anyOf"] = []any{
+				object{"pattern": field.pattern},
+				object{"pattern": interpolationPattern},
+			}
 		}
 		if len(field.enum) > 0 {
 			if items, ok := property["items"].(object); ok {

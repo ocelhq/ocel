@@ -23,8 +23,6 @@ const committedSchemaFile = "www/public/schema/ocel.schema.json"
 
 const compareTable = "www/components/compare/data.ts"
 
-var interpolated = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*\}`)
-
 var sampleNamed = regexp.MustCompile("filename: \"([^\"]+)\",\\s*code: `([^`]*)`")
 
 var skippedDirs = map[string]bool{
@@ -86,8 +84,7 @@ func parseConfig(source []byte) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("is not valid JSON: %w", err)
 	}
-	filled := interpolated.ReplaceAll(standard, []byte("filled-in"))
-	return jsonschema.UnmarshalJSON(bytes.NewReader(filled))
+	return jsonschema.UnmarshalJSON(bytes.NewReader(standard))
 }
 
 func committedConfigs(t *testing.T, root string) []string {
