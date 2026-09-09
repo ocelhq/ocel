@@ -132,7 +132,6 @@ export function renderConfig(overlay: Overlay): string {
   return `${imports.join("\n")}\n${hostnames}\nexport default defineConfig({\n${fields.join("\n")}\n});\n`;
 }
 
-/** The base a fixture actually carries: a JSON config where one has replaced the TypeScript. */
 export function baseIn(dir: string, base: string): string {
   const asJson = base.replace(/\.config\.ts$/, ".json");
   if (asJson !== base && !existsSync(path.join(dir, base)) && existsSync(path.join(dir, asJson))) {

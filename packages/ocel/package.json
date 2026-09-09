@@ -2,7 +2,7 @@
   "name": "ocel",
   "version": "0.0.1-alpha.0",
   "type": "module",
-  "description": "ocel cli and runtime sdk \u2014 turns cloud infrastructure into function calls",
+  "description": "ocel cli and runtime sdk — turns cloud infrastructure into function calls",
   "bin": {
     "ocel": "./bin/run.js"
   },
