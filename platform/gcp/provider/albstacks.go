@@ -16,8 +16,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
-const pulumiProjectName = "ocel-alb"
-
 const cloudStorageScheme = "gs"
 
 type albStacks struct{ p *Provider }
@@ -28,12 +26,11 @@ func (a albProgram) Run(ctx *pulumi.Context, _ providerkit.StackPlan) error { re
 
 func (s albStacks) Up(
 	ctx context.Context,
-	class edge.Class,
-	stack string,
+	target alb.Target,
 	program alb.Program,
 	report edge.Reporter,
 ) (map[string]string, error) {
-	adapter, plan, err := s.at(ctx, class, stack, program)
+	adapter, plan, err := s.opened(ctx, target, program)
 	if err != nil {
 		return nil, err
 	}
@@ -43,16 +40,16 @@ func (s albStacks) Up(
 	return outputsOf(ctx, adapter, plan.Ref)
 }
 
-func (s albStacks) Destroy(ctx context.Context, class edge.Class, stack string, report edge.Reporter) error {
-	adapter, plan, err := s.at(ctx, class, stack, nil)
+func (s albStacks) Destroy(ctx context.Context, target alb.Target, report edge.Reporter) error {
+	adapter, plan, err := s.opened(ctx, target, nil)
 	if err != nil {
 		return err
 	}
 	return adapter.Destroy(ctx, plan.Ref, report)
 }
 
-func (s albStacks) Outputs(ctx context.Context, class edge.Class, stack string) (map[string]string, error) {
-	adapter, plan, err := s.at(ctx, class, stack, nil)
+func (s albStacks) Outputs(ctx context.Context, target alb.Target) (map[string]string, error) {
+	adapter, plan, err := s.opened(ctx, target, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -73,21 +70,30 @@ func outputsOf(ctx context.Context, adapter *kitpulumi.Adapter, ref providerkit.
 	return read, nil
 }
 
-func (s albStacks) at(
+func (s albStacks) opened(
 	ctx context.Context,
-	class edge.Class,
-	stack string,
+	target alb.Target,
 	program alb.Program,
 ) (*kitpulumi.Adapter, providerkit.StackPlan, error) {
-	passphrase, err := s.passphrase(ctx, class)
+	passphrase, err := s.passphrase(ctx, target.Class)
 	if err != nil {
 		return nil, providerkit.StackPlan{}, err
 	}
+	config, plan := s.config(target, passphrase, program)
+	return kitpulumi.New(config), plan, nil
+}
+
+func (s albStacks) config(
+	target alb.Target,
+	passphrase string,
+	program alb.Program,
+) (kitpulumi.Config, providerkit.StackPlan) {
+	project := naming.PulumiProject(target.Prefix())
 	config := kitpulumi.Config{
 		Access: kitpulumi.Access{
-			BackendURL: naming.StateBackendURL(cloudStorageScheme, s.p.Names().StateBucket(class), pulumiProjectName),
+			BackendURL: naming.StateBackendURL(cloudStorageScheme, s.p.Names().StateBucket(target.Class), project),
 			Passphrase: passphrase,
-			Project:    pulumiProjectName,
+			Project:    project,
 			Env: map[string]string{
 				"GOOGLE_PROJECT": s.p.options.Project,
 				"GOOGLE_REGION":  s.p.options.Region,
@@ -97,11 +103,16 @@ func (s albStacks) at(
 	if program != nil {
 		config.Program = albProgram{run: program}
 	}
-	return kitpulumi.New(config), providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: pulumiProjectName, Class: class, Name: naming.InfraStack(stack)},
+	if target.Slug == "" {
+		config.Refresh = refreshesTheFront
+	}
+	return config, providerkit.StackPlan{
+		Ref:  providerkit.StackRef{Project: project, Class: target.Class, Name: naming.InfraStack(target.Name())},
 		Kind: providerkit.StackInfra,
-	}, nil
+	}
 }
+
+func refreshesTheFront(providerkit.StackRef, kitpulumi.Op) bool { return true }
 
 func (s albStacks) passphrase(ctx context.Context, class edge.Class) (string, error) {
 	secrets, err := s.p.clients.Secrets()
