@@ -45,7 +45,8 @@ esac
 
 version="${OCEL_VERSION:-}"
 if [ -z "$version" ]; then
-  tag=$(curl -fsSL --retry 3 "$latest") || fail "could not read the latest release from $latest"
+  tag=$(curl -fsSL --retry 3 "$latest") ||
+    fail "could not read the latest release from $latest; set OCEL_VERSION to install a version without it"
   version=$(printf '%s' "$tag" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
   [ -n "$version" ] || fail "$latest named no release tag"
 fi
@@ -53,7 +54,8 @@ version="${version#v}"
 
 archive="ocel_${version}_${os}_${arch}.tar.gz"
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT INT TERM
+staged=""
+trap 'rm -rf "$work" ${staged:+"$staged"}' EXIT INT TERM
 
 curl -fsSL --retry 3 -o "$work/$archive" "$downloads/v$version/$archive" ||
   fail "could not download $downloads/v$version/$archive"
@@ -68,8 +70,10 @@ actual=$(digest "$work/$archive")
 
 tar -xzf "$work/$archive" -C "$work" ocel || fail "$archive holds no ocel binary"
 mkdir -p "$destination"
-cp "$work/ocel" "$destination/ocel"
-chmod 0755 "$destination/ocel"
+staged="$destination/.ocel.$$"
+cp "$work/ocel" "$staged"
+chmod 0755 "$staged"
+mv -f "$staged" "$destination/ocel"
 
 echo "ocel $version is installed at $destination/ocel"
 case ":$PATH:" in

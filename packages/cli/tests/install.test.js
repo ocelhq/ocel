@@ -3,11 +3,13 @@ import { createHash } from "node:crypto";
 import {
   createReadStream,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:http";
@@ -55,7 +57,7 @@ beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), "ocel-release-"));
   release(join(root, "download", `v${version}`), (sum) => sum);
   release(join(root, "tampered", `v${version}`), () => "0".repeat(64));
-  writeFileSync(join(root, "latest.json"), JSON.stringify({ tag_name: "v9.9.9" }));
+  writeFileSync(join(root, "latest.json"), JSON.stringify({ tag_name: `v${version}` }));
 
   server = createServer((request, response) => {
     const path = join(root, decodeURIComponent(new URL(request.url, "http://x").pathname));
@@ -75,8 +77,9 @@ afterAll(async () => {
   await new Promise((resolve) => server.close(resolve));
 });
 
-function install({ env = {}, path } = {}) {
+function install({ env = {}, path, seed } = {}) {
   const home = mkdtempSync(join(tmpdir(), "ocel-home-"));
+  seed?.(home);
   const child = spawn("sh", [installer], {
     env: {
       PATH: path ? `${path}:${process.env.PATH}` : process.env.PATH,
@@ -132,9 +135,36 @@ describe.runIf(process.platform !== "win32")("install.sh", () => {
 
   it("takes the version from the latest release when none is pinned", async () => {
     const run = await install();
+    expect(run.stderr).toBe("");
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain(version);
+    expect(execFileSync(run.installed, { encoding: "utf8" })).toBe(`${marker}\n`);
+    rmSync(run.home, { recursive: true, force: true });
+  });
+
+  it("names OCEL_VERSION when the latest release cannot be read", async () => {
+    const run = await install({ env: { OCEL_INSTALL_LATEST: `${origin}/absent.json` } });
     expect(run.status).not.toBe(0);
-    expect(`${run.stdout}${run.stderr}`).toContain("9.9.9");
+    expect(run.stderr).toContain("OCEL_VERSION");
     expect(existsSync(run.installed)).toBe(false);
+    rmSync(run.home, { recursive: true, force: true });
+  });
+
+  it("replaces a symlink already sitting at the destination", async () => {
+    const run = await install({
+      env: { OCEL_VERSION: version },
+      seed: (home) => {
+        const bin = join(home, ".local", "bin");
+        mkdirSync(bin, { recursive: true });
+        const decoy = join(home, "decoy");
+        writeFileSync(decoy, "#!/bin/sh\necho decoy\n", { mode: 0o755 });
+        symlinkSync(decoy, join(bin, "ocel"));
+      },
+    });
+    expect(run.status).toBe(0);
+    expect(lstatSync(run.installed).isSymbolicLink()).toBe(false);
+    expect(readFileSync(join(run.home, "decoy"), "utf8")).toBe("#!/bin/sh\necho decoy\n");
+    expect(execFileSync(run.installed, { encoding: "utf8" })).toBe(`${marker}\n`);
     rmSync(run.home, { recursive: true, force: true });
   });
 
