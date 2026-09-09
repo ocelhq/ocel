@@ -1,0 +1,5 @@
+error: a #[derive(ocel::Resources)] struct takes no generic parameters, because its declarations register once per binary.
+ --> tests/ui/generic_resources.rs:2:13
+  |
+2 | struct Infra<'a> {
+  |             ^^^^

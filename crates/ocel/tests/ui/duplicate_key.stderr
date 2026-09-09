@@ -1,0 +1,5 @@
+error: 'PORT' is declared by two fields of the same struct. A key is declared by exactly one field.
+ --> tests/ui/duplicate_key.rs:5:5
+  |
+5 |     other: u16,
+  |     ^^^^^

@@ -1,0 +1,5 @@
+error: 'FLAG' has an unusable folder scope: folder 'apps/web': a folder path must start with '/'.
+ --> tests/ui/bad_folder.rs:4:5
+  |
+4 |     flag: bool,
+  |     ^^^^

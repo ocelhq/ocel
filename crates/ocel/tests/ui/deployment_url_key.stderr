@@ -1,0 +1,5 @@
+error: 'OCEL_URL' is written by Ocel for every app, from the hostname the deploy serves it on, so a declared one would be overwritten before anything read it. Read it with ocel::deployment_url().
+ --> tests/ui/deployment_url_key.rs:4:5
+  |
+4 |     url: String,
+  |     ^^^

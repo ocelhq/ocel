@@ -3,6 +3,7 @@ name = "ocel"
 description = "Declare the infrastructure a Rust app needs from the app itself"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
@@ -23,3 +24,4 @@ tokio = { version = "1", default-features = false, features = ["rt", "sync"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+trybuild = "1.0"

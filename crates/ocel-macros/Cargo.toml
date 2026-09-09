@@ -3,6 +3,7 @@ name = "ocel-macros"
 description = "The attribute macros of the ocel crate"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 

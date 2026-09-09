@@ -1,0 +1,5 @@
+error: a #[derive(ocel::Env)] struct takes no generic parameters, because its declarations register once per binary.
+ --> tests/ui/generic_env.rs:2:11
+  |
+2 | struct Env<T> {
+  |           ^^^

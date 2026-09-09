@@ -1,0 +1,5 @@
+error: 'OCEL_REGION' starts with the reserved prefix OCEL_. A 'plain' variable is delivered under its own name, so Ocel would overwrite it.
+ --> tests/ui/reserved_prefix.rs:4:5
+  |
+4 |     region: String,
+  |     ^^^^^^

@@ -1,13 +1,5 @@
 use ocel::{Error, Postgres};
 use std::sync::{Mutex, MutexGuard};
-
-static DELIVERED: Postgres = Postgres::new("delivered");
-static ABSENT: Postgres = Postgres::new("absent");
-static MISTYPED: Postgres = Postgres::new("mistyped");
-static EMPTY: Postgres = Postgres::new("empty");
-static FIXTURE: Postgres = Postgres::new("fixture");
-static UNREADABLE: Postgres = Postgres::new("unreadable");
-
 static ENV: Mutex<()> = Mutex::new(());
 
 fn env() -> MutexGuard<'static, ()> {
@@ -22,7 +14,9 @@ fn a_connection_string_carries_credentials_percent_encoded() {
         r#"{"name":"delivered","postgres":{"host":"db.internal","port":5432,"database":"app","username":"user name","password":"p@ss:word/with#odd?chars"}}"#,
     );
     assert_eq!(
-        DELIVERED.connection_string().expect("a connection string"),
+        Postgres::new("delivered")
+            .connection_string()
+            .expect("a connection string"),
         "postgres://user%20name:p%40ss%3Aword%2Fwith%23odd%3Fchars@db.internal:5432/app"
     );
 }
@@ -30,7 +24,7 @@ fn a_connection_string_carries_credentials_percent_encoded() {
 #[test]
 fn a_link_that_was_never_delivered_names_the_commands_that_deliver_it() {
     let _env = env();
-    let err = ABSENT
+    let err = Postgres::new("absent")
         .connection_string()
         .expect_err("no link was delivered");
     assert_eq!(
@@ -46,7 +40,9 @@ fn a_link_of_another_kind_says_what_it_carries() {
         "OCEL_RESOURCE_POSTGRES_mistyped",
         r#"{"name":"mistyped","bucket":{"bucket":"uploads"}}"#,
     );
-    let err = MISTYPED.connection_string().expect_err("a bucket link");
+    let err = Postgres::new("mistyped")
+        .connection_string()
+        .expect_err("a bucket link");
     assert_eq!(
         err.to_string(),
         "OCEL_RESOURCE_POSTGRES_mistyped carries a BUCKET link, and this app reads it as a POSTGRES"
@@ -58,7 +54,9 @@ fn a_link_of_another_kind_says_what_it_carries() {
 fn a_link_carrying_nothing_at_all_says_what_it_carries() {
     let _env = env();
     std::env::set_var("OCEL_RESOURCE_POSTGRES_empty", r#"{"name":"empty"}"#);
-    let err = EMPTY.connection_string().expect_err("no properties");
+    let err = Postgres::new("empty")
+        .connection_string()
+        .expect_err("no properties");
     assert_eq!(
         err.to_string(),
         "OCEL_RESOURCE_POSTGRES_empty carries a UNSPECIFIED link, and this app reads it as a POSTGRES"
@@ -75,7 +73,7 @@ fn a_link_the_deploy_delivers_is_read_past_the_fields_this_app_uses() {
         std::fs::read_to_string(fixture).expect("the postgres link fixture"),
     );
     assert_eq!(
-        FIXTURE.connection_string().expect("a connection string"),
+        Postgres::new("fixture").connection_string().expect("a connection string"),
         "postgres://fixture_operator:fixture-password-not-a-secret@shop-prod-main-r1a2b3c4.cluster-cxyz.us-east-1.rds.amazonaws.com:5433/fixture_catalog"
     );
 }
@@ -84,7 +82,7 @@ fn a_link_the_deploy_delivers_is_read_past_the_fields_this_app_uses() {
 fn a_value_that_is_not_a_link_record_is_reported_without_quoting_what_it_held() {
     let _env = env();
     std::env::set_var("OCEL_RESOURCE_POSTGRES_unreadable", "s3cret-not-json");
-    let err = UNREADABLE
+    let err = Postgres::new("unreadable")
         .connection_string()
         .expect_err("not a link record");
     assert!(
@@ -114,9 +112,9 @@ fn a_pool_is_opened_once_over_the_delivered_link() {
         "OCEL_RESOURCE_POSTGRES_pooled",
         serde_json::json!({"name": "pooled", "postgres": properties(&url)}).to_string(),
     );
-    static POOLED: Postgres = Postgres::new("pooled");
-    let first = runtime.block_on(POOLED.pool()).expect("a pool");
-    let second = runtime.block_on(POOLED.pool()).expect("the same pool");
+    let pooled = Postgres::new("pooled");
+    let first = runtime.block_on(pooled.pool()).expect("a pool");
+    let second = runtime.block_on(pooled.pool()).expect("the same pool");
     assert!(std::ptr::eq(first, second), "pool opened twice");
 }
 

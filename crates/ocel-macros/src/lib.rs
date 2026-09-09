@@ -1,9 +1,79 @@
 //! The attribute macros of the [`ocel`](https://docs.rs/ocel) crate. Import them from
 //! there rather than depending on this crate directly.
 
+mod attribute;
+mod env;
+mod resources;
+mod source;
+mod variable;
+
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, ItemFn, ReturnType, Type};
+use syn::{parse_macro_input, DeriveInput, ItemFn, ReturnType, Type};
+
+fn ungeneric(input: &DeriveInput, derive: &str) -> syn::Result<()> {
+    match input.generics.params.is_empty() {
+        true => Ok(()),
+        false => Err(syn::Error::new_spanned(
+            &input.generics,
+            format!("a #[derive({derive})] struct takes no generic parameters, because its declarations register once per binary."),
+        )),
+    }
+}
+
+/// Declare every [`Postgres`](https://docs.rs/ocel) field of a struct, and write the
+/// `load` that hands the struct back with a handle in each field.
+///
+/// ```ignore
+/// #[derive(ocel::Resources, Clone)]
+/// pub struct Infra {
+///     #[ocel(name = "main", version = "17")]
+///     pub db: ocel::Postgres,
+///     pub cache: ocel::Postgres,
+/// }
+/// ```
+///
+/// A field's name defaults to its identifier and its version to `17`. Every field is an
+/// `ocel::Postgres`, and anything else is a compile error naming the field.
+#[proc_macro_derive(Resources, attributes(ocel))]
+pub fn resources(item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+    ungeneric(&input, "ocel::Resources")
+        .and_then(|()| resources::derive(&input))
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Declare every field of a struct as an environment variable, and write the `load` that
+/// reads the delivered values into it.
+///
+/// ```ignore
+/// #[derive(ocel::Env, Clone)]
+/// pub struct Env {
+///     pub database_name: String,
+///     #[ocel(sensitive)]
+///     pub api_key: String,
+///     pub signing_key: ocel::Secret,
+///     #[ocel(default = 3000)]
+///     pub port: u16,
+///     pub timeout: Option<u64>,
+///     #[ocel(key = "FLAG", folders = ["/apps/web"])]
+///     pub flag: bool,
+/// }
+/// ```
+///
+/// A field's key defaults to its identifier upper-cased. A field is required unless it
+/// carries a default or is an `Option`, and its value is parsed with the field type's
+/// `FromStr`. A field of type `ocel::Secret` declares the secret class and resolves its
+/// value on every read.
+#[proc_macro_derive(Env, attributes(ocel))]
+pub fn env(item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+    ungeneric(&input, "ocel::Env")
+        .and_then(|()| env::derive(&input))
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
 
 /// Run discovery before the app does anything, and return from `main` once discovery has
 /// posted what the binary declares.
