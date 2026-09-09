@@ -106,6 +106,18 @@ func (w *world) Route(_ context.Context, urlMap, hostname, backend string) error
 	return nil
 }
 
+func (w *world) Hold(_ context.Context, urlMap, hostname string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	hosts := w.routed[urlMap]
+	if hosts == nil {
+		hosts = map[string]string{}
+		w.routed[urlMap] = hosts
+	}
+	hosts[hostname] = notFoundBackend
+	return nil
+}
+
 func (w *world) Unroute(_ context.Context, urlMap, hostname string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()

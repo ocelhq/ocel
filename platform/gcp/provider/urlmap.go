@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -23,6 +24,16 @@ func (p *Provider) Route(ctx context.Context, urlMap, hostname, backend string) 
 	}
 	return p.rewrite(ctx, urlMap, "route "+hostname+" through the load balancer", func(held *compute.UrlMap) bool {
 		return routed(held, hostname, p.backendLink(backend))
+	})
+}
+
+func (p *Provider) Hold(ctx context.Context, urlMap, hostname string) error {
+	if urlMap == "" || hostname == "" {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"hold %q on url map %q until its app releases: a host rule names both", hostname, urlMap)
+	}
+	return p.rewrite(ctx, urlMap, "answer "+hostname+" with a 404 until its app has released", func(held *compute.UrlMap) bool {
+		return unclaimed(held, hostname)
 	})
 }
 
@@ -69,29 +80,57 @@ func (p *Provider) rewrite(ctx context.Context, urlMap, doing string, change fun
 }
 
 func routed(held *compute.UrlMap, hostname, backend string) bool {
-	matcher := matcherFor(hostname)
+	return matched(held, hostname, &compute.PathMatcher{Name: matcherFor(hostname), DefaultService: backend})
+}
+
+func unclaimed(held *compute.UrlMap, hostname string) bool {
+	return matched(held, hostname, &compute.PathMatcher{
+		Name:               matcherFor(hostname),
+		DefaultService:     held.DefaultService,
+		DefaultRouteAction: refusing(),
+	})
+}
+
+func refusing() *compute.HttpRouteAction {
+	return &compute.HttpRouteAction{FaultInjectionPolicy: &compute.HttpFaultInjection{
+		Abort: &compute.HttpFaultAbort{HttpStatus: http.StatusNotFound, Percentage: 100},
+	}}
+}
+
+func matched(held *compute.UrlMap, hostname string, want *compute.PathMatcher) bool {
 	changed := false
 	at := slices.IndexFunc(held.HostRules, func(rule *compute.HostRule) bool {
 		return slices.Contains(rule.Hosts, hostname)
 	})
 	switch {
 	case at < 0:
-		held.HostRules = append(held.HostRules, &compute.HostRule{Hosts: []string{hostname}, PathMatcher: matcher})
+		held.HostRules = append(held.HostRules, &compute.HostRule{Hosts: []string{hostname}, PathMatcher: want.Name})
 		changed = true
-	case held.HostRules[at].PathMatcher != matcher:
-		held.HostRules[at].PathMatcher = matcher
+	case held.HostRules[at].PathMatcher != want.Name:
+		held.HostRules[at].PathMatcher = want.Name
 		changed = true
 	}
-	on := slices.IndexFunc(held.PathMatchers, func(path *compute.PathMatcher) bool { return path.Name == matcher })
+	on := slices.IndexFunc(held.PathMatchers, func(path *compute.PathMatcher) bool { return path.Name == want.Name })
 	switch {
 	case on < 0:
-		held.PathMatchers = append(held.PathMatchers, &compute.PathMatcher{Name: matcher, DefaultService: backend})
+		held.PathMatchers = append(held.PathMatchers, want)
 		changed = true
-	case held.PathMatchers[on].DefaultService != backend:
-		held.PathMatchers[on].DefaultService = backend
+	case !answers(held.PathMatchers[on], want):
+		held.PathMatchers[on] = want
 		changed = true
 	}
 	return changed
+}
+
+func answers(held, want *compute.PathMatcher) bool {
+	return held.DefaultService == want.DefaultService && aborting(held.DefaultRouteAction) == aborting(want.DefaultRouteAction)
+}
+
+func aborting(action *compute.HttpRouteAction) int64 {
+	if action == nil || action.FaultInjectionPolicy == nil || action.FaultInjectionPolicy.Abort == nil {
+		return 0
+	}
+	return action.FaultInjectionPolicy.Abort.HttpStatus
 }
 
 func unrouted(held *compute.UrlMap, hostname string) bool {
