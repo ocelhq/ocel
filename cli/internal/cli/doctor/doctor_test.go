@@ -142,7 +142,7 @@ func TestRunDoctorWithoutAConfig(t *testing.T) {
 
 	out := rendered(t, stdout.String())
 	for _, want := range []string{
-		"  ✗ no ocel.config.ts found in this directory or any parent",
+		"  ✗ no ocel.json found in this directory or any parent",
 		"    → run `ocel init` to set up this project",
 		"1 problem.",
 	} {
@@ -198,7 +198,7 @@ func TestRunDoctorOnAHealthyProject(t *testing.T) {
 		"Project  my-shop · ocel.config.ts",
 		"  ✓ node vX on PATH",
 		"  ✓ config loads — 2 apps (web, api)",
-		"  ✓ provider @ocel/provider-aws 1.4.0",
+		"  ✓ provider aws 1.4.0",
 		"  ✓ provider default edge",
 		"",
 		"AWS  123456789012 · eu-west-1 · profile shop",

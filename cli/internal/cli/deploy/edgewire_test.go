@@ -16,9 +16,9 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		want        string
 	}{
 		{"an omitted edge names none, leaving the provider to choose", "", "kind= "},
-		{"a declared api-gateway edge names it", "  edge: { kind: \"api-gateway\", options: {} },\n", "kind=api-gateway"},
-		{"an edge this CLI has never heard of is forwarded whole", "  edge: { kind: \"fastly\", options: {} },\n", "kind=fastly"},
-		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\", options: {} },\n", "kind=cloudflare"},
+		{"a declared api-gateway edge names it", "  edge: { kind: \"api-gateway\" },\n", "kind=api-gateway"},
+		{"an edge this CLI has never heard of is forwarded whole", "  edge: { kind: \"fastly\" },\n", "kind=fastly"},
+		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\" },\n", "kind=cloudflare"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -41,7 +41,7 @@ func TestDeploySendsTheEdgeTheProjectDeclared(t *testing.T) {
 }
 
 func TestDeployCarriesTheEdgeSettingsUnchanged(t *testing.T) {
-	root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\", options: { zone: \"acme.com\" } },\n  dns: { kind: \"cloudflare\", zone: \"acme.com\" },\n  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
+	root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\" },\n  dns: { kind: \"cloudflare\", zone: \"acme.com\" },\n  allowDegraded: [\"streaming\", \"edge-cache\"],\n")
 
 	var stdout, stderr bytes.Buffer
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {

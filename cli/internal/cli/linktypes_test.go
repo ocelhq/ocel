@@ -38,7 +38,7 @@ func TestRenderLinkTypes(t *testing.T) {
 			},
 		})
 
-		fixture := filepath.Join("..", "..", "..", "packages", "provider-aws", "typetests", "typed", linkTypesFileName)
+		fixture := filepath.Join("..", "..", "..", "packages", "ocel", "typetests", "typed", linkTypesFileName)
 		want, err := os.ReadFile(fixture)
 		if err != nil {
 			t.Fatalf("read %s: %v", fixture, err)
@@ -60,7 +60,7 @@ func TestRenderLinkTypes(t *testing.T) {
 	t.Run("marks the file as generated even when the coordinate published nothing", func(t *testing.T) {
 		got := renderLinkTypes("aws", "production", nil)
 
-		fixture := filepath.Join("..", "..", "..", "packages", "provider-aws", "typetests", "empty", linkTypesFileName)
+		fixture := filepath.Join("..", "..", "..", "packages", "ocel", "typetests", "empty", linkTypesFileName)
 		want, err := os.ReadFile(fixture)
 		if err != nil {
 			t.Fatalf("read %s: %v", fixture, err)

@@ -388,7 +388,7 @@ func TestCheckStatableBinding(t *testing.T) {
 			t.Fatal("checkStatableBinding = nil, want a refusal: no child of this run could read API_BASE")
 		}
 		got := err.Error()
-		for _, want := range []string{"API_BASE", "web binds /web", "api binds /api", "the project root", dotenv.FileName, "ocel.config.ts"} {
+		for _, want := range []string{"API_BASE", "web binds /web", "api binds /api", "the project root", dotenv.FileName, "ocel.json"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("refusal = %q, want it to mention %q", got, want)
 			}
@@ -445,7 +445,7 @@ func TestCheckStatableBinding(t *testing.T) {
 			"\n  web binds /web\n  api binds /api\n\n" +
 			"`ocel dev` and `ocel run` spawn one child for the whole project and nothing tells it which app that child is, " +
 			"so the binding they state is the project root. A scoped read refuses under it, even with the value in " + dotenv.FileName + ".\n\n" +
-			"fix: bind every app to the same folder in ocel.config.ts, or drop `folders:` from those declarations"
+			"fix: bind every app to the same folder in ocel.json, or drop `folders:` from those declarations"
 
 		for range 50 {
 			err := checkStatableBinding(apps, "", projectconfig.DefaultFileName, scoped)
