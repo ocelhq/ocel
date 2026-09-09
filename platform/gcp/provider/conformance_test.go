@@ -31,6 +31,7 @@ func TestGCPProvider(t *testing.T) {
 		Spec:    providerkit.Spec{Version: "test", New: gcp.New},
 		Options: providerkit.Options{"project": "conformance", "region": "europe-west1"},
 		Binary:  buildProvider(t),
+		Certifier: &conformance.CertifierChecks{Kind: alb.Kind},
 	})
 }
 

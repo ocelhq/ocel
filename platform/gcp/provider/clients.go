@@ -11,6 +11,7 @@ import (
 	"cloud.google.com/go/storage"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/artifactregistry/v1"
+	certmanager "google.golang.org/api/certificatemanager/v1"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/compute/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
@@ -48,6 +49,7 @@ type clients struct {
 	accounts  memo[*iam.Service]
 	runs      memo[*run.Service]
 	compute   memo[*compute.Service]
+	certs     memo[*certmanager.Service]
 	principal memo[string]
 	projects  memo[*cloudresourcemanager.Service]
 }
@@ -127,6 +129,12 @@ func (c *clients) Run() (*run.Service, error) {
 func (c *clients) Compute() (*compute.Service, error) {
 	return opened(c, &c.compute, "Compute Engine", func() (*compute.Service, error) {
 		return compute.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+	})
+}
+
+func (c *clients) Certificates() (*certmanager.Service, error) {
+	return opened(c, &c.certs, "Certificate Manager", func() (*certmanager.Service, error) {
+		return certmanager.NewService(context.Background(), EmulatorREST(c.endpoint)...)
 	})
 }
 
