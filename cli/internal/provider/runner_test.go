@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -181,7 +182,7 @@ func TestConfigure(t *testing.T) {
 
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "reject-config", Config{
-			ProviderConfig: &contractv1.ProviderConfig{},
+			ProviderConfig: fakeOptionsConfig(t, map[string]any{"regionn": "eu-west-2"}),
 			ProviderName:   "aws",
 			ReadyTimeout:   5 * time.Second,
 		})
@@ -192,7 +193,7 @@ func TestConfigure(t *testing.T) {
 		}
 		for _, want := range []string{
 			`configures provider "aws" with options it does not accept`,
-			`"regionn"`,
+			`"provider.options.regionn"`,
 		} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("Ready() error = %q, want it to contain %q", err, want)
@@ -202,6 +203,56 @@ func TestConfigure(t *testing.T) {
 			t.Errorf("Ready() error = %q, want no raw connect code prefix", err)
 		}
 	})
+
+	t.Run("an option nested in another is named by its whole path", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		r, _ := spawnFake(t, ctx, "reject-config", Config{
+			ProviderConfig: fakeOptionsConfig(t, map[string]any{"ssh": map[string]any{"hostt": "example.com"}}),
+			ProviderName:   "vps",
+			ReadyTimeout:   5 * time.Second,
+		})
+
+		err := r.Ready(ctx)
+		if err == nil {
+			t.Fatal("Ready() error = nil, want the provider's refusal")
+		}
+		if !strings.Contains(err.Error(), "provider.options.ssh.hostt") {
+			t.Errorf("Ready() error = %q, want the option's path in the config", err)
+		}
+	})
+
+	t.Run("a refusal that is not about an unknown option is passed through as the provider wrote it", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		r, _ := spawnFake(t, ctx, "refuse-config", Config{
+			ProviderConfig: &contractv1.ProviderConfig{},
+			ProviderName:   "aws",
+			ReadyTimeout:   5 * time.Second,
+		})
+
+		err := r.Ready(ctx)
+		if err == nil {
+			t.Fatal("Ready() error = nil, want the provider's refusal")
+		}
+		if !strings.Contains(err.Error(), "this account is not bootstrapped for previews") {
+			t.Errorf("Ready() error = %q, want the provider's own words", err)
+		}
+		if strings.Contains(err.Error(), "options it does not accept") {
+			t.Errorf("Ready() error = %q, want no claim about unknown options", err)
+		}
+	})
+}
+
+func fakeOptionsConfig(t *testing.T, options map[string]any) *contractv1.ProviderConfig {
+	t.Helper()
+	shaped, err := structpb.NewStruct(options)
+	if err != nil {
+		t.Fatalf("provider options: %v", err)
+	}
+	return &contractv1.ProviderConfig{Options: shaped}
 }
 
 func TestDeploy(t *testing.T) {

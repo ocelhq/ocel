@@ -22,6 +22,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const DefaultReadyTimeout = 10 * time.Second
@@ -254,7 +255,10 @@ func (r *Runner) configure(ctx context.Context) error {
 	if _, err := client.Configure(ctx, &contractv1.ConfigureRequest{Config: r.providerConfig}); err != nil {
 		var rejected *connect.Error
 		if errors.As(err, &rejected) && rejected.Code() == connect.CodeInvalidArgument {
-			return fmt.Errorf("the config configures provider %q with options it does not accept, under \"provider.options\": %s", r.providerName, rejected.Message())
+			if code, named := providerkit.RefusedCode(err); named && code == providerkit.CodeUnknownOption {
+				return fmt.Errorf("the config configures provider %q with options it does not accept: %s", r.providerName, rejected.Message())
+			}
+			return fmt.Errorf("provider %q refuses the config it was given: %s", r.providerName, rejected.Message())
 		}
 		return fmt.Errorf("provider: configure the provider session: %w", err)
 	}

@@ -79,11 +79,12 @@ func (CredentialTier) EnumDescriptor() ([]byte, []int) {
 type RefusalCode int32
 
 const (
-	RefusalCode_REFUSAL_CODE_UNSPECIFIED RefusalCode = 0
-	RefusalCode_REFUSAL_CODE_INVALID     RefusalCode = 1
-	RefusalCode_REFUSAL_CODE_NOT_READY   RefusalCode = 2
-	RefusalCode_REFUSAL_CODE_DENIED      RefusalCode = 3
-	RefusalCode_REFUSAL_CODE_BUSY        RefusalCode = 4
+	RefusalCode_REFUSAL_CODE_UNSPECIFIED    RefusalCode = 0
+	RefusalCode_REFUSAL_CODE_INVALID        RefusalCode = 1
+	RefusalCode_REFUSAL_CODE_NOT_READY      RefusalCode = 2
+	RefusalCode_REFUSAL_CODE_DENIED         RefusalCode = 3
+	RefusalCode_REFUSAL_CODE_BUSY           RefusalCode = 4
+	RefusalCode_REFUSAL_CODE_UNKNOWN_OPTION RefusalCode = 5
 )
 
 // Enum value maps for RefusalCode.
@@ -94,13 +95,15 @@ var (
 		2: "REFUSAL_CODE_NOT_READY",
 		3: "REFUSAL_CODE_DENIED",
 		4: "REFUSAL_CODE_BUSY",
+		5: "REFUSAL_CODE_UNKNOWN_OPTION",
 	}
 	RefusalCode_value = map[string]int32{
-		"REFUSAL_CODE_UNSPECIFIED": 0,
-		"REFUSAL_CODE_INVALID":     1,
-		"REFUSAL_CODE_NOT_READY":   2,
-		"REFUSAL_CODE_DENIED":      3,
-		"REFUSAL_CODE_BUSY":        4,
+		"REFUSAL_CODE_UNSPECIFIED":    0,
+		"REFUSAL_CODE_INVALID":        1,
+		"REFUSAL_CODE_NOT_READY":      2,
+		"REFUSAL_CODE_DENIED":         3,
+		"REFUSAL_CODE_BUSY":           4,
+		"REFUSAL_CODE_UNKNOWN_OPTION": 5,
 	}
 )
 
@@ -4638,13 +4641,14 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0eCredentialTier\x12\x1f\n" +
 	"\x1bCREDENTIAL_TIER_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19CREDENTIAL_TIER_BOOTSTRAP\x10\x01\x12\x1a\n" +
-	"\x16CREDENTIAL_TIER_DEPLOY\x10\x02*\x91\x01\n" +
+	"\x16CREDENTIAL_TIER_DEPLOY\x10\x02*\xb2\x01\n" +
 	"\vRefusalCode\x12\x1c\n" +
 	"\x18REFUSAL_CODE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14REFUSAL_CODE_INVALID\x10\x01\x12\x1a\n" +
 	"\x16REFUSAL_CODE_NOT_READY\x10\x02\x12\x17\n" +
 	"\x13REFUSAL_CODE_DENIED\x10\x03\x12\x15\n" +
-	"\x11REFUSAL_CODE_BUSY\x10\x04*\x85\x01\n" +
+	"\x11REFUSAL_CODE_BUSY\x10\x04\x12\x1f\n" +
+	"\x1bREFUSAL_CODE_UNKNOWN_OPTION\x10\x05*\x85\x01\n" +
 	"\x0fHostTrustReason\x12!\n" +
 	"\x1dHOST_TRUST_REASON_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"HOST_TRUST_REASON_UNKNOWN_HOST_KEY\x10\x01\x12'\n" +

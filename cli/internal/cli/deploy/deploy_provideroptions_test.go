@@ -67,7 +67,7 @@ func TestDeployRendersTheProviderRefusalAgainstTheConfigFile(t *testing.T) {
 	rendered := stdout.String() + stderr.String()
 	for _, want := range []string{
 		`configures provider "aws" with options it does not accept`,
-		`"regionn"`,
+		`"provider.options.regionn"`,
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Errorf("rendered output = %q, want it to contain %q", rendered, want)

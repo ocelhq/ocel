@@ -1,11 +1,9 @@
 package clitest
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -19,8 +17,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-
-	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -893,7 +889,7 @@ func journalEdge(kind string, dns *contractv1.Dns, allowDegraded []string) {
 func (s *deployFakeProviderServer) Configure(ctx context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
 	aws, err := decodeFakeProviderOptions(req.GetConfig())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, providerkit.RefusalError(err)
 	}
 	path := os.Getenv(FakeConfigureJournalEnvVar)
 	if path == "" {
@@ -915,21 +911,7 @@ type fakeProviderOptions struct {
 }
 
 func decodeFakeProviderOptions(config *contractv1.ProviderConfig) (fakeProviderOptions, error) {
-	var options fakeProviderOptions
-	fields := config.GetOptions()
-	if len(fields.GetFields()) == 0 {
-		return options, nil
-	}
-	raw, err := protojson.Marshal(fields)
-	if err != nil {
-		return options, err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&options); err != nil {
-		return fakeProviderOptions{}, err
-	}
-	return options, nil
+	return providerkit.Decode[fakeProviderOptions](providerkit.Options(config.GetOptions().AsMap()))
 }
 
 func journalBootstrap(req *contractv1.BootstrapRequest) {

@@ -63,11 +63,11 @@ func TestTheDestinationRefusesWhatItCannotRead(t *testing.T) {
 	}{
 		"an unknown key": {
 			options: providerkit.Options{"ssh": map[string]any{"host": "203.0.113.10", "hostname": "203.0.113.10"}},
-			mention: `option "ssh"`,
+			mention: `"provider.options.ssh.hostname" is not a key this config has`,
 		},
 		"a port that is not a number": {
 			options: providerkit.Options{"ssh": map[string]any{"host": "203.0.113.10", "port": "2222"}},
-			mention: `option "ssh": "port" is not a int`,
+			mention: `"provider.options.ssh.port" must be a number`,
 		},
 		"an object with no host": {options: providerkit.Options{"ssh": map[string]any{"user": "deploy"}}},
 		"an empty alias":         {options: providerkit.Options{"ssh": ""}},

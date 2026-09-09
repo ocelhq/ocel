@@ -142,9 +142,21 @@ type fakeProviderServer struct {
 	mode string
 }
 
-func (s *fakeProviderServer) Configure(_ context.Context, _ *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
-	if s.mode == "reject-config" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(`json: unknown field "regionn"`))
+type fakeOptions struct {
+	Region string `json:"region,omitempty"`
+	SSH    struct {
+		Host string `json:"host,omitempty"`
+	} `json:"ssh,omitempty"`
+}
+
+func (s *fakeProviderServer) Configure(_ context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
+	switch s.mode {
+	case "reject-config":
+		if _, err := providerkit.Decode[fakeOptions](providerkit.Options(req.GetConfig().GetOptions().AsMap())); err != nil {
+			return nil, providerkit.RefusalError(err)
+		}
+	case "refuse-config":
+		return nil, providerkit.RefusalError(providerkit.Refuse(providerkit.CodeInvalid, "this account is not bootstrapped for previews"))
 	}
 	return &contractv1.ConfigureResponse{}, nil
 }

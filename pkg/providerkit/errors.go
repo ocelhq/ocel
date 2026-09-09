@@ -13,6 +13,8 @@ var refusalCodes = map[Code]connect.Code{
 	CodeNotReady: connect.CodeFailedPrecondition,
 	CodeDenied:   connect.CodePermissionDenied,
 	CodeBusy:     connect.CodeAborted,
+
+	CodeUnknownOption: connect.CodeInvalidArgument,
 }
 
 func RefusalError(err error) error {
@@ -47,6 +49,8 @@ var wireRefusalCodes = map[Code]contractv1.RefusalCode{
 	CodeNotReady: contractv1.RefusalCode_REFUSAL_CODE_NOT_READY,
 	CodeDenied:   contractv1.RefusalCode_REFUSAL_CODE_DENIED,
 	CodeBusy:     contractv1.RefusalCode_REFUSAL_CODE_BUSY,
+
+	CodeUnknownOption: contractv1.RefusalCode_REFUSAL_CODE_UNKNOWN_OPTION,
 }
 
 func RefusedCode(err error) (Code, bool) {

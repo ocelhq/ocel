@@ -12,10 +12,11 @@ type Attr = edge.Attr
 type Code = ports.Code
 
 const (
-	CodeInvalid  = ports.CodeInvalid
-	CodeNotReady = ports.CodeNotReady
-	CodeDenied   = ports.CodeDenied
-	CodeBusy     = ports.CodeBusy
+	CodeInvalid       = ports.CodeInvalid
+	CodeNotReady      = ports.CodeNotReady
+	CodeDenied        = ports.CodeDenied
+	CodeBusy          = ports.CodeBusy
+	CodeUnknownOption = ports.CodeUnknownOption
 )
 
 type Refusal = ports.Refusal

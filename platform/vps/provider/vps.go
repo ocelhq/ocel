@@ -64,27 +64,14 @@ func (t *Target) UnmarshalJSON(data []byte) error {
 	case trimmed[0] == '{':
 		type wire Target
 		var decoded wire
-		dec := json.NewDecoder(bytes.NewReader(trimmed))
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&decoded); err != nil {
-			return fmt.Errorf(`option "ssh": %s`, spelledProblem(err))
+		if err := json.Unmarshal(trimmed, &decoded); err != nil {
+			return fmt.Errorf(`option "ssh": %w`, err)
 		}
 		*t = Target(decoded)
 		return nil
 	default:
 		return errors.New(`option "ssh" is either an ssh_config alias or the destination spelled out`)
 	}
-}
-
-func spelledProblem(err error) string {
-	if key, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
-		return "unknown key " + key
-	}
-	var mismatch *json.UnmarshalTypeError
-	if errors.As(err, &mismatch) && mismatch.Field != "" {
-		return fmt.Sprintf("%q is not a %s", mismatch.Field, mismatch.Type)
-	}
-	return err.Error()
 }
 
 type Provider struct {

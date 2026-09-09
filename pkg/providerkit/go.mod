@@ -36,6 +36,7 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
+	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
@@ -59,3 +60,5 @@ replace github.com/ocelhq/ocel/pkg/naming => ../naming
 replace github.com/ocelhq/ocel/pkg/proto => ../proto
 
 replace github.com/ocelhq/ocel/platform/edge/contract => ../../platform/edge/contract
+
+replace github.com/ocelhq/ocel/pkg/configdoc => ../configdoc
