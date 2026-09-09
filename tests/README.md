@@ -61,7 +61,7 @@ images is the daemon that runs them:
 
 ```
 go -C cli build -o bin/ocel ./ocel
-node scripts/build-native.mjs --host --target provider-gcp
+node scripts/snapshot.mjs
 scripts/floci.sh --cloud gcp create ocel-journeys
 export OCEL_FLOCI_GCP_ENDPOINT=http://127.0.0.1:<the port it printed>
 pnpm --filter @ocel-tests/journeys cell --concern deploy --fixture node --target gcp
@@ -78,7 +78,7 @@ For `vps` that is a box the run can reach over SSH, and on a laptop that is an i
 
 ```
 go -C cli build -o bin/ocel ./ocel
-node scripts/build-native.mjs --host --target provider-vps
+node scripts/snapshot.mjs
 scripts/incus.sh create journey
 eval "$(scripts/incus.sh info journey)"
 export OCEL_VPS_HOST=$OCEL_INCUS_ADDR OCEL_VPS_USER=$OCEL_INCUS_USER OCEL_VPS_IDENTITY_FILE=$OCEL_INCUS_KEY

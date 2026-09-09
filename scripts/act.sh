@@ -104,8 +104,7 @@ run_journey_vps() {
     incus_run "incus list" >/dev/null || die "the journey vps lane needs a working incus (incus admin init --auto)"
     pnpm install --frozen-lockfile &&
         pnpm turbo run build --filter=ocel &&
-        node scripts/build-native.mjs --host --target cli &&
-        node scripts/build-native.mjs --host --target provider-vps || return $?
+        node scripts/snapshot.mjs || return $?
     local vm=ocel-act-journey-vps-$$ status=0
     incus_run "scripts/incus.sh create $vm" || return $?
     eval "$(incus_run "scripts/incus.sh info $vm")"

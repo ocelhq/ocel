@@ -8,7 +8,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ocel/provider-aws": "workspace:^",
     "@ocel/sst": "workspace:^",
     "express": "~5.0.0",
     "ocel": "workspace:^",

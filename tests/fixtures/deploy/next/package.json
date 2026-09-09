@@ -10,9 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ocel/provider-aws": "workspace:^",
-    "@ocel/provider-gcp": "workspace:^",
-    "@ocel/provider-vps": "workspace:^",
     "better-sqlite3": "^13.0.3",
     "next": "16.2.10",
     "ocel": "workspace:^",

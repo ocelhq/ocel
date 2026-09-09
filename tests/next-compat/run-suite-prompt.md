@@ -80,7 +80,7 @@ Hard-stop on any of these; a bad preflight makes the result meaningless.
    a new RPC as `unimplemented: 404`; the binary older than the last Go-touching
    commit is the tell. Repack only when no other run is using the sidecar, and
    note that packing does not imply building — the Go binaries come from
-   `node scripts/build-native.mjs --host --target cli`.
+   `node scripts/snapshot.mjs`.
 
 ## Screen the suite before running it
 

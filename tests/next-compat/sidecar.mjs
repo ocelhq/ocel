@@ -8,10 +8,8 @@ export function linkSidecar(dir, sidecarDir) {
     const target = join(sidecarDir, "node_modules", name);
     if (!existsSync(target)) {
       throw new Error(
-        `sidecar has no ${name} package at ${target}. A sidecar packed before ` +
-          `@ocel/sdk folded into the root ocel package carries only @ocel/*; ` +
-          `repack it from the ocel and @ocel/provider-aws* tarballs — see ` +
-          `"Repacking the sidecar" in tests/next-compat/README.md.`,
+        `sidecar has no ${name} package at ${target}. Repack it from the ocel ` +
+          `tarball — see "Repacking the sidecar" in tests/next-compat/README.md.`,
       );
     }
     const link = join(modules, name);

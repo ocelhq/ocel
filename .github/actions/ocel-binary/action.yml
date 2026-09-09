@@ -1,9 +1,8 @@
 name: ocel binary
 description: >-
-  The ocel CLI on PATH, with the AWS provider binary the workspace links beside
-  it. The CLI is either built from this checkout or installed from the latest
-  release; the provider is never published, so it is built from the checkout
-  either way.
+  The ocel CLI on PATH. Built from this checkout, it comes with the providers
+  of its own version under OCEL_PROVIDERS_DIR; installed from the latest
+  release, it fetches the providers that release published.
 
 inputs:
   source:
@@ -60,17 +59,13 @@ runs:
       shell: bash
       run: pnpm turbo run build --filter=ocel
 
-    - name: Build the provider this deploy drives
-      shell: bash
-      run: node scripts/build-native.mjs --host --target provider-aws
-
-    - name: Build the CLI from this checkout
+    - name: Build the binaries this deploy drives
       if: inputs.source != 'release'
       shell: bash
       run: |
         set -euo pipefail
-        node scripts/build-native.mjs --host --target cli
-        echo "$GITHUB_WORKSPACE/packages/native-lib/cli-linux-x64/bin" >> "$GITHUB_PATH"
+        node scripts/snapshot.mjs | tee -a "$GITHUB_ENV"
+        echo "$GITHUB_WORKSPACE/dist/ocel_linux_amd64_v1" >> "$GITHUB_PATH"
 
     - name: Take the CLI from the latest release
       if: inputs.source == 'release'

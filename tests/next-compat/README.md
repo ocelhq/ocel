@@ -127,13 +127,13 @@ Both read slug, environment, app, build id and deploy time from
 
 The sidecar is the only thing a temp app sees of Ocel. CI builds one per run;
 local runs reuse a long-lived one at `OCEL_E2E_SIDECAR_DIR`. It needs repacking
-only when `ocel/config` resolution or the `@ocel/provider-aws*` binaries change.
+only when `ocel/config` resolution changes.
 
 ```bash
 SIDECAR=<sidecar dir>
 TARBALLS=$(mktemp -d)
 cd <adapter repo> && pnpm --filter ocel build
-for pkg in ocel @ocel/linux-x64 @ocel/provider-aws @ocel/provider-aws-linux-x64; do
+for pkg in ocel @ocel/linux-x64; do
   pnpm --filter "$pkg" exec pnpm pack --pack-destination "$TARBALLS"
 done
 cd "$SIDECAR" && npm init -y >/dev/null
@@ -145,7 +145,7 @@ A worker-source or Next-adapter change needs a rebuild of the CLI binary in the
 adapter repo instead, not a sidecar repack:
 
 ```bash
-node scripts/build-native.mjs --host --target cli
+node scripts/snapshot.mjs
 ```
 
 ## Reclaiming a stranded project
