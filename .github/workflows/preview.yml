@@ -14,7 +14,7 @@ on:
       - "proto/**"
       - "platform/**"
       - "scripts/**"
-      - "ocel.aws.config.ts"
+      - "ocel.aws.json"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -32,7 +32,7 @@ concurrency:
   cancel-in-progress: ${{ github.event.action != 'closed' }}
 
 env:
-  OCEL_CONFIG: ocel.aws.config.ts
+  OCEL_CONFIG: ocel.aws.json
   OCEL_GITHUB_APP_URL: ${{ vars.OCEL_GITHUB_APP_URL }}
   OCEL_REPORT_SECRET: ${{ secrets.OCEL_REPORT_SECRET }}
   PR: ${{ github.event.pull_request.number }}

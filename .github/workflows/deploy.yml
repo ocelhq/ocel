@@ -7,7 +7,7 @@ on:
     paths:
       - "www/**"
       - "console/github/**"
-      - "ocel.aws.config.ts"
+      - "ocel.aws.json"
       - "packages/ocel/**"
       - ".github/workflows/deploy.yml"
       - ".github/actions/ocel-binary/**"
@@ -32,7 +32,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  OCEL_CONFIG: ocel.aws.config.ts
+  OCEL_CONFIG: ocel.aws.json
 
 jobs:
   deploy:

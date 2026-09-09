@@ -1,0 +1,15 @@
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "ocelhq",
+  "provider": {
+    "name": "vps",
+    "options": {
+      "ssh": {
+        "host": "${OCEL_VPS_HOST}",
+        "user": "${OCEL_VPS_USER}",
+        "identityFile": "${OCEL_VPS_IDENTITY_FILE}"
+      }
+    }
+  },
+  "apps": [{ "name": "node", "path": "./tests/fixtures/sdk/node" }]
+}

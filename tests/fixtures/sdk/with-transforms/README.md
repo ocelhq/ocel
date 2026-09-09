@@ -4,8 +4,8 @@ Four of these fixtures are three rungs of one ladder, and a team climbs it as
 it scales. Every rung deploys with `ocel deploy`; what changes is how much of the
 provisioning you have taken back.
 
-**No config — [express](../express).** The reference composite: `ocel.config.ts` names the
-slug, the provider and the app, and `ocel.vps.config.ts` is the same project on a box of
+**No config — [express](../express).** The reference composite: `ocel.json` names the
+slug, the provider and the app, and `ocel.vps.json` is the same project on a box of
 your own. Everything else Ocel provisions from what the app declares. A resource
 in app code is the provisioning step, so there is nothing to keep in sync and nothing to
 configure. Most projects never need to leave this rung.
@@ -23,7 +23,7 @@ the one thing it always provisions, and transforms are how you shape it even her
 why a shared-VPC setup needs both rungs at once.
 
 The app on this rung is modeled on the [express](../express) example, with a `postgres`
-resource; what it adds is `ocel.config.ts` and `transforms/defaults.transform.ts`. The module is
+resource; what it adds is `ocel.json` and `transforms/defaults.transform.ts`. The module is
 the whole of what it has to show.
 
 ## Run it
