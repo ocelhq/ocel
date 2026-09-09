@@ -1,4 +1,4 @@
-package projectconfig
+package projectconfig_test
 
 import (
 	"io/fs"
@@ -7,6 +7,9 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/fixturetest"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
 const docsDir = "www/content/docs"
@@ -21,9 +24,9 @@ type block struct {
 	body  string
 }
 
-func jsonBlocks(t *testing.T, root string) []block {
+func mdxPages(t *testing.T, root string) map[string]string {
 	t.Helper()
-	var blocks []block
+	pages := map[string]string{}
 	dir := filepath.Join(root, docsDir)
 	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() || !strings.HasSuffix(entry.Name(), ".mdx") {
@@ -37,9 +40,22 @@ func jsonBlocks(t *testing.T, root string) []block {
 		if err != nil {
 			return err
 		}
+		pages[page] = string(source)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk the docs: %v", err)
+	}
+	return pages
+}
+
+func jsonBlocks(t *testing.T, root string) []block {
+	t.Helper()
+	var blocks []block
+	for page, source := range mdxPages(t, root) {
 		var open *block
 		var body []string
-		for _, line := range strings.Split(string(source), "\n") {
+		for _, line := range strings.Split(source, "\n") {
 			if !strings.HasPrefix(line, "```") {
 				if open != nil {
 					body = append(body, line)
@@ -62,21 +78,16 @@ func jsonBlocks(t *testing.T, root string) []block {
 			}
 			open = &block{page: page, title: named[1]}
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk the docs: %v", err)
 	}
 	return blocks
 }
 
 func configTitled(title string) bool {
-	_, _, ok := formOf(title)
-	return ok && strings.HasSuffix(title, ".json")
+	return projectconfig.IsConfig(title) && !projectconfig.IsProgram(title)
 }
 
 func TestEveryDocumentedConfigValidatesAgainstTheSchema(t *testing.T) {
-	root := repoDir(t)
+	root := fixturetest.RepoDir(t)
 	schema := committedSchema(t, root)
 	want := schemaID(t, root)
 	shown := 0
@@ -86,10 +97,12 @@ func TestEveryDocumentedConfigValidatesAgainstTheSchema(t *testing.T) {
 		}
 		shown++
 		name := example.page + " › " + example.title
-		if !strings.Contains(example.body, want) {
-			t.Errorf("%s does not name the committed schema %q", name, want)
+		document := documentOf(t, name, []byte(example.body))
+		named, _ := document.(map[string]any)["$schema"].(string)
+		if named != want {
+			t.Errorf("%s names %q, want the committed schema %q", name, named, want)
 		}
-		if err := schema.Validate(documentOf(t, name, []byte(example.body))); err != nil {
+		if err := schema.Validate(document); err != nil {
 			t.Errorf("%s does not validate against the committed schema: %v", name, err)
 		}
 	}
@@ -98,30 +111,32 @@ func TestEveryDocumentedConfigValidatesAgainstTheSchema(t *testing.T) {
 	}
 }
 
-func TestOnlyTheTypeScriptPageShowsTheTypeScriptConfig(t *testing.T) {
-	root := repoDir(t)
-	dir := filepath.Join(root, docsDir)
-	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil || entry.IsDir() || !strings.HasSuffix(entry.Name(), ".mdx") {
-			return err
+func TestOnlyTheTypeScriptPageShowsAConfigWrittenAsAProgram(t *testing.T) {
+	root := fixturetest.RepoDir(t)
+	for page, source := range mdxPages(t, root) {
+		if page == typescriptPage {
+			continue
 		}
-		page, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
+		if named := projectconfig.ProgramNamedIn(source); named != "" {
+			t.Errorf("%s shows %s, and only %s shows a config written as a program", page, named, typescriptPage)
 		}
-		source, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if page != typescriptPage && strings.Contains(string(source), TSFileName) {
-			t.Errorf("%s shows %s, and only %s does", page, TSFileName, typescriptPage)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk the docs: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, typescriptPage)); err != nil {
-		t.Fatalf("the page that shows %s is missing: %v", TSFileName, err)
+	if _, err := os.Stat(filepath.Join(root, docsDir, typescriptPage)); err != nil {
+		t.Fatalf("the page that shows %s is missing: %v", projectconfig.TSFileName, err)
+	}
+}
+
+func TestAConfigWrittenAsAProgramIsFoundUnderAnyTarget(t *testing.T) {
+	for _, page := range []string{
+		"deploy with `ocel.config.ts` at the root",
+		"the gcp target reads `ocel.gcp.config.ts` instead",
+		"```ts title=\"ocel.vps.config.ts\"",
+	} {
+		if projectconfig.ProgramNamedIn(page) == "" {
+			t.Errorf("%q shows a config written as a program and went unfound", page)
+		}
+	}
+	if named := projectconfig.ProgramNamedIn("run `ocel deploy` against next.config.ts"); named != "" {
+		t.Errorf("found %q in a page that shows no ocel config", named)
 	}
 }
