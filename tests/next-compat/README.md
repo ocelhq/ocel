@@ -133,7 +133,7 @@ only when `ocel/config` resolution changes.
 SIDECAR=<sidecar dir>
 TARBALLS=$(mktemp -d)
 cd <adapter repo> && pnpm --filter ocel build
-for pkg in ocel @ocel/linux-x64; do
+for pkg in ocel @ocel/cli-linux-x64; do
   pnpm --filter "$pkg" exec pnpm pack --pack-destination "$TARBALLS"
 done
 cd "$SIDECAR" && npm init -y >/dev/null
