@@ -5,18 +5,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 )
 
 const warmEvent = `{"ocel":{"warm":1}}`
@@ -24,14 +24,14 @@ const warmEvent = `{"ocel":{"warm":1}}`
 const warmedReply = `{"type":"compile-cache-warmed","payload":` +
 	`{"ok":true,"state":"warmed","entries":42,"loaded":41,` +
 	`"failures":[{"entry":"app/broken/page.js","message":"boom"}],` +
-	`"stoppedBy":"complete","bytes":1234,"dir":"` + compileCacheDir + `"}}`
+	`"stoppedBy":"complete","bytes":1234,"dir":"/tmp/ocel/compile-cache"}}`
 
 const unsupportedReply = `{"type":"compile-cache-warmed","payload":{"ok":false,"state":"unsupported","dir":null}}`
 
 const stoppedReply = `{"type":"compile-cache-warmed","payload":` +
 	`{"ok":true,"state":"warmed","entries":42,"loaded":33,"failures":[],` +
 	`"stoppedBy":"ceiling","skipped":["app/a/page","app/b/page"],"skippedCount":9,` +
-	`"bytes":1234,"dir":"` + compileCacheDir + `"}}`
+	`"bytes":1234,"dir":"/tmp/ocel/compile-cache"}}`
 
 func TestIsWarmInvocation(t *testing.T) {
 	cases := []struct {
@@ -77,11 +77,51 @@ func warmRuntime(t *testing.T, event []byte, deadline time.Time) (*runtimeClient
 	return newRuntimeClient(strings.TrimPrefix(srv.URL, "http://")), captured
 }
 
-func warmFixture(t *testing.T, store bytecodeStore, dir, reply string) *nodeChild {
+const warmKey = "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz"
+
+type scriptedCache struct {
+	key     string
+	source  bytecode.Source
+	outcome bytecode.Outcome
+	delay   time.Duration
+
+	mu      sync.Mutex
+	uploads int
+}
+
+func (c *scriptedCache) Key() string { return c.key }
+
+func (c *scriptedCache) Source() bytecode.Source {
+	if c.source == "" {
+		return bytecode.SourceNone
+	}
+	return c.source
+}
+
+func (c *scriptedCache) Cached() bool { return c.Source() != bytecode.SourceNone }
+
+func (c *scriptedCache) Upload(context.Context, time.Time, bytecode.Flush) bytecode.Outcome {
+	c.mu.Lock()
+	c.uploads++
+	c.mu.Unlock()
+	time.Sleep(c.delay)
+	return c.outcome
+}
+
+func (c *scriptedCache) count() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.uploads
+}
+
+func publishes() *scriptedCache {
+	return &scriptedCache{key: warmKey, outcome: bytecode.Outcome{Uploaded: true, Bytes: 520}}
+}
+
+func warmFixture(t *testing.T, cache *scriptedCache, reply string) *nodeChild {
 	t.Helper()
 	m, nodeReader, nodeConn := controlConnPair(t)
-	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
-	m.bytecode = u
+	m.cache = cache
 	go func() {
 		if _, err := nodeReader.ReadString('\n'); err != nil || reply == "" {
 			return
@@ -89,16 +129,6 @@ func warmFixture(t *testing.T, store bytecodeStore, dir, reply string) *nodeChil
 		fmt.Fprintln(nodeConn, reply)
 	}()
 	return m
-}
-
-type slowBytecodeStore struct {
-	*fakeBytecodeStore
-	delay time.Duration
-}
-
-func (s slowBytecodeStore) putObject(ctx context.Context, bucket, key string, body []byte) error {
-	time.Sleep(s.delay)
-	return s.fakeBytecodeStore.putObject(ctx, bucket, key, body)
 }
 
 func warmCtx(t *testing.T, remaining time.Duration) context.Context {
@@ -110,8 +140,8 @@ func warmCtx(t *testing.T, remaining time.Duration) context.Context {
 
 func TestWarmBytecodeCache(t *testing.T) {
 	t.Run("publishes inline and reports it", func(t *testing.T) {
-		store := &fakeBytecodeStore{}
-		m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
+		cache := publishes()
+		m := warmFixture(t, cache, warmedReply)
 
 		got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
 
@@ -127,20 +157,20 @@ func TestWarmBytecodeCache(t *testing.T) {
 		if len(got.Failures) != 1 || got.Failures[0].Entry != "app/broken/page.js" {
 			t.Errorf("failures = %+v, want the one node reported", got.Failures)
 		}
-		if got.Key != m.bytecode.key {
-			t.Errorf("key = %q, want the resolution's %q", got.Key, m.bytecode.key)
+		if got.Key != warmKey {
+			t.Errorf("key = %q, want the cache's %q", got.Key, warmKey)
 		}
 		if got.Bytes <= 0 {
 			t.Errorf("bytes = %d, want what was measured for the ceiling", got.Bytes)
 		}
-		if len(store.puts) != 1 {
-			t.Fatalf("puts = %d, want the cache published inline", len(store.puts))
+		if cache.count() != 1 {
+			t.Fatalf("uploads = %d, want the cache published inline", cache.count())
 		}
 	})
 
 	t.Run("spends the instances one upload", func(t *testing.T) {
-		store := &fakeBytecodeStore{}
-		m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
+		cache := publishes()
+		m := warmFixture(t, cache, warmedReply)
 
 		ctx := warmCtx(t, 10*time.Second)
 		if got := m.warmBytecodeCache(ctx); got.State != warmStatePublished {
@@ -148,17 +178,14 @@ func TestWarmBytecodeCache(t *testing.T) {
 		}
 		m.uploadBytecodeCacheOnce(ctx)
 
-		if len(store.puts) != 1 {
-			t.Errorf("puts = %d, want the post-invocation path to see the work as already spent", len(store.puts))
+		if cache.count() != 1 {
+			t.Errorf("uploads = %d, want the post-invocation path to see the work as already spent", cache.count())
 		}
 	})
 
 	t.Run("already cached answers without touching the child", func(t *testing.T) {
-		store := &fakeBytecodeStore{}
-		m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
-		m.bytecode = nil
-		m.bytecodeSource = bytecodeSourceS3
-		m.bytecodeKey = "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz"
+		cache := &scriptedCache{key: warmKey, source: bytecode.SourceS3}
+		m := warmFixture(t, cache, warmedReply)
 
 		start := time.Now()
 		got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
@@ -169,43 +196,40 @@ func TestWarmBytecodeCache(t *testing.T) {
 		if elapsed := time.Since(start); elapsed > time.Second {
 			t.Errorf("took %s, want an immediate answer", elapsed)
 		}
-		if len(store.heads) != 0 || len(store.puts) != 0 {
-			t.Errorf("touched S3 (heads=%v puts=%v), want nothing", store.heads, store.puts)
+		if cache.count() != 0 {
+			t.Errorf("uploads = %d, want nothing published for a cache that came from somewhere", cache.count())
 		}
-		if got.Key != m.bytecodeKey {
-			t.Errorf("key = %q, want the resolution's %q", got.Key, m.bytecodeKey)
+		if got.Key != warmKey {
+			t.Errorf("key = %q, want the cache's %q", got.Key, warmKey)
 		}
-		if got.Source != bytecodeSourceS3 {
-			t.Errorf("source = %q, want %q", got.Source, bytecodeSourceS3)
+		if got.Source != bytecode.SourceS3 {
+			t.Errorf("source = %q, want %q", got.Source, bytecode.SourceS3)
 		}
 	})
 
 	t.Run("already cached names which leg served it", func(t *testing.T) {
-		m := warmFixture(t, &fakeBytecodeStore{}, cacheDirWith(t, "compiled bytes"), warmedReply)
-		m.bytecode = nil
-		m.bytecodeSource = bytecodeSourceEmbedded
-		m.bytecodeKey = "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz"
+		m := warmFixture(t, &scriptedCache{key: warmKey, source: bytecode.SourceEmbedded}, warmedReply)
 
 		got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
 
 		if got.State != warmStateAlreadyCached {
 			t.Fatalf("state = %q, want %q", got.State, warmStateAlreadyCached)
 		}
-		if got.Source != bytecodeSourceEmbedded {
-			t.Errorf("source = %q, want %q", got.Source, bytecodeSourceEmbedded)
+		if got.Source != bytecode.SourceEmbedded {
+			t.Errorf("source = %q, want %q", got.Source, bytecode.SourceEmbedded)
 		}
 	})
 
 	t.Run("a pass that publishes reports no source", func(t *testing.T) {
-		m := warmFixture(t, &fakeBytecodeStore{}, cacheDirWith(t, "compiled bytes"), warmedReply)
+		m := warmFixture(t, publishes(), warmedReply)
 
 		got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
 
 		if got.State != warmStatePublished {
 			t.Fatalf("state = %q, want %q", got.State, warmStatePublished)
 		}
-		if got.Source != bytecodeSourceNone {
-			t.Errorf("source = %q, want %q", got.Source, bytecodeSourceNone)
+		if got.Source != bytecode.SourceNone {
+			t.Errorf("source = %q, want %q", got.Source, bytecode.SourceNone)
 		}
 	})
 
@@ -220,16 +244,16 @@ func TestWarmBytecodeCache(t *testing.T) {
 	})
 
 	t.Run("unsupported artifact still publishes what init loaded", func(t *testing.T) {
-		store := &fakeBytecodeStore{}
-		m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), unsupportedReply)
+		cache := publishes()
+		m := warmFixture(t, cache, unsupportedReply)
 
 		got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
 
 		if got.State != warmStatePublished {
 			t.Fatalf("state = %q (%+v), want %q", got.State, got, warmStatePublished)
 		}
-		if len(store.puts) != 1 {
-			t.Fatalf("puts = %d, want the cache INIT produced published anyway", len(store.puts))
+		if cache.count() != 1 {
+			t.Fatalf("uploads = %d, want the cache INIT produced published anyway", cache.count())
 		}
 		if !strings.Contains(got.Uncounted, "no compile-cache warm capability") {
 			t.Errorf("uncounted = %q, want the counts reported unknown with the reason", got.Uncounted)
@@ -240,16 +264,16 @@ func TestWarmBytecodeCache(t *testing.T) {
 	})
 
 	t.Run("publishes when node never reports back", func(t *testing.T) {
-		store := &fakeBytecodeStore{}
-		m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), "")
+		cache := publishes()
+		m := warmFixture(t, cache, "")
 
 		got := m.warmBytecodeCache(warmCtx(t, 3*time.Second))
 
 		if got.State != warmStatePublished {
 			t.Fatalf("state = %q (%+v), want %q", got.State, got, warmStatePublished)
 		}
-		if len(store.puts) != 1 {
-			t.Errorf("puts = %d, want whatever was loaded published anyway", len(store.puts))
+		if cache.count() != 1 {
+			t.Errorf("uploads = %d, want whatever was loaded published anyway", cache.count())
 		}
 		if !strings.Contains(got.Uncounted, "did not report back") {
 			t.Errorf("uncounted = %q, want the counts reported unknown with the reason", got.Uncounted)
@@ -257,10 +281,10 @@ func TestWarmBytecodeCache(t *testing.T) {
 	})
 
 	t.Run("collects a late report", func(t *testing.T) {
-		store := slowBytecodeStore{fakeBytecodeStore: &fakeBytecodeStore{}, delay: 400 * time.Millisecond}
+		cache := publishes()
+		cache.delay = 400 * time.Millisecond
 		m, nodeReader, nodeConn := controlConnPair(t)
-		u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "compiled bytes"), OK: true}, true)
-		m.bytecode = u
+		m.cache = cache
 
 		go func() {
 			if _, err := nodeReader.ReadString('\n'); err != nil {
@@ -270,7 +294,7 @@ func TestWarmBytecodeCache(t *testing.T) {
 			fmt.Fprintln(nodeConn, warmedReply)
 		}()
 
-		got := m.warmBytecodeCache(warmCtx(t, bytecodeUploadBudget+completionMargin+500*time.Millisecond))
+		got := m.warmBytecodeCache(warmCtx(t, bytecode.UploadBudget+completionMargin+500*time.Millisecond))
 
 		if got.State != warmStatePublished {
 			t.Fatalf("state = %q (%+v), want %q", got.State, got, warmStatePublished)
@@ -284,8 +308,7 @@ func TestWarmBytecodeCache(t *testing.T) {
 	})
 
 	t.Run("carries the skipped entries", func(t *testing.T) {
-		store := &fakeBytecodeStore{}
-		m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), stoppedReply)
+		m := warmFixture(t, publishes(), stoppedReply)
 
 		got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
 
@@ -298,8 +321,7 @@ func TestWarmBytecodeCache(t *testing.T) {
 	})
 
 	t.Run("reports a failed upload as failed", func(t *testing.T) {
-		store := &fakeBytecodeStore{putErr: errors.New("access denied")}
-		m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
+		m := warmFixture(t, &scriptedCache{key: warmKey, outcome: bytecode.Outcome{Reason: "could not upload the compile cache to " + warmKey + ": access denied"}}, warmedReply)
 
 		got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
 
@@ -315,18 +337,11 @@ func TestWarmBytecodeCache(t *testing.T) {
 	})
 
 	t.Run("reports a cache over the ceiling", func(t *testing.T) {
-		dir := t.TempDir()
-		f, err := os.Create(filepath.Join(dir, "big.blob"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := f.Truncate(bytecodeCacheCeiling + 1); err != nil {
-			t.Fatal(err)
-		}
-		f.Close()
-
-		store := &fakeBytecodeStore{}
-		m := warmFixture(t, store, dir, warmedReply)
+		over := int64(bytecode.CacheCeiling) + 1
+		m := warmFixture(t, &scriptedCache{key: warmKey, outcome: bytecode.Outcome{
+			Bytes:  over,
+			Reason: fmt.Sprintf("compile cache is %d bytes, over the %d byte ceiling; skipping upload", over, bytecode.CacheCeiling),
+		}}, warmedReply)
 
 		got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
 
@@ -336,31 +351,29 @@ func TestWarmBytecodeCache(t *testing.T) {
 		if !strings.Contains(got.Error, "ceiling") {
 			t.Errorf("error = %q, want the ceiling named", got.Error)
 		}
-		if len(store.puts) != 0 {
-			t.Errorf("puts = %v, want nothing over the ceiling", store.puts)
+		if got.Uploaded == nil || *got.Uploaded {
+			t.Errorf("uploaded = %v, want false over the ceiling", got.Uploaded)
 		}
 	})
 
 	t.Run("an object already there reads as already cached", func(t *testing.T) {
-		store := &fakeBytecodeStore{exists: true}
-		m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
+		m := warmFixture(t, &scriptedCache{key: warmKey, outcome: bytecode.Outcome{Existed: true}}, warmedReply)
 
 		got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
 
 		if got.State != warmStateAlreadyCached {
 			t.Fatalf("state = %q, want %q", got.State, warmStateAlreadyCached)
 		}
-		if len(store.puts) != 0 {
-			t.Errorf("puts = %v, want none once the object exists", store.puts)
+		if got.Uploaded != nil {
+			t.Errorf("uploaded = %v, want nothing reported once the object exists", *got.Uploaded)
 		}
 	})
 
 	t.Run("stops waiting at the load deadline", func(t *testing.T) {
-		store := &fakeBytecodeStore{}
-		m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), "")
+		m := warmFixture(t, publishes(), "")
 
 		start := time.Now()
-		m.warmBytecodeCache(warmCtx(t, bytecodeUploadBudget+completionMargin+500*time.Millisecond))
+		m.warmBytecodeCache(warmCtx(t, bytecode.UploadBudget+completionMargin+500*time.Millisecond))
 
 		if elapsed := time.Since(start); elapsed > 2*time.Second {
 			t.Errorf("took %s, want the wait ended at the load deadline", elapsed)
@@ -368,16 +381,16 @@ func TestWarmBytecodeCache(t *testing.T) {
 	})
 
 	t.Run("fails without asking when no window is left", func(t *testing.T) {
-		store := &fakeBytecodeStore{}
-		m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
+		cache := publishes()
+		m := warmFixture(t, cache, warmedReply)
 
-		got := m.warmBytecodeCache(warmCtx(t, bytecodeUploadBudget))
+		got := m.warmBytecodeCache(warmCtx(t, bytecode.UploadBudget))
 
 		if got.State != warmStateFailed {
 			t.Fatalf("state = %q, want %q", got.State, warmStateFailed)
 		}
-		if len(store.heads) != 0 {
-			t.Errorf("heads = %v, want the pass abandoned before any work", store.heads)
+		if cache.count() != 0 {
+			t.Errorf("uploads = %d, want the pass abandoned before any work", cache.count())
 		}
 	})
 }
@@ -392,14 +405,14 @@ func TestWarmLoadDeadline(t *testing.T) {
 		if !ok {
 			t.Fatal("warmLoadDeadline() ok = false, want a window")
 		}
-		want := deadline.Add(-bytecodeUploadBudget - completionMargin)
+		want := deadline.Add(-bytecode.UploadBudget - completionMargin)
 		if got.Sub(want) > time.Millisecond || want.Sub(got) > time.Millisecond {
 			t.Errorf("load deadline = %s, want %s", got, want)
 		}
 	})
 
 	t.Run("a deadline with nothing left to reserve yields no window", func(t *testing.T) {
-		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(bytecodeUploadBudget))
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(bytecode.UploadBudget))
 		defer cancel()
 
 		if got, ok := warmLoadDeadline(ctx); ok {
@@ -447,8 +460,8 @@ func TestWarmCompileCache(t *testing.T) {
 		if msg.Type != "warm-compile-cache" {
 			t.Errorf("type = %q, want warm-compile-cache", msg.Type)
 		}
-		if msg.Payload.CeilingBytes != bytecodeCacheCeiling {
-			t.Errorf("ceilingBytes = %d, want %d", msg.Payload.CeilingBytes, bytecodeCacheCeiling)
+		if msg.Payload.CeilingBytes != bytecode.CacheCeiling {
+			t.Errorf("ceilingBytes = %d, want %d", msg.Payload.CeilingBytes, bytecode.CacheCeiling)
 		}
 		want := deadline.Add(-warmReplyMargin).UnixMilli()
 		if msg.Payload.DeadlineMs != want {
@@ -492,8 +505,8 @@ func TestHandleInvocationWarm(t *testing.T) {
 		}))
 		defer node.Close()
 
-		store := &fakeBytecodeStore{}
-		m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
+		cache := publishes()
+		m := warmFixture(t, cache, warmedReply)
 		m.upstream = upstream{port: portOf(t, node), client: newLoopbackClient()}
 
 		rt, captured := warmRuntime(t, []byte(warmEvent), time.Now().Add(10*time.Second))
@@ -514,8 +527,8 @@ func TestHandleInvocationWarm(t *testing.T) {
 		if got.State != warmStatePublished {
 			t.Errorf("state = %q, want %q", got.State, warmStatePublished)
 		}
-		if len(store.puts) != 1 {
-			t.Errorf("puts = %d, want the cache published during the warm invocation", len(store.puts))
+		if cache.count() != 1 {
+			t.Errorf("uploads = %d, want the cache published during the warm invocation", cache.count())
 		}
 	})
 
@@ -546,9 +559,7 @@ func TestHandleInvocationWarm(t *testing.T) {
 	t.Run("a warm failure still answers the invocation", func(t *testing.T) {
 		parentSide, nodeSide := net.Pipe()
 		nodeSide.Close()
-		store := &fakeBytecodeStore{putErr: errors.New("access denied")}
-		u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
-		m := &nodeChild{control: parentSide, pending: map[string]chan struct{}{}, bytecode: u}
+		m := &nodeChild{control: parentSide, pending: map[string]chan struct{}{}, cache: &scriptedCache{key: warmKey, outcome: bytecode.Outcome{Reason: "access denied"}}}
 		go m.drainControl(bufio.NewReader(parentSide))
 
 		rt, captured := warmRuntime(t, []byte(warmEvent), time.Now().Add(10*time.Second))
@@ -568,7 +579,7 @@ func TestHandleInvocationWarm(t *testing.T) {
 
 func TestWarmSummary(t *testing.T) {
 	t.Run("omits what does not apply", func(t *testing.T) {
-		for _, s := range []warmSummary{{State: warmStateAlreadyCached, Source: bytecodeSourceNone}, {State: warmStateDisabled, Source: bytecodeSourceNone}} {
+		for _, s := range []warmSummary{{State: warmStateAlreadyCached, Source: bytecode.SourceNone}, {State: warmStateDisabled, Source: bytecode.SourceNone}} {
 			encoded, err := json.Marshal(s)
 			if err != nil {
 				t.Fatal(err)

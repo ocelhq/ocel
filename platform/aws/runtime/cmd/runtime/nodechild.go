@@ -9,10 +9,12 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 )
 
 const completionMargin = 500 * time.Millisecond
@@ -28,13 +30,9 @@ type nodeChild struct {
 
 	control net.Conn
 
-	live *liveValues
+	live liveValues
 
-	bytecode *bytecodeUpload
-
-	bytecodeSource bytecodeSource
-
-	bytecodeKey string
+	cache compileCache
 
 	lifecycle bool
 
@@ -45,19 +43,22 @@ type nodeChild struct {
 	bytecodeDone bool
 }
 
-func (m *nodeChild) bytecodeCacheSource() bytecodeSource {
-	if m.bytecodeSource == "" {
-		return bytecodeSourceNone
+func (m *nodeChild) cacheSource() bytecode.Source {
+	if m.cache == nil {
+		return bytecode.SourceNone
 	}
-	return m.bytecodeSource
+	return m.cache.Source()
 }
 
-func (m *nodeChild) bytecodeCached() bool {
-	return m.bytecodeCacheSource() != bytecodeSourceNone
+func (m *nodeChild) cached() bool {
+	return m.cacheSource() != bytecode.SourceNone
 }
 
 func (m *nodeChild) refreshLiveValues(ctx context.Context) {
-	m.live.refreshIfStale(ctx)
+	if m.live == nil {
+		return
+	}
+	m.live.Refresh(ctx)
 }
 
 func (m *nodeChild) endInvocation(ctx context.Context, requestID string, waiter <-chan struct{}, reached bool) {
@@ -116,6 +117,8 @@ func (m *nodeChild) awaitCompletion(ctx context.Context, requestID string, waite
 		fmt.Fprintf(os.Stderr, "ocel: background tasks abandoned for %s: deadline reached\n", requestID)
 	}
 }
+
+const compileCacheFlushTimeout = time.Second
 
 const flushCompileCacheLine = `{"type":"flush-compile-cache"}` + "\n"
 
@@ -214,7 +217,7 @@ func warmCompileCacheLine(deadline time.Time) []byte {
 		Type: "warm-compile-cache",
 		Payload: warmCompileCacheParams{
 			DeadlineMs:   deadline.Add(-warmReplyMargin).UnixMilli(),
-			CeilingBytes: bytecodeCacheCeiling,
+			CeilingBytes: bytecode.CacheCeiling,
 		},
 	})
 	return append(line, '\n')
@@ -258,10 +261,23 @@ func (m *nodeChild) claimBytecodeUpload() bool {
 }
 
 func (m *nodeChild) uploadBytecodeCacheOnce(ctx context.Context) {
-	if m.bytecode == nil || !m.claimBytecodeUpload() {
+	if m.cache == nil || m.cache.Cached() || !m.claimBytecodeUpload() {
 		return
 	}
-	m.bytecode.run(ctx)
+	m.cache.Upload(ctx, uploadBy(ctx), m.flushed)
+}
+
+func uploadBy(ctx context.Context) time.Time {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return time.Time{}
+	}
+	return deadline.Add(-completionMargin)
+}
+
+func (m *nodeChild) flushed(ctx context.Context) (bytecode.Flushed, bool) {
+	p, ok := m.flushCompileCache(ctx)
+	return bytecode.Flushed{Dir: p.Dir, OK: p.OK}, ok
 }
 
 type controlMsg struct {
@@ -399,7 +415,7 @@ func nodeChildEnv(sockPath string, extraEnv []string) []string {
 		"OCEL_CONTROL_SOCKET="+sockPath,
 		"OCEL_HANDLER="+os.Getenv("OCEL_HANDLER"),
 	)
-	env = append(env, compileCacheEnv()...)
+	env = append(env, bytecode.Env()...)
 	return append(env, extraEnv...)
 }
 
@@ -408,6 +424,14 @@ func entrypointPath(a providerkit.FunctionConfig) string {
 		return "/opt/ocel/next/entrypoint.mjs"
 	}
 	return "/opt/ocel/node/entrypoint.mjs"
+}
+
+func nodeVersionFromBinary(ctx context.Context) (string, error) {
+	out, err := exec.CommandContext(ctx, nodeBinaryPath, "--version").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func startNode(entrypoint string) spawner {
