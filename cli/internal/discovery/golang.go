@@ -7,9 +7,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
-const goEntryDir = ".ocel/discovery"
+const goEntryDir = constants.ProjectStateDirName + "/discovery"
 
 type goLauncher struct{}
 
@@ -38,7 +40,7 @@ func (goLauncher) Command(ctx context.Context, configDir string, root Root, serv
 
 	cmd := exec.CommandContext(ctx, "go", "run", "./"+goEntryDir)
 	cmd.Dir = moduleRoot
-	cmd.Env = append(os.Environ(), "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+serverURL)
+	cmd.Env = append(os.Environ(), constants.PhaseEnvName+"=discovery", constants.DevServerEnvName+"="+serverURL)
 	return cmd, nil
 }
 

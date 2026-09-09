@@ -137,7 +137,7 @@ export interface RuntimeObject {
 
 /** Where the resources an app declares are found. */
 export interface DiscoveryConfig {
-  /** The directories holding infrastructure declarations, relative to the config. Left off, ocel reads ./infra. */
+  /** The directories holding infrastructure declarations, relative to the config. Left off, ocel reads the default discovery directory. */
   paths?: string[];
 }
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/constants"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -45,11 +46,11 @@ export default {
 		if built == nil {
 			t.Fatal("runBuild did not build the project")
 		}
-		if got, want := stdout.String(), "Built 1 function into .ocel/output\n"; got != want {
+		if got, want := stdout.String(), "Built 1 function into "+constants.ProjectStateDirName+"/output\n"; got != want {
 			t.Errorf("stdout = %q, want %q", got, want)
 		}
 
-		record, err := os.ReadFile(filepath.Join(root, ".ocel", "output", "client-digests.json"))
+		record, err := os.ReadFile(filepath.Join(root, constants.ProjectStateDirName, "output", "client-digests.json"))
 		if err != nil {
 			t.Fatalf("the build recorded nothing about its client values: %v", err)
 		}

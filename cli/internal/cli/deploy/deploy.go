@@ -17,12 +17,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
+	"github.com/ocelhq/ocel/pkg/constants"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-const prebuiltFlagUsage = "Deploy the existing .ocel/output instead of building first (produce it with ocel build)"
+const prebuiltFlagUsage = "Deploy the existing " + constants.ProjectStateDirName + "/output instead of building first (produce it with ocel build)"
 
 type deployOptions struct {
 	yes      bool

@@ -13,6 +13,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -705,8 +706,8 @@ func TestFunctionEnvKey(t *testing.T) {
 
 func TestArtifactArchivePath(t *testing.T) {
 	t.Run("resolves relative to the output root", func(t *testing.T) {
-		got := artifactArchivePath("/proj/.ocel/output", "apps/web/functions/api.func")
-		want := "/proj/.ocel/output/apps/web/functions/api.func"
+		got := artifactArchivePath("/proj/"+constants.ProjectStateDirName+"/output", "apps/web/functions/api.func")
+		want := "/proj/" + constants.ProjectStateDirName + "/output/apps/web/functions/api.func"
 		if got != want {
 			t.Errorf("artifactArchivePath() = %q, want %q", got, want)
 		}

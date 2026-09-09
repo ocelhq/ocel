@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
@@ -49,7 +50,7 @@ func resolveAccount(ctx context.Context, deps cmddeps.Deps, apiURL, token, proje
 
 func reportLocal(stdout io.Writer) {
 	fmt.Fprintf(stdout, "running without the console: %s alone carries every value, every resource is an OCEL_RESOURCE_ entry in it, and uploads land under %s.\n",
-		dotenv.FileName, filepath.Join(scratchDirName, "blob"))
+		dotenv.FileName, filepath.Join(constants.ProjectStateDirName, "blob"))
 }
 
 type invocation struct {

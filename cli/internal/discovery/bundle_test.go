@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 const registerSideEffect = `
@@ -22,11 +24,11 @@ export {};
 func TestBundle(t *testing.T) {
 	t.Run("runs its imports and leaves sync to the caller", func(t *testing.T) {
 		root := t.TempDir()
-		write(t, filepath.Join(root, "infra", "main.ts"), registerSideEffect+`
+		write(t, filepath.Join(root, "declarations", "main.ts"), registerSideEffect+`
 console.log("declared");
 `)
 
-		files, err := Discover(root, []string{"infra"})
+		files, err := Discover(root, []string{"declarations"})
 		if err != nil {
 			t.Fatalf("Discover: %v", err)
 		}
@@ -44,7 +46,7 @@ console.log("declared");
 		defer server.Close()
 
 		cmd := exec.Command("node", entry)
-		cmd.Env = append(cmd.Environ(), "OCEL_DEV_SERVER="+server.URL)
+		cmd.Env = append(cmd.Environ(), constants.DevServerEnvName+"="+server.URL)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("run bundled entry: %v\n%s", err, out)
@@ -66,9 +68,9 @@ console.log("declared");
 			`const { EventEmitter } = require("events");
 module.exports = { emitter: new EventEmitter() };
 `)
-		write(t, filepath.Join(root, "infra", "main.ts"), `import "cjsdep";`+registerSideEffect)
+		write(t, filepath.Join(root, "declarations", "main.ts"), `import "cjsdep";`+registerSideEffect)
 
-		files, err := Discover(root, []string{"infra"})
+		files, err := Discover(root, []string{"declarations"})
 		if err != nil {
 			t.Fatalf("Discover: %v", err)
 		}
@@ -84,7 +86,7 @@ module.exports = { emitter: new EventEmitter() };
 		defer server.Close()
 
 		cmd := exec.Command("node", entry)
-		cmd.Env = append(cmd.Environ(), "OCEL_DEV_SERVER="+server.URL)
+		cmd.Env = append(cmd.Environ(), constants.DevServerEnvName+"="+server.URL)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("run bundled entry with CJS builtin-requiring dep: %v\n%s", err, out)
 		}

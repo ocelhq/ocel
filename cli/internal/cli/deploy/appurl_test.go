@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/constants"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -52,8 +53,8 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	}
 
 	t.Run("the build is handed it", func(t *testing.T) {
-		if got, want := built["api"][providerkit.URLEnvName], "https://api.acme.com"; got != want {
-			t.Errorf("build env = %v, want %s = %q", built["api"], providerkit.URLEnvName, want)
+		if got, want := built["api"][constants.AppURLEnvName], "https://api.acme.com"; got != want {
+			t.Errorf("build env = %v, want %s = %q", built["api"], constants.AppURLEnvName, want)
 		}
 		if got, want := built["api"][providerkit.ClientURLEnvName], "https://api.acme.com"; got != want {
 			t.Errorf("build env = %v, want %s = %q for the browser bundle", built["api"], providerkit.ClientURLEnvName, want)
@@ -61,8 +62,8 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	})
 
 	t.Run("the manifest carries it to the provider", func(t *testing.T) {
-		if got, want := manifestVariable(t, manifest, "api", providerkit.URLEnvName).GetValue(), "https://api.acme.com"; got != want {
-			t.Errorf("%s = %q, want %q", providerkit.URLEnvName, got, want)
+		if got, want := manifestVariable(t, manifest, "api", constants.AppURLEnvName).GetValue(), "https://api.acme.com"; got != want {
+			t.Errorf("%s = %q, want %q", constants.AppURLEnvName, got, want)
 		}
 		if got, want := manifestVariable(t, manifest, "api", providerkit.ClientURLEnvName).GetValue(), "https://api.acme.com"; got != want {
 			t.Errorf("%s = %q, want %q", providerkit.ClientURLEnvName, got, want)
@@ -70,7 +71,7 @@ func TestTheDeploymentURLReachesEveryDeliverySite(t *testing.T) {
 	})
 
 	t.Run("the client accessor inlines it", func(t *testing.T) {
-		accessor, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
+		accessor, err := os.ReadFile(filepath.Join(root, constants.ProjectStateDirName, "env-client.ts"))
 		if err != nil {
 			t.Fatalf("no client accessor was generated: %v", err)
 		}

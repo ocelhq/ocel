@@ -41,8 +41,6 @@ func ProgramNamedIn(source string) string {
 	return programNamed.FindString(source)
 }
 
-const scratchDirName = ".ocel"
-
 const initHint = "run `ocel init` to create one"
 
 type NoConfigError struct {

@@ -8,6 +8,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -348,7 +349,7 @@ func (r *release) appEnv(plan providerkit.StackPlan, bundle appBundle, sessions 
 	}
 	maps.Copy(env, app.Values.Injected())
 	if app.Values.Folder != "" {
-		env[appFolderEnv] = app.Values.Folder
+		env[constants.AppFolderEnvName] = app.Values.Folder
 	}
 	for key, value := range bundle.env() {
 		env[key] = value

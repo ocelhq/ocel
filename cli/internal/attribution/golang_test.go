@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/pkg/constants"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
@@ -25,8 +26,8 @@ func goApp(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	write(t, filepath.Join(root, "go.mod"), "module example.com/web\n\ngo 1.27.0\n")
-	write(t, filepath.Join(root, "server", "main.go"), "package main\n\nimport _ \"example.com/web/infra\"\n\nfunc main() {}\n")
-	write(t, filepath.Join(root, "infra", "infra.go"), "package infra\n")
+	write(t, filepath.Join(root, "server", "main.go"), "package main\n\nimport _ \"example.com/web/"+constants.DefaultDiscoveryDirName+"\"\n\nfunc main() {}\n")
+	write(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "declarations.go"), "package "+constants.DefaultDiscoveryDirName+"\n")
 	write(t, filepath.Join(root, "unused", "unused.go"), "package unused\n")
 	return root
 }
@@ -37,7 +38,7 @@ func TestGoReachGrantsAResourceTheAppsMainImports(t *testing.T) {
 	declarations := []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
-		Source: filepath.Join(root, "infra", "infra.go") + ":1",
+		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "declarations.go") + ":1",
 	}}
 
 	usages, err := Compute(t.Context(), root, apps, declarations)
@@ -99,7 +100,7 @@ func TestGoReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
-		Source: filepath.Join(root, "infra", "infra.go") + ":5",
+		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "infra.go") + ":5",
 	}})
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
@@ -116,14 +117,14 @@ func TestGoReachStopsAtTheModuleTheAppLivesIn(t *testing.T) {
 	root := t.TempDir()
 	write(t, filepath.Join(root, "go.work"), "go 1.27.0\n\nuse (\n\t./server\n\t./shared\n)\n")
 	write(t, filepath.Join(root, "server", "go.mod"), "module example.com/web\n\ngo 1.27.0\n\nrequire example.com/shared v0.0.0\n")
-	write(t, filepath.Join(root, "server", "main.go"), "package main\n\nimport _ \"example.com/shared/infra\"\n\nfunc main() {}\n")
+	write(t, filepath.Join(root, "server", "main.go"), "package main\n\nimport _ \"example.com/shared/"+constants.DefaultDiscoveryDirName+"\"\n\nfunc main() {}\n")
 	write(t, filepath.Join(root, "shared", "go.mod"), "module example.com/shared\n\ngo 1.27.0\n")
-	write(t, filepath.Join(root, "shared", "infra", "infra.go"), "package infra\n")
+	write(t, filepath.Join(root, "shared", constants.DefaultDiscoveryDirName, "declarations.go"), "package "+constants.DefaultDiscoveryDirName+"\n")
 
 	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, []Declaration{{
 		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
 		Name:   "main",
-		Source: filepath.Join(root, "shared", "infra", "infra.go") + ":1",
+		Source: filepath.Join(root, "shared", constants.DefaultDiscoveryDirName, "declarations.go") + ":1",
 	}})
 	if err != nil {
 		t.Fatalf("Compute: %v", err)

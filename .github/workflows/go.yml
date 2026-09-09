@@ -51,8 +51,8 @@ jobs:
       matrix:
         group:
           - name: cli
-            dirs: cli sdk pkg/naming pkg/proto pkg/channel pkg/configdoc
-            packages: ./cli/... ./sdk/... ./pkg/naming/... ./pkg/proto/... ./pkg/channel/... ./pkg/configdoc/... ./tests/fixtures/sdk/go/...
+            dirs: cli sdk pkg/naming pkg/proto pkg/channel pkg/configdoc pkg/constants
+            packages: ./cli/... ./sdk/... ./pkg/naming/... ./pkg/proto/... ./pkg/channel/... ./pkg/configdoc/... ./pkg/constants/... ./tests/fixtures/sdk/go/...
             sums: |
               cli/go.sum
               sdk/go.sum

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -241,7 +242,7 @@ func TestPath(t *testing.T) {
 
 	t.Run("is under the project scratch dir", func(t *testing.T) {
 		t.Parallel()
-		if got, want := Path("/p"), filepath.Join("/p", ".ocel", "service-map.json"); got != want {
+		if got, want := Path("/p"), filepath.Join("/p", constants.ProjectStateDirName, "service-map.json"); got != want {
 			t.Errorf("Path() = %q, want %q", got, want)
 		}
 	})

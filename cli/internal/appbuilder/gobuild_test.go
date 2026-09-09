@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -64,7 +65,7 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 		App:          "api",
 	}})
 
-	binary := filepath.Join(root, ".ocel", "output", "apps", "api", "functions", "index.func", "api")
+	binary := filepath.Join(root, constants.ProjectStateDirName, "output", "apps", "api", "functions", "index.func", "api")
 	if _, err := os.Stat(binary); err != nil {
 		t.Fatalf("the build wrote no binary for the function to boot: %v", err)
 	}

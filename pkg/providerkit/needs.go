@@ -11,12 +11,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
-	artifactRootDir = ".ocel/output"
+	artifactRootDir = constants.ProjectStateDirName + "/output"
 
 	appsDir = "apps"
 

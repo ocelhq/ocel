@@ -11,6 +11,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 type ctxKey struct{}
@@ -40,7 +42,7 @@ type Run struct {
 func Start(ctx context.Context, projectDir, command string) (context.Context, *Run, error) {
 	start := time.Now()
 	id := newTraceID()
-	dir := filepath.Join(projectDir, ".ocel", "runs")
+	dir := filepath.Join(projectDir, constants.ProjectStateDirName, "runs")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return ctx, nil, err
 	}

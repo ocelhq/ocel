@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 //go:generate pnpm --dir ../../../.. exec turbo run build --filter=@platform/aws-transform-runner
@@ -20,7 +22,6 @@ import (
 var runner []byte
 
 const (
-	scratchDirName = ".ocel"
 	bundleFileName = "transform.mjs"
 	runnerFileName = "transform-runner.mjs"
 )
@@ -75,9 +76,9 @@ func (p NodePass) Evaluate(ctx context.Context, req Request) ([]Result, error) {
 }
 
 func (p NodePass) bundle() (string, error) {
-	outDir := filepath.Join(p.Root, scratchDirName)
+	outDir := filepath.Join(p.Root, constants.ProjectStateDirName)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return "", fmt.Errorf("create %s: %w", scratchDirName, err)
+		return "", fmt.Errorf("create %s: %w", constants.ProjectStateDirName, err)
 	}
 	runnerPath := filepath.Join(outDir, runnerFileName)
 	if err := os.WriteFile(runnerPath, runner, 0o644); err != nil {

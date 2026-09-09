@@ -9,19 +9,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
 func pythonFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	write(t, filepath.Join(root, "infra", "__init__.py"), "")
+	write(t, filepath.Join(root, "declarations", "__init__.py"), "")
 	return root
 }
 
-func TestThePythonLauncherRunsAScriptThatImportsTheInfraPackage(t *testing.T) {
+func TestThePythonLauncherDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	configDir := pythonFixture(t)
-	root := Root{Dir: filepath.Join(configDir, "infra"), Language: Python}
+	root := Root{Dir: filepath.Join(configDir, "declarations"), Language: Python}
 
 	cmd, err := launchers[Python].Command(context.Background(), configDir, root, "http://127.0.0.1:1234")
 	if err != nil {
@@ -31,21 +32,21 @@ func TestThePythonLauncherRunsAScriptThatImportsTheInfraPackage(t *testing.T) {
 	if cmd.Dir != configDir {
 		t.Errorf("Dir = %q, want %q", cmd.Dir, configDir)
 	}
-	if want := "./.ocel/discovery.py"; !slices.Contains(cmd.Args, want) {
+	if want := "./" + constants.ProjectStateDirName + "/discovery.py"; !slices.Contains(cmd.Args, want) {
 		t.Errorf("Args = %q, want them to run %q", cmd.Args, want)
 	}
-	for _, want := range []string{"OCEL_PHASE=discovery", "OCEL_DEV_SERVER=http://127.0.0.1:1234", "PYTHONDONTWRITEBYTECODE=1"} {
+	for _, want := range []string{constants.PhaseEnvName + "=discovery", constants.DevServerEnvName + "=http://127.0.0.1:1234", "PYTHONDONTWRITEBYTECODE=1"} {
 		if !slices.Contains(cmd.Env, want) {
 			t.Errorf("Env lacks %q", want)
 		}
 	}
 
-	generated, err := os.ReadFile(filepath.Join(configDir, ".ocel", "discovery.py"))
+	generated, err := os.ReadFile(filepath.Join(configDir, constants.ProjectStateDirName, "discovery.py"))
 	if err != nil {
 		t.Fatalf("read the generated script: %v", err)
 	}
-	if !strings.Contains(string(generated), `import_module("infra")`) {
-		t.Errorf("generated script = %q, want it to import the infra package", generated)
+	if !strings.Contains(string(generated), `import_module("declarations")`) {
+		t.Errorf("generated script = %q, want it to import the package named by the root", generated)
 	}
 }
 
@@ -53,9 +54,9 @@ func TestThePythonLauncherRunsFromTheNearestProjectFileAboveTheRoot(t *testing.T
 	configDir := t.TempDir()
 	write(t, filepath.Join(configDir, "pyproject.toml"), "")
 	write(t, filepath.Join(configDir, "server", "requirements.txt"), "")
-	write(t, filepath.Join(configDir, "server", "infra", "__init__.py"), "")
+	write(t, filepath.Join(configDir, "server", "declarations", "__init__.py"), "")
 
-	cmd, err := launchers[Python].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "server", "infra"), Language: Python}, "http://127.0.0.1:1234")
+	cmd, err := launchers[Python].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "server", "declarations"), Language: Python}, "http://127.0.0.1:1234")
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -67,7 +68,7 @@ func TestThePythonLauncherRunsFromTheNearestProjectFileAboveTheRoot(t *testing.T
 func TestThePythonLauncherRefusesARootTooDeepToNameAPackage(t *testing.T) {
 	configDir := t.TempDir()
 	write(t, filepath.Join(configDir, "requirements.txt"), "")
-	root := filepath.Join(configDir, "server", "infra")
+	root := filepath.Join(configDir, "server", "declarations")
 	write(t, filepath.Join(root, "__init__.py"), "")
 
 	_, err := launchers[Python].Command(context.Background(), configDir, Root{Dir: root, Language: Python}, "http://127.0.0.1:1234")
@@ -81,12 +82,19 @@ func TestThePythonLauncherRefusesARootTooDeepToNameAPackage(t *testing.T) {
 
 func TestRunDeclaresWhatThePythonFixtureDeclares(t *testing.T) {
 	configDir := repoFixture(t, filepath.Join("sdk", "python"))
+	app, err := os.ReadFile(filepath.Join(configDir, "server", "main.py"))
+	if err != nil {
+		t.Fatalf("read the fixture app: %v", err)
+	}
+	if !strings.Contains(string(app), "from "+constants.DefaultDiscoveryDirName+" import") {
+		t.Fatalf("the fixture app does not import the default discovery package")
+	}
 
 	roots, err := Roots(configDir, nil)
 	if err != nil {
 		t.Fatalf("Roots: %v", err)
 	}
-	if len(roots) != 1 || roots[0].Language != Python || roots[0].Dir != filepath.Join(configDir, "infra") {
+	if len(roots) != 1 || roots[0].Language != Python || roots[0].Dir != filepath.Join(configDir, constants.DefaultDiscoveryDirName) {
 		t.Fatalf("roots = %+v, want the python infra folder of the project", roots)
 	}
 
@@ -112,7 +120,7 @@ func TestRunDeclaresWhatThePythonFixtureDeclares(t *testing.T) {
 	if resource.GetName() != "main" || resource.GetType() != linksv1.LinkType_LINK_TYPE_POSTGRES {
 		t.Errorf("resource = %v, want the postgres named main", resource)
 	}
-	want := filepath.ToSlash(filepath.Join("infra", "__init__.py")) + ":3"
+	want := filepath.ToSlash(filepath.Join(constants.DefaultDiscoveryDirName, "__init__.py")) + ":3"
 	if source := filepath.ToSlash(declares[0].GetSource()); !strings.HasSuffix(source, want) {
 		t.Errorf("source = %q, want it to end with %q", source, want)
 	}

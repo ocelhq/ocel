@@ -11,6 +11,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 var unresolvableImportLogLevels = map[string]api.LogLevel{
@@ -113,7 +114,7 @@ func shakenSurvivors(root string, app App) (map[string]map[string]bool, error) {
 		Bundle:        true,
 		Platform:      api.PlatformNode,
 		Format:        api.FormatESModule,
-		Outdir:        filepath.Join(root, ".ocel", "attribution", app.Name),
+		Outdir:        filepath.Join(root, constants.ProjectStateDirName, "attribution", app.Name),
 		Write:         false,
 		Metafile:      true,
 		Loader:        assetLoaders,

@@ -8,6 +8,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 //go:generate pnpm --dir ../.. exec turbo run build --filter=@cli/node
@@ -16,7 +18,7 @@ import (
 var embedded embed.FS
 
 func DistDir(projectDir string) string {
-	return filepath.Join(projectDir, ".ocel", "dist")
+	return filepath.Join(projectDir, constants.ProjectStateDirName, "dist")
 }
 
 func BuilderPath(projectDir string) string {

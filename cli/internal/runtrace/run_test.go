@@ -12,6 +12,8 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 func TestStartNamesArtifactsByTraceID(t *testing.T) {
@@ -25,7 +27,7 @@ func TestStartNamesArtifactsByTraceID(t *testing.T) {
 		t.Fatalf("Close() = %v", err)
 	}
 
-	runsDir := filepath.Join(dir, ".ocel", "runs")
+	runsDir := filepath.Join(dir, constants.ProjectStateDirName, "runs")
 	wantLog := filepath.Join(runsDir, r.TraceID()+".ndjson")
 	wantTrace := filepath.Join(runsDir, r.TraceID()+".otlp.json")
 

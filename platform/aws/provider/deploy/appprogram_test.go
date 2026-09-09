@@ -8,6 +8,7 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -231,7 +232,7 @@ func TestAReleaseThatProvisionsNamesNoPhase(t *testing.T) {
 
 	env := releasing(t, Config{}).appEnv(plan, appBundle{}, sessionScope{})
 
-	if got, held := env[providerkit.PhaseEnvName]; held {
-		t.Errorf("%s = %q, want a release that provisions to name no phase at all", providerkit.PhaseEnvName, got)
+	if got, held := env[constants.PhaseEnvName]; held {
+		t.Errorf("%s = %q, want a release that provisions to name no phase at all", constants.PhaseEnvName, got)
 	}
 }

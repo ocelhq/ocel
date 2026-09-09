@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
 	"github.com/ocelhq/ocel/platform/aws/provider/membrane/bucket"
@@ -21,9 +22,8 @@ import (
 )
 
 const (
-	runtimeAddressEnvVar = "OCEL_RUNTIME_ADDRESS"
-	stateTableEnvVar     = "OCEL_RUNTIME_STATE_TABLE"
-	sessionPrefixEnvVar  = "OCEL_RUNTIME_SESSION_PREFIX"
+	stateTableEnvVar    = "OCEL_RUNTIME_STATE_TABLE"
+	sessionPrefixEnvVar = "OCEL_RUNTIME_SESSION_PREFIX"
 )
 
 func membraneWanted(links []live.Link) bool {
@@ -72,7 +72,7 @@ func serveMembrane(ctx context.Context, links []live.Link, table, sessionPrefix 
 	go func() { served <- srv.Serve(ln) }()
 
 	return []string{
-		runtimeAddressEnvVar + "=http://" + ln.Addr().String(),
+		constants.RuntimeAddressEnvName + "=http://" + ln.Addr().String(),
 		channel.SessionTokenEnvVar + "=" + token,
 	}, served, nil
 }

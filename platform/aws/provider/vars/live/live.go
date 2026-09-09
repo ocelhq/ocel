@@ -7,12 +7,13 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-const FilePath = ".ocel/variables.live.json"
+const FilePath = constants.ProjectStateDirName + "/variables.live.json"
 
 type Manifest struct {
 	Slug        string `json:"slug"`

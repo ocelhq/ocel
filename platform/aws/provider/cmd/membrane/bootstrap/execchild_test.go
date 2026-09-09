@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 const (
@@ -179,12 +181,12 @@ func TestStartExecutable(t *testing.T) {
 }
 
 func TestExecutableEnvNamesThePortTheAppBinds(t *testing.T) {
-	env := executableEnv(4321, []string{"OCEL_RUNTIME_ADDRESS=http://127.0.0.1:9"})
+	env := executableEnv(4321, []string{constants.RuntimeAddressEnvName + "=http://127.0.0.1:9"})
 	var port, address string
 	for _, entry := range env {
 		if name, value, _ := strings.Cut(entry, "="); name == "PORT" {
 			port = value
-		} else if name == "OCEL_RUNTIME_ADDRESS" {
+		} else if name == constants.RuntimeAddressEnvName {
 			address = value
 		}
 	}
@@ -192,7 +194,7 @@ func TestExecutableEnvNamesThePortTheAppBinds(t *testing.T) {
 		t.Errorf("PORT = %q, want the port the membrane forwards to", port)
 	}
 	if address != "http://127.0.0.1:9" {
-		t.Errorf("OCEL_RUNTIME_ADDRESS = %q, want what the membrane resolved for this deployment", address)
+		t.Errorf("%s = %q, want what the membrane resolved for this deployment", constants.RuntimeAddressEnvName, address)
 	}
 }
 

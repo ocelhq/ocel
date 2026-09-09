@@ -10,6 +10,8 @@ require (
 	github.com/containerd/errdefs v1.0.0
 	github.com/google/go-containerregistry v0.21.7
 	github.com/ocelhq/ocel/pkg/channel v0.0.0
+	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
+	github.com/ocelhq/ocel/pkg/constants v0.0.0
 	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/proto v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
@@ -36,7 +38,6 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
-	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
@@ -54,6 +55,8 @@ require (
 )
 
 replace github.com/ocelhq/ocel/pkg/channel => ../channel
+
+replace github.com/ocelhq/ocel/pkg/constants => ../constants
 
 replace github.com/ocelhq/ocel/pkg/naming => ../naming
 

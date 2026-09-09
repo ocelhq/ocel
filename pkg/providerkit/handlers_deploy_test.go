@@ -13,6 +13,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
@@ -47,7 +48,7 @@ func builtApps(t *testing.T, apps ...string) {
 	t.Helper()
 	root := t.TempDir()
 	for _, app := range apps {
-		built := filepath.Join(root, ".ocel/output", filepath.FromSlash(appArtifactPath(app)))
+		built := filepath.Join(root, constants.ProjectStateDirName, "output", filepath.FromSlash(appArtifactPath(app)))
 		if err := os.MkdirAll(built, 0o755); err != nil {
 			t.Fatal(err)
 		}

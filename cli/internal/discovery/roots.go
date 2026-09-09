@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 type Language string
@@ -24,8 +25,6 @@ type Root struct {
 	Dir      string
 	Language Language
 }
-
-const defaultRootName = "infra"
 
 var manifestLanguages = []struct {
 	file     string
@@ -129,7 +128,7 @@ func configuredRootDirs(configDir string, paths []string) ([]string, error) {
 }
 
 func defaultRootDirs(configDir string) []string {
-	dir := filepath.Join(configDir, defaultRootName)
+	dir := filepath.Join(configDir, constants.DefaultDiscoveryDirName)
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		return nil
 	}

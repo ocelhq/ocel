@@ -7,9 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-)
 
-const scratchDirName = ".ocel"
+	"github.com/ocelhq/ocel/pkg/constants"
+)
 
 const fileName = "console.json"
 
@@ -21,7 +21,7 @@ type Binding struct {
 }
 
 func path(projectDir string) string {
-	return filepath.Join(projectDir, scratchDirName, fileName)
+	return filepath.Join(projectDir, constants.ProjectStateDirName, fileName)
 }
 
 func Read(projectDir, apiURL string) (*Binding, error) {

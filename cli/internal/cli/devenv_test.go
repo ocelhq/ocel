@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -51,14 +52,14 @@ declare global {
 }
 globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
-  fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.OCEL_DEV_SERVER), {
+  fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.%s), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ definitions: [%s] }),
   }),
 );
 export {};
-`, strings.Join(definitions, ","))
+`, constants.DevServerEnvName, strings.Join(definitions, ","))
 }
 
 func TestResolvedEnv(t *testing.T) {
@@ -119,34 +120,34 @@ func TestResolvedEnv(t *testing.T) {
 		t.Parallel()
 
 		bound := resolvedEnv(nil, nil, nil, nil, "", "/web")
-		if bound["OCEL_APP_FOLDER"] != "/web" {
-			t.Errorf("OCEL_APP_FOLDER = %q, want %q", bound["OCEL_APP_FOLDER"], "/web")
+		if bound[constants.AppFolderEnvName] != "/web" {
+			t.Errorf("%s = %q, want %q", constants.AppFolderEnvName, bound[constants.AppFolderEnvName], "/web")
 		}
 
 		unbound := resolvedEnv(nil, nil, nil, nil, "", "")
-		folder, ok := unbound["OCEL_APP_FOLDER"]
+		folder, ok := unbound[constants.AppFolderEnvName]
 		if !ok {
-			t.Fatalf("resolvedEnv = %v, want OCEL_APP_FOLDER written even for an unbound app", unbound)
+			t.Fatalf("resolvedEnv = %v, want %s written even for an unbound app", unbound, constants.AppFolderEnvName)
 		}
 		if folder != "" {
-			t.Errorf("OCEL_APP_FOLDER = %q, want the project root spelled as the empty string", folder)
+			t.Errorf("%s = %q, want the project root spelled as the empty string", constants.AppFolderEnvName, folder)
 		}
 
-		stale := toMap(mergeEnv([]string{"OCEL_APP_FOLDER=/stale"}, nil, nil, nil, nil, "", ""))
-		if stale["OCEL_APP_FOLDER"] != "" {
-			t.Errorf("OCEL_APP_FOLDER = %q, want the shell's stale binding overwritten", stale["OCEL_APP_FOLDER"])
+		stale := toMap(mergeEnv([]string{constants.AppFolderEnvName + "=/stale"}, nil, nil, nil, nil, "", ""))
+		if stale[constants.AppFolderEnvName] != "" {
+			t.Errorf("%s = %q, want the shell's stale binding overwritten", constants.AppFolderEnvName, stale[constants.AppFolderEnvName])
 		}
 
 		contested := resolvedEnv(
-			map[string]string{"OCEL_APP_FOLDER": "/from-project-env"},
-			map[string]string{"OCEL_APP_FOLDER": "/from-live"},
-			map[string]string{"OCEL_APP_FOLDER": "/from-dotfile"},
-			[]resolve.Resource{{Name: "main", Env: map[string]string{"OCEL_APP_FOLDER": "/from-resource"}}},
+			map[string]string{constants.AppFolderEnvName: "/from-project-env"},
+			map[string]string{constants.AppFolderEnvName: "/from-live"},
+			map[string]string{constants.AppFolderEnvName: "/from-dotfile"},
+			[]resolve.Resource{{Name: "main", Env: map[string]string{constants.AppFolderEnvName: "/from-resource"}}},
 			"",
 			"/web",
 		)
-		if contested["OCEL_APP_FOLDER"] != "/web" {
-			t.Errorf("OCEL_APP_FOLDER = %q, want the binding dev states to outrank every source it merges", contested["OCEL_APP_FOLDER"])
+		if contested[constants.AppFolderEnvName] != "/web" {
+			t.Errorf("%s = %q, want the binding dev states to outrank every source it merges", constants.AppFolderEnvName, contested[constants.AppFolderEnvName])
 		}
 	})
 }
@@ -478,7 +479,7 @@ func TestRunDevEnvironment(t *testing.T) {
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "NEXT_PUBLIC_SITE_URL=https://example.com\nAWS_PROFILE=dev\napi_base=lower\nAPI_BASE=http://localhost:3000\nnot an assignment\n")
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -501,8 +502,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			if env["API_BASE"] != "http://localhost:3000" {
 				t.Errorf("API_BASE = %q, want the dotfile's value", env["API_BASE"])
 			}
-			if env["OCEL_APP_FOLDER"] != "/web" {
-				t.Errorf("OCEL_APP_FOLDER = %q, want the folder the only app binds", env["OCEL_APP_FOLDER"])
+			if env[constants.AppFolderEnvName] != "/web" {
+				t.Errorf("%s = %q, want the folder the only app binds", constants.AppFolderEnvName, env[constants.AppFolderEnvName])
 			}
 		})
 
@@ -539,7 +540,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath}
@@ -576,7 +577,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath}
@@ -613,7 +614,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "NOBODY=x\n")
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
@@ -645,7 +646,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		withCredentials(&deps, resolveServer.URL)
 		calls := withProjectEnv(&deps, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -688,7 +689,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		withProjectEnv(&deps, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "STRIPE_API_KEY=sk_from_file\n")
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -730,7 +731,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -772,7 +773,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"DB_PASSWORD","class":"VARIABLE_CLASS_SECRET","required":true}`))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"DB_PASSWORD","class":"VARIABLE_CLASS_SECRET","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
@@ -808,7 +809,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n")
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "PUBLIC_SITE_URL=https://local.example.com\nSTRIPE_API_KEY=sk_local\n")
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(
 			`{"key":"PUBLIC_SITE_URL","class":"VARIABLE_CLASS_PLAIN","required":true,"clientAccessible":true}`,
 			`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`,
 		))
@@ -824,7 +825,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
 		}
 
-		accessor, readErr := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
+		accessor, readErr := os.ReadFile(filepath.Join(root, constants.ProjectStateDirName, "env-client.ts"))
 		if readErr != nil {
 			t.Fatalf("dev generated no client accessor: %v", readErr)
 		}
@@ -834,7 +835,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if strings.Contains(string(accessor), "STRIPE_API_KEY") {
 			t.Errorf("accessor names a server-only value:\n%s", accessor)
 		}
-		if tsconfig := readTestFile(t, filepath.Join(root, "tsconfig.json")); !strings.Contains(tsconfig, `"ocel/env/client": ["./.ocel/env-client.ts"]`) {
+		if tsconfig := readTestFile(t, filepath.Join(root, "tsconfig.json")); !strings.Contains(tsconfig, `"ocel/env/client": ["./`+constants.ProjectStateDirName+`/env-client.ts"]`) {
 			t.Errorf("tsconfig does not point the import at the accessor:\n%s", tsconfig)
 		}
 
@@ -871,7 +872,7 @@ func TestRunRunEnvironment(t *testing.T) {
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "NOBODY=x\n")
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
@@ -906,7 +907,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(
 			`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
@@ -928,8 +929,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if env["API_BASE"] != "http://localhost:3000" {
 			t.Errorf("API_BASE = %q, want `ocel run` to resolve the dotfile the way `ocel dev` does", env["API_BASE"])
 		}
-		if env["OCEL_APP_FOLDER"] != "/web" {
-			t.Errorf("OCEL_APP_FOLDER = %q, want the folder the only app binds", env["OCEL_APP_FOLDER"])
+		if env[constants.AppFolderEnvName] != "/web" {
+			t.Errorf("%s = %q, want the folder the only app binds", constants.AppFolderEnvName, env[constants.AppFolderEnvName])
 		}
 		if !strings.Contains(stdout.String(), dotfileReadOnceAdvice) {
 			t.Errorf("stdout = %q, want the advice for a run that reads the file once", stdout.String())
@@ -950,7 +951,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		deps := newDeps()
 		withCredentials(&deps, resolveServer.URL)
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath}
@@ -987,7 +988,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		withCredentials(&deps, resolveServer.URL)
 		withProjectEnv(&deps, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
 		writeLink(t, root, resolveServer.URL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -1016,7 +1017,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "")
 
 		got := resolvedEnv(nil, nil, nil, nil, "", "")
-		for _, key := range []string{providerkit.URLEnvName, providerkit.ClientURLEnvName} {
+		for _, key := range []string{constants.AppURLEnvName, providerkit.ClientURLEnvName} {
 			if want := "http://localhost:3000"; got[key] != want {
 				t.Errorf("%s = %q, want %q — dev never leaves it unset, so an app may read it without a fallback", key, got[key], want)
 			}
@@ -1027,8 +1028,8 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "")
 
 		got := resolvedEnv(nil, nil, map[string]string{"PORT": "4321"}, nil, "", "")
-		if want := "http://localhost:4321"; got[providerkit.URLEnvName] != want {
-			t.Errorf("%s = %q, want %q", providerkit.URLEnvName, got[providerkit.URLEnvName], want)
+		if want := "http://localhost:4321"; got[constants.AppURLEnvName] != want {
+			t.Errorf("%s = %q, want %q", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
 		}
 	})
 
@@ -1036,8 +1037,8 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "8080")
 
 		got := resolvedEnv(nil, nil, nil, nil, "", "")
-		if want := "http://localhost:8080"; got[providerkit.URLEnvName] != want {
-			t.Errorf("%s = %q, want %q — the app is spawned with the shell's environment under it", providerkit.URLEnvName, got[providerkit.URLEnvName], want)
+		if want := "http://localhost:8080"; got[constants.AppURLEnvName] != want {
+			t.Errorf("%s = %q, want %q — the app is spawned with the shell's environment under it", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
 		}
 	})
 }

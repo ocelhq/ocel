@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/constants"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
@@ -888,7 +889,7 @@ func TestChildEnv(t *testing.T) {
 
 	t.Run("hands the child the membrane it must reach and the token that opens it", func(t *testing.T) {
 		membraneEnv := []string{
-			runtimeAddressEnvVar + "=http://127.0.0.1:41000",
+			constants.RuntimeAddressEnvName + "=http://127.0.0.1:41000",
 			channel.SessionTokenEnvVar + "=deadbeef",
 		}
 		l := newLiveValues(resolves(map[string]string{}), []string{"DB_PASSWORD"}, nil, nil)

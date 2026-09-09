@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -68,8 +69,8 @@ func TestAResourceIsNamedAsTheRuntimeReadsIt(t *testing.T) {
 func TestADeployThatProvisionsNamesNoPhase(t *testing.T) {
 	delivered := deliveredBy(t, namingARegistry(containerDeployRequest("/healthz")), nil)
 
-	if got, held := delivered[providerkit.PhaseEnvName]; held {
-		t.Errorf("%s = %q, want a deploy that provisions to name no phase at all", providerkit.PhaseEnvName, got)
+	if got, held := delivered[constants.PhaseEnvName]; held {
+		t.Errorf("%s = %q, want a deploy that provisions to name no phase at all", constants.PhaseEnvName, got)
 	}
 }
 
@@ -122,12 +123,12 @@ func TestEveryValueClassIsDeliveredUnderItsBareNameToAContainer(t *testing.T) {
 
 func TestTheDeploymentURLIsDeliveredToAContainerRatherThanRefusedAsAnOcelName(t *testing.T) {
 	req := namingARegistry(containerDeployRequest("/healthz"))
-	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, providerkit.URLEnvName, "https://shop.example")
+	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, constants.AppURLEnvName, "https://shop.example")
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, providerkit.ClientURLEnvName, "https://shop.example")
 
 	delivered := deliveredBy(t, req, nil)
 
-	for _, key := range []string{providerkit.URLEnvName, providerkit.ClientURLEnvName} {
+	for _, key := range []string{constants.AppURLEnvName, providerkit.ClientURLEnvName} {
 		if got, want := delivered[key], "https://shop.example"; got != want {
 			t.Errorf("a container is handed %s=%q, want %q: ocel writes it for every app, so the guard on its own prefix must not refuse its own entry", key, got, want)
 		}

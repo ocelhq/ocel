@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 func TestWrite(t *testing.T) {
@@ -136,7 +138,7 @@ func TestPath(t *testing.T) {
 
 	t.Run("is under the project scratch dir", func(t *testing.T) {
 		t.Parallel()
-		if got, want := Path("/p"), filepath.Join("/p", ".ocel", "deploy-result.json"); got != want {
+		if got, want := Path("/p"), filepath.Join("/p", constants.ProjectStateDirName, "deploy-result.json"); got != want {
 			t.Errorf("Path() = %q, want %q", got, want)
 		}
 	})

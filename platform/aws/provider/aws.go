@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
@@ -40,7 +41,7 @@ import (
 
 const Vendor providerkit.Vendor = "aws"
 
-const artifactRootDirName = ".ocel/output"
+const artifactRootDirName = constants.ProjectStateDirName + "/output"
 
 type Options struct {
 	Region       string            `json:"region,omitempty" doc:"The AWS region to deploy into."`

@@ -60,18 +60,17 @@ Compute is a setting too. On providers that support it, the same app runs as fun
 
 ## Application defined infrastructure
 
-A database or a bucket is a function call in your app. Declare it once in an `infra` folder, import it where you use it, and the call is what provisions it. There is no other definition of it anywhere.
+A database or a bucket is a function call in your app. Declare it once in a [discovery folder](/docs/configuration#discoverypaths), import it where you use it, and the call is what provisions it. There is no other definition of it anywhere.
 
-```ts title="infra/index.ts"
+```ts title="resources/index.ts"
 import { postgres } from "ocel/postgres";
 
-// infrastructure in your app code!
 export const db = postgres("main");
 ```
 
 ```ts title="src/server.ts"
 import express from "express";
-import { db } from "../infra";
+import { db } from "../resources";
 
 const app = express();
 

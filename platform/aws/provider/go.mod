@@ -1,13 +1,3 @@
-// The Ocel AWS provider binary. It lives in its own Go module so the heavy AWS
-// SDK dependency tree it will pull in stays out of the CLI's and SDK's module
-// graphs. It builds two binaries under cmd/: the provider (cmd/ocelaws) and the
-// runtime (cmd/ocelawsrt). The "ocel" prefix keeps the shipped provider binary
-// from shadowing the real `aws` CLI on a user's PATH.
-//
-// The `replace` pins the shared proto module to the local checkout (proto has no
-// published tag yet); without it `go mod tidy` mis-resolves the path to the CLI
-// module. Swap for a real `require github.com/ocelhq/ocel/pkg/proto vX.Y.Z` (and
-// drop the replace) once proto is tagged. The root go.work wires this for dev.
 module github.com/ocelhq/ocel/platform/aws/provider
 
 go 1.27.0
@@ -40,6 +30,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/evanw/esbuild v0.28.1
 	github.com/ocelhq/ocel/pkg/channel v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/pkg/constants v0.0.0
 	github.com/ocelhq/ocel/pkg/naming v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/pkg/proto v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0-00010101000000-000000000000
@@ -203,6 +194,8 @@ require (
 )
 
 replace github.com/ocelhq/ocel/pkg/channel => ../../../pkg/channel
+
+replace github.com/ocelhq/ocel/pkg/constants => ../../../pkg/constants
 
 replace github.com/ocelhq/ocel/pkg/proto => ../../../pkg/proto
 

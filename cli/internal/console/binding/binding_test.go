@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 const apiURL = "https://ocel.app"
@@ -87,10 +89,10 @@ func TestRead(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(dir, ".ocel"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, constants.ProjectStateDirName), 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, ".ocel", "console.json"), []byte("{not json"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, constants.ProjectStateDirName, "console.json"), []byte("{not json"), 0o644); err != nil {
 			t.Fatalf("write: %v", err)
 		}
 
@@ -132,8 +134,8 @@ func TestWrite(t *testing.T) {
 		if err := Write(dir, sample()); err != nil {
 			t.Fatalf("Write err = %v", err)
 		}
-		if _, err := os.Stat(filepath.Join(dir, ".ocel", "console.json")); err != nil {
-			t.Fatalf("stat .ocel/console.json: %v", err)
+		if _, err := os.Stat(filepath.Join(dir, constants.ProjectStateDirName, "console.json")); err != nil {
+			t.Fatalf("stat %s/console.json: %v", constants.ProjectStateDirName, err)
 		}
 	})
 

@@ -18,6 +18,7 @@ require (
 	github.com/moby/patternmatcher v0.6.1
 	github.com/ocelhq/ocel/pkg/channel v0.0.0
 	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
+	github.com/ocelhq/ocel/pkg/constants v0.0.0
 	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/proto v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0-00010101000000-000000000000
@@ -183,3 +184,5 @@ replace github.com/ocelhq/ocel/pkg/providerkit => ../pkg/providerkit
 replace github.com/ocelhq/ocel/platform/edge/contract => ../platform/edge/contract
 
 replace github.com/ocelhq/ocel/pkg/configdoc => ../pkg/configdoc
+
+replace github.com/ocelhq/ocel/pkg/constants => ../pkg/constants

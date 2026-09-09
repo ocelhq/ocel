@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 var runLocal bool
@@ -127,7 +128,7 @@ func runStandalone(ctx context.Context, deps cmddeps.Deps, link *devConsole, cfg
 	var projectCfg resolve.Account
 	if link == nil {
 		reportLocal(stdout)
-		srv = devserver.NewLocal(devServerAddr, filepath.Join(cfg.Dir, scratchDirName, "blob"))
+		srv = devserver.NewLocal(devServerAddr, filepath.Join(cfg.Dir, constants.ProjectStateDirName, "blob"))
 	} else {
 		projectCfg = resolveAccount(ctx, deps, link.apiURL, link.token, link.projectID, stderr)
 		srv = devserver.New(link.apiURL, link.token, link.projectID, devServerAddr)

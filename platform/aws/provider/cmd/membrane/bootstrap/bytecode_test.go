@@ -25,6 +25,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 func TestBytecodeCacheKey(t *testing.T) {
@@ -782,7 +784,7 @@ func TestCompileCacheEnv(t *testing.T) {
 	})
 	t.Run("gate open", func(t *testing.T) {
 		t.Setenv(bytecodePrefixEnvVar, "ocel")
-		want := []string{"NODE_COMPILE_CACHE=/tmp/.ocel/compile-cache"}
+		want := []string{"NODE_COMPILE_CACHE=" + compileCacheDir}
 		got := compileCacheEnv()
 		if len(got) != 1 || got[0] != want[0] {
 			t.Errorf("compileCacheEnv() = %v, want %v", got, want)
@@ -994,13 +996,13 @@ func TestFlushCompileCache(t *testing.T) {
 		if line != flushCompileCacheLine {
 			t.Errorf("node received %q, want %q", line, flushCompileCacheLine)
 		}
-		fmt.Fprintln(nodeConn, `{"type":"compile-cache-flushed","payload":{"dir":"/tmp/.ocel/compile-cache","ok":true}}`)
+		fmt.Fprintf(nodeConn, `{"type":"compile-cache-flushed","payload":{"dir":%q,"ok":true}}`+"\n", compileCacheDir)
 
 		got := <-done
 		if !got.ok {
 			t.Fatal("flushCompileCache() ok = false, want the ack delivered")
 		}
-		if got.ack.Dir != "/tmp/.ocel/compile-cache" || !got.ack.OK {
+		if got.ack.Dir != compileCacheDir || !got.ack.OK {
 			t.Errorf("ack = %+v, want the dir and ok node reported", got.ack)
 		}
 	})
@@ -1137,7 +1139,7 @@ func TestBytecodeBudget(t *testing.T) {
 
 func TestNodeChildEnv(t *testing.T) {
 	t.Run("carries the compile cache only when gated", func(t *testing.T) {
-		const want = "NODE_COMPILE_CACHE=/tmp/.ocel/compile-cache"
+		const want = "NODE_COMPILE_CACHE=" + compileCacheDir
 
 		t.Run("gate open", func(t *testing.T) {
 			t.Setenv(bytecodePrefixEnvVar, "ocel")
@@ -2276,8 +2278,8 @@ func TestEmbeddedBytecodePath(t *testing.T) {
 			key  string
 			want string
 		}{
-			{bytecodeCacheKey("ocel", "my-app", "24.3.1", "arm64"), "/var/task/.ocel/bytecode/node24.3.1-arm64.tar"},
-			{bytecodeCacheKey("stg/deploy", "other-fn", "20.11.0", "amd64"), "/var/task/.ocel/bytecode/node20.11.0-x86_64.tar"},
+			{bytecodeCacheKey("ocel", "my-app", "24.3.1", "arm64"), embeddedBytecodeDir + "/node24.3.1-arm64.tar"},
+			{bytecodeCacheKey("stg/deploy", "other-fn", "20.11.0", "amd64"), embeddedBytecodeDir + "/node20.11.0-x86_64.tar"},
 		}
 		for _, c := range cases {
 			if got := embeddedBytecodePath(c.key); got != c.want {
@@ -2463,7 +2465,7 @@ func TestLoadEmbeddedBytecodeCache(t *testing.T) {
 func TestEmbeddedBytecodeCache(t *testing.T) {
 	t.Run("logs a line distinct from the S3 rehydrate", func(t *testing.T) {
 		root := t.TempDir()
-		dir := filepath.Join(root, ".ocel", "bytecode")
+		dir := filepath.Join(root, constants.ProjectStateDirName, "bytecode")
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}

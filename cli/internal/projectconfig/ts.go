@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 var reportedErrorKinds = []string{"BuildEnvError", "EnvDefinitionError"}
@@ -27,9 +28,9 @@ func recognizedErrorKinds() string {
 
 func readTS(ctx context.Context, configPath string) ([]byte, error) {
 	dir := filepath.Dir(configPath)
-	outDir := filepath.Join(dir, scratchDirName)
+	outDir := filepath.Join(dir, constants.ProjectStateDirName)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create %s: %w", scratchDirName, err)
+		return nil, fmt.Errorf("create %s: %w", constants.ProjectStateDirName, err)
 	}
 	outfile := filepath.Join(outDir, bundleName(configPath))
 

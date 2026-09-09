@@ -24,6 +24,7 @@ import (
 
 	"github.com/creack/pty"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -131,7 +132,7 @@ func (j journey) declares(t *testing.T, release string) {
 	write(t, filepath.Join(j.project, "app", "package.json"), lifecycleManifest)
 	j.fixture(t, release)
 	write(t, filepath.Join(j.project, "app", "server.js"), lifecycleServer)
-	write(t, filepath.Join(j.project, "infra", "vars.ts"), fmt.Sprintf(
+	write(t, filepath.Join(j.project, constants.DefaultDiscoveryDirName, "vars.ts"), fmt.Sprintf(
 		"import { defineEnv } from \"ocel/env\";\n\nexport const env = defineEnv({\n  %s: { class: \"sensitive\" },\n});\n", lifecycleSensitive))
 	modules := filepath.Join(j.project, "node_modules")
 	if err := os.MkdirAll(modules, 0o700); err != nil {

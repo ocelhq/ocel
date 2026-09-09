@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 
@@ -64,7 +65,7 @@ globalThis.__ocelRegister.push(
     const log = process.env.OCEL_TEST_DISCOVERY_LOG;
     if (log) await (await import("node:fs/promises")).appendFile(log, "ran\n");
 
-    const res = await fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.OCEL_DEV_SERVER), {
+    const res = await fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.%s), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ definitions: %s }),
@@ -73,7 +74,7 @@ globalThis.__ocelRegister.push(
   })(),
 );
 export {};
-`, definitions)
+`, constants.DevServerEnvName, definitions)
 }
 
 func setUpDeclaringFixture(t *testing.T, definitions string) (root, log string) {
@@ -283,7 +284,7 @@ func TestRunEnvSet(t *testing.T) {
 
 		envSet(t, root, "POSTHOG_ID", "ph_root", envOptions{})
 
-		clitest.WriteFile(t, filepath.Join(root, "infra", "env.ts"),
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "env.ts"),
 			envDeclaringScript(`[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`))
 
 		var stdout, stderr bytes.Buffer

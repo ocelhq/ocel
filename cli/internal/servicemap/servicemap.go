@@ -10,14 +10,13 @@ import (
 	"sort"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
 const SchemaVersion = 1
-
-const scratchDirName = ".ocel"
 
 const fileName = "service-map.json"
 
@@ -106,7 +105,7 @@ func deriveUsages(manifest *contractv1.Manifest) []Usage {
 }
 
 func Path(projectDir string) string {
-	return filepath.Join(projectDir, scratchDirName, fileName)
+	return filepath.Join(projectDir, constants.ProjectStateDirName, fileName)
 }
 
 func Write(projectDir string, r Record) error {

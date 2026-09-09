@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	ocel "github.com/ocelhq/ocel/sdk"
 )
 
@@ -38,8 +39,8 @@ func collector(t *testing.T, seen *[]map[string]any) *httptest.Server {
 func TestPostgresDeclaresDuringDiscovery(t *testing.T) {
 	var seen []map[string]any
 	srv := collector(t, &seen)
-	t.Setenv("OCEL_PHASE", "discovery")
-	t.Setenv("OCEL_DEV_SERVER", srv.URL)
+	t.Setenv(constants.PhaseEnvName, "discovery")
+	t.Setenv(constants.DevServerEnvName, srv.URL)
 
 	_, file, line, _ := runtime.Caller(0)
 	db := ocel.Postgres("main")
@@ -79,8 +80,8 @@ func TestPostgresDeclaresDuringDiscovery(t *testing.T) {
 func TestVersionOverridesTheDeclaredVersion(t *testing.T) {
 	var seen []map[string]any
 	srv := collector(t, &seen)
-	t.Setenv("OCEL_PHASE", "discovery")
-	t.Setenv("OCEL_DEV_SERVER", srv.URL)
+	t.Setenv(constants.PhaseEnvName, "discovery")
+	t.Setenv(constants.DevServerEnvName, srv.URL)
 
 	ocel.Postgres("main", ocel.PostgresVersion("16"))
 
@@ -96,8 +97,8 @@ func TestVersionOverridesTheDeclaredVersion(t *testing.T) {
 func TestAccessorsRefuseDuringDiscovery(t *testing.T) {
 	var seen []map[string]any
 	srv := collector(t, &seen)
-	t.Setenv("OCEL_PHASE", "discovery")
-	t.Setenv("OCEL_DEV_SERVER", srv.URL)
+	t.Setenv(constants.PhaseEnvName, "discovery")
+	t.Setenv(constants.DevServerEnvName, srv.URL)
 
 	db := ocel.Postgres("main")
 

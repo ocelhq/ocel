@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 func builtTree(t *testing.T, files map[string]string) string {
@@ -43,7 +45,7 @@ func digested(t *testing.T, dir string, overlay map[string][]byte) string {
 
 func TestAnArtifactDigestNamesOneTreeAndOneOverlay(t *testing.T) {
 	files := map[string]string{"src/server.js": "handler", "package.json": `{"name":"app"}`}
-	sealed := map[string][]byte{".ocel/vars.sealed": []byte("one")}
+	sealed := map[string][]byte{constants.ProjectStateDirName + "/vars.sealed": []byte("one")}
 
 	t.Run("one tree built twice digests the same", func(t *testing.T) {
 		if a, b := digested(t, builtTree(t, files), nil), digested(t, builtTree(t, files), nil); a != b {
@@ -87,7 +89,7 @@ func TestAnArtifactDigestNamesOneTreeAndOneOverlay(t *testing.T) {
 		if again := digested(t, dir, sealed); again != with {
 			t.Errorf("one tree and one overlay digest to %q then %q, want one key", with, again)
 		}
-		other := digested(t, dir, map[string][]byte{".ocel/vars.sealed": []byte("two")})
+		other := digested(t, dir, map[string][]byte{constants.ProjectStateDirName + "/vars.sealed": []byte("two")})
 		if other == with {
 			t.Error("the digest ignored the overlay's contents")
 		}
@@ -121,7 +123,7 @@ func TestAPackedArtifactCarriesTheTreeTheOverlayAndItsSymlinks(t *testing.T) {
 	t.Run("the tree and the overlay round trip", func(t *testing.T) {
 		dir := builtTree(t, map[string]string{"src/server.js": "handler", "package.json": "{}"})
 		files := map[string]string{}
-		for _, entry := range packed(t, dir, map[string][]byte{".ocel/vars.sealed": []byte("sealed")}).File {
+		for _, entry := range packed(t, dir, map[string][]byte{constants.ProjectStateDirName + "/vars.sealed": []byte("sealed")}).File {
 			body, err := entry.Open()
 			if err != nil {
 				t.Fatal(err)
@@ -134,9 +136,9 @@ func TestAPackedArtifactCarriesTheTreeTheOverlayAndItsSymlinks(t *testing.T) {
 			files[entry.Name] = string(content)
 		}
 		want := map[string]string{
-			"src/server.js":     "handler",
-			"package.json":      "{}",
-			".ocel/vars.sealed": "sealed",
+			"src/server.js": "handler",
+			"package.json":  "{}",
+			constants.ProjectStateDirName + "/vars.sealed": "sealed",
 		}
 		for name, body := range want {
 			if files[name] != body {

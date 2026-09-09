@@ -70,7 +70,7 @@ func TestConfiguredTransformsNeedNode(t *testing.T) {
 	t.Parallel()
 
 	cfg := goProject(t, "ocel.json")
-	cfg.Provider = &projectconfig.ProviderDescriptor{Name: "aws", Options: json.RawMessage(`{"transforms":["./infra/transform.ts"]}`)}
+	cfg.Provider = &projectconfig.ProviderDescriptor{Name: "aws", Options: json.RawMessage(`{"transforms":["./transforms/default.transform.ts"]}`)}
 	if reasons := nodeReasons(cfg); !slices.Contains(reasons, "the provider is configured with transforms") {
 		t.Fatalf("nodeReasons() = %v, want the transforms named", reasons)
 	}

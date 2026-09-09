@@ -22,11 +22,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/node"
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
-
-const scratchDirName = ".ocel"
 
 const outputDirName = "output"
 
@@ -90,9 +89,7 @@ type runtimeInput struct {
 
 const adapterPathEnv = "NEXT_ADAPTER_PATH"
 
-const appFolderEnv = "OCEL_APP_FOLDER"
-
-var buildOwnedNames = []string{adapterPathEnv, appFolderEnv, deploymentIDEnv, providerkit.PhaseEnvName, "PATH"}
+var buildOwnedNames = []string{adapterPathEnv, constants.AppFolderEnvName, deploymentIDEnv, constants.PhaseEnvName, "PATH"}
 
 func checkVariableNames(vars map[string]string) error {
 	for _, name := range buildOwnedNames {
@@ -116,7 +113,7 @@ func builderEnv(adapterPath string, vars map[string]string) []string {
 	for _, key := range keys {
 		env = append(env, key+"="+vars[key])
 	}
-	return append(env, adapterPathEnv+"="+adapterPath, appFolderEnv+"=")
+	return append(env, adapterPathEnv+"="+adapterPath, constants.AppFolderEnvName+"=")
 }
 
 func AppFolder(apps []projectconfig.App) string {
@@ -149,8 +146,8 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		}
 	}
 
-	outputDir := filepath.Join(cfg.Dir, scratchDirName, outputDirName)
-	relOutput := filepath.Join(scratchDirName, outputDirName)
+	outputDir := filepath.Join(cfg.Dir, constants.ProjectStateDirName, outputDirName)
+	relOutput := filepath.Join(constants.ProjectStateDirName, outputDirName)
 
 	if err := os.RemoveAll(outputDir); err != nil {
 		return fmt.Errorf("reset %s: %w", relOutput, err)
@@ -363,10 +360,10 @@ func appArtifactRoot(outputDir, funcDir string) (string, error) {
 }
 
 func CollectFunctions(projectDir string) ([]manifestbuilder.Function, error) {
-	outputDir := filepath.Join(projectDir, scratchDirName, outputDirName)
+	outputDir := filepath.Join(projectDir, constants.ProjectStateDirName, outputDirName)
 	if _, err := os.Stat(outputDir); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("no build output at %s; run `ocel build` first", filepath.Join(scratchDirName, outputDirName))
+			return nil, fmt.Errorf("no build output at %s; run `ocel build` first", filepath.Join(constants.ProjectStateDirName, outputDirName))
 		}
 		return nil, err
 	}
@@ -374,7 +371,7 @@ func CollectFunctions(projectDir string) ([]manifestbuilder.Function, error) {
 }
 
 func EdgeApps(projectDir string) []string {
-	appsDir := filepath.Join(projectDir, scratchDirName, outputDirName, appsDirName)
+	appsDir := filepath.Join(projectDir, constants.ProjectStateDirName, outputDirName, appsDirName)
 	entries, err := os.ReadDir(appsDir)
 	if err != nil {
 		return nil
@@ -401,7 +398,7 @@ func BuildID(projectDir, app string) string {
 }
 
 func serveDescriptor(projectDir, app string) edge.ServeDescriptor {
-	raw, err := os.ReadFile(filepath.Join(projectDir, scratchDirName, outputDirName, appsDirName, app, edge.ServeDescriptorFile))
+	raw, err := os.ReadFile(filepath.Join(projectDir, constants.ProjectStateDirName, outputDirName, appsDirName, app, edge.ServeDescriptorFile))
 	if err != nil {
 		return edge.ServeDescriptor{}
 	}

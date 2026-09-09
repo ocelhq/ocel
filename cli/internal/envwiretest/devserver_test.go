@@ -5,10 +5,12 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -33,7 +35,7 @@ func TestDevserverDiscover(t *testing.T) {
 		cfg := &projectconfig.Config{
 			Slug:      "devserver",
 			Dir:       root,
-			Discovery: projectconfig.Discovery{Paths: []string{"infra"}},
+			Discovery: projectconfig.Discovery{Paths: []string{filepath.Base(clitest.DiscoveryDir(root))}},
 		}
 
 		var stdout, stderr strings.Builder

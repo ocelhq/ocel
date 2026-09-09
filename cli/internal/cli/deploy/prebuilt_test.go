@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -177,7 +178,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		root := t.TempDir()
 		clitest.WritePrebuiltFunction(t, root, "api", "index")
 		recorded := "d1a2b3c4d5e6f708192a3b4c5d6e7f80"
-		clitest.WriteFile(t, filepath.Join(root, ".ocel", "output", "apps", "api", "deployment-id"), recorded+"\n")
+		clitest.WriteFile(t, filepath.Join(root, constants.ProjectStateDirName, "output", "apps", "api", "deployment-id"), recorded+"\n")
 		deps := clitest.NewDeps()
 
 		s, _ := newBuildManifestSession(t)
@@ -215,7 +216,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.StubRecordedDeploymentIDs(&deps)
 		deps.BuildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
-			data, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
+			data, err := os.ReadFile(filepath.Join(root, constants.ProjectStateDirName, "env-client.ts"))
 			if err != nil {
 				return err
 			}
@@ -232,7 +233,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		if !strings.Contains(generated, `PUBLIC_SITE_URL: inlined(schema, "PUBLIC_SITE_URL", process.env.PUBLIC_SITE_URL)`) {
 			t.Errorf("accessor the build saw = %q, want it to read the key under its declared name", generated)
 		}
-		if _, err := os.Stat(filepath.Join(root, ".ocel", "output", "client-digests.json")); err != nil {
+		if _, err := os.Stat(filepath.Join(root, constants.ProjectStateDirName, "output", "client-digests.json")); err != nil {
 			t.Errorf("the build recorded no client values: %v", err)
 		}
 	})
@@ -340,7 +341,7 @@ func TestPrebuiltDeploy(t *testing.T) {
 	t.Run("no build output aborts before the provider is spawned", func(t *testing.T) {
 		root, _ := clitest.SetUpDeployFixture(t)
 		addAppToFixtureConfig(t, root)
-		if err := os.RemoveAll(filepath.Join(root, ".ocel", "output")); err != nil {
+		if err := os.RemoveAll(filepath.Join(root, constants.ProjectStateDirName, "output")); err != nil {
 			t.Fatalf("drop the fixture's build output: %v", err)
 		}
 		deps := clitest.NewDeps()

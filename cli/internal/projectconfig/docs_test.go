@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 const docsDir = "www/content/docs"
@@ -123,6 +124,24 @@ func TestOnlyTheTypeScriptPageShowsAConfigWrittenAsAProgram(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, docsDir, typescriptPage)); err != nil {
 		t.Fatalf("the page that shows %s is missing: %v", projectconfig.TSFileName, err)
+	}
+}
+
+func TestOnlyTheConfigurationPageNamesTheDefaultDiscoveryDirectory(t *testing.T) {
+	root := fixturetest.RepoDir(t)
+	pages := mdxPages(t, root)
+	canonical := "configuration.mdx"
+	named := regexp.MustCompile(`\b` + regexp.QuoteMeta(constants.DefaultDiscoveryDirName) + `\b`)
+	for page, source := range pages {
+		if page != canonical && named.MatchString(source) {
+			t.Errorf("%s names the default discovery directory instead of linking to %s", page, canonical)
+		}
+	}
+	link := "/docs/configuration#discoverypaths"
+	for _, page := range []string{"index.mdx", "sdk/index.mdx"} {
+		if !strings.Contains(pages[page], link) {
+			t.Errorf("%s does not link to %s", page, link)
+		}
 	}
 }
 

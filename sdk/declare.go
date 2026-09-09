@@ -6,25 +6,23 @@ import (
 	"os"
 
 	"connectrpc.com/connect"
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 )
 
 const (
-	phaseEnv     = "OCEL_PHASE"
-	devServerEnv = "OCEL_DEV_SERVER"
-
 	discoveryPhase = "discovery"
 )
 
 func discovering() bool {
-	return os.Getenv(phaseEnv) == discoveryPhase
+	return os.Getenv(constants.PhaseEnvName) == discoveryPhase
 }
 
 func resources() resourcesv1connect.ResourceServiceClient {
 	return resourcesv1connect.NewResourceServiceClient(
 		http.DefaultClient,
-		os.Getenv(devServerEnv),
+		os.Getenv(constants.DevServerEnvName),
 		connect.WithProtoJSON(),
 	)
 }

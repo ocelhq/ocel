@@ -8,13 +8,14 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 func TestAProjectWithNoJavaScriptNeverReachesForTheNodeBuilder(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeGoApp(t, root, "infra")
+	writeGoApp(t, root, "declarations")
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module fixture\n\ngo 1.24\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +44,7 @@ func TestAJavaScriptProjectStillReachesTheNodeBuilderWithNoAppsDeclared(t *testi
 	ran := false
 	builder := Builder{Exec: func(context.Context, string, []string, []byte, io.Writer) error {
 		ran = true
-		writePlan(t, filepath.Join(root, scratchDirName, outputDirName))
+		writePlan(t, filepath.Join(root, constants.ProjectStateDirName, outputDirName))
 		return nil
 	}}
 	if err := builder.Build(context.Background(), cfg, nil, io.Discard); err != nil {

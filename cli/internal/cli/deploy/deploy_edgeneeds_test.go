@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 
@@ -15,7 +16,7 @@ import (
 
 func writeAppNeeds(t *testing.T, root, app, runtime, needs string) {
 	t.Helper()
-	clitest.WriteFile(t, filepath.Join(root, ".ocel", "output", "apps", app, edge.ServeDescriptorFile),
+	clitest.WriteFile(t, filepath.Join(root, constants.ProjectStateDirName, "output", "apps", app, edge.ServeDescriptorFile),
 		`{"runtime":"`+runtime+`","buildId":"b1","needs":`+needs+`}`)
 }
 

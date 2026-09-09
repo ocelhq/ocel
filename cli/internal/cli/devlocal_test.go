@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 const localLink = `{"name":"main","postgres":{"host":"localhost","port":5432,"database":"app","username":"app","password":"pw"}}`
@@ -43,7 +44,7 @@ func TestRunDevLocal(t *testing.T) {
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "OCEL_RESOURCE_POSTGRES_main="+localLink+"\n")
 
 		envDumpPath := filepath.Join(root, "env.out")
@@ -65,7 +66,7 @@ func TestRunDevLocal(t *testing.T) {
 		if got := env["OCEL_RESOURCE_POSTGRES_main"]; got != localLink {
 			t.Fatalf("app env OCEL_RESOURCE_POSTGRES_main = %q, want the dotfile's own %q", got, localLink)
 		}
-		if _, ok := env["OCEL_RUNTIME_ADDRESS"]; !ok {
+		if _, ok := env[constants.RuntimeAddressEnvName]; !ok {
 			t.Error("the app was told no runtime address, so it can declare nothing")
 		}
 	})
@@ -74,7 +75,7 @@ func TestRunDevLocal(t *testing.T) {
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		var stdout, stderr syncBuffer
 		err := runDev(context.Background(), localDeps(t), true, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr, strings.NewReader(""))
@@ -103,7 +104,7 @@ func TestRunRunLocal(t *testing.T) {
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		clitest.WriteFile(t, filepath.Join(root, "infra", "main.ts"), declareResourceScript("main"))
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "OCEL_RESOURCE_POSTGRES_main="+localLink+"\n")
 
 		envDumpPath := filepath.Join(root, "env.out")

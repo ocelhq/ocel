@@ -21,7 +21,7 @@ type Document struct {
 }
 
 type DiscoveryConfig struct {
-	Paths []string `json:"paths,omitempty" doc:"The directories holding infrastructure declarations, relative to the config. Left off, ocel reads ./infra."`
+	Paths []string `json:"paths,omitempty" doc:"The directories holding infrastructure declarations, relative to the config. Left off, ocel reads the default discovery directory."`
 }
 
 type ProviderDescriptor struct {

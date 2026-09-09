@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -320,10 +321,14 @@ func TestCompileLeavesTheBuildHostsOwnDirectoriesOutOfThePythonArtifact(t *testi
 func TestCompileCarriesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *testing.T) {
 	t.Parallel()
 
+	fixtureImport := "from infra import db\n"
+	if imported := strings.Fields(fixtureImport)[1]; imported != constants.DefaultDiscoveryDirName {
+		t.Fatalf("the fixture imports %q, want the default discovery package %q", imported, constants.DefaultDiscoveryDirName)
+	}
 	project := pythonApp(t, map[string]string{
-		"server/main.py":     "from infra import db\n",
-		"infra/__init__.py":  "db = 1\n",
-		"infra/nested/db.py": "handle = 2\n",
+		"server/main.py": fixtureImport,
+		constants.DefaultDiscoveryDirName + "/__init__.py":  "db = 1\n",
+		constants.DefaultDiscoveryDirName + "/nested/db.py": "handle = 2\n",
 	})
 	out := t.TempDir()
 	appDir := filepath.Join(out, "apps", "web")
@@ -332,7 +337,7 @@ func TestCompileCarriesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *te
 		App:            "web",
 		Runtime:        providerkit.Runtime{Name: "python", Arch: "x86_64"},
 		Source:         filepath.Join(project, "server"),
-		DiscoveryRoots: []string{filepath.Join(project, "infra"), filepath.Join(project, "server")},
+		DiscoveryRoots: []string{filepath.Join(project, constants.DefaultDiscoveryDirName), filepath.Join(project, "server")},
 		FuncDir:        funcDir,
 		AppDir:         appDir,
 	})
@@ -340,7 +345,7 @@ func TestCompileCarriesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *te
 		t.Fatalf("compile: %v", err)
 	}
 
-	for _, rel := range []string{filepath.Join("infra", "__init__.py"), filepath.Join("infra", "nested", "db.py")} {
+	for _, rel := range []string{filepath.Join(constants.DefaultDiscoveryDirName, "__init__.py"), filepath.Join(constants.DefaultDiscoveryDirName, "nested", "db.py")} {
 		if _, err := os.Stat(filepath.Join(funcDir, rel)); err != nil {
 			t.Errorf("the artifact holds no %s: `from infra import db` resolves at runtime only if the folder that declared it travels with the app: %v", rel, err)
 		}
