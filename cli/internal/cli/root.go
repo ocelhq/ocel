@@ -27,9 +27,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/version"
 )
-
-var version = "dev"
 
 var verboseFlag bool
 
@@ -56,7 +55,7 @@ var rootCmd = &cobra.Command{
 	Use:           "ocel <command>",
 	Short:         "Ocel CLI",
 	Long:          "Ocel CLI\n\nocel deploys apps to your own infrastructure",
-	Version:       version,
+	Version:       version.Version,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
@@ -66,7 +65,7 @@ func Execute() error {
 }
 
 func init() {
-	runui.Version = version
+	runui.Version = version.Version
 	s := newDeps()
 
 	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full logs instead of the progress view (also $OCEL_DEBUG)")

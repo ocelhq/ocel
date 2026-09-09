@@ -38,13 +38,14 @@ func VerifyAuthHeader(value, token string) bool {
 
 const readinessSentinelPrefix = "OCEL_READY"
 
-func FormatReadinessLine(addr string, certDER []byte) string {
-	return readinessSentinelPrefix + " " + addr + " " + base64.StdEncoding.EncodeToString(certDER)
+func FormatReadinessLine(version, addr string, certDER []byte) string {
+	return readinessSentinelPrefix + " " + version + " " + addr + " " + base64.StdEncoding.EncodeToString(certDER)
 }
 
 type Readiness struct {
-	Addr string
-	Cert *x509.Certificate
+	Version string
+	Addr    string
+	Cert    *x509.Certificate
 }
 
 func ParseReadinessLine(line string) (Readiness, bool) {
@@ -53,7 +54,10 @@ func ParseReadinessLine(line string) (Readiness, bool) {
 	if !strings.HasPrefix(line, prefix) {
 		return Readiness{}, false
 	}
-	rest := line[len(prefix):]
+	version, rest, found := strings.Cut(line[len(prefix):], " ")
+	if !found || version == "" {
+		return Readiness{}, false
+	}
 	split := strings.LastIndex(rest, " ")
 	if split <= 0 {
 		return Readiness{}, false
@@ -70,7 +74,7 @@ func ParseReadinessLine(line string) (Readiness, bool) {
 	if err != nil {
 		return Readiness{}, false
 	}
-	return Readiness{Addr: addr, Cert: cert}, true
+	return Readiness{Version: version, Addr: addr, Cert: cert}, true
 }
 
 func FormatUnixAddr(path string) string {

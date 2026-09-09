@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
 func manifestDir(t *testing.T, manifest string) string {
@@ -77,7 +78,7 @@ func TestInitWritesTheSchemaThisCLIShipsWith(t *testing.T) {
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if !strings.Contains(doc.Schema, version) || !strings.HasSuffix(doc.Schema, "ocel.schema.json") {
+	if !strings.Contains(doc.Schema, version.Version) || !strings.HasSuffix(doc.Schema, "ocel.schema.json") {
 		t.Fatalf("$schema = %q, want it to name this CLI's version and the schema", doc.Schema)
 	}
 }

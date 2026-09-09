@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
 const sdkPackage = "ocel"
@@ -213,7 +214,7 @@ func resolveSlug(projectDir, requested string) (string, error) {
 }
 
 func schemaURL() string {
-	return "https://ocel.dev/schema/" + version + "/ocel.schema.json"
+	return "https://ocel.dev/schema/" + version.Version + "/ocel.schema.json"
 }
 
 func configTemplate(name, slug, provider string) string {
