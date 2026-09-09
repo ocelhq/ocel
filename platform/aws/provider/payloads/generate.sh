@@ -41,7 +41,7 @@ mkdir -p "$dist"
 for goarch in amd64 arm64; do
   layer="$stage/runtime-$goarch"
   mkdir -p "$layer/ocel"
-  build_lambda ./cmd/runtime "$layer/ocel/runtime" "$goarch"
+  build_lambda ./cmd/runtime "$layer/bootstrap" "$goarch"
   cp -R "$root/platform/aws/runtime/dist/." "$layer/ocel/"
   pack "$layer" "$dist/runtime-layer-$goarch.zip"
 done

@@ -197,8 +197,47 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 	if got := stringsAt(inputs, "layers"); len(got) != 1 || !strings.Contains(got[0], "layer-runtime-arm64") {
 		t.Errorf("the function's layers = %v, want the arm64 runtime this stack published", got)
 	}
-	if got, ok := inputs[resource.PropertyKey("runtime")]; !ok || got.StringValue() != defaultFunctionRuntime {
-		t.Errorf("runtime = %v, want %q: every function boots the same runtime", got, defaultFunctionRuntime)
+	if got, ok := inputs[resource.PropertyKey("runtime")]; !ok || got.StringValue() != providedFunctionRuntime {
+		t.Errorf("runtime = %v, want %q: an app with its own binary needs no managed language runtime", got, providedFunctionRuntime)
+	}
+	if got, ok := inputs[resource.PropertyKey("handler")]; !ok || got.StringValue() != providedHandler {
+		t.Errorf("handler = %v, want %q: %s boots the executable of that name", got, providedHandler, providedFunctionRuntime)
+	}
+}
+
+func TestAManagedRuntimeFunctionKeepsItsOwnEntryAsTheHandler(t *testing.T) {
+	t.Parallel()
+
+	args, err := translateFunctionSpec(providerkit.RuntimeNode, providerkit.FunctionSpec{
+		Runtime: providerkit.Runtime{Name: providerkit.RuntimeNode},
+		Handler: "src/server.js",
+	})
+	if err != nil {
+		t.Fatalf("translateFunctionSpec: %v", err)
+	}
+	if got := lambdaHandler(args); got != "src/server.js" {
+		t.Errorf("handler = %q, want the app's own entry", got)
+	}
+	if env := functionEnv(nil, args, nil, nil); env["OCEL_HANDLER"] != "/var/task/src/server.js" {
+		t.Errorf("OCEL_HANDLER = %q, want the app's own entry", env["OCEL_HANDLER"])
+	}
+}
+
+func TestACommandFunctionKeepsItsOwnEntryInTheEnvironment(t *testing.T) {
+	t.Parallel()
+
+	args, err := translateFunctionSpec(providerkit.RuntimeGo, providerkit.FunctionSpec{
+		Runtime: providerkit.Runtime{Name: providerkit.RuntimeGo},
+		Handler: "web",
+	})
+	if err != nil {
+		t.Fatalf("translateFunctionSpec: %v", err)
+	}
+	if got := lambdaHandler(args); got != providedHandler {
+		t.Errorf("handler = %q, want %q", got, providedHandler)
+	}
+	if env := functionEnv(nil, args, nil, nil); env["OCEL_HANDLER"] != "/var/task/web" {
+		t.Errorf("OCEL_HANDLER = %q, want the app's own entry rather than the runtime's", env["OCEL_HANDLER"])
 	}
 }
 
@@ -214,8 +253,13 @@ func TestEveryFunctionBootsTheRuntimeWhateverRuntimeItServes(t *testing.T) {
 			t.Fatalf("translateFunctionSpec(%q): %v", name, err)
 		}
 		env := functionEnv(nil, args, nil, nil)
-		if env["AWS_LAMBDA_EXEC_WRAPPER"] != execWrapper {
-			t.Errorf("%q boots through %q, want the runtime at %q", name, env["AWS_LAMBDA_EXEC_WRAPPER"], execWrapper)
+		wrapper, wrapped := env["AWS_LAMBDA_EXEC_WRAPPER"]
+		if args.Runtime == providedFunctionRuntime {
+			if wrapped {
+				t.Errorf("%q is handed %s = %q; on %s Lambda runs the layer's own bootstrap and there is nothing to wrap", name, "AWS_LAMBDA_EXEC_WRAPPER", wrapper, providedFunctionRuntime)
+			}
+		} else if wrapper != execWrapper {
+			t.Errorf("%q boots through %q, want the runtime at %q", name, wrapper, execWrapper)
 		}
 		if want := "/var/task/web"; env["OCEL_HANDLER"] != want {
 			t.Errorf("%q hands the runtime %q, want %q", name, env["OCEL_HANDLER"], want)
@@ -226,13 +270,30 @@ func TestEveryFunctionBootsTheRuntimeWhateverRuntimeItServes(t *testing.T) {
 	}
 }
 
+func TestAnAppThatShipsItsOwnBinaryRunsOnTheProvidedRuntime(t *testing.T) {
+	t.Parallel()
+
+	for name, want := range map[string]string{
+		providerkit.RuntimeGo:     providedFunctionRuntime,
+		"rust":                    providedFunctionRuntime,
+		providerkit.RuntimeNode:   defaultFunctionRuntime,
+		providerkit.RuntimeNext:   defaultFunctionRuntime,
+		"":                        defaultFunctionRuntime,
+		providerkit.RuntimePython: pythonFunctionRuntime,
+	} {
+		if got := managedRuntime(name); got != want {
+			t.Errorf("a %q function runs on %q, want %q — a language this provider carries no interpreter for runs the binary the app ships", name, got, want)
+		}
+	}
+}
+
 func TestAFunctionRunsOnTheManagedRuntimeItsLanguageNeedsAnInterpreterFrom(t *testing.T) {
 	t.Parallel()
 
 	for name, want := range map[string]string{
 		providerkit.RuntimeNode:   defaultFunctionRuntime,
 		providerkit.RuntimeNext:   defaultFunctionRuntime,
-		providerkit.RuntimeGo:     defaultFunctionRuntime,
+		providerkit.RuntimeGo:     providedFunctionRuntime,
 		providerkit.RuntimePython: pythonFunctionRuntime,
 	} {
 		args, err := translateFunctionSpec(name, providerkit.FunctionSpec{Runtime: providerkit.Runtime{Name: name}})
@@ -266,9 +327,10 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 		name    string
 		runtime string
 		handler string
+		want    string
 	}{
-		{"an exec artifact takes the program its command runs", providerkit.RuntimeGo, "web"},
-		{"a bundled node artifact takes its bundle", providerkit.RuntimeNode, "index.mjs"},
+		{"an exec artifact takes the bootstrap the layer carries", providerkit.RuntimeGo, "web", providedHandler},
+		{"a bundled node artifact takes its bundle", providerkit.RuntimeNode, "index.mjs", "index.mjs"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -309,8 +371,8 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 			if !ok || !got.IsString() {
 				t.Fatalf("handler = %v, want a string", got)
 			}
-			if got.StringValue() != tc.handler {
-				t.Errorf("handler = %q, want %q: Lambda refuses a package whose handler names no file in it", got.StringValue(), tc.handler)
+			if got.StringValue() != tc.want {
+				t.Errorf("handler = %q, want %q: Lambda refuses a package whose handler names no file it can boot", got.StringValue(), tc.want)
 			}
 		})
 	}
