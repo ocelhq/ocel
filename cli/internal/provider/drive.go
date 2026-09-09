@@ -33,7 +33,7 @@ func driveOnce(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io
 
 	binPath, err := Locate(ctx, cfg.Dir, desc.Name)
 	if err != nil {
-		return fmt.Errorf("locate provider binary: %w", err)
+		return err
 	}
 
 	env, err := workerBundleEnv(cfg.Dir)
