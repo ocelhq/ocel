@@ -82,8 +82,8 @@ func TestDetectFramework(t *testing.T) {
 			want:  "",
 		},
 		{
-			name:  "a next app carrying a go module is still next",
-			files: map[string]string{"package.json": `{"dependencies":{"next":"15.0.0"}}`, "go.mod": "module example.com/api\n"},
+			name:  "a next config decides it before the manifest is ever read",
+			files: map[string]string{"package.json": "{ not json", "next.config.ts": "export default {};"},
 			want:  "next",
 		},
 	}
@@ -135,6 +135,36 @@ func TestDetectFrameworkRefusals(t *testing.T) {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, missing %q", err, want)
 			}
+		}
+	})
+
+	t.Run("a next manifest standing beside a go module is refused, not read as next", func(t *testing.T) {
+		t.Parallel()
+
+		dir := appDir(t, map[string]string{"package.json": nextManifest, "go.mod": "module example.com/api\n"})
+
+		_, err := detectFramework(dir)
+		if err == nil {
+			t.Fatal("detectFramework = nil error, want a refusal: next does not settle what go also claims")
+		}
+		for _, want := range []string{dir, "framework", "node", "go"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, missing %q", err, want)
+			}
+		}
+	})
+
+	t.Run("a package.json that is not JSON is surfaced rather than read as plain node", func(t *testing.T) {
+		t.Parallel()
+
+		dir := appDir(t, map[string]string{"package.json": "{ not json"})
+
+		_, err := detectFramework(dir)
+		if err == nil {
+			t.Fatal("detectFramework = nil error, want a refusal: the manifest cannot be read")
+		}
+		if !strings.Contains(err.Error(), nodeManifest) {
+			t.Errorf("error = %q, missing %q", err, nodeManifest)
 		}
 	})
 }
