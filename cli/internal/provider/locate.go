@@ -40,7 +40,8 @@ func Pin(ctx context.Context, projectDir string) error {
 	if err != nil {
 		return err
 	}
-	return pin(ctx, store, projectDir)
+	_, err = pin(ctx, store, projectDir)
+	return err
 }
 
 func pins(ctx context.Context, store *providers.Store, projectDir string) (lockfile.Lock, error) {
@@ -49,11 +50,7 @@ func pins(ctx context.Context, store *providers.Store, projectDir string) (lockf
 		return lockfile.Lock{}, err
 	}
 	if !held {
-		if err := pin(ctx, store, projectDir); err != nil {
-			return lockfile.Lock{}, err
-		}
-		lock, _, err = lockfile.Read(projectDir)
-		return lock, err
+		return pin(ctx, store, projectDir)
 	}
 	if lock.CLI != store.Version {
 		return lockfile.Lock{}, fmt.Errorf("%s pins the providers of ocel %s and this is ocel %s — run `ocel lock` to pin the providers this version runs, and commit the change", lockfile.Name, lock.CLI, store.Version)
@@ -61,10 +58,14 @@ func pins(ctx context.Context, store *providers.Store, projectDir string) (lockf
 	return lock, nil
 }
 
-func pin(ctx context.Context, store *providers.Store, projectDir string) error {
+func pin(ctx context.Context, store *providers.Store, projectDir string) (lockfile.Lock, error) {
 	sums, err := store.Checksums(ctx)
 	if err != nil {
-		return fmt.Errorf("read the checksums of release %s: %w", store.Version, err)
+		return lockfile.Lock{}, fmt.Errorf("read the checksums of release %s: %w", store.Version, err)
 	}
-	return lockfile.Write(projectDir, lockfile.FromChecksums(store.Version, sums))
+	lock := lockfile.FromChecksums(store.Version, sums)
+	if err := lockfile.Write(projectDir, lock); err != nil {
+		return lockfile.Lock{}, err
+	}
+	return lock, nil
 }

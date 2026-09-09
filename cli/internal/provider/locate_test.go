@@ -150,7 +150,7 @@ func TestPinRewritesALockThatPinsAnotherVersion(t *testing.T) {
 		t.Fatalf("Write: %v", err)
 	}
 
-	if err := pin(context.Background(), store, projectDir); err != nil {
+	if _, err := pin(context.Background(), store, projectDir); err != nil {
 		t.Fatalf("pin: %v", err)
 	}
 
