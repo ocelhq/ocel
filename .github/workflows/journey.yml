@@ -336,7 +336,11 @@ jobs:
 
       - name: Build the binaries a journey drives
         if: ${{ steps.gate.outputs.any == 'true' }}
-        run: node scripts/snapshot.mjs
+        run: |
+          set -euo pipefail
+          node scripts/snapshot.mjs > "$RUNNER_TEMP/snapshot.env"
+          . "$RUNNER_TEMP/snapshot.env"
+          install -D -m 0755 "$OCEL_BIN" dist/journey/ocel
 
       - name: Upload them for the lanes
         if: ${{ steps.gate.outputs.any == 'true' }}
@@ -345,7 +349,7 @@ jobs:
           name: journey-binaries
           if-no-files-found: error
           path: |
-            dist/ocel_linux_amd64_v1/ocel
+            dist/journey/ocel
             dist/providers/**
 
   aws:
