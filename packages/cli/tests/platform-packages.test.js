@@ -31,7 +31,7 @@ function binary(goos, goarch, folder, name, id) {
   };
 }
 
-function stage(targets) {
+function stage(targets, { from = root, dist = "dist", packages = "packages" } = {}) {
   const artifacts = targets.map(([goos, goarch, folder, name]) =>
     binary(goos, goarch, folder, name, "ocel"),
   );
@@ -43,10 +43,7 @@ function stage(targets) {
     const suffix = `${goos === "windows" ? "win32" : goos}-${goarch === "amd64" ? "x64" : goarch}`;
     mkdirSync(join(root, "packages", `cli-${suffix}`), { recursive: true });
   }
-  return spawnSync(process.execPath, [script, "dist", "packages"], {
-    cwd: root,
-    encoding: "utf8",
-  });
+  return spawnSync(process.execPath, [script, dist, packages], { cwd: from, encoding: "utf8" });
 }
 
 beforeEach(() => {
@@ -81,6 +78,21 @@ describe("platform-packages.mjs", () => {
     expect(() =>
       statSync(join(root, "packages", "cli-linux-x64", "bin", "provider-aws")),
     ).toThrow();
+  });
+
+  it("reads the manifest's paths against the project root, not the working directory", () => {
+    const elsewhere = mkdtempSync(join(tmpdir(), "ocel-elsewhere-"));
+    const run = stage(every, {
+      from: elsewhere,
+      dist: join(root, "dist"),
+      packages: join(root, "packages"),
+    });
+    rmSync(elsewhere, { recursive: true, force: true });
+    expect(run.stderr).toBe("");
+    expect(run.status).toBe(0);
+    expect(readFileSync(join(root, "packages", "cli-linux-x64", "bin", "ocel"), "utf8")).toBe(
+      "ocel linux amd64",
+    );
   });
 
   it("names the target goreleaser did not build", () => {
