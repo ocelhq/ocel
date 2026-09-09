@@ -48,11 +48,11 @@ func (s *stack) adopt(front Front) error {
 
 func (s *stack) keep() { s.state.Adapter = edge.Own(s.held) }
 
-func (s *stack) reaching(host Host) string {
+func (s *stack) reach(ctx context.Context, host Host, hostname string) error {
 	if host.Service == "" {
-		return s.held.Front.NotFound
+		return s.e.deps.Routes.Hold(ctx, s.held.Front.URLMap, hostname)
 	}
-	return host.Backend
+	return s.e.deps.Routes.Route(ctx, s.held.Front.URLMap, hostname, host.Backend)
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
@@ -81,7 +81,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err := s.raise(ctx, hosts); err != nil {
 		return err
 	}
-	if err := s.e.deps.Routes.Route(ctx, s.held.Front.URLMap, binding.Hostname, s.reaching(hosts[binding.Hostname])); err != nil {
+	if err := s.reach(ctx, hosts[binding.Hostname], binding.Hostname); err != nil {
 		return errors.Join(err, s.raise(ctx, s.held.Hosts))
 	}
 	if err := s.claim(ctx, binding.Hostname); err != nil {

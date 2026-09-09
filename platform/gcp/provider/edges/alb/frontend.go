@@ -49,6 +49,19 @@ type frontSpec struct {
 	Names   names
 }
 
+const notFoundStatus = 404
+
+func refusingRouteAction() compute.URLMapDefaultRouteActionPtrInput {
+	return &compute.URLMapDefaultRouteActionArgs{
+		FaultInjectionPolicy: &compute.URLMapDefaultRouteActionFaultInjectionPolicyArgs{
+			Abort: &compute.URLMapDefaultRouteActionFaultInjectionPolicyAbortArgs{
+				HttpStatus: pulumi.Int(notFoundStatus),
+				Percentage: pulumi.Float64(100),
+			},
+		},
+	}
+}
+
 func frontProgram(spec frontSpec) Program {
 	return func(ctx *pulumi.Context) error {
 		project := pulumi.String(spec.Project)
@@ -80,9 +93,10 @@ func frontProgram(spec frontSpec) Program {
 			return err
 		}
 		routes, err := compute.NewURLMap(ctx, spec.Names.URLMap, &compute.URLMapArgs{
-			Name:           pulumi.String(spec.Names.URLMap),
-			Project:        project,
-			DefaultService: notFound.SelfLink,
+			Name:               pulumi.String(spec.Names.URLMap),
+			Project:            project,
+			DefaultService:     notFound.SelfLink,
+			DefaultRouteAction: refusingRouteAction(),
 		}, pulumi.IgnoreChanges(frontRouting))
 		if err != nil {
 			return err

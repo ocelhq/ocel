@@ -50,6 +50,10 @@ func TestTheFrontendStandsOneLoadBalancerUpForTheWholeClass(t *testing.T) {
 	if got := routes.Args["defaultService"]; got == nil {
 		t.Error("the url map names no default service, and a hostname no project claimed would reach whichever backend answered first")
 	}
+	if got := abortedBy(routes.Args["defaultRouteAction"]); got != float64(notFoundStatus) {
+		t.Errorf("the url map answers an unclaimed hostname with %v, want %d: the not-found backend it defaults to holds no backends, "+
+			"so anything that reaches it is answered 502 rather than refused", got, notFoundStatus)
+	}
 	if got := routes.Args["hostRules"]; got != nil {
 		t.Errorf("the url map declares host rules %v, and a bind writes them: the stack that owns the map must leave them alone", got)
 	}
@@ -64,6 +68,22 @@ func TestTheFrontendStandsOneLoadBalancerUpForTheWholeClass(t *testing.T) {
 	if got := proxy.Args["certificateMap"]; got == nil {
 		t.Error("the https proxy names no certificate map, and every hostname's certificate is served through one")
 	}
+}
+
+func abortedBy(action any) any {
+	held, carried := action.(map[string]any)
+	if !carried {
+		return nil
+	}
+	policy, carried := held["faultInjectionPolicy"].(map[string]any)
+	if !carried {
+		return nil
+	}
+	abort, carried := policy["abort"].(map[string]any)
+	if !carried {
+		return nil
+	}
+	return abort["httpStatus"]
 }
 
 func TestABindingDeclaresACachedBackendOnThePointersCloudRunService(t *testing.T) {

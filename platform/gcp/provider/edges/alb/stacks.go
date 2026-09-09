@@ -41,6 +41,8 @@ type Stacks interface {
 type Routes interface {
 	Route(ctx context.Context, urlMap, hostname, backend string) error
 
+	Hold(ctx context.Context, urlMap, hostname string) error
+
 	Unroute(ctx context.Context, urlMap, hostname string) error
 }
 

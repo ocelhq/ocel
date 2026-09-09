@@ -3,6 +3,7 @@ package gcp
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 
 	"google.golang.org/api/compute/v1"
@@ -71,6 +72,37 @@ func TestRoutingRetriesTheWriteTheUrlMapChangedUnder(t *testing.T) {
 	if len(server.standing().HostRules) != 1 {
 		t.Errorf("the url map holds %+v after the retry, want the host rule the route asked for", server.standing().HostRules)
 	}
+}
+
+func TestAHeldHostnameIsAnsweredWithA404RatherThanTheEmptyBackendsGatewayError(t *testing.T) {
+	t.Parallel()
+
+	p, server := routing(t, emptyMap())
+	if err := p.Hold(context.Background(), classRoutes, "shop.example.com"); err != nil {
+		t.Fatalf("Hold = %v", err)
+	}
+
+	held := server.standing()
+	if len(held.PathMatchers) != 1 {
+		t.Fatalf("the url map holds path matchers %+v, want the one that answers a hostname whose app has released nothing", held.PathMatchers)
+	}
+	matcher := held.PathMatchers[0]
+	if matcher.DefaultService != held.DefaultService {
+		t.Errorf("the path matcher serves %q, want the map's own default %q: a path matcher with no service at all is refused",
+			matcher.DefaultService, held.DefaultService)
+	}
+	abort := notFoundAbort(matcher.DefaultRouteAction)
+	if abort == nil || abort.HttpStatus != http.StatusNotFound || abort.Percentage != 100 {
+		t.Errorf("the path matcher aborts with %+v, want every request answered 404: the not-found backend has no backends, "+
+			"so anything reaching it is answered 502 instead of refused", abort)
+	}
+}
+
+func notFoundAbort(action *compute.HttpRouteAction) *compute.HttpFaultAbort {
+	if action == nil || action.FaultInjectionPolicy == nil {
+		return nil
+	}
+	return action.FaultInjectionPolicy.Abort
 }
 
 func TestRoutingRefusesAHostRuleThatNamesNoBackend(t *testing.T) {
