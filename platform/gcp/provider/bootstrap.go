@@ -69,10 +69,10 @@ func (b bootstrapper) Describe(ctx context.Context, class providerkit.Class) (pr
 	if err != nil {
 		return providerkit.Bootstrap{}, err
 	}
-	return described(read), nil
+	return b.described(ctx, read)
 }
 
-func described(read survey) providerkit.Bootstrap {
+func (b bootstrapper) described(ctx context.Context, read survey) (providerkit.Bootstrap, error) {
 	items := bootstrapItems(read.Names, read.Class, read.Emulated)
 	stacks := []providerkit.BootstrapStack{{
 		Name:          read.Project + "/" + string(read.Class),
@@ -82,12 +82,16 @@ func described(read survey) providerkit.Bootstrap {
 		Writer:        read.Stamp.Writer,
 	}}
 	for _, feature := range read.Stamp.Features {
+		standing, err := b.frontStands(ctx, read.Class, feature)
+		if err != nil {
+			return providerkit.Bootstrap{}, err
+		}
 		stacks = append(stacks, providerkit.BootstrapStack{
 			Name:          read.Project + "/" + string(read.Class) + "/" + feature,
 			Feature:       feature,
-			Present:       true,
+			Present:       standing,
 			Schema:        uint32(read.Stamp.Schema),
-			DigestCurrent: true,
+			DigestCurrent: standing,
 			Writer:        read.Stamp.Writer,
 		})
 	}
@@ -97,7 +101,7 @@ func described(read survey) providerkit.Bootstrap {
 		Unfinished: read.Present && read.Stamp.State != stateComplete,
 		Held:       read,
 		Stacks:     stacks,
-	}
+	}, nil
 }
 
 func (b bootstrapper) held(ctx context.Context, req providerkit.BootstrapRequest) (survey, error) {
@@ -115,7 +119,11 @@ func (b bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	if err := b.preflight(ctx, read, req.Features); err != nil {
 		return providerkit.Plan{}, err
 	}
-	groups := providerkit.DeriveGroups(described(read), b.Catalogue(), req)
+	standing, err := b.described(ctx, read)
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	groups := providerkit.DeriveGroups(standing, b.Catalogue(), req)
 	groups[0].Changes = planned(read, stackItems(read.Names, read.Class, read.Emulated))
 
 	params := providerkit.ChangeGroup{
