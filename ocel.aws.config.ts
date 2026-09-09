@@ -1,7 +1,7 @@
-import awsProvider from "@ocel/provider-aws";
 import { buildEnv, defineConfig } from "ocel/config";
 import { cloudflareDns } from "ocel/dns";
 import { cloudflare } from "ocel/edge";
+import awsProvider from "ocel/providers/aws";
 import { z } from "zod";
 
 const aws = buildEnv({

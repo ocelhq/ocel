@@ -35,7 +35,7 @@ const configAws: Pane = {
     lang: "ts",
     filename: "ocel.config.ts",
     code: `import { defineConfig } from "ocel/config";
-import awsProvider from "@ocel/provider-aws";
+import awsProvider from "ocel/providers/aws";
 
 export default defineConfig({
   slug: "my-app",
@@ -49,7 +49,7 @@ const configVps: Pane = {
     lang: "ts",
     filename: "ocel.config.ts",
     code: `import { defineConfig } from "ocel/config";
-import vpsProvider from "@ocel/provider-vps";
+import vpsProvider from "ocel/providers/vps";
 
 export default defineConfig({
   slug: "my-app",

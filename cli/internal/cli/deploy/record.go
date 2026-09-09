@@ -49,7 +49,7 @@ func providerOf(cfg *projectconfig.Config) deployresult.Provider {
 		Region string `json:"region"`
 	}
 	_ = json.Unmarshal(cfg.Provider.Options, &options)
-	return deployresult.Provider{Package: cfg.Provider.Package, Region: options.Region}
+	return deployresult.Provider{Name: cfg.Provider.Name, Region: options.Region}
 }
 
 func appURLs(results []*progressv1.AppResult, name string) []string {

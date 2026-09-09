@@ -255,8 +255,8 @@ func nodeCheck(ctx context.Context) check {
 
 func configFailure(err error) (string, string) {
 	message := firstLine(err.Error())
-	if strings.Contains(message, "no "+projectconfig.ConfigFileName+" found") {
-		return "no " + projectconfig.ConfigFileName + " found in this directory or any parent",
+	if strings.Contains(message, "no "+projectconfig.DefaultFileName+" found") {
+		return "no " + projectconfig.DefaultFileName + " found in this directory or any parent",
 			"run `ocel init` to set up this project"
 	}
 	if head, hint, ok := splitHint(message); ok {
@@ -287,11 +287,15 @@ func appsText(cfg *projectconfig.Config) string {
 }
 
 func providerText(cfg *projectconfig.Config, descriptor *projectconfig.ProviderDescriptor) string {
-	text := "provider " + descriptor.Package
-	if version := packageVersion(cfg.Dir, descriptor.Package); version != "" {
+	text := "provider " + descriptor.Name
+	if version := packageVersion(cfg.Dir, providerPackage(descriptor.Name)); version != "" {
 		text += " " + version
 	}
 	return text
+}
+
+func providerPackage(name string) string {
+	return "@ocel/provider-" + name
 }
 
 func packageVersion(dir, pkg string) string {
@@ -370,7 +374,7 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 	spinner := runui.StartSpinner(deps.Presentation(stdout), stdout, "Checking your setup")
 	err := provider.Drive(ctx, cfg, stderr, stderr, runui.TrustFor(deps.HostTrust, spinner), func(runner *provider.Runner) error {
 		*got = answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
-		got.pkg = runner.Package()
+		got.pkg = runner.Name()
 		client, err := runner.Client()
 		if err != nil {
 			return err

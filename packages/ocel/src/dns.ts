@@ -1,4 +1,6 @@
-/** Options for Cloudflare DNS, authored inline in `ocel.config.ts`. */
+import type { DnsDescriptor } from "./config.js";
+
+/** Options for Cloudflare DNS. */
 export interface CloudflareDnsOptions {
   /**
    * The zone the records are written into. Omit it and ocel picks the zone
@@ -8,9 +10,6 @@ export interface CloudflareDnsOptions {
 }
 
 /** Declares Cloudflare as the DNS the project's records are written into. */
-export function cloudflareDns(options: CloudflareDnsOptions = {}): {
-  kind: "cloudflare";
-  zone?: string;
-} {
+export function cloudflareDns(options: CloudflareDnsOptions = {}): DnsDescriptor {
   return { kind: "cloudflare", ...options };
 }

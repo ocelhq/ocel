@@ -194,7 +194,7 @@ func TestDeployRefusesWhatItCannotAttribute(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/ap1", runtime: "node" }],
 };
@@ -221,7 +221,7 @@ func writeSharedResourceMonorepo(t *testing.T, root string) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [
     { name: "api", path: "apps/api", runtime: "node" },

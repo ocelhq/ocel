@@ -181,7 +181,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 		})
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				return fmt.Errorf("%s cannot say which features a bootstrap has; it predates them. Upgrade the provider pinned in this project and try again", runner.Package())
+				return fmt.Errorf("%s cannot say which features a bootstrap has; it predates them. Upgrade the provider pinned in this project and try again", runner.Name())
 			}
 			return err
 		}
@@ -282,9 +282,9 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			}
 		}
 
-		title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Package())
+		title := fmt.Sprintf("Bootstrap %s infrastructure with %s?", Name(tier), runner.Name())
 		if rendered {
-			title = fmt.Sprintf("%s with %s?", runui.ConfirmVerb(consented), runner.Package())
+			title = fmt.Sprintf("%s with %s?", runui.ConfirmVerb(consented), runner.Name())
 		}
 		granted, err := ui.Consent(ctx, title)
 		if err != nil || !granted {

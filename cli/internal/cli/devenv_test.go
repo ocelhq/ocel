@@ -374,16 +374,16 @@ func TestCheckStatableBinding(t *testing.T) {
 	t.Run("it refuses when the apps do not agree on one", func(t *testing.T) {
 		t.Parallel()
 
-		if err := checkStatableBinding(apps, "", projectconfig.ConfigFileName, nil); err != nil {
+		if err := checkStatableBinding(apps, "", projectconfig.DefaultFileName, nil); err != nil {
 			t.Errorf("checkStatableBinding = %v, want nil with no scoped variable declared", err)
 		}
 
 		agreed := []projectconfig.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/web"}}
-		if err := checkStatableBinding(agreed, "/web", projectconfig.ConfigFileName, map[string][]string{"API_BASE": {"/web"}}); err != nil {
+		if err := checkStatableBinding(agreed, "/web", projectconfig.DefaultFileName, map[string][]string{"API_BASE": {"/web"}}); err != nil {
 			t.Errorf("checkStatableBinding = %v, want nil when every app binds the folder dev states", err)
 		}
 
-		err := checkStatableBinding(apps, "", projectconfig.ConfigFileName, map[string][]string{"API_BASE": {"/web", "/api"}})
+		err := checkStatableBinding(apps, "", projectconfig.DefaultFileName, map[string][]string{"API_BASE": {"/web", "/api"}})
 		if err == nil {
 			t.Fatal("checkStatableBinding = nil, want a refusal: no child of this run could read API_BASE")
 		}
@@ -401,12 +401,12 @@ func TestCheckStatableBinding(t *testing.T) {
 	t.Run("it starts when no app binds the key's scope", func(t *testing.T) {
 		t.Parallel()
 
-		if err := checkStatableBinding(apps, "", projectconfig.ConfigFileName, map[string][]string{"NOBODY": {"/nowhere"}}); err != nil {
+		if err := checkStatableBinding(apps, "", projectconfig.DefaultFileName, map[string][]string{"NOBODY": {"/nowhere"}}); err != nil {
 			t.Errorf("checkStatableBinding = %v, want nil: no app binds /nowhere, so no read is lost", err)
 		}
 
 		scoped := map[string][]string{"NOBODY": {"/nowhere"}, "API_BASE": {"/web"}}
-		err := checkStatableBinding(apps, "", projectconfig.ConfigFileName, scoped)
+		err := checkStatableBinding(apps, "", projectconfig.DefaultFileName, scoped)
 		if err == nil {
 			t.Fatal("checkStatableBinding = nil, want a refusal for API_BASE, which web would read under its own binding")
 		}
@@ -418,7 +418,7 @@ func TestCheckStatableBinding(t *testing.T) {
 	t.Run("it names only the apps binding the key's scope", func(t *testing.T) {
 		t.Parallel()
 
-		err := checkStatableBinding(apps, "", projectconfig.ConfigFileName, map[string][]string{"API_BASE": {"/web"}})
+		err := checkStatableBinding(apps, "", projectconfig.DefaultFileName, map[string][]string{"API_BASE": {"/web"}})
 		if err == nil {
 			t.Fatal("checkStatableBinding = nil, want a refusal: web would read API_BASE under its own binding")
 		}
@@ -448,7 +448,7 @@ func TestCheckStatableBinding(t *testing.T) {
 			"fix: bind every app to the same folder in ocel.config.ts, or drop `folders:` from those declarations"
 
 		for range 50 {
-			err := checkStatableBinding(apps, "", projectconfig.ConfigFileName, scoped)
+			err := checkStatableBinding(apps, "", projectconfig.DefaultFileName, scoped)
 			if err == nil {
 				t.Fatal("checkStatableBinding = nil, want a refusal: both apps lose a read")
 			}

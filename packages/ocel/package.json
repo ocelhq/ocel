@@ -2,7 +2,7 @@
   "name": "ocel",
   "version": "0.0.1-alpha.0",
   "type": "module",
-  "description": "ocel cli and runtime sdk — turns cloud infrastructure into function calls",
+  "description": "ocel cli and runtime sdk \u2014 turns cloud infrastructure into function calls",
   "bin": {
     "ocel": "./bin/run.js"
   },
@@ -23,6 +23,34 @@
     "./dns": {
       "types": "./dist/dns.d.ts",
       "import": "./dist/dns.js"
+    },
+    "./providers/aws": {
+      "types": "./dist/providers/aws/index.d.ts",
+      "import": "./dist/providers/aws/index.js"
+    },
+    "./providers/aws/edge": {
+      "types": "./dist/providers/aws/edge.d.ts",
+      "import": "./dist/providers/aws/edge.js"
+    },
+    "./providers/aws/dns": {
+      "types": "./dist/providers/aws/dns.d.ts",
+      "import": "./dist/providers/aws/dns.js"
+    },
+    "./providers/aws/transform": {
+      "types": "./dist/providers/aws/transform/index.d.ts",
+      "import": "./dist/providers/aws/transform/index.js"
+    },
+    "./providers/aws/transform/run": {
+      "types": "./dist/providers/aws/transform/run.d.ts",
+      "import": "./dist/providers/aws/transform/run.js"
+    },
+    "./providers/gcp": {
+      "types": "./dist/providers/gcp/index.d.ts",
+      "import": "./dist/providers/gcp/index.js"
+    },
+    "./providers/vps": {
+      "types": "./dist/providers/vps/index.d.ts",
+      "import": "./dist/providers/vps/index.js"
     },
     "./env": {
       "types": "./dist/env/index.d.ts",
@@ -67,7 +95,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json && tsc --noEmit -p tsconfig.typetests.json && tsc --noEmit -p tsconfig.typetests-empty.json && tsc --noEmit -p tsconfig.typetests-open.json && tsc --noEmit -p tsconfig.typetests-config.json"
   },
   "license": "MIT",
   "dependencies": {

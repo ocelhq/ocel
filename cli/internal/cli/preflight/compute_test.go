@@ -80,11 +80,11 @@ func TestAProviderNamingAComputeOcelDoesNotKnowFailsThePlanByName(t *testing.T) 
 
 	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api"}}}
 
-	_, err := ResolveComputes(cfg, []string{"vm"}, "@ocel/provider-vps")
+	_, err := ResolveComputes(cfg, []string{"vm"}, "vps")
 	if err == nil {
 		t.Fatal("ResolveComputes() stamped a compute ocel does not know onto every app, want the plan refused before the manifest is built")
 	}
-	for _, want := range []string{"@ocel/provider-vps", `"vm"`, `"serverless"`, `"container"`} {
+	for _, want := range []string{"vps", `"vm"`, `"serverless"`, `"container"`} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("ResolveComputes() error = %q, want it to name %s", err, want)
 		}
@@ -112,11 +112,11 @@ func TestAProviderWhoseIdentityIsEmptyIsStillNamedByThePlan(t *testing.T) {
 
 	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api"}}}
 
-	_, err := ResolveComputes(cfg, nil, "@ocel/provider-aws")
+	_, err := ResolveComputes(cfg, nil, "aws")
 	if err == nil {
 		t.Fatal("ResolveComputes() accepted a provider that names no compute, want the plan refused")
 	}
-	if !strings.Contains(err.Error(), "@ocel/provider-aws") {
+	if !strings.Contains(err.Error(), "aws") {
 		t.Errorf("ResolveComputes() error = %q, want the provider named from the package the project pins, which stands whether or not preflight could answer an identity", err)
 	}
 }

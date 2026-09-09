@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.typetests-base.json",
+  "include": ["typetests/open/**/*"]
+}

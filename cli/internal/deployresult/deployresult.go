@@ -28,8 +28,8 @@ type Result struct {
 }
 
 type Provider struct {
-	Package string `json:"package"`
-	Region  string `json:"region,omitempty"`
+	Name   string `json:"name"`
+	Region string `json:"region,omitempty"`
 }
 
 type Environment struct {

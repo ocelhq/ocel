@@ -1,0 +1,26 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "const": "gcp"
+    },
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "description": "The Google Cloud project to deploy into.",
+          "type": "string"
+        },
+        "region": {
+          "description": "The region to deploy into. A project spans them all, so this names the one.",
+          "type": "string"
+        }
+      },
+      "required": ["project", "region"],
+      "title": "GcpProviderOptions",
+      "type": "object"
+    }
+  },
+  "required": ["name"],
+  "type": "object"
+}

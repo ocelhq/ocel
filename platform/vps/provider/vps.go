@@ -22,19 +22,21 @@ import (
 const Vendor providerkit.Vendor = "vps"
 
 type Options struct {
-	SSH          Target            `json:"ssh"`
-	DeployKey    string            `json:"deployKey"`
-	Certificates map[string]string `json:"certificates"`
+	SSH          Target            `json:"ssh" doc:"The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out."`
+	DeployKey    string            `json:"deployKey,omitempty" doc:"The public key the ocel-deploy login is to answer to, as a path from / or from ~/. Omit it and bootstrap mirrors the keys the login it bootstraps with already answers to."`
+	Certificates map[string]string `json:"certificates,omitempty" doc:"Certificates to serve a hostname with, keyed by hostname, valued by the path to the certificate on the machine."`
 }
 
 type Target struct {
 	Alias        string `json:"-"`
 	Config       string `json:"-"`
-	Host         string `json:"host"`
-	Port         int    `json:"port"`
-	User         string `json:"user"`
-	IdentityFile string `json:"identityFile"`
+	Host         string `json:"host" doc:"The hostname or address to reach the machine at."`
+	Port         int    `json:"port,omitempty" doc:"The port sshd listens on. Omit it and ssh's own default stands."`
+	User         string `json:"user,omitempty" doc:"The account to log in as. Omit it and ssh resolves the user itself."`
+	IdentityFile string `json:"identityFile,omitempty" doc:"The private key to authenticate with, as a path."`
 }
+
+func (Target) AlsoAString() bool { return true }
 
 func (t Target) session() session.Target {
 	return session.Target{

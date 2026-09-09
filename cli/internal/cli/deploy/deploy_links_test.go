@@ -19,7 +19,7 @@ func writeLinkedMonorepo(t *testing.T, root string, links string) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
   links: [`+links+`],
   apps: [{ name: "api", path: "apps/api", runtime: "node" }],

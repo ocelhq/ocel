@@ -10,7 +10,7 @@ import (
 
 func TestProviderConfigCarriesTheDescriptorOptionsOpaquely(t *testing.T) {
 	config, err := providerConfig(&projectconfig.ProviderDescriptor{
-		Package: "@ocel/provider-aws",
+		Name:    "aws",
 		Options: json.RawMessage(`{"region":"us-east-1"}`),
 	})
 	if err != nil {
@@ -23,7 +23,7 @@ func TestProviderConfigCarriesTheDescriptorOptionsOpaquely(t *testing.T) {
 
 func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
 	_, err := providerConfig(&projectconfig.ProviderDescriptor{
-		Package: "@ocel/provider-aws",
+		Name:    "aws",
 		Options: json.RawMessage(`["us-east-1"]`),
 	})
 	if err == nil {
@@ -36,7 +36,7 @@ func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
 
 func TestProviderConfigLeavesAnUnconfiguredProviderWithoutOptions(t *testing.T) {
 	config, err := providerConfig(&projectconfig.ProviderDescriptor{
-		Package: "@ocel/provider-aws",
+		Name:    "aws",
 		Options: json.RawMessage(`{}`),
 	})
 	if err != nil {

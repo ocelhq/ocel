@@ -36,7 +36,7 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Sessio
 	if err != nil {
 		return standing{}, err
 	}
-	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), runner.Package())
+	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), runner.Name())
 	if err != nil {
 		return standing{}, err
 	}
@@ -71,7 +71,7 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, 
 	if err != nil {
 		return standing{}, err
 	}
-	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), runner.Package())
+	compute, err := preflight.ResolveComputes(cfg, resp.GetComputes(), runner.Name())
 	if err != nil {
 		return standing{}, err
 	}

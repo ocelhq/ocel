@@ -43,7 +43,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := refuseClaimedDomains(tc.claims, projectconfig.ConfigFileName, func(string) {})
+			err := refuseClaimedDomains(tc.claims, projectconfig.DefaultFileName, func(string) {})
 			if !tc.refuse {
 				if err != nil {
 					t.Fatalf("refuseClaimedDomains err = %v, want nil", err)
@@ -67,7 +67,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 		var warned []string
 		err := refuseClaimedDomains([]*contractv1.DomainClaim{
 			{Hostname: "acme.com", Cause: "the edge was throttled listing what it serves"},
-		}, projectconfig.ConfigFileName, func(message string) { warned = append(warned, message) })
+		}, projectconfig.DefaultFileName, func(message string) { warned = append(warned, message) })
 		if err != nil {
 			t.Fatalf("refuseClaimedDomains err = %v, want a deploy that carries on when the provider could not say who serves the hostname", err)
 		}
@@ -83,7 +83,7 @@ func TestRefuseClaimedDomains(t *testing.T) {
 			{Hostname: "acme.com", Status: contractv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-other-production-web"},
 			{Hostname: "www.acme.com", Status: contractv1.DomainClaim_STATUS_UNCLAIMED},
 			{Hostname: "shop.acme.com", Status: contractv1.DomainClaim_STATUS_CLAIMED, Owner: "ocel-third-production-web"},
-		}, projectconfig.ConfigFileName, func(string) {})
+		}, projectconfig.DefaultFileName, func(string) {})
 		if err == nil {
 			t.Fatal("refuseClaimedDomains err = nil, want a refusal")
 		}
@@ -104,7 +104,7 @@ func TestDomainClaims(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
 };
 `)
@@ -139,7 +139,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { production: "acme.com" },
 };
 `)
@@ -170,7 +170,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { production: "acme.com" },
   apps: [{ name: "api", path: "apps/api", runtime: "node", domains: { production: "api.acme.com" } }],
 };
