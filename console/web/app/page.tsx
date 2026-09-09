@@ -162,7 +162,7 @@ function Cli() {
               <span className="font-mono text-[12.5px] text-dim">+ more added all the time</span>
             </div>
             <div className="mt-[26px] flex flex-wrap items-center gap-4">
-              <CommandLine command="npm i -g ocel" />
+              <CommandLine command="npm i -g @ocel/cli" />
               <a
                 href="https://ocel.app/docs/cli/frameworks"
                 target="_blank"
@@ -614,7 +614,7 @@ function CtaBand() {
           Get started
         </Button>
         <span className="border-[1.5px] border-dim px-[18px] py-3 font-mono text-sm text-background">
-          npm i -g ocel
+          npm i -g @ocel/cli
         </span>
       </div>
     </section>
