@@ -78,14 +78,14 @@ func TestNodePassEvaluate(t *testing.T) {
 
 		root := transformtest.Root(t, map[string]string{
 			"infra/defaults.transform.ts": `
-				import { defineTransform } from "@ocel/provider-aws/transform"
+				import { defineTransform } from "ocel/providers/aws/transform"
 				export default defineTransform([
 					{ function: { lambda: { memorySizeMb: 2048, timeoutSeconds: 60 } } },
 					{ if: (ctx) => ctx.envClass === "production", function: { url: { invokeMode: "BUFFERED" } } },
 				])
 			`,
 			"infra/late.transform.ts": `
-				import { defineTransform } from "@ocel/provider-aws/transform"
+				import { defineTransform } from "ocel/providers/aws/transform"
 				export default defineTransform({
 					function: { lambda: (args, ctx) => ({ ...args, memorySizeMb: ctx.resourceName === "api-users" ? 512 : args.memorySizeMb }) },
 				})
@@ -116,7 +116,7 @@ func TestNodePassEvaluate(t *testing.T) {
 
 		root := transformtest.Root(t, map[string]string{
 			"infra/preview.transform.ts": `
-				import { defineTransform } from "@ocel/provider-aws/transform"
+				import { defineTransform } from "ocel/providers/aws/transform"
 				export default defineTransform({
 					if: (ctx) => ctx.envClass === "preview" || ctx.app === "web",
 					function: { lambda: { memorySizeMb: 128 } },
@@ -214,7 +214,7 @@ func TestNodePassEvaluate(t *testing.T) {
 
 		root := transformtest.Root(t, map[string]string{
 			"infra/bad.transform.ts": `
-				import { defineTransform } from "@ocel/provider-aws/transform"
+				import { defineTransform } from "ocel/providers/aws/transform"
 				export default defineTransform({
 					function: { lambda: { reservedConcurrency: 4 } as never },
 				})

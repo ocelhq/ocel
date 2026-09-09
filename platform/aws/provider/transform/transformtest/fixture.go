@@ -33,18 +33,18 @@ func Root(t *testing.T, modules map[string]string) string {
 		t.Skip("node is not on PATH")
 	}
 
-	pkg := filepath.Join(repo(t), "packages", "provider-aws")
-	if _, err := os.Stat(filepath.Join(pkg, "package.json")); err != nil {
-		t.Skipf("the provider-aws package is not checked out: %v", err)
+	pkg := filepath.Join(repo(t), "packages", "ocel")
+	if _, err := os.Stat(filepath.Join(pkg, "dist", "config.js")); err != nil {
+		t.Skipf("the ocel package is not built: %v", err)
 	}
 
 	root := t.TempDir()
-	scope := filepath.Join(root, "node_modules", "@ocel")
-	if err := os.MkdirAll(scope, 0o755); err != nil {
+	modulesDir := filepath.Join(root, "node_modules")
+	if err := os.MkdirAll(modulesDir, 0o755); err != nil {
 		t.Fatalf("create node_modules: %v", err)
 	}
-	if err := os.Symlink(pkg, filepath.Join(scope, "provider-aws")); err != nil {
-		t.Fatalf("link the provider package: %v", err)
+	if err := os.Symlink(pkg, filepath.Join(modulesDir, "ocel")); err != nil {
+		t.Fatalf("link the ocel package: %v", err)
 	}
 	for name, source := range modules {
 		path := filepath.Join(root, filepath.FromSlash(name))

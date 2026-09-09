@@ -3,6 +3,7 @@ package transform
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -13,10 +14,15 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 )
 
+//go:generate pnpm --dir ../../../.. exec turbo run build --filter=@platform/aws-transform-runner
+
+//go:embed dist/runner.mjs
+var runner []byte
+
 const (
 	scratchDirName = ".ocel"
 	bundleFileName = "transform.mjs"
-	runnerModule   = "@ocel/provider-aws/transform/run"
+	runnerFileName = "transform-runner.mjs"
 )
 
 type NodePass struct {
@@ -73,11 +79,15 @@ func (p NodePass) bundle() (string, error) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return "", fmt.Errorf("create %s: %w", scratchDirName, err)
 	}
+	runnerPath := filepath.Join(outDir, runnerFileName)
+	if err := os.WriteFile(runnerPath, runner, 0o644); err != nil {
+		return "", fmt.Errorf("write the transform runner: %w", err)
+	}
 	outfile := filepath.Join(outDir, bundleFileName)
 
 	result := api.Build(api.BuildOptions{
 		Stdin: &api.StdinOptions{
-			Contents:   p.entry(),
+			Contents:   p.entry(runnerPath),
 			ResolveDir: p.Root,
 			Sourcefile: "ocel-transform-entry.ts",
 			Loader:     api.LoaderTS,
@@ -95,9 +105,9 @@ func (p NodePass) bundle() (string, error) {
 	return outfile, nil
 }
 
-func (p NodePass) entry() string {
+func (p NodePass) entry(runnerPath string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "import { loadModule, runEvaluate } from %q;\n", runnerModule)
+	fmt.Fprintf(&b, "import { loadModule, runEvaluate } from %q;\n", runnerPath)
 	for i, module := range p.Modules {
 		fmt.Fprintf(&b, "import m%d from %q;\n", i, p.resolve(module))
 	}
