@@ -176,7 +176,7 @@ func TestEveryCommittedConfigValidatesAgainstTheSchema(t *testing.T) {
 	root := repoDir(t)
 	schema := committedSchema(t, root)
 	for _, path := range committedConfigs(t, root) {
-		if strings.HasSuffix(path, TSFileName) || strings.HasSuffix(path, ".config.ts") {
+		if strings.HasSuffix(path, ".config.ts") {
 			continue
 		}
 		source, err := os.ReadFile(path)
