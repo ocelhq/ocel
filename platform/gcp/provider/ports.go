@@ -22,6 +22,7 @@ type edges struct {
 	pins      pin.Pins
 	stacks    alb.Stacks
 	routes    alb.Routes
+	entries   alb.Entries
 	project   string
 	region    string
 }
@@ -41,6 +42,7 @@ func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 			Records: e.records,
 			Stacks:  e.stacks,
 			Routes:  e.routes,
+			Entries: e.entries,
 			Pins:    e.pins,
 			Project: e.project,
 			Region:  e.region,

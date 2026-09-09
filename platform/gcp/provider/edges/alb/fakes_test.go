@@ -28,6 +28,7 @@ type world struct {
 	routed   map[string]map[string]string
 	pinned   []string
 	backends map[string]map[string]bool
+	entries  map[string]map[string]bool
 }
 
 func newWorld() *world {
@@ -38,6 +39,7 @@ func newWorld() *world {
 		},
 		routed:   map[string]map[string]string{},
 		backends: map[string]map[string]bool{"": {notFoundBackend: true}},
+		entries:  map[string]map[string]bool{},
 	}
 }
 
@@ -125,6 +127,21 @@ func (w *world) Unroute(_ context.Context, urlMap, hostname string) error {
 	return nil
 }
 
+func (w *world) Entered(_ context.Context, certificateMap string) ([]string, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return slices.Sorted(maps.Keys(w.entries[certificateMap])), nil
+}
+
+func (w *world) enter(certificateMap, hostname string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.entries[certificateMap] == nil {
+		w.entries[certificateMap] = map[string]bool{}
+	}
+	w.entries[certificateMap][hostname] = true
+}
+
 func (w *world) Pin(_ context.Context, service, revision string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -168,6 +185,8 @@ func (w *world) pins() []string {
 var _ Stacks = (*world)(nil)
 
 var _ Routes = (*world)(nil)
+
+var _ Entries = (*world)(nil)
 
 func declared(program Program) (map[string]declaration, error) {
 	seen := map[string]declaration{}

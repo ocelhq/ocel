@@ -233,6 +233,37 @@ func covered(held *certmanager.Certificate) []string {
 	return nil
 }
 
+func (p *Provider) Entered(ctx context.Context, certificateMap string) ([]string, error) {
+	certificates, err := p.clients.Certificates()
+	if err != nil {
+		return nil, err
+	}
+	parent := p.certificatesGlobal() + "/certificateMaps/" + certificateMap
+	var bound []string
+	for page := ""; ; {
+		held, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.ListCertificateMapEntriesResponse, error) {
+			return certificates.Projects.Locations.CertificateMaps.CertificateMapEntries.
+				List(parent).PageToken(page).Context(ctx).Do(call...)
+		})
+		if absent(err) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read what the certificate map %s serves: %w", certificateMap, err)
+		}
+		for _, entry := range held.CertificateMapEntries {
+			if entry.Hostname != "" {
+				bound = append(bound, entry.Hostname)
+			}
+		}
+		if page = held.NextPageToken; page == "" {
+			break
+		}
+	}
+	slices.Sort(bound)
+	return bound, nil
+}
+
 func (p *Provider) DiscardCertificate(ctx context.Context, cert providerkit.Certificate, report providerkit.Reporter) error {
 	if !cert.Held() {
 		return nil
