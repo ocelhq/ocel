@@ -3,6 +3,7 @@ package alb
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -41,12 +42,17 @@ func (s *stack) adopt(front Front) error {
 		return err
 	}
 	s.held.Front = front
-	return s.keep()
+	s.keep()
+	return nil
 }
 
-func (s *stack) keep() error {
-	s.state.Adapter = edge.Own(s.held)
-	return nil
+func (s *stack) keep() { s.state.Adapter = edge.Own(s.held) }
+
+func (s *stack) reaching(host Host) string {
+	if host.Service == "" {
+		return s.held.Front.NotFound
+	}
+	return host.Backend
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
@@ -75,16 +81,14 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err := s.raise(ctx, hosts); err != nil {
 		return err
 	}
-	if err := s.e.deps.Routes.Route(ctx, s.held.Front.URLMap, binding.Hostname, hosts[binding.Hostname].Backend); err != nil {
-		return err
+	if err := s.e.deps.Routes.Route(ctx, s.held.Front.URLMap, binding.Hostname, s.reaching(hosts[binding.Hostname])); err != nil {
+		return errors.Join(err, s.raise(ctx, s.held.Hosts))
 	}
 	if err := s.claim(ctx, binding.Hostname); err != nil {
 		return err
 	}
 	s.held.Hosts = hosts
-	if err := s.keep(); err != nil {
-		return err
-	}
+	s.keep()
 	s.state.Bind(binding.Hostname)
 	s.state.PublishFront(binding.Hostname, s.held.Front.Address)
 	return nil
@@ -111,9 +115,7 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 		hosts = nil
 	}
 	s.held.Hosts = hosts
-	if err := s.keep(); err != nil {
-		return err
-	}
+	s.keep()
 	s.state.Release(hostname)
 	s.state.PublishFront(hostname, "")
 	return nil
@@ -200,9 +202,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return err
 	}
 	s.held.Hosts = nil
-	if err := s.keep(); err != nil {
-		return err
-	}
+	s.keep()
 	for _, hostname := range s.state.Bound {
 		s.state.PublishFront(hostname, "")
 	}
