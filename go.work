@@ -10,6 +10,7 @@ use (
 	./pkg/providerkit
 	./pkg/providerkit/pulumi
 	./platform/aws/provider
+	./platform/aws/runtime
 	./platform/edge/cloudflare/deploy
 	./platform/edge/contract
 	./platform/gcp/provider

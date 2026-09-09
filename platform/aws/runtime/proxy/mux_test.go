@@ -1,4 +1,4 @@
-package membrane
+package proxy
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
 )
 
-const testToken = "membrane-session-token"
+const testToken = "proxy-session-token"
 
 type recordingBuckets struct {
 	presigned []*blobv1.PresignFile

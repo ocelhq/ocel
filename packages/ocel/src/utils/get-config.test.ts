@@ -124,7 +124,7 @@ describe("getRuntimeAddress", () => {
     delete process.env.OCEL_RUNTIME_ADDRESS;
   });
 
-  it("reads the one address every membrane-backed resource shares", () => {
+  it("reads the one address every runtime-backed resource shares", () => {
     process.env.OCEL_RUNTIME_ADDRESS = "http://127.0.0.1:41235";
 
     expect(getRuntimeAddress()).toBe("http://127.0.0.1:41235");

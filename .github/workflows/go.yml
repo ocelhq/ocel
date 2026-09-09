@@ -61,11 +61,13 @@ jobs:
               pkg/proto/go.sum
               pkg/channel/go.sum
               platform/aws/provider/go.sum
+              platform/aws/runtime/go.sum
           - name: aws
-            dirs: platform/aws/provider
-            packages: ./platform/aws/provider/...
+            dirs: platform/aws/provider platform/aws/runtime
+            packages: ./platform/aws/provider/... ./platform/aws/runtime/...
             sums: |
               platform/aws/provider/go.sum
+              platform/aws/runtime/go.sum
               cli/go.sum
           - name: gcp
             dirs: platform/gcp/provider
@@ -153,7 +155,7 @@ jobs:
         if: matrix.group.name == 'cli' || matrix.group.name == 'aws'
         run: go generate -C platform/aws/provider ./...
 
-      - name: go generate (the gcp provider's embedded membrane)
+      - name: go generate (the gcp provider's embedded runtime)
         if: matrix.group.name == 'gcp'
         run: go generate -C platform/gcp/provider ./...
 
@@ -220,7 +222,7 @@ jobs:
         if: matrix.group.name == 'aws' && steps.gate-live.outputs.green != 'true'
         run: |
           set -euo pipefail
-          scripts/floci.sh run "ocel-aws-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -C platform/aws/provider -race -count=1 -timeout 30m -run '^TestLive' -json ./... | tee live.json
+          scripts/floci.sh run "ocel-aws-live-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -race -count=1 -timeout 30m -run '^TestLive' -json ./platform/aws/provider/... ./platform/aws/runtime/... | tee live.json
 
       - name: Assert the live suite ran
         if: matrix.group.name == 'aws' && steps.gate-live.outputs.green != 'true'
@@ -244,7 +246,7 @@ jobs:
         if: matrix.group.name == 'aws' && steps.gate-lifecycle.outputs.green != 'true'
         run: |
           set -euo pipefail
-          scripts/floci.sh run "ocel-aws-lifecycle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -C platform/aws/provider -race -count=1 -timeout 30m -run '^TestLifecycle' -json ./... | tee lifecycle.json
+          scripts/floci.sh run "ocel-aws-lifecycle-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" -- go test -race -count=1 -timeout 30m -run '^TestLifecycle' -json ./platform/aws/provider/... ./platform/aws/runtime/... | tee lifecycle.json
 
       - name: Assert the lifecycle suite ran
         if: matrix.group.name == 'aws' && steps.gate-lifecycle.outputs.green != 'true'

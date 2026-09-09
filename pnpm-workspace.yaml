@@ -5,7 +5,7 @@ packages:
   - packages/*
   - frameworks/*/*
   - platform/aws/functions/*
-  - platform/aws/membrane
+  - platform/aws/runtime
   - platform/aws/provider/edges/cloudfront/resolver
   - platform/aws/provider/payloads
   - platform/aws/provider/transform

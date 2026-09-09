@@ -66,7 +66,7 @@ async function flushOver(
   await new Promise<void>((resolve) => controlServer.listen(sockPath, resolve));
   process.env.OCEL_CONTROL_SOCKET = sockPath;
 
-  const { installCompileCacheFlush } = await import("../src/membrane.mjs");
+  const { installCompileCacheFlush } = await import("../src/host.mjs");
   installCompileCacheFlush();
   await waitFor(() => controlConns.size > 0);
 

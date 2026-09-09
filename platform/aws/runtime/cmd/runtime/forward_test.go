@@ -168,7 +168,7 @@ func TestHandleInvocationForward(t *testing.T) {
 					t.Errorf("Location header = %q, want %q", p.Headers["Location"], target.URL)
 				}
 				if targetHits != 0 {
-					t.Errorf("bootstrap fetched the redirect target %d times; it must forward the 3xx untouched", targetHits)
+					t.Errorf("the runtime fetched the redirect target %d times; it must forward the 3xx untouched", targetHits)
 				}
 				if strings.Contains(string(body), "the redirect target's own body") {
 					t.Errorf("body = %q, want the app's redirect body, not the target's", body)

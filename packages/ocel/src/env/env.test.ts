@@ -397,7 +397,7 @@ describe("reading a variable", () => {
     expect(process.env.READ_INTEROP).toBe("pk_live_123");
   });
 
-  it("reads an encrypted-baked value the membrane injected under its namespaced name", () => {
+  it("reads an encrypted-baked value the runtime injected under its namespaced name", () => {
     vi.stubEnv("OCEL_VAR_READ_SEALED", "sk_live_123");
     const env = defineEnv({ READ_SEALED: { class: "sensitive" } });
     expect(env.READ_SEALED).toBe("sk_live_123");

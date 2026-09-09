@@ -15,10 +15,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/platform/aws/provider/membrane"
-	"github.com/ocelhq/ocel/platform/aws/provider/membrane/bucket"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	"github.com/ocelhq/ocel/platform/aws/runtime/bucket"
+	"github.com/ocelhq/ocel/platform/aws/runtime/proxy"
 )
 
 const (
@@ -26,7 +26,7 @@ const (
 	sessionPrefixEnvVar = "OCEL_RUNTIME_SESSION_PREFIX"
 )
 
-func membraneWanted(links []live.Link) bool {
+func proxyWanted(links []live.Link) bool {
 	for _, l := range links {
 		if naming.Proxied(l.Type) {
 			return true
@@ -35,8 +35,8 @@ func membraneWanted(links []live.Link) bool {
 	return false
 }
 
-func serveMembrane(ctx context.Context, links []live.Link, table, sessionPrefix string) ([]string, <-chan error, error) {
-	if !membraneWanted(links) {
+func serveProxy(ctx context.Context, links []live.Link, table, sessionPrefix string) ([]string, <-chan error, error) {
+	if !proxyWanted(links) {
 		return nil, nil, nil
 	}
 	if table == "" {
@@ -59,15 +59,15 @@ func serveMembrane(ctx context.Context, links []live.Link, table, sessionPrefix 
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return nil, nil, fmt.Errorf("bind the membrane listener: %w", err)
+		return nil, nil, fmt.Errorf("bind the proxy listener: %w", err)
 	}
-	token, err := membraneToken()
+	token, err := proxyToken()
 	if err != nil {
 		ln.Close()
 		return nil, nil, err
 	}
 
-	srv := &http.Server{Handler: membrane.NewMux(token, svc)}
+	srv := &http.Server{Handler: proxy.NewMux(token, svc)}
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()
 
@@ -77,19 +77,19 @@ func serveMembrane(ctx context.Context, links []live.Link, table, sessionPrefix 
 	}, served, nil
 }
 
-func superviseMembrane(served <-chan error) {
+func superviseProxy(served <-chan error) {
 	if served == nil {
 		return
 	}
 	err := <-served
-	fmt.Fprintf(os.Stderr, "ocel: the membrane stopped serving this deployment's links: %v\n", err)
+	fmt.Fprintf(os.Stderr, "ocel: the proxy stopped serving this deployment's links: %v\n", err)
 	os.Exit(1)
 }
 
-func membraneToken() (string, error) {
+func proxyToken() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("draw a membrane session token: %w", err)
+		return "", fmt.Errorf("draw a proxy session token: %w", err)
 	}
 	return hex.EncodeToString(b), nil
 }

@@ -40,13 +40,13 @@ func main() {
 		fatalInit(fmt.Sprintf("failed to open this deployment's encrypted variables: %v", err))
 	}
 
-	membraneEnv, membraneServed, err := serveMembrane(ctx, live.declaredLinks(), os.Getenv(stateTableEnvVar), os.Getenv(sessionPrefixEnvVar))
+	proxyEnv, proxyServed, err := serveProxy(ctx, live.declaredLinks(), os.Getenv(stateTableEnvVar), os.Getenv(sessionPrefixEnvVar))
 	if err != nil {
-		fatalInit(fmt.Sprintf("failed to serve this deployment's membrane: %v", err))
+		fatalInit(fmt.Sprintf("failed to serve this deployment's proxied links: %v", err))
 	}
-	go superviseMembrane(membraneServed)
+	go superviseProxy(proxyServed)
 
-	child, err := bringUp(ctx, served, live, prefetch, childEnv(bakedEnv, live, membraneEnv), start, bytecodeReady)
+	child, err := bringUp(ctx, served, live, prefetch, childEnv(bakedEnv, live, proxyEnv), start, bytecodeReady)
 	if err != nil {
 		fatalInit(err.Error())
 	}
@@ -166,11 +166,11 @@ func bringUpChildWithBytecode(
 	return child, nil
 }
 
-func childEnv(bakedEnv []string, live *liveValues, membraneEnv []string) []string {
-	env := make([]string, 0, len(bakedEnv)+len(membraneEnv)+1)
+func childEnv(bakedEnv []string, live *liveValues, proxyEnv []string) []string {
+	env := make([]string, 0, len(bakedEnv)+len(proxyEnv)+1)
 	env = append(env, bakedEnv...)
 	env = append(env, live.declaredEnv()...)
-	return append(env, membraneEnv...)
+	return append(env, proxyEnv...)
 }
 
 func fatalInit(msg string) {

@@ -17,8 +17,8 @@ func TestPayloads(t *testing.T) {
 		payload func() Payload
 		entry   string
 	}{
-		{"runtime layer x86_64", runtimeLayerFor(providerkit.ArchX8664), "ocel/bootstrap"},
-		{"runtime layer arm64", runtimeLayerFor(providerkit.ArchARM64), "ocel/bootstrap"},
+		{"runtime layer x86_64", runtimeLayerFor(providerkit.ArchX8664), "ocel/runtime"},
+		{"runtime layer arm64", runtimeLayerFor(providerkit.ArchARM64), "ocel/runtime"},
 		{"upload completer", UploadCompleter, "bootstrap"},
 		{"image optimizer", ImageOptimizer, "index.mjs"},
 		{"revalidator", Revalidator, "index.mjs"},

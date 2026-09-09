@@ -630,7 +630,7 @@ func TestReconcileLeavesTheTagInvalidatorAFrontToReach(t *testing.T) {
 func TestCacheTagHeaderIsTheOneTheOriginWrites(t *testing.T) {
 	t.Parallel()
 
-	const shaping = "../../../membrane/src/next/cache-shaping.mts"
+	const shaping = "../../../runtime/src/next/cache-shaping.mts"
 	source, err := os.ReadFile(shaping)
 	if err != nil {
 		t.Fatalf("read the origin's cache shaping: %v", err)

@@ -2,7 +2,7 @@ import http from "node:http";
 import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type FetchHandler, fetchToNodeHandler } from "./fetch-bridge.mjs";
-import type { Invoke } from "./membrane.mjs";
+import type { Invoke } from "./host.mjs";
 
 export type Loaded = { kind: "server"; value: http.Server } | { kind: "export"; value: unknown };
 

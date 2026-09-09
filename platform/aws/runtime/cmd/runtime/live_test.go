@@ -104,7 +104,7 @@ func (s *sink) messages(t *testing.T) []liveValuesMsg {
 	for _, line := range s.lines {
 		var msg liveValuesMsg
 		if err := json.Unmarshal([]byte(line), &msg); err != nil {
-			t.Fatalf("the bootstrap pushed %q, which node cannot decode: %v", line, err)
+			t.Fatalf("the runtime pushed %q, which node cannot decode: %v", line, err)
 		}
 		out = append(out, msg)
 	}
@@ -887,18 +887,18 @@ func TestChildEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("hands the child the membrane it must reach and the token that opens it", func(t *testing.T) {
-		membraneEnv := []string{
+	t.Run("hands the child the proxy it must reach and the token that opens it", func(t *testing.T) {
+		proxyEnv := []string{
 			constants.RuntimeAddressEnvName + "=http://127.0.0.1:41000",
 			channel.SessionTokenEnvVar + "=deadbeef",
 		}
 		l := newLiveValues(resolves(map[string]string{}), []string{"DB_PASSWORD"}, nil, nil)
 
-		got := childEnv([]string{"OCEL_VAR_STRIPE_KEY=sk_baked"}, l, membraneEnv)
+		got := childEnv([]string{"OCEL_VAR_STRIPE_KEY=sk_baked"}, l, proxyEnv)
 
-		for _, want := range membraneEnv {
+		for _, want := range proxyEnv {
 			if !slices.Contains(got, want) {
-				t.Errorf("childEnv = %q, missing %q, so the app cannot reach the membrane serving its links", got, want)
+				t.Errorf("childEnv = %q, missing %q, so the app cannot reach the proxy serving its links", got, want)
 			}
 		}
 	})

@@ -40,11 +40,11 @@ async function start(invoke: Invoke): Promise<number> {
   return messages.filter((m) => m.type === "server-ready").at(-1)!.payload.httpPort;
 }
 
-let serveInvoke: typeof import("../src/membrane.mjs").serveInvoke;
-let serveServer: typeof import("../src/membrane.mjs").serveServer;
-let drainWaitUntil: typeof import("../src/membrane.mjs").drainWaitUntil;
-let startServer: typeof import("../src/membrane.mjs").startServer;
-type Invoke = import("../src/membrane.mjs").Invoke;
+let serveInvoke: typeof import("../src/host.mjs").serveInvoke;
+let serveServer: typeof import("../src/host.mjs").serveServer;
+let drainWaitUntil: typeof import("../src/host.mjs").drainWaitUntil;
+let startServer: typeof import("../src/host.mjs").startServer;
+type Invoke = import("../src/host.mjs").Invoke;
 
 beforeAll(async () => {
   sockDir = await mkdtemp(join(tmpdir(), "ocel-ctrl-"));
@@ -70,7 +70,7 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => controlServer.listen(sockPath, resolve));
 
   process.env.OCEL_CONTROL_SOCKET = sockPath;
-  const mod = await import("../src/membrane.mjs");
+  const mod = await import("../src/host.mjs");
   serveInvoke = mod.serveInvoke;
   serveServer = mod.serveServer;
   drainWaitUntil = mod.drainWaitUntil;
@@ -302,7 +302,7 @@ describe("an app that calls listen() instead of exporting a handler", () => {
     return messages.filter((m) => m.type === "server-ready").at(-1)!.payload.httpPort;
   }
 
-  test("completes its invocation instead of leaving the membrane waiting out the budget", async () => {
+  test("completes its invocation instead of leaving the runtime waiting out the budget", async () => {
     const server = http.createServer((_req, res) => res.end("ok"));
     const port = await startServed(server);
 
@@ -320,7 +320,7 @@ describe("an app that calls listen() instead of exporting a handler", () => {
     server.close();
   });
 
-  test("does not leak the membrane's own headers into the app", async () => {
+  test("does not leak the runtime's own headers into the app", async () => {
     let seen: http.IncomingHttpHeaders | undefined;
     const server = http.createServer((req, res) => {
       seen = { ...req.headers };
@@ -387,7 +387,7 @@ describe("an app that calls listen() instead of exporting a handler", () => {
     server.close();
   });
 
-  test("a bare startServer declares that it cannot, so the membrane never waits on it", async () => {
+  test("a bare startServer declares that it cannot, so the runtime never waits on it", async () => {
     const before = messages.filter((m) => m.type === "server-ready").length;
     const server = http.createServer((_req, res) => res.end("ok"));
     await startServer(server);

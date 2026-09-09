@@ -150,7 +150,7 @@ test("answers an RSC request with the RSC variant's headers", async () => {
   expect(entry?.value.headers["content-type"]).toBe("text/x-component");
 });
 
-test("negotiates on the membrane's mark once Next has stripped the flight headers", async () => {
+test("negotiates on the runtime's mark once Next has stripped the flight headers", async () => {
   const store = fakeStore();
   seedPage(store, "index");
   store.entries.get("index")!.value.headers = {
@@ -171,7 +171,7 @@ test("negotiates on the membrane's mark once Next has stripped the flight header
   expect(entry?.value.headers["content-type"]).toBe("text/x-component");
 });
 
-test("the membrane's mark is invisible to header enumeration", () => {
+test("the runtime's mark is invisible to header enumeration", () => {
   const headers: Record<string | symbol, any> = {};
   headers[Symbol.for("ocel.rsc-request")] = true;
 

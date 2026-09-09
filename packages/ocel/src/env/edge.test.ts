@@ -55,7 +55,7 @@ describe("reading on the edge", () => {
     expect(env.EDGE_PLAIN).toBe("bare");
   });
 
-  it("prefers the membrane's name over the bare one, for both readable classes", () => {
+  it("prefers the runtime's name over the bare one, for both readable classes", () => {
     write("EDGE_PLAIN_BOTH", "bare");
     write("OCEL_VAR_EDGE_PLAIN_BOTH", "delivered");
     write("EDGE_SENSITIVE_BOTH", "bare");
@@ -70,7 +70,7 @@ describe("reading on the edge", () => {
     expect(env.EDGE_SENSITIVE_BOTH).toBe("delivered");
   });
 
-  it("reads a sensitive value, which arrives unsealed under the membrane's name", () => {
+  it("reads a sensitive value, which arrives unsealed under the runtime's name", () => {
     write("OCEL_VAR_EDGE_SENSITIVE", "unsealed");
     const env = defineEnv({
       EDGE_SENSITIVE: { class: "sensitive", schema: z.string() },

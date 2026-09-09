@@ -10,8 +10,8 @@
     "./edge-kind": "./src/edge-kind.mts",
     "./entrypoint": "./src/entrypoint.mts",
     "./fetch-bridge": "./src/fetch-bridge.mts",
+    "./host": "./src/host.mts",
     "./live-values": "./src/live-values.mts",
-    "./membrane": "./src/membrane.mts",
     "./serve": "./src/serve.mts",
     "./user-app": "./src/user-app.mts"
   },

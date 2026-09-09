@@ -86,12 +86,12 @@ const specs = [
     "description": "AWS IAM Function URL provisioning and the runtime entrypoints serving its invocations.",
     "noiseTier": "precise",
     "filePatterns": [
-      "platform/aws/membrane/src/**/entrypoint.mts",
+      "platform/aws/runtime/src/**/entrypoint.mts",
       "frameworks/node/runtime/src/entrypoint.mts",
       "frameworks/node/runtime/src/fetch-bridge.mts",
-      "frameworks/node/runtime/src/membrane.mts",
+      "frameworks/node/runtime/src/host.mts",
       "platform/aws/functions/image-optimizer/src/*.mts",
-      "platform/aws/provider/cmd/membrane/bootstrap/*.go",
+      "platform/aws/runtime/cmd/runtime/*.go",
       "platform/aws/provider/deploy/function.go"
     ],
     "patterns": [
@@ -174,7 +174,7 @@ const specs = [
     "filePatterns": [
       "packages/ocel/src/blob/route.ts",
       "cli/internal/devserver/detector.go",
-      "platform/aws/provider/membrane/bucket/listener.go",
+      "platform/aws/runtime/bucket/listener.go",
       "console/api/src/routes/blob/signing.ts"
     ],
     "patterns": [
@@ -205,10 +205,10 @@ const specs = [
     "noiseTier": "precise",
     "filePatterns": [
       "platform/aws/provider/server/*.go",
-      "platform/aws/provider/membrane/mux.go",
-      "platform/aws/provider/membrane/bucket/service.go",
+      "platform/aws/runtime/proxy/mux.go",
+      "platform/aws/runtime/bucket/service.go",
       "platform/aws/provider/cmd/deploy/main.go",
-      "platform/aws/provider/cmd/membrane/bootstrap/membraneserver.go",
+      "platform/aws/runtime/cmd/runtime/proxyserver.go",
       "platform/aws/provider/channelauth/interceptor.go",
       "pkg/channel/channel.go"
     ],
@@ -224,7 +224,7 @@ const specs = [
         "label": "Connect session interceptor"
       },
       {
-        "source": "^\\s*httpSrv\\s*:=\\s*&http\\.Server\\s*\\{\\s*Handler:\\s*(?:server|membrane)\\.NewMux\\s*\\(\\s*token\\b",
+        "source": "^\\s*httpSrv\\s*:=\\s*&http\\.Server\\s*\\{\\s*Handler:\\s*(?:server|proxy)\\.NewMux\\s*\\(\\s*token\\b",
         "flags": "m",
         "label": "Authenticated RPC server"
       },
@@ -396,9 +396,9 @@ const specs = [
     "filePatterns": [
       "frameworks/node/runtime/src/entrypoint.mts",
       "frameworks/node/runtime/src/fetch-bridge.mts",
-      "platform/aws/membrane/src/next/entrypoint.mts",
-      "frameworks/node/runtime/src/membrane.mts",
-      "platform/aws/provider/cmd/membrane/bootstrap/*.go",
+      "platform/aws/runtime/src/next/entrypoint.mts",
+      "frameworks/node/runtime/src/host.mts",
+      "platform/aws/runtime/cmd/runtime/*.go",
       "platform/aws/provider/deploy/function.go"
     ],
     "patterns": [
@@ -704,7 +704,7 @@ const specs = [
     "description": "Go membrane BucketService ConnectRPC handler implementations: presigned S3 PUT issuance, upload-signature verification, and upload-status reporting.",
     "noiseTier": "precise",
     "filePatterns": [
-      "platform/aws/provider/membrane/bucket/*.go"
+      "platform/aws/runtime/bucket/*.go"
     ],
     "patterns": [
       {
@@ -731,7 +731,7 @@ const specs = [
     "description": "HMAC-SHA256 signing and constant-time verification of canonical upload payloads that authenticate bucket upload completions in the membrane.",
     "noiseTier": "precise",
     "filePatterns": [
-      "platform/aws/provider/membrane/bucket/*.go"
+      "platform/aws/runtime/bucket/*.go"
     ],
     "patterns": [
       {
@@ -762,7 +762,7 @@ const specs = [
     "description": "S3 object-created Lambda listener that resolves the upload session by object tag and posts an HMAC-signed completion to the session's callback origin, gated by an allow-list.",
     "noiseTier": "precise",
     "filePatterns": [
-      "platform/aws/provider/membrane/bucket/*.go"
+      "platform/aws/runtime/bucket/*.go"
     ],
     "patterns": [
       {
@@ -793,7 +793,7 @@ const specs = [
     "description": "DynamoDB upload-session store for the membrane bucket service, including the conditional UpdateItem that guards the idempotent pending-to-succeeded file transition.",
     "noiseTier": "normal",
     "filePatterns": [
-      "platform/aws/provider/membrane/bucket/*.go"
+      "platform/aws/runtime/bucket/*.go"
     ],
     "patterns": [
       {

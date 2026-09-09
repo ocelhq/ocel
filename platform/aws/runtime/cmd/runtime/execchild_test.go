@@ -93,7 +93,7 @@ func TestStartExecutable(t *testing.T) {
 		}
 		_, body := splitPrelude(t, captured.body)
 		if want := "served by server with what it was handed"; string(body) != want {
-			t.Errorf("body = %q, want %q — the child is exec'd from the artifact with the env the membrane resolved", body, want)
+			t.Errorf("body = %q, want %q — the child is exec'd from the artifact with the env the runtime resolved", body, want)
 		}
 	})
 
@@ -120,10 +120,10 @@ func TestStartExecutable(t *testing.T) {
 		}
 	})
 
-	t.Run("carries none of the hooks the membrane holds a control channel for", func(t *testing.T) {
+	t.Run("carries none of the hooks the runtime holds a control channel for", func(t *testing.T) {
 		var c child = &execChild{}
 		if _, controlled := c.(controlledChild); controlled {
-			t.Error("an exec'd child answers hooks that exist only for a child the membrane drives over a control socket")
+			t.Error("an exec'd child answers hooks that exist only for a child the runtime drives over a control socket")
 		}
 	})
 
@@ -167,7 +167,7 @@ func TestStartExecutable(t *testing.T) {
 			t.Fatal(convErr)
 		}
 		if syscall.Kill(pid, 0) == nil {
-			t.Errorf("pid %d is still running after the membrane refused to serve it", pid)
+			t.Errorf("pid %d is still running after the runtime refused to serve it", pid)
 		}
 	})
 
@@ -191,10 +191,10 @@ func TestExecutableEnvNamesThePortTheAppBinds(t *testing.T) {
 		}
 	}
 	if port != "4321" {
-		t.Errorf("PORT = %q, want the port the membrane forwards to", port)
+		t.Errorf("PORT = %q, want the port the runtime forwards to", port)
 	}
 	if address != "http://127.0.0.1:9" {
-		t.Errorf("%s = %q, want what the membrane resolved for this deployment", constants.RuntimeAddressEnvName, address)
+		t.Errorf("%s = %q, want what the runtime resolved for this deployment", constants.RuntimeAddressEnvName, address)
 	}
 }
 
@@ -207,7 +207,7 @@ func TestReadArtifactCarriesTheCommandItIsServedBy(t *testing.T) {
 	}
 	served := readArtifact()
 	if !executable(served) {
-		t.Fatalf("artifact %+v is not read as one the membrane execs", served)
+		t.Fatalf("artifact %+v is not read as one the runtime execs", served)
 	}
 	if len(served.Command) != 1 || served.Command[0] != "./web" {
 		t.Errorf("command = %q, want the artifact's own binary", served.Command)
@@ -225,6 +225,6 @@ func TestAnArtifactWithoutACommandIsHostedByNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	if executable(readArtifact()) {
-		t.Error("a bundled artifact declares no command, and the membrane hosts it in node")
+		t.Error("a bundled artifact declares no command, and the runtime hosts it in node")
 	}
 }

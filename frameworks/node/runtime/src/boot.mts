@@ -1,5 +1,5 @@
+import { type Bind, reportFatalBoot, serveInvoke, serveServer } from "./host.mjs";
 import { awaitLiveValues } from "./live-values.mjs";
-import { type Bind, reportFatalBoot, serveInvoke, serveServer } from "./membrane.mjs";
 import { invokeFor, loadUserApp, resolveHandler } from "./user-app.mjs";
 
 export interface BootOptions {

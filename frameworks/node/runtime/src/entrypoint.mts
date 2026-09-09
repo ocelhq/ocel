@@ -1,5 +1,5 @@
 import { boot } from "./boot.mjs";
-import { installCompileCacheFlush, installCompileCacheWarm } from "./membrane.mjs";
+import { installCompileCacheFlush, installCompileCacheWarm } from "./host.mjs";
 
 boot({
   hooks: () => {

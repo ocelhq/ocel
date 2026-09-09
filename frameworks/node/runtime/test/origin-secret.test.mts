@@ -16,10 +16,10 @@ const controlConns = new Set<net.Socket>();
 let controlServer: net.Server;
 let sockDir: string;
 
-type Membrane = typeof import("../src/membrane.mjs");
-type Invoke = import("../src/membrane.mjs").Invoke;
+type Host = typeof import("../src/host.mjs");
+type Invoke = import("../src/host.mjs").Invoke;
 
-let membrane: Membrane;
+let host: Host;
 
 function waitFor(pred: () => boolean, timeoutMs = 3000): Promise<void> {
   return new Promise<void>((resolve, reject) => {
@@ -40,12 +40,10 @@ function waitFor(pred: () => boolean, timeoutMs = 3000): Promise<void> {
 }
 
 const doors: Record<string, (invoke: Invoke) => Promise<void>> = {
-  serveEntry: (invoke) => membrane.serveEntry(invoke),
-  serveInvoke: (invoke) => membrane.serveInvoke(invoke),
+  serveEntry: (invoke) => host.serveEntry(invoke),
+  serveInvoke: (invoke) => host.serveInvoke(invoke),
   serveServer: (invoke) =>
-    membrane.serveServer(
-      http.createServer((req, res) => invoke(req, res, { waitUntil: () => {} })),
-    ),
+    host.serveServer(http.createServer((req, res) => invoke(req, res, { waitUntil: () => {} }))),
 };
 
 async function start(door: string, invoke: Invoke): Promise<number> {
@@ -97,7 +95,7 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => controlServer.listen(sockPath, resolve));
 
   process.env.OCEL_CONTROL_SOCKET = sockPath;
-  membrane = await import("../src/membrane.mjs");
+  host = await import("../src/host.mjs");
 });
 
 afterEach(() => {

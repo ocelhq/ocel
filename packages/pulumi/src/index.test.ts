@@ -7,7 +7,7 @@ describe("what @ocel/pulumi exports", () => {
     expect(Object.keys(entry.link)).toEqual(["postgres", "custom"]);
   });
 
-  it("offers no bucket, because the membrane serves only ocel-provisioned buckets", () => {
+  it("offers no bucket, because the runtime serves only ocel-provisioned buckets", () => {
     expect(entry.link).not.toHaveProperty("bucket");
   });
 });

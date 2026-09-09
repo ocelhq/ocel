@@ -1096,7 +1096,7 @@ test("leaves the client asset suffix empty when the build stamped no deployment 
   expect(globalThis.NEXT_CLIENT_ASSET_SUFFIX).toBe("");
 });
 
-test("prefers the forwarded host and proto the membrane normalizes onto the request", async () => {
+test("prefers the forwarded host and proto the runtime normalizes onto the request", async () => {
   let seenUrl = "";
   const load = () => ({
     default: (args: { request: { url: string } }) => {
