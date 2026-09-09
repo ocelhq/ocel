@@ -645,13 +645,37 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)(yaml@2.9.0)
 
-  packages/native-lib/cli-darwin-arm64: {}
+  packages/cli:
+    devDependencies:
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(vite@8.1.3(@types/node@26.1.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
+    optionalDependencies:
+      '@ocel/cli-darwin-arm64':
+        specifier: workspace:^
+        version: link:../cli-darwin-arm64
+      '@ocel/cli-darwin-x64':
+        specifier: workspace:^
+        version: link:../cli-darwin-x64
+      '@ocel/cli-linux-arm64':
+        specifier: workspace:^
+        version: link:../cli-linux-arm64
+      '@ocel/cli-linux-x64':
+        specifier: workspace:^
+        version: link:../cli-linux-x64
+      '@ocel/cli-win32-x64':
+        specifier: workspace:^
+        version: link:../cli-win32-x64
 
-  packages/native-lib/cli-darwin-x64: {}
+  packages/cli-darwin-arm64: {}
 
-  packages/native-lib/cli-linux-x64: {}
+  packages/cli-darwin-x64: {}
 
-  packages/native-lib/cli-win32-x64: {}
+  packages/cli-linux-arm64: {}
+
+  packages/cli-linux-x64: {}
+
+  packages/cli-win32-x64: {}
 
   packages/ocel:
     dependencies:
