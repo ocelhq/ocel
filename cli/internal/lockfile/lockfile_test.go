@@ -19,6 +19,15 @@ const releaseChecksums = `d0d0 ocel_0.2.0_linux_amd64.tar.gz
 beef ocel-provider-aws_0.1.0_linux_amd64.tar.gz
 `
 
+func rendered(t *testing.T, lock Lock) []byte {
+	t.Helper()
+	raw, err := lock.Bytes()
+	if err != nil {
+		t.Fatalf("Bytes: %v", err)
+	}
+	return raw
+}
+
 func TestChecksumsParseTheDigestOfEveryProviderArchive(t *testing.T) {
 	t.Parallel()
 
@@ -103,8 +112,8 @@ func TestTheLockReadsBackTheBytesItWrote(t *testing.T) {
 	if !held {
 		t.Fatal("Read found no lock where Write had just put one")
 	}
-	if string(read.Bytes()) != string(written.Bytes()) {
-		t.Fatalf("the lock read back differs:\n%s\nwant\n%s", read.Bytes(), written.Bytes())
+	if a, b := rendered(t, read), rendered(t, written); string(a) != string(b) {
+		t.Fatalf("the lock read back differs:\n%s\nwant\n%s", a, b)
 	}
 }
 
@@ -136,7 +145,43 @@ func TestTheLockIsWrittenInOneOrderWhateverOrderItWasBuiltIn(t *testing.T) {
 		t.Fatalf("ParseChecksums: %v", err)
 	}
 
-	if a, b := FromChecksums("0.2.0", forward).Bytes(), FromChecksums("0.2.0", backward).Bytes(); string(a) != string(b) {
+	if a, b := rendered(t, FromChecksums("0.2.0", forward)), rendered(t, FromChecksums("0.2.0", backward)); string(a) != string(b) {
 		t.Fatalf("the lock is not byte-identical across build order:\n%s\nvs\n%s", a, b)
+	}
+}
+
+func TestAFailedWriteLeavesThePriorLockIntact(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes through a directory it holds no write bit on")
+	}
+
+	sums, err := providers.ParseChecksums(strings.NewReader(releaseChecksums))
+	if err != nil {
+		t.Fatalf("ParseChecksums: %v", err)
+	}
+	dir := t.TempDir()
+	if err := Write(dir, FromChecksums("0.2.0", sums)); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	before, err := os.ReadFile(Path(dir))
+	if err != nil {
+		t.Fatalf("read the lock: %v", err)
+	}
+
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatalf("seal the directory: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	if err := Write(dir, FromChecksums("0.3.0", sums)); err == nil {
+		t.Fatal("Write() error = nil, want a write that cannot land to fail")
+	}
+
+	after, err := os.ReadFile(Path(dir))
+	if err != nil {
+		t.Fatalf("read the lock back: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("a failed write changed the lock:\n%s\nwant\n%s", after, before)
 	}
 }
