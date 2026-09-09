@@ -172,22 +172,21 @@ async function boxConfig(dir: string, slug: string, login: string): Promise<stri
   const target = box();
   await mkdir(dir, { recursive: true });
   await writeFile(
-    path.join(dir, "ocel.config.ts"),
-    `import vps from "@ocel/provider-vps";
-import { defineConfig } from "ocel/config";
-
-export default defineConfig({
-  slug: ${JSON.stringify(slug)},
-  provider: vps({
-    ssh: {
-      host: ${JSON.stringify(target.host)},
-      user: ${JSON.stringify(login)},
-      identityFile: ${JSON.stringify(target.identityFile)},
-    },
-  }),
-  apps: [],
-});
-`,
+    path.join(dir, "ocel.json"),
+    `${JSON.stringify(
+      {
+        slug,
+        provider: {
+          name: "vps",
+          options: {
+            ssh: { host: target.host, user: login, identityFile: target.identityFile },
+          },
+        },
+        apps: [],
+      },
+      null,
+      2,
+    )}\n`,
     "utf8",
   );
   return dir;

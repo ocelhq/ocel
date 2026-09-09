@@ -62,7 +62,7 @@ your app uses.
 ```ts
 // ocel.config.ts — written by `ocel init`
 import { defineConfig } from "ocel/config";
-import awsProvider from "@ocel/provider-aws";
+import awsProvider from "ocel/providers/aws";
 
 export default defineConfig({
   slug: "my-app",
