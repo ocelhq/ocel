@@ -30,7 +30,56 @@ func (s *stack) ledger() *kitledger.Ledger {
 func (s *stack) Ledger() edge.Ledger { return s.ledger() }
 
 func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
-	return pin.Promote(ctx, s.ledger(), s.e.deps.Pins, promotion, pointer, report)
+	if err := pin.Promote(ctx, s.ledger(), s.e.deps.Pins, promotion, pointer, report); err != nil {
+		return err
+	}
+	return s.released(ctx, promotion, report)
+}
+
+func (s *stack) released(ctx context.Context, promotion edge.Promotion, report edge.Reporter) error {
+	hosts := maps.Clone(s.held.Hosts)
+	serving := map[string]string{}
+	var took []string
+	for _, hostname := range slices.Sorted(maps.Keys(hosts)) {
+		host := hosts[hostname]
+		if host.Service != "" {
+			continue
+		}
+		if _, promoted := promotion.Builds[host.App]; !promoted {
+			continue
+		}
+		service, held := serving[host.App]
+		if !held {
+			found, err := s.serving(ctx, host.App)
+			if err != nil {
+				return err
+			}
+			serving[host.App], service = found, found
+		}
+		if service == "" {
+			continue
+		}
+		host.Service = service
+		hosts[hostname] = host
+		took = append(took, hostname)
+	}
+	if len(took) == 0 {
+		return nil
+	}
+	if err := s.raise(ctx, hosts); err != nil {
+		return err
+	}
+	for _, hostname := range took {
+		if report != nil {
+			report.Detail("Routing " + hostname + " to " + hosts[hostname].Service)
+		}
+		if err := s.reach(ctx, hosts[hostname], hostname); err != nil {
+			return errors.Join(err, s.raise(ctx, s.held.Hosts))
+		}
+	}
+	s.held.Hosts = hosts
+	s.keep()
+	return nil
 }
 
 func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
