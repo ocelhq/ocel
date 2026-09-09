@@ -128,9 +128,20 @@ func spill(path string, body io.Reader, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(file, io.LimitReader(body, archiveCeiling)); err != nil {
+	if err := fill(file, body); err != nil {
 		file.Close()
 		return err
 	}
 	return file.Close()
+}
+
+func fill(into io.Writer, body io.Reader) error {
+	spilled, err := io.Copy(into, io.LimitReader(body, archiveCeiling+1))
+	if err != nil {
+		return err
+	}
+	if spilled > archiveCeiling {
+		return fmt.Errorf("the archive holds a member larger than %d bytes", archiveCeiling)
+	}
+	return nil
 }
