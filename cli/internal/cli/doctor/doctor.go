@@ -2,12 +2,10 @@ package doctor
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -25,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/version"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -135,7 +134,6 @@ var tiers = []environmentv1.Tier{environmentv1.Tier_TIER_PRODUCTION, environment
 func build(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io.Writer) report {
 	var found report
 	project := section{name: "Project"}
-	project.checks = append(project.checks, nodeCheck(ctx))
 
 	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
 	if err != nil {
@@ -144,6 +142,9 @@ func build(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io
 		return found
 	}
 
+	if needed, held := nodeCheck(ctx, cfg); held {
+		project.checks = append(project.checks, needed)
+	}
 	project.identity = join(cfg.Slug, filepath.Base(cfg.Path))
 	project.pass(appsText(cfg))
 
@@ -151,7 +152,7 @@ func build(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io
 	if providerErr != nil {
 		project.fail(firstLine(providerErr.Error()), "")
 	} else {
-		project.pass(providerText(cfg, descriptor))
+		project.pass(providerText(descriptor))
 	}
 	project.pass(edgeText(cfg))
 
@@ -241,19 +242,6 @@ func skippedSection(name string) section {
 	return s
 }
 
-func nodeCheck(ctx context.Context) check {
-	path, err := exec.LookPath("node")
-	if err != nil {
-		return check{verdict: verdictFail, text: "node not found on PATH", fix: "install Node.js and put it on PATH"}
-	}
-	out, err := exec.CommandContext(ctx, path, "--version").Output()
-	version := strings.TrimSpace(string(out))
-	if err != nil || version == "" {
-		return check{verdict: verdictPass, text: "node on PATH"}
-	}
-	return check{verdict: verdictPass, text: "node " + version + " on PATH"}
-}
-
 func configFailure(err error) (string, string) {
 	message := firstLine(err.Error())
 	var missing projectconfig.NoConfigError
@@ -288,30 +276,8 @@ func appsText(cfg *projectconfig.Config) string {
 	return fmt.Sprintf("config loads — %s (%s)", plural(len(names), "app"), strings.Join(names, ", "))
 }
 
-func providerText(cfg *projectconfig.Config, descriptor *projectconfig.ProviderDescriptor) string {
-	text := "provider " + descriptor.Name
-	if version := packageVersion(cfg.Dir, providerPackage(descriptor.Name)); version != "" {
-		text += " " + version
-	}
-	return text
-}
-
-func providerPackage(name string) string {
-	return "@ocel/provider-" + name
-}
-
-func packageVersion(dir, pkg string) string {
-	raw, err := os.ReadFile(filepath.Join(dir, "node_modules", filepath.FromSlash(pkg), "package.json"))
-	if err != nil {
-		return ""
-	}
-	var manifest struct {
-		Version string `json:"version"`
-	}
-	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return ""
-	}
-	return manifest.Version
+func providerText(descriptor *projectconfig.ProviderDescriptor) string {
+	return "provider " + descriptor.Name + " " + version.Version
 }
 
 func edgeText(cfg *projectconfig.Config) string {

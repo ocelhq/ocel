@@ -162,18 +162,14 @@ func installRealProvider(t *testing.T, repoRoot, root string) (binPath string) {
 		t.Fatalf("symlink ocel package: %v", err)
 	}
 
-	binDir := filepath.Join(nodeModules, "@ocel", "provider-aws-"+clitest.NodePlatformSuffix(t), "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", binDir, err)
-	}
-	binPath = filepath.Join(binDir, "deploy")
-	build := exec.Command("go", "build", "-o", binPath, "github.com/ocelhq/ocel/platform/aws/provider/cmd/deploy")
-	build.Dir = repoRoot
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("go build the aws provider: %v\n%s", err, out)
-	}
-
-	return binPath
+	return clitest.InstallProvider(t, "aws", func(dest string) error {
+		build := exec.Command("go", "build", "-o", dest, "github.com/ocelhq/ocel/platform/aws/provider/cmd/deploy")
+		build.Dir = repoRoot
+		if out, err := build.CombinedOutput(); err != nil {
+			return fmt.Errorf("go build the aws provider: %w\n%s", err, out)
+		}
+		return nil
+	})
 }
 
 func repoRootDir(t *testing.T) string {

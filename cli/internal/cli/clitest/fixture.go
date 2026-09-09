@@ -25,8 +25,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
 func fakeAccount(_ context.Context, apiURL, token, projectID string) (resolve.Account, error) {
@@ -149,17 +151,11 @@ function declarationSite(): string {
 export {};
 `)
 
-	binDir := filepath.Join(root, "node_modules", "@ocel", "provider-aws-"+NodePlatformSuffix(t), "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", binDir, err)
-	}
 	testBinary, err := filepath.Abs(os.Args[0])
 	if err != nil {
 		t.Fatalf("resolve test binary path: %v", err)
 	}
-	if err := os.Symlink(testBinary, filepath.Join(binDir, "deploy")); err != nil {
-		t.Fatalf("symlink fake provider binary: %v", err)
-	}
+	InstallProvider(t, "aws", func(dest string) error { return os.Symlink(testBinary, dest) })
 
 	sockPath = filepath.Join(t.TempDir(), "deploy-provider.sock")
 	t.Setenv(FakeProviderEnvVar, "1")
@@ -171,18 +167,23 @@ export {};
 	return root, sockPath
 }
 
-func NodePlatformSuffix(t *testing.T) string {
+func InstallProvider(t *testing.T, name string, place func(dest string) error) string {
 	t.Helper()
 
-	nodePlatform := map[string]string{"darwin": "darwin", "linux": "linux"}[runtime.GOOS]
-	if nodePlatform == "" {
-		t.Skipf("no node platform mapping for GOOS=%s", runtime.GOOS)
+	dir := os.Getenv(providers.OverrideEnvVar)
+	if dir == "" {
+		dir = t.TempDir()
+		t.Setenv(providers.OverrideEnvVar, dir)
 	}
-	nodeArch := map[string]string{"amd64": "x64", "arm64": "arm64"}[runtime.GOARCH]
-	if nodeArch == "" {
-		t.Skipf("no node arch mapping for GOARCH=%s", runtime.GOARCH)
+	held := filepath.Join(dir, name, version.Version, runtime.GOOS+"-"+runtime.GOARCH)
+	if err := os.MkdirAll(held, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", held, err)
 	}
-	return nodePlatform + "-" + nodeArch
+	dest := filepath.Join(held, providers.ExecutableName(name, runtime.GOOS))
+	if err := place(dest); err != nil {
+		t.Fatalf("install the %s provider at %s: %v", name, dest, err)
+	}
+	return dest
 }
 
 func StubBuild(deps *cmddeps.Deps, functions []manifestbuilder.Function) {

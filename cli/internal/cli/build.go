@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appurl"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
@@ -46,8 +47,14 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 		return err
 	}
 
-	if err := node.Ensure(cfg.Dir); err != nil {
+	holdsJS, err := discovery.HoldsJS(cfg)
+	if err != nil {
 		return err
+	}
+	if holdsJS {
+		if err := node.Ensure(cfg.Dir); err != nil {
+			return err
+		}
 	}
 
 	ctx, run, err := runtrace.Start(ctx, cfg.Dir, "ocel build")
