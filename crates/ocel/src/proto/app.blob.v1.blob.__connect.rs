@@ -1,31 +1,31 @@
 ///Shorthand for `OwnedView<PresignUploadRequestView<'static>>`.
 pub type OwnedPresignUploadRequestView = ::buffa::view::OwnedView<
-    crate::r#gen::app::blob::v1::__buffa::view::PresignUploadRequestView<'static>,
+    crate::proto::app::blob::v1::__buffa::view::PresignUploadRequestView<'static>,
 >;
 ///Shorthand for `OwnedView<PresignUploadResponseView<'static>>`.
 pub type OwnedPresignUploadResponseView = ::buffa::view::OwnedView<
-    crate::r#gen::app::blob::v1::__buffa::view::PresignUploadResponseView<'static>,
+    crate::proto::app::blob::v1::__buffa::view::PresignUploadResponseView<'static>,
 >;
 ///Shorthand for `OwnedView<VerifyUploadSignatureRequestView<'static>>`.
 pub type OwnedVerifyUploadSignatureRequestView = ::buffa::view::OwnedView<
-    crate::r#gen::app::blob::v1::__buffa::view::VerifyUploadSignatureRequestView<'static>,
+    crate::proto::app::blob::v1::__buffa::view::VerifyUploadSignatureRequestView<'static>,
 >;
 ///Shorthand for `OwnedView<VerifyUploadSignatureResponseView<'static>>`.
 pub type OwnedVerifyUploadSignatureResponseView = ::buffa::view::OwnedView<
-    crate::r#gen::app::blob::v1::__buffa::view::VerifyUploadSignatureResponseView<
+    crate::proto::app::blob::v1::__buffa::view::VerifyUploadSignatureResponseView<
         'static,
     >,
 >;
 ///Shorthand for `OwnedView<GetUploadStatusRequestView<'static>>`.
 pub type OwnedGetUploadStatusRequestView = ::buffa::view::OwnedView<
-    crate::r#gen::app::blob::v1::__buffa::view::GetUploadStatusRequestView<'static>,
+    crate::proto::app::blob::v1::__buffa::view::GetUploadStatusRequestView<'static>,
 >;
 ///Shorthand for `OwnedView<GetUploadStatusResponseView<'static>>`.
 pub type OwnedGetUploadStatusResponseView = ::buffa::view::OwnedView<
-    crate::r#gen::app::blob::v1::__buffa::view::GetUploadStatusResponseView<'static>,
+    crate::proto::app::blob::v1::__buffa::view::GetUploadStatusResponseView<'static>,
 >;
-impl ::connectrpc::Encodable<crate::r#gen::app::blob::v1::PresignUploadResponse>
-for crate::r#gen::app::blob::v1::__buffa::view::PresignUploadResponseView<'_> {
+impl ::connectrpc::Encodable<crate::proto::app::blob::v1::PresignUploadResponse>
+for crate::proto::app::blob::v1::__buffa::view::PresignUploadResponseView<'_> {
     fn encode(
         &self,
         codec: ::connectrpc::CodecFormat,
@@ -33,9 +33,9 @@ for crate::r#gen::app::blob::v1::__buffa::view::PresignUploadResponseView<'_> {
         ::connectrpc::__codegen::encode_view_body(self, codec)
     }
 }
-impl ::connectrpc::Encodable<crate::r#gen::app::blob::v1::PresignUploadResponse>
+impl ::connectrpc::Encodable<crate::proto::app::blob::v1::PresignUploadResponse>
 for ::buffa::view::OwnedView<
-    crate::r#gen::app::blob::v1::__buffa::view::PresignUploadResponseView<'static>,
+    crate::proto::app::blob::v1::__buffa::view::PresignUploadResponseView<'static>,
 > {
     fn encode(
         &self,
@@ -58,8 +58,8 @@ for ::buffa::view::OwnedView<
         )
     }
 }
-impl ::connectrpc::Encodable<crate::r#gen::app::blob::v1::VerifyUploadSignatureResponse>
-for crate::r#gen::app::blob::v1::__buffa::view::VerifyUploadSignatureResponseView<'_> {
+impl ::connectrpc::Encodable<crate::proto::app::blob::v1::VerifyUploadSignatureResponse>
+for crate::proto::app::blob::v1::__buffa::view::VerifyUploadSignatureResponseView<'_> {
     fn encode(
         &self,
         codec: ::connectrpc::CodecFormat,
@@ -67,9 +67,9 @@ for crate::r#gen::app::blob::v1::__buffa::view::VerifyUploadSignatureResponseVie
         ::connectrpc::__codegen::encode_view_body(self, codec)
     }
 }
-impl ::connectrpc::Encodable<crate::r#gen::app::blob::v1::VerifyUploadSignatureResponse>
+impl ::connectrpc::Encodable<crate::proto::app::blob::v1::VerifyUploadSignatureResponse>
 for ::buffa::view::OwnedView<
-    crate::r#gen::app::blob::v1::__buffa::view::VerifyUploadSignatureResponseView<
+    crate::proto::app::blob::v1::__buffa::view::VerifyUploadSignatureResponseView<
         'static,
     >,
 > {
@@ -94,8 +94,8 @@ for ::buffa::view::OwnedView<
         )
     }
 }
-impl ::connectrpc::Encodable<crate::r#gen::app::blob::v1::GetUploadStatusResponse>
-for crate::r#gen::app::blob::v1::__buffa::view::GetUploadStatusResponseView<'_> {
+impl ::connectrpc::Encodable<crate::proto::app::blob::v1::GetUploadStatusResponse>
+for crate::proto::app::blob::v1::__buffa::view::GetUploadStatusResponseView<'_> {
     fn encode(
         &self,
         codec: ::connectrpc::CodecFormat,
@@ -103,9 +103,9 @@ for crate::r#gen::app::blob::v1::__buffa::view::GetUploadStatusResponseView<'_> 
         ::connectrpc::__codegen::encode_view_body(self, codec)
     }
 }
-impl ::connectrpc::Encodable<crate::r#gen::app::blob::v1::GetUploadStatusResponse>
+impl ::connectrpc::Encodable<crate::proto::app::blob::v1::GetUploadStatusResponse>
 for ::buffa::view::OwnedView<
-    crate::r#gen::app::blob::v1::__buffa::view::GetUploadStatusResponseView<'static>,
+    crate::proto::app::blob::v1::__buffa::view::GetUploadStatusResponseView<'static>,
 > {
     fn encode(
         &self,
@@ -213,12 +213,12 @@ pub trait BucketService: Send + Sync + 'static {
         ctx: ::connectrpc::RequestContext,
         request: ::connectrpc::ServiceRequest<
             '_,
-            crate::r#gen::app::blob::v1::PresignUploadRequest,
+            crate::proto::app::blob::v1::PresignUploadRequest,
         >,
     ) -> impl ::std::future::Future<
         Output = ::connectrpc::ServiceResult<
             impl ::connectrpc::Encodable<
-                crate::r#gen::app::blob::v1::PresignUploadResponse,
+                crate::proto::app::blob::v1::PresignUploadResponse,
             > + Send + use<'a, Self>,
         >,
     > + Send;
@@ -236,12 +236,12 @@ pub trait BucketService: Send + Sync + 'static {
         ctx: ::connectrpc::RequestContext,
         request: ::connectrpc::ServiceRequest<
             '_,
-            crate::r#gen::app::blob::v1::VerifyUploadSignatureRequest,
+            crate::proto::app::blob::v1::VerifyUploadSignatureRequest,
         >,
     ) -> impl ::std::future::Future<
         Output = ::connectrpc::ServiceResult<
             impl ::connectrpc::Encodable<
-                crate::r#gen::app::blob::v1::VerifyUploadSignatureResponse,
+                crate::proto::app::blob::v1::VerifyUploadSignatureResponse,
             > + Send + use<'a, Self>,
         >,
     > + Send;
@@ -259,12 +259,12 @@ pub trait BucketService: Send + Sync + 'static {
         ctx: ::connectrpc::RequestContext,
         request: ::connectrpc::ServiceRequest<
             '_,
-            crate::r#gen::app::blob::v1::GetUploadStatusRequest,
+            crate::proto::app::blob::v1::GetUploadStatusRequest,
         >,
     ) -> impl ::std::future::Future<
         Output = ::connectrpc::ServiceResult<
             impl ::connectrpc::Encodable<
-                crate::r#gen::app::blob::v1::GetUploadStatusResponse,
+                crate::proto::app::blob::v1::GetUploadStatusResponse,
             > + Send + use<'a, Self>,
         >,
     > + Send;
@@ -308,7 +308,7 @@ impl<S: BucketService> BucketServiceExt for S {
                     ::connectrpc::view_handler_fn(move |
                         ctx,
                         req: ::buffa::view::OwnedView<
-                            crate::r#gen::app::blob::v1::__buffa::view::PresignUploadRequestView<
+                            crate::proto::app::blob::v1::__buffa::view::PresignUploadRequestView<
                                 'static,
                             >,
                         >,
@@ -317,12 +317,12 @@ impl<S: BucketService> BucketServiceExt for S {
                         let svc = ::std::sync::Arc::clone(&svc);
                         async move {
                             let sreq = ::connectrpc::ServiceRequest::<
-                                crate::r#gen::app::blob::v1::PresignUploadRequest,
+                                crate::proto::app::blob::v1::PresignUploadRequest,
                             >::from_parts(req.reborrow(), req.bytes());
                             svc.presign_upload(ctx, sreq)
                                 .await?
                                 .encode::<
-                                    crate::r#gen::app::blob::v1::PresignUploadResponse,
+                                    crate::proto::app::blob::v1::PresignUploadResponse,
                                 >(format)
                         }
                     })
@@ -337,7 +337,7 @@ impl<S: BucketService> BucketServiceExt for S {
                     ::connectrpc::view_handler_fn(move |
                         ctx,
                         req: ::buffa::view::OwnedView<
-                            crate::r#gen::app::blob::v1::__buffa::view::VerifyUploadSignatureRequestView<
+                            crate::proto::app::blob::v1::__buffa::view::VerifyUploadSignatureRequestView<
                                 'static,
                             >,
                         >,
@@ -346,12 +346,12 @@ impl<S: BucketService> BucketServiceExt for S {
                         let svc = ::std::sync::Arc::clone(&svc);
                         async move {
                             let sreq = ::connectrpc::ServiceRequest::<
-                                crate::r#gen::app::blob::v1::VerifyUploadSignatureRequest,
+                                crate::proto::app::blob::v1::VerifyUploadSignatureRequest,
                             >::from_parts(req.reborrow(), req.bytes());
                             svc.verify_upload_signature(ctx, sreq)
                                 .await?
                                 .encode::<
-                                    crate::r#gen::app::blob::v1::VerifyUploadSignatureResponse,
+                                    crate::proto::app::blob::v1::VerifyUploadSignatureResponse,
                                 >(format)
                         }
                     })
@@ -366,7 +366,7 @@ impl<S: BucketService> BucketServiceExt for S {
                     ::connectrpc::view_handler_fn(move |
                         ctx,
                         req: ::buffa::view::OwnedView<
-                            crate::r#gen::app::blob::v1::__buffa::view::GetUploadStatusRequestView<
+                            crate::proto::app::blob::v1::__buffa::view::GetUploadStatusRequestView<
                                 'static,
                             >,
                         >,
@@ -375,12 +375,12 @@ impl<S: BucketService> BucketServiceExt for S {
                         let svc = ::std::sync::Arc::clone(&svc);
                         async move {
                             let sreq = ::connectrpc::ServiceRequest::<
-                                crate::r#gen::app::blob::v1::GetUploadStatusRequest,
+                                crate::proto::app::blob::v1::GetUploadStatusRequest,
                             >::from_parts(req.reborrow(), req.bytes());
                             svc.get_upload_status(ctx, sreq)
                                 .await?
                                 .encode::<
-                                    crate::r#gen::app::blob::v1::GetUploadStatusResponse,
+                                    crate::proto::app::blob::v1::GetUploadStatusResponse,
                                 >(format)
                         }
                     })
@@ -478,21 +478,21 @@ impl<T: BucketService> ::connectrpc::Dispatcher for BucketServiceServer<T> {
                 let svc = ::std::sync::Arc::clone(&self.inner);
                 Box::pin(async move {
                     let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
-                        crate::r#gen::app::blob::v1::PresignUploadRequest,
+                        crate::proto::app::blob::v1::PresignUploadRequest,
                     >(request.encoded()?, format)?;
-                    let req: crate::r#gen::app::blob::v1::__buffa::view::PresignUploadRequestView<
+                    let req: crate::proto::app::blob::v1::__buffa::view::PresignUploadRequestView<
                         '_,
                     > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
                         &body,
                         ctx.decode_options(),
                     )?;
                     let req = ::connectrpc::ServiceRequest::<
-                        crate::r#gen::app::blob::v1::PresignUploadRequest,
+                        crate::proto::app::blob::v1::PresignUploadRequest,
                     >::from_parts(&req, &body);
                     svc.presign_upload(ctx, req)
                         .await?
                         .encode::<
-                            crate::r#gen::app::blob::v1::PresignUploadResponse,
+                            crate::proto::app::blob::v1::PresignUploadResponse,
                         >(format)
                 })
             }
@@ -500,21 +500,21 @@ impl<T: BucketService> ::connectrpc::Dispatcher for BucketServiceServer<T> {
                 let svc = ::std::sync::Arc::clone(&self.inner);
                 Box::pin(async move {
                     let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
-                        crate::r#gen::app::blob::v1::VerifyUploadSignatureRequest,
+                        crate::proto::app::blob::v1::VerifyUploadSignatureRequest,
                     >(request.encoded()?, format)?;
-                    let req: crate::r#gen::app::blob::v1::__buffa::view::VerifyUploadSignatureRequestView<
+                    let req: crate::proto::app::blob::v1::__buffa::view::VerifyUploadSignatureRequestView<
                         '_,
                     > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
                         &body,
                         ctx.decode_options(),
                     )?;
                     let req = ::connectrpc::ServiceRequest::<
-                        crate::r#gen::app::blob::v1::VerifyUploadSignatureRequest,
+                        crate::proto::app::blob::v1::VerifyUploadSignatureRequest,
                     >::from_parts(&req, &body);
                     svc.verify_upload_signature(ctx, req)
                         .await?
                         .encode::<
-                            crate::r#gen::app::blob::v1::VerifyUploadSignatureResponse,
+                            crate::proto::app::blob::v1::VerifyUploadSignatureResponse,
                         >(format)
                 })
             }
@@ -522,21 +522,21 @@ impl<T: BucketService> ::connectrpc::Dispatcher for BucketServiceServer<T> {
                 let svc = ::std::sync::Arc::clone(&self.inner);
                 Box::pin(async move {
                     let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
-                        crate::r#gen::app::blob::v1::GetUploadStatusRequest,
+                        crate::proto::app::blob::v1::GetUploadStatusRequest,
                     >(request.encoded()?, format)?;
-                    let req: crate::r#gen::app::blob::v1::__buffa::view::GetUploadStatusRequestView<
+                    let req: crate::proto::app::blob::v1::__buffa::view::GetUploadStatusRequestView<
                         '_,
                     > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
                         &body,
                         ctx.decode_options(),
                     )?;
                     let req = ::connectrpc::ServiceRequest::<
-                        crate::r#gen::app::blob::v1::GetUploadStatusRequest,
+                        crate::proto::app::blob::v1::GetUploadStatusRequest,
                     >::from_parts(&req, &body);
                     svc.get_upload_status(ctx, req)
                         .await?
                         .encode::<
-                            crate::r#gen::app::blob::v1::GetUploadStatusResponse,
+                            crate::proto::app::blob::v1::GetUploadStatusResponse,
                         >(format)
                 })
             }
@@ -671,11 +671,11 @@ where
     /// Call the PresignUpload RPC. Sends a request to /app.blob.v1.BucketService/PresignUpload.
     pub async fn presign_upload(
         &self,
-        request: crate::r#gen::app::blob::v1::PresignUploadRequest,
+        request: crate::proto::app::blob::v1::PresignUploadRequest,
     ) -> Result<
         ::connectrpc::client::UnaryResponse<
             ::buffa::view::OwnedView<
-                crate::r#gen::app::blob::v1::__buffa::view::PresignUploadResponseView<
+                crate::proto::app::blob::v1::__buffa::view::PresignUploadResponseView<
                     'static,
                 >,
             >,
@@ -691,12 +691,12 @@ where
     /// Call the PresignUpload RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
     pub async fn presign_upload_with_options(
         &self,
-        request: crate::r#gen::app::blob::v1::PresignUploadRequest,
+        request: crate::proto::app::blob::v1::PresignUploadRequest,
         options: ::connectrpc::client::CallOptions,
     ) -> Result<
         ::connectrpc::client::UnaryResponse<
             ::buffa::view::OwnedView<
-                crate::r#gen::app::blob::v1::__buffa::view::PresignUploadResponseView<
+                crate::proto::app::blob::v1::__buffa::view::PresignUploadResponseView<
                     'static,
                 >,
             >,
@@ -716,11 +716,11 @@ where
     /// Call the VerifyUploadSignature RPC. Sends a request to /app.blob.v1.BucketService/VerifyUploadSignature.
     pub async fn verify_upload_signature(
         &self,
-        request: crate::r#gen::app::blob::v1::VerifyUploadSignatureRequest,
+        request: crate::proto::app::blob::v1::VerifyUploadSignatureRequest,
     ) -> Result<
         ::connectrpc::client::UnaryResponse<
             ::buffa::view::OwnedView<
-                crate::r#gen::app::blob::v1::__buffa::view::VerifyUploadSignatureResponseView<
+                crate::proto::app::blob::v1::__buffa::view::VerifyUploadSignatureResponseView<
                     'static,
                 >,
             >,
@@ -736,12 +736,12 @@ where
     /// Call the VerifyUploadSignature RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
     pub async fn verify_upload_signature_with_options(
         &self,
-        request: crate::r#gen::app::blob::v1::VerifyUploadSignatureRequest,
+        request: crate::proto::app::blob::v1::VerifyUploadSignatureRequest,
         options: ::connectrpc::client::CallOptions,
     ) -> Result<
         ::connectrpc::client::UnaryResponse<
             ::buffa::view::OwnedView<
-                crate::r#gen::app::blob::v1::__buffa::view::VerifyUploadSignatureResponseView<
+                crate::proto::app::blob::v1::__buffa::view::VerifyUploadSignatureResponseView<
                     'static,
                 >,
             >,
@@ -761,11 +761,11 @@ where
     /// Call the GetUploadStatus RPC. Sends a request to /app.blob.v1.BucketService/GetUploadStatus.
     pub async fn get_upload_status(
         &self,
-        request: crate::r#gen::app::blob::v1::GetUploadStatusRequest,
+        request: crate::proto::app::blob::v1::GetUploadStatusRequest,
     ) -> Result<
         ::connectrpc::client::UnaryResponse<
             ::buffa::view::OwnedView<
-                crate::r#gen::app::blob::v1::__buffa::view::GetUploadStatusResponseView<
+                crate::proto::app::blob::v1::__buffa::view::GetUploadStatusResponseView<
                     'static,
                 >,
             >,
@@ -781,12 +781,12 @@ where
     /// Call the GetUploadStatus RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
     pub async fn get_upload_status_with_options(
         &self,
-        request: crate::r#gen::app::blob::v1::GetUploadStatusRequest,
+        request: crate::proto::app::blob::v1::GetUploadStatusRequest,
         options: ::connectrpc::client::CallOptions,
     ) -> Result<
         ::connectrpc::client::UnaryResponse<
             ::buffa::view::OwnedView<
-                crate::r#gen::app::blob::v1::__buffa::view::GetUploadStatusResponseView<
+                crate::proto::app::blob::v1::__buffa::view::GetUploadStatusResponseView<
                     'static,
                 >,
             >,

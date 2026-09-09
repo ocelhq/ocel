@@ -1,7 +1,7 @@
 mod collector;
 
 use collector::{collector, Declared};
-use ocel::r#gen::common::links::v1::LinkType;
+use ocel::proto::common::links::v1::LinkType;
 
 pub static DB: ocel::Postgres = ocel::postgres!("main");
 pub static CACHE: ocel::Postgres = ocel::postgres!("cache", version = "16");
@@ -58,7 +58,7 @@ fn declaration<'a>(declared: &'a [Declared], name: &str) -> &'a Declared {
 }
 
 fn version(declared: &Declared) -> &str {
-    use ocel::r#gen::app::resources::v1::declare_request::Config;
+    use ocel::proto::app::resources::v1::declare_request::Config;
     match declared.request.config.as_ref().expect("a config") {
         Config::Postgres(config) => config.version.as_str(),
         other => panic!("declared {other:?}, want a postgres config"),

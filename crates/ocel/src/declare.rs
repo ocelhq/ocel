@@ -1,9 +1,9 @@
 use crate::postgres::KIND;
-use crate::r#gen::app::resources::v1::declare_request::Config;
-use crate::r#gen::app::resources::v1::{
+use crate::proto::app::resources::v1::declare_request::Config;
+use crate::proto::app::resources::v1::{
     DeclareRequest, PostgresConfig, ResourceIdentifier, ResourceServiceClient,
 };
-use crate::r#gen::common::links::v1::LinkType;
+use crate::proto::common::links::v1::LinkType;
 use crate::Error;
 
 const PHASE_ENV: &str = "OCEL_PHASE";

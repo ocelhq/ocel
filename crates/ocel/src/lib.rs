@@ -12,10 +12,10 @@
 
 mod declare;
 mod error;
-#[doc(hidden)]
-pub mod r#gen;
 mod link;
 mod postgres;
+#[doc(hidden)]
+pub mod proto;
 
 pub use declare::{discover, Declaration};
 pub use error::Error;

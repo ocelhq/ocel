@@ -1,5 +1,5 @@
-use crate::r#gen::common::links::v1::link::Properties;
-use crate::r#gen::common::links::v1::{Link, PostgresProperties};
+use crate::proto::common::links::v1::link::Properties;
+use crate::proto::common::links::v1::{Link, PostgresProperties};
 use crate::Error;
 
 pub(crate) fn postgres(name: &str) -> Result<PostgresProperties, Error> {

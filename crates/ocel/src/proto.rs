@@ -9,15 +9,15 @@
 pub mod app {
     pub mod blob {
         pub mod v1 {
-            include!("gen/app.blob.v1.rs");
-            include!("gen/app.blob.v1.mod.rs");
+            include!("proto/app.blob.v1.rs");
+            include!("proto/app.blob.v1.mod.rs");
         }
     }
 
     pub mod resources {
         pub mod v1 {
-            include!("gen/app.resources.v1.rs");
-            include!("gen/app.resources.v1.mod.rs");
+            include!("proto/app.resources.v1.rs");
+            include!("proto/app.resources.v1.mod.rs");
         }
     }
 }
@@ -25,7 +25,7 @@ pub mod app {
 pub mod common {
     pub mod links {
         pub mod v1 {
-            include!("gen/common.links.v1.rs");
+            include!("proto/common.links.v1.rs");
         }
     }
 }
