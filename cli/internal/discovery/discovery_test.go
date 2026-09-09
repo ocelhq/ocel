@@ -158,8 +158,9 @@ func assertFiles(t *testing.T, got, want []string) {
 }
 
 type collector struct {
-	mu       sync.Mutex
-	declares []*resourcesv1.DeclareRequest
+	mu        sync.Mutex
+	declares  []*resourcesv1.DeclareRequest
+	variables []*resourcesv1.VariableDefinition
 }
 
 func (c *collector) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*resourcesv1.DeclareResponse, error) {
@@ -169,7 +170,10 @@ func (c *collector) Declare(_ context.Context, req *resourcesv1.DeclareRequest) 
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
-func (c *collector) DeclareEnv(_ context.Context, _ *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
+func (c *collector) DeclareEnv(_ context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.variables = append(c.variables, req.GetDefinitions()...)
 	return &resourcesv1.DeclareEnvResponse{}, nil
 }
 
@@ -181,6 +185,12 @@ func (c *collector) declared() []*resourcesv1.DeclareRequest {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.declares
+}
+
+func (c *collector) declaredVariables() []*resourcesv1.VariableDefinition {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.variables
 }
 
 func declareCollector(t *testing.T) (*collector, string) {
