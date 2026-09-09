@@ -194,8 +194,17 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 			Folder:     a.Folder,
 		})
 	}
-	if len(req.Apps) == 0 && (len(cfg.Apps) > 0 || !discovery.HoldsJS(cfg)) {
-		return nil
+	if len(req.Apps) == 0 {
+		if len(cfg.Apps) > 0 {
+			return nil
+		}
+		holdsJS, err := discovery.HoldsJS(cfg)
+		if err != nil {
+			return err
+		}
+		if !holdsJS {
+			return nil
+		}
 	}
 
 	builderPath := node.BuilderPath(cfg.Dir)
