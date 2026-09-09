@@ -91,11 +91,32 @@ func (b bootstrapper) tearFronts(ctx context.Context, class providerkit.Class, f
 	})
 }
 
+type standingFront interface {
+	Standing(ctx context.Context, class edge.Class) (bool, error)
+
+	Bound(ctx context.Context, class edge.Class) ([]string, error)
+}
+
+func (b bootstrapper) frontStands(ctx context.Context, class providerkit.Class, feature string) (bool, error) {
+	standing := true
+	err := b.eachFront([]string{feature}, func(_ providerkit.Feature, front edge.Edge) error {
+		held, reports := front.(standingFront)
+		if !reports {
+			return nil
+		}
+		up, err := held.Standing(ctx, class)
+		if err != nil {
+			return err
+		}
+		standing = standing && up
+		return nil
+	})
+	return standing, err
+}
+
 func (b bootstrapper) frontsFree(ctx context.Context, class providerkit.Class, features []string) error {
 	return b.eachFront(features, func(_ providerkit.Feature, front edge.Edge) error {
-		holder, holds := front.(interface {
-			Bound(ctx context.Context, class edge.Class) ([]string, error)
-		})
+		holder, holds := front.(standingFront)
 		if !holds {
 			return nil
 		}

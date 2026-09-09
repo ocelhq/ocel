@@ -79,6 +79,14 @@ func (e *Edge) raise(ctx context.Context, class edge.Class, report edge.Reporter
 	return front, nil
 }
 
+func (e *Edge) Standing(ctx context.Context, class edge.Class) (bool, error) {
+	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Class: class})
+	if err != nil {
+		return false, err
+	}
+	return frontOf(outputs).standing(), nil
+}
+
 func (e *Edge) Bound(ctx context.Context, class edge.Class) ([]string, error) {
 	if e.deps.Entries == nil {
 		return nil, nil

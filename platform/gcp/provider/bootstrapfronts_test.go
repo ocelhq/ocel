@@ -26,8 +26,14 @@ func (r *frontRegistry) Open(kind edge.Kind) (edge.Edge, error) {
 
 type countingFront struct {
 	*alb.Edge
-	raised []edge.Class
-	torn   []edge.Class
+	raised   []edge.Class
+	torn     []edge.Class
+	standing bool
+	refusal  error
+}
+
+func (f *countingFront) Standing(_ context.Context, _ edge.Class) (bool, error) {
+	return f.standing, nil
 }
 
 func (f *countingFront) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
@@ -36,6 +42,9 @@ func (f *countingFront) Bootstrap(_ context.Context, class edge.Class) (edge.Boo
 }
 
 func (f *countingFront) Teardown(_ context.Context, class edge.Class) error {
+	if f.refusal != nil {
+		return f.refusal
+	}
 	f.torn = append(f.torn, class)
 	return nil
 }
@@ -44,6 +53,60 @@ func fronting(t *testing.T) (bootstrapper, *frontRegistry) {
 	t.Helper()
 	registry := &frontRegistry{front: &countingFront{}}
 	return bootstrapper{fronts: registry}, registry
+}
+
+func surveyed(features ...string) survey {
+	return survey{
+		Names:   Names{namespace: "ocel", project: "acme-prod"},
+		Class:   providerkit.ClassProduction,
+		Project: "acme-prod",
+		Present: true,
+		Stamp:   stamp{State: stateComplete, Features: features},
+	}
+}
+
+func featureStack(described providerkit.Bootstrap, name string) (providerkit.BootstrapStack, bool) {
+	for _, stack := range described.Stacks {
+		if stack.Feature == name {
+			return stack, true
+		}
+	}
+	return providerkit.BootstrapStack{}, false
+}
+
+func TestAFeatureWhoseFrontNeverCameUpIsReportedAbsentSoTheGateRaisesItAgain(t *testing.T) {
+	t.Parallel()
+
+	b, registry := fronting(t)
+	registry.front.standing = false
+
+	described, err := b.described(context.Background(), surveyed(albFeature))
+	if err != nil {
+		t.Fatalf("described = %v", err)
+	}
+	held, reported := featureStack(described, albFeature)
+	if !reported {
+		t.Fatalf("Describe reports %+v, want a stack for the %q the stamp records", described.Stacks, albFeature)
+	}
+	if held.Present {
+		t.Error("a feature the stamp records is reported standing whatever the front says, so a raise that failed after the stamp was written " +
+			"reads as healthy and is never tried again")
+	}
+}
+
+func TestAFeatureWhoseFrontStandsIsReportedStanding(t *testing.T) {
+	t.Parallel()
+
+	b, registry := fronting(t)
+	registry.front.standing = true
+
+	described, err := b.described(context.Background(), surveyed(albFeature))
+	if err != nil {
+		t.Fatalf("described = %v", err)
+	}
+	if held, _ := featureStack(described, albFeature); !held.Present {
+		t.Error("a feature whose front reported its address and its maps is not reported standing, so every bootstrap raises it again")
+	}
 }
 
 func TestABootstrapThatNamedNoEdgeFeatureTakesNoFrontDown(t *testing.T) {
