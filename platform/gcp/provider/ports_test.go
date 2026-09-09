@@ -82,11 +82,19 @@ func TestAFrontedServiceStopsAnsweringOnItsOwnCloudRunUrl(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open(direct) = %v", err)
 	}
-	if got := gcp.IngressFor(front); got != "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" {
-		t.Errorf("a service fronted by the %q edge takes ingress %q, want the load balancer only: the run.app url would otherwise answer past the front's certificate, cache and host rules", alb.Kind, got)
+	if !front.Facts().ShieldsOrigin {
+		t.Errorf("the %q edge does not declare that it shields the origin, and the ingress a release takes is read from that fact "+
+			"rather than from which edge it is", alb.Kind)
 	}
-	if got := gcp.IngressFor(direct); got != "INGRESS_TRAFFIC_ALL" {
-		t.Errorf("a service under the direct edge takes ingress %q, want every caller: its run.app url is the whole of what serves it", got)
+	if direct.Facts().ShieldsOrigin {
+		t.Error("the direct edge declares that it shields the origin, and the url Cloud Run gives each service is the whole of what serves it")
+	}
+	if got := gcp.IngressFor(edge.Facts{ShieldsOrigin: true}); got != "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER" {
+		t.Errorf("a service behind an edge that shields the origin takes ingress %q, want the load balancer only: the run.app url would "+
+			"otherwise answer past the front's certificate, cache and host rules", got)
+	}
+	if got := gcp.IngressFor(edge.Facts{}); got != "INGRESS_TRAFFIC_ALL" {
+		t.Errorf("a service under an edge that shields nothing takes ingress %q, want every caller", got)
 	}
 }
 

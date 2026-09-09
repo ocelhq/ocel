@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 const (
@@ -55,11 +54,18 @@ const (
 	ingressLoadBalancer = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 )
 
-func ingressFor(front edge.Edge) string {
-	if front != nil && front.Kind() == alb.Kind {
+func ingressFor(facts edge.Facts) string {
+	if facts.ShieldsOrigin {
 		return ingressLoadBalancer
 	}
 	return ingressEverywhere
+}
+
+func factsOf(front edge.Edge) edge.Facts {
+	if front == nil {
+		return edge.Facts{}
+	}
+	return front.Facts()
 }
 
 func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {

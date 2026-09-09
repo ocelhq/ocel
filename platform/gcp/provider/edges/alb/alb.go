@@ -35,7 +35,7 @@ func New(deps Deps) *Edge { return &Edge{deps: deps} }
 func (e *Edge) Kind() edge.Kind { return Kind }
 
 func (e *Edge) Facts() edge.Facts {
-	return edge.Facts{InvalidatesByCacheTag: true, CredentialScope: e.deps.Project}
+	return edge.Facts{InvalidatesByCacheTag: true, ShieldsOrigin: true, CredentialScope: e.deps.Project}
 }
 
 var supported = []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming}
