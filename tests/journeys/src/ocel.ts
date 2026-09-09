@@ -3,7 +3,7 @@ import path from "node:path";
 import { shapeFor, writeJourneyConfig } from "./config";
 import { REDACTED, redact } from "./contract";
 import { live, relay, type Say } from "./live";
-import { fixtureMember, ocelBin, treeDir } from "./paths";
+import { fixtureMember, ocelBin, providersDir, treeDir } from "./paths";
 import type { Leg, TargetName } from "./spec";
 import type { CellContext } from "./targets/types";
 import { plantWorkspace } from "./tree";
@@ -45,7 +45,10 @@ export async function spawnOcel(
   say: Say = live("ocel |"),
 ): Promise<Ran> {
   return new Promise<Ran>((resolve, reject) => {
-    const child = spawn(ocelBin, args, { cwd: dir, env });
+    const child = spawn(ocelBin, args, {
+      cwd: dir,
+      env: { OCEL_PROVIDERS_DIR: providersDir, ...env },
+    });
     let stdout = "";
     let stderr = "";
     say(`$ ocel ${maskArgs(args)}`);
