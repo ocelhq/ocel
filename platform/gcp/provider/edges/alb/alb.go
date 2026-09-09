@@ -61,7 +61,7 @@ func (e *Edge) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapO
 
 func (e *Edge) raise(ctx context.Context, class edge.Class, report edge.Reporter) (Front, error) {
 	names := frontNames(class)
-	outputs, err := e.deps.Stacks.Up(ctx, class, FrontStack(class), frontProgram(frontSpec{
+	outputs, err := e.deps.Stacks.Up(ctx, Target{Class: class}, frontProgram(frontSpec{
 		Project: e.deps.Project,
 		Names:   names,
 	}), report)
@@ -78,7 +78,7 @@ func (e *Edge) raise(ctx context.Context, class edge.Class, report edge.Reporter
 }
 
 func (e *Edge) Teardown(ctx context.Context, class edge.Class) error {
-	return e.deps.Stacks.Destroy(ctx, class, FrontStack(class), edge.DiscardReporter())
+	return e.deps.Stacks.Destroy(ctx, Target{Class: class}, edge.DiscardReporter())
 }
 
 type held struct {
@@ -102,7 +102,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"the %q edge serves a project by slug, and this stack carries none", Kind)
 	}
-	outputs, err := e.deps.Stacks.Outputs(ctx, spec.Class, FrontStack(spec.Class))
+	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Class: spec.Class})
 	if err != nil {
 		return nil, err
 	}

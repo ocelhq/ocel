@@ -121,12 +121,14 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	return nil
 }
 
+func (s *stack) target() Target { return Target{Class: s.state.Class, Slug: s.state.Slug} }
+
 func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
-	name := BindingStack(s.state.Slug, s.state.Class)
+	target := s.target()
 	if len(hosts) == 0 {
-		return s.e.deps.Stacks.Destroy(ctx, s.state.Class, name, edge.DiscardReporter())
+		return s.e.deps.Stacks.Destroy(ctx, target, edge.DiscardReporter())
 	}
-	_, err := s.e.deps.Stacks.Up(ctx, s.state.Class, name, bindingProgram(bindingSpec{
+	_, err := s.e.deps.Stacks.Up(ctx, target, bindingProgram(bindingSpec{
 		Project:        s.e.deps.Project,
 		Region:         s.e.deps.Region,
 		Slug:           s.state.Slug,
@@ -194,7 +196,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		}
 	}
 	if len(s.held.Hosts) > 0 {
-		if err := s.e.deps.Stacks.Destroy(ctx, s.state.Class, BindingStack(s.state.Slug, s.state.Class), edge.DiscardReporter()); err != nil {
+		if err := s.e.deps.Stacks.Destroy(ctx, s.target(), edge.DiscardReporter()); err != nil {
 			return err
 		}
 	}

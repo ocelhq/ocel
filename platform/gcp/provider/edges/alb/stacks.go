@@ -11,12 +11,31 @@ import (
 
 type Program func(ctx *pulumi.Context) error
 
+type Target struct {
+	Class edge.Class
+	Slug  string
+}
+
+func (t Target) Name() string {
+	if t.Slug == "" {
+		return FrontStack(t.Class)
+	}
+	return BindingStack(t.Slug, t.Class)
+}
+
+func (t Target) Prefix() string {
+	if t.Slug == "" {
+		return dashed(string(Kind), "front", string(t.Class))
+	}
+	return dashed(string(Kind), "project", naming.Sanitize(t.Slug))
+}
+
 type Stacks interface {
-	Up(ctx context.Context, class edge.Class, stack string, program Program, report edge.Reporter) (map[string]string, error)
+	Up(ctx context.Context, target Target, program Program, report edge.Reporter) (map[string]string, error)
 
-	Destroy(ctx context.Context, class edge.Class, stack string, report edge.Reporter) error
+	Destroy(ctx context.Context, target Target, report edge.Reporter) error
 
-	Outputs(ctx context.Context, class edge.Class, stack string) (map[string]string, error)
+	Outputs(ctx context.Context, target Target) (map[string]string, error)
 }
 
 type Routes interface {

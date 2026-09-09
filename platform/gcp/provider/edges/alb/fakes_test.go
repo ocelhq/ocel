@@ -50,7 +50,8 @@ func front() map[string]string {
 	}
 }
 
-func (w *world) Up(_ context.Context, _ edge.Class, stack string, program Program, _ edge.Reporter) (map[string]string, error) {
+func (w *world) Up(_ context.Context, target Target, program Program, _ edge.Reporter) (map[string]string, error) {
+	stack := target.Name()
 	if program == nil {
 		return nil, errors.New("a stack was raised with no program to raise")
 	}
@@ -75,18 +76,18 @@ func (w *world) Up(_ context.Context, _ edge.Class, stack string, program Progra
 	return map[string]string{}, nil
 }
 
-func (w *world) Destroy(_ context.Context, _ edge.Class, stack string, _ edge.Reporter) error {
+func (w *world) Destroy(_ context.Context, target Target, _ edge.Reporter) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.destroys = append(w.destroys, stack)
-	delete(w.backends, stack)
+	w.destroys = append(w.destroys, target.Name())
+	delete(w.backends, target.Name())
 	return nil
 }
 
-func (w *world) Outputs(_ context.Context, _ edge.Class, stack string) (map[string]string, error) {
+func (w *world) Outputs(_ context.Context, target Target) (map[string]string, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return maps.Clone(w.outputs[stack]), nil
+	return maps.Clone(w.outputs[target.Name()]), nil
 }
 
 func (w *world) Route(_ context.Context, urlMap, hostname, backend string) error {
