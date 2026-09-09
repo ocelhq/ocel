@@ -5,27 +5,30 @@ use crate::Error;
 
 pub(crate) const KIND: &str = "postgres";
 
-/// A postgres database an app declares and reads its link from.
+/// A postgres database an app declares and reads its link from. A field of this type in a
+/// struct deriving [`Resources`](macro@crate::Resources) is the declaration.
+#[derive(Clone)]
 pub struct Postgres {
-    name: &'static str,
+    name: String,
     #[cfg(feature = "postgres")]
-    pool: tokio::sync::OnceCell<sqlx::PgPool>,
+    pool: std::sync::Arc<tokio::sync::OnceCell<sqlx::PgPool>>,
 }
 
 impl Postgres {
-    /// Take the handle for the database named `name`. Prefer [`postgres!`], which
-    /// declares the database as well as handing back its handle.
-    pub const fn new(name: &'static str) -> Self {
+    /// Take the handle for the database named `name`. Prefer
+    /// [`Resources`](macro@crate::Resources), which declares the database as well as
+    /// handing back its handle.
+    pub fn new(name: impl Into<String>) -> Self {
         Self {
-            name,
+            name: name.into(),
             #[cfg(feature = "postgres")]
-            pool: tokio::sync::OnceCell::const_new(),
+            pool: std::sync::Arc::default(),
         }
     }
 
     /// The name the database was declared under, and the name its link is delivered as.
-    pub const fn name(&self) -> &'static str {
-        self.name
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// The postgres URL of the delivered link, with the credentials percent-encoded. It
@@ -61,7 +64,7 @@ impl Postgres {
         if discovering() {
             return Err(self.unprovisioned(access));
         }
-        postgres(self.name)
+        postgres(&self.name)
     }
 
     fn unprovisioned(&self, access: &str) -> Error {
@@ -70,32 +73,4 @@ impl Postgres {
             access: access.to_string(),
         }
     }
-}
-
-/// Declare a postgres database and return the handle an app reads it through. Write it in
-/// a file under the project's `infra` folder:
-///
-/// ```ignore
-/// pub static DB: ocel::Postgres = ocel::postgres!("main");
-/// pub static CACHE: ocel::Postgres = ocel::postgres!("cache", version = "16");
-/// ```
-///
-/// The declaration is registered at link time and posted by [`discover`](crate::discover),
-/// so the file is never run to be read.
-#[macro_export]
-macro_rules! postgres {
-    ($name:literal) => {
-        $crate::postgres!($name, version = "17")
-    };
-    ($name:literal, version = $version:literal) => {{
-        $crate::inventory::submit! {
-            $crate::Declaration {
-                name: $name,
-                version: $version,
-                file: file!(),
-                line: line!(),
-            }
-        }
-        $crate::Postgres::new($name)
-    }};
 }

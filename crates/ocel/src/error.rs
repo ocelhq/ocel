@@ -1,3 +1,11 @@
+fn bound_to(binding: &str) -> &str {
+    if binding.is_empty() {
+        "the project root"
+    } else {
+        binding
+    }
+}
+
 /// Everything a declared resource can fail with.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -55,6 +63,56 @@ pub enum Error {
         name: String,
         /// What the dev server said.
         said: String,
+    },
+
+    /// Discovery could not tell the CLI about the variables a struct declares.
+    #[error("ocel: declare env: {said}")]
+    DeclareEnv {
+        /// What the dev server said.
+        said: String,
+    },
+
+    /// Two files declare the same key or the same resource name.
+    #[error("'{key}' {detail}")]
+    Definition {
+        /// The key or name that is declared twice.
+        key: String,
+        /// What is wrong and how to fix it.
+        detail: String,
+    },
+
+    /// A variable is scoped to folders this app is not bound to.
+    #[error("'{key}' is scoped to {}, but this app is bound to {}. Bind this app to one of those folders in ocel.config.ts, or widen the variable's scope.", .folders.join(", "), bound_to(.binding))]
+    Scope {
+        /// The scoped variable.
+        key: String,
+        /// The scope the variable was declared with.
+        folders: Vec<String>,
+        /// The folder this app is bound to, empty at the project root.
+        binding: String,
+    },
+
+    /// A declared variable has no value.
+    #[error("'{key}' has no value. Set one with `ocel env set {key} <VALUE>`.")]
+    Unset {
+        /// The variable the value belongs to.
+        key: String,
+    },
+
+    /// A declared variable has a value its field type rejects.
+    #[error("'{key}' is set but does not satisfy its type: {detail}. Fix it with `ocel env set {key} <VALUE>`.")]
+    Invalid {
+        /// The variable the value belongs to.
+        key: String,
+        /// What the parse said, withheld for a confidential class.
+        detail: String,
+    },
+
+    /// The deploy gave this app no hostname to serve on.
+    #[error("'{key}' was not delivered to this app. Ocel writes it from the hostname the deploy serves the app on, and this app is served on none: add one under `domains.production` on the app, or on the project if this is the first app it names, and deploy again.")]
+    Undelivered {
+        /// The variable Ocel writes the url into.
+        key: String,
     },
 
     /// The pool over a delivered link could not be opened.

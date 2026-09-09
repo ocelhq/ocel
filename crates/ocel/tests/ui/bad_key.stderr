@@ -1,0 +1,5 @@
+error: 'lower case' is not a usable variable name: use upper-case letters, digits and underscores, starting with a letter or underscore.
+ --> tests/ui/bad_key.rs:4:5
+  |
+4 |     port: u16,
+  |     ^^^^

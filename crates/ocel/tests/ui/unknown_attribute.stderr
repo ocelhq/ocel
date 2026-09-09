@@ -1,0 +1,5 @@
+error: 'PORT' has an unknown attribute 'optional'. The attributes are sensitive, key = "<KEY>", default = <VALUE> and folders = ["<PATH>"].
+ --> tests/ui/unknown_attribute.rs:3:12
+  |
+3 |     #[ocel(optional)]
+  |            ^^^^^^^^
