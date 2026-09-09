@@ -421,7 +421,7 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 		if err != nil {
 			return nil, fmt.Errorf("app %q: %w", a.Name, err)
 		}
-		runtime, err := normalizeRuntime(a.Name, filepath.Join(dir, filepath.FromSlash(a.Path)), a)
+		runtime, err := resolveRuntime(a.Name, filepath.Join(dir, filepath.FromSlash(a.Path)), a.Framework, a.Arch, a.Compute)
 		if err != nil {
 			return nil, err
 		}
@@ -482,14 +482,14 @@ func normalizeHealth(a configdoc.AppConfig) (*Health, error) {
 	return &Health{Path: path}, nil
 }
 
-func normalizeRuntime(app string, dir string, raw configdoc.AppConfig) (Runtime, error) {
-	name, err := frameworkOf(app, dir, strings.TrimSpace(raw.Framework), strings.TrimSpace(raw.Compute))
+func resolveRuntime(app, dir, framework, arch, compute string) (Runtime, error) {
+	name, err := frameworkOf(app, dir, strings.TrimSpace(framework), strings.TrimSpace(compute))
 	if err != nil {
 		return Runtime{}, err
 	}
-	arch, err := architectureOf(app, strings.TrimSpace(raw.Arch))
+	architecture, err := architectureOf(app, strings.TrimSpace(arch))
 	if err != nil {
 		return Runtime{}, err
 	}
-	return Runtime{Name: name, Arch: arch}, nil
+	return Runtime{Name: name, Arch: architecture}, nil
 }

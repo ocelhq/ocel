@@ -71,6 +71,37 @@ Each folder's language is the one the source files in it are written in, not the
 manifest names: `.go` is go, `.py` is python, `.rs` is rust, and `.ts`, `.tsx`, `.js`,
 `.jsx`, `.mjs` or `.cjs` is js. A folder holding two of them is an error.
 
+## framework
+
+What an app is built with, when ocel is not to read it off the app's own directory.
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [{ "name": "web", "path": ".", "framework": "next" }]
+}
+```
+
+One of `node`, `next`, `go` or `python`. Left off, ocel reads the app's directory: a
+`package.json` that names `next` as a dependency or sits beside a `next.config.*` is next,
+a `package.json` on its own is node, a `go.mod` is go, and a `pyproject.toml` or
+`requirements.txt` is python.
+
+## arch
+
+The processor architecture an app's functions are built for.
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "apps": [{ "name": "web", "path": ".", "arch": "arm64" }]
+}
+```
+
+Either `x86_64` or `arm64`. Left off, it is your provider's own default.
+
 ## Another config per target
 
 A file named `ocel.<target>.json` is the same project deployed somewhere else — a box of
