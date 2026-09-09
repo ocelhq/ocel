@@ -284,6 +284,11 @@ type upstream struct {
 
 func (u upstream) endpoint() upstream { return u }
 
+const (
+	initializationTypeEnvVar = "AWS_LAMBDA_INITIALIZATION_TYPE"
+	snapStartInitialization  = "snap-start"
+)
+
 func newLoopbackClient() *http.Client {
 	return &http.Client{
 		CheckRedirect: func(*http.Request, []*http.Request) error {
@@ -293,6 +298,7 @@ func newLoopbackClient() *http.Client {
 			MaxIdleConns:        16,
 			MaxIdleConnsPerHost: 16,
 			IdleConnTimeout:     4 * time.Second,
+			DisableKeepAlives:   os.Getenv(initializationTypeEnvVar) == snapStartInitialization,
 		},
 	}
 }
