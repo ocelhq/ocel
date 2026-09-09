@@ -1,4 +1,4 @@
-package sdk
+package ocel
 
 import (
 	"context"
@@ -21,12 +21,24 @@ func discovering() bool {
 	return os.Getenv(phaseEnv) == discoveryPhase
 }
 
-func declare(req *resourcesv1.DeclareRequest) error {
-	client := resourcesv1connect.NewResourceServiceClient(
+func resources() resourcesv1connect.ResourceServiceClient {
+	return resourcesv1connect.NewResourceServiceClient(
 		http.DefaultClient,
 		os.Getenv(devServerEnv),
 		connect.WithProtoJSON(),
 	)
-	_, err := client.Declare(context.Background(), req)
+}
+
+func declare(req *resourcesv1.DeclareRequest) error {
+	_, err := resources().Declare(context.Background(), req)
+	return err
+}
+
+func declareVariables(req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
+	return resources().DeclareEnv(context.Background(), req)
+}
+
+func reportEnvProblems(req *resourcesv1.ReportEnvProblemsRequest) error {
+	_, err := resources().ReportEnvProblems(context.Background(), req)
 	return err
 }

@@ -1,4 +1,4 @@
-package sdk_test
+package ocel_test
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/sdk"
+	ocel "github.com/ocelhq/ocel/sdk"
 )
 
 func collector(t *testing.T, seen *[]map[string]any) *httptest.Server {
@@ -42,7 +42,7 @@ func TestPostgresDeclaresDuringDiscovery(t *testing.T) {
 	t.Setenv("OCEL_DEV_SERVER", srv.URL)
 
 	_, file, line, _ := runtime.Caller(0)
-	db := sdk.Postgres("main")
+	db := ocel.Postgres("main")
 
 	if got := db.Name(); got != "main" {
 		t.Errorf("Name() = %q, want %q", got, "main")
@@ -82,7 +82,7 @@ func TestVersionOverridesTheDeclaredVersion(t *testing.T) {
 	t.Setenv("OCEL_PHASE", "discovery")
 	t.Setenv("OCEL_DEV_SERVER", srv.URL)
 
-	sdk.Postgres("main", sdk.PostgresVersion("16"))
+	ocel.Postgres("main", ocel.PostgresVersion("16"))
 
 	if len(seen) != 1 {
 		t.Fatalf("declares = %d, want 1", len(seen))
@@ -99,7 +99,7 @@ func TestAccessorsRefuseDuringDiscovery(t *testing.T) {
 	t.Setenv("OCEL_PHASE", "discovery")
 	t.Setenv("OCEL_DEV_SERVER", srv.URL)
 
-	db := sdk.Postgres("main")
+	db := ocel.Postgres("main")
 
 	for _, tc := range []struct {
 		access string
@@ -108,7 +108,7 @@ func TestAccessorsRefuseDuringDiscovery(t *testing.T) {
 		{"ConnectionString", second(db.ConnectionString())},
 		{"Pool", second(db.Pool(t.Context()))},
 	} {
-		var unprovisioned *sdk.UnprovisionedError
+		var unprovisioned *ocel.UnprovisionedError
 		if !errors.As(tc.err, &unprovisioned) {
 			t.Fatalf("%s() error = %v, want an *UnprovisionedError", tc.access, tc.err)
 		}
@@ -127,7 +127,7 @@ func second[T any](_ T, err error) error { return err }
 func TestConnectionStringPercentEncodesCredentials(t *testing.T) {
 	t.Setenv("OCEL_RESOURCE_POSTGRES_main", `{"name":"main","postgres":{"host":"h","port":5432,"database":"d","username":"user name","password":"p@ss:word/with#odd?chars"}}`)
 
-	got, err := sdk.Postgres("main").ConnectionString()
+	got, err := ocel.Postgres("main").ConnectionString()
 	if err != nil {
 		t.Fatalf("ConnectionString() error = %v", err)
 	}
@@ -138,7 +138,7 @@ func TestConnectionStringPercentEncodesCredentials(t *testing.T) {
 }
 
 func TestAMissingLinkNamesTheCommandsThatDeliverIt(t *testing.T) {
-	_, err := sdk.Postgres("main").ConnectionString()
+	_, err := ocel.Postgres("main").ConnectionString()
 
 	want := "Value for OCEL_RESOURCE_POSTGRES_main is not defined. " +
 		"Run `ocel dev` to resolve it locally, or `ocel deploy` to have it delivered from the resource this app links."
@@ -150,7 +150,7 @@ func TestAMissingLinkNamesTheCommandsThatDeliverIt(t *testing.T) {
 func TestALinkOfAnotherTypeIsRefused(t *testing.T) {
 	t.Setenv("OCEL_RESOURCE_POSTGRES_main", `{"name":"main","bucket":{"bucket":"b"}}`)
 
-	_, err := sdk.Postgres("main").ConnectionString()
+	_, err := ocel.Postgres("main").ConnectionString()
 
 	want := "OCEL_RESOURCE_POSTGRES_main carries a BUCKET link, and this app reads it as a POSTGRES"
 	if err == nil || err.Error() != want {
@@ -161,7 +161,7 @@ func TestALinkOfAnotherTypeIsRefused(t *testing.T) {
 func TestAMalformedLinkKeepsTheValueOutOfTheError(t *testing.T) {
 	t.Setenv("OCEL_RESOURCE_POSTGRES_main", `{"name":"main","postgres":{"password":s3cretpassword}}`)
 
-	_, err := sdk.Postgres("main").ConnectionString()
+	_, err := ocel.Postgres("main").ConnectionString()
 	if err == nil {
 		t.Fatal("ConnectionString() succeeded on a malformed link, want error")
 	}
@@ -174,11 +174,11 @@ func TestAMalformedLinkKeepsTheValueOutOfTheError(t *testing.T) {
 }
 
 func TestAMissingLinkIsAMissingLinkError(t *testing.T) {
-	_, err := sdk.Postgres("main").ConnectionString()
+	_, err := ocel.Postgres("main").ConnectionString()
 
-	var missing *sdk.MissingLinkError
+	var missing *ocel.MissingLinkError
 	if !errors.As(err, &missing) {
-		t.Fatalf("ConnectionString() error = %v, want a *sdk.MissingLinkError", err)
+		t.Fatalf("ConnectionString() error = %v, want a *ocel.MissingLinkError", err)
 	}
 	if missing.Key != "OCEL_RESOURCE_POSTGRES_main" {
 		t.Errorf("Key = %q, want the env var the link arrives in", missing.Key)

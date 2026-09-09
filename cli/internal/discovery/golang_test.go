@@ -112,6 +112,14 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 	if !strings.HasSuffix(filepath.ToSlash(source), want) {
 		t.Errorf("source = %q, want it to end with %q", source, want)
 	}
+
+	variables := collected.declaredVariables()
+	if len(variables) != 1 || variables[0].GetKey() != "GREETING" || variables[0].GetRequired() {
+		t.Fatalf("variables = %v, want the one defaulted GREETING", variables)
+	}
+	if want := filepath.ToSlash(filepath.Join("infra", "infra.go")) + ":9"; !strings.HasSuffix(filepath.ToSlash(variables[0].GetSource()), want) {
+		t.Errorf("variable source = %q, want it to end with %q", variables[0].GetSource(), want)
+	}
 }
 
 func TestRunReportsWhatAGoRootThatDoesNotCompileSaid(t *testing.T) {

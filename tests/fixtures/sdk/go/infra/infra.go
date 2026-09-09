@@ -1,5 +1,9 @@
 package infra
 
-import "github.com/ocelhq/ocel/sdk"
+import ocel "github.com/ocelhq/ocel/sdk"
 
-var DB = sdk.Postgres("main")
+var DB = ocel.Postgres("main")
+
+var Env = ocel.Env[struct {
+	Greeting string `ocel:"GREETING,default=hello"`
+}]()
