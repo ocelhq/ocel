@@ -190,7 +190,7 @@ crates/target/
 tests/fixtures/sdk/rust/target/
 
 .workflow-data
-packages/native-lib/*/bin/
+packages/cli-*/bin/
 # e2e harness's default OCEL_BIN location (`cd cli && go build -o bin/ocel ./ocel`).
 cli/bin/
 tests/fixtures/deploy/go/server/deploy-go

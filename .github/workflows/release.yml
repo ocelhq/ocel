@@ -119,6 +119,7 @@ jobs:
             dist/ocel_darwin_amd64_v1/ocel
             dist/ocel_darwin_arm64/ocel
             dist/ocel_linux_amd64_v1/ocel
+            dist/ocel_linux_arm64/ocel
             dist/ocel_windows_amd64_v1/ocel.exe
 
   publish:
@@ -166,13 +167,14 @@ jobs:
           name: cli-binaries
           path: dist
 
-      - name: Assemble binaries into native packages
+      - name: Assemble binaries into the platform packages
         run: |
           set -euo pipefail
-          install -D -m 0755 dist/ocel_darwin_arm64/ocel packages/native-lib/cli-darwin-arm64/bin/ocel
-          install -D -m 0755 dist/ocel_darwin_amd64_v1/ocel packages/native-lib/cli-darwin-x64/bin/ocel
-          install -D -m 0755 dist/ocel_linux_amd64_v1/ocel packages/native-lib/cli-linux-x64/bin/ocel
-          install -D -m 0644 dist/ocel_windows_amd64_v1/ocel.exe packages/native-lib/cli-win32-x64/bin/ocel.exe
+          install -D -m 0755 dist/ocel_darwin_arm64/ocel packages/cli-darwin-arm64/bin/ocel
+          install -D -m 0755 dist/ocel_darwin_amd64_v1/ocel packages/cli-darwin-x64/bin/ocel
+          install -D -m 0755 dist/ocel_linux_arm64/ocel packages/cli-linux-arm64/bin/ocel
+          install -D -m 0755 dist/ocel_linux_amd64_v1/ocel packages/cli-linux-x64/bin/ocel
+          install -D -m 0644 dist/ocel_windows_amd64_v1/ocel.exe packages/cli-win32-x64/bin/ocel.exe
 
       - name: Build the published packages
         run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
@@ -180,7 +182,7 @@ jobs:
       - name: Publish packages
         run: |
           set -euo pipefail
-          for pkg in ocel sst pulumi native-lib/cli-darwin-arm64 native-lib/cli-darwin-x64 native-lib/cli-linux-x64 native-lib/cli-win32-x64; do
+          for pkg in ocel sst pulumi cli-darwin-arm64 cli-darwin-x64 cli-linux-arm64 cli-linux-x64 cli-win32-x64 cli; do
             (cd "packages/$pkg" && pnpm publish --access public --provenance --no-git-checks)
           done
         env:

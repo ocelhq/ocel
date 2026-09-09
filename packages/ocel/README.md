@@ -1,8 +1,8 @@
 # ocel
 
-Platform as a Framework. `ocel` is one package with two faces: the **CLI** that provisions
-and deploys, and the **runtime SDK** your app imports. Declaring a resource in app code —
-`postgres("main")` — *is* the provisioning step.
+Platform as a Framework. `ocel` is the **runtime SDK** your app imports and the types your
+config is written against. Declaring a resource in app code — `postgres("main")` — *is* the
+provisioning step.
 
 ## Install
 
@@ -11,36 +11,17 @@ npm install ocel
 ```
 
 It belongs in `dependencies`, not `devDependencies`: the SDK subpaths are imported by your
-running app. The CLI binary is delivered through platform-specific
-`optionalDependencies` (`@ocel/darwin-arm64`, `@ocel/darwin-x64`, `@ocel/linux-x64`,
-`@ocel/win32-x64`), so only your platform's is downloaded.
+running app.
 
 ## CLI
 
+The `ocel` command is a separate install:
+
 ```sh
-npx ocel init          # write ocel.config.ts and add ocel + the provider to dependencies
-npx ocel dev -- <cmd>  # run <cmd> with resource connections in its environment
-npx ocel deploy        # deploy to the provider configured in ocel.config.ts
+npm install -g @ocel/cli
+curl -fsSL https://ocel.dev/install.sh | sh
+brew install ocelhq/tap/ocel
 ```
-
-`init` runs entirely offline. `dev` and `deploy` need an authenticated, linked project.
-
-| Command | Purpose |
-| --- | --- |
-| `ocel init [slug]` | Make this directory deployable |
-| `ocel dev -- <cmd>` | Run your project in development mode |
-| `ocel run -- <cmd>` | Run a one-off command with your project's resource connections |
-| `ocel build` | Build your project's apps into `.ocel/output` without deploying |
-| `ocel deploy` | Deploy your project to its configured cloud provider |
-| `ocel preview up\|rm\|ls\|prune` | Stand up a preview environment for the current branch |
-| `ocel rollback` | Roll production back to a previous deployment |
-| `ocel deployments ls\|prune` | Manage production deployments |
-| `ocel destroy production\|preview` | Permanently destroy this project's deployment of one class |
-| `ocel bootstrap production\|preview\|destroy\|policy\|status` | Provision the account-global resources your provider needs |
-| `ocel login` / `ocel logout` | Authenticate the CLI with your account |
-| `ocel console link [project]` / `ocel console unlink` | Link this directory to an Ocel console project |
-
-Run `ocel <command> --help` for flags.
 
 ## SDK
 

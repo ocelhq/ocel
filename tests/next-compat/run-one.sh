@@ -54,11 +54,11 @@ finish() {
         node -p "require('$dir/.ocel-e2e.json').slug" | sed 's/^/slug=/'
         node -p "JSON.parse(require('fs').readFileSync('$dir/.ocel/deploy-result.json')).apps.flatMap((a) => a.urls ?? [])[0]" 2>/dev/null |
           sed 's/^/url=/'
-        printf 'teardown=cd %s && node %s/packages/ocel/bin/run.js preview rm --ref %s --yes\n' \
+        printf 'teardown=cd %s && node %s/packages/cli/bin/ocel.js preview rm --ref %s --yes\n' \
           "$dir" "$ADAPTER_DIR" "$ref"
       } >>"$WORK/staged.txt"
     else
-      (cd "$dir" && node "$ADAPTER_DIR/packages/ocel/bin/run.js" preview rm --ref "$ref" --yes) >>"$LOG" 2>&1
+      (cd "$dir" && node "$ADAPTER_DIR/packages/cli/bin/ocel.js" preview rm --ref "$ref" --yes) >>"$LOG" 2>&1
     fi
   done <"$WORK/dirs.txt"
   [ -s "$WORK/staged.txt" ] || rm -f "$WORK/staged.txt"

@@ -112,7 +112,7 @@ run_journey_vps() {
         OCEL_VPS_HOST="$OCEL_INCUS_ADDR" \
         OCEL_VPS_USER="$OCEL_INCUS_USER" \
         OCEL_VPS_IDENTITY_FILE="$OCEL_INCUS_KEY" \
-        OCEL_BIN="$PWD/packages/native-lib/cli-linux-x64/bin/ocel" \
+        OCEL_BIN="$PWD/packages/cli-linux-x64/bin/ocel" \
         pnpm --filter @ocel-tests/journeys journey || status=$?
     incus_run "scripts/incus.sh destroy $vm" || echo "act.sh: could not destroy $vm" >&2
     return $status

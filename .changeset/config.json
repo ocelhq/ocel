@@ -3,7 +3,15 @@
   "changelog": "@changesets/cli/changelog",
   "commit": false,
   "fixed": [
-    ["ocel", "@ocel/darwin-arm64", "@ocel/darwin-x64", "@ocel/linux-x64", "@ocel/win32-x64"]
+    [
+      "ocel",
+      "@ocel/cli",
+      "@ocel/cli-darwin-arm64",
+      "@ocel/cli-darwin-x64",
+      "@ocel/cli-linux-arm64",
+      "@ocel/cli-linux-x64",
+      "@ocel/cli-win32-x64"
+    ]
   ],
   "linked": [],
   "access": "public",

@@ -2,12 +2,8 @@
   "name": "ocel",
   "version": "0.0.1-alpha.0",
   "type": "module",
-  "description": "ocel cli and runtime sdk — turns cloud infrastructure into function calls",
-  "bin": {
-    "ocel": "./bin/run.js"
-  },
+  "description": "ocel runtime sdk — turns cloud infrastructure into function calls",
   "files": [
-    "bin/",
     "dist/",
     "README.md"
   ],
@@ -105,12 +101,6 @@
     "@connectrpc/connect-node": "^2.1.2",
     "@standard-schema/spec": "^1.1.0",
     "zod": "^4.4.3"
-  },
-  "optionalDependencies": {
-    "@ocel/darwin-arm64": "workspace:^",
-    "@ocel/darwin-x64": "workspace:^",
-    "@ocel/linux-x64": "workspace:^",
-    "@ocel/win32-x64": "workspace:^"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.160",
