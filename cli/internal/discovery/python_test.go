@@ -124,6 +124,14 @@ func TestRunDeclaresWhatThePythonFixtureDeclares(t *testing.T) {
 	if source := filepath.ToSlash(declares[0].GetSource()); !strings.HasSuffix(source, want) {
 		t.Errorf("source = %q, want it to end with %q", source, want)
 	}
+
+	variables := collected.declaredVariables()
+	if len(variables) != 1 || variables[0].GetKey() != "GREETING" || variables[0].GetRequired() {
+		t.Fatalf("variables = %v, want the one defaulted GREETING", variables)
+	}
+	if want := filepath.ToSlash(filepath.Join(constants.DefaultDiscoveryDirName, "__init__.py")) + ":6"; !strings.HasSuffix(filepath.ToSlash(variables[0].GetSource()), want) {
+		t.Errorf("variable source = %q, want it to end with %q", variables[0].GetSource(), want)
+	}
 }
 
 func pythonSDKEnvironment(t *testing.T) string {

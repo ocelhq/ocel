@@ -1,68 +1,10 @@
-import gzip
 import json
 import os
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
 from ocel import UnprovisionedResourceError, postgres
-from ocel.gen.app.resources.v1.resources_pb import DeclareRequest
 from ocel.gen.common.links.v1.links_pb import LinkType
-
-
-class Collector:
-    def __init__(self):
-        self.declares = []
-        self.server = HTTPServer(("127.0.0.1", 0), self._handler())
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
-        self.thread.start()
-
-    @property
-    def url(self):
-        host, port = self.server.server_address
-        return f"http://{host}:{port}"
-
-    def _handler(self):
-        declares = self.declares
-
-        class Handler(BaseHTTPRequestHandler):
-            def do_POST(self):
-                body = self.rfile.read(int(self.headers["Content-Length"]))
-                if self.headers.get("Content-Encoding") == "gzip":
-                    body = gzip.decompress(body)
-                kind = self.headers.get("Content-Type", "")
-                declares.append(
-                    (self.path, self.headers.get("Connect-Protocol-Version"), decode(kind, body))
-                )
-                self.send_response(200)
-                self.send_header("Content-Type", kind)
-                self.end_headers()
-                self.wfile.write(b"{}" if kind.endswith("json") else b"")
-
-            def log_message(self, *_args):
-                pass
-
-        return Handler
-
-    def close(self):
-        self.server.shutdown()
-        self.server.server_close()
-
-
-def decode(content_type: str, body: bytes) -> DeclareRequest:
-    if content_type.endswith("json"):
-        return DeclareRequest.from_json(body)
-    return DeclareRequest.from_binary(body)
-
-
-@pytest.fixture
-def collector(monkeypatch):
-    c = Collector()
-    monkeypatch.setenv("OCEL_PHASE", "discovery")
-    monkeypatch.setenv("OCEL_DEV_SERVER", c.url)
-    yield c
-    c.close()
 
 
 def test_a_declared_database_reaches_the_dev_server_with_the_file_that_declared_it(collector):

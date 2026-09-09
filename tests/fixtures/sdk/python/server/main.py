@@ -2,7 +2,7 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from infra import db
+from infra import Env, db
 
 DEFAULT_PORT = "3104"
 
@@ -10,7 +10,9 @@ DEFAULT_PORT = "3104"
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
-            body = json.dumps({"ok": True, "database": db.name}).encode()
+            body = json.dumps(
+                {"ok": True, "database": db.name, "greeting": Env().greeting}
+            ).encode()
             self.send_response(200)
             self.send_header("content-type", "application/json")
             self.send_header("content-length", str(len(body)))
