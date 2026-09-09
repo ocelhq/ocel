@@ -130,12 +130,35 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: |
+            cli/go.sum
+            platform/aws/provider/go.sum
+            platform/gcp/provider/go.sum
+            platform/vps/provider/go.sum
+            pkg/proto/go.sum
+            sdk/go.sum
+
+      - name: Setup gobuildcache
+        uses: ./.github/actions/gobuildcache
+        with:
+          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
       - uses: ./.github/actions/node-workspace
         with:
           registry-url: https://registry.npmjs.org
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - uses: ./.github/actions/goreleaser
 
       - name: Download the CLI binaries
         uses: actions/download-artifact@v4
@@ -166,9 +189,13 @@ jobs:
       - name: Tag the release the binaries are published under
         run: |
           set -euo pipefail
-          pnpm changeset tag
           version=$(node -p "require('./packages/ocel/package.json').version")
-          git tag "v$version"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$version" -m "v$version"
+          git push origin "v$version"
 
-      - name: Push tags
-        run: git push --follow-tags
+      - name: Publish the archives a CLI fetches its providers from
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: goreleaser release --clean
