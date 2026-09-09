@@ -103,6 +103,72 @@ func TestALockWrittenOnOnePlatformMatchesTheOneWrittenOnAnother(t *testing.T) {
 	}
 }
 
+func TestALockPinningAnotherVersionIsRefusedRatherThanRewritten(t *testing.T) {
+	t.Parallel()
+
+	server := releaseServing(t, "aws")
+	store := storeOn(t, server, "linux", "amd64")
+	projectDir := t.TempDir()
+
+	pinned := lockfile.Lock{CLI: "0.3.0", Providers: map[string]map[string]string{"aws": {"linux-amd64": "abc"}}}
+	if err := lockfile.Write(projectDir, pinned); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	before, err := os.ReadFile(lockfile.Path(projectDir))
+	if err != nil {
+		t.Fatalf("read the lock: %v", err)
+	}
+
+	_, err = locate(context.Background(), store, projectDir, "aws")
+	if err == nil {
+		t.Fatal("locate() error = nil, want a lock pinning another version refused")
+	}
+	for _, want := range []string{lockfile.Name, "0.3.0", locatedVersion, "ocel lock"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not name %q", err.Error(), want)
+		}
+	}
+
+	after, err := os.ReadFile(lockfile.Path(projectDir))
+	if err != nil {
+		t.Fatalf("read the lock back: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("the pin regenerated itself:\n%s\nwant\n%s", after, before)
+	}
+}
+
+func TestPinRewritesALockThatPinsAnotherVersion(t *testing.T) {
+	t.Parallel()
+
+	server := releaseServing(t, "aws", "vps")
+	store := storeOn(t, server, "linux", "amd64")
+	projectDir := t.TempDir()
+
+	stale := lockfile.Lock{CLI: "0.3.0", Providers: map[string]map[string]string{"aws": {"linux-amd64": "abc"}}}
+	if err := lockfile.Write(projectDir, stale); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	if err := pin(context.Background(), store, projectDir); err != nil {
+		t.Fatalf("pin: %v", err)
+	}
+
+	lock, held, err := lockfile.Read(projectDir)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if !held {
+		t.Fatalf("no %s was left beside the config", lockfile.Name)
+	}
+	if lock.CLI != locatedVersion {
+		t.Fatalf("lock.CLI = %q, want %q", lock.CLI, locatedVersion)
+	}
+	if len(lock.Providers["vps"]) != len(providers.Platforms) {
+		t.Fatalf("vps pins %d platforms, want all %d", len(lock.Providers["vps"]), len(providers.Platforms))
+	}
+}
+
 func TestAPinnedLockIsNotRewrittenOrRefetched(t *testing.T) {
 	t.Parallel()
 
