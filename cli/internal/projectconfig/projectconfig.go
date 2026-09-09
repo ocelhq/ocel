@@ -93,7 +93,7 @@ func (c *Config) EdgeKind() edge.Kind {
 
 func (c *Config) RequireProvider() (*ProviderDescriptor, error) {
 	if c.Provider == nil {
-		return nil, fmt.Errorf("no provider configured in %s — add `\"provider\": { \"name\": \"aws\" }` to your config", filepath.Base(c.Path))
+		return nil, fmt.Errorf("no provider configured in %s — add `\"provider\": { \"name\": … }` naming the provider this project deploys through", filepath.Base(c.Path))
 	}
 	return c.Provider, nil
 }
@@ -109,7 +109,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Config, error) {
 	var provider *ProviderDescriptor
 	if doc.Provider != nil {
 		if strings.TrimSpace(doc.Provider.Name) == "" {
-			return nil, fmt.Errorf("%s configures a provider with no \"name\" — name the provider this project deploys into, such as \"aws\"", configPath)
+			return nil, fmt.Errorf("%s configures a provider with no \"name\" — name the provider this project deploys into", configPath)
 		}
 		options := doc.Provider.Options
 		if len(options) == 0 || string(options) == "null" {

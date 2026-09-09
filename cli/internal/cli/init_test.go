@@ -56,7 +56,7 @@ func TestRunInit(t *testing.T) {
 		dir := initTestDir(t, "My Cool App")
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), deps, dir, "", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "", initOptions{provider: "acme"}, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -74,12 +74,12 @@ func TestRunInit(t *testing.T) {
 		dir := initTestDir(t, "ignored-dir-name")
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "acme"}, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
 		content := readConfig(t, dir)
-		for _, want := range []string{`"slug": "my-app"`, `"provider": { "name": "aws"`, `"$schema"`} {
+		for _, want := range []string{`"slug": "my-app"`, `"provider": { "name": "acme", "options": {} }`, `"$schema"`} {
 			if !strings.Contains(content, want) {
 				t.Errorf("config = %q, want it to contain %q", content, want)
 			}
@@ -97,7 +97,7 @@ func TestRunInit(t *testing.T) {
 				argv := stubPackageManager(&deps, nil)
 				dir := initTestDir(t, "proj")
 
-				err := runInit(context.Background(), deps, dir, slug, initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
+				err := runInit(context.Background(), deps, dir, slug, initOptions{provider: "acme"}, &bytes.Buffer{}, &bytes.Buffer{})
 				if err == nil {
 					t.Fatal("runInit err = nil, want error")
 				}
@@ -118,7 +118,7 @@ func TestRunInit(t *testing.T) {
 		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "!!!")
 
-		err := runInit(context.Background(), deps, dir, "", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
+		err := runInit(context.Background(), deps, dir, "", initOptions{provider: "acme"}, &bytes.Buffer{}, &bytes.Buffer{})
 		if err == nil || !strings.Contains(err.Error(), "ocel init my-app") {
 			t.Fatalf("err = %v, want it to ask for a slug", err)
 		}
@@ -135,7 +135,7 @@ func TestRunInit(t *testing.T) {
 			t.Fatalf("write existing config: %v", err)
 		}
 
-		err := runInit(context.Background(), deps, dir, "my-app", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
+		err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "acme"}, &bytes.Buffer{}, &bytes.Buffer{})
 		if err == nil || !strings.Contains(err.Error(), projectconfig.DefaultFileName) {
 			t.Fatalf("err = %v, want it to name the config already there", err)
 		}
@@ -148,7 +148,7 @@ func TestRunInit(t *testing.T) {
 		}
 	})
 
-	t.Run("--provider names the provider the config is scaffolded with", func(t *testing.T) {
+	t.Run("--provider names the provider the config is scaffolded with, with options for it to fill in", func(t *testing.T) {
 		t.Parallel()
 
 		deps := newDeps()
@@ -161,29 +161,27 @@ func TestRunInit(t *testing.T) {
 		}
 
 		content := readConfig(t, dir)
-		if !strings.Contains(content, `"name": "gcp"`) {
-			t.Fatalf("config = %q, want it to name the provider asked for", content)
-		}
-		if !strings.Contains(content, `"project": "my-project"`) {
-			t.Fatalf("config = %q, want the gcp provider given a project and a region to edit", content)
+		if !strings.Contains(content, `"provider": { "name": "gcp", "options": {} }`) {
+			t.Fatalf("config = %q, want the provider asked for and options only the provider knows", content)
 		}
 	})
 
-	t.Run("a provider that needs options is scaffolded with a placeholder", func(t *testing.T) {
+	t.Run("no provider is refused, naming the flag, and nothing is written", func(t *testing.T) {
 		t.Parallel()
 
 		deps := newDeps()
-		stubPackageManager(&deps, nil)
+		argv := stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 
-		opts := initOptions{provider: "vps"}
-		if err := runInit(context.Background(), deps, dir, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
-			t.Fatalf("runInit err = %v", err)
+		err := runInit(context.Background(), deps, dir, "my-app", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
+		if err == nil || !strings.Contains(err.Error(), "--provider") {
+			t.Fatalf("err = %v, want it to ask for --provider", err)
 		}
-
-		content := readConfig(t, dir)
-		if !strings.Contains(content, `"ssh": "my-vps"`) {
-			t.Fatalf("config = %q, want the vps provider given a destination to edit", content)
+		if _, statErr := os.Stat(filepath.Join(dir, projectconfig.DefaultFileName)); statErr == nil {
+			t.Fatal("a config was written with no provider named")
+		}
+		if *argv != nil {
+			t.Fatalf("ran %v, want no package manager call", *argv)
 		}
 	})
 
@@ -207,7 +205,7 @@ func TestRunInit(t *testing.T) {
 					t.Fatalf("write lockfile: %v", err)
 				}
 
-				if err := runInit(context.Background(), deps, dir, "my-app", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+				if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "acme"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 					t.Fatalf("runInit err = %v", err)
 				}
 				if got := *argv; !slices.Equal(got, want) {
@@ -228,7 +226,7 @@ func TestRunInit(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "acme"}, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v, want the failed install to be non-fatal", err)
 		}
 		if !strings.Contains(readConfig(t, dir), `"slug": "my-app"`) {
@@ -259,7 +257,7 @@ func TestRunInit(t *testing.T) {
 
 		deps := newDeps()
 		argv := stubPackageManager(&deps, nil)
-		opts := initOptions{configPath: filepath.Join("..", "infra", projectconfig.DefaultFileName)}
+		opts := initOptions{provider: "acme", configPath: filepath.Join("..", "infra", projectconfig.DefaultFileName)}
 
 		var stdout bytes.Buffer
 		if err := runInit(context.Background(), deps, cwd, "", opts, &stdout, &bytes.Buffer{}); err != nil {
@@ -288,7 +286,7 @@ func TestRunInit(t *testing.T) {
 		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 
-		opts := initOptions{configPath: filepath.Join("nested", "deep", projectconfig.DefaultFileName)}
+		opts := initOptions{provider: "acme", configPath: filepath.Join("nested", "deep", projectconfig.DefaultFileName)}
 		if err := runInit(context.Background(), deps, dir, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}
