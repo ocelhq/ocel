@@ -9,6 +9,7 @@ import (
 var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/pkg/providerkit":        true,
 	"github.com/ocelhq/ocel/pkg/channel":            true,
+	"github.com/ocelhq/ocel/pkg/configdoc":          true,
 	"github.com/ocelhq/ocel/pkg/naming":             true,
 	"github.com/ocelhq/ocel/pkg/proto":              true,
 	"github.com/ocelhq/ocel/platform/edge/contract": true,

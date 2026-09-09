@@ -657,6 +657,8 @@ enum RefusalCode {
   REFUSAL_CODE_DENIED = 3;
 
   REFUSAL_CODE_BUSY = 4;
+
+  REFUSAL_CODE_UNKNOWN_OPTION = 5;
 }
 
 enum HostTrustReason {

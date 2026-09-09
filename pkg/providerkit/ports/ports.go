@@ -125,10 +125,11 @@ const (
 type Code string
 
 const (
-	CodeInvalid  Code = "invalid"
-	CodeNotReady Code = "not-ready"
-	CodeDenied   Code = "denied"
-	CodeBusy     Code = "busy"
+	CodeInvalid       Code = "invalid"
+	CodeNotReady      Code = "not-ready"
+	CodeDenied        Code = "denied"
+	CodeBusy          Code = "busy"
+	CodeUnknownOption Code = "unknown-option"
 )
 
 type Refusal struct {

@@ -21,15 +21,28 @@ func typeError(path, want string) error {
 	return fmt.Errorf("%q must be %s", path, want)
 }
 
+type UnknownKeyError struct {
+	Path  string
+	Known []string
+}
+
+func (e UnknownKeyError) Error() string {
+	if len(e.Known) == 0 {
+		return fmt.Sprintf("%q is not a key this config has", e.Path)
+	}
+	return fmt.Sprintf("%q is not a key this config has — the keys here are %s", e.Path, strings.Join(e.Known, ", "))
+}
+
 func unknownKeyError(path, key string, known []string) error {
 	at := key
 	if path != "" {
 		at = path + "." + key
 	}
-	if len(known) == 0 {
-		return fmt.Errorf("%q is not a key this config has", at)
-	}
-	return fmt.Errorf("%q is not a key this config has — the keys here are %s", at, strings.Join(known, ", "))
+	return UnknownKeyError{Path: at, Known: known}
+}
+
+func Check(path string, target any, value any) error {
+	return checkValue(path, reflect.TypeOf(target), value)
 }
 
 func checkStruct(path string, target any, value map[string]any) error {
@@ -43,8 +56,14 @@ func checkValue(path string, target reflect.Type, value any) error {
 	if target == rawMessageType {
 		return nil
 	}
-	if checker, ok := reflect.New(target).Elem().Interface().(shapeChecker); ok {
+	zero := reflect.New(target).Elem().Interface()
+	if checker, ok := zero.(shapeChecker); ok {
 		return checker.checkShape(path, value)
+	}
+	if _, ok := zero.(AlsoAString); ok {
+		if _, spelled := value.(string); spelled {
+			return nil
+		}
 	}
 
 	switch target.Kind() {
