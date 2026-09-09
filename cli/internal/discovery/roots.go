@@ -110,6 +110,17 @@ func defaultRootDirs(configDir string) []string {
 	return []string{dir}
 }
 
+func HoldsJS(cfg *projectconfig.Config) bool {
+	if _, err := os.Stat(filepath.Join(cfg.Dir, "package.json")); err == nil {
+		return true
+	}
+	roots, err := RootsOf(cfg)
+	if err != nil {
+		return true
+	}
+	return slices.ContainsFunc(roots, func(root Root) bool { return root.Language == JS })
+}
+
 func LanguageOfApp(dir string) Language {
 	for _, m := range manifestLanguages {
 		if _, err := os.Stat(filepath.Join(dir, m.file)); err == nil {
