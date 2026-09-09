@@ -210,14 +210,30 @@ func (s *stack) Destroy(ctx context.Context) error {
 	return nil
 }
 
+const maxResourceName = 63
+
+func resourceName(slug string, class edge.Class, hostname string, role ...string) string {
+	segments := []naming.Segment{
+		naming.Fixed("ocel"),
+		naming.Fixed(string(Kind)),
+		naming.Compressible(slug),
+		naming.Fixed(string(class)),
+		naming.Compressible(naming.SanitizeHost(hostname)),
+	}
+	for _, each := range role {
+		segments = append(segments, naming.Fixed(each))
+	}
+	return naming.Fit(maxResourceName, naming.WordSeparator, segments...)
+}
+
 func backendName(slug string, class edge.Class, hostname string) string {
-	return dashed("ocel", string(Kind), naming.Sanitize(slug), string(class), naming.Sanitize(hostname))
+	return resourceName(slug, class, hostname)
 }
 
 func entryName(slug string, class edge.Class, hostname string) string {
-	return backendName(slug, class, hostname) + "-cert"
+	return resourceName(slug, class, hostname, "cert")
 }
 
 func negName(slug string, class edge.Class, hostname string) string {
-	return backendName(slug, class, hostname) + "-neg"
+	return resourceName(slug, class, hostname, "neg")
 }

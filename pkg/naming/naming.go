@@ -82,6 +82,15 @@ func SanitizeAlpha(value string) string {
 	return out
 }
 
+const WildcardSuffix = "wildcard"
+
+func SanitizeHost(hostname string) string {
+	if under, wild := strings.CutPrefix(hostname, "*."); wild {
+		return Sanitize(under) + WordSeparator + WildcardSuffix
+	}
+	return Sanitize(hostname)
+}
+
 func Underscore(value string) string {
 	return strings.ReplaceAll(Sanitize(value), WordSeparator, "_")
 }
