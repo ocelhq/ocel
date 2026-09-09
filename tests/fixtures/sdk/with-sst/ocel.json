@@ -1,0 +1,10 @@
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "with-sst",
+  "links": ["orders"],
+  "provider": {
+    "name": "aws",
+    "options": { "transforms": ["./transforms/network.transform.ts"] }
+  },
+  "apps": [{ "name": "web", "path": "." }]
+}

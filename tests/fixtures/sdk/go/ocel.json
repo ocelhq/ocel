@@ -1,9 +1,6 @@
 {
   "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
-  "slug": "go",
-  "provider": {
-    "name": "gcp",
-    "options": { "project": "${OCEL_GCP_PROJECT}", "region": "${OCEL_GCP_REGION}" }
-  },
+  "slug": "sdk-go",
+  "provider": { "name": "aws" },
   "apps": [{ "name": "web", "path": "./server", "runtime": "go" }]
 }

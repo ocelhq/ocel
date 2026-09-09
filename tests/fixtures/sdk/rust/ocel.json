@@ -1,0 +1,6 @@
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "sdk-rust",
+  "provider": { "name": "aws" },
+  "apps": [{ "name": "web", "path": "." }]
+}

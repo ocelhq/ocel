@@ -1,6 +1,6 @@
 {
   "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
-  "slug": "go",
+  "slug": "python",
   "provider": {
     "name": "vps",
     "options": {

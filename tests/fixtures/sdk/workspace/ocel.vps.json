@@ -1,0 +1,34 @@
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "workspace",
+  "provider": {
+    "name": "vps",
+    "options": {
+      "ssh": {
+        "host": "${OCEL_VPS_HOST}",
+        "user": "${OCEL_VPS_USER}",
+        "identityFile": "${OCEL_VPS_IDENTITY_FILE}"
+      }
+    }
+  },
+  "apps": [
+    {
+      "name": "next",
+      "path": "./apps/next",
+      "folder": "/next",
+      "compute": "container",
+      "health": { "path": "/health" }
+      // The hostname production serves on, bound with `ocel domain add`:
+      // "domains": { "production": "next.example.com" }
+    },
+    {
+      "name": "express",
+      "path": "./apps/express",
+      "folder": "/express",
+      "compute": "container",
+      "health": { "path": "/health" }
+      // The hostname production serves on, bound with `ocel domain add`:
+      // "domains": { "production": "express.example.com" }
+    }
+  ]
+}
