@@ -96,6 +96,13 @@ func TestAPatternReachesTheGeneratedSchema(t *testing.T) {
 	if !strings.Contains(string(generated), `"pattern": "^arn:aws:kms:"`) {
 		t.Errorf("schema = %s, want the pattern carried into it", generated)
 	}
+	tolerated, err := json.Marshal(interpolationPattern)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(generated), `"pattern": `+string(tolerated)) {
+		t.Errorf("schema = %s, want an unresolved interpolation to pass it", generated)
+	}
 }
 
 func TestAValueIsCheckedAgainstItsPattern(t *testing.T) {
