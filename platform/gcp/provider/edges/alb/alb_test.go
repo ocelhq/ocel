@@ -171,3 +171,17 @@ func TestARemovalPlanNamesTheStandingCostItLeavesBehind(t *testing.T) {
 		t.Errorf("the kept group reads %q, want the standing cost named: the load balancer outlives the project it fronted", kept.Reason)
 	}
 }
+
+func TestAHostnameBoundBeforeItsAppReleasedIsRoutedToTheFrontsNotFoundBackend(t *testing.T) {
+	t.Parallel()
+
+	_, w, stack := reconciled(t)
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
+		t.Fatalf("BindDomain = %v", err)
+	}
+
+	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != notFoundBackend {
+		t.Errorf("the class url map routes shop.example.com onto %q, want the front's not-found backend %q: the bind declared no backend "+
+			"for an app that has released nothing, and Compute rejects a url map naming a backend that is not there", got, notFoundBackend)
+	}
+}

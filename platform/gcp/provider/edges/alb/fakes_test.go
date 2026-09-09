@@ -3,6 +3,7 @@ package alb
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"sync"
@@ -15,6 +16,10 @@ import (
 
 const frontAddress = "34.117.0.7"
 
+const notFoundBackend = "ocel-alb-production-notfound"
+
+const backendToken = "gcp:compute/backendService:BackendService"
+
 type world struct {
 	mu       sync.Mutex
 	outputs  map[string]map[string]string
@@ -22,7 +27,7 @@ type world struct {
 	destroys []string
 	routed   map[string]map[string]string
 	pinned   []string
-	refuseUp error
+	backends map[string]map[string]bool
 }
 
 func newWorld() *world {
@@ -31,7 +36,8 @@ func newWorld() *world {
 			FrontStack(edge.ClassProduction): front(),
 			FrontStack(edge.ClassPreview):    front(),
 		},
-		routed: map[string]map[string]string{},
+		routed:   map[string]map[string]string{},
+		backends: map[string]map[string]bool{"": {notFoundBackend: true}},
 	}
 }
 
@@ -40,21 +46,29 @@ func front() map[string]string {
 		"address":        frontAddress,
 		"certificateMap": "ocel-alb-production-certs",
 		"urlMap":         "ocel-alb-production-routes",
-		"notFound":       "ocel-alb-production-notfound",
+		"notFound":       notFoundBackend,
 	}
 }
 
 func (w *world) Up(_ context.Context, _ edge.Class, stack string, program Program, _ edge.Reporter) (map[string]string, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.refuseUp != nil {
-		return nil, w.refuseUp
-	}
 	if program == nil {
 		return nil, errors.New("a stack was raised with no program to raise")
 	}
+	seen, err := declared(program)
+	if err != nil {
+		return nil, err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.ups = append(w.ups, stack)
-	if held, standing := w.outputs[stack]; standing {
+	standing := map[string]bool{}
+	for name, declaration := range seen {
+		if declaration.Token == backendToken {
+			standing[name] = true
+		}
+	}
+	w.backends[stack] = standing
+	if held, up := w.outputs[stack]; up {
 		return maps.Clone(held), nil
 	}
 	w.outputs[stack] = map[string]string{}
@@ -65,6 +79,7 @@ func (w *world) Destroy(_ context.Context, _ edge.Class, stack string, _ edge.Re
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.destroys = append(w.destroys, stack)
+	delete(w.backends, stack)
 	return nil
 }
 
@@ -77,6 +92,10 @@ func (w *world) Outputs(_ context.Context, _ edge.Class, stack string) (map[stri
 func (w *world) Route(_ context.Context, urlMap, hostname, backend string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if !w.stands(backend) {
+		return fmt.Errorf("route %s onto the backend service %q, which no stack declared: Compute rejects a url map naming a backend that is not there",
+			hostname, backend)
+	}
 	hosts := w.routed[urlMap]
 	if hosts == nil {
 		hosts = map[string]string{}
@@ -98,6 +117,15 @@ func (w *world) Pin(_ context.Context, service, revision string) error {
 	defer w.mu.Unlock()
 	w.pinned = append(w.pinned, service+"@"+revision)
 	return nil
+}
+
+func (w *world) stands(backend string) bool {
+	for _, standing := range w.backends {
+		if standing[backend] {
+			return true
+		}
+	}
+	return false
 }
 
 func (w *world) raised() []string {
