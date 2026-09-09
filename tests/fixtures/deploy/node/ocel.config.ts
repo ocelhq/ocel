@@ -3,23 +3,13 @@ import awsProvider from "ocel/providers/aws";
 
 export default defineConfig({
   slug: "node",
+  // Deploys into the region the environment names. Pin one instead:
+  // provider: awsProvider({ region: "eu-west-1" }),
   provider: awsProvider(),
-
-  // The provider fronts the deployment with its own default edge. Name one instead:
-  // edge: cloudfront(), // or apiGateway(), both from "ocel/providers/aws/edge"
-  // edge: cloudflare(), // from "ocel/edge"; the token and account id come from the environment
-
-  // Hostname records go into the provider's own dns. Write them into cloudflare instead:
-  // dns: cloudflareDns(), // from "ocel/dns"
-
   apps: [
     {
       name: "web",
       path: ".",
-      // Serverless unless told otherwise; a container is one image serving every route:
-      // compute: "container",
-      // The hostname production serves on, bound with `ocel domain add`:
-      // domains: { production: "web.example.com" },
     },
   ],
 });

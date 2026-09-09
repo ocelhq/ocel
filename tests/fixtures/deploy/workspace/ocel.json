@@ -2,32 +2,17 @@
   "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
   "slug": "workspace",
   "provider": { "name": "aws" },
-
-  // The provider fronts the deployment with its own default edge. Name one of cloudfront, api-gateway or cloudflare instead:
-  // "edge": { "kind": "cloudfront" },
-
-  // Hostname records go into the provider's own dns. Write them into cloudflare instead:
-  // "dns": { "kind": "cloudflare" },
-
   "apps": [
     {
       "name": "next",
       "runtime": "next",
       "path": "./apps/next",
       "folder": "/next"
-      // Serverless unless told otherwise; a container is one image serving every route:
-      // "compute": "container",
-      // The hostname production serves on, bound with `ocel domain add`:
-      // "domains": { "production": "next.example.com" }
     },
     {
       "name": "express",
       "path": "./apps/express",
       "folder": "/express"
-      // Serverless unless told otherwise; a container is one image serving every route:
-      // "compute": "container",
-      // The hostname production serves on, bound with `ocel domain add`:
-      // "domains": { "production": "express.example.com" }
     }
   ]
 }
