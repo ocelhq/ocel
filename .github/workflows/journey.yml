@@ -331,6 +331,9 @@ jobs:
       - name: Build, typecheck and test the workspace
         run: pnpm turbo run build typecheck test --filter='!./console/*' --filter='!./tests/fixtures/**' --filter='!./tests/*'
 
+      - uses: ./.github/actions/goreleaser
+        if: ${{ steps.gate.outputs.any == 'true' }}
+
       - name: Build the binaries a journey drives
         if: ${{ steps.gate.outputs.any == 'true' }}
         run: node scripts/snapshot.mjs
@@ -931,6 +934,8 @@ jobs:
           bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
           region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+
+      - uses: ./.github/actions/goreleaser
 
       - name: Build the binaries this reaping drives
         run: |
