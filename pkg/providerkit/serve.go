@@ -52,7 +52,7 @@ func Serve(spec Spec) error {
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()
 
-	fmt.Println(channel.FormatReadinessLine(addr, identity.CertificateDER()))
+	fmt.Println(channel.FormatReadinessLine(spec.Version, addr, identity.CertificateDER()))
 
 	select {
 	case <-ctx.Done():

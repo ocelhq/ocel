@@ -18,6 +18,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -149,7 +150,7 @@ func RunFakeProvider() int {
 	path, handler = envvarsv1connect.NewEnvVarsServiceHandler(fake)
 	mux.Handle(path, handler)
 
-	fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath), identity.CertificateDER()))
+	fmt.Println(channel.FormatReadinessLine(version.Version, channel.FormatUnixAddr(sockPath), identity.CertificateDER()))
 
 	srv := &http.Server{Handler: mux}
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {

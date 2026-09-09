@@ -17,6 +17,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
+	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
@@ -34,6 +35,15 @@ const fakeProviderGrandchildPidFileEnvVar = "OCEL_TEST_FAKE_PROVIDER_GRANDCHILD_
 const fakeProviderKnownHostsEnvVar = "OCEL_TEST_FAKE_PROVIDER_KNOWN_HOSTS"
 
 const fakeProviderDrivesEnvVar = "OCEL_TEST_FAKE_PROVIDER_DRIVES"
+
+const fakeProviderVersionEnvVar = "OCEL_TEST_FAKE_PROVIDER_VERSION"
+
+func fakeProviderVersion() string {
+	if announced := os.Getenv(fakeProviderVersionEnvVar); announced != "" {
+		return announced
+	}
+	return version.Version
+}
 
 const (
 	fakeHostName     = "vps.example.com"
@@ -104,7 +114,7 @@ func runFakeProvider() int {
 			fmt.Fprintln(os.Stderr, "fake provider: decoy identity:", err)
 			return 1
 		}
-		fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath), decoy.CertificateDER()))
+		fmt.Println(channel.FormatReadinessLine(fakeProviderVersion(), channel.FormatUnixAddr(sockPath), decoy.CertificateDER()))
 		srv := &http.Server{Handler: mux}
 		if err := srv.Serve(bound); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return 1
@@ -128,7 +138,7 @@ func runFakeProvider() int {
 		}
 	}
 
-	fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath), announced.CertificateDER()))
+	fmt.Println(channel.FormatReadinessLine(fakeProviderVersion(), channel.FormatUnixAddr(sockPath), announced.CertificateDER()))
 
 	srv := &http.Server{Handler: mux}
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {

@@ -17,6 +17,7 @@ import (
 	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/cli/internal/procgroup"
+	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/channel"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -70,6 +71,20 @@ type ReadyTimeoutError struct {
 
 func (e *ReadyTimeoutError) Error() string {
 	return fmt.Sprintf("provider did not signal readiness within %s", e.Timeout)
+}
+
+type VersionMismatchError struct {
+	Name      string
+	Announced string
+	Expected  string
+}
+
+func (e *VersionMismatchError) Error() string {
+	named := "the provider"
+	if e.Name != "" {
+		named = "provider " + e.Name
+	}
+	return fmt.Sprintf("%s is version %s and this CLI is version %s; a provider ships with the CLI it runs under", named, e.Announced, e.Expected)
 }
 
 type OperationFailedError struct {
@@ -238,6 +253,9 @@ func (r *Runner) Ready(ctx context.Context) error {
 }
 
 func (r *Runner) open(ctx context.Context, ready channel.Readiness) error {
+	if ready.Version != version.Version {
+		return &VersionMismatchError{Name: r.providerName, Announced: ready.Version, Expected: version.Version}
+	}
 	if err := r.dial(ready); err != nil {
 		return err
 	}

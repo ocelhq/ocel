@@ -136,19 +136,23 @@ func TestReadinessLineCarriesTheServerCertificate(t *testing.T) {
 		t.Fatalf("NewIdentity() error = %v", err)
 	}
 
-	t.Run("round trips the address and the certificate", func(t *testing.T) {
+	t.Run("round trips the version, the address and the certificate", func(t *testing.T) {
 		t.Parallel()
 		for _, addr := range []string{
 			"unix:/tmp/ocel-provider-abc123/provider.sock",
+			"unix:/tmp/ocel provider/provider.sock",
 			"tcp:127.0.0.1:54321",
 		} {
-			line := FormatReadinessLine(addr, identity.CertificateDER())
+			line := FormatReadinessLine("0.1.2-alpha.3", addr, identity.CertificateDER())
 			if strings.Contains(line, "\n") {
 				t.Fatalf("FormatReadinessLine() = %q, want a single stdout line", line)
 			}
 			got, ok := ParseReadinessLine(line)
 			if !ok {
 				t.Fatalf("ParseReadinessLine(%q) ok = false, want true", line)
+			}
+			if got.Version != "0.1.2-alpha.3" {
+				t.Fatalf("ParseReadinessLine(%q) version = %q, want %q", line, got.Version, "0.1.2-alpha.3")
 			}
 			if got.Addr != addr {
 				t.Fatalf("ParseReadinessLine(%q) addr = %q, want %q", line, got.Addr, addr)
@@ -168,13 +172,15 @@ func TestReadinessLineCarriesTheServerCertificate(t *testing.T) {
 		}{
 			{"nothing at all", ""},
 			{"an unrelated log line", "listening on socket...\n"},
-			{"a sentinel with a typo", "OCEL_READY_TYPO unix:/tmp/x.sock " + b64},
+			{"a sentinel with a typo", "OCEL_READY_TYPO 1.0.0 unix:/tmp/x.sock " + b64},
 			{"the sentinel named midway through a line", "some log line mentioning OCEL_READY midway " + b64},
-			{"an address with no certificate", "OCEL_READY unix:/tmp/x.sock"},
-			{"a certificate with no address", "OCEL_READY " + b64},
-			{"an empty certificate field", "OCEL_READY unix:/tmp/x.sock "},
-			{"a certificate that is not base64", "OCEL_READY unix:/tmp/x.sock not-base64!"},
-			{"base64 that is not a certificate", "OCEL_READY unix:/tmp/x.sock " + base64.StdEncoding.EncodeToString([]byte("nope"))},
+			{"a line carrying no version", "OCEL_READY unix:/tmp/x.sock " + b64},
+			{"an empty version field", "OCEL_READY  unix:/tmp/x.sock " + b64},
+			{"an address with no certificate", "OCEL_READY 1.0.0 unix:/tmp/x.sock"},
+			{"a certificate with no address", "OCEL_READY 1.0.0 " + b64},
+			{"an empty certificate field", "OCEL_READY 1.0.0 unix:/tmp/x.sock "},
+			{"a certificate that is not base64", "OCEL_READY 1.0.0 unix:/tmp/x.sock not-base64!"},
+			{"base64 that is not a certificate", "OCEL_READY 1.0.0 unix:/tmp/x.sock " + base64.StdEncoding.EncodeToString([]byte("nope"))},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
