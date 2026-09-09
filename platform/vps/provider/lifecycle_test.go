@@ -188,7 +188,7 @@ func (j journey) manifest(t *testing.T) string {
 func (j journey) declaration(t *testing.T, login string) string {
 	t.Helper()
 	options, err := json.Marshal(map[string]any{
-		"package": "@ocel/provider-vps",
+		"name": "vps",
 		"options": map[string]any{"ssh": map[string]any{
 			"host":         j.vm.addr,
 			"user":         login,
