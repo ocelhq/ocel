@@ -10,7 +10,7 @@ By the end of this page a Next.js app is running in your AWS account, with a URL
 
 | You need | Why |
 | --- | --- |
-| Node 20 or newer | Ocel builds your app with it, and the CLI installs from npm |
+| Node 20 or newer | Ocel builds your Next.js app with it |
 | An AWS account | Where the app runs |
 | AWS credentials in your shell | Ocel provisions with them |
 
@@ -23,9 +23,11 @@ aws sts get-caller-identity
 ## Install
 
 ```bash
-npm install -g ocel
+curl -fsSL https://ocel.dev/install.sh | sh
 ocel --version
 ```
+
+[Homebrew and npm](/docs/install) install the same binary.
 
 ## Make a project deployable
 

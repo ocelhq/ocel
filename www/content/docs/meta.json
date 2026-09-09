@@ -2,6 +2,7 @@
   "title": "Deploy",
   "pages": [
     "index",
+    "install",
     "quick-start",
     "compare",
     "---Deploy---",

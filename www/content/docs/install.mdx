@@ -1,0 +1,60 @@
+---
+title: Install
+description: Three ways to put the ocel binary on your machine.
+icon: ArrowDownTrayIcon
+---
+
+`ocel` is a single static binary. Pick whichever of the three suits the machine — they
+install the same build, and each one replaces an earlier install in place.
+
+## Installer
+
+```bash
+curl -fsSL https://ocel.dev/install.sh | sh
+```
+
+It installs into `~/.local/bin`, verifies the download against the release's
+`checksums.txt` before writing anything, and prints the line to add to your shell profile
+if `~/.local/bin` is not already on `PATH`. Pin a version with `OCEL_VERSION`:
+
+```bash
+curl -fsSL https://ocel.dev/install.sh | OCEL_VERSION=0.1.0 sh
+```
+
+macOS and Linux, on x86-64 and arm64.
+
+## Homebrew
+
+```bash
+brew install ocelhq/tap/ocel
+```
+
+`brew upgrade ocel` moves to the newest release.
+
+## npm
+
+```bash
+npm install -g @ocel/cli
+```
+
+The binary itself arrives as an optional dependency for your platform —
+`@ocel/cli-darwin-arm64`, `@ocel/cli-darwin-x64`, `@ocel/cli-linux-arm64`,
+`@ocel/cli-linux-x64` or `@ocel/cli-win32-x64` — so nothing else is downloaded. This is the
+only one of the three that covers Windows, and the only one that pins the CLI per project:
+
+```bash
+npm install --save-dev @ocel/cli
+```
+
+`ocel` — the package your app imports for `postgres()`, `bucket()` and the config
+types — is a separate install and carries no binary:
+
+```bash
+npm install ocel
+```
+
+## Check it
+
+```bash
+ocel --version
+```

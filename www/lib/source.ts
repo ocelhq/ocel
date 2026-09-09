@@ -1,4 +1,5 @@
 import {
+  ArrowDownTrayIcon,
   BoltIcon,
   BookOpenIcon,
   CommandLineIcon,
@@ -15,7 +16,14 @@ const docs = defineDocs({
   dir: "content/docs",
 });
 
-const icons = { BoltIcon, BookOpenIcon, CommandLineIcon, Squares2X2Icon, ScaleIcon };
+const icons = {
+  ArrowDownTrayIcon,
+  BoltIcon,
+  BookOpenIcon,
+  CommandLineIcon,
+  Squares2X2Icon,
+  ScaleIcon,
+};
 
 export const source = loader({
   baseUrl: "/docs",
