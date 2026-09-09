@@ -29,16 +29,19 @@ func TestAnOptionThisProviderDoesNotTakeIsRefused(t *testing.T) {
 		name    string
 		options providerkit.Options
 		names   string
+		code    providerkit.Code
 	}{
 		{
 			name:    "an option no provider accepts",
 			options: providerkit.Options{"project": "acme-prod", "region": "europe-west1", "keyFile": "/tmp/sa.json"},
 			names:   "keyFile",
+			code:    providerkit.CodeUnknownOption,
 		},
 		{
 			name:    "no region",
 			options: providerkit.Options{"project": "acme-prod"},
 			names:   "region",
+			code:    providerkit.CodeInvalid,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -46,8 +49,8 @@ func TestAnOptionThisProviderDoesNotTakeIsRefused(t *testing.T) {
 
 			var refusal providerkit.Refusal
 			p, err := gcp.New(context.Background(), tc.options)
-			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-				t.Fatalf("New() = %v, %v, want an invalid refusal", p, err)
+			if !errors.As(err, &refusal) || refusal.Code != tc.code {
+				t.Fatalf("New() = %v, %v, want a %q refusal", p, err, tc.code)
 			}
 			if !strings.Contains(refusal.Message, tc.names) {
 				t.Errorf("New() refused with %q, want it to name %q so the author knows which line to edit", refusal.Message, tc.names)
