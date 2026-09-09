@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -285,5 +286,18 @@ func TestTheIdentityNamesTheVendorTheProviderNamesItself(t *testing.T) {
 	named := providerkit.IdentityProto(Vendor, identity).GetProvider()
 	if named != string(Vendor) {
 		t.Errorf("the identity names %q and the provider names itself %q; the CLI matches a credential problem to its section by that string, so a mismatch loses the problem", named, Vendor)
+	}
+}
+
+func TestAVarsKeyThatNamesNoKMSKeyIsRefused(t *testing.T) {
+	if _, err := providerkit.Decode[Options](providerkit.Options{"varsKey": "arn:aws:kms:eu-west-1:111122223333:key/abcd"}); err != nil {
+		t.Fatalf("a kms key arn was refused: %v", err)
+	}
+	_, err := providerkit.Decode[Options](providerkit.Options{"varsKey": "arn:aws:s3:::a-bucket"})
+	if err == nil {
+		t.Fatal("a varsKey that names no kms key was taken")
+	}
+	if !strings.Contains(err.Error(), "varsKey") {
+		t.Errorf("error = %q, want it to name the option", err)
 	}
 }

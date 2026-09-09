@@ -2,6 +2,7 @@ package configdoc
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/configdoc/schematest"
@@ -80,5 +81,33 @@ func TestOptionsSchemaRefusesAnUnnamedProvider(t *testing.T) {
 	}
 	if _, err := OptionsSchema("", options{}); err == nil {
 		t.Fatal("options schema for an unnamed provider = nil error, want a refusal")
+	}
+}
+
+type patterned struct {
+	Key string `json:"key,omitempty" pattern:"^arn:aws:kms:"`
+}
+
+func TestAPatternReachesTheGeneratedSchema(t *testing.T) {
+	generated, err := OptionsSchema("aws", patterned{})
+	if err != nil {
+		t.Fatalf("options schema: %v", err)
+	}
+	if !strings.Contains(string(generated), `"pattern": "^arn:aws:kms:"`) {
+		t.Errorf("schema = %s, want the pattern carried into it", generated)
+	}
+}
+
+func TestAValueIsCheckedAgainstItsPattern(t *testing.T) {
+	held := map[string]any{"key": "arn:aws:kms:eu-west-1:111122223333:key/abcd"}
+	if err := Check("provider.options", patterned{}, held); err != nil {
+		t.Fatalf("a key that matches its pattern was refused: %v", err)
+	}
+	err := Check("provider.options", patterned{}, map[string]any{"key": "abcd"})
+	if err == nil {
+		t.Fatal("a key that does not match its pattern was taken")
+	}
+	if !strings.Contains(err.Error(), "provider.options.key") || !strings.Contains(err.Error(), "^arn:aws:kms:") {
+		t.Errorf("error = %q, want it to name the key and the pattern", err)
 	}
 }
