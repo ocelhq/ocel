@@ -86,11 +86,11 @@ type AppPlan struct {
 
 	AssetPrefix string
 
-	Membranes map[string]ArtifactRef
+	RuntimePayloads map[string]ArtifactRef
 
 	Packed any
 
-	CrossesMembrane bool
+	Proxied bool
 }
 
 type RoutingPlan struct {

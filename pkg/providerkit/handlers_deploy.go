@@ -107,7 +107,7 @@ type deployRun struct {
 	mu             sync.Mutex
 	artifacts      map[string]ArtifactRef
 	functionImages map[string]string
-	membranes      map[string]ArtifactRef
+	runtimes       map[string]ArtifactRef
 	needs          NeedRecords
 	links          []Link
 	functions      map[string][]Function
@@ -523,7 +523,7 @@ func (r *deployRun) preflight(ctx context.Context, report Reporter) error {
 	if err != nil {
 		return err
 	}
-	if err := RefuseUnreachableLinks(r.provider.Vendor(), r.provider.Serves(), r.crossesMembrane, resources, grants); err != nil {
+	if err := RefuseUnreachableLinks(r.provider.Vendor(), r.provider.Serves(), r.proxied, resources, grants); err != nil {
 		return Refuse(CodeInvalid, "%s", err)
 	}
 	if err := r.refuseContainerValues(ctx); err != nil {
@@ -731,10 +731,10 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 					ISR:             facts.ISR,
 					Bytecode:        facts.Bytecode,
 					AssetPrefix:     facts.AssetPrefix,
-					Membranes:       r.membranes,
+					RuntimePayloads: r.runtimes,
 					Guard:           facts.Guard,
 					Packed:          pack.Carry,
-					CrossesMembrane: crossesMembrane(r.crossesMembrane, grants),
+					Proxied:         anyProxied(r.proxied, grants),
 				},
 			}
 			if r.dry {

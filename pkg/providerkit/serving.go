@@ -88,10 +88,10 @@ func ArchOfELFMachine(machine uint16) (string, bool) {
 	return "", false
 }
 
-const MembranePrefix = "ocel-membrane-layer"
+const RuntimeLayerPrefix = "ocel-runtime-layer"
 
-type MembraneSource interface {
-	Membrane(ctx context.Context, arch string) ([]byte, error)
+type RuntimePayloadSource interface {
+	RuntimePayload(ctx context.Context, arch string) ([]byte, error)
 }
 
 type ServingQuery struct {
@@ -153,17 +153,17 @@ func guardFor(q ServingQuery, desc edge.ServeDescriptor, present bool) *OriginGu
 	return &OriginGuard{Entry: desc.Entry}
 }
 
-func CrossesMembrane(kind LinkType) bool {
+func Proxied(kind LinkType) bool {
 	for wire, held := range linkTypes {
 		if held == kind {
-			return naming.CrossesMembrane(wire)
+			return naming.Proxied(wire)
 		}
 	}
 	return false
 }
 
-func crossesMembrane(crosses func(LinkType) bool, grants []Link) bool {
-	return slices.ContainsFunc(grants, func(link Link) bool { return crosses(link.Type) })
+func anyProxied(proxied func(LinkType) bool, grants []Link) bool {
+	return slices.ContainsFunc(grants, func(link Link) bool { return proxied(link.Type) })
 }
 
 func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*RoutingPlan, error) {
@@ -185,45 +185,45 @@ func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*Routi
 	return &RoutingPlan{Entry: desc.Entry, Manifest: raw}, nil
 }
 
-func MembraneRef(ctx context.Context, source MembraneSource, class Class, arch string) (ArtifactRef, []byte, error) {
+func RuntimePayloadRef(ctx context.Context, source RuntimePayloadSource, class Class, arch string) (ArtifactRef, []byte, error) {
 	if source == nil {
 		return ArtifactRef{}, nil, nil
 	}
-	body, err := source.Membrane(ctx, arch)
+	body, err := source.RuntimePayload(ctx, arch)
 	if err != nil {
-		return ArtifactRef{}, nil, fmt.Errorf("read the membrane the app's functions boot through: %w", err)
+		return ArtifactRef{}, nil, fmt.Errorf("read the runtime the app's functions boot through: %w", err)
 	}
 	if len(body) == 0 {
 		return ArtifactRef{}, nil, Refuse(CodeNotReady,
-			"this provider carries no membrane for an app's functions to boot through")
+			"this provider carries no runtime for an app's functions to boot through")
 	}
 	sum := sha256.Sum256(body)
-	return ArtifactRef{Class: class, Bucket: StoreFunctions, Key: MembraneKey(hex.EncodeToString(sum[:]))}, body, nil
+	return ArtifactRef{Class: class, Bucket: StoreFunctions, Key: RuntimeLayerKey(hex.EncodeToString(sum[:]))}, body, nil
 }
 
-func PlaceMembrane(ctx context.Context, source MembraneSource, class Class, arch string, store ArtifactStore, report Reporter) (ArtifactRef, error) {
-	ref, body, err := MembraneRef(ctx, source, class, arch)
+func PlaceRuntimePayload(ctx context.Context, source RuntimePayloadSource, class Class, arch string, store ArtifactStore, report Reporter) (ArtifactRef, error) {
+	ref, body, err := RuntimePayloadRef(ctx, source, class, arch)
 	if err != nil || len(body) == 0 {
 		return ref, err
 	}
 	held, err := store.Has(ctx, ref)
 	if err != nil {
-		return ArtifactRef{}, fmt.Errorf("look for the membrane: %w", err)
+		return ArtifactRef{}, fmt.Errorf("look for the runtime: %w", err)
 	}
 	if held {
 		return ref, nil
 	}
 	if err := store.Put(ctx, ref, bytes.NewReader(body)); err != nil {
-		return ArtifactRef{}, fmt.Errorf("place the membrane: %w", err)
+		return ArtifactRef{}, fmt.Errorf("place the runtime: %w", err)
 	}
 	if report != nil {
-		report.Detail("placed the membrane at " + ref.Key)
+		report.Detail("placed the runtime at " + ref.Key)
 	}
 	return ref, nil
 }
 
-func MembraneKey(digest string) string {
-	return MembranePrefix + "/" + digest + ".zip"
+func RuntimeLayerKey(digest string) string {
+	return RuntimeLayerPrefix + "/" + digest + ".zip"
 }
 
 func withoutSlash(prefix string) string {

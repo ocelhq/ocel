@@ -17,8 +17,8 @@ import (
 
 const (
 	fixtureBucket = "ocel-artifacts-test"
-	fixturePrefix = "ocel-membrane-layer"
-	fixtureLabel  = "membrane layer"
+	fixturePrefix = "ocel-runtime-layer"
+	fixtureLabel  = "runtime layer"
 )
 
 type fakeObjectStore struct {
@@ -82,7 +82,7 @@ func (f *fakeObjectStore) PutObject(_ context.Context, in *s3.PutObjectInput, _ 
 }
 
 func fixturePayload() Payload {
-	layer, err := MembraneLayer(providerkit.ArchX8664)
+	layer, err := RuntimeLayer(providerkit.ArchX8664)
 	if err != nil {
 		panic(err)
 	}

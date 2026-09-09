@@ -64,7 +64,7 @@ func TestCompileWritesAnExecutableBootstrapForTheArchitectureItWasAsked(t *testi
 				t.Fatalf("the compile wrote no binary named after the app: %v", err)
 			}
 			if info.Mode()&0o111 == 0 {
-				t.Errorf("the binary is mode %v, want the execute bit — the zip carries the mode and the membrane execs it", info.Mode())
+				t.Errorf("the binary is mode %v, want the execute bit — the zip carries the mode and the runtime execs it", info.Mode())
 			}
 
 			read, err := elf.Open(binary)

@@ -30,8 +30,8 @@ type packingProvider struct {
 	packed []providerkit.AppPacking
 }
 
-func (p *packingProvider) Membrane(context.Context, string) ([]byte, error) {
-	return []byte(fake.Membrane), nil
+func (p *packingProvider) RuntimePayload(context.Context, string) ([]byte, error) {
+	return []byte(fake.RuntimePayload), nil
 }
 
 func (p *packingProvider) PackApp(_ context.Context, packing providerkit.AppPacking, _ providerkit.Reporter) (providerkit.AppPack, error) {

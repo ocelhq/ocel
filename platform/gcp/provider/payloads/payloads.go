@@ -10,9 +10,9 @@ import (
 //go:embed dist
 var embedded embed.FS
 
-var nodeMembrane = load("dist/serve.mjs")
+var nodeRuntime = load("dist/serve.mjs")
 
-func NodeMembrane() []byte { return nodeMembrane }
+func NodeRuntime() []byte { return nodeRuntime }
 
 func load(name string) []byte {
 	body, err := embedded.ReadFile(name)

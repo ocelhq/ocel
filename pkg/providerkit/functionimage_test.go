@@ -112,7 +112,7 @@ func TestFunctionImageCarriesTheStagedTreeUnderTheRootTheRuntimeRunsFrom(t *test
 	}
 }
 
-func TestFunctionImageBootsANodeFunctionThroughTheMembrane(t *testing.T) {
+func TestFunctionImageBootsANodeFunctionThroughTheRuntime(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"index.mjs":   "export const handler = () => {}",
 		"config.json": functionConfig(t, nil),
@@ -124,12 +124,12 @@ func TestFunctionImageBootsANodeFunctionThroughTheMembrane(t *testing.T) {
 	}
 
 	config := configOf(t, image)
-	if !slices.Contains(config.Cmd, providerkit.NodeMembranePath) {
-		t.Errorf("the image runs %v, want the membrane a node function's handler is served through", config.Cmd)
+	if !slices.Contains(config.Cmd, providerkit.NodeRuntimePath) {
+		t.Errorf("the image runs %v, want the runtime a node function's handler is served through", config.Cmd)
 	}
 }
 
-func TestFunctionImageRefusesAFunctionThatNamesNoCommandAndBootsThroughNoMembrane(t *testing.T) {
+func TestFunctionImageRefusesAFunctionThatNamesNoCommandAndBootsThroughNoRuntime(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"server":      "a built binary",
 		"config.json": runtimeConfig(t, providerkit.RuntimeGo, nil),
@@ -152,7 +152,7 @@ func TestFunctionImageRunsWhatTheRuntimeItIsBuiltAgainstNames(t *testing.T) {
 
 	_, err := providerkit.FunctionImage(empty.Image, goRuntime, dir, nil)
 	if err == nil {
-		t.Fatal("FunctionImage() built a go image booting the node membrane because the staged config said node, want the runtime the base was chosen for to decide")
+		t.Fatal("FunctionImage() built a go image booting the node runtime because the staged config said node, want the runtime the base was chosen for to decide")
 	}
 	if !strings.Contains(err.Error(), "command") {
 		t.Errorf("FunctionImage() = %v, want it to name the command the artifact carries none of", err)
@@ -249,15 +249,15 @@ func TestFunctionImageRunsTheCommandTheFunctionsConfigNames(t *testing.T) {
 	}
 }
 
-func TestFunctionImageCarriesTheMembraneAtThePathItBootsFrom(t *testing.T) {
+func TestFunctionImageCarriesTheRuntimeAtThePathItBootsFrom(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"index.mjs":   "export default () => {}",
 		"config.json": functionConfig(t, nil),
 	})
-	membrane := []byte("export const membrane = 1")
+	runtime := []byte("export const runtime = 1")
 
 	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir,
-		map[string][]byte{providerkit.NodeMembranePath: membrane})
+		map[string][]byte{providerkit.NodeRuntimePath: runtime})
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -267,16 +267,16 @@ func TestFunctionImageCarriesTheMembraneAtThePathItBootsFrom(t *testing.T) {
 		t.Fatal(err)
 	}
 	held := tarNames(t, layers[0])
-	want := strings.TrimPrefix(providerkit.NodeMembranePath, "/")
+	want := strings.TrimPrefix(providerkit.NodeRuntimePath, "/")
 	if !slices.Contains(held, want) {
-		t.Fatalf("the layer holds %v and nothing at %s, so the image runs a membrane it does not carry", held, providerkit.NodeMembranePath)
+		t.Fatalf("the layer holds %v and nothing at %s, so the image runs a runtime it does not carry", held, providerkit.NodeRuntimePath)
 	}
-	if body := tarBody(t, layers[0], want); !bytes.Equal(body, membrane) {
-		t.Errorf("the image carries %q at %s, want the membrane it was handed", body, providerkit.NodeMembranePath)
+	if body := tarBody(t, layers[0], want); !bytes.Equal(body, runtime) {
+		t.Errorf("the image carries %q at %s, want the runtime it was handed", body, providerkit.NodeRuntimePath)
 	}
 }
 
-func TestFunctionImageTellsTheMembraneWhichHandlerToServe(t *testing.T) {
+func TestFunctionImageTellsTheRuntimeWhichHandlerToServe(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"index.mjs":   "export default () => {}",
 		"config.json": functionConfig(t, nil),
@@ -290,17 +290,17 @@ func TestFunctionImageTellsTheMembraneWhichHandlerToServe(t *testing.T) {
 	config := configOf(t, image)
 	want := "OCEL_HANDLER=" + providerkit.FunctionImageRoot + "/index.mjs"
 	if !slices.Contains(config.Env, want) {
-		t.Errorf("the image carries env %v and never %s, so the membrane has no handler to serve", config.Env, want)
+		t.Errorf("the image carries env %v and never %s, so the runtime has no handler to serve", config.Env, want)
 	}
 }
 
-func TestFunctionImageRefusesAnOverlayThatWritesOutsideTheFunctionAndItsMembrane(t *testing.T) {
+func TestFunctionImageRefusesAnOverlayThatWritesOutsideTheFunctionAndItsRuntime(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"index.mjs":   "export default () => {}",
 		"config.json": functionConfig(t, nil),
 	})
 
-	for _, rel := range []string{"/etc/passwd", "../../../etc/passwd", "/ocel/membranes/entrypoint.mjs"} {
+	for _, rel := range []string{"/etc/passwd", "../../../etc/passwd", "/ocel/runtimes/entrypoint.mjs"} {
 		_, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir,
 			map[string][]byte{rel: []byte("root::0:0::/:/bin/sh")})
 		if err == nil {
@@ -312,17 +312,17 @@ func TestFunctionImageRefusesAnOverlayThatWritesOutsideTheFunctionAndItsMembrane
 	}
 }
 
-func TestFunctionImageCarriesAnOverlayAlongsideTheMembraneItBootsFrom(t *testing.T) {
+func TestFunctionImageCarriesAnOverlayAlongsideTheRuntimeItBootsFrom(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"index.mjs":   "export default () => {}",
 		"config.json": functionConfig(t, nil),
 	})
-	beside := path.Join(path.Dir(providerkit.NodeMembranePath), "lib/shim.mjs")
+	beside := path.Join(path.Dir(providerkit.NodeRuntimePath), "lib/shim.mjs")
 
 	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir,
 		map[string][]byte{beside: []byte("export const shim = 1")})
 	if err != nil {
-		t.Fatalf("FunctionImage() error = %v, want the membrane's own directory carried: it is the one place outside the function's tree the image is built to hold", err)
+		t.Fatalf("FunctionImage() error = %v, want the runtime's own directory carried: it is the one place outside the function's tree the image is built to hold", err)
 	}
 
 	layers, err := image.Layers()

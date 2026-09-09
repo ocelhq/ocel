@@ -199,7 +199,7 @@ func TestSync(t *testing.T) {
 			t.Fatalf("bucket env = %s, want %v", raw, want)
 		}
 		if result.DevServerAddress != "http://dev.local:1234" {
-			t.Fatalf("DevServerAddress = %q, want the dev server address every membrane-backed resource reaches", result.DevServerAddress)
+			t.Fatalf("DevServerAddress = %q, want the dev server address every runtime-backed resource reaches", result.DevServerAddress)
 		}
 	})
 

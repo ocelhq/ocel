@@ -128,26 +128,26 @@ func (r *deployRun) upload(ctx context.Context, report Reporter) error {
 	if len(r.manifest.GetFunctions()) == 0 {
 		return nil
 	}
-	source, carries := r.provider.(MembraneSource)
+	source, carries := r.provider.(RuntimePayloadSource)
 	if !carries {
 		return nil
 	}
 	if r.dry {
-		return r.drawMembranes(ctx, source, report)
+		return r.drawRuntimes(ctx, source, report)
 	}
 	placed := map[string]ArtifactRef{}
-	for _, arch := range r.membraneArches() {
-		ref, err := PlaceMembrane(ctx, source, r.plan.Class, arch, r.provider.Artifacts(), report)
+	for _, arch := range r.runtimeArches() {
+		ref, err := PlaceRuntimePayload(ctx, source, r.plan.Class, arch, r.provider.Artifacts(), report)
 		if err != nil {
 			return err
 		}
 		placed[arch] = ref
 	}
-	r.membranes = placed
+	r.runtimes = placed
 	return nil
 }
 
-func (r *deployRun) membraneArches() []string {
+func (r *deployRun) runtimeArches() []string {
 	var arches []string
 	for _, fn := range r.manifest.GetFunctions() {
 		if arch := Architecture(fn.GetRuntime().GetArch()); !slices.Contains(arches, arch) {
@@ -158,28 +158,28 @@ func (r *deployRun) membraneArches() []string {
 	return arches
 }
 
-func (r *deployRun) drawMembranes(ctx context.Context, source MembraneSource, report Reporter) error {
-	report.Say("Reading the membrane the app's functions boot through")
+func (r *deployRun) drawRuntimes(ctx context.Context, source RuntimePayloadSource, report Reporter) error {
+	report.Say("Reading the runtime the app's functions boot through")
 	drawn := map[string]ArtifactRef{}
 	stands := true
-	for _, arch := range r.membraneArches() {
-		ref, _, err := MembraneRef(ctx, source, r.plan.Class, arch)
+	for _, arch := range r.runtimeArches() {
+		ref, _, err := RuntimePayloadRef(ctx, source, r.plan.Class, arch)
 		if err != nil {
 			return err
 		}
 		held, err := r.provider.Artifacts().Has(ctx, ref)
 		if err != nil {
-			return fmt.Errorf("look for the membrane: %w", err)
+			return fmt.Errorf("look for the runtime: %w", err)
 		}
 		drawn[arch] = ref
 		stands = stands && held
 	}
-	r.membranes = drawn
-	r.draft.membrane = ChangeGroup{
+	r.runtimes = drawn
+	r.draft.runtime = ChangeGroup{
 		Kind:   UploadKind,
-		Name:   membraneGroupName,
+		Name:   runtimeGroupName,
 		Action: standsOrCreates(stands),
-		Reason: reasonMembrane,
+		Reason: reasonRuntime,
 	}
 	return nil
 }

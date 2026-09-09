@@ -37,11 +37,11 @@ func plannedAppStack(t *testing.T) (Config, providerkit.StackPlan) {
 				{Name: "fn--web--entry", Artifact: providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "entry.zip"}},
 				{Name: "fn--web--admin", Route: "/admin", Artifact: providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "admin.zip"}},
 			},
-			Routing:     &providerkit.RoutingPlan{Entry: "fn--web--entry", Manifest: []byte(routedManifest)},
-			ISR:         &providerkit.ISRPlan{Prefix: "shop/prod/web/r1/isr", TagNamespace: "tag:shop"},
-			Bytecode:    &providerkit.BytecodePlan{Prefix: "shop/prod/web/r1/bytecode"},
-			AssetPrefix: coord.AssetKey(""),
-			Membranes:   map[string]providerkit.ArtifactRef{providerkit.ArchX8664: {Bucket: providerkit.StoreFunctions, Key: providerkit.MembraneKey("abc123")}},
+			Routing:         &providerkit.RoutingPlan{Entry: "fn--web--entry", Manifest: []byte(routedManifest)},
+			ISR:             &providerkit.ISRPlan{Prefix: "shop/prod/web/r1/isr", TagNamespace: "tag:shop"},
+			Bytecode:        &providerkit.BytecodePlan{Prefix: "shop/prod/web/r1/bytecode"},
+			AssetPrefix:     coord.AssetKey(""),
+			RuntimePayloads: map[string]providerkit.ArtifactRef{providerkit.ArchX8664: {Bucket: providerkit.StoreFunctions, Key: providerkit.RuntimeLayerKey("abc123")}},
 		},
 	}
 	return cfg, plan
@@ -89,7 +89,7 @@ func TestAnAppStackStandsUpFromThePlanAlone(t *testing.T) {
 	}
 }
 
-func TestThePlannedAppBootsThroughTheMembraneItWasHandedAndNoOther(t *testing.T) {
+func TestThePlannedAppBootsThroughTheRuntimeItWasHandedAndNoOther(t *testing.T) {
 	t.Parallel()
 
 	cfg, plan := plannedAppStack(t)
@@ -100,13 +100,13 @@ func TestThePlannedAppBootsThroughTheMembraneItWasHandedAndNoOther(t *testing.T)
 	}
 	layer := work.functions.Layers[providerkit.ArchX8664]
 	if layer.Bucket != cfg.ArtifactBucket {
-		t.Errorf("membrane bucket = %q, want the account's artifact bucket", layer.Bucket)
+		t.Errorf("runtime bucket = %q, want the account's artifact bucket", layer.Bucket)
 	}
-	if layer.Key != plan.App.Membranes[providerkit.ArchX8664].Key {
-		t.Errorf("membrane key = %q, want the one the plan named for the architecture its functions run on", layer.Key)
+	if layer.Key != plan.App.RuntimePayloads[providerkit.ArchX8664].Key {
+		t.Errorf("runtime key = %q, want the one the plan named for the architecture its functions run on", layer.Key)
 	}
 	if layer.SHA256 != "abc123" {
-		t.Errorf("membrane source hash = %q, want the digest its key is addressed by", layer.SHA256)
+		t.Errorf("runtime source hash = %q, want the digest its key is addressed by", layer.SHA256)
 	}
 }
 

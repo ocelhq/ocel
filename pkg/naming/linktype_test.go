@@ -27,7 +27,7 @@ func TestKindOf(t *testing.T) {
 	}
 }
 
-func TestCrossesMembrane(t *testing.T) {
+func TestProxied(t *testing.T) {
 	for _, tc := range []struct {
 		typ  linksv1.LinkType
 		want bool
@@ -37,8 +37,8 @@ func TestCrossesMembrane(t *testing.T) {
 		{linksv1.LinkType_LINK_TYPE_UNSPECIFIED, false},
 		{linksv1.LinkType(99), false},
 	} {
-		if got := CrossesMembrane(tc.typ); got != tc.want {
-			t.Errorf("CrossesMembrane(%v) = %v, want %v", tc.typ, got, tc.want)
+		if got := Proxied(tc.typ); got != tc.want {
+			t.Errorf("Proxied(%v) = %v, want %v", tc.typ, got, tc.want)
 		}
 	}
 }

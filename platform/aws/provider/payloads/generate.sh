@@ -38,11 +38,11 @@ rm -rf "$dist"
 mkdir -p "$dist"
 
 for goarch in amd64 arm64; do
-  layer="$stage/membrane-$goarch"
+  layer="$stage/runtime-$goarch"
   mkdir -p "$layer/ocel"
   build_lambda ./cmd/membrane/bootstrap "$layer/ocel/bootstrap" "$goarch"
   cp -R "$root/platform/aws/membrane/dist/." "$layer/ocel/"
-  pack "$layer" "$dist/membrane-layer-$goarch.zip"
+  pack "$layer" "$dist/runtime-layer-$goarch.zip"
 done
 
 mkdir -p "$stage/upload-completer"

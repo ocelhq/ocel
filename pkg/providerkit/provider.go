@@ -96,8 +96,8 @@ type ServesFunctionURLs interface {
 	ServesFunctionURLs() bool
 }
 
-type MembraneCrosser interface {
-	CrossesMembrane(kind LinkType) bool
+type ProxiedLinker interface {
+	Proxied(kind LinkType) bool
 }
 
 type Vendor string

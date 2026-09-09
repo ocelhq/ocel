@@ -28,7 +28,7 @@ const (
 
 func membraneWanted(links []live.Link) bool {
 	for _, l := range links {
-		if naming.CrossesMembrane(l.Type) {
+		if naming.Proxied(l.Type) {
 			return true
 		}
 	}
