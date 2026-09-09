@@ -113,14 +113,20 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 			t.Errorf("viewer certificate = %q, want the wildcard certificate %q", arn, previewCert)
 		}
 		associated := held.config.DefaultCacheBehavior.FunctionAssociations
-		if associated == nil || len(associated.Items) != 1 {
-			t.Fatalf("function associations = %+v, want the resolver attached at creation", associated)
+		if associated == nil || len(associated.Items) != 2 {
+			t.Fatalf("function associations = %+v, want the resolver and the empty-body dropper attached at creation", associated)
 		}
 		if associated.Items[0].EventType != cftypes.EventTypeViewerRequest {
 			t.Errorf("function association = %s, want it on the viewer request", associated.Items[0].EventType)
 		}
 		if arn := aws.ToString(associated.Items[0].FunctionARN); arn != fakeResolverARN(edge.ClassPreview) {
 			t.Errorf("function association = %q, want the preview resolver", arn)
+		}
+		if associated.Items[1].EventType != cftypes.EventTypeViewerResponse {
+			t.Errorf("function association = %s, want it on the viewer response", associated.Items[1].EventType)
+		}
+		if arn := aws.ToString(associated.Items[1].FunctionARN); arn != fakeEmptyBodyARN(edge.ClassPreview) {
+			t.Errorf("function association = %q, want the preview empty-body dropper", arn)
 		}
 		if origin := aws.ToString(held.config.Origins.Items[0].DomainName); origin != assetOriginDomain(fakeAssetBucket, fakeRegion) {
 			t.Errorf("origin = %q, want the preview bootstrap's asset bucket", origin)

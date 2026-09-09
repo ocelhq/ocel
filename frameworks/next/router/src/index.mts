@@ -6,6 +6,7 @@ import type {
 } from "@framework/next-protocol/routing-manifest";
 
 import { resolveRoutes, responseToMiddlewareResult } from "@next/routing";
+import { dropEmptyBodySentinel } from "@platform/edge-contract/empty-body";
 
 import { type AssetStoreDeps, isNextStaticPathname, serveStaticAsset } from "./assets.mjs";
 import { withStatus, withVercelCacheAlias } from "./http-cache.mjs";
@@ -1041,27 +1042,22 @@ function streamOf(body: ArrayBuffer | null): ReadableStream | null {
   return body === null ? null : new Blob([body]).stream();
 }
 
-const EMPTY_BODY_HEADER = "x-ocel-empty-body";
-
 const NEXT_CACHE_TAGS_HEADER = "x-next-cache-tags";
 const CACHE_TAG_HEADER = "cache-tag";
 
 function originFetch(deps: RouteDeps): typeof fetch {
   const doFetch = deps.originFetch ?? deps.fetch ?? fetch;
   return (async (input, init) => {
-    const response = retainOwner(await doFetch(input as RequestInfo, init));
-    const hasEmptyBody = response.headers.has(EMPTY_BODY_HEADER);
+    const response = dropEmptyBodySentinel(retainOwner(await doFetch(input as RequestInfo, init)));
     const keepCacheTags = deps.keepCacheTags === true;
     const hasCacheTags =
       response.headers.has(NEXT_CACHE_TAGS_HEADER) ||
       (!keepCacheTags && response.headers.has(CACHE_TAG_HEADER));
     const announced = response.headers.has(OCEL_REVALIDATED);
-    if (!hasEmptyBody && !hasCacheTags && !announced) return response;
+    if (!hasCacheTags && !announced) return response;
 
     if (announced) await deps.onRevalidated?.();
-    if (hasEmptyBody) await response.body?.cancel();
-    const rebuilt = new Response(hasEmptyBody ? null : response.body, response);
-    rebuilt.headers.delete(EMPTY_BODY_HEADER);
+    const rebuilt = new Response(response.body, response);
     rebuilt.headers.delete(NEXT_CACHE_TAGS_HEADER);
     if (!keepCacheTags) rebuilt.headers.delete(CACHE_TAG_HEADER);
     rebuilt.headers.delete(OCEL_REVALIDATED);

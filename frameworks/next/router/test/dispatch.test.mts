@@ -4,6 +4,7 @@ import v8 from "node:v8";
 import vm from "node:vm";
 
 import type { Route } from "@next/routing";
+import { EMPTY_BODY_HEADER } from "@platform/edge-contract/empty-body";
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, type RouteDeps, ruleDestinationPathname, serve } from "../src/index.mjs";
@@ -259,7 +260,7 @@ describe("dispatchResult", () => {
         fetch: (async () =>
           new Response("\n", {
             status,
-            headers: { "x-ocel-empty-body": "1", "x-custom": "kept" },
+            headers: { [EMPTY_BODY_HEADER]: "1", "x-custom": "kept" },
           })) as unknown as typeof fetch,
       });
 
@@ -271,7 +272,7 @@ describe("dispatchResult", () => {
 
       expect(res.status).toBe(status);
       expect(await res.text()).toBe("");
-      expect(res.headers.get("x-ocel-empty-body")).toBeNull();
+      expect(res.headers.get(EMPTY_BODY_HEADER)).toBeNull();
       expect(res.headers.get("x-custom")).toBe("kept");
     },
   );

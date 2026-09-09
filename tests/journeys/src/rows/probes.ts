@@ -8,6 +8,10 @@ import {
   SLEEP_MS,
 } from "../contract";
 
+const EMPTY_BODY_TIMEOUT_MS = 15_000;
+
+export const EMPTY_BODY_ROW = "GET /api/probes/empty/:kind answers nothing at all, promptly";
+
 export const STREAM_ROW = "GET /api/probes/stream streams its chunks in order to the sentinel";
 
 export const nativeRows: ContractRow[] = [
@@ -64,6 +68,31 @@ export const probeRows: ContractRow[] = [
         });
         assert.equal(res.status, code, `status ${code} came back as ${res.status}`);
         if (code === 302) {
+          assert.equal(res.headers.get("location"), "/api/probes/status/204");
+        }
+      }
+    },
+  },
+  {
+    title: EMPTY_BODY_ROW,
+    run: async (ctx) => {
+      for (const [kind, status] of [
+        ["ok", 200],
+        ["redirect", 302],
+      ] as const) {
+        const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/empty/${kind}`, {
+          redirect: "manual",
+          signal: AbortSignal.timeout(EMPTY_BODY_TIMEOUT_MS),
+        });
+        const text = await res.text();
+        assert.equal(res.status, status, describeResponse(res, text));
+        assert.equal(text.length, 0, describeResponse(res, text));
+        assert.equal(
+          res.headers.get("x-ocel-empty-body"),
+          null,
+          `the sentinel marker reached the browser: ${describeResponse(res, text)}`,
+        );
+        if (kind === "redirect") {
           assert.equal(res.headers.get("location"), "/api/probes/status/204");
         }
       }

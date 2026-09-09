@@ -15,6 +15,7 @@ const (
 
 	OutputEdgeRoutesStoreARN = "EdgeRoutesStoreArn"
 	OutputEdgeResolverARN    = "EdgeResolverArn"
+	OutputEdgeEmptyBodyARN   = "EdgeEmptyBodyArn"
 	OutputEdgeCachePolicy    = "EdgeCachePolicyId"
 	OutputEdgeHeadersPolicy  = "EdgeHeadersPolicyId"
 	OutputEdgeAssetAccess    = "EdgeAssetAccessId"
@@ -43,11 +44,12 @@ func cloudFrontEdgeTemplate(in featureInputs) featureStack {
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: "Ocel bootstrap feature (%s, %s) - what a CloudFront front needs in this account before any deployment is fronted with it: the key value store one entry per hostname is written into, the resolver function every distribution runs, the cache and response-headers policies they answer by, and the origin access control they read the asset bucket through."
 Resources:
-%s%s%s%s%sOutputs:
+%s%s%s%s%s%sOutputs:
 %s`,
 			FeatureCloudFrontEdge, in.class,
 			routesStoreResource(in.ns, held),
 			resolverResource(in.ns, held),
+			emptyBodyResource(in.ns, held),
 			cachePolicyResource(in.ns, held),
 			headersPolicyResource(in.ns, held),
 			assetAccessResource(in.ns, held),
@@ -81,6 +83,21 @@ func resolverResource(ns Namespace, class edge.Class) string {
           - KeyValueStoreARN: !GetAtt EdgeRoutes.Arn
       FunctionCode: |
 %s`, ns.EdgeResolverName(class), indent(string(resolver.Code()), 8))
+}
+
+func emptyBodyResource(ns Namespace, class edge.Class) string {
+	return fmt.Sprintf(`  EdgeEmptyBody:
+    Type: AWS::CloudFront::Function
+    Metadata:
+      Description: "Runs on every response this account fronts: an origin that answered with no body of its own marks a single sentinel byte, and this empties it again."
+    Properties:
+      Name: %q
+      AutoPublish: true
+      FunctionConfig:
+        Comment: "Ocel: empties the sentinel byte an origin marks a bodiless response with, and drops the mark."
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+%s`, ns.EdgeEmptyBodyName(class), indent(string(resolver.EmptyBodyCode()), 8))
 }
 
 func cachePolicyResource(ns Namespace, class edge.Class) string {
@@ -129,9 +146,10 @@ func headersPolicyResource(ns Namespace, class edge.Class) string {
         RemoveHeadersConfig:
           Items:
             - Header: %q
+            - Header: %q
 `, ns.edgeHeadersPolicyName(class),
 		fmt.Sprintf("Ocel: marks every response the %q edge served, so a probe can tell which front answered, and drops cache tags.", KindCloudFront),
-		edge.HeaderEdge, KindCloudFront, EdgeCacheTagHeader)
+		edge.HeaderEdge, KindCloudFront, EdgeCacheTagHeader, edge.HeaderEmptyBody)
 }
 
 func assetAccessResource(ns Namespace, class edge.Class) string {
@@ -158,6 +176,9 @@ func cloudFrontEdgeOutputs() string {
     Description: "Published resolver function every distribution this account fronts runs on viewer request."
     Value: !GetAtt EdgeResolver.FunctionARN
   %s:
+    Description: "Published function every distribution this account fronts runs on viewer response, emptying the sentinel byte a bodiless origin answer carries."
+    Value: !GetAtt EdgeEmptyBody.FunctionARN
+  %s:
     Description: "Cache policy every distribution this account fronts caches by."
     Value: !Ref EdgeCachePolicy
   %s:
@@ -166,7 +187,7 @@ func cloudFrontEdgeOutputs() string {
   %s:
     Description: "Origin access control every distribution this account fronts signs its asset-bucket reads with."
     Value: !Ref EdgeAssetAccess
-`, OutputEdgeRoutesStoreARN, OutputEdgeResolverARN, OutputEdgeCachePolicy, OutputEdgeHeadersPolicy, OutputEdgeAssetAccess)
+`, OutputEdgeRoutesStoreARN, OutputEdgeResolverARN, OutputEdgeEmptyBodyARN, OutputEdgeCachePolicy, OutputEdgeHeadersPolicy, OutputEdgeAssetAccess)
 }
 
 func noPayloads(context.Context, ObjectStore, string) (stackPayloads, error) {

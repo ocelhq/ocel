@@ -82,6 +82,16 @@ function statusProbe(code: number): Response {
   return json({ status: code }, { status: code, headers });
 }
 
+function emptyProbe(kind: string): Response {
+  if (kind === "redirect") {
+    return new Response(null, { status: 302, headers: { location: `${MOUNT}/status/204` } });
+  }
+  if (kind === "ok") {
+    return new Response(null, { status: 200 });
+  }
+  return json({ error: `no empty probe called ${kind}` }, { status: 404 });
+}
+
 async function echoProbe(request: Request, url: URL): Promise<Response> {
   return json({
     method: request.method,
@@ -145,6 +155,9 @@ async function handle(request: Request): Promise<Response> {
     }
     if (head === "status" && tail.length === 1) {
       return statusProbe(Number(tail[0]));
+    }
+    if (head === "empty" && tail.length === 1) {
+      return emptyProbe(tail[0]);
     }
     if (head === "large") {
       return largeOut(url);

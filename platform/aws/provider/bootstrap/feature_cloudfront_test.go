@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -27,7 +28,12 @@ type cloudFrontEdgeShape struct {
 				Name string `yaml:"Name"`
 			} `yaml:"CachePolicyConfig"`
 			ResponseHeadersPolicyConfig struct {
-				Name string `yaml:"Name"`
+				Name                string `yaml:"Name"`
+				RemoveHeadersConfig struct {
+					Items []struct {
+						Header string `yaml:"Header"`
+					} `yaml:"Items"`
+				} `yaml:"RemoveHeadersConfig"`
 			} `yaml:"ResponseHeadersPolicyConfig"`
 			OriginAccessControlConfig struct {
 				Name                          string `yaml:"Name"`
@@ -106,6 +112,38 @@ func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testin
 			if got, want := headers.Properties.ResponseHeadersPolicyConfig.Name, defaultNamespace.edgeHeadersPolicyName(held); got != want {
 				t.Errorf("response headers policy name = %q, want %q", got, want)
 			}
+			removed := []string{}
+			for _, item := range headers.Properties.ResponseHeadersPolicyConfig.RemoveHeadersConfig.Items {
+				removed = append(removed, strings.ToLower(item.Header))
+			}
+			for _, header := range []string{EdgeCacheTagHeader, edge.HeaderEmptyBody} {
+				if !slices.Contains(removed, header) {
+					t.Errorf("removed headers = %v, want %s among them: nothing of ocel's own reaches a browser", removed, header)
+				}
+			}
+
+			dropper, ok := tmpl.Resources["EdgeEmptyBody"]
+			if !ok {
+				t.Fatal("template stands up no empty-body function; the origin's sentinel byte would reach every browser")
+			}
+			if dropper.Type != "AWS::CloudFront::Function" {
+				t.Errorf("EdgeEmptyBody Type = %q, want AWS::CloudFront::Function", dropper.Type)
+			}
+			if got, want := dropper.Properties.Name, defaultNamespace.EdgeEmptyBodyName(held); got != want {
+				t.Errorf("empty-body function name = %q, want %q", got, want)
+			}
+			if !dropper.Properties.AutoPublish {
+				t.Error("AutoPublish = false; an unpublished function runs on no distribution")
+			}
+			if got, want := strings.TrimRight(dropper.Properties.FunctionCode, "\n"), strings.TrimRight(string(resolver.EmptyBodyCode()), "\n"); got != want {
+				t.Error("the function carries something other than the empty-body dropper this build embeds")
+			}
+			if got := dropper.Properties.FunctionConfig.Runtime; got != "cloudfront-js-2.0" {
+				t.Errorf("empty-body runtime = %q, want cloudfront-js-2.0", got)
+			}
+			if !strings.Contains(string(resolver.EmptyBodyCode()), edge.HeaderEmptyBody) {
+				t.Errorf("the empty-body function names a header other than %s, which is what the origin marks", edge.HeaderEmptyBody)
+			}
 
 			access, ok := tmpl.Resources["EdgeAssetAccess"]
 			if !ok {
@@ -127,6 +165,7 @@ func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testin
 			for _, key := range []string{
 				OutputEdgeRoutesStoreARN,
 				OutputEdgeResolverARN,
+				OutputEdgeEmptyBodyARN,
 				OutputEdgeCachePolicy,
 				OutputEdgeHeadersPolicy,
 				OutputEdgeAssetAccess,
@@ -155,6 +194,7 @@ func TestTheCoreCarriesNothingACloudFrontFrontNeeds(t *testing.T) {
 			for _, key := range []string{
 				OutputEdgeRoutesStoreARN,
 				OutputEdgeResolverARN,
+				OutputEdgeEmptyBodyARN,
 				OutputEdgeCachePolicy,
 				OutputEdgeHeadersPolicy,
 				OutputEdgeAssetAccess,

@@ -5,6 +5,7 @@
   "type": "module",
   "description": "what an edge and an origin cloud agree on, so neither has to import the other",
   "exports": {
+    "./empty-body": "./src/empty-body.mts",
     "./revalidation": "./src/revalidation.mts",
     "./serve": "./src/serve.mts",
     "./revalidation/sample": "./src/revalidation-sample.mts",

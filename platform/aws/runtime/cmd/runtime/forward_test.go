@@ -177,9 +177,10 @@ func TestHandleInvocationForward(t *testing.T) {
 		}
 	})
 
-	t.Run("empty body travels as sentinel byte", func(t *testing.T) {
+	t.Run("empty body travels as a marked sentinel byte", func(t *testing.T) {
 		for _, status := range []int{
 			http.StatusOK,
+			http.StatusFound,
 			http.StatusTemporaryRedirect,
 			http.StatusNotFound,
 			http.StatusMethodNotAllowed,
@@ -187,6 +188,8 @@ func TestHandleInvocationForward(t *testing.T) {
 		} {
 			t.Run(strconv.Itoa(status), func(t *testing.T) {
 				node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Location", "/elsewhere")
+					w.Header().Set("Content-Length", "0")
 					w.WriteHeader(status)
 				}))
 				defer node.Close()
@@ -198,6 +201,9 @@ func TestHandleInvocationForward(t *testing.T) {
 					t.Fatalf("handleInvocation: %v", err)
 				}
 
+				if cap.mode != responseModeStreaming {
+					t.Errorf("%s = %q, want %q", headerResponseMode, cap.mode, responseModeStreaming)
+				}
 				p, body := splitPrelude(t, cap.body)
 				if p.StatusCode != status {
 					t.Errorf("statusCode = %d, want %d", p.StatusCode, status)
@@ -205,14 +211,22 @@ func TestHandleInvocationForward(t *testing.T) {
 				if p.Headers[emptyBodyHeader] != "1" {
 					t.Errorf("%s header = %q, want 1", emptyBodyHeader, p.Headers[emptyBodyHeader])
 				}
+				for name, value := range p.Headers {
+					if http.CanonicalHeaderKey(name) == "Content-Length" {
+						t.Errorf("prelude claims Content-Length %q ahead of the sentinel byte", value)
+					}
+				}
 				if string(body) != emptyBodySentinel {
 					t.Errorf("body = %q, want the sentinel byte %q", body, emptyBodySentinel)
+				}
+				if status == http.StatusFound && p.Headers["Location"] != "/elsewhere" {
+					t.Errorf("Location = %q, want the app's own redirect target", p.Headers["Location"])
 				}
 			})
 		}
 	})
 
-	t.Run("self terminating statuses carry no sentinel", func(t *testing.T) {
+	t.Run("self terminating statuses stream a prelude and stop", func(t *testing.T) {
 		for _, status := range []int{http.StatusNoContent, http.StatusNotModified} {
 			t.Run(strconv.Itoa(status), func(t *testing.T) {
 				node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -231,6 +245,9 @@ func TestHandleInvocationForward(t *testing.T) {
 				if p.StatusCode != status {
 					t.Errorf("statusCode = %d, want %d", p.StatusCode, status)
 				}
+				if cap.mode != responseModeStreaming {
+					t.Errorf("%s = %q, want %q: a status that terminates on its own still streams", headerResponseMode, cap.mode, responseModeStreaming)
+				}
 				if _, marked := p.Headers[emptyBodyHeader]; marked {
 					t.Errorf("%s set on a status that terminates on its own", emptyBodyHeader)
 				}
@@ -241,8 +258,9 @@ func TestHandleInvocationForward(t *testing.T) {
 		}
 	})
 
-	t.Run("bodied response is unmarked and intact", func(t *testing.T) {
+	t.Run("bodied response is streamed unmarked and intact", func(t *testing.T) {
 		node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Transfer-Encoding", "chunked")
 			io.WriteString(w, "x")
 		}))
 		defer node.Close()
@@ -254,12 +272,43 @@ func TestHandleInvocationForward(t *testing.T) {
 			t.Fatalf("handleInvocation: %v", err)
 		}
 
+		if cap.mode != responseModeStreaming {
+			t.Errorf("%s = %q, want %q", headerResponseMode, cap.mode, responseModeStreaming)
+		}
 		p, body := splitPrelude(t, cap.body)
-		if _, marked := p.Headers[emptyBodyHeader]; marked {
-			t.Errorf("bodied response carries %s; the edge would drop its body", emptyBodyHeader)
+		for name := range p.Headers {
+			if http.CanonicalHeaderKey(name) == "Transfer-Encoding" {
+				t.Errorf("prelude carries %q; the edge frames the body itself", name)
+			}
+			if strings.HasPrefix(strings.ToLower(name), "x-ocel-") {
+				t.Errorf("prelude carries %q, want nothing of ocel's own reaching the browser", name)
+			}
 		}
 		if string(body) != "x" {
 			t.Errorf("body = %q, want x", body)
+		}
+	})
+
+	t.Run("bodied response keeps the length it declared", func(t *testing.T) {
+		node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Length", "5")
+			io.WriteString(w, "hello")
+		}))
+		defer node.Close()
+
+		rt, cap := fakeRuntime(t, []byte(getEvent))
+		m := &nodeChild{upstream: upstream{port: portOf(t, node), client: newLoopbackClient()}}
+
+		if err := handleInvocation(t.Context(), rt, m); err != nil {
+			t.Fatalf("handleInvocation: %v", err)
+		}
+
+		p, body := splitPrelude(t, cap.body)
+		if p.Headers["Content-Length"] != "5" {
+			t.Errorf("Content-Length = %q, want 5", p.Headers["Content-Length"])
+		}
+		if string(body) != "hello" {
+			t.Errorf("body = %q, want hello", body)
 		}
 	})
 

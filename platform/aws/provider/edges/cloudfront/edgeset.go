@@ -9,22 +9,24 @@ import (
 )
 
 type edgeSet struct {
-	keyValueStoreARN    string
-	functionARN         string
-	cachePolicy         string
-	headersPolicy       string
-	originAccessControl string
+	keyValueStoreARN     string
+	functionARN          string
+	emptyBodyFunctionARN string
+	cachePolicy          string
+	headersPolicy        string
+	originAccessControl  string
 }
 
 func edgeSetOf(deployed bootstrap.Deployed, class edge.Class) (edgeSet, error) {
 	set := edgeSet{
-		keyValueStoreARN:    deployed.Outputs[bootstrap.OutputEdgeRoutesStoreARN],
-		functionARN:         deployed.Outputs[bootstrap.OutputEdgeResolverARN],
-		cachePolicy:         deployed.Outputs[bootstrap.OutputEdgeCachePolicy],
-		headersPolicy:       deployed.Outputs[bootstrap.OutputEdgeHeadersPolicy],
-		originAccessControl: deployed.Outputs[bootstrap.OutputEdgeAssetAccess],
+		keyValueStoreARN:     deployed.Outputs[bootstrap.OutputEdgeRoutesStoreARN],
+		functionARN:          deployed.Outputs[bootstrap.OutputEdgeResolverARN],
+		emptyBodyFunctionARN: deployed.Outputs[bootstrap.OutputEdgeEmptyBodyARN],
+		cachePolicy:          deployed.Outputs[bootstrap.OutputEdgeCachePolicy],
+		headersPolicy:        deployed.Outputs[bootstrap.OutputEdgeHeadersPolicy],
+		originAccessControl:  deployed.Outputs[bootstrap.OutputEdgeAssetAccess],
 	}
-	if set.keyValueStoreARN == "" || set.functionARN == "" || set.cachePolicy == "" || set.headersPolicy == "" || set.originAccessControl == "" {
+	if set.keyValueStoreARN == "" || set.functionARN == "" || set.emptyBodyFunctionARN == "" || set.cachePolicy == "" || set.headersPolicy == "" || set.originAccessControl == "" {
 		return edgeSet{}, unbootstrapped(class)
 	}
 	return set, nil

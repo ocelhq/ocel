@@ -227,10 +227,15 @@ func fakeResolverARN(class edge.Class) string {
 	return "arn:aws:cloudfront::123456789012:function/" + defaultNamespace.EdgeResolverName(class)
 }
 
+func fakeEmptyBodyARN(class edge.Class) string {
+	return "arn:aws:cloudfront::123456789012:function/" + defaultNamespace.EdgeEmptyBodyName(class)
+}
+
 func fakeEdgeOutputs(class edge.Class) map[string]string {
 	return map[string]string{
 		bootstrap.OutputEdgeRoutesStoreARN: fakeRoutesARN(class),
 		bootstrap.OutputEdgeResolverARN:    fakeResolverARN(class),
+		bootstrap.OutputEdgeEmptyBodyARN:   fakeEmptyBodyARN(class),
 		bootstrap.OutputEdgeCachePolicy:    "cache-" + string(class),
 		bootstrap.OutputEdgeHeadersPolicy:  "headers-" + string(class),
 		bootstrap.OutputEdgeAssetAccess:    "oac-" + string(class),

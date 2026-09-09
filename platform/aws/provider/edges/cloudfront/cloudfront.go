@@ -272,6 +272,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	own.AssetBucket = deployed.AssetBucket
 	own.Region = c.Region
 	own.Function = set.functionARN
+	own.EmptyBodyFunction = set.emptyBodyFunctionARN
 	own.KeyValueStore = set.keyValueStoreARN
 	own.CachePolicy = set.cachePolicy
 	own.HeadersPolicy = set.headersPolicy

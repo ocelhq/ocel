@@ -130,6 +130,7 @@ func (p *provider) previewWildcardPlan(ctx context.Context, c Clients, baseDomai
 		name:          previewWildcardName(baseDomain),
 		assetOrigin:   assetOriginDomain(deployed.AssetBucket, c.Region),
 		function:      set.functionARN,
+		emptyBody:     set.emptyBodyFunctionARN,
 		cachePolicy:   set.cachePolicy,
 		headersPolicy: set.headersPolicy,
 		oac:           set.originAccessControl,

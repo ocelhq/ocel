@@ -240,8 +240,15 @@ func TestReconcile(t *testing.T) {
 		if aws.ToString(behavior.OriginRequestPolicyId) != allViewerExceptHostPolicyID {
 			t.Errorf("origin request policy = %q, want the managed AllViewerExceptHostHeader policy", aws.ToString(behavior.OriginRequestPolicyId))
 		}
-		if len(behavior.FunctionAssociations.Items) != 1 || behavior.FunctionAssociations.Items[0].EventType != cftypes.EventTypeViewerRequest {
-			t.Errorf("function associations = %+v, want the resolver on viewer-request", behavior.FunctionAssociations.Items)
+		associated := behavior.FunctionAssociations.Items
+		if len(associated) != 2 {
+			t.Fatalf("function associations = %+v, want the resolver on viewer-request and the empty-body dropper on viewer-response", associated)
+		}
+		if associated[0].EventType != cftypes.EventTypeViewerRequest || aws.ToString(associated[0].FunctionARN) != fakeResolverARN(edge.ClassProduction) {
+			t.Errorf("first association = %+v, want the resolver on viewer-request", associated[0])
+		}
+		if associated[1].EventType != cftypes.EventTypeViewerResponse || aws.ToString(associated[1].FunctionARN) != fakeEmptyBodyARN(edge.ClassProduction) {
+			t.Errorf("second association = %+v, want the empty-body dropper on viewer-response", associated[1])
 		}
 		if aws.ToString(behavior.CachePolicyId) != ownState(t, stack).CachePolicy {
 			t.Errorf("cache policy = %q, want the one bootstrap made (%q)", aws.ToString(behavior.CachePolicyId), ownState(t, stack).CachePolicy)

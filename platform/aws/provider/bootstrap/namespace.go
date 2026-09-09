@@ -101,6 +101,10 @@ func (n Namespace) EdgeResolverName(class edge.Class) string {
 	return n.edgeSetName("resolver", class)
 }
 
+func (n Namespace) EdgeEmptyBodyName(class edge.Class) string {
+	return n.edgeSetName("empty-body", class)
+}
+
 func (n Namespace) edgeCachePolicyName(class edge.Class) string {
 	return n.edgeSetName("cache", class)
 }
