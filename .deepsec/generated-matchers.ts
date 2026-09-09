@@ -430,7 +430,7 @@ const specs = [
     "examples": [
       "await serveInvoke(invokeFor(resolveHandler(loaded.value)));",
       "AuthorizationType: pulumi.String(functionURLAuthIAM),",
-      "func handleInvocation(ctx context.Context, rt *runtimeClient, m *Membrane) error {",
+      "func handleInvocation(ctx context.Context, rt *runtimeClient, c child) error {",
       "type funcURLRequest struct {",
       "return startServer(http.createServer(wrapWithOcelContext(invoke)), onListening);",
       "return fetchToNodeHandler(resolved.fetch);"
@@ -701,7 +701,7 @@ const specs = [
   {
     "version": 1,
     "slug": "membrane-bucket-service-handler",
-    "description": "Go membrane BucketService ConnectRPC handler implementations: presigned S3 PUT issuance, upload-signature verification, and upload-status reporting.",
+    "description": "Go runtime BucketService ConnectRPC handler implementations: presigned S3 PUT issuance, upload-signature verification, and upload-status reporting.",
     "noiseTier": "precise",
     "filePatterns": [
       "platform/aws/runtime/bucket/*.go"
@@ -728,7 +728,7 @@ const specs = [
   {
     "version": 1,
     "slug": "membrane-upload-hmac",
-    "description": "HMAC-SHA256 signing and constant-time verification of canonical upload payloads that authenticate bucket upload completions in the membrane.",
+    "description": "HMAC-SHA256 signing and constant-time verification of canonical upload payloads that authenticate bucket upload completions in the runtime.",
     "noiseTier": "precise",
     "filePatterns": [
       "platform/aws/runtime/bucket/*.go"
@@ -790,7 +790,7 @@ const specs = [
   {
     "version": 1,
     "slug": "membrane-upload-session-store",
-    "description": "DynamoDB upload-session store for the membrane bucket service, including the conditional UpdateItem that guards the idempotent pending-to-succeeded file transition.",
+    "description": "DynamoDB upload-session store for the runtime bucket service, including the conditional UpdateItem that guards the idempotent pending-to-succeeded file transition.",
     "noiseTier": "normal",
     "filePatterns": [
       "platform/aws/runtime/bucket/*.go"

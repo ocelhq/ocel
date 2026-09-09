@@ -145,6 +145,13 @@ describe("shapeFor", () => {
   });
 });
 
+const ARCHED_JSON_BASE = `{
+  "slug": "go",
+  "provider": { "name": "aws" },
+  "apps": [{ "name": "web", "path": "./server", "framework": "go", "arch": "arm64" }]
+}
+`;
+
 describe("a container cell", () => {
   it("carries no framework on any target, because a container runs the image it is given", () => {
     for (const base of [AWS_BASE, GCP_BASE, VPS_BASE]) {
@@ -152,6 +159,26 @@ describe("a container cell", () => {
         "framework: undefined,",
       );
     }
+  });
+
+  it("carries no arch either, because the image names the platform it is built for", () => {
+    for (const base of [AWS_BASE, GCP_BASE, VPS_BASE]) {
+      expect(renderConfig({ base, slug: "j-1-deploy-node", compute: "container" })).toContain(
+        "arch: undefined,",
+      );
+    }
+  });
+
+  it("writes neither key as data, whatever the fixture declared", () => {
+    const written = JSON.parse(
+      renderJsonConfig(ARCHED_JSON_BASE, {
+        base: "./ocel.json",
+        slug: "j-1-go",
+        compute: "container",
+      }),
+    ) as { apps: Record<string, unknown>[] };
+    expect(written.apps[0]).not.toHaveProperty("framework");
+    expect(written.apps[0]).not.toHaveProperty("arch");
   });
 
   it("leaves the framework the fixture declares where the cell runs serverless", () => {
@@ -226,6 +253,7 @@ export default defineConfig({
     ...app,
     compute: "container",
     framework: undefined,
+    arch: undefined,
     ...(hostnames[app.name] ? { domains: { production: hostnames[app.name] } } : {}),
   })),
 });

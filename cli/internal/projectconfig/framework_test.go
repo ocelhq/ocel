@@ -209,6 +209,26 @@ export default {
 		}
 	})
 
+	t.Run("an app whose directory is not there resolves to no framework, leaving the path to be refused where it is read", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  apps: [{ name: "web", path: "services/web" }],
+};
+`)
+
+		cfg, err := Resolve(context.Background(), root, "")
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		if cfg.Apps[0].Runtime != (Runtime{}) {
+			t.Fatalf("Apps[0].Runtime = %+v, want none: nothing stands at the path to be read", cfg.Apps[0].Runtime)
+		}
+	})
+
 	t.Run("a container app is read with no framework at all", func(t *testing.T) {
 		t.Parallel()
 

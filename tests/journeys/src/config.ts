@@ -90,6 +90,7 @@ function appOverlay(overlay: Overlay): string {
   }
   if (overlay.compute === "container") {
     lines.push(`    framework: undefined,`);
+    lines.push(`    arch: undefined,`);
   }
   if (overlay.hostnames) {
     lines.push(
@@ -148,6 +149,7 @@ function appDocument(app: App, overlay: Overlay): App {
   }
   if (overlay.compute === "container") {
     delete written.framework;
+    delete written.arch;
   }
   const hostname = app.name === undefined ? undefined : overlay.hostnames?.[app.name];
   if (hostname) {
