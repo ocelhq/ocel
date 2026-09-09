@@ -26,7 +26,7 @@ func TestResolveReadsJSONWithoutNode(t *testing.T) {
   // the provider this project deploys into
   "slug": "go-only",
   "provider": { "name": "aws", "options": { "region": "eu-west-2" } },
-  "apps": [{ "name": "web", "path": "./server", "runtime": "go" }],
+  "apps": [{ "name": "web", "path": "./server", "framework": "go" }],
 }`)
 
 	cfg, err := Resolve(context.Background(), dir, "")

@@ -244,8 +244,8 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "api", path: "services/api", runtime: "node", entrypoint: "src/main.ts" },
-    { name: "web", path: "services/web", runtime: "node" },
+    { name: "api", path: "services/api", framework: "node", entrypoint: "src/main.ts" },
+    { name: "web", path: "services/web", framework: "node" },
   ],
 };
 `,
@@ -368,7 +368,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", runtime: "node" }],
+  apps: [{ name: "api", path: "services/api", framework: "node" }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
@@ -382,7 +382,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", runtime: "node", compute: "container" }],
+  apps: [{ name: "api", path: "services/api", framework: "node", compute: "container" }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
@@ -426,11 +426,11 @@ export default {
 			},
 		},
 		{
-			name: "reads a runtime named as a bare string",
+			name: "reads the framework an app names",
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", runtime: "next" }],
+  apps: [{ name: "api", path: "services/api", framework: "next" }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
@@ -440,11 +440,11 @@ export default {
 			},
 		},
 		{
-			name: "reads go as a runtime an app runs on",
+			name: "reads go as a framework an app is built with",
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", runtime: "go" }],
+  apps: [{ name: "api", path: "services/api", framework: "go" }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
@@ -454,30 +454,16 @@ export default {
 			},
 		},
 		{
-			name: "reads a runtime named as an object with an architecture",
+			name: "reads the architecture an app names beside its framework",
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", runtime: { name: "node", arch: "arm64" } }],
+  apps: [{ name: "api", path: "services/api", framework: "node", arch: "arm64" }],
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
 				if got, want := cfg.Apps[0].Runtime, (Runtime{Name: "node", Arch: "arm64"}); got != want {
 					t.Fatalf("Apps[0].Runtime = %+v, want %+v", got, want)
-				}
-			},
-		},
-		{
-			name: "leaves an app that names no runtime without one",
-			config: `
-export default {
-  slug: "test-app",
-  apps: [{ name: "api", path: "services/api" }],
-};
-`,
-			check: func(t *testing.T, root string, cfg *Config) {
-				if cfg.Apps[0].Runtime != (Runtime{}) {
-					t.Fatalf("Apps[0].Runtime = %+v, want none where the app names none", cfg.Apps[0].Runtime)
 				}
 			},
 		},
@@ -533,8 +519,8 @@ export default {
   slug: "test-app",
   domains: { production: "acme.com" },
   apps: [
-    { name: "web", path: "apps/web", runtime: "node", domains: { production: "App.Acme.com" } },
-    { name: "admin", path: "apps/admin", runtime: "node" },
+    { name: "web", path: "apps/web", framework: "node", domains: { production: "App.Acme.com" } },
+    { name: "admin", path: "apps/admin", framework: "node" },
   ],
 };
 `,
@@ -560,7 +546,7 @@ export default {
   slug: "test-app",
   domains: { preview: "*.preview.acme.com" },
   apps: [
-    { name: "web", path: "apps/web", runtime: "node", domains: { production: "app.acme.com" } },
+    { name: "web", path: "apps/web", framework: "node", domains: { production: "app.acme.com" } },
   ],
 };
 `,
@@ -604,8 +590,8 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "web", path: "apps/web", runtime: "next", folder: "/web" },
-    { name: "admin", path: "apps/admin", runtime: "next" },
+    { name: "web", path: "apps/web", framework: "next", folder: "/web" },
+    { name: "admin", path: "apps/admin", framework: "next" },
   ],
 };
 `,
@@ -802,31 +788,21 @@ export default {
 			wantErr: []string{"slug"},
 		},
 		{
-			name: "rejects a runtime nothing runs",
+			name: "rejects a framework nothing builds",
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", runtime: "deno" }],
+  apps: [{ name: "api", path: "services/api", framework: "deno" }],
 };
 `,
 			wantErr: []string{`app "api"`, "deno", "node", "next", "go"},
-		},
-		{
-			name: "rejects a runtime object with no name",
-			config: `
-export default {
-  slug: "test-app",
-  apps: [{ name: "api", path: "services/api", runtime: { arch: "x86_64" } }],
-};
-`,
-			wantErr: []string{`app "api"`, "runtime"},
 		},
 		{
 			name: "rejects an architecture nothing runs on",
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", path: "services/api", runtime: { name: "node", arch: "riscv" } }],
+  apps: [{ name: "api", path: "services/api", framework: "node", arch: "riscv" }],
 };
 `,
 			wantErr: []string{`app "api"`, "riscv", "x86_64", "arm64"},
@@ -837,8 +813,8 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "api", path: "services/api", runtime: "node" },
-    { name: "api", path: "services/other", runtime: "node" },
+    { name: "api", path: "services/api", framework: "node" },
+    { name: "api", path: "services/other", framework: "node" },
   ],
 };
 `,
@@ -889,7 +865,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  apps: [{ name: "api", runtime: "node" }],
+  apps: [{ name: "api", framework: "node" }],
 };
 `,
 			wantErr: []string{"path"},
@@ -900,7 +876,7 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "web", path: "apps/web", runtime: "node", domains: { preview: "*.preview.acme.com" } },
+    { name: "web", path: "apps/web", framework: "node", domains: { preview: "*.preview.acme.com" } },
   ],
 };
 `,
@@ -930,8 +906,8 @@ export default {
 export default {
   slug: "test-app",
   apps: [
-    { name: "web", path: "apps/web", runtime: "next", folder: "/shared" },
-    { name: "admin", path: "apps/admin", runtime: "next", folder: "/shared" },
+    { name: "web", path: "apps/web", framework: "next", folder: "/shared" },
+    { name: "admin", path: "apps/admin", framework: "next", folder: "/shared" },
   ],
 };
 `,
@@ -1269,7 +1245,7 @@ export default {
 				writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "`+name+`", path: "services/api", runtime: "node" }],
+  apps: [{ name: "`+name+`", path: "services/api", framework: "node" }],
 };
 `)
 
@@ -1295,7 +1271,7 @@ export default {
 				writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "`+name+`", path: "services/api", runtime: "node" }],
+  apps: [{ name: "`+name+`", path: "services/api", framework: "node" }],
 };
 `)
 
@@ -1324,7 +1300,7 @@ export default {
 				writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "`+name+`", path: "services/api", runtime: "node" }],
+  apps: [{ name: "`+name+`", path: "services/api", framework: "node" }],
 };
 `)
 
@@ -1356,7 +1332,7 @@ export default {
 				writeConfig(t, root, `
 export default {
   slug: "test-app",
-  apps: [{ name: "web", path: "apps/web", runtime: "next", folder: "`+folder+`" }],
+  apps: [{ name: "web", path: "apps/web", framework: "next", folder: "`+folder+`" }],
 };
 `)
 

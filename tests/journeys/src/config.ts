@@ -89,7 +89,7 @@ function appOverlay(overlay: Overlay): string {
     lines.push(`    compute: ${JSON.stringify(overlay.compute)},`);
   }
   if (overlay.compute === "container") {
-    lines.push(`    runtime: undefined,`);
+    lines.push(`    framework: undefined,`);
   }
   if (overlay.hostnames) {
     lines.push(
@@ -147,7 +147,7 @@ function appDocument(app: App, overlay: Overlay): App {
     written.compute = overlay.compute;
   }
   if (overlay.compute === "container") {
-    delete written.runtime;
+    delete written.framework;
   }
   const hostname = app.name === undefined ? undefined : overlay.hostnames?.[app.name];
   if (hostname) {

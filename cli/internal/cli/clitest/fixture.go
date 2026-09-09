@@ -241,7 +241,7 @@ export default {
   slug: "`+FixtureSlug+`",
   provider: { name: "aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", runtime: "node" }],
+  apps: [{ name: "api", path: "apps/api", framework: "node" }],
 };
 `)
 	WriteFile(t, filepath.Join(DiscoveryDir(root), "main.ts"), `
@@ -303,7 +303,7 @@ export default {
   slug: "`+FixtureSlug+`",
   provider: { name: "aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", runtime: "node" }],
+  apps: [{ name: "api", path: "apps/api", framework: "node" }],
 `+declaration+`};
 `)
 }

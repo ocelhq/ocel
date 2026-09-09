@@ -224,7 +224,7 @@ export default {
   slug: "test-app",
   provider: { name: "aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", compute: "serverless", runtime: "node" }],
+  apps: [{ name: "api", path: "apps/api", compute: "serverless", framework: "node" }],
   registry: { server: "ghcr.io", password: "OCEL_TEST_REGISTRY_TOKEN" },
 };
 `)

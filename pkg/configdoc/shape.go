@@ -46,10 +46,6 @@ func Check(path string, target any, value any) error {
 	return checkValue(path, reflect.TypeOf(target), value)
 }
 
-func checkStruct(path string, target any, value map[string]any) error {
-	return checkValue(path, reflect.TypeOf(target), value)
-}
-
 func checkValue(path string, target reflect.Type, value any) error {
 	for target.Kind() == reflect.Pointer {
 		target = target.Elem()

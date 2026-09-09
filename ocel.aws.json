@@ -8,10 +8,9 @@
     "options": { "region": "${OCEL_AWS_REGION}", "varsKey": "${OCEL_AWS_VARS_KEY}" }
   },
   "apps": [
-    { "name": "www", "runtime": "next", "path": "./www" },
+    { "name": "www", "path": "./www" },
     {
       "name": "github",
-      "runtime": "node",
       "path": "./console/github",
       "domains": { "production": "github.ocel.dev" }
     }

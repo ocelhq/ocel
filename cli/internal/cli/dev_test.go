@@ -297,6 +297,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		followerAppArgs := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
 
 		subdir := filepath.Join(root, "apps", "web")
+		clitest.WriteFile(t, filepath.Join(subdir, "package.json"), `{"name":"web"}`)
 		clitest.WriteFile(t, filepath.Join(subdir, "index.ts"), "export {};\n")
 
 		var followerStdout, followerStderr bytes.Buffer

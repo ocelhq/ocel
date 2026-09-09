@@ -146,18 +146,18 @@ describe("shapeFor", () => {
 });
 
 describe("a container cell", () => {
-  it("carries no runtime on any target, because a container runs the image it is given", () => {
+  it("carries no framework on any target, because a container runs the image it is given", () => {
     for (const base of [AWS_BASE, GCP_BASE, VPS_BASE]) {
       expect(renderConfig({ base, slug: "j-1-deploy-node", compute: "container" })).toContain(
-        "runtime: undefined,",
+        "framework: undefined,",
       );
     }
   });
 
-  it("leaves the runtime the fixture declares where the cell runs serverless", () => {
+  it("leaves the framework the fixture declares where the cell runs serverless", () => {
     expect(
       renderConfig({ base: GCP_BASE, slug: "j-1-deploy-node", compute: "serverless" }),
-    ).not.toContain("runtime:");
+    ).not.toContain("framework:");
   });
 });
 
@@ -225,7 +225,7 @@ export default defineConfig({
   apps: base.apps?.map((app) => ({
     ...app,
     compute: "container",
-    runtime: undefined,
+    framework: undefined,
     ...(hostnames[app.name] ? { domains: { production: hostnames[app.name] } } : {}),
   })),
 });
@@ -243,8 +243,8 @@ const COMMENTED_JSON_BASE = `{
       "name": "web",
       "path": "./server",
       // The architecture the binary is built for, x86_64 unless named:
-      // "runtime": { "name": "go", "arch": "arm64" },
-      "runtime": "go"
+      // "arch": "arm64",
+      "framework": "go"
     }
   ]
 }
@@ -258,7 +258,7 @@ describe("renderJsonConfig", () => {
       $schema: "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
       slug: "j-1-go",
       provider: { name: "aws" },
-      apps: [{ name: "web", path: "./server", runtime: "go" }],
+      apps: [{ name: "web", path: "./server", framework: "go" }],
     });
   });
 

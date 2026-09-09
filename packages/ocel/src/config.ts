@@ -13,7 +13,6 @@ export type {
   ProjectDomainConfig,
   ProviderDescriptor,
   RegistryConfig,
-  RuntimeObject,
   VpsProviderOptions,
   VpsTarget,
 } from "./generated/config.js";
@@ -37,12 +36,12 @@ type AppComputeOf<T> = T extends { apps?: (infer A)[] }
     : never
   : never;
 
-/** The runtime a serverless app's functions run on. */
-export type Runtime = NonNullable<AppRuntimeOf<OcelConfig>>;
+/** What a serverless app is built with. */
+export type Framework = NonNullable<AppFrameworkOf<OcelConfig>>;
 
-type AppRuntimeOf<T> = T extends { apps?: (infer A)[] }
-  ? A extends { runtime?: infer R }
-    ? R
+type AppFrameworkOf<T> = T extends { apps?: (infer A)[] }
+  ? A extends { framework?: infer F }
+    ? F
     : never
   : never;
 

@@ -23,7 +23,7 @@ export default {
   slug: "test-app",
   provider: { name: "aws", options: `+options+` },
   domains: { preview: "*.preview.acme.com" },
-  apps: [{ name: "api", path: "apps/api", runtime: "node" }],
+  apps: [{ name: "api", path: "apps/api", framework: "node" }],
 };
 `)
 

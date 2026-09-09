@@ -112,7 +112,7 @@ func setUpRealProviderExpressFixture(t *testing.T) (root, binPath, funcLogicalNa
 export default {
   slug: "test-app",
   provider: { name: "aws", options: {} },
-  apps: [{ name: %q, path: %q, runtime: "node" }],
+  apps: [{ name: %q, path: %q, framework: "node" }],
 };
 `, appName, filepath.ToSlash(appPath)))
 

@@ -166,8 +166,8 @@ export default {
   provider: { name: "aws", options: {} },
   domains: { production: "shop.example.com", preview: "*.preview.example.com" },
   apps: [
-    { name: "web", path: "apps/web", runtime: "node" },
-    { name: "api", path: "apps/api", runtime: "node" },
+    { name: "web", path: "apps/web", framework: "node" },
+    { name: "api", path: "apps/api", framework: "node" },
   ],
 };
 `)
@@ -356,8 +356,8 @@ export default {
   provider: { name: "aws", options: {} },
   domains: { production: "shop.example.com" },
   apps: [
-    { name: "web", path: "apps/web", runtime: "node" },
-    { name: "api", path: "apps/api", runtime: "node" },
+    { name: "web", path: "apps/web", framework: "node" },
+    { name: "api", path: "apps/api", framework: "node" },
   ],
 };
 `)
