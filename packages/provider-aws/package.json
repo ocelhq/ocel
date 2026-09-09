@@ -3,33 +3,12 @@
   "version": "0.0.1-alpha.0",
   "private": true,
   "type": "module",
-  "description": "AWS provider descriptor for `ocel deploy`",
-  "exports": {
-    ".": "./src/index.ts",
-    "./dns": "./src/dns.ts",
-    "./edge": "./src/edge.ts",
-    "./transform": "./src/transform/index.ts",
-    "./transform/run": "./src/transform/run.ts"
-  },
-  "scripts": {
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.typetests.json && tsc --noEmit -p tsconfig.typetests-empty.json && tsc --noEmit -p tsconfig.typetests-open.json && tsc --noEmit -p tsconfig.typetests-config.json"
-  },
+  "description": "The AWS provider binary `ocel deploy` runs",
   "optionalDependencies": {
     "@ocel/provider-aws-darwin-arm64": "workspace:^",
     "@ocel/provider-aws-darwin-x64": "workspace:^",
     "@ocel/provider-aws-linux-x64": "workspace:^",
     "@ocel/provider-aws-win32-x64": "workspace:^"
-  },
-  "peerDependencies": {
-    "ocel": "workspace:^"
-  },
-  "devDependencies": {
-    "@types/node": "^26.1.1",
-    "ocel": "workspace:^",
-    "typescript": "^5.9.3",
-    "vite": "^8.1.3",
-    "vitest": "^4.1.9"
   },
   "license": "MIT"
 }

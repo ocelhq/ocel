@@ -17,7 +17,11 @@ var resolverScript []byte
 
 const scratchDirName = ".ocel"
 
-func Locate(ctx context.Context, projectDir, packageName string) (string, error) {
+const packagePrefix = "@ocel/provider-"
+
+func Locate(ctx context.Context, projectDir, name string) (string, error) {
+	packageName := packagePrefix + name
+
 	if _, err := exec.LookPath("node"); err != nil {
 		return "", fmt.Errorf("node not found on PATH: %w", err)
 	}

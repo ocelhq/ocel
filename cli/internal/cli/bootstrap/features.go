@@ -167,7 +167,7 @@ func printRequired(stdout io.Writer, catalogue []*contractv1.Feature, required, 
 		return
 	}
 	printSection(stdout, catalogue, []string{required}, "Required by this project:",
-		fmt.Sprintf("Your edge is %s. Change it in %s.", kind, projectconfig.ConfigFileName))
+		fmt.Sprintf("Your edge is %s. Change it in %s.", kind, projectconfig.DefaultFileName))
 }
 
 func printSection(stdout io.Writer, catalogue []*contractv1.Feature, names []string, heading, note string) {

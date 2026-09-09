@@ -22,7 +22,7 @@ func setUpProviderFixture(t *testing.T, options string) (root, journal string, d
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: `+options+` },
+  provider: { name: "aws", options: `+options+` },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", runtime: "node" }],
 };
@@ -67,7 +67,7 @@ func TestDeployRendersTheProviderRefusalAgainstTheConfigFile(t *testing.T) {
 	}
 	rendered := stdout.String() + stderr.String()
 	for _, want := range []string{
-		projectconfig.ConfigFileName + " configures @ocel/provider-aws with options it does not accept",
+		projectconfig.DefaultFileName + " configures @ocel/provider-aws with options it does not accept",
 		`"regionn"`,
 	} {
 		if !strings.Contains(rendered, want) {

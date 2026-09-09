@@ -26,7 +26,7 @@ func TestLiveADryRunOfAContainerAppCarriesTheDigestTheDaemonBuilt(t *testing.T) 
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+clitest.FixtureSlug+`",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   apps: [{ name: "api", path: "apps/api", compute: "container" }],
 };
 `)

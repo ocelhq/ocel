@@ -1,5 +1,5 @@
-import gcpProvider from "@ocel/provider-gcp";
 import { buildEnv, defineConfig } from "ocel/config";
+import gcpProvider from "ocel/providers/gcp";
 import { z } from "zod";
 
 const gcp = buildEnv({

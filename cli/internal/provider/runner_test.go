@@ -143,9 +143,9 @@ func TestHandshake(t *testing.T) {
 
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "impostor-cert", Config{
-			ProviderConfig:  &contractv1.ProviderConfig{},
-			ProviderPackage: "@ocel/provider-aws",
-			ReadyTimeout:    5 * time.Second,
+			ProviderConfig: &contractv1.ProviderConfig{},
+			ProviderName:   "aws",
+			ReadyTimeout:   5 * time.Second,
 		})
 
 		err := r.Ready(ctx)
@@ -162,9 +162,9 @@ func TestHandshake(t *testing.T) {
 
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "plaintext", Config{
-			ProviderConfig:  &contractv1.ProviderConfig{},
-			ProviderPackage: "@ocel/provider-aws",
-			ReadyTimeout:    5 * time.Second,
+			ProviderConfig: &contractv1.ProviderConfig{},
+			ProviderName:   "aws",
+			ReadyTimeout:   5 * time.Second,
 		})
 
 		err := r.Ready(ctx)
@@ -182,9 +182,9 @@ func TestConfigure(t *testing.T) {
 
 		ctx := context.Background()
 		r, _ := spawnFake(t, ctx, "reject-config", Config{
-			ProviderConfig:  &contractv1.ProviderConfig{},
-			ProviderPackage: "@ocel/provider-aws",
-			ReadyTimeout:    5 * time.Second,
+			ProviderConfig: &contractv1.ProviderConfig{},
+			ProviderName:   "aws",
+			ReadyTimeout:   5 * time.Second,
 		})
 
 		err := r.Ready(ctx)
@@ -192,7 +192,7 @@ func TestConfigure(t *testing.T) {
 			t.Fatal("Ready() error = nil, want the provider's refusal")
 		}
 		for _, want := range []string{
-			projectconfig.ConfigFileName + " configures @ocel/provider-aws with options it does not accept",
+			projectconfig.DefaultFileName + " configures @ocel/provider-aws with options it does not accept",
 			`"regionn"`,
 		} {
 			if !strings.Contains(err.Error(), want) {

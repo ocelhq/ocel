@@ -1,0 +1,39 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "const": "aws"
+    },
+    "options": {
+      "additionalProperties": false,
+      "properties": {
+        "certificates": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Certificates to serve a hostname with, keyed by hostname, valued by the ARN of an already-issued ACM certificate. A hostname left off gets a certificate ocel requests, validates and deletes again.",
+          "type": "object"
+        },
+        "region": {
+          "description": "The AWS region to deploy into.",
+          "type": "string"
+        },
+        "transforms": {
+          "description": "Transform modules to apply while provisioning, in order — later modules win where their patches collide. Each is a path to a module whose default export is a defineTransform(...) result.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "varsKey": {
+          "description": "ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap --features vars-key makes a key ocel owns.",
+          "type": "string"
+        }
+      },
+      "title": "AwsProviderOptions",
+      "type": "object"
+    }
+  },
+  "required": ["name"],
+  "type": "object"
+}

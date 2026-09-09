@@ -64,13 +64,13 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier contractv1.Cre
 		})
 		if err != nil {
 			if connect.CodeOf(err) == connect.CodeUnimplemented {
-				return predates(runner.Package())
+				return predates(runner.Name())
 			}
 			return err
 		}
 		groups := permissions.GetGroups()
 		if len(groups) == 0 {
-			return predates(runner.Package())
+			return predates(runner.Name())
 		}
 		if len(groups) == 1 {
 			fmt.Fprintln(stdout, groups[0].GetDocument())

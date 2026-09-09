@@ -71,6 +71,7 @@ require (
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
 	github.com/ocelhq/ocel/pkg/channel v0.0.0 // indirect
+	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
 	github.com/ocelhq/ocel/pkg/proto v0.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
@@ -115,3 +116,5 @@ replace github.com/ocelhq/ocel/pkg/proto => ../../../pkg/proto
 replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy
+
+replace github.com/ocelhq/ocel/pkg/configdoc => ../../../pkg/configdoc

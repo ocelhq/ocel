@@ -20,7 +20,7 @@ func TestBootstrapCarriesTheFeatureSetAndNoEdge(t *testing.T) {
 		features    string
 		want        string
 	}{
-		{"a named set reaches the provider whole", "  edge: { kind: \"cloudflare\", options: {} },\n", "isr,image-optimization", "features=isr,image-optimization force=false acceptReplacements=true"},
+		{"a named set reaches the provider whole", "  edge: { kind: \"cloudflare\" },\n", "isr,image-optimization", "features=isr,image-optimization force=false acceptReplacements=true"},
 		{"all names every feature the provider offers", "", "all", "features=isr,image-optimization,vars-key,cloudflare-edge,cloudfront-edge force=false acceptReplacements=true"},
 		{"none leaves the core alone", "", "none", "features= force=false acceptReplacements=true"},
 	}
@@ -100,8 +100,8 @@ func TestBootstrapDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		want        string
 	}{
 		{"an omitted edge names none, leaving the provider to choose", "", "kind= "},
-		{"a declared api-gateway edge names it", "  edge: { kind: \"api-gateway\", options: {} },\n", "kind=api-gateway"},
-		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\", options: {} },\n", "kind=cloudflare"},
+		{"a declared api-gateway edge names it", "  edge: { kind: \"api-gateway\" },\n", "kind=api-gateway"},
+		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\" },\n", "kind=cloudflare"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -137,9 +137,9 @@ func TestDestroySendsTheEdgeTheProjectDeclared(t *testing.T) {
 		planned     string
 	}{
 		{"an omitted edge names none, leaving the provider to choose", "", "kind= ", "cloudfront"},
-		{"a declared api-gateway edge names it", "  edge: { kind: \"api-gateway\", options: {} },\n", "kind=api-gateway", "api-gateway"},
-		{"an edge this CLI has never heard of is forwarded whole", "  edge: { kind: \"fastly\", options: {} },\n", "kind=fastly", "fastly"},
-		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\", options: {} },\n", "kind=cloudflare", "cloudflare"},
+		{"a declared api-gateway edge names it", "  edge: { kind: \"api-gateway\" },\n", "kind=api-gateway", "api-gateway"},
+		{"an edge this CLI has never heard of is forwarded whole", "  edge: { kind: \"fastly\" },\n", "kind=fastly", "fastly"},
+		{"a declared cloudflare edge names it", "  edge: { kind: \"cloudflare\" },\n", "kind=cloudflare", "cloudflare"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

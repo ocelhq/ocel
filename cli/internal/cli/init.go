@@ -60,7 +60,7 @@ func init() {
 }
 
 func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts initOptions, stdout, stderr io.Writer) error {
-	configPath := filepath.Join(cwd, projectconfig.ConfigFileName)
+	configPath := filepath.Join(cwd, projectconfig.DefaultFileName)
 	if opts.configPath != "" {
 		configPath = opts.configPath
 		if !filepath.IsAbs(configPath) {

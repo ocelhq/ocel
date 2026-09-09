@@ -67,7 +67,7 @@ func writeProductionConfig(t *testing.T, root string) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { production: "shop.app.com" },
   dns: { kind: "cloudflare" },
 };
@@ -198,7 +198,7 @@ func TestRunDomain(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { preview: "*.preview.acme.com" },
   dns: { kind: "cloudflare" },
 };
@@ -401,7 +401,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { production: ["shop.app.com", "www.app.com"] },
   dns: { kind: "cloudflare" },
 };
@@ -437,7 +437,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { production: ["shop.app.com", "www.app.com"] },
 };
 `)
@@ -467,7 +467,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { production: "shop.app.com" },
 };
 `)
@@ -496,7 +496,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { production: "shop.app.com" },
 };
 `)
@@ -536,7 +536,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { production: "shop.app.com" },
   dns: { kind: "cloudflare" },
 };

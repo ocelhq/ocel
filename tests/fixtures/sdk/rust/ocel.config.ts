@@ -1,5 +1,5 @@
-import awsProvider from "@ocel/provider-aws";
 import { defineConfig } from "ocel/config";
+import awsProvider from "ocel/providers/aws";
 
 export default defineConfig({
   slug: "sdk-rust",

@@ -1,0 +1,419 @@
+{
+  "$id": "https://ocel.dev/schema/ocel.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "description": "The JSON Schema this config is written against. ocel init writes the schema shipped with the CLI that created it.",
+      "type": "string"
+    },
+    "allowDegraded": {
+      "description": "The needs this project waives rather than have a deploy refused over.",
+      "items": {
+        "enum": [
+          "edge-middleware",
+          "edge-runtime",
+          "ppr-resume",
+          "edge-cache",
+          "streaming"
+        ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "apps": {
+      "description": "The apps this project deploys. Left off, ocel detects one at the project root.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "build": {
+            "additionalProperties": false,
+            "description": "How a container app's image is built.",
+            "properties": {
+              "command": {
+                "description": "The command that builds the app inside the image. Left off, the app's own build script runs.",
+                "type": "string"
+              },
+              "context": {
+                "description": "The directory the image is built from, relative to the project. Left off, it is the workspace root the app belongs to.",
+                "type": "string"
+              },
+              "dockerfile": {
+                "description": "The Dockerfile to build from. A relative path resolves against the app's directory.",
+                "type": "string"
+              }
+            },
+            "title": "BuildConfig",
+            "type": "object"
+          },
+          "compute": {
+            "description": "What the app runs on: serverless functions packed per route, or one container image serving everything.",
+            "enum": [
+              "serverless",
+              "container"
+            ],
+            "type": "string"
+          },
+          "domains": {
+            "additionalProperties": false,
+            "description": "The hostnames this app is served on.",
+            "properties": {
+              "production": {
+                "description": "The hostnames production is served on.",
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                ]
+              }
+            },
+            "title": "AppDomainConfig",
+            "type": "object"
+          },
+          "entrypoint": {
+            "description": "The file the app is served from, when it is not the one ocel would detect.",
+            "type": "string"
+          },
+          "folder": {
+            "description": "The variables folder this app reads, when it does not read the project's own.",
+            "type": "string"
+          },
+          "health": {
+            "additionalProperties": false,
+            "description": "How a container app is checked before it is served.",
+            "properties": {
+              "path": {
+                "description": "The path the check requests, off the app's own root. Any 2xx answer means up. Left off, the check requests /.",
+                "type": "string"
+              }
+            },
+            "title": "HealthConfig",
+            "type": "object"
+          },
+          "name": {
+            "description": "The app's name. It is a label of every resource the app deploys and of its preview hostname, so it is a DNS label.",
+            "type": "string"
+          },
+          "path": {
+            "description": "The app's directory, relative to the config.",
+            "type": "string"
+          },
+          "runtime": {
+            "description": "The runtime a serverless app's functions run on. Named on its own it takes the provider's default architecture.",
+            "oneOf": [
+              {
+                "enum": [
+                  "node",
+                  "next",
+                  "go",
+                  "python"
+                ],
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "arch": {
+                    "description": "The processor architecture the functions are built for.",
+                    "enum": [
+                      "x86_64",
+                      "arm64"
+                    ],
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "What a serverless app's functions are packed for and run on.",
+                    "enum": [
+                      "node",
+                      "next",
+                      "go",
+                      "python"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "RuntimeObject",
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "path"
+        ],
+        "title": "AppConfig",
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "discovery": {
+      "additionalProperties": false,
+      "description": "Where the resources an app declares are found.",
+      "properties": {
+        "paths": {
+          "description": "The directories holding infrastructure declarations, relative to the config. Left off, ocel reads ./infra.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "DiscoveryConfig",
+      "type": "object"
+    },
+    "dns": {
+      "additionalProperties": false,
+      "description": "Where the project's hostname records are written.",
+      "properties": {
+        "kind": {
+          "description": "The DNS the project's records are written into.",
+          "type": "string"
+        },
+        "zone": {
+          "description": "The zone the records are written into. Omit it and ocel picks the zone that covers the hostname.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "DnsDescriptor",
+      "type": "object"
+    },
+    "domains": {
+      "additionalProperties": false,
+      "description": "The hostnames this project is served on.",
+      "properties": {
+        "preview": {
+          "description": "The wildcard hostname previews are served under, such as *.preview.example.com.",
+          "type": "string"
+        },
+        "production": {
+          "description": "The hostnames production is served on.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "title": "ProjectDomainConfig",
+      "type": "object"
+    },
+    "edge": {
+      "additionalProperties": false,
+      "description": "The edge in front of the origin. Omit it and the provider fronts the deployment with its own default edge.",
+      "properties": {
+        "kind": {
+          "description": "The edge the project's hostnames are served from.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "EdgeDescriptor",
+      "type": "object"
+    },
+    "links": {
+      "description": "Resource ids ocel binds to a link your own infrastructure published, instead of provisioning them itself. A listed id nothing has published refuses the deploy.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "provider": {
+      "description": "The provider ocel deploy provisions into.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "const": "aws"
+            },
+            "options": {
+              "additionalProperties": false,
+              "properties": {
+                "certificates": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Certificates to serve a hostname with, keyed by hostname, valued by the ARN of an already-issued ACM certificate. A hostname left off gets a certificate ocel requests, validates and deletes again.",
+                  "type": "object"
+                },
+                "region": {
+                  "description": "The AWS region to deploy into.",
+                  "type": "string"
+                },
+                "transforms": {
+                  "description": "Transform modules to apply while provisioning, in order — later modules win where their patches collide. Each is a path to a module whose default export is a defineTransform(...) result.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "varsKey": {
+                  "description": "ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap --features vars-key makes a key ocel owns.",
+                  "type": "string"
+                }
+              },
+              "title": "AwsProviderOptions",
+              "type": "object"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "const": "gcp"
+            },
+            "options": {
+              "additionalProperties": false,
+              "properties": {
+                "project": {
+                  "description": "The Google Cloud project to deploy into.",
+                  "type": "string"
+                },
+                "region": {
+                  "description": "The region to deploy into. A project spans them all, so this names the one.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "project",
+                "region"
+              ],
+              "title": "GcpProviderOptions",
+              "type": "object"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "const": "vps"
+            },
+            "options": {
+              "additionalProperties": false,
+              "properties": {
+                "certificates": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Certificates to serve a hostname with, keyed by hostname, valued by the path to the certificate on the machine.",
+                  "type": "object"
+                },
+                "deployKey": {
+                  "description": "The public key the ocel-deploy login is to answer to, as a path from / or from ~/. Omit it and bootstrap mirrors the keys the login it bootstraps with already answers to.",
+                  "type": "string"
+                },
+                "ssh": {
+                  "description": "The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out.",
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "host": {
+                          "description": "The hostname or address to reach the machine at.",
+                          "type": "string"
+                        },
+                        "identityFile": {
+                          "description": "The private key to authenticate with, as a path.",
+                          "type": "string"
+                        },
+                        "port": {
+                          "description": "The port sshd listens on. Omit it and ssh's own default stands.",
+                          "type": "integer"
+                        },
+                        "user": {
+                          "description": "The account to log in as. Omit it and ssh resolves the user itself.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "host"
+                      ],
+                      "title": "VpsTarget",
+                      "type": "object"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "ssh"
+              ],
+              "title": "VpsProviderOptions",
+              "type": "object"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "registry": {
+      "additionalProperties": false,
+      "description": "Where this project's container images are pushed.",
+      "properties": {
+        "password": {
+          "description": "The name of the environment variable holding the password or token — not the secret itself.",
+          "type": "string"
+        },
+        "server": {
+          "description": "The registry host and the namespace images sit under, such as ghcr.io/acme. No scheme, and no credentials.",
+          "type": "string"
+        },
+        "username": {
+          "description": "The username the push authenticates as, where the registry wants one.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "server",
+        "password"
+      ],
+      "title": "RegistryConfig",
+      "type": "object"
+    },
+    "slug": {
+      "description": "The project's deployment identity. Every stack and resource ocel creates in your own account is keyed on it, so changing it forks a new project.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "slug"
+  ],
+  "title": "Ocel project configuration",
+  "type": "object"
+}

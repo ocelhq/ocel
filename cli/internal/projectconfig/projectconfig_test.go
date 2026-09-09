@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/configdoc"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -28,7 +29,7 @@ func writeConfig(t *testing.T, dir, contents string) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", dir, err)
 	}
-	path := filepath.Join(dir, ConfigFileName)
+	path := filepath.Join(dir, TSFileName)
 	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -49,12 +50,13 @@ func TestFindProjectRoot(t *testing.T) {
 			},
 		},
 		{
-			name: "walks up to the scratch dir",
+			name: "walks past a scratch dir that anchors nothing",
 			setup: func(t *testing.T, root string) {
 				if err := os.MkdirAll(filepath.Join(root, scratchDirName), 0o755); err != nil {
 					t.Fatalf("mkdir scratch: %v", err)
 				}
 			},
+			wantStart: true,
 		},
 		{
 			name:      "falls back to the start dir when nothing anchors the walk",
@@ -176,20 +178,6 @@ export default {
 			},
 		},
 		{
-			name: "ignores a leftover project ID",
-			config: `
-export default {
-  slug: "test-app",
-  projectId: "proj_123",
-};
-`,
-			check: func(t *testing.T, root string, cfg *Config) {
-				if cfg.Slug != "test-app" {
-					t.Fatalf("Slug = %q, want %q", cfg.Slug, "test-app")
-				}
-			},
-		},
-		{
 			name: "accepts a valid slug",
 			config: `
 export default {
@@ -207,15 +195,15 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: { region: "us-east-1" } },
+  provider: { name: "aws", options: { region: "us-east-1" } },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
 				if cfg.Provider == nil {
 					t.Fatal("Provider = nil, want a descriptor")
 				}
-				if cfg.Provider.Package != "@ocel/provider-aws" {
-					t.Fatalf("Provider.Package = %q, want %q", cfg.Provider.Package, "@ocel/provider-aws")
+				if cfg.Provider.Name != "aws" {
+					t.Fatalf("Provider.Name = %q, want %q", cfg.Provider.Name, "aws")
 				}
 				if got, want := string(cfg.Provider.Options), `{"region":"us-east-1"}`; got != want {
 					t.Fatalf("Provider.Options = %s, want %s", got, want)
@@ -227,7 +215,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws" },
+  provider: { name: "aws" },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
@@ -351,7 +339,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: { region: "eu-west-2" } },
+  provider: { name: "aws", options: { region: "eu-west-2" } },
   registry: { server: "ghcr.io", password: "GHCR_TOKEN" },
 };
 `,
@@ -677,7 +665,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  edge: { kind: "fastly", options: { pop: "lhr" } },
+  edge: { kind: "fastly" },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
@@ -691,7 +679,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  edge: { kind: "cloudflare", options: {} },
+  edge: { kind: "cloudflare" },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
@@ -762,7 +750,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  edge: { kind: "api-gateway", options: {} },
+  edge: { kind: "api-gateway" },
   dns: { kind: "route53" },
 };
 `,
@@ -915,7 +903,7 @@ export default {
   ],
 };
 `,
-			wantErr: []string{`app "web"`, "domains.preview", "project", "ocel domains"},
+			wantErr: []string{"apps[0].domains.preview", "production"},
 		},
 		{
 			name: "rejects a non-wildcard preview domain",
@@ -976,7 +964,7 @@ export default {
   edge: true,
 };
 `,
-			wantErr: []string{`has an invalid "edge"`, "use `edge: cloudflare()` (from ocel/edge), name one of your provider's own edges, or omit it for the provider's default edge"},
+			wantErr: []string{`"edge" must be an object`},
 		},
 		{
 			name: "rejects an edge object carrying no kind",
@@ -986,7 +974,7 @@ export default {
   edge: {},
 };
 `,
-			wantErr: []string{`has an invalid "edge"`, "cloudflare()"},
+			wantErr: []string{`has an invalid "edge"`, `{ "kind": "cloudflare" }`},
 		},
 		{
 			name: "refuses an edge turned off outright",
@@ -996,7 +984,7 @@ export default {
   edge: false,
 };
 `,
-			wantErr: []string{`has an invalid "edge"`, "`edge: false` is gone", "Omit `edge` for the provider's default edge", "one of your provider's own edges"},
+			wantErr: []string{`"edge" must be an object`},
 		},
 		{
 			name: "names the two dns spellings when the dns is not a marker",
@@ -1006,7 +994,7 @@ export default {
   dns: "acme.com",
 };
 `,
-			wantErr: []string{`has an invalid "dns"`, "use `dns: cloudflareDns()` (from ocel/dns), `dns: route53()` (from @ocel/provider-aws/dns), or omit it"},
+			wantErr: []string{`"dns" must be an object`},
 		},
 		{
 			name: "lists the known needs when one is unknown",
@@ -1096,11 +1084,11 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  edge: { kind: "cloudflare", options: {} },
+  edge: { kind: "cloudflare" },
   dns: { kind: "route53" },
 };
 `,
-			wantErr: []string{`has an invalid "dns"`, "route53()", "cloudflare()", "cloudflareDns()"},
+			wantErr: []string{`has an invalid "dns"`, "route53", "cloudflare"},
 		},
 	}
 
@@ -1406,20 +1394,21 @@ func TestResolveOptional(t *testing.T) {
 		}
 	})
 
-	t.Run("no config anchors on the scratch dir", func(t *testing.T) {
+	t.Run("no config anchors on nothing but the start dir", func(t *testing.T) {
 		t.Parallel()
 
 		root := t.TempDir()
 		if err := os.MkdirAll(filepath.Join(root, scratchDirName), 0o755); err != nil {
 			t.Fatalf("mkdir scratch: %v", err)
 		}
+		start := nestedDir(t, root)
 
-		cfg, err := ResolveOptional(context.Background(), nestedDir(t, root), "")
+		cfg, err := ResolveOptional(context.Background(), start, "")
 		if err != nil {
 			t.Fatalf("ResolveOptional: %v", err)
 		}
-		if cfg.Dir != root {
-			t.Fatalf("Dir = %q, want %q", cfg.Dir, root)
+		if cfg.Dir != start {
+			t.Fatalf("Dir = %q, want %q", cfg.Dir, start)
 		}
 	})
 
@@ -1549,22 +1538,22 @@ func TestConfigRequireProvider(t *testing.T) {
 		if !strings.Contains(err.Error(), "no provider configured") {
 			t.Fatalf("err = %q, want it to mention %q", err.Error(), "no provider configured")
 		}
-		if !strings.Contains(err.Error(), "awsProvider") {
-			t.Fatalf("err = %q, want it to mention %q", err.Error(), "awsProvider")
+		if !strings.Contains(err.Error(), "\"provider\"") {
+			t.Fatalf("err = %q, want it to mention %q", err.Error(), "provider")
 		}
 	})
 
 	t.Run("returns the descriptor when the provider is present", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &Config{Provider: &ProviderDescriptor{Package: "@ocel/provider-aws", Options: []byte(`{}`)}}
+		cfg := &Config{Provider: &ProviderDescriptor{Name: "aws", Options: []byte(`{}`)}}
 
 		provider, err := cfg.RequireProvider()
 		if err != nil {
 			t.Fatalf("RequireProvider: %v", err)
 		}
-		if provider.Package != "@ocel/provider-aws" {
-			t.Fatalf("Package = %q, want %q", provider.Package, "@ocel/provider-aws")
+		if provider.Name != "aws" {
+			t.Fatalf("Name = %q, want %q", provider.Name, "aws")
 		}
 	})
 }
@@ -1623,7 +1612,7 @@ func TestNormalizeProductionDomains(t *testing.T) {
 	t.Run("dedupes and normalizes hostnames", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := normalizeProductionDomains(stringOrList{"App.com", "app.com", " www.app.com "}, "")
+		got, err := normalizeProductionDomains(configdoc.StringList{"App.com", "app.com", " www.app.com "}, "")
 		if err != nil {
 			t.Fatalf("normalizeProductionDomains: %v", err)
 		}
@@ -1635,7 +1624,7 @@ func TestNormalizeProductionDomains(t *testing.T) {
 	t.Run("rejects a preview collision", func(t *testing.T) {
 		t.Parallel()
 
-		if _, err := normalizeProductionDomains(stringOrList{"*.app.com"}, "*.app.com"); err == nil {
+		if _, err := normalizeProductionDomains(configdoc.StringList{"*.app.com"}, "*.app.com"); err == nil {
 			t.Fatal("want error when a production hostname equals the preview wildcard")
 		}
 	})
@@ -1659,7 +1648,7 @@ export default {
 		if err := os.MkdirAll(configDir, 0o755); err != nil {
 			t.Fatalf("mkdir infra: %v", err)
 		}
-		configPath := filepath.Join(configDir, "staging.ocel.ts")
+		configPath := filepath.Join(configDir, "ocel.staging.config.ts")
 		if err := os.WriteFile(configPath, []byte(contents), 0o644); err != nil {
 			t.Fatalf("write config: %v", err)
 		}
@@ -1683,12 +1672,12 @@ export default {
 		t.Parallel()
 
 		root := t.TempDir()
-		configPath := filepath.Join(root, "custom.ts")
+		configPath := filepath.Join(root, "ocel.custom.config.ts")
 		if err := os.WriteFile(configPath, []byte(contents), 0o644); err != nil {
 			t.Fatalf("write config: %v", err)
 		}
 
-		cfg, err := Resolve(context.Background(), root, filepath.Join(".", "custom.ts"))
+		cfg, err := Resolve(context.Background(), root, filepath.Join(".", "ocel.custom.config.ts"))
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
@@ -1745,7 +1734,7 @@ export default {
 		t.Parallel()
 
 		root := t.TempDir()
-		configPath := filepath.Join(root, "custom.ts")
+		configPath := filepath.Join(root, "ocel.custom.config.ts")
 		if err := os.WriteFile(configPath, []byte(contents), 0o644); err != nil {
 			t.Fatalf("write config: %v", err)
 		}
@@ -1764,9 +1753,9 @@ func TestBundleName(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]string{
-		ConfigFileName:    "config.mjs",
-		"staging.ocel.ts": "config.staging.ocel.mjs",
-		"custom.ts":       "config.custom.mjs",
+		TSFileName:               "config.mjs",
+		"ocel.staging.config.ts": "config.staging.mjs",
+		"ocel.custom.config.ts":  "config.custom.mjs",
 	}
 	for base, want := range cases {
 		if got := bundleName(filepath.Join("/proj", base)); got != want {
@@ -1779,7 +1768,7 @@ func TestTwoConfigsInOneDirDoNotShareABundle(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	slugs := map[string]string{"staging.ocel.ts": "staging-app", "prod.ocel.ts": "prod-app"}
+	slugs := map[string]string{"ocel.staging.config.ts": "staging-app", "ocel.prod.config.ts": "prod-app"}
 	for name, slug := range slugs {
 		contents := "export default { slug: \"" + slug + "\" };\n"
 		if err := os.WriteFile(filepath.Join(root, name), []byte(contents), 0o644); err != nil {

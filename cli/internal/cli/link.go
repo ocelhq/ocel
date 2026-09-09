@@ -275,7 +275,7 @@ func runLinkGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opts li
 		}
 
 		path := filepath.Join(cfg.Dir, linkTypesFileName)
-		if err := os.WriteFile(path, []byte(renderLinkTypes(runner.Package(), describeLinkCoordinate(opts), resp.GetLinks())), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(renderLinkTypes(runner.Name(), describeLinkCoordinate(opts), resp.GetLinks())), 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", linkTypesFileName, err)
 		}
 

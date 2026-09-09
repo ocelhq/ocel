@@ -134,17 +134,18 @@ func joinPath(path, key string) string {
 }
 
 type jsonField struct {
-	name string
-	doc  string
-	enum []string
-	kind reflect.Type
+	name     string
+	doc      string
+	enum     []string
+	optional bool
+	kind     reflect.Type
 }
 
 func jsonFields(target reflect.Type) []jsonField {
 	fields := make([]jsonField, 0, target.NumField())
 	for i := range target.NumField() {
 		field := target.Field(i)
-		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		name, options, _ := strings.Cut(field.Tag.Get("json"), ",")
 		if name == "" || name == "-" {
 			continue
 		}
@@ -153,10 +154,11 @@ func jsonFields(target reflect.Type) []jsonField {
 			enum = strings.Split(raw, ",")
 		}
 		fields = append(fields, jsonField{
-			name: name,
-			doc:  field.Tag.Get("doc"),
-			enum: enum,
-			kind: field.Type,
+			name:     name,
+			doc:      field.Tag.Get("doc"),
+			enum:     enum,
+			optional: strings.Contains(options, "omitempty"),
+			kind:     field.Type,
 		})
 	}
 	return fields

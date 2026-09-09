@@ -1,4 +1,4 @@
-import { defineTransform } from "@ocel/provider-aws/transform";
+import { defineTransform } from "ocel/providers/aws/transform";
 
 export default defineTransform(({ links }) => ({
   function: {

@@ -1,5 +1,5 @@
-import vpsProvider from "@ocel/provider-vps";
 import { buildEnv, defineConfig } from "ocel/config";
+import vpsProvider from "ocel/providers/vps";
 import { z } from "zod";
 
 const ssh = buildEnv({

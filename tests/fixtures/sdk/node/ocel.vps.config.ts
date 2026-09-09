@@ -1,5 +1,5 @@
-import vpsProvider from "@ocel/provider-vps";
 import { buildEnv, defineConfig } from "ocel/config";
+import vpsProvider from "ocel/providers/vps";
 import { z } from "zod";
 
 // What the config itself needs while it is evaluated, read from the shell or the project's .env.

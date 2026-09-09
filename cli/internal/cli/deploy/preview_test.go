@@ -212,7 +212,7 @@ func TestRunPreviewUp(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
 };
 `)
 		deps := clitest.NewDeps()
@@ -247,7 +247,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
 };
 `)
 		deps := clitest.NewDeps()
@@ -371,7 +371,7 @@ func TestRunDeployWithoutAPreviewDomain(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { package: "@ocel/provider-aws", options: {} },
+  provider: { name: "aws", options: {} },
   domains: { production: "acme.com" },
 };
 `)

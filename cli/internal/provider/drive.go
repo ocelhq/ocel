@@ -31,7 +31,7 @@ func driveOnce(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io
 		return err
 	}
 
-	binPath, err := Locate(ctx, cfg.Dir, desc.Package)
+	binPath, err := Locate(ctx, cfg.Dir, desc.Name)
 	if err != nil {
 		return fmt.Errorf("locate provider binary: %w", err)
 	}
@@ -47,12 +47,12 @@ func driveOnce(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io
 	}
 
 	runner, err := Spawn(ctx, Config{
-		BinaryPath:      binPath,
-		Stdout:          stdout,
-		Stderr:          stderr,
-		Env:             env,
-		ProviderConfig:  providerConfig,
-		ProviderPackage: desc.Package,
+		BinaryPath:     binPath,
+		Stdout:         stdout,
+		Stderr:         stderr,
+		Env:            env,
+		ProviderConfig: providerConfig,
+		ProviderName:   desc.Name,
 	})
 	if err != nil {
 		return fmt.Errorf("spawn provider: %w", err)
@@ -72,7 +72,7 @@ func providerConfig(desc *projectconfig.ProviderDescriptor) (*contractv1.Provide
 	}
 	options := &structpb.Struct{}
 	if err := protojson.Unmarshal(desc.Options, options); err != nil {
-		return nil, fmt.Errorf("%s configures %s with options that are not a JSON object: %w", projectconfig.ConfigFileName, desc.Package, err)
+		return nil, fmt.Errorf("the config configures provider %q with \"options\" that are not an object: %w", desc.Name, err)
 	}
 	config.Options = options
 	return config, nil

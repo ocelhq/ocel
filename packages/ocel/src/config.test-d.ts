@@ -37,14 +37,6 @@ describe("an app's runtime", () => {
       apps: [{ name: "api", path: "services/api" }],
     });
   });
-
-  it("is refused on a container app, which runs what its image says", () => {
-    defineConfig({
-      slug: "shop",
-      // @ts-expect-error a container image carries its own runtime, and there is none to name here
-      apps: [{ name: "api", path: "services/api", compute: "container", runtime: "node" }],
-    });
-  });
 });
 
 describe("an app's build", () => {
@@ -57,22 +49,6 @@ describe("an app's build", () => {
           path: "services/api",
           compute: "container",
           build: { dockerfile: "../shared/Dockerfile" },
-        },
-      ],
-    });
-  });
-
-  it("is refused on a serverless app, which builds no image", () => {
-    defineConfig({
-      slug: "shop",
-      apps: [
-        {
-          name: "api",
-          path: "services/api",
-          runtime: "node",
-          compute: "serverless",
-          // @ts-expect-error build configures a container image and there is none to configure here
-          build: { dockerfile: "Dockerfile" },
         },
       ],
     });

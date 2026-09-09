@@ -138,6 +138,7 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/natefinch/atomic v1.0.1 // indirect
 	github.com/nxadm/tail v1.4.11 // indirect
+	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
 	github.com/opentracing/basictracer-go v1.1.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pgavlin/fx v0.1.6 // indirect
@@ -210,3 +211,5 @@ replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy
 
 replace github.com/ocelhq/ocel/pkg/naming => ../../../pkg/naming
+
+replace github.com/ocelhq/ocel/pkg/configdoc => ../../../pkg/configdoc
