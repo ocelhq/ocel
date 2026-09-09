@@ -171,11 +171,6 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		deploymentIDs[a.Name] = id
 	}
 
-	builderPath := node.BuilderPath(cfg.Dir)
-	if _, err := os.Stat(builderPath); err != nil {
-		return fmt.Errorf("node builder not found at %s: %w", builderPath, err)
-	}
-
 	req := builderRequest{
 		OutDir:        outputDir,
 		ProjectRoot:   cfg.Dir,
@@ -199,8 +194,13 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 			Folder:     a.Folder,
 		})
 	}
-	if len(cfg.Apps) > 0 && len(req.Apps) == 0 {
+	if len(req.Apps) == 0 && (len(cfg.Apps) > 0 || !discovery.HoldsJS(cfg)) {
 		return nil
+	}
+
+	builderPath := node.BuilderPath(cfg.Dir)
+	if _, err := os.Stat(builderPath); err != nil {
+		return fmt.Errorf("node builder not found at %s: %w", builderPath, err)
 	}
 
 	payload, err := json.Marshal(req)

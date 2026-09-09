@@ -36,6 +36,9 @@ func lookup(env []string, name string) (string, bool) {
 
 func writeBuilder(t *testing.T, projectDir string) string {
 	t.Helper()
+	if err := os.WriteFile(filepath.Join(projectDir, "package.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	path := node.BuilderPath(projectDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
