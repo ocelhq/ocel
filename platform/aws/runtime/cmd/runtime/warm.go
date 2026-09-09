@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 )
 
 type warmInvocation struct {
@@ -30,19 +32,19 @@ const (
 )
 
 type warmSummary struct {
-	State        string         `json:"state"`
-	Entries      int            `json:"entries,omitempty"`
-	Loaded       int            `json:"loaded,omitempty"`
-	Failures     []warmFailure  `json:"failures,omitempty"`
-	StoppedBy    string         `json:"stoppedBy,omitempty"`
-	Skipped      []string       `json:"skipped,omitempty"`
-	SkippedCount int            `json:"skippedCount,omitempty"`
-	Uncounted    string         `json:"uncounted,omitempty"`
-	Bytes        int64          `json:"bytes,omitempty"`
-	Key          string         `json:"key,omitempty"`
-	Source       bytecodeSource `json:"source"`
-	Uploaded     *bool          `json:"uploaded,omitempty"`
-	Error        string         `json:"error,omitempty"`
+	State        string          `json:"state"`
+	Entries      int             `json:"entries,omitempty"`
+	Loaded       int             `json:"loaded,omitempty"`
+	Failures     []warmFailure   `json:"failures,omitempty"`
+	StoppedBy    string          `json:"stoppedBy,omitempty"`
+	Skipped      []string        `json:"skipped,omitempty"`
+	SkippedCount int             `json:"skippedCount,omitempty"`
+	Uncounted    string          `json:"uncounted,omitempty"`
+	Bytes        int64           `json:"bytes,omitempty"`
+	Key          string          `json:"key,omitempty"`
+	Source       bytecode.Source `json:"source"`
+	Uploaded     *bool           `json:"uploaded,omitempty"`
+	Error        string          `json:"error,omitempty"`
 }
 
 const warmInvocationBudget = 30 * time.Second
@@ -52,7 +54,7 @@ func warmLoadDeadline(ctx context.Context) (time.Time, bool) {
 	if !ok {
 		deadline = time.Now().Add(warmInvocationBudget)
 	}
-	load := deadline.Add(-bytecodeUploadBudget - completionMargin)
+	load := deadline.Add(-bytecode.UploadBudget - completionMargin)
 	if !load.After(time.Now()) {
 		return time.Time{}, false
 	}
@@ -63,7 +65,7 @@ func answerWarm(ctx context.Context, c controlledChild, rw *responseWriter) erro
 	if c == nil {
 		return writeWarmSummary(rw, warmSummary{
 			State:  warmStateDisabled,
-			Source: bytecodeSourceNone,
+			Source: bytecode.SourceNone,
 			Error:  "this app carries no compile cache to warm",
 		})
 	}
@@ -87,11 +89,11 @@ func writeWarmSummary(rw *responseWriter, s warmSummary) error {
 }
 
 func (m *nodeChild) warmBytecodeCache(ctx context.Context) warmSummary {
-	source := m.bytecodeCacheSource()
-	if m.bytecodeCached() {
-		return warmSummary{State: warmStateAlreadyCached, Key: m.bytecodeKey, Source: source}
+	source := m.cacheSource()
+	if m.cached() {
+		return warmSummary{State: warmStateAlreadyCached, Key: m.cache.Key(), Source: source}
 	}
-	if m.bytecode == nil {
+	if m.cache == nil {
 		return warmSummary{State: warmStateDisabled, Source: source, Error: "this deployment resolved no bytecode cache identity"}
 	}
 
@@ -103,34 +105,34 @@ func (m *nodeChild) warmBytecodeCache(ctx context.Context) warmSummary {
 	report, waiter, answered := m.warmCompileCache(ctx, deadline)
 	defer m.endWarmExchange()
 
-	summary := warmSummary{Key: m.bytecode.key, Source: source}
+	summary := warmSummary{Key: m.cache.Key(), Source: source}
 	if !m.claimBytecodeUpload() {
 		summary.State = warmStateFailed
 		summary.Error = "this instance already spent its one compile cache upload"
 		return summary
 	}
 
-	outcome := m.bytecode.run(ctx)
+	outcome := m.cache.Upload(ctx, uploadBy(ctx), m.flushed)
 
 	if !answered {
 		report, answered = collectWarmReport(waiter)
 	}
 	summary.count(report, answered)
 
-	if outcome.bytes > 0 {
-		summary.Bytes = outcome.bytes
+	if outcome.Bytes > 0 {
+		summary.Bytes = outcome.Bytes
 	}
-	if outcome.existed {
+	if outcome.Existed {
 		summary.State = warmStateAlreadyCached
 		return summary
 	}
-	summary.Uploaded = &outcome.uploaded
-	if outcome.uploaded {
+	summary.Uploaded = &outcome.Uploaded
+	if outcome.Uploaded {
 		summary.State = warmStatePublished
 		return summary
 	}
 	summary.State = warmStateFailed
-	summary.Error = outcome.reason
+	summary.Error = outcome.Reason
 	return summary
 }
 

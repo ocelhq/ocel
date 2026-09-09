@@ -1,4 +1,4 @@
-package main
+package live
 
 import (
 	"context"
@@ -20,22 +20,22 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const liveStalenessBound = 60 * time.Second
+const stalenessBound = 60 * time.Second
 
-const liveFetchBudget = 3 * time.Second
+const fetchBudget = 3 * time.Second
 
-type liveFetcher interface {
+type fetcher interface {
 	fetchLive(ctx context.Context) (map[string]string, error)
 }
 
 type storeFetcher struct {
 	reader values.Reader
 	cells  []values.Cell
-	links  []live.Link
+	links  []vars.Link
 
 	mu       sync.Mutex
 	reported map[string]int64
@@ -80,7 +80,7 @@ type lagged struct {
 	Message string
 }
 
-func grantLag(links []live.Link, records []values.Published) []lagged {
+func grantLag(links []vars.Link, records []values.Published) []lagged {
 	var out []lagged
 	for i, record := range records {
 		granted := links[i].Granted
@@ -103,7 +103,7 @@ func republished(n int64) string {
 	return fmt.Sprintf("%d more times", n)
 }
 
-func linkNames(links []live.Link) []string {
+func linkNames(links []vars.Link) []string {
 	names := make([]string, 0, len(links))
 	for _, l := range links {
 		names = append(names, l.Name)
@@ -111,7 +111,7 @@ func linkNames(links []live.Link) []string {
 	return names
 }
 
-func merged(resolved map[string]string, links []live.Link, records []values.Published) map[string]string {
+func merged(resolved map[string]string, links []vars.Link, records []values.Published) map[string]string {
 	out := make(map[string]string, len(resolved)+len(records))
 	maps.Copy(out, resolved)
 	for i, record := range records {
@@ -120,18 +120,18 @@ func merged(resolved map[string]string, links []live.Link, records []values.Publ
 	return out
 }
 
-type liveValuesMsg struct {
+type valuesMsg struct {
 	Type       string            `json:"type"`
 	Generation uint32            `json:"generation"`
 	Values     map[string]string `json:"values"`
 }
 
-const liveValuesMsgType = "liveValues"
+const valuesMsgType = "Values"
 
-type liveValues struct {
-	fetcher liveFetcher
+type Values struct {
+	fetcher fetcher
 	keys    []string
-	links   []live.Link
+	links   []vars.Link
 	now     func() time.Time
 
 	failed chan struct{}
@@ -146,49 +146,49 @@ type liveValues struct {
 	refreshing  bool
 }
 
-func newLiveValues(fetcher liveFetcher, keys []string, links []live.Link, now func() time.Time) *liveValues {
+func newValues(fetcher fetcher, keys []string, links []vars.Link, now func() time.Time) *Values {
 	if now == nil {
 		now = time.Now
 	}
-	return &liveValues{fetcher: fetcher, keys: keys, links: links, now: now, failed: make(chan struct{})}
+	return &Values{fetcher: fetcher, keys: keys, links: links, now: now, failed: make(chan struct{})}
 }
 
-func (l *liveValues) resolve(ctx context.Context) (map[string]string, error) {
+func (l *Values) read(ctx context.Context) (map[string]string, error) {
 	values, err := l.fetcher.fetchLive(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := live.Conform(l.links, values); err != nil {
+	if err := vars.Conform(l.links, values); err != nil {
 		return nil, err
 	}
 	return values, nil
 }
 
-const liveKeysEnvVar = "OCEL_LIVE_KEYS"
+const keysEnvVar = "OCEL_LIVE_KEYS"
 
-func (l *liveValues) declaredEnv() []string {
+func (l *Values) Env() []string {
 	if l == nil || len(l.keys) == 0 {
 		return nil
 	}
-	return []string{liveKeysEnvVar + "=" + strings.Join(l.keys, ",")}
+	return []string{keysEnvVar + "=" + strings.Join(l.keys, ",")}
 }
 
-func (l *liveValues) declaredLinks() []live.Link {
+func (l *Values) Links() []vars.Link {
 	if l == nil {
 		return nil
 	}
 	return l.links
 }
 
-func (l *liveValues) start(ctx context.Context) <-chan error {
+func (l *Values) Prefetch(ctx context.Context) <-chan error {
 	if l == nil {
 		return nil
 	}
 	done := make(chan error, 1)
 	go func() {
-		ctx, cancel := context.WithTimeout(ctx, liveFetchBudget)
+		ctx, cancel := context.WithTimeout(ctx, fetchBudget)
 		defer cancel()
-		values, err := l.resolve(ctx)
+		values, err := l.read(ctx)
 		if err != nil {
 			l.mu.Lock()
 			l.failure = err
@@ -203,14 +203,14 @@ func (l *liveValues) start(ctx context.Context) <-chan error {
 	return done
 }
 
-func (l *liveValues) prefetchFailed() <-chan struct{} {
+func (l *Values) Abandoned() <-chan struct{} {
 	if l == nil {
 		return nil
 	}
 	return l.failed
 }
 
-func (l *liveValues) prefetchError() error {
+func (l *Values) Failure() error {
 	if l == nil {
 		return nil
 	}
@@ -219,14 +219,14 @@ func (l *liveValues) prefetchError() error {
 	return l.failure
 }
 
-func (l *liveValues) join(done <-chan error) error {
+func (l *Values) Join(done <-chan error) error {
 	if done == nil {
 		return nil
 	}
 	return <-done
 }
 
-func (l *liveValues) attach(sink io.Writer) {
+func (l *Values) Attach(sink io.Writer) {
 	if l == nil {
 		return
 	}
@@ -238,12 +238,12 @@ func (l *liveValues) attach(sink io.Writer) {
 	}
 }
 
-func (l *liveValues) refreshIfStale(ctx context.Context) {
+func (l *Values) Refresh(ctx context.Context) {
 	if l == nil {
 		return
 	}
 	l.mu.Lock()
-	if l.refreshing || l.generation == 0 || l.now().Sub(l.fetchedAt) < liveStalenessBound {
+	if l.refreshing || l.generation == 0 || l.now().Sub(l.fetchedAt) < stalenessBound {
 		l.mu.Unlock()
 		return
 	}
@@ -251,9 +251,9 @@ func (l *liveValues) refreshIfStale(ctx context.Context) {
 	l.mu.Unlock()
 
 	go func() {
-		ctx, cancel := context.WithTimeout(ctx, liveFetchBudget)
+		ctx, cancel := context.WithTimeout(ctx, fetchBudget)
 		defer cancel()
-		values, err := l.resolve(ctx)
+		values, err := l.read(ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ocel: live value refresh failed, serving the last resolved generation: %v\n", err)
 			l.mu.Lock()
@@ -268,7 +268,7 @@ func (l *liveValues) refreshIfStale(ctx context.Context) {
 	}()
 }
 
-func (l *liveValues) apply(values map[string]string) {
+func (l *Values) apply(values map[string]string) {
 	if values == nil {
 		values = map[string]string{}
 	}
@@ -281,11 +281,11 @@ func (l *liveValues) apply(values map[string]string) {
 	l.deliver()
 }
 
-func (l *liveValues) deliver() {
+func (l *Values) deliver() {
 	if l.sink == nil {
 		return
 	}
-	line, err := json.Marshal(liveValuesMsg{Type: liveValuesMsgType, Generation: l.generation, Values: l.values})
+	line, err := json.Marshal(valuesMsg{Type: valuesMsgType, Generation: l.generation, Values: l.values})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: could not encode live values: %v\n", err)
 		return
@@ -297,15 +297,15 @@ func (l *liveValues) deliver() {
 	l.undelivered = false
 }
 
-func resolveLiveValues(ctx context.Context) (*liveValues, error) {
-	raw, err := os.ReadFile(filepath.Join(taskRoot(), live.FilePath))
+func Resolve(ctx context.Context, taskRoot string) (*Values, error) {
+	raw, err := os.ReadFile(filepath.Join(taskRoot, vars.FilePath))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", live.FilePath, err)
+		return nil, fmt.Errorf("read %s: %w", vars.FilePath, err)
 	}
-	manifest, err := live.Parse(raw)
+	manifest, err := vars.Parse(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +317,7 @@ func resolveLiveValues(ctx context.Context) (*liveValues, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
-	return newLiveValues(&storeFetcher{
+	return newValues(&storeFetcher{
 		reader: values.Reader{
 			Records:     awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(manifest.Table)},
 			Sealer:      awsports.Sealer{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(manifest.KeyARN)},
@@ -329,7 +329,7 @@ func resolveLiveValues(ctx context.Context) (*liveValues, error) {
 	}, manifestKeys(manifest), manifest.Links, nil), nil
 }
 
-func manifestKeys(m live.Manifest) []string {
+func manifestKeys(m vars.Manifest) []string {
 	keys := make([]string, 0, len(m.Keys)+len(m.Links))
 	for _, k := range m.Keys {
 		keys = append(keys, k.Key)
@@ -340,7 +340,7 @@ func manifestKeys(m live.Manifest) []string {
 	return keys
 }
 
-func manifestCells(m live.Manifest) []values.Cell {
+func manifestCells(m vars.Manifest) []values.Cell {
 	cells := make([]values.Cell, 0, len(m.Keys))
 	for _, k := range m.Keys {
 		cells = append(cells, values.Cell{Folder: k.Folder, Key: k.Key})

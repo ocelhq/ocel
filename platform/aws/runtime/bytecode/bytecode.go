@@ -1,4 +1,4 @@
-package main
+package bytecode
 
 import (
 	"archive/tar"
@@ -11,7 +11,6 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -27,9 +26,9 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 )
 
-const bytecodeCacheCeiling = 64 << 20
+const CacheCeiling = 64 << 20
 
-func bytecodeCacheKey(prefix, functionName, nodeVersion, goArch string) string {
+func cacheKey(prefix, functionName, nodeVersion, goArch string) string {
 	return fmt.Sprintf("%s/%s/node%s-%s.tar.gz", prefix, functionName, nodeVersion, s3Arch(goArch))
 }
 
@@ -50,11 +49,11 @@ func canonicalNodeVersion(version string) (string, error) {
 	return m[1], nil
 }
 
-func exceedsBytecodeCacheCeiling(uncompressedSize int64) bool {
-	return uncompressedSize > bytecodeCacheCeiling
+func exceedsCeiling(uncompressedSize int64) bool {
+	return uncompressedSize > CacheCeiling
 }
 
-func buildBytecodeArchive(ctx context.Context, dir string) ([]byte, error) {
+func buildArchive(ctx context.Context, dir string) ([]byte, error) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
@@ -112,36 +111,34 @@ func buildBytecodeArchive(ctx context.Context, dir string) ([]byte, error) {
 
 const compileCacheDir = "/tmp/" + constants.ProjectStateDirName + "/compile-cache"
 
-const bytecodePrefixEnvVar = "OCEL_BYTECODE_PREFIX"
+const prefixEnvVar = "OCEL_BYTECODE_PREFIX"
 
-const bytecodeBucketEnvVar = "OCEL_BYTECODE_BUCKET"
+const bucketEnvVar = "OCEL_BYTECODE_BUCKET"
 
-const bytecodeUploadBudget = 2 * time.Second
+const UploadBudget = 2 * time.Second
 
-const bytecodeRehydrateBudget = 2 * time.Second
+const rehydrateBudget = 2 * time.Second
 
-const bytecodeResolveBudget = 2 * time.Second
+const resolveBudget = 2 * time.Second
 
-const compileCacheFlushTimeout = time.Second
-
-func compileCacheEnv() []string {
-	if os.Getenv(bytecodePrefixEnvVar) == "" {
+func Env() []string {
+	if os.Getenv(prefixEnvVar) == "" {
 		return nil
 	}
 	return []string{"NODE_COMPILE_CACHE=" + compileCacheDir}
 }
 
-type bytecodeStore interface {
+type objectStore interface {
 	objectExists(ctx context.Context, bucket, key string) (bool, error)
 	putObject(ctx context.Context, bucket, key string, body []byte) error
 	getObject(ctx context.Context, bucket, key string) (io.ReadCloser, int64, error)
 }
 
-var errBytecodeCacheMiss = errors.New("bytecode cache: no object at that key")
+var errCacheMiss = errors.New("bytecode cache: no object at that key")
 
-type s3BytecodeStore struct{ client *s3.Client }
+type s3Store struct{ client *s3.Client }
 
-func (s s3BytecodeStore) objectExists(ctx context.Context, bucket, key string) (bool, error) {
+func (s s3Store) objectExists(ctx context.Context, bucket, key string) (bool, error) {
 	_, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &bucket, Key: &key})
 	if err != nil {
 		var notFound *s3types.NotFound
@@ -158,7 +155,7 @@ func isS3Forbidden(err error) bool {
 	return errors.As(err, &resp) && resp.HTTPStatusCode() == http.StatusForbidden
 }
 
-func (s s3BytecodeStore) putObject(ctx context.Context, bucket, key string, body []byte) error {
+func (s s3Store) putObject(ctx context.Context, bucket, key string, body []byte) error {
 	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: &bucket,
 		Key:    &key,
@@ -167,13 +164,13 @@ func (s s3BytecodeStore) putObject(ctx context.Context, bucket, key string, body
 	return err
 }
 
-func (s s3BytecodeStore) getObject(ctx context.Context, bucket, key string) (io.ReadCloser, int64, error) {
+func (s s3Store) getObject(ctx context.Context, bucket, key string) (io.ReadCloser, int64, error) {
 	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &key})
 	if err != nil {
 		var noSuchKey *s3types.NoSuchKey
 		var notFound *s3types.NotFound
 		if errors.As(err, &noSuchKey) || errors.As(err, &notFound) {
-			return nil, 0, errBytecodeCacheMiss
+			return nil, 0, errCacheMiss
 		}
 		return nil, 0, err
 	}
@@ -184,56 +181,55 @@ func (s s3BytecodeStore) getObject(ctx context.Context, bucket, key string) (io.
 	return out.Body, size, nil
 }
 
-type bytecodeUpload struct {
-	store  bytecodeStore
-	bucket string
-	key    string
-	root   string
-	flush  func(ctx context.Context) (compileCacheFlushedPayload, bool)
+type Flushed struct {
+	Dir string
+	OK  bool
 }
 
-type bytecodeUploadOutcome struct {
-	uploaded bool
-	existed  bool
-	bytes    int64
-	reason   string
+type Flush func(ctx context.Context) (Flushed, bool)
+
+type Outcome struct {
+	Uploaded bool
+	Existed  bool
+	Bytes    int64
+	Reason   string
 }
 
-func abandonUpload(format string, args ...any) bytecodeUploadOutcome {
+func abandonUpload(format string, args ...any) Outcome {
 	reason := fmt.Sprintf(format, args...)
 	fmt.Fprintln(os.Stderr, "ocel: "+reason)
-	return bytecodeUploadOutcome{reason: reason}
+	return Outcome{Reason: reason}
 }
 
-func (u bytecodeUpload) run(ctx context.Context) bytecodeUploadOutcome {
-	budget := bytecodeBudget(ctx)
+func (c *Cache) Upload(ctx context.Context, by time.Time, flush Flush) Outcome {
+	budget := budgetUntil(by)
 	if budget <= 0 {
 		return abandonUpload("no time left to publish the compile cache; skipping")
 	}
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 
-	exists, err := u.store.objectExists(ctx, u.bucket, u.key)
+	exists, err := c.store.objectExists(ctx, c.bucket, c.key)
 	if err != nil {
-		return abandonUpload("could not check for an existing compile cache at %s: %v", u.key, err)
+		return abandonUpload("could not check for an existing compile cache at %s: %v", c.key, err)
 	}
 	if exists {
-		return bytecodeUploadOutcome{existed: true}
+		return Outcome{Existed: true}
 	}
 
-	ack, ok := u.flush(ctx)
+	ack, ok := flush(ctx)
 	if !ok {
-		return bytecodeUploadOutcome{reason: "node did not acknowledge the compile-cache flush"}
+		return Outcome{Reason: "node did not acknowledge the compile-cache flush"}
 	}
 	if !ack.OK {
 		return abandonUpload("node reported no compile cache to flush; skipping upload")
 	}
 
-	if !within(u.root, ack.Dir) {
-		return abandonUpload("node reported a compile cache at %s, outside %s; skipping upload", ack.Dir, u.root)
+	if !within(c.root, ack.Dir) {
+		return abandonUpload("node reported a compile cache at %s, outside %s; skipping upload", ack.Dir, c.root)
 	}
 
-	size, err := compileCacheSize(ctx, u.root)
+	size, err := compileCacheSize(ctx, c.root)
 	if err != nil {
 		return abandonUpload("could not measure the compile cache: %v", err)
 	}
@@ -243,21 +239,21 @@ func (u bytecodeUpload) run(ctx context.Context) bytecodeUploadOutcome {
 		}
 		return abandonUpload("the compile cache at %s is empty; nothing to upload", ack.Dir)
 	}
-	if exceedsBytecodeCacheCeiling(size) {
-		over := abandonUpload("compile cache is %d bytes, over the %d byte ceiling; skipping upload", size, bytecodeCacheCeiling)
-		over.bytes = size
+	if exceedsCeiling(size) {
+		over := abandonUpload("compile cache is %d bytes, over the %d byte ceiling; skipping upload", size, CacheCeiling)
+		over.Bytes = size
 		return over
 	}
 
-	archive, err := buildArchiveWithin(ctx, u.root)
+	archive, err := buildArchiveWithin(ctx, c.root)
 	if err != nil {
 		return abandonUpload("could not archive the compile cache: %v", err)
 	}
 
-	if err := u.store.putObject(ctx, u.bucket, u.key, archive); err != nil {
-		return abandonUpload("could not upload the compile cache to %s: %v", u.key, err)
+	if err := c.store.putObject(ctx, c.bucket, c.key, archive); err != nil {
+		return abandonUpload("could not upload the compile cache to %s: %v", c.key, err)
 	}
-	return bytecodeUploadOutcome{uploaded: true, bytes: size}
+	return Outcome{Uploaded: true, Bytes: size}
 }
 
 func within(root, path string) bool {
@@ -307,7 +303,7 @@ func buildArchiveWithin(ctx context.Context, dir string) ([]byte, error) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		archive, err := buildBytecodeArchive(ctx, dir)
+		archive, err := buildArchive(ctx, dir)
 		done <- result{archive: archive, err: err}
 	}()
 	select {
@@ -382,15 +378,15 @@ func untarInto(ctx context.Context, r io.Reader, dir string, ceiling int64) (int
 	}
 }
 
-func rehydrateCompileCache(ctx context.Context, store bytecodeStore, bucket, key, dir string) (int64, bool) {
+func rehydrateCompileCache(ctx context.Context, st objectStore, bucket, key, dir string) (int64, bool) {
 	if err := os.RemoveAll(dir); err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: could not clear %s before rehydrating the compile cache: %v\n", dir, err)
 		return 0, false
 	}
 
-	body, size, err := store.getObject(ctx, bucket, key)
+	body, size, err := st.getObject(ctx, bucket, key)
 	if err != nil {
-		if errors.Is(err, errBytecodeCacheMiss) {
+		if errors.Is(err, errCacheMiss) {
 			fmt.Fprintf(os.Stderr, "ocel: no compile cache at %s yet; nothing to rehydrate\n", key)
 		} else {
 			fmt.Fprintf(os.Stderr, "ocel: could not fetch the compile cache at %s: %v\n", key, err)
@@ -399,9 +395,9 @@ func rehydrateCompileCache(ctx context.Context, store bytecodeStore, bucket, key
 	}
 	defer body.Close()
 
-	if exceedsBytecodeCacheCeiling(size) {
+	if exceedsCeiling(size) {
 		fmt.Fprintf(os.Stderr, "ocel: compile cache at %s is %d bytes, over the %d byte ceiling; skipping rehydration\n",
-			key, size, bytecodeCacheCeiling)
+			key, size, CacheCeiling)
 		return 0, false
 	}
 
@@ -411,7 +407,7 @@ func rehydrateCompileCache(ctx context.Context, store bytecodeStore, bucket, key
 	}
 	done := make(chan result, 1)
 	go func() {
-		n, err := untarGzipInto(ctx, body, dir, bytecodeCacheCeiling)
+		n, err := untarGzipInto(ctx, body, dir, CacheCeiling)
 		done <- result{n: n, err: err}
 	}()
 
@@ -432,25 +428,25 @@ func rehydrateCompileCache(ctx context.Context, store bytecodeStore, bucket, key
 	}
 }
 
-type bytecodeSource string
+type Source string
 
 const (
-	bytecodeSourceEmbedded bytecodeSource = "embedded"
-	bytecodeSourceS3       bytecodeSource = "s3"
-	bytecodeSourceNone     bytecodeSource = "none"
+	SourceEmbedded Source = "embedded"
+	SourceS3       Source = "s3"
+	SourceNone     Source = "none"
 )
 
-const embeddedBytecodeDir = "/var/task/" + constants.ProjectStateDirName + "/bytecode"
+const embeddedDir = "/var/task/" + constants.ProjectStateDirName + "/bytecode"
 
-func embeddedBytecodePath(key string) string {
+func embeddedPath(key string) string {
 	base := path.Base(key)
 	if !strings.HasSuffix(base, ".tar.gz") {
 		return ""
 	}
-	return filepath.Join(embeddedBytecodeDir, strings.TrimSuffix(base, ".gz"))
+	return filepath.Join(embeddedDir, strings.TrimSuffix(base, ".gz"))
 }
 
-func loadEmbeddedBytecodeCache(ctx context.Context, tarPath, dir string) (int64, bool) {
+func loadEmbedded(ctx context.Context, tarPath, dir string) (int64, bool) {
 	if ctx.Err() != nil {
 		return 0, false
 	}
@@ -469,7 +465,7 @@ func loadEmbeddedBytecodeCache(ctx context.Context, tarPath, dir string) (int64,
 		return 0, false
 	}
 
-	n, err := untarInto(ctx, f, dir, bytecodeCacheCeiling)
+	n, err := untarInto(ctx, f, dir, CacheCeiling)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: could not load the embedded compile cache at %s: %v\n", tarPath, err)
 		os.RemoveAll(dir)
@@ -478,9 +474,9 @@ func loadEmbeddedBytecodeCache(ctx context.Context, tarPath, dir string) (int64,
 	return n, true
 }
 
-func embeddedBytecodeCache(ctx context.Context, tarPath, dir string) bool {
+func loadEmbeddedCache(ctx context.Context, tarPath, dir string) bool {
 	start := time.Now()
-	n, hit := loadEmbeddedBytecodeCache(ctx, tarPath, dir)
+	n, hit := loadEmbedded(ctx, tarPath, dir)
 	if hit {
 		fmt.Fprintf(os.Stderr, "ocel: loaded embedded compile cache from %s: %d bytes in %dms\n",
 			tarPath, n, time.Since(start).Milliseconds())
@@ -488,38 +484,99 @@ func embeddedBytecodeCache(ctx context.Context, tarPath, dir string) bool {
 	return hit
 }
 
-func bytecodeBudget(ctx context.Context) time.Duration {
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		return bytecodeUploadBudget
+func budgetUntil(by time.Time) time.Duration {
+	if by.IsZero() {
+		return UploadBudget
 	}
-	if remaining := time.Until(deadline) - completionMargin; remaining < bytecodeUploadBudget {
+	if remaining := time.Until(by); remaining < UploadBudget {
 		return remaining
 	}
-	return bytecodeUploadBudget
+	return UploadBudget
 }
 
-func nodeVersionFromBinary(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, nodeBinaryPath, "--version").Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-type bytecodeResolution struct {
-	store  bytecodeStore
+type Cache struct {
+	store  objectStore
 	bucket string
 	key    string
+	root   string
+	source Source
 }
 
-func (r *bytecodeResolution) upload(flush func(context.Context) (compileCacheFlushedPayload, bool)) *bytecodeUpload {
-	return &bytecodeUpload{store: r.store, bucket: r.bucket, key: r.key, root: compileCacheDir, flush: flush}
+func (c *Cache) Key() string { return c.key }
+
+func (c *Cache) Source() Source {
+	if c == nil || c.source == "" {
+		return SourceNone
+	}
+	return c.source
 }
 
-func resolveBytecodeResolution(ctx context.Context, nodeVersion func(context.Context) (string, error)) *bytecodeResolution {
-	prefix := os.Getenv(bytecodePrefixEnvVar)
-	bucket := os.Getenv(bytecodeBucketEnvVar)
+func (c *Cache) Cached() bool { return c.Source() != SourceNone }
+
+type Priming struct {
+	started   time.Time
+	resolved  chan *Cache
+	embedded  func(context.Context, *Cache) bool
+	rehydrate func(context.Context, *Cache) bool
+}
+
+func Start(ctx context.Context, nodeVersion func(context.Context) (string, error)) *Priming {
+	p := &Priming{
+		started:   time.Now(),
+		resolved:  make(chan *Cache, 1),
+		embedded:  loadEmbeddedInto,
+		rehydrate: rehydrateFromStore,
+	}
+	go func() {
+		resolveCtx, cancel := context.WithTimeout(ctx, resolveBudget)
+		defer cancel()
+		p.resolved <- resolve(resolveCtx, nodeVersion)
+	}()
+	return p
+}
+
+func (p *Priming) Await(ctx context.Context) *Cache {
+	if p == nil {
+		return nil
+	}
+	wait := time.Until(p.started.Add(resolveBudget))
+	if wait < 0 {
+		wait = 0
+	}
+	var c *Cache
+	select {
+	case c = <-p.resolved:
+	case <-time.After(wait):
+		fmt.Fprintln(os.Stderr, "ocel: compile cache resolution did not finish in time; compile cache disabled")
+	}
+	if c == nil {
+		return nil
+	}
+
+	rehydrateCtx, cancel := context.WithTimeout(ctx, rehydrateBudget)
+	defer cancel()
+	switch {
+	case p.embedded(rehydrateCtx, c):
+		c.source = SourceEmbedded
+	case p.rehydrate(rehydrateCtx, c):
+		c.source = SourceS3
+	default:
+		c.source = SourceNone
+	}
+	return c
+}
+
+func loadEmbeddedInto(ctx context.Context, c *Cache) bool {
+	tarPath := embeddedPath(c.key)
+	if tarPath == "" {
+		return false
+	}
+	return loadEmbeddedCache(ctx, tarPath, c.root)
+}
+
+func resolve(ctx context.Context, nodeVersion func(context.Context) (string, error)) *Cache {
+	prefix := os.Getenv(prefixEnvVar)
+	bucket := os.Getenv(bucketEnvVar)
 	function := os.Getenv("AWS_LAMBDA_FUNCTION_NAME")
 	if prefix == "" || bucket == "" || function == "" {
 		return nil
@@ -542,22 +599,27 @@ func resolveBytecodeResolution(ctx context.Context, nodeVersion func(context.Con
 		return nil
 	}
 
-	return &bytecodeResolution{
-		store:  s3BytecodeStore{client: s3.NewFromConfig(cfg)},
+	return &Cache{
+		store:  s3Store{client: s3.NewFromConfig(cfg)},
 		bucket: bucket,
-		key:    bytecodeCacheKey(prefix, function, canonical, runtime.GOARCH),
+		key:    cacheKey(prefix, function, canonical, runtime.GOARCH),
+		root:   compileCacheDir,
 	}
 }
 
-func rehydrateBytecodeCache(ctx context.Context, r *bytecodeResolution, dir string) bool {
-	ctx, cancel := context.WithTimeout(ctx, bytecodeRehydrateBudget)
+func rehydrateFromStore(ctx context.Context, c *Cache) bool {
+	return rehydrateInto(ctx, c, c.root)
+}
+
+func rehydrateInto(ctx context.Context, c *Cache, dir string) bool {
+	ctx, cancel := context.WithTimeout(ctx, rehydrateBudget)
 	defer cancel()
 
 	start := time.Now()
-	n, hit := rehydrateCompileCache(ctx, r.store, r.bucket, r.key, dir)
+	n, hit := rehydrateCompileCache(ctx, c.store, c.bucket, c.key, dir)
 	if hit {
 		fmt.Fprintf(os.Stderr, "ocel: rehydrated compile cache from %s: %d bytes in %dms\n",
-			r.key, n, time.Since(start).Milliseconds())
+			c.key, n, time.Since(start).Milliseconds())
 	}
 	return hit
 }

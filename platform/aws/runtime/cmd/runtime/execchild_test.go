@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 )
 
 const (
@@ -115,8 +116,8 @@ func TestStartExecutable(t *testing.T) {
 		if summary.State != warmStateDisabled {
 			t.Errorf("state = %q, want %q", summary.State, warmStateDisabled)
 		}
-		if summary.Source != bytecodeSourceNone {
-			t.Errorf("source = %q, want %q", summary.Source, bytecodeSourceNone)
+		if summary.Source != bytecode.SourceNone {
+			t.Errorf("source = %q, want %q", summary.Source, bytecode.SourceNone)
 		}
 	})
 
