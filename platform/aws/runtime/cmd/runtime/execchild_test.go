@@ -21,6 +21,7 @@ const (
 	helperChildVar  = "OCEL_TEST_HTTP_CHILD"
 	helperParentVar = "OCEL_TEST_HTTP_CHILD_PARENT"
 	helperSaidVar   = "OCEL_TEST_HTTP_CHILD_SAYS"
+	helperDelayVar  = "OCEL_TEST_HTTP_CHILD_DELAY"
 )
 
 func TestHTTPChildHelper(t *testing.T) {
@@ -34,6 +35,10 @@ func TestHTTPChildHelper(t *testing.T) {
 		}
 		os.Exit(0)
 	}()
+
+	if delay, err := time.ParseDuration(os.Getenv(helperDelayVar)); err == nil {
+		time.Sleep(delay)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -139,26 +144,48 @@ func TestStartExecutable(t *testing.T) {
 		}
 	})
 
-	t.Run("refuses a command that never listens within the budget", func(t *testing.T) {
-		t.Setenv("LAMBDA_TASK_ROOT", t.TempDir())
-		_, err := startExecutable([]string{"sh", "-c", "sleep 1"}, freePort(t), nil, 150*time.Millisecond)
-		if err == nil {
-			t.Fatal("startExecutable() error = nil, want a budget-expiry error")
+	t.Run("serves an app that listens after the budget", func(t *testing.T) {
+		command := httpChildCommand(t)
+		port := freePort(t)
+
+		child, err := startExecutable(
+			command,
+			port,
+			append(helperEnv(), helperSaidVar+"=what it was handed", helperDelayVar+"=600ms"),
+			150*time.Millisecond,
+		)
+		if err != nil {
+			t.Fatalf("startExecutable: %v, want a slow app served late rather than never", err)
 		}
-		if !strings.Contains(err.Error(), "150ms") {
-			t.Errorf("error = %q, want it to name the budget that expired", err)
+
+		rt, captured := fakeRuntimeWithDeadline(t, []byte(getEvent), time.Now().Add(20*time.Second))
+		if err := handleInvocation(t.Context(), rt, child); err != nil {
+			t.Fatalf("handleInvocation: %v", err)
+		}
+		_, body := splitPrelude(t, captured.body)
+		if want := "served by server with what it was handed"; string(body) != want {
+			t.Errorf("body = %q, want %q — the invocation waited for the app rather than being refused", body, want)
 		}
 	})
 
-	t.Run("kills and reaps a command it gave up waiting on", func(t *testing.T) {
+	t.Run("keeps an app that never listens running and fails the invocation", func(t *testing.T) {
 		t.Setenv("LAMBDA_TASK_ROOT", t.TempDir())
 		pidFile := filepath.Join(t.TempDir(), "pid")
-		_, err := startExecutable(
-			[]string{"sh", "-c", "echo $$ > " + pidFile + "; exec sleep 30"},
+		child, err := startExecutable(
+			[]string{"sh", "-c", "echo $$ > " + pidFile + "; exec sleep 30 >/dev/null 2>&1"},
 			freePort(t), nil, 150*time.Millisecond)
-		if err == nil {
-			t.Fatal("startExecutable() error = nil, want a budget-expiry error")
+		if err != nil {
+			t.Fatalf("startExecutable: %v, want the runtime to enter its loop anyway", err)
 		}
+
+		rt, captured := fakeRuntimeWithDeadline(t, []byte(getEvent), time.Now().Add(600*time.Millisecond))
+		if err := handleInvocation(t.Context(), rt, child); err != nil {
+			t.Fatalf("handleInvocation = %v, want the loop to carry on to the next invocation", err)
+		}
+		if got := captured.trailer.Get(headerErrorType); got != errTypeUpstream {
+			t.Errorf("%s = %q, want %q", headerErrorType, got, errTypeUpstream)
+		}
+
 		raw, readErr := os.ReadFile(pidFile)
 		if readErr != nil {
 			t.Fatalf("the command never recorded its pid: %v", readErr)
@@ -167,9 +194,10 @@ func TestStartExecutable(t *testing.T) {
 		if convErr != nil {
 			t.Fatal(convErr)
 		}
-		if syscall.Kill(pid, 0) == nil {
-			t.Errorf("pid %d is still running after the runtime refused to serve it", pid)
+		if syscall.Kill(pid, 0) != nil {
+			t.Errorf("pid %d was killed; a slow app is given every later invocation to come up in", pid)
 		}
+
 	})
 
 	t.Run("refuses a command that is not there", func(t *testing.T) {

@@ -575,6 +575,57 @@ func TestHandleInvocationWarm(t *testing.T) {
 			t.Errorf("state = %q, want %q", got.State, warmStateFailed)
 		}
 	})
+
+	t.Run("a child still starting is answered in the warm shape at the load deadline", func(t *testing.T) {
+		cache := publishes()
+		m := &nodeChild{ready: make(chan struct{}), pending: map[string]chan struct{}{}, cache: cache}
+
+		rt, captured := warmRuntime(t, []byte(warmEvent),
+			time.Now().Add(bytecode.UploadBudget+completionMargin+700*time.Millisecond))
+		start := time.Now()
+		if err := handleInvocation(context.Background(), rt, m); err != nil {
+			t.Fatalf("handleInvocation: %v", err)
+		}
+
+		var got warmSummary
+		if err := json.Unmarshal(captured.body, &got); err != nil {
+			t.Fatalf("answer is not a warm summary (%q): %v", captured.body, err)
+		}
+		if got.State != warmStateFailed {
+			t.Errorf("state = %q, want %q rather than a generic upstream error", got.State, warmStateFailed)
+		}
+		if !strings.Contains(got.Error, "starting") {
+			t.Errorf("error = %q, want it to name the app that has not finished starting", got.Error)
+		}
+		if elapsed := time.Since(start); elapsed > 2*time.Second {
+			t.Errorf("took %s, want the wait ended at the load deadline with time left to answer", elapsed)
+		}
+		if cache.count() != 0 {
+			t.Errorf("uploads = %d, want nothing published by a child that never came up", cache.count())
+		}
+	})
+
+	t.Run("an already cached child is answered without waiting for it to come up", func(t *testing.T) {
+		m := &nodeChild{ready: make(chan struct{}), pending: map[string]chan struct{}{},
+			cache: &scriptedCache{key: warmKey, source: bytecode.SourceS3}}
+
+		rt, captured := warmRuntime(t, []byte(warmEvent), time.Now().Add(10*time.Second))
+		start := time.Now()
+		if err := handleInvocation(context.Background(), rt, m); err != nil {
+			t.Fatalf("handleInvocation: %v", err)
+		}
+
+		var got warmSummary
+		if err := json.Unmarshal(captured.body, &got); err != nil {
+			t.Fatalf("answer is not a warm summary (%q): %v", captured.body, err)
+		}
+		if got.State != warmStateAlreadyCached {
+			t.Errorf("state = %q, want %q", got.State, warmStateAlreadyCached)
+		}
+		if elapsed := time.Since(start); elapsed > time.Second {
+			t.Errorf("took %s, want an answer that needs nothing from the child", elapsed)
+		}
+	})
 }
 
 func TestWarmSummary(t *testing.T) {
