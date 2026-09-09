@@ -44,7 +44,7 @@ export function Hero() {
       <div className="relative mx-auto grid max-w-[1180px] grid-cols-1 gap-11 px-5 pb-[58px] pt-16 md:grid-cols-[1fr_1.06fr] md:px-10">
         <div>
           <div className="mb-[18px] font-mono text-xs tracking-[0.08em] text-primary">
-            $ npm i -g ocel
+            $ npm i -g @ocel/cli
           </div>
           <h1 className="text-[54px] font-semibold leading-[1.04] tracking-[-0.03em] text-foreground text-pretty">
             Deploy apps to
