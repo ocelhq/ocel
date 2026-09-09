@@ -74,6 +74,9 @@ func New(version string) (*Store, error) {
 func (s *Store) Fetches() bool { return s.Override == "" }
 
 func (s *Store) Binary(ctx context.Context, name, digest string) (string, error) {
+	if err := checkName(name); err != nil {
+		return "", err
+	}
 	executable := ExecutableName(name, s.Platform.GOOS)
 
 	if s.Override != "" {

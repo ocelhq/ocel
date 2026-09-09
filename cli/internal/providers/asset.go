@@ -1,6 +1,19 @@
 package providers
 
-import "strings"
+import (
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+var providerName = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+func checkName(name string) error {
+	if !providerName.MatchString(name) {
+		return fmt.Errorf("%q is not a provider name", name)
+	}
+	return nil
+}
 
 const assetPrefix = "ocel-provider-"
 
