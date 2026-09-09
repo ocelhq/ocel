@@ -20,7 +20,7 @@ const (
 
 	appsDir = "apps"
 
-	configFileName = "ocel.config.ts"
+	configFileName = "ocel.json"
 )
 
 func ArtifactRoot() string {
