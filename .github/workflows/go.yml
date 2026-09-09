@@ -12,6 +12,7 @@ on:
       - "tests/fixtures/sdk/go/**"
       - "tests/fixtures/sdk/python/**"
       - "tests/fixtures/sdk/rust/**"
+      - "tests/fixtures/sdk/rust-workspace/**"
       - "crates/**"
       - "python/**"
       - "pnpm-lock.yaml"

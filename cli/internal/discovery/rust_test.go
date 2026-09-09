@@ -167,3 +167,83 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 		t.Errorf("source = %q, want it in %q", source, want)
 	}
 }
+
+func TestRunDeclaresWhatASharedRustCrateDeclares(t *testing.T) {
+	needsCargo(t)
+	configDir := repoFixture(t, filepath.Join("sdk", "rust-workspace"))
+
+	roots, err := RootsOf(&projectconfig.Config{Dir: configDir, Apps: []projectconfig.App{
+		{Name: "api", Path: "./apps/api"},
+		{Name: "web", Path: "./apps/web"},
+	}})
+	if err != nil {
+		t.Fatalf("RootsOf: %v", err)
+	}
+	want := []Root{
+		{Dir: filepath.Join(configDir, "apps", "api"), Language: Rust},
+		{Dir: filepath.Join(configDir, "apps", "web"), Language: Rust},
+	}
+	if !slices.Equal(roots, want) {
+		t.Fatalf("roots = %+v, want the two app crates %+v", roots, want)
+	}
+
+	collected, url := declareCollector(t)
+
+	prepared, err := Prepare(configDir, roots)
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), configDir, prepared, url, &stdout, &stderr); err != nil {
+		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
+	}
+
+	shared := filepath.Join(configDir, "crates", "infra", "src", "lib.rs")
+
+	declares := collected.declared()
+	if len(declares) != 2 {
+		t.Fatalf("declares = %v, want one per app binary", declares)
+	}
+	for _, declared := range declares {
+		resource := declared.GetResource()
+		if resource.GetName() != "main" || resource.GetType() != linksv1.LinkType_LINK_TYPE_POSTGRES {
+			t.Errorf("resource = %v, want the postgres named main", resource)
+		}
+		if file := sourceFile(t, declared.GetSource()); file != shared {
+			t.Errorf("source = %q, want the declaration in %q", declared.GetSource(), shared)
+		}
+	}
+	if a, b := declares[0].GetSource(), declares[1].GetSource(); a != b {
+		t.Errorf("sources = %q and %q, want both binaries to name the same declaration", a, b)
+	}
+
+	variables := collected.declaredVariables()
+	if len(variables) != 2 {
+		t.Fatalf("variables = %v, want one per app binary", variables)
+	}
+	for _, variable := range variables {
+		if variable.GetKey() != "GREETING" {
+			t.Errorf("variable = %v, want the key GREETING", variable)
+		}
+		if file := sourceFile(t, variable.GetSource()); file != shared {
+			t.Errorf("source = %q, want the declaration in %q", variable.GetSource(), shared)
+		}
+	}
+	if a, b := variables[0].GetSource(), variables[1].GetSource(); a != b {
+		t.Errorf("sources = %q and %q, want both binaries to name the same declaration", a, b)
+	}
+}
+
+func sourceFile(t *testing.T, source string) string {
+	t.Helper()
+	colon := strings.LastIndex(source, ":")
+	if colon <= 0 {
+		t.Fatalf("source = %q, want a file and a line", source)
+	}
+	file := filepath.Clean(source[:colon])
+	if !filepath.IsAbs(file) {
+		t.Errorf("source = %q, want the file as an absolute path", source)
+	}
+	return file
+}
