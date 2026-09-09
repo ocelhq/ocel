@@ -1,4 +1,4 @@
-use ocel::r#gen::app::resources::v1::DeclareRequest;
+use ocel::proto::app::resources::v1::DeclareRequest;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{channel, Receiver};

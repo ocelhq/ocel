@@ -1,33 +1,33 @@
 ///Shorthand for `OwnedView<DeclareRequestView<'static>>`.
 pub type OwnedDeclareRequestView = ::buffa::view::OwnedView<
-    crate::r#gen::app::resources::v1::__buffa::view::DeclareRequestView<'static>,
+    crate::proto::app::resources::v1::__buffa::view::DeclareRequestView<'static>,
 >;
 ///Shorthand for `OwnedView<DeclareResponseView<'static>>`.
 pub type OwnedDeclareResponseView = ::buffa::view::OwnedView<
-    crate::r#gen::app::resources::v1::__buffa::view::DeclareResponseView<'static>,
+    crate::proto::app::resources::v1::__buffa::view::DeclareResponseView<'static>,
 >;
 ///Shorthand for `OwnedView<DeclareEnvRequestView<'static>>`.
 pub type OwnedDeclareEnvRequestView = ::buffa::view::OwnedView<
-    crate::r#gen::app::resources::v1::__buffa::view::DeclareEnvRequestView<'static>,
+    crate::proto::app::resources::v1::__buffa::view::DeclareEnvRequestView<'static>,
 >;
 ///Shorthand for `OwnedView<DeclareEnvResponseView<'static>>`.
 pub type OwnedDeclareEnvResponseView = ::buffa::view::OwnedView<
-    crate::r#gen::app::resources::v1::__buffa::view::DeclareEnvResponseView<'static>,
+    crate::proto::app::resources::v1::__buffa::view::DeclareEnvResponseView<'static>,
 >;
 ///Shorthand for `OwnedView<ReportEnvProblemsRequestView<'static>>`.
 pub type OwnedReportEnvProblemsRequestView = ::buffa::view::OwnedView<
-    crate::r#gen::app::resources::v1::__buffa::view::ReportEnvProblemsRequestView<
+    crate::proto::app::resources::v1::__buffa::view::ReportEnvProblemsRequestView<
         'static,
     >,
 >;
 ///Shorthand for `OwnedView<ReportEnvProblemsResponseView<'static>>`.
 pub type OwnedReportEnvProblemsResponseView = ::buffa::view::OwnedView<
-    crate::r#gen::app::resources::v1::__buffa::view::ReportEnvProblemsResponseView<
+    crate::proto::app::resources::v1::__buffa::view::ReportEnvProblemsResponseView<
         'static,
     >,
 >;
-impl ::connectrpc::Encodable<crate::r#gen::app::resources::v1::DeclareResponse>
-for crate::r#gen::app::resources::v1::__buffa::view::DeclareResponseView<'_> {
+impl ::connectrpc::Encodable<crate::proto::app::resources::v1::DeclareResponse>
+for crate::proto::app::resources::v1::__buffa::view::DeclareResponseView<'_> {
     fn encode(
         &self,
         codec: ::connectrpc::CodecFormat,
@@ -35,9 +35,9 @@ for crate::r#gen::app::resources::v1::__buffa::view::DeclareResponseView<'_> {
         ::connectrpc::__codegen::encode_view_body(self, codec)
     }
 }
-impl ::connectrpc::Encodable<crate::r#gen::app::resources::v1::DeclareResponse>
+impl ::connectrpc::Encodable<crate::proto::app::resources::v1::DeclareResponse>
 for ::buffa::view::OwnedView<
-    crate::r#gen::app::resources::v1::__buffa::view::DeclareResponseView<'static>,
+    crate::proto::app::resources::v1::__buffa::view::DeclareResponseView<'static>,
 > {
     fn encode(
         &self,
@@ -60,8 +60,8 @@ for ::buffa::view::OwnedView<
         )
     }
 }
-impl ::connectrpc::Encodable<crate::r#gen::app::resources::v1::DeclareEnvResponse>
-for crate::r#gen::app::resources::v1::__buffa::view::DeclareEnvResponseView<'_> {
+impl ::connectrpc::Encodable<crate::proto::app::resources::v1::DeclareEnvResponse>
+for crate::proto::app::resources::v1::__buffa::view::DeclareEnvResponseView<'_> {
     fn encode(
         &self,
         codec: ::connectrpc::CodecFormat,
@@ -69,9 +69,9 @@ for crate::r#gen::app::resources::v1::__buffa::view::DeclareEnvResponseView<'_> 
         ::connectrpc::__codegen::encode_view_body(self, codec)
     }
 }
-impl ::connectrpc::Encodable<crate::r#gen::app::resources::v1::DeclareEnvResponse>
+impl ::connectrpc::Encodable<crate::proto::app::resources::v1::DeclareEnvResponse>
 for ::buffa::view::OwnedView<
-    crate::r#gen::app::resources::v1::__buffa::view::DeclareEnvResponseView<'static>,
+    crate::proto::app::resources::v1::__buffa::view::DeclareEnvResponseView<'static>,
 > {
     fn encode(
         &self,
@@ -94,8 +94,8 @@ for ::buffa::view::OwnedView<
         )
     }
 }
-impl ::connectrpc::Encodable<crate::r#gen::app::resources::v1::ReportEnvProblemsResponse>
-for crate::r#gen::app::resources::v1::__buffa::view::ReportEnvProblemsResponseView<'_> {
+impl ::connectrpc::Encodable<crate::proto::app::resources::v1::ReportEnvProblemsResponse>
+for crate::proto::app::resources::v1::__buffa::view::ReportEnvProblemsResponseView<'_> {
     fn encode(
         &self,
         codec: ::connectrpc::CodecFormat,
@@ -103,9 +103,9 @@ for crate::r#gen::app::resources::v1::__buffa::view::ReportEnvProblemsResponseVi
         ::connectrpc::__codegen::encode_view_body(self, codec)
     }
 }
-impl ::connectrpc::Encodable<crate::r#gen::app::resources::v1::ReportEnvProblemsResponse>
+impl ::connectrpc::Encodable<crate::proto::app::resources::v1::ReportEnvProblemsResponse>
 for ::buffa::view::OwnedView<
-    crate::r#gen::app::resources::v1::__buffa::view::ReportEnvProblemsResponseView<
+    crate::proto::app::resources::v1::__buffa::view::ReportEnvProblemsResponseView<
         'static,
     >,
 > {
@@ -215,12 +215,12 @@ pub trait ResourceService: Send + Sync + 'static {
         ctx: ::connectrpc::RequestContext,
         request: ::connectrpc::ServiceRequest<
             '_,
-            crate::r#gen::app::resources::v1::DeclareRequest,
+            crate::proto::app::resources::v1::DeclareRequest,
         >,
     ) -> impl ::std::future::Future<
         Output = ::connectrpc::ServiceResult<
             impl ::connectrpc::Encodable<
-                crate::r#gen::app::resources::v1::DeclareResponse,
+                crate::proto::app::resources::v1::DeclareResponse,
             > + Send + use<'a, Self>,
         >,
     > + Send;
@@ -238,12 +238,12 @@ pub trait ResourceService: Send + Sync + 'static {
         ctx: ::connectrpc::RequestContext,
         request: ::connectrpc::ServiceRequest<
             '_,
-            crate::r#gen::app::resources::v1::DeclareEnvRequest,
+            crate::proto::app::resources::v1::DeclareEnvRequest,
         >,
     ) -> impl ::std::future::Future<
         Output = ::connectrpc::ServiceResult<
             impl ::connectrpc::Encodable<
-                crate::r#gen::app::resources::v1::DeclareEnvResponse,
+                crate::proto::app::resources::v1::DeclareEnvResponse,
             > + Send + use<'a, Self>,
         >,
     > + Send;
@@ -261,12 +261,12 @@ pub trait ResourceService: Send + Sync + 'static {
         ctx: ::connectrpc::RequestContext,
         request: ::connectrpc::ServiceRequest<
             '_,
-            crate::r#gen::app::resources::v1::ReportEnvProblemsRequest,
+            crate::proto::app::resources::v1::ReportEnvProblemsRequest,
         >,
     ) -> impl ::std::future::Future<
         Output = ::connectrpc::ServiceResult<
             impl ::connectrpc::Encodable<
-                crate::r#gen::app::resources::v1::ReportEnvProblemsResponse,
+                crate::proto::app::resources::v1::ReportEnvProblemsResponse,
             > + Send + use<'a, Self>,
         >,
     > + Send;
@@ -310,7 +310,7 @@ impl<S: ResourceService> ResourceServiceExt for S {
                     ::connectrpc::view_handler_fn(move |
                         ctx,
                         req: ::buffa::view::OwnedView<
-                            crate::r#gen::app::resources::v1::__buffa::view::DeclareRequestView<
+                            crate::proto::app::resources::v1::__buffa::view::DeclareRequestView<
                                 'static,
                             >,
                         >,
@@ -319,12 +319,12 @@ impl<S: ResourceService> ResourceServiceExt for S {
                         let svc = ::std::sync::Arc::clone(&svc);
                         async move {
                             let sreq = ::connectrpc::ServiceRequest::<
-                                crate::r#gen::app::resources::v1::DeclareRequest,
+                                crate::proto::app::resources::v1::DeclareRequest,
                             >::from_parts(req.reborrow(), req.bytes());
                             svc.declare(ctx, sreq)
                                 .await?
                                 .encode::<
-                                    crate::r#gen::app::resources::v1::DeclareResponse,
+                                    crate::proto::app::resources::v1::DeclareResponse,
                                 >(format)
                         }
                     })
@@ -339,7 +339,7 @@ impl<S: ResourceService> ResourceServiceExt for S {
                     ::connectrpc::view_handler_fn(move |
                         ctx,
                         req: ::buffa::view::OwnedView<
-                            crate::r#gen::app::resources::v1::__buffa::view::DeclareEnvRequestView<
+                            crate::proto::app::resources::v1::__buffa::view::DeclareEnvRequestView<
                                 'static,
                             >,
                         >,
@@ -348,12 +348,12 @@ impl<S: ResourceService> ResourceServiceExt for S {
                         let svc = ::std::sync::Arc::clone(&svc);
                         async move {
                             let sreq = ::connectrpc::ServiceRequest::<
-                                crate::r#gen::app::resources::v1::DeclareEnvRequest,
+                                crate::proto::app::resources::v1::DeclareEnvRequest,
                             >::from_parts(req.reborrow(), req.bytes());
                             svc.declare_env(ctx, sreq)
                                 .await?
                                 .encode::<
-                                    crate::r#gen::app::resources::v1::DeclareEnvResponse,
+                                    crate::proto::app::resources::v1::DeclareEnvResponse,
                                 >(format)
                         }
                     })
@@ -368,7 +368,7 @@ impl<S: ResourceService> ResourceServiceExt for S {
                     ::connectrpc::view_handler_fn(move |
                         ctx,
                         req: ::buffa::view::OwnedView<
-                            crate::r#gen::app::resources::v1::__buffa::view::ReportEnvProblemsRequestView<
+                            crate::proto::app::resources::v1::__buffa::view::ReportEnvProblemsRequestView<
                                 'static,
                             >,
                         >,
@@ -377,12 +377,12 @@ impl<S: ResourceService> ResourceServiceExt for S {
                         let svc = ::std::sync::Arc::clone(&svc);
                         async move {
                             let sreq = ::connectrpc::ServiceRequest::<
-                                crate::r#gen::app::resources::v1::ReportEnvProblemsRequest,
+                                crate::proto::app::resources::v1::ReportEnvProblemsRequest,
                             >::from_parts(req.reborrow(), req.bytes());
                             svc.report_env_problems(ctx, sreq)
                                 .await?
                                 .encode::<
-                                    crate::r#gen::app::resources::v1::ReportEnvProblemsResponse,
+                                    crate::proto::app::resources::v1::ReportEnvProblemsResponse,
                                 >(format)
                         }
                     })
@@ -480,21 +480,21 @@ impl<T: ResourceService> ::connectrpc::Dispatcher for ResourceServiceServer<T> {
                 let svc = ::std::sync::Arc::clone(&self.inner);
                 Box::pin(async move {
                     let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
-                        crate::r#gen::app::resources::v1::DeclareRequest,
+                        crate::proto::app::resources::v1::DeclareRequest,
                     >(request.encoded()?, format)?;
-                    let req: crate::r#gen::app::resources::v1::__buffa::view::DeclareRequestView<
+                    let req: crate::proto::app::resources::v1::__buffa::view::DeclareRequestView<
                         '_,
                     > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
                         &body,
                         ctx.decode_options(),
                     )?;
                     let req = ::connectrpc::ServiceRequest::<
-                        crate::r#gen::app::resources::v1::DeclareRequest,
+                        crate::proto::app::resources::v1::DeclareRequest,
                     >::from_parts(&req, &body);
                     svc.declare(ctx, req)
                         .await?
                         .encode::<
-                            crate::r#gen::app::resources::v1::DeclareResponse,
+                            crate::proto::app::resources::v1::DeclareResponse,
                         >(format)
                 })
             }
@@ -502,21 +502,21 @@ impl<T: ResourceService> ::connectrpc::Dispatcher for ResourceServiceServer<T> {
                 let svc = ::std::sync::Arc::clone(&self.inner);
                 Box::pin(async move {
                     let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
-                        crate::r#gen::app::resources::v1::DeclareEnvRequest,
+                        crate::proto::app::resources::v1::DeclareEnvRequest,
                     >(request.encoded()?, format)?;
-                    let req: crate::r#gen::app::resources::v1::__buffa::view::DeclareEnvRequestView<
+                    let req: crate::proto::app::resources::v1::__buffa::view::DeclareEnvRequestView<
                         '_,
                     > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
                         &body,
                         ctx.decode_options(),
                     )?;
                     let req = ::connectrpc::ServiceRequest::<
-                        crate::r#gen::app::resources::v1::DeclareEnvRequest,
+                        crate::proto::app::resources::v1::DeclareEnvRequest,
                     >::from_parts(&req, &body);
                     svc.declare_env(ctx, req)
                         .await?
                         .encode::<
-                            crate::r#gen::app::resources::v1::DeclareEnvResponse,
+                            crate::proto::app::resources::v1::DeclareEnvResponse,
                         >(format)
                 })
             }
@@ -524,21 +524,21 @@ impl<T: ResourceService> ::connectrpc::Dispatcher for ResourceServiceServer<T> {
                 let svc = ::std::sync::Arc::clone(&self.inner);
                 Box::pin(async move {
                     let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
-                        crate::r#gen::app::resources::v1::ReportEnvProblemsRequest,
+                        crate::proto::app::resources::v1::ReportEnvProblemsRequest,
                     >(request.encoded()?, format)?;
-                    let req: crate::r#gen::app::resources::v1::__buffa::view::ReportEnvProblemsRequestView<
+                    let req: crate::proto::app::resources::v1::__buffa::view::ReportEnvProblemsRequestView<
                         '_,
                     > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
                         &body,
                         ctx.decode_options(),
                     )?;
                     let req = ::connectrpc::ServiceRequest::<
-                        crate::r#gen::app::resources::v1::ReportEnvProblemsRequest,
+                        crate::proto::app::resources::v1::ReportEnvProblemsRequest,
                     >::from_parts(&req, &body);
                     svc.report_env_problems(ctx, req)
                         .await?
                         .encode::<
-                            crate::r#gen::app::resources::v1::ReportEnvProblemsResponse,
+                            crate::proto::app::resources::v1::ReportEnvProblemsResponse,
                         >(format)
                 })
             }
@@ -673,11 +673,11 @@ where
     /// Call the Declare RPC. Sends a request to /app.resources.v1.ResourceService/Declare.
     pub async fn declare(
         &self,
-        request: crate::r#gen::app::resources::v1::DeclareRequest,
+        request: crate::proto::app::resources::v1::DeclareRequest,
     ) -> Result<
         ::connectrpc::client::UnaryResponse<
             ::buffa::view::OwnedView<
-                crate::r#gen::app::resources::v1::__buffa::view::DeclareResponseView<
+                crate::proto::app::resources::v1::__buffa::view::DeclareResponseView<
                     'static,
                 >,
             >,
@@ -690,12 +690,12 @@ where
     /// Call the Declare RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
     pub async fn declare_with_options(
         &self,
-        request: crate::r#gen::app::resources::v1::DeclareRequest,
+        request: crate::proto::app::resources::v1::DeclareRequest,
         options: ::connectrpc::client::CallOptions,
     ) -> Result<
         ::connectrpc::client::UnaryResponse<
             ::buffa::view::OwnedView<
-                crate::r#gen::app::resources::v1::__buffa::view::DeclareResponseView<
+                crate::proto::app::resources::v1::__buffa::view::DeclareResponseView<
                     'static,
                 >,
             >,
@@ -715,11 +715,11 @@ where
     /// Call the DeclareEnv RPC. Sends a request to /app.resources.v1.ResourceService/DeclareEnv.
     pub async fn declare_env(
         &self,
-        request: crate::r#gen::app::resources::v1::DeclareEnvRequest,
+        request: crate::proto::app::resources::v1::DeclareEnvRequest,
     ) -> Result<
         ::connectrpc::client::UnaryResponse<
             ::buffa::view::OwnedView<
-                crate::r#gen::app::resources::v1::__buffa::view::DeclareEnvResponseView<
+                crate::proto::app::resources::v1::__buffa::view::DeclareEnvResponseView<
                     'static,
                 >,
             >,
@@ -735,12 +735,12 @@ where
     /// Call the DeclareEnv RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
     pub async fn declare_env_with_options(
         &self,
-        request: crate::r#gen::app::resources::v1::DeclareEnvRequest,
+        request: crate::proto::app::resources::v1::DeclareEnvRequest,
         options: ::connectrpc::client::CallOptions,
     ) -> Result<
         ::connectrpc::client::UnaryResponse<
             ::buffa::view::OwnedView<
-                crate::r#gen::app::resources::v1::__buffa::view::DeclareEnvResponseView<
+                crate::proto::app::resources::v1::__buffa::view::DeclareEnvResponseView<
                     'static,
                 >,
             >,
@@ -760,11 +760,11 @@ where
     /// Call the ReportEnvProblems RPC. Sends a request to /app.resources.v1.ResourceService/ReportEnvProblems.
     pub async fn report_env_problems(
         &self,
-        request: crate::r#gen::app::resources::v1::ReportEnvProblemsRequest,
+        request: crate::proto::app::resources::v1::ReportEnvProblemsRequest,
     ) -> Result<
         ::connectrpc::client::UnaryResponse<
             ::buffa::view::OwnedView<
-                crate::r#gen::app::resources::v1::__buffa::view::ReportEnvProblemsResponseView<
+                crate::proto::app::resources::v1::__buffa::view::ReportEnvProblemsResponseView<
                     'static,
                 >,
             >,
@@ -780,12 +780,12 @@ where
     /// Call the ReportEnvProblems RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
     pub async fn report_env_problems_with_options(
         &self,
-        request: crate::r#gen::app::resources::v1::ReportEnvProblemsRequest,
+        request: crate::proto::app::resources::v1::ReportEnvProblemsRequest,
         options: ::connectrpc::client::CallOptions,
     ) -> Result<
         ::connectrpc::client::UnaryResponse<
             ::buffa::view::OwnedView<
-                crate::r#gen::app::resources::v1::__buffa::view::ReportEnvProblemsResponseView<
+                crate::proto::app::resources::v1::__buffa::view::ReportEnvProblemsResponseView<
                     'static,
                 >,
             >,

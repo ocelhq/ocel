@@ -1,6 +1,6 @@
 use crate::declare::discovering;
 use crate::link::{encoded, postgres};
-use crate::r#gen::common::links::v1::PostgresProperties;
+use crate::proto::common::links::v1::PostgresProperties;
 use crate::Error;
 
 pub(crate) const KIND: &str = "postgres";
