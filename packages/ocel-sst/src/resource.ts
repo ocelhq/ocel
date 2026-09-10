@@ -235,18 +235,22 @@ function ownerFor(util: DynamicHost, logical: string): string {
   return [`urn:pulumi:${util.getStack()}`, util.getProject(), dynamicType, logical].join("::");
 }
 
+declare const $util: DynamicHost | undefined;
+
+declare const $cli: { paths?: { root?: string } } | undefined;
+
 function host(): DynamicHost {
-  const util = (globalThis as { $util?: DynamicHost }).$util;
+  const util = typeof $util === "undefined" ? undefined : $util;
   if (!util?.dynamic?.Resource) {
     throw new Error(
-      "@ocel/sst links from inside sst.config.ts, where SST provides $util; it found no $util here",
+      "@ocel/sst links from inside the run() of your sst.config.ts, where SST supplies $util; nothing supplies it here. Move the link call into run().",
     );
   }
   return util;
 }
 
 function configRoot(): string {
-  const cli = (globalThis as { $cli?: { paths?: { root?: string } } }).$cli;
+  const cli = typeof $cli === "undefined" ? undefined : $cli;
   const root = cli?.paths?.root;
   if (!root) {
     throw new Error(

@@ -105,6 +105,18 @@ describe("declaring a postgres link", () => {
     expect(() => declare({ class: "preview", environment: "*" })).toThrow(/reserved/);
   });
 
+  it("says where a link call belongs when nothing supplies the util", () => {
+    Reflect.deleteProperty(globalThis, "$util");
+
+    expect(() => declare()).toThrow(/Move the link call into run\(\)/);
+  });
+
+  it("says how to name the project when nothing supplies the config root", () => {
+    Reflect.deleteProperty(globalThis, "$cli");
+
+    expect(() => declare()).toThrow(/pass `project` to say which directory holds it/);
+  });
+
   it("keeps only the fields a postgres link carries", () => {
     postgres("orders", {
       getSSTLink: () => ({ properties: { ...properties, extra: "dropped" } }),
