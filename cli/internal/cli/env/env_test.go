@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 
@@ -54,6 +55,10 @@ func seedFakeValue(t *testing.T, tier environmentv1.Tier, c *envvarsv1.Coordinat
 }
 
 func envDeclaringScript(definitions string) string {
+	return envDeclaringRequest(`{"definitions": ` + definitions + `}`)
+}
+
+func envDeclaringRequest(body string) string {
 	return fmt.Sprintf(`
 declare global {
   var __ocelRegister: Promise<unknown>[];
@@ -68,13 +73,13 @@ globalThis.__ocelRegister.push(
     const res = await fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.%s), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ definitions: %s }),
+      body: JSON.stringify(%s),
     });
     if (!res.ok) throw new Error("DeclareEnv failed: " + res.status + " " + (await res.text()));
   })(),
 );
 export {};
-`, constants.DevServerEnvName, definitions)
+`, constants.DevServerEnvName, body)
 }
 
 func setUpDeclaringFixture(t *testing.T, definitions string) (root, log string) {
@@ -577,7 +582,7 @@ func TestRenderValues(t *testing.T) {
 		var stdout bytes.Buffer
 		renderValues(&stdout, []*envvarsv1.ValueMetadata{
 			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Folder: ""}},
-		}, nil, nil)
+		}, nil, nil, nil)
 
 		out := stdout.String()
 		if !strings.Contains(out, "(project root)") {
@@ -602,7 +607,7 @@ func TestRenderValues(t *testing.T) {
 			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY"}},
 			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "pr-42"}},
 			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
-		}, []string{"staging"}, nil)
+		}, []string{"staging"}, nil, nil)
 
 		out := withOrphan.String()
 		if !strings.Contains(out, note) {
@@ -620,7 +625,7 @@ func TestRenderValues(t *testing.T) {
 		var live bytes.Buffer
 		renderValues(&live, []*envvarsv1.ValueMetadata{
 			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
-		}, []string{"staging"}, nil)
+		}, []string{"staging"}, nil, nil)
 		if out := live.String(); strings.Contains(out, note) {
 			t.Errorf("ls stdout = %q, want no orphan note when every override has its environment", out)
 		}
@@ -630,7 +635,8 @@ func TestRenderValues(t *testing.T) {
 		t.Parallel()
 
 		var stdout bytes.Buffer
-		renderValues(&stdout, []*envvarsv1.ValueMetadata{{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY"}}}, nil, map[string]string{"STRIPE_API_KEY": "Used to call Stripe"})
+		renderValues(&stdout, []*envvarsv1.ValueMetadata{{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY"}}}, nil,
+			[]*resourcesv1.VariableDefinition{{Key: "STRIPE_API_KEY", Description: "Used to call Stripe"}}, nil)
 		if out := stdout.String(); !strings.Contains(out, "Used to call Stripe") {
 			t.Errorf("ls stdout = %q, want the variable description", out)
 		}
