@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
 )
@@ -18,13 +20,17 @@ type Settings struct {
 	Transforms []string
 }
 
-func (s Settings) RefuseTransforms(provider string) error {
-	if len(s.Transforms) == 0 {
+func RefuseTransforms(vendor Vendor, transforms []string) error {
+	if len(transforms) == 0 {
 		return nil
 	}
+	listed := make([]string, len(transforms))
+	for i, module := range transforms {
+		listed[i] = strconv.Quote(module)
+	}
 	return Refuse(CodeInvalid,
-		"this project lists %q under \"transforms\" and the %s provider renders nothing a transform can patch; drop it, or deploy to a provider that does",
-		s.Transforms[0], provider)
+		"this project lists %s under \"transforms\" and the %s provider renders nothing a transform can patch; drop them, or deploy to a provider that does",
+		strings.Join(listed, ", "), vendor)
 }
 
 func Decode[T any](options Options) (T, error) {

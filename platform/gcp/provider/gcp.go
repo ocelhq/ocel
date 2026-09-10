@@ -31,9 +31,6 @@ type Provider struct {
 }
 
 func New(ctx context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
-	if err := settings.RefuseTransforms("gcp"); err != nil {
-		return nil, err
-	}
 	decoded, err := providerkit.Decode[Options](settings.Options)
 	if err != nil {
 		return nil, err

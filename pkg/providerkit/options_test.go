@@ -6,6 +6,24 @@ import (
 	"testing"
 )
 
+func TestRefuseTransformsNamesTheVendorAndEveryModuleListed(t *testing.T) {
+	t.Parallel()
+
+	if err := RefuseTransforms("gcp", nil); err != nil {
+		t.Fatalf("RefuseTransforms() = %v with nothing listed, want a deploy left alone", err)
+	}
+
+	err := RefuseTransforms("gcp", []string{"./transforms/network.transform.ts", "./transforms/tags.transform.ts"})
+	if err == nil {
+		t.Fatal("RefuseTransforms() = nil, want a deploy to a provider that renders nothing patchable refused")
+	}
+	for _, want := range []string{"gcp", "network.transform.ts", "tags.transform.ts"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("RefuseTransforms() = %v, want it to name %q", err, want)
+		}
+	}
+}
+
 type awsish struct {
 	Region  string `json:"region"`
 	Profile string `json:"profile,omitempty"`

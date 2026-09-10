@@ -91,6 +91,8 @@ func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootst
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
 
+func (p *Provider) RendersTransforms() {}
+
 func (p *Provider) Serves() []providerkit.BindingType { return deploy.Serves() }
 
 func (p *Provider) Computes() []providerkit.Compute {

@@ -73,14 +73,15 @@ func newDeployStages(plan DeployPlan) deployStages {
 }
 
 type deployRun struct {
-	provider Provider
-	gate     Gate
-	features []string
-	sender   *eventSender
-	tracked  *stageScope
-	manifest *contractv1.Manifest
-	plan     DeployPlan
-	stages   deployStages
+	provider   Provider
+	gate       Gate
+	features   []string
+	transforms []string
+	sender     *eventSender
+	tracked    *stageScope
+	manifest   *contractv1.Manifest
+	plan       DeployPlan
+	stages     deployStages
 
 	front     edge.Edge
 	stack     edge.EdgeStack
@@ -155,6 +156,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		provider:       provider,
 		gate:           gate,
 		features:       features,
+		transforms:     h.session.transforms(),
 		sender:         sender,
 		tracked:        newStageScope(sender),
 		manifest:       req.GetManifest(),
@@ -524,6 +526,11 @@ func (r *deployRun) preflight(ctx context.Context, report Reporter) error {
 	}
 	if err := r.refuseContainerValues(ctx); err != nil {
 		return err
+	}
+	if _, renders := r.provider.(TransformRenderer); !renders {
+		if err := RefuseTransforms(r.provider.Vendor(), r.transforms); err != nil {
+			return err
+		}
 	}
 	preflighter, ok := r.provider.(DeployPreflighter)
 	if !ok {
