@@ -88,28 +88,36 @@ func checkDevWritable(definitions []*resourcesv1.VariableDefinition, key string)
 		if len(scope) == 0 {
 			return nil
 		}
-		return fmt.Errorf("%s is scoped to %s, and a dev value carries no folder scope — `ocel dev` runs one child for the whole project. Put %s=<VALUE> in %s under the folder that needs it, or drop the scope where %s is declared so one dev value serves the project",
-			key, strings.Join(scope, " and "), key, dotenv.FileName, key)
+		return fmt.Errorf("%s is scoped to %s, and a dev value carries no folder scope — `ocel dev` runs one child for the whole project. Put %s=<VALUE> in %s under the folder that needs it, or drop the scope where %s is declared so one dev value serves the project%s",
+			key, strings.Join(scope, " and "), key, dotenv.FileName, key, descriptionLine(definition.GetDescription()))
 	}
 	return envgate.CheckWritable(definitions, key, "")
 }
 
 func runEnvLsDev(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
-	return withDevStore(ctx, deps, cwd, "", opts, stderr, func(store *devStore, _ *projectconfig.Config) error {
+	return withDevStore(ctx, deps, cwd, "", opts, stderr, func(store *devStore, cfg *projectconfig.Config) error {
+		definitions, err := declaredVariables(ctx, deps, cfg, nil, "", opts, stderr)
+		if err != nil {
+			return err
+		}
 		values, err := store.client.List(ctx, store.token, store.projectID)
 		if err != nil {
 			return err
 		}
-		renderDevValues(stdout, values)
+		renderDevValues(stdout, values, descriptions(definitions))
 		return nil
 	})
 }
 
 func runEnvGetDev(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	return withDevStore(ctx, deps, cwd, key, opts, stderr, func(store *devStore, _ *projectconfig.Config) error {
+	return withDevStore(ctx, deps, cwd, key, opts, stderr, func(store *devStore, cfg *projectconfig.Config) error {
+		definitions, err := declaredVariables(ctx, deps, cfg, nil, key, opts, stderr)
+		if err != nil {
+			return err
+		}
 		held, err := store.client.Get(ctx, store.token, store.projectID, key)
 		if errors.Is(err, envstore.ErrNoValue) {
-			return fmt.Errorf("no value is set for %s in dev; set one with `ocel env set %s <VALUE> --dev`", key, key)
+			return fmt.Errorf("no value is set for %s in dev; set one with `ocel env set %s <VALUE> --dev`%s", key, key, descriptionLine(descriptions(definitions)[key]))
 		}
 		if err != nil {
 			return err
@@ -139,15 +147,15 @@ func runEnvRmDev(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts e
 	})
 }
 
-func renderDevValues(stdout io.Writer, values []envstore.Value) {
+func renderDevValues(stdout io.Writer, values []envstore.Value, descriptions map[string]string) {
 	if len(values) == 0 {
 		fmt.Fprintln(stdout, "No dev values set. Set one with `ocel env set <KEY> <VALUE> --dev`.")
 		return
 	}
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "KEY\tBYTES\tUPDATED")
+	fmt.Fprintln(tw, "KEY\tDESCRIPTION\tBYTES\tUPDATED")
 	for _, value := range values {
-		fmt.Fprintf(tw, "%s\t%d\t%s\n", value.Key, len(value.Value), runui.EpochDate(value.UpdatedAt/1000))
+		fmt.Fprintf(tw, "%s\t%s\t%d\t%s\n", value.Key, descriptions[value.Key], len(value.Value), runui.EpochDate(value.UpdatedAt/1000))
 	}
 	_ = tw.Flush()
 }

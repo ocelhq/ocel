@@ -15,7 +15,7 @@ func TestOwedVariablesArePaintedOnlyWhenColourIsOn(t *testing.T) {
 	ev := &streamv1.RunEvent{Event: &streamv1.RunEvent_Waiting{Waiting: &streamv1.WaitingEvent{
 		Url: "http://127.0.0.1:5555/#t=abc",
 		Owed: &streamv1.VariablesOwed{Cells: []*streamv1.OwedVariable{
-			{Key: "DATABASE_URL", Reason: "no value"},
+			{Key: "DATABASE_URL", Reason: "no value", Description: "The primary database connection string"},
 			{Key: "PORT", Folder: "/web", Reason: "set, but not a number"},
 		}},
 	}}}
@@ -33,6 +33,9 @@ func TestOwedVariablesArePaintedOnlyWhenColourIsOn(t *testing.T) {
 	}
 	if strings.Contains(plain, "\x1b[") {
 		t.Errorf("plain = %q, want no escape codes without colour", plain)
+	}
+	if !strings.Contains(plain, "The primary database connection string") {
+		t.Errorf("plain = %q, want the variable description", plain)
 	}
 	if stripped := stripANSI(painted); stripped != plain {
 		t.Errorf("painted minus codes =\n%s\nwant the plain form\n%s", stripped, plain)

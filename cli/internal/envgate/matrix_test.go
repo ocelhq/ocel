@@ -96,6 +96,18 @@ func TestMatrix(t *testing.T) {
 		}
 	})
 
+	t.Run("carries a variable description", func(t *testing.T) {
+		t.Parallel()
+		g := prefetched(t, newFakeValues(), envgate.Scope{})
+		definition := def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)
+		definition.Description = "Used to call Stripe"
+		declare(t, g, definition)
+
+		if got := row(t, g.Matrix(nil), "STRIPE_API_KEY").Description; got != "Used to call Stripe" {
+			t.Errorf("description = %q, want %q", got, "Used to call Stripe")
+		}
+	})
+
 	t.Run("a key with a default is never required", func(t *testing.T) {
 		t.Parallel()
 		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})

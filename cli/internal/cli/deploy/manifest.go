@@ -190,6 +190,7 @@ func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[st
 			Source:           definition.GetSource(),
 			SchemaSource:     definition.GetSchemaSource(),
 			Schema:           definition.GetHasSchema(),
+			Description:      definition.GetDescription(),
 		})
 	}
 	return variables

@@ -35,6 +35,12 @@ message VariableDefinition {
   string schema_source = 7;
 
   bool has_schema = 8;
+
+  string description = 9 [(buf.validate.field).cel = {
+    id: "variables.definition.description"
+    message: "a description is at most 120 bytes, one line, and has no control characters"
+    expression: "size(bytes(this)) <= 120 && !this.matches('[[:cntrl:]]')"
+  }];
 }
 
 message DeclareEnvRequest {

@@ -210,6 +210,10 @@ func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOption
 		return runEnvLsDev(ctx, deps, cwd, opts, stdout, stderr)
 	}
 	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+		definitions, err := declaredVariables(ctx, deps, cfg, runner, "", opts, stderr)
+		if err != nil {
+			return err
+		}
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
@@ -227,7 +231,7 @@ func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOption
 				return err
 			}
 		}
-		renderValues(stdout, resp.GetValues(), environments)
+		renderValues(stdout, resp.GetValues(), environments, descriptions(definitions))
 		return nil
 	})
 }
@@ -243,6 +247,10 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 		return runEnvGetDev(ctx, deps, cwd, key, opts, stdout, stderr)
 	}
 	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+		definitions, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
+		if err != nil {
+			return err
+		}
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
@@ -256,7 +264,7 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 			return err
 		}
 		if !resp.GetFound() {
-			return fmt.Errorf("no value is set for %s; set one with `ocel env set %s <VALUE>`", describeCell(key, opts), key)
+			return fmt.Errorf("no value is set for %s; set one with `ocel env set %s <VALUE>`%s", describeCell(key, opts), key, descriptionLine(descriptions(definitions)[key]))
 		}
 
 		if opts.reveal {
@@ -413,14 +421,14 @@ func renderReferences(stdout io.Writer, cell string, references []*envvarsv1.Coo
 	fmt.Fprintln(stdout, "\nEditing this value changes what every one of them reads.")
 }
 
-func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environments []string) {
+func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environments []string, descriptions map[string]string) {
 	if len(values) == 0 {
 		fmt.Fprintln(stdout, "No values set. Set one with `ocel env set <KEY> <VALUE>`.")
 		return
 	}
 	orphans := false
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "KEY\tFOLDER\tENVIRONMENT\tVERSION\tBYTES\tUPDATED\tSOURCE")
+	fmt.Fprintln(tw, "KEY\tDESCRIPTION\tFOLDER\tENVIRONMENT\tVERSION\tBYTES\tUPDATED\tSOURCE")
 	for _, v := range values {
 		c := v.GetCoordinate()
 		environment := environmentOrAll(c.GetEnvironment())
@@ -433,8 +441,8 @@ func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environme
 		if target := v.GetTarget(); target != nil {
 			size, source = "—", describeCoordinate(target)
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
-			c.GetKey(), folderOrRoot(c.GetFolder()), environment,
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
+			c.GetKey(), descriptions[c.GetKey()], folderOrRoot(c.GetFolder()), environment,
 			v.GetVersion(), size, runui.EpochDate(v.GetUpdatedAt()), source)
 	}
 	_ = tw.Flush()
@@ -442,6 +450,21 @@ func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environme
 	if orphans {
 		fmt.Fprintln(stdout, "\nAn orphaned override belongs to an environment that no longer exists, so nothing will ever read it. Remove one with `ocel env rm <KEY> --preview --environment <ENVIRONMENT>`.")
 	}
+}
+
+func descriptions(definitions []*resourcesv1.VariableDefinition) map[string]string {
+	out := make(map[string]string, len(definitions))
+	for _, definition := range definitions {
+		out[definition.GetKey()] = definition.GetDescription()
+	}
+	return out
+}
+
+func descriptionLine(description string) string {
+	if description == "" {
+		return ""
+	}
+	return "\n  " + description
 }
 
 func renderVersions(stdout io.Writer, cell string, versions []*envvarsv1.VersionEntry) {

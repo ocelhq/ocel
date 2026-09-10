@@ -32,6 +32,7 @@ pub struct DeclaredVariable {
     pub class: Class,
     pub required: bool,
     pub folders: &'static [&'static str],
+    pub description: Option<&'static str>,
     pub file: &'static str,
     pub line: u32,
     pub check: Option<Check>,
@@ -210,6 +211,7 @@ fn definition(variable: &DeclaredVariable) -> VariableDefinition {
         folders: variable.folders.iter().map(|f| f.to_string()).collect(),
         source: source(variable.file, variable.line),
         has_schema: variable.check.is_some(),
+        description: variable.description.unwrap_or_default().to_string(),
         ..Default::default()
     }
 }

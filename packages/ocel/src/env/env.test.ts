@@ -113,6 +113,15 @@ describe("definition errors", () => {
     expect(() => defineEnv({ "lower-case": { class: "plain" } })).toThrow(EnvDefinitionError);
   });
 
+  it("rejects a description with controls or more than 120 bytes", () => {
+    expect(() => defineEnv({ API_KEY: { class: "plain", description: "two\nlines" } })).toThrow(
+      /unusable description/,
+    );
+    expect(() => defineEnv({ API_KEY: { class: "plain", description: "x".repeat(121) } })).toThrow(
+      /at most 120 bytes/,
+    );
+  });
+
   it("rejects client access on an encrypted class from an untyped caller", () => {
     expect(() =>
       // @ts-expect-error the pairing this asserts on does not typecheck
@@ -163,7 +172,7 @@ describe("the declaration payload", () => {
   it("carries every variable of one call, with its class and whether it is required", async () => {
     source.override = "/app/src/env.ts";
     defineEnv({
-      PAYLOAD_PLAIN: { class: "plain", client: true },
+      PAYLOAD_PLAIN: { class: "plain", client: true, description: "Shown in the dashboard" },
       PAYLOAD_SECRET: { class: "secret" },
       PAYLOAD_DEFAULTED: { class: "sensitive", schema: z.string().default("d") },
     });
@@ -182,6 +191,7 @@ describe("the declaration payload", () => {
           source: declaredIn,
           schemaSource: "",
           hasSchema: false,
+          description: "Shown in the dashboard",
         },
         {
           key: "PAYLOAD_SECRET",

@@ -4,6 +4,7 @@ import re
 import threading
 import types
 import typing
+import unicodedata
 from collections.abc import Sequence
 from typing import Any, overload
 
@@ -147,7 +148,7 @@ _UNSET = _Unset()
 
 
 class _Marker:
-    __slots__ = ("key", "default", "sensitive", "folders")
+    __slots__ = ("key", "default", "sensitive", "folders", "description")
 
     def __init__(
         self,
@@ -155,11 +156,13 @@ class _Marker:
         default: Any,
         sensitive: bool,
         folders: Sequence[str] | None,
+        description: str | None,
     ) -> None:
         self.key = key
         self.default = default
         self.sensitive = sensitive
         self.folders = folders
+        self.description = description
 
 
 @overload
@@ -169,6 +172,7 @@ def var[T](
     default: T,
     sensitive: bool = False,
     folders: Sequence[str] | None = None,
+    description: str | None = None,
 ) -> T: ...
 
 
@@ -178,6 +182,7 @@ def var(
     key: str | None = None,
     sensitive: bool = False,
     folders: Sequence[str] | None = None,
+    description: str | None = None,
 ) -> Any: ...
 
 
@@ -187,11 +192,12 @@ def var(
     default: Any = _UNSET,
     sensitive: bool = False,
     folders: Sequence[str] | None = None,
+    description: str | None = None,
 ) -> Any:
     """Spell out what an attribute of a class of :class:`Env` declares: the key when it is
     not the attribute name upper-cased, the value to fall back on when none is set, the
     sensitive class, and the folders the variable holds a value in."""
-    return _Marker(key, default, sensitive, folders)
+    return _Marker(key, default, sensitive, folders, description)
 
 
 class _Variable:
@@ -204,6 +210,7 @@ class _Variable:
         "folders",
         "default_raw",
         "default_value",
+        "description",
     )
 
     def __init__(
@@ -216,6 +223,7 @@ class _Variable:
         folders: tuple[str, ...],
         default_raw: str | None,
         default_value: Any,
+        description: str,
     ) -> None:
         self.attr = attr
         self.key = key
@@ -225,6 +233,7 @@ class _Variable:
         self.folders = folders
         self.default_raw = default_raw
         self.default_value = default_value
+        self.description = description
 
     @property
     def live(self) -> bool:
@@ -374,7 +383,11 @@ def _definitions(cls: type, source: str) -> list[_Variable]:
 
 def _definition(cls: type, attr: str, annotation: Any) -> _Variable:
     assigned = cls.__dict__.get(attr, _UNSET)
-    marker = assigned if isinstance(assigned, _Marker) else _Marker(None, assigned, False, None)
+    marker = (
+        assigned
+        if isinstance(assigned, _Marker)
+        else _Marker(None, assigned, False, None, None)
+    )
 
     key = marker.key or attr.upper()
     if not _KEY_PATTERN.fullmatch(key):
@@ -382,6 +395,17 @@ def _definition(cls: type, attr: str, annotation: Any) -> _Variable:
             key,
             "is not a usable variable name: use upper-case letters, digits and "
             "underscores, starting with a letter or underscore.",
+        )
+
+    description = marker.description or ""
+    if len(description.encode()) > 120:
+        raise EnvDefinitionError(
+            key, "has an unusable description: a description is at most 120 bytes."
+        )
+    if any(unicodedata.category(character) == "Cc" for character in description):
+        raise EnvDefinitionError(
+            key,
+            "has an unusable description: a description is one line and has no control characters.",
         )
 
     target, optional = _target(key, annotation)
@@ -432,7 +456,7 @@ def _definition(cls: type, attr: str, annotation: Any) -> _Variable:
         if problem:
             raise EnvDefinitionError(key, f"has an unusable folder scope: {problem}")
 
-    variable = _Variable(attr, key, klass, target, optional, folders, None, _UNSET)
+    variable = _Variable(attr, key, klass, target, optional, folders, None, _UNSET, description)
     if marker.default is not _UNSET and not (optional and marker.default is None):
         _default(variable, marker.default)
     return variable
@@ -537,6 +561,7 @@ def _declare(variables: Sequence[_Variable], source: str) -> None:
                     folders=list(variable.folders),
                     source=source,
                     has_schema=variable.has_schema,
+                    description=variable.description,
                 )
                 for variable in variables
             ]

@@ -30,10 +30,11 @@ type MatrixCell struct {
 }
 
 type MatrixRow struct {
-	Key   string       `json:"key"`
-	Class string       `json:"class"`
-	Scope []string     `json:"scope,omitempty"`
-	Cells []MatrixCell `json:"cells"`
+	Key         string       `json:"key"`
+	Description string       `json:"description,omitempty"`
+	Class       string       `json:"class"`
+	Scope       []string     `json:"scope,omitempty"`
+	Cells       []MatrixCell `json:"cells"`
 }
 
 type AppResolution struct {
@@ -84,10 +85,11 @@ func (g *Gate) Matrix(environments []string) Matrix {
 	}
 	for _, definition := range definitions {
 		row := MatrixRow{
-			Key:   definition.GetKey(),
-			Class: className[definition.GetClass()],
-			Scope: definition.GetFolders(),
-			Cells: make([]MatrixCell, 0, len(columns)),
+			Key:         definition.GetKey(),
+			Description: definition.GetDescription(),
+			Class:       className[definition.GetClass()],
+			Scope:       definition.GetFolders(),
+			Cells:       make([]MatrixCell, 0, len(columns)),
 		}
 		for _, folder := range columns {
 			cell := Cell{Key: definition.GetKey(), Folder: folder}

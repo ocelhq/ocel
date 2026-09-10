@@ -577,7 +577,7 @@ func TestRenderValues(t *testing.T) {
 		var stdout bytes.Buffer
 		renderValues(&stdout, []*envvarsv1.ValueMetadata{
 			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Folder: ""}},
-		}, nil)
+		}, nil, nil)
 
 		out := stdout.String()
 		if !strings.Contains(out, "(project root)") {
@@ -602,7 +602,7 @@ func TestRenderValues(t *testing.T) {
 			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY"}},
 			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "pr-42"}},
 			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
-		}, []string{"staging"})
+		}, []string{"staging"}, nil)
 
 		out := withOrphan.String()
 		if !strings.Contains(out, note) {
@@ -620,9 +620,19 @@ func TestRenderValues(t *testing.T) {
 		var live bytes.Buffer
 		renderValues(&live, []*envvarsv1.ValueMetadata{
 			{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
-		}, []string{"staging"})
+		}, []string{"staging"}, nil)
 		if out := live.String(); strings.Contains(out, note) {
 			t.Errorf("ls stdout = %q, want no orphan note when every override has its environment", out)
+		}
+	})
+
+	t.Run("shows a declared description", func(t *testing.T) {
+		t.Parallel()
+
+		var stdout bytes.Buffer
+		renderValues(&stdout, []*envvarsv1.ValueMetadata{{Coordinate: &envvarsv1.Coordinate{Key: "STRIPE_API_KEY"}}}, nil, map[string]string{"STRIPE_API_KEY": "Used to call Stripe"})
+		if out := stdout.String(); !strings.Contains(out, "Used to call Stripe") {
+			t.Errorf("ls stdout = %q, want the variable description", out)
 		}
 	})
 }

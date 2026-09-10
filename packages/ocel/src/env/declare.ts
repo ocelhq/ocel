@@ -31,6 +31,7 @@ export async function declareEnv(definitions: Definitions, source: string): Prom
       source,
       schemaSource: sourceOf(definitions),
       hasSchema: definition.schema !== undefined,
+      ...(definition.description === undefined ? {} : { description: definition.description }),
     })),
   });
 

@@ -111,6 +111,27 @@ func TestEnvRejectsAnUnusableKey(t *testing.T) {
 	}
 }
 
+func TestEnvRejectsAnUnusableDescription(t *testing.T) {
+	t.Run("control", func(t *testing.T) {
+		type env struct {
+			Name string "ocel:\"NAME,description=two\\nlines\""
+		}
+		err := definitionError(t, func() { ocel.Env[env]() })
+		if !strings.Contains(err.Error(), "unusable description") {
+			t.Errorf("error = %q", err)
+		}
+	})
+	t.Run("too long", func(t *testing.T) {
+		type env struct {
+			Name string "ocel:\"NAME,description=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\""
+		}
+		err := definitionError(t, func() { ocel.Env[env]() })
+		if !strings.Contains(err.Error(), "unusable description") {
+			t.Errorf("error = %q", err)
+		}
+	})
+}
+
 func TestEnvRejectsAnOcelOwnedNameForABareKeyClass(t *testing.T) {
 	type env struct {
 		Name string `ocel:"OCEL_THING"`
@@ -202,7 +223,7 @@ func TestEnvDeclaresTheClassTheTagNames(t *testing.T) {
 
 	ocel.Env[struct {
 		Plain     string      `ocel:"P"`
-		Sensitive string      `ocel:"S,sensitive"`
+		Sensitive string      `ocel:"S,sensitive,description=Used to call Stripe"`
 		Explicit  string      `ocel:"E,plain"`
 		Secret    ocel.Secret `ocel:"X"`
 	}]()
@@ -215,6 +236,9 @@ func TestEnvDeclaresTheClassTheTagNames(t *testing.T) {
 	want := []string{"VARIABLE_CLASS_PLAIN", "VARIABLE_CLASS_SENSITIVE", "VARIABLE_CLASS_PLAIN", "VARIABLE_CLASS_SECRET"}
 	if !equal(classes, want) {
 		t.Errorf("classes = %v, want %v", classes, want)
+	}
+	if got := declared["definitions"].([]any)[1].(map[string]any)["description"]; got != "Used to call Stripe" {
+		t.Errorf("description = %q, want %q", got, "Used to call Stripe")
 	}
 }
 

@@ -75,6 +75,7 @@ type Variable struct {
 	Source           string
 	SchemaSource     string
 	Schema           bool
+	Description      string
 }
 
 type Function struct {
@@ -439,7 +440,7 @@ func manifestVariables(variables []Variable) []*contractv1.ManifestVariable {
 	}
 	out := make([]*contractv1.ManifestVariable, 0, len(variables))
 	for _, v := range variables {
-		out = append(out, &contractv1.ManifestVariable{Key: v.Key, Class: v.Class, Value: v.Value, Folder: v.Folder, Version: v.Version})
+		out = append(out, &contractv1.ManifestVariable{Key: v.Key, Class: v.Class, Value: v.Value, Folder: v.Folder, Version: v.Version, Description: v.Description})
 	}
 	slices.SortFunc(out, func(a, b *contractv1.ManifestVariable) int { return strings.Compare(a.Key, b.Key) })
 	return out

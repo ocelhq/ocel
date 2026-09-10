@@ -758,7 +758,7 @@ func TestManifestVariables(t *testing.T) {
 		t.Parallel()
 
 		got := manifestVariables([]Variable{
-			{Key: "VERSIONED", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "v", Version: 4},
+			{Key: "VERSIONED", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "v", Version: 4, Description: "Used to call Stripe"},
 			{Key: "UNVERSIONED", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "u"},
 		})
 		if len(got) != 2 {
@@ -769,6 +769,9 @@ func TestManifestVariables(t *testing.T) {
 		}
 		if got[1].GetKey() != "VERSIONED" || got[1].GetVersion() != 4 {
 			t.Errorf("VERSIONED = %v, want the version it resolved at", got[1])
+		}
+		if got[1].GetDescription() != "Used to call Stripe" {
+			t.Errorf("VERSIONED description = %q, want it preserved", got[1].GetDescription())
 		}
 	})
 }

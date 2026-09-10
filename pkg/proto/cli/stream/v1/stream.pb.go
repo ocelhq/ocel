@@ -489,6 +489,7 @@ type OwedVariable struct {
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Folder        string                 `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
 	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -540,6 +541,13 @@ func (x *OwedVariable) GetFolder() string {
 func (x *OwedVariable) GetReason() string {
 	if x != nil {
 		return x.Reason
+	}
+	return ""
+}
+
+func (x *OwedVariable) GetDescription() string {
+	if x != nil {
+		return x.Description
 	}
 	return ""
 }
@@ -797,11 +805,12 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x04owed\x18\x03 \x01(\v2\x1c.cli.stream.v1.VariablesOwedR\x04owed\"Z\n" +
 	"\rVariablesOwed\x121\n" +
 	"\x05cells\x18\x01 \x03(\v2\x1b.cli.stream.v1.OwedVariableR\x05cells\x12\x16\n" +
-	"\x06remedy\x18\x02 \x01(\tR\x06remedy\"n\n" +
+	"\x06remedy\x18\x02 \x01(\tR\x06remedy\"\x90\x01\n" +
 	"\fOwedVariable\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x124\n" +
 	"\x06folder\x18\x02 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"&\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\"&\n" +
 	"\fResumedEvent\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xfa\x02\n" +
 	"\x0eRunResultEvent\x12\x18\n" +

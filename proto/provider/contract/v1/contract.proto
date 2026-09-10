@@ -218,6 +218,8 @@ message ManifestVariable {
   string folder = 4 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
 
   int64 version = 5;
+
+  string description = 6;
 }
 
 message ManifestFunction {

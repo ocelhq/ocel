@@ -36,6 +36,7 @@ export interface MatrixCell {
 
 export interface MatrixRow {
   key: string;
+  description?: string;
   class: Class;
   scope?: string[];
   cells: MatrixCell[];

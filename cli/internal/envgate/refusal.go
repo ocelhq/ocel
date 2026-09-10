@@ -16,8 +16,9 @@ const (
 )
 
 type Refusal struct {
-	Problems []*resourcesv1.VariableProblem
-	Scope    Scope
+	Problems    []*resourcesv1.VariableProblem
+	Definitions []*resourcesv1.VariableDefinition
+	Scope       Scope
 }
 
 func (r *Refusal) Error() string {
@@ -30,12 +31,22 @@ func (r *Refusal) Owed() *streamv1.VariablesOwed {
 	cells := make([]*streamv1.OwedVariable, 0, len(r.Problems))
 	for _, problem := range r.Problems {
 		cells = append(cells, &streamv1.OwedVariable{
-			Key:    problem.GetKey(),
-			Folder: problem.GetFolder(),
-			Reason: reason(problem),
+			Key:         problem.GetKey(),
+			Folder:      problem.GetFolder(),
+			Reason:      reason(problem),
+			Description: r.description(problem.GetKey()),
 		})
 	}
 	return &streamv1.VariablesOwed{Cells: cells, Remedy: r.remedy()}
+}
+
+func (r *Refusal) description(key string) string {
+	for _, definition := range r.Definitions {
+		if definition.GetKey() == key {
+			return definition.GetDescription()
+		}
+	}
+	return ""
 }
 
 func (r *Refusal) remedy() string {
@@ -101,6 +112,9 @@ func Lines(cells []*streamv1.OwedVariable, paint Paint) []string {
 		key := fmt.Sprintf("%-*s", keyWidth, cell.GetKey())
 		folder := fmt.Sprintf("%-*s", folderWidth, folderName(cell.GetFolder()))
 		out = append(out, indent+paint.Fail(Mark)+" "+key+indent+paint.Faint(folder)+indent+cell.GetReason())
+		if description := cell.GetDescription(); description != "" {
+			out = append(out, indent+indent+paint.Faint(description))
+		}
 	}
 	return out
 }

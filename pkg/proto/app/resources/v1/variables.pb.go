@@ -136,6 +136,7 @@ type VariableDefinition struct {
 	Source           string                 `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
 	SchemaSource     string                 `protobuf:"bytes,7,opt,name=schema_source,json=schemaSource,proto3" json:"schema_source,omitempty"`
 	HasSchema        bool                   `protobuf:"varint,8,opt,name=has_schema,json=hasSchema,proto3" json:"has_schema,omitempty"`
+	Description      string                 `protobuf:"bytes,9,opt,name=description,proto3" json:"description,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -224,6 +225,13 @@ func (x *VariableDefinition) GetHasSchema() bool {
 		return x.HasSchema
 	}
 	return false
+}
+
+func (x *VariableDefinition) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
 }
 
 type DeclareEnvRequest struct {
@@ -526,7 +534,7 @@ var File_app_resources_v1_variables_proto protoreflect.FileDescriptor
 
 const file_app_resources_v1_variables_proto_rawDesc = "" +
 	"\n" +
-	" app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto\"\xe6\x02\n" +
+	" app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto\"\xbd\x04\n" +
 	"\x12VariableDefinition\x12+\n" +
 	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12?\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05class\x12+\n" +
@@ -536,7 +544,9 @@ const file_app_resources_v1_variables_proto_rawDesc = "" +
 	"\x06source\x18\x06 \x01(\tR\x06source\x12#\n" +
 	"\rschema_source\x18\a \x01(\tR\fschemaSource\x12\x1d\n" +
 	"\n" +
-	"has_schema\x18\b \x01(\bR\thasSchema\"[\n" +
+	"has_schema\x18\b \x01(\bR\thasSchema\x12\xd4\x01\n" +
+	"\vdescription\x18\t \x01(\tB\xb1\x01\xbaH\xad\x01\xba\x01\xa9\x01\n" +
+	" variables.definition.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a8size(bytes(this)) <= 120 && !this.matches('[[:cntrl:]]')R\vdescription\"[\n" +
 	"\x11DeclareEnvRequest\x12F\n" +
 	"\vdefinitions\x18\x01 \x03(\v2$.app.resources.v1.VariableDefinitionR\vdefinitions\"\x87\x01\n" +
 	"\fVariableCell\x12+\n" +
