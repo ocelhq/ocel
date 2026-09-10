@@ -46,7 +46,7 @@ func (f *storeFetcher) fetchLive(ctx context.Context) (map[string]string, error)
 	if err != nil {
 		return nil, err
 	}
-	records, err := f.reader.Bindings(ctx, linkNames(f.bindings))
+	records, err := f.reader.Bindings(ctx, bindingNames(f.bindings))
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func republished(n int64) string {
 	return fmt.Sprintf("%d more times", n)
 }
 
-func linkNames(bindings []vars.Binding) []string {
+func bindingNames(bindings []vars.Binding) []string {
 	names := make([]string, 0, len(bindings))
 	for _, l := range bindings {
 		names = append(names, l.Name)
