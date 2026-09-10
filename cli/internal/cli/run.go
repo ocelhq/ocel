@@ -77,7 +77,7 @@ func runRun(ctx context.Context, deps cmddeps.Deps, local bool, cwd string, appA
 	var link *devConsole
 	if !local {
 		apiURL := console.EffectiveBaseURL(creds.APIURL)
-		bound, bindErr := ensureConsoleBinding(ctx, deps, cfg.Dir, apiURL, stdout, stderr, stdin)
+		bound, bindErr := ensureConsoleLink(ctx, deps, cfg.Dir, apiURL, stdout, stderr, stdin)
 		if bindErr != nil {
 			return bindErr
 		}

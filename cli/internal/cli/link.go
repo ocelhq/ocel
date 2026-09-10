@@ -1,382 +1,365 @@
 package cli
 
 import (
-	"bytes"
+	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
-	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
-	"github.com/ocelhq/ocel/cli/internal/runui"
-	"github.com/ocelhq/ocel/pkg/naming"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
-	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/console/auth"
+	"github.com/ocelhq/ocel/cli/internal/console/link"
+	"github.com/ocelhq/ocel/cli/internal/console/project"
+	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/prompt"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
-const defaultLinkOwner = "cli"
-
 type linkOptions struct {
-	preview     bool
-	environment string
-	owner       string
-}
-
-func (o linkOptions) checkEnvironment() error {
-	if o.environment == "" || o.preview {
-		return nil
-	}
-	return fmt.Errorf("--environment addresses one preview environment's override, and production has a single environment; pass --preview, or leave --environment off to address the production value")
-}
-
-func (o linkOptions) tier() environmentv1.Tier {
-	if o.preview {
-		return environmentv1.Tier_TIER_PREVIEW
-	}
-	return environmentv1.Tier_TIER_PRODUCTION
-}
-
-func (o linkOptions) ownerOrDefault() string {
-	if o.owner == "" {
-		return defaultLinkOwner
-	}
-	return o.owner
+	org    string
+	create bool
+	apiURL string
 }
 
 var linkOpts linkOptions
 
 var linkCmd = &cobra.Command{
-	Use:   "link",
-	Short: "Manage the links this project's apps resolve",
-	Long: "Manage the links this project's apps resolve.\n\n" +
-		"A link is one resource an app reaches — its address, its credentials and the " +
-		"permissions that go with it — published under a name apps bind to. Records live in " +
-		"your own provider account and are reached through the provider, never by the CLI directly.",
-}
-
-var linkSetCmd = &cobra.Command{
-	Use:   "set",
-	Short: "Publish one link, read as JSON on stdin",
-	Long: "Publish one link, read as JSON on stdin.\n\n" +
-		"The link is a common.links.v1.Link in protobuf JSON, and it carries its own name, so " +
-		"there is nothing to name on the command line:\n\n" +
-		"  ocel link set < link.json\n\n" +
-		"A name belongs to whoever published it. Publishing over a name another publisher " +
-		"holds is refused rather than handing every app bound to that name another " +
-		"resource's values; pass --owner to publish as that publisher.",
-	Args: cobra.NoArgs,
+	Use:   "link [project]",
+	Short: "Link this directory to an Ocel console project",
+	Long: "Records this working tree's console project in " + constants.ProjectStateDirName + "/console.json,\n" +
+		"which is untracked — a clone can be linked to a different account or\n" +
+		"project, or to none at all.\n\n" +
+		"With no arguments on a terminal, pick from your existing projects or\n" +
+		"create a new one. Otherwise name an existing project's slug, or pass\n" +
+		"--create to make a new project named after this directory.",
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return withLinkCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkSet(ctx, newDeps(), cwd, cmd.InOrStdin(), linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
-		})
-	},
-}
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("determine working directory: %w", err)
+		}
 
-var linkRmCmd = &cobra.Command{
-	Use:   "rm <NAME>",
-	Short: "Remove a link, whatever published it",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return withLinkCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkRm(ctx, newDeps(), cwd, args[0], linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
-		})
-	},
-}
+		projectRef := ""
+		if len(args) > 0 {
+			projectRef = args[0]
+		}
 
-var linkLsCmd = &cobra.Command{
-	Use:   "ls",
-	Short: "List the published links, without revealing what they hold",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return withLinkCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkLs(ctx, newDeps(), cwd, linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
-		})
-	},
-}
+		deps := newDeps()
+		opts := linkOpts
+		creds, _ := deps.LoadCredentials()
+		opts.apiURL = console.EffectiveBaseURL(creds.APIURL)
 
-var linkGenerateCmd = &cobra.Command{
-	Use:   "generate",
-	Short: "Write the transform types for the links published to one coordinate",
-	Long: "Write the transform types for the links published to one coordinate.\n\n" +
-		"Reads the records published to production, or to the preview coordinate --preview and " +
-		"--environment name, and writes " + linkTypesFileName + " beside your ocel config. The file " +
-		"names each record and the properties it carries, so `links.<name>.<property>` in a transform " +
-		"is checked where it is written instead of at the deploy. Check it in, and run this again when " +
-		"what you publish changes.\n\n" +
-		"Unlike `ocel generate`, this reads the published records: it logs in and runs the provider.",
-	Args: cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return withLinkCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkGenerate(ctx, newDeps(), cwd, linkOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
-		})
+		return runLink(cmd.Context(), deps, cwd, projectRef, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
 func init() {
-	for _, c := range []*cobra.Command{linkSetCmd, linkRmCmd, linkLsCmd, linkGenerateCmd} {
-		c.Flags().BoolVar(&linkOpts.preview, "preview", false, "Act on the preview bootstrap instead of production")
-		c.Flags().StringVar(&linkOpts.environment, "environment", "", "Address the link this named preview environment holds instead of the one bound to all environments")
-		linkCmd.AddCommand(c)
-	}
-	linkSetCmd.Flags().StringVar(&linkOpts.owner, "owner", defaultLinkOwner, "Publish under this publisher's name")
+	linkCmd.Flags().StringVar(&linkOpts.org, "org", "", "Select an organization by slug, bypassing the interactive picker")
+	linkCmd.Flags().BoolVar(&linkOpts.create, "create", false, "Create a new project instead of selecting an existing one")
+
 	rootCmd.AddCommand(linkCmd)
+	rootCmd.AddCommand(unlinkCmd)
 }
 
-func withLinkCommand(cmd *cobra.Command, run func(context.Context, string) error) error {
-	cwd, err := os.Getwd()
+func runLink(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, opts linkOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+	creds, err := deps.LoadCredentials()
 	if err != nil {
-		return fmt.Errorf("determine working directory: %w", err)
+		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
+		return &exitsig.ExitError{Code: 1}
 	}
-	ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
-	defer stop()
-	return run(ctx, cwd)
-}
 
-func withLinkProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts linkOptions, stderr io.Writer, drive func(*provider.Runner, *projectconfig.Config) error) error {
-	if err := opts.checkEnvironment(); err != nil {
+	apiURL := strings.TrimRight(opts.apiURL, "/")
+	// TODO: linkCmd installs no interrupt handler, so SIGINT still hard-kills here —
+	// migrating these reads to the prompt package without also adding installInterruptHandler
+	// would look like a cleanup but would reintroduce the raw-mode/masked-SIGINT bug
+	// this package's other commands fixed (see #245).
+	scanner := bufio.NewScanner(stdin)
+	projectRef = strings.TrimSpace(projectRef)
+
+	if existing, err := link.Read(projectDir, apiURL); err != nil {
 		return err
-	}
-	cfg, err := projectconfig.Resolve(ctx, cwd, deps.ConfigPath())
-	if err != nil {
-		return err
+	} else if existing != nil {
+		fmt.Fprintf(stdout, "This directory is linked to %s. Re-linking.\n", existing.ProjectName)
 	}
 
-	hint := "ocel bootstrap production"
-	if opts.preview {
-		hint = "ocel bootstrap preview"
-	}
+	authClient := auth.New(apiURL)
+	projectClient := project.New(apiURL)
 
-	return provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
-		if err := preflight.Credentials(ctx, runui.Plain(deps.Presentation(stderr), stderr), runner, cfg, opts.tier(), hint); err != nil {
-			return err
-		}
-		return drive(runner, cfg)
-	})
-}
-
-func runLinkSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io.Reader, opts linkOptions, stdout, stderr io.Writer) error {
-	link, err := decodeLink(stdin)
+	org, err := pickOrganization(ctx, authClient, creds.AccessToken, opts, stdout, stdin, scanner)
 	if err != nil {
 		return err
 	}
-	owner := opts.ownerOrDefault()
-	return withLinkProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
-		client, err := runner.Vars()
-		if err != nil {
-			return err
+	if err := authClient.SetActiveOrganization(ctx, creds.AccessToken, org.ID); err != nil {
+		return fmt.Errorf("failed to set active organization: %w", err)
+	}
+	fmt.Fprintf(stdout, "✓ Using organization %s\n", org.Name)
+
+	var projects []project.Project
+	err = withSpinner(stdout, "Loading projects...", func() error {
+		list, listErr := projectClient.ListProjects(ctx, creds.AccessToken)
+		if listErr != nil {
+			return listErr
 		}
-		resp, err := client.SetLink(ctx, &envvarsv1.SetLinkRequest{
-			Slug:        cfg.Slug,
-			Tier:        opts.tier(),
-			Environment: opts.environment,
-			Link:        link,
-			Owner:       owner,
-		})
-		if err != nil {
-			return err
-		}
-		if deps.Presentation(stdout).Format == runui.FormatJSON {
-			return writeLinkJSON(stdout, linkSetReport{Name: link.GetName(), Owner: owner, Version: resp.GetVersion()})
-		}
-		fmt.Fprintf(stdout, "Published %s as %s (version %d).\n", describeLink(link.GetName(), opts), owner, resp.GetVersion())
+		projects = list
 		return nil
 	})
-}
-
-func decodeLink(stdin io.Reader) (*linksv1.Link, error) {
-	raw, err := io.ReadAll(stdin)
 	if err != nil {
-		return nil, fmt.Errorf("read the link on stdin: %w", err)
+		return fmt.Errorf("failed to list projects: %w", err)
 	}
-	if len(bytes.TrimSpace(raw)) == 0 {
-		return nil, errors.New("nothing came in on stdin; `ocel link set` reads one link as protobuf JSON, so pipe it in: `ocel link set < link.json`")
+
+	selected, err := selectOrCreateProject(ctx, projectClient, creds.AccessToken, projectDir, projectRef, opts, projects, org, stdout, stdin, scanner)
+	if err != nil {
+		return err
 	}
-	link := &linksv1.Link{}
-	if err := protojson.Unmarshal(raw, link); err != nil {
-		return nil, fmt.Errorf("read the link on stdin: %w", err)
+
+	if err := link.Write(projectDir, link.Link{
+		APIURL:         apiURL,
+		OrganizationID: org.ID,
+		ProjectID:      selected.ID,
+		ProjectName:    selected.Name,
+	}); err != nil {
+		return err
 	}
-	return link, nil
+
+	fmt.Fprintf(stdout, "✓ Linked to %s (%s)\n", selected.Name, selected.Slug)
+	return nil
 }
 
-func runLinkRm(ctx context.Context, deps cmddeps.Deps, cwd, name string, opts linkOptions, stdout, stderr io.Writer) error {
-	return withLinkProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
-		client, err := runner.Vars()
-		if err != nil {
-			return err
+func ensureConsoleLink(ctx context.Context, deps cmddeps.Deps, projectDir, apiURL string, stdout, stderr io.Writer, stdin io.Reader) (*link.Link, error) {
+	existing, err := link.Read(projectDir, apiURL)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return existing, nil
+	}
+
+	if !prompt.Interactive(stdin) {
+		return nil, fmt.Errorf("%s isn't linked to a console project — run `ocel link <project>` (or `ocel link --create`) first", projectDir)
+	}
+
+	fmt.Fprintln(stdout, "This directory isn't linked to a console project yet.")
+	if err := runLink(ctx, deps, projectDir, "", linkOptions{apiURL: apiURL}, stdout, stderr, stdin); err != nil {
+		return nil, err
+	}
+
+	existing, err = link.Read(projectDir, apiURL)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, errors.New("linking recorded no project — run `ocel link` and try again")
+	}
+	return existing, nil
+}
+
+func selectOrCreateProject(
+	ctx context.Context,
+	client *project.Client,
+	accessToken, projectDir, projectRef string,
+	opts linkOptions,
+	projects []project.Project,
+	org *auth.Organization,
+	stdout io.Writer,
+	stdin io.Reader,
+	scanner *bufio.Scanner,
+) (*project.Project, error) {
+	if opts.create {
+		return createProject(ctx, client, accessToken, defaultProjectName(projectDir, projectRef), org, stdout)
+	}
+
+	if projectRef != "" {
+		for i := range projects {
+			if projects[i].Slug == projectRef {
+				return &projects[i], nil
+			}
 		}
-		resp, err := client.RemoveLink(ctx, &envvarsv1.RemoveLinkRequest{
-			Slug:        cfg.Slug,
-			Tier:        opts.tier(),
-			Environment: opts.environment,
-			Name:        name,
-		})
-		if err != nil {
-			return err
+		if len(projects) == 0 {
+			return nil, fmt.Errorf("%s has no projects yet — run `ocel link --create` to make one", org.Name)
 		}
-		if deps.Presentation(stdout).Format == runui.FormatJSON {
-			return writeLinkJSON(stdout, linkRemoveReport{Name: name, Removed: resp.GetRemoved()})
+		return nil, fmt.Errorf("no project with slug %q in %s; available: %s (or pass --create)", projectRef, org.Name, joinProjectSlugs(projects))
+	}
+
+	if !prompt.Interactive(stdin) {
+		if len(projects) == 0 {
+			return nil, errors.New("no project selected — pass --create to make one")
 		}
-		if !resp.GetRemoved() {
-			fmt.Fprintf(stdout, "No link named %s is published.\n", describeLink(name, opts))
-			return nil
+		return nil, fmt.Errorf("no project selected — pass a project slug or --create. available: %s", joinProjectSlugs(projects))
+	}
+
+	if len(projects) == 0 {
+		fmt.Fprintf(stdout, "%s has no projects yet.\n", org.Name)
+		return createProject(ctx, client, accessToken, promptProjectName(projectDir, stdout, scanner), org, stdout)
+	}
+
+	fmt.Fprintf(stdout, "Projects in %s:\n", org.Name)
+	for i, p := range projects {
+		fmt.Fprintf(stdout, "  %d) %s (%s)\n", i+1, p.Name, p.Slug)
+	}
+	fmt.Fprintln(stdout, "  n) Create a new project")
+	fmt.Fprint(stdout, "Select a project (number, slug, or n): ")
+
+	selection := ""
+	if scanner.Scan() {
+		selection = strings.TrimSpace(scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read input: %w", err)
+	}
+	switch {
+	case selection == "":
+		return nil, errors.New("no project selected; rerun `ocel link`")
+	case strings.EqualFold(selection, "n"):
+		return createProject(ctx, client, accessToken, promptProjectName(projectDir, stdout, scanner), org, stdout)
+	}
+
+	if idx, convErr := strconv.Atoi(selection); convErr == nil {
+		if idx < 1 || idx > len(projects) {
+			return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
 		}
-		fmt.Fprintf(stdout, "Removed %s.\n", describeLink(name, opts))
+		return &projects[idx-1], nil
+	}
+	for i := range projects {
+		if projects[i].Slug == selection {
+			return &projects[i], nil
+		}
+	}
+	return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
+}
+
+func createProject(ctx context.Context, client *project.Client, accessToken, name string, org *auth.Organization, stdout io.Writer) (*project.Project, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, errors.New("project name required — pass it as an argument, e.g. `ocel link --create my-app`")
+	}
+	slug := slugify(name)
+	if slug == "" {
+		return nil, fmt.Errorf("could not derive a valid slug from %q — try a name with at least one alphanumeric character", name)
+	}
+
+	var created *project.Project
+	err := withSpinner(stdout, fmt.Sprintf("Creating project %q...", name), func() error {
+		p, createErr := client.CreateProject(ctx, accessToken, name, slug)
+		if createErr != nil {
+			return createErr
+		}
+		created = p
 		return nil
 	})
+	if err != nil {
+		if project.IsConflict(err) {
+			return nil, fmt.Errorf("a project with slug %q already exists in %s — run `ocel link %s` to link to it", slug, org.Name, slug)
+		}
+		return nil, fmt.Errorf("failed to create project: %w", err)
+	}
+	fmt.Fprintf(stdout, "✓ Created project (id: %s)\n", created.ID)
+	return created, nil
 }
 
-func runLinkLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
-	return withLinkProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
-		client, err := runner.Vars()
-		if err != nil {
-			return err
+func defaultProjectName(projectDir, name string) string {
+	if name != "" {
+		return name
+	}
+	return filepath.Base(projectDir)
+}
+
+func promptProjectName(projectDir string, stdout io.Writer, scanner *bufio.Scanner) string {
+	fallback := filepath.Base(projectDir)
+	fmt.Fprintf(stdout, "Project name (%s): ", fallback)
+	if scanner.Scan() {
+		if name := strings.TrimSpace(scanner.Text()); name != "" {
+			return name
 		}
-		resp, err := client.ListLinks(ctx, &envvarsv1.ListLinksRequest{
-			Slug:        cfg.Slug,
-			Tier:        opts.tier(),
-			Environment: opts.environment,
-		})
-		if err != nil {
-			return err
+	}
+	return fallback
+}
+
+func pickOrganization(ctx context.Context, client *auth.Client, accessToken string, opts linkOptions, stdout io.Writer, stdin io.Reader, scanner *bufio.Scanner) (*auth.Organization, error) {
+	var orgs []auth.Organization
+	err := withSpinner(stdout, "Resolving organization...", func() error {
+		list, listErr := client.ListOrganizations(ctx, accessToken)
+		if listErr != nil {
+			return listErr
 		}
-		if deps.Presentation(stdout).Format == runui.FormatJSON {
-			return writeLinkJSON(stdout, linkListReport{Links: linkReports(resp.GetLinks())})
-		}
-		renderLinks(stdout, resp.GetLinks())
+		orgs = list
 		return nil
 	})
-}
+	if err != nil {
+		return nil, fmt.Errorf("failed to list organizations: %w", err)
+	}
 
-func runLinkGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opts linkOptions, stdout, stderr io.Writer) error {
-	return withLinkProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
-		client, err := runner.Vars()
-		if err != nil {
-			return err
+	if len(orgs) == 0 {
+		return nil, errors.New("you don't belong to any organization yet — create one on the Ocel dashboard first")
+	}
+
+	if opts.org != "" {
+		for i := range orgs {
+			if orgs[i].Slug == opts.org {
+				return &orgs[i], nil
+			}
 		}
-		resp, err := client.ListLinks(ctx, &envvarsv1.ListLinksRequest{
-			Slug:        cfg.Slug,
-			Tier:        opts.tier(),
-			Environment: opts.environment,
-		})
-		if err != nil {
-			return err
+		return nil, fmt.Errorf("no organization with slug %q found; available: %s", opts.org, joinOrgSlugs(orgs))
+	}
+
+	if len(orgs) == 1 {
+		return &orgs[0], nil
+	}
+
+	if !prompt.Interactive(stdin) {
+		return nil, fmt.Errorf("multiple organizations found; pass --org <slug>. available: %s", joinOrgSlugs(orgs))
+	}
+
+	fmt.Fprintln(stdout, "Multiple organizations found:")
+	for i, org := range orgs {
+		fmt.Fprintf(stdout, "  %d) %s (%s)\n", i+1, org.Name, org.Slug)
+	}
+	fmt.Fprint(stdout, "Select an organization (number or slug): ")
+
+	selection := ""
+	if scanner.Scan() {
+		selection = strings.TrimSpace(scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read input: %w", err)
+	}
+	if selection == "" {
+		return nil, errors.New("no organization selected; rerun `ocel link`")
+	}
+
+	if idx, convErr := strconv.Atoi(selection); convErr == nil {
+		if idx < 1 || idx > len(orgs) {
+			return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
 		}
-
-		path := filepath.Join(cfg.Dir, linkTypesFileName)
-		if err := os.WriteFile(path, []byte(renderLinkTypes(runner.Name(), describeLinkCoordinate(opts), resp.GetLinks())), 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", linkTypesFileName, err)
+		return &orgs[idx-1], nil
+	}
+	for i := range orgs {
+		if orgs[i].Slug == selection {
+			return &orgs[i], nil
 		}
-
-		if deps.Presentation(stdout).Format == runui.FormatJSON {
-			return writeLinkJSON(stdout, linkGenerateReport{Path: path, Links: linkReports(resp.GetLinks())})
-		}
-		if len(resp.GetLinks()) == 0 {
-			fmt.Fprintf(stdout, "Nothing is published to %s; wrote %s, which names no record and so leaves no link name open.\n", describeLinkCoordinate(opts), path)
-			return nil
-		}
-		fmt.Fprintf(stdout, "Wrote %s from the %d links published to %s.\n", path, len(resp.GetLinks()), describeLinkCoordinate(opts))
-		return nil
-	})
-}
-
-func describeLinkCoordinate(opts linkOptions) string {
-	if !opts.preview {
-		return "production"
 	}
-	if opts.environment == "" {
-		return "preview"
+	return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
+}
+
+func joinOrgSlugs(orgs []auth.Organization) string {
+	slugs := make([]string, len(orgs))
+	for i, org := range orgs {
+		slugs[i] = org.Slug
 	}
-	return "the preview environment " + opts.environment
+	return strings.Join(slugs, ", ")
 }
 
-type linkGenerateReport struct {
-	Path  string       `json:"path"`
-	Links []linkReport `json:"links"`
-}
-
-type linkSetReport struct {
-	Name    string `json:"name"`
-	Owner   string `json:"owner"`
-	Version uint64 `json:"version"`
-}
-
-type linkRemoveReport struct {
-	Name    string `json:"name"`
-	Removed bool   `json:"removed"`
-}
-
-type linkListReport struct {
-	Links []linkReport `json:"links"`
-}
-
-type linkReport struct {
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Source  string `json:"source"`
-	Owner   string `json:"owner"`
-	Version uint64 `json:"version"`
-}
-
-func linkReports(links []*envvarsv1.LinkSummary) []linkReport {
-	out := make([]linkReport, 0, len(links))
-	for _, l := range links {
-		out = append(out, linkReport{
-			Name:    l.GetName(),
-			Type:    linkTypeName(l.GetType()),
-			Source:  l.GetSource(),
-			Owner:   l.GetOwner(),
-			Version: l.GetVersion(),
-		})
+func joinProjectSlugs(projects []project.Project) string {
+	slugs := make([]string, len(projects))
+	for i, p := range projects {
+		slugs[i] = p.Slug
 	}
-	return out
-}
-
-func writeLinkJSON(stdout io.Writer, report any) error {
-	encoder := json.NewEncoder(stdout)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(report)
-}
-
-func renderLinks(stdout io.Writer, links []*envvarsv1.LinkSummary) {
-	if len(links) == 0 {
-		fmt.Fprintln(stdout, "No links published. Publish one with `ocel link set < link.json`.")
-		return
-	}
-	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tTYPE\tSOURCE\tOWNER\tVERSION")
-	for _, l := range links {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\n",
-			l.GetName(), linkTypeName(l.GetType()), sourceOrDash(l.GetSource()), l.GetOwner(), l.GetVersion())
-	}
-	_ = tw.Flush()
-}
-
-func linkTypeName(t linksv1.LinkType) string {
-	return strings.ToLower(naming.EnvFragment(t))
-}
-
-func sourceOrDash(source string) string {
-	if source == "" {
-		return "—"
-	}
-	return source
-}
-
-func describeLink(name string, opts linkOptions) string {
-	if opts.environment != "" {
-		return name + " for " + opts.environment
-	}
-	return name
+	return strings.Join(slugs, ", ")
 }

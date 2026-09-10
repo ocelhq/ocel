@@ -7,11 +7,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/console/binding"
+	"github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
-var consoleUnlinkCmd = &cobra.Command{
+var unlinkCmd = &cobra.Command{
 	Use:   "unlink",
 	Short: "Remove this directory's Ocel console link",
 	Long: "Removes " + constants.ProjectStateDirName + "/console.json, leaving this working tree associated with no\n" +
@@ -22,12 +22,12 @@ var consoleUnlinkCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		return runConsoleUnlink(cwd, cmd.OutOrStdout())
+		return runUnlink(cwd, cmd.OutOrStdout())
 	},
 }
 
-func runConsoleUnlink(projectDir string, stdout io.Writer) error {
-	removed, err := binding.Clear(projectDir)
+func runUnlink(projectDir string, stdout io.Writer) error {
+	removed, err := link.Clear(projectDir)
 	if err != nil {
 		return err
 	}
