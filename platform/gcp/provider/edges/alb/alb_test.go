@@ -182,6 +182,11 @@ func TestOneHostRuleAndOneMaskedNegAnswerEveryPreviewHostname(t *testing.T) {
 	if _, standing := stood[backend]; !standing {
 		t.Errorf("the host rule points at the backend %q, which the front stands up as %v", backend, keys(stood))
 	}
+	if !cachesByHost(stood[backend]) {
+		t.Errorf("the preview backend declares the cache key policy %v, want the host in it: one backend answers every preview "+
+			"hostname on the wildcard, so a key that leaves the host out serves one preview's bytes to another",
+			cacheKeyPolicy(stood[backend]))
+	}
 	if _, entered := stood[previewEntryName(previewBase)]; !entered {
 		t.Errorf("the preview front stands up %v, want a certificate map entry: nothing terminates TLS for %s without one",
 			keys(stood), edge.PreviewWildcard(previewBase))
@@ -418,6 +423,20 @@ func cloudRunMask(neg declaration) string {
 	}
 	mask, _ := run["urlMask"].(string)
 	return mask
+}
+
+func cacheKeyPolicy(backend declaration) map[string]any {
+	policy, held := backend.Args["cdnPolicy"].(map[string]any)
+	if !held {
+		return nil
+	}
+	key, _ := policy["cacheKeyPolicy"].(map[string]any)
+	return key
+}
+
+func cachesByHost(backend declaration) bool {
+	host, _ := cacheKeyPolicy(backend)["includeHost"].(bool)
+	return host
 }
 
 func reconciledPreview(t *testing.T) (*Edge, *world, edge.EdgeStack) {

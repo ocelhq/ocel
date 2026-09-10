@@ -103,6 +103,11 @@ func previewWildcardResources(ctx *pulumi.Context, spec frontSpec) error {
 		EnableCdn:           pulumi.Bool(true),
 		CdnPolicy: &compute.BackendServiceCdnPolicyArgs{
 			CacheMode: pulumi.String(cacheOnOrigin),
+			CacheKeyPolicy: &compute.BackendServiceCdnPolicyCacheKeyPolicyArgs{
+				IncludeHost:        pulumi.Bool(true),
+				IncludeProtocol:    pulumi.Bool(true),
+				IncludeQueryString: pulumi.Bool(true),
+			},
 		},
 		Backends: compute.BackendServiceBackendArray{
 			&compute.BackendServiceBackendArgs{Group: group.SelfLink},
