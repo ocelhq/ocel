@@ -104,13 +104,13 @@ func TestDefineEnv(t *testing.T) {
 			}
 		})
 
-		t.Run("the verdict is exactly the cells the two halves owe", func(t *testing.T) {
+		t.Run("the verdict is exactly the cells the two halves owe, in declaration order", func(t *testing.T) {
 			refusal := refuse(t, gate)
 			got := describeProblems(refusal.Problems)
 			want := []string{
 				"PORT@ KIND_INVALID",
-				"POSTHOG_ID@/admin KIND_MISSING",
 				"STRIPE_API_KEY@ KIND_MISSING",
+				"POSTHOG_ID@/admin KIND_MISSING",
 			}
 			if strings.Join(got, "\n") != strings.Join(want, "\n") {
 				t.Fatalf("problems =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
