@@ -123,7 +123,7 @@ func (x VariableProblem_Kind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use VariableProblem_Kind.Descriptor instead.
 func (VariableProblem_Kind) EnumDescriptor() ([]byte, []int) {
-	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{4, 0}
+	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{5, 0}
 }
 
 type VariableDefinition struct {
@@ -137,6 +137,7 @@ type VariableDefinition struct {
 	SchemaSource     string                 `protobuf:"bytes,7,opt,name=schema_source,json=schemaSource,proto3" json:"schema_source,omitempty"`
 	HasSchema        bool                   `protobuf:"varint,8,opt,name=has_schema,json=hasSchema,proto3" json:"has_schema,omitempty"`
 	Description      string                 `protobuf:"bytes,9,opt,name=description,proto3" json:"description,omitempty"`
+	Group            string                 `protobuf:"bytes,10,opt,name=group,proto3" json:"group,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -234,16 +235,84 @@ func (x *VariableDefinition) GetDescription() string {
 	return ""
 }
 
+func (x *VariableDefinition) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+type GroupDefinition struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Required      bool                   `protobuf:"varint,2,opt,name=required,proto3" json:"required,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GroupDefinition) Reset() {
+	*x = GroupDefinition{}
+	mi := &file_app_resources_v1_variables_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroupDefinition) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroupDefinition) ProtoMessage() {}
+
+func (x *GroupDefinition) ProtoReflect() protoreflect.Message {
+	mi := &file_app_resources_v1_variables_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroupDefinition.ProtoReflect.Descriptor instead.
+func (*GroupDefinition) Descriptor() ([]byte, []int) {
+	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GroupDefinition) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *GroupDefinition) GetRequired() bool {
+	if x != nil {
+		return x.Required
+	}
+	return false
+}
+
+func (x *GroupDefinition) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
 type DeclareEnvRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Definitions   []*VariableDefinition  `protobuf:"bytes,1,rep,name=definitions,proto3" json:"definitions,omitempty"`
+	Groups        []*GroupDefinition     `protobuf:"bytes,2,rep,name=groups,proto3" json:"groups,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeclareEnvRequest) Reset() {
 	*x = DeclareEnvRequest{}
-	mi := &file_app_resources_v1_variables_proto_msgTypes[1]
+	mi := &file_app_resources_v1_variables_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -255,7 +324,7 @@ func (x *DeclareEnvRequest) String() string {
 func (*DeclareEnvRequest) ProtoMessage() {}
 
 func (x *DeclareEnvRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_resources_v1_variables_proto_msgTypes[1]
+	mi := &file_app_resources_v1_variables_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -268,12 +337,19 @@ func (x *DeclareEnvRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeclareEnvRequest.ProtoReflect.Descriptor instead.
 func (*DeclareEnvRequest) Descriptor() ([]byte, []int) {
-	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{1}
+	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *DeclareEnvRequest) GetDefinitions() []*VariableDefinition {
 	if x != nil {
 		return x.Definitions
+	}
+	return nil
+}
+
+func (x *DeclareEnvRequest) GetGroups() []*GroupDefinition {
+	if x != nil {
+		return x.Groups
 	}
 	return nil
 }
@@ -289,7 +365,7 @@ type VariableCell struct {
 
 func (x *VariableCell) Reset() {
 	*x = VariableCell{}
-	mi := &file_app_resources_v1_variables_proto_msgTypes[2]
+	mi := &file_app_resources_v1_variables_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -301,7 +377,7 @@ func (x *VariableCell) String() string {
 func (*VariableCell) ProtoMessage() {}
 
 func (x *VariableCell) ProtoReflect() protoreflect.Message {
-	mi := &file_app_resources_v1_variables_proto_msgTypes[2]
+	mi := &file_app_resources_v1_variables_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -314,7 +390,7 @@ func (x *VariableCell) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VariableCell.ProtoReflect.Descriptor instead.
 func (*VariableCell) Descriptor() ([]byte, []int) {
-	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{2}
+	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *VariableCell) GetKey() string {
@@ -347,7 +423,7 @@ type DeclareEnvResponse struct {
 
 func (x *DeclareEnvResponse) Reset() {
 	*x = DeclareEnvResponse{}
-	mi := &file_app_resources_v1_variables_proto_msgTypes[3]
+	mi := &file_app_resources_v1_variables_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -359,7 +435,7 @@ func (x *DeclareEnvResponse) String() string {
 func (*DeclareEnvResponse) ProtoMessage() {}
 
 func (x *DeclareEnvResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_resources_v1_variables_proto_msgTypes[3]
+	mi := &file_app_resources_v1_variables_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -372,7 +448,7 @@ func (x *DeclareEnvResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeclareEnvResponse.ProtoReflect.Descriptor instead.
 func (*DeclareEnvResponse) Descriptor() ([]byte, []int) {
-	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{3}
+	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *DeclareEnvResponse) GetCells() []*VariableCell {
@@ -394,7 +470,7 @@ type VariableProblem struct {
 
 func (x *VariableProblem) Reset() {
 	*x = VariableProblem{}
-	mi := &file_app_resources_v1_variables_proto_msgTypes[4]
+	mi := &file_app_resources_v1_variables_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -406,7 +482,7 @@ func (x *VariableProblem) String() string {
 func (*VariableProblem) ProtoMessage() {}
 
 func (x *VariableProblem) ProtoReflect() protoreflect.Message {
-	mi := &file_app_resources_v1_variables_proto_msgTypes[4]
+	mi := &file_app_resources_v1_variables_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -419,7 +495,7 @@ func (x *VariableProblem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VariableProblem.ProtoReflect.Descriptor instead.
 func (*VariableProblem) Descriptor() ([]byte, []int) {
-	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{4}
+	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *VariableProblem) GetKey() string {
@@ -459,7 +535,7 @@ type ReportEnvProblemsRequest struct {
 
 func (x *ReportEnvProblemsRequest) Reset() {
 	*x = ReportEnvProblemsRequest{}
-	mi := &file_app_resources_v1_variables_proto_msgTypes[5]
+	mi := &file_app_resources_v1_variables_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -471,7 +547,7 @@ func (x *ReportEnvProblemsRequest) String() string {
 func (*ReportEnvProblemsRequest) ProtoMessage() {}
 
 func (x *ReportEnvProblemsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_resources_v1_variables_proto_msgTypes[5]
+	mi := &file_app_resources_v1_variables_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -484,7 +560,7 @@ func (x *ReportEnvProblemsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportEnvProblemsRequest.ProtoReflect.Descriptor instead.
 func (*ReportEnvProblemsRequest) Descriptor() ([]byte, []int) {
-	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{5}
+	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ReportEnvProblemsRequest) GetProblems() []*VariableProblem {
@@ -502,7 +578,7 @@ type ReportEnvProblemsResponse struct {
 
 func (x *ReportEnvProblemsResponse) Reset() {
 	*x = ReportEnvProblemsResponse{}
-	mi := &file_app_resources_v1_variables_proto_msgTypes[6]
+	mi := &file_app_resources_v1_variables_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -514,7 +590,7 @@ func (x *ReportEnvProblemsResponse) String() string {
 func (*ReportEnvProblemsResponse) ProtoMessage() {}
 
 func (x *ReportEnvProblemsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_resources_v1_variables_proto_msgTypes[6]
+	mi := &file_app_resources_v1_variables_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -527,14 +603,14 @@ func (x *ReportEnvProblemsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportEnvProblemsResponse.ProtoReflect.Descriptor instead.
 func (*ReportEnvProblemsResponse) Descriptor() ([]byte, []int) {
-	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{6}
+	return file_app_resources_v1_variables_proto_rawDescGZIP(), []int{7}
 }
 
 var File_app_resources_v1_variables_proto protoreflect.FileDescriptor
 
 const file_app_resources_v1_variables_proto_rawDesc = "" +
 	"\n" +
-	" app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto\"\xbd\x04\n" +
+	" app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto\"\xec\x04\n" +
 	"\x12VariableDefinition\x12+\n" +
 	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12?\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05class\x12+\n" +
@@ -546,9 +622,17 @@ const file_app_resources_v1_variables_proto_rawDesc = "" +
 	"\n" +
 	"has_schema\x18\b \x01(\bR\thasSchema\x12\xd4\x01\n" +
 	"\vdescription\x18\t \x01(\tB\xb1\x01\xbaH\xad\x01\xba\x01\xa9\x01\n" +
-	" variables.definition.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a8size(bytes(this)) <= 120 && !this.matches('[[:cntrl:]]')R\vdescription\"[\n" +
+	" variables.definition.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a8size(bytes(this)) <= 120 && !this.matches('[[:cntrl:]]')R\vdescription\x12-\n" +
+	"\x05group\x18\n" +
+	" \x01(\tB\x17\xbaH\x14r\x122\x10^[^#[:cntrl:]]*$R\x05group\"\xac\x02\n" +
+	"\x0fGroupDefinition\x12+\n" +
+	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12\x1a\n" +
+	"\brequired\x18\x02 \x01(\bR\brequired\x12\xcf\x01\n" +
+	"\vdescription\x18\x03 \x01(\tB\xac\x01\xbaH\xa8\x01\xba\x01\xa4\x01\n" +
+	"\x1bvariables.group.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a8size(bytes(this)) <= 120 && !this.matches('[[:cntrl:]]')R\vdescription\"\x96\x01\n" +
 	"\x11DeclareEnvRequest\x12F\n" +
-	"\vdefinitions\x18\x01 \x03(\v2$.app.resources.v1.VariableDefinitionR\vdefinitions\"\x87\x01\n" +
+	"\vdefinitions\x18\x01 \x03(\v2$.app.resources.v1.VariableDefinitionR\vdefinitions\x129\n" +
+	"\x06groups\x18\x02 \x03(\v2!.app.resources.v1.GroupDefinitionR\x06groups\"\x87\x01\n" +
 	"\fVariableCell\x12+\n" +
 	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x124\n" +
 	"\x06folder\x18\x02 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12\x14\n" +
@@ -587,29 +671,31 @@ func file_app_resources_v1_variables_proto_rawDescGZIP() []byte {
 }
 
 var file_app_resources_v1_variables_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_app_resources_v1_variables_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_app_resources_v1_variables_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_app_resources_v1_variables_proto_goTypes = []any{
 	(VariableClass)(0),                // 0: app.resources.v1.VariableClass
 	(VariableProblem_Kind)(0),         // 1: app.resources.v1.VariableProblem.Kind
 	(*VariableDefinition)(nil),        // 2: app.resources.v1.VariableDefinition
-	(*DeclareEnvRequest)(nil),         // 3: app.resources.v1.DeclareEnvRequest
-	(*VariableCell)(nil),              // 4: app.resources.v1.VariableCell
-	(*DeclareEnvResponse)(nil),        // 5: app.resources.v1.DeclareEnvResponse
-	(*VariableProblem)(nil),           // 6: app.resources.v1.VariableProblem
-	(*ReportEnvProblemsRequest)(nil),  // 7: app.resources.v1.ReportEnvProblemsRequest
-	(*ReportEnvProblemsResponse)(nil), // 8: app.resources.v1.ReportEnvProblemsResponse
+	(*GroupDefinition)(nil),           // 3: app.resources.v1.GroupDefinition
+	(*DeclareEnvRequest)(nil),         // 4: app.resources.v1.DeclareEnvRequest
+	(*VariableCell)(nil),              // 5: app.resources.v1.VariableCell
+	(*DeclareEnvResponse)(nil),        // 6: app.resources.v1.DeclareEnvResponse
+	(*VariableProblem)(nil),           // 7: app.resources.v1.VariableProblem
+	(*ReportEnvProblemsRequest)(nil),  // 8: app.resources.v1.ReportEnvProblemsRequest
+	(*ReportEnvProblemsResponse)(nil), // 9: app.resources.v1.ReportEnvProblemsResponse
 }
 var file_app_resources_v1_variables_proto_depIdxs = []int32{
 	0, // 0: app.resources.v1.VariableDefinition.class:type_name -> app.resources.v1.VariableClass
 	2, // 1: app.resources.v1.DeclareEnvRequest.definitions:type_name -> app.resources.v1.VariableDefinition
-	4, // 2: app.resources.v1.DeclareEnvResponse.cells:type_name -> app.resources.v1.VariableCell
-	1, // 3: app.resources.v1.VariableProblem.kind:type_name -> app.resources.v1.VariableProblem.Kind
-	6, // 4: app.resources.v1.ReportEnvProblemsRequest.problems:type_name -> app.resources.v1.VariableProblem
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	3, // 2: app.resources.v1.DeclareEnvRequest.groups:type_name -> app.resources.v1.GroupDefinition
+	5, // 3: app.resources.v1.DeclareEnvResponse.cells:type_name -> app.resources.v1.VariableCell
+	1, // 4: app.resources.v1.VariableProblem.kind:type_name -> app.resources.v1.VariableProblem.Kind
+	7, // 5: app.resources.v1.ReportEnvProblemsRequest.problems:type_name -> app.resources.v1.VariableProblem
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_app_resources_v1_variables_proto_init() }
@@ -623,7 +709,7 @@ func file_app_resources_v1_variables_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_resources_v1_variables_proto_rawDesc), len(file_app_resources_v1_variables_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

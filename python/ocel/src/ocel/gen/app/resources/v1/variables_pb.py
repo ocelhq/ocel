@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from protobuf import DescFile
 
 
-_VariableDefinitionFields: TypeAlias = Literal["key", "class", "client_accessible", "required", "folders", "source", "schema_source", "has_schema", "description"]
+_VariableDefinitionFields: TypeAlias = Literal["key", "class", "client_accessible", "required", "folders", "source", "schema_source", "has_schema", "description", "group"]
 
 class VariableDefinition(Message[_VariableDefinitionFields]):
     """
@@ -62,9 +62,13 @@ class VariableDefinition(Message[_VariableDefinitionFields]):
             ```proto
             string description = 9;
             ```
+        group:
+            ```proto
+            string group = 10;
+            ```
     """
 
-    __slots__ = ("key", "class_", "client_accessible", "required", "folders", "source", "schema_source", "has_schema", "description")
+    __slots__ = ("key", "class_", "client_accessible", "required", "folders", "source", "schema_source", "has_schema", "description", "group")
 
     if TYPE_CHECKING:
 
@@ -80,6 +84,7 @@ class VariableDefinition(Message[_VariableDefinitionFields]):
             schema_source: str = "",
             has_schema: bool = False,
             description: str = "",
+            group: str = "",
         ) -> None:
             pass
 
@@ -92,8 +97,49 @@ class VariableDefinition(Message[_VariableDefinitionFields]):
         schema_source: str
         has_schema: bool
         description: str
+        group: str
 
-_DeclareEnvRequestFields: TypeAlias = Literal["definitions"]
+_GroupDefinitionFields: TypeAlias = Literal["key", "required", "description"]
+
+class GroupDefinition(Message[_GroupDefinitionFields]):
+    """
+    ```proto
+    message app.resources.v1.GroupDefinition
+    ```
+
+    Attributes:
+        key:
+            ```proto
+            string key = 1;
+            ```
+        required:
+            ```proto
+            bool required = 2;
+            ```
+        description:
+            ```proto
+            string description = 3;
+            ```
+    """
+
+    __slots__ = ("key", "required", "description")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            key: str = "",
+            required: bool = False,
+            description: str = "",
+        ) -> None:
+            pass
+
+        key: str
+        required: bool
+        description: str
+
+_DeclareEnvRequestFields: TypeAlias = Literal["definitions", "groups"]
 
 class DeclareEnvRequest(Message[_DeclareEnvRequestFields]):
     """
@@ -106,9 +152,13 @@ class DeclareEnvRequest(Message[_DeclareEnvRequestFields]):
             ```proto
             repeated app.resources.v1.VariableDefinition definitions = 1;
             ```
+        groups:
+            ```proto
+            repeated app.resources.v1.GroupDefinition groups = 2;
+            ```
     """
 
-    __slots__ = ("definitions",)
+    __slots__ = ("definitions", "groups")
 
     if TYPE_CHECKING:
 
@@ -116,10 +166,12 @@ class DeclareEnvRequest(Message[_DeclareEnvRequestFields]):
             self,
             *,
             definitions: list[VariableDefinition] | None = None,
+            groups: list[GroupDefinition] | None = None,
         ) -> None:
             pass
 
         definitions: list[VariableDefinition]
+        groups: list[GroupDefinition]
 
 _VariableCellFields: TypeAlias = Literal["key", "folder", "value"]
 
@@ -343,12 +395,13 @@ class VariableClass(Enum):
 
 
 _DESC = file_desc(
-    b'\n app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto"\xbd\x04\n\x12VariableDefinition\x12+\n\x03key\x18\x01 \x01(\tR\x03keyB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$\x12?\n\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassR\x05classB\x08\xbaH\x05\x82\x01\x02\x10\x01\x12+\n\x11client_accessible\x18\x03 \x01(\x08R\x10clientAccessible\x12\x1a\n\x08required\x18\x04 \x01(\x08R\x08required\x12=\n\x07folders\x18\x05 \x03(\tR\x07foldersB#\xbaH \x92\x01\x1d\x18\x01"\x19r\x172\x15^(/[^/#[:cntrl:]]+)+$\x12\x16\n\x06source\x18\x06 \x01(\tR\x06source\x12#\n\rschema_source\x18\x07 \x01(\tR\x0cschemaSource\x12\x1d\n\nhas_schema\x18\x08 \x01(\x08R\thasSchema\x12\xd4\x01\n\x0bdescription\x18\t \x01(\tR\x0bdescriptionB\xb1\x01\xbaH\xad\x01\xba\x01\xa9\x01\n variables.definition.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a8size(bytes(this)) <= 120 && !this.matches(\'[[:cntrl:]]\')"[\n\x11DeclareEnvRequest\x12F\n\x0bdefinitions\x18\x01 \x03(\x0b2$.app.resources.v1.VariableDefinitionR\x0bdefinitions"\x87\x01\n\x0cVariableCell\x12+\n\x03key\x18\x01 \x01(\tR\x03keyB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$\x124\n\x06folder\x18\x02 \x01(\tR\x06folderB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$\x12\x14\n\x05value\x18\x03 \x01(\tR\x05value"J\n\x12DeclareEnvResponse\x124\n\x05cells\x18\x01 \x03(\x0b2\x1e.app.resources.v1.VariableCellR\x05cells"\xf9\x01\n\x0fVariableProblem\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x124\n\x06folder\x18\x02 \x01(\tR\x06folderB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$\x12D\n\x04kind\x18\x03 \x01(\x0e2&.app.resources.v1.VariableProblem.KindR\x04kindB\x08\xbaH\x05\x82\x01\x02\x10\x01\x12\x16\n\x06detail\x18\x04 \x01(\tR\x06detail"@\n\x04Kind\x12\x14\n\x10KIND_UNSPECIFIED\x10\x00\x12\x10\n\x0cKIND_MISSING\x10\x01\x12\x10\n\x0cKIND_INVALID\x10\x02"Y\n\x18ReportEnvProblemsRequest\x12=\n\x08problems\x18\x01 \x03(\x0b2!.app.resources.v1.VariableProblemR\x08problems"\x1b\n\x19ReportEnvProblemsResponse*\x9e\x01\n\rVariableClass\x12\x1e\n\x1aVARIABLE_CLASS_UNSPECIFIED\x10\x00\x12\x18\n\x14VARIABLE_CLASS_PLAIN\x10\x01\x12\x1c\n\x18VARIABLE_CLASS_SENSITIVE\x10\x02\x12\x19\n\x15VARIABLE_CLASS_SECRET\x10\x03\x12\x1a\n\x16VARIABLE_CLASS_DERIVED\x10\x04B?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
+    b'\n app/resources/v1/variables.proto\x12\x10app.resources.v1\x1a\x1bbuf/validate/validate.proto"\xec\x04\n\x12VariableDefinition\x12+\n\x03key\x18\x01 \x01(\tR\x03keyB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$\x12?\n\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassR\x05classB\x08\xbaH\x05\x82\x01\x02\x10\x01\x12+\n\x11client_accessible\x18\x03 \x01(\x08R\x10clientAccessible\x12\x1a\n\x08required\x18\x04 \x01(\x08R\x08required\x12=\n\x07folders\x18\x05 \x03(\tR\x07foldersB#\xbaH \x92\x01\x1d\x18\x01"\x19r\x172\x15^(/[^/#[:cntrl:]]+)+$\x12\x16\n\x06source\x18\x06 \x01(\tR\x06source\x12#\n\rschema_source\x18\x07 \x01(\tR\x0cschemaSource\x12\x1d\n\nhas_schema\x18\x08 \x01(\x08R\thasSchema\x12\xd4\x01\n\x0bdescription\x18\t \x01(\tR\x0bdescriptionB\xb1\x01\xbaH\xad\x01\xba\x01\xa9\x01\n variables.definition.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a8size(bytes(this)) <= 120 && !this.matches(\'[[:cntrl:]]\')\x12-\n\x05group\x18\n \x01(\tR\x05groupB\x17\xbaH\x14r\x122\x10^[^#[:cntrl:]]*$"\xac\x02\n\x0fGroupDefinition\x12+\n\x03key\x18\x01 \x01(\tR\x03keyB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$\x12\x1a\n\x08required\x18\x02 \x01(\x08R\x08required\x12\xcf\x01\n\x0bdescription\x18\x03 \x01(\tR\x0bdescriptionB\xac\x01\xbaH\xa8\x01\xba\x01\xa4\x01\n\x1bvariables.group.description\x12Ka description is at most 120 bytes, one line, and has no control characters\x1a8size(bytes(this)) <= 120 && !this.matches(\'[[:cntrl:]]\')"\x96\x01\n\x11DeclareEnvRequest\x12F\n\x0bdefinitions\x18\x01 \x03(\x0b2$.app.resources.v1.VariableDefinitionR\x0bdefinitions\x129\n\x06groups\x18\x02 \x03(\x0b2!.app.resources.v1.GroupDefinitionR\x06groups"\x87\x01\n\x0cVariableCell\x12+\n\x03key\x18\x01 \x01(\tR\x03keyB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$\x124\n\x06folder\x18\x02 \x01(\tR\x06folderB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$\x12\x14\n\x05value\x18\x03 \x01(\tR\x05value"J\n\x12DeclareEnvResponse\x124\n\x05cells\x18\x01 \x03(\x0b2\x1e.app.resources.v1.VariableCellR\x05cells"\xf9\x01\n\x0fVariableProblem\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x124\n\x06folder\x18\x02 \x01(\tR\x06folderB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$\x12D\n\x04kind\x18\x03 \x01(\x0e2&.app.resources.v1.VariableProblem.KindR\x04kindB\x08\xbaH\x05\x82\x01\x02\x10\x01\x12\x16\n\x06detail\x18\x04 \x01(\tR\x06detail"@\n\x04Kind\x12\x14\n\x10KIND_UNSPECIFIED\x10\x00\x12\x10\n\x0cKIND_MISSING\x10\x01\x12\x10\n\x0cKIND_INVALID\x10\x02"Y\n\x18ReportEnvProblemsRequest\x12=\n\x08problems\x18\x01 \x03(\x0b2!.app.resources.v1.VariableProblemR\x08problems"\x1b\n\x19ReportEnvProblemsResponse*\x9e\x01\n\rVariableClass\x12\x1e\n\x1aVARIABLE_CLASS_UNSPECIFIED\x10\x00\x12\x18\n\x14VARIABLE_CLASS_PLAIN\x10\x01\x12\x1c\n\x18VARIABLE_CLASS_SENSITIVE\x10\x02\x12\x19\n\x15VARIABLE_CLASS_SECRET\x10\x03\x12\x1a\n\x16VARIABLE_CLASS_DERIVED\x10\x04B?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
     [
         validate_pb.desc(),
     ],
     {
         "VariableDefinition": VariableDefinition,
+        "GroupDefinition": GroupDefinition,
         "DeclareEnvRequest": DeclareEnvRequest,
         "VariableCell": VariableCell,
         "DeclareEnvResponse": DeclareEnvResponse,

@@ -241,6 +241,13 @@ pub struct VariableDefinition {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
     )]
     pub description: ::buffa::alloc::string::String,
+    /// Field 10: `group`
+    #[serde(
+        rename = "group",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub group: ::buffa::alloc::string::String,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -257,6 +264,7 @@ impl ::core::fmt::Debug for VariableDefinition {
             .field("schema_source", &self.schema_source)
             .field("has_schema", &self.has_schema)
             .field("description", &self.description)
+            .field("group", &self.group)
             .finish()
     }
 }
@@ -318,6 +326,9 @@ impl ::buffa::Message for VariableDefinition {
         if !self.description.is_empty() {
             size += 1u64 + ::buffa::types::string_encoded_len(&self.description) as u64;
         }
+        if !self.group.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.group) as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -357,6 +368,9 @@ impl ::buffa::Message for VariableDefinition {
         }
         if !self.description.is_empty() {
             ::buffa::types::put_string_field(9u32, &self.description, buf);
+        }
+        if !self.group.is_empty() {
+            ::buffa::types::put_string_field(10u32, &self.group, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -440,6 +454,13 @@ impl ::buffa::Message for VariableDefinition {
                 )?;
                 ::buffa::types::merge_string(&mut self.description, buf)?;
             }
+            10u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.group, buf)?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -457,6 +478,7 @@ impl ::buffa::Message for VariableDefinition {
         self.schema_source.clear();
         self.has_schema = false;
         self.description.clear();
+        self.group.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -492,6 +514,176 @@ pub const __VARIABLE_DEFINITION_JSON_ANY: ::buffa::type_registry::JsonAnyEntry =
 #[derive(Clone, PartialEq, Default)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(default)]
+pub struct GroupDefinition {
+    /// Field 1: `key`
+    #[serde(
+        rename = "key",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub key: ::buffa::alloc::string::String,
+    /// Field 2: `required`
+    #[serde(
+        rename = "required",
+        with = "::buffa::json_helpers::proto_bool",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
+    )]
+    pub required: bool,
+    /// Field 3: `description`
+    #[serde(
+        rename = "description",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub description: ::buffa::alloc::string::String,
+    #[serde(skip)]
+    #[doc(hidden)]
+    pub __buffa_unknown_fields: ::buffa::UnknownFields,
+}
+impl ::core::fmt::Debug for GroupDefinition {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.debug_struct("GroupDefinition")
+            .field("key", &self.key)
+            .field("required", &self.required)
+            .field("description", &self.description)
+            .finish()
+    }
+}
+impl GroupDefinition {
+    /// Protobuf type URL for this message, for use with `Any::pack` and
+    /// `Any::unpack_if`.
+    ///
+    /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
+    pub const TYPE_URL: &'static str = "type.googleapis.com/app.resources.v1.GroupDefinition";
+}
+::buffa::impl_default_instance!(GroupDefinition);
+impl ::buffa::MessageName for GroupDefinition {
+    const PACKAGE: &'static str = "app.resources.v1";
+    const NAME: &'static str = "GroupDefinition";
+    const FULL_NAME: &'static str = "app.resources.v1.GroupDefinition";
+    const TYPE_URL: &'static str = "type.googleapis.com/app.resources.v1.GroupDefinition";
+}
+impl ::buffa::Message for GroupDefinition {
+    /// Returns the total encoded size in bytes.
+    ///
+    /// Accumulates in `u64` (which cannot overflow for in-memory
+    /// data) and saturates to `u32` at return, so a message whose
+    /// encoded size exceeds the 2 GiB protobuf limit yields a value
+    /// above [`::buffa::MAX_MESSAGE_BYTES`] that the encode entry
+    /// points reject, never a silently wrapped size.
+    #[allow(clippy::let_and_return)]
+    fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        let mut size = 0u64;
+        if !self.key.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.key) as u64;
+        }
+        if self.required {
+            size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
+        }
+        if !self.description.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.description) as u64;
+        }
+        size += self.__buffa_unknown_fields.encoded_len() as u64;
+        ::buffa::saturate_size(size)
+    }
+    fn write_to(
+        &self,
+        _cache: &mut ::buffa::SizeCache,
+        buf: &mut impl ::buffa::EncodeSink,
+    ) {
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        if !self.key.is_empty() {
+            ::buffa::types::put_string_field(1u32, &self.key, buf);
+        }
+        if self.required {
+            ::buffa::types::put_bool_field(2u32, self.required, buf);
+        }
+        if !self.description.is_empty() {
+            ::buffa::types::put_string_field(3u32, &self.description, buf);
+        }
+        self.__buffa_unknown_fields.write_to(buf);
+    }
+    fn merge_field(
+        &mut self,
+        tag: ::buffa::encoding::Tag,
+        buf: &mut impl ::buffa::bytes::Buf,
+        ctx: ::buffa::DecodeContext<'_>,
+    ) -> ::core::result::Result<(), ::buffa::DecodeError> {
+        #[allow(unused_imports)]
+        use ::buffa::bytes::Buf as _;
+        #[allow(unused_imports)]
+        use ::buffa::Enumeration as _;
+        match tag.field_number() {
+            1u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.key, buf)?;
+            }
+            2u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.required = ::buffa::types::decode_bool(buf)?;
+            }
+            3u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.description, buf)?;
+            }
+            _ => {
+                self.__buffa_unknown_fields
+                    .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+    fn clear(&mut self) {
+        self.key.clear();
+        self.required = false;
+        self.description.clear();
+        self.__buffa_unknown_fields.clear();
+    }
+}
+impl ::buffa::ExtensionSet for GroupDefinition {
+    const PROTO_FQN: &'static str = "app.resources.v1.GroupDefinition";
+    fn unknown_fields(&self) -> &::buffa::UnknownFields {
+        &self.__buffa_unknown_fields
+    }
+    fn unknown_fields_mut(&mut self) -> &mut ::buffa::UnknownFields {
+        &mut self.__buffa_unknown_fields
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for GroupDefinition {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+#[doc(hidden)]
+pub const __GROUP_DEFINITION_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
+    type_url: "type.googleapis.com/app.resources.v1.GroupDefinition",
+    to_json: ::buffa::type_registry::any_to_json::<GroupDefinition>,
+    from_json: ::buffa::type_registry::any_from_json::<GroupDefinition>,
+    is_wkt: false,
+};
+#[derive(Clone, PartialEq, Default)]
+#[derive(::serde::Serialize, ::serde::Deserialize)]
+#[serde(default)]
 pub struct DeclareEnvRequest {
     /// Field 1: `definitions`
     #[serde(
@@ -500,6 +692,13 @@ pub struct DeclareEnvRequest {
         deserialize_with = "::buffa::json_helpers::null_as_default"
     )]
     pub definitions: ::buffa::alloc::vec::Vec<VariableDefinition>,
+    /// Field 2: `groups`
+    #[serde(
+        rename = "groups",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_vec",
+        deserialize_with = "::buffa::json_helpers::null_as_default"
+    )]
+    pub groups: ::buffa::alloc::vec::Vec<GroupDefinition>,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -508,6 +707,7 @@ impl ::core::fmt::Debug for DeclareEnvRequest {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         f.debug_struct("DeclareEnvRequest")
             .field("definitions", &self.definitions)
+            .field("groups", &self.groups)
             .finish()
     }
 }
@@ -546,6 +746,14 @@ impl ::buffa::Message for DeclareEnvRequest {
                 += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
                     + inner_size as u64;
         }
+        for v in &self.groups {
+            let __slot = __cache.reserve();
+            let inner_size = v.compute_size(__cache);
+            __cache.set(__slot, inner_size);
+            size
+                += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                    + inner_size as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -559,6 +767,14 @@ impl ::buffa::Message for DeclareEnvRequest {
         for v in &self.definitions {
             ::buffa::types::put_len_delimited_header(
                 1u32,
+                u64::from(__cache.consume_next()),
+                buf,
+            );
+            v.write_to(__cache, buf);
+        }
+        for v in &self.groups {
+            ::buffa::types::put_len_delimited_header(
+                2u32,
                 u64::from(__cache.consume_next()),
                 buf,
             );
@@ -589,6 +805,18 @@ impl ::buffa::Message for DeclareEnvRequest {
                 ::buffa::Message::merge_length_delimited(&mut elem, buf, ctx)?;
                 self.definitions.push(elem);
             }
+            2u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                let mut elem = ::core::default::Default::default();
+                ctx.register_element_memory(
+                    ::buffa::__private::element_footprint(&elem),
+                )?;
+                ::buffa::Message::merge_length_delimited(&mut elem, buf, ctx)?;
+                self.groups.push(elem);
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -598,6 +826,7 @@ impl ::buffa::Message for DeclareEnvRequest {
     }
     fn clear(&mut self) {
         self.definitions.clear();
+        self.groups.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -2624,6 +2853,8 @@ pub mod __buffa {
             pub has_schema: bool,
             /// Field 9: `description`
             pub description: &'a str,
+            /// Field 10: `group`
+            pub group: &'a str,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::buffa::MessageView<'a> for VariableDefinitionView<'a> {
@@ -2720,6 +2951,13 @@ pub mod __buffa {
                         )?;
                         view.description = ::buffa::types::borrow_str(&mut cur)?;
                     }
+                    10u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.group = ::buffa::types::borrow_str(&mut cur)?;
+                    }
                     5u32 => {
                         ::buffa::encoding::check_wire_type(
                             tag,
@@ -2769,6 +3007,7 @@ pub mod __buffa {
                     schema_source: self.schema_source.to_string(),
                     has_schema: self.has_schema,
                     description: self.description.to_string(),
+                    group: self.group.to_string(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -2821,6 +3060,10 @@ pub mod __buffa {
                             + ::buffa::types::string_encoded_len(&self.description)
                                 as u64;
                 }
+                if !self.group.is_empty() {
+                    size
+                        += 1u64 + ::buffa::types::string_encoded_len(&self.group) as u64;
+                }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
             }
@@ -2861,6 +3104,9 @@ pub mod __buffa {
                 }
                 if !self.description.is_empty() {
                     ::buffa::types::put_string_field(9u32, &self.description, buf);
+                }
+                if !self.group.is_empty() {
+                    ::buffa::types::put_string_field(10u32, &self.group, buf);
                 }
                 self.__buffa_unknown_fields.write_to(buf);
             }
@@ -2909,6 +3155,9 @@ pub mod __buffa {
                 }
                 if !::buffa::json_helpers::skip_if::is_empty_str(self.description) {
                     __map.serialize_entry("description", self.description)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.group) {
+                    __map.serialize_entry("group", self.group)?;
                 }
                 __map.end()
             }
@@ -3050,6 +3299,11 @@ pub mod __buffa {
             pub fn description(&self) -> &'_ str {
                 self.0.reborrow().description
             }
+            /// Field 10: `group`
+            #[must_use]
+            pub fn group(&self) -> &'_ str {
+                self.0.reborrow().group
+            }
         }
         impl ::core::convert::From<::buffa::OwnedView<VariableDefinitionView<'static>>>
         for VariableDefinitionOwnedView {
@@ -3082,11 +3336,332 @@ pub mod __buffa {
             }
         }
         #[derive(Clone, Debug, Default)]
+        pub struct GroupDefinitionView<'a> {
+            /// Field 1: `key`
+            pub key: &'a str,
+            /// Field 2: `required`
+            pub required: bool,
+            /// Field 3: `description`
+            pub description: &'a str,
+            pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
+        }
+        impl<'a> ::buffa::MessageView<'a> for GroupDefinitionView<'a> {
+            type Owned = super::super::GroupDefinition;
+            fn decode_view(
+                buf: &'a [u8],
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                let __limit = ::core::cell::Cell::new(
+                    ::buffa::DEFAULT_UNKNOWN_FIELD_LIMIT,
+                );
+                let __elem = ::core::cell::Cell::new(
+                    ::buffa::DEFAULT_ELEMENT_MEMORY_LIMIT,
+                );
+                <Self as ::buffa::MessageView>::decode_view_ctx(
+                    buf,
+                    ::buffa::DecodeContext::new(::buffa::RECURSION_LIMIT, &__limit)
+                        .with_element_memory(&__elem),
+                )
+            }
+            fn decode_view_with_ctx(
+                buf: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                <Self as ::buffa::MessageView>::decode_view_ctx(buf, ctx)
+            }
+            #[inline]
+            fn merge_view_field(
+                &mut self,
+                tag: ::buffa::encoding::Tag,
+                cur: &'a [u8],
+                before_tag: &'a [u8],
+                ctx: ::buffa::DecodeContext<'_>,
+            ) -> ::core::result::Result<&'a [u8], ::buffa::DecodeError> {
+                let _ = ctx;
+                #[allow(unused_variables)]
+                let view = self;
+                let mut cur = cur;
+                match tag.field_number() {
+                    1u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.key = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    2u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.required = ::buffa::types::decode_bool(&mut cur)?;
+                    }
+                    3u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.description = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    _ => {
+                        ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
+                        let span_len = before_tag.len() - cur.len();
+                        view.__buffa_unknown_fields
+                            .push_record(before_tag, span_len, ctx)?;
+                    }
+                }
+                ::core::result::Result::Ok(cur)
+            }
+            fn to_owned_message(
+                &self,
+            ) -> ::core::result::Result<
+                super::super::GroupDefinition,
+                ::buffa::DecodeError,
+            > {
+                self.to_owned_from_source(None)
+            }
+            #[allow(clippy::useless_conversion, clippy::needless_update)]
+            fn to_owned_from_source(
+                &self,
+                __buffa_src: ::core::option::Option<&::buffa::bytes::Bytes>,
+            ) -> ::core::result::Result<
+                super::super::GroupDefinition,
+                ::buffa::DecodeError,
+            > {
+                #[allow(unused_imports)]
+                use ::buffa::alloc::string::ToString as _;
+                let _ = __buffa_src;
+                ::core::result::Result::Ok(super::super::GroupDefinition {
+                    key: self.key.to_string(),
+                    required: self.required,
+                    description: self.description.to_string(),
+                    __buffa_unknown_fields: self
+                        .__buffa_unknown_fields
+                        .to_owned()?
+                        .into(),
+                    ..::core::default::Default::default()
+                })
+            }
+        }
+        impl<'a> ::buffa::ViewEncode<'a> for GroupDefinitionView<'a> {
+            #[allow(clippy::needless_borrow, clippy::let_and_return)]
+            fn compute_size(&self, _cache: &mut ::buffa::SizeCache) -> u32 {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                let mut size = 0u64;
+                if !self.key.is_empty() {
+                    size += 1u64 + ::buffa::types::string_encoded_len(&self.key) as u64;
+                }
+                if self.required {
+                    size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
+                }
+                if !self.description.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.description)
+                                as u64;
+                }
+                size += self.__buffa_unknown_fields.encoded_len() as u64;
+                ::buffa::saturate_size(size)
+            }
+            #[allow(clippy::needless_borrow)]
+            fn write_to(
+                &self,
+                _cache: &mut ::buffa::SizeCache,
+                buf: &mut impl ::buffa::EncodeSink,
+            ) {
+                #[allow(unused_imports)]
+                use ::buffa::Enumeration as _;
+                if !self.key.is_empty() {
+                    ::buffa::types::put_string_field(1u32, &self.key, buf);
+                }
+                if self.required {
+                    ::buffa::types::put_bool_field(2u32, self.required, buf);
+                }
+                if !self.description.is_empty() {
+                    ::buffa::types::put_string_field(3u32, &self.description, buf);
+                }
+                self.__buffa_unknown_fields.write_to(buf);
+            }
+        }
+        /// Serializes this view as protobuf JSON.
+        ///
+        /// Implicit-presence fields with default values are omitted, `required`
+        /// fields are always emitted, explicit-presence (`optional`) fields are
+        /// emitted only when set, bytes fields are base64-encoded, and enum
+        /// values are their proto name strings.
+        ///
+        /// This impl uses `serialize_map(None)` because the number of emitted
+        /// fields depends on default-omission rules; serializers that require
+        /// known map lengths (e.g. `bincode`) will return a runtime error.
+        /// Use the owned message type for those formats.
+        impl<'__a> ::serde::Serialize for GroupDefinitionView<'__a> {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                use ::serde::ser::SerializeMap as _;
+                let mut __map = __s.serialize_map(::core::option::Option::None)?;
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.key) {
+                    __map.serialize_entry("key", self.key)?;
+                }
+                if self.required {
+                    __map.serialize_entry("required", &self.required)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.description) {
+                    __map.serialize_entry("description", self.description)?;
+                }
+                __map.end()
+            }
+        }
+        impl<'a> ::buffa::MessageName for GroupDefinitionView<'a> {
+            const PACKAGE: &'static str = "app.resources.v1";
+            const NAME: &'static str = "GroupDefinition";
+            const FULL_NAME: &'static str = "app.resources.v1.GroupDefinition";
+            const TYPE_URL: &'static str = "type.googleapis.com/app.resources.v1.GroupDefinition";
+        }
+        ::buffa::impl_default_view_instance!(GroupDefinitionView);
+        ::buffa::impl_view_reborrow!(GroupDefinitionView);
+        /** Self-contained, `'static` owned view of a `GroupDefinition` message.
+
+ Wraps [`::buffa::OwnedView`]`<`[`GroupDefinitionView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
+
+ Field accessors return borrows tied to `&self`. Use [`Self::view`] to get the full [`GroupDefinitionView`] when you need struct patterns, iteration helpers, or to pass the view to lifetime-parameterised code.*/
+        #[derive(Clone, Debug)]
+        pub struct GroupDefinitionOwnedView(
+            ::buffa::OwnedView<GroupDefinitionView<'static>>,
+        );
+        impl GroupDefinitionOwnedView {
+            /// Decode an owned view from a [`::buffa::bytes::Bytes`] buffer.
+            ///
+            /// The view borrows directly from the buffer's data; the buffer is
+            /// retained inside the returned handle.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer contains invalid
+            /// protobuf data.
+            pub fn decode(
+                bytes: ::buffa::bytes::Bytes,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    GroupDefinitionOwnedView(::buffa::OwnedView::decode(bytes)?),
+                )
+            }
+            /// Decode with custom [`::buffa::DecodeOptions`] (recursion limit,
+            /// max message size).
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError`] if the buffer is invalid or
+            /// exceeds the configured limits.
+            pub fn decode_with_options(
+                bytes: ::buffa::bytes::Bytes,
+                opts: &::buffa::DecodeOptions,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    GroupDefinitionOwnedView(
+                        ::buffa::OwnedView::decode_with_options(bytes, opts)?,
+                    ),
+                )
+            }
+            /// Build from an owned message via an encode → decode round-trip.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`::buffa::DecodeError::MessageTooLarge`] if the
+            /// message's encoded size exceeds the 2 GiB protobuf limit, or
+            /// another [`::buffa::DecodeError`] if the re-encoded bytes are
+            /// somehow invalid (should not happen for well-formed messages).
+            pub fn from_owned(
+                msg: &super::super::GroupDefinition,
+            ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
+                ::core::result::Result::Ok(
+                    GroupDefinitionOwnedView(::buffa::OwnedView::from_owned(msg)?),
+                )
+            }
+            /// Borrow the full [`GroupDefinitionView`] with its lifetime tied to `&self`.
+            #[must_use]
+            pub fn view(&self) -> &GroupDefinitionView<'_> {
+                self.0.reborrow()
+            }
+            /// Convert to the owned message type.
+            ///
+            /// Infallible: this type's constructors wire-decode their
+            /// buffer, and a view produced by wire decoding always
+            /// converts. Delegates to [`::buffa::OwnedView::to_owned_message`],
+            /// whose contract also governs handles converted from a raw
+            /// [`::buffa::OwnedView`].
+            #[must_use]
+            pub fn to_owned_message(&self) -> super::super::GroupDefinition {
+                self.0.to_owned_message()
+            }
+            /// The underlying bytes buffer.
+            #[must_use]
+            pub fn bytes(&self) -> &::buffa::bytes::Bytes {
+                self.0.bytes()
+            }
+            /// Consume the handle, returning the underlying bytes buffer.
+            #[must_use]
+            pub fn into_bytes(self) -> ::buffa::bytes::Bytes {
+                self.0.into_bytes()
+            }
+            /// Field 1: `key`
+            #[must_use]
+            pub fn key(&self) -> &'_ str {
+                self.0.reborrow().key
+            }
+            /// Field 2: `required`
+            #[must_use]
+            pub fn required(&self) -> bool {
+                self.0.reborrow().required
+            }
+            /// Field 3: `description`
+            #[must_use]
+            pub fn description(&self) -> &'_ str {
+                self.0.reborrow().description
+            }
+        }
+        impl ::core::convert::From<::buffa::OwnedView<GroupDefinitionView<'static>>>
+        for GroupDefinitionOwnedView {
+            fn from(inner: ::buffa::OwnedView<GroupDefinitionView<'static>>) -> Self {
+                GroupDefinitionOwnedView(inner)
+            }
+        }
+        impl ::core::convert::From<GroupDefinitionOwnedView>
+        for ::buffa::OwnedView<GroupDefinitionView<'static>> {
+            fn from(wrapper: GroupDefinitionOwnedView) -> Self {
+                wrapper.0
+            }
+        }
+        impl ::core::convert::AsRef<::buffa::OwnedView<GroupDefinitionView<'static>>>
+        for GroupDefinitionOwnedView {
+            fn as_ref(&self) -> &::buffa::OwnedView<GroupDefinitionView<'static>> {
+                &self.0
+            }
+        }
+        impl ::buffa::HasMessageView for super::super::GroupDefinition {
+            type View<'a> = GroupDefinitionView<'a>;
+            type ViewHandle = GroupDefinitionOwnedView;
+        }
+        impl ::serde::Serialize for GroupDefinitionOwnedView {
+            fn serialize<__S: ::serde::Serializer>(
+                &self,
+                __s: __S,
+            ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                ::serde::Serialize::serialize(&self.0, __s)
+            }
+        }
+        #[derive(Clone, Debug, Default)]
         pub struct DeclareEnvRequestView<'a> {
             /// Field 1: `definitions`
             pub definitions: ::buffa::RepeatedView<
                 'a,
                 super::super::__buffa::view::VariableDefinitionView<'a>,
+            >,
+            /// Field 2: `groups`
+            pub groups: ::buffa::RepeatedView<
+                'a,
+                super::super::__buffa::view::GroupDefinitionView<'a>,
             >,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
@@ -3146,6 +3721,26 @@ pub mod __buffa {
                                 )?,
                             );
                     }
+                    2u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let __sub_ctx = ctx.descend()?;
+                        let sub = ::buffa::types::borrow_bytes(&mut cur)?;
+                        ctx.register_element_memory(
+                            ::core::mem::size_of::<
+                                super::super::__buffa::view::GroupDefinitionView,
+                            >(),
+                        )?;
+                        view.groups
+                            .push(
+                                <super::super::__buffa::view::GroupDefinitionView as ::buffa::MessageView>::decode_view_ctx(
+                                    sub,
+                                    __sub_ctx,
+                                )?,
+                            );
+                    }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                         let span_len = before_tag.len() - cur.len();
@@ -3180,6 +3775,11 @@ pub mod __buffa {
                         .iter()
                         .map(|v| v.to_owned_from_source(__buffa_src))
                         .collect::<::core::result::Result<_, ::buffa::DecodeError>>()?,
+                    groups: self
+                        .groups
+                        .iter()
+                        .map(|v| v.to_owned_from_source(__buffa_src))
+                        .collect::<::core::result::Result<_, ::buffa::DecodeError>>()?,
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -3202,6 +3802,14 @@ pub mod __buffa {
                         += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
                             + inner_size as u64;
                 }
+                for v in &self.groups {
+                    let __slot = __cache.reserve();
+                    let inner_size = v.compute_size(__cache);
+                    __cache.set(__slot, inner_size);
+                    size
+                        += 1u64 + ::buffa::encoding::varint_len(inner_size as u64) as u64
+                            + inner_size as u64;
+                }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
             }
@@ -3216,6 +3824,14 @@ pub mod __buffa {
                 for v in &self.definitions {
                     ::buffa::types::put_len_delimited_header(
                         1u32,
+                        u64::from(__cache.consume_next()),
+                        buf,
+                    );
+                    v.write_to(__cache, buf);
+                }
+                for v in &self.groups {
+                    ::buffa::types::put_len_delimited_header(
+                        2u32,
                         u64::from(__cache.consume_next()),
                         buf,
                     );
@@ -3244,6 +3860,9 @@ pub mod __buffa {
                 let mut __map = __s.serialize_map(::core::option::Option::None)?;
                 if !self.definitions.is_empty() {
                     __map.serialize_entry("definitions", &*self.definitions)?;
+                }
+                if !self.groups.is_empty() {
+                    __map.serialize_entry("groups", &*self.groups)?;
                 }
                 __map.end()
             }
@@ -3349,6 +3968,16 @@ pub mod __buffa {
                 super::super::__buffa::view::VariableDefinitionView<'_>,
             > {
                 &self.0.reborrow().definitions
+            }
+            /// Field 2: `groups`
+            #[must_use]
+            pub fn groups(
+                &self,
+            ) -> &::buffa::RepeatedView<
+                '_,
+                super::super::__buffa::view::GroupDefinitionView<'_>,
+            > {
+                &self.0.reborrow().groups
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<DeclareEnvRequestView<'static>>>
@@ -6565,6 +7194,7 @@ pub mod __buffa {
     /// Register this package's `Any` type entries and extension entries.
     pub fn register_types(reg: &mut ::buffa::type_registry::TypeRegistry) {
         reg.register_json_any(super::__VARIABLE_DEFINITION_JSON_ANY);
+        reg.register_json_any(super::__GROUP_DEFINITION_JSON_ANY);
         reg.register_json_any(super::__DECLARE_ENV_REQUEST_JSON_ANY);
         reg.register_json_any(super::__VARIABLE_CELL_JSON_ANY);
         reg.register_json_any(super::__DECLARE_ENV_RESPONSE_JSON_ANY);
@@ -6582,6 +7212,10 @@ pub mod __buffa {
 pub use self::__buffa::view::VariableDefinitionView;
 #[doc(inline)]
 pub use self::__buffa::view::VariableDefinitionOwnedView;
+#[doc(inline)]
+pub use self::__buffa::view::GroupDefinitionView;
+#[doc(inline)]
+pub use self::__buffa::view::GroupDefinitionOwnedView;
 #[doc(inline)]
 pub use self::__buffa::view::DeclareEnvRequestView;
 #[doc(inline)]

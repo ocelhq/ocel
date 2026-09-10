@@ -41,10 +41,26 @@ message VariableDefinition {
     message: "a description is at most 120 bytes, one line, and has no control characters"
     expression: "size(bytes(this)) <= 120 && !this.matches('[[:cntrl:]]')"
   }];
+
+  string group = 10 [(buf.validate.field).string = {pattern: "^[^#[:cntrl:]]*$"}];
+}
+
+message GroupDefinition {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+
+  bool required = 2;
+
+  string description = 3 [(buf.validate.field).cel = {
+    id: "variables.group.description"
+    message: "a description is at most 120 bytes, one line, and has no control characters"
+    expression: "size(bytes(this)) <= 120 && !this.matches('[[:cntrl:]]')"
+  }];
 }
 
 message DeclareEnvRequest {
   repeated VariableDefinition definitions = 1;
+
+  repeated GroupDefinition groups = 2;
 }
 
 message VariableCell {
