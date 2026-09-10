@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,16 +53,26 @@ func (p NodePass) Evaluate(ctx context.Context, req Request) ([]Result, error) {
 		return nil, err
 	}
 
-	var decoded struct {
-		Resources []struct {
-			Name    string            `json:"name"`
-			Patches Patches           `json:"patches"`
-			Tags    map[string]string `json:"tags"`
-		} `json:"resources"`
+	var answer struct {
+		Refusal string `json:"refusal"`
+		Result  *struct {
+			Resources []struct {
+				Name    string            `json:"name"`
+				Patches Patches           `json:"patches"`
+				Tags    map[string]string `json:"tags"`
+			} `json:"resources"`
+		} `json:"result"`
 	}
-	if err := json.Unmarshal(out, &decoded); err != nil {
+	if err := json.Unmarshal(out, &answer); err != nil {
 		return nil, fmt.Errorf("decode transform result: %w", err)
 	}
+	if answer.Refusal != "" {
+		return nil, providerkit.Refuse(providerkit.CodeInvalid, "transforms rejected this deploy: %s", answer.Refusal)
+	}
+	if answer.Result == nil {
+		return nil, fmt.Errorf("the transform runner answered with neither a result nor a refusal")
+	}
+	decoded := answer.Result
 	if len(decoded.Resources) != len(req.Resources) {
 		return nil, fmt.Errorf("transforms returned %d resources for %d candidates", len(decoded.Resources), len(req.Resources))
 	}
@@ -140,16 +151,44 @@ func runNode(ctx context.Context, bundle string, payload []byte) ([]byte, error)
 	if _, err := exec.LookPath("node"); err != nil {
 		return nil, fmt.Errorf("transforms need node on PATH: %w", err)
 	}
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		return nil, fmt.Errorf("open the channel transforms answer down: %w", err)
+	}
+	defer reader.Close()
+
 	cmd := exec.CommandContext(ctx, "node", bundle)
 	cmd.Stdin = bytes.NewReader(payload)
+	cmd.Stdout = os.Stderr
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		if stderr.Len() > 0 {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid, "transforms rejected this deploy: %s", strings.TrimSpace(stderr.String()))
-		}
+	cmd.ExtraFiles = []*os.File{writer}
+
+	if err := cmd.Start(); err != nil {
+		writer.Close()
 		return nil, fmt.Errorf("run transforms: %w", err)
 	}
-	return out, nil
+	writer.Close()
+
+	answered := make(chan []byte, 1)
+	go func() {
+		out, _ := io.ReadAll(reader)
+		answered <- out
+	}()
+	waited := cmd.Wait()
+	out := <-answered
+
+	if len(out) > 0 {
+		return out, nil
+	}
+	said := strings.TrimSpace(stderr.String())
+	if waited == nil {
+		return nil, fmt.Errorf("the transform runner exited without answering: %s", said)
+	}
+	if strings.Contains(said, "ERR_MODULE_NOT_FOUND") {
+		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+			"a transform module imports a package this project has not installed, so node could not load it. `@ocel/transforms` carries `@pulumi/aws` itself: install it as a devDependency and re-run.\n%s",
+			said)
+	}
+	return nil, fmt.Errorf("run transforms: %w\n%s", waited, said)
 }

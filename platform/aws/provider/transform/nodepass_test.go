@@ -171,6 +171,45 @@ func TestNodePassEvaluate(t *testing.T) {
 		}
 	})
 
+	t.Run("a module that prints at import time is still read", func(t *testing.T) {
+		t.Parallel()
+
+		results, err := evaluateWith(t, functionRequest(), map[string]string{
+			"chatty.transform.ts": `
+				import { defineTransform } from "@ocel/transforms"
+				console.log("loading the transform")
+				export default defineTransform({ aws: { function: { lambda: { memorySize: 1024 } } } })
+			`,
+		}, "./chatty.transform.ts")
+		if err != nil {
+			t.Fatalf("Evaluate: %v", err)
+		}
+		if got := results[0].Patches["lambda"]["memorySize"]; got != float64(1024) {
+			t.Errorf("memorySize = %v, want 1024 — what a module prints is not the answer it gives", got)
+		}
+	})
+
+	t.Run("a package the project never installed is reported as one, not as a refusal", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := evaluateWith(t, functionRequest(), map[string]string{
+			"aws.transform.ts": `
+				import { defineTransform } from "@ocel/transforms"
+				import { lambda } from "@pulumi/aws"
+				export default defineTransform({ aws: { function: { lambda: { description: String(lambda) } } } })
+			`,
+		}, "./aws.transform.ts")
+		if err == nil {
+			t.Fatal("Evaluate() = nil, want a module node could not load reported")
+		}
+		if strings.Contains(err.Error(), "transforms rejected this deploy") {
+			t.Errorf("err = %v, want an uninstalled package reported as one rather than as a rule refusing the deploy", err)
+		}
+		if !strings.Contains(err.Error(), "install") {
+			t.Errorf("err = %v, want it to name the remedy", err)
+		}
+	})
+
 	t.Run("tags reach the provider as the union of the rules that carried them", func(t *testing.T) {
 		t.Parallel()
 
