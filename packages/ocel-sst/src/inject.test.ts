@@ -74,7 +74,7 @@ describe("reaching what SST injects into the config bundle", () => {
   });
 
   it("declares a custom binding from the injected util", () => {
-    bind.custom("network", { properties: { subnetIds: ["subnet-1"] } });
+    bind.custom("network", { subnetIds: ["subnet-1"] });
 
     expect(built).toHaveLength(1);
     expect(built[0]?.props).toMatchObject({ project: root, name: "network" });

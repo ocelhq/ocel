@@ -7,17 +7,12 @@ export interface CustomBinding {
   source: string;
 }
 
-export interface DescribedCustom {
-  properties: Record<string, unknown>;
-}
-
-export function customBinding(name: string, described: DescribedCustom): CustomBinding {
+export function customBinding(name: string, properties: Record<string, unknown>): CustomBinding {
   if (!name) {
     throw new Error(
       "a binding is published under no name; the name is what a transform reads it by",
     );
   }
-  const properties = described.properties;
   if (Object.keys(properties).length === 0) {
     throw new Error(
       `custom binding ${name} carries no properties; a custom binding is the values a transform reads out of it, so an empty one has nothing to read`,

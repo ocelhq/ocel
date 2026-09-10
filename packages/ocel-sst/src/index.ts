@@ -5,7 +5,7 @@ export type { Grant, SSTInclude } from "./grants.js";
 export type { PostgresBinding, PostgresProperties } from "./postgres.js";
 export type {
   BindOptions,
-  DescribedCustomResource,
+  CustomProperties,
   DescribedPostgresResource,
   SSTPostgresBindable,
 } from "./resource.js";

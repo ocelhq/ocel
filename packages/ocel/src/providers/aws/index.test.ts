@@ -10,26 +10,17 @@ describe("awsProvider", () => {
     });
   });
 
-  it("carries the ordered transform module list through to the provider", () => {
+  it("carries the ordered transform module list at the root of the config", () => {
     const config = defineConfig({
       slug: "test-app",
-      provider: awsProvider({
-        transforms: ["./transforms/defaults.transform.ts", "./transforms/vpc.transform.ts"],
-      }),
+      transforms: ["./transforms/defaults.transform.ts", "./transforms/vpc.transform.ts"],
+      provider: awsProvider({ region: "us-east-1" }),
     });
 
-    expect(JSON.parse(JSON.stringify(config.provider))).toEqual({
-      name: "aws",
-      options: {
-        transforms: ["./transforms/defaults.transform.ts", "./transforms/vpc.transform.ts"],
-      },
-    });
-  });
-
-  it("leaves the options bag without a transforms key when none is authored", () => {
-    expect(
-      Object.hasOwn(awsProvider({ region: "us-east-1" }).options as object, "transforms"),
-    ).toBe(false);
+    expect(JSON.parse(JSON.stringify(config.transforms))).toEqual([
+      "./transforms/defaults.transform.ts",
+      "./transforms/vpc.transform.ts",
+    ]);
   });
 
   it("carries already-issued certificate arns through, keyed by hostname", () => {

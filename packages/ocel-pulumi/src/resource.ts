@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { createUrn, dynamic, type Input, type Resource } from "@pulumi/pulumi";
 import { checkTarget, runBindings, type Target } from "./cli.js";
-import { customBinding, type DescribedCustom } from "./custom.js";
+import { customBinding } from "./custom.js";
 import type { GrantInput } from "./grants.js";
 import { type DescribedPostgres, postgresBinding } from "./postgres.js";
 
@@ -30,9 +30,7 @@ export interface DescribedPostgresResource {
  * values to a transform that fills a surface field with them, so nothing is
  * delivered to an app and no grants are accepted.
  */
-export interface DescribedCustomResource {
-  properties: Record<string, Input<unknown>>;
-}
+export type CustomProperties = Record<string, Input<unknown>>;
 
 /**
  * Where a binding lands: an ocel class, one preview environment, the project
@@ -52,7 +50,9 @@ interface BindingInputs extends Target {
 
 interface PostgresInputs extends BindingInputs, DescribedPostgres {}
 
-interface CustomInputs extends BindingInputs, DescribedCustom {}
+interface CustomInputs extends BindingInputs {
+  properties: Record<string, unknown>;
+}
 
 interface BindingState extends Target {
   name: string;
@@ -118,7 +118,7 @@ export const postgresProvider = bindingProvider<PostgresInputs>(
 );
 
 export const customProvider = bindingProvider<CustomInputs>(
-  (inputs) => customBinding(inputs.name, { properties: inputs.properties }),
+  (inputs) => customBinding(inputs.name, inputs.properties),
   (inputs) => Object.values(inputs.properties).every((value) => value !== undefined),
 );
 
@@ -148,13 +148,13 @@ export function postgres(
  * binding, as a side effect of this update.
  *
  * The name is the one a transform reads — `bind.custom("network", …)` here,
- * `bindings.network.subnetIds` in a transform module. `class` defaults to
+ * `bindings.custom.network.subnetIds` in a transform module. `class` defaults to
  * production, `environment` names one preview environment, and `project` is the
  * directory holding `ocel.json`, which is the directory Pulumi runs the
  * program from unless it is given.
  */
-export function custom(name: string, resource: DescribedCustomResource, opts?: BindOptions): void {
-  declare(customProvider, name, opts, { properties: resource.properties });
+export function custom(name: string, properties: CustomProperties, opts?: BindOptions): void {
+  declare(customProvider, name, opts, { properties });
 }
 
 const dynamicType = "pulumi-nodejs:dynamic:Resource";

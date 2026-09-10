@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.typecheck.json",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": false,
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "@ocel/transforms": ["./src/index.ts"],
+      "@ocel/transforms/aws": ["./src/aws/index.ts"]
+    }
+  }
+}
