@@ -282,7 +282,7 @@ describe("declaring a custom binding", () => {
     "urn:pulumi:production::shop::pulumi-nodejs:dynamic:Resource::ocel-binding-network";
 
   function declareCustom(opts?: Parameters<typeof custom>[2]): Built {
-    custom("network", { properties: network }, { project: root, ...opts });
+    custom("network", network, { project: root, ...opts });
     return latest();
   }
 

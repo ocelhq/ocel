@@ -1,4 +1,4 @@
-import type { TransformRule } from "./define";
+import { isTransformDefinition, type TransformDefinition } from "./define";
 import { type EvaluateRequest, evaluate, type TransformModule } from "./evaluate";
 
 /**
@@ -6,12 +6,12 @@ import { type EvaluateRequest, evaluate, type TransformModule } from "./evaluate
  * that rejects a rule can name the file the author wrote it in.
  */
 export function loadModule(specifier: string, exported: unknown): TransformModule {
-  if (!Array.isArray(exported)) {
+  if (!isTransformDefinition(exported)) {
     throw new Error(
       `${specifier}: a transform module must export a default \`defineTransform(...)\` result`,
     );
   }
-  return { specifier, rules: exported as readonly TransformRule[] };
+  return { specifier, definition: exported as TransformDefinition };
 }
 
 async function readRequest(): Promise<EvaluateRequest> {

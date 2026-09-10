@@ -10,7 +10,7 @@ await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
 
 const result = await Bun.build({
-  entrypoints: [join(root, "packages/ocel/src/providers/aws/transform/run.ts")],
+  entrypoints: [join(root, "packages/ocel-transforms/src/run.ts")],
   outdir: dist,
   naming: "runner.mjs",
   target: "node",

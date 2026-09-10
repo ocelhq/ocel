@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { checkTarget, runBindings, type Target } from "./cli.js";
-import { customBinding, type DescribedCustom } from "./custom.js";
+import { customBinding } from "./custom.js";
 import type { Grant, SSTInclude } from "./grants.js";
 import { type DescribedPostgres, postgresBinding } from "./postgres.js";
 
@@ -43,7 +43,9 @@ interface BindingInputs extends Target {
 
 interface PostgresInputs extends BindingInputs, DescribedPostgres {}
 
-interface CustomInputs extends BindingInputs, DescribedCustom {}
+interface CustomInputs extends BindingInputs {
+  properties: Record<string, unknown>;
+}
 
 interface BindingState extends Target {
   name: string;
@@ -110,7 +112,7 @@ export const postgresProvider = bindingProvider<PostgresInputs>(
 );
 
 export const customProvider = bindingProvider<CustomInputs>(
-  (inputs) => customBinding(inputs.name, { properties: inputs.properties }),
+  (inputs) => customBinding(inputs.name, inputs.properties),
   (inputs) => Object.values(inputs.properties).every((value) => value !== undefined),
 );
 
@@ -155,21 +157,19 @@ export function postgres(
  * values to a transform that fills a surface field with them, so nothing is
  * delivered to an app and no grants are accepted.
  */
-export interface DescribedCustomResource {
-  properties: Record<string, Input<unknown>>;
-}
+export type CustomProperties = Record<string, Input<unknown>>;
 
 /**
  * Publishes one set of values your own infrastructure holds as one ocel custom
  * binding, as a side effect of this apply.
  *
  * The name is the one a transform reads — `bind.custom("network", …)` here,
- * `bindings.network.subnetIds` in a transform module. `class` defaults to
+ * `bindings.custom.network.subnetIds` in a transform module. `class` defaults to
  * production, `environment` names one preview environment, and `project` is the
  * directory holding `ocel.json`, which is the SST config root unless it is
  * given.
  */
-export function custom(name: string, resource: DescribedCustomResource, opts?: BindOptions): void {
+export function custom(name: string, properties: CustomProperties, opts?: BindOptions): void {
   const util = host();
   const target: Target = {
     project: opts?.project ?? configRoot(),
@@ -183,7 +183,7 @@ export function custom(name: string, resource: DescribedCustomResource, opts?: B
     ...target,
     name,
     owner: ownerFor(util, logical),
-    properties: resource.properties,
+    properties,
   });
 }
 

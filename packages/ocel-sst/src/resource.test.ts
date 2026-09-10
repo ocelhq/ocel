@@ -249,7 +249,7 @@ describe("declaring a custom binding", () => {
   };
 
   function declareCustom(opts?: Parameters<typeof custom>[2]) {
-    custom("network", { properties: network }, opts);
+    custom("network", network, opts);
     return latest();
   }
 
@@ -288,7 +288,7 @@ describe("declaring a custom binding", () => {
 
   it("reports a change rather than throwing while a property is still unknown", async () => {
     const olds = (await customProvider.create(declareCustom().props as never)).outs;
-    custom("network", { properties: { ...network, subnetIds: undefined } });
+    custom("network", { ...network, subnetIds: undefined });
 
     expect(await customProvider.diff("id", olds, latest().props as never)).toMatchObject({
       changes: true,

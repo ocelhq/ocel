@@ -11,7 +11,6 @@
       "ocel/providers/aws": ["./src/providers/aws/index.ts"],
       "ocel/providers/aws/edge": ["./src/providers/aws/edge.ts"],
       "ocel/providers/aws/dns": ["./src/providers/aws/dns.ts"],
-      "ocel/providers/aws/transform": ["./src/providers/aws/transform/index.ts"],
       "ocel/providers/gcp": ["./src/providers/gcp/index.ts"],
       "ocel/providers/vps": ["./src/providers/vps/index.ts"]
     }

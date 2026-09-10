@@ -8,7 +8,7 @@
     "build": "bun build.mjs"
   },
   "devDependencies": {
-    "ocel": "workspace:^"
+    "@ocel/transforms": "workspace:^"
   },
   "license": "MIT"
 }
