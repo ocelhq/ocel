@@ -37,7 +37,11 @@ import {
   referenceLine,
   revealable,
   setForOptions,
+  type VariableGroupState,
   type Variant,
+  variableGroupOf,
+  variableGroupSwitchable,
+  variableGroupsOf,
 } from "../model";
 import { useValue } from "../signals";
 import {
@@ -63,6 +67,7 @@ import {
   openCopy,
   openDrawer,
   owedOnly,
+  owedVariableGroupCells,
   pickEnvironment,
   problems,
   reveal,
@@ -82,6 +87,8 @@ import {
   toggleGroup,
   toggleRevealVisible,
   toggleSelected,
+  toggleVariableGroup,
+  variableGroupStates,
   visible,
 } from "../store";
 import { Chip, ChipButton, Glyph } from "./Chip";
@@ -146,6 +153,7 @@ export function Table() {
       onDrop={(event) => dropInto(event, "")}
     >
       <Toolbar />
+      <GroupCards />
       <div className="overflow-x-auto">
         <table className="w-full table-fixed border-collapse text-sm">
           <thead>
@@ -217,6 +225,66 @@ export function Table() {
         </p>
       )}
     </section>
+  );
+}
+
+function GroupCards() {
+  const current = useValue(state)!;
+  const env = useValue(environment);
+  const states = useValue(variableGroupStates).filter((derived) => derived.environment === env);
+  const groups = variableGroupsOf(current);
+  if (groups.length === 0) return null;
+  return (
+    <div className="grid gap-3 border-b border-border p-4 md:grid-cols-2">
+      {groups.map((group) => (
+        <section
+          key={group.key}
+          data-slot="variable-group"
+          className="border border-border bg-muted/30 p-3"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-mono text-sm">{group.key}</h2>
+              {group.description && (
+                <p className="mt-1 text-xs text-muted-foreground">{group.description}</p>
+              )}
+            </div>
+            {group.required && <Chip tone="muted">required</Chip>}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {states
+              .filter((derived) => derived.group.key === group.key)
+              .map((derived) => (
+                <GroupColumn derived={derived} key={derived.folder} />
+              ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function GroupColumn({ derived }: { derived: VariableGroupState }) {
+  const tally = `${folderName(derived.folder)} · ${derived.present}/${derived.members.length}`;
+  if (!variableGroupSwitchable(derived)) {
+    return (
+      <Chip data-slot="group-column" tone={derived.status === "partial" ? "owed" : "muted"}>
+        {tally}
+      </Chip>
+    );
+  }
+  const on = derived.switchedOn || derived.status !== "off";
+  return (
+    <Button
+      data-slot="group-switch"
+      variant={on ? "default" : "outline"}
+      size="xs"
+      aria-pressed={on}
+      onClick={() => toggleVariableGroup(derived.group.key, derived.folder, !on)}
+    >
+      {tally}
+      {derived.status === "partial" && " · incomplete"}
+    </Button>
   );
 }
 
@@ -418,6 +486,8 @@ function KeyRow({ line, flat }: { line: KeyLine; flat: boolean }) {
   const key = addressKey(variant.at);
   const app = useValue(hoveredApp);
   const picked = useValue(selected).has(key);
+  const groupOwed = useValue(owedVariableGroupCells);
+  const group = variableGroupOf(useValue(state)!, row.group);
   const open = editable(variant);
   const dimmed = app !== null && !readBy(row, app);
   const owed = variant.owed || line.needed;
@@ -450,6 +520,12 @@ function KeyRow({ line, flat }: { line: KeyLine; flat: boolean }) {
               </ChipButton>
             )}
             {row.class !== "plain" && <Chip tone="muted">{row.class}</Chip>}
+            {group && (
+              <Chip tone={groupOwed.has(addressKey(variant.at)) ? "owed" : "muted"}>
+                {group.key}
+                {group.required ? "" : " · optional"}
+              </Chip>
+            )}
             {owed && (
               <Chip tone="owed" data-slot="owed">
                 {line.needed ? "deploy needs this" : "required"}
@@ -464,6 +540,11 @@ function KeyRow({ line, flat }: { line: KeyLine; flat: boolean }) {
           {row.description && (
             <p className="mt-1 text-left font-normal text-[12px] text-muted-foreground">
               {row.description}
+            </p>
+          )}
+          {group?.description && (
+            <p className="mt-1 text-left font-normal text-[12px] text-muted-foreground">
+              {group.description}
             </p>
           )}
         </div>
