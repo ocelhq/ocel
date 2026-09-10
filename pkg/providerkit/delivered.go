@@ -19,8 +19,8 @@ const (
 
 var InjectedPortText = strconv.Itoa(InjectedPort)
 
-func ResourceEnvName(kind LinkType, resource string) string {
-	return naming.ResourceEnvName(WireLinkType(kind), resource)
+func ResourceEnvName(kind BindingType, resource string) string {
+	return naming.ResourceEnvName(WireBindingType(kind), resource)
 }
 
 func (r *deployRun) delivers(entry AppEntry) bool {
@@ -35,7 +35,7 @@ func (r *deployRun) deliver(ctx context.Context, entry AppEntry, held AppValues)
 	if !r.delivers(entry) {
 		return nil, nil
 	}
-	delivered := make(map[string]string, len(held.Plain)+len(held.Sensitive)+len(held.Secrets)+len(held.Links))
+	delivered := make(map[string]string, len(held.Plain)+len(held.Sensitive)+len(held.Secrets)+len(held.Bindings))
 	maps.Copy(delivered, held.Plain)
 	maps.Copy(delivered, held.Sensitive)
 
@@ -47,7 +47,7 @@ func (r *deployRun) deliver(ctx context.Context, entry AppEntry, held AppValues)
 		Records:     r.provider.Records(),
 		Sealer:      r.provider.Sealer(),
 		Scope:       r.scope,
-		Environment: r.plan.linkEnvironment(),
+		Environment: r.plan.bindingEnvironment(),
 	}
 	opened, err := reader.Values(ctx, cells)
 	if err != nil {
@@ -60,19 +60,19 @@ func (r *deployRun) deliver(ctx context.Context, entry AppEntry, held AppValues)
 		}
 		delivered[secret.Key] = plaintext
 	}
-	for _, link := range held.Links {
-		name := ResourceEnvName(link.Type, grantedResource(link))
-		if len(link.Wire) == 0 {
+	for _, binding := range held.Bindings {
+		name := ResourceEnvName(binding.Type, grantedResource(binding))
+		if len(binding.Wire) == 0 {
 			return nil, Refuse(CodeNotReady,
-				"app %s consumes %s, and this deploy resolved no record for it: a container reads a linked resource off %s alone, so handing it an empty one would fail at the app's first connection rather than here",
-				entry.App, link.Name, name)
+				"app %s consumes %s, and this deploy resolved no record for it: a container reads a bound resource off %s alone, so handing it an empty one would fail at the app's first connection rather than here",
+				entry.App, binding.Name, name)
 		}
 		if _, taken := delivered[name]; taken {
 			return nil, Refuse(CodeInvalid,
 				"app %s consumes two resources that both reach it as %s, and one would silently take the other's place: rename one of them",
 				entry.App, name)
 		}
-		delivered[name] = string(link.Wire)
+		delivered[name] = string(binding.Wire)
 	}
 	maps.Copy(delivered, held.Injected())
 	return delivered, nil
@@ -81,7 +81,7 @@ func (r *deployRun) deliver(ctx context.Context, entry AppEntry, held AppValues)
 func (r *deployRun) refuseUnsetSecret(app, key string) error {
 	return Refuse(CodeNotReady,
 		"app %s declares %s as a secret and nothing is stored for it in %s: a container is handed the value the deploy resolved, so an unset secret is refused here rather than at the app's first read. Set it with `ocel env set %s <value>`",
-		app, key, describeCoordinate(string(r.plan.Class), r.plan.linkEnvironment()), key)
+		app, key, describeCoordinate(string(r.plan.Class), r.plan.bindingEnvironment()), key)
 }
 
 func (r *deployRun) refuseContainerValues(ctx context.Context) error {
@@ -119,7 +119,7 @@ func (r *deployRun) storedCells(ctx context.Context) (map[values.Cell]bool, erro
 	if err != nil {
 		return nil, err
 	}
-	shadowed := map[string]bool{"": true, r.plan.linkEnvironment(): true}
+	shadowed := map[string]bool{"": true, r.plan.bindingEnvironment(): true}
 	stored := make(map[values.Cell]bool, len(held))
 	for _, metadata := range held {
 		if shadowed[metadata.Coordinate.Environment] {
@@ -153,7 +153,7 @@ func refuseOwnedNames(app string, held AppValues) error {
 	}
 	if len(owned) > 0 {
 		return Refuse(CodeInvalid,
-			"app %s declares %s, and a container is handed every value it declares under that value's own bare name: %s is the prefix ocel delivers its own entries under, so a value named that way would sit beside — or on top of — a linked resource's record. Rename it",
+			"app %s declares %s, and a container is handed every value it declares under that value's own bare name: %s is the prefix ocel delivers its own entries under, so a value named that way would sit beside — or on top of — a bound resource's record. Rename it",
 			app, strings.Join(owned, ", "), ownedPrefix)
 	}
 	return nil

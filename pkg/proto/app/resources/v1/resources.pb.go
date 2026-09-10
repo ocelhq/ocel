@@ -7,7 +7,6 @@
 package resourcesv1
 
 import (
-	v1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -22,9 +21,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type ResourceType int32
+
+const (
+	ResourceType_RESOURCE_TYPE_UNSPECIFIED ResourceType = 0
+	ResourceType_RESOURCE_TYPE_POSTGRES    ResourceType = 1
+	ResourceType_RESOURCE_TYPE_BUCKET      ResourceType = 2
+	ResourceType_RESOURCE_TYPE_CONTAINER   ResourceType = 3
+)
+
+// Enum value maps for ResourceType.
+var (
+	ResourceType_name = map[int32]string{
+		0: "RESOURCE_TYPE_UNSPECIFIED",
+		1: "RESOURCE_TYPE_POSTGRES",
+		2: "RESOURCE_TYPE_BUCKET",
+		3: "RESOURCE_TYPE_CONTAINER",
+	}
+	ResourceType_value = map[string]int32{
+		"RESOURCE_TYPE_UNSPECIFIED": 0,
+		"RESOURCE_TYPE_POSTGRES":    1,
+		"RESOURCE_TYPE_BUCKET":      2,
+		"RESOURCE_TYPE_CONTAINER":   3,
+	}
+)
+
+func (x ResourceType) Enum() *ResourceType {
+	p := new(ResourceType)
+	*p = x
+	return p
+}
+
+func (x ResourceType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ResourceType) Descriptor() protoreflect.EnumDescriptor {
+	return file_app_resources_v1_resources_proto_enumTypes[0].Descriptor()
+}
+
+func (ResourceType) Type() protoreflect.EnumType {
+	return &file_app_resources_v1_resources_proto_enumTypes[0]
+}
+
+func (x ResourceType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ResourceType.Descriptor instead.
+func (ResourceType) EnumDescriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{0}
+}
+
 type ResourceIdentifier struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          v1.BindingType         `protobuf:"varint,1,opt,name=type,proto3,enum=common.bindings.v1.BindingType" json:"type,omitempty"`
+	Type          ResourceType           `protobuf:"varint,1,opt,name=type,proto3,enum=app.resources.v1.ResourceType" json:"type,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -60,11 +111,11 @@ func (*ResourceIdentifier) Descriptor() ([]byte, []int) {
 	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ResourceIdentifier) GetType() v1.BindingType {
+func (x *ResourceIdentifier) GetType() ResourceType {
 	if x != nil {
 		return x.Type
 	}
-	return v1.BindingType(0)
+	return ResourceType_RESOURCE_TYPE_UNSPECIFIED
 }
 
 func (x *ResourceIdentifier) GetName() string {
@@ -300,9 +351,9 @@ var File_app_resources_v1_resources_proto protoreflect.FileDescriptor
 
 const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\n" +
-	" app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto\x1a!common/bindings/v1/bindings.proto\"]\n" +
-	"\x12ResourceIdentifier\x123\n" +
-	"\x04type\x18\x01 \x01(\x0e2\x1f.common.bindings.v1.BindingTypeR\x04type\x12\x12\n" +
+	" app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto\"\\\n" +
+	"\x12ResourceIdentifier\x122\n" +
+	"\x04type\x18\x01 \x01(\x0e2\x1e.app.resources.v1.ResourceTypeR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x11\n" +
 	"\x0fDeclareResponse\"\xee\x01\n" +
 	"\x0eDeclareRequest\x12@\n" +
@@ -314,7 +365,12 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\x0ePostgresConfig\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\"7\n" +
 	"\fBucketConfig\x12'\n" +
-	"\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins2\xa8\x02\n" +
+	"\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins*\x80\x01\n" +
+	"\fResourceType\x12\x1d\n" +
+	"\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n" +
+	"\x14RESOURCE_TYPE_BUCKET\x10\x02\x12\x1b\n" +
+	"\x17RESOURCE_TYPE_CONTAINER\x10\x032\xa8\x02\n" +
 	"\x0fResourceService\x12N\n" +
 	"\aDeclare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n" +
 	"\n" +
@@ -333,28 +389,29 @@ func file_app_resources_v1_resources_proto_rawDescGZIP() []byte {
 	return file_app_resources_v1_resources_proto_rawDescData
 }
 
+var file_app_resources_v1_resources_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_app_resources_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_app_resources_v1_resources_proto_goTypes = []any{
-	(*ResourceIdentifier)(nil),        // 0: app.resources.v1.ResourceIdentifier
-	(*DeclareResponse)(nil),           // 1: app.resources.v1.DeclareResponse
-	(*DeclareRequest)(nil),            // 2: app.resources.v1.DeclareRequest
-	(*PostgresConfig)(nil),            // 3: app.resources.v1.PostgresConfig
-	(*BucketConfig)(nil),              // 4: app.resources.v1.BucketConfig
-	(v1.BindingType)(0),               // 5: common.bindings.v1.BindingType
+	(ResourceType)(0),                 // 0: app.resources.v1.ResourceType
+	(*ResourceIdentifier)(nil),        // 1: app.resources.v1.ResourceIdentifier
+	(*DeclareResponse)(nil),           // 2: app.resources.v1.DeclareResponse
+	(*DeclareRequest)(nil),            // 3: app.resources.v1.DeclareRequest
+	(*PostgresConfig)(nil),            // 4: app.resources.v1.PostgresConfig
+	(*BucketConfig)(nil),              // 5: app.resources.v1.BucketConfig
 	(*DeclareEnvRequest)(nil),         // 6: app.resources.v1.DeclareEnvRequest
 	(*ReportEnvProblemsRequest)(nil),  // 7: app.resources.v1.ReportEnvProblemsRequest
 	(*DeclareEnvResponse)(nil),        // 8: app.resources.v1.DeclareEnvResponse
 	(*ReportEnvProblemsResponse)(nil), // 9: app.resources.v1.ReportEnvProblemsResponse
 }
 var file_app_resources_v1_resources_proto_depIdxs = []int32{
-	5, // 0: app.resources.v1.ResourceIdentifier.type:type_name -> common.bindings.v1.BindingType
-	0, // 1: app.resources.v1.DeclareRequest.resource:type_name -> app.resources.v1.ResourceIdentifier
-	3, // 2: app.resources.v1.DeclareRequest.postgres:type_name -> app.resources.v1.PostgresConfig
-	4, // 3: app.resources.v1.DeclareRequest.bucket:type_name -> app.resources.v1.BucketConfig
-	2, // 4: app.resources.v1.ResourceService.Declare:input_type -> app.resources.v1.DeclareRequest
+	0, // 0: app.resources.v1.ResourceIdentifier.type:type_name -> app.resources.v1.ResourceType
+	1, // 1: app.resources.v1.DeclareRequest.resource:type_name -> app.resources.v1.ResourceIdentifier
+	4, // 2: app.resources.v1.DeclareRequest.postgres:type_name -> app.resources.v1.PostgresConfig
+	5, // 3: app.resources.v1.DeclareRequest.bucket:type_name -> app.resources.v1.BucketConfig
+	3, // 4: app.resources.v1.ResourceService.Declare:input_type -> app.resources.v1.DeclareRequest
 	6, // 5: app.resources.v1.ResourceService.DeclareEnv:input_type -> app.resources.v1.DeclareEnvRequest
 	7, // 6: app.resources.v1.ResourceService.ReportEnvProblems:input_type -> app.resources.v1.ReportEnvProblemsRequest
-	1, // 7: app.resources.v1.ResourceService.Declare:output_type -> app.resources.v1.DeclareResponse
+	2, // 7: app.resources.v1.ResourceService.Declare:output_type -> app.resources.v1.DeclareResponse
 	8, // 8: app.resources.v1.ResourceService.DeclareEnv:output_type -> app.resources.v1.DeclareEnvResponse
 	9, // 9: app.resources.v1.ResourceService.ReportEnvProblems:output_type -> app.resources.v1.ReportEnvProblemsResponse
 	7, // [7:10] is the sub-list for method output_type
@@ -379,13 +436,14 @@ func file_app_resources_v1_resources_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_resources_v1_resources_proto_rawDesc), len(file_app_resources_v1_resources_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_app_resources_v1_resources_proto_goTypes,
 		DependencyIndexes: file_app_resources_v1_resources_proto_depIdxs,
+		EnumInfos:         file_app_resources_v1_resources_proto_enumTypes,
 		MessageInfos:      file_app_resources_v1_resources_proto_msgTypes,
 	}.Build()
 	File_app_resources_v1_resources_proto = out.File

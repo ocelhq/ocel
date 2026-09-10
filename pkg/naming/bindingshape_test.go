@@ -6,10 +6,10 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
-func TestLinkPropertyShapes(t *testing.T) {
+func TestBindingPropertyShapes(t *testing.T) {
 	t.Run("an owned type is described by its descriptor, values or none", func(t *testing.T) {
 		want := []PropertyShape{
 			{Name: "host", JSONType: JSONTypeString},
@@ -18,22 +18,22 @@ func TestLinkPropertyShapes(t *testing.T) {
 			{Name: "username", JSONType: JSONTypeString},
 			{Name: "password", JSONType: JSONTypeString},
 		}
-		empty := &linksv1.Link{
+		empty := &bindingsv1.Binding{
 			Name:       "orders",
-			Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{}},
+			Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{}},
 		}
-		if got := LinkPropertyShapes(empty); !reflect.DeepEqual(got, want) {
-			t.Errorf("LinkPropertyShapes(empty postgres) = %v, want %v", got, want)
+		if got := BindingPropertyShapes(empty); !reflect.DeepEqual(got, want) {
+			t.Errorf("BindingPropertyShapes(empty postgres) = %v, want %v", got, want)
 		}
 
-		filled := &linksv1.Link{
+		filled := &bindingsv1.Binding{
 			Name: "orders",
-			Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
+			Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 				Host: "db.internal", Port: 5432, Database: "app", Username: "app", Password: "pw",
 			}},
 		}
-		if got := LinkPropertyShapes(filled); !reflect.DeepEqual(got, want) {
-			t.Errorf("LinkPropertyShapes(filled postgres) = %v, want %v", got, want)
+		if got := BindingPropertyShapes(filled); !reflect.DeepEqual(got, want) {
+			t.Errorf("BindingPropertyShapes(filled postgres) = %v, want %v", got, want)
 		}
 	})
 
@@ -51,7 +51,7 @@ func TestLinkPropertyShapes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("structpb.NewStruct: %v", err)
 		}
-		link := &linksv1.Link{Name: "network", Properties: &linksv1.Link_Custom{Custom: custom}}
+		binding := &bindingsv1.Binding{Name: "network", Properties: &bindingsv1.Binding_Custom{Custom: custom}}
 
 		want := []PropertyShape{
 			{Name: "absent", JSONType: JSONTypeUnknown},
@@ -63,14 +63,14 @@ func TestLinkPropertyShapes(t *testing.T) {
 			{Name: "subnetIds", JSONType: JSONTypeString, List: true},
 			{Name: "tags", JSONType: JSONTypeObject},
 		}
-		if got := LinkPropertyShapes(link); !reflect.DeepEqual(got, want) {
-			t.Errorf("LinkPropertyShapes(custom) = %v, want %v", got, want)
+		if got := BindingPropertyShapes(binding); !reflect.DeepEqual(got, want) {
+			t.Errorf("BindingPropertyShapes(custom) = %v, want %v", got, want)
 		}
 	})
 
 	t.Run("a record with no properties describes nothing", func(t *testing.T) {
-		if got := LinkPropertyShapes(&linksv1.Link{Name: "orders"}); got != nil {
-			t.Errorf("LinkPropertyShapes(bare) = %v, want nil", got)
+		if got := BindingPropertyShapes(&bindingsv1.Binding{Name: "orders"}); got != nil {
+			t.Errorf("BindingPropertyShapes(bare) = %v, want nil", got)
 		}
 	})
 }

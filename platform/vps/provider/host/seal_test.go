@@ -196,7 +196,7 @@ func TestWhatTheSealHelperWritesIsAES256GCMOverTheKeyOnDisk(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	opened, err := gcm.Open(nil, sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():], bound.Binding())
+	opened, err := gcm.Open(nil, sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():], bound.AAD())
 	if err != nil {
 		t.Fatalf("what the helper sealed does not open as %s over the key it minted: %v", SealAlgorithm, err)
 	}

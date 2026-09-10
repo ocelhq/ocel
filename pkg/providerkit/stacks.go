@@ -16,7 +16,7 @@ type Stack struct {
 	App       string     `json:"app,omitempty"`
 	Release   string     `json:"release,omitempty"`
 	Identity  string     `json:"identity,omitempty"`
-	Links     []Link     `json:"links,omitempty"`
+	Bindings  []Binding  `json:"bindings,omitempty"`
 	Functions []Function `json:"functions,omitempty"`
 
 	Containers []AppContainer `json:"containers,omitempty"`

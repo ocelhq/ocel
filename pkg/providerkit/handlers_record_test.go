@@ -137,7 +137,7 @@ func TestTheStagedRecordCarriesTheCodeAndVariablesAnEdgeRunsTheAppWith(t *testin
 		t.Errorf("env[%s] = %q, want the folder the app is rooted at", constants.AppFolderEnvName, record.Env[constants.AppFolderEnvName])
 	}
 	if _, named := record.Env["orders"]; named {
-		t.Errorf("env = %v, want no link name among the variables the worker runs with", record.Env)
+		t.Errorf("env = %v, want no binding name among the variables the worker runs with", record.Env)
 	}
 	if record.IsrWriteSecret == "" {
 		t.Error("the staged record carries no isrWriteSecret, so the edge cannot write a revalidated page back")

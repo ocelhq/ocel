@@ -320,7 +320,7 @@ func TestPurgeTakesEveryRecordAProjectHolds(t *testing.T) {
 	if _, err := store.Set(ctx, scope, at("KEY"), "one", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetLink(ctx, scope, "", "OCEL", "db", values.Pair{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", values.Pair{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
 		t.Fatal(err)
 	}
 	consumer := values.Scope{Project: "web", Class: ports.ClassProduction}
@@ -378,15 +378,15 @@ func TestAKeyKeepsItsShapeThroughTheRecordTree(t *testing.T) {
 	}
 }
 
-func TestALinkNameBelongsToOnePublisher(t *testing.T) {
+func TestABindingNameBelongsToOnePublisher(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 	pair := values.Pair{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
 
-	if _, err := store.SetLink(ctx, scope, "", "neon", "db", pair); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "", "neon", "db", pair); err != nil {
 		t.Fatal(err)
 	}
-	_, err := store.SetLink(ctx, scope, "", "supabase", "db", pair)
+	_, err := store.SetBinding(ctx, scope, "", "supabase", "db", pair)
 	if !errors.Is(err, values.ErrClaimed) {
 		t.Fatalf("a second publisher taking the name = %v, want ErrClaimed", err)
 	}
@@ -394,73 +394,73 @@ func TestALinkNameBelongsToOnePublisher(t *testing.T) {
 		t.Fatalf("the refusal does not name the holder: %v", err)
 	}
 
-	version, err := store.SetLink(ctx, scope, "", "neon", "db", pair)
+	version, err := store.SetBinding(ctx, scope, "", "neon", "db", pair)
 	if err != nil || version != 2 {
 		t.Fatalf("the holder republishing = %d, %v, want version 2", version, err)
 	}
 }
 
-func TestALinkIsRemovedAndItsNameFreed(t *testing.T) {
+func TestABindingIsRemovedAndItsNameFreed(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 	pair := values.Pair{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
 
-	if _, err := store.SetLink(ctx, scope, "", "neon", "db", pair); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "", "neon", "db", pair); err != nil {
 		t.Fatal(err)
 	}
-	removed, err := store.RemoveLink(ctx, scope, "", "db")
+	removed, err := store.RemoveBinding(ctx, scope, "", "db")
 	if err != nil || !removed {
-		t.Fatalf("RemoveLink() = %v, %v", removed, err)
+		t.Fatalf("RemoveBinding() = %v, %v", removed, err)
 	}
-	if again, err := store.RemoveLink(ctx, scope, "", "db"); err != nil || again {
-		t.Fatalf("a second RemoveLink() = %v, %v, want it report nothing removed", again, err)
+	if again, err := store.RemoveBinding(ctx, scope, "", "db"); err != nil || again {
+		t.Fatalf("a second RemoveBinding() = %v, %v, want it report nothing removed", again, err)
 	}
-	if _, err := store.SetLink(ctx, scope, "", "supabase", "db", pair); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "", "supabase", "db", pair); err != nil {
 		t.Fatalf("publishing to the freed name = %v, want it allowed", err)
 	}
 }
 
-func TestALinkPublishedToAnEnvironmentShadowsTheClassWidePair(t *testing.T) {
+func TestABindingPublishedToAnEnvironmentShadowsTheClassWidePair(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.SetLink(ctx, scope, "", "OCEL", "db", values.Pair{Record: []byte(`{"class":true}`), Value: []byte("class-wide")}); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", values.Pair{Record: []byte(`{"class":true}`), Value: []byte("class-wide")}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetLink(ctx, scope, "pr-7", "OCEL", "db", values.Pair{Record: []byte(`{"env":true}`), Value: []byte("pr-7 only")}); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "pr-7", "OCEL", "db", values.Pair{Record: []byte(`{"env":true}`), Value: []byte("pr-7 only")}); err != nil {
 		t.Fatal(err)
 	}
 
-	published, err := store.ResolveLink(ctx, scope, "pr-7", "db")
+	published, err := store.ResolveBinding(ctx, scope, "pr-7", "db")
 	if err != nil || string(published.Value) != "pr-7 only" {
-		t.Fatalf("ResolveLink() in the environment = %q, %v", published.Value, err)
+		t.Fatalf("ResolveBinding() in the environment = %q, %v", published.Value, err)
 	}
-	published, err = store.ResolveLink(ctx, scope, "", "db")
+	published, err = store.ResolveBinding(ctx, scope, "", "db")
 	if err != nil || string(published.Value) != "class-wide" {
-		t.Fatalf("ResolveLink() class-wide = %q, %v", published.Value, err)
+		t.Fatalf("ResolveBinding() class-wide = %q, %v", published.Value, err)
 	}
 
-	summaries, err := store.ListLinks(ctx, scope, "pr-7")
+	summaries, err := store.ListBindings(ctx, scope, "pr-7")
 	if err != nil || len(summaries) != 1 || string(summaries[0].Record) != `{"env":true}` {
-		t.Fatalf("ListLinks() in the environment = %+v, %v, want the environment's own record", summaries, err)
+		t.Fatalf("ListBindings() in the environment = %+v, %v, want the environment's own record", summaries, err)
 	}
 }
 
-func TestAReaderResolvesTheLinksADeploymentWasBuiltToRead(t *testing.T) {
+func TestAReaderResolvesTheBindingsADeploymentWasBuiltToRead(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.SetLink(ctx, scope, "", "OCEL", "db", values.Pair{Record: []byte("{}"), Value: []byte("the sealed record")}); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", values.Pair{Record: []byte("{}"), Value: []byte("the sealed record")}); err != nil {
 		t.Fatal(err)
 	}
 	reader := values.Reader{Records: store.Records, Sealer: store.Sealer, Scope: scope}
 
-	found, err := reader.Links(ctx, []string{"db"})
+	found, err := reader.Bindings(ctx, []string{"db"})
 	if err != nil || len(found) != 1 || string(found[0].Value) != "the sealed record" {
-		t.Fatalf("Links() = %+v, %v", found, err)
+		t.Fatalf("Bindings() = %+v, %v", found, err)
 	}
-	if _, err := reader.Links(ctx, []string{"db", "cache"}); !errors.Is(err, values.ErrNotPublished) {
-		t.Fatalf("Links() naming a link nobody published = %v, want ErrNotPublished", err)
+	if _, err := reader.Bindings(ctx, []string{"db", "cache"}); !errors.Is(err, values.ErrNotPublished) {
+		t.Fatalf("Bindings() naming a binding nobody published = %v, want ErrNotPublished", err)
 	}
 }
 
@@ -488,12 +488,12 @@ func TestReferenceOwnersNamesTheProjectsAValueIsBorrowedFrom(t *testing.T) {
 	}
 }
 
-func TestAnUnpublishedLinkIsNotFound(t *testing.T) {
+func TestAnUnpublishedBindingIsNotFound(t *testing.T) {
 	store, scope := fixture()
 
-	_, err := store.ResolveLink(context.Background(), scope, "", "db")
+	_, err := store.ResolveBinding(context.Background(), scope, "", "db")
 	if !errors.Is(err, values.ErrNotPublished) {
-		t.Fatalf("ResolveLink() of a link nobody published = %v, want ErrNotPublished", err)
+		t.Fatalf("ResolveBinding() of a binding nobody published = %v, want ErrNotPublished", err)
 	}
 }
 
@@ -501,14 +501,14 @@ func TestTheClassWideEnvironmentIsReserved(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if err := values.ValidateLinkEnvironment("*"); err == nil {
+	if err := values.ValidateBindingEnvironment("*"); err == nil {
 		t.Fatal("the class-wide token was accepted as an environment name")
 	}
-	if _, err := store.SetLink(ctx, scope, "*", "neon", "db", values.Pair{}); err == nil {
-		t.Fatal("SetLink() to the class-wide token succeeded, want it refused")
+	if _, err := store.SetBinding(ctx, scope, "*", "neon", "db", values.Pair{}); err == nil {
+		t.Fatal("SetBinding() to the class-wide token succeeded, want it refused")
 	}
-	if _, err := store.SetLink(ctx, scope, "", "", "db", values.Pair{}); err == nil {
-		t.Fatal("SetLink() with no publisher succeeded, want it refused")
+	if _, err := store.SetBinding(ctx, scope, "", "", "db", values.Pair{}); err == nil {
+		t.Fatal("SetBinding() with no publisher succeeded, want it refused")
 	}
 }
 
@@ -583,7 +583,7 @@ func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
 	}
 }
 
-func TestResolvingABatchOfLinksReadsEachEnvironmentOnce(t *testing.T) {
+func TestResolvingABatchOfBindingsReadsEachEnvironmentOnce(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
@@ -591,50 +591,50 @@ func TestResolvingABatchOfLinksReadsEachEnvironmentOnce(t *testing.T) {
 	for _, name := range []string{"db", "cache", "queue"} {
 		publishing = append(publishing, values.Publishing{Name: name, Pair: values.Pair{Record: []byte("{}"), Value: []byte(`"` + name + `"`)}})
 	}
-	if _, err := store.SetLinks(ctx, scope, "", "OCEL", publishing); err != nil {
+	if _, err := store.SetBindings(ctx, scope, "", "OCEL", publishing); err != nil {
 		t.Fatal(err)
 	}
 
 	watched := &counted{RecordStore: store.Records, Sealer: store.Sealer}
 	store.Records, store.Sealer = watched, watched
-	resolved, err := store.ResolveLinks(ctx, scope, "", []string{"db", "cache", "queue"})
+	resolved, err := store.ResolveBindings(ctx, scope, "", []string{"db", "cache", "queue"})
 	if err != nil || len(resolved) != 3 {
-		t.Fatalf("ResolveLinks() = %+v, %v, want all three", resolved, err)
+		t.Fatalf("ResolveBindings() = %+v, %v, want all three", resolved, err)
 	}
 	for i, name := range []string{"db", "cache", "queue"} {
 		if string(resolved[i].Value) != `"`+name+`"` {
-			t.Fatalf("ResolveLinks() answered %q for %s", resolved[i].Value, name)
+			t.Fatalf("ResolveBindings() answered %q for %s", resolved[i].Value, name)
 		}
 	}
 	if watched.reads != 0 || watched.lists != 1 {
-		t.Errorf("ResolveLinks() made %d point reads and %d queries, want one query serving the whole batch", watched.reads, watched.lists)
+		t.Errorf("ResolveBindings() made %d point reads and %d queries, want one query serving the whole batch", watched.reads, watched.lists)
 	}
 }
 
-func TestResolvingOneLinkReadsThatLinkAlone(t *testing.T) {
+func TestResolvingOneBindingReadsThatBindingAlone(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
 	for _, name := range []string{"db", "cache", "queue"} {
-		if _, err := store.SetLink(ctx, scope, "", "OCEL", name, values.Pair{Record: []byte("{}"), Value: []byte(`"` + name + `"`)}); err != nil {
+		if _, err := store.SetBinding(ctx, scope, "", "OCEL", name, values.Pair{Record: []byte("{}"), Value: []byte(`"` + name + `"`)}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := store.SetLink(ctx, scope, "pr-7", "OCEL", "db", values.Pair{Record: []byte("{}"), Value: []byte(`"pr-7 db"`)}); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "pr-7", "OCEL", "db", values.Pair{Record: []byte("{}"), Value: []byte(`"pr-7 db"`)}); err != nil {
 		t.Fatal(err)
 	}
 
 	watched := &counted{RecordStore: store.Records, Sealer: store.Sealer}
 	store.Records, store.Sealer = watched, watched
-	resolved, err := store.ResolveLink(ctx, scope, "pr-7", "db")
+	resolved, err := store.ResolveBinding(ctx, scope, "pr-7", "db")
 	if err != nil || string(resolved.Value) != `"pr-7 db"` {
-		t.Fatalf("ResolveLink() = %q, %v, want the pair published to the environment", resolved.Value, err)
+		t.Fatalf("ResolveBinding() = %q, %v, want the pair published to the environment", resolved.Value, err)
 	}
 	if watched.reads != 0 || watched.lists != 1 {
-		t.Fatalf("ResolveLink() made %d point reads and %d queries, want one query holding the whole pair", watched.reads, watched.lists)
+		t.Fatalf("ResolveBinding() made %d point reads and %d queries, want one query holding the whole pair", watched.reads, watched.lists)
 	}
-	if under := watched.under[0].String(); !strings.HasSuffix(under, "links/db") {
-		t.Errorf("ResolveLink() queried under %q, want the prefix one link's records and values share", under)
+	if under := watched.under[0].String(); !strings.HasSuffix(under, "bindings/db") {
+		t.Errorf("ResolveBinding() queried under %q, want the prefix one binding's records and values share", under)
 	}
 }
 

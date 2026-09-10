@@ -10,7 +10,7 @@ import (
 type Provider interface {
 	Vendor() Vendor
 
-	Serves() []LinkType
+	Serves() []BindingType
 
 	Computes() []Compute
 
@@ -69,7 +69,7 @@ type DeployPreflight struct {
 	Plan      DeployPlan
 	Edge      edge.Kind
 	Resources []Resource
-	Grants    []Link
+	Grants    []Binding
 	Apps      []AppUsage
 	Report    Reporter
 	Writer    Writer
@@ -79,7 +79,7 @@ type DeployPreflight struct {
 type AppUsage struct {
 	App       string
 	Resources []Resource
-	Grants    []Link
+	Grants    []Binding
 }
 
 type DeployPreflighter interface {
@@ -91,20 +91,20 @@ type StackInspector interface {
 }
 
 type GrantVerifier interface {
-	VerifyGrants(ctx context.Context, link Link) error
+	VerifyGrants(ctx context.Context, binding Binding) error
 }
 
 type ServesFunctionURLs interface {
 	ServesFunctionURLs() bool
 }
 
-type ProxiedLinker interface {
-	Proxied(kind LinkType) bool
+type ProxiedBinder interface {
+	Proxied(kind BindingType) bool
 }
 
 type Vendor string
 
-type LinkType string
+type BindingType string
 
 type Class = ports.Class
 

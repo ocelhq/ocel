@@ -89,24 +89,24 @@ func versionName(scope Scope, at Coordinate, version int64) ports.RecordName {
 	return append(historyName(scope, at), fmt.Sprintf("%0*d", versionDigits, version))
 }
 
-func linksName(scope Scope) ports.RecordName { return Under(scope, "links") }
+func bindingsName(scope Scope) ports.RecordName { return Under(scope, "bindings") }
 
-func linkName(scope Scope, link string) ports.RecordName {
-	return Under(scope, "links", ports.Escape(link))
+func bindingName(scope Scope, binding string) ports.RecordName {
+	return Under(scope, "bindings", ports.Escape(binding))
 }
 
-func linkRecordName(scope Scope, link, environment string) ports.RecordName {
-	return append(linkName(scope, link), "records", ports.Escape(canonicalEnvironment(environment)))
+func bindingRecordName(scope Scope, binding, environment string) ports.RecordName {
+	return append(bindingName(scope, binding), "records", ports.Escape(canonicalEnvironment(environment)))
 }
 
-func linkValueName(scope Scope, link, environment string) ports.RecordName {
-	return append(linkName(scope, link), "values", ports.Escape(canonicalEnvironment(environment)))
+func bindingValueName(scope Scope, binding, environment string) ports.RecordName {
+	return append(bindingName(scope, binding), "values", ports.Escape(canonicalEnvironment(environment)))
 }
 
-func linkOwnersName(scope Scope) ports.RecordName { return Under(scope, "linkowners") }
+func bindingOwnersName(scope Scope) ports.RecordName { return Under(scope, "bindingowners") }
 
-func linkOwnerName(scope Scope, owner, environment string) ports.RecordName {
-	return Under(scope, "linkowners", ports.Escape(owner), ports.Escape(canonicalEnvironment(environment)))
+func bindingOwnerName(scope Scope, owner, environment string) ports.RecordName {
+	return Under(scope, "bindingowners", ports.Escape(owner), ports.Escape(canonicalEnvironment(environment)))
 }
 
 func Refs(scope Scope) ports.RecordName {

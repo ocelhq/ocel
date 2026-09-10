@@ -30,7 +30,7 @@ func (s *Sealer) Seal(_ context.Context, at providerkit.Coordinate, plaintext []
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
-	return gcm.Seal(nonce, nonce, plaintext, at.Binding()), nil
+	return gcm.Seal(nonce, nonce, plaintext, at.AAD()), nil
 }
 
 func (s *Sealer) Open(_ context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
@@ -42,9 +42,9 @@ func (s *Sealer) Open(_ context.Context, at providerkit.Coordinate, sealed []byt
 		return nil, providerkit.Refuse(providerkit.CodeInvalid, "sealed value is truncated")
 	}
 	nonce, body := sealed[:gcm.NonceSize()], sealed[gcm.NonceSize():]
-	plaintext, err := gcm.Open(nil, nonce, body, at.Binding())
+	plaintext, err := gcm.Open(nil, nonce, body, at.AAD())
 	if err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeDenied, "sealed value does not open at %s", at.Binding())
+		return nil, providerkit.Refuse(providerkit.CodeDenied, "sealed value does not open at %s", at.AAD())
 	}
 	return plaintext, nil
 }

@@ -2,9 +2,9 @@ package ports
 
 import "strings"
 
-func (c Coordinate) Binding() []byte {
+func (c Coordinate) AAD() []byte {
 	var bound strings.Builder
-	for _, part := range []string{c.Project, string(c.Class), c.Env, c.Folder, c.Link, c.Name} {
+	for _, part := range []string{c.Project, string(c.Class), c.Env, c.Folder, c.Binding, c.Name} {
 		bound.WriteString(Escape(part))
 		bound.WriteByte('/')
 	}

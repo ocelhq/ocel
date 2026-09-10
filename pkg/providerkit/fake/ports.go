@@ -305,10 +305,10 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 	}
 	result := providerkit.StackResult{}
 	for _, resource := range plan.Resources {
-		if resource.Linked {
+		if resource.Binding != "" {
 			continue
 		}
-		result.Links = append(result.Links, providerkit.Link{
+		result.Bindings = append(result.Bindings, providerkit.Binding{
 			Type:       resource.Type,
 			Name:       resource.Name,
 			Properties: propertiesFor(resource.Type, resource.Name),
@@ -418,7 +418,7 @@ func stackKey(ref providerkit.StackRef) string {
 	return ref.Project + "/" + string(ref.Class) + "/" + ref.Name.String()
 }
 
-func propertiesFor(t providerkit.LinkType, name string) map[string]string {
+func propertiesFor(t providerkit.BindingType, name string) map[string]string {
 	properties := map[string]string{}
 	for _, property := range providerkit.RequiredProperties(t) {
 		switch property {

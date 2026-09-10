@@ -114,7 +114,7 @@ func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
 			Name:    vendor + "/" + stack.String(),
 			Feature: stack.Env,
 			Action:  planv1.Change_ACTION_DELETE,
-			Reason:  "the resources every app in " + stack.Env + " links to",
+			Reason:  "the resources every app in " + stack.Env + " bindings to",
 			Slow:    true,
 		})
 	}
@@ -136,7 +136,7 @@ func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
 			Kind:   "variable values",
 			Name:   r.slug,
 			Action: planv1.Change_ACTION_DELETE,
-			Reason: "the values this project's apps read, and the links published beside them",
+			Reason: "the values this project's apps read, and the bindings published beside them",
 		},
 		&planv1.ChangeGroup{
 			Kind:   "stored objects",

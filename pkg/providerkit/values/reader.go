@@ -44,7 +44,7 @@ func (r Reader) Values(ctx context.Context, cells []Cell) (map[string]string, er
 	return out, nil
 }
 
-func (r Reader) Links(ctx context.Context, names []string) ([]Published, error) {
+func (r Reader) Bindings(ctx context.Context, names []string) ([]Published, error) {
 	store := Store{Records: r.Records, Sealer: r.Sealer}
-	return store.ResolveLinks(ctx, r.Scope, r.Environment, names)
+	return store.ResolveBindings(ctx, r.Scope, r.Environment, names)
 }

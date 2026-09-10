@@ -10,7 +10,7 @@ const (
 	tokenStack   = "STACK"
 	tokenClass   = "CLASS"
 	tokenTag     = "TAG"
-	tokenLink    = "LINK"
+	tokenBinding = "BINDING"
 	tokenEnv     = "ENV"
 	tokenSession = "SESSION"
 )
@@ -31,8 +31,8 @@ func VarsKey(project, class string) string {
 	return token(tokenProject, project) + KeySeparator + token(tokenClass, class)
 }
 
-func LinkVarsKey(project, class, link string) string {
-	return VarsKey(project, class) + KeySeparator + token(tokenLink, link)
+func BindingVarsKey(project, class, binding string) string {
+	return VarsKey(project, class) + KeySeparator + token(tokenBinding, binding)
 }
 
 func ISRTagPrefix(project string, stack StackName) string {

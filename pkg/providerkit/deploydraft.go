@@ -50,13 +50,13 @@ func (r *deployRun) drawValues(ctx context.Context) (ChangeGroup, error) {
 	}
 	changes := make([]Change, 0, len(resources))
 	for _, resource := range resources {
-		if resource.Linked {
+		if resource.Binding != "" {
 			continue
 		}
 		changes = append(changes, Change{
 			Kind:   string(resource.Type),
 			Name:   resource.Name,
-			Action: standsOrCreates(slices.ContainsFunc(published, linking(resource))),
+			Action: standsOrCreates(slices.ContainsFunc(published, provisioning(resource))),
 		})
 	}
 	group := ChangeGroup{Kind: ParameterGroupKind, Name: valuesGroupName, Changes: changes}

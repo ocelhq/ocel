@@ -5,13 +5,13 @@ import (
 	"slices"
 )
 
-type UnreachableLinkError struct {
+type UnreachableBindingError struct {
 	Resource string
-	Type     LinkType
+	Type     BindingType
 	Vendor   Vendor
 }
 
-func (e *UnreachableLinkError) Error() string {
+func (e *UnreachableBindingError) Error() string {
 	return fmt.Sprintf(
 		"%s is a %s, a type an app reaches through the runtime, and the %s provider serves no %s for it to reach. "+
 			"Drop the resource, or deploy it to a provider that serves it",
@@ -19,30 +19,30 @@ func (e *UnreachableLinkError) Error() string {
 	)
 }
 
-func RefuseUnreachableLinks(vendor Vendor, serves []LinkType, proxied func(LinkType) bool, resources []Resource, grants []Link) error {
+func RefuseUnreachableBindings(vendor Vendor, serves []BindingType, proxied func(BindingType) bool, resources []Resource, grants []Binding) error {
 	for _, resource := range resources {
 		if err := reachable(vendor, serves, proxied, resource.Declared, resource.Type); err != nil {
 			return err
 		}
 	}
-	for _, link := range grants {
-		if err := reachable(vendor, serves, proxied, grantedResource(link), link.Type); err != nil {
+	for _, binding := range grants {
+		if err := reachable(vendor, serves, proxied, grantedResource(binding), binding.Type); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func reachable(vendor Vendor, serves []LinkType, proxied func(LinkType) bool, resource string, kind LinkType) error {
+func reachable(vendor Vendor, serves []BindingType, proxied func(BindingType) bool, resource string, kind BindingType) error {
 	if !proxied(kind) || slices.Contains(serves, kind) {
 		return nil
 	}
-	return &UnreachableLinkError{Resource: resource, Type: kind, Vendor: vendor}
+	return &UnreachableBindingError{Resource: resource, Type: kind, Vendor: vendor}
 }
 
-func grantedResource(link Link) string {
-	if link.Resource != "" {
-		return link.Resource
+func grantedResource(binding Binding) string {
+	if binding.Resource != "" {
+		return binding.Resource
 	}
-	return link.Name
+	return binding.Name
 }

@@ -21,14 +21,14 @@ func SynthesizedPlan(ctx context.Context, store ArtifactStore, plan StackPlan, s
 	if err != nil {
 		return Plan{}, err
 	}
-	changes := make([]Change, 0, len(plan.Resources)+len(standing.Links)+len(uploads)+len(images))
+	changes := make([]Change, 0, len(plan.Resources)+len(standing.Bindings)+len(uploads)+len(images))
 	changes = append(changes, images...)
 	changes = append(changes, uploads...)
 	for _, resource := range plan.Resources {
 		changes = append(changes, Change{
 			Kind:   string(resource.Type),
 			Name:   resource.Name,
-			Action: standsOrCreates(slices.ContainsFunc(standing.Links, linking(resource))),
+			Action: standsOrCreates(slices.ContainsFunc(standing.Bindings, provisioning(resource))),
 		})
 	}
 	declared := DeclaredFunctions(plan)
@@ -47,11 +47,11 @@ func SynthesizedPlan(ctx context.Context, store ArtifactStore, plan StackPlan, s
 			Action: standsOrCreates(slices.ContainsFunc(standing.Containers, holding(container))),
 		})
 	}
-	for _, link := range standing.Links {
-		if slices.ContainsFunc(plan.Resources, func(resource Resource) bool { return linking(resource)(link) }) {
+	for _, binding := range standing.Bindings {
+		if slices.ContainsFunc(plan.Resources, func(resource Resource) bool { return provisioning(resource)(binding) }) {
 			continue
 		}
-		changes = append(changes, Change{Kind: string(link.Type), Name: link.Name, Action: ActionDelete, Reason: reasonUndeclared})
+		changes = append(changes, Change{Kind: string(binding.Type), Name: binding.Name, Action: ActionDelete, Reason: reasonUndeclared})
 	}
 	for _, function := range standing.Functions {
 		if slices.Contains(declared, function.Name) {
@@ -69,9 +69,9 @@ func SynthesizedPlan(ctx context.Context, store ArtifactStore, plan StackPlan, s
 }
 
 func SynthesizedRemoval(ref StackRef, standing StackResult) Plan {
-	changes := make([]Change, 0, len(standing.Links)+len(standing.Functions)+len(standing.Containers))
-	for _, link := range standing.Links {
-		changes = append(changes, Change{Kind: string(link.Type), Name: link.Name, Action: ActionDelete})
+	changes := make([]Change, 0, len(standing.Bindings)+len(standing.Functions)+len(standing.Containers))
+	for _, binding := range standing.Bindings {
+		changes = append(changes, Change{Kind: string(binding.Type), Name: binding.Name, Action: ActionDelete})
 	}
 	for _, function := range standing.Functions {
 		changes = append(changes, Change{Kind: functionKind, Name: function.Name, Action: ActionDelete})
@@ -107,8 +107,8 @@ func standsOrCreates(stands bool) ChangeAction {
 	return ActionCreate
 }
 
-func linking(resource Resource) func(Link) bool {
-	return func(link Link) bool { return link.Name == resource.Name && link.Type == resource.Type }
+func provisioning(resource Resource) func(Binding) bool {
+	return func(binding Binding) bool { return binding.Name == resource.Name && binding.Type == resource.Type }
 }
 
 func calling(function string) func(Function) bool {

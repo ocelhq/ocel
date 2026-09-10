@@ -111,7 +111,7 @@ type Coordinate struct {
 	Class   Class
 	Env     string
 	Folder  string
-	Link    string
+	Binding string
 	Name    string
 }
 

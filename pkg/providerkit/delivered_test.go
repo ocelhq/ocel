@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -58,10 +57,10 @@ func deliveredBy(t *testing.T, req *contractv1.DeployRequest, publish func(*fake
 func TestAResourceIsNamedAsTheRuntimeReadsIt(t *testing.T) {
 	t.Parallel()
 
-	if got := providerkit.ResourceEnvName(providerkit.LinkPostgres, "main"); got != "OCEL_RESOURCE_POSTGRES_main" {
+	if got := providerkit.ResourceEnvName(providerkit.BindingPostgres, "main"); got != "OCEL_RESOURCE_POSTGRES_main" {
 		t.Errorf("ResourceEnvName = %q, want the name `ocel dev` and the sdk already agree on", got)
 	}
-	if got := providerkit.ResourceEnvName(providerkit.LinkBucket, "uploads"); got != "OCEL_RESOURCE_BUCKET_uploads" {
+	if got := providerkit.ResourceEnvName(providerkit.BindingBucket, "uploads"); got != "OCEL_RESOURCE_BUCKET_uploads" {
 		t.Errorf("ResourceEnvName = %q, want the bucket record read under its resource name", got)
 	}
 }
@@ -135,12 +134,12 @@ func TestTheDeploymentURLIsDeliveredToAContainerRatherThanRefusedAsAnOcelName(t 
 	}
 }
 
-func TestALinkRecordIsDeliveredUnderTheNameTheSdkReadsItBy(t *testing.T) {
+func TestABindingRecordIsDeliveredUnderTheNameTheSdkReadsItBy(t *testing.T) {
 	req := namingARegistry(containerDeployRequest("/healthz"))
 	req.Manifest.Resources = []*contractv1.ManifestResource{{
 		LogicalName: "orders",
-		Linked:      true,
-		Resource:    &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "orders"},
+		Binding:     "orders",
+		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders"},
 	}}
 	req.Manifest.Usages = []*contractv1.ManifestUsage{{App: "web", Resource: "orders"}}
 
@@ -148,9 +147,9 @@ func TestALinkRecordIsDeliveredUnderTheNameTheSdkReadsItBy(t *testing.T) {
 		publishRecord(t, p, providerkit.ClassProduction, "terraform", postgresRecord("orders", "terraform"))
 	})
 
-	record := delivered[providerkit.ResourceEnvName(providerkit.LinkPostgres, "orders")]
+	record := delivered[providerkit.ResourceEnvName(providerkit.BindingPostgres, "orders")]
 	if record == "" {
-		t.Fatalf("a container is handed %v, and nothing under the name the sdk resolves a link by", delivered)
+		t.Fatalf("a container is handed %v, and nothing under the name the sdk resolves a binding by", delivered)
 	}
 	for _, want := range []string{`"host":"db.example"`, `"password":"hunter2"`, `"port":5432`} {
 		if !strings.Contains(strings.ReplaceAll(record, " ", ""), want) {
@@ -262,10 +261,10 @@ func TestAServerlessAppIsHeldToNeitherReservation(t *testing.T) {
 	}
 }
 
-func TestALinkThisDeployProvisionsIsDeliveredAsItsRecordRatherThanAsNothing(t *testing.T) {
+func TestABindingThisDeployProvisionsIsDeliveredAsItsRecordRatherThanAsNothing(t *testing.T) {
 	delivered := deliveredBy(t, namingARegistry(containerDeployRequest("/healthz")), nil)
 
-	name := providerkit.ResourceEnvName(providerkit.LinkPostgres, "orders")
+	name := providerkit.ResourceEnvName(providerkit.BindingPostgres, "orders")
 	record := delivered[name]
 	if record == "" {
 		t.Fatalf("a container is handed %s=%q for a resource this very deploy provisioned, and an app reading it builds a client out of an empty string", name, record)

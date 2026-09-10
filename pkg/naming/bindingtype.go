@@ -5,51 +5,51 @@ import (
 	"slices"
 	"strings"
 
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-const linkTypePrefix = "LINK_TYPE_"
+const bindingTypePrefix = "BINDING_TYPE_"
 
-var linkKinds = map[linksv1.LinkType]Kind{
-	linksv1.LinkType_LINK_TYPE_POSTGRES: KindDatabase,
-	linksv1.LinkType_LINK_TYPE_BUCKET:   KindBucket,
+var bindingKinds = map[bindingsv1.BindingType]Kind{
+	bindingsv1.BindingType_BINDING_TYPE_POSTGRES: KindDatabase,
+	bindingsv1.BindingType_BINDING_TYPE_BUCKET:   KindBucket,
 }
 
-var proxiedTypes = map[linksv1.LinkType]bool{
-	linksv1.LinkType_LINK_TYPE_BUCKET: true,
+var proxiedTypes = map[bindingsv1.BindingType]bool{
+	bindingsv1.BindingType_BINDING_TYPE_BUCKET: true,
 }
 
-func Proxied(t linksv1.LinkType) bool {
+func Proxied(t bindingsv1.BindingType) bool {
 	return proxiedTypes[t]
 }
 
-func LinkTypes() []linksv1.LinkType {
-	return slices.Sorted(maps.Keys(linkKinds))
+func BindingTypes() []bindingsv1.BindingType {
+	return slices.Sorted(maps.Keys(bindingKinds))
 }
 
-func KindOf(t linksv1.LinkType) (Kind, bool) {
-	kind, ok := linkKinds[t]
+func KindOf(t bindingsv1.BindingType) (Kind, bool) {
+	kind, ok := bindingKinds[t]
 	return kind, ok
 }
 
-func EnvFragment(t linksv1.LinkType) string {
-	return strings.TrimPrefix(t.String(), linkTypePrefix)
+func EnvFragment(t bindingsv1.BindingType) string {
+	return strings.TrimPrefix(t.String(), bindingTypePrefix)
 }
 
-func LinkTypeOf(l *linksv1.Link) linksv1.LinkType {
+func BindingTypeOf(l *bindingsv1.Binding) bindingsv1.BindingType {
 	switch l.GetProperties().(type) {
-	case *linksv1.Link_Postgres:
-		return linksv1.LinkType_LINK_TYPE_POSTGRES
-	case *linksv1.Link_Bucket:
-		return linksv1.LinkType_LINK_TYPE_BUCKET
-	case *linksv1.Link_Custom:
-		return linksv1.LinkType_LINK_TYPE_CUSTOM
+	case *bindingsv1.Binding_Postgres:
+		return bindingsv1.BindingType_BINDING_TYPE_POSTGRES
+	case *bindingsv1.Binding_Bucket:
+		return bindingsv1.BindingType_BINDING_TYPE_BUCKET
+	case *bindingsv1.Binding_Custom:
+		return bindingsv1.BindingType_BINDING_TYPE_CUSTOM
 	}
-	return linksv1.LinkType_LINK_TYPE_UNSPECIFIED
+	return bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED
 }
 
-func linkProperties(l *linksv1.Link) protoreflect.Message {
+func bindingProperties(l *bindingsv1.Binding) protoreflect.Message {
 	m := l.ProtoReflect()
 	fd := m.WhichOneof(m.Descriptor().Oneofs().ByName("properties"))
 	if fd == nil {
@@ -58,7 +58,7 @@ func linkProperties(l *linksv1.Link) protoreflect.Message {
 	return m.Get(fd).Message()
 }
 
-func LinkProperty(l *linksv1.Link, name string) (any, bool) {
+func BindingProperty(l *bindingsv1.Binding, name string) (any, bool) {
 	if custom := l.GetCustom(); custom != nil {
 		value, carries := custom.GetFields()[name]
 		if !carries {
@@ -66,7 +66,7 @@ func LinkProperty(l *linksv1.Link, name string) (any, bool) {
 		}
 		return value.AsInterface(), true
 	}
-	properties := linkProperties(l)
+	properties := bindingProperties(l)
 	if properties == nil {
 		return nil, false
 	}
@@ -77,11 +77,11 @@ func LinkProperty(l *linksv1.Link, name string) (any, bool) {
 	return propertyValue(fd, properties.Get(fd)), true
 }
 
-func LinkPropertyNames(l *linksv1.Link) []string {
+func BindingPropertyNames(l *bindingsv1.Binding) []string {
 	if custom := l.GetCustom(); custom != nil {
 		return slices.Sorted(maps.Keys(custom.GetFields()))
 	}
-	properties := linkProperties(l)
+	properties := bindingProperties(l)
 	if properties == nil {
 		return nil
 	}
@@ -123,6 +123,6 @@ func propertyScalar(fd protoreflect.FieldDescriptor, v protoreflect.Value) any {
 
 const ResourceEnvPrefix = "OCEL_RESOURCE_"
 
-func ResourceEnvName(t linksv1.LinkType, resource string) string {
+func ResourceEnvName(t bindingsv1.BindingType, resource string) string {
 	return ResourceEnvPrefix + EnvFragment(t) + "_" + resource
 }

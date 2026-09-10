@@ -7,7 +7,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
@@ -33,7 +33,7 @@ func PropertyShapeMessages(shapes []PropertyShape) []*envvarsv1.PropertyShape {
 	return out
 }
 
-func LinkPropertyShapes(l *linksv1.Link) []PropertyShape {
+func BindingPropertyShapes(l *bindingsv1.Binding) []PropertyShape {
 	if custom := l.GetCustom(); custom != nil {
 		fields := custom.GetFields()
 		out := make([]PropertyShape, 0, len(fields))
@@ -43,7 +43,7 @@ func LinkPropertyShapes(l *linksv1.Link) []PropertyShape {
 		return out
 	}
 
-	properties := linkProperties(l)
+	properties := bindingProperties(l)
 	if properties == nil {
 		return nil
 	}
