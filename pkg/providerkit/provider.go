@@ -86,6 +86,10 @@ type DeployPreflighter interface {
 	PreflightDeploy(ctx context.Context, pre DeployPreflight) error
 }
 
+type TransformRenderer interface {
+	RendersTransforms()
+}
+
 type StackInspector interface {
 	Inspect(ctx context.Context, ref StackRef) (StackState, error)
 }

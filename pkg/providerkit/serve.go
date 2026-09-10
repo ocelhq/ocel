@@ -100,6 +100,13 @@ type session struct {
 
 	mu       sync.Mutex
 	provider Provider
+	settings Settings
+}
+
+func (s *session) transforms() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.settings.Transforms
 }
 
 func (s *session) configure(ctx context.Context, settings Settings) error {
@@ -116,6 +123,7 @@ func (s *session) configure(ctx context.Context, settings Settings) error {
 		return connect.NewError(connect.CodeInternal, errors.New("the provider constructor returned nothing"))
 	}
 	s.provider = provider
+	s.settings = settings
 	return nil
 }
 
