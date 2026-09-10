@@ -3,32 +3,32 @@
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(i32)]
-pub enum LinkType {
-    LINK_TYPE_UNSPECIFIED = 0i32,
-    LINK_TYPE_POSTGRES = 1i32,
-    LINK_TYPE_BUCKET = 2i32,
-    LINK_TYPE_CUSTOM = 3i32,
+pub enum BindingType {
+    BINDING_TYPE_UNSPECIFIED = 0i32,
+    BINDING_TYPE_POSTGRES = 1i32,
+    BINDING_TYPE_BUCKET = 2i32,
+    BINDING_TYPE_CUSTOM = 3i32,
 }
-impl LinkType {
-    ///Idiomatic alias for [`Self::LINK_TYPE_UNSPECIFIED`]; `Debug` prints the variant name.
+impl BindingType {
+    ///Idiomatic alias for [`Self::BINDING_TYPE_UNSPECIFIED`]; `Debug` prints the variant name.
     #[allow(non_upper_case_globals)]
-    pub const Unspecified: Self = Self::LINK_TYPE_UNSPECIFIED;
-    ///Idiomatic alias for [`Self::LINK_TYPE_POSTGRES`]; `Debug` prints the variant name.
+    pub const Unspecified: Self = Self::BINDING_TYPE_UNSPECIFIED;
+    ///Idiomatic alias for [`Self::BINDING_TYPE_POSTGRES`]; `Debug` prints the variant name.
     #[allow(non_upper_case_globals)]
-    pub const Postgres: Self = Self::LINK_TYPE_POSTGRES;
-    ///Idiomatic alias for [`Self::LINK_TYPE_BUCKET`]; `Debug` prints the variant name.
+    pub const Postgres: Self = Self::BINDING_TYPE_POSTGRES;
+    ///Idiomatic alias for [`Self::BINDING_TYPE_BUCKET`]; `Debug` prints the variant name.
     #[allow(non_upper_case_globals)]
-    pub const Bucket: Self = Self::LINK_TYPE_BUCKET;
-    ///Idiomatic alias for [`Self::LINK_TYPE_CUSTOM`]; `Debug` prints the variant name.
+    pub const Bucket: Self = Self::BINDING_TYPE_BUCKET;
+    ///Idiomatic alias for [`Self::BINDING_TYPE_CUSTOM`]; `Debug` prints the variant name.
     #[allow(non_upper_case_globals)]
-    pub const Custom: Self = Self::LINK_TYPE_CUSTOM;
+    pub const Custom: Self = Self::BINDING_TYPE_CUSTOM;
 }
-impl ::core::default::Default for LinkType {
+impl ::core::default::Default for BindingType {
     fn default() -> Self {
-        Self::LINK_TYPE_UNSPECIFIED
+        Self::BINDING_TYPE_UNSPECIFIED
     }
 }
-impl ::serde::Serialize for LinkType {
+impl ::serde::Serialize for BindingType {
     fn serialize<S: ::serde::Serializer>(
         &self,
         s: S,
@@ -36,39 +36,39 @@ impl ::serde::Serialize for LinkType {
         s.serialize_str(::buffa::Enumeration::proto_name(self))
     }
 }
-impl<'de> ::serde::Deserialize<'de> for LinkType {
+impl<'de> ::serde::Deserialize<'de> for BindingType {
     fn deserialize<D: ::serde::Deserializer<'de>>(
         d: D,
     ) -> ::core::result::Result<Self, D::Error> {
         struct _V;
         impl ::serde::de::Visitor<'_> for _V {
-            type Value = LinkType;
+            type Value = BindingType;
             fn expecting(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
             ) -> ::core::fmt::Result {
                 f.write_str(
-                    concat!("a string, integer, or null for ", stringify!(LinkType)),
+                    concat!("a string, integer, or null for ", stringify!(BindingType)),
                 )
             }
             fn visit_str<E: ::serde::de::Error>(
                 self,
                 v: &str,
-            ) -> ::core::result::Result<LinkType, E> {
-                <LinkType as ::buffa::Enumeration>::from_proto_name(v)
+            ) -> ::core::result::Result<BindingType, E> {
+                <BindingType as ::buffa::Enumeration>::from_proto_name(v)
                     .ok_or_else(|| { ::serde::de::Error::unknown_variant(v, &[]) })
             }
             fn visit_i64<E: ::serde::de::Error>(
                 self,
                 v: i64,
-            ) -> ::core::result::Result<LinkType, E> {
+            ) -> ::core::result::Result<BindingType, E> {
                 let v32 = i32::try_from(v)
                     .map_err(|_| {
                         ::serde::de::Error::custom(
                             ::buffa::alloc::format!("enum value {v} out of i32 range"),
                         )
                     })?;
-                <LinkType as ::buffa::Enumeration>::from_i32(v32)
+                <BindingType as ::buffa::Enumeration>::from_i32(v32)
                     .ok_or_else(|| {
                         ::serde::de::Error::custom(
                             ::buffa::alloc::format!("unknown enum value {v32}"),
@@ -78,14 +78,14 @@ impl<'de> ::serde::Deserialize<'de> for LinkType {
             fn visit_u64<E: ::serde::de::Error>(
                 self,
                 v: u64,
-            ) -> ::core::result::Result<LinkType, E> {
+            ) -> ::core::result::Result<BindingType, E> {
                 let v32 = i32::try_from(v)
                     .map_err(|_| {
                         ::serde::de::Error::custom(
                             ::buffa::alloc::format!("enum value {v} out of i32 range"),
                         )
                     })?;
-                <LinkType as ::buffa::Enumeration>::from_i32(v32)
+                <BindingType as ::buffa::Enumeration>::from_i32(v32)
                     .ok_or_else(|| {
                         ::serde::de::Error::custom(
                             ::buffa::alloc::format!("unknown enum value {v32}"),
@@ -94,14 +94,14 @@ impl<'de> ::serde::Deserialize<'de> for LinkType {
             }
             fn visit_unit<E: ::serde::de::Error>(
                 self,
-            ) -> ::core::result::Result<LinkType, E> {
+            ) -> ::core::result::Result<BindingType, E> {
                 ::core::result::Result::Ok(::core::default::Default::default())
             }
         }
         d.deserialize_any(_V)
     }
 }
-impl ::buffa::json_helpers::ProtoElemJson for LinkType {
+impl ::buffa::json_helpers::ProtoElemJson for BindingType {
     fn serialize_proto_json<S: ::serde::Serializer>(
         v: &Self,
         s: S,
@@ -114,13 +114,13 @@ impl ::buffa::json_helpers::ProtoElemJson for LinkType {
         <Self as ::serde::Deserialize>::deserialize(d)
     }
 }
-impl ::buffa::Enumeration for LinkType {
+impl ::buffa::Enumeration for BindingType {
     fn from_i32(value: i32) -> ::core::option::Option<Self> {
         match value {
-            0i32 => ::core::option::Option::Some(Self::LINK_TYPE_UNSPECIFIED),
-            1i32 => ::core::option::Option::Some(Self::LINK_TYPE_POSTGRES),
-            2i32 => ::core::option::Option::Some(Self::LINK_TYPE_BUCKET),
-            3i32 => ::core::option::Option::Some(Self::LINK_TYPE_CUSTOM),
+            0i32 => ::core::option::Option::Some(Self::BINDING_TYPE_UNSPECIFIED),
+            1i32 => ::core::option::Option::Some(Self::BINDING_TYPE_POSTGRES),
+            2i32 => ::core::option::Option::Some(Self::BINDING_TYPE_BUCKET),
+            3i32 => ::core::option::Option::Some(Self::BINDING_TYPE_CUSTOM),
             _ => ::core::option::Option::None,
         }
     }
@@ -129,38 +129,42 @@ impl ::buffa::Enumeration for LinkType {
     }
     fn proto_name(&self) -> &'static str {
         match self {
-            Self::LINK_TYPE_UNSPECIFIED => "LINK_TYPE_UNSPECIFIED",
-            Self::LINK_TYPE_POSTGRES => "LINK_TYPE_POSTGRES",
-            Self::LINK_TYPE_BUCKET => "LINK_TYPE_BUCKET",
-            Self::LINK_TYPE_CUSTOM => "LINK_TYPE_CUSTOM",
+            Self::BINDING_TYPE_UNSPECIFIED => "BINDING_TYPE_UNSPECIFIED",
+            Self::BINDING_TYPE_POSTGRES => "BINDING_TYPE_POSTGRES",
+            Self::BINDING_TYPE_BUCKET => "BINDING_TYPE_BUCKET",
+            Self::BINDING_TYPE_CUSTOM => "BINDING_TYPE_CUSTOM",
         }
     }
     fn from_proto_name(name: &str) -> ::core::option::Option<Self> {
         match name {
-            "LINK_TYPE_UNSPECIFIED" => {
-                ::core::option::Option::Some(Self::LINK_TYPE_UNSPECIFIED)
+            "BINDING_TYPE_UNSPECIFIED" => {
+                ::core::option::Option::Some(Self::BINDING_TYPE_UNSPECIFIED)
             }
-            "LINK_TYPE_POSTGRES" => {
-                ::core::option::Option::Some(Self::LINK_TYPE_POSTGRES)
+            "BINDING_TYPE_POSTGRES" => {
+                ::core::option::Option::Some(Self::BINDING_TYPE_POSTGRES)
             }
-            "LINK_TYPE_BUCKET" => ::core::option::Option::Some(Self::LINK_TYPE_BUCKET),
-            "LINK_TYPE_CUSTOM" => ::core::option::Option::Some(Self::LINK_TYPE_CUSTOM),
+            "BINDING_TYPE_BUCKET" => {
+                ::core::option::Option::Some(Self::BINDING_TYPE_BUCKET)
+            }
+            "BINDING_TYPE_CUSTOM" => {
+                ::core::option::Option::Some(Self::BINDING_TYPE_CUSTOM)
+            }
             _ => ::core::option::Option::None,
         }
     }
     fn values() -> &'static [Self] {
         &[
-            Self::LINK_TYPE_UNSPECIFIED,
-            Self::LINK_TYPE_POSTGRES,
-            Self::LINK_TYPE_BUCKET,
-            Self::LINK_TYPE_CUSTOM,
+            Self::BINDING_TYPE_UNSPECIFIED,
+            Self::BINDING_TYPE_POSTGRES,
+            Self::BINDING_TYPE_BUCKET,
+            Self::BINDING_TYPE_CUSTOM,
         ]
     }
 }
 #[derive(Clone, PartialEq, Default)]
 #[derive(::serde::Serialize)]
 #[serde(default)]
-pub struct Link {
+pub struct Binding {
     /// Field 1: `name`
     #[serde(
         rename = "name",
@@ -183,14 +187,14 @@ pub struct Link {
     )]
     pub source: ::buffa::alloc::string::String,
     #[serde(flatten)]
-    pub properties: ::core::option::Option<__buffa::oneof::link::Properties>,
+    pub properties: ::core::option::Option<__buffa::oneof::binding::Properties>,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
 }
-impl ::core::fmt::Debug for Link {
+impl ::core::fmt::Debug for Binding {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        f.debug_struct("Link")
+        f.debug_struct("Binding")
             .field("name", &self.name)
             .field("grants", &self.grants)
             .field("source", &self.source)
@@ -198,21 +202,21 @@ impl ::core::fmt::Debug for Link {
             .finish()
     }
 }
-impl Link {
+impl Binding {
     /// Protobuf type URL for this message, for use with `Any::pack` and
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.Link";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.Binding";
 }
-::buffa::impl_default_instance!(Link);
-impl ::buffa::MessageName for Link {
-    const PACKAGE: &'static str = "common.links.v1";
-    const NAME: &'static str = "Link";
-    const FULL_NAME: &'static str = "common.links.v1.Link";
-    const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.Link";
+::buffa::impl_default_instance!(Binding);
+impl ::buffa::MessageName for Binding {
+    const PACKAGE: &'static str = "common.bindings.v1";
+    const NAME: &'static str = "Binding";
+    const FULL_NAME: &'static str = "common.bindings.v1.Binding";
+    const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.Binding";
 }
-impl ::buffa::Message for Link {
+impl ::buffa::Message for Binding {
     /// Returns the total encoded size in bytes.
     ///
     /// Accumulates in `u64` (which cannot overflow for in-memory
@@ -230,7 +234,7 @@ impl ::buffa::Message for Link {
         }
         if let ::core::option::Option::Some(ref v) = self.properties {
             match v {
-                __buffa::oneof::link::Properties::Postgres(x) => {
+                __buffa::oneof::binding::Properties::Postgres(x) => {
                     let __slot = __cache.reserve();
                     let inner = x.compute_size(__cache);
                     __cache.set(__slot, inner);
@@ -238,7 +242,7 @@ impl ::buffa::Message for Link {
                         += 1u64 + ::buffa::encoding::varint_len(inner as u64) as u64
                             + inner as u64;
                 }
-                __buffa::oneof::link::Properties::Bucket(x) => {
+                __buffa::oneof::binding::Properties::Bucket(x) => {
                     let __slot = __cache.reserve();
                     let inner = x.compute_size(__cache);
                     __cache.set(__slot, inner);
@@ -246,7 +250,7 @@ impl ::buffa::Message for Link {
                         += 1u64 + ::buffa::encoding::varint_len(inner as u64) as u64
                             + inner as u64;
                 }
-                __buffa::oneof::link::Properties::Custom(x) => {
+                __buffa::oneof::binding::Properties::Custom(x) => {
                     let __slot = __cache.reserve();
                     let inner = x.compute_size(__cache);
                     __cache.set(__slot, inner);
@@ -282,7 +286,7 @@ impl ::buffa::Message for Link {
         }
         if let ::core::option::Option::Some(ref v) = self.properties {
             match v {
-                __buffa::oneof::link::Properties::Postgres(x) => {
+                __buffa::oneof::binding::Properties::Postgres(x) => {
                     ::buffa::types::put_len_delimited_header(
                         2u32,
                         u64::from(__cache.consume_next()),
@@ -290,7 +294,7 @@ impl ::buffa::Message for Link {
                     );
                     x.write_to(__cache, buf);
                 }
-                __buffa::oneof::link::Properties::Bucket(x) => {
+                __buffa::oneof::binding::Properties::Bucket(x) => {
                     ::buffa::types::put_len_delimited_header(
                         3u32,
                         u64::from(__cache.consume_next()),
@@ -298,7 +302,7 @@ impl ::buffa::Message for Link {
                     );
                     x.write_to(__cache, buf);
                 }
-                __buffa::oneof::link::Properties::Custom(x) => {
+                __buffa::oneof::binding::Properties::Custom(x) => {
                     ::buffa::types::put_len_delimited_header(
                         6u32,
                         u64::from(__cache.consume_next()),
@@ -345,7 +349,7 @@ impl ::buffa::Message for Link {
                     ::buffa::encoding::WireType::LengthDelimited,
                 )?;
                 if let ::core::option::Option::Some(
-                    __buffa::oneof::link::Properties::Postgres(ref mut existing),
+                    __buffa::oneof::binding::Properties::Postgres(ref mut existing),
                 ) = self.properties
                 {
                     ::buffa::Message::merge_length_delimited(&mut **existing, buf, ctx)?;
@@ -353,7 +357,7 @@ impl ::buffa::Message for Link {
                     let mut val = ::core::default::Default::default();
                     ::buffa::Message::merge_length_delimited(&mut val, buf, ctx)?;
                     self.properties = ::core::option::Option::Some(
-                        __buffa::oneof::link::Properties::Postgres(
+                        __buffa::oneof::binding::Properties::Postgres(
                             ::buffa::alloc::boxed::Box::new(val),
                         ),
                     );
@@ -365,7 +369,7 @@ impl ::buffa::Message for Link {
                     ::buffa::encoding::WireType::LengthDelimited,
                 )?;
                 if let ::core::option::Option::Some(
-                    __buffa::oneof::link::Properties::Bucket(ref mut existing),
+                    __buffa::oneof::binding::Properties::Bucket(ref mut existing),
                 ) = self.properties
                 {
                     ::buffa::Message::merge_length_delimited(&mut **existing, buf, ctx)?;
@@ -373,7 +377,7 @@ impl ::buffa::Message for Link {
                     let mut val = ::core::default::Default::default();
                     ::buffa::Message::merge_length_delimited(&mut val, buf, ctx)?;
                     self.properties = ::core::option::Option::Some(
-                        __buffa::oneof::link::Properties::Bucket(
+                        __buffa::oneof::binding::Properties::Bucket(
                             ::buffa::alloc::boxed::Box::new(val),
                         ),
                     );
@@ -385,7 +389,7 @@ impl ::buffa::Message for Link {
                     ::buffa::encoding::WireType::LengthDelimited,
                 )?;
                 if let ::core::option::Option::Some(
-                    __buffa::oneof::link::Properties::Custom(ref mut existing),
+                    __buffa::oneof::binding::Properties::Custom(ref mut existing),
                 ) = self.properties
                 {
                     ::buffa::Message::merge_length_delimited(&mut **existing, buf, ctx)?;
@@ -393,7 +397,7 @@ impl ::buffa::Message for Link {
                     let mut val = ::core::default::Default::default();
                     ::buffa::Message::merge_length_delimited(&mut val, buf, ctx)?;
                     self.properties = ::core::option::Option::Some(
-                        __buffa::oneof::link::Properties::Custom(
+                        __buffa::oneof::binding::Properties::Custom(
                             ::buffa::alloc::boxed::Box::new(val),
                         ),
                     );
@@ -433,8 +437,8 @@ impl ::buffa::Message for Link {
         self.__buffa_unknown_fields.clear();
     }
 }
-impl ::buffa::ExtensionSet for Link {
-    const PROTO_FQN: &'static str = "common.links.v1.Link";
+impl ::buffa::ExtensionSet for Binding {
+    const PROTO_FQN: &'static str = "common.bindings.v1.Binding";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -442,24 +446,24 @@ impl ::buffa::ExtensionSet for Link {
         &mut self.__buffa_unknown_fields
     }
 }
-impl<'de> ::serde::Deserialize<'de> for Link {
+impl<'de> ::serde::Deserialize<'de> for Binding {
     fn deserialize<D: ::serde::Deserializer<'de>>(
         d: D,
     ) -> ::core::result::Result<Self, D::Error> {
         struct _V;
         impl<'de> ::serde::de::Visitor<'de> for _V {
-            type Value = Link;
+            type Value = Binding;
             fn expecting(
                 &self,
                 f: &mut ::core::fmt::Formatter<'_>,
             ) -> ::core::fmt::Result {
-                f.write_str("struct Link")
+                f.write_str("struct Binding")
             }
             #[allow(clippy::field_reassign_with_default)]
             fn visit_map<A: ::serde::de::MapAccess<'de>>(
                 self,
                 mut map: A,
-            ) -> ::core::result::Result<Link, A::Error> {
+            ) -> ::core::result::Result<Binding, A::Error> {
                 let mut __f_name: ::core::option::Option<
                     ::buffa::alloc::string::String,
                 > = None;
@@ -470,7 +474,7 @@ impl<'de> ::serde::Deserialize<'de> for Link {
                     ::buffa::alloc::string::String,
                 > = None;
                 let mut __oneof_properties: ::core::option::Option<
-                    __buffa::oneof::link::Properties,
+                    __buffa::oneof::binding::Properties,
                 > = None;
                 while let Some(key) = map.next_key::<::buffa::alloc::string::String>()? {
                     match key.as_str() {
@@ -546,7 +550,7 @@ impl<'de> ::serde::Deserialize<'de> for Link {
                                     );
                                 }
                                 __oneof_properties = Some(
-                                    __buffa::oneof::link::Properties::Postgres(
+                                    __buffa::oneof::binding::Properties::Postgres(
                                         ::buffa::alloc::boxed::Box::new(v),
                                     ),
                                 );
@@ -570,7 +574,7 @@ impl<'de> ::serde::Deserialize<'de> for Link {
                                     );
                                 }
                                 __oneof_properties = Some(
-                                    __buffa::oneof::link::Properties::Bucket(
+                                    __buffa::oneof::binding::Properties::Bucket(
                                         ::buffa::alloc::boxed::Box::new(v),
                                     ),
                                 );
@@ -596,7 +600,7 @@ impl<'de> ::serde::Deserialize<'de> for Link {
                                     );
                                 }
                                 __oneof_properties = Some(
-                                    __buffa::oneof::link::Properties::Custom(
+                                    __buffa::oneof::binding::Properties::Custom(
                                         ::buffa::alloc::boxed::Box::new(v),
                                     ),
                                 );
@@ -607,7 +611,7 @@ impl<'de> ::serde::Deserialize<'de> for Link {
                         }
                     }
                 }
-                let mut __r = <Link as ::core::default::Default>::default();
+                let mut __r = <Binding as ::core::default::Default>::default();
                 if let ::core::option::Option::Some(v) = __f_name {
                     __r.name = v;
                 }
@@ -624,7 +628,7 @@ impl<'de> ::serde::Deserialize<'de> for Link {
         d.deserialize_map(_V)
     }
 }
-impl ::buffa::json_helpers::ProtoElemJson for Link {
+impl ::buffa::json_helpers::ProtoElemJson for Binding {
     fn serialize_proto_json<S: ::serde::Serializer>(
         v: &Self,
         s: S,
@@ -638,19 +642,19 @@ impl ::buffa::json_helpers::ProtoElemJson for Link {
     }
 }
 #[doc(hidden)]
-pub const __LINK_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/common.links.v1.Link",
-    to_json: ::buffa::type_registry::any_to_json::<Link>,
-    from_json: ::buffa::type_registry::any_from_json::<Link>,
+pub const __BINDING_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
+    type_url: "type.googleapis.com/common.bindings.v1.Binding",
+    to_json: ::buffa::type_registry::any_to_json::<Binding>,
+    from_json: ::buffa::type_registry::any_from_json::<Binding>,
     is_wkt: false,
 };
-pub mod link {
+pub mod binding {
     #[allow(unused_imports)]
     use super::*;
     #[doc(inline)]
-    pub use super::__buffa::oneof::link::Properties;
+    pub use super::__buffa::oneof::binding::Properties;
     #[doc(inline)]
-    pub use super::__buffa::view::oneof::link::Properties as PropertiesView;
+    pub use super::__buffa::view::oneof::binding::Properties as PropertiesView;
 }
 #[derive(Clone, PartialEq, Default)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
@@ -711,14 +715,14 @@ impl PostgresProperties {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.PostgresProperties";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.PostgresProperties";
 }
 ::buffa::impl_default_instance!(PostgresProperties);
 impl ::buffa::MessageName for PostgresProperties {
-    const PACKAGE: &'static str = "common.links.v1";
+    const PACKAGE: &'static str = "common.bindings.v1";
     const NAME: &'static str = "PostgresProperties";
-    const FULL_NAME: &'static str = "common.links.v1.PostgresProperties";
-    const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.PostgresProperties";
+    const FULL_NAME: &'static str = "common.bindings.v1.PostgresProperties";
+    const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.PostgresProperties";
 }
 impl ::buffa::Message for PostgresProperties {
     /// Returns the total encoded size in bytes.
@@ -838,7 +842,7 @@ impl ::buffa::Message for PostgresProperties {
     }
 }
 impl ::buffa::ExtensionSet for PostgresProperties {
-    const PROTO_FQN: &'static str = "common.links.v1.PostgresProperties";
+    const PROTO_FQN: &'static str = "common.bindings.v1.PostgresProperties";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -861,7 +865,7 @@ impl ::buffa::json_helpers::ProtoElemJson for PostgresProperties {
 }
 #[doc(hidden)]
 pub const __POSTGRES_PROPERTIES_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/common.links.v1.PostgresProperties",
+    type_url: "type.googleapis.com/common.bindings.v1.PostgresProperties",
     to_json: ::buffa::type_registry::any_to_json::<PostgresProperties>,
     from_json: ::buffa::type_registry::any_from_json::<PostgresProperties>,
     is_wkt: false,
@@ -891,14 +895,14 @@ impl BucketProperties {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.BucketProperties";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.BucketProperties";
 }
 ::buffa::impl_default_instance!(BucketProperties);
 impl ::buffa::MessageName for BucketProperties {
-    const PACKAGE: &'static str = "common.links.v1";
+    const PACKAGE: &'static str = "common.bindings.v1";
     const NAME: &'static str = "BucketProperties";
-    const FULL_NAME: &'static str = "common.links.v1.BucketProperties";
-    const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.BucketProperties";
+    const FULL_NAME: &'static str = "common.bindings.v1.BucketProperties";
+    const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.BucketProperties";
 }
 impl ::buffa::Message for BucketProperties {
     /// Returns the total encoded size in bytes.
@@ -962,7 +966,7 @@ impl ::buffa::Message for BucketProperties {
     }
 }
 impl ::buffa::ExtensionSet for BucketProperties {
-    const PROTO_FQN: &'static str = "common.links.v1.BucketProperties";
+    const PROTO_FQN: &'static str = "common.bindings.v1.BucketProperties";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -985,7 +989,7 @@ impl ::buffa::json_helpers::ProtoElemJson for BucketProperties {
 }
 #[doc(hidden)]
 pub const __BUCKET_PROPERTIES_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/common.links.v1.BucketProperties",
+    type_url: "type.googleapis.com/common.bindings.v1.BucketProperties",
     to_json: ::buffa::type_registry::any_to_json::<BucketProperties>,
     from_json: ::buffa::type_registry::any_from_json::<BucketProperties>,
     is_wkt: false,
@@ -1041,14 +1045,14 @@ impl Grant {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.Grant";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.Grant";
 }
 ::buffa::impl_default_instance!(Grant);
 impl ::buffa::MessageName for Grant {
-    const PACKAGE: &'static str = "common.links.v1";
+    const PACKAGE: &'static str = "common.bindings.v1";
     const NAME: &'static str = "Grant";
-    const FULL_NAME: &'static str = "common.links.v1.Grant";
-    const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.Grant";
+    const FULL_NAME: &'static str = "common.bindings.v1.Grant";
+    const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.Grant";
 }
 impl ::buffa::Message for Grant {
     /// Returns the total encoded size in bytes.
@@ -1177,7 +1181,7 @@ impl ::buffa::Message for Grant {
     }
 }
 impl ::buffa::ExtensionSet for Grant {
-    const PROTO_FQN: &'static str = "common.links.v1.Grant";
+    const PROTO_FQN: &'static str = "common.bindings.v1.Grant";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1200,7 +1204,7 @@ impl ::buffa::json_helpers::ProtoElemJson for Grant {
 }
 #[doc(hidden)]
 pub const __GRANT_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/common.links.v1.Grant",
+    type_url: "type.googleapis.com/common.bindings.v1.Grant",
     to_json: ::buffa::type_registry::any_to_json::<Grant>,
     from_json: ::buffa::type_registry::any_from_json::<Grant>,
     is_wkt: false,
@@ -1248,14 +1252,14 @@ impl GrantCondition {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.GrantCondition";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.GrantCondition";
 }
 ::buffa::impl_default_instance!(GrantCondition);
 impl ::buffa::MessageName for GrantCondition {
-    const PACKAGE: &'static str = "common.links.v1";
+    const PACKAGE: &'static str = "common.bindings.v1";
     const NAME: &'static str = "GrantCondition";
-    const FULL_NAME: &'static str = "common.links.v1.GrantCondition";
-    const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.GrantCondition";
+    const FULL_NAME: &'static str = "common.bindings.v1.GrantCondition";
+    const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.GrantCondition";
 }
 impl ::buffa::Message for GrantCondition {
     /// Returns the total encoded size in bytes.
@@ -1351,7 +1355,7 @@ impl ::buffa::Message for GrantCondition {
     }
 }
 impl ::buffa::ExtensionSet for GrantCondition {
-    const PROTO_FQN: &'static str = "common.links.v1.GrantCondition";
+    const PROTO_FQN: &'static str = "common.bindings.v1.GrantCondition";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1374,7 +1378,7 @@ impl ::buffa::json_helpers::ProtoElemJson for GrantCondition {
 }
 #[doc(hidden)]
 pub const __GRANT_CONDITION_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/common.links.v1.GrantCondition",
+    type_url: "type.googleapis.com/common.bindings.v1.GrantCondition",
     to_json: ::buffa::type_registry::any_to_json::<GrantCondition>,
     from_json: ::buffa::type_registry::any_from_json::<GrantCondition>,
     is_wkt: false,
@@ -1397,7 +1401,7 @@ pub mod __buffa {
         #[allow(unused_imports)]
         use super::*;
         #[derive(Clone, Debug, Default)]
-        pub struct LinkView<'a> {
+        pub struct BindingView<'a> {
             /// Field 1: `name`
             pub name: &'a str,
             /// Field 4: `grants`
@@ -1408,12 +1412,12 @@ pub mod __buffa {
             /// Field 5: `source`
             pub source: &'a str,
             pub properties: ::core::option::Option<
-                super::super::__buffa::view::oneof::link::Properties<'a>,
+                super::super::__buffa::view::oneof::binding::Properties<'a>,
             >,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
-        impl<'a> ::buffa::MessageView<'a> for LinkView<'a> {
-            type Owned = super::super::Link;
+        impl<'a> ::buffa::MessageView<'a> for BindingView<'a> {
+            type Owned = super::super::Binding;
             fn decode_view(
                 buf: &'a [u8],
             ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
@@ -1490,7 +1494,7 @@ pub mod __buffa {
                         let __sub_ctx = ctx.descend()?;
                         let sub = ::buffa::types::borrow_bytes(&mut cur)?;
                         if let Some(
-                            super::super::__buffa::view::oneof::link::Properties::Postgres(
+                            super::super::__buffa::view::oneof::binding::Properties::Postgres(
                                 ref mut existing,
                             ),
                         ) = view.properties
@@ -1502,7 +1506,7 @@ pub mod __buffa {
                             )?;
                         } else {
                             view.properties = Some(
-                                super::super::__buffa::view::oneof::link::Properties::Postgres(
+                                super::super::__buffa::view::oneof::binding::Properties::Postgres(
                                     ::buffa::alloc::boxed::Box::new(
                                         <super::super::__buffa::view::PostgresPropertiesView as ::buffa::MessageView>::decode_view_ctx(
                                             sub,
@@ -1521,7 +1525,7 @@ pub mod __buffa {
                         let __sub_ctx = ctx.descend()?;
                         let sub = ::buffa::types::borrow_bytes(&mut cur)?;
                         if let Some(
-                            super::super::__buffa::view::oneof::link::Properties::Bucket(
+                            super::super::__buffa::view::oneof::binding::Properties::Bucket(
                                 ref mut existing,
                             ),
                         ) = view.properties
@@ -1533,7 +1537,7 @@ pub mod __buffa {
                             )?;
                         } else {
                             view.properties = Some(
-                                super::super::__buffa::view::oneof::link::Properties::Bucket(
+                                super::super::__buffa::view::oneof::binding::Properties::Bucket(
                                     ::buffa::alloc::boxed::Box::new(
                                         <super::super::__buffa::view::BucketPropertiesView as ::buffa::MessageView>::decode_view_ctx(
                                             sub,
@@ -1552,7 +1556,7 @@ pub mod __buffa {
                         let __sub_ctx = ctx.descend()?;
                         let sub = ::buffa::types::borrow_bytes(&mut cur)?;
                         if let Some(
-                            super::super::__buffa::view::oneof::link::Properties::Custom(
+                            super::super::__buffa::view::oneof::binding::Properties::Custom(
                                 ref mut existing,
                             ),
                         ) = view.properties
@@ -1564,7 +1568,7 @@ pub mod __buffa {
                             )?;
                         } else {
                             view.properties = Some(
-                                super::super::__buffa::view::oneof::link::Properties::Custom(
+                                super::super::__buffa::view::oneof::binding::Properties::Custom(
                                     ::buffa::alloc::boxed::Box::new(
                                         <::buffa_types::google::protobuf::__buffa::view::StructView as ::buffa::MessageView>::decode_view_ctx(
                                             sub,
@@ -1586,18 +1590,18 @@ pub mod __buffa {
             }
             fn to_owned_message(
                 &self,
-            ) -> ::core::result::Result<super::super::Link, ::buffa::DecodeError> {
+            ) -> ::core::result::Result<super::super::Binding, ::buffa::DecodeError> {
                 self.to_owned_from_source(None)
             }
             #[allow(clippy::useless_conversion, clippy::needless_update)]
             fn to_owned_from_source(
                 &self,
                 __buffa_src: ::core::option::Option<&::buffa::bytes::Bytes>,
-            ) -> ::core::result::Result<super::super::Link, ::buffa::DecodeError> {
+            ) -> ::core::result::Result<super::super::Binding, ::buffa::DecodeError> {
                 #[allow(unused_imports)]
                 use ::buffa::alloc::string::ToString as _;
                 let _ = __buffa_src;
-                ::core::result::Result::Ok(super::super::Link {
+                ::core::result::Result::Ok(super::super::Binding {
                     name: self.name.to_string(),
                     grants: self
                         .grants
@@ -1609,28 +1613,28 @@ pub mod __buffa {
                         ::core::option::Option::Some(v) => {
                             ::core::option::Option::Some(
                                 match v {
-                                    super::super::__buffa::view::oneof::link::Properties::Postgres(
+                                    super::super::__buffa::view::oneof::binding::Properties::Postgres(
                                         v,
                                     ) => {
-                                        super::super::__buffa::oneof::link::Properties::Postgres(
+                                        super::super::__buffa::oneof::binding::Properties::Postgres(
                                             ::buffa::alloc::boxed::Box::new(
                                                 v.to_owned_from_source(__buffa_src)?,
                                             ),
                                         )
                                     }
-                                    super::super::__buffa::view::oneof::link::Properties::Bucket(
+                                    super::super::__buffa::view::oneof::binding::Properties::Bucket(
                                         v,
                                     ) => {
-                                        super::super::__buffa::oneof::link::Properties::Bucket(
+                                        super::super::__buffa::oneof::binding::Properties::Bucket(
                                             ::buffa::alloc::boxed::Box::new(
                                                 v.to_owned_from_source(__buffa_src)?,
                                             ),
                                         )
                                     }
-                                    super::super::__buffa::view::oneof::link::Properties::Custom(
+                                    super::super::__buffa::view::oneof::binding::Properties::Custom(
                                         v,
                                     ) => {
-                                        super::super::__buffa::oneof::link::Properties::Custom(
+                                        super::super::__buffa::oneof::binding::Properties::Custom(
                                             ::buffa::alloc::boxed::Box::new(
                                                 v.to_owned_from_source(__buffa_src)?,
                                             ),
@@ -1649,7 +1653,7 @@ pub mod __buffa {
                 })
             }
         }
-        impl<'a> ::buffa::ViewEncode<'a> for LinkView<'a> {
+        impl<'a> ::buffa::ViewEncode<'a> for BindingView<'a> {
             #[allow(clippy::needless_borrow, clippy::let_and_return)]
             fn compute_size(&self, __cache: &mut ::buffa::SizeCache) -> u32 {
                 #[allow(unused_imports)]
@@ -1660,7 +1664,7 @@ pub mod __buffa {
                 }
                 if let ::core::option::Option::Some(ref v) = self.properties {
                     match v {
-                        super::super::__buffa::view::oneof::link::Properties::Postgres(
+                        super::super::__buffa::view::oneof::binding::Properties::Postgres(
                             x,
                         ) => {
                             let __slot = __cache.reserve();
@@ -1670,7 +1674,7 @@ pub mod __buffa {
                                 += 1u64 + ::buffa::encoding::varint_len(inner as u64) as u64
                                     + inner as u64;
                         }
-                        super::super::__buffa::view::oneof::link::Properties::Bucket(
+                        super::super::__buffa::view::oneof::binding::Properties::Bucket(
                             x,
                         ) => {
                             let __slot = __cache.reserve();
@@ -1680,7 +1684,7 @@ pub mod __buffa {
                                 += 1u64 + ::buffa::encoding::varint_len(inner as u64) as u64
                                     + inner as u64;
                         }
-                        super::super::__buffa::view::oneof::link::Properties::Custom(
+                        super::super::__buffa::view::oneof::binding::Properties::Custom(
                             x,
                         ) => {
                             let __slot = __cache.reserve();
@@ -1721,7 +1725,7 @@ pub mod __buffa {
                 }
                 if let ::core::option::Option::Some(ref v) = self.properties {
                     match v {
-                        super::super::__buffa::view::oneof::link::Properties::Postgres(
+                        super::super::__buffa::view::oneof::binding::Properties::Postgres(
                             x,
                         ) => {
                             ::buffa::types::put_len_delimited_header(
@@ -1731,7 +1735,7 @@ pub mod __buffa {
                             );
                             x.write_to(__cache, buf);
                         }
-                        super::super::__buffa::view::oneof::link::Properties::Bucket(
+                        super::super::__buffa::view::oneof::binding::Properties::Bucket(
                             x,
                         ) => {
                             ::buffa::types::put_len_delimited_header(
@@ -1741,7 +1745,7 @@ pub mod __buffa {
                             );
                             x.write_to(__cache, buf);
                         }
-                        super::super::__buffa::view::oneof::link::Properties::Custom(
+                        super::super::__buffa::view::oneof::binding::Properties::Custom(
                             x,
                         ) => {
                             ::buffa::types::put_len_delimited_header(
@@ -1778,7 +1782,7 @@ pub mod __buffa {
         /// fields depends on default-omission rules; serializers that require
         /// known map lengths (e.g. `bincode`) will return a runtime error.
         /// Use the owned message type for those formats.
-        impl<'__a> ::serde::Serialize for LinkView<'__a> {
+        impl<'__a> ::serde::Serialize for BindingView<'__a> {
             fn serialize<__S: ::serde::Serializer>(
                 &self,
                 __s: __S,
@@ -1796,17 +1800,17 @@ pub mod __buffa {
                 }
                 if let ::core::option::Option::Some(ref __ov) = self.properties {
                     match __ov {
-                        super::super::__buffa::view::oneof::link::Properties::Postgres(
+                        super::super::__buffa::view::oneof::binding::Properties::Postgres(
                             v,
                         ) => {
                             __map.serialize_entry("postgres", v)?;
                         }
-                        super::super::__buffa::view::oneof::link::Properties::Bucket(
+                        super::super::__buffa::view::oneof::binding::Properties::Bucket(
                             v,
                         ) => {
                             __map.serialize_entry("bucket", v)?;
                         }
-                        super::super::__buffa::view::oneof::link::Properties::Custom(
+                        super::super::__buffa::view::oneof::binding::Properties::Custom(
                             v,
                         ) => {
                             __map.serialize_entry("custom", v)?;
@@ -1816,22 +1820,22 @@ pub mod __buffa {
                 __map.end()
             }
         }
-        impl<'a> ::buffa::MessageName for LinkView<'a> {
-            const PACKAGE: &'static str = "common.links.v1";
-            const NAME: &'static str = "Link";
-            const FULL_NAME: &'static str = "common.links.v1.Link";
-            const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.Link";
+        impl<'a> ::buffa::MessageName for BindingView<'a> {
+            const PACKAGE: &'static str = "common.bindings.v1";
+            const NAME: &'static str = "Binding";
+            const FULL_NAME: &'static str = "common.bindings.v1.Binding";
+            const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.Binding";
         }
-        ::buffa::impl_default_view_instance!(LinkView);
-        ::buffa::impl_view_reborrow!(LinkView);
-        /** Self-contained, `'static` owned view of a `Link` message.
+        ::buffa::impl_default_view_instance!(BindingView);
+        ::buffa::impl_view_reborrow!(BindingView);
+        /** Self-contained, `'static` owned view of a `Binding` message.
 
- Wraps [`::buffa::OwnedView`]`<`[`LinkView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
+ Wraps [`::buffa::OwnedView`]`<`[`BindingView`]`<'static>>`: the decoded view and the [`::buffa::bytes::Bytes`] buffer it borrows from travel together, so the handle is `'static` and `Send + Sync` — suitable for async handlers, spawned tasks, and anywhere a `'static` bound is required.
 
- Field accessors return borrows tied to `&self`. Use [`Self::view`] to get the full [`LinkView`] when you need struct patterns, iteration helpers, or to pass the view to lifetime-parameterised code.*/
+ Field accessors return borrows tied to `&self`. Use [`Self::view`] to get the full [`BindingView`] when you need struct patterns, iteration helpers, or to pass the view to lifetime-parameterised code.*/
         #[derive(Clone, Debug)]
-        pub struct LinkOwnedView(::buffa::OwnedView<LinkView<'static>>);
-        impl LinkOwnedView {
+        pub struct BindingOwnedView(::buffa::OwnedView<BindingView<'static>>);
+        impl BindingOwnedView {
             /// Decode an owned view from a [`::buffa::bytes::Bytes`] buffer.
             ///
             /// The view borrows directly from the buffer's data; the buffer is
@@ -1845,7 +1849,7 @@ pub mod __buffa {
                 bytes: ::buffa::bytes::Bytes,
             ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
                 ::core::result::Result::Ok(
-                    LinkOwnedView(::buffa::OwnedView::decode(bytes)?),
+                    BindingOwnedView(::buffa::OwnedView::decode(bytes)?),
                 )
             }
             /// Decode with custom [`::buffa::DecodeOptions`] (recursion limit,
@@ -1860,7 +1864,9 @@ pub mod __buffa {
                 opts: &::buffa::DecodeOptions,
             ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
                 ::core::result::Result::Ok(
-                    LinkOwnedView(::buffa::OwnedView::decode_with_options(bytes, opts)?),
+                    BindingOwnedView(
+                        ::buffa::OwnedView::decode_with_options(bytes, opts)?,
+                    ),
                 )
             }
             /// Build from an owned message via an encode → decode round-trip.
@@ -1872,15 +1878,15 @@ pub mod __buffa {
             /// another [`::buffa::DecodeError`] if the re-encoded bytes are
             /// somehow invalid (should not happen for well-formed messages).
             pub fn from_owned(
-                msg: &super::super::Link,
+                msg: &super::super::Binding,
             ) -> ::core::result::Result<Self, ::buffa::DecodeError> {
                 ::core::result::Result::Ok(
-                    LinkOwnedView(::buffa::OwnedView::from_owned(msg)?),
+                    BindingOwnedView(::buffa::OwnedView::from_owned(msg)?),
                 )
             }
-            /// Borrow the full [`LinkView`] with its lifetime tied to `&self`.
+            /// Borrow the full [`BindingView`] with its lifetime tied to `&self`.
             #[must_use]
-            pub fn view(&self) -> &LinkView<'_> {
+            pub fn view(&self) -> &BindingView<'_> {
                 self.0.reborrow()
             }
             /// Convert to the owned message type.
@@ -1891,7 +1897,7 @@ pub mod __buffa {
             /// whose contract also governs handles converted from a raw
             /// [`::buffa::OwnedView`].
             #[must_use]
-            pub fn to_owned_message(&self) -> super::super::Link {
+            pub fn to_owned_message(&self) -> super::super::Binding {
                 self.0.to_owned_message()
             }
             /// The underlying bytes buffer.
@@ -1926,34 +1932,34 @@ pub mod __buffa {
             pub fn properties(
                 &self,
             ) -> ::core::option::Option<
-                &super::super::__buffa::view::oneof::link::Properties<'_>,
+                &super::super::__buffa::view::oneof::binding::Properties<'_>,
             > {
                 self.0.reborrow().properties.as_ref()
             }
         }
-        impl ::core::convert::From<::buffa::OwnedView<LinkView<'static>>>
-        for LinkOwnedView {
-            fn from(inner: ::buffa::OwnedView<LinkView<'static>>) -> Self {
-                LinkOwnedView(inner)
+        impl ::core::convert::From<::buffa::OwnedView<BindingView<'static>>>
+        for BindingOwnedView {
+            fn from(inner: ::buffa::OwnedView<BindingView<'static>>) -> Self {
+                BindingOwnedView(inner)
             }
         }
-        impl ::core::convert::From<LinkOwnedView>
-        for ::buffa::OwnedView<LinkView<'static>> {
-            fn from(wrapper: LinkOwnedView) -> Self {
+        impl ::core::convert::From<BindingOwnedView>
+        for ::buffa::OwnedView<BindingView<'static>> {
+            fn from(wrapper: BindingOwnedView) -> Self {
                 wrapper.0
             }
         }
-        impl ::core::convert::AsRef<::buffa::OwnedView<LinkView<'static>>>
-        for LinkOwnedView {
-            fn as_ref(&self) -> &::buffa::OwnedView<LinkView<'static>> {
+        impl ::core::convert::AsRef<::buffa::OwnedView<BindingView<'static>>>
+        for BindingOwnedView {
+            fn as_ref(&self) -> &::buffa::OwnedView<BindingView<'static>> {
                 &self.0
             }
         }
-        impl ::buffa::HasMessageView for super::super::Link {
-            type View<'a> = LinkView<'a>;
-            type ViewHandle = LinkOwnedView;
+        impl ::buffa::HasMessageView for super::super::Binding {
+            type View<'a> = BindingView<'a>;
+            type ViewHandle = BindingOwnedView;
         }
-        impl ::serde::Serialize for LinkOwnedView {
+        impl ::serde::Serialize for BindingOwnedView {
             fn serialize<__S: ::serde::Serializer>(
                 &self,
                 __s: __S,
@@ -2196,10 +2202,10 @@ pub mod __buffa {
             }
         }
         impl<'a> ::buffa::MessageName for PostgresPropertiesView<'a> {
-            const PACKAGE: &'static str = "common.links.v1";
+            const PACKAGE: &'static str = "common.bindings.v1";
             const NAME: &'static str = "PostgresProperties";
-            const FULL_NAME: &'static str = "common.links.v1.PostgresProperties";
-            const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.PostgresProperties";
+            const FULL_NAME: &'static str = "common.bindings.v1.PostgresProperties";
+            const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.PostgresProperties";
         }
         ::buffa::impl_default_view_instance!(PostgresPropertiesView);
         ::buffa::impl_view_reborrow!(PostgresPropertiesView);
@@ -2483,10 +2489,10 @@ pub mod __buffa {
             }
         }
         impl<'a> ::buffa::MessageName for BucketPropertiesView<'a> {
-            const PACKAGE: &'static str = "common.links.v1";
+            const PACKAGE: &'static str = "common.bindings.v1";
             const NAME: &'static str = "BucketProperties";
-            const FULL_NAME: &'static str = "common.links.v1.BucketProperties";
-            const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.BucketProperties";
+            const FULL_NAME: &'static str = "common.bindings.v1.BucketProperties";
+            const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.BucketProperties";
         }
         ::buffa::impl_default_view_instance!(BucketPropertiesView);
         ::buffa::impl_view_reborrow!(BucketPropertiesView);
@@ -2838,10 +2844,10 @@ pub mod __buffa {
             }
         }
         impl<'a> ::buffa::MessageName for GrantView<'a> {
-            const PACKAGE: &'static str = "common.links.v1";
+            const PACKAGE: &'static str = "common.bindings.v1";
             const NAME: &'static str = "Grant";
-            const FULL_NAME: &'static str = "common.links.v1.Grant";
-            const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.Grant";
+            const FULL_NAME: &'static str = "common.bindings.v1.Grant";
+            const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.Grant";
         }
         ::buffa::impl_default_view_instance!(GrantView);
         ::buffa::impl_view_reborrow!(GrantView);
@@ -3163,10 +3169,10 @@ pub mod __buffa {
             }
         }
         impl<'a> ::buffa::MessageName for GrantConditionView<'a> {
-            const PACKAGE: &'static str = "common.links.v1";
+            const PACKAGE: &'static str = "common.bindings.v1";
             const NAME: &'static str = "GrantCondition";
-            const FULL_NAME: &'static str = "common.links.v1.GrantCondition";
-            const TYPE_URL: &'static str = "type.googleapis.com/common.links.v1.GrantCondition";
+            const FULL_NAME: &'static str = "common.bindings.v1.GrantCondition";
+            const TYPE_URL: &'static str = "type.googleapis.com/common.bindings.v1.GrantCondition";
         }
         ::buffa::impl_default_view_instance!(GrantConditionView);
         ::buffa::impl_view_reborrow!(GrantConditionView);
@@ -3303,7 +3309,7 @@ pub mod __buffa {
         pub mod oneof {
             #[allow(unused_imports)]
             use super::*;
-            pub mod link {
+            pub mod binding {
                 #[allow(unused_imports)]
                 use super::*;
                 #[derive(Clone, Debug)]
@@ -3336,7 +3342,7 @@ pub mod __buffa {
     pub mod oneof {
         #[allow(unused_imports)]
         use super::*;
-        pub mod link {
+        pub mod binding {
             #[allow(unused_imports)]
             use super::*;
             #[derive(Clone, PartialEq, Debug)]
@@ -3404,7 +3410,7 @@ pub mod __buffa {
     }
     /// Register this package's `Any` type entries and extension entries.
     pub fn register_types(reg: &mut ::buffa::type_registry::TypeRegistry) {
-        reg.register_json_any(super::__LINK_JSON_ANY);
+        reg.register_json_any(super::__BINDING_JSON_ANY);
         reg.register_json_any(super::__POSTGRES_PROPERTIES_JSON_ANY);
         reg.register_json_any(super::__BUCKET_PROPERTIES_JSON_ANY);
         reg.register_json_any(super::__GRANT_JSON_ANY);
@@ -3412,9 +3418,9 @@ pub mod __buffa {
     }
 }
 #[doc(inline)]
-pub use self::__buffa::view::LinkView;
+pub use self::__buffa::view::BindingView;
 #[doc(inline)]
-pub use self::__buffa::view::LinkOwnedView;
+pub use self::__buffa::view::BindingOwnedView;
 #[doc(inline)]
 pub use self::__buffa::view::PostgresPropertiesView;
 #[doc(inline)]

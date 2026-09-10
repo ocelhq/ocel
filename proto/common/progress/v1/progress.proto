@@ -4,7 +4,7 @@ package common.progress.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/common/progress/v1;progressv1";
 
 import "buf/validate/validate.proto";
-import "common/links/v1/links.proto";
+import "common/bindings/v1/bindings.proto";
 import "common/plan/v1/plan.proto";
 
 message OperationEvent {
@@ -165,7 +165,7 @@ message ResultEvent {
   bool success = 1;
   string error = 2;
 
-  repeated common.links.v1.Link links = 3;
+  repeated common.bindings.v1.Binding bindings = 3;
 
   repeated FunctionOutput functions = 4;
 

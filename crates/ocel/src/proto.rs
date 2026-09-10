@@ -23,9 +23,9 @@ pub mod app {
 }
 
 pub mod common {
-    pub mod links {
+    pub mod bindings {
         pub mod v1 {
-            include!("proto/common.links.v1.rs");
+            include!("proto/common.bindings.v1.rs");
         }
     }
 }

@@ -4,7 +4,7 @@ package app.resources.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1";
 
 import "app/resources/v1/variables.proto";
-import "common/links/v1/links.proto";
+import "common/bindings/v1/bindings.proto";
 
 service ResourceService {
     rpc Declare(DeclareRequest) returns (DeclareResponse);
@@ -15,7 +15,7 @@ service ResourceService {
 }
 
 message ResourceIdentifier {
-  common.links.v1.LinkType type = 1;
+  common.bindings.v1.BindingType type = 1;
   string name = 2;
 }
 

@@ -12,12 +12,12 @@ from protobuf import Message
 from protobuf._codegen import file_desc
 
 from . import variables_pb
-from ....common.links.v1 import links_pb
+from ....common.bindings.v1 import bindings_pb
 
 if TYPE_CHECKING:
     from protobuf import DescFile, Oneof
 
-    from ....common.links.v1.links_pb import LinkType
+    from ....common.bindings.v1.bindings_pb import BindingType
 
 
 _ResourceIdentifierFields: TypeAlias = Literal["type", "name"]
@@ -31,7 +31,7 @@ class ResourceIdentifier(Message[_ResourceIdentifierFields]):
     Attributes:
         type:
             ```proto
-            common.links.v1.LinkType type = 1;
+            common.bindings.v1.BindingType type = 1;
             ```
         name:
             ```proto
@@ -46,12 +46,12 @@ class ResourceIdentifier(Message[_ResourceIdentifierFields]):
         def __init__(
             self,
             *,
-            type: LinkType | None = None,
+            type: BindingType | None = None,
             name: str = "",
         ) -> None:
             pass
 
-        type: LinkType
+        type: BindingType
         name: str
 
 _DeclareResponseFields: TypeAlias = NoReturn
@@ -170,10 +170,10 @@ class BucketConfig(Message[_BucketConfigFields]):
 
 
 _DESC = file_desc(
-    b'\n app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto\x1a\x1bcommon/links/v1/links.proto"W\n\x12ResourceIdentifier\x12-\n\x04type\x18\x01 \x01(\x0e2\x19.common.links.v1.LinkTypeR\x04type\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name"\x11\n\x0fDeclareResponse"\xee\x01\n\x0eDeclareRequest\x12@\n\x08resource\x18\x01 \x01(\x0b2$.app.resources.v1.ResourceIdentifierR\x08resource\x12>\n\x08postgres\x18\x02 \x01(\x0b2 .app.resources.v1.PostgresConfigH\x00R\x08postgres\x128\n\x06bucket\x18\x03 \x01(\x0b2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x12\x16\n\x06source\x18\x04 \x01(\tR\x06sourceB\x08\n\x06config"*\n\x0ePostgresConfig\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version"7\n\x0cBucketConfig\x12\'\n\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins2\xa8\x02\n\x0fResourceService\x12N\n\x07Declare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n\nDeclareEnv\x12#.app.resources.v1.DeclareEnvRequest\x1a$.app.resources.v1.DeclareEnvResponse\x12l\n\x11ReportEnvProblems\x12*.app.resources.v1.ReportEnvProblemsRequest\x1a+.app.resources.v1.ReportEnvProblemsResponseB?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
+    b'\n app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto\x1a!common/bindings/v1/bindings.proto"]\n\x12ResourceIdentifier\x123\n\x04type\x18\x01 \x01(\x0e2\x1f.common.bindings.v1.BindingTypeR\x04type\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name"\x11\n\x0fDeclareResponse"\xee\x01\n\x0eDeclareRequest\x12@\n\x08resource\x18\x01 \x01(\x0b2$.app.resources.v1.ResourceIdentifierR\x08resource\x12>\n\x08postgres\x18\x02 \x01(\x0b2 .app.resources.v1.PostgresConfigH\x00R\x08postgres\x128\n\x06bucket\x18\x03 \x01(\x0b2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x12\x16\n\x06source\x18\x04 \x01(\tR\x06sourceB\x08\n\x06config"*\n\x0ePostgresConfig\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version"7\n\x0cBucketConfig\x12\'\n\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins2\xa8\x02\n\x0fResourceService\x12N\n\x07Declare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n\nDeclareEnv\x12#.app.resources.v1.DeclareEnvRequest\x1a$.app.resources.v1.DeclareEnvResponse\x12l\n\x11ReportEnvProblems\x12*.app.resources.v1.ReportEnvProblemsRequest\x1a+.app.resources.v1.ReportEnvProblemsResponseB?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
     [
         variables_pb.desc(),
-        links_pb.desc(),
+        bindings_pb.desc(),
     ],
     {
         "ResourceIdentifier": ResourceIdentifier,

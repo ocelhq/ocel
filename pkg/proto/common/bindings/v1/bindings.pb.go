@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        (unknown)
-// source: common/links/v1/links.proto
+// source: common/bindings/v1/bindings.proto
 
-package linksv1
+package bindingsv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -22,88 +22,88 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type LinkType int32
+type BindingType int32
 
 const (
-	LinkType_LINK_TYPE_UNSPECIFIED LinkType = 0
-	LinkType_LINK_TYPE_POSTGRES    LinkType = 1
-	LinkType_LINK_TYPE_BUCKET      LinkType = 2
-	LinkType_LINK_TYPE_CUSTOM      LinkType = 3
+	BindingType_BINDING_TYPE_UNSPECIFIED BindingType = 0
+	BindingType_BINDING_TYPE_POSTGRES    BindingType = 1
+	BindingType_BINDING_TYPE_BUCKET      BindingType = 2
+	BindingType_BINDING_TYPE_CUSTOM      BindingType = 3
 )
 
-// Enum value maps for LinkType.
+// Enum value maps for BindingType.
 var (
-	LinkType_name = map[int32]string{
-		0: "LINK_TYPE_UNSPECIFIED",
-		1: "LINK_TYPE_POSTGRES",
-		2: "LINK_TYPE_BUCKET",
-		3: "LINK_TYPE_CUSTOM",
+	BindingType_name = map[int32]string{
+		0: "BINDING_TYPE_UNSPECIFIED",
+		1: "BINDING_TYPE_POSTGRES",
+		2: "BINDING_TYPE_BUCKET",
+		3: "BINDING_TYPE_CUSTOM",
 	}
-	LinkType_value = map[string]int32{
-		"LINK_TYPE_UNSPECIFIED": 0,
-		"LINK_TYPE_POSTGRES":    1,
-		"LINK_TYPE_BUCKET":      2,
-		"LINK_TYPE_CUSTOM":      3,
+	BindingType_value = map[string]int32{
+		"BINDING_TYPE_UNSPECIFIED": 0,
+		"BINDING_TYPE_POSTGRES":    1,
+		"BINDING_TYPE_BUCKET":      2,
+		"BINDING_TYPE_CUSTOM":      3,
 	}
 )
 
-func (x LinkType) Enum() *LinkType {
-	p := new(LinkType)
+func (x BindingType) Enum() *BindingType {
+	p := new(BindingType)
 	*p = x
 	return p
 }
 
-func (x LinkType) String() string {
+func (x BindingType) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (LinkType) Descriptor() protoreflect.EnumDescriptor {
-	return file_common_links_v1_links_proto_enumTypes[0].Descriptor()
+func (BindingType) Descriptor() protoreflect.EnumDescriptor {
+	return file_common_bindings_v1_bindings_proto_enumTypes[0].Descriptor()
 }
 
-func (LinkType) Type() protoreflect.EnumType {
-	return &file_common_links_v1_links_proto_enumTypes[0]
+func (BindingType) Type() protoreflect.EnumType {
+	return &file_common_bindings_v1_bindings_proto_enumTypes[0]
 }
 
-func (x LinkType) Number() protoreflect.EnumNumber {
+func (x BindingType) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use LinkType.Descriptor instead.
-func (LinkType) EnumDescriptor() ([]byte, []int) {
-	return file_common_links_v1_links_proto_rawDescGZIP(), []int{0}
+// Deprecated: Use BindingType.Descriptor instead.
+func (BindingType) EnumDescriptor() ([]byte, []int) {
+	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{0}
 }
 
-type Link struct {
+type Binding struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Types that are valid to be assigned to Properties:
 	//
-	//	*Link_Postgres
-	//	*Link_Bucket
-	//	*Link_Custom
-	Properties    isLink_Properties `protobuf_oneof:"properties"`
-	Grants        []*Grant          `protobuf:"bytes,4,rep,name=grants,proto3" json:"grants,omitempty"`
-	Source        string            `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
+	//	*Binding_Postgres
+	//	*Binding_Bucket
+	//	*Binding_Custom
+	Properties    isBinding_Properties `protobuf_oneof:"properties"`
+	Grants        []*Grant             `protobuf:"bytes,4,rep,name=grants,proto3" json:"grants,omitempty"`
+	Source        string               `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Link) Reset() {
-	*x = Link{}
-	mi := &file_common_links_v1_links_proto_msgTypes[0]
+func (x *Binding) Reset() {
+	*x = Binding{}
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Link) String() string {
+func (x *Binding) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Link) ProtoMessage() {}
+func (*Binding) ProtoMessage() {}
 
-func (x *Link) ProtoReflect() protoreflect.Message {
-	mi := &file_common_links_v1_links_proto_msgTypes[0]
+func (x *Binding) ProtoReflect() protoreflect.Message {
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -114,87 +114,87 @@ func (x *Link) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Link.ProtoReflect.Descriptor instead.
-func (*Link) Descriptor() ([]byte, []int) {
-	return file_common_links_v1_links_proto_rawDescGZIP(), []int{0}
+// Deprecated: Use Binding.ProtoReflect.Descriptor instead.
+func (*Binding) Descriptor() ([]byte, []int) {
+	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Link) GetName() string {
+func (x *Binding) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *Link) GetProperties() isLink_Properties {
+func (x *Binding) GetProperties() isBinding_Properties {
 	if x != nil {
 		return x.Properties
 	}
 	return nil
 }
 
-func (x *Link) GetPostgres() *PostgresProperties {
+func (x *Binding) GetPostgres() *PostgresProperties {
 	if x != nil {
-		if x, ok := x.Properties.(*Link_Postgres); ok {
+		if x, ok := x.Properties.(*Binding_Postgres); ok {
 			return x.Postgres
 		}
 	}
 	return nil
 }
 
-func (x *Link) GetBucket() *BucketProperties {
+func (x *Binding) GetBucket() *BucketProperties {
 	if x != nil {
-		if x, ok := x.Properties.(*Link_Bucket); ok {
+		if x, ok := x.Properties.(*Binding_Bucket); ok {
 			return x.Bucket
 		}
 	}
 	return nil
 }
 
-func (x *Link) GetCustom() *structpb.Struct {
+func (x *Binding) GetCustom() *structpb.Struct {
 	if x != nil {
-		if x, ok := x.Properties.(*Link_Custom); ok {
+		if x, ok := x.Properties.(*Binding_Custom); ok {
 			return x.Custom
 		}
 	}
 	return nil
 }
 
-func (x *Link) GetGrants() []*Grant {
+func (x *Binding) GetGrants() []*Grant {
 	if x != nil {
 		return x.Grants
 	}
 	return nil
 }
 
-func (x *Link) GetSource() string {
+func (x *Binding) GetSource() string {
 	if x != nil {
 		return x.Source
 	}
 	return ""
 }
 
-type isLink_Properties interface {
-	isLink_Properties()
+type isBinding_Properties interface {
+	isBinding_Properties()
 }
 
-type Link_Postgres struct {
+type Binding_Postgres struct {
 	Postgres *PostgresProperties `protobuf:"bytes,2,opt,name=postgres,proto3,oneof"`
 }
 
-type Link_Bucket struct {
+type Binding_Bucket struct {
 	Bucket *BucketProperties `protobuf:"bytes,3,opt,name=bucket,proto3,oneof"`
 }
 
-type Link_Custom struct {
+type Binding_Custom struct {
 	Custom *structpb.Struct `protobuf:"bytes,6,opt,name=custom,proto3,oneof"`
 }
 
-func (*Link_Postgres) isLink_Properties() {}
+func (*Binding_Postgres) isBinding_Properties() {}
 
-func (*Link_Bucket) isLink_Properties() {}
+func (*Binding_Bucket) isBinding_Properties() {}
 
-func (*Link_Custom) isLink_Properties() {}
+func (*Binding_Custom) isBinding_Properties() {}
 
 type PostgresProperties struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -209,7 +209,7 @@ type PostgresProperties struct {
 
 func (x *PostgresProperties) Reset() {
 	*x = PostgresProperties{}
-	mi := &file_common_links_v1_links_proto_msgTypes[1]
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -221,7 +221,7 @@ func (x *PostgresProperties) String() string {
 func (*PostgresProperties) ProtoMessage() {}
 
 func (x *PostgresProperties) ProtoReflect() protoreflect.Message {
-	mi := &file_common_links_v1_links_proto_msgTypes[1]
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -234,7 +234,7 @@ func (x *PostgresProperties) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostgresProperties.ProtoReflect.Descriptor instead.
 func (*PostgresProperties) Descriptor() ([]byte, []int) {
-	return file_common_links_v1_links_proto_rawDescGZIP(), []int{1}
+	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *PostgresProperties) GetHost() string {
@@ -281,7 +281,7 @@ type BucketProperties struct {
 
 func (x *BucketProperties) Reset() {
 	*x = BucketProperties{}
-	mi := &file_common_links_v1_links_proto_msgTypes[2]
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -293,7 +293,7 @@ func (x *BucketProperties) String() string {
 func (*BucketProperties) ProtoMessage() {}
 
 func (x *BucketProperties) ProtoReflect() protoreflect.Message {
-	mi := &file_common_links_v1_links_proto_msgTypes[2]
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -306,7 +306,7 @@ func (x *BucketProperties) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BucketProperties.ProtoReflect.Descriptor instead.
 func (*BucketProperties) Descriptor() ([]byte, []int) {
-	return file_common_links_v1_links_proto_rawDescGZIP(), []int{2}
+	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *BucketProperties) GetBucket() string {
@@ -328,7 +328,7 @@ type Grant struct {
 
 func (x *Grant) Reset() {
 	*x = Grant{}
-	mi := &file_common_links_v1_links_proto_msgTypes[3]
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -340,7 +340,7 @@ func (x *Grant) String() string {
 func (*Grant) ProtoMessage() {}
 
 func (x *Grant) ProtoReflect() protoreflect.Message {
-	mi := &file_common_links_v1_links_proto_msgTypes[3]
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -353,7 +353,7 @@ func (x *Grant) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Grant.ProtoReflect.Descriptor instead.
 func (*Grant) Descriptor() ([]byte, []int) {
-	return file_common_links_v1_links_proto_rawDescGZIP(), []int{3}
+	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Grant) GetActions() []string {
@@ -395,7 +395,7 @@ type GrantCondition struct {
 
 func (x *GrantCondition) Reset() {
 	*x = GrantCondition{}
-	mi := &file_common_links_v1_links_proto_msgTypes[4]
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -407,7 +407,7 @@ func (x *GrantCondition) String() string {
 func (*GrantCondition) ProtoMessage() {}
 
 func (x *GrantCondition) ProtoReflect() protoreflect.Message {
-	mi := &file_common_links_v1_links_proto_msgTypes[4]
+	mi := &file_common_bindings_v1_bindings_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -420,7 +420,7 @@ func (x *GrantCondition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrantCondition.ProtoReflect.Descriptor instead.
 func (*GrantCondition) Descriptor() ([]byte, []int) {
-	return file_common_links_v1_links_proto_rawDescGZIP(), []int{4}
+	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GrantCondition) GetOperator() string {
@@ -444,17 +444,17 @@ func (x *GrantCondition) GetValues() []string {
 	return nil
 }
 
-var File_common_links_v1_links_proto protoreflect.FileDescriptor
+var File_common_bindings_v1_bindings_proto protoreflect.FileDescriptor
 
-const file_common_links_v1_links_proto_rawDesc = "" +
+const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\n" +
-	"\x1bcommon/links/v1/links.proto\x12\x0fcommon.links.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xa3\x02\n" +
-	"\x04Link\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12A\n" +
-	"\bpostgres\x18\x02 \x01(\v2#.common.links.v1.PostgresPropertiesH\x00R\bpostgres\x12;\n" +
-	"\x06bucket\x18\x03 \x01(\v2!.common.links.v1.BucketPropertiesH\x00R\x06bucket\x121\n" +
-	"\x06custom\x18\x06 \x01(\v2\x17.google.protobuf.StructH\x00R\x06custom\x12.\n" +
-	"\x06grants\x18\x04 \x03(\v2\x16.common.links.v1.GrantR\x06grants\x12\x16\n" +
+	"!common/bindings/v1/bindings.proto\x12\x12common.bindings.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xaf\x02\n" +
+	"\aBinding\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12D\n" +
+	"\bpostgres\x18\x02 \x01(\v2&.common.bindings.v1.PostgresPropertiesH\x00R\bpostgres\x12>\n" +
+	"\x06bucket\x18\x03 \x01(\v2$.common.bindings.v1.BucketPropertiesH\x00R\x06bucket\x121\n" +
+	"\x06custom\x18\x06 \x01(\v2\x17.google.protobuf.StructH\x00R\x06custom\x121\n" +
+	"\x06grants\x18\x04 \x03(\v2\x19.common.bindings.v1.GrantR\x06grants\x12\x16\n" +
 	"\x06source\x18\x05 \x01(\tR\x06sourceB\f\n" +
 	"\n" +
 	"properties\"\x95\x01\n" +
@@ -465,53 +465,53 @@ const file_common_links_v1_links_proto_rawDesc = "" +
 	"\busername\x18\x04 \x01(\tR\busername\x12\x1f\n" +
 	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\"*\n" +
 	"\x10BucketProperties\x12\x16\n" +
-	"\x06bucket\x18\x01 \x01(\tR\x06bucket\"\x96\x01\n" +
+	"\x06bucket\x18\x01 \x01(\tR\x06bucket\"\x99\x01\n" +
 	"\x05Grant\x12\x18\n" +
 	"\aactions\x18\x01 \x03(\tR\aactions\x12\x1c\n" +
 	"\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n" +
-	"\x05label\x18\x03 \x01(\tR\x05label\x12?\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12B\n" +
 	"\n" +
-	"conditions\x18\x04 \x03(\v2\x1f.common.links.v1.GrantConditionR\n" +
+	"conditions\x18\x04 \x03(\v2\".common.bindings.v1.GrantConditionR\n" +
 	"conditions\"V\n" +
 	"\x0eGrantCondition\x12\x1a\n" +
 	"\boperator\x18\x01 \x01(\tR\boperator\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n" +
-	"\x06values\x18\x03 \x03(\tR\x06values*i\n" +
-	"\bLinkType\x12\x19\n" +
-	"\x15LINK_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
-	"\x12LINK_TYPE_POSTGRES\x10\x01\x12\x14\n" +
-	"\x10LINK_TYPE_BUCKET\x10\x02\x12\x14\n" +
-	"\x10LINK_TYPE_CUSTOM\x10\x03B:Z8github.com/ocelhq/ocel/pkg/proto/common/links/v1;linksv1b\x06proto3"
+	"\x06values\x18\x03 \x03(\tR\x06values*x\n" +
+	"\vBindingType\x12\x1c\n" +
+	"\x18BINDING_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15BINDING_TYPE_POSTGRES\x10\x01\x12\x17\n" +
+	"\x13BINDING_TYPE_BUCKET\x10\x02\x12\x17\n" +
+	"\x13BINDING_TYPE_CUSTOM\x10\x03B@Z>github.com/ocelhq/ocel/pkg/proto/common/bindings/v1;bindingsv1b\x06proto3"
 
 var (
-	file_common_links_v1_links_proto_rawDescOnce sync.Once
-	file_common_links_v1_links_proto_rawDescData []byte
+	file_common_bindings_v1_bindings_proto_rawDescOnce sync.Once
+	file_common_bindings_v1_bindings_proto_rawDescData []byte
 )
 
-func file_common_links_v1_links_proto_rawDescGZIP() []byte {
-	file_common_links_v1_links_proto_rawDescOnce.Do(func() {
-		file_common_links_v1_links_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_common_links_v1_links_proto_rawDesc), len(file_common_links_v1_links_proto_rawDesc)))
+func file_common_bindings_v1_bindings_proto_rawDescGZIP() []byte {
+	file_common_bindings_v1_bindings_proto_rawDescOnce.Do(func() {
+		file_common_bindings_v1_bindings_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_common_bindings_v1_bindings_proto_rawDesc), len(file_common_bindings_v1_bindings_proto_rawDesc)))
 	})
-	return file_common_links_v1_links_proto_rawDescData
+	return file_common_bindings_v1_bindings_proto_rawDescData
 }
 
-var file_common_links_v1_links_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_common_links_v1_links_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
-var file_common_links_v1_links_proto_goTypes = []any{
-	(LinkType)(0),              // 0: common.links.v1.LinkType
-	(*Link)(nil),               // 1: common.links.v1.Link
-	(*PostgresProperties)(nil), // 2: common.links.v1.PostgresProperties
-	(*BucketProperties)(nil),   // 3: common.links.v1.BucketProperties
-	(*Grant)(nil),              // 4: common.links.v1.Grant
-	(*GrantCondition)(nil),     // 5: common.links.v1.GrantCondition
+var file_common_bindings_v1_bindings_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_common_bindings_v1_bindings_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_common_bindings_v1_bindings_proto_goTypes = []any{
+	(BindingType)(0),           // 0: common.bindings.v1.BindingType
+	(*Binding)(nil),            // 1: common.bindings.v1.Binding
+	(*PostgresProperties)(nil), // 2: common.bindings.v1.PostgresProperties
+	(*BucketProperties)(nil),   // 3: common.bindings.v1.BucketProperties
+	(*Grant)(nil),              // 4: common.bindings.v1.Grant
+	(*GrantCondition)(nil),     // 5: common.bindings.v1.GrantCondition
 	(*structpb.Struct)(nil),    // 6: google.protobuf.Struct
 }
-var file_common_links_v1_links_proto_depIdxs = []int32{
-	2, // 0: common.links.v1.Link.postgres:type_name -> common.links.v1.PostgresProperties
-	3, // 1: common.links.v1.Link.bucket:type_name -> common.links.v1.BucketProperties
-	6, // 2: common.links.v1.Link.custom:type_name -> google.protobuf.Struct
-	4, // 3: common.links.v1.Link.grants:type_name -> common.links.v1.Grant
-	5, // 4: common.links.v1.Grant.conditions:type_name -> common.links.v1.GrantCondition
+var file_common_bindings_v1_bindings_proto_depIdxs = []int32{
+	2, // 0: common.bindings.v1.Binding.postgres:type_name -> common.bindings.v1.PostgresProperties
+	3, // 1: common.bindings.v1.Binding.bucket:type_name -> common.bindings.v1.BucketProperties
+	6, // 2: common.bindings.v1.Binding.custom:type_name -> google.protobuf.Struct
+	4, // 3: common.bindings.v1.Binding.grants:type_name -> common.bindings.v1.Grant
+	5, // 4: common.bindings.v1.Grant.conditions:type_name -> common.bindings.v1.GrantCondition
 	5, // [5:5] is the sub-list for method output_type
 	5, // [5:5] is the sub-list for method input_type
 	5, // [5:5] is the sub-list for extension type_name
@@ -519,32 +519,32 @@ var file_common_links_v1_links_proto_depIdxs = []int32{
 	0, // [0:5] is the sub-list for field type_name
 }
 
-func init() { file_common_links_v1_links_proto_init() }
-func file_common_links_v1_links_proto_init() {
-	if File_common_links_v1_links_proto != nil {
+func init() { file_common_bindings_v1_bindings_proto_init() }
+func file_common_bindings_v1_bindings_proto_init() {
+	if File_common_bindings_v1_bindings_proto != nil {
 		return
 	}
-	file_common_links_v1_links_proto_msgTypes[0].OneofWrappers = []any{
-		(*Link_Postgres)(nil),
-		(*Link_Bucket)(nil),
-		(*Link_Custom)(nil),
+	file_common_bindings_v1_bindings_proto_msgTypes[0].OneofWrappers = []any{
+		(*Binding_Postgres)(nil),
+		(*Binding_Bucket)(nil),
+		(*Binding_Custom)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_links_v1_links_proto_rawDesc), len(file_common_links_v1_links_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_bindings_v1_bindings_proto_rawDesc), len(file_common_bindings_v1_bindings_proto_rawDesc)),
 			NumEnums:      1,
 			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_common_links_v1_links_proto_goTypes,
-		DependencyIndexes: file_common_links_v1_links_proto_depIdxs,
-		EnumInfos:         file_common_links_v1_links_proto_enumTypes,
-		MessageInfos:      file_common_links_v1_links_proto_msgTypes,
+		GoTypes:           file_common_bindings_v1_bindings_proto_goTypes,
+		DependencyIndexes: file_common_bindings_v1_bindings_proto_depIdxs,
+		EnumInfos:         file_common_bindings_v1_bindings_proto_enumTypes,
+		MessageInfos:      file_common_bindings_v1_bindings_proto_msgTypes,
 	}.Build()
-	File_common_links_v1_links_proto = out.File
-	file_common_links_v1_links_proto_goTypes = nil
-	file_common_links_v1_links_proto_depIdxs = nil
+	File_common_bindings_v1_bindings_proto = out.File
+	file_common_bindings_v1_bindings_proto_goTypes = nil
+	file_common_bindings_v1_bindings_proto_depIdxs = nil
 }

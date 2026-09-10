@@ -1,18 +1,18 @@
 syntax = "proto3";
-package common.links.v1;
+package common.bindings.v1;
 
 import "google/protobuf/struct.proto";
 
-option go_package = "github.com/ocelhq/ocel/pkg/proto/common/links/v1;linksv1";
+option go_package = "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1;bindingsv1";
 
-enum LinkType {
-  LINK_TYPE_UNSPECIFIED = 0;
-  LINK_TYPE_POSTGRES = 1;
-  LINK_TYPE_BUCKET = 2;
-  LINK_TYPE_CUSTOM = 3;
+enum BindingType {
+  BINDING_TYPE_UNSPECIFIED = 0;
+  BINDING_TYPE_POSTGRES = 1;
+  BINDING_TYPE_BUCKET = 2;
+  BINDING_TYPE_CUSTOM = 3;
 }
 
-message Link {
+message Binding {
   string name = 1;
 
   oneof properties {

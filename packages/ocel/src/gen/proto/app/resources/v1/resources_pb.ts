@@ -6,24 +6,24 @@ import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegen
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { DeclareEnvRequestSchema, DeclareEnvResponseSchema, ReportEnvProblemsRequestSchema, ReportEnvProblemsResponseSchema } from "./variables_pb.js";
 import { file_app_resources_v1_variables } from "./variables_pb.js";
-import type { LinkType } from "../../../common/links/v1/links_pb.js";
-import { file_common_links_v1_links } from "../../../common/links/v1/links_pb.js";
+import type { BindingType } from "../../../common/bindings/v1/bindings_pb.js";
+import { file_common_bindings_v1_bindings } from "../../../common/bindings/v1/bindings_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file app/resources/v1/resources.proto.
  */
 export const file_app_resources_v1_resources: GenFile = /*@__PURE__*/
-  fileDesc("CiBhcHAvcmVzb3VyY2VzL3YxL3Jlc291cmNlcy5wcm90bxIQYXBwLnJlc291cmNlcy52MSJLChJSZXNvdXJjZUlkZW50aWZpZXISJwoEdHlwZRgBIAEoDjIZLmNvbW1vbi5saW5rcy52MS5MaW5rVHlwZRIMCgRuYW1lGAIgASgJIhEKD0RlY2xhcmVSZXNwb25zZSLKAQoORGVjbGFyZVJlcXVlc3QSNgoIcmVzb3VyY2UYASABKAsyJC5hcHAucmVzb3VyY2VzLnYxLlJlc291cmNlSWRlbnRpZmllchI0Cghwb3N0Z3JlcxgCIAEoCzIgLmFwcC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIwCgZidWNrZXQYAyABKAsyHi5hcHAucmVzb3VyY2VzLnYxLkJ1Y2tldENvbmZpZ0gAEg4KBnNvdXJjZRgEIAEoCUIICgZjb25maWciIQoOUG9zdGdyZXNDb25maWcSDwoHdmVyc2lvbhgBIAEoCSInCgxCdWNrZXRDb25maWcSFwoPYWxsb3dlZF9vcmlnaW5zGAEgAygJMqgCCg9SZXNvdXJjZVNlcnZpY2USTgoHRGVjbGFyZRIgLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZVJlcXVlc3QaIS5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVSZXNwb25zZRJXCgpEZWNsYXJlRW52EiMuYXBwLnJlc291cmNlcy52MS5EZWNsYXJlRW52UmVxdWVzdBokLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZUVudlJlc3BvbnNlEmwKEVJlcG9ydEVudlByb2JsZW1zEiouYXBwLnJlc291cmNlcy52MS5SZXBvcnRFbnZQcm9ibGVtc1JlcXVlc3QaKy5hcHAucmVzb3VyY2VzLnYxLlJlcG9ydEVudlByb2JsZW1zUmVzcG9uc2VCP1o9Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vYXBwL3Jlc291cmNlcy92MTtyZXNvdXJjZXN2MWIGcHJvdG8z", [file_app_resources_v1_variables, file_common_links_v1_links]);
+  fileDesc("CiBhcHAvcmVzb3VyY2VzL3YxL3Jlc291cmNlcy5wcm90bxIQYXBwLnJlc291cmNlcy52MSJRChJSZXNvdXJjZUlkZW50aWZpZXISLQoEdHlwZRgBIAEoDjIfLmNvbW1vbi5iaW5kaW5ncy52MS5CaW5kaW5nVHlwZRIMCgRuYW1lGAIgASgJIhEKD0RlY2xhcmVSZXNwb25zZSLKAQoORGVjbGFyZVJlcXVlc3QSNgoIcmVzb3VyY2UYASABKAsyJC5hcHAucmVzb3VyY2VzLnYxLlJlc291cmNlSWRlbnRpZmllchI0Cghwb3N0Z3JlcxgCIAEoCzIgLmFwcC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIwCgZidWNrZXQYAyABKAsyHi5hcHAucmVzb3VyY2VzLnYxLkJ1Y2tldENvbmZpZ0gAEg4KBnNvdXJjZRgEIAEoCUIICgZjb25maWciIQoOUG9zdGdyZXNDb25maWcSDwoHdmVyc2lvbhgBIAEoCSInCgxCdWNrZXRDb25maWcSFwoPYWxsb3dlZF9vcmlnaW5zGAEgAygJMqgCCg9SZXNvdXJjZVNlcnZpY2USTgoHRGVjbGFyZRIgLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZVJlcXVlc3QaIS5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVSZXNwb25zZRJXCgpEZWNsYXJlRW52EiMuYXBwLnJlc291cmNlcy52MS5EZWNsYXJlRW52UmVxdWVzdBokLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZUVudlJlc3BvbnNlEmwKEVJlcG9ydEVudlByb2JsZW1zEiouYXBwLnJlc291cmNlcy52MS5SZXBvcnRFbnZQcm9ibGVtc1JlcXVlc3QaKy5hcHAucmVzb3VyY2VzLnYxLlJlcG9ydEVudlByb2JsZW1zUmVzcG9uc2VCP1o9Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vYXBwL3Jlc291cmNlcy92MTtyZXNvdXJjZXN2MWIGcHJvdG8z", [file_app_resources_v1_variables, file_common_bindings_v1_bindings]);
 
 /**
  * @generated from message app.resources.v1.ResourceIdentifier
  */
 export type ResourceIdentifier = Message<"app.resources.v1.ResourceIdentifier"> & {
   /**
-   * @generated from field: common.links.v1.LinkType type = 1;
+   * @generated from field: common.bindings.v1.BindingType type = 1;
    */
-  type: LinkType;
+  type: BindingType;
 
   /**
    * @generated from field: string name = 2;

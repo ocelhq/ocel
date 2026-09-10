@@ -1538,7 +1538,9 @@ pub struct ResourceIdentifier {
         with = "::buffa::json_helpers::proto_enum",
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
     )]
-    pub r#type: ::buffa::EnumValue<super::super::super::common::links::v1::LinkType>,
+    pub r#type: ::buffa::EnumValue<
+        super::super::super::common::bindings::v1::BindingType,
+    >,
     /// Field 2: `name`
     #[serde(
         rename = "name",
@@ -4748,7 +4750,7 @@ pub mod __buffa {
         pub struct ResourceIdentifierView<'a> {
             /// Field 1: `type`
             pub r#type: ::buffa::EnumValue<
-                super::super::super::super::super::common::links::v1::LinkType,
+                super::super::super::super::super::common::bindings::v1::BindingType,
             >,
             /// Field 2: `name`
             pub name: &'a str,
@@ -5007,7 +5009,7 @@ pub mod __buffa {
             pub fn r#type(
                 &self,
             ) -> ::buffa::EnumValue<
-                super::super::super::super::super::common::links::v1::LinkType,
+                super::super::super::super::super::common::bindings::v1::BindingType,
             > {
                 self.0.reborrow().r#type
             }

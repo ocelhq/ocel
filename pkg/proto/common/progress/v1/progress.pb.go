@@ -8,7 +8,7 @@ package progressv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
-	v11 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	v11 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	v1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -1088,7 +1088,7 @@ type ResultEvent struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Success     bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Error       string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	Links       []*v11.Link            `protobuf:"bytes,3,rep,name=links,proto3" json:"links,omitempty"`
+	Bindings    []*v11.Binding         `protobuf:"bytes,3,rep,name=bindings,proto3" json:"bindings,omitempty"`
 	Functions   []*FunctionOutput      `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
 	PromotionId string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	FlipBound   *FlipBound             `protobuf:"bytes,7,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
@@ -1146,9 +1146,9 @@ func (x *ResultEvent) GetError() string {
 	return ""
 }
 
-func (x *ResultEvent) GetLinks() []*v11.Link {
+func (x *ResultEvent) GetBindings() []*v11.Binding {
 	if x != nil {
-		return x.Links
+		return x.Bindings
 	}
 	return nil
 }
@@ -1303,7 +1303,7 @@ var File_common_progress_v1_progress_proto protoreflect.FileDescriptor
 
 const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\n" +
-	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1bcommon/links/v1/links.proto\x1a\x19common/plan/v1/plan.proto\"\xfa\x03\n" +
+	"!common/progress/v1/progress.proto\x12\x12common.progress.v1\x1a\x1bbuf/validate/validate.proto\x1a!common/bindings/v1/bindings.proto\x1a\x19common/plan/v1/plan.proto\"\xfa\x03\n" +
 	"\x0eOperationEvent\x12?\n" +
 	"\bprogress\x18\x01 \x01(\v2!.common.progress.v1.ProgressEventH\x00R\bprogress\x120\n" +
 	"\x03log\x18\x02 \x01(\v2\x1c.common.progress.v1.LogEventH\x00R\x03log\x129\n" +
@@ -1364,11 +1364,11 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x128\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x1e.common.progress.v1.AppOutcomeR\aoutcome\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12\x12\n" +
-	"\x04urls\x18\x04 \x03(\tR\x04urls\"\xf5\x02\n" +
+	"\x04urls\x18\x04 \x03(\tR\x04urls\"\x81\x03\n" +
 	"\vResultEvent\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\x12+\n" +
-	"\x05links\x18\x03 \x03(\v2\x15.common.links.v1.LinkR\x05links\x12@\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x127\n" +
+	"\bbindings\x18\x03 \x03(\v2\x1b.common.bindings.v1.BindingR\bbindings\x12@\n" +
 	"\tfunctions\x18\x04 \x03(\v2\".common.progress.v1.FunctionOutputR\tfunctions\x12!\n" +
 	"\fpromotion_id\x18\x06 \x01(\tR\vpromotionId\x12<\n" +
 	"\n" +
@@ -1454,7 +1454,7 @@ var file_common_progress_v1_progress_proto_goTypes = []any{
 	(*FunctionOutput)(nil), // 16: common.progress.v1.FunctionOutput
 	(*FlipBound)(nil),      // 17: common.progress.v1.FlipBound
 	(*v1.ChangePlan)(nil),  // 18: common.plan.v1.ChangePlan
-	(*v11.Link)(nil),       // 19: common.links.v1.Link
+	(*v11.Binding)(nil),    // 19: common.bindings.v1.Binding
 }
 var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	9,  // 0: common.progress.v1.OperationEvent.progress:type_name -> common.progress.v1.ProgressEvent
@@ -1472,7 +1472,7 @@ var file_common_progress_v1_progress_proto_depIdxs = []int32{
 	7,  // 12: common.progress.v1.SpanEvent.attributes:type_name -> common.progress.v1.SpanAttribute
 	11, // 13: common.progress.v1.DnsOwedEvent.records:type_name -> common.progress.v1.DnsRecord
 	3,  // 14: common.progress.v1.AppResult.outcome:type_name -> common.progress.v1.AppOutcome
-	19, // 15: common.progress.v1.ResultEvent.links:type_name -> common.links.v1.Link
+	19, // 15: common.progress.v1.ResultEvent.bindings:type_name -> common.bindings.v1.Binding
 	16, // 16: common.progress.v1.ResultEvent.functions:type_name -> common.progress.v1.FunctionOutput
 	17, // 17: common.progress.v1.ResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
 	14, // 18: common.progress.v1.ResultEvent.apps:type_name -> common.progress.v1.AppResult

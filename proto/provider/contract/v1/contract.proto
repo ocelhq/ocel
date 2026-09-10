@@ -240,7 +240,7 @@ message ManifestResource {
     app.resources.v1.BucketConfig bucket = 4;
   }
 
-  bool linked = 5;
+  string binding = 5;
 }
 
 message DeployRequest {

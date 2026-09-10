@@ -8,8 +8,8 @@ package envvarsv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	v11 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	v1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	v11 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1112,31 +1112,31 @@ func (x *ListVersionsResponse) GetVersions() []*VersionEntry {
 	return nil
 }
 
-type SetLinkRequest struct {
+type SetBindingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
 	Tier          v1.Tier                `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
 	Environment   string                 `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
-	Link          *v11.Link              `protobuf:"bytes,4,opt,name=link,proto3" json:"link,omitempty"`
+	Binding       *v11.Binding           `protobuf:"bytes,4,opt,name=binding,proto3" json:"binding,omitempty"`
 	Owner         string                 `protobuf:"bytes,5,opt,name=owner,proto3" json:"owner,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SetLinkRequest) Reset() {
-	*x = SetLinkRequest{}
+func (x *SetBindingRequest) Reset() {
+	*x = SetBindingRequest{}
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SetLinkRequest) String() string {
+func (x *SetBindingRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SetLinkRequest) ProtoMessage() {}
+func (*SetBindingRequest) ProtoMessage() {}
 
-func (x *SetLinkRequest) ProtoReflect() protoreflect.Message {
+func (x *SetBindingRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1148,67 +1148,67 @@ func (x *SetLinkRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetLinkRequest.ProtoReflect.Descriptor instead.
-func (*SetLinkRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use SetBindingRequest.ProtoReflect.Descriptor instead.
+func (*SetBindingRequest) Descriptor() ([]byte, []int) {
 	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{20}
 }
 
-func (x *SetLinkRequest) GetSlug() string {
+func (x *SetBindingRequest) GetSlug() string {
 	if x != nil {
 		return x.Slug
 	}
 	return ""
 }
 
-func (x *SetLinkRequest) GetTier() v1.Tier {
+func (x *SetBindingRequest) GetTier() v1.Tier {
 	if x != nil {
 		return x.Tier
 	}
 	return v1.Tier(0)
 }
 
-func (x *SetLinkRequest) GetEnvironment() string {
+func (x *SetBindingRequest) GetEnvironment() string {
 	if x != nil {
 		return x.Environment
 	}
 	return ""
 }
 
-func (x *SetLinkRequest) GetLink() *v11.Link {
+func (x *SetBindingRequest) GetBinding() *v11.Binding {
 	if x != nil {
-		return x.Link
+		return x.Binding
 	}
 	return nil
 }
 
-func (x *SetLinkRequest) GetOwner() string {
+func (x *SetBindingRequest) GetOwner() string {
 	if x != nil {
 		return x.Owner
 	}
 	return ""
 }
 
-type SetLinkResponse struct {
+type SetBindingResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Version       uint64                 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SetLinkResponse) Reset() {
-	*x = SetLinkResponse{}
+func (x *SetBindingResponse) Reset() {
+	*x = SetBindingResponse{}
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SetLinkResponse) String() string {
+func (x *SetBindingResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SetLinkResponse) ProtoMessage() {}
+func (*SetBindingResponse) ProtoMessage() {}
 
-func (x *SetLinkResponse) ProtoReflect() protoreflect.Message {
+func (x *SetBindingResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1220,19 +1220,19 @@ func (x *SetLinkResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetLinkResponse.ProtoReflect.Descriptor instead.
-func (*SetLinkResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use SetBindingResponse.ProtoReflect.Descriptor instead.
+func (*SetBindingResponse) Descriptor() ([]byte, []int) {
 	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{21}
 }
 
-func (x *SetLinkResponse) GetVersion() uint64 {
+func (x *SetBindingResponse) GetVersion() uint64 {
 	if x != nil {
 		return x.Version
 	}
 	return 0
 }
 
-type RemoveLinkRequest struct {
+type RemoveBindingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
 	Tier          v1.Tier                `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
@@ -1242,20 +1242,20 @@ type RemoveLinkRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RemoveLinkRequest) Reset() {
-	*x = RemoveLinkRequest{}
+func (x *RemoveBindingRequest) Reset() {
+	*x = RemoveBindingRequest{}
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RemoveLinkRequest) String() string {
+func (x *RemoveBindingRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RemoveLinkRequest) ProtoMessage() {}
+func (*RemoveBindingRequest) ProtoMessage() {}
 
-func (x *RemoveLinkRequest) ProtoReflect() protoreflect.Message {
+func (x *RemoveBindingRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1267,60 +1267,60 @@ func (x *RemoveLinkRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveLinkRequest.ProtoReflect.Descriptor instead.
-func (*RemoveLinkRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use RemoveBindingRequest.ProtoReflect.Descriptor instead.
+func (*RemoveBindingRequest) Descriptor() ([]byte, []int) {
 	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *RemoveLinkRequest) GetSlug() string {
+func (x *RemoveBindingRequest) GetSlug() string {
 	if x != nil {
 		return x.Slug
 	}
 	return ""
 }
 
-func (x *RemoveLinkRequest) GetTier() v1.Tier {
+func (x *RemoveBindingRequest) GetTier() v1.Tier {
 	if x != nil {
 		return x.Tier
 	}
 	return v1.Tier(0)
 }
 
-func (x *RemoveLinkRequest) GetEnvironment() string {
+func (x *RemoveBindingRequest) GetEnvironment() string {
 	if x != nil {
 		return x.Environment
 	}
 	return ""
 }
 
-func (x *RemoveLinkRequest) GetName() string {
+func (x *RemoveBindingRequest) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-type RemoveLinkResponse struct {
+type RemoveBindingResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Removed       bool                   `protobuf:"varint,1,opt,name=removed,proto3" json:"removed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RemoveLinkResponse) Reset() {
-	*x = RemoveLinkResponse{}
+func (x *RemoveBindingResponse) Reset() {
+	*x = RemoveBindingResponse{}
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RemoveLinkResponse) String() string {
+func (x *RemoveBindingResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RemoveLinkResponse) ProtoMessage() {}
+func (*RemoveBindingResponse) ProtoMessage() {}
 
-func (x *RemoveLinkResponse) ProtoReflect() protoreflect.Message {
+func (x *RemoveBindingResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1332,19 +1332,19 @@ func (x *RemoveLinkResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveLinkResponse.ProtoReflect.Descriptor instead.
-func (*RemoveLinkResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use RemoveBindingResponse.ProtoReflect.Descriptor instead.
+func (*RemoveBindingResponse) Descriptor() ([]byte, []int) {
 	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{23}
 }
 
-func (x *RemoveLinkResponse) GetRemoved() bool {
+func (x *RemoveBindingResponse) GetRemoved() bool {
 	if x != nil {
 		return x.Removed
 	}
 	return false
 }
 
-type ListLinksRequest struct {
+type ListBindingsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
 	Tier          v1.Tier                `protobuf:"varint,2,opt,name=tier,proto3,enum=common.environment.v1.Tier" json:"tier,omitempty"`
@@ -1353,20 +1353,20 @@ type ListLinksRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListLinksRequest) Reset() {
-	*x = ListLinksRequest{}
+func (x *ListBindingsRequest) Reset() {
+	*x = ListBindingsRequest{}
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListLinksRequest) String() string {
+func (x *ListBindingsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListLinksRequest) ProtoMessage() {}
+func (*ListBindingsRequest) ProtoMessage() {}
 
-func (x *ListLinksRequest) ProtoReflect() protoreflect.Message {
+func (x *ListBindingsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1378,53 +1378,53 @@ func (x *ListLinksRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListLinksRequest.ProtoReflect.Descriptor instead.
-func (*ListLinksRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListBindingsRequest.ProtoReflect.Descriptor instead.
+func (*ListBindingsRequest) Descriptor() ([]byte, []int) {
 	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{24}
 }
 
-func (x *ListLinksRequest) GetSlug() string {
+func (x *ListBindingsRequest) GetSlug() string {
 	if x != nil {
 		return x.Slug
 	}
 	return ""
 }
 
-func (x *ListLinksRequest) GetTier() v1.Tier {
+func (x *ListBindingsRequest) GetTier() v1.Tier {
 	if x != nil {
 		return x.Tier
 	}
 	return v1.Tier(0)
 }
 
-func (x *ListLinksRequest) GetEnvironment() string {
+func (x *ListBindingsRequest) GetEnvironment() string {
 	if x != nil {
 		return x.Environment
 	}
 	return ""
 }
 
-type ListLinksResponse struct {
+type ListBindingsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Links         []*LinkSummary         `protobuf:"bytes,1,rep,name=links,proto3" json:"links,omitempty"`
+	Bindings      []*BindingSummary      `protobuf:"bytes,1,rep,name=bindings,proto3" json:"bindings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListLinksResponse) Reset() {
-	*x = ListLinksResponse{}
+func (x *ListBindingsResponse) Reset() {
+	*x = ListBindingsResponse{}
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListLinksResponse) String() string {
+func (x *ListBindingsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListLinksResponse) ProtoMessage() {}
+func (*ListBindingsResponse) ProtoMessage() {}
 
-func (x *ListLinksResponse) ProtoReflect() protoreflect.Message {
+func (x *ListBindingsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1436,22 +1436,22 @@ func (x *ListLinksResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListLinksResponse.ProtoReflect.Descriptor instead.
-func (*ListLinksResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListBindingsResponse.ProtoReflect.Descriptor instead.
+func (*ListBindingsResponse) Descriptor() ([]byte, []int) {
 	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{25}
 }
 
-func (x *ListLinksResponse) GetLinks() []*LinkSummary {
+func (x *ListBindingsResponse) GetBindings() []*BindingSummary {
 	if x != nil {
-		return x.Links
+		return x.Bindings
 	}
 	return nil
 }
 
-type LinkSummary struct {
+type BindingSummary struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Type          v11.LinkType           `protobuf:"varint,2,opt,name=type,proto3,enum=common.links.v1.LinkType" json:"type,omitempty"`
+	Type          v11.BindingType        `protobuf:"varint,2,opt,name=type,proto3,enum=common.bindings.v1.BindingType" json:"type,omitempty"`
 	Source        string                 `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
 	Owner         string                 `protobuf:"bytes,4,opt,name=owner,proto3" json:"owner,omitempty"`
 	Version       uint64                 `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
@@ -1460,20 +1460,20 @@ type LinkSummary struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *LinkSummary) Reset() {
-	*x = LinkSummary{}
+func (x *BindingSummary) Reset() {
+	*x = BindingSummary{}
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *LinkSummary) String() string {
+func (x *BindingSummary) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*LinkSummary) ProtoMessage() {}
+func (*BindingSummary) ProtoMessage() {}
 
-func (x *LinkSummary) ProtoReflect() protoreflect.Message {
+func (x *BindingSummary) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_envvars_v1_envvars_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1485,47 +1485,47 @@ func (x *LinkSummary) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use LinkSummary.ProtoReflect.Descriptor instead.
-func (*LinkSummary) Descriptor() ([]byte, []int) {
+// Deprecated: Use BindingSummary.ProtoReflect.Descriptor instead.
+func (*BindingSummary) Descriptor() ([]byte, []int) {
 	return file_provider_envvars_v1_envvars_proto_rawDescGZIP(), []int{26}
 }
 
-func (x *LinkSummary) GetName() string {
+func (x *BindingSummary) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *LinkSummary) GetType() v11.LinkType {
+func (x *BindingSummary) GetType() v11.BindingType {
 	if x != nil {
 		return x.Type
 	}
-	return v11.LinkType(0)
+	return v11.BindingType(0)
 }
 
-func (x *LinkSummary) GetSource() string {
+func (x *BindingSummary) GetSource() string {
 	if x != nil {
 		return x.Source
 	}
 	return ""
 }
 
-func (x *LinkSummary) GetOwner() string {
+func (x *BindingSummary) GetOwner() string {
 	if x != nil {
 		return x.Owner
 	}
 	return ""
 }
 
-func (x *LinkSummary) GetVersion() uint64 {
+func (x *BindingSummary) GetVersion() uint64 {
 	if x != nil {
 		return x.Version
 	}
 	return 0
 }
 
-func (x *LinkSummary) GetProperties() []*PropertyShape {
+func (x *BindingSummary) GetProperties() []*PropertyShape {
 	if x != nil {
 		return x.Properties
 	}
@@ -1596,7 +1596,7 @@ var File_provider_envvars_v1_envvars_proto protoreflect.FileDescriptor
 
 const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\n" +
-	"!provider/envvars/v1/envvars.proto\x12\x13provider.envvars.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a\x1bcommon/links/v1/links.proto\"\xee\x03\n" +
+	"!provider/envvars/v1/envvars.proto\x12\x13provider.envvars.v1\x1a\x1bbuf/validate/validate.proto\x1a'common/environment/v1/environment.proto\x1a!common/bindings/v1/bindings.proto\"\xee\x03\n" +
 	"\n" +
 	"Coordinate\x125\n" +
 	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xca\x01\n" +
@@ -1686,37 +1686,37 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"coordinate\x18\x02 \x01(\v2\x1f.provider.envvars.v1.CoordinateB\x06\xbaH\x03\xc8\x01\x01R\n" +
 	"coordinate\"U\n" +
 	"\x14ListVersionsResponse\x12=\n" +
-	"\bversions\x18\x01 \x03(\v2!.provider.envvars.v1.VersionEntryR\bversions\"\x97\x04\n" +
-	"\x0eSetLinkRequest\x125\n" +
-	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xd3\x01\n" +
-	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xa1\x01\xbaH\x9d\x01\xba\x01\x99\x01\n" +
-	"\x11envvars.link.tier\x12ta link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xae\x01\n" +
+	"\bversions\x18\x01 \x03(\v2!.provider.envvars.v1.VersionEntryR\bversions\"\xac\x04\n" +
+	"\x11SetBindingRequest\x125\n" +
+	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xd9\x01\n" +
+	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xa7\x01\xbaH\xa3\x01\xba\x01\x9f\x01\n" +
+	"\x14envvars.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xae\x01\n" +
 	"\venvironment\x18\x03 \x01(\tB\x8b\x01\xbaH\x87\x01\xba\x01p\n" +
-	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\x121\n" +
-	"\x04link\x18\x04 \x01(\v2\x15.common.links.v1.LinkB\x06\xbaH\x03\xc8\x01\x01R\x04link\x12\x14\n" +
-	"\x05owner\x18\x05 \x01(\tR\x05owner\"+\n" +
-	"\x0fSetLinkResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x04R\aversion\"\x80\x04\n" +
-	"\x11RemoveLinkRequest\x125\n" +
-	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xd3\x01\n" +
-	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xa1\x01\xbaH\x9d\x01\xba\x01\x99\x01\n" +
-	"\x11envvars.link.tier\x12ta link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xae\x01\n" +
+	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\x12=\n" +
+	"\abinding\x18\x04 \x01(\v2\x1b.common.bindings.v1.BindingB\x06\xbaH\x03\xc8\x01\x01R\abinding\x12\x14\n" +
+	"\x05owner\x18\x05 \x01(\tR\x05owner\".\n" +
+	"\x12SetBindingResponse\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\x04R\aversion\"\x89\x04\n" +
+	"\x14RemoveBindingRequest\x125\n" +
+	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xd9\x01\n" +
+	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xa7\x01\xbaH\xa3\x01\xba\x01\x9f\x01\n" +
+	"\x14envvars.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xae\x01\n" +
 	"\venvironment\x18\x03 \x01(\tB\x8b\x01\xbaH\x87\x01\xba\x01p\n" +
 	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\x12-\n" +
-	"\x04name\x18\x04 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x04name\".\n" +
-	"\x12RemoveLinkResponse\x12\x18\n" +
-	"\aremoved\x18\x01 \x01(\bR\aremoved\"\xd0\x03\n" +
-	"\x10ListLinksRequest\x125\n" +
-	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xd3\x01\n" +
-	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xa1\x01\xbaH\x9d\x01\xba\x01\x99\x01\n" +
-	"\x11envvars.link.tier\x12ta link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xae\x01\n" +
+	"\x04name\x18\x04 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x04name\"1\n" +
+	"\x15RemoveBindingResponse\x12\x18\n" +
+	"\aremoved\x18\x01 \x01(\bR\aremoved\"\xd9\x03\n" +
+	"\x13ListBindingsRequest\x125\n" +
+	"\x04slug\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\xd9\x01\n" +
+	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\xa7\x01\xbaH\xa3\x01\xba\x01\x9f\x01\n" +
+	"\x14envvars.binding.tier\x12wa binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier\x1a\x0ethis in [1, 2]R\x04tier\x12\xae\x01\n" +
 	"\venvironment\x18\x03 \x01(\tB\x8b\x01\xbaH\x87\x01\xba\x01p\n" +
-	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\"K\n" +
-	"\x11ListLinksResponse\x126\n" +
-	"\x05links\x18\x01 \x03(\v2 .provider.envvars.v1.LinkSummaryR\x05links\"\xdc\x01\n" +
-	"\vLinkSummary\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12-\n" +
-	"\x04type\x18\x02 \x01(\x0e2\x19.common.links.v1.LinkTypeR\x04type\x12\x16\n" +
+	"\x1eenvvars.environment.class_wide\x129\"*\" is reserved: it names the value that binds class-wide\x1a\x13!this.contains('*')r\x122\x10^[^#[:cntrl:]]*$R\venvironment\"W\n" +
+	"\x14ListBindingsResponse\x12?\n" +
+	"\bbindings\x18\x01 \x03(\v2#.provider.envvars.v1.BindingSummaryR\bbindings\"\xe5\x01\n" +
+	"\x0eBindingSummary\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x123\n" +
+	"\x04type\x18\x02 \x01(\x0e2\x1f.common.bindings.v1.BindingTypeR\x04type\x12\x16\n" +
 	"\x06source\x18\x03 \x01(\tR\x06source\x12\x14\n" +
 	"\x05owner\x18\x04 \x01(\tR\x05owner\x12\x18\n" +
 	"\aversion\x18\x05 \x01(\x04R\aversion\x12B\n" +
@@ -1726,7 +1726,7 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\rPropertyShape\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\tjson_type\x18\x02 \x01(\tR\bjsonType\x12\x12\n" +
-	"\x04list\x18\x03 \x01(\bR\x04list2\xae\b\n" +
+	"\x04list\x18\x03 \x01(\bR\x04list2\xc9\b\n" +
 	"\x0eEnvVarsService\x12W\n" +
 	"\bSetValue\x12$.provider.envvars.v1.SetValueRequest\x1a%.provider.envvars.v1.SetValueResponse\x12]\n" +
 	"\n" +
@@ -1736,11 +1736,11 @@ const file_provider_envvars_v1_envvars_proto_rawDesc = "" +
 	"\vDeleteValue\x12'.provider.envvars.v1.DeleteValueRequest\x1a(.provider.envvars.v1.DeleteValueResponse\x12c\n" +
 	"\fSetReference\x12(.provider.envvars.v1.SetReferenceRequest\x1a).provider.envvars.v1.SetReferenceResponse\x12i\n" +
 	"\x0eListReferences\x12*.provider.envvars.v1.ListReferencesRequest\x1a+.provider.envvars.v1.ListReferencesResponse\x12c\n" +
-	"\fListVersions\x12(.provider.envvars.v1.ListVersionsRequest\x1a).provider.envvars.v1.ListVersionsResponse\x12T\n" +
-	"\aSetLink\x12#.provider.envvars.v1.SetLinkRequest\x1a$.provider.envvars.v1.SetLinkResponse\x12]\n" +
+	"\fListVersions\x12(.provider.envvars.v1.ListVersionsRequest\x1a).provider.envvars.v1.ListVersionsResponse\x12]\n" +
 	"\n" +
-	"RemoveLink\x12&.provider.envvars.v1.RemoveLinkRequest\x1a'.provider.envvars.v1.RemoveLinkResponse\x12Z\n" +
-	"\tListLinks\x12%.provider.envvars.v1.ListLinksRequest\x1a&.provider.envvars.v1.ListLinksResponseB@Z>github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1;envvarsv1b\x06proto3"
+	"SetBinding\x12&.provider.envvars.v1.SetBindingRequest\x1a'.provider.envvars.v1.SetBindingResponse\x12f\n" +
+	"\rRemoveBinding\x12).provider.envvars.v1.RemoveBindingRequest\x1a*.provider.envvars.v1.RemoveBindingResponse\x12c\n" +
+	"\fListBindings\x12(.provider.envvars.v1.ListBindingsRequest\x1a).provider.envvars.v1.ListBindingsResponseB@Z>github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1;envvarsv1b\x06proto3"
 
 var (
 	file_provider_envvars_v1_envvars_proto_rawDescOnce sync.Once
@@ -1776,17 +1776,17 @@ var file_provider_envvars_v1_envvars_proto_goTypes = []any{
 	(*ListReferencesResponse)(nil), // 17: provider.envvars.v1.ListReferencesResponse
 	(*ListVersionsRequest)(nil),    // 18: provider.envvars.v1.ListVersionsRequest
 	(*ListVersionsResponse)(nil),   // 19: provider.envvars.v1.ListVersionsResponse
-	(*SetLinkRequest)(nil),         // 20: provider.envvars.v1.SetLinkRequest
-	(*SetLinkResponse)(nil),        // 21: provider.envvars.v1.SetLinkResponse
-	(*RemoveLinkRequest)(nil),      // 22: provider.envvars.v1.RemoveLinkRequest
-	(*RemoveLinkResponse)(nil),     // 23: provider.envvars.v1.RemoveLinkResponse
-	(*ListLinksRequest)(nil),       // 24: provider.envvars.v1.ListLinksRequest
-	(*ListLinksResponse)(nil),      // 25: provider.envvars.v1.ListLinksResponse
-	(*LinkSummary)(nil),            // 26: provider.envvars.v1.LinkSummary
+	(*SetBindingRequest)(nil),      // 20: provider.envvars.v1.SetBindingRequest
+	(*SetBindingResponse)(nil),     // 21: provider.envvars.v1.SetBindingResponse
+	(*RemoveBindingRequest)(nil),   // 22: provider.envvars.v1.RemoveBindingRequest
+	(*RemoveBindingResponse)(nil),  // 23: provider.envvars.v1.RemoveBindingResponse
+	(*ListBindingsRequest)(nil),    // 24: provider.envvars.v1.ListBindingsRequest
+	(*ListBindingsResponse)(nil),   // 25: provider.envvars.v1.ListBindingsResponse
+	(*BindingSummary)(nil),         // 26: provider.envvars.v1.BindingSummary
 	(*PropertyShape)(nil),          // 27: provider.envvars.v1.PropertyShape
 	(v1.Tier)(0),                   // 28: common.environment.v1.Tier
-	(*v11.Link)(nil),               // 29: common.links.v1.Link
-	(v11.LinkType)(0),              // 30: common.links.v1.LinkType
+	(*v11.Binding)(nil),            // 29: common.bindings.v1.Binding
+	(v11.BindingType)(0),           // 30: common.bindings.v1.BindingType
 }
 var file_provider_envvars_v1_envvars_proto_depIdxs = []int32{
 	0,  // 0: provider.envvars.v1.ValueMetadata.coordinate:type_name -> provider.envvars.v1.Coordinate
@@ -1815,13 +1815,13 @@ var file_provider_envvars_v1_envvars_proto_depIdxs = []int32{
 	28, // 23: provider.envvars.v1.ListVersionsRequest.tier:type_name -> common.environment.v1.Tier
 	0,  // 24: provider.envvars.v1.ListVersionsRequest.coordinate:type_name -> provider.envvars.v1.Coordinate
 	2,  // 25: provider.envvars.v1.ListVersionsResponse.versions:type_name -> provider.envvars.v1.VersionEntry
-	28, // 26: provider.envvars.v1.SetLinkRequest.tier:type_name -> common.environment.v1.Tier
-	29, // 27: provider.envvars.v1.SetLinkRequest.link:type_name -> common.links.v1.Link
-	28, // 28: provider.envvars.v1.RemoveLinkRequest.tier:type_name -> common.environment.v1.Tier
-	28, // 29: provider.envvars.v1.ListLinksRequest.tier:type_name -> common.environment.v1.Tier
-	26, // 30: provider.envvars.v1.ListLinksResponse.links:type_name -> provider.envvars.v1.LinkSummary
-	30, // 31: provider.envvars.v1.LinkSummary.type:type_name -> common.links.v1.LinkType
-	27, // 32: provider.envvars.v1.LinkSummary.properties:type_name -> provider.envvars.v1.PropertyShape
+	28, // 26: provider.envvars.v1.SetBindingRequest.tier:type_name -> common.environment.v1.Tier
+	29, // 27: provider.envvars.v1.SetBindingRequest.binding:type_name -> common.bindings.v1.Binding
+	28, // 28: provider.envvars.v1.RemoveBindingRequest.tier:type_name -> common.environment.v1.Tier
+	28, // 29: provider.envvars.v1.ListBindingsRequest.tier:type_name -> common.environment.v1.Tier
+	26, // 30: provider.envvars.v1.ListBindingsResponse.bindings:type_name -> provider.envvars.v1.BindingSummary
+	30, // 31: provider.envvars.v1.BindingSummary.type:type_name -> common.bindings.v1.BindingType
+	27, // 32: provider.envvars.v1.BindingSummary.properties:type_name -> provider.envvars.v1.PropertyShape
 	3,  // 33: provider.envvars.v1.EnvVarsService.SetValue:input_type -> provider.envvars.v1.SetValueRequest
 	5,  // 34: provider.envvars.v1.EnvVarsService.ListValues:input_type -> provider.envvars.v1.ListValuesRequest
 	7,  // 35: provider.envvars.v1.EnvVarsService.GetValue:input_type -> provider.envvars.v1.GetValueRequest
@@ -1830,9 +1830,9 @@ var file_provider_envvars_v1_envvars_proto_depIdxs = []int32{
 	14, // 38: provider.envvars.v1.EnvVarsService.SetReference:input_type -> provider.envvars.v1.SetReferenceRequest
 	16, // 39: provider.envvars.v1.EnvVarsService.ListReferences:input_type -> provider.envvars.v1.ListReferencesRequest
 	18, // 40: provider.envvars.v1.EnvVarsService.ListVersions:input_type -> provider.envvars.v1.ListVersionsRequest
-	20, // 41: provider.envvars.v1.EnvVarsService.SetLink:input_type -> provider.envvars.v1.SetLinkRequest
-	22, // 42: provider.envvars.v1.EnvVarsService.RemoveLink:input_type -> provider.envvars.v1.RemoveLinkRequest
-	24, // 43: provider.envvars.v1.EnvVarsService.ListLinks:input_type -> provider.envvars.v1.ListLinksRequest
+	20, // 41: provider.envvars.v1.EnvVarsService.SetBinding:input_type -> provider.envvars.v1.SetBindingRequest
+	22, // 42: provider.envvars.v1.EnvVarsService.RemoveBinding:input_type -> provider.envvars.v1.RemoveBindingRequest
+	24, // 43: provider.envvars.v1.EnvVarsService.ListBindings:input_type -> provider.envvars.v1.ListBindingsRequest
 	4,  // 44: provider.envvars.v1.EnvVarsService.SetValue:output_type -> provider.envvars.v1.SetValueResponse
 	6,  // 45: provider.envvars.v1.EnvVarsService.ListValues:output_type -> provider.envvars.v1.ListValuesResponse
 	8,  // 46: provider.envvars.v1.EnvVarsService.GetValue:output_type -> provider.envvars.v1.GetValueResponse
@@ -1841,9 +1841,9 @@ var file_provider_envvars_v1_envvars_proto_depIdxs = []int32{
 	15, // 49: provider.envvars.v1.EnvVarsService.SetReference:output_type -> provider.envvars.v1.SetReferenceResponse
 	17, // 50: provider.envvars.v1.EnvVarsService.ListReferences:output_type -> provider.envvars.v1.ListReferencesResponse
 	19, // 51: provider.envvars.v1.EnvVarsService.ListVersions:output_type -> provider.envvars.v1.ListVersionsResponse
-	21, // 52: provider.envvars.v1.EnvVarsService.SetLink:output_type -> provider.envvars.v1.SetLinkResponse
-	23, // 53: provider.envvars.v1.EnvVarsService.RemoveLink:output_type -> provider.envvars.v1.RemoveLinkResponse
-	25, // 54: provider.envvars.v1.EnvVarsService.ListLinks:output_type -> provider.envvars.v1.ListLinksResponse
+	21, // 52: provider.envvars.v1.EnvVarsService.SetBinding:output_type -> provider.envvars.v1.SetBindingResponse
+	23, // 53: provider.envvars.v1.EnvVarsService.RemoveBinding:output_type -> provider.envvars.v1.RemoveBindingResponse
+	25, // 54: provider.envvars.v1.EnvVarsService.ListBindings:output_type -> provider.envvars.v1.ListBindingsResponse
 	44, // [44:55] is the sub-list for method output_type
 	33, // [33:44] is the sub-list for method input_type
 	33, // [33:33] is the sub-list for extension type_name
