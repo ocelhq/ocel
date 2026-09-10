@@ -5,6 +5,24 @@ import (
 	"testing"
 )
 
+func TestPreviewSiteLabelIsTheFirstLabelOfTheHostname(t *testing.T) {
+	t.Parallel()
+
+	shared := SharedPreview("shop", "preview.acme.com")
+	if got := shared.Label("pr-12", "web"); got != "shop--pr-12--web" {
+		t.Errorf("got %q, want the label the hostname carries in front of the base domain", got)
+	}
+	if label, host := shared.Label("pr-12", ""), shared.Host("pr-12", ""); host != label+".preview.acme.com" {
+		t.Errorf("label %q and host %q disagree: what routes on the label is what DNS answers", label, host)
+	}
+	if got := SharedPreview("shop", "").Label("pr-12", ""); got != "shop--pr-12" {
+		t.Errorf("got %q, want the label a site with no base domain still names: the label is what a service is named, not where it is served", got)
+	}
+	if got := shared.Label("", "web"); got != "" {
+		t.Errorf("no pointer = %q, want nothing", got)
+	}
+}
+
 func TestPreviewSiteHost(t *testing.T) {
 	t.Parallel()
 
