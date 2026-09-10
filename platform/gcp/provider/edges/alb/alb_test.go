@@ -271,6 +271,46 @@ func TestDestroyingThePreviewWildcardTakesItsRouteAndLeavesTheFrontStanding(t *t
 	}
 }
 
+func TestAWildcardWhoseFrontFailsToRiseIsOwnedByNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	front, w := fronting(t)
+	w.breakUp(FrontStack(providerkit.ClassPreview), errors.New("the preview front would not rise"))
+
+	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err == nil {
+		t.Fatal("ReconcilePreviewWildcard = nil, want the failure the front reported")
+	}
+
+	owner, err := front.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
+	if err != nil || owner != "" {
+		t.Errorf("DomainOwner(%s) = %q, %v, want nothing: a reconcile that never raised a front serves no wildcard, "+
+			"and a record claiming it would refuse every project that asks to bind one", edge.PreviewWildcard(previewBase), owner, err)
+	}
+}
+
+func TestAWildcardWhoseTeardownFailsIsStillOwnedSoTheRetryStillTearsItDown(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	front, w := fronting(t)
+	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
+		t.Fatalf("ReconcilePreviewWildcard = %v", err)
+	}
+	w.breakUp(FrontStack(providerkit.ClassPreview), errors.New("the preview front would not rise"))
+
+	if err := front.DestroyPreviewWildcard(ctx, previewBase); err == nil {
+		t.Fatal("DestroyPreviewWildcard = nil, want the failure the front reported")
+	}
+
+	owner, err := front.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
+	if err != nil || owner != edge.PreviewEntryOwner {
+		t.Errorf("DomainOwner(%s) = %q, %v, want %q: the neg and the certificate map entry are still standing, "+
+			"and a retry that read the wildcard as gone would leave them there forever",
+			edge.PreviewWildcard(previewBase), owner, err, edge.PreviewEntryOwner)
+	}
+}
+
 func TestThePreviewWildcardIsHeldWhileAProjectIsStillServedOnIt(t *testing.T) {
 	t.Parallel()
 
