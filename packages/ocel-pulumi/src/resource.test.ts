@@ -150,12 +150,12 @@ describe("declaring a postgres binding", () => {
 });
 
 describe("publishing a postgres binding", () => {
-  it("runs ocel binding set in the project, owned by this resource", async () => {
+  it("runs ocel bindings set in the project, owned by this resource", async () => {
     const created = await postgresProvider.create(await inputs(declare()));
 
     const { command, args, options } = argv();
     expect(command).toBe(process.execPath);
-    expect(args).toEqual([entry, "binding", "set", "--owner", ownerUrn]);
+    expect(args).toEqual([entry, "bindings", "set", "--owner", ownerUrn]);
     expect(options).toMatchObject({ cwd: root });
     expect(JSON.parse(String(options?.input))).toEqual({
       name: "orders",
@@ -261,13 +261,13 @@ describe("changing a published postgres binding", () => {
 });
 
 describe("removing a postgres binding", () => {
-  it("runs ocel binding rm for the name it published", async () => {
+  it("runs ocel bindings rm for the name it published", async () => {
     const created = await postgresProvider.create(await inputs(declare()));
     run.mockClear();
 
     await postgresProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual([entry, "binding", "rm", "orders"]);
+    expect(argv().args).toEqual([entry, "bindings", "rm", "orders"]);
     expect(argv().options).toMatchObject({ cwd: root });
   });
 });
@@ -299,11 +299,11 @@ describe("declaring a custom binding", () => {
     });
   });
 
-  it("runs ocel binding set with a custom record sourced to pulumi", async () => {
+  it("runs ocel bindings set with a custom record sourced to pulumi", async () => {
     const created = await customProvider.create(await inputs(declareCustom()));
 
     const { args, options } = argv();
-    expect(args).toEqual([entry, "binding", "set", "--owner", customOwner]);
+    expect(args).toEqual([entry, "bindings", "set", "--owner", customOwner]);
     expect(JSON.parse(String(options?.input))).toEqual({
       name: "network",
       custom: network,
@@ -335,12 +335,12 @@ describe("declaring a custom binding", () => {
     });
   });
 
-  it("runs ocel binding rm for the name it published", async () => {
+  it("runs ocel bindings rm for the name it published", async () => {
     const created = await customProvider.create(await inputs(declareCustom()));
     run.mockClear();
 
     await customProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual([entry, "binding", "rm", "network"]);
+    expect(argv().args).toEqual([entry, "bindings", "rm", "network"]);
   });
 });

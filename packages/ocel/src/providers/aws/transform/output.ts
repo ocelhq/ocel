@@ -14,7 +14,7 @@ declare const resolvedValue: unique symbol;
  * place of one a transform module could write down. It is resolved provider-side
  * against the records published to the environment being deployed, so a module
  * never holds the value itself. `T` is what the record carries under that
- * property, known only once `ocel binding generate` has written it down.
+ * property, known only once `ocel bindings generate` has written it down.
  */
 export interface BindingOutput<T = unknown> {
   readonly [outputPlaceholderKey]: BindingOutputRef;
@@ -34,7 +34,7 @@ export type BindingPlaceholders = { readonly [binding: string]: BindingPropertie
  * The placeholders `L` describes: one property of one record per field, each
  * carrying the type that record publishes it as. `G` is what marks `L` as
  * written down; while nothing has augmented it — nothing has run
- * `ocel binding generate` — every name stays open and the deploy is the check.
+ * `ocel bindings generate` — every name stays open and the deploy is the check.
  */
 export type BindingPlaceholdersOf<L, G> = keyof G extends never
   ? BindingPlaceholders

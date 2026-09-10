@@ -191,7 +191,7 @@ describe("the gap list", () => {
 
   it("lists no leg marker, refuse or publish title on floci, on any edge", () => {
     const publish =
-      "publish · ocel binding ls lists both records with their name, type, source and owner";
+      "publish · ocel bindings ls lists both records with their name, type, source and owner";
     for (const [name, cell] of Object.entries(expectationsFor("aws.floci"))) {
       assert.ok(!("redeploy" in cell) && !("rollback" in cell) && !(DESTROY_TITLE in cell), name);
       assert.ok(!("refuse" in cell) && !(publish in cell), name);

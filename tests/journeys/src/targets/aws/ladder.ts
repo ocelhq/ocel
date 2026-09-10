@@ -212,7 +212,7 @@ export async function refuse(cell: CellContext): Promise<void> {
 
 export const ladderRows: LadderRow[] = [
   {
-    title: "ocel binding ls lists both records with their name, type, source and owner",
+    title: "ocel bindings ls lists both records with their name, type, source and owner",
     phase: "publish",
     run: async (cell) => {
       const dir = await workTree(cell, "aws");
@@ -220,7 +220,7 @@ export const ladderRows: LadderRow[] = [
         ...process.env,
         OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)),
       };
-      const result = await ocel(dir, ["binding", "ls", "--log-format", "json"], env);
+      const result = await ocel(dir, ["bindings", "ls", "--log-format", "json"], env);
       const parsed = JSON.parse(result.stdout) as {
         bindings: Array<{ name: string; type: string; source: string; owner: string }>;
       };
@@ -229,7 +229,7 @@ export const ladderRows: LadderRow[] = [
         assert.equal(
           listed.length,
           1,
-          `ocel binding ls lists ${listed.length} records named ${name}, want 1`,
+          `ocel bindings ls lists ${listed.length} records named ${name}, want 1`,
         );
         assert.ok(listed[0]!.type.length > 0, `${name} is listed with no type`);
         assert.ok(listed[0]!.source.length > 0, `${name} is listed with no source`);
