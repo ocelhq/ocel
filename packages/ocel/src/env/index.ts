@@ -1,83 +1,67 @@
-import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { callSiteFile } from "../utils/callsite.js";
 import { defer } from "../utils/defer.js";
+import { type Env, envAccessor, FIXED } from "./access.js";
 import { declareEnv } from "./declare.js";
 import {
-  type Definitions,
+  type EnvDefinitions,
+  type FlatDefinitions,
   isLive,
   type VariableDefinition,
   validateDefinitions,
 } from "./definition.js";
 import { EnvValueError } from "./errors.js";
 import { liveGeneration, NO_GENERATION, readLive } from "./live.js";
+import { sourceOf } from "./schema.js";
 import { assertInScope, inScope } from "./scope.js";
-import { coerce, readDelivered, undeclared } from "./value.js";
+import { coerce, readDelivered } from "./value.js";
 
+export type { Env } from "./access.js";
 export { EnvClientError } from "./client.js";
 export type {
   Definitions,
+  EnvDefinitions,
+  GroupDefinition,
+  GroupOptions,
   VariableClass,
   VariableDefinition,
 } from "./definition.js";
+export { group } from "./definition.js";
 export { type Deployment, deployment } from "./deployment.js";
 export { EnvDefinitionError, EnvEdgeError, EnvValueError } from "./errors.js";
 export { EnvScopeError } from "./scope.js";
 
-export type Env<TDefinitions extends Definitions> = {
-  readonly [K in keyof TDefinitions]: TDefinitions[K]["schema"] extends StandardSchemaV1
-    ? StandardSchemaV1.InferOutput<TDefinitions[K]["schema"]>
-    : string;
-};
-
-export function defineEnv<const TDefinitions extends Definitions>(
+export function defineEnv<const TDefinitions extends EnvDefinitions>(
   definitions: TDefinitions,
 ): Env<TDefinitions> {
   const source = callSiteFile();
-  validateDefinitions(definitions, source);
+  const flat = validateDefinitions(definitions, source);
 
   if (process.env.OCEL_PHASE === "discovery") {
-    defer(declareEnv(definitions, source));
+    defer(declareEnv(flat, source, sourceOf(definitions)));
   }
 
-  const resolved = new Map<string, { generation: number; value: unknown }>();
-  const env = new Proxy({} as Env<TDefinitions>, {
-    get(_target, property) {
-      if (typeof property === "symbol") return undefined;
+  const env = envAccessor(definitions, { resolve, delivered, generationOf });
 
-      const key = property;
-      const definition = definitions[key];
-      if (!definition) throw undeclared(key);
-      const generation = generationOf(definition);
-      const memo = resolved.get(key);
-      if (memo?.generation === generation) return memo.value;
-
-      const value = resolve(key, definition);
-      resolved.set(key, { generation, value });
-      return value;
-    },
-  });
-
-  validateLiveValues(definitions, env);
+  validateLiveValues(flat, env);
   return env;
 }
 
-const FIXED = -1;
+function delivered(key: string, definition: VariableDefinition): boolean {
+  return read(key, definition) !== undefined;
+}
 
 function generationOf(definition: VariableDefinition): number {
   return isLive(definition) ? liveGeneration() : FIXED;
 }
 
-function validateLiveValues<TDefinitions extends Definitions>(
-  definitions: TDefinitions,
-  env: Env<TDefinitions>,
-): void {
+function validateLiveValues(definitions: FlatDefinitions, env: Env<EnvDefinitions>): void {
   if (liveGeneration() === NO_GENERATION) return;
   if (process.env.OCEL_PHASE === "discovery") return;
 
   for (const [key, definition] of Object.entries(definitions)) {
     if (!isLive(definition)) continue;
     if (!inScope(definition.folders ?? [])) continue;
-    void env[key as keyof TDefinitions];
+    void env[definition.group ?? key];
   }
 }
 

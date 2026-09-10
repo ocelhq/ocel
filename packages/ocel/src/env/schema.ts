@@ -1,7 +1,7 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { callSiteFile } from "../utils/callsite.js";
 import { EnvClientError } from "./client.js";
-import type { Definitions } from "./definition.js";
+import type { Definitions, EnvDefinitions } from "./definition.js";
 import { parse } from "./standard.js";
 
 const SOURCE: unique symbol = Symbol.for("ocel.env.schema");
@@ -26,7 +26,7 @@ export function envSchema<const TDefinitions extends Definitions>(
 }
 
 /** The module a set of definitions was declared in through {@link envSchema}, or `""`. */
-export function sourceOf(definitions: Definitions): string {
+export function sourceOf(definitions: EnvDefinitions): string {
   const source = (definitions as { [SOURCE]?: unknown })[SOURCE];
   return typeof source === "string" ? source : "";
 }

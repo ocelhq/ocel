@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from "vitest";
 import { z } from "zod";
-import { defineEnv } from "./index.js";
+import { defineEnv, group } from "./index.js";
 
 describe("the object defineEnv hands back", () => {
   it("types a schemaless variable as a string and a schema'd one as its output", () => {
@@ -67,5 +67,35 @@ describe("client access on an encrypted class", () => {
       TYPED_CLIENT_LIVE: { class: "secret", client: true },
     });
     defineEnv({ TYPED_CLIENT_OK: { class: "plain", client: true } });
+  });
+});
+
+describe("a group of variables", () => {
+  it("types an optional group as possibly absent and a required one as always there", () => {
+    const env = defineEnv({
+      github: group(
+        { TYPED_GITHUB_ID: { class: "plain" }, TYPED_GITHUB_SECRET: { class: "secret" } },
+        { optional: true, description: "Enable GitHub sign-in" },
+      ),
+      smtp: group({ TYPED_SMTP_HOST: { class: "plain" } }),
+    });
+
+    expectTypeOf(env.github).toEqualTypeOf<
+      { readonly TYPED_GITHUB_ID: string; readonly TYPED_GITHUB_SECRET: string } | undefined
+    >();
+    expectTypeOf(env.smtp).toEqualTypeOf<{ readonly TYPED_SMTP_HOST: string }>();
+  });
+
+  it("flows a member's schema output through the group", () => {
+    const env = defineEnv({
+      ports: group({ TYPED_GROUP_PORT: { class: "plain", schema: z.coerce.number() } }),
+      optionalPorts: group(
+        { TYPED_GROUP_OPTIONAL_PORT: { class: "plain", schema: z.coerce.number() } },
+        { optional: true },
+      ),
+    });
+
+    expectTypeOf(env.ports.TYPED_GROUP_PORT).toEqualTypeOf<number>();
+    expectTypeOf(env.optionalPorts?.TYPED_GROUP_OPTIONAL_PORT).toEqualTypeOf<number | undefined>();
   });
 });
