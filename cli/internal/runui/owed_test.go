@@ -52,7 +52,7 @@ func TestARefusalIsTheFailureNotADetailUnderOne(t *testing.T) {
 
 	got := out.String()
 	for _, want := range []string{
-		"✗ 1 variable is not ready — nothing has been built.\n\n  ✗ STRIPE_API_KEY  root  no value\n\n  Fill them in: ocel env set STRIPE_API_KEY <VALUE>\n\n  the variables UI closed",
+		"✗ 1 variable is not ready — nothing has been built.\n\n  ✗ STRIPE_API_KEY  root  no value\n\n  Fill them in: ocel env set STRIPE_API_KEY=<VALUE>\n\n  the variables UI closed",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("stdout = %q, want it to contain %q", got, want)

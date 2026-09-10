@@ -290,7 +290,7 @@ class _Variable:
             raise EnvValueError(
                 self.key,
                 f"is set but does not satisfy its type: {self.complaint(_said(error))}. "
-                f"Fix it with `ocel env set {self.key} <VALUE>`.",
+                f"Fix it with `ocel env set {self.key}=<VALUE>`.",
             ) from None
 
 
@@ -625,4 +625,4 @@ def _delivered(key: str) -> str | None:
 
 
 def _unset(key: str) -> EnvValueError:
-    return EnvValueError(key, f"has no value. Set one with `ocel env set {key} <VALUE>`.")
+    return EnvValueError(key, f"has no value. Set one with `ocel env set {key}=<VALUE>`.")

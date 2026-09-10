@@ -142,35 +142,47 @@ func envCoordinate(slug, key string, opts envOptions) *envvarsv1.Coordinate {
 }
 
 func runEnvSet(ctx context.Context, deps cmddeps.Deps, cwd, key, value string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
+	return runEnvSetPairs(ctx, deps, cwd, []envSetPair{{key: key, value: value}}, opts, stdin, stdout, stderr)
+}
+
+func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []envSetPair, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
 	if opts.dev {
-		return runEnvSetDev(ctx, deps, cwd, key, value, opts, stdout, stderr)
+		return runEnvSetDevPairs(ctx, deps, cwd, pairs, opts, stdout, stderr)
 	}
 	if opts.folder != "" {
 		if err := envgate.ValidateFolder(opts.folder); err != nil {
 			return err
 		}
 	}
+	key := ""
+	if len(pairs) > 0 {
+		key = pairs[0].key
+	}
 	return withEnvProviderSealing(ctx, deps, cwd, opts, stdin, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
 		definitions, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err
 		}
-		if err := envgate.CheckWritable(definitions, key, opts.folder); err != nil {
-			return err
+		for _, pair := range pairs {
+			if err := envgate.CheckWritable(definitions, pair.key, opts.folder); err != nil {
+				return err
+			}
 		}
 		vars, err := runner.Vars()
 		if err != nil {
 			return err
 		}
-		resp, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
-			Tier:       envTier(opts),
-			Coordinate: envCoordinate(cfg.Slug, key, opts),
-			Value:      value,
-		})
-		if err != nil {
-			return err
+		for _, pair := range pairs {
+			resp, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+				Tier:       envTier(opts),
+				Coordinate: envCoordinate(cfg.Slug, pair.key, opts),
+				Value:      pair.value,
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, opts), resp.GetMetadata().GetVersion())
 		}
-		fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(key, opts), resp.GetMetadata().GetVersion())
 		if preflight.RunsAContainer(cfg, standing.GetComputes()) {
 			fmt.Fprintln(stdout,
 				"This project runs on container compute, which carries nothing of ocel's to re-read a value: the container serving now keeps the value its deploy handed it, and this one lands on the next deploy. Run `ocel deploy`.")
@@ -264,7 +276,7 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 			return err
 		}
 		if !resp.GetFound() {
-			return fmt.Errorf("no value is set for %s; set one with `ocel env set %s <VALUE>`%s", describeCell(key, opts), key, descriptionLine(descriptions(definitions)[key]))
+			return fmt.Errorf("no value is set for %s; set one with `ocel env set %s=<VALUE>`%s", describeCell(key, opts), key, descriptionLine(descriptions(definitions)[key]))
 		}
 
 		if opts.reveal {
@@ -423,7 +435,7 @@ func renderReferences(stdout io.Writer, cell string, references []*envvarsv1.Coo
 
 func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environments []string, descriptions map[string]string) {
 	if len(values) == 0 {
-		fmt.Fprintln(stdout, "No values set. Set one with `ocel env set <KEY> <VALUE>`.")
+		fmt.Fprintln(stdout, "No values set. Set one with `ocel env set <KEY>=<VALUE>`.")
 		return
 	}
 	orphans := false

@@ -93,14 +93,14 @@ pub enum Error {
     },
 
     /// A declared variable has no value.
-    #[error("'{key}' has no value. Set one with `ocel env set {key} <VALUE>`.")]
+    #[error("'{key}' has no value. Set one with `ocel env set {key}=<VALUE>`.")]
     Unset {
         /// The variable the value belongs to.
         key: String,
     },
 
     /// A declared variable has a value its field type rejects.
-    #[error("'{key}' is set but does not satisfy its type: {detail}. Fix it with `ocel env set {key} <VALUE>`.")]
+    #[error("'{key}' is set but does not satisfy its type: {detail}. Fix it with `ocel env set {key}=<VALUE>`.")]
     Invalid {
         /// The variable the value belongs to.
         key: String,

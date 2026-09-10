@@ -489,7 +489,7 @@ def test_a_variable_nothing_is_set_for_names_the_command_that_sets_one(monkeypat
     with pytest.raises(ocel.EnvValueError) as raised:
         _ = Env().nothing_set
     assert str(raised.value) == (
-        "'NOTHING_SET' has no value. Set one with `ocel env set NOTHING_SET <VALUE>`."
+        "'NOTHING_SET' has no value. Set one with `ocel env set NOTHING_SET=<VALUE>`."
     )
 
 
@@ -503,7 +503,7 @@ def test_a_value_its_annotation_rejects_names_the_command_that_fixes_it(monkeypa
         _ = Env().port
     assert str(raised.value) == (
         "'PORT' is set but does not satisfy its type: invalid literal for int() with base "
-        "10: 'eighty'. Fix it with `ocel env set PORT <VALUE>`."
+        "10: 'eighty'. Fix it with `ocel env set PORT=<VALUE>`."
     )
 
 

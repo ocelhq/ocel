@@ -35,7 +35,7 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 				"",
 				"  ✗ STRIPE_API_KEY  root  no value",
 				"",
-				"  Fill them in: ocel env set STRIPE_API_KEY <VALUE>",
+				"  Fill them in: ocel env set STRIPE_API_KEY=<VALUE>",
 			}, "\n"),
 		},
 		{
@@ -53,7 +53,7 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 				"  ✗ STRIPE_KEY    /web           no value",
 				"  ✗ SENTRY_DSN    /services/api  no value",
 				"",
-				"  Fill them in: ocel env set <KEY> <VALUE> --folder <FOLDER>",
+				"  Fill them in: ocel env set <KEY>=<VALUE> --folder <FOLDER>",
 			}, "\n"),
 		},
 		{
@@ -71,7 +71,7 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 				"  ✗ PORT          root  set, but not a number",
 				"  ✗ API_BASE      /web  set, but it does not satisfy its schema",
 				"",
-				"  Fill them in: ocel env set <KEY> <VALUE> --folder <FOLDER> --preview",
+				"  Fill them in: ocel env set <KEY>=<VALUE> --folder <FOLDER> --preview",
 			}, "\n"),
 		},
 		{
@@ -83,7 +83,7 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 				"",
 				"  ✗ STRIPE_KEY  /web  no value",
 				"",
-				"  Fill them in: ocel env set STRIPE_KEY <VALUE> --folder /web --preview",
+				"  Fill them in: ocel env set STRIPE_KEY=<VALUE> --folder /web --preview",
 			}, "\n"),
 		},
 		{

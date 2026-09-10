@@ -62,19 +62,27 @@ func withDevStore(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts 
 	return run(&devStore{client: envstore.New(apiURL), token: creds.AccessToken, projectID: link.ProjectID}, cfg)
 }
 
-func runEnvSetDev(ctx context.Context, deps cmddeps.Deps, cwd, key, value string, opts envOptions, stdout, stderr io.Writer) error {
+func runEnvSetDevPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []envSetPair, opts envOptions, stdout, stderr io.Writer) error {
+	key := ""
+	if len(pairs) > 0 {
+		key = pairs[0].key
+	}
 	return withDevStore(ctx, deps, cwd, key, opts, stderr, func(store *devStore, cfg *projectconfig.Config) error {
 		definitions, err := declaredVariables(ctx, deps, cfg, nil, key, opts, stderr)
 		if err != nil {
 			return err
 		}
-		if err := checkDevWritable(definitions, key); err != nil {
-			return err
+		for _, pair := range pairs {
+			if err := checkDevWritable(definitions, pair.key); err != nil {
+				return err
+			}
 		}
-		if err := store.client.Set(ctx, store.token, store.projectID, key, value); err != nil {
-			return err
+		for _, pair := range pairs {
+			if err := store.client.Set(ctx, store.token, store.projectID, pair.key, pair.value); err != nil {
+				return err
+			}
+			fmt.Fprintf(stdout, "Set %s for `ocel dev`. Every developer linked to this project resolves it; a deploy resolves none of it.\n", pair.key)
 		}
-		fmt.Fprintf(stdout, "Set %s for `ocel dev`. Every developer linked to this project resolves it; a deploy resolves none of it.\n", key)
 		return nil
 	})
 }
@@ -117,7 +125,7 @@ func runEnvGetDev(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts 
 		}
 		held, err := store.client.Get(ctx, store.token, store.projectID, key)
 		if errors.Is(err, envstore.ErrNoValue) {
-			return fmt.Errorf("no value is set for %s in dev; set one with `ocel env set %s <VALUE> --dev`%s", key, key, descriptionLine(descriptions(definitions)[key]))
+			return fmt.Errorf("no value is set for %s in dev; set one with `ocel env set %s=<VALUE> --dev`%s", key, key, descriptionLine(descriptions(definitions)[key]))
 		}
 		if err != nil {
 			return err
@@ -149,7 +157,7 @@ func runEnvRmDev(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts e
 
 func renderDevValues(stdout io.Writer, values []envstore.Value, descriptions map[string]string) {
 	if len(values) == 0 {
-		fmt.Fprintln(stdout, "No dev values set. Set one with `ocel env set <KEY> <VALUE> --dev`.")
+		fmt.Fprintln(stdout, "No dev values set. Set one with `ocel env set <KEY>=<VALUE> --dev`.")
 		return
 	}
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)

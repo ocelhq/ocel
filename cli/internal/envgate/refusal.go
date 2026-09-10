@@ -61,7 +61,7 @@ func (r *Refusal) remedy() string {
 	if len(r.Problems) == 1 {
 		key, folder = r.Problems[0].GetKey(), r.Problems[0].GetFolder()
 	}
-	cmd := fmt.Sprintf("ocel env set %s <VALUE>", key)
+	cmd := fmt.Sprintf("ocel env set %s=<VALUE>", key)
 	if inFolder {
 		cmd += " --folder " + folder
 	}

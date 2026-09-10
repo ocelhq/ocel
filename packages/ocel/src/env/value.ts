@@ -22,12 +22,12 @@ export function coerce(
   if (result.ok) return result.value;
   if (raw === undefined) throw unset(key);
   throw new EnvValueError(
-    `'${key}' is set but does not satisfy its schema: ${complaint(definition, result.message)}. Fix it with \`ocel env set ${key} <VALUE>\`.`,
+    `'${key}' is set but does not satisfy its schema: ${complaint(definition, result.message)}. Fix it with \`ocel env set ${key}=<VALUE>\`.`,
   );
 }
 
 function unset(key: string): EnvValueError {
-  return new EnvValueError(`'${key}' has no value. Set one with \`ocel env set ${key} <VALUE>\`.`);
+  return new EnvValueError(`'${key}' has no value. Set one with \`ocel env set ${key}=<VALUE>\`.`);
 }
 
 export function undeclared(key: string): EnvValueError {

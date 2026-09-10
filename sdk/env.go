@@ -431,7 +431,7 @@ func resolve(target reflect.Value, vars []variable) error {
 		}
 		value, err := parse(v.field.Type, raw)
 		if err != nil {
-			return &EnvValueError{Key: v.key, Detail: fmt.Sprintf("is set but does not satisfy its type: %s. Fix it with `ocel env set %s <VALUE>`.", v.complaint(err.Error()), v.key)}
+			return &EnvValueError{Key: v.key, Detail: fmt.Sprintf("is set but does not satisfy its type: %s. Fix it with `ocel env set %s=<VALUE>`.", v.complaint(err.Error()), v.key)}
 		}
 		target.Field(v.index).Set(value)
 	}
@@ -439,7 +439,7 @@ func resolve(target reflect.Value, vars []variable) error {
 }
 
 func unset(key string) *EnvValueError {
-	return &EnvValueError{Key: key, Detail: fmt.Sprintf("has no value. Set one with `ocel env set %s <VALUE>`.", key)}
+	return &EnvValueError{Key: key, Detail: fmt.Sprintf("has no value. Set one with `ocel env set %s=<VALUE>`.", key)}
 }
 
 func inScope(folders []string) bool {
