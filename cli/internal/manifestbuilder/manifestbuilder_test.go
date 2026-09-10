@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -85,8 +84,8 @@ func marshal(t *testing.T, m *contractv1.Manifest) []byte {
 
 func synthDeclarations() []Declaration {
 	return []Declaration{
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "analytics", Postgres: &resourcesv1.PostgresConfig{Version: "16"}, Source: "app/analytics.ts:9"},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "analytics", Postgres: &resourcesv1.PostgresConfig{Version: "16"}, Source: "app/analytics.ts:9"},
 	}
 }
 
@@ -204,7 +203,7 @@ func TestBuild(t *testing.T) {
 		}
 
 		withExtra := append(append([]Declaration{}, base...), Declaration{
-			Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "billing", Source: "app/billing.ts:2",
+			Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "billing", Source: "app/billing.ts:2",
 		})
 		after, err := Build("proj-1", nil, nil, "serverless", withExtra, nil, nil, nil)
 		if err != nil {
@@ -230,7 +229,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, "serverless", []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
 		}, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -253,7 +252,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, nil, "serverless", []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "storage", Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}, Source: "app/storage.ts:3"},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "storage", Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}, Source: "app/storage.ts:3"},
 		}, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -279,8 +278,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, "serverless", []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Source: "app/db.ts:5"},
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Source: "app/other.ts:12"},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Source: "app/db.ts:5"},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Source: "app/other.ts:12"},
 		}, nil, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected duplicate error, got nil")
@@ -356,8 +355,8 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, "serverless", []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "my_uploads", Source: "app/a.ts:1"},
-			{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "my-uploads", Source: "app/b.ts:2"},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "my_uploads", Source: "app/a.ts:1"},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "my-uploads", Source: "app/b.ts:2"},
 		}, nil, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected a collision error, got nil")
@@ -390,7 +389,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, "serverless", []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_UNSPECIFIED, Name: "main"},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED, Name: "main"},
 		}, nil, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected error for unsupported resource type, got nil")
@@ -401,7 +400,7 @@ func TestBuild(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, nil, "serverless", []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: ""},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: ""},
 		}, nil, nil, nil)
 		if err == nil {
 			t.Fatal("Build: expected error for empty id, got nil")
@@ -780,8 +779,8 @@ func TestBuildUsages(t *testing.T) {
 	t.Parallel()
 
 	declarations := []Declaration{
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Source: "shared/db.ts:3"},
-		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Source: "shared/files.ts:3"},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Source: "shared/db.ts:3"},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Source: "shared/files.ts:3"},
 	}
 
 	t.Run("lands one edge per app and resource, files deduped and sorted", func(t *testing.T) {
@@ -789,12 +788,12 @@ func TestBuildUsages(t *testing.T) {
 
 		manifest, err := Build("proj-1", nil, []App{
 			{Name: "api", Usages: []Usage{
-				{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/server.ts"}},
-				{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/reports.ts", "apps/api/src/server.ts"}},
-				{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/api/src/server.ts"}},
+				{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/server.ts"}},
+				{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/reports.ts", "apps/api/src/server.ts"}},
+				{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/api/src/server.ts"}},
 			}},
 			{Name: "worker", Usages: []Usage{
-				{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/worker/src/worker.ts"}},
+				{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/worker/src/worker.ts"}},
 			}},
 		}, "serverless", declarations, nil, nil, nil)
 		if err != nil {
@@ -819,7 +818,7 @@ func TestBuildUsages(t *testing.T) {
 		t.Parallel()
 
 		manifest, err := Build("proj-1", nil, []App{
-			{Name: "api", Usages: []Usage{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/server.ts"}}}},
+			{Name: "api", Usages: []Usage{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/server.ts"}}}},
 		}, "serverless", declarations, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("Build err = %v", err)
@@ -837,7 +836,7 @@ func TestBuildUsages(t *testing.T) {
 		t.Parallel()
 
 		_, err := Build("proj-1", nil, []App{
-			{Name: "api", Usages: []Usage{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "ghost", Files: []string{"apps/api/src/server.ts"}}}},
+			{Name: "api", Usages: []Usage{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "ghost", Files: []string{"apps/api/src/server.ts"}}}},
 		}, "serverless", declarations, nil, nil, nil)
 
 		var dangling *DanglingUsageError
@@ -865,49 +864,75 @@ func TestBuildUsages(t *testing.T) {
 	})
 }
 
-func TestBindLinks(t *testing.T) {
+func TestBindBindings(t *testing.T) {
 	declarations := []Declaration{
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "ocel/db.ts:1"},
-		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/bucket.ts:1"},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "ocel/db.ts:1"},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/bucket.ts:1"},
+	}
+	postgres := func(name, external string) Binding {
+		return Binding{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: name, External: external}
 	}
 
-	t.Run("a listed id marks the resource ocel does not provision", func(t *testing.T) {
+	t.Run("a bound resource carries the name the record is published under", func(t *testing.T) {
 		t.Parallel()
-		manifest, err := Build("proj-1", nil, nil, "serverless", declarations, []string{"main"}, nil, nil)
+		manifest, err := Build("proj-1", nil, nil, "serverless", declarations, []Binding{postgres("main", "sst-pg-main")}, nil, nil)
 		if err != nil {
 			t.Fatalf("Build: %v", err)
 		}
-		linked := map[string]bool{}
+		bound := map[string]string{}
 		for _, r := range manifest.GetResources() {
-			linked[r.GetLogicalName()] = r.GetLinked()
+			bound[r.GetLogicalName()] = r.GetBinding()
 		}
-		if !linked["db--main"] {
-			t.Errorf("db--main linked = false, want the listed id bound to a published record")
+		if bound["db--main"] != "sst-pg-main" {
+			t.Errorf("db--main binding = %q, want the published name the provider looks the record up by", bound["db--main"])
 		}
-		if linked["bucket--uploads"] {
-			t.Errorf("bucket--uploads linked = true, want an unlisted id to provision as before")
-		}
-	})
-
-	t.Run("a listed id nothing declares is refused", func(t *testing.T) {
-		t.Parallel()
-		_, err := Build("proj-1", nil, nil, "serverless", declarations, []string{"orders"}, nil, nil)
-		var unbound *UnboundLinkError
-		if !errors.As(err, &unbound) || unbound.Link != "orders" {
-			t.Fatalf("Build err = %v, want an *UnboundLinkError naming orders", err)
+		if bound["bucket--uploads"] != "" {
+			t.Errorf("bucket--uploads binding = %q, want an unbound resource provisioned as before", bound["bucket--uploads"])
 		}
 	})
 
-	t.Run("a listed id two resources answer to is refused", func(t *testing.T) {
+	t.Run("a name nothing declares is refused", func(t *testing.T) {
 		t.Parallel()
-		ambiguous := append(append([]Declaration{}, declarations...), Declaration{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "main", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/blob.ts:1"})
-		_, err := Build("proj-1", nil, nil, "serverless", ambiguous, []string{"main"}, nil, nil)
-		var clash *AmbiguousLinkError
-		if !errors.As(err, &clash) {
-			t.Fatalf("Build err = %v, want an *AmbiguousLinkError", err)
+		_, err := Build("proj-1", nil, nil, "serverless", declarations, []Binding{postgres("orders", "sst-pg-orders")}, nil, nil)
+		var unbound *UndeclaredBindingError
+		if !errors.As(err, &unbound) || unbound.Name != "orders" {
+			t.Fatalf("Build err = %v, want an *UndeclaredBindingError naming orders", err)
 		}
-		if clash.First != "bucket--main" || clash.Second != "db--main" {
-			t.Errorf("clash = %+v, want both resources the id names", clash)
+	})
+
+	t.Run("a name declared as another type is refused before any credential is read", func(t *testing.T) {
+		t.Parallel()
+		_, err := Build("proj-1", nil, nil, "serverless", declarations, []Binding{postgres("uploads", "sst-pg-uploads")}, nil, nil)
+		var mismatch *BindingTypeError
+		if !errors.As(err, &mismatch) {
+			t.Fatalf("Build err = %v, want a *BindingTypeError: the type key is what catches this without a provider round trip", err)
+		}
+		if mismatch.Name != "uploads" {
+			t.Errorf("mismatch = %+v, want it to name uploads", mismatch)
+		}
+		for _, want := range []string{"postgres", "bucket", "uploads"} {
+			if !strings.Contains(mismatch.Error(), want) {
+				t.Errorf("err = %v, want it to carry %q", mismatch, want)
+			}
+		}
+	})
+
+	t.Run("one declared name under two types binds each apart", func(t *testing.T) {
+		t.Parallel()
+		both := append(append([]Declaration{}, declarations...), Declaration{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "main", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/blob.ts:1"})
+		manifest, err := Build("proj-1", nil, nil, "serverless", both, []Binding{
+			postgres("main", "sst-pg-main"),
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "main", External: "sst-s3-main"},
+		}, nil, nil)
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		bound := map[string]string{}
+		for _, r := range manifest.GetResources() {
+			bound[r.GetLogicalName()] = r.GetBinding()
+		}
+		if bound["db--main"] != "sst-pg-main" || bound["bucket--main"] != "sst-s3-main" {
+			t.Errorf("bound = %v, want the type key to tell two resources of one name apart", bound)
 		}
 	})
 
@@ -918,8 +943,8 @@ func TestBindLinks(t *testing.T) {
 			t.Fatalf("Build: %v", err)
 		}
 		for _, r := range manifest.GetResources() {
-			if r.GetLinked() {
-				t.Errorf("%s linked = true, want nothing bound where nothing is listed", r.GetLogicalName())
+			if r.GetBinding() != "" {
+				t.Errorf("%s binding = %q, want nothing bound where nothing is written", r.GetLogicalName(), r.GetBinding())
 			}
 		}
 	})

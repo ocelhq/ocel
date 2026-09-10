@@ -9,42 +9,42 @@ export type {
 } from "./define";
 export { defineTransform } from "./define";
 
-import { type LinkPlaceholdersOf, links as openLinks } from "./output";
+import { type BindingPlaceholdersOf, bindings as openBindings } from "./output";
 
 /**
  * The records published to the coordinate a deploy targets, each property
- * under the type it carries. `ocel link generate` writes an augmentation of
+ * under the type it carries. `ocel binding generate` writes an augmentation of
  * this interface from the records themselves; until something does, every
  * name is open and the deploy is what checks it.
  */
-export interface Links {}
+export interface Bindings {}
 
 /**
- * Whether `ocel link generate` has written the records down. It augments this
- * separately from `Links`, so a coordinate that published nothing still closes
- * `Links` to the empty set instead of reading as never generated.
+ * Whether `ocel binding generate` has written the records down. It augments this
+ * separately from `Bindings`, so a coordinate that published nothing still closes
+ * `Bindings` to the empty set instead of reading as never generated.
  */
-export interface LinksGenerated {}
+export interface BindingsGenerated {}
 
 /** The placeholders a transform module reads, narrowed by whatever was generated. */
-export type TransformLinks = LinkPlaceholdersOf<Links, LinksGenerated>;
+export type TransformBindings = BindingPlaceholdersOf<Bindings, BindingsGenerated>;
 
 /**
  * The published records a transform module reads, one placeholder per property
- * named. Nothing is resolved here: `links.orders.host` is the instruction the
+ * named. Nothing is resolved here: `bindings.orders.host` is the instruction the
  * deploy carries out against the records published to the environment it targets.
  */
-export const links = openLinks as TransformLinks;
+export const bindings = openBindings as TransformBindings;
 
 export type {
-  Linked,
-  LinkOutput,
-  LinkOutputRef,
-  LinkPlaceholders,
-  LinkPlaceholdersOf,
-  LinkProperties,
+  BindingOutput,
+  BindingOutputRef,
+  BindingPlaceholders,
+  BindingPlaceholdersOf,
+  BindingProperties,
+  Bound,
 } from "./output";
-export { isLinkOutput } from "./output";
+export { isBindingOutput } from "./output";
 export type {
   AwsSurfaces,
   BucketBucketSurface,

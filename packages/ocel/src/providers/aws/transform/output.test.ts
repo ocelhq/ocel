@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defineTransform } from "./define";
 import { type EvaluateRequest, evaluate, type TransformModule } from "./evaluate";
-import { isLinkOutput, links, outputPlaceholderKey } from "./output";
+import { bindings, isBindingOutput, outputPlaceholderKey } from "./output";
 
 function request(): EvaluateRequest {
   return {
@@ -33,32 +33,32 @@ function transformModule(
   return { specifier, rules };
 }
 
-describe("links", () => {
+describe("bindings", () => {
   it("names one property of one published record", () => {
-    expect(links.network!.lambdaSecurityGroupId).toEqual({
+    expect(bindings.network!.lambdaSecurityGroupId).toEqual({
       [outputPlaceholderKey]: {
-        link: "network",
+        binding: "network",
         property: "lambdaSecurityGroupId",
       },
     });
   });
 
   it("hands out a frozen placeholder that names no list", () => {
-    const placeholder = links.network!.privateSubnetIds!;
+    const placeholder = bindings.network!.privateSubnetIds!;
 
     expect(Object.isFrozen(placeholder)).toBe(true);
     expect(Object.isFrozen(placeholder[outputPlaceholderKey])).toBe(true);
-    expect(Object.keys(placeholder[outputPlaceholderKey])).toEqual(["link", "property"]);
+    expect(Object.keys(placeholder[outputPlaceholderKey])).toEqual(["binding", "property"]);
   });
 
-  it("refuses an output that names no link or no property", () => {
-    expect(() => links[""]!.privateSubnetIds).toThrow(/names no link/);
-    expect(() => links.network![""]).toThrow(/names no property/);
+  it("refuses an output that names no binding or no property", () => {
+    expect(() => bindings[""]!.privateSubnetIds).toThrow(/names no binding/);
+    expect(() => bindings.network![""]).toThrow(/names no property/);
   });
 
   it("manufactures nothing for a symbol or for the thenable trap", async () => {
-    const published = links as Record<string | symbol, unknown>;
-    const network = links.network as Record<string | symbol, unknown>;
+    const published = bindings as Record<string | symbol, unknown>;
+    const network = bindings.network as Record<string | symbol, unknown>;
 
     expect(published.then).toBeUndefined();
     expect(published[Symbol.iterator]).toBeUndefined();
@@ -69,19 +69,19 @@ describe("links", () => {
   });
 
   it("recognises what it authored and nothing else", () => {
-    expect(isLinkOutput(links.network!.vpcId)).toBe(true);
-    expect(isLinkOutput("subnet-a")).toBe(false);
-    expect(isLinkOutput(null)).toBe(false);
-    expect(isLinkOutput(["subnet-a"])).toBe(false);
+    expect(isBindingOutput(bindings.network!.vpcId)).toBe(true);
+    expect(isBindingOutput("subnet-a")).toBe(false);
+    expect(isBindingOutput(null)).toBe(false);
+    expect(isBindingOutput(["subnet-a"])).toBe(false);
   });
 });
 
-describe("evaluate with link outputs", () => {
+describe("evaluate with binding outputs", () => {
   it("carries a placeholder through to the deploy in place of a value", () => {
     const got = evaluate(request(), [
       transformModule(
         "vpc.ts",
-        defineTransform(({ links: published }) => ({
+        defineTransform(({ bindings: published }) => ({
           function: {
             vpc: {
               subnetIds: published.network!.privateSubnetIds,
@@ -93,14 +93,14 @@ describe("evaluate with link outputs", () => {
     ]);
 
     expect(got.resources[0]!.surfaces.vpc).toEqual({
-      subnetIds: links.network!.privateSubnetIds,
-      securityGroupIds: links.network!.lambdaSecurityGroupIds,
+      subnetIds: bindings.network!.privateSubnetIds,
+      securityGroupIds: bindings.network!.lambdaSecurityGroupIds,
     });
   });
 
   it("serializes to what the deploy decodes", () => {
-    expect(JSON.parse(JSON.stringify(links.network!.privateSubnetIds))).toEqual({
-      $ocelOutput: { link: "network", property: "privateSubnetIds" },
+    expect(JSON.parse(JSON.stringify(bindings.network!.privateSubnetIds))).toEqual({
+      $ocelOutput: { binding: "network", property: "privateSubnetIds" },
     });
   });
 
@@ -111,7 +111,7 @@ describe("evaluate with link outputs", () => {
           "vpc.ts",
           defineTransform({
             function: {
-              vpc: () => ({ subnetIds: links.network!.privateSubnetIds }) as never,
+              vpc: () => ({ subnetIds: bindings.network!.privateSubnetIds }) as never,
             },
           }),
         ),
@@ -126,7 +126,7 @@ describe("evaluate with link outputs", () => {
           "vpc.ts",
           defineTransform({
             function: {
-              vpc: { vpcId: links.network!.vpcId } as never,
+              vpc: { vpcId: bindings.network!.vpcId } as never,
             },
           }),
         ),

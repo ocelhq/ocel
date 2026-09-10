@@ -60,7 +60,7 @@ func TestPostgresDeclaresDuringDiscovery(t *testing.T) {
 	}
 
 	resource, _ := got["resource"].(map[string]any)
-	if resource["type"] != "LINK_TYPE_POSTGRES" || resource["name"] != "main" {
+	if resource["type"] != "RESOURCE_TYPE_POSTGRES" || resource["name"] != "main" {
 		t.Errorf("resource = %v", resource)
 	}
 	postgres, _ := got["postgres"].(map[string]any)
@@ -138,33 +138,33 @@ func TestConnectionStringPercentEncodesCredentials(t *testing.T) {
 	}
 }
 
-func TestAMissingLinkNamesTheCommandsThatDeliverIt(t *testing.T) {
+func TestAMissingBindingNamesTheCommandsThatDeliverIt(t *testing.T) {
 	_, err := ocel.Postgres("main").ConnectionString()
 
 	want := "Value for OCEL_RESOURCE_POSTGRES_main is not defined. " +
-		"Run `ocel dev` to resolve it locally, or `ocel deploy` to have it delivered from the resource this app links."
+		"Run `ocel dev` to resolve it locally, or `ocel deploy` to have it delivered from the resource this app binds."
 	if err == nil || err.Error() != want {
 		t.Errorf("ConnectionString() error = %v, want %q", err, want)
 	}
 }
 
-func TestALinkOfAnotherTypeIsRefused(t *testing.T) {
+func TestABindingOfAnotherTypeIsRefused(t *testing.T) {
 	t.Setenv("OCEL_RESOURCE_POSTGRES_main", `{"name":"main","bucket":{"bucket":"b"}}`)
 
 	_, err := ocel.Postgres("main").ConnectionString()
 
-	want := "OCEL_RESOURCE_POSTGRES_main carries a BUCKET link, and this app reads it as a POSTGRES"
+	want := "OCEL_RESOURCE_POSTGRES_main carries a BUCKET binding, and this app reads it as a POSTGRES"
 	if err == nil || err.Error() != want {
 		t.Errorf("ConnectionString() error = %v, want %q", err, want)
 	}
 }
 
-func TestAMalformedLinkKeepsTheValueOutOfTheError(t *testing.T) {
+func TestAMalformedBindingKeepsTheValueOutOfTheError(t *testing.T) {
 	t.Setenv("OCEL_RESOURCE_POSTGRES_main", `{"name":"main","postgres":{"password":s3cretpassword}}`)
 
 	_, err := ocel.Postgres("main").ConnectionString()
 	if err == nil {
-		t.Fatal("ConnectionString() succeeded on a malformed link, want error")
+		t.Fatal("ConnectionString() succeeded on a malformed binding, want error")
 	}
 	if strings.Contains(err.Error(), "s3cretpassword") {
 		t.Errorf("ConnectionString() error = %q, want it to keep the value out", err)
@@ -174,14 +174,14 @@ func TestAMalformedLinkKeepsTheValueOutOfTheError(t *testing.T) {
 	}
 }
 
-func TestAMissingLinkIsAMissingLinkError(t *testing.T) {
+func TestAMissingBindingIsAMissingBindingError(t *testing.T) {
 	_, err := ocel.Postgres("main").ConnectionString()
 
-	var missing *ocel.MissingLinkError
+	var missing *ocel.MissingBindingError
 	if !errors.As(err, &missing) {
-		t.Fatalf("ConnectionString() error = %v, want a *ocel.MissingLinkError", err)
+		t.Fatalf("ConnectionString() error = %v, want a *ocel.MissingBindingError", err)
 	}
 	if missing.Key != "OCEL_RESOURCE_POSTGRES_main" {
-		t.Errorf("Key = %q, want the env var the link arrives in", missing.Key)
+		t.Errorf("Key = %q, want the env var the binding arrives in", missing.Key)
 	}
 }

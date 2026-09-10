@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
 func storeValues(projectEnv, dotfile map[string]string) map[string]string {
@@ -78,18 +78,23 @@ func localResourceRefusal(err error, dotfileKeys map[string]struct{}, run invoca
 		if keyErr != nil {
 			return keyErr
 		}
-		example, exampleErr := exampleLink(resource.Type, resource.Name)
+		example, exampleErr := exampleBinding(resource.Type, resource.Name)
 		if exampleErr != nil {
 			return exampleErr
 		}
 		fmt.Fprintf(&b, "\n  %s %s\n    no %s is set, and this run resolves a resource from %s alone\n    fix: add %s=%s to %s\n",
-			strings.ToLower(naming.EnvFragment(resource.Type)), resource.Name, key, dotenv.FileName, key, example, dotenv.FileName)
+			strings.ToLower(typeFragment(resource.Type)), resource.Name, key, dotenv.FileName, key, example, dotenv.FileName)
 		if hint := shellHint(key, dotfileKeys, run); hint != "" {
 			b.WriteString("    " + hint + "\n")
 		}
 	}
 	fmt.Fprintf(&b, "\nSet the entries above in %s, then run `%s` again.", dotenv.FileName, run.command())
 	return errors.New(b.String())
+}
+
+func typeFragment(t resourcesv1.ResourceType) string {
+	bound, _ := naming.BindableAs(t)
+	return naming.EnvFragment(bound)
 }
 
 func localPlural(n int) string {
@@ -99,11 +104,12 @@ func localPlural(n int) string {
 	return fmt.Sprintf("%d resources are", n)
 }
 
-func exampleLink(t linksv1.LinkType, name string) (string, error) {
-	link := &linksv1.Link{Name: name}
-	switch t {
-	case linksv1.LinkType_LINK_TYPE_POSTGRES:
-		link.Properties = &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
+func exampleBinding(t resourcesv1.ResourceType, name string) (string, error) {
+	bound, _ := naming.BindableAs(t)
+	binding := &bindingsv1.Binding{Name: name}
+	switch bound {
+	case bindingsv1.BindingType_BINDING_TYPE_POSTGRES:
+		binding.Properties = &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 			Host: "localhost", Port: 5432, Database: name, Username: name, Password: "a-password",
 		}}
 	default:
@@ -111,10 +117,10 @@ func exampleLink(t linksv1.LinkType, name string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		link.Properties = &linksv1.Link_Custom{Custom: fields}
+		binding.Properties = &bindingsv1.Binding_Custom{Custom: fields}
 	}
 
-	encoded, err := protojson.Marshal(link)
+	encoded, err := protojson.Marshal(binding)
 	if err != nil {
 		return "", err
 	}

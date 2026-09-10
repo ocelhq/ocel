@@ -8,8 +8,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
@@ -61,7 +61,7 @@ func appURLs(results []*progressv1.AppResult, name string) []string {
 	return nil
 }
 
-func publishServiceMap(cfg *projectconfig.Config, manifest *contractv1.Manifest, env *environmentv1.Environment, tag, promotionID string, links []*linksv1.Link) error {
+func publishServiceMap(cfg *projectconfig.Config, manifest *contractv1.Manifest, env *environmentv1.Environment, tag, promotionID string, bindings []*bindingsv1.Binding) error {
 	record := servicemap.Derive(servicemap.Deploy{
 		Slug: cfg.Slug,
 		Environment: servicemap.Environment{
@@ -70,7 +70,7 @@ func publishServiceMap(cfg *projectconfig.Config, manifest *contractv1.Manifest,
 		},
 		PromotionID: promotionID,
 		Tag:         tag,
-	}, manifest, links)
+	}, manifest, bindings)
 
 	if err := servicemap.Write(cfg.Dir, record); err != nil {
 		return fmt.Errorf("publish service map: %w", err)

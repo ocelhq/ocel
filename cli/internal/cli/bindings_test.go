@@ -17,37 +17,37 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
-const fakeLinkPassword = "pw-never-listed-7c31"
+const fakeBindingPassword = "pw-never-listed-7c31"
 
-func setUpLinkFixture(t *testing.T) string {
+func setUpBindingFixture(t *testing.T) string {
 	t.Helper()
 	root, _ := clitest.SetUpDeployFixture(t)
-	t.Setenv(clitest.FakeLinksStoreEnvVar, filepath.Join(t.TempDir(), "links.json"))
+	t.Setenv(clitest.FakeBindingsStoreEnvVar, filepath.Join(t.TempDir(), "bindings.json"))
 	return root
 }
 
-func postgresLinkJSON(name, host string) string {
+func postgresBindingJSON(name, host string) string {
 	return fmt.Sprintf(`{
   "name": %q,
   "source": "aws:rds:%s",
   "postgres": {"host": %q, "port": 5432, "database": "app", "username": "app", "password": %q}
-}`, name, name, host, fakeLinkPassword)
+}`, name, name, host, fakeBindingPassword)
 }
 
-func linkSet(t *testing.T, root, body string, opts bindingsOptions) string {
+func bindingSet(t *testing.T, root, body string, opts bindingsOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runLinkSet(context.Background(), newDeps(), root, strings.NewReader(body), opts, &stdout, &stderr); err != nil {
-		t.Fatalf("runLinkSet err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	if err := runBindingsSet(context.Background(), newDeps(), root, strings.NewReader(body), opts, &stdout, &stderr); err != nil {
+		t.Fatalf("runBindingsSet err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
 }
 
-func linkLs(t *testing.T, root string, opts bindingsOptions) string {
+func bindingLs(t *testing.T, root string, opts bindingsOptions) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runLinkLs(context.Background(), newDeps(), root, opts, &stdout, &stderr); err != nil {
-		t.Fatalf("runLinkLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	if err := runBindingsLs(context.Background(), newDeps(), root, opts, &stdout, &stderr); err != nil {
+		t.Fatalf("runBindingsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 	return stdout.String()
 }
@@ -68,43 +68,43 @@ func jsonOutput(t *testing.T) {
 	logFormatFlag = string(runui.FormatJSON)
 }
 
-func TestRunLinkSet(t *testing.T) {
+func TestRunBindingsSet(t *testing.T) {
 	t.Run("the record it publishes is what ls shows, and rm takes it away", func(t *testing.T) {
-		root := setUpLinkFixture(t)
+		root := setUpBindingFixture(t)
 
-		if out := linkSet(t, root, postgresLinkJSON("main", "db.internal"), bindingsOptions{}); !strings.Contains(out, "main") {
-			t.Errorf("set stdout = %q, want it to name the link it published", out)
+		if out := bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{}); !strings.Contains(out, "main") {
+			t.Errorf("set stdout = %q, want it to name the binding it published", out)
 		}
 
-		listed := linkLs(t, root, bindingsOptions{})
-		for _, want := range []string{"main", "postgres", "aws:rds:main", defaultLinkOwner} {
+		listed := bindingLs(t, root, bindingsOptions{})
+		for _, want := range []string{"main", "postgres", "aws:rds:main", defaultBindingOwner} {
 			if !strings.Contains(listed, want) {
 				t.Errorf("ls stdout = %q, want it to show %q", listed, want)
 			}
 		}
 
 		var rm, stderr bytes.Buffer
-		if err := runLinkRm(context.Background(), newDeps(), root, "main", bindingsOptions{}, &rm, &stderr); err != nil {
-			t.Fatalf("runLinkRm err = %v; stderr=%s", err, stderr.String())
+		if err := runBindingsRm(context.Background(), newDeps(), root, "main", bindingsOptions{}, &rm, &stderr); err != nil {
+			t.Fatalf("runBindingsRm err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(rm.String(), "main") {
-			t.Errorf("rm stdout = %q, want it to name the link it removed", rm.String())
+			t.Errorf("rm stdout = %q, want it to name the binding it removed", rm.String())
 		}
 
-		if after := linkLs(t, root, bindingsOptions{}); strings.Contains(after, "main") {
-			t.Errorf("ls after rm = %q, want the link gone", after)
+		if after := bindingLs(t, root, bindingsOptions{}); strings.Contains(after, "main") {
+			t.Errorf("ls after rm = %q, want the binding gone", after)
 		}
 	})
 
 	t.Run("refuses to take a name another publisher holds", func(t *testing.T) {
-		root := setUpLinkFixture(t)
-		linkSet(t, root, postgresLinkJSON("main", "db.internal"), bindingsOptions{owner: "terraform"})
+		root := setUpBindingFixture(t)
+		bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{owner: "terraform"})
 
 		var stdout, stderr bytes.Buffer
-		err := runLinkSet(context.Background(), newDeps(), root,
-			strings.NewReader(postgresLinkJSON("main", "other.internal")), bindingsOptions{owner: "cli"}, &stdout, &stderr)
+		err := runBindingsSet(context.Background(), newDeps(), root,
+			strings.NewReader(postgresBindingJSON("main", "other.internal")), bindingsOptions{owner: "cli"}, &stdout, &stderr)
 		if err == nil {
-			t.Fatal("runLinkSet over another publisher's link err = nil, want a refusal")
+			t.Fatal("runBindingsSet over another publisher's binding err = nil, want a refusal")
 		}
 		for _, want := range []string{"terraform", "cli"} {
 			if !strings.Contains(err.Error(), want) {
@@ -114,100 +114,100 @@ func TestRunLinkSet(t *testing.T) {
 	})
 
 	t.Run("refuses to publish as ocel's own provisioning", func(t *testing.T) {
-		root := setUpLinkFixture(t)
+		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runLinkSet(context.Background(), newDeps(), root,
-			strings.NewReader(postgresLinkJSON("main", "db.internal")), bindingsOptions{owner: "OCEL"}, &stdout, &stderr)
+		err := runBindingsSet(context.Background(), newDeps(), root,
+			strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{owner: "OCEL"}, &stdout, &stderr)
 		if err == nil {
-			t.Fatal("runLinkSet --owner OCEL err = nil, want a refusal")
+			t.Fatal("runBindingsSet --owner OCEL err = nil, want a refusal")
 		}
 		if !strings.Contains(err.Error(), "OCEL") {
 			t.Errorf("err = %v, want it to name the publisher it refused", err)
 		}
-		if listed := linkLs(t, root, bindingsOptions{}); strings.Contains(listed, "main") {
-			t.Errorf("ls = %q, want the refused link never published", listed)
+		if listed := bindingLs(t, root, bindingsOptions{}); strings.Contains(listed, "main") {
+			t.Errorf("ls = %q, want the refused binding never published", listed)
 		}
 	})
 
 	t.Run("the same publisher bumps the version", func(t *testing.T) {
-		root := setUpLinkFixture(t)
+		root := setUpBindingFixture(t)
 		opts := bindingsOptions{owner: "terraform"}
-		linkSet(t, root, postgresLinkJSON("main", "db.internal"), opts)
-		if out := linkSet(t, root, postgresLinkJSON("main", "moved.internal"), opts); !strings.Contains(out, "2") {
+		bindingSet(t, root, postgresBindingJSON("main", "db.internal"), opts)
+		if out := bindingSet(t, root, postgresBindingJSON("main", "moved.internal"), opts); !strings.Contains(out, "2") {
 			t.Errorf("second set stdout = %q, want version 2", out)
 		}
 
-		listed := linkLs(t, root, bindingsOptions{})
+		listed := bindingLs(t, root, bindingsOptions{})
 		if !strings.Contains(listed, "terraform") {
 			t.Errorf("ls stdout = %q, want the publisher that holds the name", listed)
 		}
 	})
 
-	t.Run("rm takes a link whatever published it", func(t *testing.T) {
-		root := setUpLinkFixture(t)
-		linkSet(t, root, postgresLinkJSON("main", "db.internal"), bindingsOptions{owner: "terraform"})
+	t.Run("rm takes a binding whatever published it", func(t *testing.T) {
+		root := setUpBindingFixture(t)
+		bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{owner: "terraform"})
 
 		var stdout, stderr bytes.Buffer
-		if err := runLinkRm(context.Background(), newDeps(), root, "main", bindingsOptions{}, &stdout, &stderr); err != nil {
-			t.Fatalf("runLinkRm over another publisher's link err = %v; stderr=%s", err, stderr.String())
+		if err := runBindingsRm(context.Background(), newDeps(), root, "main", bindingsOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runBindingsRm over another publisher's binding err = %v; stderr=%s", err, stderr.String())
 		}
-		if after := linkLs(t, root, bindingsOptions{}); strings.Contains(after, "main") {
-			t.Errorf("ls after rm = %q, want the link gone", after)
+		if after := bindingLs(t, root, bindingsOptions{}); strings.Contains(after, "main") {
+			t.Errorf("ls after rm = %q, want the binding gone", after)
 		}
 	})
 
 	t.Run("reports nothing to remove", func(t *testing.T) {
-		root := setUpLinkFixture(t)
+		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		if err := runLinkRm(context.Background(), newDeps(), root, "never-published", bindingsOptions{}, &stdout, &stderr); err != nil {
-			t.Fatalf("runLinkRm err = %v; stderr=%s", err, stderr.String())
+		if err := runBindingsRm(context.Background(), newDeps(), root, "never-published", bindingsOptions{}, &stdout, &stderr); err != nil {
+			t.Fatalf("runBindingsRm err = %v; stderr=%s", err, stderr.String())
 		}
 		if !strings.Contains(stdout.String(), "never-published") {
-			t.Errorf("rm of a link that was never published = %q, want it to name what it looked for", stdout.String())
+			t.Errorf("rm of a binding that was never published = %q, want it to name what it looked for", stdout.String())
 		}
 	})
 
-	t.Run("refuses stdin that is not a link", func(t *testing.T) {
-		root := setUpLinkFixture(t)
+	t.Run("refuses stdin that is not a binding", func(t *testing.T) {
+		root := setUpBindingFixture(t)
 
 		for name, body := range map[string]string{
-			"not JSON at all":         "postgres://db.internal/app",
-			"a field no link carries": `{"name":"main","postgres":{"host":"db.internal"},"nonsense":true}`,
-			"nothing at all on stdin": "",
-			"JSON that is not a link": `["main"]`,
-			"a link with no name":     `{"postgres":{"host":"db.internal"}}`,
+			"not JSON at all":            "postgres://db.internal/app",
+			"a field no binding carries": `{"name":"main","postgres":{"host":"db.internal"},"nonsense":true}`,
+			"nothing at all on stdin":    "",
+			"JSON that is not a binding": `["main"]`,
+			"a binding with no name":     `{"postgres":{"host":"db.internal"}}`,
 		} {
 			t.Run(name, func(t *testing.T) {
 				var stdout, stderr bytes.Buffer
-				err := runLinkSet(context.Background(), newDeps(), root, strings.NewReader(body), bindingsOptions{}, &stdout, &stderr)
+				err := runBindingsSet(context.Background(), newDeps(), root, strings.NewReader(body), bindingsOptions{}, &stdout, &stderr)
 				if err == nil {
-					t.Fatalf("runLinkSet(%q) err = nil, want a refusal", body)
+					t.Fatalf("runBindingsSet(%q) err = nil, want a refusal", body)
 				}
-				if listed := linkLs(t, root, bindingsOptions{}); strings.Contains(listed, "main") {
-					t.Errorf("ls = %q, want the refused link never published", listed)
+				if listed := bindingLs(t, root, bindingsOptions{}); strings.Contains(listed, "main") {
+					t.Errorf("ls = %q, want the refused binding never published", listed)
 				}
 			})
 		}
 	})
 }
 
-func TestRunLinkLs(t *testing.T) {
+func TestRunBindingsLs(t *testing.T) {
 	t.Run("never prints a property value", func(t *testing.T) {
-		root := setUpLinkFixture(t)
-		linkSet(t, root, postgresLinkJSON("main", "db.internal"), bindingsOptions{})
+		root := setUpBindingFixture(t)
+		bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{})
 
 		for name, run := range map[string]func() string{
-			"human": func() string { return linkLs(t, root, bindingsOptions{}) },
+			"human": func() string { return bindingLs(t, root, bindingsOptions{}) },
 			"json": func() string {
 				jsonOutput(t)
-				return linkLs(t, root, bindingsOptions{})
+				return bindingLs(t, root, bindingsOptions{})
 			},
 		} {
 			t.Run(name, func(t *testing.T) {
 				out := run()
-				for _, secret := range []string{fakeLinkPassword, "db.internal", "5432"} {
+				for _, secret := range []string{fakeBindingPassword, "db.internal", "5432"} {
 					if strings.Contains(out, secret) {
 						t.Errorf("ls stdout = %q, want no property value printed (found %q)", out, secret)
 					}
@@ -217,14 +217,14 @@ func TestRunLinkLs(t *testing.T) {
 	})
 
 	t.Run("reports an empty listing", func(t *testing.T) {
-		root := setUpLinkFixture(t)
-		if out := linkLs(t, root, bindingsOptions{}); !strings.Contains(out, "ocel link set") {
+		root := setUpBindingFixture(t)
+		if out := bindingLs(t, root, bindingsOptions{}); !strings.Contains(out, "ocel bindings set") {
 			t.Errorf("ls with nothing published = %q, want it to name the command that publishes one", out)
 		}
 	})
 }
 
-func customLinkJSON(name string) string {
+func customBindingJSON(name string) string {
 	return fmt.Sprintf(`{
   "name": %q,
   "source": "terraform:module.network",
@@ -232,13 +232,13 @@ func customLinkJSON(name string) string {
 }`, name)
 }
 
-func linkGenerate(t *testing.T, root string, opts bindingsOptions) (string, string) {
+func bindingGenerate(t *testing.T, root string, opts bindingsOptions) (string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	if err := runLinkGenerate(context.Background(), newDeps(), root, opts, &stdout, &stderr); err != nil {
-		t.Fatalf("runLinkGenerate err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	if err := runBindingsGenerate(context.Background(), newDeps(), root, opts, &stdout, &stderr); err != nil {
+		t.Fatalf("runBindingsGenerate err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	written, err := os.ReadFile(filepath.Join(root, linkTypesFileName))
+	written, err := os.ReadFile(filepath.Join(root, bindingTypesFileName))
 	if err != nil {
 		t.Fatalf("read the generated types: %v", err)
 	}
@@ -247,13 +247,13 @@ func linkGenerate(t *testing.T, root string, opts bindingsOptions) (string, stri
 
 func renderedPropertyTypes(t *testing.T, written string) []string {
 	t.Helper()
-	_, declared, ok := strings.Cut(written, "interface Links {\n")
+	_, declared, ok := strings.Cut(written, "interface Bindings {\n")
 	if !ok {
-		t.Fatalf("generated file =\n%s\nnames no Links interface", written)
+		t.Fatalf("generated file =\n%s\nnames no Bindings interface", written)
 	}
 	body, _, ok := strings.Cut(declared, "\n  }\n")
 	if !ok {
-		t.Fatalf("generated file =\n%s\nnever closes the Links interface", written)
+		t.Fatalf("generated file =\n%s\nnever closes the Bindings interface", written)
 	}
 
 	var types []string
@@ -277,16 +277,16 @@ func renderedPropertyTypes(t *testing.T, written string) []string {
 	return types
 }
 
-func TestRunLinkGenerate(t *testing.T) {
+func TestRunBindingsGenerate(t *testing.T) {
 	t.Run("writes the shape of every published record and none of its values", func(t *testing.T) {
-		root := setUpLinkFixture(t)
-		linkSet(t, root, postgresLinkJSON("orders", "db.internal"), bindingsOptions{})
-		linkSet(t, root, customLinkJSON("network"), bindingsOptions{owner: "terraform"})
+		root := setUpBindingFixture(t)
+		bindingSet(t, root, postgresBindingJSON("orders", "db.internal"), bindingsOptions{})
+		bindingSet(t, root, customBindingJSON("network"), bindingsOptions{owner: "terraform"})
 
-		out, written := linkGenerate(t, root, bindingsOptions{})
+		out, written := bindingGenerate(t, root, bindingsOptions{})
 
 		for _, want := range []string{
-			"// generated by `ocel link generate` from production; do not edit",
+			"// generated by `ocel binding generate` from production; do not edit",
 			`declare module "ocel/providers/aws/transform"`,
 			"network: { port: number; securityGroupIds: string[]; subnetIds: string[] };",
 			"orders: { host: string; port: number; database: string; username: string; password: string };",
@@ -304,19 +304,19 @@ func TestRunLinkGenerate(t *testing.T) {
 				t.Errorf("generated file =\n%s\nwrote %q for a property; a shape says how a property reads, never what it holds", written, rendered)
 			}
 		}
-		if !strings.Contains(out, linkTypesFileName) {
+		if !strings.Contains(out, bindingTypesFileName) {
 			t.Errorf("generate stdout = %q, want it to name the file it wrote", out)
 		}
 	})
 
 	t.Run("addresses the coordinate its flags name", func(t *testing.T) {
-		root := setUpLinkFixture(t)
-		linkSet(t, root, postgresLinkJSON("orders", "db.internal"), bindingsOptions{})
+		root := setUpBindingFixture(t)
+		bindingSet(t, root, postgresBindingJSON("orders", "db.internal"), bindingsOptions{})
 
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		linkSet(t, root, customLinkJSON("network"), bindingsOptions{preview: true, environment: "staging", owner: "terraform"})
+		bindingSet(t, root, customBindingJSON("network"), bindingsOptions{preview: true, environment: "staging", owner: "terraform"})
 
-		_, written := linkGenerate(t, root, bindingsOptions{preview: true, environment: "staging"})
+		_, written := bindingGenerate(t, root, bindingsOptions{preview: true, environment: "staging"})
 		if !strings.Contains(written, "from the preview environment staging;") {
 			t.Errorf("generated file =\n%s\nwant the header to name the coordinate it read", written)
 		}
@@ -326,99 +326,99 @@ func TestRunLinkGenerate(t *testing.T) {
 	})
 
 	t.Run("refuses --environment without --preview", func(t *testing.T) {
-		root := setUpLinkFixture(t)
+		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
-		err := runLinkGenerate(context.Background(), newDeps(), root, bindingsOptions{environment: "staging"}, &stdout, &stderr)
+		err := runBindingsGenerate(context.Background(), newDeps(), root, bindingsOptions{environment: "staging"}, &stdout, &stderr)
 		if err == nil {
-			t.Fatal("runLinkGenerate --environment against production err = nil, want a refusal")
+			t.Fatal("runBindingsGenerate --environment against production err = nil, want a refusal")
 		}
-		if _, statErr := os.Stat(filepath.Join(root, linkTypesFileName)); statErr == nil {
+		if _, statErr := os.Stat(filepath.Join(root, bindingTypesFileName)); statErr == nil {
 			t.Error("a refused generate wrote the file anyway")
 		}
 	})
 
 	t.Run("names no record when nothing is published", func(t *testing.T) {
-		root := setUpLinkFixture(t)
+		root := setUpBindingFixture(t)
 
-		out, written := linkGenerate(t, root, bindingsOptions{})
-		if !strings.Contains(written, "interface Links {\n  }\n") {
+		out, written := bindingGenerate(t, root, bindingsOptions{})
+		if !strings.Contains(written, "interface Bindings {\n  }\n") {
 			t.Errorf("generated file =\n%s\nwant an interface naming no record", written)
 		}
-		if !strings.Contains(written, "interface LinksGenerated {\n    generated: true;\n  }") {
+		if !strings.Contains(written, "interface BindingsGenerated {\n    generated: true;\n  }") {
 			t.Errorf("generated file =\n%s\nwant it to mark itself generated, so an empty coordinate still closes every name", written)
 		}
-		if !strings.Contains(out, "Nothing is published") || !strings.Contains(out, "no link name open") {
+		if !strings.Contains(out, "Nothing is published") || !strings.Contains(out, "no binding name open") {
 			t.Errorf("generate stdout = %q, want it to say nothing was published and that no name stays open", out)
 		}
 	})
 }
 
-func TestLinkBootstrap(t *testing.T) {
+func TestBindingBootstrap(t *testing.T) {
 	t.Run("refuses --environment without --preview", func(t *testing.T) {
-		root := setUpLinkFixture(t)
+		root := setUpBindingFixture(t)
 
 		var stdout, stderr bytes.Buffer
 		for name, err := range map[string]error{
-			"set": runLinkSet(context.Background(), newDeps(), root, strings.NewReader(postgresLinkJSON("main", "db.internal")), bindingsOptions{environment: "staging"}, &stdout, &stderr),
-			"rm":  runLinkRm(context.Background(), newDeps(), root, "main", bindingsOptions{environment: "staging"}, &stdout, &stderr),
-			"ls":  runLinkLs(context.Background(), newDeps(), root, bindingsOptions{environment: "staging"}, &stdout, &stderr),
+			"set": runBindingsSet(context.Background(), newDeps(), root, strings.NewReader(postgresBindingJSON("main", "db.internal")), bindingsOptions{environment: "staging"}, &stdout, &stderr),
+			"rm":  runBindingsRm(context.Background(), newDeps(), root, "main", bindingsOptions{environment: "staging"}, &stdout, &stderr),
+			"ls":  runBindingsLs(context.Background(), newDeps(), root, bindingsOptions{environment: "staging"}, &stdout, &stderr),
 		} {
 			if err == nil {
-				t.Errorf("`ocel link %s --environment` against production err = nil, want a refusal", name)
+				t.Errorf("`ocel binding %s --environment` against production err = nil, want a refusal", name)
 				continue
 			}
 			if !strings.Contains(err.Error(), "--preview") {
-				t.Errorf("`ocel link %s` err = %v, want it to name the flag that selects the bootstrap overrides live on", name, err)
+				t.Errorf("`ocel binding %s` err = %v, want it to name the flag that selects the bootstrap overrides live on", name, err)
 			}
 		}
 	})
 
-	t.Run("a preview link is not a production link", func(t *testing.T) {
-		root := setUpLinkFixture(t)
-		linkSet(t, root, postgresLinkJSON("main", "prod.internal"), bindingsOptions{})
+	t.Run("a preview binding is not a production binding", func(t *testing.T) {
+		root := setUpBindingFixture(t)
+		bindingSet(t, root, postgresBindingJSON("main", "prod.internal"), bindingsOptions{})
 
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
-		if out := linkLs(t, root, bindingsOptions{preview: true}); strings.Contains(out, "main") {
-			t.Errorf("preview ls = %q, want no production link listed", out)
+		if out := bindingLs(t, root, bindingsOptions{preview: true}); strings.Contains(out, "main") {
+			t.Errorf("preview ls = %q, want no production binding listed", out)
 		}
 
-		linkSet(t, root, postgresLinkJSON("staged", "staging.internal"), bindingsOptions{preview: true, environment: "staging"})
-		if out := linkLs(t, root, bindingsOptions{preview: true, environment: "staging"}); !strings.Contains(out, "staged") {
-			t.Errorf("ls --preview --environment staging = %q, want the link that environment holds", out)
+		bindingSet(t, root, postgresBindingJSON("staged", "staging.internal"), bindingsOptions{preview: true, environment: "staging"})
+		if out := bindingLs(t, root, bindingsOptions{preview: true, environment: "staging"}); !strings.Contains(out, "staged") {
+			t.Errorf("ls --preview --environment staging = %q, want the binding that environment holds", out)
 		}
 
 		t.Setenv(clitest.FakeInfraTierEnvVar, "production")
-		if out := linkLs(t, root, bindingsOptions{}); strings.Contains(out, "staged") {
-			t.Errorf("production ls = %q, want no preview link listed", out)
+		if out := bindingLs(t, root, bindingsOptions{}); strings.Contains(out, "staged") {
+			t.Errorf("production ls = %q, want no preview binding listed", out)
 		}
 	})
 }
 
-func TestRunLinkJSONOutput(t *testing.T) {
-	root := setUpLinkFixture(t)
+func TestRunBindingsJSONOutput(t *testing.T) {
+	root := setUpBindingFixture(t)
 	jsonOutput(t)
 
-	set := asJSON(t, linkSet(t, root, postgresLinkJSON("main", "db.internal"), bindingsOptions{}))
+	set := asJSON(t, bindingSet(t, root, postgresBindingJSON("main", "db.internal"), bindingsOptions{}))
 	if set["name"] != "main" || set["version"] != float64(1) {
 		t.Errorf("set json = %v, want the name and version it published", set)
 	}
 
-	listed := asJSON(t, linkLs(t, root, bindingsOptions{}))
-	links, ok := listed["links"].([]any)
-	if !ok || len(links) != 1 {
-		t.Fatalf("ls json = %v, want one link", listed)
+	listed := asJSON(t, bindingLs(t, root, bindingsOptions{}))
+	bindings, ok := listed["bindings"].([]any)
+	if !ok || len(bindings) != 1 {
+		t.Fatalf("ls json = %v, want one binding", listed)
 	}
-	link, _ := links[0].(map[string]any)
-	for field, want := range map[string]any{"name": "main", "type": "postgres", "source": "aws:rds:main", "owner": defaultLinkOwner, "version": float64(1)} {
-		if link[field] != want {
-			t.Errorf("ls json link %s = %v, want %v", field, link[field], want)
+	binding, _ := bindings[0].(map[string]any)
+	for field, want := range map[string]any{"name": "main", "type": "postgres", "source": "aws:rds:main", "owner": defaultBindingOwner, "version": float64(1)} {
+		if binding[field] != want {
+			t.Errorf("ls json binding %s = %v, want %v", field, binding[field], want)
 		}
 	}
 
 	var rm, stderr bytes.Buffer
-	if err := runLinkRm(context.Background(), newDeps(), root, "main", bindingsOptions{}, &rm, &stderr); err != nil {
-		t.Fatalf("runLinkRm err = %v; stderr=%s", err, stderr.String())
+	if err := runBindingsRm(context.Background(), newDeps(), root, "main", bindingsOptions{}, &rm, &stderr); err != nil {
+		t.Fatalf("runBindingsRm err = %v; stderr=%s", err, stderr.String())
 	}
 	removed := asJSON(t, rm.String())
 	if removed["name"] != "main" || removed["removed"] != true {
@@ -426,7 +426,7 @@ func TestRunLinkJSONOutput(t *testing.T) {
 	}
 }
 
-func TestLinkCommands(t *testing.T) {
+func TestBindingCommands(t *testing.T) {
 	t.Parallel()
 
 	t.Run("every subcommand addresses a bootstrap", func(t *testing.T) {
@@ -435,7 +435,7 @@ func TestLinkCommands(t *testing.T) {
 		for _, c := range []*cobra.Command{bindingsSetCmd, bindingsRmCmd, bindingsLsCmd, bindingsGenerateCmd} {
 			for _, flag := range []string{"preview", "environment"} {
 				if c.Flags().Lookup(flag) == nil {
-					t.Errorf("`ocel link %s` cannot address --%s", c.Name(), flag)
+					t.Errorf("`ocel binding %s` cannot address --%s", c.Name(), flag)
 				}
 			}
 		}
@@ -446,14 +446,14 @@ func TestLinkCommands(t *testing.T) {
 
 		owner := bindingsSetCmd.Flags().Lookup("owner")
 		if owner == nil {
-			t.Fatal("`ocel link set` registers no --owner; the publisher is what keeps one from taking another's link")
+			t.Fatal("`ocel bindings set` registers no --owner; the publisher is what keeps one from taking another's binding")
 		}
-		if owner.DefValue != defaultLinkOwner {
-			t.Errorf("--owner defaults to %q, want %q", owner.DefValue, defaultLinkOwner)
+		if owner.DefValue != defaultBindingOwner {
+			t.Errorf("--owner defaults to %q, want %q", owner.DefValue, defaultBindingOwner)
 		}
 		for _, c := range []*cobra.Command{bindingsRmCmd, bindingsLsCmd, bindingsGenerateCmd} {
 			if c.Flags().Lookup("owner") != nil {
-				t.Errorf("`ocel link %s` registers --owner; only publishing takes a name", c.Name())
+				t.Errorf("`ocel binding %s` registers --owner; only publishing takes a name", c.Name())
 			}
 		}
 	})
@@ -462,7 +462,7 @@ func TestLinkCommands(t *testing.T) {
 		t.Parallel()
 
 		if bindingsGenerateCmd.Parent() != bindingsCmd {
-			t.Errorf("`ocel link generate` hangs off %v, want the link command", bindingsGenerateCmd.Parent())
+			t.Errorf("`ocel binding generate` hangs off %v, want the binding command", bindingsGenerateCmd.Parent())
 		}
 		if generateCmd.Parent() != rootCmd {
 			t.Errorf("`ocel generate` hangs off %v, want the root command", generateCmd.Parent())
@@ -471,15 +471,15 @@ func TestLinkCommands(t *testing.T) {
 			t.Errorf("`ocel generate` long = %q, want the promise it keeps", generateCmd.Long)
 		}
 		if !strings.Contains(bindingsGenerateCmd.Long, "provider") {
-			t.Errorf("`ocel link generate` long = %q, want it to say it runs the provider", bindingsGenerateCmd.Long)
+			t.Errorf("`ocel binding generate` long = %q, want it to say it runs the provider", bindingsGenerateCmd.Long)
 		}
 	})
 
-	t.Run("`ocel link` is a different command", func(t *testing.T) {
+	t.Run("`ocel binding` is a different command", func(t *testing.T) {
 		t.Parallel()
 
-		if linkCmd.Parent() != rootCmd {
-			t.Errorf("`ocel link` hangs off %v, want the root command", linkCmd.Parent())
+		if bindingsCmd.Parent() != rootCmd {
+			t.Errorf("`ocel binding` hangs off %v, want the root command", bindingsCmd.Parent())
 		}
 		if unlinkCmd.Parent() != rootCmd {
 			t.Errorf("`ocel unlink` hangs off %v, want the root command", unlinkCmd.Parent())

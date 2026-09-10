@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 func needsCargo(t *testing.T) {
@@ -36,7 +36,7 @@ func rustUsages(t *testing.T, root, source string) []Usage {
 	t.Helper()
 	app := App{Name: "web", Path: "app", Language: discovery.Rust}
 	usages, err := Compute(t.Context(), root, []App{app}, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: source + ":1",
 	}})
@@ -51,7 +51,7 @@ func TestRustReachGrantsAResourceTheCrateDeclares(t *testing.T) {
 	root := rustApp(t)
 	usages := rustUsages(t, root, filepath.Join(root, "app", "src", "main.rs"))
 
-	want := []Usage{{App: "web", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"app/src/main.rs"}}}
+	want := []Usage{{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"app/src/main.rs"}}}
 	if !slices.EqualFunc(usages, want, func(a, b Usage) bool {
 		return a.App == b.App && a.Type == b.Type && a.Name == b.Name && slices.Equal(a.Files, b.Files)
 	}) {
@@ -96,7 +96,7 @@ func TestRustReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 
 	app := App{Name: "web", Path: ".", Language: discovery.Rust}
 	usages, err := Compute(t.Context(), root, []App{app}, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "src", "main.rs") + ":4",
 	}})
@@ -124,7 +124,7 @@ func TestRustReachGrantsASharedCrateResourceToEveryAppThatLinksIt(t *testing.T) 
 		{Name: "web", Path: "apps/web", Language: discovery.Rust},
 	}
 	usages, err := Compute(t.Context(), root, apps, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "crates", "infra", "src", "lib.rs") + ":4",
 	}})
@@ -133,8 +133,8 @@ func TestRustReachGrantsASharedCrateResourceToEveryAppThatLinksIt(t *testing.T) 
 	}
 
 	want := []Usage{
-		{App: "api", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/main.rs"}},
-		{App: "web", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/main.rs"}},
+		{App: "api", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/api/src/main.rs"}},
+		{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/main.rs"}},
 	}
 	if !slices.EqualFunc(usages, want, func(a, b Usage) bool {
 		return a.App == b.App && a.Type == b.Type && a.Name == b.Name && slices.Equal(a.Files, b.Files)
@@ -179,7 +179,7 @@ func TestRustReachGrantsNothingFromASiblingCrateUnderTheConfigDir(t *testing.T) 
 		{Dir: filepath.Join(root, "apps", "api"), Language: discovery.Rust},
 	}}
 	usages, err := Compute(t.Context(), root, []App{app}, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "apps", "web", "src", "main.rs") + ":1",
 	}})

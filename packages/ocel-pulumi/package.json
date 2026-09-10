@@ -3,7 +3,7 @@
   "version": "0.0.1-alpha.0",
   "private": false,
   "type": "module",
-  "description": "Publishes Pulumi-defined resources as ocel links, one link per call",
+  "description": "Publishes Pulumi-defined resources as ocel bindings, one binding per call",
   "files": [
     "dist/",
     "README.md"

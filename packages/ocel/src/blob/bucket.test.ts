@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { LinkType } from "../gen/proto/common/links/v1/links_pb.js";
+import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 
 const declareMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
@@ -44,7 +44,7 @@ describe("Bucket discovery declare", () => {
 
     expect(declareMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        resource: { name: "storage", type: LinkType.BUCKET },
+        resource: { name: "storage", type: BindingType.BUCKET },
         config: { case: "bucket", value: { allowedOrigins: [] } },
       }),
     );

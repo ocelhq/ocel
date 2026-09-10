@@ -21,12 +21,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/pkg/naming"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
-const defaultLinkOwner = "cli"
+const defaultBindingOwner = "cli"
 
 type bindingsOptions struct {
 	preview     bool
@@ -50,7 +50,7 @@ func (o bindingsOptions) tier() environmentv1.Tier {
 
 func (o bindingsOptions) ownerOrDefault() string {
 	if o.owner == "" {
-		return defaultLinkOwner
+		return defaultBindingOwner
 	}
 	return o.owner
 }
@@ -59,67 +59,67 @@ var bindingsOpts bindingsOptions
 
 var bindingsCmd = &cobra.Command{
 	Use:   "bindings",
-	Short: "Manage the links this project's apps resolve",
-	Long: "Manage the links this project's apps resolve.\n\n" +
-		"A link is one resource an app reaches — its address, its credentials and the " +
+	Short: "Manage the bindings this project's apps resolve",
+	Long: "Manage the bindings this project's apps resolve.\n\n" +
+		"A binding is one resource an app reaches — its address, its credentials and the " +
 		"permissions that go with it — published under a name apps bind to. Records live in " +
 		"your own provider account and are reached through the provider, never by the CLI directly.",
 }
 
 var bindingsSetCmd = &cobra.Command{
 	Use:   "set",
-	Short: "Publish one link, read as JSON on stdin",
-	Long: "Publish one link, read as JSON on stdin.\n\n" +
-		"The link is a common.links.v1.Link in protobuf JSON, and it carries its own name, so " +
+	Short: "Publish one binding, read as JSON on stdin",
+	Long: "Publish one binding, read as JSON on stdin.\n\n" +
+		"The binding is a common.bindings.v1.Binding in protobuf JSON, and it carries its own name, so " +
 		"there is nothing to name on the command line:\n\n" +
-		"  ocel link set < link.json\n\n" +
+		"  ocel bindings set < binding.json\n\n" +
 		"A name belongs to whoever published it. Publishing over a name another publisher " +
 		"holds is refused rather than handing every app bound to that name another " +
 		"resource's values; pass --owner to publish as that publisher.",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return withLinkCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkSet(ctx, newDeps(), cwd, cmd.InOrStdin(), bindingsOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withBindingCommand(cmd, func(ctx context.Context, cwd string) error {
+			return runBindingsSet(ctx, newDeps(), cwd, cmd.InOrStdin(), bindingsOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
 
 var bindingsRmCmd = &cobra.Command{
 	Use:   "rm <NAME>",
-	Short: "Remove a link, whatever published it",
+	Short: "Remove a binding, whatever published it",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return withLinkCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkRm(ctx, newDeps(), cwd, args[0], bindingsOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withBindingCommand(cmd, func(ctx context.Context, cwd string) error {
+			return runBindingsRm(ctx, newDeps(), cwd, args[0], bindingsOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
 
 var bindingsLsCmd = &cobra.Command{
 	Use:   "ls",
-	Short: "List the published links, without revealing what they hold",
+	Short: "List the published bindings, without revealing what they hold",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return withLinkCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkLs(ctx, newDeps(), cwd, bindingsOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withBindingCommand(cmd, func(ctx context.Context, cwd string) error {
+			return runBindingsLs(ctx, newDeps(), cwd, bindingsOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
 
 var bindingsGenerateCmd = &cobra.Command{
 	Use:   "generate",
-	Short: "Write the transform types for the links published to one coordinate",
-	Long: "Write the transform types for the links published to one coordinate.\n\n" +
+	Short: "Write the transform types for the bindings published to one coordinate",
+	Long: "Write the transform types for the bindings published to one coordinate.\n\n" +
 		"Reads the records published to production, or to the preview coordinate --preview and " +
-		"--environment name, and writes " + linkTypesFileName + " beside your ocel config. The file " +
-		"names each record and the properties it carries, so `links.<name>.<property>` in a transform " +
+		"--environment name, and writes " + bindingTypesFileName + " beside your ocel config. The file " +
+		"names each record and the properties it carries, so `bindings.<name>.<property>` in a transform " +
 		"is checked where it is written instead of at the deploy. Check it in, and run this again when " +
 		"what you publish changes.\n\n" +
-		"Unlike `ocel generate`, this reads the published records: it logs in and runs the provider.",
+		"This reads the published records, so it logs in and runs the provider.",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return withLinkCommand(cmd, func(ctx context.Context, cwd string) error {
-			return runLinkGenerate(ctx, newDeps(), cwd, bindingsOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		return withBindingCommand(cmd, func(ctx context.Context, cwd string) error {
+			return runBindingsGenerate(ctx, newDeps(), cwd, bindingsOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	},
 }
@@ -127,14 +127,14 @@ var bindingsGenerateCmd = &cobra.Command{
 func init() {
 	for _, c := range []*cobra.Command{bindingsSetCmd, bindingsRmCmd, bindingsLsCmd, bindingsGenerateCmd} {
 		c.Flags().BoolVar(&bindingsOpts.preview, "preview", false, "Act on the preview bootstrap instead of production")
-		c.Flags().StringVar(&bindingsOpts.environment, "environment", "", "Address the link this named preview environment holds instead of the one bound to all environments")
+		c.Flags().StringVar(&bindingsOpts.environment, "environment", "", "Address the binding this named preview environment holds instead of the one bound to all environments")
 		bindingsCmd.AddCommand(c)
 	}
-	bindingsSetCmd.Flags().StringVar(&bindingsOpts.owner, "owner", defaultLinkOwner, "Publish under this publisher's name")
+	bindingsSetCmd.Flags().StringVar(&bindingsOpts.owner, "owner", defaultBindingOwner, "Publish under this publisher's name")
 	rootCmd.AddCommand(bindingsCmd)
 }
 
-func withLinkCommand(cmd *cobra.Command, run func(context.Context, string) error) error {
+func withBindingCommand(cmd *cobra.Command, run func(context.Context, string) error) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("determine working directory: %w", err)
@@ -144,7 +144,7 @@ func withLinkCommand(cmd *cobra.Command, run func(context.Context, string) error
 	return run(ctx, cwd)
 }
 
-func withLinkProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stderr io.Writer, drive func(*provider.Runner, *projectconfig.Config) error) error {
+func withBindingProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stderr io.Writer, drive func(*provider.Runner, *projectconfig.Config) error) error {
 	if err := opts.checkEnvironment(); err != nil {
 		return err
 	}
@@ -166,57 +166,57 @@ func withLinkProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts b
 	})
 }
 
-func runLinkSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io.Reader, opts bindingsOptions, stdout, stderr io.Writer) error {
-	link, err := decodeLink(stdin)
+func runBindingsSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io.Reader, opts bindingsOptions, stdout, stderr io.Writer) error {
+	binding, err := decodeBinding(stdin)
 	if err != nil {
 		return err
 	}
 	owner := opts.ownerOrDefault()
-	return withLinkProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
-		resp, err := client.SetLink(ctx, &envvarsv1.SetLinkRequest{
+		resp, err := client.SetBinding(ctx, &envvarsv1.SetBindingRequest{
 			Slug:        cfg.Slug,
 			Tier:        opts.tier(),
 			Environment: opts.environment,
-			Link:        link,
+			Binding:     binding,
 			Owner:       owner,
 		})
 		if err != nil {
 			return err
 		}
 		if deps.Presentation(stdout).Format == runui.FormatJSON {
-			return writeLinkJSON(stdout, linkSetReport{Name: link.GetName(), Owner: owner, Version: resp.GetVersion()})
+			return writeBindingJSON(stdout, bindingSetReport{Name: binding.GetName(), Owner: owner, Version: resp.GetVersion()})
 		}
-		fmt.Fprintf(stdout, "Published %s as %s (version %d).\n", describeLink(link.GetName(), opts), owner, resp.GetVersion())
+		fmt.Fprintf(stdout, "Published %s as %s (version %d).\n", describeBinding(binding.GetName(), opts), owner, resp.GetVersion())
 		return nil
 	})
 }
 
-func decodeLink(stdin io.Reader) (*linksv1.Link, error) {
+func decodeBinding(stdin io.Reader) (*bindingsv1.Binding, error) {
 	raw, err := io.ReadAll(stdin)
 	if err != nil {
-		return nil, fmt.Errorf("read the link on stdin: %w", err)
+		return nil, fmt.Errorf("read the binding on stdin: %w", err)
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
-		return nil, errors.New("nothing came in on stdin; `ocel link set` reads one link as protobuf JSON, so pipe it in: `ocel link set < link.json`")
+		return nil, errors.New("nothing came in on stdin; `ocel bindings set` reads one binding as protobuf JSON, so pipe it in: `ocel bindings set < binding.json`")
 	}
-	link := &linksv1.Link{}
-	if err := protojson.Unmarshal(raw, link); err != nil {
-		return nil, fmt.Errorf("read the link on stdin: %w", err)
+	binding := &bindingsv1.Binding{}
+	if err := protojson.Unmarshal(raw, binding); err != nil {
+		return nil, fmt.Errorf("read the binding on stdin: %w", err)
 	}
-	return link, nil
+	return binding, nil
 }
 
-func runLinkRm(ctx context.Context, deps cmddeps.Deps, cwd, name string, opts bindingsOptions, stdout, stderr io.Writer) error {
-	return withLinkProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+func runBindingsRm(ctx context.Context, deps cmddeps.Deps, cwd, name string, opts bindingsOptions, stdout, stderr io.Writer) error {
+	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
-		resp, err := client.RemoveLink(ctx, &envvarsv1.RemoveLinkRequest{
+		resp, err := client.RemoveBinding(ctx, &envvarsv1.RemoveBindingRequest{
 			Slug:        cfg.Slug,
 			Tier:        opts.tier(),
 			Environment: opts.environment,
@@ -226,24 +226,24 @@ func runLinkRm(ctx context.Context, deps cmddeps.Deps, cwd, name string, opts bi
 			return err
 		}
 		if deps.Presentation(stdout).Format == runui.FormatJSON {
-			return writeLinkJSON(stdout, linkRemoveReport{Name: name, Removed: resp.GetRemoved()})
+			return writeBindingJSON(stdout, bindingRemoveReport{Name: name, Removed: resp.GetRemoved()})
 		}
 		if !resp.GetRemoved() {
-			fmt.Fprintf(stdout, "No link named %s is published.\n", describeLink(name, opts))
+			fmt.Fprintf(stdout, "No binding named %s is published.\n", describeBinding(name, opts))
 			return nil
 		}
-		fmt.Fprintf(stdout, "Removed %s.\n", describeLink(name, opts))
+		fmt.Fprintf(stdout, "Removed %s.\n", describeBinding(name, opts))
 		return nil
 	})
 }
 
-func runLinkLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stdout, stderr io.Writer) error {
-	return withLinkProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+func runBindingsLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stdout, stderr io.Writer) error {
+	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
-		resp, err := client.ListLinks(ctx, &envvarsv1.ListLinksRequest{
+		resp, err := client.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
 			Slug:        cfg.Slug,
 			Tier:        opts.tier(),
 			Environment: opts.environment,
@@ -252,20 +252,20 @@ func runLinkLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindings
 			return err
 		}
 		if deps.Presentation(stdout).Format == runui.FormatJSON {
-			return writeLinkJSON(stdout, linkListReport{Links: linkReports(resp.GetLinks())})
+			return writeBindingJSON(stdout, bindingListReport{Bindings: bindingReports(resp.GetBindings())})
 		}
-		renderLinks(stdout, resp.GetLinks())
+		renderBindings(stdout, resp.GetBindings())
 		return nil
 	})
 }
 
-func runLinkGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stdout, stderr io.Writer) error {
-	return withLinkProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
+func runBindingsGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opts bindingsOptions, stdout, stderr io.Writer) error {
+	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
 			return err
 		}
-		resp, err := client.ListLinks(ctx, &envvarsv1.ListLinksRequest{
+		resp, err := client.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
 			Slug:        cfg.Slug,
 			Tier:        opts.tier(),
 			Environment: opts.environment,
@@ -274,24 +274,24 @@ func runLinkGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opts bi
 			return err
 		}
 
-		path := filepath.Join(cfg.Dir, linkTypesFileName)
-		if err := os.WriteFile(path, []byte(renderLinkTypes(runner.Name(), describeLinkCoordinate(opts), resp.GetLinks())), 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", linkTypesFileName, err)
+		path := filepath.Join(cfg.Dir, bindingTypesFileName)
+		if err := os.WriteFile(path, []byte(renderBindingTypes(runner.Name(), describeBindingCoordinate(opts), resp.GetBindings())), 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", bindingTypesFileName, err)
 		}
 
 		if deps.Presentation(stdout).Format == runui.FormatJSON {
-			return writeLinkJSON(stdout, linkGenerateReport{Path: path, Links: linkReports(resp.GetLinks())})
+			return writeBindingJSON(stdout, bindingGenerateReport{Path: path, Bindings: bindingReports(resp.GetBindings())})
 		}
-		if len(resp.GetLinks()) == 0 {
-			fmt.Fprintf(stdout, "Nothing is published to %s; wrote %s, which names no record and so leaves no link name open.\n", describeLinkCoordinate(opts), path)
+		if len(resp.GetBindings()) == 0 {
+			fmt.Fprintf(stdout, "Nothing is published to %s; wrote %s, which names no record and so leaves no binding name open.\n", describeBindingCoordinate(opts), path)
 			return nil
 		}
-		fmt.Fprintf(stdout, "Wrote %s from the %d links published to %s.\n", path, len(resp.GetLinks()), describeLinkCoordinate(opts))
+		fmt.Fprintf(stdout, "Wrote %s from the %d bindings published to %s.\n", path, len(resp.GetBindings()), describeBindingCoordinate(opts))
 		return nil
 	})
 }
 
-func describeLinkCoordinate(opts bindingsOptions) string {
+func describeBindingCoordinate(opts bindingsOptions) string {
 	if !opts.preview {
 		return "production"
 	}
@@ -301,27 +301,27 @@ func describeLinkCoordinate(opts bindingsOptions) string {
 	return "the preview environment " + opts.environment
 }
 
-type linkGenerateReport struct {
-	Path  string       `json:"path"`
-	Links []linkReport `json:"links"`
+type bindingGenerateReport struct {
+	Path     string          `json:"path"`
+	Bindings []bindingReport `json:"bindings"`
 }
 
-type linkSetReport struct {
+type bindingSetReport struct {
 	Name    string `json:"name"`
 	Owner   string `json:"owner"`
 	Version uint64 `json:"version"`
 }
 
-type linkRemoveReport struct {
+type bindingRemoveReport struct {
 	Name    string `json:"name"`
 	Removed bool   `json:"removed"`
 }
 
-type linkListReport struct {
-	Links []linkReport `json:"links"`
+type bindingListReport struct {
+	Bindings []bindingReport `json:"bindings"`
 }
 
-type linkReport struct {
+type bindingReport struct {
 	Name    string `json:"name"`
 	Type    string `json:"type"`
 	Source  string `json:"source"`
@@ -329,12 +329,12 @@ type linkReport struct {
 	Version uint64 `json:"version"`
 }
 
-func linkReports(links []*envvarsv1.LinkSummary) []linkReport {
-	out := make([]linkReport, 0, len(links))
-	for _, l := range links {
-		out = append(out, linkReport{
+func bindingReports(bindings []*envvarsv1.BindingSummary) []bindingReport {
+	out := make([]bindingReport, 0, len(bindings))
+	for _, l := range bindings {
+		out = append(out, bindingReport{
 			Name:    l.GetName(),
-			Type:    linkTypeName(l.GetType()),
+			Type:    bindingTypeName(l.GetType()),
 			Source:  l.GetSource(),
 			Owner:   l.GetOwner(),
 			Version: l.GetVersion(),
@@ -343,27 +343,27 @@ func linkReports(links []*envvarsv1.LinkSummary) []linkReport {
 	return out
 }
 
-func writeLinkJSON(stdout io.Writer, report any) error {
+func writeBindingJSON(stdout io.Writer, report any) error {
 	encoder := json.NewEncoder(stdout)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(report)
 }
 
-func renderLinks(stdout io.Writer, links []*envvarsv1.LinkSummary) {
-	if len(links) == 0 {
-		fmt.Fprintln(stdout, "No links published. Publish one with `ocel link set < link.json`.")
+func renderBindings(stdout io.Writer, bindings []*envvarsv1.BindingSummary) {
+	if len(bindings) == 0 {
+		fmt.Fprintln(stdout, "No bindings published. Publish one with `ocel bindings set < binding.json`.")
 		return
 	}
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tTYPE\tSOURCE\tOWNER\tVERSION")
-	for _, l := range links {
+	for _, l := range bindings {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\n",
-			l.GetName(), linkTypeName(l.GetType()), sourceOrDash(l.GetSource()), l.GetOwner(), l.GetVersion())
+			l.GetName(), bindingTypeName(l.GetType()), sourceOrDash(l.GetSource()), l.GetOwner(), l.GetVersion())
 	}
 	_ = tw.Flush()
 }
 
-func linkTypeName(t linksv1.LinkType) string {
+func bindingTypeName(t bindingsv1.BindingType) string {
 	return strings.ToLower(naming.EnvFragment(t))
 }
 
@@ -374,7 +374,7 @@ func sourceOrDash(source string) string {
 	return source
 }
 
-func describeLink(name string, opts bindingsOptions) string {
+func describeBinding(name string, opts bindingsOptions) string {
 	if opts.environment != "" {
 		return name + " for " + opts.environment
 	}

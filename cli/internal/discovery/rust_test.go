@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 func needsCargo(t *testing.T) {
@@ -148,7 +148,7 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 		t.Fatalf("declares = %v, want exactly one", declares)
 	}
 	resource := declares[0].GetResource()
-	if resource.GetName() != "main" || resource.GetType() != linksv1.LinkType_LINK_TYPE_POSTGRES {
+	if resource.GetName() != "main" || resource.GetType() != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
 		t.Errorf("resource = %v, want the postgres named main", resource)
 	}
 	source := declares[0].GetSource()
@@ -208,7 +208,7 @@ func TestRunDeclaresWhatASharedRustCrateDeclares(t *testing.T) {
 	}
 	for _, declared := range declares {
 		resource := declared.GetResource()
-		if resource.GetName() != "main" || resource.GetType() != linksv1.LinkType_LINK_TYPE_POSTGRES {
+		if resource.GetName() != "main" || resource.GetType() != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
 			t.Errorf("resource = %v, want the postgres named main", resource)
 		}
 		if file := sourceFile(t, declared.GetSource()); file != shared {

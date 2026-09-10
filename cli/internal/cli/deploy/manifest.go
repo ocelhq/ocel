@@ -117,7 +117,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, err
 	}
 
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages, compute, images), compute, toDeclarations(cfg.Dir, resources), cfg.Links, functions, variablesByApp(variables, functions))
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages, compute, images), compute, toDeclarations(cfg.Dir, resources), toBindings(cfg.Bindings), functions, variablesByApp(variables, functions))
 	if err != nil {
 		return nil, err
 	}
@@ -449,4 +449,12 @@ func toAttributionDeclarations(resources []declare.Resource) []attribution.Decla
 		decls[i] = attribution.Declaration{Type: r.Type, Name: r.Name, Source: r.Source}
 	}
 	return decls
+}
+
+func toBindings(bindings []projectconfig.Binding) []manifestbuilder.Binding {
+	out := make([]manifestbuilder.Binding, 0, len(bindings))
+	for _, b := range bindings {
+		out = append(out, manifestbuilder.Binding{Type: b.Type, Name: b.Name, External: b.External})
+	}
+	return out
 }

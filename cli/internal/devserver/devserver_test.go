@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -73,14 +73,14 @@ func serve(t *testing.T, s *Server) string {
 	return ts.URL
 }
 
-func declareResource(t *testing.T, url, name string, typ linksv1.LinkType) {
+func declareResource(t *testing.T, url, name string, typ resourcesv1.ResourceType) {
 	t.Helper()
 	client := resourcesv1connect.NewResourceServiceClient(testClient, url)
 	req := &resourcesv1.DeclareRequest{Resource: &resourcesv1.ResourceIdentifier{Name: name, Type: typ}}
 	switch typ {
-	case linksv1.LinkType_LINK_TYPE_POSTGRES:
+	case resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES:
 		req.Config = &resourcesv1.DeclareRequest_Postgres{Postgres: &resourcesv1.PostgresConfig{}}
-	case linksv1.LinkType_LINK_TYPE_BUCKET:
+	case resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET:
 		req.Config = &resourcesv1.DeclareRequest_Bucket{Bucket: &resourcesv1.BucketConfig{}}
 	}
 	if _, err := client.Declare(context.Background(), req); err != nil {
@@ -120,7 +120,7 @@ func TestSync(t *testing.T) {
 		s := newDevServer(resolveServer.URL)
 		url := serve(t, s)
 
-		declareResource(t, url, "main", linksv1.LinkType_LINK_TYPE_POSTGRES)
+		declareResource(t, url, "main", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
 
 		if status := postSync(t, url); status != http.StatusOK {
 			t.Fatalf("POST /sync status = %d, want 200", status)
@@ -169,8 +169,8 @@ func TestSync(t *testing.T) {
 		s.devServerAddr = "http://dev.local:1234"
 		url := serve(t, s)
 
-		declareResource(t, url, "main", linksv1.LinkType_LINK_TYPE_POSTGRES)
-		declareResource(t, url, "storage", linksv1.LinkType_LINK_TYPE_BUCKET)
+		declareResource(t, url, "main", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
+		declareResource(t, url, "storage", resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET)
 
 		if status := postSync(t, url); status != http.StatusOK {
 			t.Fatalf("POST /sync status = %d, want 200", status)
@@ -190,12 +190,12 @@ func TestSync(t *testing.T) {
 		if !ok {
 			t.Fatalf("bucket env = %+v, want OCEL_RESOURCE_BUCKET_storage", result.Resources[i].Env)
 		}
-		var link linksv1.Link
-		if err := protojson.Unmarshal([]byte(raw), &link); err != nil {
+		var binding bindingsv1.Binding
+		if err := protojson.Unmarshal([]byte(raw), &binding); err != nil {
 			t.Fatalf("unmarshal bucket env: %v", err)
 		}
-		want := &linksv1.Link{Name: "storage", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "storage"}}}
-		if !proto.Equal(&link, want) {
+		want := &bindingsv1.Binding{Name: "storage", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "storage"}}}
+		if !proto.Equal(&binding, want) {
 			t.Fatalf("bucket env = %s, want %v", raw, want)
 		}
 		if result.DevServerAddress != "http://dev.local:1234" {
@@ -208,9 +208,9 @@ func TestSync(t *testing.T) {
 		s := newDevServer(resolveServer.URL)
 		url := serve(t, s)
 
-		declareResource(t, url, "stale", linksv1.LinkType_LINK_TYPE_POSTGRES)
+		declareResource(t, url, "stale", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
 		s.ResetManifest()
-		declareResource(t, url, "fresh", linksv1.LinkType_LINK_TYPE_POSTGRES)
+		declareResource(t, url, "fresh", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
 
 		postSync(t, url)
 

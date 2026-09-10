@@ -51,7 +51,7 @@ describe("postgres()", () => {
     );
 
     expect(() => postgres("orders")).toThrow(
-      "OCEL_RESOURCE_POSTGRES_orders carries a BUCKET link, and this app reads it as a POSTGRES",
+      "OCEL_RESOURCE_POSTGRES_orders carries a BUCKET binding, and this app reads it as a POSTGRES",
     );
   });
 

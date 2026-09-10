@@ -2,12 +2,12 @@ package deploy
 
 import (
 	"github.com/ocelhq/ocel/cli/internal/runui"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
 type deployOutcome struct {
-	links       []*linksv1.Link
+	bindings    []*bindingsv1.Binding
 	functions   []*progressv1.FunctionOutput
 	apps        []*progressv1.AppResult
 	urlNote     string
@@ -22,7 +22,7 @@ func (o *deployOutcome) collect(ui *runui.Session) func(*progressv1.OperationEve
 		if res == nil {
 			return
 		}
-		o.links = res.GetLinks()
+		o.bindings = res.GetBindings()
 		o.functions = res.GetFunctions()
 		o.apps = res.GetApps()
 		o.urlNote = res.GetUrlNote()

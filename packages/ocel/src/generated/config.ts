@@ -29,6 +29,13 @@ export interface OcelConfig {
   )[];
   /** The apps this project deploys. Left off, ocel detects one at the project root. */
   apps?: AppConfig[];
+  /** Resources this project declares that ocel binds to a record your own infrastructure published, instead of provisioning them itself. Keyed by resource type, then by the name the app declares; the value is the name the record is published under. A name nothing has published refuses the deploy. */
+  bindings?: {
+    /** Each key is a bucket resource this project declares; its value is the name the record is published under. */
+    bucket?: Record<string, string>;
+    /** Each key is a postgres resource this project declares; its value is the name the record is published under. */
+    postgres?: Record<string, string>;
+  };
   /** Where the resources an app declares are found. */
   discovery?: DiscoveryConfig;
   /** Where the project's hostname records are written. */
@@ -37,8 +44,6 @@ export interface OcelConfig {
   domains?: ProjectDomainConfig;
   /** The edge in front of the origin. Omit it and the provider fronts the deployment with its own default edge. */
   edge?: EdgeDescriptor;
-  /** Resource ids ocel binds to a link your own infrastructure published, instead of provisioning them itself. A listed id nothing has published refuses the deploy. */
-  links?: string[];
   /** The provider ocel deploy provisions into. */
   provider?: ProviderDescriptor;
   /** Where this project's container images are pushed. */

@@ -1,19 +1,29 @@
 package projectconfig
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/naming"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
+
+type Binding struct {
+	Type     resourcesv1.ResourceType
+	Name     string
+	External string
+}
 
 type Discovery struct {
 	Paths []string
@@ -77,7 +87,7 @@ type Config struct {
 	DNS           *DNSDescriptor
 	AllowDegraded []string
 	Apps          []App
-	Links         []string
+	Bindings      []Binding
 	Domains       map[string][]string
 	Registry      *Registry
 	Dir           string
@@ -143,7 +153,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Config, error) {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
 	}
 
-	links, err := normalizeLinks(doc.Links)
+	bindings, err := normalizeBindings(doc.Bindings)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
 	}
@@ -166,7 +176,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Config, error) {
 		DNS:           dns,
 		AllowDegraded: allowDegraded,
 		Apps:          apps,
-		Links:         links,
+		Bindings:      bindings,
 		Domains:       domains,
 		Registry:      registry,
 		Dir:           filepath.Dir(configPath),
@@ -293,26 +303,35 @@ func normalizeRegistryServer(server string) (string, string, error) {
 	return host, strings.Join(segments[1:], "/"), nil
 }
 
-func normalizeLinks(raw []string) ([]string, error) {
+func normalizeBindings(raw configdoc.Bindings) ([]Binding, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
-	out := make([]string, 0, len(raw))
-	seen := make(map[string]bool, len(raw))
-	for _, name := range raw {
-		link := strings.TrimSpace(name)
-		if link == "" {
-			return nil, fmt.Errorf("`links` holds an empty name — every entry names one resource your own infrastructure publishes")
+	out := make([]Binding, 0, len(raw))
+	for _, key := range slices.Sorted(maps.Keys(raw)) {
+		typ, bindable := naming.ResourceTypeNamed(key)
+		if _, ok := naming.BindableAs(typ); !bindable || !ok {
+			return nil, fmt.Errorf("`bindings` is keyed by %q, and nothing publishes a record of that type — the types that can be bound are %s",
+				key, strings.Join(configdoc.BindableTypes(), ", "))
 		}
-		if strings.Contains(link, naming.KeySeparator) {
-			return nil, fmt.Errorf("link %q may not contain %q: it separates the fields of the key the published record is stored under", link, naming.KeySeparator)
+		named := raw[key]
+		for _, declared := range slices.Sorted(maps.Keys(named)) {
+			external := strings.TrimSpace(named[declared])
+			if external == "" {
+				return nil, fmt.Errorf("`bindings.%s.%s` names no published record — a binding always spells out the name the record is published under, even when it matches", key, declared)
+			}
+			if strings.Contains(external, naming.KeySeparator) {
+				return nil, fmt.Errorf("published name %q may not contain %q: it separates the fields of the key the record is stored under", external, naming.KeySeparator)
+			}
+			out = append(out, Binding{Type: typ, Name: declared, External: external})
 		}
-		if seen[link] {
-			return nil, fmt.Errorf("`links` names %q twice — one entry binds it", link)
-		}
-		seen[link] = true
-		out = append(out, link)
 	}
+	slices.SortFunc(out, func(a, b Binding) int {
+		if a.Type != b.Type {
+			return cmp.Compare(a.Type, b.Type)
+		}
+		return strings.Compare(a.Name, b.Name)
+	})
 	return out, nil
 }
 

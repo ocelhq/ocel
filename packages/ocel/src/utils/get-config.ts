@@ -1,68 +1,72 @@
 import { fromJson } from "@bufbuild/protobuf";
 import { readLive } from "../env/live.js";
-import { type Link, LinkSchema, LinkType } from "../gen/proto/common/links/v1/links_pb.js";
+import {
+  type Binding,
+  BindingSchema,
+  BindingType,
+} from "../gen/proto/common/bindings/v1/bindings_pb.js";
 
-/** The link types an app resolves; a custom record is read by transforms alone. */
-export type LinkCase = Exclude<NonNullable<Link["properties"]["case"]>, "custom">;
+/** The binding types an app resolves; a custom record is read by transforms alone. */
+export type BindingCase = Exclude<NonNullable<Binding["properties"]["case"]>, "custom">;
 
-export type LinkProperties<TCase extends LinkCase> = Extract<
-  Link["properties"],
+export type BindingProperties<TCase extends BindingCase> = Extract<
+  Binding["properties"],
   { case: TCase }
 >["value"];
 
 const typeOfCase: {
-  [TCase in NonNullable<Link["properties"]["case"]>]: LinkType;
+  [TCase in NonNullable<Binding["properties"]["case"]>]: BindingType;
 } = {
-  postgres: LinkType.POSTGRES,
-  bucket: LinkType.BUCKET,
-  custom: LinkType.CUSTOM,
+  postgres: BindingType.POSTGRES,
+  bucket: BindingType.BUCKET,
+  custom: BindingType.CUSTOM,
 };
 
-/** The type a link's properties case declares; UNSPECIFIED when it carries none. */
-export function linkTypeOf(link: Link): LinkType {
-  return link.properties.case ? typeOfCase[link.properties.case] : LinkType.UNSPECIFIED;
+/** The type a binding's properties case declares; UNSPECIFIED when it carries none. */
+export function bindingTypeOf(binding: Binding): BindingType {
+  return binding.properties.case ? typeOfCase[binding.properties.case] : BindingType.UNSPECIFIED;
 }
 
-/** The env key a link of the given type is delivered under. */
-export function linkKey(name: string, type: LinkType): string {
-  return `OCEL_RESOURCE_${LinkType[type]}_${name}`;
+/** The env key a binding of the given type is delivered under. */
+export function bindingKey(name: string, type: BindingType): string {
+  return `OCEL_RESOURCE_${BindingType[type]}_${name}`;
 }
 
 /**
- * Reads the link delivered for a resource and hands back its typed
+ * Reads the binding delivered for a resource and hands back its typed
  * properties. Throws when nothing was delivered, when the payload is not a
- * link record, or when the record is of another type than the one asked for.
+ * binding record, or when the record is of another type than the one asked for.
  */
-export function getConfig<TCase extends LinkCase>(
+export function getConfig<TCase extends BindingCase>(
   name: string,
   kind: TCase,
-): LinkProperties<TCase> {
+): BindingProperties<TCase> {
   const type = typeOfCase[kind];
-  const key = linkKey(name, type);
+  const key = bindingKey(name, type);
   const raw = readLive(key) ?? process.env[key];
 
   if (!raw) {
     throw new Error(
-      `Value for ${key} is not defined. Run \`ocel dev\` to resolve it locally, or \`ocel deploy\` to have it delivered from the resource this app links.`,
+      `Value for ${key} is not defined. Run \`ocel dev\` to resolve it locally, or \`ocel deploy\` to have it delivered from the resource this app bindings.`,
     );
   }
 
-  let link: Link;
+  let binding: Binding;
   try {
-    link = fromJson(LinkSchema, JSON.parse(raw));
+    binding = fromJson(BindingSchema, JSON.parse(raw));
   } catch (cause) {
     throw new Error(
-      `${key} does not carry a link record, so this app cannot read it as a ${LinkType[type]}`,
+      `${key} does not carry a binding record, so this app cannot read it as a ${BindingType[type]}`,
       { cause },
     );
   }
 
-  if (link.properties.case !== kind) {
+  if (binding.properties.case !== kind) {
     throw new Error(
-      `${key} carries a ${LinkType[linkTypeOf(link)]} link, and this app reads it as a ${LinkType[type]}`,
+      `${key} carries a ${BindingType[bindingTypeOf(binding)]} binding, and this app reads it as a ${BindingType[type]}`,
     );
   }
-  return link.properties.value as LinkProperties<TCase>;
+  return binding.properties.value as BindingProperties<TCase>;
 }
 
 export const RUNTIME_ADDRESS = "OCEL_RUNTIME_ADDRESS";

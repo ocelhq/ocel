@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 function declare(opts?: Parameters<typeof postgres>[2]) {
-  postgres("orders", { getSSTLink: () => ({ properties }) }, opts);
+  postgres("orders", { getSSTBinding: () => ({ properties }) }, opts);
   return latest();
 }
 
@@ -78,17 +78,17 @@ function argv() {
   return { command: call[0], args: call[1] as string[], options: call[2] };
 }
 
-describe("declaring a postgres link", () => {
+describe("declaring a postgres binding", () => {
   it("builds one resource per call, owned by that resource alone", () => {
     const one = declare();
 
-    expect(one.name).toBe("ocel-link-orders");
+    expect(one.name).toBe("ocel-binding-orders");
     expect(one.props).toMatchObject({
       name: "orders",
       class: "production",
       project: root,
       owner:
-        "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-link-orders",
+        "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-orders",
       properties,
     });
   });
@@ -105,10 +105,10 @@ describe("declaring a postgres link", () => {
     expect(() => declare({ class: "preview", environment: "*" })).toThrow(/reserved/);
   });
 
-  it("says where a link call belongs when nothing supplies the util", () => {
+  it("says where a binding call belongs when nothing supplies the util", () => {
     Reflect.deleteProperty(globalThis, "$util");
 
-    expect(() => declare()).toThrow(/Move the link call into run\(\)/);
+    expect(() => declare()).toThrow(/Move the binding call into run\(\)/);
   });
 
   it("says how to name the project when nothing supplies the config root", () => {
@@ -117,27 +117,27 @@ describe("declaring a postgres link", () => {
     expect(() => declare()).toThrow(/pass `project` to say which directory holds it/);
   });
 
-  it("keeps only the fields a postgres link carries", () => {
+  it("keeps only the fields a postgres binding carries", () => {
     postgres("orders", {
-      getSSTLink: () => ({ properties: { ...properties, extra: "dropped" } }),
+      getSSTBinding: () => ({ properties: { ...properties, extra: "dropped" } }),
     });
 
     expect(built[0]?.props.properties).toEqual(properties);
   });
 });
 
-describe("publishing a postgres link", () => {
-  it("runs ocel link set in the project, owned by this resource", async () => {
+describe("publishing a postgres binding", () => {
+  it("runs ocel binding set in the project, owned by this resource", async () => {
     const created = await postgresProvider.create(declare().props as never);
 
     const { command, args, options } = argv();
     expect(command).toBe(process.execPath);
     expect(args).toEqual([
       entry,
-      "link",
+      "binding",
       "set",
       "--owner",
-      "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-link-orders",
+      "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-orders",
     ]);
     expect(options).toMatchObject({ cwd: root });
     expect(JSON.parse(String(options?.input))).toEqual({
@@ -172,20 +172,20 @@ describe("publishing a postgres link", () => {
   it("surfaces the CLI's refusal verbatim", async () => {
     run.mockReturnValue({
       status: 1,
-      stderr: "link orders in production is already published by publisher urn:pulumi:other\n",
+      stderr: "binding orders in production is already published by publisher urn:pulumi:other\n",
     } as never);
 
     await expect(postgresProvider.create(declare().props as never)).rejects.toThrow(
-      "link orders in production is already published by publisher urn:pulumi:other",
+      "binding orders in production is already published by publisher urn:pulumi:other",
     );
   });
 });
 
-describe("changing a published postgres link", () => {
+describe("changing a published postgres binding", () => {
   it("updates in place when only the record changed", async () => {
     const olds = (await postgresProvider.create(declare().props as never)).outs;
     postgres("orders", {
-      getSSTLink: () => ({ properties: { ...properties, host: "moved" } }),
+      getSSTBinding: () => ({ properties: { ...properties, host: "moved" } }),
     });
 
     const diff = await postgresProvider.diff("id", olds, latest().props as never);
@@ -209,7 +209,7 @@ describe("changing a published postgres link", () => {
   it("reports a change rather than throwing while a property is still unknown", async () => {
     const olds = (await postgresProvider.create(declare().props as never)).outs;
     postgres("orders", {
-      getSSTLink: () => ({
+      getSSTBinding: () => ({
         properties: { ...properties, host: undefined },
       }),
     });
@@ -230,19 +230,19 @@ describe("changing a published postgres link", () => {
   });
 });
 
-describe("removing a postgres link", () => {
-  it("runs ocel link rm for the name it published", async () => {
+describe("removing a postgres binding", () => {
+  it("runs ocel binding rm for the name it published", async () => {
     const created = await postgresProvider.create(declare().props as never);
     run.mockClear();
 
     await postgresProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual([entry, "link", "rm", "orders"]);
+    expect(argv().args).toEqual([entry, "binding", "rm", "orders"]);
     expect(argv().options).toMatchObject({ cwd: root });
   });
 });
 
-describe("declaring a custom link", () => {
+describe("declaring a custom binding", () => {
   const network = {
     subnetIds: ["subnet-0a1", "subnet-0b2"],
     securityGroupIds: ["sg-0c3"],
@@ -256,27 +256,27 @@ describe("declaring a custom link", () => {
   it("builds one resource per call, owned by that resource alone", () => {
     const one = declareCustom();
 
-    expect(one.name).toBe("ocel-link-network");
+    expect(one.name).toBe("ocel-binding-network");
     expect(one.props).toMatchObject({
       name: "network",
       class: "production",
       project: root,
       owner:
-        "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-link-network",
+        "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-network",
       properties: network,
     });
   });
 
-  it("runs ocel link set with a custom record sourced to sst", async () => {
+  it("runs ocel binding set with a custom record sourced to sst", async () => {
     const created = await customProvider.create(declareCustom().props as never);
 
     const { args, options } = argv();
     expect(args).toEqual([
       entry,
-      "link",
+      "binding",
       "set",
       "--owner",
-      "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-link-network",
+      "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-network",
     ]);
     expect(JSON.parse(String(options?.input))).toEqual({
       name: "network",
@@ -305,12 +305,12 @@ describe("declaring a custom link", () => {
     });
   });
 
-  it("runs ocel link rm for the name it published", async () => {
+  it("runs ocel binding rm for the name it published", async () => {
     const created = await customProvider.create(declareCustom().props as never);
     run.mockClear();
 
     await customProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual([entry, "link", "rm", "network"]);
+    expect(argv().args).toEqual([entry, "binding", "rm", "network"]);
   });
 });

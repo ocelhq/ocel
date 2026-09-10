@@ -1,6 +1,6 @@
 # @ocel/pulumi
 
-Publish resources your Pulumi program provisions as ocel links, so an ocel app can
+Publish resources your Pulumi program provisions as ocel bindings, so an ocel app can
 reach them by name.
 
 ## Install
@@ -15,12 +15,12 @@ project — the directory holding `ocel.json` — not from the Pulumi program.
 ## Use
 
 `ocel.json` beside `Pulumi.yaml` in the same package is the supported layout.
-Declare the link in the Pulumi program:
+Declare the binding in the Pulumi program:
 
 ```ts
 import * as aws from "@pulumi/aws";
 import { Config } from "@pulumi/pulumi";
-import { link } from "@ocel/pulumi";
+import { bind } from "@ocel/pulumi";
 
 const password = new Config().requireSecret("dbPassword");
 
@@ -30,7 +30,7 @@ const orders = new aws.rds.Instance("orders", {
   /* … */
 });
 
-link.postgres("orders", {
+bind.postgres("orders", {
   host: orders.address,
   port: orders.port,
   database: orders.dbName,
@@ -46,7 +46,7 @@ Name it in `ocel.json`:
   "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
   "slug": "shop",
   "provider": { "name": "aws" },
-  "links": ["orders"],
+  "bindings": ["orders"],
   "apps": [{ "name": "api", "path": "." }]
 }
 ```
@@ -59,16 +59,16 @@ import { postgres } from "ocel/postgres";
 export const orders = postgres("orders");
 ```
 
-`pulumi up` publishes the link; `ocel deploy` hands it to the app.
+`pulumi up` publishes the binding; `ocel deploy` hands it to the app.
 
-## `link.postgres(name, resource, opts?)`
+## `bind.postgres(name, resource, opts?)`
 
 `name` is the name the app binds to. `resource` is the postgres fields, each of them
 an input this update resolves before the record is published, so a resource's outputs
 are handed over as they are:
 
 ```ts
-link.postgres("orders", {
+bind.postgres("orders", {
   host,
   port,
   database,
@@ -78,26 +78,26 @@ link.postgres("orders", {
 });
 ```
 
-`opts` says where the link lands:
+`opts` says where the binding lands:
 
 | Option        | Default                     | Meaning                                                                                    |
 | ------------- | --------------------------- | ------------------------------------------------------------------------------------------ |
-| `class`       | `"production"`              | The ocel class the link is published to.                                                     |
-| `environment` | none                        | One preview environment; `class: "preview"` only. Left off, the link serves every preview.   |
+| `class`       | `"production"`              | The ocel class the binding is published to.                                                     |
+| `environment` | none                        | One preview environment; `class: "preview"` only. Left off, the binding serves every preview.   |
 | `project`     | the program's directory     | The directory holding `ocel.json`.                                                      |
-| `parent`      | none                        | The Pulumi resource this link hangs under.                                                   |
+| `parent`      | none                        | The Pulumi resource this binding hangs under.                                                   |
 
-One call is one resource. Remove the call and the published link goes with it. A name
+One call is one resource. Remove the call and the published binding goes with it. A name
 belongs to whoever published it — the URN of the resource the call creates — so two
 stacks publishing `orders` into one project is refused rather than silently handing
 every app bound to that name another database.
 
-## `link.custom(name, { properties }, opts?)`
+## `bind.custom(name, { properties }, opts?)`
 
 Publishes values ocel neither types nor delivers, for a transform to read:
 
 ```ts
-link.custom("network", {
+bind.custom("network", {
   properties: {
     subnetIds: vpc.privateSubnetIds,
     securityGroupIds: [securityGroup.id],
@@ -108,11 +108,11 @@ link.custom("network", {
 A transform module in the ocel project reads them by name:
 
 ```ts
-export default defineTransform(({ links }) => ({
+export default defineTransform(({ bindings }) => ({
   function: {
     vpc: {
-      subnetIds: links.network.subnetIds,
-      securityGroupIds: links.network.securityGroupIds,
+      subnetIds: bindings.network.subnetIds,
+      securityGroupIds: bindings.network.securityGroupIds,
     },
   },
 }));
@@ -120,12 +120,12 @@ export default defineTransform(({ links }) => ({
 
 The properties are inserted verbatim — string, number, boolean, list or object — and
 the surface being filled is what rejects a value of the wrong shape. `opts` is the same
-as for `link.postgres`.
+as for `bind.postgres`.
 
-No app reads a custom link, so it takes no `grants`: nothing would attach them. Naming
-one in `links` is refused for the same reason.
+No app reads a custom binding, so it takes no `grants`: nothing would attach them. Naming
+one in `bindings` is refused for the same reason.
 
 ## Types
 
-There is one function per ocel link type an app resolves. A resource ocel cannot type is
-not linkable by name — publish what a transform needs from it with `link.custom` instead.
+There is one function per ocel binding type an app resolves. A resource ocel cannot type is
+not bindable by name — publish what a transform needs from it with `bind.custom` instead.

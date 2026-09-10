@@ -1,4 +1,5 @@
-import { LinkType, type PostgresProperties } from "../gen/proto/common/links/v1/links_pb.js";
+import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
+import type { PostgresProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import { declarationSite } from "../utils/callsite.js";
 import type { Component } from "../utils/component.js";
 import { defer } from "../utils/defer.js";
@@ -10,7 +11,7 @@ export interface PostgresConfig {
 }
 
 export class Postgres implements Component {
-  private type = LinkType.POSTGRES;
+  private type = ResourceType.POSTGRES;
 
   constructor(
     public id: string,

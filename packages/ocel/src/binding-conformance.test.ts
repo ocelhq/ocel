@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LinkType } from "./gen/proto/common/links/v1/links_pb.js";
-import { linkKey } from "./utils/get-config.js";
+import { BindingType } from "./gen/proto/common/bindings/v1/bindings_pb.js";
+import { bindingKey } from "./utils/get-config.js";
 
 vi.mock("./utils/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
@@ -22,22 +22,22 @@ function repoRoot() {
   }
 }
 
-const fixtures = new URL("proto/common/links/v1/fixtures/", repoRoot());
+const fixtures = new URL("proto/common/bindings/v1/fixtures/", repoRoot());
 
-const types = Object.values(LinkType).filter(
-  (value): value is LinkType =>
-    typeof value === "number" && value !== LinkType.UNSPECIFIED && value !== LinkType.CUSTOM,
+const types = Object.values(BindingType).filter(
+  (value): value is BindingType =>
+    typeof value === "number" && value !== BindingType.UNSPECIFIED && value !== BindingType.CUSTOM,
 );
 
-function fileOf(type: LinkType) {
-  return `${LinkType[type].toLowerCase()}.json`;
+function fileOf(type: BindingType) {
+  return `${BindingType[type].toLowerCase()}.json`;
 }
 
-function raw(type: LinkType) {
+function raw(type: BindingType) {
   return readFileSync(new URL(fileOf(type), fixtures), "utf8");
 }
 
-describe("the link conformance fixtures", () => {
+describe("the binding conformance fixtures", () => {
   beforeEach(() => {
     vi.stubEnv("OCEL_PHASE", "");
   });
@@ -46,13 +46,13 @@ describe("the link conformance fixtures", () => {
     vi.unstubAllEnvs();
   });
 
-  it("carry exactly one record per link type an app resolves", () => {
+  it("carry exactly one record per binding type an app resolves", () => {
     expect(readdirSync(fixtures).sort()).toEqual(types.map(fileOf).sort());
   });
 
   it("reach postgres() through its live key", () => {
-    const body = raw(LinkType.POSTGRES);
-    vi.stubEnv(linkKey("main", LinkType.POSTGRES), body);
+    const body = raw(BindingType.POSTGRES);
+    vi.stubEnv(bindingKey("main", BindingType.POSTGRES), body);
     const want = JSON.parse(body).postgres;
 
     const pool = postgres("main");
@@ -70,8 +70,8 @@ describe("the link conformance fixtures", () => {
   });
 
   it("reach bucket() through its live key", () => {
-    const body = raw(LinkType.BUCKET);
-    vi.stubEnv(linkKey("uploads", LinkType.BUCKET), body);
+    const body = raw(BindingType.BUCKET);
+    vi.stubEnv(bindingKey("uploads", BindingType.BUCKET), body);
 
     expect(bucket("uploads", { uploaders: {} }).__config()).toMatchObject(JSON.parse(body).bucket);
   });

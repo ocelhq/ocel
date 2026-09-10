@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LinkType } from "../gen/proto/common/links/v1/links_pb.js";
+import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 
 const declareMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
@@ -19,7 +19,7 @@ describe("Postgres discovery declare", () => {
 
     expect(declareMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        resource: { name: "main", type: LinkType.POSTGRES },
+        resource: { name: "main", type: BindingType.POSTGRES },
         config: { case: "postgres", value: { version: "17" } },
       }),
     );
@@ -30,7 +30,7 @@ describe("Postgres discovery declare", () => {
 
     expect(declareMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        resource: { name: "main", type: LinkType.POSTGRES },
+        resource: { name: "main", type: BindingType.POSTGRES },
         config: { case: "postgres", value: { version: "17" } },
       }),
     );
@@ -41,7 +41,7 @@ describe("Postgres discovery declare", () => {
 
     expect(declareMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        resource: { name: "main", type: LinkType.POSTGRES },
+        resource: { name: "main", type: BindingType.POSTGRES },
         config: { case: "postgres", value: { version: "16" } },
       }),
     );

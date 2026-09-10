@@ -1,27 +1,29 @@
 import { custom, postgres } from "./resource.js";
 
-export type { CustomLink } from "./custom.js";
+export type { CustomBinding } from "./custom.js";
 export type { Grant, SSTInclude } from "./grants.js";
-export type { PostgresLink, PostgresProperties } from "./postgres.js";
+export type { PostgresBinding, PostgresProperties } from "./postgres.js";
 export type {
+  BindOptions,
   DescribedCustomResource,
   DescribedPostgresResource,
-  LinkOptions,
-  SSTPostgresLinkable,
+  SSTPostgresBindable,
 } from "./resource.js";
 
 /**
- * The ocel links this SST app publishes, one call per link.
+ * The ocel bindings this SST app publishes, one call per binding.
  *
- * A link is one resource an app reaches, published under the name the app binds
- * to — `postgres("orders")` in the app, `link.postgres("orders", …)` here. Each
+ * A binding is one resource an app reaches, published under a name of this
+ * program's choosing — `bind.postgres("sst-pg-orders", …)` here, and the app's
+ * config binds a declared resource to it with
+ * `"bindings": { "postgres": { "orders": "sst-pg-orders" } }`. Each
  * call is one Pulumi resource, so removing the call removes the published
- * record, and there is one function per ocel link type an app resolves: a
- * resource ocel cannot type is not linkable by name, and nothing here refuses
+ * record, and there is one function per ocel binding type an app resolves: a
+ * resource ocel cannot type is not bindable by name, and nothing here refuses
  * at apply what it could refuse by having no function to call.
  *
  * `custom` is the exception an app never sees: it publishes values ocel neither
  * types nor delivers, read only by a transform module through
- * `links.<name>.<property>`.
+ * `bindings.<name>.<property>`.
  */
-export const link = { postgres, custom };
+export const bind = { postgres, custom };

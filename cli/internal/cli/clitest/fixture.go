@@ -143,7 +143,7 @@ globalThis.__ocelRegister.push(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      resource: { type: "LINK_TYPE_POSTGRES", name: "main" },
+      resource: { type: "RESOURCE_TYPE_POSTGRES", name: "main" },
       postgres: { version: "17" },
       source,
     }),
@@ -269,12 +269,12 @@ function site(): string {
 }
 
 export function declarePostgres(name: string) {
-  register({ resource: { type: "LINK_TYPE_POSTGRES", name }, postgres: { version: "17" }, source: site() });
+  register({ resource: { type: "RESOURCE_TYPE_POSTGRES", name }, postgres: { version: "17" }, source: site() });
   return { name };
 }
 
 export function declareBucket(name: string) {
-  register({ resource: { type: "LINK_TYPE_BUCKET", name }, bucket: {}, source: site() });
+  register({ resource: { type: "RESOURCE_TYPE_BUCKET", name }, bucket: {}, source: site() });
   return { name };
 }
 `)

@@ -162,10 +162,10 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		if err := recordDeployResult(cfg, manifest, env, opts.tag, out.promotionID, out.apps); err != nil {
 			return err
 		}
-		if err := publishServiceMap(cfg, manifest, env, opts.tag, out.promotionID, out.links); err != nil {
+		if err := publishServiceMap(cfg, manifest, env, opts.tag, out.promotionID, out.bindings); err != nil {
 			return err
 		}
-		ui.Deployed("Deployed", out.urlNote, out.flip, out.links, out.functions)
+		ui.Deployed("Deployed", out.urlNote, out.flip, out.bindings, out.functions)
 		return nil
 	})
 }

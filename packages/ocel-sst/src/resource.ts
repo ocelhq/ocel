@@ -1,12 +1,12 @@
 import crypto from "node:crypto";
-import { checkTarget, runLink, type Target } from "./cli.js";
-import { customLink, type DescribedCustom } from "./custom.js";
+import { checkTarget, runBindings, type Target } from "./cli.js";
+import { customBinding, type DescribedCustom } from "./custom.js";
 import type { Grant, SSTInclude } from "./grants.js";
-import { type DescribedPostgres, postgresLink } from "./postgres.js";
+import { type DescribedPostgres, postgresBinding } from "./postgres.js";
 
-/** An SST component, as SST already describes itself to its own link consumers. */
-export interface SSTPostgresLinkable {
-  getSSTLink(): {
+/** An SST component, as SST already describes itself to its own binding consumers. */
+export interface SSTPostgresBindable {
+  getSSTBinding(): {
     properties: Record<string, unknown>;
     include?: SSTInclude[];
   };
@@ -17,7 +17,7 @@ type Input<T> = T | Promise<T> | { apply(f: (value: T) => unknown): unknown };
 /**
  * A postgres resource described by hand, for anything SST does not describe.
  *
- * The fields are the ones `common.links.v1.PostgresProperties` declares, and the grants
+ * The fields are the ones `common.bindings.v1.PostgresProperties` declares, and the grants
  * are explicit: nothing is inferred about what an app may do with the resource.
  */
 export interface DescribedPostgresResource {
@@ -29,29 +29,29 @@ export interface DescribedPostgresResource {
   grants?: Grant[];
 }
 
-/** Where a link lands: an ocel class, one preview environment, and the project holding both. */
-export interface LinkOptions {
+/** Where a binding lands: an ocel class, one preview environment, and the project holding both. */
+export interface BindOptions {
   class?: "production" | "preview";
   environment?: string;
   project?: string;
 }
 
-interface LinkInputs extends Target {
+interface BindingInputs extends Target {
   name: string;
   owner: string;
 }
 
-interface PostgresInputs extends LinkInputs, DescribedPostgres {}
+interface PostgresInputs extends BindingInputs, DescribedPostgres {}
 
-interface CustomInputs extends LinkInputs, DescribedCustom {}
+interface CustomInputs extends BindingInputs, DescribedCustom {}
 
-interface LinkState extends Target {
+interface BindingState extends Target {
   name: string;
   owner: string;
   digest: string;
 }
 
-function linkProvider<I extends LinkInputs>(
+function bindingProvider<I extends BindingInputs>(
   recordFor: (inputs: I) => object,
   resolved: (inputs: I) => boolean,
 ) {
@@ -61,7 +61,7 @@ function linkProvider<I extends LinkInputs>(
       .update(JSON.stringify(recordFor(inputs)))
       .digest("hex");
 
-  const stateOf = (inputs: I): LinkState => ({
+  const stateOf = (inputs: I): BindingState => ({
     name: inputs.name,
     owner: inputs.owner,
     project: inputs.project,
@@ -71,7 +71,7 @@ function linkProvider<I extends LinkInputs>(
   });
 
   const set = (inputs: I) =>
-    runLink(["set", "--owner", inputs.owner], inputs, `${JSON.stringify(recordFor(inputs))}\n`);
+    runBindings(["set", "--owner", inputs.owner], inputs, `${JSON.stringify(recordFor(inputs))}\n`);
 
   return {
     async create(inputs: I) {
@@ -79,7 +79,7 @@ function linkProvider<I extends LinkInputs>(
       return { id: idFor(inputs), outs: stateOf(inputs) };
     },
 
-    async diff(_id: string, olds: LinkState, news: I) {
+    async diff(_id: string, olds: BindingState, news: I) {
       const replaces = replacesFor(olds, news);
       return {
         changes: replaces.length > 0 || !resolved(news) || olds.digest !== digestOf(news),
@@ -88,46 +88,46 @@ function linkProvider<I extends LinkInputs>(
       };
     },
 
-    async update(_id: string, _olds: LinkState, news: I) {
+    async update(_id: string, _olds: BindingState, news: I) {
       set(news);
       return { outs: stateOf(news) };
     },
 
-    async delete(_id: string, props: LinkState) {
-      runLink(["rm", props.name], props);
+    async delete(_id: string, props: BindingState) {
+      runBindings(["rm", props.name], props);
     },
   };
 }
 
-export const postgresProvider = linkProvider<PostgresInputs>(
+export const postgresProvider = bindingProvider<PostgresInputs>(
   (inputs) =>
-    postgresLink(inputs.name, {
+    postgresBinding(inputs.name, {
       properties: inputs.properties,
       include: inputs.include,
       grants: inputs.grants,
     }),
-  (inputs) => linkFields.every((field) => inputs.properties[field] !== undefined),
+  (inputs) => bindingFields.every((field) => inputs.properties[field] !== undefined),
 );
 
-export const customProvider = linkProvider<CustomInputs>(
-  (inputs) => customLink(inputs.name, { properties: inputs.properties }),
+export const customProvider = bindingProvider<CustomInputs>(
+  (inputs) => customBinding(inputs.name, { properties: inputs.properties }),
   (inputs) => Object.values(inputs.properties).every((value) => value !== undefined),
 );
 
 /**
- * Publishes one SST-defined resource as one ocel link, as a side effect of this apply.
+ * Publishes one SST-defined resource as one ocel binding, as a side effect of this apply.
  *
  * The name is the one the app declares — `postgres("orders")` in ocel,
  * `postgres("orders", …)` here — and the resource is either an SST component,
- * whose own link description is passed through, or the postgres fields written
+ * whose own binding description is passed through, or the postgres fields written
  * out by hand. `class` defaults to production, `environment` names one preview
  * environment, and `project` is the directory holding `ocel.json`, which is
  * the SST config root unless it is given.
  */
 export function postgres(
   name: string,
-  resource: SSTPostgresLinkable | DescribedPostgresResource,
-  opts?: LinkOptions,
+  resource: SSTPostgresBindable | DescribedPostgresResource,
+  opts?: BindOptions,
 ): void {
   const util = host();
   const target: Target = {
@@ -137,7 +137,7 @@ export function postgres(
   };
   checkTarget(target);
 
-  const logical = `ocel-link-${name}`;
+  const logical = `ocel-binding-${name}`;
   new util.dynamic.Resource(postgresProvider, logical, {
     ...target,
     name,
@@ -150,7 +150,7 @@ export function postgres(
  * A record only transforms read: the properties written out by hand, under a
  * name a transform names.
  *
- * Ocel neither types nor interprets what a custom link carries — it hands the
+ * Ocel neither types nor interprets what a custom binding carries — it hands the
  * values to a transform that fills a surface field with them, so nothing is
  * delivered to an app and no grants are accepted.
  */
@@ -160,15 +160,15 @@ export interface DescribedCustomResource {
 
 /**
  * Publishes one set of values your own infrastructure holds as one ocel custom
- * link, as a side effect of this apply.
+ * binding, as a side effect of this apply.
  *
- * The name is the one a transform reads — `link.custom("network", …)` here,
- * `links.network.subnetIds` in a transform module. `class` defaults to
+ * The name is the one a transform reads — `bind.custom("network", …)` here,
+ * `bindings.network.subnetIds` in a transform module. `class` defaults to
  * production, `environment` names one preview environment, and `project` is the
  * directory holding `ocel.json`, which is the SST config root unless it is
  * given.
  */
-export function custom(name: string, resource: DescribedCustomResource, opts?: LinkOptions): void {
+export function custom(name: string, resource: DescribedCustomResource, opts?: BindOptions): void {
   const util = host();
   const target: Target = {
     project: opts?.project ?? configRoot(),
@@ -177,7 +177,7 @@ export function custom(name: string, resource: DescribedCustomResource, opts?: L
   };
   checkTarget(target);
 
-  const logical = `ocel-link-${name}`;
+  const logical = `ocel-binding-${name}`;
   new util.dynamic.Resource(customProvider, logical, {
     ...target,
     name,
@@ -186,21 +186,21 @@ export function custom(name: string, resource: DescribedCustomResource, opts?: L
   });
 }
 
-function idFor(inputs: LinkInputs): string {
+function idFor(inputs: BindingInputs): string {
   return [inputs.class, inputs.environment, inputs.name].filter(Boolean).join("/");
 }
 
 const identity = ["name", "owner", "project", "class", "environment"] as const;
 
-function replacesFor(olds: LinkState, news: LinkInputs): string[] {
+function replacesFor(olds: BindingState, news: BindingInputs): string[] {
   return identity.filter((field) => olds[field] !== news[field]);
 }
 
-const linkFields = ["host", "port", "database", "username", "password"] as const;
+const bindingFields = ["host", "port", "database", "username", "password"] as const;
 
-function describe(resource: SSTPostgresLinkable | DescribedPostgresResource): DescribedPostgres {
-  if (typeof (resource as SSTPostgresLinkable).getSSTLink === "function") {
-    const described = (resource as SSTPostgresLinkable).getSSTLink();
+function describe(resource: SSTPostgresBindable | DescribedPostgresResource): DescribedPostgres {
+  if (typeof (resource as SSTPostgresBindable).getSSTBinding === "function") {
+    const described = (resource as SSTPostgresBindable).getSSTBinding();
     return {
       properties: pick(described.properties),
       include: described.include,
@@ -215,7 +215,7 @@ function describe(resource: SSTPostgresLinkable | DescribedPostgresResource): De
 
 function pick(properties: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const field of linkFields) {
+  for (const field of bindingFields) {
     out[field] = properties[field];
   }
   return out;
@@ -243,7 +243,7 @@ function host(): DynamicHost {
   const util = typeof $util === "undefined" ? undefined : $util;
   if (!util?.dynamic?.Resource) {
     throw new Error(
-      "@ocel/sst links from inside the run() of your sst.config.ts, where SST supplies $util; nothing supplies it here. Move the link call into run().",
+      "@ocel/sst bindings from inside the run() of your sst.config.ts, where SST supplies $util; nothing supplies it here. Move the binding call into run().",
     );
   }
   return util;

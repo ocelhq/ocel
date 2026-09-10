@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 func TestRegistry(t *testing.T) {
@@ -15,10 +15,10 @@ func TestRegistry(t *testing.T) {
 
 		m := New()
 
-		m.Add(Entry{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES})
+		m.Add(Entry{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
 
 		got := m.Snapshot()
-		want := []Entry{{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES}}
+		want := []Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
 		if len(got) != len(want) || got[0] != want[0] {
 			t.Fatalf("Snapshot() = %+v, want %+v", got, want)
 		}
@@ -28,7 +28,7 @@ func TestRegistry(t *testing.T) {
 		t.Parallel()
 
 		m := New()
-		m.Add(Entry{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES})
+		m.Add(Entry{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
 
 		snap := m.Snapshot()
 		snap[0].Name = "mutated"
@@ -43,7 +43,7 @@ func TestRegistry(t *testing.T) {
 		t.Parallel()
 
 		m := New()
-		m.Add(Entry{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES})
+		m.Add(Entry{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
 
 		m.Reset()
 
@@ -51,9 +51,9 @@ func TestRegistry(t *testing.T) {
 			t.Fatalf("Snapshot() after Reset = %+v, want empty", got)
 		}
 
-		m.Add(Entry{Name: "second", Type: linksv1.LinkType_LINK_TYPE_POSTGRES})
+		m.Add(Entry{Name: "second", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
 		got := m.Snapshot()
-		want := []Entry{{Name: "second", Type: linksv1.LinkType_LINK_TYPE_POSTGRES}}
+		want := []Entry{{Name: "second", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
 		if len(got) != len(want) || got[0] != want[0] {
 			t.Fatalf("Snapshot() after Reset+Add = %+v, want %+v", got, want)
 		}
@@ -68,7 +68,7 @@ func TestRegistry(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				m.Add(Entry{Name: "r", Type: linksv1.LinkType_LINK_TYPE_POSTGRES})
+				m.Add(Entry{Name: "r", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
 			}()
 		}
 		wg.Wait()

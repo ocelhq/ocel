@@ -1,4 +1,4 @@
-import type { Linked } from "./output";
+import type { Bound } from "./output";
 
 /** The environment classes a deploy can target. */
 export type EnvClass = "development" | "preview" | "production";
@@ -46,11 +46,11 @@ export interface FunctionUrlSurface {
 /**
  * Where that function's Lambda runs. Both lists empty leaves it outside any
  * VPC, which is how ocel renders it; filling both places it in yours, and the
- * ids are what a link your own infrastructure published carries.
+ * ids are what a binding your own infrastructure published carries.
  */
 export interface FunctionVpcSurface {
-  subnetIds: Linked<Linked<string>[]>;
-  securityGroupIds: Linked<Linked<string>[]>;
+  subnetIds: Bound<Bound<string>[]>;
+  securityGroupIds: Bound<Bound<string>[]>;
 }
 
 /** The tunable args of the S3 bucket itself. */

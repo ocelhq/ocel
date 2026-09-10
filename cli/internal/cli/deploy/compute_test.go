@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -57,7 +57,7 @@ func TestAnAppOnlyItsUsagesNameTakesTheProvidersDefaultCompute(t *testing.T) {
 	t.Parallel()
 
 	got := toApps(nil, []attribution.Usage{
-		{App: "web", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main"},
+		{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"},
 	}, "container", nil)
 
 	if len(got) != 1 || got[0].Compute != "container" {

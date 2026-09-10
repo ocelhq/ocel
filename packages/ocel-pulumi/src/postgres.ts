@@ -1,7 +1,7 @@
 import { source } from "./cli.js";
 import { type Grant, scoped } from "./grants.js";
 
-/** The typed properties a postgres link carries, as `common.links.v1.PostgresProperties`. */
+/** The typed properties a postgres binding carries, as `common.bindings.v1.PostgresProperties`. */
 export interface PostgresProperties {
   host: string;
   port: number;
@@ -10,8 +10,8 @@ export interface PostgresProperties {
   password: string;
 }
 
-/** One `common.links.v1.Link` holding postgres properties, ready for protobuf JSON. */
-export interface PostgresLink {
+/** One `common.bindings.v1.Binding` holding postgres properties, ready for protobuf JSON. */
+export interface PostgresBinding {
   name: string;
   postgres: PostgresProperties;
   grants?: Grant[];
@@ -23,20 +23,22 @@ export interface DescribedPostgres {
   grants?: Grant[];
 }
 
-export function postgresLink(name: string, described: DescribedPostgres): PostgresLink {
+export function postgresBinding(name: string, described: DescribedPostgres): PostgresBinding {
   if (!name) {
-    throw new Error("a link is published under no name; the name is what a consuming app binds to");
+    throw new Error(
+      "a binding is published under no name; the name is what a consuming app binds to",
+    );
   }
-  const link: PostgresLink = {
+  const binding: PostgresBinding = {
     name,
     postgres: propertiesFor(name, described.properties),
     source,
   };
   const grants = scoped(name, described.grants);
   if (grants) {
-    link.grants = grants;
+    binding.grants = grants;
   }
-  return link;
+  return binding;
 }
 
 const textFields = ["host", "database", "username", "password"] as const;
@@ -47,7 +49,7 @@ function propertiesFor(name: string, properties: Record<string, unknown>): Postg
     const value = properties[field];
     if (typeof value !== "string" || value === "") {
       throw new Error(
-        `postgres link ${name} carries no ${field}; a postgres link is its host, port, database, username and password, and an app resolving it reads every one`,
+        `postgres binding ${name} carries no ${field}; a postgres binding is its host, port, database, username and password, and an app resolving it reads every one`,
       );
     }
     out[field] = value;
@@ -60,7 +62,7 @@ function portFor(name: string, value: unknown): number {
   const port = typeof value === "string" ? Number(value) : value;
   if (typeof port !== "number" || !Number.isInteger(port) || port <= 0) {
     throw new Error(
-      `postgres link ${name} carries port ${JSON.stringify(value ?? null)}, and a port is a whole number an app can connect to`,
+      `postgres binding ${name} carries port ${JSON.stringify(value ?? null)}, and a port is a whole number an app can connect to`,
     );
   }
   return port;
