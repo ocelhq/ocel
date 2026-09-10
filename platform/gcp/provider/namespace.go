@@ -3,11 +3,13 @@ package gcp
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"regexp"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -76,6 +78,38 @@ func (n Names) Service(project, env, app, function string) (string, error) {
 			app, service, len(service), maxServiceName, serviceHashLen, providerkit.NamespaceEnvVar)
 	}
 	return service, nil
+}
+
+func (n Names) PreviewService(label, app, function string) (string, error) {
+	service := label
+	if function != app {
+		service = strings.Join([]string{label, providerkit.FunctionRoute(app, function), functionSuffix}, naming.FieldSeparator)
+	}
+	if len(service) > maxPreviewService || !cloudRunService.MatchString(service) {
+		return "", providerkit.Refuse(providerkit.CodeInvalid,
+			"the preview %s would be served by a Cloud Run service named %q, which Cloud Run will not take: "+
+				"a service on a shared preview wildcard is named the label its hostname carries, "+
+				"because the load balancer hands the whole label to Cloud Run to find it, "+
+				"and Cloud Run takes at most %d characters of lowercase letters, digits and single dashes starting with a letter.\n"+
+				"This one is %s. Shorten one of them and deploy again",
+			app, service, maxPreviewService, previewParts(service))
+	}
+	return service, nil
+}
+
+const functionSuffix = "fn"
+
+const maxPreviewService = edge.PreviewLabelMaxLen
+
+var cloudRunService = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
+
+func previewParts(service string) string {
+	parts := strings.Split(service, naming.FieldSeparator)
+	described := make([]string, 0, len(parts))
+	for _, part := range parts {
+		described = append(described, fmt.Sprintf("%q (%d)", part, len(part)))
+	}
+	return fmt.Sprintf("%s = %d characters", strings.Join(described, " + "), len(service))
 }
 
 func serviceHash(parts ...string) string {

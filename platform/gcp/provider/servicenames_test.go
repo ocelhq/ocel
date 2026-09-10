@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 
@@ -142,6 +143,80 @@ func TestAFunctionOfOneAppAndAnAppNamedForItAreTwoServices(t *testing.T) {
 	}
 	if part == whole {
 		t.Errorf("both are served by %q, and one app's function would release over another app entirely", part)
+	}
+}
+
+func TestAPreviewServedOnTheSharedWildcardIsNamedTheLabelItsHostnameCarries(t *testing.T) {
+	names := serviceNames(t)
+	label := edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", "")
+
+	service, err := names.PreviewService(label, "web", "web")
+	if err != nil {
+		t.Fatalf("PreviewService() = %v", err)
+	}
+	if service != label {
+		t.Errorf("PreviewService() = %q, want exactly %q: the url mask hands the whole label to Cloud Run as the service name, "+
+			"so anything else answers nothing", service, label)
+	}
+	if !cloudRunName.MatchString(service) {
+		t.Errorf("PreviewService() = %q, which Cloud Run will not take as a service name", service)
+	}
+}
+
+func TestAPreviewFunctionThatIsNotTheAppIsNamedApartFromEveryPreviewHostname(t *testing.T) {
+	names := serviceNames(t)
+	site := edge.SharedPreview("shop", "preview.acme.com")
+
+	part, err := names.PreviewService(site.Label("pr-7", ""), "web", "fn--web--checkout")
+	if err != nil {
+		t.Fatalf("PreviewService() = %v", err)
+	}
+	if !cloudRunName.MatchString(part) {
+		t.Errorf("PreviewService() = %q, which Cloud Run will not take as a service name", part)
+	}
+	if !strings.Contains(part, "checkout") {
+		t.Errorf("PreviewService() = %q, want the route the function serves named in it", part)
+	}
+	for _, app := range []string{"", "web", "checkout"} {
+		if host := site.Label("pr-7", app); host == part {
+			t.Errorf("PreviewService() = %q, which is the label %s answers on: a hostname would reach a function nothing routes to it", part, host)
+		}
+	}
+	beside, err := names.PreviewService(site.Label("pr-7", "web"), "web", "fn--web--checkout")
+	if err != nil {
+		t.Fatalf("PreviewService() = %v", err)
+	}
+	if beside == part {
+		t.Errorf("the one-app and the many-app preview both name %q, and they are two previews with two hostnames", part)
+	}
+}
+
+func TestAPreviewLabelCloudRunWouldRefuseIsRefusedWithItsParts(t *testing.T) {
+	names := serviceNames(t)
+	pointer := strings.Repeat("pr-70", 12)
+
+	_, err := names.PreviewService(edge.SharedPreview("shop", "preview.acme.com").Label(pointer, "web"), "web", "web")
+	if err == nil {
+		t.Fatal("PreviewService() named a service Cloud Run will not take")
+	}
+	if code, refused := providerkit.RefusedCode(err); !refused || code != providerkit.CodeInvalid {
+		t.Errorf("PreviewService() code = %v, want %v", code, providerkit.CodeInvalid)
+	}
+	for _, part := range []string{"shop", pointer, "web", "60"} {
+		if !strings.Contains(err.Error(), part) {
+			t.Errorf("PreviewService() = %v, want %q named in it: the parts and their lengths are what a user can shorten", err, part)
+		}
+	}
+}
+
+func TestAPreviewLabelNothingNamedIsRefusedRatherThanStandingSomethingUnreachable(t *testing.T) {
+	names := serviceNames(t)
+
+	if _, err := names.PreviewService("", "web", "web"); err == nil {
+		t.Fatal("PreviewService() named a service from an empty label")
+	}
+	if _, err := names.PreviewService("Shop--PR_7", "web", "web"); err == nil {
+		t.Fatal("PreviewService() named a service from a label Cloud Run will not take")
 	}
 }
 

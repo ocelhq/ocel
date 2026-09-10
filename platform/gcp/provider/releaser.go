@@ -10,6 +10,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 )
 
+func (p *Provider) serviceFor(plan providerkit.StackPlan, app *providerkit.AppPlan, function string) (string, error) {
+	if app.PreviewLabel != "" {
+		return p.Names().PreviewService(app.PreviewLabel, app.App, function)
+	}
+	return p.Names().Service(plan.Ref.Project, plan.Ref.Name.Env, app.App, function)
+}
+
 func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.Function, error) {
 	app := plan.App
 	if app == nil {
@@ -25,7 +32,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 			return nil, providerkit.Refuse(providerkit.CodeInvalid,
 				"function %s carries no image, and a function on Cloud Run is the container a registry coordinate names", spec.Name)
 		}
-		service, err := p.Names().Service(plan.Ref.Project, plan.Ref.Name.Env, app.App, spec.Name)
+		service, err := p.serviceFor(plan, app, spec.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -79,7 +86,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"app %s carries no health check path, and up means a 2xx on the path the wire named rather than on one this provider chose", app.App)
 	}
-	service, err := p.Names().Service(plan.Ref.Project, plan.Ref.Name.Env, app.App, app.App)
+	service, err := p.serviceFor(plan, app, app.App)
 	if err != nil {
 		return nil, err
 	}
