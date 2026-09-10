@@ -45,22 +45,28 @@ func renderBindingTypes(coordinate string, bound []projectconfig.Binding, publis
 }
 
 func readableBindings(bound []projectconfig.Binding, published []*envvarsv1.BindingSummary) map[string]map[string][]*envvarsv1.PropertyShape {
-	declared := make(map[string]projectconfig.Binding, len(bound))
+	declared := make(map[string][]projectconfig.Binding, len(bound))
 	for _, binding := range bound {
-		declared[binding.External] = binding
+		declared[binding.External] = append(declared[binding.External], binding)
 	}
 	out := map[string]map[string][]*envvarsv1.PropertyShape{}
-	for _, record := range published {
-		kind, name := customBindingKey, record.GetName()
-		if binding, keyed := declared[record.GetName()]; keyed {
-			kind, name = naming.ResourceTypeName(binding.Type), binding.Name
-		} else if record.GetType() != bindingsv1.BindingType_BINDING_TYPE_CUSTOM {
-			continue
-		}
+	put := func(kind, name string, shapes []*envvarsv1.PropertyShape) {
 		if out[kind] == nil {
 			out[kind] = map[string][]*envvarsv1.PropertyShape{}
 		}
-		out[kind][name] = record.GetProperties()
+		out[kind][name] = shapes
+	}
+	for _, record := range published {
+		keyed := declared[record.GetName()]
+		if len(keyed) == 0 {
+			if record.GetType() == bindingsv1.BindingType_BINDING_TYPE_CUSTOM {
+				put(customBindingKey, record.GetName(), record.GetProperties())
+			}
+			continue
+		}
+		for _, binding := range keyed {
+			put(naming.ResourceTypeName(binding.Type), binding.Name, record.GetProperties())
+		}
 	}
 	return out
 }
