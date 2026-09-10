@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AWS_IMAGE="${OCEL_FLOCI_IMAGE:-ghcr.io/ocelhq/floci:2.0.1-ocel.1}"
+AWS_IMAGE="${OCEL_FLOCI_IMAGE:-ghcr.io/ocelhq/floci:2.0.1-ocel.2}"
 GCP_IMAGE="${OCEL_FLOCI_GCP_IMAGE:-floci/floci-gcp:0.8.0}"
 DOCKER_SOCK="${OCEL_FLOCI_DOCKER_SOCK:-/var/run/docker.sock}"
 READY_WAIT_SECS="${OCEL_FLOCI_READY_WAIT:-180}"

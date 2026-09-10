@@ -132,14 +132,8 @@ export const gaps: Gap[] = [
     issue: 1145,
     affects: [
       {
-        on: ["aws"],
+        on: ["aws", "aws.floci"],
         cells: ["deploy/node/web", "deploy/python/web", "deploy/go/web"],
-        variants: GATEWAY,
-        tests: [{ row: EMPTY_BODY_ROW }],
-      },
-      {
-        on: ["aws.floci"],
-        cells: ["deploy/node/web", "deploy/python/web"],
         variants: GATEWAY,
         tests: [{ row: EMPTY_BODY_ROW }],
       },
@@ -186,13 +180,6 @@ export const gaps: Gap[] = [
         skip: true,
       },
     ],
-  },
-  {
-    id: "floci-refuses-bootstrap-in-layer",
-    reason:
-      "floci rejects a provided.al2023 function at create when bootstrap lives in the layer, where lambda looks for it",
-    issue: 1146,
-    affects: [{ on: ["aws.floci"], cells: ["deploy/go/web"], tests: [UP_TITLE], skip: true }],
   },
   {
     id: "floci-runs-no-load-balancer",
