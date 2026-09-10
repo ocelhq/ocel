@@ -175,7 +175,7 @@ func (e *PolicyBudgetError) Error() string {
 	)
 	for _, app := range e.Apps {
 		fmt.Fprintf(&b,
-			"\napp %s bindings %d resources whose inline IAM policies come to %d characters on one execution role:\n",
+			"\napp %s binds %d resources whose inline IAM policies come to %d characters on one execution role:\n",
 			app.App, len(app.Items), app.Total,
 		)
 		for _, item := range app.Items {

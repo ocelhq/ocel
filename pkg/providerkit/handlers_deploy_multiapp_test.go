@@ -269,7 +269,7 @@ func TestDeployStartsNoAppWhenTheSharedInfrastructureFails(t *testing.T) {
 	statuses := spanStatuses(events)
 	for _, app := range []string{"web", "admin"} {
 		if _, ran := statuses[app]; ran {
-			t.Errorf("%s ran, want no app started at all once the infrastructure it bindings to failed", app)
+			t.Errorf("%s ran, want no app started at all once the infrastructure it binds to failed", app)
 		}
 	}
 	want := []string{"web=APP_OUTCOME_NOT_RUN", "admin=APP_OUTCOME_NOT_RUN"}

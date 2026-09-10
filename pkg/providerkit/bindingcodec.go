@@ -130,19 +130,19 @@ const grantWildcard = "*"
 func VerifyGrantScope(binding *bindingsv1.Binding) error {
 	for _, g := range binding.GetGrants() {
 		if len(g.GetActions()) == 0 {
-			return fmt.Errorf("binding %s carries a grant over %v naming no action: a grant names what an app may do with the resource it bindings: %w",
+			return fmt.Errorf("binding %s carries a grant over %v naming no action: a grant names what an app may do with the resource it binds: %w",
 				binding.GetName(), g.GetResources(), ErrUnscopedGrant)
 		}
 		if len(g.GetResources()) == 0 {
-			return fmt.Errorf("binding %s grants %v over no resource: an app receives permissions for the resource it bindings and nothing else: %w",
+			return fmt.Errorf("binding %s grants %v over no resource: an app receives permissions for the resource it binds and nothing else: %w",
 				binding.GetName(), g.GetActions(), ErrUnscopedGrant)
 		}
 		if slices.Contains(g.GetActions(), grantWildcard) {
-			return fmt.Errorf("binding %s grants %q over %v: %q is every action any vendor has, which reaches past the resource it bindings: %w",
+			return fmt.Errorf("binding %s grants %q over %v: %q is every action any vendor has, which reaches past the resource it binds: %w",
 				binding.GetName(), grantWildcard, g.GetResources(), grantWildcard, ErrUnscopedGrant)
 		}
 		if slices.Contains(g.GetResources(), grantWildcard) {
-			return fmt.Errorf("binding %s grants %v over %q: %q is every resource in the account, and an app receives permissions for the resource it bindings and nothing else: %w",
+			return fmt.Errorf("binding %s grants %v over %q: %q is every resource in the account, and an app receives permissions for the resource it binds and nothing else: %w",
 				binding.GetName(), g.GetActions(), grantWildcard, grantWildcard, ErrUnscopedGrant)
 		}
 	}

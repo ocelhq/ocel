@@ -30,7 +30,7 @@ export function scoped(name: string, grants: Grant[] | undefined): Grant[] | und
     }
     if (grant.resources.length === 0 || grant.resources.includes(wildcard)) {
       throw new Error(
-        `binding ${name} carries a grant over ${grant.resources.join(", ") || "no resource"}: an app receives permissions for the resource it bindings and nothing else`,
+        `binding ${name} carries a grant over ${grant.resources.join(", ") || "no resource"}: an app receives permissions for the resource it binds and nothing else`,
       );
     }
   }

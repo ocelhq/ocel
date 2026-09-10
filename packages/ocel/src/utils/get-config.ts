@@ -47,7 +47,7 @@ export function getConfig<TCase extends BindingCase>(
 
   if (!raw) {
     throw new Error(
-      `Value for ${key} is not defined. Run \`ocel dev\` to resolve it locally, or \`ocel deploy\` to have it delivered from the resource this app bindings.`,
+      `Value for ${key} is not defined. Run \`ocel dev\` to resolve it locally, or \`ocel deploy\` to have it delivered from the resource this app binds.`,
     );
   }
 

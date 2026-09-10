@@ -114,7 +114,7 @@ func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
 			Name:    vendor + "/" + stack.String(),
 			Feature: stack.Env,
 			Action:  planv1.Change_ACTION_DELETE,
-			Reason:  "the resources every app in " + stack.Env + " bindings to",
+			Reason:  "the resources every app in " + stack.Env + " binds to",
 			Slow:    true,
 		})
 	}
