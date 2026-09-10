@@ -36,6 +36,7 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                 ::ocel::Declared {
                     resources: ::std::vec![#(#declared),*],
                     variables: ::std::vec::Vec::new(),
+                    groups: ::std::vec::Vec::new(),
                 }
             }
 

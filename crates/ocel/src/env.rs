@@ -1,3 +1,4 @@
+use crate::DeclaredVariable;
 use crate::Error;
 use std::fmt::Display;
 use std::str::FromStr;
@@ -69,6 +70,13 @@ pub fn deployment_url() -> Result<String, Error> {
     delivered(URL_KEY).ok_or_else(|| Error::Undelivered {
         key: URL_KEY.to_string(),
     })
+}
+
+#[doc(hidden)]
+pub fn group_present(variables: &[DeclaredVariable]) -> bool {
+    variables
+        .iter()
+        .any(|variable| delivered(variable.key).is_some())
 }
 
 #[doc(hidden)]

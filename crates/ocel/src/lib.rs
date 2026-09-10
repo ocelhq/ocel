@@ -51,9 +51,11 @@ pub use ocel_macros::Resources;
 pub use ocel_macros::Env;
 
 #[doc(hidden)]
-pub use declare::{Check, Declare, Declared, DeclaredResource, DeclaredVariable, Registered};
+pub use declare::{
+    Check, Declare, Declared, DeclaredGroup, DeclaredResource, DeclaredVariable, Group, Registered,
+};
 #[doc(hidden)]
-pub use env::{check, optional, secret, value, Boolean, Class};
+pub use env::{check, group_present, optional, secret, value, Boolean, Class};
 
 #[doc(hidden)]
 pub use inventory;
