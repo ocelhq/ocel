@@ -384,9 +384,7 @@ def _definitions(cls: type, source: str) -> list[_Variable]:
 def _definition(cls: type, attr: str, annotation: Any) -> _Variable:
     assigned = cls.__dict__.get(attr, _UNSET)
     marker = (
-        assigned
-        if isinstance(assigned, _Marker)
-        else _Marker(None, assigned, False, None, None)
+        assigned if isinstance(assigned, _Marker) else _Marker(None, assigned, False, None, None)
     )
 
     key = marker.key or attr.upper()
