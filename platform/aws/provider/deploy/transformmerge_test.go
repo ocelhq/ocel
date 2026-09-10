@@ -1,13 +1,41 @@
 package deploy
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 )
+
+func TestAnOutputThatResolvedToNothingNeverLandsInAPatch(t *testing.T) {
+	t.Parallel()
+
+	if !emptyOutput(nil) {
+		t.Fatal("emptyOutput(nil) = false, and a record carrying an explicit null would land in the patch as one")
+	}
+
+	stack := planUnderTransform().Ref.Name
+	candidates := []transformCandidate{
+		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--users"}, names: functionResourceNames("shop", stack, "fn--api--users")},
+	}
+	results := []transform.Result{{Patches: transform.Patches{
+		"lambda": map[string]any{"description": placeholderFor(customBindingType, "legacy", "subnetIds")},
+	}}}
+
+	err := resolvePlanOutputs(t.Context(), providerkit.StackPlan{
+		Bindings: &publishedReader{bindings: []providerkit.Binding{
+			{Type: providerkit.BindingPostgres, Name: "legacy", Properties: map[string]string{"subnetIds": ""}},
+		}},
+	}, candidates, results)
+	var empty *EmptyOutputError
+	if !errors.As(err, &empty) {
+		t.Fatalf("resolvePlanOutputs() = %v, want an EmptyOutputError rather than a null in the patch", err)
+	}
+}
 
 func mergedValue(t *testing.T, held sdk.Input) any {
 	t.Helper()

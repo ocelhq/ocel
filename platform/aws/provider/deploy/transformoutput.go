@@ -218,6 +218,9 @@ func carried(properties []string) string {
 }
 
 func emptyOutput(value any) bool {
+	if value == nil {
+		return true
+	}
 	if text, ok := value.(string); ok {
 		return strings.TrimSpace(text) == ""
 	}
