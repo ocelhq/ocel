@@ -25,23 +25,6 @@ func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan
 	}
 	var candidates []transformCandidate
 
-	for _, resource := range plan.Resources {
-		switch resource.Type {
-		case providerkit.BindingPostgres:
-			req.Resources = append(req.Resources, transform.Resource{Type: transformTypePostgres, Name: resource.Name})
-			candidates = append(candidates, transformCandidate{
-				key:   resourceKey{Type: transformTypePostgres, Name: resource.Name},
-				names: postgresResourceNames(project, stack.Env, resource.Name),
-			})
-		case providerkit.BindingBucket:
-			req.Resources = append(req.Resources, transform.Resource{Type: transformTypeBucket, Name: resource.Name})
-			candidates = append(candidates, transformCandidate{
-				key:   resourceKey{Type: transformTypeBucket, Name: resource.Name},
-				names: bucketResourceNames(project, stack.Env, resource.Name, translateBucket(resource.Bucket)),
-			})
-		}
-	}
-
 	if app := plan.App; app != nil {
 		for _, spec := range app.Functions {
 			req.Resources = append(req.Resources, transform.Resource{
@@ -51,6 +34,26 @@ func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan
 				key:   resourceKey{Type: transformTypeFunction, Name: spec.Name},
 				names: functionResourceNames(project, stack, spec.Name),
 			})
+		}
+	} else {
+		for _, resource := range plan.Resources {
+			if resource.Binding != "" {
+				continue
+			}
+			switch resource.Type {
+			case providerkit.BindingPostgres:
+				req.Resources = append(req.Resources, transform.Resource{Type: transformTypePostgres, Name: resource.Name})
+				candidates = append(candidates, transformCandidate{
+					key:   resourceKey{Type: transformTypePostgres, Name: resource.Name},
+					names: postgresResourceNames(project, stack.Env, resource.Name),
+				})
+			case providerkit.BindingBucket:
+				req.Resources = append(req.Resources, transform.Resource{Type: transformTypeBucket, Name: resource.Name})
+				candidates = append(candidates, transformCandidate{
+					key:   resourceKey{Type: transformTypeBucket, Name: resource.Name},
+					names: bucketResourceNames(project, stack.Env, resource.Name),
+				})
+			}
 		}
 	}
 

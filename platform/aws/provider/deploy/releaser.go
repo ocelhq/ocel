@@ -217,6 +217,7 @@ func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan, work *inf
 		case providerkit.BindingBucket:
 			args := translateBucket(resource.Bucket)
 			args.Tags = transformed.tagsFor(transformTypeBucket, resource.Name)
+			args.PatchedCORS = transformed.opensCORS(resource.Name)
 			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, sessions, work.completer)
 		default:
 			return providerkit.Refuse(providerkit.CodeInvalid,
@@ -399,6 +400,9 @@ func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, rep
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
+	if err := transformedIn(prepared).refuseUnclaimed(); err != nil {
+		return providerkit.StackResult{}, err
+	}
 	if err := writeOriginRecord(ctx, r.cfg, plan.Ref.Name.App, work, result); err != nil {
 		return providerkit.StackResult{}, err
 	}
@@ -413,7 +417,24 @@ func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, report p
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	return r.adapter.Preview(ctx, prepared, report)
+	previewed, err := r.adapter.Preview(ctx, prepared, report)
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	if err := transformedIn(prepared).refuseUnclaimed(); err != nil {
+		return providerkit.Plan{}, err
+	}
+	return previewed, nil
+}
+
+func transformedIn(plan providerkit.StackPlan) *transformPatches {
+	switch work := plan.Options.(type) {
+	case *appWork:
+		return work.transformed
+	case *infraWork:
+		return work.transformed
+	}
+	return nil
 }
 
 func (r *release) prepare(ctx context.Context, plan providerkit.StackPlan) (providerkit.StackPlan, *appWork, error) {
