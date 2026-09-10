@@ -16,6 +16,7 @@ const (
 	httpsPortRange  = "443"
 	cacheOnOrigin   = "USE_ORIGIN_HEADERS"
 	serverlessNEG   = "SERVERLESS"
+	previewURLMask  = "<service>"
 	certificateHost = "//certificatemanager.googleapis.com/projects/%s/locations/global/certificateMaps/%s"
 )
 
@@ -46,7 +47,9 @@ func frontNames(class edge.Class) names {
 
 type frontSpec struct {
 	Project string
+	Region  string
 	Names   names
+	Preview previewEntry
 }
 
 const notFoundStatus = 404
@@ -60,6 +63,55 @@ func refusingRouteAction() compute.URLMapDefaultRouteActionPtrInput {
 			},
 		},
 	}
+}
+
+func previewWildcardResources(ctx *pulumi.Context, spec frontSpec) error {
+	base := spec.Preview.BaseDomain
+	if base == "" {
+		return nil
+	}
+	project := pulumi.String(spec.Project)
+	entry := previewEntryName(base)
+	if _, err := certificatemanager.NewCertificateMapEntry(ctx, entry, &certificatemanager.CertificateMapEntryArgs{
+		Name:         pulumi.String(entry),
+		Project:      project,
+		Map:          pulumi.String(spec.Names.CertificateMap),
+		Hostname:     pulumi.String(edge.PreviewWildcard(base)),
+		Certificates: pulumi.StringArray{pulumi.String(spec.Preview.Certificate)},
+	}); err != nil {
+		return err
+	}
+	neg := previewNEGName(base)
+	group, err := compute.NewRegionNetworkEndpointGroup(ctx, neg, &compute.RegionNetworkEndpointGroupArgs{
+		Name:                pulumi.String(neg),
+		Project:             project,
+		Region:              pulumi.String(spec.Region),
+		NetworkEndpointType: pulumi.String(serverlessNEG),
+		CloudRun: &compute.RegionNetworkEndpointGroupCloudRunArgs{
+			UrlMask: pulumi.String(previewURLMask + "." + base),
+		},
+	})
+	if err != nil {
+		return err
+	}
+	backend := previewBackendName(base)
+	_, err = compute.NewBackendService(ctx, backend, &compute.BackendServiceArgs{
+		Name:                pulumi.String(backend),
+		Project:             project,
+		Protocol:            pulumi.String("HTTPS"),
+		LoadBalancingScheme: pulumi.String(externalManaged),
+		EnableCdn:           pulumi.Bool(true),
+		CdnPolicy: &compute.BackendServiceCdnPolicyArgs{
+			CacheMode: pulumi.String(cacheOnOrigin),
+		},
+		Backends: compute.BackendServiceBackendArray{
+			&compute.BackendServiceBackendArgs{Group: group.SelfLink},
+		},
+		Description: pulumi.String(
+			"resolves the first label of every preview hostname on " + edge.PreviewWildcard(base) +
+				" to the Cloud Run service of that name, so a preview is a deploy and nothing else"),
+	})
+	return err
 }
 
 func frontProgram(spec frontSpec) Program {
@@ -119,6 +171,9 @@ func frontProgram(spec frontSpec) Program {
 			LoadBalancingScheme: pulumi.String(externalManaged),
 			NetworkTier:         pulumi.String(premiumTier),
 		}); err != nil {
+			return err
+		}
+		if err := previewWildcardResources(ctx, spec); err != nil {
 			return err
 		}
 		ctx.Export(outputAddress, address.Address)
