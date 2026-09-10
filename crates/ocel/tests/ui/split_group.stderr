@@ -1,0 +1,5 @@
+error: Split is read as one, and no folder satisfies every member: SPLIT_WEB (/web), SPLIT_API (/api).
+ --> tests/ui/split_group.rs:2:8
+  |
+2 | struct Split {
+  |        ^^^^^

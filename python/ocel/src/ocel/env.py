@@ -529,7 +529,27 @@ def _group(cls: type, attr: str, target: type, optional: bool) -> _Group:
     problem = _description_problem(description)
     if problem:
         raise EnvDefinitionError(key, f"has an unusable description: {problem}")
-    return _Group(attr, key, target, optional, description, _MEMBERS[target])
+    members = _MEMBERS[target]
+    unshared = _unshared_scopes(members)
+    if unshared:
+        raise EnvDefinitionError(
+            key, f"is read as one, and no folder satisfies every member: {unshared}."
+        )
+    return _Group(attr, key, target, optional, description, members)
+
+
+def _unshared_scopes(members: Sequence[_Variable]) -> str:
+    shared: set[str] | None = None
+    scoped: list[str] = []
+    for member in members:
+        if not member.folders:
+            continue
+        scoped.append(f"{member.key} ({', '.join(member.folders)})")
+        folders = set(member.folders)
+        shared = folders if shared is None else shared & folders
+    if shared is None or shared:
+        return ""
+    return ", ".join(scoped)
 
 
 def _group_annotation(annotation: Any) -> tuple[type | None, bool]:

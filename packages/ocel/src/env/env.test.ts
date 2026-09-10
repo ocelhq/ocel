@@ -1190,6 +1190,37 @@ describe("group definition errors", () => {
     expect(() => defineEnv({ hollow: group({}) })).toThrow(/no variables/);
     expect(() => defineEnv({ hollow2: group({}, { optional: true }) })).toThrow(EnvDefinitionError);
   });
+
+  it("refuses a group no folder satisfies", () => {
+    expect(() =>
+      defineEnv({
+        split: group({
+          SPLIT_WEB: { class: "plain", folders: ["/web"] },
+          SPLIT_API: { class: "plain", folders: ["/api"] },
+        }),
+      }),
+    ).toThrow(/'split'.*SPLIT_WEB \(\/web\).*SPLIT_API \(\/api\)/s);
+    expect(() =>
+      defineEnv({
+        split2: group({
+          SPLIT2_WEB: { class: "plain", folders: ["/web"] },
+          SPLIT2_API: { class: "plain", folders: ["/api"] },
+        }),
+      }),
+    ).toThrow(EnvDefinitionError);
+  });
+
+  it("accepts a group whose members share a folder", () => {
+    expect(() =>
+      defineEnv({
+        shared: group({
+          SHARED_BOTH: { class: "plain", folders: ["/web", "/api"] },
+          SHARED_API: { class: "plain", folders: ["/api"] },
+          SHARED_WIDER: { class: "plain" },
+        }),
+      }),
+    ).not.toThrow();
+  });
 });
 
 describe("what a group declares", () => {

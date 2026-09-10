@@ -162,6 +162,25 @@ function validateGroup(key: string, definition: GroupDefinition): void {
   if (problem) {
     throw new EnvDefinitionError(`'${key}' has an unusable description: ${problem}`);
   }
+  const unsatisfiable = unsharedScopes(definition.definitions);
+  if (unsatisfiable) {
+    throw new EnvDefinitionError(
+      `'${key}' is read as one, and no folder satisfies every member: ${unsatisfiable}.`,
+    );
+  }
+}
+
+function unsharedScopes(definitions: Definitions): string | undefined {
+  let shared: readonly string[] | undefined;
+  const scoped: string[] = [];
+  for (const [key, definition] of Object.entries(definitions)) {
+    const folders = definition.folders;
+    if (!folders || folders.length === 0) continue;
+    scoped.push(`${key} (${folders.join(", ")})`);
+    shared = shared === undefined ? folders : shared.filter((folder) => folders.includes(folder));
+  }
+  if (shared === undefined || shared.length > 0) return undefined;
+  return scoped.join(", ");
 }
 
 function descriptionProblem(description: string | undefined): string {

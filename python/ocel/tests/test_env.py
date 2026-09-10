@@ -978,3 +978,38 @@ def test_a_scoped_member_of_a_group_a_root_value_turned_on_is_owed(collector):
 
     _ = Env
     assert [(p.key, p.folder) for p in collector.reported()] == [("INHERITED_WEB", "/web")]
+
+
+def test_a_group_no_folder_satisfies_is_refused():
+    class Split(ocel.Group):
+        web: str = ocel.var(key="SPLIT_WEB", folders=["/web"])
+        api: str = ocel.var(key="SPLIT_API", folders=["/api"])
+
+    with pytest.raises(ocel.EnvDefinitionError) as raised:
+
+        class Env(ocel.Env):
+            split: Split | None = None
+
+        _ = Env
+
+    assert str(raised.value) == (
+        "'split' is read as one, and no folder satisfies every member: "
+        "SPLIT_WEB (/web), SPLIT_API (/api)."
+    )
+
+
+def test_a_group_whose_members_share_a_folder_is_declared(collector):
+    class Shared(ocel.Group):
+        both: str = ocel.var(key="SHARED_BOTH", folders=["/web", "/api"])
+        api: str = ocel.var(key="SHARED_API", folders=["/api"])
+        wider: str = ocel.var(key="SHARED_WIDER")
+
+    class Env(ocel.Env):
+        shared: Shared | None = None
+
+    _ = Env
+    assert [d.key for d in collector.declared_env().definitions] == [
+        "SHARED_BOTH",
+        "SHARED_API",
+        "SHARED_WIDER",
+    ]
