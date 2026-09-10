@@ -950,6 +950,16 @@ export default {
 			wantErr: []string{"main"},
 		},
 		{
+			name: "rejects an empty declared name",
+			config: `
+export default {
+  slug: "test-app",
+  bindings: { postgres: { "": "orders" } },
+};
+`,
+			wantErr: []string{"bindings.postgres", "empty name"},
+		},
+		{
 			name: "rejects a published name carrying the key separator",
 			config: `
 export default {

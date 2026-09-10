@@ -316,6 +316,9 @@ func normalizeBindings(raw configdoc.Bindings) ([]Binding, error) {
 		}
 		named := raw[key]
 		for _, declared := range slices.Sorted(maps.Keys(named)) {
+			if strings.TrimSpace(declared) == "" {
+				return nil, fmt.Errorf("`bindings.%s` is keyed by an empty name — the key is the name an app declares the resource under, and the value is the name the record is published under", key)
+			}
 			external := strings.TrimSpace(named[declared])
 			if external == "" {
 				return nil, fmt.Errorf("`bindings.%s.%s` names no published record — a binding always spells out the name the record is published under, even when it matches", key, declared)
