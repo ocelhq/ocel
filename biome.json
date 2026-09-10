@@ -25,7 +25,7 @@
       "!**/*_pb.js",
       "!**/next-env.d.ts",
       "!**/worker-configuration.d.ts",
-      "!**/ocel-links.d.ts",
+      "!**/ocel-bindings.d.ts",
       "!tests/next-compat/baseline-manifest.json",
       "!.claude",
       "!.beads",

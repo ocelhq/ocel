@@ -1,7 +1,7 @@
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 
-function postgresLink(name: string, url: string): string {
+function postgresBinding(name: string, url: string): string {
   const parsed = new URL(url);
   return JSON.stringify({
     name,
@@ -27,7 +27,7 @@ export default defineConfig({
     env: {
       DATABASE_URL:
         process.env.TEST_DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/ocelhq_test",
-      OCEL_RESOURCE_POSTGRES_main: postgresLink(
+      OCEL_RESOURCE_POSTGRES_main: postgresBinding(
         "main",
         process.env.TEST_DATABASE_URL ?? "postgres://postgres:postgres@localhost:5432/ocelhq_test",
       ),

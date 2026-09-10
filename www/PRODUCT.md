@@ -66,7 +66,7 @@ own account, and find the reference they need without having to search for it.
 **Ships today** (the repo is the source of truth):
 
 - CLI commands documented under `content/docs/cli/`: init, dev, build, deploy,
-  deployments, rollback, destroy, doctor, domain, env, generate, link, login, logout, run.
+  deployments, rollback, destroy, doctor, domain, env, generate, bindings, link, login, logout, run.
 - SDKs: TypeScript (`packages/ocel`) and Go (`sdk/`).
 - SDK resources: postgres and bucket.
 - Providers: AWS (`platform/aws`), VPS over SSH (`platform/vps`), Cloudflare as an
@@ -88,7 +88,7 @@ codebase makes clean breaks; the site must not imply stability guarantees it doe
 have.
 
 **Terminology:** "your own cloud", "provider", "target", "slug", "app", "resource",
-"console", "link". Say "deploys apps to your own infra", never "brings the DX of X to Y".
+"console", "link", "binding". Say "deploys apps to your own infra", never "brings the DX of X to Y".
 Never call the console or Ocel a cloud.
 
 ## Brand Commitments

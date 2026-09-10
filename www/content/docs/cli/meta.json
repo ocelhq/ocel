@@ -16,7 +16,7 @@
     "---Configure---",
     "env",
     "domain",
-    "link",
+    "bindings",
     "generate",
     "---Account---",
     "login",

@@ -67,7 +67,7 @@ const { rows } = await db.query(
   },
 };
 
-const linkedPostgres: Pane = {
+const boundPostgres: Pane = {
   code: {
     lang: "json",
     filename: "ocel.json",
@@ -75,7 +75,7 @@ const linkedPostgres: Pane = {
   "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
   "slug": "shop",
   "provider": { "name": "aws" },
-  "links": ["orders"]
+  "bindings": { "postgres": { "orders": "orders" } }
 }`,
   },
 };
@@ -694,14 +694,14 @@ export const publicIp = server.publicIp;`,
           code: {
             lang: "ts",
             filename: "index.ts",
-            code: `import { link } from "@ocel/pulumi";
+            code: `import { bind } from "@ocel/pulumi";
 
 const orders = new aws.rds.Instance("orders", {
   engine: "postgres",
   password,
 });
 
-link.postgres("orders", {
+bind.postgres("orders", {
   host: orders.address,
   port: orders.port,
   database: orders.dbName,
@@ -710,7 +710,7 @@ link.postgres("orders", {
 });`,
           },
         },
-        ocel: linkedPostgres,
+        ocel: boundPostgres,
         verdict:
           '`@ocel/pulumi` hands a database you already manage in Pulumi to the app, which reads it with `postgres("orders")` like any other.',
       },
@@ -728,7 +728,7 @@ link.postgres("orders", {
           list: [
             "You want the app built and shipped by the same command that provisions what it needs.",
             ocelPickAppCode,
-            "You can run both: `@ocel/pulumi` links a Pulumi-managed database into an Ocel app rather than replacing the program.",
+            "You can run both: `@ocel/pulumi` binds a Pulumi-managed database into an Ocel app rather than replacing the program.",
           ],
         },
         verdict: "",
@@ -814,14 +814,14 @@ link.postgres("orders", {
             lang: "ts",
             filename: "sst.config.ts",
             code: `async run() {
-  const { link } = await import("@ocel/sst");
+  const { bind } = await import("@ocel/sst");
   const vpc = new sst.aws.Vpc("Vpc");
   const orders = new sst.aws.Postgres("Orders", { vpc });
-  link.postgres("orders", orders);
+  bind.postgres("orders", orders);
 }`,
           },
         },
-        ocel: linkedPostgres,
+        ocel: boundPostgres,
         verdict:
           '`@ocel/sst` hands a database you already manage in SST to the app, which reads it with `postgres("orders")` like any other.',
       },
@@ -839,7 +839,7 @@ link.postgres("orders", {
           list: [
             "You want one config that names a target, with AWS and a VPS both reachable from it.",
             ocelPickAppCode,
-            "You can run both: `@ocel/sst` links an SST-managed database into an Ocel app rather than replacing the config.",
+            "You can run both: `@ocel/sst` binds an SST-managed database into an Ocel app rather than replacing the config.",
           ],
         },
         verdict: "",
