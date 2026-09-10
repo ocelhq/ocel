@@ -314,8 +314,8 @@ async function up(cell: CellContext): Promise<Deployment> {
   const drive = driving(cell, started, "up");
 
   if (setsEnv(cell.fixture.rows)) {
-    await drive("env-greeting", ["env", "set", "GREETING", INITIAL_GREETING]);
-    await drive("env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN]);
+    await drive("env-greeting", ["env", "set", `GREETING=${INITIAL_GREETING}`]);
+    await drive("env-secret", ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`]);
   }
   await drive("deploy", ["deploy", "--yes"]);
   await bindDomains(cell, started);
@@ -330,7 +330,7 @@ async function redeploy(cell: CellContext, greeting: string): Promise<Deployment
   const drive = driving(cell, started, "redeploy");
 
   if (setsEnv(cell.fixture.rows)) {
-    await drive("env-greeting", ["env", "set", "GREETING", greeting]);
+    await drive("env-greeting", ["env", "set", `GREETING=${greeting}`]);
   }
   await drive("deploy", ["deploy", "--yes"]);
   return deployment(cell, started);

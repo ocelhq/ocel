@@ -74,7 +74,7 @@ async function up(cell: CellContext): Promise<Deployment> {
       dir,
       "up",
       "env-greeting",
-      ["env", "set", "GREETING", INITIAL_GREETING, "--dev"],
+      ["env", "set", `GREETING=${INITIAL_GREETING}`, "--dev"],
       env,
     );
     await runOcel(
@@ -82,7 +82,7 @@ async function up(cell: CellContext): Promise<Deployment> {
       dir,
       "up",
       "env-secret",
-      ["env", "set", "SECRET_TOKEN", SECRET_TOKEN, "--dev"],
+      ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`, "--dev"],
       env,
     );
   }

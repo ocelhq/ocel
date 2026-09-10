@@ -1017,7 +1017,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	run.vm.ssh(t, "sudo usermod -aG docker "+run.vm.user)
 	t.Cleanup(func() { run.vm.ssh(t, "sudo gpasswd -d "+run.vm.user+" docker >/dev/null 2>&1 || true") })
 
-	set := run.deploying(t, "env", "set", lifecycleSensitive, run.value)
+	set := run.deploying(t, "env", "set", lifecycleSensitive+"="+run.value)
 	if !strings.Contains(set, "Set "+lifecycleSensitive) {
 		t.Fatalf("`ocel env set %s` said nothing about setting it:\n%s", lifecycleSensitive, set)
 	}
@@ -1249,7 +1249,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 			edge.ProbeHostname(wildcard), edge.HeaderEdge, host.EdgeName, probed.headers)
 	}
 
-	if held := run.deploying(t, "env", "set", lifecycleSensitive, run.value, "--preview"); !strings.Contains(held, "Set "+lifecycleSensitive) {
+	if held := run.deploying(t, "env", "set", lifecycleSensitive+"="+run.value, "--preview"); !strings.Contains(held, "Set "+lifecycleSensitive) {
 		t.Fatalf("`ocel env set %s --preview` said nothing about setting it:\n%s", lifecycleSensitive, held)
 	}
 	if up := run.deploying(t, "preview", "up", "--name", lifecyclePreview, "--yes"); !strings.Contains(up, "Preview "+lifecyclePreview+" is up") {
