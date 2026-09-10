@@ -48,7 +48,7 @@ _CLASS_NAMES = {
 }
 
 _owner_lock = threading.Lock()
-_owner: dict[str, str] = {}
+_owner: dict[str, "_Site"] = {}
 _MEMBERS: dict[type, tuple["_Variable", ...]] = {}
 
 _DECLARED_TWICE = (
@@ -374,12 +374,12 @@ class Env:
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         _refuse_restatement(cls, Env)
-        frame = _caller()
-        entries = _entries(cls, frame.filename)
+        site = _site(cls)
+        entries = _entries(cls, site)
         for entry in entries:
             setattr(cls, entry.attr, entry)
         if discovering():
-            _declare(entries, f"{frame.filename}:{frame.lineno}")
+            _declare(entries, site)
 
 
 def deployment_url() -> str:
@@ -395,6 +395,27 @@ def deployment_url() -> str:
             "it names, and deploy again.",
         )
     return delivered
+
+
+class _Site:
+    __slots__ = ("file", "line", "scope", "cls")
+
+    def __init__(self, file: str, line: int, scope: dict[str, Any], cls: str) -> None:
+        self.file = file
+        self.line = line
+        self.scope = scope
+        self.cls = cls
+
+    def __str__(self) -> str:
+        return f"{self.file}:{self.line}"
+
+    def rerun_of(self, claimed: "_Site") -> bool:
+        return self.file == claimed.file and self.scope is not claimed.scope
+
+
+def _site(cls: type) -> _Site:
+    frame = _caller()
+    return _Site(frame.filename, frame.lineno, frame.frame.f_globals, cls.__qualname__)
 
 
 def _caller() -> inspect.FrameInfo:
@@ -437,7 +458,7 @@ def _members(cls: type) -> tuple[_Variable, ...]:
     return tuple(members)
 
 
-def _entries(cls: type, source: str) -> "list[_Variable | _Group]":
+def _entries(cls: type, site: _Site) -> "list[_Variable | _Group]":
     entries: list[_Variable | _Group] = []
     with _owner_lock:
         for attr, annotation in inspect.get_annotations(cls, eval_str=True).items():
@@ -456,15 +477,21 @@ def _entries(cls: type, source: str) -> "list[_Variable | _Group]":
                 if any(seen.key == variable.key for seen in _flattened(entries)):
                     raise EnvDefinitionError(variable.key, _DECLARED_TWICE)
                 claimed = _owner.get(variable.key)
-                if claimed is not None and claimed != source:
+                if claimed is not None and not site.rerun_of(claimed):
+                    if claimed.file != site.file:
+                        raise EnvDefinitionError(
+                            variable.key,
+                            f"is already declared in {claimed.file}. A key may be "
+                            f"defined by exactly one file.",
+                        )
                     raise EnvDefinitionError(
                         variable.key,
-                        f"is already declared in {claimed}. A key may be defined by "
-                        f"exactly one file.",
+                        f"is already declared by {claimed.cls} in {claimed.file}. A key "
+                        f"is declared by exactly one class.",
                     )
             entries.append(entry)
         for variable in _flattened(entries):
-            _owner[variable.key] = source
+            _owner[variable.key] = site
     return entries
 
 
@@ -531,14 +558,14 @@ def _group(cls: type, attr: str, target: type, optional: bool) -> _Group:
         raise EnvDefinitionError(key, f"has an unusable description: {problem}")
     members = _MEMBERS[target]
     unshared = _unshared_scopes(members)
-    if unshared:
+    if unshared is not None:
         raise EnvDefinitionError(
             key, f"is read as one, and no folder satisfies every member: {unshared}."
         )
     return _Group(attr, key, target, optional, description, members)
 
 
-def _unshared_scopes(members: Sequence[_Variable]) -> str:
+def _unshared_scopes(members: Sequence[_Variable]) -> str | None:
     shared: set[str] | None = None
     scoped: list[str] = []
     for member in members:
@@ -548,7 +575,7 @@ def _unshared_scopes(members: Sequence[_Variable]) -> str:
         folders = set(member.folders)
         shared = folders if shared is None else shared & folders
     if shared is None or shared:
-        return ""
+        return None
     return ", ".join(scoped)
 
 
@@ -747,7 +774,8 @@ def _folder_problem(folder: str) -> str:
     return ""
 
 
-def _declare(entries: Sequence[_Variable | _Group], source: str) -> None:
+def _declare(entries: Sequence[_Variable | _Group], site: _Site) -> None:
+    source = str(site)
     definitions: list[VariableDefinition] = []
     groups: list[GroupDefinition] = []
     for entry in entries:
