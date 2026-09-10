@@ -64,7 +64,7 @@ type containerWork struct {
 	boundary   string
 	region     string
 	secret     string
-	policies   []linkPolicy
+	policies   []bindingPolicy
 	service    naming.Coordinate
 	role       naming.Coordinate
 	substrate  substrate
@@ -109,7 +109,7 @@ func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, er
 		return nil, providerkit.Refuse(providerkit.CodeNotReady,
 			"this class holds no origin secret, and a container answers only to an edge that presents one: re-run `%s`", providerkit.BootstrapCommand(plan.Ref.Class))
 	}
-	policies, err := planLinkPolicies(app.Grants)
+	policies, err := planBindingPolicies(app.Grants)
 	if err != nil {
 		return nil, err
 	}
@@ -367,10 +367,10 @@ func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resou
 		return nil, nil, err
 	}
 	granted := make([]pulumi.Resource, 0, len(w.policies))
-	for _, link := range w.policies {
-		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "link", link.Link), &iam.RolePolicyArgs{
+	for _, binding := range w.policies {
+		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "binding", binding.Binding), &iam.RolePolicyArgs{
 			Role:   role.Name,
-			Policy: pulumi.String(link.Policy),
+			Policy: pulumi.String(binding.Policy),
 		})
 		if err != nil {
 			return nil, nil, err

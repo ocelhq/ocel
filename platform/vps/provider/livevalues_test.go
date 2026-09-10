@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -14,10 +14,10 @@ import (
 )
 
 const (
-	livePlainValue     = "eu-west-1"
-	liveSensitiveValue = "sk-live-8c41ff20b7"
-	liveSecretValue    = "postgres://app:hunter2@db.internal:5432/orders"
-	liveLinkPassword   = "opensesame-9f21"
+	livePlainValue      = "eu-west-1"
+	liveSensitiveValue  = "sk-live-8c41ff20b7"
+	liveSecretValue     = "postgres://app:hunter2@db.internal:5432/orders"
+	liveBindingPassword = "opensesame-9f21"
 )
 
 func liveScope() values.Scope {
@@ -35,18 +35,18 @@ func resolving(t *testing.T, p *vps.Provider) map[string]string {
 	if _, err := store.Set(ctx, liveScope(), values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, liveSecretValue, nil); err != nil {
 		t.Fatalf("sealing a secret through the box's own helper = %v", err)
 	}
-	pair, err := providerkit.LinkPair("terraform", &linksv1.Link{
+	pair, err := providerkit.BindingPair("terraform", &bindingsv1.Binding{
 		Name:   "main",
 		Source: "terraform",
-		Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
-			Host: "db.internal", Port: 5432, Database: "orders", Username: "app", Password: liveLinkPassword,
+		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
+			Host: "db.internal", Port: 5432, Database: "orders", Username: "app", Password: liveBindingPassword,
 		}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetLink(ctx, liveScope(), "", "terraform", "main", pair); err != nil {
-		t.Fatalf("publishing a link onto the box = %v", err)
+	if _, err := store.SetBinding(ctx, liveScope(), "", "terraform", "main", pair); err != nil {
+		t.Fatalf("publishing a binding onto the box = %v", err)
 	}
 
 	reader := values.Reader{Records: p.Records(), Sealer: p.Sealer(), Scope: liveScope()}
@@ -54,9 +54,9 @@ func resolving(t *testing.T, p *vps.Provider) map[string]string {
 	if err != nil {
 		t.Fatalf("opening a secret back through the helper = %v", err)
 	}
-	records, err := reader.Links(ctx, []string{"main"})
+	records, err := reader.Bindings(ctx, []string{"main"})
 	if err != nil {
-		t.Fatalf("resolving a link back through the helper = %v", err)
+		t.Fatalf("resolving a binding back through the helper = %v", err)
 	}
 	if opened["DATABASE_URL"] != liveSecretValue {
 		t.Fatalf("the helper opened %q, and the deploy hands a container what it resolved", opened["DATABASE_URL"])
@@ -65,7 +65,7 @@ func resolving(t *testing.T, p *vps.Provider) map[string]string {
 		"REGION":       livePlainValue,
 		"API_TOKEN":    liveSensitiveValue,
 		"DATABASE_URL": opened["DATABASE_URL"],
-		providerkit.ResourceEnvName(providerkit.LinkPostgres, "main"): string(records[0].Value),
+		providerkit.ResourceEnvName(providerkit.BindingPostgres, "main"): string(records[0].Value),
 	}
 }
 

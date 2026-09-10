@@ -3,17 +3,17 @@ import path from "node:path";
 import { journeyConfigIn } from "../../config";
 import { live } from "../../live";
 import { ocel, spawnOcel, workTree } from "../../ocel";
-import { linkRows } from "../../rows";
+import { bindingRows } from "../../rows";
 import type { LadderRow } from "../../spec";
 import type { CellContext } from "../types";
 import { place } from "./place";
-import { awsLinkStore, awsStore, type Cli, cliAt, said } from "./store";
+import { awsBindingStore, awsStore, type Cli, cliAt, said } from "./store";
 
-export const LINK_NAME = "orders";
-export const LINK_TYPE = "postgres";
-export const CUSTOM_LINK_NAME = "network";
-export const CUSTOM_LINK_TYPE = "custom";
-export const LINK_NAMES = [LINK_NAME, CUSTOM_LINK_NAME] as const;
+export const BINDING_NAME = "orders";
+export const BINDING_TYPE = "postgres";
+export const CUSTOM_BINDING_NAME = "network";
+export const CUSTOM_BINDING_TYPE = "custom";
+export const BINDING_NAMES = [BINDING_NAME, CUSTOM_BINDING_NAME] as const;
 
 const NOTHING_PUBLISHED = "nothing has published a record under that name";
 const NOTHING_AT_ALL = "Nothing at all is published to";
@@ -59,8 +59,8 @@ async function cli(): Promise<Cli> {
   return cliAt(await endpoint());
 }
 
-async function linkStore() {
-  return awsLinkStore(await endpoint());
+async function bindingStore() {
+  return awsBindingStore(await endpoint());
 }
 
 async function taggedFunctionArns(slug: string): Promise<string[]> {
@@ -184,21 +184,21 @@ export async function refuse(cell: CellContext): Promise<void> {
   assert.notEqual(
     result.code,
     0,
-    "ocel deploy exited 0 with nothing published; a link is resolved before anything is provisioned",
+    "ocel deploy exited 0 with nothing published; a binding is resolved before anything is provisioned",
   );
   assert.equal(
     await awsStore(await endpoint()).stands(cell.slug),
     false,
-    `${cell.slug} has a project before anything published a link`,
+    `${cell.slug} has a project before anything published a binding`,
   );
   assert.deepEqual(
     await taggedFunctionArns(cell.slug),
     [],
-    `${cell.slug} carries a tagged function before anything published a link`,
+    `${cell.slug} carries a tagged function before anything published a binding`,
   );
   assert.ok(
-    output.includes(LINK_NAME),
-    `the refusal does not name the bound link ${LINK_NAME}: ${output}`,
+    output.includes(BINDING_NAME),
+    `the refusal does not name the bound binding ${BINDING_NAME}: ${output}`,
   );
   assert.ok(
     output.includes(NOTHING_PUBLISHED),
@@ -212,7 +212,7 @@ export async function refuse(cell: CellContext): Promise<void> {
 
 export const ladderRows: LadderRow[] = [
   {
-    title: "ocel link ls lists both records with their name, type, source and owner",
+    title: "ocel binding ls lists both records with their name, type, source and owner",
     phase: "publish",
     run: async (cell) => {
       const dir = await workTree(cell, "aws");
@@ -220,16 +220,16 @@ export const ladderRows: LadderRow[] = [
         ...process.env,
         OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)),
       };
-      const result = await ocel(dir, ["link", "ls", "--log-format", "json"], env);
+      const result = await ocel(dir, ["binding", "ls", "--log-format", "json"], env);
       const parsed = JSON.parse(result.stdout) as {
-        links: Array<{ name: string; type: string; source: string; owner: string }>;
+        bindings: Array<{ name: string; type: string; source: string; owner: string }>;
       };
-      for (const name of LINK_NAMES) {
-        const listed = parsed.links.filter((row) => row.name === name);
+      for (const name of BINDING_NAMES) {
+        const listed = parsed.bindings.filter((row) => row.name === name);
         assert.equal(
           listed.length,
           1,
-          `ocel link ls lists ${listed.length} records named ${name}, want 1`,
+          `ocel binding ls lists ${listed.length} records named ${name}, want 1`,
         );
         assert.ok(listed[0]!.type.length > 0, `${name} is listed with no type`);
         assert.ok(listed[0]!.source.length > 0, `${name} is listed with no source`);
@@ -242,8 +242,8 @@ export const ladderRows: LadderRow[] = [
       "each record is stamped with the publisher's URN and holds nothing beside the sealed value",
     phase: "publish",
     run: async (cell) => {
-      const records = await (await linkStore()).records(cell.slug);
-      for (const name of LINK_NAMES) {
+      const records = await (await bindingStore()).records(cell.slug);
+      for (const name of BINDING_NAMES) {
         const record = records.find((row) => row.name === name);
         assert.ok(record, `no record named ${name} is published`);
         assert.match(
@@ -264,8 +264,8 @@ export const ladderRows: LadderRow[] = [
     title: "the value row beside each record carries ciphertext",
     phase: "publish",
     run: async (cell) => {
-      const values = await (await linkStore()).values(cell.slug);
-      for (const name of LINK_NAMES) {
+      const values = await (await bindingStore()).values(cell.slug);
+      for (const name of BINDING_NAMES) {
         const value = values.find((row) => row.name === name);
         assert.ok(value, `no value row is published for ${name}`);
         assert.ok(value!.sealed.length > 0, `${name}'s value row carries no sealed bytes`);
@@ -277,36 +277,36 @@ export const ladderRows: LadderRow[] = [
       "grants are scoped to the named resource: orders carries rds-db:connect, network carries none",
     phase: "publish",
     run: async (cell) => {
-      const records = await (await linkStore()).records(cell.slug);
-      const orders = records.find((row) => row.name === LINK_NAME);
-      assert.ok(orders, `no record named ${LINK_NAME} is published`);
+      const records = await (await bindingStore()).records(cell.slug);
+      const orders = records.find((row) => row.name === BINDING_NAME);
+      assert.ok(orders, `no record named ${BINDING_NAME} is published`);
       assert.ok(
         orders!.grants.length > 0 &&
           orders!.grants.every((grant) => grant.actions.length > 0 && grant.resources.length > 0),
-        `${LINK_NAME}'s grants are not scoped to a resource: ${JSON.stringify(orders!.grants)}`,
+        `${BINDING_NAME}'s grants are not scoped to a resource: ${JSON.stringify(orders!.grants)}`,
       );
       assert.ok(
         orders!.grants.some((grant) => grant.actions.includes("rds-db:connect")),
-        `${LINK_NAME} carries no rds-db:connect grant: ${JSON.stringify(orders!.grants)}`,
+        `${BINDING_NAME} carries no rds-db:connect grant: ${JSON.stringify(orders!.grants)}`,
       );
-      const network = records.find((row) => row.name === CUSTOM_LINK_NAME);
-      assert.ok(network, `no record named ${CUSTOM_LINK_NAME} is published`);
+      const network = records.find((row) => row.name === CUSTOM_BINDING_NAME);
+      assert.ok(network, `no record named ${CUSTOM_BINDING_NAME} is published`);
       assert.deepEqual(
         network!.grants,
         [],
-        `${CUSTOM_LINK_NAME} carries grants, and no consumer attaches a custom link's grants`,
+        `${CUSTOM_BINDING_NAME} carries grants, and no consumer attaches a custom binding's grants`,
       );
     },
   },
   {
-    title: "the publisher's index owns exactly its one link",
+    title: "the publisher's index owns exactly its one binding",
     phase: "publish",
     run: async (cell) => {
-      const records = await (await linkStore()).records(cell.slug);
-      for (const name of LINK_NAMES) {
+      const records = await (await bindingStore()).records(cell.slug);
+      for (const name of BINDING_NAMES) {
         const record = records.find((row) => row.name === name);
         assert.ok(record, `no record named ${name} is published`);
-        const owned = await (await linkStore()).ownerIndex(cell.slug, record!.owner);
+        const owned = await (await bindingStore()).ownerIndex(cell.slug, record!.owner);
         assert.deepEqual(
           owned,
           [name],
@@ -319,8 +319,8 @@ export const ladderRows: LadderRow[] = [
     title: "ownership is unchanged and ocel's own index claims neither name",
     phase: "consume",
     run: async (cell) => {
-      const records = await (await linkStore()).records(cell.slug);
-      for (const name of LINK_NAMES) {
+      const records = await (await bindingStore()).records(cell.slug);
+      for (const name of BINDING_NAMES) {
         const record = records.find((row) => row.name === name);
         assert.ok(record, `no record named ${name} is published`);
         assert.match(
@@ -329,8 +329,8 @@ export const ladderRows: LadderRow[] = [
           `${name} is now owned by ${record!.owner}, not the publisher`,
         );
       }
-      const ocelIndex = await (await linkStore()).ownerIndex(cell.slug, "OCEL");
-      for (const name of LINK_NAMES) {
+      const ocelIndex = await (await bindingStore()).ownerIndex(cell.slug, "OCEL");
+      for (const name of BINDING_NAMES) {
         assert.ok(
           !(ocelIndex ?? []).includes(name),
           `ocel's own index claims ${name}, and a consumer never becomes a publisher`,
@@ -343,9 +343,9 @@ export const ladderRows: LadderRow[] = [
       "every tagged function carries the postgres env key with no clear-text host, database or password",
     phase: "consume",
     run: async (cell, live) => {
-      assert.ok(live, "consume ran with no live deployment to read the link report from");
+      assert.ok(live, "consume ran with no live deployment to read the binding report from");
       const { body } = await (async () => {
-        const res = await live!.fetch(`${live!.baseUrl}/api/link`);
+        const res = await live!.fetch(`${live!.baseUrl}/api/binding`);
         return { body: (await res.json()) as { host: string; database: string } };
       })();
       const arns = await taggedFunctionArns(cell.slug);
@@ -353,7 +353,7 @@ export const ladderRows: LadderRow[] = [
       for (const arn of arns) {
         const configuration = await functionConfiguration(arn);
         const variables = configuration.Environment?.Variables ?? {};
-        const key = `OCEL_RESOURCE_POSTGRES_${LINK_NAME}`;
+        const key = `OCEL_RESOURCE_POSTGRES_${BINDING_NAME}`;
         assert.ok(key in variables, `${arn} carries no ${key}`);
         for (const [envKey, value] of Object.entries(variables)) {
           assert.ok(!value.includes(body.host), `${arn}'s ${envKey} carries the host in the clear`);
@@ -371,11 +371,11 @@ export const ladderRows: LadderRow[] = [
     phase: "consume",
     run: async (cell) => {
       const placement = placementFor(cell.slug);
-      const records = await (await linkStore()).records(cell.slug);
-      const orders = records.find((row) => row.name === LINK_NAME);
-      assert.ok(orders, `no record named ${LINK_NAME} is published`);
+      const records = await (await bindingStore()).records(cell.slug);
+      const orders = records.find((row) => row.name === BINDING_NAME);
+      assert.ok(orders, `no record named ${BINDING_NAME} is published`);
       const grant = orders!.grants.find((row) => row.actions.includes("rds-db:connect"));
-      assert.ok(grant, `${LINK_NAME} carries no rds-db:connect grant`);
+      assert.ok(grant, `${BINDING_NAME} carries no rds-db:connect grant`);
 
       for (const arn of await taggedFunctionArns(cell.slug)) {
         const configuration = await functionConfiguration(arn);
@@ -397,7 +397,7 @@ export const ladderRows: LadderRow[] = [
           `${roleName} carries ${JSON.stringify(managed)}, none of which is ${VPC_ACCESS_POLICY_ARN}`,
         );
         for (const resource of grant!.resources) {
-          const document = await inlinePolicyDocument(roleName, `policy-link-${LINK_NAME}`);
+          const document = await inlinePolicyDocument(roleName, `policy-binding-${BINDING_NAME}`);
           assert.ok(
             statementsGrant(document, "rds-db:connect", resource),
             `${roleName} carries no inline policy allowing rds-db:connect on ${resource}`,
@@ -407,11 +407,11 @@ export const ladderRows: LadderRow[] = [
     },
   },
   {
-    title: "both link routes answer",
+    title: "both binding routes answer",
     phase: "consume",
     run: async (_cell, live) => {
-      assert.ok(live, "consume ran with no live deployment to reach the link routes on");
-      for (const row of linkRows) {
+      assert.ok(live, "consume ran with no live deployment to reach the binding routes on");
+      for (const row of bindingRows) {
         await row.run(live!);
       }
     },
@@ -420,8 +420,8 @@ export const ladderRows: LadderRow[] = [
     title: "the record survives ocel destroy",
     phase: "outlive",
     run: async (cell) => {
-      const records = await (await linkStore()).records(cell.slug);
-      for (const name of LINK_NAMES) {
+      const records = await (await bindingStore()).records(cell.slug);
+      for (const name of BINDING_NAMES) {
         assert.ok(
           records.some((row) => row.name === name),
           `${name}'s record did not survive ocel destroy, and destroy never touches the publisher`,
@@ -433,14 +433,14 @@ export const ladderRows: LadderRow[] = [
     title: "both partitions are empty once the publisher is removed",
     phase: "prune",
     run: async (cell) => {
-      const records = await (await linkStore()).records(cell.slug);
+      const records = await (await bindingStore()).records(cell.slug);
       assert.deepEqual(
         records,
         [],
-        `the links partition still carries ${JSON.stringify(records.map((row) => row.name))}`,
+        `the bindings partition still carries ${JSON.stringify(records.map((row) => row.name))}`,
       );
       for (const owner of ownersOf(cell.slug)) {
-        const owned = await (await linkStore()).ownerIndex(cell.slug, owner);
+        const owned = await (await bindingStore()).ownerIndex(cell.slug, owner);
         assert.equal(
           owned,
           undefined,

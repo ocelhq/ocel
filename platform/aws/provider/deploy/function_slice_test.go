@@ -15,7 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -703,12 +703,12 @@ func admits(t *testing.T, pattern, key string) bool {
 func TestFunctionEnvKey(t *testing.T) {
 	cases := []struct {
 		name     string
-		typ      linksv1.LinkType
+		typ      bindingsv1.BindingType
 		userID   string
 		wantName string
 	}{
-		{"postgres uses the type's env fragment and user ID", linksv1.LinkType_LINK_TYPE_POSTGRES, "main", "OCEL_RESOURCE_POSTGRES_main"},
-		{"bucket uses the type's env fragment and user ID", linksv1.LinkType_LINK_TYPE_BUCKET, "uploads", "OCEL_RESOURCE_BUCKET_uploads"},
+		{"postgres uses the type's env fragment and user ID", bindingsv1.BindingType_BINDING_TYPE_POSTGRES, "main", "OCEL_RESOURCE_POSTGRES_main"},
+		{"bucket uses the type's env fragment and user ID", bindingsv1.BindingType_BINDING_TYPE_BUCKET, "uploads", "OCEL_RESOURCE_BUCKET_uploads"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -136,7 +136,7 @@ func TestTheSealHelperRoundTripsAValueAndOpensItNowhereElse(t *testing.T) {
 		"another environment": {Project: bound.Project, Class: bound.Class, Env: "staging", Folder: bound.Folder, Name: bound.Name},
 		"another folder":      {Project: bound.Project, Class: bound.Class, Env: bound.Env, Folder: "/a/b", Name: bound.Name},
 		"another key":         {Project: bound.Project, Class: bound.Class, Env: bound.Env, Folder: bound.Folder, Name: "API_KEY"},
-		"another link":        {Project: bound.Project, Class: bound.Class, Env: bound.Env, Folder: bound.Folder, Link: "db", Name: bound.Name},
+		"another binding":     {Project: bound.Project, Class: bound.Class, Env: bound.Env, Folder: bound.Folder, Binding: "db", Name: bound.Name},
 	} {
 		if _, code := sealHelperAt(t, root, sealed, append([]string{"open"}, sealFlags(moved)...)...); code == 0 {
 			t.Errorf("a value sealed here opened at %s, so the coordinate authenticates nothing", name)
@@ -460,7 +460,7 @@ func TestTheProviderReachesTheKeyOnlyThroughTheHelperItInstalled(t *testing.T) {
 		Class:   providerkit.ClassProduction,
 		Env:     "*",
 		Folder:  "/apps/web",
-		Link:    "db",
+		Binding: "db",
 		Name:    "DATABASE_URL",
 	}
 	argv, err := sealArgv("open", at)
@@ -481,7 +481,7 @@ func TestTheProviderReachesTheKeyOnlyThroughTheHelperItInstalled(t *testing.T) {
 		"--project": at.Project,
 		"--env":     at.Env,
 		"--folder":  at.Folder,
-		"--link":    at.Link,
+		"--binding": at.Binding,
 		"--name":    at.Name,
 	} {
 		if handed(argv, flag) != want {
@@ -529,11 +529,11 @@ func TestAValueSealedToNoClassIsRefusedRatherThanSealedToWhateverStands(t *testi
 	}
 }
 
-func TestACoordinateMissingAnyPartButTheLinkIsRefused(t *testing.T) {
+func TestACoordinateMissingAnyPartButTheBindingIsRefused(t *testing.T) {
 	t.Parallel()
 
 	whole := providerkit.Coordinate{
-		Project: "shop", Class: providerkit.ClassProduction, Env: "*", Folder: "/", Link: "db", Name: "DATABASE_URL",
+		Project: "shop", Class: providerkit.ClassProduction, Env: "*", Folder: "/", Binding: "db", Name: "DATABASE_URL",
 	}
 	for name, blanked := range map[string]func(*providerkit.Coordinate){
 		"project": func(at *providerkit.Coordinate) { at.Project = "" },
@@ -551,9 +551,9 @@ func TestACoordinateMissingAnyPartButTheLinkIsRefused(t *testing.T) {
 	}
 
 	at := whole
-	at.Link = ""
+	at.Binding = ""
 	if _, err := sealArgv("seal", at); err != nil {
-		t.Errorf("sealing a value that belongs to no link = %v, want the seal every plain value takes", err)
+		t.Errorf("sealing a value that belongs to no binding = %v, want the seal every plain value takes", err)
 	}
 }
 

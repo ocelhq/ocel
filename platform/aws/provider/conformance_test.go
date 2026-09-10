@@ -34,7 +34,7 @@ func TestTheRootCarriesTheVendorAndEveryOptionalSet(t *testing.T) {
 	if p.Vendor() != provider.Vendor {
 		t.Errorf("Vendor() = %q, want %q", p.Vendor(), provider.Vendor)
 	}
-	for _, want := range []providerkit.LinkType{providerkit.LinkPostgres, providerkit.LinkBucket} {
+	for _, want := range []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket} {
 		if !slices.Contains(p.Serves(), want) {
 			t.Errorf("Serves() = %v, want it to carry %s", p.Serves(), want)
 		}

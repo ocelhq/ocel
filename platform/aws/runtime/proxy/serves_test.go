@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/runtime/proxy"
@@ -13,15 +13,15 @@ import (
 func TestEveryProxiedTypeThisProviderServesIsOneTheRuntimeRuns(t *testing.T) {
 	t.Parallel()
 
-	var proxied []linksv1.LinkType
+	var proxied []bindingsv1.BindingType
 	for _, kind := range deploy.Serves() {
 		if providerkit.Proxied(kind) {
-			proxied = append(proxied, providerkit.WireLinkType(kind))
+			proxied = append(proxied, providerkit.WireBindingType(kind))
 		}
 	}
-	var run []linksv1.LinkType
-	for wire := range linksv1.LinkType_name {
-		kind := linksv1.LinkType(wire)
+	var run []bindingsv1.BindingType
+	for wire := range bindingsv1.BindingType_name {
+		kind := bindingsv1.BindingType(wire)
 		if proxy.Serves(kind) {
 			run = append(run, kind)
 		}

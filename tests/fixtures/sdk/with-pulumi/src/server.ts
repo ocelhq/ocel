@@ -21,7 +21,7 @@ app.get("/ocel.svg", (_req, res) => {
   res.end(OCEL_SVG_BYTES);
 });
 
-app.get("/api/link", (_req, res) => {
+app.get("/api/binding", (_req, res) => {
   const url = new URL(orders.connectionString);
   res.json({
     host: url.hostname,
@@ -32,7 +32,7 @@ app.get("/api/link", (_req, res) => {
   });
 });
 
-app.get("/api/link/query", async (_req, res) => {
+app.get("/api/binding/query", async (_req, res) => {
   await orders.query("select 1");
   res.json({ ok: true });
 });

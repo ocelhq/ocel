@@ -338,11 +338,11 @@ type executionRole struct {
 	VarsClass      string
 	VarsReferenced []string
 
-	LinkPolicies []linkPolicy
+	BindingPolicies []bindingPolicy
 }
 
-func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []linkPolicy, vpcAccess bool, router *routerHost) executionRole {
-	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN, Boundary: cfg.AppBoundaryARN, Tags: tags, LinkPolicies: policies, VPCAccess: vpcAccess, Router: router}
+func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bytecode map[string]*bytecodeConfig, bundle appBundle, tags map[string]string, policies []bindingPolicy, vpcAccess bool, router *routerHost) executionRole {
+	role := executionRole{App: app, Cache: caches[app], Bytecode: bytecode[app], VarsKeyARN: cfg.VarsKeyARN, Boundary: cfg.AppBoundaryARN, Tags: tags, BindingPolicies: policies, VPCAccess: vpcAccess, Router: router}
 	if bundle.hasLive() {
 		role.ValuesTableARN = cfg.VarsTableARN
 		role.VarsReferenced = bundle.Referenced
@@ -418,10 +418,10 @@ func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRo
 			return nil, err
 		}
 	}
-	for _, link := range r.LinkPolicies {
-		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "link", link.Link), &iam.RolePolicyArgs{
+	for _, binding := range r.BindingPolicies {
+		if _, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "binding", binding.Binding), &iam.RolePolicyArgs{
 			Role:   role.Name,
-			Policy: pulumi.String(link.Policy),
+			Policy: pulumi.String(binding.Policy),
 		}); err != nil {
 			return nil, err
 		}

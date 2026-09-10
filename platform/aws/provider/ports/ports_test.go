@@ -121,7 +121,7 @@ func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
 	}
 }
 
-func TestALinkSealsUnderItsOwnName(t *testing.T) {
+func TestABindingSealsUnderItsOwnName(t *testing.T) {
 	sealer, crypto := newSealer()
 
 	at := kit.Coordinate{
@@ -129,14 +129,14 @@ func TestALinkSealsUnderItsOwnName(t *testing.T) {
 		Class:   edge.ClassPreview,
 		Env:     "*",
 		Folder:  "/",
-		Link:    "orders",
+		Binding: "orders",
 		Name:    "PROPERTIES",
 	}
 	if _, err := sealer.Seal(context.Background(), at, []byte("{}")); err != nil {
 		t.Fatalf("Seal err = %v", err)
 	}
-	if crypto.contexts[0]["link"] != "orders" {
-		t.Errorf("encryption context = %v, want it to name the link the value belongs to", crypto.contexts[0])
+	if crypto.contexts[0]["binding"] != "orders" {
+		t.Errorf("encryption context = %v, want it to name the binding the value belongs to", crypto.contexts[0])
 	}
 }
 
@@ -262,14 +262,14 @@ func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
 	}
 }
 
-func TestALinksPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
+func TestABindingsPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
 	records, ddb := newRecords(t)
 	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
 	store := values.Store{Records: records, Sealer: mustSealer()}
 
-	if _, err := store.SetLink(context.Background(), scope, "", values.OwnerOcel, "db",
+	if _, err := store.SetBinding(context.Background(), scope, "", values.OwnerOcel, "db",
 		values.Pair{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
-		t.Fatalf("SetLink err = %v", err)
+		t.Fatalf("SetBinding err = %v", err)
 	}
 
 	partition, err := awsports.Partition(values.Under(scope))
@@ -278,18 +278,18 @@ func TestALinksPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
 	}
 	for _, held := range ddb.partitions() {
 		if held != partition {
-			t.Errorf("a link write landed in partition %q, and a function's role is scoped to %q alone", held, partition)
+			t.Errorf("a binding write landed in partition %q, and a function's role is scoped to %q alone", held, partition)
 		}
 	}
 
-	prefix := "links#db#"
+	prefix := "bindings#db#"
 	under := 0
 	for _, sk := range ddb.sortKeys(partition) {
-		if !strings.HasPrefix(sk, "links#") {
+		if !strings.HasPrefix(sk, "bindings#") {
 			continue
 		}
 		if !strings.HasPrefix(sk, prefix) {
-			t.Errorf("a link record sorts at %q, want the whole pair under %q so one query holds it", sk, prefix)
+			t.Errorf("a binding record sorts at %q, want the whole pair under %q so one query holds it", sk, prefix)
 			continue
 		}
 		under++

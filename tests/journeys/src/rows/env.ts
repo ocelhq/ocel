@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { type ContractRow, json } from "../contract";
-import { linkRows } from "./links";
+import { bindingRows } from "./bindings";
 
 export const ENV_ROW = "GET /api/probes/env reports the greeting and never the secret";
 
@@ -19,5 +19,5 @@ export const envRows: ContractRow[] = [
 ];
 
 export function setsEnv(rows: ContractRow[]): boolean {
-  return rows.some((row) => envRows.includes(row) || linkRows.includes(row));
+  return rows.some((row) => envRows.includes(row) || bindingRows.includes(row));
 }

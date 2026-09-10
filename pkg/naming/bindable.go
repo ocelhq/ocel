@@ -21,9 +21,7 @@ func BindableAs(t resourcesv1.ResourceType) (bindingsv1.BindingType, bool) {
 }
 
 func BindableResourceTypes() []resourcesv1.ResourceType {
-	return slices.SortedFunc(maps.Keys(bindable), func(a, b resourcesv1.ResourceType) int {
-		return cmp.Compare(a, b)
-	})
+	return slices.SortedFunc(maps.Keys(bindable), cmp.Compare)
 }
 
 const resourceTypePrefix = "RESOURCE_TYPE_"

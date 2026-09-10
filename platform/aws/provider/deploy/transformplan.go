@@ -22,7 +22,7 @@ func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan
 	for _, resource := range plan.Resources {
 		name := resource.Name
 		switch resource.Type {
-		case providerkit.LinkPostgres:
+		case providerkit.BindingPostgres:
 			args := translatePostgres(resource.Postgres)
 			req.Resources = append(req.Resources, transform.Resource{
 				Type: "postgres", Name: name, Surfaces: postgresSurfaces(args),
@@ -32,7 +32,7 @@ func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan
 				out.postgres[name] = applied
 				return err
 			}})
-		case providerkit.LinkBucket:
+		case providerkit.BindingBucket:
 			args := translateBucket(resource.Bucket)
 			req.Resources = append(req.Resources, transform.Resource{
 				Type: "bucket", Name: name, Surfaces: bucketSurfaces(args),
@@ -180,7 +180,7 @@ func resolvePlanOutputs(ctx context.Context, plan providerkit.StackPlan, candida
 
 func refusePlanProvisionedOutputs(plan providerkit.StackPlan, placed []placedOutput) error {
 	for _, p := range placed {
-		if slices.ContainsFunc(plan.Resources, func(r providerkit.Resource) bool { return r.Name == p.Ref.Link && !r.Linked }) {
+		if slices.ContainsFunc(plan.Resources, func(r providerkit.Resource) bool { return r.Name == p.Ref.Binding && r.Binding == "" }) {
 			return &ProvisionedOutputError{Ref: p.Ref, At: p.At}
 		}
 	}
@@ -188,31 +188,31 @@ func refusePlanProvisionedOutputs(plan providerkit.StackPlan, placed []placedOut
 }
 
 func readPlanOutputs(ctx context.Context, plan providerkit.StackPlan, placed []placedOutput) (map[outputRef]any, error) {
-	if plan.Links == nil {
+	if plan.Bindings == nil {
 		return nil, fmt.Errorf(
-			"a transform fills %s from link %q, and this deploy reached no variable store to read published records from",
-			placed[0].At, placed[0].Ref.Link)
+			"a transform fills %s from binding %q, and this deploy reached no variable store to read published records from",
+			placed[0].At, placed[0].Ref.Binding)
 	}
-	names, err := plan.Links.Names(ctx)
+	names, err := plan.Bindings.Names(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("a transform fills %s from link %q: %w", placed[0].At, placed[0].Ref.Link, err)
+		return nil, fmt.Errorf("a transform fills %s from binding %q: %w", placed[0].At, placed[0].Ref.Binding, err)
 	}
 	slices.Sort(names)
 
 	wanted := make([]string, 0, len(placed))
 	for _, p := range placed {
-		if !slices.Contains(names, p.Ref.Link) {
+		if !slices.Contains(names, p.Ref.Binding) {
 			return nil, &UnpublishedOutputError{
 				Ref: p.Ref, At: p.At, Class: string(plan.Ref.Class), Environment: plan.Ref.Name.Env, Published: names,
 			}
 		}
-		if !slices.Contains(wanted, p.Ref.Link) {
-			wanted = append(wanted, p.Ref.Link)
+		if !slices.Contains(wanted, p.Ref.Binding) {
+			wanted = append(wanted, p.Ref.Binding)
 		}
 	}
-	records, err := resolvePlanLinks(ctx, plan.Links, wanted)
+	records, err := resolvePlanBindings(ctx, plan.Bindings, wanted)
 	if err != nil {
-		return nil, fmt.Errorf("a transform fills %s from link %q: %w", placed[0].At, placed[0].Ref.Link, err)
+		return nil, fmt.Errorf("a transform fills %s from binding %q: %w", placed[0].At, placed[0].Ref.Binding, err)
 	}
 
 	values := make(map[outputRef]any, len(placed))
@@ -220,7 +220,7 @@ func readPlanOutputs(ctx context.Context, plan providerkit.StackPlan, placed []p
 		if _, done := values[p.Ref]; done {
 			continue
 		}
-		record := records[p.Ref.Link]
+		record := records[p.Ref.Binding]
 		value, carries := record.Properties[p.Ref.Property]
 		if !carries {
 			return nil, &OutputPropertyError{Ref: p.Ref, At: p.At, Carries: slices.Sorted(maps.Keys(record.Properties))}
@@ -233,12 +233,12 @@ func readPlanOutputs(ctx context.Context, plan providerkit.StackPlan, placed []p
 	return values, nil
 }
 
-func resolvePlanLinks(ctx context.Context, links providerkit.LinkReader, names []string) (map[string]providerkit.Link, error) {
-	held := make([]providerkit.Link, len(names))
+func resolvePlanBindings(ctx context.Context, bindings providerkit.BindingReader, names []string) (map[string]providerkit.Binding, error) {
+	held := make([]providerkit.Binding, len(names))
 	group, gctx := errgroup.WithContext(ctx)
 	for i, name := range names {
 		group.Go(func() error {
-			record, err := links.Resolve(gctx, name)
+			record, err := bindings.Resolve(gctx, name)
 			if err != nil {
 				return err
 			}
@@ -249,7 +249,7 @@ func resolvePlanLinks(ctx context.Context, links providerkit.LinkReader, names [
 	if err := group.Wait(); err != nil {
 		return nil, err
 	}
-	records := make(map[string]providerkit.Link, len(names))
+	records := make(map[string]providerkit.Binding, len(names))
 	for i, name := range names {
 		records[name] = held[i]
 	}

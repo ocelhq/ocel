@@ -177,32 +177,32 @@ export function awsStore(
   };
 }
 
-const LINK_CLASS = "production";
+const BINDING_CLASS = "production";
 
-const LINK_TYPES = ["postgres", "bucket", "custom"] as const;
+const BINDING_TYPES = ["postgres", "bucket", "custom"] as const;
 
-export type LinkGrant = { actions: string[]; resources: string[]; label?: string };
-export type LinkKind = (typeof LINK_TYPES)[number] | "unspecified";
+export type BindingGrant = { actions: string[]; resources: string[]; label?: string };
+export type BindingKind = (typeof BINDING_TYPES)[number] | "unspecified";
 
-export type LinkRecordItem = {
+export type BindingRecordItem = {
   name: string;
-  type: LinkKind;
+  type: BindingKind;
   source: string;
   owner: string;
-  grants: LinkGrant[];
+  grants: BindingGrant[];
   redactedProperties: Record<string, unknown>;
 };
 
-export type LinkValueItem = { name: string; sealed: string };
+export type BindingValueItem = { name: string; sealed: string };
 
-export type LinkStore = {
-  records(slug: string): Promise<LinkRecordItem[]>;
-  values(slug: string): Promise<LinkValueItem[]>;
+export type BindingStore = {
+  records(slug: string): Promise<BindingRecordItem[]>;
+  values(slug: string): Promise<BindingValueItem[]>;
   ownerIndex(slug: string, owner: string): Promise<string[] | undefined>;
 };
 
-function linksPartition(slug: string): string {
-  return `values#${slug}#${LINK_CLASS}`;
+function bindingsPartition(slug: string): string {
+  return `values#${slug}#${BINDING_CLASS}`;
 }
 
 type RawItem = { sk: string; body: string };
@@ -224,60 +224,59 @@ async function queryItems(
   return found;
 }
 
-function linkTypeOf(link: Record<string, unknown>): LinkKind {
-  return LINK_TYPES.find((type) => type in link) ?? "unspecified";
+function bindingTypeOf(binding: Record<string, unknown>): BindingKind {
+  return BINDING_TYPES.find((type) => type in binding) ?? "unspecified";
 }
 
-export function awsLinkStore(
+export function awsBindingStore(
   endpoint?: string,
   cli: Cli = cliAt(endpoint),
   namespace: string = namespaceOf(process.env),
-): LinkStore {
+): BindingStore {
   const stack = bootstrapStackOf(namespace);
 
-  async function linkTableOrThrow(): Promise<string> {
-    const name = await bootstrapTable(cli, stack, STATE_TABLE_OUTPUT, "no link can be read");
+  async function bindingTableOrThrow(): Promise<string> {
+    const name = await bootstrapTable(cli, stack, STATE_TABLE_OUTPUT, "no binding can be read");
     if (!name) {
       throw new Error(
-        `the ${stack} stack publishes no ${STATE_TABLE_OUTPUT} output, so no link can be read`,
+        `the ${stack} stack publishes no ${STATE_TABLE_OUTPUT} output, so no binding can be read`,
       );
     }
     return name;
   }
 
-  async function linkItems(slug: string): Promise<RawItem[]> {
-    return queryItems(cli, await linkTableOrThrow(), linksPartition(slug), "links#");
+  async function bindingItems(slug: string): Promise<RawItem[]> {
+    return queryItems(cli, await bindingTableOrThrow(), bindingsPartition(slug), "bindings#");
   }
 
   return {
     async records(slug) {
-      const records: LinkRecordItem[] = [];
-      for (const item of await linkItems(slug)) {
+      const records: BindingRecordItem[] = [];
+      for (const item of await bindingItems(slug)) {
         const [, , kind] = item.sk.split("#");
         if (kind !== "records") {
           continue;
         }
         const envelope = JSON.parse(item.body) as { record: string; owner?: string };
-        const link = JSON.parse(Buffer.from(envelope.record, "base64").toString("utf8")) as Record<
-          string,
-          unknown
-        > & { name: string; source?: string; grants?: LinkGrant[] };
-        const type = linkTypeOf(link);
+        const binding = JSON.parse(
+          Buffer.from(envelope.record, "base64").toString("utf8"),
+        ) as Record<string, unknown> & { name: string; source?: string; grants?: BindingGrant[] };
+        const type = bindingTypeOf(binding);
         records.push({
-          name: link.name,
+          name: binding.name,
           type,
-          source: link.source ?? "",
+          source: binding.source ?? "",
           owner: envelope.owner || "OCEL",
-          grants: link.grants ?? [],
-          redactedProperties: (link[type] as Record<string, unknown> | undefined) ?? {},
+          grants: binding.grants ?? [],
+          redactedProperties: (binding[type] as Record<string, unknown> | undefined) ?? {},
         });
       }
       return records;
     },
 
     async values(slug) {
-      const values: LinkValueItem[] = [];
-      for (const item of await linkItems(slug)) {
+      const values: BindingValueItem[] = [];
+      for (const item of await bindingItems(slug)) {
         const [, name, kind] = item.sk.split("#");
         if (kind !== "values" || !name) {
           continue;
@@ -291,9 +290,9 @@ export function awsLinkStore(
     async ownerIndex(slug, owner) {
       const items = await queryItems(
         cli,
-        await linkTableOrThrow(),
-        linksPartition(slug),
-        `linkowners#${owner}#`,
+        await bindingTableOrThrow(),
+        bindingsPartition(slug),
+        `bindingowners#${owner}#`,
       );
       const [item] = items;
       if (!item) {

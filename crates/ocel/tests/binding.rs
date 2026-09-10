@@ -22,19 +22,19 @@ fn a_connection_string_carries_credentials_percent_encoded() {
 }
 
 #[test]
-fn a_link_that_was_never_delivered_names_the_commands_that_deliver_it() {
+fn a_binding_that_was_never_delivered_names_the_commands_that_deliver_it() {
     let _env = env();
     let err = Postgres::new("absent")
         .connection_string()
-        .expect_err("no link was delivered");
+        .expect_err("no binding was delivered");
     assert_eq!(
         err.to_string(),
-        "Value for OCEL_RESOURCE_POSTGRES_absent is not defined. Run `ocel dev` to resolve it locally, or `ocel deploy` to have it delivered from the resource this app links."
+        "Value for OCEL_RESOURCE_POSTGRES_absent is not defined. Run `ocel dev` to resolve it locally, or `ocel deploy` to have it delivered from the resource this app binds."
     );
 }
 
 #[test]
-fn a_link_of_another_kind_says_what_it_carries() {
+fn a_binding_of_another_kind_says_what_it_carries() {
     let _env = env();
     std::env::set_var(
         "OCEL_RESOURCE_POSTGRES_mistyped",
@@ -42,16 +42,16 @@ fn a_link_of_another_kind_says_what_it_carries() {
     );
     let err = Postgres::new("mistyped")
         .connection_string()
-        .expect_err("a bucket link");
+        .expect_err("a bucket binding");
     assert_eq!(
         err.to_string(),
-        "OCEL_RESOURCE_POSTGRES_mistyped carries a BUCKET link, and this app reads it as a POSTGRES"
+        "OCEL_RESOURCE_POSTGRES_mistyped carries a BUCKET binding, and this app reads it as a POSTGRES"
     );
-    assert!(matches!(err, Error::WrongLinkType { .. }));
+    assert!(matches!(err, Error::WrongBindingType { .. }));
 }
 
 #[test]
-fn a_link_carrying_nothing_at_all_says_what_it_carries() {
+fn a_binding_carrying_nothing_at_all_says_what_it_carries() {
     let _env = env();
     std::env::set_var("OCEL_RESOURCE_POSTGRES_empty", r#"{"name":"empty"}"#);
     let err = Postgres::new("empty")
@@ -59,18 +59,18 @@ fn a_link_carrying_nothing_at_all_says_what_it_carries() {
         .expect_err("no properties");
     assert_eq!(
         err.to_string(),
-        "OCEL_RESOURCE_POSTGRES_empty carries a UNSPECIFIED link, and this app reads it as a POSTGRES"
+        "OCEL_RESOURCE_POSTGRES_empty carries a UNSPECIFIED binding, and this app reads it as a POSTGRES"
     );
 }
 
 #[test]
-fn a_link_the_deploy_delivers_is_read_past_the_fields_this_app_uses() {
+fn a_binding_the_deploy_delivers_is_read_past_the_fields_this_app_uses() {
     let _env = env();
     let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../proto/common/links/v1/fixtures/postgres.json");
+        .join("../../proto/common/bindings/v1/fixtures/postgres.json");
     std::env::set_var(
         "OCEL_RESOURCE_POSTGRES_fixture",
-        std::fs::read_to_string(fixture).expect("the postgres link fixture"),
+        std::fs::read_to_string(fixture).expect("the postgres binding fixture"),
     );
     assert_eq!(
         Postgres::new("fixture").connection_string().expect("a connection string"),
@@ -79,19 +79,19 @@ fn a_link_the_deploy_delivers_is_read_past_the_fields_this_app_uses() {
 }
 
 #[test]
-fn a_value_that_is_not_a_link_record_is_reported_without_quoting_what_it_held() {
+fn a_value_that_is_not_a_binding_record_is_reported_without_quoting_what_it_held() {
     let _env = env();
     std::env::set_var("OCEL_RESOURCE_POSTGRES_unreadable", "s3cret-not-json");
     let err = Postgres::new("unreadable")
         .connection_string()
-        .expect_err("not a link record");
+        .expect_err("not a binding record");
     assert!(
         !err.to_string().contains("s3cret"),
         "error = {err}, want it to name the key without the value it held"
     );
     assert_eq!(
         err.to_string(),
-        "OCEL_RESOURCE_POSTGRES_unreadable does not carry a link record, so this app cannot read it as a POSTGRES"
+        "OCEL_RESOURCE_POSTGRES_unreadable does not carry a binding record, so this app cannot read it as a POSTGRES"
     );
 }
 
@@ -104,7 +104,7 @@ fn a_run_that_is_not_discovery_leaves_the_app_to_serve() {
 #[cfg(feature = "postgres")]
 #[test]
 #[ignore = "needs a postgres at DATABASE_URL"]
-fn a_pool_is_opened_once_over_the_delivered_link() {
+fn a_pool_is_opened_once_over_the_delivered_binding() {
     let _env = env();
     let runtime = tokio::runtime::Runtime::new().expect("a runtime");
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL");

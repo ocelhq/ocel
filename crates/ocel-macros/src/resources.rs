@@ -45,7 +45,7 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
         }
 
         impl #ident {
-            /// The struct with a handle in every field, ready to read links through.
+            /// The struct with a handle in every field, ready to read bindings through.
             pub fn load() -> ::core::result::Result<Self, ::ocel::Error> {
                 <Self as ::ocel::Declare>::load()
             }

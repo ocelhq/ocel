@@ -93,7 +93,7 @@ func TestTheRootCarriesTheVendorAndNoOptionalSetYet(t *testing.T) {
 		t.Errorf("Vendor() = %q, want %q", p.Vendor(), vps.Vendor)
 	}
 	if got := p.Serves(); len(got) != 0 {
-		t.Errorf("Serves() = %v, want nothing until the provider provisions links of its own", got)
+		t.Errorf("Serves() = %v, want nothing until the provider provisions bindings of its own", got)
 	}
 
 	var root providerkit.Provider = p
@@ -135,7 +135,7 @@ func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T)
 			Name:    naming.InfraStack("prod"),
 		},
 		Kind:      providerkit.StackInfra,
-		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.LinkPostgres}},
+		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.BindingPostgres}},
 	}
 
 	var refusal providerkit.Refusal

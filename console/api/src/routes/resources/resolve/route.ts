@@ -110,7 +110,7 @@ export async function resolveResources(request: Request): Promise<Response> {
       );
     }
 
-    env[buildResourceEnvKey(resource.type, resource.name)] = handler.link(
+    env[buildResourceEnvKey(resource.type, resource.name)] = handler.binding(
       resource.name,
       assignment,
     );

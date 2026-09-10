@@ -8,8 +8,8 @@ import (
 
 func runtimeResources() []providerkit.Resource {
 	return []providerkit.Resource{
-		{Name: "database--main", Declared: "database--main", Type: providerkit.LinkPostgres},
-		{Name: "bucket--uploads", Declared: "bucket--uploads", Type: providerkit.LinkBucket},
+		{Name: "database--main", Declared: "database--main", Type: providerkit.BindingPostgres},
+		{Name: "bucket--uploads", Declared: "bucket--uploads", Type: providerkit.BindingBucket},
 	}
 }
 
@@ -39,11 +39,11 @@ func TestProvisionsBucket(t *testing.T) {
 		}
 	})
 
-	t.Run("a linked bucket completes uploads of its own", func(t *testing.T) {
+	t.Run("a bound bucket completes uploads of its own", func(t *testing.T) {
 		t.Parallel()
 
 		plan := runtimePlan()
-		plan.Resources[1].Linked = true
+		plan.Resources[1].Binding = plan.Resources[1].Name
 
 		if provisionsBucket(plan) {
 			t.Error("provisionsBucket = true, want false for a bucket handed to us")

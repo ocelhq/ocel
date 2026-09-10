@@ -84,10 +84,10 @@ func sealArgv(verb string, at providerkit.Coordinate) ([]string, error) {
 		{"project", at.Project},
 		{"env", at.Env},
 		{"folder", at.Folder},
-		{"link", at.Link},
+		{"binding", at.Binding},
 		{"name", at.Name},
 	} {
-		if named[1] == "" && named[0] != "link" {
+		if named[1] == "" && named[0] != "binding" {
 			return nil, providerkit.Refuse(providerkit.CodeInvalid,
 				"a value's coordinate names no %s, and the coordinate is what a sealed value is bound to", named[0])
 		}

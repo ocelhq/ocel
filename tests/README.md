@@ -17,7 +17,7 @@ A cell is one fixture on one target, named in `journeys/src/spec.ts`. A fixture 
 one concern: `deploy` asks whether a runtime runs on a target at all, and its apps under
 `fixtures/deploy/` declare no resources; `lifecycle` asks whether a release can be replaced
 and rolled back there, from `fixtures/lifecycle/`; `sdk` asks whether what an app declares
-is provisioned, linked and usable, from `fixtures/sdk/`. The harness starts nothing but the
+is provisioned, bound and usable, from `fixtures/sdk/`. The harness starts nothing but the
 `ocel` binary; bring up what the target needs first. For `dev` that is postgres, the
 control-plane schema and the console:
 

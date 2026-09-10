@@ -91,7 +91,7 @@ func variable(key, value string, class resourcesv1.VariableClass) *contractv1.Ma
 	return &contractv1.ManifestVariable{Key: key, Class: class, Value: value}
 }
 
-func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, links []live.Link) (appBundle, error) {
+func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, bindings []live.Binding) (appBundle, error) {
 	sensitive := map[string]string{}
 	var keys []live.Key
 	for _, v := range app.GetVariables() {
@@ -102,7 +102,7 @@ func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, links
 			keys = append(keys, live.Key{Key: v.GetKey(), Folder: v.GetFolder()})
 		}
 	}
-	return sealAppBundle(cfg, slug, app.GetName(), sensitive, keys, links)
+	return sealAppBundle(cfg, slug, app.GetName(), sensitive, keys, bindings)
 }
 
 func renderAppBundles(cfg Config, manifest *contractv1.Manifest) (map[string]appBundle, error) {

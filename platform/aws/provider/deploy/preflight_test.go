@@ -37,7 +37,7 @@ func TestPreflightPolicyBudget(t *testing.T) {
 	t.Run("a bill within budget passes", func(t *testing.T) {
 		t.Parallel()
 
-		uploads := []providerkit.Resource{{Name: "bucket--uploads", Declared: "uploads", Type: providerkit.LinkBucket}}
+		uploads := []providerkit.Resource{{Name: "bucket--uploads", Declared: "uploads", Type: providerkit.BindingBucket}}
 		pre := providerkit.DeployPreflight{
 			Plan:      preflightPlan(),
 			Resources: uploads,
@@ -60,7 +60,7 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		}
 		for i := range 40 {
 			name := fmt.Sprintf("bucket--%02d", i)
-			held := providerkit.Resource{Name: name, Declared: name, Type: providerkit.LinkBucket}
+			held := providerkit.Resource{Name: name, Declared: name, Type: providerkit.BindingBucket}
 			pre.Resources = append(pre.Resources, held)
 			pre.Apps[0].Resources = append(pre.Apps[0].Resources, held)
 			pre.Apps[1].Resources = append(pre.Apps[1].Resources, held)
@@ -78,7 +78,7 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		}
 	})
 
-	t.Run("a link already published is billed from the grants it carries", func(t *testing.T) {
+	t.Run("a binding already published is billed from the grants it carries", func(t *testing.T) {
 		t.Parallel()
 
 		pre := providerkit.DeployPreflight{
@@ -87,9 +87,9 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		}
 		for i := range 40 {
 			name := fmt.Sprintf("bucket--%02d", i)
-			pre.Grants = append(pre.Grants, providerkit.Link{
+			pre.Grants = append(pre.Grants, providerkit.Binding{
 				Name: name,
-				Type: providerkit.LinkBucket,
+				Type: providerkit.BindingBucket,
 				Grants: []providerkit.Grant{{
 					Label:     "objects",
 					Actions:   []string{"s3:GetObject", "s3:PutObject", "s3:DeleteObject"},
@@ -115,7 +115,7 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		}
 		for i := range 40 {
 			name := fmt.Sprintf("bucket--%02d", i)
-			held := providerkit.Resource{Name: name, Declared: name, Type: providerkit.LinkBucket}
+			held := providerkit.Resource{Name: name, Declared: name, Type: providerkit.BindingBucket}
 			pre.Resources = append(pre.Resources, held)
 			pre.Apps[0].Resources = append(pre.Apps[0].Resources, held)
 		}
@@ -130,14 +130,14 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		}
 	})
 
-	t.Run("a declared bucket and its published link are one line on the bill", func(t *testing.T) {
+	t.Run("a declared bucket and its published binding are one line on the bill", func(t *testing.T) {
 		t.Parallel()
 
 		items, err := billedPolicies(
-			[]providerkit.Resource{{Name: "bucket--uploads", Declared: "uploads", Type: providerkit.LinkBucket}},
-			[]providerkit.Link{{
+			[]providerkit.Resource{{Name: "bucket--uploads", Declared: "uploads", Type: providerkit.BindingBucket}},
+			[]providerkit.Binding{{
 				Name:   "bucket--uploads",
-				Type:   providerkit.LinkBucket,
+				Type:   providerkit.BindingBucket,
 				Grants: []providerkit.Grant{{Label: "objects", Actions: []string{"s3:GetObject"}, Resources: []string{"arn:aws:s3:::uploads/*"}}},
 			}},
 			newSessionScope("shop", "prod", preflightConfig().StateTableARN),

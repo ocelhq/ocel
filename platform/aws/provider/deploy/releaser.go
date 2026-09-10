@@ -15,7 +15,7 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -124,8 +124,8 @@ func (r *Releaser) at(ctx context.Context, ref providerkit.StackRef, kind edge.K
 	return held, nil
 }
 
-func Serves() []providerkit.LinkType {
-	return []providerkit.LinkType{providerkit.LinkPostgres, providerkit.LinkBucket}
+func Serves() []providerkit.BindingType {
+	return []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket}
 }
 
 const skipTeardownRefreshEnv = "OCEL_SKIP_TEARDOWN_REFRESH"
@@ -199,20 +199,20 @@ func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan, work *inf
 	sessions := newSessionScope(project, env, r.cfg.StateTableARN)
 
 	for _, resource := range plan.Resources {
-		if resource.Linked {
+		if resource.Binding != "" {
 			continue
 		}
 		var err error
 		switch resource.Type {
-		case providerkit.LinkPostgres:
+		case providerkit.BindingPostgres:
 			args := transformed.forPostgres(resource.Name, resource.Postgres)
 			err = registerPostgres(pctx, project, env, resource.Name, args, vpc.Id, vpc.CidrBlock, subnets.Ids)
-		case providerkit.LinkBucket:
+		case providerkit.BindingBucket:
 			args := transformed.forBucket(resource.Name, resource.Bucket)
 			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, sessions, work.completer)
 		default:
 			return providerkit.Refuse(providerkit.CodeInvalid,
-				"this provider stands up no %s; it stands up %s and %s", resource.Type, providerkit.LinkPostgres, providerkit.LinkBucket)
+				"this provider stands up no %s; it stands up %s and %s", resource.Type, providerkit.BindingPostgres, providerkit.BindingBucket)
 		}
 		if err != nil {
 			return fmt.Errorf("declare %s: %w", resource.Name, err)
@@ -223,7 +223,7 @@ func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan, work *inf
 
 func provisionsBucket(plan providerkit.StackPlan) bool {
 	return slices.ContainsFunc(plan.Resources, func(resource providerkit.Resource) bool {
-		return resource.Type == providerkit.LinkBucket && !resource.Linked
+		return resource.Type == providerkit.BindingBucket && resource.Binding == ""
 	})
 }
 
@@ -260,7 +260,7 @@ func (r *release) Decode(ctx context.Context, plan providerkit.StackPlan, output
 	sessions := newSessionScope(naming.Sanitize(plan.Ref.Project), plan.Ref.Name.Env, r.cfg.StateTableARN)
 	result := providerkit.StackResult{}
 	for _, resource := range plan.Resources {
-		if resource.Linked {
+		if resource.Binding != "" {
 			continue
 		}
 		raw, produced := outputs[resource.Name]
@@ -272,54 +272,54 @@ func (r *release) Decode(ctx context.Context, plan providerkit.StackPlan, output
 			return providerkit.StackResult{}, fmt.Errorf("output for %s is not a map", resource.Name)
 		}
 		var (
-			link *linksv1.Link
-			err  error
+			binding *bindingsv1.Binding
+			err     error
 		)
 		switch resource.Type {
-		case providerkit.LinkPostgres:
-			link, err = collectPostgresLink(ctx, r.cfg.Secrets, resource.Name, fields)
-		case providerkit.LinkBucket:
-			link, err = collectBucketLink(resource.Name, sessions, fields)
+		case providerkit.BindingPostgres:
+			binding, err = collectPostgresBinding(ctx, r.cfg.Secrets, resource.Name, fields)
+		case providerkit.BindingBucket:
+			binding, err = collectBucketBinding(resource.Name, sessions, fields)
 		}
 		if err != nil {
 			return providerkit.StackResult{}, err
 		}
-		held := linkOf(resource.Type, link)
+		held := bindingOf(resource.Type, binding)
 		held.Resource = resource.Declared
-		result.Links = append(result.Links, held)
+		result.Bindings = append(result.Bindings, held)
 	}
 	return result, nil
 }
 
-func linkOf(kind providerkit.LinkType, link *linksv1.Link) providerkit.Link {
+func bindingOf(kind providerkit.BindingType, binding *bindingsv1.Binding) providerkit.Binding {
 	properties := map[string]string{}
 	switch kind {
-	case providerkit.LinkPostgres:
-		p := link.GetPostgres()
+	case providerkit.BindingPostgres:
+		p := binding.GetPostgres()
 		properties[providerkit.PropertyHost] = p.GetHost()
 		properties[providerkit.PropertyPort] = strconv.Itoa(int(p.GetPort()))
 		properties[providerkit.PropertyDatabase] = p.GetDatabase()
 		properties[providerkit.PropertyUsername] = p.GetUsername()
 		properties[providerkit.PropertyPassword] = p.GetPassword()
-	case providerkit.LinkBucket:
-		properties[providerkit.PropertyBucket] = link.GetBucket().GetBucket()
+	case providerkit.BindingBucket:
+		properties[providerkit.PropertyBucket] = binding.GetBucket().GetBucket()
 	}
-	return providerkit.Link{
+	return providerkit.Binding{
 		Type:       kind,
-		Name:       link.GetName(),
+		Name:       binding.GetName(),
 		Properties: properties,
-		Grants:     providerkit.GrantsOf(link),
+		Grants:     providerkit.GrantsOf(binding),
 	}
 }
 
 func (r *release) refuseHandover(ctx context.Context, plan providerkit.StackPlan) error {
-	var linked []providerkit.Resource
+	var bound []providerkit.Resource
 	for _, resource := range plan.Resources {
-		if resource.Linked {
-			linked = append(linked, resource)
+		if resource.Binding != "" {
+			bound = append(bound, resource)
 		}
 	}
-	if len(linked) == 0 {
+	if len(bound) == 0 {
 		return nil
 	}
 	outputs, err := r.adapter.Outputs(ctx, plan.Ref, nil)
@@ -327,7 +327,7 @@ func (r *release) refuseHandover(ctx context.Context, plan providerkit.StackPlan
 		return err
 	}
 	var handed []string
-	for _, resource := range linked {
+	for _, resource := range bound {
 		if _, provisioned := outputs[resource.Name]; provisioned {
 			handed = append(handed, resource.Declared)
 		}
@@ -335,7 +335,7 @@ func (r *release) refuseHandover(ctx context.Context, plan providerkit.StackPlan
 	if len(handed) == 0 {
 		return nil
 	}
-	return &HandoverError{Links: handed, Stack: plan.Ref.Name.String()}
+	return &HandoverError{Bindings: handed, Stack: plan.Ref.Name.String()}
 }
 
 func (r *Releaser) PackApp(ctx context.Context, packing providerkit.AppPacking, _ providerkit.Reporter) (providerkit.AppPack, error) {

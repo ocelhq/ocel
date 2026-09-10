@@ -58,11 +58,11 @@ function declareResource(body: unknown) {
 }
 
 declareResource({
-  resource: { type: "BINDING_TYPE_POSTGRES", name: "main" },
+  resource: { type: "RESOURCE_TYPE_POSTGRES", name: "main" },
   postgres: { version: "17" },
 });
 declareResource({
-  resource: { type: "BINDING_TYPE_POSTGRES", name: "reporting" },
+  resource: { type: "RESOURCE_TYPE_POSTGRES", name: "reporting" },
   postgres: { version: "16" },
 });
 export {};
@@ -123,7 +123,7 @@ await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+c
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
-    resource: { type: "BINDING_TYPE_POSTGRES", name: "prepared-once" },
+    resource: { type: "RESOURCE_TYPE_POSTGRES", name: "prepared-once" },
     postgres: { version: "17" },
   }),
 });

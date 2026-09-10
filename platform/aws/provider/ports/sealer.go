@@ -104,8 +104,8 @@ func encryptionContext(at kit.Coordinate) (map[string]string, error) {
 			return nil, kit.Refuse(kit.CodeInvalid, "a value's coordinate names no %s, and the coordinate is what a sealed value is bound to", name)
 		}
 	}
-	if at.Link != "" {
-		bound["link"] = at.Link
+	if at.Binding != "" {
+		bound["binding"] = at.Binding
 	}
 	return bound, nil
 }

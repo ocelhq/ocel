@@ -5,22 +5,22 @@ from urllib.parse import quote
 from protobuf import Oneof
 
 from ocel._declare import declare, discovering
-from ocel._link import link, unprovisioned
+from ocel._binding import binding, unprovisioned
 from ocel.gen.app.resources.v1.resources_pb import (
     DeclareRequest,
     PostgresConfig,
     ResourceIdentifier,
+    ResourceType,
 )
-from ocel.gen.common.links.v1.links_pb import LinkType
 
 _KIND = "postgres"
 _DEFAULT_VERSION = "17"
 
 
 class Postgres:
-    """A postgres database an app declares and reads its link from."""
+    """A postgres database an app declares and reads its binding from."""
 
-    #: The name the database was declared under, and the name its link is delivered as.
+    #: The name the database was declared under, and the name its binding is delivered as.
     name: str
 
     def __init__(self, name: str):
@@ -32,15 +32,15 @@ class Postgres:
 
     @property
     def connection_string(self) -> str:
-        """The postgres URL of the delivered link, with the credentials percent-encoded."""
-        properties = link(self.name)
+        """The postgres URL of the delivered binding, with the credentials percent-encoded."""
+        properties = binding(self.name)
         user = quote(properties.username, safe="")
         password = quote(properties.password, safe="")
         database = quote(properties.database, safe="")
         return f"postgres://{user}:{password}@{properties.host}:{properties.port}/{database}"
 
     async def pool(self):
-        """The asyncpg pool over the delivered link, opened on the first call and returned
+        """The asyncpg pool over the delivered binding, opened on the first call and returned
         as it stands on every one after."""
         if self._pool is None:
             async with self._opening:
@@ -66,14 +66,14 @@ class _Unprovisioned(Postgres):
 def postgres(name: str, *, version: str | None = None) -> Postgres:
     """Declare a postgres database named ``name`` and return the handle an app reads it
     through. Call it from a file under the project's discovery folder: during discovery the
-    call is the declaration, and at runtime it reads the link the deploy delivered for
+    call is the declaration, and at runtime it reads the binding the deploy delivered for
     that name."""
     if not discovering():
         return Postgres(name)
     caller = inspect.stack(0)[1]
     declare(
         DeclareRequest(
-            resource=ResourceIdentifier(type=LinkType.POSTGRES, name=name),
+            resource=ResourceIdentifier(type=ResourceType.POSTGRES, name=name),
             config=Oneof(_KIND, PostgresConfig(version=version or _DEFAULT_VERSION)),
             source=f"{caller.filename}:{caller.lineno}",
         )

@@ -1,16 +1,16 @@
 import type { ContractRow } from "../contract";
+import { bindingRows } from "./bindings";
 import { envRows } from "./env";
 import { healthRows } from "./health";
-import { linkRows } from "./links";
 import { nextCacheRows, nextDataCacheRows } from "./nextCache";
 import { nextRoutingRows, nextStateRows } from "./nextRouting";
 import { nativeRows, probeRows, vendoredRows } from "./probes";
 import { productRows } from "./product";
 import { staticRows } from "./static";
 
+export * from "./bindings";
 export * from "./env";
 export * from "./health";
-export * from "./links";
 export * from "./nextCache";
 export * from "./nextRouting";
 export * from "./probes";
@@ -25,7 +25,7 @@ export const everyRow: ContractRow[] = [
   ...vendoredRows,
   ...probeRows,
   ...envRows,
-  ...linkRows,
+  ...bindingRows,
   ...nextRoutingRows,
   ...nextStateRows,
   ...nextCacheRows,

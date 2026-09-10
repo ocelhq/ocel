@@ -24,12 +24,12 @@
 //!
 //! Each derive registers what the struct declares at link time, so discovery reads it by
 //! running the binary with `#[ocel::main]` on its `main`, without loading a value. At
-//! runtime `load` reads the links and the values the deploy delivered.
+//! runtime `load` reads the bindings and the values the deploy delivered.
 
 mod declare;
 mod env;
 mod error;
-mod link;
+mod binding;
 mod postgres;
 #[doc(hidden)]
 pub mod proto;

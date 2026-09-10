@@ -67,7 +67,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   const dir = await workTree(cell, "dev");
   const env = { ...childEnv(token), OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)) };
 
-  await runOcel(cell, dir, "up", "console-link", ["console", "link", "--create", cell.slug], env);
+  await runOcel(cell, dir, "up", "console-link", ["link", "--create", cell.slug], env);
   if (setsEnv(cell.fixture.rows)) {
     await runOcel(
       cell,
