@@ -39,7 +39,14 @@ export interface MatrixRow {
   description?: string;
   class: Class;
   scope?: string[];
+  group?: string;
   cells: MatrixCell[];
+}
+
+export interface VariableGroup {
+  key: string;
+  required: boolean;
+  description?: string;
 }
 
 export interface AppResolution {
@@ -61,6 +68,7 @@ export interface State {
   matrix: {
     columns: string[];
     rows: MatrixRow[];
+    groups?: VariableGroup[];
     apps: AppResolution[];
   };
   recovery?: Recovery;
@@ -106,12 +114,17 @@ export function cellOf(row: MatrixRow, folder: string): MatrixCell | undefined {
   return row.cells.find((cell) => cell.folder === folder);
 }
 
-export function owedCell(cell: MatrixCell): boolean {
-  return (cell.state === "required" && !cell.set) || cell.problem !== undefined;
+export function owedCell(row: MatrixRow, cell: MatrixCell, off: ReadonlySet<string>): boolean {
+  const owing = cell.state === "required" && !cell.set && !offVariableGroup(row, cell.folder, off);
+  return owing || cell.problem !== undefined;
 }
 
 export function owedCount(current: State): number {
-  return current.matrix.rows.reduce((total, row) => total + row.cells.filter(owedCell).length, 0);
+  const off = offVariableGroupsOf(current);
+  return current.matrix.rows.reduce(
+    (total, row) => total + row.cells.filter((cell) => owedCell(row, cell, off)).length,
+    0,
+  );
 }
 
 export function readable(row: MatrixRow): string[] {
@@ -141,6 +154,7 @@ export function variantOf(
   cell: MatrixCell,
   environment: string,
   extra: boolean,
+  off: ReadonlySet<string>,
 ): Variant {
   const override = environment === "" ? undefined : overrideOf(cell, environment);
   const reference = environment === "" ? cell.reference : override?.reference;
@@ -154,7 +168,11 @@ export function variantOf(
     version: environment === "" ? cell.version : (override?.version ?? 0),
     orphaned: override?.orphaned === true,
     extra,
-    owed: environment === "" && cell.state === "required" && !set,
+    owed:
+      environment === "" &&
+      cell.state === "required" &&
+      !set &&
+      !offVariableGroup(row, cell.folder, off),
     ...(reference && { reference }),
     ...(environment === "" && cell.problem && { problem: cell.problem }),
   };
@@ -173,9 +191,11 @@ function materialised(cell: MatrixCell): boolean {
 export interface Catalogue {
   rows: readonly MatrixRow[];
   variants: ReadonlyMap<string, Variant>;
+  off: ReadonlySet<string>;
 }
 
 export function catalogueOf(current: State, extras: readonly Address[]): Catalogue {
+  const off = offVariableGroupsOf(current);
   const variants = new Map<string, Variant>();
   const put = (variant: Variant) => {
     const key = addressKey(variant.at);
@@ -187,18 +207,18 @@ export function catalogueOf(current: State, extras: readonly Address[]): Catalog
     for (const cell of cells) {
       const real = cell.folder === "" || materialised(cell);
       const wanted = asked.some((at) => at.folder === cell.folder && at.environment === "");
-      if (real || wanted) put(variantOf(row, cell, "", !real));
+      if (real || wanted) put(variantOf(row, cell, "", !real, off));
       for (const override of cell.overrides ?? []) {
-        put(variantOf(row, cell, override.environment, false));
+        put(variantOf(row, cell, override.environment, false, off));
       }
       for (const at of asked) {
         if (at.folder === cell.folder && at.environment !== "") {
-          put(variantOf(row, cell, at.environment, true));
+          put(variantOf(row, cell, at.environment, true, off));
         }
       }
     }
   }
-  return { rows: current.matrix.rows, variants };
+  return { rows: current.matrix.rows, variants, off };
 }
 
 export function variantsOf(catalogue: Catalogue): Variant[] {
@@ -211,7 +231,209 @@ export function variantAt(catalogue: Catalogue, at: Address): Variant | undefine
   const row = catalogue.rows.find((candidate) => candidate.key === at.key);
   const cell = row && cellOf(row, at.folder);
   if (!row || !cell) return undefined;
-  return variantOf(row, cell, at.environment, true);
+  return variantOf(row, cell, at.environment, true, catalogue.off);
+}
+
+export type VariableGroupStatus = "off" | "partial" | "complete";
+
+export interface VariableGroupMember {
+  at: Address;
+  addresses: Address[];
+  required: boolean;
+  present: boolean;
+}
+
+export interface VariableGroupState {
+  group: VariableGroup;
+  folder: string;
+  environment: string;
+  status: VariableGroupStatus;
+  switchedOn: boolean;
+  members: VariableGroupMember[];
+  present: number;
+  owed: VariableGroupMember[];
+}
+
+export interface VariableGroupPending {
+  drafts: ReadonlyMap<string, string>;
+  removals: ReadonlySet<string>;
+  switchedOn: ReadonlySet<string>;
+}
+
+export function variableGroupsOf(current: State): VariableGroup[] {
+  return current.matrix.groups ?? [];
+}
+
+export function variableGroupOf(
+  current: State,
+  key: string | undefined,
+): VariableGroup | undefined {
+  if (key === undefined || key === "") return undefined;
+  return variableGroupsOf(current).find((group) => group.key === key);
+}
+
+export function variableGroupColumn(folder: string, environment: string): string {
+  return `${folder} ${environment}`;
+}
+
+export function variableGroupColumnKey(group: string, folder: string, environment: string): string {
+  return `${group} ${variableGroupColumn(folder, environment)}`;
+}
+
+function resolution(row: MatrixRow, folder: string): MatrixCell[] {
+  const scope = row.scope ?? [];
+  const chain =
+    scope.length > 0
+      ? scope.includes(folder)
+        ? [folder]
+        : []
+      : folder === ""
+        ? [""]
+        : [folder, ""];
+  const out: MatrixCell[] = [];
+  for (const where of chain) {
+    const found = cellOf(row, where);
+    if (found && (found.state !== "forbidden" || found.set)) out.push(found);
+  }
+  return out;
+}
+
+function filled(cell: MatrixCell, at: Address, pending: VariableGroupPending): boolean {
+  const key = addressKey(at);
+  const draft = pending.drafts.get(key);
+  if (draft !== undefined) return draft !== "";
+  if (pending.removals.has(key)) return false;
+  if (at.environment === "") return cell.set || cell.reference !== undefined;
+  return overrideOf(cell, at.environment) !== undefined;
+}
+
+function memberOf(
+  row: MatrixRow,
+  folder: string,
+  environment: string,
+  pending: VariableGroupPending,
+): VariableGroupMember | undefined {
+  const cells = resolution(row, folder);
+  const root = cells[cells.length - 1];
+  if (root === undefined) return undefined;
+  const reach: { cell: MatrixCell; at: Address }[] = [];
+  for (const cell of cells) {
+    if (environment !== "") {
+      reach.push({ cell, at: { key: row.key, folder: cell.folder, environment } });
+    }
+    reach.push({ cell, at: { key: row.key, folder: cell.folder, environment: "" } });
+  }
+  return {
+    at: reach[0]!.at,
+    addresses: reach.map((step) => step.at),
+    required: root.state === "required",
+    present: reach.some((step) => filled(step.cell, step.at, pending)),
+  };
+}
+
+export function variableGroupStateOf(
+  current: State,
+  key: string,
+  folder: string,
+  environment: string,
+  pending: VariableGroupPending,
+): VariableGroupState | undefined {
+  const group = variableGroupOf(current, key);
+  if (group === undefined) return undefined;
+  const members = current.matrix.rows
+    .filter((row) => row.group === key)
+    .flatMap((row) => {
+      const member = memberOf(row, folder, environment, pending);
+      return member ? [member] : [];
+    });
+  if (members.length === 0) return undefined;
+  const owed = members.filter((member) => member.required && !member.present);
+  const present = members.filter((member) => member.present).length;
+  return {
+    group,
+    folder,
+    environment,
+    status: present === 0 ? "off" : owed.length === 0 ? "complete" : "partial",
+    switchedOn: pending.switchedOn.has(variableGroupColumnKey(key, folder, environment)),
+    members,
+    present,
+    owed,
+  };
+}
+
+const settled: VariableGroupPending = {
+  drafts: new Map(),
+  removals: new Set(),
+  switchedOn: new Set(),
+};
+
+export function offVariableGroupsOf(current: State): ReadonlySet<string> {
+  const out = new Set<string>();
+  for (const derived of variableGroupStatesOf(current, "", settled)) {
+    if (derived.status === "off" && !derived.group.required) {
+      out.add(variableGroupColumnKey(derived.group.key, derived.folder, ""));
+    }
+  }
+  return out;
+}
+
+function offVariableGroup(row: MatrixRow, folder: string, off: ReadonlySet<string>): boolean {
+  return row.group !== undefined && off.has(variableGroupColumnKey(row.group, folder, ""));
+}
+
+export function variableGroupStatesOf(
+  current: State,
+  environment: string,
+  pending: VariableGroupPending,
+): VariableGroupState[] {
+  const out: VariableGroupState[] = [];
+  for (const group of variableGroupsOf(current)) {
+    for (const folder of current.matrix.columns) {
+      const derived = variableGroupStateOf(current, group.key, folder, environment, pending);
+      if (derived) out.push(derived);
+    }
+  }
+  return out;
+}
+
+export function variableGroupSwitchable(derived: VariableGroupState): boolean {
+  return !derived.group.required;
+}
+
+export function owedVariableGroupCellsOf(
+  states: readonly VariableGroupState[],
+): ReadonlySet<string> {
+  const out = new Set<string>();
+  for (const derived of states) {
+    if (derived.status !== "partial") continue;
+    for (const member of derived.owed) out.add(addressKey(member.at));
+  }
+  return out;
+}
+
+export function blockedVariableGroupColumns(
+  states: readonly VariableGroupState[],
+): ReadonlySet<string> {
+  return new Set(
+    states
+      .filter((derived) => derived.status === "partial")
+      .map((derived) => variableGroupColumn(derived.folder, derived.environment)),
+  );
+}
+
+export function variableGroupBlockLine(states: readonly VariableGroupState[]): string {
+  const blocked = states.filter((derived) => derived.status === "partial");
+  const line = names(
+    blocked.map(
+      (derived) =>
+        `${derived.group.key} in ${folderName(derived.folder)}${
+          derived.environment === "" ? "" : ` for ${derived.environment}`
+        }`,
+    ),
+  );
+  return blocked.some(variableGroupSwitchable)
+    ? `${line} must be complete before saving, or switch the group off.`
+    : `${line} must be complete before saving.`;
 }
 
 export interface Environment {
@@ -273,7 +495,9 @@ function lineOf(
   environment: string,
 ): KeyLine {
   const at = { key: row.key, folder: cell.folder, environment };
-  const variant = catalogue.variants.get(addressKey(at)) ?? variantOf(row, cell, environment, true);
+  const variant =
+    catalogue.variants.get(addressKey(at)) ??
+    variantOf(row, cell, environment, true, catalogue.off);
   const root = cellOf(row, "");
   let inherits: Inherits = null;
   if (environment !== "") {
@@ -344,7 +568,7 @@ export function listingOf(
         if (!catalogue.variants.has(addressKey({ key: row.key, folder, environment: "" })))
           continue;
         lines.push(lineOf(catalogue, owed, row, cell, lens.environment));
-        if (owedCell(cell)) owing += 1;
+        if (owedCell(row, cell, catalogue.off)) owing += 1;
       }
       groups.push({ folder, keys: lines.length, owed: owing, lines });
     }

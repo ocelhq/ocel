@@ -6,6 +6,7 @@ import {
   addressKey,
   applyDotenv,
   baselineOf,
+  blockedVariableGroupColumns,
   type CopyPlan,
   catalogueOf,
   type DropOutcome,
@@ -16,6 +17,7 @@ import {
   names,
   type OtherValue,
   owedSet,
+  owedVariableGroupCellsOf,
   type Problem,
   planCopy,
   plural,
@@ -26,7 +28,13 @@ import {
   type State,
   saveSummary,
   unfilledOwed,
+  type VariableGroupPending,
   type Version,
+  variableGroupBlockLine,
+  variableGroupColumn,
+  variableGroupColumnKey,
+  variableGroupStateOf,
+  variableGroupStatesOf,
   variantsOf,
 } from "./model";
 import { computed, signal } from "./signals";
@@ -46,6 +54,8 @@ export const spotlight = signal<string | null>(null);
 export const focusing = signal<string | null>(null);
 
 export const drafts = signal<ReadonlyMap<string, string>>(new Map());
+export const variableGroupRemovals = signal<ReadonlySet<string>>(new Set());
+export const variableGroupsOn = signal<ReadonlySet<string>>(new Set());
 export const baselines = signal<ReadonlyMap<string, string>>(new Map());
 export const revealErrors = signal<ReadonlyMap<string, string>>(new Map());
 export const problems = signal<ReadonlyMap<string, Problem>>(new Map());
@@ -94,6 +104,26 @@ export const environments = computed(() => (state.value ? environmentsOf(state.v
 export const dirty = computed(() => dirtyEntries(catalogue.value, drafts.value, baselines.value));
 
 export const owed = computed(() => owedSet(state.value?.recovery));
+
+function variableGroupPending(): VariableGroupPending {
+  return {
+    drafts: drafts.value,
+    removals: variableGroupRemovals.value,
+    switchedOn: variableGroupsOn.value,
+  };
+}
+
+export const variableGroupStates = computed(() => {
+  const current = state.value ?? emptyState;
+  const pending = variableGroupPending();
+  const base = variableGroupStatesOf(current, "", pending);
+  if (environment.value === "") return base;
+  return [...base, ...variableGroupStatesOf(current, environment.value, pending)];
+});
+
+export const owedVariableGroupCells = computed(() =>
+  owedVariableGroupCellsOf(variableGroupStates.value),
+);
 
 export const listing = computed(() =>
   listingOf(state.value ?? emptyState, catalogue.value, owed.value, {
@@ -369,12 +399,25 @@ function settle(results: SaveResult[]): ReturnType<typeof reduceSave> {
 
 export async function save(): Promise<void> {
   const pending = dirty.value;
-  if (pending.length === 0 || saving.value) return;
+  if ((pending.length === 0 && variableGroupRemovals.value.size === 0) || saving.value) return;
+  const states = variableGroupStates.value;
+  const blocked = blockedVariableGroupColumns(states);
+  const open = (at: Address) => !blocked.has(variableGroupColumn(at.folder, at.environment));
+  const held = pending.filter((draft) => open(draft.at));
+  const dropping = [...variableGroupRemovals.value].flatMap((key) => {
+    const variant = variants.value.get(key);
+    return variant?.set && !variant.reference && open(variant.at) ? [variant] : [];
+  });
+  const refused = blocked.size === 0 ? null : variableGroupBlockLine(states);
+  if (held.length === 0 && dropping.length === 0) {
+    if (refused) outcome.value = { text: refused, tone: "owed" };
+    return;
+  }
   saving.value = true;
   outcome.value = null;
   try {
     const results = await Promise.all(
-      pending.map((draft) =>
+      held.map((draft) =>
         attempt(draft.at, () =>
           api("PUT", "/api/value", {
             ...draft.at,
@@ -384,11 +427,39 @@ export async function save(): Promise<void> {
         ),
       ),
     );
+    const removed = await Promise.all(
+      dropping.map((variant) =>
+        attempt(variant.at, () =>
+          api("DELETE", `/api/value?${query(variant.at)}&version=${variant.version}`),
+        ),
+      ),
+    );
+    const attempted = new Set(dropping.map((variant) => addressKey(variant.at)));
+    variableGroupRemovals.value = new Set([
+      ...[...variableGroupRemovals.value].filter((key) => !attempted.has(key)),
+      ...removed.filter((result) => !result.ok).map((result) => addressKey(result.at)),
+    ]);
     await refresh();
     const reduced = settle(results);
+    const switched = variableGroupsOn.value;
+    variableGroupsOn.value = new Set(
+      variableGroupStates.value
+        .filter((derived) => derived.status === "off")
+        .map((derived) =>
+          variableGroupColumnKey(derived.group.key, derived.folder, derived.environment),
+        )
+        .filter((key) => switched.has(key)),
+    );
+    const cleared = removed.filter((result) => result.ok).length;
     outcome.value = {
-      text: saveSummary(reduced),
-      ...(reduced.saved < results.length && { tone: "owed" as const }),
+      text: [
+        saveSummary(reduced),
+        cleared > 0 ? `Removed ${plural(cleared, "group value")}.` : "",
+        refused ?? "",
+      ]
+        .filter((part) => part !== "")
+        .join(" "),
+      ...((reduced.saved < results.length || refused !== null) && { tone: "owed" as const }),
     };
     await reveal(
       results.filter((result) => !result.ok && result.status === 409).map((result) => result.at),
@@ -396,6 +467,45 @@ export async function save(): Promise<void> {
   } finally {
     saving.value = false;
   }
+}
+
+export function toggleVariableGroup(group: string, folder: string, on: boolean): void {
+  const current = state.value;
+  if (!current) return;
+  const at = environment.value;
+  const derived = variableGroupStateOf(current, group, folder, at, variableGroupPending());
+  if (!derived) return;
+  const column = variableGroupColumnKey(group, folder, at);
+  const switchedOn = new Set(variableGroupsOn.value);
+  const removals = new Set(variableGroupRemovals.value);
+  const remaining = new Map(drafts.value);
+  if (on) {
+    switchedOn.add(column);
+    for (const member of derived.members) {
+      for (const address of member.addresses) removals.delete(addressKey(address));
+    }
+    variableGroupsOn.value = switchedOn;
+    variableGroupRemovals.value = removals;
+    for (const member of derived.members) remember(member.at);
+    search.value = "";
+    owedOnly.value = false;
+    expand(folder);
+    const first = derived.owed[0] ?? derived.members[0];
+    if (first) focusing.value = addressKey(first.at);
+    return;
+  }
+  switchedOn.delete(column);
+  for (const member of derived.members) {
+    for (const address of member.addresses) {
+      const key = addressKey(address);
+      remaining.delete(key);
+      const variant = variants.value.get(key);
+      if (variant?.set && !variant.reference) removals.add(key);
+    }
+  }
+  variableGroupsOn.value = switchedOn;
+  variableGroupRemovals.value = removals;
+  drafts.value = remaining;
 }
 
 export function askRemoval(cells: readonly Address[]): void {

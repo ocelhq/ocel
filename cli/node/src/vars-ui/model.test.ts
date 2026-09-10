@@ -90,6 +90,57 @@ describe("owedCount", () => {
   });
 });
 
+describe("owedCount with variable groups", () => {
+  const grouped = (rows: MatrixRow[]): State => ({
+    ...stateOf(rows),
+    matrix: { columns: ["", "/web"], rows, groups: [{ key: "github", required: false }], apps: [] },
+  });
+
+  it("owes nothing in an optional group nobody has turned on", () => {
+    const current = grouped([
+      row("GITHUB_ID", [cell({ state: "required" })], { group: "github" }),
+      row("GITHUB_SECRET", [cell({ state: "required" })], { group: "github" }),
+    ]);
+    expect(owedCount(current)).toBe(0);
+    expect(variantAt(catalogueOf(current, []), at("GITHUB_ID"))?.owed).toBe(false);
+  });
+
+  it("owes the rest of an optional group once one member holds a value", () => {
+    const current = grouped([
+      row("GITHUB_ID", [cell({ state: "required", set: true, version: 1 })], { group: "github" }),
+      row("GITHUB_SECRET", [cell({ state: "required" })], { group: "github" }),
+    ]);
+    expect(owedCount(current)).toBe(1);
+    expect(variantAt(catalogueOf(current, []), at("GITHUB_SECRET"))?.owed).toBe(true);
+  });
+
+  it("owes a required member of a required group the way the deploy gate does", () => {
+    const rows = [
+      row("STRIPE_KEY", [cell({ state: "required" })], { group: "stripe" }),
+      row("STRIPE_HINT", [cell({})], { group: "stripe" }),
+    ];
+    const current: State = {
+      ...stateOf(rows),
+      matrix: {
+        columns: ["", "/web"],
+        rows,
+        groups: [{ key: "stripe", required: true }],
+        apps: [],
+      },
+    };
+    expect(owedCount(current)).toBe(1);
+    expect(variantAt(catalogueOf(current, []), at("STRIPE_KEY"))?.owed).toBe(true);
+  });
+
+  it("still owes a required cell that belongs to no group", () => {
+    const current = grouped([
+      row("GITHUB_ID", [cell({ state: "required" })], { group: "github" }),
+      row("DATABASE_URL", [cell({ state: "required" })]),
+    ]);
+    expect(owedCount(current)).toBe(1);
+  });
+});
+
 describe("held", () => {
   const base = cell({
     set: true,
