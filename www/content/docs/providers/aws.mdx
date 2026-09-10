@@ -32,7 +32,6 @@ ocel deploy
 | `region` | The region to deploy into. |
 | `varsKey` | ARN of a KMS key to encrypt this account's variables under. Omit it and `ocel bootstrap --features vars-key` makes a key ocel owns. |
 | `certificates` | Already-issued ACM certificate ARNs, keyed by hostname. A hostname left off gets a certificate ocel requests, validates and deletes again. |
-| `transforms` | Module paths applied while provisioning, in order — later modules win where their patches collide. |
 
 ## Edge
 

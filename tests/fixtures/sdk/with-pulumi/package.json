@@ -17,6 +17,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@ocel/transforms": "workspace:^",
     "@types/express": "~5.0.0",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",

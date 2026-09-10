@@ -1,0 +1,109 @@
+---
+title: Transforms
+description: Patch the cloud resources ocel provisions.
+---
+
+A transform is a module ocel runs before it provisions anything. It returns patches for the
+underlying cloud resources ocel is about to create, keyed by the provider that creates them.
+
+List the modules at the root of the config, in the order they apply — a later module wins
+where two patch the same field:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "transforms": ["./transforms/defaults.transform.ts"],
+  "provider": { "name": "aws" },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+Add the package the modules import:
+
+```bash
+pnpm add -D @ocel/transforms
+```
+
+## A module
+
+```ts title="transforms/defaults.transform.ts"
+import { defineTransform } from "@ocel/transforms";
+
+export default defineTransform({
+  aws: {
+    function: { lambda: { memorySize: 2048, timeout: 60 } },
+  },
+});
+```
+
+`aws` is the provider. `function` is the ocel resource. `lambda` is the Pulumi resource the
+AWS provider creates for it, and what you write under it is `aws.lambda.Function`'s own args,
+typed from `@pulumi/aws`. A field ocel fills from what the deploy built — the role it created,
+the code it uploaded, the environment it sealed — is not on the type, and naming one anyway
+refuses the deploy.
+
+A module with no branch for the provider the project deploys to refuses the deploy, rather
+than quietly doing nothing.
+
+| ocel resource | Pulumi resources |
+| --- | --- |
+| `function` | `lambda`, `url`, `logGroup` |
+| `bucket` | `bucket`, `publicAccessBlock`, `cors`, `uploadCompleterRole`, `uploadCompleterLogGroup`, `uploadCompleter`, `notification` |
+| `postgres` | `securityGroup`, `subnetGroup`, `cluster`, `instance` |
+
+## Gates and tags
+
+A rule can carry an `if` gate, decided from the environment being deployed and the app the
+candidate resource belongs to, and `tags` to union into every resource it reaches. Write a
+list of rules where one is not enough:
+
+```ts title="transforms/defaults.transform.ts"
+import { defineTransform } from "@ocel/transforms";
+
+export default defineTransform([
+  { tags: { "acme:cost-center": "platform" } },
+  {
+    if: ({ envClass }) => envClass === "production",
+    aws: {
+      postgres: {
+        cluster: { serverlessv2ScalingConfiguration: { minCapacity: 2, maxCapacity: 16 } },
+      },
+    },
+  },
+]);
+```
+
+## Reading what your own infrastructure published
+
+A transform fills a field from a record your own infrastructure published, through the
+callback form:
+
+```ts title="transforms/network.transform.ts"
+import { defineTransform } from "@ocel/transforms";
+
+export default defineTransform(({ bindings }) => ({
+  aws: {
+    function: {
+      lambda: {
+        vpcConfig: {
+          subnetIds: bindings.custom.network.subnetIds,
+          securityGroupIds: bindings.custom.network.securityGroupIds,
+        },
+      },
+    },
+  },
+}));
+```
+
+`bindings.<type>.<name>` reads the record bound to a resource your config declares —
+`<type>.<name>` is the key under `bindings` in `ocel.json` — and `bindings.custom.<name>`
+reads a record nothing declared, published by [`@ocel/sst`](/docs/sdk) or
+[`@ocel/pulumi`](/docs/sdk) with `bind.custom`.
+
+Nothing is resolved in the module: the deploy reads the record published to the coordinate
+it targets. A resource ocel provisions itself cannot be read this way — ocel publishes what
+it provisions long after the transforms have run.
+
+Run `ocel bindings generate` to write the names and their types down, and the module is
+checked where it is written instead of at the deploy.
