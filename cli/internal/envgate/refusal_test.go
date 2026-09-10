@@ -6,6 +6,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 func missing(key, folder string) *resourcesv1.VariableProblem {
@@ -146,7 +148,7 @@ func TestRefusalOwedIsTheStreamFormOfError(t *testing.T) {
 	if owed.GetRemedy() != "ocel env ui" {
 		t.Errorf("Owed().Remedy = %q, want the editor", owed.GetRemedy())
 	}
-	plain := strings.Join(append(envgate.Lines(owed.GetCells(), envgate.Plain), "", envgate.RemedyLine(owed.GetRemedy())), "\n")
+	plain := strings.Join(append(envgate.Lines(owed, envgate.Plain), "", envgate.RemedyLine(owed.GetRemedy())), "\n")
 	if plain != refusal.Error() {
 		t.Errorf("Lines(Owed()) =\n%s\nwant Error()\n%s", plain, refusal.Error())
 	}
@@ -169,6 +171,40 @@ func TestRefusalPrintsTheVariableDescription(t *testing.T) {
 	}
 }
 
+func TestOwedCarriesGroupingOverTheWire(t *testing.T) {
+	t.Parallel()
+	refusal := &envgate.Refusal{
+		Problems: []*resourcesv1.VariableProblem{
+			missing("GITHUB_CLIENT_ID", ""),
+			missing("GITHUB_CLIENT_SECRET", ""),
+			missing("DATABASE_URL", ""),
+		},
+		Definitions: []*resourcesv1.VariableDefinition{
+			{Key: "GITHUB_CLIENT_ID", Group: "github", Required: true},
+			{Key: "GITHUB_CLIENT_SECRET", Group: "github", Required: true},
+			{Key: "DATABASE_URL", Required: true},
+		},
+		Groups: []*resourcesv1.GroupDefinition{{Key: "github", Description: "Sign in with GitHub"}},
+	}
+
+	encoded, err := proto.Marshal(refusal.Owed())
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	wire := &streamv1.VariablesOwed{}
+	if err := proto.Unmarshal(encoded, wire); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	got := strings.Join(append(envgate.Lines(wire, envgate.Plain), "", envgate.RemedyLine(wire.GetRemedy())), "\n")
+	if got != refusal.Error() {
+		t.Errorf("Lines(wire) =\n%s\nwant Error()\n%s", got, refusal.Error())
+	}
+	if !strings.Contains(got, "github — set together (Sign in with GitHub)") {
+		t.Errorf("Lines(wire) =\n%s\nwant the group header", got)
+	}
+}
+
 func TestPaintTouchesOnlyTheMarkAndTheFolder(t *testing.T) {
 	t.Parallel()
 	refusal := &envgate.Refusal{
@@ -178,7 +214,7 @@ func TestPaintTouchesOnlyTheMarkAndTheFolder(t *testing.T) {
 		Fail:  func(s string) string { return "<red>" + s + "</red>" },
 		Faint: func(s string) string { return "<dim>" + s + "</dim>" },
 	}
-	got := envgate.Lines(refusal.Owed().GetCells(), paint)
+	got := envgate.Lines(refusal.Owed(), paint)
 	want := []string{
 		"<red>✗</red> 2 variables are not ready — nothing has been built.",
 		"",
@@ -189,7 +225,7 @@ func TestPaintTouchesOnlyTheMarkAndTheFolder(t *testing.T) {
 		t.Errorf("Lines() =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	stripped := strings.NewReplacer("<red>", "", "</red>", "", "<dim>", "", "</dim>", "").Replace(strings.Join(got, "\n"))
-	if plain := strings.Join(envgate.Lines(refusal.Owed().GetCells(), envgate.Plain), "\n"); stripped != plain {
+	if plain := strings.Join(envgate.Lines(refusal.Owed(), envgate.Plain), "\n"); stripped != plain {
 		t.Errorf("painted minus codes =\n%s\nwant the plain form\n%s", stripped, plain)
 	}
 }

@@ -72,7 +72,12 @@ func groupPresent(definitions []*resourcesv1.VariableDefinition, held heldCells,
 	return false
 }
 
-func groupDescription(groups []*resourcesv1.GroupDefinition, key string) string {
+type described interface {
+	GetKey() string
+	GetDescription() string
+}
+
+func groupDescription[T described](groups []T, key string) string {
 	for _, group := range groups {
 		if group.GetKey() == key {
 			return group.GetDescription()

@@ -66,6 +66,8 @@ message VariablesOwed {
   repeated OwedVariable cells = 1;
 
   string remedy = 2;
+
+  repeated OwedGroup groups = 3;
 }
 
 message OwedVariable {
@@ -76,6 +78,14 @@ message OwedVariable {
   string reason = 3;
 
   string description = 4;
+
+  string group = 5 [(buf.validate.field).string.pattern = "^[^#[:cntrl:]]*$"];
+}
+
+message OwedGroup {
+  string key = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+
+  string description = 2;
 }
 
 // The end of a pause.
