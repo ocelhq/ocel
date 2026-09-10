@@ -2,7 +2,6 @@ package doctor
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -70,12 +69,12 @@ func TestConfiguredTransformsNeedNode(t *testing.T) {
 	t.Parallel()
 
 	cfg := goProject(t, "ocel.json")
-	cfg.Provider = &projectconfig.ProviderDescriptor{Name: "aws", Options: json.RawMessage(`{"transforms":["./transforms/default.transform.ts"]}`)}
-	if reasons := nodeReasons(cfg); !slices.Contains(reasons, "the provider is configured with transforms") {
+	cfg.Transforms = []string{"./transforms/default.transform.ts"}
+	if reasons := nodeReasons(cfg); !slices.Contains(reasons, "this project lists transforms") {
 		t.Fatalf("nodeReasons() = %v, want the transforms named", reasons)
 	}
 
-	cfg.Provider.Options = json.RawMessage(`{"transforms":[]}`)
+	cfg.Transforms = nil
 	if reasons := nodeReasons(cfg); len(reasons) != 0 {
 		t.Fatalf("nodeReasons() = %v, want none for an empty transform list", reasons)
 	}

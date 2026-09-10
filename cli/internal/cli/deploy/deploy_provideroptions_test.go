@@ -3,6 +3,7 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,7 +14,21 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
+func mustJSON(t *testing.T, value any) string {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("encode %v: %v", value, err)
+	}
+	return string(encoded)
+}
+
 func setUpProviderFixture(t *testing.T, options string) (root, journal string, deps cmddeps.Deps) {
+	t.Helper()
+	return setUpProviderFixtureWith(t, options, nil)
+}
+
+func setUpProviderFixtureWith(t *testing.T, options string, transforms []string) (root, journal string, deps cmddeps.Deps) {
 	t.Helper()
 
 	root, _ = clitest.SetUpDeployFixture(t)
@@ -21,6 +36,7 @@ func setUpProviderFixture(t *testing.T, options string) (root, journal string, d
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
+  transforms: `+mustJSON(t, transforms)+`,
   provider: { name: "aws", options: `+options+` },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "node" }],
@@ -39,7 +55,9 @@ export default {
 }
 
 func TestDeployConfiguresTheProviderOnceAtSessionSetup(t *testing.T) {
-	root, journal, deps := setUpProviderFixture(t, `{ region: "eu-west-2", transforms: ["./transforms/net.transform.ts"], certificates: { "app.acme.com": "arn:aws:acm:eu-west-2:1:certificate/x" } }`)
+	root, journal, deps := setUpProviderFixtureWith(t,
+		`{ region: "eu-west-2", certificates: { "app.acme.com": "arn:aws:acm:eu-west-2:1:certificate/x" } }`,
+		[]string{"./transforms/net.transform.ts"})
 
 	var stdout, stderr bytes.Buffer
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {

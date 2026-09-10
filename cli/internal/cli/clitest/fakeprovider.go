@@ -902,13 +902,12 @@ func (s *deployFakeProviderServer) Configure(ctx context.Context, req *contractv
 		return nil, err
 	}
 	defer f.Close()
-	fmt.Fprintf(f, "region=%s transforms=%s certificates=%v\n", aws.Region, strings.Join(aws.Transforms, ","), aws.Certificates)
+	fmt.Fprintf(f, "region=%s transforms=%s certificates=%v\n", aws.Region, strings.Join(req.GetConfig().GetTransforms(), ","), aws.Certificates)
 	return &contractv1.ConfigureResponse{}, nil
 }
 
 type fakeProviderOptions struct {
 	Region       string            `json:"region"`
-	Transforms   []string          `json:"transforms"`
 	Certificates map[string]string `json:"certificates"`
 }
 

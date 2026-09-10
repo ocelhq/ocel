@@ -2,7 +2,6 @@ package doctor
 
 import (
 	"context"
-	"encoding/json"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -19,23 +18,10 @@ func nodeReasons(cfg *projectconfig.Config) []string {
 	if holds, err := discovery.HoldsJS(cfg); err != nil || holds {
 		reasons = append(reasons, "this project holds JavaScript")
 	}
-	if transformed(cfg.Provider) {
-		reasons = append(reasons, "the provider is configured with transforms")
+	if len(cfg.Transforms) > 0 {
+		reasons = append(reasons, "this project lists transforms")
 	}
 	return reasons
-}
-
-func transformed(descriptor *projectconfig.ProviderDescriptor) bool {
-	if descriptor == nil || len(descriptor.Options) == 0 {
-		return false
-	}
-	var options struct {
-		Transforms []string `json:"transforms"`
-	}
-	if err := json.Unmarshal(descriptor.Options, &options); err != nil {
-		return false
-	}
-	return len(options.Transforms) > 0
 }
 
 func nodeCheck(ctx context.Context, cfg *projectconfig.Config) (check, bool) {

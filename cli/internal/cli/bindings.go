@@ -112,7 +112,7 @@ var bindingsGenerateCmd = &cobra.Command{
 	Long: "Write the transform types for the bindings published to one coordinate.\n\n" +
 		"Reads the records published to production, or to the preview coordinate --preview and " +
 		"--environment name, and writes " + bindingTypesFileName + " beside your ocel config. The file " +
-		"names each record and the properties it carries, so `bindings.<name>.<property>` in a transform " +
+		"names each record and the properties it carries, so `bindings.<type>.<name>.<property>` in a transform " +
 		"is checked where it is written instead of at the deploy. Check it in, and run this again when " +
 		"what you publish changes.\n\n" +
 		"This reads the published records, so it logs in and runs the provider.",
@@ -275,7 +275,7 @@ func runBindingsGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opt
 		}
 
 		path := filepath.Join(cfg.Dir, bindingTypesFileName)
-		if err := os.WriteFile(path, []byte(renderBindingTypes(runner.Name(), describeBindingCoordinate(opts), resp.GetBindings())), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(renderBindingTypes(describeBindingCoordinate(opts), cfg.Bindings, resp.GetBindings())), 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", bindingTypesFileName, err)
 		}
 
