@@ -1,17 +1,15 @@
-import { defineTransform } from "ocel/providers/aws/transform";
+import { defineTransform } from "@ocel/transforms";
 
 export default defineTransform([
   {
-    function: { lambda: { memorySizeMb: 2048, timeoutSeconds: 60 } },
+    aws: { function: { lambda: { memorySize: 2048, timeout: 60 } } },
   },
   {
     if: ({ envClass }) => envClass === "production",
-    postgres: {
-      cluster: (args) => ({
-        ...args,
-        minCapacity: 2,
-        maxCapacity: 16,
-      }),
+    aws: {
+      postgres: {
+        cluster: { serverlessv2ScalingConfiguration: { minCapacity: 2, maxCapacity: 16 } },
+      },
     },
   },
   {

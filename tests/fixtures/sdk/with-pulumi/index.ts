@@ -81,10 +81,8 @@ bind.postgres("orders", {
 });
 
 bind.custom("network", {
-  properties: {
-    subnetIds,
-    securityGroupIds: [security.id],
-  },
+  subnetIds,
+  securityGroupIds: [security.id],
 });
 
 export const endpoint = interpolate`${orders.address}:${orders.port}`;

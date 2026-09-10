@@ -2,9 +2,7 @@
   "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
   "slug": "with-sst",
   "bindings": { "postgres": { "orders": "orders" } },
-  "provider": {
-    "name": "aws",
-    "options": { "transforms": ["./transforms/network.transform.ts"] }
-  },
+  "transforms": ["./transforms/network.transform.ts"],
+  "provider": { "name": "aws" },
   "apps": [{ "name": "web", "path": "." }]
 }

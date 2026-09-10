@@ -9,6 +9,7 @@
     "configuration",
     "typescript-config",
     "environments",
+    "transforms",
     "frameworks",
     "---Providers---",
     "providers/aws",

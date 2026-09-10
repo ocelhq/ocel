@@ -1,10 +1,14 @@
-import { defineTransform } from "ocel/providers/aws/transform";
+import { defineTransform } from "@ocel/transforms";
 
 export default defineTransform(({ bindings }) => ({
-  function: {
-    vpc: {
-      subnetIds: bindings.network.subnetIds,
-      securityGroupIds: bindings.network.securityGroupIds,
+  aws: {
+    function: {
+      lambda: {
+        vpcConfig: {
+          subnetIds: bindings.custom.network.subnetIds,
+          securityGroupIds: bindings.custom.network.securityGroupIds,
+        },
+      },
     },
   },
 }));

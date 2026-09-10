@@ -63,10 +63,8 @@ export default $config({
 
     bind.postgres("orders", orders);
     bind.custom("network", {
-      properties: {
-        subnetIds: vpc.privateSubnets,
-        securityGroupIds: vpc.securityGroups,
-      },
+      subnetIds: vpc.privateSubnets,
+      securityGroupIds: vpc.securityGroups,
     });
 
     return {
