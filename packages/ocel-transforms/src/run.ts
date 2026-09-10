@@ -1,3 +1,4 @@
+import { writeSync } from "node:fs";
 import { isTransformDefinition, type TransformDefinition } from "./define";
 import { type EvaluateRequest, evaluate, type TransformModule } from "./evaluate";
 
@@ -22,16 +23,23 @@ async function readRequest(): Promise<EvaluateRequest> {
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as EvaluateRequest;
 }
 
+/** The descriptor the deploy opens for the answer, leaving stdout to the modules. */
+export const resultDescriptor = 3;
+
 /**
  * Runs the deploy-time pass: reads the candidate resources ocel offers on
- * stdin, applies the modules in order, and writes the result to stdout. A
- * rejected rule leaves its reason on stderr and fails the deploy.
+ * stdin, applies the modules in order, and writes the answer down the
+ * descriptor the deploy opened for it. A rejected rule rides down the same
+ * descriptor as a refusal, so a module that crashes or fails to import is not
+ * read as one, and anything a module prints stays on stdout where it belongs.
  */
 export async function runEvaluate(modules: readonly TransformModule[]): Promise<void> {
   try {
-    process.stdout.write(JSON.stringify(evaluate(await readRequest(), modules)));
+    const result = evaluate(await readRequest(), modules);
+    writeSync(resultDescriptor, JSON.stringify({ result }));
   } catch (error) {
-    process.stderr.write(error instanceof Error ? error.message : String(error));
+    const refusal = error instanceof Error ? error.message : String(error);
+    writeSync(resultDescriptor, JSON.stringify({ refusal }));
     process.exitCode = 1;
   }
 }
