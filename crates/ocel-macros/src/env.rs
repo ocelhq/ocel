@@ -130,12 +130,13 @@ pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream
         }
     });
     let (flat, submission) = match kind {
-        Kind::Group => (
-            groups
+        Kind::Group => {
+            satisfiable(ident, &variables)?;
+            let flat = groups
                 .is_empty()
-                .then(|| quote!(impl ::ocel::Group for #ident {})),
-            None,
-        ),
+                .then(|| quote!(impl ::ocel::Group for #ident {}));
+            (flat, None)
+        }
         Kind::Env => (
             None,
             Some(quote! {
@@ -174,6 +175,38 @@ pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream
 
         #submission
     })
+}
+
+fn satisfiable(ident: &syn::Ident, variables: &[Variable]) -> syn::Result<()> {
+    let mut shared: Option<Vec<String>> = None;
+    let mut scoped: Vec<String> = Vec::new();
+    for variable in variables {
+        if variable.folders.is_empty() {
+            continue;
+        }
+        scoped.push(format!(
+            "{} ({})",
+            variable.key,
+            variable.folders.join(", ")
+        ));
+        shared = Some(match shared {
+            None => variable.folders.clone(),
+            Some(held) => held
+                .into_iter()
+                .filter(|folder| variable.folders.contains(folder))
+                .collect(),
+        });
+    }
+    match shared {
+        Some(shared) if shared.is_empty() => Err(syn::Error::new_spanned(
+            ident,
+            format!(
+                "{ident} is read as one, and no folder satisfies every member: {}.",
+                scoped.join(", ")
+            ),
+        )),
+        _ => Ok(()),
+    }
 }
 
 fn text(value: Option<&str>) -> TokenStream {

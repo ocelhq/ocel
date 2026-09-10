@@ -978,3 +978,39 @@ func TestEnvRefusesAGroupThatDeclaresNoVariables(t *testing.T) {
 		t.Errorf("error = %q", err)
 	}
 }
+
+func TestEnvRefusesAGroupNoFolderCanSatisfy(t *testing.T) {
+	type split struct {
+		Web string `ocel:"SPLIT_WEB,folders=/web"`
+		API string `ocel:"SPLIT_API,folders=/api"`
+	}
+	err := definitionError(t, func() {
+		ocel.Env[struct {
+			Split split `ocel:"split"`
+		}]()
+	})
+	for _, want := range []string{"split", "SPLIT_WEB", "/web", "SPLIT_API", "/api", "read as one"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want %q in it", err, want)
+		}
+	}
+}
+
+func TestEnvAcceptsAGroupWhoseMembersShareAFolder(t *testing.T) {
+	type shared struct {
+		Both  string `ocel:"SHARED_BOTH,folders=/web;/api"`
+		API   string `ocel:"SHARED_API,folders=/api"`
+		Wider string `ocel:"SHARED_WIDER"`
+	}
+	t.Setenv(constants.AppFolderEnvName, "/api")
+	t.Setenv("SHARED_BOTH", "b")
+	t.Setenv("SHARED_API", "a")
+	t.Setenv("SHARED_WIDER", "w")
+	if err := caught(t, func() {
+		ocel.Env[struct {
+			Shared shared `ocel:"shared"`
+		}]()
+	}); err != nil {
+		t.Errorf("error = %v, want a group /api satisfies accepted", err)
+	}
+}

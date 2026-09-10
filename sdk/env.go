@@ -266,6 +266,9 @@ func definitions(t reflect.Type, source string) (declaration, error) {
 		if err != nil {
 			return declaration{}, err
 		}
+		if err := satisfiable(g.key, members); err != nil {
+			return declaration{}, err
+		}
 		for _, member := range members {
 			g.members = append(g.members, len(decl.vars))
 			decl.vars = append(decl.vars, member)
@@ -342,6 +345,31 @@ func groupVariables(t reflect.Type, prefix []int, key string) ([]variable, error
 		return nil, &EnvDefinitionError{Detail: fmt.Sprintf("group %s declares no variables. A group holds the variables an app takes together, so it holds at least one.", key)}
 	}
 	return vars, nil
+}
+
+func satisfiable(key string, members []variable) error {
+	var shared []string
+	var scoped []string
+	for _, member := range members {
+		if len(member.folders) == 0 {
+			continue
+		}
+		scoped = append(scoped, member.key+" ("+strings.Join(member.folders, ", ")+")")
+		if shared == nil {
+			shared = member.folders
+			continue
+		}
+		shared = slices.DeleteFunc(slices.Clone(shared), func(folder string) bool {
+			return !slices.Contains(member.folders, folder)
+		})
+	}
+	if shared != nil && len(shared) == 0 {
+		return &EnvDefinitionError{Detail: fmt.Sprintf(
+			"group %s is read as one, and no folder satisfies every member: %s.",
+			key, strings.Join(scoped, ", "),
+		)}
+	}
+	return nil
 }
 
 func definition(field reflect.StructField, index []int) (variable, error) {
