@@ -3,7 +3,6 @@ package gcp
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -90,9 +89,10 @@ func (n Names) PreviewService(label, app, function string) (string, error) {
 			"the preview %s would be served by a Cloud Run service named %q, which Cloud Run will not take: "+
 				"a service on a shared preview wildcard is named the label its hostname carries, "+
 				"because the load balancer hands the whole label to Cloud Run to find it, "+
-				"and Cloud Run takes at most %d characters of lowercase letters, digits and single dashes starting with a letter.\n"+
-				"This one is %s. Shorten one of them and deploy again",
-			app, service, maxPreviewService, previewParts(service))
+				"and Cloud Run takes at most %d characters of lowercase letters, digits and dashes, "+
+				"starting with a letter and ending with a letter or a digit.\n"+
+				"This one is %s = %d characters. Shorten one of them and deploy again",
+			app, service, maxPreviewService, edge.LabelParts(service), len(service))
 	}
 	return service, nil
 }
@@ -102,15 +102,6 @@ const functionSuffix = "fn"
 const maxPreviewService = edge.PreviewLabelMaxLen
 
 var cloudRunService = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
-
-func previewParts(service string) string {
-	parts := strings.Split(service, naming.FieldSeparator)
-	described := make([]string, 0, len(parts))
-	for _, part := range parts {
-		described = append(described, fmt.Sprintf("%q (%d)", part, len(part)))
-	}
-	return fmt.Sprintf("%s = %d characters", strings.Join(described, " + "), len(service))
-}
 
 func serviceHash(parts ...string) string {
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))

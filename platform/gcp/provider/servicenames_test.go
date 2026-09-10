@@ -209,6 +209,22 @@ func TestAPreviewLabelCloudRunWouldRefuseIsRefusedWithItsParts(t *testing.T) {
 	}
 }
 
+func TestThePreviewRefusalNamesTheDoubleDashesCloudRunTakes(t *testing.T) {
+	names := serviceNames(t)
+	site := edge.SharedPreview("shop", "preview.acme.com")
+
+	if _, err := names.PreviewService(site.Label("pr-7", "web"), "web", "web"); err != nil {
+		t.Fatalf("PreviewService(%q) = %v, want a label joined by %q taken", site.Label("pr-7", "web"), err, edge.PreviewAppSeparator)
+	}
+	_, err := names.PreviewService(site.Label(strings.Repeat("pr-70", 12), "web"), "web", "web")
+	if err == nil {
+		t.Fatal("PreviewService() named a service Cloud Run will not take")
+	}
+	if strings.Contains(err.Error(), "single dash") {
+		t.Errorf("the refusal reads %v, and Cloud Run takes the %q every preview label joins its fields with", err, edge.PreviewAppSeparator)
+	}
+}
+
 func TestAPreviewLabelNothingNamedIsRefusedRatherThanStandingSomethingUnreachable(t *testing.T) {
 	names := serviceNames(t)
 
