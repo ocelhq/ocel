@@ -1391,6 +1391,7 @@ type ManifestVariable struct {
 	Value         string                 `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	Folder        string                 `protobuf:"bytes,4,opt,name=folder,proto3" json:"folder,omitempty"`
 	Version       int64                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
+	Description   string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1458,6 +1459,13 @@ func (x *ManifestVariable) GetVersion() int64 {
 		return x.Version
 	}
 	return 0
+}
+
+func (x *ManifestVariable) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
 }
 
 type ManifestFunction struct {
@@ -4389,13 +4397,14 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x06folder\x18\x05 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12#\n" +
 	"\rdeployment_id\x18\x06 \x01(\tR\fdeploymentId\x126\n" +
 	"\acompute\x18\a \x01(\tB\x1c\xbaH\x19r\x17R\n" +
-	"serverlessR\tcontainerR\acompute\"\xeb\x01\n" +
+	"serverlessR\tcontainerR\acompute\"\x8d\x02\n" +
 	"\x10ManifestVariable\x12+\n" +
 	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12?\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05class\x12\x19\n" +
 	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\x124\n" +
 	"\x06folder\x18\x04 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12\x18\n" +
-	"\aversion\x18\x05 \x01(\x03R\aversion\"\xda\x01\n" +
+	"\aversion\x18\x05 \x01(\x03R\aversion\x12 \n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xda\x01\n" +
 	"\x10ManifestFunction\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x127\n" +
 	"\aruntime\x18\x02 \x01(\v2\x1d.provider.contract.v1.RuntimeR\aruntime\x12\x18\n" +

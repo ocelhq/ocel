@@ -34,6 +34,7 @@ pub(crate) struct Variable {
     pub(crate) class: Class,
     pub(crate) folders: Vec<String>,
     pub(crate) fallback: Option<String>,
+    pub(crate) description: Option<String>,
     pub(crate) shape: Shape,
     pub(crate) span: Span,
 }
@@ -68,6 +69,7 @@ pub(crate) fn variable(field: &Field) -> syn::Result<Variable> {
     };
     let mut folders: Option<Vec<String>> = None;
     let mut fallback = None;
+    let description = description(field)?;
 
     for entry in entries(&field.attrs)? {
         let name = entry.name.to_string();
@@ -106,9 +108,46 @@ pub(crate) fn variable(field: &Field) -> syn::Result<Variable> {
         class,
         folders: folders.unwrap_or_default(),
         fallback,
+        description,
         shape,
         span,
     })
+}
+
+fn description(field: &Field) -> syn::Result<Option<String>> {
+    let mut lines = Vec::new();
+    for attribute in &field.attrs {
+        if !attribute.path().is_ident("doc") {
+            continue;
+        }
+        let syn::Meta::NameValue(value) = &attribute.meta else {
+            continue;
+        };
+        let syn::Expr::Lit(literal) = &value.value else {
+            continue;
+        };
+        let syn::Lit::Str(text) = &literal.lit else {
+            continue;
+        };
+        lines.push(text.value().trim().to_string());
+    }
+    let description = lines.join("\n");
+    if description.is_empty() {
+        return Ok(None);
+    }
+    if description.len() > 120 {
+        return Err(syn::Error::new_spanned(
+            field,
+            "an environment-variable description is at most 120 bytes.",
+        ));
+    }
+    if description.chars().any(char::is_control) {
+        return Err(syn::Error::new_spanned(
+            field,
+            "an environment-variable description is one line and has no control characters.",
+        ));
+    }
+    Ok(Some(description))
 }
 
 fn check(
@@ -268,6 +307,21 @@ mod tests {
     fn a_key_defaults_to_the_field_name_upper_cased() {
         assert_eq!(ok("pub database_name: String").key, "DATABASE_NAME");
         assert_eq!(ok(r#"#[ocel(key = "FLAG")] pub flag: bool"#).key, "FLAG");
+    }
+
+    #[test]
+    fn a_control_character_in_a_doc_comment_is_refused() {
+        assert!(err("/// first\n/// second\npub api_key: String").contains("one line"));
+    }
+
+    #[test]
+    fn a_doc_comment_is_the_description() {
+        assert_eq!(
+            ok("/// The connection string\npub database_url: String")
+                .description
+                .as_deref(),
+            Some("The connection string")
+        );
     }
 
     #[test]

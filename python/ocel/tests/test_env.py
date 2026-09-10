@@ -29,6 +29,16 @@ def test_a_key_no_variable_could_carry_is_refused():
     )
 
 
+@pytest.mark.parametrize("description", ["two\nlines", "x" * 121])
+def test_an_unusable_description_is_refused(description):
+    with pytest.raises(ocel.EnvDefinitionError) as raised:
+
+        class Env(ocel.Env):
+            api_key: str = ocel.var(description=description)
+
+    assert "unusable description" in str(raised.value)
+
+
 def test_a_name_ocel_delivers_bare_is_refused_for_the_plain_class():
     with pytest.raises(ocel.EnvDefinitionError) as raised:
 
@@ -251,7 +261,7 @@ def test_an_unannotated_attribute_declares_nothing(collector):
 def test_every_variable_reaches_the_dev_server_with_its_class_and_what_it_needs(collector):
     class Env(ocel.Env):
         plain: str
-        sensitive: str = ocel.var(sensitive=True)
+        sensitive: str = ocel.var(sensitive=True, description="Used to call Stripe")
         signing_key: ocel.Secret
         defaulted: int = 3
         optional: bool | None = None
@@ -277,6 +287,7 @@ def test_every_variable_reaches_the_dev_server_with_its_class_and_what_it_needs(
     ]
     assert [d.required for d in definitions] == [True, True, True, False, False, True]
     assert [d.has_schema for d in definitions] == [False, False, False, True, True, True]
+    assert definitions[1].description == "Used to call Stripe"
     assert list(definitions[5].folders) == ["/apps/web", "/apps/api"]
     for definition in definitions:
         assert definition.source == f"{__file__}:{line}"

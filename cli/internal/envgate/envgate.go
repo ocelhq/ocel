@@ -232,7 +232,7 @@ func (g *Gate) Check() error {
 		}
 		return cmp.Compare(a.GetFolder(), b.GetFolder())
 	})
-	return &Refusal{Problems: problems, Scope: g.scope}
+	return &Refusal{Problems: problems, Definitions: definitions, Scope: g.scope}
 }
 
 func unresolved(definitions []*resourcesv1.VariableDefinition, apps []App, held heldCells, reported []*resourcesv1.VariableProblem) []*resourcesv1.VariableProblem {

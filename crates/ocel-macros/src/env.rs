@@ -14,6 +14,10 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
         let class = class(variable.class);
         let required = variable.required();
         let folders = variable.folders.iter();
+        let description = match &variable.description {
+            Some(description) => quote!(::core::option::Option::Some(#description)),
+            None => quote!(::core::option::Option::None),
+        };
         let check = match variable.parsed() {
             Some(ty) => {
                 let parsed = parsed(ty);
@@ -27,6 +31,7 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
                 class: #class,
                 required: #required,
                 folders: &[#(#folders),*],
+                description: #description,
                 file: #file,
                 line: #line,
                 check: #check,

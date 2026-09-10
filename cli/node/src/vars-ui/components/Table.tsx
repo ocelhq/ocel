@@ -441,25 +441,32 @@ function KeyRow({ line, flat }: { line: KeyLine; flat: boolean }) {
         )}
       </td>
       <th scope="row" className={cellKey}>
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="truncate font-mono text-[13px]">{row.key}</span>
-          {flat && (
-            <ChipButton onClick={() => revealGroup(variant.at.folder)}>
-              {folderName(variant.at.folder)}
-            </ChipButton>
+        <div>
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="truncate font-mono text-[13px]">{row.key}</span>
+            {flat && (
+              <ChipButton onClick={() => revealGroup(variant.at.folder)}>
+                {folderName(variant.at.folder)}
+              </ChipButton>
+            )}
+            {row.class !== "plain" && <Chip tone="muted">{row.class}</Chip>}
+            {owed && (
+              <Chip tone="owed" data-slot="owed">
+                {line.needed ? "deploy needs this" : "required"}
+              </Chip>
+            )}
+            {row.scope && row.scope.length > 0 && (
+              <Chip tone="muted" title={`only ${names(row.scope)} read it`}>
+                scoped
+              </Chip>
+            )}
+          </span>
+          {row.description && (
+            <p className="mt-1 text-left font-normal text-[12px] text-muted-foreground">
+              {row.description}
+            </p>
           )}
-          {row.class !== "plain" && <Chip tone="muted">{row.class}</Chip>}
-          {owed && (
-            <Chip tone="owed" data-slot="owed">
-              {line.needed ? "deploy needs this" : "required"}
-            </Chip>
-          )}
-          {row.scope && row.scope.length > 0 && (
-            <Chip tone="muted" title={`only ${names(row.scope)} read it`}>
-              scoped
-            </Chip>
-          )}
-        </span>
+        </div>
       </th>
       <td className={cellValue}>
         {open ? (

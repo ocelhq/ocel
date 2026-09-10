@@ -167,13 +167,20 @@ func CheckWritable(definitions []*resourcesv1.VariableDefinition, key, folder st
 			return nil
 		}
 		if folder == "" {
-			return fmt.Errorf("%s is scoped to %s, so it has no value at the project root — nothing would read one. Set it with --folder %s instead",
-				key, strings.Join(scope, " and "), scope[0])
+			return fmt.Errorf("%s is scoped to %s, so it has no value at the project root — nothing would read one. Set it with --folder %s instead%s",
+				key, strings.Join(scope, " and "), scope[0], descriptionLine(definition))
 		}
-		return fmt.Errorf("%s is scoped to %s, so %s holds no value for it. Set it in one of the folders it names, or widen the scope where it is declared",
-			key, strings.Join(scope, " and "), folder)
+		return fmt.Errorf("%s is scoped to %s, so %s holds no value for it. Set it in one of the folders it names, or widen the scope where it is declared%s",
+			key, strings.Join(scope, " and "), folder, descriptionLine(definition))
 	}
 	return fmt.Errorf("no app in this project declares %s, so a value stored under it would be delivered to nothing: "+
 		"declare it in a defineEnv call — `defineEnv({ %s: { class: \"plain\" } })` — and set it again",
 		key, key)
+}
+
+func descriptionLine(definition *resourcesv1.VariableDefinition) string {
+	if description := definition.GetDescription(); description != "" {
+		return "\n  " + description
+	}
+	return ""
 }

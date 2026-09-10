@@ -11,6 +11,8 @@ interface VariableOptions<TSchema extends StandardSchemaV1 = StandardSchemaV1> {
   schema?: TSchema;
 
   folders?: readonly string[];
+
+  description?: string;
 }
 
 export type VariableDefinition<TSchema extends StandardSchemaV1 = StandardSchemaV1> =
@@ -97,6 +99,19 @@ function validateDefinition(key: string, definition: VariableDefinition, source:
     const problem = scopeProblem(definition.folders);
     if (problem) {
       throw new EnvDefinitionError(`'${key}' has an unusable folder scope: ${problem}`);
+    }
+  }
+  if (definition.description !== undefined) {
+    const bytes = new TextEncoder().encode(definition.description).length;
+    if (bytes > 120) {
+      throw new EnvDefinitionError(
+        `'${key}' has an unusable description: a description is at most 120 bytes.`,
+      );
+    }
+    if (/\p{Cc}/u.test(definition.description)) {
+      throw new EnvDefinitionError(
+        `'${key}' has an unusable description: a description is one line and has no control characters.`,
+      );
     }
   }
   if (LIVE_CLASSES.has(definition.class) && !isRequired(definition)) {

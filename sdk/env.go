@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -117,12 +118,13 @@ func (s Secret) String() string { return "Secret(" + s.key + ")" }
 func (s Secret) GoString() string { return s.String() }
 
 type variable struct {
-	key      string
-	class    resourcesv1.VariableClass
-	fallback *string
-	folders  []string
-	field    reflect.StructField
-	index    int
+	key         string
+	class       resourcesv1.VariableClass
+	fallback    *string
+	folders     []string
+	description string
+	field       reflect.StructField
+	index       int
 }
 
 func (v variable) required() bool {
@@ -165,6 +167,7 @@ func className(class resourcesv1.VariableClass) string {
 //	ocel:"API_KEY,sensitive"                 encrypted at rest, delivered baked
 //	ocel:"PORT,default=3000"                 the value when none is set
 //	ocel:"FEATURE_FLAG,folders=/apps/web"    one value per folder, ';' separated
+//	ocel:"API_KEY,description=The API key"   an optional, one-line description
 //
 // A field of type [Secret] declares the secret class: encrypted at rest,
 // delivered live, and read through [Secret.Value] on each use rather than
@@ -266,9 +269,14 @@ func definition(field reflect.StructField, index int) (variable, error) {
 			v.fallback = &value
 		case assigned && name == "folders":
 			v.folders = strings.Split(value, folderSeparator)
+		case assigned && name == "description":
+			v.description = value
 		default:
-			return variable{}, &EnvDefinitionError{Key: v.key, Detail: fmt.Sprintf("has an unknown tag option '%s'. The options are plain, sensitive, default=<VALUE> and folders=<PATH;PATH>.", option)}
+			return variable{}, &EnvDefinitionError{Key: v.key, Detail: fmt.Sprintf("has an unknown tag option '%s'. The options are plain, sensitive, default=<VALUE>, folders=<PATH;PATH> and description=<TEXT>.", option)}
 		}
+	}
+	if problem := descriptionProblem(v.description); problem != "" {
+		return variable{}, &EnvDefinitionError{Key: v.key, Detail: "has an unusable description: " + problem}
 	}
 
 	if v.key == constants.AppURLEnvName {
@@ -297,6 +305,16 @@ func definition(field reflect.StructField, index int) (variable, error) {
 		}
 	}
 	return v, nil
+}
+
+func descriptionProblem(description string) string {
+	if len(description) > 120 {
+		return "a description is at most 120 bytes."
+	}
+	if strings.IndexFunc(description, unicode.IsControl) >= 0 {
+		return "a description is one line and has no control characters."
+	}
+	return ""
 }
 
 func scopeProblem(folders []string) string {
@@ -336,12 +354,13 @@ func declareEnv(vars []variable, source string) error {
 	req := &resourcesv1.DeclareEnvRequest{}
 	for _, v := range vars {
 		req.Definitions = append(req.Definitions, &resourcesv1.VariableDefinition{
-			Key:       v.key,
-			Class:     v.class,
-			Required:  v.required(),
-			Folders:   v.folders,
-			Source:    source,
-			HasSchema: v.parsed(),
+			Key:         v.key,
+			Class:       v.class,
+			Required:    v.required(),
+			Folders:     v.folders,
+			Source:      source,
+			HasSchema:   v.parsed(),
+			Description: v.description,
 		})
 	}
 	res, err := declareVariables(req)

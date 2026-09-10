@@ -234,6 +234,13 @@ pub struct VariableDefinition {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
     )]
     pub has_schema: bool,
+    /// Field 9: `description`
+    #[serde(
+        rename = "description",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub description: ::buffa::alloc::string::String,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -249,6 +256,7 @@ impl ::core::fmt::Debug for VariableDefinition {
             .field("source", &self.source)
             .field("schema_source", &self.schema_source)
             .field("has_schema", &self.has_schema)
+            .field("description", &self.description)
             .finish()
     }
 }
@@ -307,6 +315,9 @@ impl ::buffa::Message for VariableDefinition {
         if self.has_schema {
             size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
         }
+        if !self.description.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.description) as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -343,6 +354,9 @@ impl ::buffa::Message for VariableDefinition {
         }
         if self.has_schema {
             ::buffa::types::put_bool_field(8u32, self.has_schema, buf);
+        }
+        if !self.description.is_empty() {
+            ::buffa::types::put_string_field(9u32, &self.description, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -419,6 +433,13 @@ impl ::buffa::Message for VariableDefinition {
                 )?;
                 self.has_schema = ::buffa::types::decode_bool(buf)?;
             }
+            9u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.description, buf)?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -435,6 +456,7 @@ impl ::buffa::Message for VariableDefinition {
         self.source.clear();
         self.schema_source.clear();
         self.has_schema = false;
+        self.description.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -2439,6 +2461,8 @@ pub mod __buffa {
             pub schema_source: &'a str,
             /// Field 8: `has_schema`
             pub has_schema: bool,
+            /// Field 9: `description`
+            pub description: &'a str,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::buffa::MessageView<'a> for VariableDefinitionView<'a> {
@@ -2528,6 +2552,13 @@ pub mod __buffa {
                         )?;
                         view.has_schema = ::buffa::types::decode_bool(&mut cur)?;
                     }
+                    9u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.description = ::buffa::types::borrow_str(&mut cur)?;
+                    }
                     5u32 => {
                         ::buffa::encoding::check_wire_type(
                             tag,
@@ -2576,6 +2607,7 @@ pub mod __buffa {
                     source: self.source.to_string(),
                     schema_source: self.schema_source.to_string(),
                     has_schema: self.has_schema,
+                    description: self.description.to_string(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -2622,6 +2654,12 @@ pub mod __buffa {
                 if self.has_schema {
                     size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
                 }
+                if !self.description.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.description)
+                                as u64;
+                }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
             }
@@ -2659,6 +2697,9 @@ pub mod __buffa {
                 }
                 if self.has_schema {
                     ::buffa::types::put_bool_field(8u32, self.has_schema, buf);
+                }
+                if !self.description.is_empty() {
+                    ::buffa::types::put_string_field(9u32, &self.description, buf);
                 }
                 self.__buffa_unknown_fields.write_to(buf);
             }
@@ -2704,6 +2745,9 @@ pub mod __buffa {
                 }
                 if self.has_schema {
                     __map.serialize_entry("hasSchema", &self.has_schema)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.description) {
+                    __map.serialize_entry("description", self.description)?;
                 }
                 __map.end()
             }
@@ -2839,6 +2883,11 @@ pub mod __buffa {
             #[must_use]
             pub fn has_schema(&self) -> bool {
                 self.0.reborrow().has_schema
+            }
+            /// Field 9: `description`
+            #[must_use]
+            pub fn description(&self) -> &'_ str {
+                self.0.reborrow().description
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<VariableDefinitionView<'static>>>

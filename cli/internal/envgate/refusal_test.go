@@ -152,6 +152,23 @@ func TestRefusalOwedIsTheStreamFormOfError(t *testing.T) {
 	}
 }
 
+func TestRefusalPrintsTheVariableDescription(t *testing.T) {
+	t.Parallel()
+	refusal := &envgate.Refusal{
+		Problems: []*resourcesv1.VariableProblem{missing("STRIPE_API_KEY", "")},
+		Definitions: []*resourcesv1.VariableDefinition{{
+			Key:         "STRIPE_API_KEY",
+			Description: "Used to call Stripe",
+		}},
+	}
+	if got := refusal.Error(); !strings.Contains(got, "Used to call Stripe") {
+		t.Errorf("Error() = %q, want the variable description", got)
+	}
+	if got := refusal.Owed().GetCells()[0].GetDescription(); got != "Used to call Stripe" {
+		t.Errorf("Owed().Cells[0].Description = %q, want %q", got, "Used to call Stripe")
+	}
+}
+
 func TestPaintTouchesOnlyTheMarkAndTheFolder(t *testing.T) {
 	t.Parallel()
 	refusal := &envgate.Refusal{
