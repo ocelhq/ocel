@@ -25,10 +25,8 @@ type runServer struct {
 	patched  []*run.GoogleCloudRunV2Service
 	policies []*run.GoogleIamV1Policy
 
-	patchConflicts  int
-	policyConflicts int
-	patchTries      int
-	policyTries     int
+	patchConflicts int
+	patchTries     int
 }
 
 func (s *runServer) open(t *testing.T) *Provider {
@@ -139,12 +137,6 @@ func (s *runServer) setPolicy(w http.ResponseWriter, r *http.Request) {
 	if asked == nil {
 		return
 	}
-	s.policyTries++
-	if s.policyConflicts > 0 {
-		s.policyConflicts--
-		conflicted(w, "there were concurrent policy changes")
-		return
-	}
 	s.policies = append(s.policies, asked.Policy)
 	writeBody(w, asked.Policy)
 }
@@ -175,6 +167,15 @@ func (s *runServer) bound() []*run.GoogleIamV1Policy {
 	return slices.Clone(s.policies)
 }
 
+func (s *runServer) standing() *run.GoogleCloudRunV2Service {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.created) == 0 {
+		return &run.GoogleCloudRunV2Service{}
+	}
+	return s.created[len(s.created)-1]
+}
+
 func (s *runServer) serving() *run.GoogleCloudRunV2Service {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -187,8 +188,8 @@ func (s *runServer) releases() []*run.GoogleCloudRunV2Service {
 	return slices.Clone(s.patched)
 }
 
-func (s *runServer) tries() (int, int) {
+func (s *runServer) tries() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.patchTries, s.policyTries
+	return s.patchTries
 }
