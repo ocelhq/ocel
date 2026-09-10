@@ -15,8 +15,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -67,7 +67,7 @@ func deployRequest() *contractv1.DeployRequest {
 			Resources: []*contractv1.ManifestResource{{
 				LogicalName: "orders",
 				Resource: &resourcesv1.ResourceIdentifier{
-					Type: linksv1.LinkType_LINK_TYPE_POSTGRES,
+					Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 					Name: "orders",
 				},
 			}},
@@ -138,8 +138,8 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 	if result.GetPromotionId() == "" {
 		t.Error("Deploy() promoted nothing: the result names no promotion, so nothing can be rolled back to")
 	}
-	if len(result.GetLinks()) != 1 || result.GetLinks()[0].GetName() != "orders" {
-		t.Fatalf("Deploy() returned links %v, want the one the manifest declares", result.GetLinks())
+	if len(result.GetBindings()) != 1 || result.GetBindings()[0].GetName() != "orders" {
+		t.Fatalf("Deploy() returned bindings %v, want the one the manifest declares", result.GetBindings())
 	}
 	if len(result.GetFunctions()) != 1 || result.GetFunctions()[0].GetUrl() == "" {
 		t.Fatalf("Deploy() returned functions %v, want the one it stood up, carrying its url", result.GetFunctions())
@@ -154,10 +154,10 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 		t.Fatalf("the releaser saw %d plans, want the infra stack and the app stack", len(plans))
 	}
 	if plans[0].Kind != providerkit.StackInfra || plans[1].Kind != providerkit.StackApp {
-		t.Fatalf("the releaser saw %s then %s, want infra before the apps that link to it", plans[0].Kind, plans[1].Kind)
+		t.Fatalf("the releaser saw %s then %s, want infra before the apps that binding to it", plans[0].Kind, plans[1].Kind)
 	}
-	if !slices.ContainsFunc(plans[1].App.Grants, func(link providerkit.Link) bool { return link.Name == "orders" }) {
-		t.Errorf("the app plan grants %v, want the infra link the app binds a client to", plans[1].App.Grants)
+	if !slices.ContainsFunc(plans[1].App.Grants, func(binding providerkit.Binding) bool { return binding.Name == "orders" }) {
+		t.Errorf("the app plan grants %v, want the infra binding the app binds a client to", plans[1].App.Grants)
 	}
 	if plans[1].App.Functions[0].Artifact.Key == "" {
 		t.Error("the app plan carries a function with no artifact, so the upload never reached the release")
@@ -200,7 +200,7 @@ func twoAppRequest() *contractv1.DeployRequest {
 	manifest.Resources = append(manifest.Resources, &contractv1.ManifestResource{
 		LogicalName: "uploads",
 		Resource: &resourcesv1.ResourceIdentifier{
-			Type: linksv1.LinkType_LINK_TYPE_BUCKET,
+			Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET,
 			Name: "uploads",
 		},
 	})
@@ -225,8 +225,8 @@ func twoAppRequest() *contractv1.DeployRequest {
 
 func grantNames(plan providerkit.StackPlan) []string {
 	names := make([]string, 0, len(plan.App.Grants))
-	for _, link := range plan.App.Grants {
-		names = append(names, link.Name)
+	for _, binding := range plan.App.Grants {
+		names = append(names, binding.Name)
 	}
 	slices.Sort(names)
 	return names
@@ -256,8 +256,8 @@ func TestDeployGrantsAnAppOnlyWhatItsUsageEdgesName(t *testing.T) {
 	if want := []string{"orders"}; !slices.Equal(grantNames(apps["web"]), want) {
 		t.Errorf("web is granted %v, want %v; a compromise of web must expose no credential it never needed", grantNames(apps["web"]), want)
 	}
-	for _, link := range apps["web"].App.Values.Links {
-		if link.Name == "uploads" {
+	for _, binding := range apps["web"].App.Values.Bindings {
+		if binding.Name == "uploads" {
 			t.Error("web is handed the bucket's address for a bucket it never uses")
 		}
 	}
@@ -280,7 +280,7 @@ func TestDeployGrantsNothingToAnAppCarryingNoUsageEdge(t *testing.T) {
 		if plan.App == nil || plan.App.App != "admin" {
 			continue
 		}
-		if len(plan.App.Grants) != 0 || len(plan.App.Values.Links) != 0 {
+		if len(plan.App.Grants) != 0 || len(plan.App.Values.Bindings) != 0 {
 			t.Errorf("admin is granted %v, want nothing for an app carrying no usage edge at all", plan.App.Grants)
 		}
 	}
@@ -309,8 +309,8 @@ func TestDeployRecordsEveryStackItStoodUp(t *testing.T) {
 		}
 		app = entry
 	}
-	if len(infra.Links) != 1 || infra.Links[0].Name != "orders" {
-		t.Errorf("the infra stack records links %v, want the resource it stood up", infra.Links)
+	if len(infra.Bindings) != 1 || infra.Bindings[0].Name != "orders" {
+		t.Errorf("the infra stack records bindings %v, want the resource it stood up", infra.Bindings)
 	}
 	if app.App != "web" || app.Identity == "" {
 		t.Errorf("the app stack records %+v, want it named for the app and the build it serves", app.Stack)
@@ -340,7 +340,7 @@ func TestDeployUploadsEveryFunctionArtifact(t *testing.T) {
 	}
 }
 
-func TestDeployPublishesEveryInfraLinkForItsAppsToRead(t *testing.T) {
+func TestDeployPublishesEveryInfraBindingForItsAppsToRead(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 
@@ -354,10 +354,10 @@ func TestDeployPublishesEveryInfraLinkForItsAppsToRead(t *testing.T) {
 
 	plans := provider.Releases().(*fake.Releaser).Plans()
 	last := plans[len(plans)-1]
-	if !slices.ContainsFunc(last.App.Grants, func(link providerkit.Link) bool {
-		return link.Name == "orders" && link.Properties[providerkit.PropertyHost] != ""
+	if !slices.ContainsFunc(last.App.Grants, func(binding providerkit.Binding) bool {
+		return binding.Name == "orders" && binding.Properties[providerkit.PropertyHost] != ""
 	}) {
-		t.Fatalf("a second deploy grants %v, want the published link read back whole", last.App.Grants)
+		t.Fatalf("a second deploy grants %v, want the published binding read back whole", last.App.Grants)
 	}
 }
 
@@ -368,20 +368,20 @@ type refusingReleaser struct {
 
 func (r refusingReleaser) Releases() providerkit.Releaser { return r.releaser }
 
-type halfLinkReleaser struct{}
+type halfBindingReleaser struct{}
 
-func (halfLinkReleaser) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
+func (halfBindingReleaser) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
 	return providerkit.SynthesizedPlan(ctx, fake.NewArtifacts(), plan, providerkit.StackResult{})
 }
 
-func (halfLinkReleaser) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Reporter) (providerkit.Plan, error) {
+func (halfBindingReleaser) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Reporter) (providerkit.Plan, error) {
 	return providerkit.SynthesizedRemoval(ref, providerkit.StackResult{}), nil
 }
 
-func (halfLinkReleaser) Provision(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.StackResult, error) {
+func (halfBindingReleaser) Provision(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.StackResult, error) {
 	var result providerkit.StackResult
 	for _, resource := range plan.Resources {
-		result.Links = append(result.Links, providerkit.Link{
+		result.Bindings = append(result.Bindings, providerkit.Binding{
 			Type:       resource.Type,
 			Name:       resource.Name,
 			Properties: map[string]string{providerkit.PropertyHost: "db.invalid"},
@@ -390,14 +390,14 @@ func (halfLinkReleaser) Provision(_ context.Context, plan providerkit.StackPlan,
 	return result, nil
 }
 
-func (halfLinkReleaser) Destroy(context.Context, providerkit.StackRef, providerkit.Reporter) error {
+func (halfBindingReleaser) Destroy(context.Context, providerkit.StackRef, providerkit.Reporter) error {
 	return nil
 }
 
-func TestDeployRefusesALinkMissingAPropertyBeforeItRecordsIt(t *testing.T) {
+func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
-	client := servedBy(t, refusingReleaser{Provider: base, releaser: halfLinkReleaser{}})
+	client := servedBy(t, refusingReleaser{Provider: base, releaser: halfBindingReleaser{}})
 
 	stream, err := client.Deploy(context.Background(), deployRequest())
 	if err != nil {
@@ -409,13 +409,13 @@ func TestDeployRefusesALinkMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	stream.Close()
 
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("Deploy() with a Postgres link carrying only a host = %v, want it refused as invalid", err)
+		t.Fatalf("Deploy() with a Postgres binding carrying only a host = %v, want it refused as invalid", err)
 	}
 	if !strings.Contains(err.Error(), providerkit.PropertyPort) {
 		t.Errorf("Deploy() failed with %q, want it to name the property that is missing", err)
 	}
 	if entries, rerr := providerkit.ReadStacks(context.Background(), base.Records(), providerkit.ClassProduction, "shop"); rerr != nil || len(entries) != 0 {
-		t.Errorf("the refused deploy recorded %v, want nothing written for a link the kit would not accept", entries)
+		t.Errorf("the refused deploy recorded %v, want nothing written for a binding the kit would not accept", entries)
 	}
 }
 
@@ -427,7 +427,7 @@ type countingSealer struct {
 }
 
 func (c *countingSealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
-	if at.Link != "" {
+	if at.Binding != "" {
 		c.mu.Lock()
 		c.opened++
 		c.mu.Unlock()
@@ -448,7 +448,7 @@ type sealCounting struct {
 
 func (s sealCounting) Sealer() providerkit.Sealer { return s.sealer }
 
-func TestDeployResolvesThePublishedLinksOnce(t *testing.T) {
+func TestDeployResolvesThePublishedBindingsOnce(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
 	sealer := &countingSealer{Sealer: base.Sealer()}
@@ -459,8 +459,8 @@ func TestDeployResolvesThePublishedLinksOnce(t *testing.T) {
 	}
 
 	if opened := sealer.count(); opened != 2 {
-		t.Fatalf("the deploy opened %d sealed link values, want one per published link: "+
-			"two apps over two links resolve the same set, and the run reads it once", opened)
+		t.Fatalf("the deploy opened %d sealed binding values, want one per published binding: "+
+			"two apps over two bindings resolve the same set, and the run reads it once", opened)
 	}
 }
 
@@ -469,7 +469,7 @@ type resolvingReleaser struct {
 
 	mu       sync.Mutex
 	host     string
-	resolved []providerkit.Link
+	resolved []providerkit.Binding
 }
 
 func (r *resolvingReleaser) publishes(host string) {
@@ -478,7 +478,7 @@ func (r *resolvingReleaser) publishes(host string) {
 	r.host = host
 }
 
-func (r *resolvingReleaser) Resolved() []providerkit.Link {
+func (r *resolvingReleaser) Resolved() []providerkit.Binding {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.resolved)
@@ -500,18 +500,18 @@ func (r *resolvingReleaser) Provision(ctx context.Context, plan providerkit.Stac
 	if plan.Kind == providerkit.StackInfra {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		for _, link := range result.Links {
-			link.Properties[providerkit.PropertyHost] = r.host
+		for _, binding := range result.Bindings {
+			binding.Properties[providerkit.PropertyHost] = r.host
 		}
 		return result, nil
 	}
-	link, err := plan.Links.Resolve(ctx, "orders")
+	binding, err := plan.Bindings.Resolve(ctx, "orders")
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.resolved = append(r.resolved, link)
+	r.resolved = append(r.resolved, binding)
 	return result, nil
 }
 
@@ -519,7 +519,7 @@ func (r *resolvingReleaser) Destroy(ctx context.Context, ref providerkit.StackRe
 	return r.inner.Destroy(ctx, ref, report)
 }
 
-func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysLink(t *testing.T) {
+func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysBinding(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
 	releaser := &resolvingReleaser{inner: base.Releases(), host: "db-one.invalid"}
@@ -536,14 +536,14 @@ func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysLink(t *
 
 	resolved := releaser.Resolved()
 	if len(resolved) != 2 {
-		t.Fatalf("the app stack resolved %d links over two deploys, want one per deploy", len(resolved))
+		t.Fatalf("the app stack resolved %d bindings over two deploys, want one per deploy", len(resolved))
 	}
 	if host := resolved[0].Properties[providerkit.PropertyHost]; host != "db-one.invalid" {
-		t.Fatalf("the first deploy's app stack resolved orders at %q, want the link its own infra stack published: "+
+		t.Fatalf("the first deploy's app stack resolved orders at %q, want the binding its own infra stack published: "+
 			"the app stack is provisioned after the infra stack, so the record it reads is the one this deploy just wrote", host)
 	}
 	if host := resolved[1].Properties[providerkit.PropertyHost]; host != "db-two.invalid" {
-		t.Errorf("the second deploy's app stack resolved orders at %q, want %q: the app stack read a link its own deploy replaced, "+
+		t.Errorf("the second deploy's app stack resolved orders at %q, want %q: the app stack read a binding its own deploy replaced, "+
 			"so provisioning ran an app before the infra it reads from", host, "db-two.invalid")
 	}
 }
@@ -665,7 +665,7 @@ func operatorServed(t *testing.T) (contractv1connect.ProviderServiceClient, envv
 	return deploys, envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL)
 }
 
-func TestDeployPublishesLinksWhereTheOperatorReadsThem(t *testing.T) {
+func TestDeployPublishesBindingsWhereTheOperatorReadsThem(t *testing.T) {
 	builtProject(t)
 	deploys, vars := operatorServed(t)
 	ctx := context.Background()
@@ -674,28 +674,28 @@ func TestDeployPublishesLinksWhereTheOperatorReadsThem(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	listed, err := vars.ListLinks(ctx, &envvarsv1.ListLinksRequest{
+	listed, err := vars.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
 		Slug: "shop",
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	if err != nil {
-		t.Fatalf("ListLinks() = %v", err)
+		t.Fatalf("ListBindings() = %v", err)
 	}
-	if len(listed.GetLinks()) != 1 || listed.GetLinks()[0].GetName() != "orders" {
-		t.Fatalf("ListLinks() after a production deploy = %+v, want the link the deploy published", listed.GetLinks())
+	if len(listed.GetBindings()) != 1 || listed.GetBindings()[0].GetName() != "orders" {
+		t.Fatalf("ListBindings() after a production deploy = %+v, want the binding the deploy published", listed.GetBindings())
 	}
 
-	removed, err := vars.RemoveLink(ctx, &envvarsv1.RemoveLinkRequest{
+	removed, err := vars.RemoveBinding(ctx, &envvarsv1.RemoveBindingRequest{
 		Slug: "shop",
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Name: "orders",
 	})
 	if err != nil || !removed.GetRemoved() {
-		t.Fatalf("RemoveLink() = %+v, %v, want the published link taken away", removed, err)
+		t.Fatalf("RemoveBinding() = %+v, %v, want the published binding taken away", removed, err)
 	}
 }
 
-func TestDeployPrunesTheLinkItStoppedProvisioning(t *testing.T) {
+func TestDeployPrunesTheBindingItStoppedProvisioning(t *testing.T) {
 	builtProject(t)
 	deploys, vars := operatorServed(t)
 	ctx := context.Background()
@@ -712,54 +712,54 @@ func TestDeployPrunesTheLinkItStoppedProvisioning(t *testing.T) {
 		t.Fatalf("Deploy() without the resource = %q", result.GetError())
 	}
 
-	listed, err := vars.ListLinks(ctx, &envvarsv1.ListLinksRequest{
+	listed, err := vars.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
 		Slug: "shop",
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	if err != nil {
-		t.Fatalf("ListLinks() = %v", err)
+		t.Fatalf("ListBindings() = %v", err)
 	}
-	if len(listed.GetLinks()) != 0 {
-		t.Fatalf("ListLinks() = %+v, want nothing: the deploy stopped provisioning the resource, so its record and credentials go with it", listed.GetLinks())
+	if len(listed.GetBindings()) != 0 {
+		t.Fatalf("ListBindings() = %+v, want nothing: the deploy stopped provisioning the resource, so its record and credentials go with it", listed.GetBindings())
 	}
 }
 
-func TestDeployLeavesAnotherPublishersLinkAlone(t *testing.T) {
+func TestDeployLeavesAnotherPublishersBindingAlone(t *testing.T) {
 	builtProject(t)
 	deploys, vars := operatorServed(t)
 	ctx := context.Background()
 
-	if _, err := vars.SetLink(ctx, &envvarsv1.SetLinkRequest{
+	if _, err := vars.SetBinding(ctx, &envvarsv1.SetBindingRequest{
 		Slug:  "shop",
 		Tier:  environmentv1.Tier_TIER_PRODUCTION,
 		Owner: "acme",
-		Link: &linksv1.Link{
+		Binding: &bindingsv1.Binding{
 			Name:       "warehouse",
 			Source:     "acme",
-			Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "db.acme"}},
+			Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "db.acme"}},
 		},
 	}); err != nil {
-		t.Fatalf("SetLink() = %v", err)
+		t.Fatalf("SetBinding() = %v", err)
 	}
 
 	if result, _ := deploy(t, deploys, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	listed, err := vars.ListLinks(ctx, &envvarsv1.ListLinksRequest{
+	listed, err := vars.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
 		Slug: "shop",
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
 	if err != nil {
-		t.Fatalf("ListLinks() = %v", err)
+		t.Fatalf("ListBindings() = %v", err)
 	}
-	names := make([]string, 0, len(listed.GetLinks()))
-	for _, link := range listed.GetLinks() {
-		names = append(names, link.GetName())
+	names := make([]string, 0, len(listed.GetBindings()))
+	for _, binding := range listed.GetBindings() {
+		names = append(names, binding.GetName())
 	}
 	slices.Sort(names)
 	if !slices.Equal(names, []string{"orders", "warehouse"}) {
-		t.Fatalf("ListLinks() = %v, want ocel's own link beside the one acme published", names)
+		t.Fatalf("ListBindings() = %v, want ocel's own binding beside the one acme published", names)
 	}
 }
 

@@ -44,5 +44,5 @@ func (decoding) Decode(_ context.Context, _ providerkit.StackPlan, outputs auto.
 	for name, output := range outputs {
 		properties[name], _ = output.Value.(string)
 	}
-	return providerkit.StackResult{Links: []providerkit.Link{{Name: "uploads", Properties: properties}}}, nil
+	return providerkit.StackResult{Bindings: []providerkit.Binding{{Name: "uploads", Properties: properties}}}, nil
 }

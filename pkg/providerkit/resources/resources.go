@@ -12,29 +12,29 @@ type Instruction struct {
 	Ref  providerkit.StackRef
 	Tags map[string]string
 
-	Links providerkit.LinkReader
+	Bindings providerkit.BindingReader
 
 	Resource providerkit.Resource
 }
 
 type Postgres interface {
-	Postgres(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Link, error)
+	Postgres(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
 }
 
 type Bucket interface {
-	Bucket(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Link, error)
+	Bucket(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
 }
 
 type Container interface {
-	Container(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Link, error)
+	Container(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
 }
 
 type Custom interface {
-	Custom(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Link, error)
+	Custom(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
 }
 
 type Remover interface {
-	RemoveResource(ctx context.Context, ref providerkit.StackRef, link providerkit.Link, report providerkit.Reporter) error
+	RemoveResource(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error
 }
 
 const (
@@ -60,8 +60,8 @@ type ImageRetention interface {
 	ForgetReleases(ctx context.Context, ref providerkit.StackRef, app string, report providerkit.Reporter) error
 }
 
-func Serves(impl any) []providerkit.LinkType {
-	var served []providerkit.LinkType
+func Serves(impl any) []providerkit.BindingType {
+	var served []providerkit.BindingType
 	for _, primitive := range primitives {
 		if primitive.servedBy(impl) {
 			served = append(served, primitive.kind)
@@ -75,37 +75,37 @@ func Releaser(records providerkit.RecordStore, artifacts providerkit.ArtifactSto
 }
 
 type primitive struct {
-	kind     providerkit.LinkType
+	kind     providerkit.BindingType
 	servedBy func(any) bool
-	call     func(any, context.Context, Instruction, providerkit.Reporter) (providerkit.Link, error)
+	call     func(any, context.Context, Instruction, providerkit.Reporter) (providerkit.Binding, error)
 }
 
 var primitives = []primitive{
 	{
-		kind:     providerkit.LinkPostgres,
+		kind:     providerkit.BindingPostgres,
 		servedBy: func(impl any) bool { _, ok := impl.(Postgres); return ok },
-		call: func(impl any, ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Link, error) {
+		call: func(impl any, ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
 			return impl.(Postgres).Postgres(ctx, in, report)
 		},
 	},
 	{
-		kind:     providerkit.LinkBucket,
+		kind:     providerkit.BindingBucket,
 		servedBy: func(impl any) bool { _, ok := impl.(Bucket); return ok },
-		call: func(impl any, ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Link, error) {
+		call: func(impl any, ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
 			return impl.(Bucket).Bucket(ctx, in, report)
 		},
 	},
 	{
-		kind:     providerkit.LinkContainer,
+		kind:     providerkit.BindingContainer,
 		servedBy: func(impl any) bool { _, ok := impl.(Container); return ok },
-		call: func(impl any, ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Link, error) {
+		call: func(impl any, ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
 			return impl.(Container).Container(ctx, in, report)
 		},
 	},
 	{
-		kind:     providerkit.LinkCustom,
+		kind:     providerkit.BindingCustom,
 		servedBy: func(impl any) bool { _, ok := impl.(Custom); return ok },
-		call: func(impl any, ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Link, error) {
+		call: func(impl any, ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
 			return impl.(Custom).Custom(ctx, in, report)
 		},
 	},
@@ -137,7 +137,7 @@ func (f *fanout) PlanDestroy(ctx context.Context, ref providerkit.StackRef, _ pr
 }
 
 func standing(recorded providerkit.Stack) providerkit.StackResult {
-	return providerkit.StackResult{Links: recorded.Links, Functions: recorded.Functions, Containers: recorded.Containers}
+	return providerkit.StackResult{Bindings: recorded.Bindings, Functions: recorded.Functions, Containers: recorded.Containers}
 }
 
 func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
@@ -167,14 +167,14 @@ func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, repo
 
 	var result providerkit.StackResult
 	for _, resource := range plan.Resources {
-		link, err := f.provision(ctx, plan, resource, report)
+		binding, err := f.provision(ctx, plan, resource, report)
 		if err != nil {
 			return providerkit.StackResult{}, err
 		}
-		if err := providerkit.VerifyProperties(link); err != nil {
+		if err := providerkit.VerifyProperties(binding); err != nil {
 			return providerkit.StackResult{}, err
 		}
-		result.Links = append(result.Links, link)
+		result.Bindings = append(result.Bindings, binding)
 	}
 	if standUp == nil {
 		return result, nil
@@ -225,12 +225,12 @@ func lacking(app *providerkit.AppPlan, primitive string) error {
 		app.App, app.Compute, primitive)
 }
 
-func (f *fanout) provision(ctx context.Context, plan providerkit.StackPlan, resource providerkit.Resource, report providerkit.Reporter) (providerkit.Link, error) {
+func (f *fanout) provision(ctx context.Context, plan providerkit.StackPlan, resource providerkit.Resource, report providerkit.Reporter) (providerkit.Binding, error) {
 	serving, err := f.serving(resource)
 	if err != nil {
-		return providerkit.Link{}, err
+		return providerkit.Binding{}, err
 	}
-	in := Instruction{Ref: plan.Ref, Tags: plan.Tags, Links: plan.Links, Resource: resource}
+	in := Instruction{Ref: plan.Ref, Tags: plan.Tags, Bindings: plan.Bindings, Resource: resource}
 	return serving.call(f.impl, ctx, in, report)
 }
 
@@ -263,8 +263,8 @@ func (f *fanout) Destroy(ctx context.Context, ref providerkit.StackRef, report p
 	if err != nil {
 		return err
 	}
-	for _, link := range recorded.Links {
-		if err := f.remove(ctx, ref, link, report); err != nil {
+	for _, binding := range recorded.Bindings {
+		if err := f.remove(ctx, ref, binding, report); err != nil {
 			return err
 		}
 	}
@@ -346,16 +346,16 @@ func unownable(ref providerkit.StackRef, going int, noun, because, primitive str
 }
 
 func (f *fanout) removeOrphans(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, report providerkit.Reporter) error {
-	for _, link := range recorded.Links {
+	for _, binding := range recorded.Bindings {
 		if slices.ContainsFunc(plan.Resources, func(resource providerkit.Resource) bool {
-			return resource.Name == link.Name && resource.Type == link.Type
+			return resource.Name == binding.Name && resource.Type == binding.Type
 		}) {
 			continue
 		}
 		if report != nil {
-			report.Detail(fmt.Sprintf("Removing %s: this plan no longer declares it", link.Name))
+			report.Detail(fmt.Sprintf("Removing %s: this plan no longer declares it", binding.Name))
 		}
-		if err := f.remove(ctx, plan.Ref, link, report); err != nil {
+		if err := f.remove(ctx, plan.Ref, binding, report); err != nil {
 			return err
 		}
 	}
@@ -398,14 +398,14 @@ func reportUndeclared(report providerkit.Reporter, name string) {
 	report.Detail(fmt.Sprintf("Removing %s: this plan no longer declares it", name))
 }
 
-func (f *fanout) remove(ctx context.Context, ref providerkit.StackRef, link providerkit.Link, report providerkit.Reporter) error {
+func (f *fanout) remove(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error {
 	remover, removes := f.impl.(Remover)
 	if !removes {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"link %s is no longer declared and this provider removes no resource, so it would be left standing and unowned",
-			link.Name)
+			"binding %s is no longer declared and this provider removes no resource, so it would be left standing and unowned",
+			binding.Name)
 	}
-	return remover.RemoveResource(ctx, ref, link, report)
+	return remover.RemoveResource(ctx, ref, binding, report)
 }
 
 func (f *fanout) recorded(ctx context.Context, ref providerkit.StackRef) (providerkit.Stack, error) {
@@ -413,7 +413,7 @@ func (f *fanout) recorded(ctx context.Context, ref providerkit.StackRef) (provid
 	return recorded, err
 }
 
-func served(kinds []providerkit.LinkType) string {
+func served(kinds []providerkit.BindingType) string {
 	if len(kinds) == 0 {
 		return "no resource primitive at all"
 	}

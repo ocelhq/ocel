@@ -10,8 +10,8 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -272,14 +272,14 @@ func TestTheEnvironmentGateRefusesWhatNothingWouldRead(t *testing.T) {
 	}
 }
 
-func TestLinksAnswerAcrossTheWire(t *testing.T) {
+func TestBindingsAnswerAcrossTheWire(t *testing.T) {
 	vars, _ := served(t)
 	ctx := context.Background()
 
-	link := &linksv1.Link{
+	binding := &bindingsv1.Binding{
 		Name:   "db",
 		Source: "neon",
-		Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
+		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 			Host:     "db.example",
 			Port:     5432,
 			Database: "shop",
@@ -288,104 +288,104 @@ func TestLinksAnswerAcrossTheWire(t *testing.T) {
 		}},
 	}
 
-	set, err := vars.SetLink(ctx, &envvarsv1.SetLinkRequest{
-		Slug:  slug,
-		Tier:  environmentv1.Tier_TIER_PRODUCTION,
-		Link:  link,
-		Owner: "neon",
+	set, err := vars.SetBinding(ctx, &envvarsv1.SetBindingRequest{
+		Slug:    slug,
+		Tier:    environmentv1.Tier_TIER_PRODUCTION,
+		Binding: binding,
+		Owner:   "neon",
 	})
 	if err != nil || set.GetVersion() != 1 {
-		t.Fatalf("SetLink() = %+v, %v", set, err)
+		t.Fatalf("SetBinding() = %+v, %v", set, err)
 	}
 
-	listed, err := vars.ListLinks(ctx, &envvarsv1.ListLinksRequest{
+	listed, err := vars.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
 		Slug: slug,
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
-	if err != nil || len(listed.GetLinks()) != 1 {
-		t.Fatalf("ListLinks() = %+v, %v", listed.GetLinks(), err)
+	if err != nil || len(listed.GetBindings()) != 1 {
+		t.Fatalf("ListBindings() = %+v, %v", listed.GetBindings(), err)
 	}
-	summary := listed.GetLinks()[0]
+	summary := listed.GetBindings()[0]
 	if summary.GetName() != "db" || summary.GetOwner() != "neon" || summary.GetSource() != "neon" {
-		t.Fatalf("ListLinks() summary = %+v", summary)
+		t.Fatalf("ListBindings() summary = %+v", summary)
 	}
-	if summary.GetType() != linksv1.LinkType_LINK_TYPE_POSTGRES {
-		t.Fatalf("ListLinks() type = %v, want the postgres it published", summary.GetType())
+	if summary.GetType() != bindingsv1.BindingType_BINDING_TYPE_POSTGRES {
+		t.Fatalf("ListBindings() type = %v, want the postgres it published", summary.GetType())
 	}
 	if len(summary.GetProperties()) == 0 {
-		t.Fatal("ListLinks() reported no property shapes, and a consumer binds against them")
+		t.Fatal("ListBindings() reported no property shapes, and a consumer binds against them")
 	}
 
-	_, err = vars.SetLink(ctx, &envvarsv1.SetLinkRequest{
-		Slug:  slug,
-		Tier:  environmentv1.Tier_TIER_PRODUCTION,
-		Link:  link,
-		Owner: "supabase",
+	_, err = vars.SetBinding(ctx, &envvarsv1.SetBindingRequest{
+		Slug:    slug,
+		Tier:    environmentv1.Tier_TIER_PRODUCTION,
+		Binding: binding,
+		Owner:   "supabase",
 	})
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
 		t.Fatalf("a second publisher taking the name: code = %v, want %v", got, connect.CodeFailedPrecondition)
 	}
 
-	removed, err := vars.RemoveLink(ctx, &envvarsv1.RemoveLinkRequest{
+	removed, err := vars.RemoveBinding(ctx, &envvarsv1.RemoveBindingRequest{
 		Slug: slug,
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Name: "db",
 	})
 	if err != nil || !removed.GetRemoved() {
-		t.Fatalf("RemoveLink() = %+v, %v", removed, err)
+		t.Fatalf("RemoveBinding() = %+v, %v", removed, err)
 	}
-	listed, err = vars.ListLinks(ctx, &envvarsv1.ListLinksRequest{
+	listed, err = vars.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
 		Slug: slug,
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 	})
-	if err != nil || len(listed.GetLinks()) != 0 {
-		t.Fatalf("ListLinks() after RemoveLink() = %+v, %v", listed.GetLinks(), err)
+	if err != nil || len(listed.GetBindings()) != 0 {
+		t.Fatalf("ListBindings() after RemoveBinding() = %+v, %v", listed.GetBindings(), err)
 	}
 }
 
-func TestALinkOcelCouldNotHaveProducedIsRefused(t *testing.T) {
+func TestABindingOcelCouldNotHaveProducedIsRefused(t *testing.T) {
 	vars, _ := served(t)
 	ctx := context.Background()
 
-	for name, link := range map[string]*linksv1.Link{
+	for name, binding := range map[string]*bindingsv1.Binding{
 		"unsourced": {
 			Name:       "db",
-			Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "db.example"}},
+			Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "db.example"}},
 		},
 		"granting no action": {
 			Name:       "files",
 			Source:     "acme",
-			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "files"}},
-			Grants:     []*linksv1.Grant{{Resources: []string{"arn:aws:s3:::files"}}},
+			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
+			Grants:     []*bindingsv1.Grant{{Resources: []string{"arn:aws:s3:::files"}}},
 		},
 		"granting over no resource": {
 			Name:       "files",
 			Source:     "acme",
-			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "files"}},
-			Grants:     []*linksv1.Grant{{Actions: []string{"s3:GetObject"}}},
+			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
+			Grants:     []*bindingsv1.Grant{{Actions: []string{"s3:GetObject"}}},
 		},
 		"granting every action": {
 			Name:       "files",
 			Source:     "acme",
-			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "files"}},
-			Grants:     []*linksv1.Grant{{Actions: []string{"*"}, Resources: []string{"arn:aws:s3:::files"}}},
+			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
+			Grants:     []*bindingsv1.Grant{{Actions: []string{"*"}, Resources: []string{"arn:aws:s3:::files"}}},
 		},
 		"granting over every resource": {
 			Name:       "files",
 			Source:     "acme",
-			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "files"}},
-			Grants:     []*linksv1.Grant{{Actions: []string{"s3:GetObject"}, Resources: []string{"*"}}},
+			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
+			Grants:     []*bindingsv1.Grant{{Actions: []string{"s3:GetObject"}, Resources: []string{"*"}}},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := vars.SetLink(ctx, &envvarsv1.SetLinkRequest{
-				Slug:  slug,
-				Tier:  environmentv1.Tier_TIER_PRODUCTION,
-				Link:  link,
-				Owner: "acme",
+			_, err := vars.SetBinding(ctx, &envvarsv1.SetBindingRequest{
+				Slug:    slug,
+				Tier:    environmentv1.Tier_TIER_PRODUCTION,
+				Binding: binding,
+				Owner:   "acme",
 			})
 			if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
-				t.Fatalf("SetLink(): code = %v, want %v", got, connect.CodeInvalidArgument)
+				t.Fatalf("SetBinding(): code = %v, want %v", got, connect.CodeInvalidArgument)
 			}
 		})
 	}
@@ -393,33 +393,33 @@ func TestALinkOcelCouldNotHaveProducedIsRefused(t *testing.T) {
 
 type refusingGrants struct{ *fake.Provider }
 
-func (refusingGrants) VerifyGrants(context.Context, providerkit.Link) error {
+func (refusingGrants) VerifyGrants(context.Context, providerkit.Binding) error {
 	return fmt.Errorf("s3:* names a whole service: %w", providerkit.ErrUnscopedGrant)
 }
 
-func TestSetLinkAsksTheProviderWhetherItWouldGrantThat(t *testing.T) {
+func TestSetBindingAsksTheProviderWhetherItWouldGrantThat(t *testing.T) {
 	vars := varsServedBy(t, refusingGrants{fake.NewProvider(fake.Options{})})
 
-	_, err := vars.SetLink(context.Background(), &envvarsv1.SetLinkRequest{
+	_, err := vars.SetBinding(context.Background(), &envvarsv1.SetBindingRequest{
 		Slug:  slug,
 		Tier:  environmentv1.Tier_TIER_PRODUCTION,
 		Owner: "acme",
-		Link: &linksv1.Link{
+		Binding: &bindingsv1.Binding{
 			Name:       "files",
 			Source:     "acme",
-			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "files"}},
-			Grants:     []*linksv1.Grant{{Actions: []string{"s3:*"}, Resources: []string{"arn:aws:s3:::files"}}},
+			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
+			Grants:     []*bindingsv1.Grant{{Actions: []string{"s3:*"}, Resources: []string{"arn:aws:s3:::files"}}},
 		},
 	})
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
-		t.Fatalf("SetLink(): code = %v, want %v: the provider refused the grant", got, connect.CodeInvalidArgument)
+		t.Fatalf("SetBinding(): code = %v, want %v: the provider refused the grant", got, connect.CodeInvalidArgument)
 	}
 }
 
-func TestALinkNamesAnEnvironmentOnlyInPreview(t *testing.T) {
+func TestABindingNamesAnEnvironmentOnlyInPreview(t *testing.T) {
 	vars, _ := served(t)
 
-	_, err := vars.ListLinks(context.Background(), &envvarsv1.ListLinksRequest{
+	_, err := vars.ListBindings(context.Background(), &envvarsv1.ListBindingsRequest{
 		Slug:        slug,
 		Tier:        environmentv1.Tier_TIER_PRODUCTION,
 		Environment: "pr-7",
@@ -475,25 +475,25 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 			_, err := vars.ListVersions(ctx, &envvarsv1.ListVersionsRequest{Coordinate: cell("KEY")})
 			return err
 		},
-		"SetLink": func() error {
-			_, err := vars.SetLink(ctx, &envvarsv1.SetLinkRequest{
+		"SetBinding": func() error {
+			_, err := vars.SetBinding(ctx, &envvarsv1.SetBindingRequest{
 				Slug:  slug,
 				Tier:  environmentv1.Tier_TIER_PRODUCTION,
 				Owner: "acme",
-				Link: &linksv1.Link{
+				Binding: &bindingsv1.Binding{
 					Name:       "db",
 					Source:     "acme",
-					Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "files"}},
+					Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
 				},
 			})
 			return err
 		},
-		"RemoveLink": func() error {
-			_, err := vars.RemoveLink(ctx, &envvarsv1.RemoveLinkRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Name: "db"})
+		"RemoveBinding": func() error {
+			_, err := vars.RemoveBinding(ctx, &envvarsv1.RemoveBindingRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Name: "db"})
 			return err
 		},
-		"ListLinks": func() error {
-			_, err := vars.ListLinks(ctx, &envvarsv1.ListLinksRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION})
+		"ListBindings": func() error {
+			_, err := vars.ListBindings(ctx, &envvarsv1.ListBindingsRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION})
 			return err
 		},
 	}

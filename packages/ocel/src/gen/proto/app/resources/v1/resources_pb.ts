@@ -2,28 +2,26 @@
 // @generated from file app/resources/v1/resources.proto (package app.resources.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { DeclareEnvRequestSchema, DeclareEnvResponseSchema, ReportEnvProblemsRequestSchema, ReportEnvProblemsResponseSchema } from "./variables_pb.js";
 import { file_app_resources_v1_variables } from "./variables_pb.js";
-import type { BindingType } from "../../../common/bindings/v1/bindings_pb.js";
-import { file_common_bindings_v1_bindings } from "../../../common/bindings/v1/bindings_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file app/resources/v1/resources.proto.
  */
 export const file_app_resources_v1_resources: GenFile = /*@__PURE__*/
-  fileDesc("CiBhcHAvcmVzb3VyY2VzL3YxL3Jlc291cmNlcy5wcm90bxIQYXBwLnJlc291cmNlcy52MSJRChJSZXNvdXJjZUlkZW50aWZpZXISLQoEdHlwZRgBIAEoDjIfLmNvbW1vbi5iaW5kaW5ncy52MS5CaW5kaW5nVHlwZRIMCgRuYW1lGAIgASgJIhEKD0RlY2xhcmVSZXNwb25zZSLKAQoORGVjbGFyZVJlcXVlc3QSNgoIcmVzb3VyY2UYASABKAsyJC5hcHAucmVzb3VyY2VzLnYxLlJlc291cmNlSWRlbnRpZmllchI0Cghwb3N0Z3JlcxgCIAEoCzIgLmFwcC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIwCgZidWNrZXQYAyABKAsyHi5hcHAucmVzb3VyY2VzLnYxLkJ1Y2tldENvbmZpZ0gAEg4KBnNvdXJjZRgEIAEoCUIICgZjb25maWciIQoOUG9zdGdyZXNDb25maWcSDwoHdmVyc2lvbhgBIAEoCSInCgxCdWNrZXRDb25maWcSFwoPYWxsb3dlZF9vcmlnaW5zGAEgAygJMqgCCg9SZXNvdXJjZVNlcnZpY2USTgoHRGVjbGFyZRIgLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZVJlcXVlc3QaIS5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVSZXNwb25zZRJXCgpEZWNsYXJlRW52EiMuYXBwLnJlc291cmNlcy52MS5EZWNsYXJlRW52UmVxdWVzdBokLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZUVudlJlc3BvbnNlEmwKEVJlcG9ydEVudlByb2JsZW1zEiouYXBwLnJlc291cmNlcy52MS5SZXBvcnRFbnZQcm9ibGVtc1JlcXVlc3QaKy5hcHAucmVzb3VyY2VzLnYxLlJlcG9ydEVudlByb2JsZW1zUmVzcG9uc2VCP1o9Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vYXBwL3Jlc291cmNlcy92MTtyZXNvdXJjZXN2MWIGcHJvdG8z", [file_app_resources_v1_variables, file_common_bindings_v1_bindings]);
+  fileDesc("CiBhcHAvcmVzb3VyY2VzL3YxL3Jlc291cmNlcy5wcm90bxIQYXBwLnJlc291cmNlcy52MSJQChJSZXNvdXJjZUlkZW50aWZpZXISLAoEdHlwZRgBIAEoDjIeLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VUeXBlEgwKBG5hbWUYAiABKAkiEQoPRGVjbGFyZVJlc3BvbnNlIsoBCg5EZWNsYXJlUmVxdWVzdBI2CghyZXNvdXJjZRgBIAEoCzIkLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VJZGVudGlmaWVyEjQKCHBvc3RncmVzGAIgASgLMiAuYXBwLnJlc291cmNlcy52MS5Qb3N0Z3Jlc0NvbmZpZ0gAEjAKBmJ1Y2tldBgDIAEoCzIeLmFwcC5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSAASDgoGc291cmNlGAQgASgJQggKBmNvbmZpZyIhCg5Qb3N0Z3Jlc0NvbmZpZxIPCgd2ZXJzaW9uGAEgASgJIicKDEJ1Y2tldENvbmZpZxIXCg9hbGxvd2VkX29yaWdpbnMYASADKAkqgAEKDFJlc291cmNlVHlwZRIdChlSRVNPVVJDRV9UWVBFX1VOU1BFQ0lGSUVEEAASGgoWUkVTT1VSQ0VfVFlQRV9QT1NUR1JFUxABEhgKFFJFU09VUkNFX1RZUEVfQlVDS0VUEAISGwoXUkVTT1VSQ0VfVFlQRV9DT05UQUlORVIQAzKoAgoPUmVzb3VyY2VTZXJ2aWNlEk4KB0RlY2xhcmUSIC5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVSZXF1ZXN0GiEuYXBwLnJlc291cmNlcy52MS5EZWNsYXJlUmVzcG9uc2USVwoKRGVjbGFyZUVudhIjLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZUVudlJlcXVlc3QaJC5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVFbnZSZXNwb25zZRJsChFSZXBvcnRFbnZQcm9ibGVtcxIqLmFwcC5yZXNvdXJjZXMudjEuUmVwb3J0RW52UHJvYmxlbXNSZXF1ZXN0GisuYXBwLnJlc291cmNlcy52MS5SZXBvcnRFbnZQcm9ibGVtc1Jlc3BvbnNlQj9aPWdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2FwcC9yZXNvdXJjZXMvdjE7cmVzb3VyY2VzdjFiBnByb3RvMw", [file_app_resources_v1_variables]);
 
 /**
  * @generated from message app.resources.v1.ResourceIdentifier
  */
 export type ResourceIdentifier = Message<"app.resources.v1.ResourceIdentifier"> & {
   /**
-   * @generated from field: common.bindings.v1.BindingType type = 1;
+   * @generated from field: app.resources.v1.ResourceType type = 1;
    */
-  type: BindingType;
+  type: ResourceType;
 
   /**
    * @generated from field: string name = 2;
@@ -123,6 +121,37 @@ export type BucketConfig = Message<"app.resources.v1.BucketConfig"> & {
  */
 export const BucketConfigSchema: GenMessage<BucketConfig> = /*@__PURE__*/
   messageDesc(file_app_resources_v1_resources, 4);
+
+/**
+ * @generated from enum app.resources.v1.ResourceType
+ */
+export enum ResourceType {
+  /**
+   * @generated from enum value: RESOURCE_TYPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: RESOURCE_TYPE_POSTGRES = 1;
+   */
+  POSTGRES = 1,
+
+  /**
+   * @generated from enum value: RESOURCE_TYPE_BUCKET = 2;
+   */
+  BUCKET = 2,
+
+  /**
+   * @generated from enum value: RESOURCE_TYPE_CONTAINER = 3;
+   */
+  CONTAINER = 3,
+}
+
+/**
+ * Describes the enum app.resources.v1.ResourceType.
+ */
+export const ResourceTypeSchema: GenEnum<ResourceType> = /*@__PURE__*/
+  enumDesc(file_app_resources_v1_resources, 0);
 
 /**
  * @generated from service app.resources.v1.ResourceService

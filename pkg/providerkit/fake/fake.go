@@ -89,8 +89,8 @@ func (p *Provider) Registry() *Images { return p.images }
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
 
-func (p *Provider) Serves() []providerkit.LinkType {
-	return []providerkit.LinkType{providerkit.LinkPostgres, providerkit.LinkBucket}
+func (p *Provider) Serves() []providerkit.BindingType {
+	return []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket}
 }
 
 func (p *Provider) Computes() []providerkit.Compute {
@@ -296,7 +296,7 @@ func (s StackInspector) Inspect(_ context.Context, ref providerkit.StackRef) (pr
 
 type GrantVerifier struct{ *Provider }
 
-func (GrantVerifier) VerifyGrants(context.Context, providerkit.Link) error { return nil }
+func (GrantVerifier) VerifyGrants(context.Context, providerkit.Binding) error { return nil }
 
 type Full struct{ *Provider }
 
@@ -310,7 +310,7 @@ func (f Full) Inspect(_ context.Context, ref providerkit.StackRef) (providerkit.
 	return f.releases.State(ref), nil
 }
 
-func (Full) VerifyGrants(context.Context, providerkit.Link) error { return nil }
+func (Full) VerifyGrants(context.Context, providerkit.Binding) error { return nil }
 
 func (f Full) PreflightDeploy(_ context.Context, pre providerkit.DeployPreflight) error {
 	return f.preflight(pre)

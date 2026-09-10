@@ -21,7 +21,7 @@ func TestABoxRefusesAProxiedLinkItServesNothingFor(t *testing.T) {
 	grants := []providerkit.Link{{Name: "uploads", Resource: "bucket--uploads", Type: providerkit.LinkBucket}}
 	err := refusingReach(t, nil, grants)
 
-	var unreachable *providerkit.UnreachableLinkError
+	var unreachable *providerkit.UnreachableBindingError
 	if !errors.As(err, &unreachable) {
 		t.Fatalf("a bucket link consumed on a box = %v, want it refused before the app is handed a record it cannot read", err)
 	}

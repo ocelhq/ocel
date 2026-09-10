@@ -49,19 +49,19 @@ type StackPlan struct {
 
 	Images ImagePlan
 
-	Links LinkReader
+	Bindings BindingReader
 
 	App *AppPlan
 
 	Options any
 }
 
-type LinkReader interface {
+type BindingReader interface {
 	Names(ctx context.Context) ([]string, error)
 
-	Published(ctx context.Context) ([]Link, error)
+	Published(ctx context.Context) ([]Binding, error)
 
-	Resolve(ctx context.Context, link string) (Link, error)
+	Resolve(ctx context.Context, binding string) (Binding, error)
 }
 
 type AppPlan struct {
@@ -77,7 +77,7 @@ type AppPlan struct {
 
 	Values AppValues
 
-	Grants []Link
+	Grants []Binding
 
 	Routing  *RoutingPlan
 	Guard    *OriginGuard
@@ -115,7 +115,7 @@ type AppValues struct {
 	Plain     map[string]string
 	Sensitive map[string]string
 	Secrets   []SecretRef
-	Links     []Link
+	Bindings  []Binding
 	Owners    map[string]string
 	Folder    string
 	Delivered map[string]string
@@ -138,9 +138,9 @@ func (v AppValues) Injected() map[string]string {
 }
 
 func (v AppValues) String() string {
-	return fmt.Sprintf("values folder %q plain %v sensitive %v secrets %v links %v delivered %d entries [redacted]",
+	return fmt.Sprintf("values folder %q plain %v sensitive %v secrets %v bindings %v delivered %d entries [redacted]",
 		v.Folder, slices.Sorted(maps.Keys(v.Plain)), slices.Sorted(maps.Keys(v.Sensitive)),
-		secretNames(v.Secrets), linkNames(v.Links), len(v.Delivered))
+		secretNames(v.Secrets), bindingNames(v.Bindings), len(v.Delivered))
 }
 
 func (v AppValues) GoString() string { return v.String() }
@@ -153,10 +153,10 @@ func secretNames(refs []SecretRef) []string {
 	return names
 }
 
-func linkNames(links []Link) []string {
-	names := make([]string, 0, len(links))
-	for _, link := range links {
-		names = append(names, link.Name)
+func bindingNames(bindings []Binding) []string {
+	names := make([]string, 0, len(bindings))
+	for _, binding := range bindings {
+		names = append(names, binding.Name)
 	}
 	return names
 }
@@ -186,7 +186,7 @@ type FunctionSpec struct {
 }
 
 type StackResult struct {
-	Links []Link
+	Bindings []Binding
 
 	Functions []Function
 
@@ -199,8 +199,8 @@ type StackResult struct {
 	ISRWriteSecret string
 }
 
-type Link struct {
-	Type       LinkType          `json:"type"`
+type Binding struct {
+	Type       BindingType       `json:"type"`
 	Name       string            `json:"name"`
 	Resource   string            `json:"resource,omitempty"`
 	Source     string            `json:"source,omitempty"`

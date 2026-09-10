@@ -4,7 +4,6 @@ package app.resources.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1";
 
 import "app/resources/v1/variables.proto";
-import "common/bindings/v1/bindings.proto";
 
 service ResourceService {
     rpc Declare(DeclareRequest) returns (DeclareResponse);
@@ -14,8 +13,15 @@ service ResourceService {
     rpc ReportEnvProblems(ReportEnvProblemsRequest) returns (ReportEnvProblemsResponse);
 }
 
+enum ResourceType {
+  RESOURCE_TYPE_UNSPECIFIED = 0;
+  RESOURCE_TYPE_POSTGRES = 1;
+  RESOURCE_TYPE_BUCKET = 2;
+  RESOURCE_TYPE_CONTAINER = 3;
+}
+
 message ResourceIdentifier {
-  common.bindings.v1.BindingType type = 1;
+  ResourceType type = 1;
   string name = 2;
 }
 

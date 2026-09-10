@@ -14,27 +14,27 @@ import (
 )
 
 type buckets struct {
-	removed []providerkit.Link
+	removed []providerkit.Binding
 }
 
-func (b *buckets) Bucket(_ context.Context, in resources.Instruction, _ providerkit.Reporter) (providerkit.Link, error) {
-	return providerkit.Link{
-		Type:       providerkit.LinkBucket,
+func (b *buckets) Bucket(_ context.Context, in resources.Instruction, _ providerkit.Reporter) (providerkit.Binding, error) {
+	return providerkit.Binding{
+		Type:       providerkit.BindingBucket,
 		Name:       in.Resource.Name,
 		Properties: map[string]string{providerkit.PropertyBucket: in.Ref.Project + "-" + in.Resource.Name},
 	}, nil
 }
 
-func (b *buckets) RemoveResource(_ context.Context, _ providerkit.StackRef, link providerkit.Link, _ providerkit.Reporter) error {
-	b.removed = append(b.removed, link)
+func (b *buckets) RemoveResource(_ context.Context, _ providerkit.StackRef, binding providerkit.Binding, _ providerkit.Reporter) error {
+	b.removed = append(b.removed, binding)
 	return nil
 }
 
 type neon struct{ *buckets }
 
-func (neon) Postgres(_ context.Context, in resources.Instruction, _ providerkit.Reporter) (providerkit.Link, error) {
-	return providerkit.Link{
-		Type: providerkit.LinkPostgres,
+func (neon) Postgres(_ context.Context, in resources.Instruction, _ providerkit.Reporter) (providerkit.Binding, error) {
+	return providerkit.Binding{
+		Type: providerkit.BindingPostgres,
 		Name: in.Resource.Name,
 		Properties: map[string]string{
 			providerkit.PropertyHost:     "db.neon.invalid",
@@ -46,11 +46,11 @@ func (neon) Postgres(_ context.Context, in resources.Instruction, _ providerkit.
 	}, nil
 }
 
-type halfLink struct{}
+type halfBinding struct{}
 
-func (halfLink) Postgres(_ context.Context, in resources.Instruction, _ providerkit.Reporter) (providerkit.Link, error) {
-	return providerkit.Link{
-		Type:       providerkit.LinkPostgres,
+func (halfBinding) Postgres(_ context.Context, in resources.Instruction, _ providerkit.Reporter) (providerkit.Binding, error) {
+	return providerkit.Binding{
+		Type:       providerkit.BindingPostgres,
 		Name:       in.Resource.Name,
 		Properties: map[string]string{providerkit.PropertyHost: "db.invalid"},
 	}, nil
@@ -67,11 +67,11 @@ func infraRef() providerkit.StackRef {
 func TestServesNamesEveryPrimitiveTheProviderImplements(t *testing.T) {
 	t.Parallel()
 
-	if served := resources.Serves(&buckets{}); !slices.Equal(served, []providerkit.LinkType{providerkit.LinkBucket}) {
+	if served := resources.Serves(&buckets{}); !slices.Equal(served, []providerkit.BindingType{providerkit.BindingBucket}) {
 		t.Fatalf("Serves() = %v, want only the bucket it implements", served)
 	}
 	served := resources.Serves(neon{&buckets{}})
-	if !slices.Contains(served, providerkit.LinkPostgres) || !slices.Contains(served, providerkit.LinkBucket) {
+	if !slices.Contains(served, providerkit.BindingPostgres) || !slices.Contains(served, providerkit.BindingBucket) {
 		t.Fatalf("Serves() = %v, want the embedded bucket and the Postgres the override adds", served)
 	}
 }
@@ -86,18 +86,18 @@ func TestReleaserFansEachResourceOutToItsPrimitive(t *testing.T) {
 		Ref:  infraRef(),
 		Kind: providerkit.StackInfra,
 		Resources: []providerkit.Resource{
-			{Name: "orders", Type: providerkit.LinkPostgres},
-			{Name: "uploads", Type: providerkit.LinkBucket},
+			{Name: "orders", Type: providerkit.BindingPostgres},
+			{Name: "uploads", Type: providerkit.BindingBucket},
 		},
 	}, nil)
 	if err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
-	if len(result.Links) != 2 {
-		t.Fatalf("Provision() returned %d links, want one per resource", len(result.Links))
+	if len(result.Bindings) != 2 {
+		t.Fatalf("Provision() returned %d bindings, want one per resource", len(result.Bindings))
 	}
-	if result.Links[0].Properties[providerkit.PropertyHost] != "db.neon.invalid" {
-		t.Errorf("orders came back from %q, want the override that serves Postgres", result.Links[0].Properties[providerkit.PropertyHost])
+	if result.Bindings[0].Properties[providerkit.PropertyHost] != "db.neon.invalid" {
+		t.Errorf("orders came back from %q, want the override that serves Postgres", result.Bindings[0].Properties[providerkit.PropertyHost])
 	}
 }
 
@@ -109,13 +109,13 @@ func TestReleaserRefusesAPrimitiveNothingServes(t *testing.T) {
 	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
 		Ref:       infraRef(),
 		Kind:      providerkit.StackInfra,
-		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.LinkPostgres}},
+		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.BindingPostgres}},
 	}, nil)
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 		t.Fatalf("Provision() of a primitive nothing serves = %v, want an invalid refusal", err)
 	}
-	if !strings.Contains(refusal.Message, string(providerkit.LinkBucket)) {
+	if !strings.Contains(refusal.Message, string(providerkit.BindingBucket)) {
 		t.Errorf("the refusal reads %q, want it to name what this provider does serve", refusal.Message)
 	}
 }
@@ -126,7 +126,7 @@ func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
 	_, err := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), &buckets{}).Plan(context.Background(), providerkit.StackPlan{
 		Ref:       infraRef(),
 		Kind:      providerkit.StackInfra,
-		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.LinkPostgres}},
+		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.BindingPostgres}},
 	}, nil)
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
@@ -134,18 +134,18 @@ func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
 	}
 }
 
-func TestReleaserRefusesALinkMissingAPropertyItsTypePromises(t *testing.T) {
+func TestReleaserRefusesABindingMissingAPropertyItsTypePromises(t *testing.T) {
 	t.Parallel()
 
-	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), halfLink{})
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), halfBinding{})
 
 	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
 		Ref:       infraRef(),
 		Kind:      providerkit.StackInfra,
-		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.LinkPostgres}},
+		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.BindingPostgres}},
 	}, nil)
 	if err == nil {
-		t.Fatal("Provision() recorded a Postgres link carrying only a host, want it refused before anything binds to it")
+		t.Fatal("Provision() recorded a Postgres binding carrying only a host, want it refused before anything binds to it")
 	}
 	if !strings.Contains(err.Error(), providerkit.PropertyDatabase) {
 		t.Errorf("the refusal reads %q, want it to name the property that is missing", err)
@@ -163,9 +163,9 @@ func TestReleaserRemovesAResourceThePlanNoLongerDeclares(t *testing.T) {
 
 	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
 		Kind: providerkit.StackInfra,
-		Links: []providerkit.Link{
-			{Type: providerkit.LinkBucket, Name: "uploads", Properties: map[string]string{providerkit.PropertyBucket: "shop-uploads"}},
-			{Type: providerkit.LinkBucket, Name: "exports", Properties: map[string]string{providerkit.PropertyBucket: "shop-exports"}},
+		Bindings: []providerkit.Binding{
+			{Type: providerkit.BindingBucket, Name: "uploads", Properties: map[string]string{providerkit.PropertyBucket: "shop-uploads"}},
+			{Type: providerkit.BindingBucket, Name: "exports", Properties: map[string]string{providerkit.PropertyBucket: "shop-exports"}},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -174,7 +174,7 @@ func TestReleaserRemovesAResourceThePlanNoLongerDeclares(t *testing.T) {
 	if _, err := releaser.Provision(ctx, providerkit.StackPlan{
 		Ref:       ref,
 		Kind:      providerkit.StackInfra,
-		Resources: []providerkit.Resource{{Name: "uploads", Type: providerkit.LinkBucket}},
+		Resources: []providerkit.Resource{{Name: "uploads", Type: providerkit.BindingBucket}},
 	}, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
@@ -198,7 +198,7 @@ func TestDestroyOfAStackNothingRecordedIsANoOp(t *testing.T) {
 	}
 }
 
-func TestDestroyTakesDownEveryLinkTheStackRecorded(t *testing.T) {
+func TestDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -207,8 +207,8 @@ func TestDestroyTakesDownEveryLinkTheStackRecorded(t *testing.T) {
 	ref := infraRef()
 
 	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
-		Kind:  providerkit.StackInfra,
-		Links: []providerkit.Link{{Type: providerkit.LinkBucket, Name: "uploads"}},
+		Kind:     providerkit.StackInfra,
+		Bindings: []providerkit.Binding{{Type: providerkit.BindingBucket, Name: "uploads"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestDestroyTakesDownEveryLinkTheStackRecorded(t *testing.T) {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.removed) != 1 {
-		t.Fatalf("Destroy() removed %d links, want the one the stack recorded", len(own.removed))
+		t.Fatalf("Destroy() removed %d bindings, want the one the stack recorded", len(own.removed))
 	}
 }
 
@@ -237,8 +237,8 @@ func TestPlanOverAStackNothingRecordedCreatesEveryResourceItDeclares(t *testing.
 		Ref:  infraRef(),
 		Kind: providerkit.StackInfra,
 		Resources: []providerkit.Resource{
-			{Name: "orders", Type: providerkit.LinkPostgres},
-			{Name: "uploads", Type: providerkit.LinkBucket},
+			{Name: "orders", Type: providerkit.BindingPostgres},
+			{Name: "uploads", Type: providerkit.BindingBucket},
 		},
 	}, nil)
 	if err != nil {
@@ -266,9 +266,9 @@ func TestPlanKeepsWhatStandsAndDeletesWhatThePlanDropped(t *testing.T) {
 	ref := infraRef()
 	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
 		Kind: providerkit.StackInfra,
-		Links: []providerkit.Link{
-			{Type: providerkit.LinkBucket, Name: "uploads"},
-			{Type: providerkit.LinkBucket, Name: "exports"},
+		Bindings: []providerkit.Binding{
+			{Type: providerkit.BindingBucket, Name: "uploads"},
+			{Type: providerkit.BindingBucket, Name: "exports"},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -278,8 +278,8 @@ func TestPlanKeepsWhatStandsAndDeletesWhatThePlanDropped(t *testing.T) {
 		Ref:  ref,
 		Kind: providerkit.StackInfra,
 		Resources: []providerkit.Resource{
-			{Name: "uploads", Type: providerkit.LinkBucket},
-			{Name: "invoices", Type: providerkit.LinkBucket},
+			{Name: "uploads", Type: providerkit.BindingBucket},
+			{Name: "invoices", Type: providerkit.BindingBucket},
 		},
 	}, nil)
 	if err != nil {
@@ -303,15 +303,15 @@ func TestPlanKeepsWhatStandsAndDeletesWhatThePlanDropped(t *testing.T) {
 	}
 }
 
-func TestPlanDestroyTakesDownEveryLinkTheStackRecorded(t *testing.T) {
+func TestPlanDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	records := fake.NewRecords()
 	ref := infraRef()
 	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
-		Kind:  providerkit.StackInfra,
-		Links: []providerkit.Link{{Type: providerkit.LinkBucket, Name: "uploads"}},
+		Kind:     providerkit.StackInfra,
+		Bindings: []providerkit.Binding{{Type: providerkit.BindingBucket, Name: "uploads"}},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func TestPlanDestroyTakesDownEveryLinkTheStackRecorded(t *testing.T) {
 		t.Fatalf("PlanDestroy() = %v", err)
 	}
 	if rows := rowsOf(plan); rows["uploads"] != providerkit.ActionDelete {
-		t.Errorf("uploads reads %q, want the recorded link shown as going", rows["uploads"])
+		t.Errorf("uploads reads %q, want the recorded binding shown as going", rows["uploads"])
 	}
 
 	absent := ref
@@ -343,7 +343,7 @@ type embedded struct {
 
 func (e embedded) Releases() providerkit.Releaser { return e.fanout }
 
-func (e embedded) Serves() []providerkit.LinkType { return resources.Serves(neon{&buckets{}}) }
+func (e embedded) Serves() []providerkit.BindingType { return resources.Serves(neon{&buckets{}}) }
 
 func (embedded) Warm(context.Context, []string, providerkit.Reporter) error { return nil }
 
@@ -356,7 +356,7 @@ func TestAWarmerBehindTheFanOutIsStillFoundOnTheRoot(t *testing.T) {
 	if _, warms := providerkit.Provider(provider).(providerkit.Warmer); !warms {
 		t.Fatal("the provider's Warmer is not found on the root, so wrapping the release port hid a capability")
 	}
-	if !slices.Contains(provider.Serves(), providerkit.LinkPostgres) {
+	if !slices.Contains(provider.Serves(), providerkit.BindingPostgres) {
 		t.Errorf("Serves() = %v, want the Postgres the override advertises", provider.Serves())
 	}
 }
@@ -903,10 +903,10 @@ func (r *retaining) RemoveContainers(_ context.Context, _ providerkit.StackRef, 
 	return nil
 }
 
-func (r *retaining) Bucket(ctx context.Context, in resources.Instruction, report providerkit.Reporter) (providerkit.Link, error) {
+func (r *retaining) Bucket(ctx context.Context, in resources.Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
 	if r.served != nil {
 		if err := r.served(in); err != nil {
-			return providerkit.Link{}, err
+			return providerkit.Binding{}, err
 		}
 	}
 	return r.buckets.Bucket(ctx, in, report)
@@ -965,7 +965,7 @@ func TestAContainerReleaseReconcilesItsImagesOnEveryPathOutOfProvision(t *testin
 		"a resource never provisions": func(own *retaining) providerkit.StackPlan {
 			own.served = func(resources.Instruction) error { return refused }
 			plan := containerPlan()
-			plan.Resources = []providerkit.Resource{{Name: "store", Type: providerkit.LinkBucket}}
+			plan.Resources = []providerkit.Resource{{Name: "store", Type: providerkit.BindingBucket}}
 			return plan
 		},
 		"the container never stands": func(own *retaining) providerkit.StackPlan {
@@ -1007,7 +1007,7 @@ func TestAContainerReleaseReconcilesEvenWhenItNeverReachedTheWork(t *testing.T) 
 		},
 		"a resource names a primitive this provider never serves": func() (providerkit.RecordStore, providerkit.StackPlan) {
 			plan := containerPlan()
-			plan.Resources = []providerkit.Resource{{Name: "ledger", Type: providerkit.LinkPostgres}}
+			plan.Resources = []providerkit.Resource{{Name: "ledger", Type: providerkit.BindingPostgres}}
 			return fake.NewRecords(), plan
 		},
 		"the app names a compute nothing stands up": func() (providerkit.RecordStore, providerkit.StackPlan) {

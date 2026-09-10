@@ -9,83 +9,83 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 )
 
-func (r *deployRun) admitLinks(ctx context.Context, report Reporter) error {
+func (r *deployRun) admitBindings(ctx context.Context, report Reporter) error {
 	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err
 	}
-	links, err := r.reader().Published(ctx)
+	bindings, err := r.reader().Published(ctx)
 	if err != nil {
 		return err
 	}
-	published := make(map[string]Link, len(links))
-	names := make([]string, 0, len(links))
-	for _, link := range links {
-		published[link.Name] = link
-		names = append(names, link.Name)
+	published := make(map[string]Binding, len(bindings))
+	names := make([]string, 0, len(bindings))
+	for _, binding := range bindings {
+		published[binding.Name] = binding
+		names = append(names, binding.Name)
 	}
 	r.warnShadowed(report, resources, names)
 
 	var missing []string
 	for _, resource := range resources {
-		if !resource.Linked {
+		if resource.Binding == "" {
 			continue
 		}
-		if _, bound := published[resource.Declared]; !bound {
-			missing = append(missing, resource.Declared)
+		if _, bound := published[resource.Binding]; !bound {
+			missing = append(missing, resource.Binding)
 		}
 	}
 	if len(missing) > 0 {
 		return r.refuseUnpublished(ctx, missing, names)
 	}
 	for _, resource := range resources {
-		if !resource.Linked {
+		if resource.Binding == "" {
 			continue
 		}
-		if err := ReadableAs(published[resource.Declared], resource.Type, r.proxied); err != nil {
+		if err := ReadableAs(published[resource.Binding], resource.Declared, resource.Type, r.proxied); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *deployRun) proxied(kind LinkType) bool {
-	if linker, asks := r.provider.(ProxiedLinker); asks {
-		return linker.Proxied(kind)
+func (r *deployRun) proxied(kind BindingType) bool {
+	if binder, asks := r.provider.(ProxiedBinder); asks {
+		return binder.Proxied(kind)
 	}
 	return Proxied(kind)
 }
 
-func ReadableAs(link Link, declared LinkType, proxied func(LinkType) bool) error {
+func ReadableAs(binding Binding, declaredName string, declared BindingType, proxied func(BindingType) bool) error {
 	switch {
-	case link.Type == LinkCustom:
+	case binding.Type == BindingCustom:
 		return Refuse(CodeInvalid,
-			"`links` binds %q, and the record published under that name is a custom one: "+
-				"a custom link is read by transforms; it is external by definition and never provisioned, so it is not bound here. "+
-				"Drop %q from `links` and read it from a transform as `links.%s.<property>`",
-			link.Name, link.Name, link.Name)
-	case link.Type != declared:
+			"`bindings` binds %s.%s to %q, and the record published under that name is a custom one: "+
+				"a custom binding is read by transforms; it is external by definition and never provisioned, so it is not bound here. "+
+				"Drop it from `bindings` and read it from a transform as `bindings.%s.<property>`",
+			declared, declaredName, binding.Name, binding.Name)
+	case binding.Type != declared:
 		return Refuse(CodeInvalid,
-			"`links` binds %q as a %s, and the record published under that name is a %s. "+
-				"Every app that uses %q would fail at its first cold start, so this deploy stops here. "+
-				"Declare it as what was published, or republish it as a %s",
-			link.Name, declared, link.Type, link.Name, declared)
-	case link.Source != "" && proxied(declared):
+			"`bindings` declares %s as a %s and binds it to %q, and the record published under that name is a %s. "+
+				"Every app that uses %s would fail at its first cold start, so this deploy stops here. "+
+				"Declare it as what was published, or republish %q as a %s",
+			declaredName, declared, binding.Name, binding.Type, declaredName, binding.Name, declared)
+	case binding.Source != "" && proxied(declared):
 		return Refuse(CodeInvalid,
-			"`links` binds %q to a %s record published by %s, and ocel's %s client cannot serve one it did not provision. "+
+			"`bindings` binds %s to the %s record %q published by %s, and ocel's %s client cannot serve one it did not provision. "+
 				"Hand the app its name as an env var (`ocel env set`) instead",
-			link.Name, declared, link.Source, declared)
+			declaredName, declared, binding.Name, binding.Source, declared)
 	}
 	return nil
 }
 
 func (r *deployRun) refuseUnpublished(ctx context.Context, missing, published []string) error {
 	elsewhere := r.publishingClasses(ctx, missing)
-	coordinate := describeCoordinate(string(r.plan.Class), r.plan.linkEnvironment())
+	coordinate := describeCoordinate(string(r.plan.Class), r.plan.bindingEnvironment())
 
 	var b strings.Builder
 	fmt.Fprintf(&b,
-		"`links` binds %s, and nothing has published a record under %s to %s. "+
+		"`bindings` binds %s, and nothing has published a record under %s to %s. "+
 			"Ocel never runs your infrastructure tool for you: run it, then deploy again",
 		quoteAll(missing), thatName(len(missing)), coordinate)
 	for _, name := range missing {
@@ -109,7 +109,7 @@ func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map
 		if class == r.plan.Class {
 			continue
 		}
-		names, err := r.values.PublishedNames(ctx, values.Scope{Project: r.plan.Slug, Class: class}, r.plan.linkEnvironment())
+		names, err := r.values.PublishedNames(ctx, values.Scope{Project: r.plan.Slug, Class: class}, r.plan.bindingEnvironment())
 		if err != nil {
 			continue
 		}
@@ -124,13 +124,14 @@ func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map
 
 func (r *deployRun) warnShadowed(report Reporter, resources []Resource, published []string) {
 	for _, resource := range resources {
-		if resource.Linked || !slices.Contains(published, resource.Declared) {
+		if resource.Binding != "" || !slices.Contains(published, resource.Declared) {
 			continue
 		}
 		report.Say(fmt.Sprintf(
-			"a link named %q is already published to %s, and this deploy provisions %s beside it. "+
-				"Ocel binds neither to the other on its own: add %q to `links` to consume the published record instead",
-			resource.Declared, describeCoordinate(string(r.plan.Class), r.plan.linkEnvironment()), resource.Name, resource.Declared))
+			"a binding named %q is already published to %s, and this deploy provisions %s beside it. "+
+				"Ocel binds neither to the other on its own: put %q in `bindings` — \"bindings\": { %q: { %q: %q } } — to consume the published record instead",
+			resource.Declared, describeCoordinate(string(r.plan.Class), r.plan.bindingEnvironment()), resource.Name,
+			resource.Declared, string(resource.Type), resource.Declared, resource.Declared))
 	}
 }
 

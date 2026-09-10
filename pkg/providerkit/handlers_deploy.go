@@ -22,8 +22,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
@@ -91,7 +91,7 @@ type deployRun struct {
 
 	values    values.Store
 	scope     values.Scope
-	published *publishedLinks
+	published *publishedBindings
 
 	registry RegistryTarget
 	images   ImageStore
@@ -107,7 +107,7 @@ type deployRun struct {
 	artifacts      map[string]ArtifactRef
 	functionImages map[string]string
 	needs          NeedRecords
-	links          []Link
+	bindings       []Binding
 	functions      map[string][]Function
 }
 
@@ -173,7 +173,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err := run.openImages(ctx, req.GetImageRegistry()); err != nil {
 		return nil, err
 	}
-	run.published = &publishedLinks{store: run.values, scope: run.scope, environment: plan.linkEnvironment()}
+	run.published = &publishedBindings{store: run.values, scope: run.scope, environment: plan.bindingEnvironment()}
 	if run.state, err = run.store.read(ctx); err != nil {
 		return nil, err
 	}
@@ -221,7 +221,7 @@ func (r *deployRun) settle(ctx context.Context, report Reporter) error {
 	if err := r.admitDomains(ctx); err != nil {
 		return err
 	}
-	if err := r.admitLinks(ctx, report); err != nil {
+	if err := r.admitBindings(ctx, report); err != nil {
 		return err
 	}
 	if !r.dry {
@@ -519,7 +519,7 @@ func (r *deployRun) preflight(ctx context.Context, report Reporter) error {
 	if err != nil {
 		return err
 	}
-	if err := RefuseUnreachableLinks(r.provider.Vendor(), r.provider.Serves(), r.proxied, resources, grants); err != nil {
+	if err := RefuseUnreachableBindings(r.provider.Vendor(), r.provider.Serves(), r.proxied, resources, grants); err != nil {
 		return Refuse(CodeInvalid, "%s", err)
 	}
 	if err := r.refuseContainerValues(ctx); err != nil {
@@ -545,7 +545,7 @@ func (r *deployRun) preflight(ctx context.Context, report Reporter) error {
 	})
 }
 
-func (r *deployRun) usage(resources []Resource, published []Link) ([]AppUsage, error) {
+func (r *deployRun) usage(resources []Resource, published []Binding) ([]AppUsage, error) {
 	apps := make([]AppUsage, 0, len(r.plan.Apps))
 	for _, entry := range r.plan.Apps {
 		used, err := r.used(entry.App)
@@ -558,9 +558,9 @@ func (r *deployRun) usage(resources []Resource, published []Link) ([]AppUsage, e
 				usage.Resources = append(usage.Resources, resource)
 			}
 		}
-		for _, link := range published {
-			if used[link.Name] {
-				usage.Grants = append(usage.Grants, link)
+		for _, binding := range published {
+			if used[binding.Name] {
+				usage.Grants = append(usage.Grants, binding)
 			}
 		}
 		apps = append(apps, usage)
@@ -569,8 +569,8 @@ func (r *deployRun) usage(resources []Resource, published []Link) ([]AppUsage, e
 }
 
 func boundName(resource Resource) string {
-	if resource.Linked {
-		return resource.Declared
+	if resource.Binding != "" {
+		return resource.Binding
 	}
 	return resource.Name
 }
@@ -635,7 +635,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 				Edge:      r.front,
 				Tags:      r.plan.infraTags(),
 				Resources: resources,
-				Links:     r.reader(),
+				Bindings:  r.reader(),
 			}
 			if r.dry {
 				report.Say("Planning the environment's infrastructure")
@@ -652,19 +652,19 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			for _, link := range result.Links {
-				if err := VerifyProperties(link); err != nil {
+			for _, binding := range result.Bindings {
+				if err := VerifyProperties(binding); err != nil {
 					return err
 				}
 			}
-			if err := r.publish(ctx, result.Links); err != nil {
+			if err := r.publish(ctx, result.Bindings); err != nil {
 				return err
 			}
-			r.links = result.Links
+			r.bindings = result.Bindings
 			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, r.plan.Infra, Stack{
-				Kind:   StackInfra,
-				Links:  result.Links,
-				Writer: WriterFor(""),
+				Kind:     StackInfra,
+				Bindings: result.Bindings,
+				Writer:   WriterFor(""),
 			})
 		})
 	})
@@ -707,13 +707,13 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 				return err
 			}
 			plan := StackPlan{
-				Ref:     r.ref(entry.Stack),
-				Kind:    StackApp,
-				Edge:    r.front,
-				Tags:    r.plan.tags(entry),
-				Uploads: staged,
-				Images:  images,
-				Links:   r.reader(),
+				Ref:      r.ref(entry.Stack),
+				Kind:     StackApp,
+				Edge:     r.front,
+				Tags:     r.plan.tags(entry),
+				Uploads:  staged,
+				Images:   images,
+				Bindings: r.reader(),
 				App: &AppPlan{
 					App:             entry.App,
 					Runtime:         entry.Manifest.GetRuntime().GetName(),
@@ -809,7 +809,7 @@ func (r *deployRun) ref(stack naming.StackName) StackRef {
 	return StackRef{Project: r.plan.Slug, Class: r.plan.Class, Name: stack}
 }
 
-func (r *deployRun) reader() *publishedLinks { return r.published }
+func (r *deployRun) reader() *publishedBindings { return r.published }
 
 func (r *deployRun) used(app string) (map[string]bool, error) {
 	resources, err := manifestResources(r.manifest)
@@ -831,35 +831,35 @@ func (r *deployRun) used(app string) (map[string]bool, error) {
 	return names, nil
 }
 
-func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Link, error) {
+func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Binding, error) {
 	used, err := r.used(entry.App)
 	if err != nil {
 		return nil, err
 	}
-	var grants []Link
-	for _, link := range r.links {
-		if used[link.Name] {
-			grants = append(grants, link)
+	var grants []Binding
+	for _, binding := range r.bindings {
+		if used[binding.Name] {
+			grants = append(grants, binding)
 		}
 	}
 	consumed, err := r.reader().Published(ctx)
 	if err != nil {
 		return nil, err
 	}
-	for _, link := range consumed {
-		if !used[link.Name] {
+	for _, binding := range consumed {
+		if !used[binding.Name] {
 			continue
 		}
-		at := slices.IndexFunc(grants, func(held Link) bool { return held.Name == link.Name })
+		at := slices.IndexFunc(grants, func(held Binding) bool { return held.Name == binding.Name })
 		if at < 0 {
-			grants = append(grants, link)
+			grants = append(grants, binding)
 			continue
 		}
 		if len(grants[at].Wire) == 0 {
-			grants[at].Wire = link.Wire
+			grants[at].Wire = binding.Wire
 		}
 	}
-	slices.SortFunc(grants, func(a, b Link) int {
+	slices.SortFunc(grants, func(a, b Binding) int {
 		if a.Name < b.Name {
 			return -1
 		}
@@ -869,8 +869,8 @@ func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Link, error) 
 		return 0
 	})
 	if verifier, ok := r.provider.(GrantVerifier); ok {
-		for _, link := range grants {
-			if err := verifier.VerifyGrants(ctx, link); err != nil {
+		for _, binding := range grants {
+			if err := verifier.VerifyGrants(ctx, binding); err != nil {
 				return nil, err
 			}
 		}
@@ -878,7 +878,7 @@ func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Link, error) 
 	return grants, nil
 }
 
-func (r *deployRun) appValues(ctx context.Context, entry AppEntry, grants []Link) (AppValues, error) {
+func (r *deployRun) appValues(ctx context.Context, entry AppEntry, grants []Binding) (AppValues, error) {
 	held, err := r.manifestValues(entry, grants)
 	if err != nil {
 		return AppValues{}, err
@@ -891,12 +891,12 @@ func (r *deployRun) appValues(ctx context.Context, entry AppEntry, grants []Link
 	return held, nil
 }
 
-func (r *deployRun) manifestValues(entry AppEntry, grants []Link) (AppValues, error) {
+func (r *deployRun) manifestValues(entry AppEntry, grants []Binding) (AppValues, error) {
 	held := AppValues{
 		Plain:     map[string]string{},
 		Sensitive: map[string]string{},
 		Owners:    map[string]string{},
-		Links:     grants,
+		Bindings:  grants,
 		Folder:    entry.Manifest.GetFolder(),
 		Phase:     r.plan.Phase,
 	}
@@ -1163,12 +1163,12 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 		FlipBound:   flipBoundProto(&flip),
 	}
 	r.reportApps(result)
-	for _, link := range r.links {
-		message, err := LinkMessage(link)
+	for _, binding := range r.bindings {
+		message, err := BindingMessage(binding)
 		if err != nil {
 			return nil, err
 		}
-		result.Links = append(result.Links, message)
+		result.Bindings = append(result.Bindings, message)
 	}
 	for _, entry := range r.plan.Apps {
 		for _, fn := range r.functions[entry.App] {
@@ -1192,44 +1192,44 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{Result: result}}, nil
 }
 
-func (r *deployRun) publish(ctx context.Context, links []Link) error {
-	publishing := make([]values.Publishing, 0, len(links))
-	for _, link := range links {
-		message, err := LinkMessage(link)
+func (r *deployRun) publish(ctx context.Context, bindings []Binding) error {
+	publishing := make([]values.Publishing, 0, len(bindings))
+	for _, binding := range bindings {
+		message, err := BindingMessage(binding)
 		if err != nil {
 			return err
 		}
 		if err := VerifyGrantScope(message); err != nil {
-			return linksError(err)
+			return bindingsError(err)
 		}
-		pair, err := LinkPair(values.OwnerOcel, message)
+		pair, err := BindingPair(values.OwnerOcel, message)
 		if err != nil {
 			return err
 		}
-		publishing = append(publishing, values.Publishing{Name: link.Name, Pair: pair})
+		publishing = append(publishing, values.Publishing{Name: binding.Name, Pair: pair})
 	}
-	if _, err := r.values.SetLinks(ctx, r.scope, r.plan.linkEnvironment(), values.OwnerOcel, publishing); err != nil {
-		return fmt.Errorf("publish %s's links: %w", r.scope.Project, err)
+	if _, err := r.values.SetBindings(ctx, r.scope, r.plan.bindingEnvironment(), values.OwnerOcel, publishing); err != nil {
+		return fmt.Errorf("publish %s's bindings: %w", r.scope.Project, err)
 	}
-	if err := r.prune(ctx, links); err != nil {
+	if err := r.prune(ctx, bindings); err != nil {
 		return err
 	}
 	r.reader().forget()
 	return nil
 }
 
-func (r *deployRun) prune(ctx context.Context, links []Link) error {
-	environment := r.plan.linkEnvironment()
-	held, err := r.values.ListLinks(ctx, r.scope, environment)
+func (r *deployRun) prune(ctx context.Context, bindings []Binding) error {
+	environment := r.plan.bindingEnvironment()
+	held, err := r.values.ListBindings(ctx, r.scope, environment)
 	if err != nil {
-		return fmt.Errorf("read %s's published links: %w", r.scope.Project, err)
+		return fmt.Errorf("read %s's published bindings: %w", r.scope.Project, err)
 	}
 	var stale []string
 	for _, record := range held {
 		if record.Owner != values.OwnerOcel || record.Environment != environment {
 			continue
 		}
-		if slices.ContainsFunc(links, func(link Link) bool { return link.Name == record.Name }) {
+		if slices.ContainsFunc(bindings, func(binding Binding) bool { return binding.Name == record.Name }) {
 			continue
 		}
 		stale = append(stale, record.Name)
@@ -1237,29 +1237,29 @@ func (r *deployRun) prune(ctx context.Context, links []Link) error {
 	if len(stale) == 0 {
 		return nil
 	}
-	if _, err := r.values.RemoveLinks(ctx, r.scope, environment, stale); err != nil {
-		return fmt.Errorf("prune %s's published links: %w", r.scope.Project, err)
+	if _, err := r.values.RemoveBindings(ctx, r.scope, environment, stale); err != nil {
+		return fmt.Errorf("prune %s's published bindings: %w", r.scope.Project, err)
 	}
 	return nil
 }
 
-type publishedLinks struct {
+type publishedBindings struct {
 	store       values.Store
 	scope       values.Scope
 	environment string
 
 	mu       sync.Mutex
-	resolved []Link
+	resolved []Binding
 	held     bool
 }
 
-func (p *publishedLinks) forget() {
+func (p *publishedBindings) forget() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.resolved, p.held = nil, false
 }
 
-func (p *publishedLinks) Published(ctx context.Context) ([]Link, error) {
+func (p *publishedBindings) Published(ctx context.Context) ([]Binding, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.held {
@@ -1269,79 +1269,79 @@ func (p *publishedLinks) Published(ctx context.Context) ([]Link, error) {
 	if err != nil {
 		return nil, err
 	}
-	resolved, err := p.store.ResolveLinks(ctx, p.scope, p.environment, names)
+	resolved, err := p.store.ResolveBindings(ctx, p.scope, p.environment, names)
 	if err != nil {
 		return nil, err
 	}
-	links := make([]Link, 0, len(resolved))
+	bindings := make([]Binding, 0, len(resolved))
 	for i, published := range resolved {
-		link, err := linkPublished(names[i], published)
+		binding, err := bindingPublished(names[i], published)
 		if err != nil {
 			return nil, err
 		}
-		links = append(links, link)
+		bindings = append(bindings, binding)
 	}
-	p.resolved, p.held = links, true
-	return links, nil
+	p.resolved, p.held = bindings, true
+	return bindings, nil
 }
 
-func (p *publishedLinks) Names(ctx context.Context) ([]string, error) {
-	links, err := p.Published(ctx)
+func (p *publishedBindings) Names(ctx context.Context) ([]string, error) {
+	bindings, err := p.Published(ctx)
 	if err != nil {
 		return nil, err
 	}
-	names := make([]string, 0, len(links))
-	for _, link := range links {
-		names = append(names, link.Name)
+	names := make([]string, 0, len(bindings))
+	for _, binding := range bindings {
+		names = append(names, binding.Name)
 	}
 	return names, nil
 }
 
-func (p *publishedLinks) Resolve(ctx context.Context, name string) (Link, error) {
-	links, err := p.Published(ctx)
+func (p *publishedBindings) Resolve(ctx context.Context, name string) (Binding, error) {
+	bindings, err := p.Published(ctx)
 	if err != nil {
-		return Link{}, err
+		return Binding{}, err
 	}
-	for _, link := range links {
-		if link.Name == name {
-			return link, nil
+	for _, binding := range bindings {
+		if binding.Name == name {
+			return binding, nil
 		}
 	}
-	published, err := p.store.ResolveLink(ctx, p.scope, p.environment, name)
+	published, err := p.store.ResolveBinding(ctx, p.scope, p.environment, name)
 	if err != nil {
-		return Link{}, err
+		return Binding{}, err
 	}
-	return linkPublished(name, published)
+	return bindingPublished(name, published)
 }
 
-func linkPublished(name string, published values.Published) (Link, error) {
-	message, err := DecodeLink(published.Value)
+func bindingPublished(name string, published values.Published) (Binding, error) {
+	message, err := DecodeBinding(published.Value)
 	if err != nil {
-		return Link{}, fmt.Errorf("read link %s: %w", name, err)
+		return Binding{}, fmt.Errorf("read binding %s: %w", name, err)
 	}
-	link := linkOf(message)
-	link.Version = published.Version
-	link.Wire = published.Value
-	return link, nil
+	binding := bindingOf(message)
+	binding.Version = published.Version
+	binding.Wire = published.Value
+	return binding, nil
 }
 
-func linkOf(message *linksv1.Link) Link {
-	link := Link{
-		Type:       LinkCustom,
+func bindingOf(message *bindingsv1.Binding) Binding {
+	binding := Binding{
+		Type:       BindingCustom,
 		Name:       message.GetName(),
 		Source:     message.GetSource(),
 		Properties: map[string]string{},
 		Grants:     GrantsOf(message),
 	}
-	if kind, known := linkTypes[naming.LinkTypeOf(message)]; known {
-		link.Type = kind
+	if kind, known := bindingTypes[naming.BindingTypeOf(message)]; known {
+		binding.Type = kind
 	}
-	for _, name := range naming.LinkPropertyNames(message) {
-		if value, held := naming.LinkProperty(message, name); held {
-			link.Properties[name] = fmt.Sprint(value)
+	for _, name := range naming.BindingPropertyNames(message) {
+		if value, held := naming.BindingProperty(message, name); held {
+			binding.Properties[name] = fmt.Sprint(value)
 		}
 	}
-	return link
+	return binding
 }
 
 func (r *deployRun) openImages(ctx context.Context, wired *contractv1.ImageRegistry) error {

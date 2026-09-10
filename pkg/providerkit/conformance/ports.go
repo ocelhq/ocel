@@ -718,7 +718,7 @@ func runStorelessArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore
 	})
 }
 
-func declared(serves []providerkit.LinkType) []providerkit.Resource {
+func declared(serves []providerkit.BindingType) []providerkit.Resource {
 	resources := make([]providerkit.Resource, 0, len(serves))
 	for _, kind := range serves {
 		resources = append(resources, providerkit.Resource{Name: "c-" + string(kind), Type: kind})
@@ -788,7 +788,7 @@ func writtenArtifact(t *testing.T) string {
 	return path
 }
 
-func RunReleaser(t *testing.T, releaser providerkit.Releaser, artifacts providerkit.ArtifactStore, serves []providerkit.LinkType) {
+func RunReleaser(t *testing.T, releaser providerkit.Releaser, artifacts providerkit.ArtifactStore, serves []providerkit.BindingType) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -926,7 +926,7 @@ func RunReleaser(t *testing.T, releaser providerkit.Releaser, artifacts provider
 		}
 	})
 
-	t.Run("every link a plan asks for comes back carrying the properties its type promises", func(t *testing.T) {
+	t.Run("every binding a plan asks for comes back carrying the properties its type promises", func(t *testing.T) {
 		resources := declared(serves)
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a plan can ask for nothing")
@@ -939,12 +939,12 @@ func RunReleaser(t *testing.T, releaser providerkit.Releaser, artifacts provider
 		if err != nil {
 			t.Fatalf("Provision() of every primitive this provider serves = %v", err)
 		}
-		if len(result.Links) != len(resources) {
-			t.Fatalf("Provision() returned %d links for %d resources, and an app binds to each by name", len(result.Links), len(resources))
+		if len(result.Bindings) != len(resources) {
+			t.Fatalf("Provision() returned %d bindings for %d resources, and an app binds to each by name", len(result.Bindings), len(resources))
 		}
-		for _, link := range result.Links {
-			if err := providerkit.VerifyProperties(link); err != nil {
-				t.Errorf("Provision() returned a link the kit refuses to record: %v", err)
+		for _, binding := range result.Bindings {
+			if err := providerkit.VerifyProperties(binding); err != nil {
+				t.Errorf("Provision() returned a binding the kit refuses to record: %v", err)
 			}
 		}
 
@@ -976,7 +976,7 @@ func RunReleaser(t *testing.T, releaser providerkit.Releaser, artifacts provider
 		}
 		result, err := releaser.Provision(ctx, unserved, nil)
 		if err == nil {
-			if len(result.Links) == 0 {
+			if len(result.Bindings) == 0 {
 				t.Fatal("Provision() of a primitive this provider does not serve stood nothing up and refused nothing, so a release reads as done where nothing happened")
 			}
 			if derr := releaser.Destroy(ctx, ref, nil); derr != nil {

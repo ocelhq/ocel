@@ -159,9 +159,9 @@ func TestAFunctionRunAsAnImageIsHandedItsValuesAtDeployTime(t *testing.T) {
 			t.Errorf("the function is handed %s=%q, want %q: an image reads its values off its own environment", key, delivered[key], want)
 		}
 	}
-	linked := providerkit.ResourceEnvName(providerkit.LinkPostgres, "orders")
-	if delivered[linked] == "" {
-		t.Errorf("the function is handed %v and nothing under %s, so the resource it links to is unreachable", delivered, linked)
+	bound := providerkit.ResourceEnvName(providerkit.BindingPostgres, "orders")
+	if delivered[bound] == "" {
+		t.Errorf("the function is handed %v and nothing under %s, so the resource it binds to is unreachable", delivered, bound)
 	}
 }
 

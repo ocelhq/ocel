@@ -136,7 +136,7 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(names) != 0 {
-		t.Errorf("the removal left links %v published, want the project's values purged", names)
+		t.Errorf("the removal left bindings %v published, want the project's values purged", names)
 	}
 }
 

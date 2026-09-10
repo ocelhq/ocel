@@ -102,7 +102,7 @@ func TestTheRootCarriesTheVendorAndNoOptionalSetYet(t *testing.T) {
 		"CodeEmbedder":   held[providerkit.CodeEmbedder](root),
 		"StackInspector": held[providerkit.StackInspector](root),
 		"GrantVerifier":  held[providerkit.GrantVerifier](root),
-		"ProxiedLinker":  held[providerkit.ProxiedLinker](root),
+		"ProxiedBinder":  held[providerkit.ProxiedBinder](root),
 		"ArtifactPacker": held[providerkit.ArtifactPacker](root),
 	} {
 		if held {

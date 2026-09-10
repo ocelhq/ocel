@@ -34,7 +34,7 @@ func (s sealer) Seal(ctx context.Context, at providerkit.Coordinate, plaintext [
 	sealed, err := client.Encrypt(ctx, &kmspb.EncryptRequest{
 		Name:                        key,
 		Plaintext:                   plaintext,
-		AdditionalAuthenticatedData: at.Binding(),
+		AdditionalAuthenticatedData: at.AAD(),
 	})
 	if err != nil {
 		return nil, s.keyless(at.Class, "encrypt value", err)
@@ -54,7 +54,7 @@ func (s sealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []by
 	opened, err := client.Decrypt(ctx, &kmspb.DecryptRequest{
 		Name:                        key,
 		Ciphertext:                  sealed,
-		AdditionalAuthenticatedData: at.Binding(),
+		AdditionalAuthenticatedData: at.AAD(),
 	})
 	if err != nil {
 		return nil, s.keyless(at.Class, "decrypt value", err)

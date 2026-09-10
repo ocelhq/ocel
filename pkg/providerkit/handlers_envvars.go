@@ -10,8 +10,8 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 )
@@ -28,8 +28,8 @@ func (h *handlers) values(tier environmentv1.Tier) (values.Store, Class, error) 
 	return values.Store{Records: provider.Records(), Sealer: provider.Sealer()}, class, nil
 }
 
-func (h *handlers) verifyGrants(ctx context.Context, link *linksv1.Link) error {
-	if len(link.GetGrants()) == 0 {
+func (h *handlers) verifyGrants(ctx context.Context, binding *bindingsv1.Binding) error {
+	if len(binding.GetGrants()) == 0 {
 		return nil
 	}
 	provider, err := h.session.use()
@@ -40,7 +40,7 @@ func (h *handlers) verifyGrants(ctx context.Context, link *linksv1.Link) error {
 	if !vets {
 		return nil
 	}
-	return verifier.VerifyGrants(ctx, linkOf(link))
+	return verifier.VerifyGrants(ctx, bindingOf(binding))
 }
 
 func (h *handlers) scoped(tier environmentv1.Tier, slug string) (values.Store, values.Scope, error) {
@@ -244,86 +244,86 @@ func (h *handlers) ListVersions(ctx context.Context, req *envvarsv1.ListVersions
 	return resp, nil
 }
 
-func (h *handlers) SetLink(ctx context.Context, req *envvarsv1.SetLinkRequest) (*envvarsv1.SetLinkResponse, error) {
-	if err := linkTarget(req.GetTier(), req.GetEnvironment()); err != nil {
+func (h *handlers) SetBinding(ctx context.Context, req *envvarsv1.SetBindingRequest) (*envvarsv1.SetBindingResponse, error) {
+	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
-	link := req.GetLink()
-	if err := values.ValidateLinkName(req.GetEnvironment(), link.GetName()); err != nil {
+	binding := req.GetBinding()
+	if err := values.ValidateBindingName(req.GetEnvironment(), binding.GetName()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if err := ValidatePublisher(req.GetOwner()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	if err := RefuseUnsourced(req.GetOwner(), link); err != nil {
-		return nil, linksError(err)
+	if err := RefuseUnsourced(req.GetOwner(), binding); err != nil {
+		return nil, bindingsError(err)
 	}
-	if err := VerifyLink(link); err != nil {
-		return nil, linksError(err)
+	if err := VerifyBinding(binding); err != nil {
+		return nil, bindingsError(err)
 	}
-	if err := h.verifyGrants(ctx, link); err != nil {
-		return nil, linksError(err)
+	if err := h.verifyGrants(ctx, binding); err != nil {
+		return nil, bindingsError(err)
 	}
-	pair, err := LinkPair(req.GetOwner(), link)
+	pair, err := BindingPair(req.GetOwner(), binding)
 	if err != nil {
-		return nil, linksError(err)
+		return nil, bindingsError(err)
 	}
 
 	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	version, err := store.SetLink(ctx, scope, req.GetEnvironment(), req.GetOwner(), link.GetName(), pair)
+	version, err := store.SetBinding(ctx, scope, req.GetEnvironment(), req.GetOwner(), binding.GetName(), pair)
 	if err != nil {
-		return nil, linksError(err)
+		return nil, bindingsError(err)
 	}
-	return &envvarsv1.SetLinkResponse{Version: uint64(version)}, nil
+	return &envvarsv1.SetBindingResponse{Version: uint64(version)}, nil
 }
 
-func (h *handlers) RemoveLink(ctx context.Context, req *envvarsv1.RemoveLinkRequest) (*envvarsv1.RemoveLinkResponse, error) {
-	if err := linkTarget(req.GetTier(), req.GetEnvironment()); err != nil {
+func (h *handlers) RemoveBinding(ctx context.Context, req *envvarsv1.RemoveBindingRequest) (*envvarsv1.RemoveBindingResponse, error) {
+	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
-	if err := values.ValidateLinkName(req.GetEnvironment(), req.GetName()); err != nil {
+	if err := values.ValidateBindingName(req.GetEnvironment(), req.GetName()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	removed, err := store.RemoveLink(ctx, scope, req.GetEnvironment(), req.GetName())
+	removed, err := store.RemoveBinding(ctx, scope, req.GetEnvironment(), req.GetName())
 	if err != nil {
-		return nil, linksError(err)
+		return nil, bindingsError(err)
 	}
-	return &envvarsv1.RemoveLinkResponse{Removed: removed}, nil
+	return &envvarsv1.RemoveBindingResponse{Removed: removed}, nil
 }
 
-func (h *handlers) ListLinks(ctx context.Context, req *envvarsv1.ListLinksRequest) (*envvarsv1.ListLinksResponse, error) {
-	if err := linkTarget(req.GetTier(), req.GetEnvironment()); err != nil {
+func (h *handlers) ListBindings(ctx context.Context, req *envvarsv1.ListBindingsRequest) (*envvarsv1.ListBindingsResponse, error) {
+	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
 	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
-	found, err := store.ListLinks(ctx, scope, req.GetEnvironment())
+	found, err := store.ListBindings(ctx, scope, req.GetEnvironment())
 	if err != nil {
-		return nil, linksError(err)
+		return nil, bindingsError(err)
 	}
-	resp := &envvarsv1.ListLinksResponse{Links: make([]*envvarsv1.LinkSummary, 0, len(found))}
+	resp := &envvarsv1.ListBindingsResponse{Bindings: make([]*envvarsv1.BindingSummary, 0, len(found))}
 	for _, published := range found {
-		link, err := DecodeLink(published.Record)
+		binding, err := DecodeBinding(published.Record)
 		if err != nil {
-			return nil, linksError(fmt.Errorf("read link %s's record: %w: %w", published.Name, err, ErrUnreadableRecord))
+			return nil, bindingsError(fmt.Errorf("read binding %s's record: %w: %w", published.Name, err, ErrUnreadableRecord))
 		}
 		shapes, err := DecodeShapes(published.Shapes)
 		if err != nil {
-			return nil, linksError(fmt.Errorf("read link %s's shape: %w: %w", published.Name, err, ErrUnreadableRecord))
+			return nil, bindingsError(fmt.Errorf("read binding %s's shape: %w: %w", published.Name, err, ErrUnreadableRecord))
 		}
-		resp.Links = append(resp.Links, &envvarsv1.LinkSummary{
+		resp.Bindings = append(resp.Bindings, &envvarsv1.BindingSummary{
 			Name:       published.Name,
-			Type:       naming.LinkTypeOf(link),
-			Source:     link.GetSource(),
+			Type:       naming.BindingTypeOf(binding),
+			Source:     binding.GetSource(),
 			Owner:      published.Owner,
 			Version:    uint64(published.Version),
 			Properties: naming.PropertyShapeMessages(shapes),
@@ -332,7 +332,7 @@ func (h *handlers) ListLinks(ctx context.Context, req *envvarsv1.ListLinksReques
 	return resp, nil
 }
 
-func linkTarget(tier environmentv1.Tier, environment string) error {
+func bindingTarget(tier environmentv1.Tier, environment string) error {
 	if environment != "" && tier != environmentv1.Tier_TIER_PREVIEW {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"environment %q is named alongside class %q: an ocel coordinate is a class and, in %s, one preview environment; leave the environment off",
@@ -389,7 +389,7 @@ func valuesError(err error) error {
 	}
 }
 
-func linksError(err error) error {
+func bindingsError(err error) error {
 	switch {
 	case errors.Is(err, values.ErrClaimed):
 		return connect.NewError(connect.CodeFailedPrecondition, err)

@@ -229,8 +229,8 @@ func TestRunHandsTheEngineTheWorkspaceAndDecodesWhatItAnswers(t *testing.T) {
 	if engine.up.Parallel != pulumi.DefaultParallel {
 		t.Errorf("the engine ran at parallelism %d, want the adapter's %d", engine.up.Parallel, pulumi.DefaultParallel)
 	}
-	if len(result.Links) != 1 || result.Links[0].Properties["bucket"] != "shop-uploads" {
-		t.Errorf("Run() = %+v, want the link the program decoded from the stack's outputs", result)
+	if len(result.Bindings) != 1 || result.Bindings[0].Properties["bucket"] != "shop-uploads" {
+		t.Errorf("Run() = %+v, want the binding the program decoded from the stack's outputs", result)
 	}
 }
 

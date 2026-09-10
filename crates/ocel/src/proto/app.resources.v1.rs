@@ -1528,6 +1528,167 @@ pub const __REPORT_ENV_PROBLEMS_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonA
     from_json: ::buffa::type_registry::any_from_json::<ReportEnvProblemsResponse>,
     is_wkt: false,
 };
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[repr(i32)]
+pub enum ResourceType {
+    RESOURCE_TYPE_UNSPECIFIED = 0i32,
+    RESOURCE_TYPE_POSTGRES = 1i32,
+    RESOURCE_TYPE_BUCKET = 2i32,
+    RESOURCE_TYPE_CONTAINER = 3i32,
+}
+impl ResourceType {
+    ///Idiomatic alias for [`Self::RESOURCE_TYPE_UNSPECIFIED`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Unspecified: Self = Self::RESOURCE_TYPE_UNSPECIFIED;
+    ///Idiomatic alias for [`Self::RESOURCE_TYPE_POSTGRES`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Postgres: Self = Self::RESOURCE_TYPE_POSTGRES;
+    ///Idiomatic alias for [`Self::RESOURCE_TYPE_BUCKET`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Bucket: Self = Self::RESOURCE_TYPE_BUCKET;
+    ///Idiomatic alias for [`Self::RESOURCE_TYPE_CONTAINER`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Container: Self = Self::RESOURCE_TYPE_CONTAINER;
+}
+impl ::core::default::Default for ResourceType {
+    fn default() -> Self {
+        Self::RESOURCE_TYPE_UNSPECIFIED
+    }
+}
+impl ::serde::Serialize for ResourceType {
+    fn serialize<S: ::serde::Serializer>(
+        &self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        s.serialize_str(::buffa::Enumeration::proto_name(self))
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for ResourceType {
+    fn deserialize<D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        struct _V;
+        impl ::serde::de::Visitor<'_> for _V {
+            type Value = ResourceType;
+            fn expecting(
+                &self,
+                f: &mut ::core::fmt::Formatter<'_>,
+            ) -> ::core::fmt::Result {
+                f.write_str(
+                    concat!("a string, integer, or null for ", stringify!(ResourceType)),
+                )
+            }
+            fn visit_str<E: ::serde::de::Error>(
+                self,
+                v: &str,
+            ) -> ::core::result::Result<ResourceType, E> {
+                <ResourceType as ::buffa::Enumeration>::from_proto_name(v)
+                    .ok_or_else(|| { ::serde::de::Error::unknown_variant(v, &[]) })
+            }
+            fn visit_i64<E: ::serde::de::Error>(
+                self,
+                v: i64,
+            ) -> ::core::result::Result<ResourceType, E> {
+                let v32 = i32::try_from(v)
+                    .map_err(|_| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                        )
+                    })?;
+                <ResourceType as ::buffa::Enumeration>::from_i32(v32)
+                    .ok_or_else(|| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("unknown enum value {v32}"),
+                        )
+                    })
+            }
+            fn visit_u64<E: ::serde::de::Error>(
+                self,
+                v: u64,
+            ) -> ::core::result::Result<ResourceType, E> {
+                let v32 = i32::try_from(v)
+                    .map_err(|_| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                        )
+                    })?;
+                <ResourceType as ::buffa::Enumeration>::from_i32(v32)
+                    .ok_or_else(|| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("unknown enum value {v32}"),
+                        )
+                    })
+            }
+            fn visit_unit<E: ::serde::de::Error>(
+                self,
+            ) -> ::core::result::Result<ResourceType, E> {
+                ::core::result::Result::Ok(::core::default::Default::default())
+            }
+        }
+        d.deserialize_any(_V)
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for ResourceType {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+impl ::buffa::Enumeration for ResourceType {
+    fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_UNSPECIFIED),
+            1i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_POSTGRES),
+            2i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_BUCKET),
+            3i32 => ::core::option::Option::Some(Self::RESOURCE_TYPE_CONTAINER),
+            _ => ::core::option::Option::None,
+        }
+    }
+    fn to_i32(&self) -> i32 {
+        *self as i32
+    }
+    fn proto_name(&self) -> &'static str {
+        match self {
+            Self::RESOURCE_TYPE_UNSPECIFIED => "RESOURCE_TYPE_UNSPECIFIED",
+            Self::RESOURCE_TYPE_POSTGRES => "RESOURCE_TYPE_POSTGRES",
+            Self::RESOURCE_TYPE_BUCKET => "RESOURCE_TYPE_BUCKET",
+            Self::RESOURCE_TYPE_CONTAINER => "RESOURCE_TYPE_CONTAINER",
+        }
+    }
+    fn from_proto_name(name: &str) -> ::core::option::Option<Self> {
+        match name {
+            "RESOURCE_TYPE_UNSPECIFIED" => {
+                ::core::option::Option::Some(Self::RESOURCE_TYPE_UNSPECIFIED)
+            }
+            "RESOURCE_TYPE_POSTGRES" => {
+                ::core::option::Option::Some(Self::RESOURCE_TYPE_POSTGRES)
+            }
+            "RESOURCE_TYPE_BUCKET" => {
+                ::core::option::Option::Some(Self::RESOURCE_TYPE_BUCKET)
+            }
+            "RESOURCE_TYPE_CONTAINER" => {
+                ::core::option::Option::Some(Self::RESOURCE_TYPE_CONTAINER)
+            }
+            _ => ::core::option::Option::None,
+        }
+    }
+    fn values() -> &'static [Self] {
+        &[
+            Self::RESOURCE_TYPE_UNSPECIFIED,
+            Self::RESOURCE_TYPE_POSTGRES,
+            Self::RESOURCE_TYPE_BUCKET,
+            Self::RESOURCE_TYPE_CONTAINER,
+        ]
+    }
+}
 #[derive(Clone, PartialEq, Default)]
 #[derive(::serde::Serialize, ::serde::Deserialize)]
 #[serde(default)]
@@ -1538,9 +1699,7 @@ pub struct ResourceIdentifier {
         with = "::buffa::json_helpers::proto_enum",
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
     )]
-    pub r#type: ::buffa::EnumValue<
-        super::super::super::common::bindings::v1::BindingType,
-    >,
+    pub r#type: ::buffa::EnumValue<ResourceType>,
     /// Field 2: `name`
     #[serde(
         rename = "name",
@@ -4749,9 +4908,7 @@ pub mod __buffa {
         #[derive(Clone, Debug, Default)]
         pub struct ResourceIdentifierView<'a> {
             /// Field 1: `type`
-            pub r#type: ::buffa::EnumValue<
-                super::super::super::super::super::common::bindings::v1::BindingType,
-            >,
+            pub r#type: ::buffa::EnumValue<super::super::ResourceType>,
             /// Field 2: `name`
             pub name: &'a str,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
@@ -5006,11 +5163,7 @@ pub mod __buffa {
             }
             /// Field 1: `type`
             #[must_use]
-            pub fn r#type(
-                &self,
-            ) -> ::buffa::EnumValue<
-                super::super::super::super::super::common::bindings::v1::BindingType,
-            > {
+            pub fn r#type(&self) -> ::buffa::EnumValue<super::super::ResourceType> {
                 self.0.reborrow().r#type
             }
             /// Field 2: `name`

@@ -157,7 +157,7 @@ func TestDynamoKeysLeadWithTheProject(t *testing.T) {
 		ProjectKey("shop"),
 		StackKey("shop", stack),
 		VarsKey("shop", "production"),
-		LinkVarsKey("shop", "production", "main"),
+		BindingVarsKey("shop", "production", "main"),
 		ISRTagKey("shop", stack, "products"),
 	} {
 		project, err := ProjectOf(key)
@@ -170,22 +170,22 @@ func TestDynamoKeysLeadWithTheProject(t *testing.T) {
 	}
 }
 
-func TestLinkVarsKeysArePerLinkPartitions(t *testing.T) {
+func TestBindingVarsKeysArePerBindingPartitions(t *testing.T) {
 	shared := VarsKey("shop", "production")
-	main := LinkVarsKey("shop", "production", "main")
-	uploads := LinkVarsKey("shop", "production", "uploads")
+	main := BindingVarsKey("shop", "production", "main")
+	uploads := BindingVarsKey("shop", "production", "uploads")
 
 	if main == uploads {
-		t.Fatalf("both links partition to %q; an IAM LeadingKeys condition could never separate them", main)
+		t.Fatalf("both bindings partition to %q; an IAM LeadingKeys condition could never separate them", main)
 	}
 	if main == shared {
-		t.Fatalf("link values partition to %q, the same partition a user's own values live in", shared)
+		t.Fatalf("binding values partition to %q, the same partition a user's own values live in", shared)
 	}
 	if !strings.HasPrefix(main, shared+KeySeparator) {
-		t.Errorf("LinkVarsKey = %q, want it under %q so one class's links stay one class's", main, shared)
+		t.Errorf("BindingVarsKey = %q, want it under %q so one class's bindings stay one class's", main, shared)
 	}
-	if LinkVarsKey("shop", "preview", "main") == main {
-		t.Errorf("preview and production share the link partition %q", main)
+	if BindingVarsKey("shop", "preview", "main") == main {
+		t.Errorf("preview and production share the binding partition %q", main)
 	}
 }
 

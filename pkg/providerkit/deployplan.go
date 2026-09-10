@@ -192,7 +192,7 @@ func envScope(env *environmentv1.Environment) (string, error) {
 	return envName(env)
 }
 
-func (p DeployPlan) linkEnvironment() string {
+func (p DeployPlan) bindingEnvironment() string {
 	if p.Class == ClassProduction {
 		return ""
 	}
