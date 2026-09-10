@@ -4,7 +4,7 @@ use crate::proto::app::resources::v1::declare_request::Config;
 use crate::proto::app::resources::v1::variable_problem::Kind;
 use crate::proto::app::resources::v1::ResourceType;
 use crate::proto::app::resources::v1::{
-    DeclareEnvRequest, DeclareRequest, PostgresConfig, ReportEnvProblemsRequest,
+    DeclareEnvRequest, DeclareRequest, GroupDefinition, PostgresConfig, ReportEnvProblemsRequest,
     ResourceIdentifier, ResourceServiceClient, VariableCell, VariableClass, VariableDefinition,
     VariableProblem,
 };
@@ -36,12 +36,24 @@ pub struct DeclaredVariable {
     pub file: &'static str,
     pub line: u32,
     pub check: Option<Check>,
+    pub group: Option<&'static str>,
+}
+
+#[doc(hidden)]
+pub struct DeclaredGroup {
+    pub key: &'static str,
+    pub required: bool,
+    pub description: Option<&'static str>,
+    pub members: fn() -> Declared,
+    pub file: &'static str,
+    pub line: u32,
 }
 
 #[doc(hidden)]
 pub struct Declared {
     pub resources: Vec<DeclaredResource>,
     pub variables: Vec<DeclaredVariable>,
+    pub groups: Vec<DeclaredGroup>,
 }
 
 #[doc(hidden)]
@@ -49,6 +61,14 @@ pub trait Declare: Sized {
     fn declared() -> Declared;
     fn load() -> Result<Self, Error>;
 }
+
+#[doc(hidden)]
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` holds #[ocel(group)] fields of its own, and a group nests one level only.",
+    label = "this cannot be a group, because it is already made of groups",
+    note = "flatten the inner group's fields into `{Self}`, or declare it beside this group rather than inside it."
+)]
+pub trait Group: Declare {}
 
 #[doc(hidden)]
 pub struct Registered(pub fn() -> Declared);
@@ -96,9 +116,11 @@ fn collected() -> Result<Declared, Error> {
     let mut all = Declared {
         resources: Vec::new(),
         variables: Vec::new(),
+        groups: Vec::new(),
     };
     let mut resource_owners: Vec<(&str, String)> = Vec::new();
     let mut variable_owners: Vec<(&str, String)> = Vec::new();
+    let mut group_owners: Vec<(&str, String)> = Vec::new();
 
     for one in structs {
         for resource in one.resources {
@@ -119,8 +141,42 @@ fn collected() -> Result<Declared, Error> {
             )?;
             all.variables.push(variable);
         }
+        for group in one.groups {
+            claim(
+                &mut group_owners,
+                group.key,
+                site(group.file, group.line),
+                "A group is declared exactly once, in exactly one file.",
+            )?;
+            all.groups.push(group);
+        }
     }
+    joined(&mut all)?;
     Ok(all)
+}
+
+fn joined(all: &mut Declared) -> Result<(), Error> {
+    for index in 0..all.groups.len() {
+        let (key, members) = (all.groups[index].key, (all.groups[index].members)());
+        for member in members.variables {
+            let Some(held) = all.variables.iter_mut().find(|held| held.key == member.key) else {
+                return Err(Error::Definition {
+                    key: member.key.to_string(),
+                    detail: format!("belongs to the group '{key}', and nothing declares it."),
+                });
+            };
+            if let Some(seen) = held.group {
+                return Err(Error::Definition {
+                    key: member.key.to_string(),
+                    detail: format!(
+                        "belongs to the group '{seen}' and to the group '{key}'. A variable belongs to one group."
+                    ),
+                });
+            }
+            held.group = Some(key);
+        }
+    }
+    Ok(())
 }
 
 fn order(one: &Declared) -> (&'static str, u32) {
@@ -132,7 +188,12 @@ fn order(one: &Declared) -> (&'static str, u32) {
         .variables
         .iter()
         .map(|variable| (variable.file, variable.line));
-    resources.chain(variables).min().unwrap_or_default()
+    let groups = one.groups.iter().map(|group| (group.file, group.line));
+    resources
+        .chain(variables)
+        .chain(groups)
+        .min()
+        .unwrap_or_default()
 }
 
 fn site(file: &str, line: u32) -> String {
@@ -180,6 +241,7 @@ async fn post_all(declared: &Declared) -> Result<(), Error> {
     let response = client
         .declare_env(DeclareEnvRequest {
             definitions: declared.variables.iter().map(definition).collect(),
+            groups: declared.groups.iter().map(group).collect(),
             ..Default::default()
         })
         .await
@@ -187,7 +249,7 @@ async fn post_all(declared: &Declared) -> Result<(), Error> {
             said: err.to_string(),
         })?;
 
-    let problems = validate(&declared.variables, &response.into_owned().cells);
+    let problems = validate(declared, &response.into_owned().cells);
     if problems.is_empty() {
         return Ok(());
     }
@@ -212,6 +274,16 @@ fn definition(variable: &DeclaredVariable) -> VariableDefinition {
         source: source(variable.file, variable.line),
         has_schema: variable.check.is_some(),
         description: variable.description.unwrap_or_default().to_string(),
+        group: variable.group.unwrap_or_default().to_string(),
+        ..Default::default()
+    }
+}
+
+fn group(group: &DeclaredGroup) -> GroupDefinition {
+    GroupDefinition {
+        key: group.key.to_string(),
+        required: group.required,
+        description: group.description.unwrap_or_default().to_string(),
         ..Default::default()
     }
 }
@@ -224,9 +296,9 @@ fn class(class: Class) -> VariableClass {
     }
 }
 
-fn validate(variables: &[DeclaredVariable], cells: &[VariableCell]) -> Vec<VariableProblem> {
+fn validate(declared: &Declared, cells: &[VariableCell]) -> Vec<VariableProblem> {
     let mut problems = Vec::new();
-    for variable in variables {
+    for variable in &declared.variables {
         let stored: Vec<&VariableCell> = cells
             .iter()
             .filter(|cell| cell.key == variable.key)
@@ -234,14 +306,18 @@ fn validate(variables: &[DeclaredVariable], cells: &[VariableCell]) -> Vec<Varia
 
         if variable.required {
             for folder in required_folders(variable) {
-                if !stored.iter().any(|cell| cell.folder == folder) {
-                    problems.push(problem(
-                        variable.key,
-                        folder,
-                        Kind::KIND_MISSING,
-                        String::new(),
-                    ));
+                if stored.iter().any(|cell| cell.folder == folder) {
+                    continue;
                 }
+                if !owed(declared, variable, cells, folder) {
+                    continue;
+                }
+                problems.push(problem(
+                    variable.key,
+                    folder,
+                    Kind::KIND_MISSING,
+                    String::new(),
+                ));
             }
         }
 
@@ -260,6 +336,42 @@ fn validate(variables: &[DeclaredVariable], cells: &[VariableCell]) -> Vec<Varia
         }
     }
     problems
+}
+
+fn owed(
+    declared: &Declared,
+    variable: &DeclaredVariable,
+    cells: &[VariableCell],
+    folder: &str,
+) -> bool {
+    let Some(key) = variable.group else {
+        return true;
+    };
+    let required = declared
+        .groups
+        .iter()
+        .any(|group| group.key == key && group.required);
+    required || switched_on(declared, key, cells, folder)
+}
+
+fn switched_on(declared: &Declared, key: &str, cells: &[VariableCell], folder: &str) -> bool {
+    declared
+        .variables
+        .iter()
+        .filter(|member| member.group == Some(key))
+        .any(|member| stored_at(member, cells, folder))
+}
+
+fn stored_at(variable: &DeclaredVariable, cells: &[VariableCell], folder: &str) -> bool {
+    let at = |where_: &str| {
+        cells
+            .iter()
+            .any(|cell| cell.key == variable.key && cell.folder == where_)
+    };
+    if !variable.folders.is_empty() {
+        return !folder.is_empty() && variable.folders.contains(&folder) && at(folder);
+    }
+    (!folder.is_empty() && at(folder)) || at("")
 }
 
 fn required_folders(variable: &DeclaredVariable) -> Vec<&str> {

@@ -59,6 +59,9 @@ pub fn resources(item: TokenStream) -> TokenStream {
 ///     pub timeout: Option<u64>,
 ///     #[ocel(key = "FLAG", folders = ["/apps/web"])]
 ///     pub flag: bool,
+///     /// Enable GitHub sign-in
+///     #[ocel(group)]
+///     pub github: Option<GitHub>,
 /// }
 /// ```
 ///
@@ -66,6 +69,14 @@ pub fn resources(item: TokenStream) -> TokenStream {
 /// carries a default or is an `Option`, and its value is parsed with the field type's
 /// `FromStr`. A field of type `ocel::Secret` declares the secret class and resolves its
 /// value on every read.
+///
+/// A field tagged `#[ocel(group)]` holds another `ocel::Env` struct, whose variables are
+/// declared under a group named after the field and described by the doc comment above it.
+/// An `Option` of one makes the group optional: it stays `None` until a value is delivered
+/// for one of its members, and nothing in it is owed until then. A group holding groups of
+/// its own is a compile error, because a group nests one level only. The field's type is
+/// read as it is written, so a type alias standing for an `Option` declares no optional
+/// group: spell the `Option` on the field.
 #[proc_macro_derive(Env, attributes(ocel))]
 pub fn env(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);

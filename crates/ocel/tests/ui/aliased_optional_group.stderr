@@ -1,0 +1,35 @@
+error[E0277]: the trait bound `Option<GitHub>: ocel::Declare` is not satisfied
+  --> tests/ui/aliased_optional_group.rs:12:13
+   |
+12 |     github: Maybe,
+   |             ^^^^^ the trait `ocel::Declare` is not implemented for `Option<GitHub>`
+   |
+help: the following other types implement trait `ocel::Declare`
+  --> tests/ui/aliased_optional_group.rs:3:10
+   |
+ 3 | #[derive(ocel::Env)]
+   |          ^^^^^^^^^ `GitHub`
+...
+ 9 | #[derive(ocel::Env)]
+   |          ^^^^^^^^^ `Env`
+   = note: this error originates in the derive macro `ocel::Env` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: `Option<GitHub>` holds #[ocel(group)] fields of its own, and a group nests one level only.
+  --> tests/ui/aliased_optional_group.rs:12:13
+   |
+12 |     github: Maybe,
+   |             ^^^^^ this cannot be a group, because it is already made of groups
+   |
+   = help: the trait `ocel::Group` is not implemented for `Option<GitHub>`
+   = note: flatten the inner group's fields into `Option<GitHub>`, or declare it beside this group rather than inside it.
+help: the trait `ocel::Group` is implemented for `GitHub`
+  --> tests/ui/aliased_optional_group.rs:3:10
+   |
+ 3 | #[derive(ocel::Env)]
+   |          ^^^^^^^^^
+note: required by a bound in `one_level`
+  --> tests/ui/aliased_optional_group.rs:9:10
+   |
+ 9 | #[derive(ocel::Env)]
+   |          ^^^^^^^^^ required by this bound in `one_level`
+   = note: this error originates in the derive macro `ocel::Env` (in Nightly builds, run with -Z macro-backtrace for more info)

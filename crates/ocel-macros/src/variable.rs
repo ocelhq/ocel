@@ -114,7 +114,7 @@ pub(crate) fn variable(field: &Field) -> syn::Result<Variable> {
     })
 }
 
-fn description(field: &Field) -> syn::Result<Option<String>> {
+pub(crate) fn description(field: &Field) -> syn::Result<Option<String>> {
     let mut lines = Vec::new();
     for attribute in &field.attrs {
         if !attribute.path().is_ident("doc") {
