@@ -10,15 +10,21 @@ export interface AwsResourceArgs {
   function: {
     lambda: lambda.FunctionArgs;
     url: lambda.FunctionUrlArgs;
+    urlPermission: lambda.PermissionArgs;
     logGroup: cloudwatch.LogGroupArgs;
+    role: iam.RoleArgs;
   };
   bucket: {
     bucket: s3.BucketV2Args;
     publicAccessBlock: s3.BucketPublicAccessBlockArgs;
     cors: s3.BucketCorsConfigurationV2Args;
     uploadCompleterRole: iam.RoleArgs;
+    uploadCompleterS3Policy: iam.RolePolicyArgs;
+    uploadCompleterSessionsPolicy: iam.RolePolicyArgs;
+    uploadCompleterLogsPolicy: iam.RolePolicyAttachmentArgs;
     uploadCompleterLogGroup: cloudwatch.LogGroupArgs;
     uploadCompleter: lambda.FunctionArgs;
+    uploadCompleterPermission: lambda.PermissionArgs;
     notification: s3.BucketNotificationArgs;
   };
   postgres: {
@@ -40,56 +46,103 @@ type OwnedFieldNames = {
 
 /**
  * The fields ocel fills from its own state — the names it minted, the ARNs it
- * created, the code it uploaded, the environment it sealed. A patch naming one
- * is refused where it is written, and the deploy refuses it again by name.
+ * created, the code it uploaded and the runtime that code was built for, the
+ * environment it sealed, the tags it sweeps by. A patch naming one is refused
+ * where it is written, and the deploy refuses it again by name.
  */
 export const awsOwnedFields = {
   function: {
     lambda: [
+      "architectures",
+      "code",
+      "environment",
       "handler",
+      "imageUri",
+      "layers",
+      "loggingConfig",
+      "name",
+      "packageType",
       "role",
+      "runtime",
       "s3Bucket",
       "s3Key",
-      "environment",
-      "loggingConfig",
-      "layers",
-      "architectures",
+      "s3ObjectVersion",
+      "sourceCodeHash",
+      "tags",
     ],
-    url: ["functionName", "authorizationType"],
-    logGroup: ["name", "namePrefix"],
+    url: ["authorizationType", "functionName", "qualifier"],
+    urlPermission: ["action", "function", "functionUrlAuthType", "principal", "qualifier"],
+    logGroup: ["name", "namePrefix", "tags"],
+    role: [
+      "assumeRolePolicy",
+      "inlinePolicies",
+      "managedPolicyArns",
+      "name",
+      "namePrefix",
+      "permissionsBoundary",
+      "tags",
+    ],
   },
   bucket: {
-    bucket: ["bucket", "bucketPrefix"],
+    bucket: ["bucket", "bucketPrefix", "tags"],
     publicAccessBlock: ["bucket"],
     cors: ["bucket"],
-    uploadCompleterRole: ["name", "namePrefix", "assumeRolePolicy", "permissionsBoundary"],
-    uploadCompleterLogGroup: ["name", "namePrefix"],
+    uploadCompleterRole: [
+      "assumeRolePolicy",
+      "inlinePolicies",
+      "managedPolicyArns",
+      "name",
+      "namePrefix",
+      "permissionsBoundary",
+      "tags",
+    ],
+    uploadCompleterS3Policy: ["name", "namePrefix", "policy", "role"],
+    uploadCompleterSessionsPolicy: ["name", "namePrefix", "policy", "role"],
+    uploadCompleterLogsPolicy: ["policyArn", "role"],
+    uploadCompleterLogGroup: ["name", "namePrefix", "tags"],
     uploadCompleter: [
-      "runtime",
+      "architectures",
+      "code",
+      "environment",
       "handler",
+      "imageUri",
+      "loggingConfig",
+      "name",
+      "packageType",
       "role",
+      "runtime",
       "s3Bucket",
       "s3Key",
-      "environment",
-      "loggingConfig",
+      "s3ObjectVersion",
+      "sourceCodeHash",
+      "tags",
     ],
+    uploadCompleterPermission: ["action", "function", "principal", "qualifier", "sourceArn"],
     notification: ["bucket", "lambdaFunctions"],
   },
   postgres: {
-    securityGroup: ["name", "namePrefix", "vpcId"],
-    subnetGroup: ["name", "namePrefix", "subnetIds"],
+    securityGroup: ["name", "namePrefix", "tags", "vpcId"],
+    subnetGroup: ["name", "namePrefix", "subnetIds", "tags"],
     cluster: [
       "clusterIdentifier",
       "clusterIdentifierPrefix",
-      "engine",
-      "masterUsername",
-      "masterPassword",
-      "manageMasterUserPassword",
       "databaseName",
       "dbSubnetGroupName",
+      "engine",
+      "manageMasterUserPassword",
+      "masterPassword",
+      "masterUsername",
+      "tags",
       "vpcSecurityGroupIds",
     ],
-    instance: ["identifier", "identifierPrefix", "clusterIdentifier", "engine", "engineVersion"],
+    instance: [
+      "clusterIdentifier",
+      "engine",
+      "engineVersion",
+      "identifier",
+      "identifierPrefix",
+      "tags",
+    ],
   },
 } as const satisfies OwnedFieldNames;
 

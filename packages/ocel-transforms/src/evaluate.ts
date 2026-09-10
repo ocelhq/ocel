@@ -11,14 +11,21 @@ import {
 import type { TransformBindings } from "./index";
 import { bindings, isBindingOutput } from "./output";
 
+/**
+ * What one ocel resource's rules came to: a patch per underlying resource the
+ * provider constructs for it, keyed by the same key the rules were written
+ * under and carrying the provider SDK's own property names.
+ */
 export type Patches = Record<string, Record<string, unknown>>;
 
+/** One resource the deploy offers the modules, as the deploy addresses it. */
 export interface RequestResource {
   readonly type: string;
   readonly name: string;
   readonly app?: string;
 }
 
+/** What a deploy asks the modules about: the environment, and every candidate in it. */
 export interface EvaluateRequest {
   readonly provider: string;
   readonly envClass: EnvClass;
@@ -26,16 +33,19 @@ export interface EvaluateRequest {
   readonly resources: readonly RequestResource[];
 }
 
+/** What the modules came to for one candidate, in the order the request listed it. */
 export interface EvaluatedResource {
   readonly name: string;
   readonly patches: Patches;
   readonly tags: TagMap;
 }
 
+/** The answer to one request, one entry per candidate the request carried. */
 export interface EvaluateResponse {
   readonly resources: readonly EvaluatedResource[];
 }
 
+/** A loaded module, paired with the specifier a refusal names it by. */
 export interface TransformModule {
   readonly specifier: string;
   readonly definition: TransformDefinition;
@@ -50,6 +60,12 @@ interface LoadedModule {
   readonly rules: readonly TransformRule[];
 }
 
+/**
+ * Applies the modules in order to every candidate the deploy offers, later
+ * modules winning. A rule that names a field ocel owns, a resource this
+ * provider does not construct, or a provider this project does not deploy to
+ * throws where it was written, and the deploy stops.
+ */
 export function evaluate(
   request: EvaluateRequest,
   modules: readonly TransformModule[],
