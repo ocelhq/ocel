@@ -6,7 +6,9 @@ import (
 	"io"
 	"os"
 	"slices"
+	"strings"
 	"text/tabwriter"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 
@@ -25,6 +27,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -159,7 +162,7 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 		key = pairs[0].key
 	}
 	return withEnvProviderSealing(ctx, deps, cwd, opts, stdin, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
-		definitions, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
+		definitions, groups, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err
 		}
@@ -183,6 +186,9 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 			}
 			fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, opts), resp.GetMetadata().GetVersion())
 		}
+		if err := printGroupProgress(ctx, vars, cfg.Slug, definitions, groups, opts, pairs, stdout); err != nil {
+			return err
+		}
 		if preflight.RunsAContainer(cfg, standing.GetComputes()) {
 			fmt.Fprintln(stdout,
 				"This project runs on container compute, which carries nothing of ocel's to re-read a value: the container serving now keeps the value its deploy handed it, and this one lands on the next deploy. Run `ocel deploy`.")
@@ -191,30 +197,30 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 	})
 }
 
-func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, runner *provider.Runner, key string, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, error) {
+func declaredVariables(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, runner *provider.Runner, key string, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition, error) {
 	prepared, err := deploycollector.Prepare(cfg)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	fingerprint := prepared.Fingerprint()
 
 	cache, cacheErr := declcache.Open()
 	if cacheErr == nil {
-		if definitions, ok := cache.LoadContaining(cfg.Dir, fingerprint, key); ok {
-			return definitions, nil
+		if definitions, groups, ok := cache.LoadContaining(cfg.Dir, fingerprint, key); ok {
+			return definitions, groups, nil
 		}
 	}
 
 	gate := envGate(cfg, runner, opts)
 	if _, err := deploycollector.Collect(ctx, cfg, gate, prepared, io.Discard, stderr); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	definitions := gate.Definitions()
+	definitions, groups := gate.Definitions(), gate.Groups()
 	if cacheErr == nil {
-		_ = cache.Save(cfg.Dir, fingerprint, definitions)
+		_ = cache.Save(cfg.Dir, fingerprint, definitions, groups)
 	}
-	return definitions, nil
+	return definitions, groups, nil
 }
 
 func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
@@ -222,7 +228,7 @@ func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOption
 		return runEnvLsDev(ctx, deps, cwd, opts, stdout, stderr)
 	}
 	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
-		definitions, err := declaredVariables(ctx, deps, cfg, runner, "", opts, stderr)
+		definitions, groups, err := declaredVariables(ctx, deps, cfg, runner, "", opts, stderr)
 		if err != nil {
 			return err
 		}
@@ -243,7 +249,7 @@ func runEnvLs(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOption
 				return err
 			}
 		}
-		renderValues(stdout, resp.GetValues(), environments, descriptions(definitions))
+		renderValues(stdout, resp.GetValues(), environments, definitions, groups)
 		return nil
 	})
 }
@@ -259,7 +265,7 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 		return runEnvGetDev(ctx, deps, cwd, key, opts, stdout, stderr)
 	}
 	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
-		definitions, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
+		definitions, _, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err
 		}
@@ -316,12 +322,58 @@ func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envO
 			return nil
 		}
 		fmt.Fprintf(stdout, "Removed %s.\n", describeCell(key, opts))
+		definitions, groups, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
+		if err != nil {
+			return err
+		}
+		if err := printGroupProgress(ctx, vars, cfg.Slug, definitions, groups, opts, []envSetPair{{key: key}}, stdout); err != nil {
+			return err
+		}
 		if preflight.RunsAContainer(cfg, standing.GetComputes()) {
 			fmt.Fprintln(stdout,
 				"This project runs on container compute, which carries nothing of ocel's to re-read a value: the container serving now still holds what its deploy handed it, and it goes on serving that until the next deploy. Run `ocel deploy` to stop serving it.")
 		}
 		return nil
 	})
+}
+
+func printGroupProgress(ctx context.Context, vars envvarsv1connect.EnvVarsServiceClient, slug string, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, opts envOptions, changed []envSetPair, stdout io.Writer) error {
+	touched := map[string]bool{}
+	for _, pair := range changed {
+		for _, definition := range definitions {
+			if definition.GetKey() == pair.key && definition.GetGroup() != "" {
+				touched[definition.GetGroup()] = true
+			}
+		}
+	}
+	if len(touched) == 0 {
+		return nil
+	}
+	listed, err := vars.ListValues(ctx, &envvarsv1.ListValuesRequest{Tier: envTier(opts), Slug: slug})
+	if err != nil {
+		return err
+	}
+	held := heldCells(listed.GetValues(), opts.environment)
+	for _, standing := range envgate.Standings(definitions, groups, held, opts.folder) {
+		if !touched[standing.Key] || len(standing.Missing) == 0 {
+			continue
+		}
+		fmt.Fprintf(stdout, "%s: %d of %d set. Set together: %s\n",
+			standing.Key, len(standing.Set), len(standing.Set)+len(standing.Missing), strings.Join(standing.Missing, ", "))
+	}
+	return nil
+}
+
+func heldCells(values []*envvarsv1.ValueMetadata, environment string) []envgate.Cell {
+	var out []envgate.Cell
+	for _, value := range values {
+		coordinate := value.GetCoordinate()
+		if coordinate.GetEnvironment() != "" && coordinate.GetEnvironment() != environment {
+			continue
+		}
+		out = append(out, envgate.Cell{Key: coordinate.GetKey(), Folder: coordinate.GetFolder()})
+	}
+	return out
 }
 
 func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, ref envRefOptions, stdout, stderr io.Writer) error {
@@ -334,7 +386,7 @@ func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 		}
 	}
 	return withEnvProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config, standing *contractv1.PreflightResponse) error {
-		definitions, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
+		definitions, _, err := declaredVariables(ctx, deps, cfg, runner, key, opts, stderr)
 		if err != nil {
 			return err
 		}
@@ -433,35 +485,125 @@ func renderReferences(stdout io.Writer, cell string, references []*envvarsv1.Coo
 	fmt.Fprintln(stdout, "\nEditing this value changes what every one of them reads.")
 }
 
-func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environments []string, descriptions map[string]string) {
+func renderValues(stdout io.Writer, values []*envvarsv1.ValueMetadata, environments []string, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition) {
 	if len(values) == 0 {
 		fmt.Fprintln(stdout, "No values set. Set one with `ocel env set <KEY>=<VALUE>`.")
 		return
 	}
+	described := descriptions(definitions)
+	belongs := membership(definitions)
+
 	orphans := false
-	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "KEY\tDESCRIPTION\tFOLDER\tENVIRONMENT\tVERSION\tBYTES\tUPDATED\tSOURCE")
+	rows := []listingRow{{cells: []string{"KEY", "DESCRIPTION", "FOLDER", "ENVIRONMENT", "VERSION", "BYTES", "UPDATED", "SOURCE"}}}
 	for _, v := range values {
-		c := v.GetCoordinate()
-		environment := environmentOrAll(c.GetEnvironment())
-		if envgate.Orphaned(environments, c.GetEnvironment()) {
-			environment += " (orphaned)"
-			orphans = true
+		if belongs[v.GetCoordinate().GetKey()] != "" {
+			continue
 		}
-		size := fmt.Sprint(v.GetSize())
-		source := "—"
-		if target := v.GetTarget(); target != nil {
-			size, source = "—", describeCoordinate(target)
-		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
-			c.GetKey(), descriptions[c.GetKey()], folderOrRoot(c.GetFolder()), environment,
-			v.GetVersion(), size, runui.EpochDate(v.GetUpdatedAt()), source)
+		row, orphaned := valueRow(v, "", described, environments)
+		rows = append(rows, row)
+		orphans = orphans || orphaned
 	}
-	_ = tw.Flush()
+	for _, group := range groups {
+		held := valuesIn(group.GetKey(), values, definitions)
+		if len(held) == 0 {
+			continue
+		}
+		rows = append(rows, listingRow{}, listingRow{headline: envgate.GroupHeadline(group.GetKey(), group.GetDescription())})
+		for _, v := range held {
+			row, orphaned := valueRow(v, listingIndent, described, environments)
+			rows = append(rows, row)
+			orphans = orphans || orphaned
+		}
+	}
+	writeListing(stdout, rows)
 
 	if orphans {
 		fmt.Fprintln(stdout, "\nAn orphaned override belongs to an environment that no longer exists, so nothing will ever read it. Remove one with `ocel env rm <KEY> --preview --environment <ENVIRONMENT>`.")
 	}
+}
+
+const listingIndent = "  "
+
+type listingRow struct {
+	headline string
+	lead     string
+	cells    []string
+}
+
+func valueRow(v *envvarsv1.ValueMetadata, lead string, descriptions map[string]string, environments []string) (listingRow, bool) {
+	c := v.GetCoordinate()
+	environment := environmentOrAll(c.GetEnvironment())
+	orphaned := envgate.Orphaned(environments, c.GetEnvironment())
+	if orphaned {
+		environment += " (orphaned)"
+	}
+	size := fmt.Sprint(v.GetSize())
+	source := "—"
+	if target := v.GetTarget(); target != nil {
+		size, source = "—", describeCoordinate(target)
+	}
+	return listingRow{lead: lead, cells: []string{
+		c.GetKey(), descriptions[c.GetKey()], folderOrRoot(c.GetFolder()), environment,
+		fmt.Sprint(v.GetVersion()), size, runui.EpochDate(v.GetUpdatedAt()), source,
+	}}, orphaned
+}
+
+func writeListing(stdout io.Writer, rows []listingRow) {
+	var widths []int
+	for _, row := range rows {
+		for i, cell := range row.cells {
+			width := utf8.RuneCountInString(cell)
+			if i == 0 {
+				width += utf8.RuneCountInString(row.lead)
+			}
+			for len(widths) <= i {
+				widths = append(widths, 0)
+			}
+			widths[i] = max(widths[i], width)
+		}
+	}
+	for _, row := range rows {
+		if row.cells == nil {
+			fmt.Fprintln(stdout, row.headline)
+			continue
+		}
+		line := row.lead
+		for i, cell := range row.cells {
+			if i == len(row.cells)-1 {
+				line += cell
+				break
+			}
+			width := widths[i]
+			if i == 0 {
+				width -= utf8.RuneCountInString(row.lead)
+			}
+			line += cell + strings.Repeat(" ", width-utf8.RuneCountInString(cell)+len(listingIndent))
+		}
+		fmt.Fprintln(stdout, strings.TrimRight(line, " "))
+	}
+}
+
+func membership(definitions []*resourcesv1.VariableDefinition) map[string]string {
+	out := make(map[string]string, len(definitions))
+	for _, definition := range definitions {
+		out[definition.GetKey()] = definition.GetGroup()
+	}
+	return out
+}
+
+func valuesIn(group string, values []*envvarsv1.ValueMetadata, definitions []*resourcesv1.VariableDefinition) []*envvarsv1.ValueMetadata {
+	var out []*envvarsv1.ValueMetadata
+	for _, definition := range definitions {
+		if definition.GetGroup() != group {
+			continue
+		}
+		for _, v := range values {
+			if v.GetCoordinate().GetKey() == definition.GetKey() {
+				out = append(out, v)
+			}
+		}
+	}
+	return out
 }
 
 func descriptions(definitions []*resourcesv1.VariableDefinition) map[string]string {

@@ -68,7 +68,7 @@ func runEnvSetDevPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs
 		key = pairs[0].key
 	}
 	return withDevStore(ctx, deps, cwd, key, opts, stderr, func(store *devStore, cfg *projectconfig.Config) error {
-		definitions, err := declaredVariables(ctx, deps, cfg, nil, key, opts, stderr)
+		definitions, _, err := declaredVariables(ctx, deps, cfg, nil, key, opts, stderr)
 		if err != nil {
 			return err
 		}
@@ -104,7 +104,7 @@ func checkDevWritable(definitions []*resourcesv1.VariableDefinition, key string)
 
 func runEnvLsDev(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOptions, stdout, stderr io.Writer) error {
 	return withDevStore(ctx, deps, cwd, "", opts, stderr, func(store *devStore, cfg *projectconfig.Config) error {
-		definitions, err := declaredVariables(ctx, deps, cfg, nil, "", opts, stderr)
+		definitions, _, err := declaredVariables(ctx, deps, cfg, nil, "", opts, stderr)
 		if err != nil {
 			return err
 		}
@@ -119,7 +119,7 @@ func runEnvLsDev(ctx context.Context, deps cmddeps.Deps, cwd string, opts envOpt
 
 func runEnvGetDev(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
 	return withDevStore(ctx, deps, cwd, key, opts, stderr, func(store *devStore, cfg *projectconfig.Config) error {
-		definitions, err := declaredVariables(ctx, deps, cfg, nil, key, opts, stderr)
+		definitions, _, err := declaredVariables(ctx, deps, cfg, nil, key, opts, stderr)
 		if err != nil {
 			return err
 		}
