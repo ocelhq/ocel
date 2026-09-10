@@ -18,13 +18,6 @@
           "description": "The AWS region to deploy into.",
           "type": "string"
         },
-        "transforms": {
-          "description": "Transform modules to apply while provisioning, in order — later modules win where their patches collide. Each is a path to a module whose default export is a defineTransform(...) result.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
         "varsKey": {
           "anyOf": [
             {

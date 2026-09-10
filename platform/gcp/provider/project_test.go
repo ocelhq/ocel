@@ -27,7 +27,7 @@ func withoutAnAmbientProject(t *testing.T) {
 
 func targeted(t *testing.T, options providerkit.Options) string {
 	t.Helper()
-	p, err := gcp.New(context.Background(), options)
+	p, err := gcp.New(context.Background(), providerkit.Settings{Options: options})
 	if err != nil {
 		t.Fatalf("New(%v) = %v, want a provider", options, err)
 	}
@@ -83,7 +83,7 @@ func TestAProjectNeitherNamedNorAmbientIsRefusedNamingWhereItIsRead(t *testing.T
 	withoutAnAmbientProject(t)
 
 	var refusal providerkit.Refusal
-	_, err := gcp.New(context.Background(), providerkit.Options{"region": "europe-west1"})
+	_, err := gcp.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"region": "europe-west1"}})
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 		t.Fatalf("New() with no project and nothing ambient = %v, want an %s refusal", err, providerkit.CodeInvalid)
 	}

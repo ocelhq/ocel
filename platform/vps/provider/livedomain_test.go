@@ -39,7 +39,7 @@ func overTheContract(t *testing.T, p *vps.Provider) contractv1connect.ProviderSe
 
 	server := httptest.NewServer(providerkit.ConformanceMux(providerkit.Spec{
 		Version: "live-suite",
-		New: func(context.Context, providerkit.Options) (providerkit.Provider, error) {
+		New: func(context.Context, providerkit.Settings) (providerkit.Provider, error) {
 			return p, nil
 		},
 	}))

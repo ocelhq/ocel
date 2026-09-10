@@ -47,7 +47,7 @@ func live(t *testing.T) account {
 
 func (a account) bootstrapper(t *testing.T) providerkit.Bootstrapper {
 	t.Helper()
-	p, err := provider.New(context.Background(), providerkit.Options{"region": liveRegion})
+	p, err := provider.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"region": liveRegion}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}

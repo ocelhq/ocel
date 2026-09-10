@@ -50,6 +50,8 @@ export interface OcelConfig {
   registry?: RegistryConfig;
   /** The project's deployment identity. Every stack and resource ocel creates in your own account is keyed on it, so changing it forks a new project. */
   slug: string;
+  /** Transform modules applied while provisioning, in order — later modules win where their patches collide. Each is a path to a module whose default export is a defineTransform(...) result, keyed by the provider it patches. */
+  transforms?: string | string[];
 }
 
 export interface AwsProviderOptions {
@@ -57,8 +59,6 @@ export interface AwsProviderOptions {
   certificates?: Record<string, string>;
   /** The AWS region to deploy into. */
   region?: string;
-  /** Transform modules to apply while provisioning, in order — later modules win where their patches collide. Each is a path to a module whose default export is a defineTransform(...) result. */
-  transforms?: string[];
   /** ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap --features vars-key makes a key ocel owns. */
   varsKey?: string;
 }

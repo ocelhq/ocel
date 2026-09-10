@@ -21,7 +21,7 @@ import (
 type Spec struct {
 	Version string
 
-	New func(ctx context.Context, options Options) (Provider, error)
+	New func(ctx context.Context, settings Settings) (Provider, error)
 }
 
 func Serve(spec Spec) error {
@@ -102,13 +102,13 @@ type session struct {
 	provider Provider
 }
 
-func (s *session) configure(ctx context.Context, options Options) error {
+func (s *session) configure(ctx context.Context, settings Settings) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.provider != nil {
 		return connect.NewError(connect.CodeFailedPrecondition, errors.New("the provider session is already configured"))
 	}
-	provider, err := s.spec.New(ctx, options)
+	provider, err := s.spec.New(ctx, settings)
 	if err != nil {
 		return RefusalError(err)
 	}

@@ -13,6 +13,20 @@ const optionsPath = "provider.options"
 
 type Options map[string]any
 
+type Settings struct {
+	Options    Options
+	Transforms []string
+}
+
+func (s Settings) RefuseTransforms(provider string) error {
+	if len(s.Transforms) == 0 {
+		return nil
+	}
+	return Refuse(CodeInvalid,
+		"this project lists %q under \"transforms\" and the %s provider renders nothing a transform can patch; drop it, or deploy to a provider that does",
+		s.Transforms[0], provider)
+}
+
 func Decode[T any](options Options) (T, error) {
 	var into T
 	raw, err := json.Marshal(map[string]any(options))

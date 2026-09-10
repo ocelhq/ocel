@@ -34,7 +34,7 @@ func varsServedBy(t *testing.T, provider providerkit.Provider) envvarsv1connect.
 
 	spec := providerkit.Spec{
 		Version: "test",
-		New: func(context.Context, providerkit.Options) (providerkit.Provider, error) {
+		New: func(context.Context, providerkit.Settings) (providerkit.Provider, error) {
 			return provider, nil
 		},
 	}
@@ -432,7 +432,7 @@ func TestABindingNamesAnEnvironmentOnlyInPreview(t *testing.T) {
 func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 	spec := providerkit.Spec{
 		Version: "test",
-		New: func(context.Context, providerkit.Options) (providerkit.Provider, error) {
+		New: func(context.Context, providerkit.Settings) (providerkit.Provider, error) {
 			return fake.NewProvider(fake.Options{}), nil
 		},
 	}

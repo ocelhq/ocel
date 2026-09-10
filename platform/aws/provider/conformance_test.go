@@ -29,7 +29,7 @@ func TestAWSProvider(t *testing.T) {
 func TestTheRootCarriesTheVendorAndEveryOptionalSet(t *testing.T) {
 	t.Parallel()
 
-	p := provider.NewProvider(provider.Options{Region: "us-east-1"}, aws.Config{Region: "us-east-1"}, defaultNamespace)
+	p := provider.NewProvider(provider.Options{Region: "us-east-1"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
 
 	if p.Vendor() != provider.Vendor {
 		t.Errorf("Vendor() = %q, want %q", p.Vendor(), provider.Vendor)

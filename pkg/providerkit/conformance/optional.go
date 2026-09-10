@@ -15,7 +15,7 @@ func runOptionalSets(t *testing.T, suite Suite) {
 		t.Skip("the suite carries no constructor, so there is no root to assert against")
 	}
 
-	provider, err := suite.New(context.Background(), suite.Options)
+	provider, err := suite.New(context.Background(), providerkit.Settings{Options: suite.Options})
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider", err)
 	}
