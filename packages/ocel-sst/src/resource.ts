@@ -117,10 +117,11 @@ export const customProvider = bindingProvider<CustomInputs>(
 /**
  * Publishes one SST-defined resource as one ocel binding, as a side effect of this apply.
  *
- * The name is the one the app declares — `postgres("orders")` in ocel,
- * `postgres("orders", …)` here — and the resource is either an SST component,
- * whose own binding description is passed through, or the postgres fields written
- * out by hand. `class` defaults to production, `environment` names one preview
+ * The name is this app's own, published for an ocel app's config to bind a
+ * declared resource to — `postgres("sst-pg-orders", …)` here, and
+ * `"bindings": { "postgres": { "orders": "sst-pg-orders" } }` in `ocel.json` —
+ * and the resource is either an SST component, whose own binding description is
+ * passed through, or the postgres fields written out by hand. `class` defaults to production, `environment` names one preview
  * environment, and `project` is the directory holding `ocel.json`, which is
  * the SST config root unless it is given.
  */
@@ -243,7 +244,7 @@ function host(): DynamicHost {
   const util = typeof $util === "undefined" ? undefined : $util;
   if (!util?.dynamic?.Resource) {
     throw new Error(
-      "@ocel/sst bindings from inside the run() of your sst.config.ts, where SST supplies $util; nothing supplies it here. Move the binding call into run().",
+      "@ocel/sst binds from inside the run() of your sst.config.ts, where SST supplies $util; nothing supplies it here. Move the binding call into run().",
     );
   }
   return util;
