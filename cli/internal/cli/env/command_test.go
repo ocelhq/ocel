@@ -3,6 +3,7 @@ package env
 import (
 	"bytes"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -18,7 +19,7 @@ func TestCommandHelp(t *testing.T) {
 	if got := cmd.Short; got != "Manage this project's variable values" {
 		t.Errorf("Short = %q", got)
 	}
-	if got := cmd.Example; got != "  $ ocel env ls\n  $ ocel env set LOG_LEVEL debug\n  $ ocel env ui --preview" {
+	if got := cmd.Example; got != "  $ ocel env ls\n  $ ocel env set LOG_LEVEL=debug\n  $ ocel env ui --preview" {
 		t.Errorf("Example = %q", got)
 	}
 
@@ -91,5 +92,26 @@ func TestCommandArguments(t *testing.T) {
 				t.Fatal("Execute() = nil")
 			}
 		})
+	}
+}
+
+func TestParseEnvSetPairs(t *testing.T) {
+	pairs, err := parseEnvSetPairs([]string{"LOG_LEVEL=debug", "DATABASE_URL=postgres://db?sslmode=require", "EMPTY="})
+	if err != nil {
+		t.Fatalf("parseEnvSetPairs() = %v", err)
+	}
+	want := []envSetPair{
+		{key: "LOG_LEVEL", value: "debug"},
+		{key: "DATABASE_URL", value: "postgres://db?sslmode=require"},
+		{key: "EMPTY", value: ""},
+	}
+	if !slices.Equal(pairs, want) {
+		t.Errorf("parseEnvSetPairs() = %#v, want %#v", pairs, want)
+	}
+
+	for _, arg := range []string{"LOG_LEVEL", "=debug"} {
+		if _, err := parseEnvSetPairs([]string{arg}); err == nil {
+			t.Errorf("parseEnvSetPairs(%q) = nil, want an error", arg)
+		}
 	}
 }

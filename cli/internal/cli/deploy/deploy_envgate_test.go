@@ -65,7 +65,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY <VALUE>"} {
+		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY=<VALUE>"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
@@ -91,7 +91,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 			t.Fatal("runDeploy err = nil, want the gate to refuse")
 		}
 		out := stdout.String()
-		for _, want := range []string{"NEXT_PUBLIC_PORT", "set, but expected a number", "ocel env set NEXT_PUBLIC_PORT <VALUE>"} {
+		for _, want := range []string{"NEXT_PUBLIC_PORT", "set, but expected a number", "ocel env set NEXT_PUBLIC_PORT=<VALUE>"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
@@ -115,7 +115,7 @@ func TestEnvGateOnDeploy(t *testing.T) {
 			t.Fatal("runDeploy err = nil, want the gate to refuse on what it knows itself")
 		}
 		out := stdout.String()
-		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY <VALUE>"} {
+		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY=<VALUE>"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}

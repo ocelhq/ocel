@@ -107,7 +107,7 @@ func TestCheck(t *testing.T) {
 			t.Fatal("Check err = nil, want a refusal")
 		}
 		msg := err.Error()
-		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY <VALUE>"} {
+		for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY=<VALUE>"} {
 			if !strings.Contains(msg, want) {
 				t.Errorf("refusal = %q, want it to contain %q", msg, want)
 			}
@@ -130,7 +130,7 @@ func TestCheck(t *testing.T) {
 		if err == nil {
 			t.Fatal("Check err = nil, want a refusal")
 		}
-		for _, want := range []string{"WEBHOOK_URL", "invalid url", "ocel env set WEBHOOK_URL <VALUE>"} {
+		for _, want := range []string{"WEBHOOK_URL", "invalid url", "ocel env set WEBHOOK_URL=<VALUE>"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("refusal = %q, want it to contain %q", err.Error(), want)
 			}
@@ -149,7 +149,7 @@ func TestCheck(t *testing.T) {
 		if err == nil {
 			t.Fatal("Check err = nil, want a refusal")
 		}
-		for _, want := range []string{"POSTHOG_ID  /checkout  set, but too small", "ocel env set <KEY> <VALUE> --folder <FOLDER>"} {
+		for _, want := range []string{"POSTHOG_ID  /checkout  set, but too small", "ocel env set <KEY>=<VALUE> --folder <FOLDER>"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("refusal = %q, want it to contain %q", err.Error(), want)
 			}
@@ -166,7 +166,7 @@ func TestCheck(t *testing.T) {
 		if err == nil {
 			t.Fatal("Check err = nil, want a refusal")
 		}
-		if !strings.Contains(err.Error(), "ocel env set STRIPE_API_KEY <VALUE> --preview") {
+		if !strings.Contains(err.Error(), "ocel env set STRIPE_API_KEY=<VALUE> --preview") {
 			t.Errorf("refusal = %q, want the preview-scoped fixing command", err.Error())
 		}
 	})
@@ -215,7 +215,7 @@ func TestCheck(t *testing.T) {
 		if err == nil {
 			t.Fatal("Check err = nil, want a required value nothing holds to refuse without being told")
 		}
-		for _, want := range []string{"STRIPE_API_KEY", "no value", "ocel env set STRIPE_API_KEY <VALUE>"} {
+		for _, want := range []string{"STRIPE_API_KEY", "no value", "ocel env set STRIPE_API_KEY=<VALUE>"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("refusal = %q, want it to contain %q", err.Error(), want)
 			}
@@ -241,7 +241,7 @@ func TestCheck(t *testing.T) {
 		if err == nil {
 			t.Fatal("Check err = nil, want the folder holding no value to refuse")
 		}
-		if !strings.Contains(err.Error(), "ocel env set POSTHOG_ID <VALUE> --folder /admin") {
+		if !strings.Contains(err.Error(), "ocel env set POSTHOG_ID=<VALUE> --folder /admin") {
 			t.Errorf("refusal = %q, want it to address the folder that owes the value", err.Error())
 		}
 		if strings.Contains(err.Error(), "--folder /web") {

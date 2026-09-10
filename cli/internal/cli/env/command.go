@@ -2,6 +2,8 @@ package env
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -13,7 +15,7 @@ func NewCommand(deps cmddeps.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "env <command>",
 		Short:   "Manage this project's variable values",
-		Example: "  $ ocel env ls\n  $ ocel env set LOG_LEVEL debug\n  $ ocel env ui --preview",
+		Example: "  $ ocel env ls\n  $ ocel env set LOG_LEVEL=debug\n  $ ocel env ui --preview",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_ = cmd.Help()
 			return &exitsig.ExitError{Code: 1}
@@ -53,20 +55,41 @@ func newLsCommand(deps cmddeps.Deps) *cobra.Command {
 func newSetCommand(deps cmddeps.Deps) *cobra.Command {
 	var opts envOptions
 	cmd := &cobra.Command{
-		Use:     "set <KEY> <VALUE>",
+		Use:     "set <KEY=VALUE>...",
 		Short:   "Set a value",
-		Example: "  $ ocel env set LOG_LEVEL debug\n  $ ocel env set LOG_LEVEL debug --folder /web",
-		Args:    cobra.ExactArgs(2),
+		Example: "  $ ocel env set LOG_LEVEL=debug\n  $ ocel env set LOG_LEVEL=debug FEATURE_FLAG=true --folder /web",
+		Args:    cobra.MinimumNArgs(1),
 	}
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		pairs, err := parseEnvSetPairs(args)
+		if err != nil {
+			return err
+		}
 		return withCommand(cmd, deps, func(ctx context.Context, cwd string) error {
-			return runEnvSet(ctx, deps, cwd, args[0], args[1], opts, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runEnvSetPairs(ctx, deps, cwd, pairs, opts, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		})
 	}
 	valueFlags(cmd, &opts)
 	devFlag(cmd, &opts)
 	environmentFlag(cmd, &opts)
 	return cmd
+}
+
+type envSetPair struct {
+	key   string
+	value string
+}
+
+func parseEnvSetPairs(args []string) ([]envSetPair, error) {
+	pairs := make([]envSetPair, 0, len(args))
+	for _, arg := range args {
+		key, value, ok := strings.Cut(arg, "=")
+		if !ok || key == "" {
+			return nil, fmt.Errorf("expected KEY=VALUE, got %q", arg)
+		}
+		pairs = append(pairs, envSetPair{key: key, value: value})
+	}
+	return pairs, nil
 }
 
 func newGetCommand(deps cmddeps.Deps) *cobra.Command {

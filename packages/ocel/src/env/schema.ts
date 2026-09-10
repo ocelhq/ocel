@@ -78,7 +78,7 @@ export function inlined<TSchema extends Definitions, TKey extends string>(
   const result = parse(definition.schema, value);
   if (!result.ok) {
     throw new EnvClientError(
-      `'${key}' is set but does not satisfy its schema: ${result.message}. Fix it with \`ocel env set ${key} <VALUE>\`.`,
+      `'${key}' is set but does not satisfy its schema: ${result.message}. Fix it with \`ocel env set ${key}=<VALUE>\`.`,
     );
   }
   return result.value as ClientValue<TSchema, TKey>;

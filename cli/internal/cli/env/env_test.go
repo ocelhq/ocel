@@ -637,6 +637,44 @@ func TestRenderValues(t *testing.T) {
 	})
 }
 
+func TestRunEnvSetPairs(t *testing.T) {
+	t.Run("sets every declared pair", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		var stdout, stderr bytes.Buffer
+		err := runEnvSetPairs(context.Background(), clitest.NewDeps(), root, []envSetPair{
+			{key: "STRIPE_API_KEY", value: "sk_live_secret"},
+			{key: "LOG_LEVEL", value: "debug"},
+		}, envOptions{}, nil, &stdout, &stderr)
+		if err != nil {
+			t.Fatalf("runEnvSetPairs() = %v; stdout=%s", err, stdout.String())
+		}
+		for _, key := range []string{"STRIPE_API_KEY", "LOG_LEVEL"} {
+			if !strings.Contains(stdout.String(), key) {
+				t.Errorf("stdout = %q, want %s", stdout.String(), key)
+			}
+		}
+	})
+
+	t.Run("validates every pair before writing any", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+		var stdout, stderr bytes.Buffer
+		err := runEnvSetPairs(context.Background(), clitest.NewDeps(), root, []envSetPair{
+			{key: "STRIPE_API_KEY", value: "sk_live_secret"},
+			{key: "SITE_HOSTNAME", value: "acme.example"},
+		}, envOptions{}, nil, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runEnvSetPairs() = nil, want an undeclared key refusal")
+		}
+		store, loadErr := clitest.LoadFakeStore()
+		if loadErr != nil {
+			t.Fatalf("load fake store: %v", loadErr)
+		}
+		if len(store) != 0 {
+			t.Errorf("store = %#v, want no writes", store)
+		}
+	})
+}
+
 func TestEnvCommands(t *testing.T) {
 	t.Parallel()
 

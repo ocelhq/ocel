@@ -572,7 +572,7 @@ func TestEnvNamesTheFixingCommandWhenNothingIsSet(t *testing.T) {
 			Key string `ocel:"NOTHING_SET"`
 		}]()
 	})
-	want := "'NOTHING_SET' has no value. Set one with `ocel env set NOTHING_SET <VALUE>`."
+	want := "'NOTHING_SET' has no value. Set one with `ocel env set NOTHING_SET=<VALUE>`."
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err, want)
 	}
@@ -585,7 +585,7 @@ func TestEnvFailsWhenTheValueIsPresentButOutOfType(t *testing.T) {
 			Port int `ocel:"PORT"`
 		}]()
 	})
-	if !strings.Contains(err.Error(), "'PORT' is set but does not satisfy its type") || !strings.Contains(err.Error(), "eighty") || !strings.Contains(err.Error(), "`ocel env set PORT <VALUE>`") {
+	if !strings.Contains(err.Error(), "'PORT' is set but does not satisfy its type") || !strings.Contains(err.Error(), "eighty") || !strings.Contains(err.Error(), "`ocel env set PORT=<VALUE>`") {
 		t.Errorf("error = %q", err)
 	}
 }
