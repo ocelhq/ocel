@@ -100,6 +100,25 @@ func TestRenderBindingTypes(t *testing.T) {
 		}
 	})
 
+	t.Run("gives every resource bound to one record its own entry", func(t *testing.T) {
+		got := renderBindingTypes("production", []projectconfig.Binding{
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", External: "shared-pg"},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "invoices", External: "shared-pg"},
+		}, []*envvarsv1.BindingSummary{
+			{
+				Name:       "shared-pg",
+				Type:       bindingsv1.BindingType_BINDING_TYPE_POSTGRES,
+				Properties: []*envvarsv1.PropertyShape{shape("host", "string", false)},
+			},
+		})
+
+		for _, want := range []string{"orders: { host: string }", "invoices: { host: string }"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("renderBindingTypes() =\n%s\nwant it to hold %q — two resources reading one record are two names a module can write", got, want)
+			}
+		}
+	})
+
 	t.Run("renders every shape a record can carry", func(t *testing.T) {
 		got := renderBindingTypes("production", nil, []*envvarsv1.BindingSummary{
 			{Name: "carries-nothing", Type: bindingsv1.BindingType_BINDING_TYPE_CUSTOM},
