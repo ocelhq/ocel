@@ -59,8 +59,8 @@ rpc DeclareResource { ... }
 resources collected
     |
     |
-dev:    resolved locally, app started with the links injected
-deploy: provisioned in your account, app shipped with the links injected
+dev:    resolved locally, app started with the bindings injected
+deploy: provisioned in your account, app shipped with the bindings injected
 ```
 
 We call this process of running your declarations to collect resource definitions `discovery`.
@@ -96,9 +96,9 @@ As magical as it may be made to seem, put plainly, the SDK combines the followin
 
 - Resource definition (usually separate IaC code)
 - Resource creation
-- Resource linking
+- Resource binding
 
-It sees what resources your app declares, sends that to the CLI, which provisions, and injects the outputs of provisioning as links the SDK understands.
+It sees what resources your app declares, sends that to the CLI, which provisions, and injects the outputs of provisioning as bindings the SDK understands.
 
 ## Gotchas
 
@@ -126,8 +126,8 @@ import { db } from "../resources";
 console.log(db.connectionString);
 ```
 
-### An app links what it imports
+### An app binds what it imports
 
-On deploy, each app is granted a resource only if that app imports the file declaring it. Ocel follows the app's import graph to decide this, so a resource declared in a discovery folder that no app imports is provisioned but linked to nothing. Reaching it at runtime fails with a missing link error.
+On deploy, each app is granted a resource only if that app imports the file declaring it. Ocel follows the app's import graph to decide this, so a resource declared in a discovery folder that no app imports is provisioned but bound to nothing. Reaching it at runtime fails with a missing binding error.
 
 The same walk needs to resolve every import statically. An app that reaches a project file through a dynamic `import()` or `require()` with a computed path refuses to deploy rather than guess which resources it uses.

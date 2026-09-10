@@ -17,7 +17,7 @@
     "providers/cloudflare",
     "---Console---",
     "console",
-    "console-link",
+    "link",
     "---Under the hood---",
     "how-a-deploy-works",
     "cli",
