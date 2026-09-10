@@ -21,8 +21,6 @@ import (
 
 const (
 	trafficByRevision = "TRAFFIC_TARGET_ALLOCATION_TYPE_REVISION"
-	invokerRole       = "roles/run.invoker"
-	everyone          = "allUsers"
 )
 
 const (
@@ -33,8 +31,6 @@ const (
 const releaseAttempts = 4
 
 const maxRequestTimeout = 3600 * time.Second
-
-type policyBinding = run.GoogleIamV1Binding
 
 type serving struct {
 	service string
@@ -108,7 +104,12 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 	if ingress == "" {
 		ingress = ingressEverywhere
 	}
-	return &run.GoogleCloudRunV2Service{Template: template, Ingress: ingress}, nil
+	return &run.GoogleCloudRunV2Service{
+		Template:           template,
+		Ingress:            ingress,
+		InvokerIamDisabled: s.public,
+		ForceSendFields:    []string{"InvokerIamDisabled"},
+	}, nil
 }
 
 func environmentOf(values map[string]string) []*run.GoogleCloudRunV2EnvVar {
@@ -123,20 +124,6 @@ func trafficTo(revision string) []*run.GoogleCloudRunV2TrafficTarget {
 	return []*run.GoogleCloudRunV2TrafficTarget{
 		{Type: trafficByRevision, Revision: revision, Percent: 100},
 	}
-}
-
-func invokable(held []*policyBinding) ([]*policyBinding, bool) {
-	for _, binding := range held {
-		if binding.Role != invokerRole {
-			continue
-		}
-		if slices.Contains(binding.Members, everyone) {
-			return held, false
-		}
-		binding.Members = append(binding.Members, everyone)
-		return held, true
-	}
-	return append(held, &policyBinding{Role: invokerRole, Members: []string{everyone}}), true
 }
 
 func (p *Provider) heldAs(image string) string {
@@ -209,11 +196,6 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 		"pin the traffic of "+s.service+" to the revision this release stood up", latestReady(s.service))
 	if err != nil {
 		return release{}, err
-	}
-	if s.public {
-		if err := p.open(ctx, services, path, s.service); err != nil {
-			return release{}, err
-		}
 	}
 	return release{url: held.Uri, revision: revision}, nil
 }
@@ -331,40 +313,6 @@ func revisionName(path string) string {
 		}
 	}
 	return path
-}
-
-func (p *Provider) open(ctx context.Context, services *run.Service, path, service string) error {
-	return p.settled(ctx, "open "+service+" to the internet", func() error {
-		policy, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
-			return services.Projects.Locations.Services.GetIamPolicy(path).Context(ctx).Do(call...)
-		})
-		if err != nil {
-			return deniedPolicy(service, err)
-		}
-		bound, changed := invokable(policy.Bindings)
-		if !changed {
-			return nil
-		}
-		policy.Bindings = bound
-		_, err = attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
-			return services.Projects.Locations.Services.
-				SetIamPolicy(path, &run.GoogleIamV1SetIamPolicyRequest{Policy: policy}).Context(ctx).Do(call...)
-		})
-		if err == nil || stale(err) {
-			return err
-		}
-		return deniedPolicy(service, err)
-	})
-}
-
-func deniedPolicy(service string, err error) error {
-	if answeredCode(err) != http.StatusForbidden {
-		return fmt.Errorf("open %s to the internet: %w", service, err)
-	}
-	return providerkit.Refuse(providerkit.CodeDenied,
-		"binding %s to %s on the Cloud Run service %s was refused, and a service nobody may invoke answers nothing: "+
-			"grant the deploying principal %s, and check that %s does not deny %s in this organization.\n%v",
-		everyone, invokerRole, service, "roles/run.admin", "constraints/iam.allowedPolicyMemberDomains", everyone, err)
 }
 
 func (p *Provider) await(ctx context.Context, services *run.Service, call func(...googleapi.CallOption) (*run.GoogleLongrunningOperation, error)) error {

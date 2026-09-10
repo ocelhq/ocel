@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"context"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -174,18 +173,6 @@ func TestAnEmulatedRunFindsTheImageUnderTheNameTheDaemonHoldsItBy(t *testing.T) 
 	}
 }
 
-func TestThePublicIsBoundToInvokeAServiceOnceAndNotTwice(t *testing.T) {
-	held := []*policyBinding{{Role: invokerRole, Members: []string{"user:someone@acme.com"}}}
-
-	bound, changed := invokable(held)
-	if !changed {
-		t.Fatal("a policy with nobody public bound was left alone, and a service nobody may invoke answers nothing")
-	}
-	if _, again := invokable(bound); again {
-		t.Error("binding the public a second time changed the policy again, so every deploy would write one")
-	}
-}
-
 func released(t *testing.T, server *runServer, s serving) (string, string) {
 	t.Helper()
 	if s.image == "" {
@@ -219,35 +206,28 @@ func TestAReleaseReportsTheRevisionItPinnedSoALaterPromoteCanReachIt(t *testing.
 	}
 }
 
-func publicly(policies []*run.GoogleIamV1Policy) bool {
-	for _, policy := range policies {
-		for _, binding := range policy.Bindings {
-			if binding.Role == invokerRole && slices.Contains(binding.Members, everyone) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func TestAFunctionThePlanGivesNoURLOfItsOwnIsLeftPrivate(t *testing.T) {
 	server := &runServer{}
 
 	released(t, server, serving{service: "ocel-shop-prod-fn", compute: providerkit.ComputeServerless})
 
-	if publicly(server.bound()) {
-		t.Error("a function the plan says has no url was bound for anyone on the internet to invoke, " +
+	if desired := server.standing(); desired.InvokerIamDisabled {
+		t.Error("a function the plan says has no url may be invoked without an invoker check, " +
 			"and a function reached only through its app is reachable by everybody instead")
 	}
 }
 
-func TestAFunctionThePlanGivesAURLIsOpenedToThePublic(t *testing.T) {
+func TestAFunctionThePlanGivesAURLIsReachedWithoutAnAllUsersGrant(t *testing.T) {
 	server := &runServer{}
 
 	released(t, server, serving{service: "ocel-shop-prod-fn", compute: providerkit.ComputeServerless, public: true})
 
-	if !publicly(server.bound()) {
-		t.Error("a function the plan gives a url of its own was left private, and a service nobody may invoke answers nothing")
+	if desired := server.standing(); !desired.InvokerIamDisabled {
+		t.Error("a function the plan gives a url of its own still checks its invoker, and a service nobody may invoke answers nothing")
+	}
+	if bound := server.bound(); len(bound) != 0 {
+		t.Errorf("the release wrote %d iam policies, want none: an org that restricts iam members to its own domain refuses an "+
+			"allUsers binding outright, and the service is opened by turning the invoker check off instead", len(bound))
 	}
 }
 
@@ -256,8 +236,8 @@ func TestAContainerAppIsAlwaysOpenedToThePublic(t *testing.T) {
 
 	released(t, server, serving{service: "ocel-shop-prod-app", compute: providerkit.ComputeContainer, health: "/", public: true})
 
-	if !publicly(server.bound()) {
-		t.Error("the app's own front was left private, and nothing else stands between the internet and it")
+	if desired := server.standing(); !desired.InvokerIamDisabled {
+		t.Error("the app's own front still checks its invoker, and nothing else stands between the internet and it")
 	}
 }
 
@@ -324,7 +304,7 @@ func TestAServiceThatKeepsChangingUnderAReleaseIsRefusedRatherThanRetriedForever
 	released(t, server, serves("ocel-shop-prod-app"))
 
 	server.patchConflicts = releaseAttempts + 1
-	before, _ := server.tries()
+	before := server.tries()
 	_, err := server.open(t).stand(context.Background(), serves("ocel-shop-prod-app"), nil)
 	if err == nil {
 		t.Fatal("stand() over a service that never settles = nil, want the release refused")
@@ -332,32 +312,7 @@ func TestAServiceThatKeepsChangingUnderAReleaseIsRefusedRatherThanRetriedForever
 	if !strings.Contains(err.Error(), "ocel-shop-prod-app") {
 		t.Errorf("stand() = %v, want the service it was releasing named", err)
 	}
-	if patched, _ := server.tries(); patched-before != releaseAttempts {
+	if patched := server.tries(); patched-before != releaseAttempts {
 		t.Errorf("the release patched %d times, want %d: a retry that never gives up holds a deploy open", patched-before, releaseAttempts)
-	}
-}
-
-func TestAPolicyChangedUnderAReleaseIsReadAgainAndWrittenAgain(t *testing.T) {
-	server := &runServer{policyConflicts: 1}
-
-	released(t, server, serves("ocel-shop-prod-app"))
-
-	if !publicly(server.bound()) {
-		t.Error("the binding a concurrent policy write refused was never made again, and a service nobody may invoke answers nothing")
-	}
-	if _, policies := server.tries(); policies != 2 {
-		t.Errorf("the release wrote the policy %d times, want 2: a 409 says the read the write was built on is stale", policies)
-	}
-}
-
-func TestAPolicyThatKeepsChangingUnderAReleaseIsRefusedRatherThanRetriedForever(t *testing.T) {
-	server := &runServer{policyConflicts: releaseAttempts + 1}
-
-	_, err := server.open(t).stand(context.Background(), serves("ocel-shop-prod-app"), nil)
-	if err == nil {
-		t.Fatal("stand() over a policy that never settles = nil, want the release refused rather than left private")
-	}
-	if _, policies := server.tries(); policies != releaseAttempts {
-		t.Errorf("the release wrote the policy %d times, want %d: a retry that never gives up holds a deploy open", policies, releaseAttempts)
 	}
 }
