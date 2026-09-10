@@ -171,17 +171,19 @@ var resourceTypes = map[resourcesv1.ResourceType]BindingType{
 	resourcesv1.ResourceType_RESOURCE_TYPE_CONTAINER: BindingContainer,
 }
 
-func WireBindingType(kind BindingType) bindingsv1.BindingType {
-	switch kind {
-	case BindingPostgres:
-		return bindingsv1.BindingType_BINDING_TYPE_POSTGRES
-	case BindingBucket:
-		return bindingsv1.BindingType_BINDING_TYPE_BUCKET
-	case BindingCustom:
-		return bindingsv1.BindingType_BINDING_TYPE_CUSTOM
-	default:
-		return bindingsv1.BindingType_BINDING_TYPE_CUSTOM
+var wireBindingTypes = func() map[BindingType]bindingsv1.BindingType {
+	out := make(map[BindingType]bindingsv1.BindingType, len(bindingTypes))
+	for wire, kind := range bindingTypes {
+		out[kind] = wire
 	}
+	return out
+}()
+
+func WireBindingType(kind BindingType) bindingsv1.BindingType {
+	if wire, known := wireBindingTypes[kind]; known {
+		return wire
+	}
+	return bindingsv1.BindingType_BINDING_TYPE_CUSTOM
 }
 
 func manifestResources(manifest *contractv1.Manifest) ([]Resource, error) {
