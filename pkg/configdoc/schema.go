@@ -16,6 +16,10 @@ type AlsoAString interface {
 	AlsoAString()
 }
 
+type schemaProvider interface {
+	jsonSchema() object
+}
+
 type object = map[string]any
 
 func Schema() ([]byte, error) {
@@ -52,6 +56,9 @@ func schemaOf(target reflect.Type) object {
 	}
 
 	value := reflect.New(target).Elem().Interface()
+	if provider, ok := value.(schemaProvider); ok {
+		return provider.jsonSchema()
+	}
 	switch value.(type) {
 	case StringList:
 		return object{"oneOf": []any{

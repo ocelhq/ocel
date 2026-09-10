@@ -131,6 +131,27 @@
       },
       "type": "array"
     },
+    "bindings": {
+      "additionalProperties": false,
+      "description": "Resources this project declares that ocel binds to a record your own infrastructure published, instead of provisioning them itself. Keyed by resource type, then by the name the app declares; the value is the name the record is published under. A name nothing has published refuses the deploy.",
+      "properties": {
+        "bucket": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Each key is a bucket resource this project declares; its value is the name the record is published under.",
+          "type": "object"
+        },
+        "postgres": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Each key is a postgres resource this project declares; its value is the name the record is published under.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "discovery": {
       "additionalProperties": false,
       "description": "Where the resources an app declares are found.",
@@ -205,13 +226,6 @@
       ],
       "title": "EdgeDescriptor",
       "type": "object"
-    },
-    "links": {
-      "description": "Resource ids ocel binds to a link your own infrastructure published, instead of provisioning them itself. A listed id nothing has published refuses the deploy.",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
     },
     "provider": {
       "additionalProperties": false,
