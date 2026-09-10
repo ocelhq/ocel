@@ -69,6 +69,63 @@ describe("evaluate", () => {
     expect(() => evaluate(request(), modules)).toThrow(/aws\.function\.lambda\.role/);
   });
 
+  it.each([
+    ["runtime", "python3.13"],
+    ["code", "./mine.zip"],
+    ["imageUri", "1.dkr.ecr.us-east-1.amazonaws.com/mine:latest"],
+    ["packageType", "Image"],
+    ["s3ObjectVersion", "an-older-object"],
+    ["sourceCodeHash", "deadbeef"],
+    ["architectures", ["arm64"]],
+    ["name", "mine"],
+    ["tags", { team: "core" }],
+  ])("refuses %s, which would unpair the lambda from the artifact ocel built", (field, value) => {
+    const modules = [
+      module(
+        "./code.transform.ts",
+        defineTransform({ aws: { function: { lambda: { [field]: value } } } } as never),
+      ),
+    ];
+
+    expect(() => evaluate(request(), modules)).toThrow(
+      new RegExp(`aws\\.function\\.lambda\\.${field}`),
+    );
+  });
+
+  it.each(["runtime", "code", "imageUri", "packageType", "s3ObjectVersion", "architectures"])(
+    "refuses %s on the upload completer, whose code ocel places itself",
+    (field) => {
+      const modules = [
+        module(
+          "./completer.transform.ts",
+          defineTransform({
+            aws: { bucket: { uploadCompleter: { [field]: "whatever" } } },
+          } as never),
+        ),
+      ];
+
+      expect(() =>
+        evaluate(request({ resources: [{ type: "bucket", name: "uploads" }] }), modules),
+      ).toThrow(new RegExp(`aws\\.bucket\\.uploadCompleter\\.${field}`));
+    },
+  );
+
+  it("carries a patch for every resource the aws provider constructs", () => {
+    const modules = [
+      module(
+        "./everything.transform.ts",
+        defineTransform({
+          aws: { function: { role: { path: "/ocel/" }, urlPermission: { statementId: "open" } } },
+        }),
+      ),
+    ];
+
+    expect(evaluate(request(), modules).resources[0]?.patches).toEqual({
+      role: { path: "/ocel/" },
+      urlPermission: { statementId: "open" },
+    });
+  });
+
   it("refuses a module with no branch for the provider this project deploys to", () => {
     const modules = [module("./gcp.transform.ts", defineTransform({ gcp: {} } as never))];
 

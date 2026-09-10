@@ -75,3 +75,56 @@ export const ownedField = defineTransform({
     },
   },
 });
+
+export const ownedRuntime = defineTransform({
+  aws: {
+    function: {
+      lambda: {
+        // @ts-expect-error the runtime pairs with the artifact ocel built
+        runtime: "python3.13",
+      },
+    },
+  },
+});
+
+export const ownedCodeLocation = defineTransform({
+  aws: {
+    function: {
+      lambda: {
+        // @ts-expect-error the object version pins the artifact ocel uploaded
+        s3ObjectVersion: "an-older-object",
+      },
+    },
+  },
+});
+
+export const ownedCompleterRuntime = defineTransform({
+  aws: {
+    bucket: {
+      uploadCompleter: {
+        // @ts-expect-error ocel places the upload completer's own code
+        packageType: "Image",
+      },
+    },
+  },
+});
+
+export const attachedPolicy = defineTransform({
+  aws: {
+    function: {
+      role: { path: "/ocel/", maxSessionDuration: 7200 },
+      urlPermission: { statementId: "open-to-the-world" },
+    },
+  },
+});
+
+export const ownedRolePolicies = defineTransform({
+  aws: {
+    function: {
+      role: {
+        // @ts-expect-error ocel attaches the role's policies as resources of their own
+        inlinePolicies: [],
+      },
+    },
+  },
+});
