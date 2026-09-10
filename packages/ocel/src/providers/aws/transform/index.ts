@@ -13,14 +13,14 @@ import { type BindingPlaceholdersOf, bindings as openBindings } from "./output";
 
 /**
  * The records published to the coordinate a deploy targets, each property
- * under the type it carries. `ocel binding generate` writes an augmentation of
+ * under the type it carries. `ocel bindings generate` writes an augmentation of
  * this interface from the records themselves; until something does, every
  * name is open and the deploy is what checks it.
  */
 export interface Bindings {}
 
 /**
- * Whether `ocel binding generate` has written the records down. It augments this
+ * Whether `ocel bindings generate` has written the records down. It augments this
  * separately from `Bindings`, so a coordinate that published nothing still closes
  * `Bindings` to the empty set instead of reading as never generated.
  */

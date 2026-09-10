@@ -127,14 +127,14 @@ describe("declaring a postgres binding", () => {
 });
 
 describe("publishing a postgres binding", () => {
-  it("runs ocel binding set in the project, owned by this resource", async () => {
+  it("runs ocel bindings set in the project, owned by this resource", async () => {
     const created = await postgresProvider.create(declare().props as never);
 
     const { command, args, options } = argv();
     expect(command).toBe(process.execPath);
     expect(args).toEqual([
       entry,
-      "binding",
+      "bindings",
       "set",
       "--owner",
       "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-orders",
@@ -231,13 +231,13 @@ describe("changing a published postgres binding", () => {
 });
 
 describe("removing a postgres binding", () => {
-  it("runs ocel binding rm for the name it published", async () => {
+  it("runs ocel bindings rm for the name it published", async () => {
     const created = await postgresProvider.create(declare().props as never);
     run.mockClear();
 
     await postgresProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual([entry, "binding", "rm", "orders"]);
+    expect(argv().args).toEqual([entry, "bindings", "rm", "orders"]);
     expect(argv().options).toMatchObject({ cwd: root });
   });
 });
@@ -267,13 +267,13 @@ describe("declaring a custom binding", () => {
     });
   });
 
-  it("runs ocel binding set with a custom record sourced to sst", async () => {
+  it("runs ocel bindings set with a custom record sourced to sst", async () => {
     const created = await customProvider.create(declareCustom().props as never);
 
     const { args, options } = argv();
     expect(args).toEqual([
       entry,
-      "binding",
+      "bindings",
       "set",
       "--owner",
       "urn:pulumi:production::shop::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-network",
@@ -305,12 +305,12 @@ describe("declaring a custom binding", () => {
     });
   });
 
-  it("runs ocel binding rm for the name it published", async () => {
+  it("runs ocel bindings rm for the name it published", async () => {
     const created = await customProvider.create(declareCustom().props as never);
     run.mockClear();
 
     await customProvider.delete("id", created.outs);
 
-    expect(argv().args).toEqual([entry, "binding", "rm", "network"]);
+    expect(argv().args).toEqual([entry, "bindings", "rm", "network"]);
   });
 });

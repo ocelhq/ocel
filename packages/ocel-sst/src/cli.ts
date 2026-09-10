@@ -13,11 +13,15 @@ export interface Target {
 export function runBindings(args: string[], target: Target, input?: string): void {
   checkTarget(target);
   const [runtime, entry] = ocelCommand(target.project);
-  const result = childProcess.spawnSync(runtime, [entry, "binding", ...args, ...flagsFor(target)], {
-    cwd: target.project,
-    input,
-    encoding: "utf8",
-  });
+  const result = childProcess.spawnSync(
+    runtime,
+    [entry, "bindings", ...args, ...flagsFor(target)],
+    {
+      cwd: target.project,
+      input,
+      encoding: "utf8",
+    },
+  );
   if (result.error) {
     throw result.error;
   }
@@ -62,7 +66,7 @@ const classWideMarker = "*";
 function refusal(stderr: string, status: number | null): string {
   const said = stderr.trim();
   if (!said) {
-    return `ocel binding exited ${status ?? "on a signal"} without saying why`;
+    return `ocel bindings exited ${status ?? "on a signal"} without saying why`;
   }
   return said;
 }

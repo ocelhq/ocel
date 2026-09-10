@@ -31,7 +31,7 @@ describe("reaching the ocel CLI", () => {
 
     expect(run).toHaveBeenCalledWith(
       process.execPath,
-      [join("/repo/app/node_modules/ocel", "bin", "run.js"), "binding", "ls"],
+      [join("/repo/app/node_modules/ocel", "bin", "run.js"), "bindings", "ls"],
       expect.objectContaining({ cwd: "/repo/app" }),
     );
   });

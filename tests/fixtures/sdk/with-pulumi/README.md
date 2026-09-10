@@ -22,7 +22,7 @@ renders, so `ocel deploy` before `pulumi up` — or after `pulumi destroy` — r
 provisions anything, naming the binding it could not read, the property, and the field a
 transform was filling with it.
 
-To see it landed, `ocel binding ls` lists both records and who published them, and
+To see it landed, `ocel bindings ls` lists both records and who published them, and
 
 ```sh
 aws lambda get-function-configuration \
