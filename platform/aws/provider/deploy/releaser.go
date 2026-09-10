@@ -154,7 +154,7 @@ type stackWork struct {
 }
 
 type infraWork struct {
-	transformed *transformedArgs
+	transformed *transformPatches
 	completer   payloads.Placement
 }
 
@@ -167,12 +167,18 @@ func (r *release) Run(pctx *sdk.Context, plan providerkit.StackPlan) error {
 	case *stackWork:
 		return work.program(pctx)
 	case *appWork:
+		if err := work.transformed.install(pctx); err != nil {
+			return err
+		}
 		return work.run(pctx, shipped)
 	case *containerWork:
 		return work.run(pctx)
 	case *substrateWork:
 		return work.run(pctx)
 	case *infraWork:
+		if err := work.transformed.install(pctx); err != nil {
+			return err
+		}
 		return r.infra(pctx, plan, work)
 	}
 	if plan.Kind != providerkit.StackInfra {
@@ -205,10 +211,12 @@ func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan, work *inf
 		var err error
 		switch resource.Type {
 		case providerkit.BindingPostgres:
-			args := transformed.forPostgres(resource.Name, resource.Postgres)
+			args := translatePostgres(resource.Postgres)
+			args.Tags = transformed.tagsFor(transformTypePostgres, resource.Name)
 			err = registerPostgres(pctx, project, env, resource.Name, args, vpc.Id, vpc.CidrBlock, subnets.Ids)
 		case providerkit.BindingBucket:
-			args := transformed.forBucket(resource.Name, resource.Bucket)
+			args := translateBucket(resource.Bucket)
+			args.Tags = transformed.tagsFor(transformTypeBucket, resource.Name)
 			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, sessions, work.completer)
 		default:
 			return providerkit.Refuse(providerkit.CodeInvalid,

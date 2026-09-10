@@ -33,18 +33,18 @@ func Root(t *testing.T, modules map[string]string) string {
 		t.Skip("node is not on PATH")
 	}
 
-	pkg := filepath.Join(repo(t), "packages", "ocel")
-	if _, err := os.Stat(filepath.Join(pkg, "dist", "config.js")); err != nil {
-		t.Skipf("the ocel package is not built: %v", err)
+	pkg := filepath.Join(repo(t), "packages", "ocel-transforms")
+	if _, err := os.Stat(filepath.Join(pkg, "dist", "index.js")); err != nil {
+		t.Skipf("the transforms package is not built: %v", err)
 	}
 
 	root := t.TempDir()
-	modulesDir := filepath.Join(root, "node_modules")
-	if err := os.MkdirAll(modulesDir, 0o755); err != nil {
+	scopeDir := filepath.Join(root, "node_modules", "@ocel")
+	if err := os.MkdirAll(scopeDir, 0o755); err != nil {
 		t.Fatalf("create node_modules: %v", err)
 	}
-	if err := os.Symlink(pkg, filepath.Join(modulesDir, "ocel")); err != nil {
-		t.Fatalf("binding the ocel package: %v", err)
+	if err := os.Symlink(pkg, filepath.Join(scopeDir, "transforms")); err != nil {
+		t.Fatalf("binding the transforms package: %v", err)
 	}
 	for name, source := range modules {
 		path := filepath.Join(root, filepath.FromSlash(name))

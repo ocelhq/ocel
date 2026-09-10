@@ -1,6 +1,8 @@
 package transform
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -9,53 +11,17 @@ import (
 
 func functionRequest() Request {
 	return Request{
-		EnvClass: "production",
-		Env:      "prod",
-		Resources: []Resource{{
-			Type: "function",
-			Name: "api-users",
-			App:  "api",
-			Surfaces: Surfaces{
-				"lambda": {"memorySizeMb": 1024, "timeoutSeconds": 30, "runtime": "nodejs24.x"},
-				"url":    {"invokeMode": "RESPONSE_STREAM"},
-				"vpc":    {"subnetIds": []any{}, "securityGroupIds": []any{}},
-			},
-		}},
+		Provider:  Provider,
+		EnvClass:  "production",
+		Env:       "prod",
+		Resources: []Resource{{Type: "function", Name: "api-users", App: "api"}},
 	}
 }
 
-func exampleRequest(envClass string) Request {
-	return Request{
-		EnvClass: envClass,
-		Env:      "prod",
-		Resources: []Resource{
-			{
-				Type: "function",
-				Name: "api-todos",
-				App:  "api",
-				Surfaces: Surfaces{
-					"lambda": {"memorySizeMb": 1024, "timeoutSeconds": 30, "runtime": "nodejs24.x"},
-					"url":    {"invokeMode": "RESPONSE_STREAM"},
-					"vpc":    {"subnetIds": []any{}, "securityGroupIds": []any{}},
-				},
-			},
-			{
-				Type: "postgres",
-				Name: "main",
-				App:  "api",
-				Surfaces: Surfaces{
-					"cluster": {
-						"engineVersion":      "16.6",
-						"minCapacity":        0,
-						"maxCapacity":        4,
-						"deletionProtection": false,
-						"skipFinalSnapshot":  true,
-					},
-					"instance": {"instanceClass": "db.serverless", "publiclyAccessible": false},
-				},
-			},
-		},
-	}
+func evaluateWith(t *testing.T, req Request, modules map[string]string, listed ...string) ([]Result, error) {
+	t.Helper()
+	root := transformtest.Root(t, modules)
+	return NodePass{Root: root, Modules: listed}.Evaluate(t.Context(), req)
 }
 
 func TestNodePassEvaluate(t *testing.T) {
@@ -73,184 +39,152 @@ func TestNodePassEvaluate(t *testing.T) {
 		}
 	})
 
-	t.Run("the listed modules patch the defaulted args in order", func(t *testing.T) {
+	t.Run("the listed modules patch in order, the later one winning", func(t *testing.T) {
 		t.Parallel()
 
-		root := transformtest.Root(t, map[string]string{
+		results, err := evaluateWith(t, functionRequest(), map[string]string{
 			"modules/defaults.transform.ts": `
-				import { defineTransform } from "ocel/providers/aws/transform"
+				import { defineTransform } from "@ocel/transforms"
 				export default defineTransform([
-					{ function: { lambda: { memorySizeMb: 2048, timeoutSeconds: 60 } } },
-					{ if: (ctx) => ctx.envClass === "production", function: { url: { invokeMode: "BUFFERED" } } },
+					{ aws: { function: { lambda: { memorySize: 2048, timeout: 60 } } } },
+					{ if: (ctx) => ctx.envClass === "production", aws: { function: { url: { invokeMode: "BUFFERED" } } } },
 				])
 			`,
 			"modules/late.transform.ts": `
-				import { defineTransform } from "ocel/providers/aws/transform"
+				import { defineTransform } from "@ocel/transforms"
+				export default defineTransform({ aws: { function: { lambda: { memorySize: 512 } } } })
+			`,
+		}, "./modules/defaults.transform.ts", "./modules/late.transform.ts")
+		if err != nil {
+			t.Fatalf("Evaluate: %v", err)
+		}
+		if len(results) != 1 {
+			t.Fatalf("results = %d, want 1", len(results))
+		}
+		lambda := results[0].Patches["lambda"]
+		if lambda["memorySize"] != float64(512) {
+			t.Errorf("memorySize = %v, want the later module's 512", lambda["memorySize"])
+		}
+		if lambda["timeout"] != float64(60) {
+			t.Errorf("timeout = %v, want the first module's 60", lambda["timeout"])
+		}
+		if got := results[0].Patches["url"]["invokeMode"]; got != "BUFFERED" {
+			t.Errorf("invokeMode = %v, want BUFFERED", got)
+		}
+	})
+
+	t.Run("a gate that reads false leaves the resource unpatched", func(t *testing.T) {
+		t.Parallel()
+
+		results, err := evaluateWith(t, functionRequest(), map[string]string{
+			"preview.transform.ts": `
+				import { defineTransform } from "@ocel/transforms"
 				export default defineTransform({
-					function: { lambda: (args, ctx) => ({ ...args, memorySizeMb: ctx.resourceName === "api-users" ? 512 : args.memorySizeMb }) },
+					if: (ctx) => ctx.envClass === "preview",
+					aws: { function: { lambda: { memorySize: 128 } } },
 				})
 			`,
-		})
-
-		results, err := NodePass{
-			Root:    root,
-			Modules: []string{"./modules/defaults.transform.ts", "./modules/late.transform.ts"},
-		}.Evaluate(t.Context(), functionRequest())
+		}, "./preview.transform.ts")
 		if err != nil {
 			t.Fatalf("Evaluate: %v", err)
 		}
-
-		if got := results[0].Surfaces["lambda"]["memorySizeMb"]; got != float64(512) {
-			t.Errorf("memorySizeMb = %v, want the later module to win with 512", got)
-		}
-		if got := results[0].Surfaces["lambda"]["timeoutSeconds"]; got != float64(60) {
-			t.Errorf("timeoutSeconds = %v, want 60 from the first module", got)
-		}
-		if got := results[0].Surfaces["url"]["invokeMode"]; got != "BUFFERED" {
-			t.Errorf("invokeMode = %v, want the production gate to have opened", got)
+		if len(results[0].Patches) != 0 {
+			t.Errorf("patches = %v, want none", results[0].Patches)
 		}
 	})
 
-	t.Run("a gate closed against the ambient context leaves the args alone", func(t *testing.T) {
+	t.Run("a binding output rides through as the placeholder the provider resolves", func(t *testing.T) {
 		t.Parallel()
 
-		root := transformtest.Root(t, map[string]string{
-			"modules/preview.transform.ts": `
-				import { defineTransform } from "ocel/providers/aws/transform"
-				export default defineTransform({
-					if: (ctx) => ctx.envClass === "preview" || ctx.app === "web",
-					function: { lambda: { memorySizeMb: 128 } },
-				})
+		results, err := evaluateWith(t, functionRequest(), map[string]string{
+			"network.transform.ts": `
+				import { defineTransform } from "@ocel/transforms"
+				export default defineTransform(({ bindings }) => ({
+					aws: { function: { lambda: { vpcConfig: { subnetIds: bindings.custom.network.subnetIds } } } },
+				}))
 			`,
-		})
-
-		results, err := NodePass{
-			Root:    root,
-			Modules: []string{"./modules/preview.transform.ts"},
-		}.Evaluate(t.Context(), functionRequest())
+		}, "./network.transform.ts")
 		if err != nil {
 			t.Fatalf("Evaluate: %v", err)
 		}
-
-		if got := results[0].Surfaces["lambda"]["memorySizeMb"]; got != float64(1024) {
-			t.Errorf("memorySizeMb = %v, want the provider's own 1024", got)
+		vpc, held := results[0].Patches["lambda"]["vpcConfig"].(map[string]any)
+		if !held {
+			t.Fatalf("lambda patch = %v, want a vpcConfig", results[0].Patches["lambda"])
+		}
+		placeholder, named := vpc["subnetIds"].(map[string]any)
+		if !named {
+			t.Fatalf("subnetIds = %v, want a placeholder", vpc["subnetIds"])
+		}
+		ref, _ := placeholder["$ocelOutput"].(map[string]any)
+		if ref["type"] != "custom" || ref["name"] != "network" || ref["property"] != "subnetIds" {
+			t.Errorf("placeholder = %v, want bindings.custom.network.subnetIds", ref)
 		}
 	})
 
-	t.Run("the with-transforms example raises every route and widens production's cluster", func(t *testing.T) {
+	t.Run("a module with no branch for this provider refuses the deploy", func(t *testing.T) {
 		t.Parallel()
 
-		root := transformtest.Root(t, map[string]string{
-			"transforms/defaults.transform.ts": transformtest.FixtureModule(t, "with-transforms", "transforms/defaults.transform.ts"),
-		})
-		pass := NodePass{Root: root, Modules: []string{"./transforms/defaults.transform.ts"}}
-
-		results, err := pass.Evaluate(t.Context(), exampleRequest("production"))
-		if err != nil {
-			t.Fatalf("Evaluate: %v", err)
-		}
-		if got := results[0].Surfaces["lambda"]["memorySizeMb"]; got != float64(2048) {
-			t.Errorf("memorySizeMb = %v, want the example's raised 2048", got)
-		}
-		if got := results[0].Surfaces["lambda"]["timeoutSeconds"]; got != float64(60) {
-			t.Errorf("timeoutSeconds = %v, want the example's raised 60", got)
-		}
-		if got := results[1].Surfaces["cluster"]["minCapacity"]; got != float64(2) {
-			t.Errorf("minCapacity = %v, want production raised to 2", got)
-		}
-		if got := results[1].Surfaces["cluster"]["maxCapacity"]; got != float64(16) {
-			t.Errorf("maxCapacity = %v, want production widened to 16", got)
-		}
-		for i, result := range results {
-			if got := result.Tags["acme:cost-center"]; got != "platform" {
-				t.Errorf("resource %d tags = %v, want the org tag on everything", i, result.Tags)
-			}
-		}
-
-		preview, err := pass.Evaluate(t.Context(), exampleRequest("preview"))
-		if err != nil {
-			t.Fatalf("Evaluate preview: %v", err)
-		}
-		if got := preview[1].Surfaces["cluster"]["deletionProtection"]; got != false {
-			t.Errorf("deletionProtection = %v, want the production gate closed for a preview", got)
-		}
-		if got := preview[1].Surfaces["cluster"]["maxCapacity"]; got != float64(4) {
-			t.Errorf("maxCapacity = %v, want the provider's own 4 for a preview", got)
-		}
-	})
-
-	t.Run("the with-sst example places every function in the network its own IaC published", func(t *testing.T) {
-		t.Parallel()
-
-		root := transformtest.Root(t, map[string]string{
-			"transforms/network.transform.ts": transformtest.FixtureModule(t, "with-sst", "transforms/network.transform.ts"),
-		})
-		pass := NodePass{Root: root, Modules: []string{"./transforms/network.transform.ts"}}
-
-		results, err := pass.Evaluate(t.Context(), exampleRequest("production"))
-		if err != nil {
-			t.Fatalf("Evaluate: %v", err)
-		}
-		for _, field := range []string{"subnetIds", "securityGroupIds"} {
-			placeholder, ok := results[0].Surfaces["vpc"][field].(map[string]any)
-			if !ok {
-				t.Fatalf("vpc.%s = %#v, want a binding output the deploy resolves", field, results[0].Surfaces["vpc"][field])
-			}
-			ref, ok := placeholder["$ocelOutput"].(map[string]any)
-			if !ok {
-				t.Fatalf("vpc.%s = %#v, want a binding output the deploy resolves", field, placeholder)
-			}
-			if ref["binding"] != "network" || ref["property"] != field {
-				t.Errorf("vpc.%s reads %v, want network's %s", field, ref, field)
-			}
-		}
-		if _, placed := results[1].Surfaces["vpc"]; placed {
-			t.Errorf("the postgres resource carries a vpc surface it has no field for")
-		}
-	})
-
-	t.Run("a patch outside the allowlist fails the deploy, naming module, resource and field", func(t *testing.T) {
-		t.Parallel()
-
-		root := transformtest.Root(t, map[string]string{
-			"modules/bad.transform.ts": `
-				import { defineTransform } from "ocel/providers/aws/transform"
-				export default defineTransform({
-					function: { lambda: { reservedConcurrency: 4 } as never },
-				})
+		_, err := evaluateWith(t, functionRequest(), map[string]string{
+			"gcp.transform.ts": `
+				import { defineTransform } from "@ocel/transforms"
+				export default defineTransform({ gcp: { service: {} } })
 			`,
-		})
-
-		_, err := NodePass{
-			Root:    root,
-			Modules: []string{"./modules/bad.transform.ts"},
-		}.Evaluate(t.Context(), functionRequest())
+		}, "./gcp.transform.ts")
 		if err == nil {
-			t.Fatal("Evaluate succeeded, want the unknown field rejected")
+			t.Fatal("Evaluate() = nil, want a module with no aws branch refused")
 		}
-		for _, fact := range []string{"./modules/bad.transform.ts", "function.lambda.reservedConcurrency"} {
-			if !strings.Contains(err.Error(), fact) {
-				t.Errorf("error = %q, missing %q", err, fact)
+		for _, want := range []string{"gcp.transform.ts", "gcp", "aws"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to name %q", err, want)
 			}
 		}
 	})
 
-	t.Run("a module without a defineTransform default export fails the deploy by name", func(t *testing.T) {
+	t.Run("a field ocel fills from what it built refuses the deploy by name", func(t *testing.T) {
 		t.Parallel()
 
-		root := transformtest.Root(t, map[string]string{
-			"modules/empty.transform.ts": `export default { function: {} }`,
-		})
-
-		_, err := NodePass{
-			Root:    root,
-			Modules: []string{"./modules/empty.transform.ts"},
-		}.Evaluate(t.Context(), functionRequest())
+		_, err := evaluateWith(t, functionRequest(), map[string]string{
+			"role.transform.ts": `
+				import { defineTransform } from "@ocel/transforms"
+				export default defineTransform({ aws: { function: { lambda: { role: "arn:aws:iam::1:role/mine" } } } })
+			`,
+		}, "./role.transform.ts")
 		if err == nil {
-			t.Fatal("Evaluate succeeded, want the malformed module rejected")
+			t.Fatal("Evaluate() = nil, want an owned field refused")
 		}
-		if !strings.Contains(err.Error(), "./modules/empty.transform.ts") {
-			t.Errorf("error = %q, missing the module that failed", err)
+		if !strings.Contains(err.Error(), "aws.function.lambda.role") {
+			t.Errorf("err = %v, want it to name the field", err)
+		}
+	})
+
+	t.Run("a module that exports something else refuses the deploy", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := evaluateWith(t, functionRequest(), map[string]string{
+			"loose.transform.ts": `export default { aws: {} }`,
+		}, "./loose.transform.ts")
+		if err == nil {
+			t.Fatal("Evaluate() = nil, want a module that skipped defineTransform refused")
+		}
+		if !strings.Contains(err.Error(), "defineTransform") {
+			t.Errorf("err = %v, want it to name defineTransform", err)
+		}
+	})
+
+	t.Run("tags reach the provider as the union of the rules that carried them", func(t *testing.T) {
+		t.Parallel()
+
+		results, err := evaluateWith(t, functionRequest(), map[string]string{
+			"tags.transform.ts": `
+				import { defineTransform } from "@ocel/transforms"
+				export default defineTransform({ tags: { team: "core" }, aws: {} })
+			`,
+		}, "./tags.transform.ts")
+		if err != nil {
+			t.Fatalf("Evaluate: %v", err)
+		}
+		if got := slices.Sorted(maps.Keys(results[0].Tags)); !slices.Equal(got, []string{"team"}) {
+			t.Errorf("tags = %v, want team", got)
 		}
 	})
 }

@@ -5,78 +5,63 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform/transformtest"
 )
 
 const conformanceModule = `
-	import { defineTransform } from "ocel/providers/aws/transform"
-	const identity = (args) => args
-	export default defineTransform({
-		function: { lambda: identity, url: identity, vpc: identity },
-		bucket: { bucket: identity, cors: identity, uploadCompleter: identity, notification: identity },
-		postgres: { cluster: identity, instance: identity },
-	})
+	import { defineTransform } from "@ocel/transforms"
+	import { awsOwnedFields } from "@ocel/transforms/aws"
+	const everything = Object.fromEntries(
+		Object.entries(awsOwnedFields).map(([type, keys]) => [
+			type,
+			Object.fromEntries(Object.keys(keys).map((key) => [key, {}])),
+		]),
+	)
+	export default defineTransform({ aws: everything })
 `
 
 func TestSurfaceConformance(t *testing.T) {
 	t.Parallel()
 
-	targeted := map[string][]string{
-		"function": {"lambda", "url", "vpc"},
-		"bucket":   {"bucket", "cors", "uploadCompleter", "notification"},
-		"postgres": {"cluster", "instance"},
+	rendered := map[string]map[string]string{
+		transformTypeFunction: functionResourceNames("proj", naming.StackName{Env: "prod", App: "api"}, "api"),
+		transformTypeBucket: bucketResourceNames("proj", "prod", "uploads",
+			translateBucket(&providerkit.BucketSpec{AllowedOrigins: []string{"https://acme.test"}})),
+		transformTypePostgres: postgresResourceNames("proj", "prod", "main"),
 	}
 
-	defaults, err := translateFunctionSpec("", providerkit.FunctionSpec{})
+	root := transformtest.Root(t, map[string]string{"conformance.transform.ts": conformanceModule})
+
+	req := transform.Request{Provider: transform.Provider, EnvClass: "production", Env: "prod"}
+	var candidates []transformCandidate
+	for _, kind := range slices.Sorted(maps.Keys(rendered)) {
+		req.Resources = append(req.Resources, transform.Resource{Type: kind, Name: kind + "-under-test"})
+		candidates = append(candidates, transformCandidate{
+			key:   resourceKey{Type: kind, Name: kind + "-under-test"},
+			names: rendered[kind],
+		})
+	}
+
+	results, err := (transform.NodePass{
+		Root:    root,
+		Modules: []string{"./conformance.transform.ts"},
+	}).Evaluate(t.Context(), req)
 	if err != nil {
-		t.Fatalf("translateFunctionSpec: %v", err)
+		t.Fatalf("evaluate the module that patches every key: %v", err)
 	}
 
-	rendered := map[string]transform.Surfaces{
-		"function": functionSurfaces(defaults),
-		"bucket":   bucketSurfaces(translateBucket(&providerkit.BucketSpec{})),
-		"postgres": postgresSurfaces(translatePostgres(&providerkit.PostgresSpec{})),
+	for i, result := range results {
+		want := slices.Sorted(maps.Keys(rendered[candidates[i].key.Type]))
+		got := slices.Sorted(maps.Keys(result.Patches))
+		if !slices.Equal(got, want) {
+			t.Errorf("%s: the module targets %v, the provider constructs %v", candidates[i].key.Type, got, want)
+		}
 	}
 
-	t.Run("the provider renders exactly the underlying resources the module targets", func(t *testing.T) {
-		t.Parallel()
-
-		for kind, want := range targeted {
-			got := slices.Sorted(maps.Keys(rendered[kind]))
-			slices.Sort(want)
-			if !slices.Equal(got, want) {
-				t.Errorf("%s renders %v, want %v", kind, got, want)
-			}
-		}
-	})
-
-	t.Run("every rendered field is one the authored surface allows, and none is missing", func(t *testing.T) {
-		t.Parallel()
-
-		root := transformtest.Root(t, map[string]string{
-			"conformance.transform.ts": conformanceModule,
-		})
-
-		req := transform.Request{EnvClass: "production", Env: "prod"}
-		for kind, surfaces := range rendered {
-			req.Resources = append(req.Resources, transform.Resource{
-				Type: kind, Name: kind + "-under-test", Surfaces: surfaces,
-			})
-		}
-		slices.SortFunc(req.Resources, func(a, b transform.Resource) int {
-			if a.Name < b.Name {
-				return -1
-			}
-			return 1
-		})
-
-		if _, err := (transform.NodePass{
-			Root:    root,
-			Modules: []string{"./conformance.transform.ts"},
-		}).Evaluate(t.Context(), req); err != nil {
-			t.Fatalf("the Go surfaces and the authored allowlist disagree: %v", err)
-		}
-	})
+	if _, err := indexPatches(candidates, results); err != nil {
+		t.Errorf("index the patches every key carries: %v", err)
+	}
 }
