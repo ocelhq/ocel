@@ -1,4 +1,4 @@
-error: 'github' is tagged #[ocel(group)], so it holds an ocel::Env struct, or an Option of one to make the group optional.
+error: 'github' is tagged #[ocel(group)], so it holds an ocel::Group struct, or an Option of one to make the group optional.
   --> tests/ui/generic_group.rs:12:5
    |
 12 |     github: Wrapper<GitHub>,

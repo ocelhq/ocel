@@ -17,7 +17,7 @@ struct Env {
 }
 
 #[allow(dead_code)]
-#[derive(ocel::Env)]
+#[derive(ocel::Group)]
 struct GitHub {
     #[ocel(key = "GITHUB_CLIENT_ID")]
     client_id: String,
@@ -26,7 +26,7 @@ struct GitHub {
 }
 
 #[allow(dead_code)]
-#[derive(ocel::Env)]
+#[derive(ocel::Group)]
 struct Smtp {
     #[ocel(key = "SMTP_HOST")]
     host: String,
@@ -37,7 +37,7 @@ struct Smtp {
 }
 
 #[allow(dead_code)]
-#[derive(ocel::Env)]
+#[derive(ocel::Group)]
 struct Stripe {
     #[ocel(key = "STRIPE_KEY")]
     key: String,

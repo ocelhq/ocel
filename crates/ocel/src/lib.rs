@@ -50,6 +50,10 @@ pub use ocel_macros::Resources;
 /// reads the delivered values into it.
 pub use ocel_macros::Env;
 
+/// Declares every field of a struct as a member of the group that holds it. A struct
+/// nothing holds declares nothing.
+pub use ocel_macros::Group;
+
 #[doc(hidden)]
 pub use declare::{
     Check, Declare, Declared, DeclaredGroup, DeclaredResource, DeclaredVariable, Group, Registered,

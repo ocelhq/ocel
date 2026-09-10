@@ -11,15 +11,18 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput, ItemFn, ReturnType, Type};
 
-fn ungeneric(input: &DeriveInput, derive: &str) -> syn::Result<()> {
+fn ungeneric(input: &DeriveInput, derive: &str, because: &str) -> syn::Result<()> {
     match input.generics.params.is_empty() {
         true => Ok(()),
         false => Err(syn::Error::new_spanned(
             &input.generics,
-            format!("a #[derive({derive})] struct takes no generic parameters, because its declarations register once per binary."),
+            format!("a #[derive({derive})] struct takes no generic parameters, because {because}."),
         )),
     }
 }
+
+const REGISTERED: &str = "its declarations register once per binary";
+const FIXED: &str = "what it declares is fixed once per binary";
 
 /// Declare every [`Postgres`](https://docs.rs/ocel) field of a struct, and write the
 /// `load` that hands the struct back with a handle in each field.
@@ -38,7 +41,7 @@ fn ungeneric(input: &DeriveInput, derive: &str) -> syn::Result<()> {
 #[proc_macro_derive(Resources, attributes(ocel))]
 pub fn resources(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
-    ungeneric(&input, "ocel::Resources")
+    ungeneric(&input, "ocel::Resources", REGISTERED)
         .and_then(|()| resources::derive(&input))
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
@@ -70,18 +73,48 @@ pub fn resources(item: TokenStream) -> TokenStream {
 /// `FromStr`. A field of type `ocel::Secret` declares the secret class and resolves its
 /// value on every read.
 ///
-/// A field tagged `#[ocel(group)]` holds another `ocel::Env` struct, whose variables are
-/// declared under a group named after the field and described by the doc comment above it.
-/// An `Option` of one makes the group optional: it stays `None` until a value is delivered
-/// for one of its members, and nothing in it is owed until then. A group holding groups of
-/// its own is a compile error, because a group nests one level only. The field's type is
-/// read as it is written, so a type alias standing for an `Option` declares no optional
-/// group: spell the `Option` on the field.
+/// A field tagged `#[ocel(group)]` holds an [`ocel::Group`](macro@Group) struct, whose
+/// variables are declared under a group named after the field and described by the doc
+/// comment above it. An `Option` of one makes the group optional: it stays `None` until a
+/// value is delivered for one of its members, and nothing in it is owed until then. A group
+/// holding groups of its own is a compile error, because a group nests one level only. The
+/// field's type is read as it is written, so a type alias standing for an `Option` declares
+/// no optional group: spell the `Option` on the field.
 #[proc_macro_derive(Env, attributes(ocel))]
 pub fn env(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
-    ungeneric(&input, "ocel::Env")
-        .and_then(|()| env::derive(&input))
+    ungeneric(&input, "ocel::Env", REGISTERED)
+        .and_then(|()| env::derive(&input, env::Kind::Env))
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Declare every field of a struct as a member of the group that holds it, and write the
+/// `load` that reads the delivered values into it.
+///
+/// ```ignore
+/// #[derive(ocel::Env, Clone)]
+/// pub struct Env {
+///     /// Enable GitHub sign-in
+///     #[ocel(group)]
+///     pub github: Option<GitHub>,
+/// }
+///
+/// #[derive(ocel::Group, Clone)]
+/// pub struct GitHub {
+///     pub client_id: String,
+///     pub client_secret: ocel::Secret,
+/// }
+/// ```
+///
+/// Fields are spelled as they are on an [`ocel::Env`](macro@Env) struct. What differs is
+/// that nothing is declared until an `ocel::Env` struct holds the group: a struct nothing
+/// holds declares no variables of its own.
+#[proc_macro_derive(Group, attributes(ocel))]
+pub fn group(item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+    ungeneric(&input, "ocel::Group", FIXED)
+        .and_then(|()| env::derive(&input, env::Kind::Group))
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }

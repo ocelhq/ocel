@@ -13,14 +13,14 @@ struct Api {
 }
 
 #[allow(dead_code)]
-#[derive(ocel::Env)]
+#[derive(ocel::Group)]
 struct WebGitHub {
     #[ocel(key = "WEB_GITHUB_CLIENT_ID")]
     client_id: String,
 }
 
 #[allow(dead_code)]
-#[derive(ocel::Env)]
+#[derive(ocel::Group)]
 struct ApiGitHub {
     #[ocel(key = "API_GITHUB_CLIENT_ID")]
     client_id: String,
