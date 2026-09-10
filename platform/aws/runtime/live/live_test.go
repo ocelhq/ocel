@@ -576,7 +576,7 @@ func TestResolveLiveValues(t *testing.T) {
 			},
 		}
 
-		names := linkNames(manifest.Bindings)
+		names := bindingNames(manifest.Bindings)
 		if len(names) != 2 {
 			t.Fatalf("names = %v, want one per binding", names)
 		}

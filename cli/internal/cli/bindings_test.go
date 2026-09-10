@@ -365,11 +365,11 @@ func TestBindingBootstrap(t *testing.T) {
 			"ls":  runBindingsLs(context.Background(), newDeps(), root, bindingsOptions{environment: "staging"}, &stdout, &stderr),
 		} {
 			if err == nil {
-				t.Errorf("`ocel binding %s --environment` against production err = nil, want a refusal", name)
+				t.Errorf("`ocel bindings %s --environment` against production err = nil, want a refusal", name)
 				continue
 			}
 			if !strings.Contains(err.Error(), "--preview") {
-				t.Errorf("`ocel binding %s` err = %v, want it to name the flag that selects the bootstrap overrides live on", name, err)
+				t.Errorf("`ocel bindings %s` err = %v, want it to name the flag that selects the bootstrap overrides live on", name, err)
 			}
 		}
 	})
@@ -435,7 +435,7 @@ func TestBindingCommands(t *testing.T) {
 		for _, c := range []*cobra.Command{bindingsSetCmd, bindingsRmCmd, bindingsLsCmd, bindingsGenerateCmd} {
 			for _, flag := range []string{"preview", "environment"} {
 				if c.Flags().Lookup(flag) == nil {
-					t.Errorf("`ocel binding %s` cannot address --%s", c.Name(), flag)
+					t.Errorf("`ocel bindings %s` cannot address --%s", c.Name(), flag)
 				}
 			}
 		}
@@ -453,7 +453,7 @@ func TestBindingCommands(t *testing.T) {
 		}
 		for _, c := range []*cobra.Command{bindingsRmCmd, bindingsLsCmd, bindingsGenerateCmd} {
 			if c.Flags().Lookup("owner") != nil {
-				t.Errorf("`ocel binding %s` registers --owner; only publishing takes a name", c.Name())
+				t.Errorf("`ocel bindings %s` registers --owner; only publishing takes a name", c.Name())
 			}
 		}
 	})
@@ -475,11 +475,11 @@ func TestBindingCommands(t *testing.T) {
 		}
 	})
 
-	t.Run("`ocel binding` is a different command", func(t *testing.T) {
+	t.Run("`ocel link` is a different command", func(t *testing.T) {
 		t.Parallel()
 
-		if bindingsCmd.Parent() != rootCmd {
-			t.Errorf("`ocel binding` hangs off %v, want the root command", bindingsCmd.Parent())
+		if linkCmd.Parent() != rootCmd {
+			t.Errorf("`ocel link` hangs off %v, want the root command", linkCmd.Parent())
 		}
 		if unlinkCmd.Parent() != rootCmd {
 			t.Errorf("`ocel unlink` hangs off %v, want the root command", unlinkCmd.Parent())
