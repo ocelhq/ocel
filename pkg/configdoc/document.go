@@ -9,7 +9,7 @@ import (
 type Document struct {
 	Schema        string               `json:"$schema,omitempty" doc:"The JSON Schema this config is written against. ocel init writes the schema shipped with the CLI that created it."`
 	Slug          string               `json:"slug" doc:"The project's deployment identity. Every stack and resource ocel creates in your own account is keyed on it, so changing it forks a new project."`
-	Links         []string             `json:"links,omitempty" doc:"Resource ids ocel binds to a link your own infrastructure published, instead of provisioning them itself. A listed id nothing has published refuses the deploy."`
+	Bindings      Bindings             `json:"bindings,omitempty" doc:"Resources this project declares that ocel binds to a record your own infrastructure published, instead of provisioning them itself. Keyed by resource type, then by the name the app declares; the value is the name the record is published under. A name nothing has published refuses the deploy."`
 	Discovery     *DiscoveryConfig     `json:"discovery,omitempty" doc:"Where the resources an app declares are found."`
 	Provider      *ProviderDescriptor  `json:"provider,omitempty" doc:"The provider ocel deploy provisions into."`
 	Edge          *EdgeDescriptor      `json:"edge,omitempty" doc:"The edge in front of the origin. Omit it and the provider fronts the deployment with its own default edge."`
