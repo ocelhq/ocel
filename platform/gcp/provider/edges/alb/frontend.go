@@ -11,13 +11,13 @@ import (
 )
 
 const (
-	externalManaged = "EXTERNAL_MANAGED"
-	premiumTier     = "PREMIUM"
-	httpsPortRange  = "443"
-	cacheOnOrigin   = "USE_ORIGIN_HEADERS"
-	serverlessNEG   = "SERVERLESS"
-	previewURLMask  = "<service>"
-	certificateHost = "//certificatemanager.googleapis.com/projects/%s/locations/global/certificateMaps/%s"
+	externalManaged    = "EXTERNAL_MANAGED"
+	premiumTier        = "PREMIUM"
+	httpsPortRange     = "443"
+	cacheOnOrigin      = "USE_ORIGIN_HEADERS"
+	serverlessNEG      = "SERVERLESS"
+	servicePlaceholder = "<service>"
+	certificateHost    = "//certificatemanager.googleapis.com/projects/%s/locations/global/certificateMaps/%s"
 )
 
 var frontRouting = []string{"hostRules", "pathMatchers"}
@@ -88,7 +88,7 @@ func previewWildcardResources(ctx *pulumi.Context, spec frontSpec) error {
 		Region:              pulumi.String(spec.Region),
 		NetworkEndpointType: pulumi.String(serverlessNEG),
 		CloudRun: &compute.RegionNetworkEndpointGroupCloudRunArgs{
-			UrlMask: pulumi.String(previewURLMask + "." + base),
+			UrlMask: pulumi.String(servicePlaceholder + "." + base),
 		},
 	})
 	if err != nil {

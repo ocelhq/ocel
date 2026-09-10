@@ -79,12 +79,16 @@ func (n Names) Service(project, env, app, function string) (string, error) {
 	return service, nil
 }
 
+const functionSuffix = "fn"
+
+var cloudRunService = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
+
 func (n Names) PreviewService(label, app, function string) (string, error) {
 	service := label
 	if function != app {
 		service = strings.Join([]string{label, providerkit.FunctionRoute(app, function), functionSuffix}, naming.FieldSeparator)
 	}
-	if len(service) > maxPreviewService || !cloudRunService.MatchString(service) {
+	if len(service) > edge.PreviewLabelMaxLen || !cloudRunService.MatchString(service) {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
 			"the preview %s would be served by a Cloud Run service named %q, which Cloud Run will not take: "+
 				"a service on a shared preview wildcard is named the label its hostname carries, "+
@@ -92,16 +96,10 @@ func (n Names) PreviewService(label, app, function string) (string, error) {
 				"and Cloud Run takes at most %d characters of lowercase letters, digits and dashes, "+
 				"starting with a letter and ending with a letter or a digit.\n"+
 				"This one is %s = %d characters. Shorten one of them and deploy again",
-			app, service, maxPreviewService, edge.LabelParts(service), len(service))
+			app, service, edge.PreviewLabelMaxLen, edge.LabelParts(service), len(service))
 	}
 	return service, nil
 }
-
-const functionSuffix = "fn"
-
-const maxPreviewService = edge.PreviewLabelMaxLen
-
-var cloudRunService = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
 
 func serviceHash(parts ...string) string {
 	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
