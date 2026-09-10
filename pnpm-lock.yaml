@@ -729,7 +729,7 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
 
-  packages/pulumi:
+  packages/ocel-pulumi:
     devDependencies:
       '@pulumi/pulumi':
         specifier: ~3.252.0
@@ -747,7 +747,7 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.43)(vite@8.1.3(@types/node@20.19.43)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
 
-  packages/sst:
+  packages/ocel-sst:
     devDependencies:
       '@types/node':
         specifier: ^20
@@ -1305,7 +1305,7 @@ importers:
     dependencies:
       '@ocel/pulumi':
         specifier: workspace:^
-        version: link:../../../../packages/pulumi
+        version: link:../../../../packages/ocel-pulumi
       '@pulumi/aws':
         specifier: ~7.41.0
         version: 7.41.0(ts-node@10.9.2(@types/node@20.19.43)(typescript@5.9.3))(typescript@5.9.3)
@@ -1348,7 +1348,7 @@ importers:
     dependencies:
       '@ocel/sst':
         specifier: workspace:^
-        version: link:../../../../packages/sst
+        version: link:../../../../packages/ocel-sst
       express:
         specifier: ~5.0.0
         version: 5.0.1
