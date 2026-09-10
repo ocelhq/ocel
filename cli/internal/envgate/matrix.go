@@ -34,7 +34,14 @@ type MatrixRow struct {
 	Description string       `json:"description,omitempty"`
 	Class       string       `json:"class"`
 	Scope       []string     `json:"scope,omitempty"`
+	Group       string       `json:"group,omitempty"`
 	Cells       []MatrixCell `json:"cells"`
+}
+
+type MatrixGroup struct {
+	Key         string `json:"key"`
+	Required    bool   `json:"required"`
+	Description string `json:"description,omitempty"`
 }
 
 type AppResolution struct {
@@ -46,6 +53,7 @@ type AppResolution struct {
 type Matrix struct {
 	Columns []string        `json:"columns"`
 	Rows    []MatrixRow     `json:"rows"`
+	Groups  []MatrixGroup   `json:"groups,omitempty"`
 	Apps    []AppResolution `json:"apps"`
 }
 
@@ -58,6 +66,7 @@ var className = map[resourcesv1.VariableClass]string{
 func (g *Gate) Matrix(environments []string) Matrix {
 	g.mu.Lock()
 	definitions := slices.Clone(g.definitions)
+	groups := slices.Clone(g.groups)
 	apps := slices.Clone(g.scope.Apps)
 	base := g.baseCells()
 	resolved := g.resolvedCells()
@@ -89,6 +98,7 @@ func (g *Gate) Matrix(environments []string) Matrix {
 			Description: definition.GetDescription(),
 			Class:       className[definition.GetClass()],
 			Scope:       definition.GetFolders(),
+			Group:       definition.GetGroup(),
 			Cells:       make([]MatrixCell, 0, len(columns)),
 		}
 		for _, folder := range columns {
@@ -105,11 +115,18 @@ func (g *Gate) Matrix(environments []string) Matrix {
 		}
 		m.Rows = append(m.Rows, row)
 	}
+	for _, group := range groups {
+		m.Groups = append(m.Groups, MatrixGroup{
+			Key:         group.GetKey(),
+			Required:    group.GetRequired(),
+			Description: group.GetDescription(),
+		})
+	}
 	for _, app := range apps {
 		m.Apps = append(m.Apps, AppResolution{
 			Name:    app.Name,
 			Folder:  app.Folder,
-			Missing: missing(definitions, app.Folder, resolved),
+			Missing: missing(definitions, groups, app.Folder, resolved),
 		})
 	}
 	return m
@@ -129,17 +146,17 @@ func state(definition *resourcesv1.VariableDefinition, folder string) CellState 
 	return CellOptional
 }
 
-func missing(definitions []*resourcesv1.VariableDefinition, binding string, held heldCells) []Cell {
+func missing(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, binding string, held heldCells) []Cell {
 	var out []Cell
 	for _, definition := range definitions {
-		if !definition.GetRequired() {
+		if !owes(definition, definitions, groups, binding, held) {
 			continue
 		}
 		scope := definition.GetFolders()
 		if len(scope) > 0 && !slices.Contains(scope, binding) {
 			continue
 		}
-		if _, ok := hop(definition, binding, held); ok {
+		if resolves(definition, binding, held) {
 			continue
 		}
 		owed := Cell{Key: definition.GetKey()}

@@ -18,13 +18,25 @@ const (
 type Refusal struct {
 	Problems    []*resourcesv1.VariableProblem
 	Definitions []*resourcesv1.VariableDefinition
+	Groups      []*resourcesv1.GroupDefinition
 	Scope       Scope
 }
 
 func (r *Refusal) Error() string {
 	owed := r.Owed()
-	lines := append(Lines(owed.GetCells(), Plain), "", RemedyLine(owed.GetRemedy()))
+	lines := append(render(owed.GetCells(), r.grouping(), Plain), "", RemedyLine(owed.GetRemedy()))
 	return strings.Join(lines, "\n")
+}
+
+func (r *Refusal) grouping() func(string) (string, string) {
+	return func(key string) (string, string) {
+		for _, definition := range r.Definitions {
+			if definition.GetKey() == key {
+				return definition.GetGroup(), groupDescription(r.Groups, definition.GetGroup())
+			}
+		}
+		return "", ""
+	}
 }
 
 func (r *Refusal) Owed() *streamv1.VariablesOwed {
@@ -102,19 +114,63 @@ func Headline(n int) string {
 }
 
 func Lines(cells []*streamv1.OwedVariable, paint Paint) []string {
+	return render(cells, nil, paint)
+}
+
+func render(cells []*streamv1.OwedVariable, grouping func(string) (string, string), paint Paint) []string {
 	out := []string{paint.Fail(Mark) + " " + Headline(len(cells)), ""}
 	keyWidth, folderWidth := 0, 0
 	for _, cell := range cells {
-		keyWidth = max(keyWidth, len(cell.GetKey()))
+		width := len(cell.GetKey())
+		if group, _ := groupNameOf(grouping, cell); group != "" {
+			width += len(indent)
+		}
+		keyWidth = max(keyWidth, width)
 		folderWidth = max(folderWidth, len(folderName(cell.GetFolder())))
 	}
+
+	written := map[string]bool{}
 	for _, cell := range cells {
-		key := fmt.Sprintf("%-*s", keyWidth, cell.GetKey())
-		folder := fmt.Sprintf("%-*s", folderWidth, folderName(cell.GetFolder()))
-		out = append(out, indent+paint.Fail(Mark)+" "+key+indent+paint.Faint(folder)+indent+cell.GetReason())
-		if description := cell.GetDescription(); description != "" {
-			out = append(out, indent+indent+paint.Faint(description))
+		group, description := groupNameOf(grouping, cell)
+		if group == "" {
+			out = append(out, owedLines(cell, indent, keyWidth, folderWidth, paint)...)
+			continue
 		}
+		if written[group] {
+			continue
+		}
+		written[group] = true
+		out = append(out, indent+paint.Faint(GroupHeadline(group, description)))
+		for _, held := range cells {
+			if name, _ := groupNameOf(grouping, held); name == group {
+				out = append(out, owedLines(held, indent+indent, keyWidth-len(indent), folderWidth, paint)...)
+			}
+		}
+	}
+	return out
+}
+
+func groupNameOf(grouping func(string) (string, string), cell *streamv1.OwedVariable) (string, string) {
+	if grouping == nil {
+		return "", ""
+	}
+	return grouping(cell.GetKey())
+}
+
+func owedLines(cell *streamv1.OwedVariable, lead string, keyWidth, folderWidth int, paint Paint) []string {
+	key := fmt.Sprintf("%-*s", keyWidth, cell.GetKey())
+	folder := fmt.Sprintf("%-*s", folderWidth, folderName(cell.GetFolder()))
+	out := []string{lead + paint.Fail(Mark) + " " + key + indent + paint.Faint(folder) + indent + cell.GetReason()}
+	if description := cell.GetDescription(); description != "" {
+		out = append(out, lead+indent+paint.Faint(description))
+	}
+	return out
+}
+
+func GroupHeadline(group, description string) string {
+	out := group + " — set together"
+	if description != "" {
+		out += " (" + description + ")"
 	}
 	return out
 }

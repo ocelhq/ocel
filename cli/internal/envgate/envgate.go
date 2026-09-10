@@ -71,6 +71,7 @@ type Gate struct {
 	overrides   map[Cell][]Override
 	references  map[Cell]*Reference
 	definitions []*resourcesv1.VariableDefinition
+	groups      []*resourcesv1.GroupDefinition
 	problems    []*resourcesv1.VariableProblem
 
 	plaintext map[Cell]revealed
@@ -153,7 +154,20 @@ func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, err
 }
 
 func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
+	groups := map[string]bool{}
+	for _, group := range req.GetGroups() {
+		if group.GetKey() == "" {
+			return nil, fmt.Errorf("an environment group needs a key")
+		}
+		if groups[group.GetKey()] {
+			return nil, fmt.Errorf("environment group %s is declared twice", group.GetKey())
+		}
+		groups[group.GetKey()] = true
+	}
 	for _, definition := range req.GetDefinitions() {
+		if definition.GetGroup() != "" && !groups[definition.GetGroup()] {
+			return nil, fmt.Errorf("%s belongs to environment group %s, but that group is not declared", definition.GetKey(), definition.GetGroup())
+		}
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_DERIVED {
 			return nil, fmt.Errorf("%s is declared as derived, a class ocel writes for the resources an app binds and prunes on its own; declare it as plain, sensitive or secret", definition.GetKey())
 		}
@@ -161,11 +175,18 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 			return nil, fmt.Errorf("%s is written by ocel for every app, from the hostname this deploy serves it on, so a declared one would be overwritten before anything read it; read it from `ocel/env` as `deployment.url` instead of declaring it", definition.GetKey())
 		}
 	}
+	for _, group := range req.GetGroups() {
+		if !slices.ContainsFunc(req.GetDefinitions(), func(definition *resourcesv1.VariableDefinition) bool {
+			return definition.GetGroup() == group.GetKey()
+		}) {
+			return nil, fmt.Errorf("environment group %s has no members", group.GetKey())
+		}
+	}
 
-	g.mu.Lock()
-	held := g.resolvedCells()
-	g.definitions = append(g.definitions, req.GetDefinitions()...)
-	g.mu.Unlock()
+	held, err := g.claim(req)
+	if err != nil {
+		return nil, err
+	}
 
 	var wanted []Cell
 	for _, definition := range req.GetDefinitions() {
@@ -201,6 +222,27 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 	return &resourcesv1.DeclareEnvResponse{Cells: cells}, nil
 }
 
+func (g *Gate) claim(req *resourcesv1.DeclareEnvRequest) (heldCells, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	for _, group := range req.GetGroups() {
+		if slices.ContainsFunc(g.groups, func(held *resourcesv1.GroupDefinition) bool { return held.GetKey() == group.GetKey() }) {
+			return nil, fmt.Errorf("environment group %s is declared twice", group.GetKey())
+		}
+	}
+	held := g.resolvedCells()
+	g.definitions = append(g.definitions, req.GetDefinitions()...)
+	g.groups = append(g.groups, req.GetGroups()...)
+	return held, nil
+}
+
+func (g *Gate) Groups() []*resourcesv1.GroupDefinition {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return slices.Clone(g.groups)
+}
+
 func (g *Gate) ReportEnvProblems(_ context.Context, req *resourcesv1.ReportEnvProblemsRequest) (*resourcesv1.ReportEnvProblemsResponse, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -218,24 +260,37 @@ func (g *Gate) Check() error {
 	g.mu.Lock()
 	problems := slices.Clone(g.problems)
 	definitions := slices.Clone(g.definitions)
+	groups := slices.Clone(g.groups)
 	apps := readers(g.scope.Apps)
 	held := g.resolvedCells()
 	g.mu.Unlock()
 
-	problems = append(problems, unresolved(definitions, apps, held, problems)...)
+	problems = append(problems, unresolved(definitions, groups, apps, held, problems)...)
 	if len(problems) == 0 {
 		return nil
 	}
 	slices.SortStableFunc(problems, func(a, b *resourcesv1.VariableProblem) int {
+		if c := cmp.Compare(declaredAt(definitions, a.GetKey()), declaredAt(definitions, b.GetKey())); c != 0 {
+			return c
+		}
 		if c := cmp.Compare(a.GetKey(), b.GetKey()); c != 0 {
 			return c
 		}
 		return cmp.Compare(a.GetFolder(), b.GetFolder())
 	})
-	return &Refusal{Problems: problems, Definitions: definitions, Scope: g.scope}
+	return &Refusal{Problems: problems, Definitions: definitions, Groups: groups, Scope: g.scope}
 }
 
-func unresolved(definitions []*resourcesv1.VariableDefinition, apps []App, held heldCells, reported []*resourcesv1.VariableProblem) []*resourcesv1.VariableProblem {
+func declaredAt(definitions []*resourcesv1.VariableDefinition, key string) int {
+	for i, definition := range definitions {
+		if definition.GetKey() == key {
+			return i
+		}
+	}
+	return len(definitions)
+}
+
+func unresolved(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, apps []App, held heldCells, reported []*resourcesv1.VariableProblem) []*resourcesv1.VariableProblem {
 	named := make(map[Cell]bool, len(reported))
 	for _, problem := range reported {
 		named[Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}] = true
@@ -243,7 +298,7 @@ func unresolved(definitions []*resourcesv1.VariableDefinition, apps []App, held 
 
 	var problems []*resourcesv1.VariableProblem
 	for _, app := range apps {
-		for _, cell := range missing(definitions, app.Folder, held) {
+		for _, cell := range missing(definitions, groups, app.Folder, held) {
 			if named[cell] {
 				continue
 			}
