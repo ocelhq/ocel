@@ -121,6 +121,7 @@ type Edge struct {
 	bindings []edge.DomainBinding
 	serving  map[string]string
 	serves   *[]edge.Need
+	byLabel  bool
 	refusal  error
 
 	unreadable error
@@ -188,11 +189,20 @@ func (e *Edge) Specs() []edge.PreviewWildcardSpec {
 func (e *Edge) Kind() edge.Kind { return e.kind }
 
 func (e *Edge) Facts() edge.Facts {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return edge.Facts{
-		RunsCode:            e.kind == KindRelay,
-		SignsOriginForwards: true,
-		CredentialScope:     "fake-account",
+		RunsCode:              e.kind == KindRelay,
+		SignsOriginForwards:   true,
+		RoutesPreviewsByLabel: e.byLabel,
+		CredentialScope:       "fake-account",
 	}
+}
+
+func (e *Edge) RoutesPreviewsByLabel(routes bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.byLabel = routes
 }
 
 const (

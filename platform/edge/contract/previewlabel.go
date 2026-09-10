@@ -42,12 +42,19 @@ func (s PreviewSite) Hosts(pointer string, apps []string) []string {
 		return nil
 	}
 	hosts := make([]string, 0, len(apps))
-	for _, app := range apps {
-		if host := s.Host(pointer, app); host != "" {
+	for slot := range apps {
+		if host := s.Host(pointer, AppAt(apps, slot)); host != "" {
 			hosts = append(hosts, host)
 		}
 	}
 	return hosts
+}
+
+func AppAt(apps []string, slot int) string {
+	if len(apps) < 2 || slot < 0 || slot >= len(apps) {
+		return ""
+	}
+	return apps[slot]
 }
 
 func (s PreviewSite) LabelProblem(hostnames []string) error {
