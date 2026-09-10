@@ -34,5 +34,7 @@ def binding(name: str) -> PostgresProperties:
     properties = delivered.properties
     if properties is None or properties.field != "postgres":
         carried = properties.field.upper() if properties else "UNSPECIFIED"
-        raise RuntimeError(f"{key} carries a {carried} binding, and this app reads it as a POSTGRES")
+        raise RuntimeError(
+            f"{key} carries a {carried} binding, and this app reads it as a POSTGRES"
+        )
     return properties.value

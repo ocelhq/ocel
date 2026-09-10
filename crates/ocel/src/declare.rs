@@ -2,12 +2,12 @@ use crate::env::{complaint, Class};
 use crate::postgres::KIND;
 use crate::proto::app::resources::v1::declare_request::Config;
 use crate::proto::app::resources::v1::variable_problem::Kind;
+use crate::proto::app::resources::v1::ResourceType;
 use crate::proto::app::resources::v1::{
     DeclareEnvRequest, DeclareRequest, PostgresConfig, ReportEnvProblemsRequest,
     ResourceIdentifier, ResourceServiceClient, VariableCell, VariableClass, VariableDefinition,
     VariableProblem,
 };
-use crate::proto::app::resources::v1::ResourceType;
 use crate::Error;
 
 const PHASE_ENV: &str = "OCEL_PHASE";

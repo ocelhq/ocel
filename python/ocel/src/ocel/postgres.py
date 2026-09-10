@@ -4,8 +4,8 @@ from urllib.parse import quote
 
 from protobuf import Oneof
 
-from ocel._declare import declare, discovering
 from ocel._binding import binding, unprovisioned
+from ocel._declare import declare, discovering
 from ocel.gen.app.resources.v1.resources_pb import (
     DeclareRequest,
     PostgresConfig,
