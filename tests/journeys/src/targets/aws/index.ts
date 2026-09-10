@@ -219,10 +219,17 @@ async function up(cell: CellContext): Promise<Deployment> {
       dir,
       "up",
       "env-greeting",
-      ["env", "set", "GREETING", INITIAL_GREETING],
+      ["env", "set", `GREETING=${INITIAL_GREETING}`],
       env,
     );
-    await runOcel(cell, dir, "up", "env-secret", ["env", "set", "SECRET_TOKEN", SECRET_TOKEN], env);
+    await runOcel(
+      cell,
+      dir,
+      "up",
+      "env-secret",
+      ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`],
+      env,
+    );
   }
   await runOcel(cell, dir, "up", "deploy", ["deploy", "--yes"], env);
   await runOcel(cell, dir, "up", "domain-add", ["domain", "add"], env);
@@ -255,7 +262,14 @@ async function redeploy(cell: CellContext, greeting: string): Promise<Deployment
   const dir = await cellTree(cell);
   const env = await cellEnv(cell, dir);
   if (setsEnv(cell.fixture.rows)) {
-    await runOcel(cell, dir, "redeploy", "env-greeting", ["env", "set", "GREETING", greeting], env);
+    await runOcel(
+      cell,
+      dir,
+      "redeploy",
+      "env-greeting",
+      ["env", "set", `GREETING=${greeting}`],
+      env,
+    );
   }
   await runOcel(cell, dir, "redeploy", "deploy", ["deploy", "--yes"], env);
   const deployed = deployment(cell, await dispatcher());
