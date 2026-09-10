@@ -145,6 +145,58 @@ def test_the_file_that_declared_a_key_declares_it_again(monkeypatch):
     assert namespace["Again"]().shared == "v"
 
 
+def test_a_file_run_again_declares_its_own_keys_again(monkeypatch):
+    monkeypatch.setenv("RERUN", "v")
+    source = "class Env(ocel.Env):\n    rerun: str\n"
+    define(source, "/rerun.py")
+
+    namespace = define(source, "/rerun.py")
+
+    assert namespace["Env"]().rerun == "v"
+
+
+def test_two_classes_in_one_file_may_not_declare_one_key():
+    with pytest.raises(ocel.EnvDefinitionError) as raised:
+        define(
+            "class First(ocel.Env):\n"
+            "    conflict: str\n"
+            "\n"
+            "class Second(ocel.Env):\n"
+            "    conflict: str\n",
+            "/both.py",
+        )
+
+    assert str(raised.value) == (
+        "'CONFLICT' is already declared by First in /both.py. A key is declared by "
+        "exactly one class."
+    )
+
+
+def test_two_classes_a_factory_writes_at_one_line_may_not_declare_one_key():
+    namespace = define(
+        "def make():\n    class Made(ocel.Env):\n        conflict: str\n    return Made\n",
+        "/factory.py",
+    )
+    namespace["make"]()
+
+    with pytest.raises(ocel.EnvDefinitionError) as raised:
+        namespace["make"]()
+
+    assert str(raised.value) == (
+        "'CONFLICT' is already declared by make.<locals>.Made in /factory.py. A key is "
+        "declared by exactly one class."
+    )
+
+
+def test_a_file_run_again_with_a_line_prepended_declares_its_own_key_again(monkeypatch):
+    monkeypatch.setenv("MOVED", "v")
+    define("class Env(ocel.Env):\n    moved: str\n", "/edit.py")
+
+    namespace = define("import os\n\nclass Env(ocel.Env):\n    moved: str\n", "/edit.py")
+
+    assert namespace["Env"]().moved == "v"
+
+
 @pytest.mark.parametrize(
     ("folders", "problem"),
     [
