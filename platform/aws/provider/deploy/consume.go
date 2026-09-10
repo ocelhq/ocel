@@ -6,16 +6,16 @@ import (
 )
 
 type HandoverError struct {
-	Links []string
-	Stack string
+	Bindings []string
+	Stack    string
 }
 
 func (e *HandoverError) Error() string {
 	return fmt.Sprintf(
-		"`links` binds %s, which ocel provisions in this environment today — stack %s still holds what it provisioned under %s. "+
+		"`bindings` binds %s, which ocel provisions in this environment today — stack %s still holds what it provisioned under %s. "+
 			"Binding it hands ownership to your own infrastructure, and this deploy would delete ocel's copy: a database is torn down with no final snapshot, and its data goes with it. "+
-			"Ocel hands no live resource over on its own. Back the data up, drop %s from the resource declarations and from `links`, deploy once to let ocel release it, then declare it again with the link in place",
-		quoteAll(e.Links), e.Stack, thatName(len(e.Links)), quoteAll(e.Links),
+			"Ocel hands no live resource over on its own. Back the data up, drop %s from the resource declarations and from `bindings`, deploy once to let ocel release it, then declare it again with the binding in place",
+		quoteAll(e.Bindings), e.Stack, thatName(len(e.Bindings)), quoteAll(e.Bindings),
 	)
 }
 

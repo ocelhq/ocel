@@ -146,7 +146,7 @@ const publishRow: LadderRow = {
   run: async () => undefined,
 };
 const consumeRow: LadderRow = {
-  title: "both link routes answer",
+  title: "both binding routes answer",
   phase: "consume",
   run: async () => undefined,
 };
@@ -196,10 +196,10 @@ describe("planTests", () => {
     expect(planned).toContain("publish · lists both records");
     expect(planned).toContain("outlive · the record survives");
     expect(planned).toContain("prune · both partitions are empty");
-    expect(planned).toContain("consume · both link routes answer");
-    expect(planned).toContain("redeploy · consume · both link routes answer");
-    expect(planned).toContain("rollback · consume · both link routes answer");
-    expect(planned.filter((title) => title.includes("both link routes answer")).length).toBe(3);
+    expect(planned).toContain("consume · both binding routes answer");
+    expect(planned).toContain("redeploy · consume · both binding routes answer");
+    expect(planned).toContain("rollback · consume · both binding routes answer");
+    expect(planned.filter((title) => title.includes("both binding routes answer")).length).toBe(3);
   });
 
   it("plans no refuse title when the fixture declares no refuse hook", () => {

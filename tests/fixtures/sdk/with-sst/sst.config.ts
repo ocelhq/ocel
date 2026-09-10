@@ -36,7 +36,7 @@ export default $config({
     };
   },
   async run() {
-    const { link } = await import("@ocel/sst");
+    const { bind } = await import("@ocel/sst");
     const vpc = new sst.aws.Vpc("Vpc");
     const routeTableIds = vpc.nodes.privateRouteTables.apply((tables) => tables.map((t) => t.id));
     for (const [name, service] of [
@@ -61,8 +61,8 @@ export default $config({
 
     const orders = new sst.aws.Postgres("Orders", { vpc });
 
-    link.postgres("orders", orders);
-    link.custom("network", {
+    bind.postgres("orders", orders);
+    bind.custom("network", {
       properties: {
         subnetIds: vpc.privateSubnets,
         securityGroupIds: vpc.securityGroups,

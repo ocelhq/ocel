@@ -194,13 +194,13 @@ func TestNodePassEvaluate(t *testing.T) {
 		for _, field := range []string{"subnetIds", "securityGroupIds"} {
 			placeholder, ok := results[0].Surfaces["vpc"][field].(map[string]any)
 			if !ok {
-				t.Fatalf("vpc.%s = %#v, want a link output the deploy resolves", field, results[0].Surfaces["vpc"][field])
+				t.Fatalf("vpc.%s = %#v, want a binding output the deploy resolves", field, results[0].Surfaces["vpc"][field])
 			}
 			ref, ok := placeholder["$ocelOutput"].(map[string]any)
 			if !ok {
-				t.Fatalf("vpc.%s = %#v, want a link output the deploy resolves", field, placeholder)
+				t.Fatalf("vpc.%s = %#v, want a binding output the deploy resolves", field, placeholder)
 			}
-			if ref["link"] != "network" || ref["property"] != field {
+			if ref["binding"] != "network" || ref["property"] != field {
 				t.Errorf("vpc.%s reads %v, want network's %s", field, ref, field)
 			}
 		}

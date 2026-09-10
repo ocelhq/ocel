@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
@@ -32,8 +32,8 @@ func proxyEnvValue(t *testing.T, env []string, key string) string {
 var testSessionPrefix = naming.SessionKeyPrefix("shop", "prod")
 
 func TestServeProxy(t *testing.T) {
-	t.Run("a deployment whose links all go direct serves nothing", func(t *testing.T) {
-		env, served, err := serveProxy(context.Background(), []live.Link{{Name: "db--main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES}}, "state", testSessionPrefix)
+	t.Run("a deployment whose bindings all go direct serves nothing", func(t *testing.T) {
+		env, served, err := serveProxy(context.Background(), []live.Binding{{Name: "db--main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}, "state", testSessionPrefix)
 		if err != nil {
 			t.Fatalf("serveProxy: %v", err)
 		}
@@ -43,14 +43,14 @@ func TestServeProxy(t *testing.T) {
 	})
 
 	t.Run("a bucket with nowhere to keep its sessions fails by name", func(t *testing.T) {
-		_, _, err := serveProxy(context.Background(), []live.Link{{Name: "bucket--uploads", Type: linksv1.LinkType_LINK_TYPE_BUCKET}}, "", testSessionPrefix)
+		_, _, err := serveProxy(context.Background(), []live.Binding{{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}}, "", testSessionPrefix)
 		if err == nil || !strings.Contains(err.Error(), stateTableEnvVar) {
 			t.Fatalf("serveProxy err = %v, want it to name %s", err, stateTableEnvVar)
 		}
 	})
 
 	t.Run("a bucket whose sessions have no key scope refuses to serve", func(t *testing.T) {
-		_, _, err := serveProxy(context.Background(), []live.Link{{Name: "bucket--uploads", Type: linksv1.LinkType_LINK_TYPE_BUCKET}}, "state", "")
+		_, _, err := serveProxy(context.Background(), []live.Binding{{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}}, "state", "")
 		if err == nil || !strings.Contains(err.Error(), sessionPrefixEnvVar) {
 			t.Fatalf("serveProxy err = %v, want it to name %s", err, sessionPrefixEnvVar)
 		}
@@ -61,7 +61,7 @@ func TestServeProxy(t *testing.T) {
 		t.Setenv("AWS_ACCESS_KEY_ID", "test")
 		t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
 
-		env, served, err := serveProxy(context.Background(), []live.Link{{Name: "bucket--uploads", Type: linksv1.LinkType_LINK_TYPE_BUCKET}}, "state", testSessionPrefix)
+		env, served, err := serveProxy(context.Background(), []live.Binding{{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}}, "state", testSessionPrefix)
 		if err != nil {
 			t.Fatalf("serveProxy: %v", err)
 		}

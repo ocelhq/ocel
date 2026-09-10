@@ -12,7 +12,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -55,7 +55,7 @@ func (r *policyRecorder) named(fragment string) map[string]string {
 	return out
 }
 
-func renderAppRole(t *testing.T, app string, policies []linkPolicy) *policyRecorder {
+func renderAppRole(t *testing.T, app string, policies []bindingPolicy) *policyRecorder {
 	t.Helper()
 	rec := &policyRecorder{}
 	program := func(pctx *pulumi.Context) error {
@@ -73,49 +73,49 @@ const stateTableARN = "arn:aws:dynamodb:us-east-1:1234:table/ocel-state"
 
 var testSessions = newSessionScope("shop", "prod", stateTableARN)
 
-func grantsLinks() []*linksv1.Link {
-	return []*linksv1.Link{
-		{Name: "bucket--uploads", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "shop-prod-uploads-abc"}}, Grants: bucketGrants("shop-prod-uploads-abc", testSessions)},
-		{Name: "database--main", Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "db.host", Port: 5432}}},
+func grantsBindings() []*bindingsv1.Binding {
+	return []*bindingsv1.Binding{
+		{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "shop-prod-uploads-abc"}}, Grants: bucketGrants("shop-prod-uploads-abc", testSessions)},
+		{Name: "database--main", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "db.host", Port: 5432}}},
 	}
 }
 
-func plannedLinks(links []*linksv1.Link) []providerkit.Link {
-	out := make([]providerkit.Link, 0, len(links))
-	for _, link := range links {
-		held := providerkit.Link{Type: providerkit.LinkCustom, Name: link.GetName(), Grants: providerkit.GrantsOf(link)}
-		switch naming.LinkTypeOf(link) {
-		case linksv1.LinkType_LINK_TYPE_BUCKET:
-			held.Type = providerkit.LinkBucket
-		case linksv1.LinkType_LINK_TYPE_POSTGRES:
-			held.Type = providerkit.LinkPostgres
+func plannedBindings(bindings []*bindingsv1.Binding) []providerkit.Binding {
+	out := make([]providerkit.Binding, 0, len(bindings))
+	for _, binding := range bindings {
+		held := providerkit.Binding{Type: providerkit.BindingCustom, Name: binding.GetName(), Grants: providerkit.GrantsOf(binding)}
+		switch naming.BindingTypeOf(binding) {
+		case bindingsv1.BindingType_BINDING_TYPE_BUCKET:
+			held.Type = providerkit.BindingBucket
+		case bindingsv1.BindingType_BINDING_TYPE_POSTGRES:
+			held.Type = providerkit.BindingPostgres
 		}
 		out = append(out, held)
 	}
 	return out
 }
 
-func TestLinkPoliciesRenderOnlyForAGrantingLink(t *testing.T) {
+func TestBindingPoliciesRenderOnlyForAGrantingBinding(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a granting link carries one inline policy", func(t *testing.T) {
+	t.Run("a granting binding carries one inline policy", func(t *testing.T) {
 		t.Parallel()
 
-		policies, err := planLinkPolicies(plannedLinks(grantsLinks()))
+		policies, err := planBindingPolicies(plannedBindings(grantsBindings()))
 		if err != nil {
-			t.Fatalf("planLinkPolicies: %v", err)
+			t.Fatalf("planBindingPolicies: %v", err)
 		}
-		if len(policies) != 1 || policies[0].Link != "bucket--uploads" {
+		if len(policies) != 1 || policies[0].Binding != "bucket--uploads" {
 			t.Fatalf("policies = %+v, want one for bucket--uploads", policies)
 		}
 
-		rendered := renderAppRole(t, "web", policies).named("link")
+		rendered := renderAppRole(t, "web", policies).named("binding")
 		if len(rendered) != 1 {
-			t.Fatalf("rendered link policies = %v, want exactly one", rendered)
+			t.Fatalf("rendered binding policies = %v, want exactly one", rendered)
 		}
 		for name, policy := range rendered {
-			if !strings.Contains(name, naming.Join(naming.WordSeparator, "link", "bucket--uploads")) {
-				t.Errorf("policy name = %q, want the link's logical name in it", name)
+			if !strings.Contains(name, naming.Join(naming.WordSeparator, "binding", "bucket--uploads")) {
+				t.Errorf("policy name = %q, want the binding's logical name in it", name)
 			}
 			if !strings.Contains(policy, "s3:PutObject") || strings.Contains(policy, `"*"`) {
 				t.Errorf("policy = %q, want scoped s3 actions", policy)
@@ -135,7 +135,7 @@ func TestLinkPoliciesRenderOnlyForAGrantingLink(t *testing.T) {
 						continue
 					}
 					if r != stateTableARN {
-						t.Errorf("resource = %q, want the bucket this link names or the table its sessions live in", r)
+						t.Errorf("resource = %q, want the bucket this binding names or the table its sessions live in", r)
 						continue
 					}
 					if got := s.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]; !slices.Equal(got, []string{testSessions.KeyPrefix + "*"}) {
@@ -146,18 +146,18 @@ func TestLinkPoliciesRenderOnlyForAGrantingLink(t *testing.T) {
 		}
 	})
 
-	t.Run("a grant-free link carries no policy", func(t *testing.T) {
+	t.Run("a grant-free binding carries no policy", func(t *testing.T) {
 		t.Parallel()
 
-		policies, err := planLinkPolicies(plannedLinks(grantsLinks()[1:]))
+		policies, err := planBindingPolicies(plannedBindings(grantsBindings()[1:]))
 		if err != nil {
-			t.Fatalf("planLinkPolicies: %v", err)
+			t.Fatalf("planBindingPolicies: %v", err)
 		}
 		if len(policies) != 0 {
-			t.Fatalf("policies = %+v, want none for a grant-free link", policies)
+			t.Fatalf("policies = %+v, want none for a grant-free binding", policies)
 		}
-		if rendered := renderAppRole(t, "admin", policies).named("link"); len(rendered) != 0 {
-			t.Fatalf("rendered link policies = %v, want none", rendered)
+		if rendered := renderAppRole(t, "admin", policies).named("binding"); len(rendered) != 0 {
+			t.Fatalf("rendered binding policies = %v, want none", rendered)
 		}
 	})
 }
@@ -167,26 +167,26 @@ func TestUnscopedGrantsAreRejected(t *testing.T) {
 
 	for _, tc := range []struct {
 		name  string
-		grant *linksv1.Grant
+		grant *bindingsv1.Grant
 	}{
-		{"a wildcard resource", &linksv1.Grant{Label: "objects", Actions: []string{"s3:GetObject"}, Resources: []string{"*"}}},
-		{"a wildcard action", &linksv1.Grant{Label: "objects", Actions: []string{"*"}, Resources: []string{"arn:aws:s3:::b/*"}}},
-		{"no resource at all", &linksv1.Grant{Label: "objects", Actions: []string{"s3:GetObject"}}},
+		{"a wildcard resource", &bindingsv1.Grant{Label: "objects", Actions: []string{"s3:GetObject"}, Resources: []string{"*"}}},
+		{"a wildcard action", &bindingsv1.Grant{Label: "objects", Actions: []string{"*"}, Resources: []string{"arn:aws:s3:::b/*"}}},
+		{"no resource at all", &bindingsv1.Grant{Label: "objects", Actions: []string{"s3:GetObject"}}},
 	} {
 		t.Run(tc.name+" is rejected", func(t *testing.T) {
 			t.Parallel()
 
-			links := []*linksv1.Link{{Name: "bucket--uploads", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "b"}}, Grants: []*linksv1.Grant{tc.grant}}}
+			bindings := []*bindingsv1.Binding{{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "b"}}, Grants: []*bindingsv1.Grant{tc.grant}}}
 
 			var unscoped *UnscopedGrantError
-			if err := VerifyGrants(plannedLinks(links)[0]); !errors.As(err, &unscoped) {
+			if err := VerifyGrants(plannedBindings(bindings)[0]); !errors.As(err, &unscoped) {
 				t.Fatalf("VerifyGrants = %v, want an *UnscopedGrantError", err)
 			}
-			if unscoped.Link != "bucket--uploads" {
-				t.Errorf("Link = %q, want bucket--uploads", unscoped.Link)
+			if unscoped.Binding != "bucket--uploads" {
+				t.Errorf("Binding = %q, want bucket--uploads", unscoped.Binding)
 			}
-			if _, err := planLinkPolicies(plannedLinks(links)); !errors.As(err, &unscoped) {
-				t.Fatalf("planLinkPolicies = %v, want an *UnscopedGrantError", err)
+			if _, err := planBindingPolicies(plannedBindings(bindings)); !errors.As(err, &unscoped) {
+				t.Fatalf("planBindingPolicies = %v, want an *UnscopedGrantError", err)
 			}
 		})
 	}
@@ -194,9 +194,9 @@ func TestUnscopedGrantsAreRejected(t *testing.T) {
 	t.Run("scoped grants pass", func(t *testing.T) {
 		t.Parallel()
 
-		for _, link := range plannedLinks(grantsLinks()) {
-			if err := VerifyGrants(link); err != nil {
-				t.Fatalf("VerifyGrants(%s) = %v, want nil", link.Name, err)
+		for _, binding := range plannedBindings(grantsBindings()) {
+			if err := VerifyGrants(binding); err != nil {
+				t.Fatalf("VerifyGrants(%s) = %v, want nil", binding.Name, err)
 			}
 		}
 	})
@@ -205,11 +205,11 @@ func TestUnscopedGrantsAreRejected(t *testing.T) {
 func TestGrantConditionMergesConditionsOnOneKey(t *testing.T) {
 	t.Parallel()
 
-	grant := &linksv1.Grant{
+	grant := &bindingsv1.Grant{
 		Label:     "sessions",
 		Actions:   []string{"dynamodb:GetItem"},
 		Resources: []string{stateTableARN},
-		Conditions: []*linksv1.GrantCondition{
+		Conditions: []*bindingsv1.GrantCondition{
 			{Operator: "ForAllValues:StringLike", Key: "dynamodb:LeadingKeys", Values: []string{"SESSION#a*"}},
 			{Operator: "ForAllValues:StringLike", Key: "dynamodb:LeadingKeys", Values: []string{"SESSION#b*", "SESSION#a*"}},
 			{Operator: "StringEquals", Key: "dynamodb:Select", Values: []string{"SPECIFIC_ATTRIBUTES"}},
@@ -226,9 +226,9 @@ func TestGrantConditionMergesConditionsOnOneKey(t *testing.T) {
 		t.Errorf("dynamodb:Select = %v, want the condition under its own operator", got)
 	}
 
-	policy, err := linkPolicyDocument("bucket--uploads", []*linksv1.Grant{grant})
+	policy, err := bindingPolicyDocument("bucket--uploads", []*bindingsv1.Grant{grant})
 	if err != nil {
-		t.Fatalf("linkPolicyDocument: %v", err)
+		t.Fatalf("bindingPolicyDocument: %v", err)
 	}
 	for _, want := range []string{"SESSION#a*", "SESSION#b*", "SPECIFIC_ATTRIBUTES"} {
 		if !strings.Contains(policy, want) {

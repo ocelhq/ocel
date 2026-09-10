@@ -114,8 +114,8 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 	t.Parallel()
 
 	cfg, plan := plannedContainerStack(t)
-	plan.App.Grants = []providerkit.Link{{
-		Type: providerkit.LinkBucket,
+	plan.App.Grants = []providerkit.Binding{{
+		Type: providerkit.BindingBucket,
 		Name: "bucket--uploads",
 		Grants: []providerkit.Grant{{
 			Label:     "objects",
@@ -145,7 +145,7 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 		t.Errorf("executionRoleArn = %v, want the substrate's shared execution role", task["executionRoleArn"])
 	}
 	if task["taskRoleArn"].StringValue() == "" {
-		t.Error("an app granted a link runs without a task role, so the grant reaches nothing")
+		t.Error("an app granted a binding runs without a task role, so the grant reaches nothing")
 	}
 	if !task["containerDefinitions"].IsSecret() {
 		t.Fatal("containerDefinitions is not a secret, so every delivered value would sit in the state checkpoint in the clear")

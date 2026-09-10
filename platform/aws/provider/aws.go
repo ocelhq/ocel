@@ -91,7 +91,7 @@ func NewProvider(options Options, cfg aws.Config, ns bootstrap.Namespace) *Provi
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
 
-func (p *Provider) Serves() []providerkit.LinkType { return deploy.Serves() }
+func (p *Provider) Serves() []providerkit.BindingType { return deploy.Serves() }
 
 func (p *Provider) Computes() []providerkit.Compute {
 	return []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer}
@@ -163,8 +163,8 @@ func (p *Provider) Inspect(ctx context.Context, ref providerkit.StackRef) (provi
 	return p.releases.Inspect(ctx, ref)
 }
 
-func (p *Provider) VerifyGrants(_ context.Context, link providerkit.Link) error {
-	return deploy.VerifyGrants(link)
+func (p *Provider) VerifyGrants(_ context.Context, binding providerkit.Binding) error {
+	return deploy.VerifyGrants(binding)
 }
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPreflight) error {

@@ -16,12 +16,12 @@ export interface ProvisionedResource {
 }
 
 export interface ResourceTypeHandler {
-  link(name: string, assignment: ResourceAssignmentRow): string;
+  binding(name: string, assignment: ResourceAssignmentRow): string;
   provision(identity: ResourceIdentity): Promise<ProvisionedResource>;
 }
 
 const postgresHandler: ResourceTypeHandler = {
-  link(name, assignment) {
+  binding(name, assignment) {
     const admin = getCloudAdminUrl();
     return JSON.stringify({
       name,

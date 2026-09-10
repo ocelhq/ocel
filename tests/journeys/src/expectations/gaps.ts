@@ -1,8 +1,8 @@
 import { UP_TITLE } from "../plan";
 import {
+  BINDING_QUERY_ROW,
+  BINDING_ROW,
   EMPTY_BODY_ROW,
-  LINK_QUERY_ROW,
-  LINK_ROW,
   nextCacheRows,
   nextDataCacheRows,
 } from "../rows";
@@ -91,9 +91,9 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "migrate-needs-link",
+    id: "migrate-needs-binding",
     reason:
-      "the aws journey migrates through ocel run, which needs a console link the lane never has",
+      "the aws journey migrates through ocel run, which needs a console binding the lane never has",
     issue: 911,
     affects: [{ on: ["aws"], cells: SDK_NODE_HTTP, tests: [UP_TITLE], skip: true }],
   },
@@ -140,15 +140,16 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "link-query-hangs",
-    reason: "a select through the postgres link answers an HTML error after ~15s on a real account",
+    id: "binding-query-hangs",
+    reason:
+      "a select through the postgres binding answers an HTML error after ~15s on a real account",
     issue: 925,
     affects: [
       {
         on: ["aws"],
         cells: ["sdk/with-transforms/web"],
         variants: GATEWAY,
-        tests: [{ row: LINK_QUERY_ROW }],
+        tests: [{ row: BINDING_QUERY_ROW }],
       },
     ],
   },
@@ -162,7 +163,7 @@ export const gaps: Gap[] = [
         on: ["aws"],
         cells: ["sdk/with-transforms/web"],
         variants: GATEWAY,
-        tests: [{ row: LINK_ROW, legs: ["redeploy"] }],
+        tests: [{ row: BINDING_ROW, legs: ["redeploy"] }],
       },
     ],
   },

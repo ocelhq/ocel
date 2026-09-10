@@ -76,7 +76,7 @@ function imageUrl(ctx: ContractContext, url: string, width: number, quality: num
 
 export const nextCacheRows: ContractRow[] = [
   {
-    title: "a static page is prerendered, frozen, and links assets immutable for a year",
+    title: "a static page is prerendered, frozen, and bindings assets immutable for a year",
     run: async (ctx) => {
       const { res, html } = await page(ctx, "/cache/static");
       tierIs(res, CACHED, "the static page");

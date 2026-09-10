@@ -15,7 +15,7 @@ production needs a bigger database than a preview, every resource needs the org'
 still provisions all of it; you change how, as reviewable rules in your repo. This is a
 smaller step than owning the infrastructure, and it is usually enough.
 
-**Links — [with-sst](../with-sst), [with-pulumi](../with-pulumi).** You need full control of
+**Bindings — [with-sst](../with-sst), [with-pulumi](../with-pulumi).** You need full control of
 some infrastructure, so your own IaC tool provisions it and Ocel turns consumer. Which tool
 that is decides nothing: the app consuming the infrastructure is the same app either way,
 and so is what Ocel asks of you. Ocel never gives away deploying the app itself — that is

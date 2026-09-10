@@ -167,7 +167,7 @@ func TestServesNothingUntilAResourcePrimitiveExists(t *testing.T) {
 
 	p := standing(t)
 	if got := p.Serves(); len(got) != 0 {
-		t.Errorf("Serves() = %v, want nothing until this provider provisions links of its own", got)
+		t.Errorf("Serves() = %v, want nothing until this provider provisions bindings of its own", got)
 	}
 	want := []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer}
 	got := p.Computes()

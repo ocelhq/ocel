@@ -7,7 +7,7 @@ use crate::proto::app::resources::v1::{
     ResourceIdentifier, ResourceServiceClient, VariableCell, VariableClass, VariableDefinition,
     VariableProblem,
 };
-use crate::proto::common::links::v1::LinkType;
+use crate::proto::app::resources::v1::ResourceType;
 use crate::Error;
 
 const PHASE_ENV: &str = "OCEL_PHASE";
@@ -282,7 +282,7 @@ fn problem(key: &str, folder: &str, kind: Kind, detail: String) -> VariableProbl
 fn request(resource: &DeclaredResource) -> DeclareRequest {
     DeclareRequest {
         resource: ResourceIdentifier {
-            r#type: LinkType::LINK_TYPE_POSTGRES.into(),
+            r#type: ResourceType::RESOURCE_TYPE_POSTGRES.into(),
             name: resource.name.to_string(),
             ..Default::default()
         }

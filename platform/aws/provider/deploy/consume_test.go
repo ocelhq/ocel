@@ -11,7 +11,7 @@ func TestAnUnscopedPublishedGrantIsRefusedBeforeAnyCloudCall(t *testing.T) {
 	t.Parallel()
 
 	var unscoped *UnscopedGrantError
-	err := VerifyGrants(providerkit.Link{
+	err := VerifyGrants(providerkit.Binding{
 		Name:   "db--main",
 		Grants: []providerkit.Grant{{Label: "everything", Actions: []string{"s3:*"}, Resources: []string{"*"}}},
 	})

@@ -2,7 +2,7 @@ mod collector;
 
 use collector::{cell, holding, Received, DECLARE, DECLARE_ENV, REPORT_ENV_PROBLEMS};
 use ocel::proto::app::resources::v1::declare_request::Config;
-use ocel::proto::common::links::v1::LinkType;
+use ocel::proto::app::resources::v1::ResourceType;
 
 #[derive(ocel::Resources)]
 struct Infra {
@@ -80,7 +80,7 @@ fn discovery_posts_every_declaration_and_reports_the_problems_it_finds() {
         .iter()
         .find(|sent| sent.resource.name == "cache")
         .expect("the postgres named cache");
-    assert_eq!(main.resource.r#type, LinkType::LINK_TYPE_POSTGRES);
+    assert_eq!(main.resource.r#type, ResourceType::RESOURCE_TYPE_POSTGRES);
     assert_eq!(version(main), "17");
     assert_eq!(version(cache), "16");
 

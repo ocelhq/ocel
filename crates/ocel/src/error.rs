@@ -20,28 +20,28 @@ pub enum Error {
         access: String,
     },
 
-    /// No link was delivered to the process for the declared name.
-    #[error("Value for {key} is not defined. Run `ocel dev` to resolve it locally, or `ocel deploy` to have it delivered from the resource this app links.")]
-    MissingLink {
-        /// The environment variable the link arrives in.
+    /// No binding was delivered to the process for the declared name.
+    #[error("Value for {key} is not defined. Run `ocel dev` to resolve it locally, or `ocel deploy` to have it delivered from the resource this app binds.")]
+    MissingBinding {
+        /// The environment variable the binding arrives in.
         key: String,
     },
 
-    /// A link was delivered, but it carries another kind of resource.
-    #[error("{key} carries a {carried} link, and this app reads it as a {expected}")]
-    WrongLinkType {
-        /// The environment variable the link arrived in.
+    /// A binding was delivered, but it carries another kind of resource.
+    #[error("{key} carries a {carried} binding, and this app reads it as a {expected}")]
+    WrongBindingType {
+        /// The environment variable the binding arrived in.
         key: String,
-        /// The kind of resource the delivered link carries.
+        /// The kind of resource the delivered binding carries.
         carried: String,
         /// The kind of resource the app read it as.
         expected: String,
     },
 
-    /// The environment variable holds something that is not a link record.
-    #[error("{key} does not carry a link record, so this app cannot read it as a {expected}")]
-    Link {
-        /// The environment variable the link arrived in.
+    /// The environment variable holds something that is not a binding record.
+    #[error("{key} does not carry a binding record, so this app cannot read it as a {expected}")]
+    Binding {
+        /// The environment variable the binding arrived in.
         key: String,
         /// The kind of resource the app read it as.
         expected: String,
@@ -115,7 +115,7 @@ pub enum Error {
         key: String,
     },
 
-    /// The pool over a delivered link could not be opened.
+    /// The pool over a delivered binding could not be opened.
     #[cfg(feature = "postgres")]
     #[error("{0}")]
     Pool(#[from] sqlx::Error),

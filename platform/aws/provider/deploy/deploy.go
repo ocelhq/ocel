@@ -7,8 +7,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
@@ -105,7 +105,7 @@ type RecordWaiter interface {
 	Await(ctx context.Context, records []edge.Record, say func(string)) error
 }
 
-func collectPostgresLink(ctx context.Context, secrets SecretsReader, name string, fields map[string]any) (*linksv1.Link, error) {
+func collectPostgresBinding(ctx context.Context, secrets SecretsReader, name string, fields map[string]any) (*bindingsv1.Binding, error) {
 	host, err := requireStringField(fields, name, outputKeyHost)
 	if err != nil {
 		return nil, err
@@ -133,9 +133,9 @@ func collectPostgresLink(ctx context.Context, secrets SecretsReader, name string
 		return nil, fmt.Errorf("resolve master password for %s: %w", name, err)
 	}
 
-	return &linksv1.Link{
+	return &bindingsv1.Binding{
 		Name: name,
-		Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
+		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 			Host:     host,
 			Port:     int32(port),
 			Database: database,

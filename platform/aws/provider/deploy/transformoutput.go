@@ -14,7 +14,7 @@ import (
 const outputPlaceholderKey = "$ocelOutput"
 
 type outputRef struct {
-	Link     string
+	Binding  string
 	Property string
 }
 
@@ -40,7 +40,7 @@ type OutputPlaceholderError struct {
 
 func (e *OutputPlaceholderError) Error() string {
 	return fmt.Sprintf(
-		"a transform fills %s with a link output that %s; author one as `links.<name>.<property>` from a callback transform",
+		"a transform fills %s with a binding output that %s; author one as `bindings.<name>.<property>` from a callback transform",
 		e.At, e.Reason)
 }
 
@@ -55,9 +55,9 @@ type UnpublishedOutputError struct {
 func (e *UnpublishedOutputError) Error() string {
 	var b strings.Builder
 	fmt.Fprintf(&b,
-		"a transform fills %s from link %q's %s, and nothing has published a record under that name to %s. "+
+		"a transform fills %s from binding %q's %s, and nothing has published a record under that name to %s. "+
 			"Ocel never runs your infrastructure tool for you: run it, then deploy again",
-		e.At, e.Ref.Link, e.Ref.Property, describeCoordinate(e.Class, e.Environment))
+		e.At, e.Ref.Binding, e.Ref.Property, describeCoordinate(e.Class, e.Environment))
 	if len(e.Published) == 0 {
 		fmt.Fprintf(&b, "\n\nNothing at all is published to %s.", describeCoordinate(e.Class, e.Environment))
 		return b.String()
@@ -74,9 +74,9 @@ type OutputPropertyError struct {
 
 func (e *OutputPropertyError) Error() string {
 	return fmt.Sprintf(
-		"a transform fills %s from link %q's %s, and the published record carries no such property. "+
+		"a transform fills %s from binding %q's %s, and the published record carries no such property. "+
 			"The record carries %s — republish it with %s",
-		e.At, e.Ref.Link, e.Ref.Property, carried(e.Carries), e.Ref.Property)
+		e.At, e.Ref.Binding, e.Ref.Property, carried(e.Carries), e.Ref.Property)
 }
 
 type ProvisionedOutputError struct {
@@ -86,10 +86,10 @@ type ProvisionedOutputError struct {
 
 func (e *ProvisionedOutputError) Error() string {
 	return fmt.Sprintf(
-		"a transform fills %s from link %q's %s, and this deploy provisions %q itself. "+
+		"a transform fills %s from binding %q's %s, and this deploy provisions %q itself. "+
 			"Ocel publishes what it provisions long after the transforms have run, so its outputs are not there to read: "+
-			"drop %q from the resource declarations and bind it through `links` if your own infrastructure owns it, or name a link that does",
-		e.At, e.Ref.Link, e.Ref.Property, e.Ref.Link, e.Ref.Link)
+			"drop %q from the resource declarations and bind it through `bindings` if your own infrastructure owns it, or name a binding that does",
+		e.At, e.Ref.Binding, e.Ref.Property, e.Ref.Binding, e.Ref.Binding)
 }
 
 type EmptyOutputError struct {
@@ -99,9 +99,9 @@ type EmptyOutputError struct {
 
 func (e *EmptyOutputError) Error() string {
 	return fmt.Sprintf(
-		"a transform fills %s from link %q's %s, and the published record carries nothing under it. "+
+		"a transform fills %s from binding %q's %s, and the published record carries nothing under it. "+
 			"A field an operator filled is never rendered as one they left alone, so this deploy stops here: republish %q with a value under %s",
-		e.At, e.Ref.Link, e.Ref.Property, e.Ref.Link, e.Ref.Property)
+		e.At, e.Ref.Binding, e.Ref.Property, e.Ref.Binding, e.Ref.Property)
 }
 
 type OutputShapeError struct {
@@ -112,8 +112,8 @@ type OutputShapeError struct {
 
 func (e *OutputShapeError) Error() string {
 	return fmt.Sprintf(
-		"a transform fills %s from link %q's %s, and the record's value is not what that field takes: %v",
-		e.At, e.Ref.Link, e.Ref.Property, e.Err)
+		"a transform fills %s from binding %q's %s, and the record's value is not what that field takes: %v",
+		e.At, e.Ref.Binding, e.Ref.Property, e.Err)
 }
 
 func (e *OutputShapeError) Unwrap() error { return e.Err }
@@ -191,17 +191,17 @@ func readOutputRef(m map[string]any, at outputSite) (outputRef, bool, error) {
 	}
 	fields, ok := raw.(map[string]any)
 	if !ok {
-		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: "names neither a link nor a property"}
+		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: "names neither a binding nor a property"}
 	}
-	link, _ := fields["link"].(string)
+	binding, _ := fields["binding"].(string)
 	property, _ := fields["property"].(string)
-	if link == "" {
-		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: "names no link"}
+	if binding == "" {
+		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: "names no binding"}
 	}
 	if property == "" {
-		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: fmt.Sprintf("names link %q and no property on it", link)}
+		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: fmt.Sprintf("names binding %q and no property on it", binding)}
 	}
-	return outputRef{Link: link, Property: property}, true, nil
+	return outputRef{Binding: binding, Property: property}, true, nil
 }
 
 func carried(properties []string) string {

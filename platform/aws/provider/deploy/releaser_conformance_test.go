@@ -294,7 +294,7 @@ func TestReleaserRunsTheKitsPortTier(t *testing.T) {
 	conformance.RunReleaser(t, conformingReleaser(engine), store, Serves())
 }
 
-func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryLink(t *testing.T) {
+func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *testing.T) {
 	t.Parallel()
 
 	engine := &mockedEngine{outputs: provisionedOutputs()}
@@ -302,8 +302,8 @@ func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryLink(t *testing
 		Ref:  providerkit.StackRef{Project: "conformance", Class: providerkit.ClassProduction, Name: naming.InfraStack("conformance")},
 		Kind: providerkit.StackInfra,
 		Resources: []providerkit.Resource{
-			{Name: "c-postgres", Type: providerkit.LinkPostgres, Postgres: &providerkit.PostgresSpec{}},
-			{Name: "c-bucket", Type: providerkit.LinkBucket, Bucket: &providerkit.BucketSpec{}},
+			{Name: "c-postgres", Type: providerkit.BindingPostgres, Postgres: &providerkit.PostgresSpec{}},
+			{Name: "c-bucket", Type: providerkit.BindingBucket, Bucket: &providerkit.BucketSpec{}},
 		},
 	}, nil)
 	if err != nil {
@@ -312,13 +312,13 @@ func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryLink(t *testing
 	if len(engine.ran) != 1 {
 		t.Fatalf("the engine ran %d stacks, want the one the plan named", len(engine.ran))
 	}
-	for _, link := range result.Links {
-		if err := providerkit.VerifyProperties(link); err != nil {
-			t.Errorf("Provision() returned a link the kit refuses to record: %v", err)
+	for _, binding := range result.Bindings {
+		if err := providerkit.VerifyProperties(binding); err != nil {
+			t.Errorf("Provision() returned a binding the kit refuses to record: %v", err)
 		}
 	}
-	if got := result.Links[0].Properties[providerkit.PropertyPassword]; got != "a-master-password" {
-		t.Errorf("the postgres link carries password %q, want the one the managed secret holds", got)
+	if got := result.Bindings[0].Properties[providerkit.PropertyPassword]; got != "a-master-password" {
+		t.Errorf("the postgres binding carries password %q, want the one the managed secret holds", got)
 	}
 }
 
@@ -361,7 +361,7 @@ func TestProvisioningABucketPlacesTheUploadCompleterItDeclares(t *testing.T) {
 		Ref:  providerkit.StackRef{Project: "conformance", Class: providerkit.ClassProduction, Name: naming.InfraStack("conformance")},
 		Kind: providerkit.StackInfra,
 		Resources: []providerkit.Resource{
-			{Name: "c-bucket", Type: providerkit.LinkBucket, Bucket: &providerkit.BucketSpec{}},
+			{Name: "c-bucket", Type: providerkit.BindingBucket, Bucket: &providerkit.BucketSpec{}},
 		},
 	}, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)

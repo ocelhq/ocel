@@ -47,9 +47,9 @@ func main() {
 		fatalInit(fmt.Sprintf("failed to open this deployment's encrypted variables: %v", err))
 	}
 
-	proxyEnv, proxyServed, err := serveProxy(ctx, resolved.Links(), os.Getenv(stateTableEnvVar), os.Getenv(sessionPrefixEnvVar))
+	proxyEnv, proxyServed, err := serveProxy(ctx, resolved.Bindings(), os.Getenv(stateTableEnvVar), os.Getenv(sessionPrefixEnvVar))
 	if err != nil {
-		fatalInit(fmt.Sprintf("failed to serve this deployment's proxied links: %v", err))
+		fatalInit(fmt.Sprintf("failed to serve this deployment's proxied bindings: %v", err))
 	}
 	go superviseProxy(proxyServed)
 
@@ -75,7 +75,7 @@ type liveValues interface {
 	Attach(sink io.Writer)
 	Refresh(ctx context.Context)
 	Env() []string
-	Links() []vars.Link
+	Bindings() []vars.Binding
 }
 
 type compileCache interface {

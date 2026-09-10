@@ -129,7 +129,7 @@ describe("the gap list", () => {
     }
   });
 
-  it("lists no api-gateway cell for a Next-bearing fixture, and the with-transforms link rows", () => {
+  it("lists no api-gateway cell for a Next-bearing fixture, and the with-transforms binding rows", () => {
     const listed = expectationsFor("aws");
     for (const cell of ["deploy/next/web", "deploy/workspace/next", "sdk/next/web"]) {
       assert.equal(listed[on("api-gateway", cell)], undefined, cell);
@@ -142,10 +142,10 @@ describe("the gap list", () => {
         ),
       ),
       {
-        "GET /api/link/query answers ok after a select through the link": [925],
-        "redeploy · GET /api/link/query answers ok after a select through the link": [925],
-        "rollback · GET /api/link/query answers ok after a select through the link": [925],
-        "redeploy · GET /api/link answers with what it resolved and the greeting it deployed with":
+        "GET /api/binding/query answers ok after a select through the binding": [925],
+        "redeploy · GET /api/binding/query answers ok after a select through the binding": [925],
+        "rollback · GET /api/binding/query answers ok after a select through the binding": [925],
+        "redeploy · GET /api/binding answers with what it resolved and the greeting it deployed with":
           [926],
       },
     );
@@ -191,7 +191,7 @@ describe("the gap list", () => {
 
   it("lists no leg marker, refuse or publish title on floci, on any edge", () => {
     const publish =
-      "publish · ocel link ls lists both records with their name, type, source and owner";
+      "publish · ocel binding ls lists both records with their name, type, source and owner";
     for (const [name, cell] of Object.entries(expectationsFor("aws.floci"))) {
       assert.ok(!("redeploy" in cell) && !("rollback" in cell) && !(DESTROY_TITLE in cell), name);
       assert.ok(!("refuse" in cell) && !(publish in cell), name);

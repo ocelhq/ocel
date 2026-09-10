@@ -4,7 +4,7 @@ import os
 import pytest
 
 from ocel import UnprovisionedResourceError, postgres
-from ocel.gen.common.links.v1.links_pb import LinkType
+from ocel.gen.app.resources.v1.resources_pb import ResourceType
 
 
 def test_a_declared_database_reaches_the_dev_server_with_the_file_that_declared_it(collector):
@@ -14,7 +14,7 @@ def test_a_declared_database_reaches_the_dev_server_with_the_file_that_declared_
     path, protocol, declared = collector.declares[0]
     assert path == "/app.resources.v1.ResourceService/Declare"
     assert protocol == "1"
-    assert declared.resource.type is LinkType.POSTGRES
+    assert declared.resource.type is ResourceType.POSTGRES
     assert declared.resource.name == "main"
     assert declared.config.field == "postgres"
     assert declared.config.value.version == "17"
@@ -50,7 +50,7 @@ def test_a_declaration_the_server_refuses_says_what_it_said(monkeypatch):
     assert str(raised.value).startswith("ocel: declare postgres 'main': ")
 
 
-def test_a_database_with_no_link_delivered_names_the_commands_that_deliver_one(monkeypatch):
+def test_a_database_with_no_binding_delivered_names_the_commands_that_deliver_one(monkeypatch):
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.delenv("OCEL_RESOURCE_POSTGRES_main", raising=False)
 
@@ -59,11 +59,11 @@ def test_a_database_with_no_link_delivered_names_the_commands_that_deliver_one(m
     assert str(raised.value) == (
         "Value for OCEL_RESOURCE_POSTGRES_main is not defined. "
         "Run `ocel dev` to resolve it locally, or `ocel deploy` to have it delivered "
-        "from the resource this app links."
+        "from the resource this app binds."
     )
 
 
-def test_a_link_of_another_type_is_refused_for_the_type_it_carries(monkeypatch):
+def test_a_binding_of_another_type_is_refused_for_the_type_it_carries(monkeypatch):
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.setenv(
         "OCEL_RESOURCE_POSTGRES_main",
@@ -73,23 +73,23 @@ def test_a_link_of_another_type_is_refused_for_the_type_it_carries(monkeypatch):
     with pytest.raises(RuntimeError) as raised:
         _ = postgres("main").connection_string
     assert str(raised.value) == (
-        "OCEL_RESOURCE_POSTGRES_main carries a BUCKET link, and this app reads it as a POSTGRES"
+        "OCEL_RESOURCE_POSTGRES_main carries a BUCKET binding, and this app reads it as a POSTGRES"
     )
 
 
-def test_a_link_carrying_nothing_at_all_is_refused_for_the_type_it_carries(monkeypatch):
+def test_a_binding_carrying_nothing_at_all_is_refused_for_the_type_it_carries(monkeypatch):
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.setenv("OCEL_RESOURCE_POSTGRES_main", json.dumps({"name": "main"}))
 
     with pytest.raises(RuntimeError) as raised:
         _ = postgres("main").connection_string
     assert str(raised.value) == (
-        "OCEL_RESOURCE_POSTGRES_main carries a UNSPECIFIED link, "
+        "OCEL_RESOURCE_POSTGRES_main carries a UNSPECIFIED binding, "
         "and this app reads it as a POSTGRES"
     )
 
 
-def test_a_value_that_is_not_a_link_record_is_reported_without_quoting_what_it_held(monkeypatch):
+def test_a_value_that_is_not_a_binding_record_is_reported_without_quoting_what_it_held(monkeypatch):
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.setenv("OCEL_RESOURCE_POSTGRES_main", "s3cret-not-json")
 
@@ -97,15 +97,15 @@ def test_a_value_that_is_not_a_link_record_is_reported_without_quoting_what_it_h
         _ = postgres("main").connection_string
     assert "s3cret" not in str(raised.value)
     assert str(raised.value) == (
-        "OCEL_RESOURCE_POSTGRES_main does not carry a link record, "
+        "OCEL_RESOURCE_POSTGRES_main does not carry a binding record, "
         "so this app cannot read it as a POSTGRES"
     )
 
 
-def test_a_link_the_deploy_delivers_is_read_past_the_fields_this_app_uses(monkeypatch):
+def test_a_binding_the_deploy_delivers_is_read_past_the_fields_this_app_uses(monkeypatch):
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     fixtures = os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "proto", "common", "links", "v1", "fixtures"
+        os.path.dirname(__file__), "..", "..", "..", "proto", "common", "bindings", "v1", "fixtures"
     )
     with open(os.path.join(fixtures, "postgres.json")) as delivered:
         monkeypatch.setenv("OCEL_RESOURCE_POSTGRES_main", delivered.read())

@@ -1,11 +1,11 @@
 use crate::declare::discovering;
-use crate::link::{encoded, postgres};
-use crate::proto::common::links::v1::PostgresProperties;
+use crate::binding::{encoded, postgres};
+use crate::proto::common::bindings::v1::PostgresProperties;
 use crate::Error;
 
 pub(crate) const KIND: &str = "postgres";
 
-/// A postgres database an app declares and reads its link from. A field of this type in a
+/// A postgres database an app declares and reads its binding from. A field of this type in a
 /// struct deriving [`Resources`](macro@crate::Resources) is the declaration.
 #[derive(Clone)]
 pub struct Postgres {
@@ -26,13 +26,13 @@ impl Postgres {
         }
     }
 
-    /// The name the database was declared under, and the name its link is delivered as.
+    /// The name the database was declared under, and the name its binding is delivered as.
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    /// The postgres URL of the delivered link, with the credentials percent-encoded. It
-    /// fails when no link was delivered for the name, and during discovery.
+    /// The postgres URL of the delivered binding, with the credentials percent-encoded. It
+    /// fails when no binding was delivered for the name, and during discovery.
     pub fn connection_string(&self) -> Result<String, Error> {
         let properties = self.properties("connection_string")?;
         Ok(format!(
@@ -45,8 +45,8 @@ impl Postgres {
         ))
     }
 
-    /// The sqlx pool over the delivered link, opened on the first call and returned as it
-    /// stands on every one after. It fails when no link was delivered for the name, and
+    /// The sqlx pool over the delivered binding, opened on the first call and returned as it
+    /// stands on every one after. It fails when no binding was delivered for the name, and
     /// during discovery.
     #[cfg(feature = "postgres")]
     pub async fn pool(&self) -> Result<&sqlx::PgPool, Error> {

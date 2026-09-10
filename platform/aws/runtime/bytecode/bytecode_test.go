@@ -197,7 +197,7 @@ func TestBuildBytecodeArchive(t *testing.T) {
 		if err := os.WriteFile(target, []byte("real contents"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Symlink(target, filepath.Join(dir, "link.bin")); err != nil {
+		if err := os.Symlink(target, filepath.Join(dir, "binding.bin")); err != nil {
 			t.Skipf("symlinks unsupported in this environment: %v", err)
 		}
 		if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755); err != nil {
@@ -209,8 +209,8 @@ func TestBuildBytecodeArchive(t *testing.T) {
 			t.Fatalf("buildArchive: %v", err)
 		}
 		got := readArchive(t, archive)
-		if _, ok := got["link.bin"]; ok {
-			t.Errorf("archive contains symlink link.bin, want it skipped")
+		if _, ok := got["binding.bin"]; ok {
+			t.Errorf("archive contains symlink binding.bin, want it skipped")
 		}
 		if _, ok := got["subdir"]; ok {
 			t.Errorf("archive contains directory entry subdir, want it skipped")
@@ -1384,7 +1384,7 @@ func TestRehydrateCompileCache(t *testing.T) {
 
 	t.Run("rejects symlink", func(t *testing.T) {
 		dest := filepath.Join(t.TempDir(), "cache")
-		archive := tarBytes(t, []tarEntry{{name: "link.bin", typeflag: tar.TypeSymlink, linkname: "/etc/passwd"}})
+		archive := tarBytes(t, []tarEntry{{name: "binding.bin", typeflag: tar.TypeSymlink, linkname: "/etc/passwd"}})
 		store := rehydrateFixture(archive)
 
 		n, ok := rehydrateCompileCache(context.Background(), store, "bucket", "key", dest)
@@ -1774,7 +1774,7 @@ func TestLoadEmbeddedBytecodeCache(t *testing.T) {
 		cases := map[string]tarEntry{
 			"traversal":     {name: "../escaped.bin", typeflag: tar.TypeReg, content: []byte("nope")},
 			"absolute path": {name: "/etc/passwd", typeflag: tar.TypeReg, content: []byte("nope")},
-			"symlink":       {name: "link.bin", typeflag: tar.TypeSymlink, linkname: "/etc/passwd"},
+			"symlink":       {name: "binding.bin", typeflag: tar.TypeSymlink, linkname: "/etc/passwd"},
 		}
 		for name, entry := range cases {
 			t.Run(name, func(t *testing.T) {

@@ -26,8 +26,8 @@ const (
 	sessionPrefixEnvVar = "OCEL_RUNTIME_SESSION_PREFIX"
 )
 
-func proxyWanted(links []live.Link) bool {
-	for _, l := range links {
+func proxyWanted(bindings []live.Binding) bool {
+	for _, l := range bindings {
 		if naming.Proxied(l.Type) {
 			return true
 		}
@@ -35,8 +35,8 @@ func proxyWanted(links []live.Link) bool {
 	return false
 }
 
-func serveProxy(ctx context.Context, links []live.Link, table, sessionPrefix string) ([]string, <-chan error, error) {
-	if !proxyWanted(links) {
+func serveProxy(ctx context.Context, bindings []live.Binding, table, sessionPrefix string) ([]string, <-chan error, error) {
+	if !proxyWanted(bindings) {
 		return nil, nil, nil
 	}
 	if table == "" {
@@ -82,7 +82,7 @@ func superviseProxy(served <-chan error) {
 		return
 	}
 	err := <-served
-	fmt.Fprintf(os.Stderr, "ocel: the proxy stopped serving this deployment's links: %v\n", err)
+	fmt.Fprintf(os.Stderr, "ocel: the proxy stopped serving this deployment's bindings: %v\n", err)
 	os.Exit(1)
 }
 

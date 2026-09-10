@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -64,7 +64,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 	}
 	cache := r.isrCache(plan)
 	bytecode := r.bytecodeCache(plan)
-	policies, err := planLinkPolicies(app.Grants)
+	policies, err := planBindingPolicies(app.Grants)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 	role := executionRole{
 		App: app.App, Cache: cache, Bytecode: bytecode,
 		VarsKeyARN: r.cfg.VarsKeyARN, Boundary: r.cfg.AppBoundaryARN,
-		Tags: roleTags, LinkPolicies: policies, VPCAccess: vpcAccess, Router: router,
+		Tags: roleTags, BindingPolicies: policies, VPCAccess: vpcAccess, Router: router,
 	}
 	if bundle.hasLive() {
 		role.ValuesTableARN = r.cfg.VarsTableARN
@@ -302,28 +302,28 @@ func (r *release) appBundle(plan providerkit.StackPlan) (appBundle, error) {
 }
 
 func (r *release) sealApp(project, app string, held providerkit.AppValues) (appBundle, error) {
-	links := make([]live.Link, 0, len(held.Links))
-	for _, link := range held.Links {
-		kind := providerkit.WireLinkType(link.Type)
-		links = append(links, live.Link{
-			Name:    link.Name,
-			Key:     naming.ResourceEnvName(kind, linkResource(link)),
+	bindings := make([]live.Binding, 0, len(held.Bindings))
+	for _, binding := range held.Bindings {
+		kind := providerkit.WireBindingType(binding.Type)
+		bindings = append(bindings, live.Binding{
+			Name:    binding.Name,
+			Key:     naming.ResourceEnvName(kind, bindingResource(binding)),
 			Type:    kind,
-			Granted: link.Version,
+			Granted: binding.Version,
 		})
 	}
 	keys := make([]live.Key, 0, len(held.Secrets))
 	for _, secret := range held.Secrets {
 		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
 	}
-	return sealAppBundle(r.cfg, project, app, held.Sensitive, keys, links)
+	return sealAppBundle(r.cfg, project, app, held.Sensitive, keys, bindings)
 }
 
-func linkResource(link providerkit.Link) string {
-	if link.Resource != "" {
-		return link.Resource
+func bindingResource(binding providerkit.Binding) string {
+	if binding.Resource != "" {
+		return binding.Resource
 	}
-	return link.Name
+	return binding.Name
 }
 
 func (r *release) appEnv(plan providerkit.StackPlan, bundle appBundle, sessions sessionScope) map[string]string {
@@ -357,30 +357,30 @@ func (r *release) appEnv(plan providerkit.StackPlan, bundle appBundle, sessions 
 	return env
 }
 
-func planLinkPolicies(grants []providerkit.Link) ([]linkPolicy, error) {
-	out := make([]linkPolicy, 0, len(grants))
-	for _, link := range grants {
-		policy, err := linkPolicyDocument(link.Name, grantMessages(link.Grants))
+func planBindingPolicies(grants []providerkit.Binding) ([]bindingPolicy, error) {
+	out := make([]bindingPolicy, 0, len(grants))
+	for _, binding := range grants {
+		policy, err := bindingPolicyDocument(binding.Name, grantMessages(binding.Grants))
 		if err != nil {
 			return nil, err
 		}
 		if policy == "" {
 			continue
 		}
-		out = append(out, linkPolicy{Link: link.Name, Policy: policy})
+		out = append(out, bindingPolicy{Binding: binding.Name, Policy: policy})
 	}
 	return out, nil
 }
 
-func grantMessages(grants []providerkit.Grant) []*linksv1.Grant {
+func grantMessages(grants []providerkit.Grant) []*bindingsv1.Grant {
 	if len(grants) == 0 {
 		return nil
 	}
-	out := make([]*linksv1.Grant, 0, len(grants))
+	out := make([]*bindingsv1.Grant, 0, len(grants))
 	for _, grant := range grants {
-		message := &linksv1.Grant{Label: grant.Label, Actions: grant.Actions, Resources: grant.Resources}
+		message := &bindingsv1.Grant{Label: grant.Label, Actions: grant.Actions, Resources: grant.Resources}
 		for _, condition := range grant.Conditions {
-			message.Conditions = append(message.Conditions, &linksv1.GrantCondition{
+			message.Conditions = append(message.Conditions, &bindingsv1.GrantCondition{
 				Operator: condition.Operator,
 				Key:      condition.Key,
 				Values:   condition.Values,

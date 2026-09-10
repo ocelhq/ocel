@@ -1,5 +1,5 @@
 name: with-pulumi
-description: Pulumi owns the database and the network; ocel deploys the app that links them
+description: Pulumi owns the database and the network; ocel deploys the app that bindings them
 runtime:
   name: nodejs
   options:

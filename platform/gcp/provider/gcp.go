@@ -78,7 +78,7 @@ func (p *Provider) Names() Names { return p.clients.Names }
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
 
-func (p *Provider) Serves() []providerkit.LinkType { return resources.Serves(p) }
+func (p *Provider) Serves() []providerkit.BindingType { return resources.Serves(p) }
 
 func (p *Provider) Computes() []providerkit.Compute {
 	return []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer}

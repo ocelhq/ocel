@@ -58,7 +58,7 @@ func TestTheProviderReachesNoCloudAndNoGoSSHStackOfItsOwn(t *testing.T) {
 		}
 		for _, engine := range provisioningEngines {
 			if strings.HasPrefix(pkg, engine) {
-				t.Errorf("the vps provider reaches %s of its own: a box is provisioned over a shell session, and the only vendor SDK it links is the one the %s it opens brings with it", pkg, dnsWriter)
+				t.Errorf("the vps provider reaches %s of its own: a box is provisioned over a shell session, and the only vendor SDK it bindings is the one the %s it opens brings with it", pkg, dnsWriter)
 			}
 		}
 	}

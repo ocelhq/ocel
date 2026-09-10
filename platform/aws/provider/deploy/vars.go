@@ -101,7 +101,7 @@ func (b appBundle) overlay() map[string][]byte {
 
 func (b appBundle) hasLive() bool { return len(b.Live) > 0 }
 
-func sealAppBundle(cfg Config, slug, app string, sensitive map[string]string, keys []live.Key, links []live.Link) (appBundle, error) {
+func sealAppBundle(cfg Config, slug, app string, sensitive map[string]string, keys []live.Key, bindings []live.Binding) (appBundle, error) {
 	manifest, err := live.Render(live.Manifest{
 		Slug:        slug,
 		Table:       cfg.VarsTable,
@@ -109,7 +109,7 @@ func sealAppBundle(cfg Config, slug, app string, sensitive map[string]string, ke
 		Class:       string(cfg.Class),
 		Environment: overrideEnvironment(cfg),
 		Keys:        keys,
-		Links:       links,
+		Bindings:    bindings,
 	})
 	if err != nil {
 		return appBundle{}, fmt.Errorf("pin %s's live values: %w", app, err)

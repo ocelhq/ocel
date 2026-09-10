@@ -11,7 +11,7 @@ KEY_MODE = 0o400
 NONCE_BYTES = 12
 TAG_BYTES = 16
 
-COORDINATE = ("project", "class", "env", "folder", "link", "name")
+COORDINATE = ("project", "class", "env", "folder", "binding", "name")
 
 
 def abort(said):

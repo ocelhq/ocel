@@ -2,7 +2,7 @@
 
 Rung three of the [fixture ladder](../with-transforms), and the only fixture standing on two rungs
 at once: SST owns the database and the network it sits in, and ocel still deploys the app —
-into that network. Links are how the app reaches what SST provisioned; transforms are how ocel
+into that network. Bindings are how the app reaches what SST provisioned; transforms are how ocel
 renders what it provisions itself. `sst.config.ts`, `ocel.json` and
 `transforms/network.transform.ts` are the three files that carry it.
 
@@ -16,10 +16,10 @@ ocel deploy
 
 That order is a contract, not a convention. Ocel resolves the published records while it
 renders, so `ocel deploy` before `sst deploy` — or after `sst remove` — refuses before it
-provisions anything, naming the link it could not read, the property, and the field a
+provisions anything, naming the binding it could not read, the property, and the field a
 transform was filling with it.
 
-To see it landed, `ocel link ls` lists both records and who published them, and
+To see it landed, `ocel binding ls` lists both records and who published them, and
 
 ```sh
 aws lambda get-function-configuration \

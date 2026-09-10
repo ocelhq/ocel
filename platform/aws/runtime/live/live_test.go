@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
@@ -366,57 +366,57 @@ func TestLiveValues(t *testing.T) {
 	})
 }
 
-func record(t *testing.T, link *linksv1.Link) string {
+func record(t *testing.T, binding *bindingsv1.Binding) string {
 	t.Helper()
-	encoded, err := protojson.Marshal(link)
+	encoded, err := protojson.Marshal(binding)
 	if err != nil {
-		t.Fatalf("render the link: %v", err)
+		t.Fatalf("render the binding: %v", err)
 	}
 	return string(encoded)
 }
 
 func postgresRecord(t *testing.T, password string) string {
 	t.Helper()
-	return record(t, &linksv1.Link{
+	return record(t, &bindingsv1.Binding{
 		Name:       "db--main",
-		Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "db.host", Port: 5432, Database: "ocel", Username: "ocel", Password: password}},
+		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "db.host", Port: 5432, Database: "ocel", Username: "ocel", Password: password}},
 	})
 }
 
 func bucketRecord(t *testing.T, bucket string) string {
 	t.Helper()
-	return record(t, &linksv1.Link{
+	return record(t, &bindingsv1.Binding{
 		Name:       "db--main",
-		Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: bucket}},
+		Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: bucket}},
 	})
 }
 
-func decodeLink(t *testing.T, raw string) *linksv1.Link {
+func decodeBinding(t *testing.T, raw string) *bindingsv1.Binding {
 	t.Helper()
-	link := &linksv1.Link{}
-	if err := protojson.Unmarshal([]byte(raw), link); err != nil {
+	binding := &bindingsv1.Binding{}
+	if err := protojson.Unmarshal([]byte(raw), binding); err != nil {
 		t.Fatalf("the child was handed %q, which it cannot parse: %v", raw, err)
 	}
-	return link
+	return binding
 }
 
-func postgresLink() vars.Link {
-	return vars.Link{
+func postgresBinding() vars.Binding {
+	return vars.Binding{
 		Name: "db--main",
 		Key:  "OCEL_RESOURCE_POSTGRES_main",
-		Type: linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES,
 	}
 }
 
-func TestLinkColdStart(t *testing.T) {
-	t.Run("a link's value arrives at cold start as the record the app reads", func(t *testing.T) {
-		link := postgresLink()
+func TestBindingColdStart(t *testing.T) {
+	t.Run("a binding's value arrives at cold start as the record the app reads", func(t *testing.T) {
+		binding := postgresBinding()
 		fetcher := resolves(map[string]string{
-			link.Key:      postgresRecord(t, "s3cr3t"),
+			binding.Key:   postgresRecord(t, "s3cr3t"),
 			"DB_PASSWORD": "hunter2",
 		})
 		out := &sink{}
-		l := newValues(fetcher, []string{link.Key, "DB_PASSWORD"}, []vars.Link{link}, nil)
+		l := newValues(fetcher, []string{binding.Key, "DB_PASSWORD"}, []vars.Binding{binding}, nil)
 		l.Attach(out)
 
 		if err := l.Join(l.Prefetch(context.Background())); err != nil {
@@ -427,7 +427,7 @@ func TestLinkColdStart(t *testing.T) {
 		if len(msgs) != 1 {
 			t.Fatalf("pushed %d messages, want the cold start's generation", len(msgs))
 		}
-		handed := decodeLink(t, msgs[0].Values[link.Key])
+		handed := decodeBinding(t, msgs[0].Values[binding.Key])
 		if handed.GetPostgres().GetPassword() != "s3cr3t" || handed.GetPostgres().GetHost() != "db.host" {
 			t.Errorf("record = %v, want the published credential", handed)
 		}
@@ -437,15 +437,15 @@ func TestLinkColdStart(t *testing.T) {
 	})
 
 	t.Run("a credential rotated after the deploy is served at the next cold start", func(t *testing.T) {
-		link := postgresLink()
+		binding := postgresBinding()
 		fetcher := resolves(
-			map[string]string{link.Key: postgresRecord(t, "old")},
-			map[string]string{link.Key: postgresRecord(t, "rotated")},
+			map[string]string{binding.Key: postgresRecord(t, "old")},
+			map[string]string{binding.Key: postgresRecord(t, "rotated")},
 		)
 
 		served := func() string {
 			out := &sink{}
-			l := newValues(fetcher, []string{link.Key}, []vars.Link{link}, nil)
+			l := newValues(fetcher, []string{binding.Key}, []vars.Binding{binding}, nil)
 			l.Attach(out)
 			if err := l.Join(l.Prefetch(context.Background())); err != nil {
 				t.Fatalf("join: %v", err)
@@ -454,7 +454,7 @@ func TestLinkColdStart(t *testing.T) {
 			if len(msgs) != 1 {
 				t.Fatalf("pushed %d messages, want the cold start's generation", len(msgs))
 			}
-			return msgs[0].Values[link.Key]
+			return msgs[0].Values[binding.Key]
 		}
 
 		first := served()
@@ -468,31 +468,31 @@ func TestLinkColdStart(t *testing.T) {
 	})
 
 	t.Run("drift between the published record and this deployment fails cold start", func(t *testing.T) {
-		link := postgresLink()
+		binding := postgresBinding()
 		for name, tc := range map[string]struct {
 			values map[string]string
 			names  []string
 		}{
 			"a record published under another type": {
-				values: map[string]string{link.Key: bucketRecord(t, "shop-uploads")},
-				names:  []string{"db--main", "LINK_TYPE_BUCKET", "LINK_TYPE_POSTGRES", link.Key},
+				values: map[string]string{binding.Key: bucketRecord(t, "shop-uploads")},
+				names:  []string{"db--main", "BINDING_TYPE_BUCKET", "BINDING_TYPE_POSTGRES", binding.Key},
 			},
 			"a record carrying no properties at all": {
-				values: map[string]string{link.Key: record(t, &linksv1.Link{Name: "db--main"})},
-				names:  []string{"db--main", "LINK_TYPE_POSTGRES", link.Key},
+				values: map[string]string{binding.Key: record(t, &bindingsv1.Binding{Name: "db--main"})},
+				names:  []string{"db--main", "BINDING_TYPE_POSTGRES", binding.Key},
 			},
 			"no record at all": {
 				values: map[string]string{"DB_PASSWORD": "hunter2"},
-				names:  []string{"db--main", link.Key, "LINK_TYPE_POSTGRES"},
+				names:  []string{"db--main", binding.Key, "BINDING_TYPE_POSTGRES"},
 			},
 			"a value that is not a record": {
-				values: map[string]string{link.Key: "postgres://ocel@db.host:5432/ocel"},
-				names:  []string{"db--main", link.Key},
+				values: map[string]string{binding.Key: "postgres://ocel@db.host:5432/ocel"},
+				names:  []string{"db--main", binding.Key},
 			},
 		} {
 			t.Run(name, func(t *testing.T) {
 				out := &sink{}
-				l := newValues(resolves(tc.values), []string{link.Key}, []vars.Link{link}, nil)
+				l := newValues(resolves(tc.values), []string{binding.Key}, []vars.Binding{binding}, nil)
 				l.Attach(out)
 
 				err := l.Join(l.Prefetch(context.Background()))
@@ -508,22 +508,22 @@ func TestLinkColdStart(t *testing.T) {
 					}
 				}
 				if msgs := out.messages(t); len(msgs) != 0 {
-					t.Errorf("pushed %+v, want nothing delivered to an app whose links drifted", msgs)
+					t.Errorf("pushed %+v, want nothing delivered to an app whose bindings drifted", msgs)
 				}
 			})
 		}
 	})
 
 	t.Run("drift found on a refresh keeps the last good generation serving", func(t *testing.T) {
-		link := postgresLink()
+		binding := postgresBinding()
 		clock := time.Unix(1_700_000_000, 0)
 		good := postgresRecord(t, "good")
 		fetcher := resolves(
-			map[string]string{link.Key: good},
-			map[string]string{link.Key: bucketRecord(t, "shop-uploads")},
+			map[string]string{binding.Key: good},
+			map[string]string{binding.Key: bucketRecord(t, "shop-uploads")},
 		)
 		out := &sink{}
-		l := newValues(fetcher, []string{link.Key}, []vars.Link{link}, func() time.Time { return clock })
+		l := newValues(fetcher, []string{binding.Key}, []vars.Binding{binding}, func() time.Time { return clock })
 		l.Attach(out)
 
 		if err := l.Join(l.Prefetch(context.Background())); err != nil {
@@ -535,7 +535,7 @@ func TestLinkColdStart(t *testing.T) {
 		eventually(t, "the drifting refresh to run", func() bool { return fetcher.count() == 2 })
 
 		consistently(t, "a warm process pushed a generation it could not conform", func() bool { return len(out.messages(t)) == 1 })
-		if msgs := out.messages(t); msgs[0].Values[link.Key] != good {
+		if msgs := out.messages(t); msgs[0].Values[binding.Key] != good {
 			t.Errorf("serving %+v, want the last generation that conformed", msgs[0])
 		}
 	})
@@ -563,34 +563,34 @@ func TestResolveLiveValues(t *testing.T) {
 		l.Refresh(context.Background())
 	})
 
-	t.Run("addresses each link by the partition its pair lives in", func(t *testing.T) {
+	t.Run("addresses each binding by the partition its pair lives in", func(t *testing.T) {
 		manifest := vars.Manifest{
 			Slug:        "shop",
 			Table:       "ocel-vars",
 			KeyARN:      "arn:aws:kms:us-east-1:1234:key/abcd",
 			Class:       "preview",
 			Environment: "pr-42",
-			Links: []vars.Link{
+			Bindings: []vars.Binding{
 				{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"},
 				{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads"},
 			},
 		}
 
-		names := linkNames(manifest.Links)
+		names := linkNames(manifest.Bindings)
 		if len(names) != 2 {
-			t.Fatalf("names = %v, want one per link", names)
+			t.Fatalf("names = %v, want one per binding", names)
 		}
-		for i, want := range manifest.Links {
+		for i, want := range manifest.Bindings {
 			if names[i] != want.Name {
-				t.Errorf("name %q, want the link %q the record is published under", names[i], want.Name)
+				t.Errorf("name %q, want the binding %q the record is published under", names[i], want.Name)
 			}
 		}
 
-		values := merged(nil, manifest.Links, []values.Published{
-			publishedRecord(t, &linksv1.Link{Name: "db--main", Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "h", Database: "d", Username: "u"}}}, 1),
-			publishedRecord(t, &linksv1.Link{Name: "bucket--uploads", Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "shop-uploads"}}}, 1),
+		values := merged(nil, manifest.Bindings, []values.Published{
+			publishedRecord(t, &bindingsv1.Binding{Name: "db--main", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "h", Database: "d", Username: "u"}}}, 1),
+			publishedRecord(t, &bindingsv1.Binding{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "shop-uploads"}}}, 1),
 		})
-		for _, l := range manifest.Links {
+		for _, l := range manifest.Bindings {
 			if values[l.Key] == "" {
 				t.Errorf("%s reached the child under no key; the record is filed under the key the app reads", l.Name)
 			}
@@ -598,7 +598,7 @@ func TestResolveLiveValues(t *testing.T) {
 
 		keys := manifestKeys(manifest)
 		if len(keys) != 2 {
-			t.Fatalf("declared keys = %v, want the link keys named to the child", keys)
+			t.Fatalf("declared keys = %v, want the binding keys named to the child", keys)
 		}
 	})
 
@@ -739,38 +739,38 @@ func TestResolveLiveValues(t *testing.T) {
 }
 
 func TestMerged(t *testing.T) {
-	links := []vars.Link{{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"}}
-	published := &linksv1.Link{
+	bindings := []vars.Binding{{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"}}
+	published := &bindingsv1.Binding{
 		Name:       "db--main",
-		Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{Host: "ocel", Port: 5432}},
+		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "ocel", Port: 5432}},
 	}
 	records := []values.Published{publishedRecord(t, published, 1)}
 
-	t.Run("a link is never shadowed by a secret that shares its name", func(t *testing.T) {
-		got := merged(map[string]string{"OCEL_RESOURCE_POSTGRES_main": "postgres://mine"}, links, records)
-		if handed := decodeLink(t, got["OCEL_RESOURCE_POSTGRES_main"]); !proto.Equal(handed, published) {
-			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the record ocel published for the link; a secret the user named the same way must not stand in for a resource's own credential", got["OCEL_RESOURCE_POSTGRES_main"])
+	t.Run("a binding is never shadowed by a secret that shares its name", func(t *testing.T) {
+		got := merged(map[string]string{"OCEL_RESOURCE_POSTGRES_main": "postgres://mine"}, bindings, records)
+		if handed := decodeBinding(t, got["OCEL_RESOURCE_POSTGRES_main"]); !proto.Equal(handed, published) {
+			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the record ocel published for the binding; a secret the user named the same way must not stand in for a resource's own credential", got["OCEL_RESOURCE_POSTGRES_main"])
 		}
 	})
 
 	t.Run("carries both when they name different keys", func(t *testing.T) {
-		got := merged(map[string]string{"STRIPE_API_KEY": "sk_live"}, links, records)
+		got := merged(map[string]string{"STRIPE_API_KEY": "sk_live"}, bindings, records)
 		if got["STRIPE_API_KEY"] != "sk_live" || len(got) != 2 {
-			t.Errorf("merged = %v, want the secret beside the link and nothing else", got)
+			t.Errorf("merged = %v, want the secret beside the binding and nothing else", got)
 		}
-		if handed := decodeLink(t, got["OCEL_RESOURCE_POSTGRES_main"]); !proto.Equal(handed, published) {
-			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the published link", got["OCEL_RESOURCE_POSTGRES_main"])
+		if handed := decodeBinding(t, got["OCEL_RESOURCE_POSTGRES_main"]); !proto.Equal(handed, published) {
+			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the published binding", got["OCEL_RESOURCE_POSTGRES_main"])
 		}
 	})
 }
 
-func publishedRecord(t *testing.T, link *linksv1.Link, version int64) values.Published {
+func publishedRecord(t *testing.T, binding *bindingsv1.Binding, version int64) values.Published {
 	t.Helper()
-	encoded, err := protojson.Marshal(link)
+	encoded, err := protojson.Marshal(binding)
 	if err != nil {
-		t.Fatalf("render the link: %v", err)
+		t.Fatalf("render the binding: %v", err)
 	}
-	return values.Published{Name: link.GetName(), Value: encoded, Version: version}
+	return values.Published{Name: binding.GetName(), Value: encoded, Version: version}
 }
 
 func TestEnv(t *testing.T) {
@@ -834,17 +834,17 @@ func TestLiveStalenessBound(t *testing.T) {
 }
 
 func TestGrantLag(t *testing.T) {
-	bound := func(granted int64) vars.Link {
-		link := postgresLink()
-		link.Granted = granted
-		return link
+	bound := func(granted int64) vars.Binding {
+		binding := postgresBinding()
+		binding.Granted = granted
+		return binding
 	}
 	published := func(version int64) []values.Published {
 		return []values.Published{{Name: "main", Version: version}}
 	}
 
 	t.Run("names the publishes an app's grants are behind", func(t *testing.T) {
-		got := grantLag([]vars.Link{bound(3)}, published(5))
+		got := grantLag([]vars.Binding{bound(3)}, published(5))
 		if len(got) != 1 {
 			t.Fatalf("grantLag = %v, want the lag reported once", got)
 		}
@@ -856,19 +856,19 @@ func TestGrantLag(t *testing.T) {
 	})
 
 	t.Run("says nothing while the grants match the record", func(t *testing.T) {
-		if got := grantLag([]vars.Link{bound(5)}, published(5)); len(got) != 0 {
+		if got := grantLag([]vars.Binding{bound(5)}, published(5)); len(got) != 0 {
 			t.Errorf("grantLag = %v, want silence when the running grants came from the live version", got)
 		}
 	})
 
-	t.Run("says nothing for a link this deploy provisioned and granted in one pass", func(t *testing.T) {
-		if got := grantLag([]vars.Link{postgresLink()}, published(9)); len(got) != 0 {
+	t.Run("says nothing for a binding this deploy provisioned and granted in one pass", func(t *testing.T) {
+		if got := grantLag([]vars.Binding{postgresBinding()}, published(9)); len(got) != 0 {
 			t.Errorf("grantLag = %v, want no lag where publish and grant are the same act", got)
 		}
 	})
 
 	t.Run("repeats itself only when the record moves again", func(t *testing.T) {
-		fetcher := &storeFetcher{links: []vars.Link{bound(3)}}
+		fetcher := &storeFetcher{bindings: []vars.Binding{bound(3)}}
 
 		if got := fetcher.unreportedGrantLag(published(5)); len(got) != 1 {
 			t.Fatalf("first refresh reported %v, want the lag once", got)

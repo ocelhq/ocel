@@ -299,7 +299,7 @@ func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *t
 		t.Errorf("heal over a path the deploy login pointed elsewhere says %q, want both the path and where it points named", refusal.Message)
 	}
 	if held := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U /etc")); held != "root" {
-		t.Fatalf("/etc is owned by %q after a heal that followed a link into it, want root", held)
+		t.Fatalf("/etc is owned by %q after a heal that followed a binding into it, want root", held)
 	}
 }
 

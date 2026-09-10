@@ -158,12 +158,12 @@ func TestAPlannedAppGuardsItsOriginOnlyWithASecretToDemand(t *testing.T) {
 	}
 }
 
-func TestAPlannedAppTakesItsGrantsFromTheLinksItWasGranted(t *testing.T) {
+func TestAPlannedAppTakesItsGrantsFromTheBindingsItWasGranted(t *testing.T) {
 	t.Parallel()
 
 	cfg, plan := plannedAppStack(t)
-	plan.App.Grants = []providerkit.Link{{
-		Type: providerkit.LinkBucket,
+	plan.App.Grants = []providerkit.Binding{{
+		Type: providerkit.BindingBucket,
 		Name: "bucket--uploads",
 		Grants: []providerkit.Grant{{
 			Label:     "objects",
@@ -175,11 +175,11 @@ func TestAPlannedAppTakesItsGrantsFromTheLinksItWasGranted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
-	if len(work.role.LinkPolicies) != 1 || work.role.LinkPolicies[0].Link != "bucket--uploads" {
-		t.Fatalf("link policies = %+v, want one for the link the app was granted", work.role.LinkPolicies)
+	if len(work.role.BindingPolicies) != 1 || work.role.BindingPolicies[0].Binding != "bucket--uploads" {
+		t.Fatalf("binding policies = %+v, want one for the binding the app was granted", work.role.BindingPolicies)
 	}
-	if !strings.Contains(work.role.LinkPolicies[0].Policy, "s3:GetObject") {
-		t.Errorf("policy = %q, want the actions the grant carried", work.role.LinkPolicies[0].Policy)
+	if !strings.Contains(work.role.BindingPolicies[0].Policy, "s3:GetObject") {
+		t.Errorf("policy = %q, want the actions the grant carried", work.role.BindingPolicies[0].Policy)
 	}
 }
 

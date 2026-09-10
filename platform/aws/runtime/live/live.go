@@ -33,9 +33,9 @@ type fetcher interface {
 }
 
 type storeFetcher struct {
-	reader values.Reader
-	cells  []values.Cell
-	links  []vars.Link
+	reader   values.Reader
+	cells    []values.Cell
+	bindings []vars.Binding
 
 	mu       sync.Mutex
 	reported map[string]int64
@@ -46,14 +46,14 @@ func (f *storeFetcher) fetchLive(ctx context.Context) (map[string]string, error)
 	if err != nil {
 		return nil, err
 	}
-	records, err := f.reader.Links(ctx, linkNames(f.links))
+	records, err := f.reader.Bindings(ctx, linkNames(f.bindings))
 	if err != nil {
 		return nil, err
 	}
 	for _, lag := range f.unreportedGrantLag(records) {
 		fmt.Fprintln(os.Stderr, "ocel: "+lag)
 	}
-	return merged(resolved, f.links, records), nil
+	return merged(resolved, f.bindings, records), nil
 }
 
 func (f *storeFetcher) unreportedGrantLag(records []values.Published) []string {
@@ -64,7 +64,7 @@ func (f *storeFetcher) unreportedGrantLag(records []values.Published) []string {
 	}
 
 	var out []string
-	for _, lag := range grantLag(f.links, records) {
+	for _, lag := range grantLag(f.bindings, records) {
 		if f.reported[lag.Name] == lag.Version {
 			continue
 		}
@@ -80,15 +80,15 @@ type lagged struct {
 	Message string
 }
 
-func grantLag(links []vars.Link, records []values.Published) []lagged {
+func grantLag(bindings []vars.Binding, records []values.Published) []lagged {
 	var out []lagged
 	for i, record := range records {
-		granted := links[i].Granted
+		granted := bindings[i].Granted
 		if granted == 0 || record.Version <= granted {
 			continue
 		}
 		out = append(out, lagged{Name: record.Name, Version: record.Version, Message: fmt.Sprintf(
-			"link %s has been published %s since this deployment's IAM grants were rendered, from version %d. "+
+			"binding %s has been published %s since this deployment's IAM grants were rendered, from version %d. "+
 				"Its values are live and current; its permissions are not, and ocel widens no permission on its own — deploy again to move them to version %d",
 			record.Name, republished(record.Version-granted), granted, record.Version,
 		)})
@@ -103,19 +103,19 @@ func republished(n int64) string {
 	return fmt.Sprintf("%d more times", n)
 }
 
-func linkNames(links []vars.Link) []string {
-	names := make([]string, 0, len(links))
-	for _, l := range links {
+func linkNames(bindings []vars.Binding) []string {
+	names := make([]string, 0, len(bindings))
+	for _, l := range bindings {
 		names = append(names, l.Name)
 	}
 	return names
 }
 
-func merged(resolved map[string]string, links []vars.Link, records []values.Published) map[string]string {
+func merged(resolved map[string]string, bindings []vars.Binding, records []values.Published) map[string]string {
 	out := make(map[string]string, len(resolved)+len(records))
 	maps.Copy(out, resolved)
 	for i, record := range records {
-		out[links[i].Key] = string(record.Value)
+		out[bindings[i].Key] = string(record.Value)
 	}
 	return out
 }
@@ -129,10 +129,10 @@ type valuesMsg struct {
 const valuesMsgType = "Values"
 
 type Values struct {
-	fetcher fetcher
-	keys    []string
-	links   []vars.Link
-	now     func() time.Time
+	fetcher  fetcher
+	keys     []string
+	bindings []vars.Binding
+	now      func() time.Time
 
 	failed chan struct{}
 
@@ -146,11 +146,11 @@ type Values struct {
 	refreshing  bool
 }
 
-func newValues(fetcher fetcher, keys []string, links []vars.Link, now func() time.Time) *Values {
+func newValues(fetcher fetcher, keys []string, bindings []vars.Binding, now func() time.Time) *Values {
 	if now == nil {
 		now = time.Now
 	}
-	return &Values{fetcher: fetcher, keys: keys, links: links, now: now, failed: make(chan struct{})}
+	return &Values{fetcher: fetcher, keys: keys, bindings: bindings, now: now, failed: make(chan struct{})}
 }
 
 func (l *Values) read(ctx context.Context) (map[string]string, error) {
@@ -158,7 +158,7 @@ func (l *Values) read(ctx context.Context) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := vars.Conform(l.links, values); err != nil {
+	if err := vars.Conform(l.bindings, values); err != nil {
 		return nil, err
 	}
 	return values, nil
@@ -173,11 +173,11 @@ func (l *Values) Env() []string {
 	return []string{keysEnvVar + "=" + strings.Join(l.keys, ",")}
 }
 
-func (l *Values) Links() []vars.Link {
+func (l *Values) Bindings() []vars.Binding {
 	if l == nil {
 		return nil
 	}
-	return l.links
+	return l.bindings
 }
 
 func (l *Values) Prefetch(ctx context.Context) <-chan error {
@@ -309,7 +309,7 @@ func Resolve(ctx context.Context, taskRoot string) (*Values, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(manifest.Keys) == 0 && len(manifest.Links) == 0 {
+	if len(manifest.Keys) == 0 && len(manifest.Bindings) == 0 {
 		return nil, nil
 	}
 
@@ -324,17 +324,17 @@ func Resolve(ctx context.Context, taskRoot string) (*Values, error) {
 			Scope:       values.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
 			Environment: manifest.Environment,
 		},
-		cells: manifestCells(manifest),
-		links: manifest.Links,
-	}, manifestKeys(manifest), manifest.Links, nil), nil
+		cells:    manifestCells(manifest),
+		bindings: manifest.Bindings,
+	}, manifestKeys(manifest), manifest.Bindings, nil), nil
 }
 
 func manifestKeys(m vars.Manifest) []string {
-	keys := make([]string, 0, len(m.Keys)+len(m.Links))
+	keys := make([]string, 0, len(m.Keys)+len(m.Bindings))
 	for _, k := range m.Keys {
 		keys = append(keys, k.Key)
 	}
-	for _, l := range m.Links {
+	for _, l := range m.Bindings {
 		keys = append(keys, l.Key)
 	}
 	return keys

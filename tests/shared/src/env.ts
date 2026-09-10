@@ -10,7 +10,7 @@ export const HARNESS_ONLY_ENV = [
   "BETTER_AUTH_URL",
 ];
 
-export function postgresLink(name: string, url: string): string {
+export function postgresBinding(name: string, url: string): string {
   const parsed = new URL(url);
   return JSON.stringify({
     name,
@@ -35,7 +35,7 @@ export function consoleUrl(): string {
 export function applyConsoleEnvDefaults() {
   const databaseUrl = process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL;
   process.env.DATABASE_URL = databaseUrl;
-  process.env.OCEL_RESOURCE_POSTGRES_main ??= postgresLink("main", databaseUrl);
+  process.env.OCEL_RESOURCE_POSTGRES_main ??= postgresBinding("main", databaseUrl);
   process.env.OCEL_CLOUD_ADMIN_URL ??= "postgres://postgres:postgres@localhost:5433/postgres";
   process.env.BETTER_AUTH_SECRET ??= "tests-secret-not-for-production";
   process.env.BETTER_AUTH_URL ??= consoleUrl();

@@ -1,22 +1,22 @@
-use crate::proto::common::links::v1::link::Properties;
-use crate::proto::common::links::v1::{Link, PostgresProperties};
+use crate::proto::common::bindings::v1::binding::Properties;
+use crate::proto::common::bindings::v1::{Binding, PostgresProperties};
 use crate::Error;
 
 pub(crate) fn postgres(name: &str) -> Result<PostgresProperties, Error> {
     let key = format!("OCEL_RESOURCE_POSTGRES_{name}");
     let raw = match std::env::var(&key) {
         Ok(raw) if !raw.is_empty() => raw,
-        _ => return Err(Error::MissingLink { key }),
+        _ => return Err(Error::MissingBinding { key }),
     };
 
-    let delivered: Link = serde_json::from_str(&raw).map_err(|_| Error::Link {
+    let delivered: Binding = serde_json::from_str(&raw).map_err(|_| Error::Binding {
         key: key.clone(),
         expected: "POSTGRES".to_string(),
     })?;
 
     match delivered.properties {
         Some(Properties::Postgres(properties)) => Ok(*properties),
-        other => Err(Error::WrongLinkType {
+        other => Err(Error::WrongBindingType {
             key,
             carried: carried(&other),
             expected: "POSTGRES".to_string(),

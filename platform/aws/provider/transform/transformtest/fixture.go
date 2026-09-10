@@ -44,7 +44,7 @@ func Root(t *testing.T, modules map[string]string) string {
 		t.Fatalf("create node_modules: %v", err)
 	}
 	if err := os.Symlink(pkg, filepath.Join(modulesDir, "ocel")); err != nil {
-		t.Fatalf("link the ocel package: %v", err)
+		t.Fatalf("binding the ocel package: %v", err)
 	}
 	for name, source := range modules {
 		path := filepath.Join(root, filepath.FromSlash(name))

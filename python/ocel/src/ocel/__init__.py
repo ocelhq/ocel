@@ -1,4 +1,4 @@
-from ocel._link import UnprovisionedResourceError
+from ocel._binding import UnprovisionedResourceError
 from ocel.env import (
     Env,
     EnvDefinitionError,

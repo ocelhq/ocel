@@ -1,4 +1,4 @@
-import { link } from "@ocel/pulumi";
+import { bind } from "@ocel/pulumi";
 import * as aws from "@pulumi/aws";
 import { Config, interpolate } from "@pulumi/pulumi";
 
@@ -63,7 +63,7 @@ const orders = new aws.rds.Instance("orders", {
 
 const account = aws.getCallerIdentityOutput().accountId;
 
-link.postgres("orders", {
+bind.postgres("orders", {
   host: orders.address,
   port: orders.port,
   database: orders.dbName,
@@ -80,7 +80,7 @@ link.postgres("orders", {
   ],
 });
 
-link.custom("network", {
+bind.custom("network", {
   properties: {
     subnetIds,
     securityGroupIds: [security.id],

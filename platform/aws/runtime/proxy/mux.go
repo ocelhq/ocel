@@ -7,14 +7,14 @@ import (
 	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
-var served = map[linksv1.LinkType]bool{
-	linksv1.LinkType_LINK_TYPE_BUCKET: true,
+var served = map[bindingsv1.BindingType]bool{
+	bindingsv1.BindingType_BINDING_TYPE_BUCKET: true,
 }
 
-func Serves(t linksv1.LinkType) bool {
+func Serves(t bindingsv1.BindingType) bool {
 	return served[t]
 }
 

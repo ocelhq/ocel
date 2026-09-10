@@ -1,6 +1,6 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
-import { awsLinkStore, awsStore, type Cli, namespacesStanding } from "./store";
+import { awsBindingStore, awsStore, type Cli, namespacesStanding } from "./store";
 
 const TABLES: Record<string, string> = {
   StateTableName: "ocel-state",
@@ -134,7 +134,7 @@ function b64(value: string): string {
   return Buffer.from(value, "utf8").toString("base64");
 }
 
-function linksPage(items: Array<{ sk: string; body: Record<string, unknown> }>): string {
+function bindingsPage(items: Array<{ sk: string; body: Record<string, unknown> }>): string {
   return JSON.stringify({
     Items: items.map(({ sk, body }) => ({
       sk: { S: sk },
@@ -154,15 +154,15 @@ function recordItem(
   };
 }
 
-describe("awsLinkStore", () => {
+describe("awsBindingStore", () => {
   const owner =
-    "urn:pulumi:j-1::with-sst::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-link-orders";
+    "urn:pulumi:j-1::with-sst::pulumi:pulumi:Stack$pulumi-nodejs:dynamic:Resource::ocel-binding-orders";
 
-  it("asks for the state table the provider writes link values into", async () => {
+  it("asks for the state table the provider writes binding values into", async () => {
     const { cli, calls } = cliOver((args) =>
-      describeStacks(args) ? tableAsked(args) : linksPage([]),
+      describeStacks(args) ? tableAsked(args) : bindingsPage([]),
     );
-    await awsLinkStore(undefined, cli).records(SLUG);
+    await awsBindingStore(undefined, cli).records(SLUG);
     assert.deepEqual(outputsAsked(calls), ["StateTableName"]);
     assert.ok(calls.find((args) => args[0] === "dynamodb")?.includes(STATE_TABLE));
   });
@@ -170,8 +170,8 @@ describe("awsLinkStore", () => {
   it("refuses when the stack publishes no state table name", async () => {
     const { cli } = cliOver(() => "None");
     await assert.rejects(
-      awsLinkStore(undefined, cli).records(SLUG),
-      /publishes no StateTableName output, so no link can be read/,
+      awsBindingStore(undefined, cli).records(SLUG),
+      /publishes no StateTableName output, so no binding can be read/,
     );
   });
 
@@ -180,9 +180,9 @@ describe("awsLinkStore", () => {
       if (describeStacks(args)) {
         return tableAsked(args);
       }
-      return linksPage([
+      return bindingsPage([
         recordItem(
-          "links#orders#records#*#",
+          "bindings#orders#records#*#",
           {
             name: "orders",
             postgres: {},
@@ -194,14 +194,14 @@ describe("awsLinkStore", () => {
           owner,
         ),
         recordItem(
-          "links#network#records#*#",
+          "bindings#network#records#*#",
           { name: "network", custom: {}, source: "sst" },
           owner,
         ),
       ]);
     });
 
-    const records = await awsLinkStore(undefined, cli).records(SLUG);
+    const records = await awsBindingStore(undefined, cli).records(SLUG);
     assert.equal(records.length, 2);
     const orders = records.find((row) => row.name === "orders");
     assert.deepEqual(orders, {
@@ -228,9 +228,9 @@ describe("awsLinkStore", () => {
     const { cli } = cliOver((args) =>
       describeStacks(args)
         ? tableAsked(args)
-        : linksPage([{ sk: "links#orders#values#*#", body: { version: 1, sealed } }]),
+        : bindingsPage([{ sk: "bindings#orders#values#*#", body: { version: 1, sealed } }]),
     );
-    const values = await awsLinkStore(undefined, cli).values(SLUG);
+    const values = await awsBindingStore(undefined, cli).values(SLUG);
     assert.deepEqual(values, [{ name: "orders", sealed }]);
   });
 
@@ -238,24 +238,24 @@ describe("awsLinkStore", () => {
     const { cli, calls } = cliOver((args) =>
       describeStacks(args)
         ? tableAsked(args)
-        : linksPage([{ sk: `linkowners#${owner}#*#`, body: { names: ["orders"] } }]),
+        : bindingsPage([{ sk: `bindingowners#${owner}#*#`, body: { names: ["orders"] } }]),
     );
-    const names = await awsLinkStore(undefined, cli).ownerIndex(SLUG, owner);
+    const names = await awsBindingStore(undefined, cli).ownerIndex(SLUG, owner);
     assert.deepEqual(names, ["orders"]);
     const queried = calls.find((args) => args[0] === "dynamodb");
     assert.ok(
       queried?.includes(
         JSON.stringify({
           ":pk": { S: `values#${SLUG}#production` },
-          ":sk": { S: `linkowners#${owner}#` },
+          ":sk": { S: `bindingowners#${owner}#` },
         }),
       ),
     );
   });
 
   it("reports no index for an owner that never published there", async () => {
-    const { cli } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : linksPage([])));
-    assert.equal(await awsLinkStore(undefined, cli).ownerIndex(SLUG, owner), undefined);
+    const { cli } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : bindingsPage([])));
+    assert.equal(await awsBindingStore(undefined, cli).ownerIndex(SLUG, owner), undefined);
   });
 });
 

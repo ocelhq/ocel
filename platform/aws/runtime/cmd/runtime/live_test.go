@@ -48,7 +48,7 @@ func (s *sink) messages(t *testing.T) []map[string]string {
 
 type stubValues struct {
 	env      []string
-	links    []vars.Link
+	bindings []vars.Binding
 	failure  error
 	released chan struct{}
 	pushed   map[string]string
@@ -105,7 +105,7 @@ func (s *stubValues) Refresh(context.Context) {
 
 func (s *stubValues) Env() []string { return s.env }
 
-func (s *stubValues) Links() []vars.Link { return s.links }
+func (s *stubValues) Bindings() []vars.Binding { return s.bindings }
 
 func fakeSpawn(gotBudget *time.Duration) spawner {
 	return func(_ []string, budget time.Duration, onControl func(io.Writer), _ <-chan struct{}) (*nodeChild, error) {
@@ -151,13 +151,13 @@ func TestBringUpNode(t *testing.T) {
 
 	t.Run("drift is reported as itself and not as node never starting", func(t *testing.T) {
 		const budget = 5 * time.Second
-		l := &stubValues{failure: fmt.Errorf("link db--main is published as LINK_TYPE_BUCKET: %w", vars.ErrDrift)}
+		l := &stubValues{failure: fmt.Errorf("binding db--main is published as BINDING_TYPE_BUCKET: %w", vars.ErrDrift)}
 
 		_, err := bringUpNode(neverReady, l, l.Prefetch(context.Background()), nil, budget)
 		if err == nil {
 			t.Fatal("bringUpNode = nil, want init refused")
 		}
-		if !strings.Contains(err.Error(), "LINK_TYPE_BUCKET") {
+		if !strings.Contains(err.Error(), "BINDING_TYPE_BUCKET") {
 			t.Errorf("error = %v, want the drift named", err)
 		}
 		if strings.Contains(err.Error(), "did not signal ready") {
@@ -218,7 +218,7 @@ func TestChildEnv(t *testing.T) {
 
 		for _, want := range proxyEnv {
 			if !slices.Contains(got, want) {
-				t.Errorf("childEnv = %q, missing %q, so the app cannot reach the proxy serving its links", got, want)
+				t.Errorf("childEnv = %q, missing %q, so the app cannot reach the proxy serving its bindings", got, want)
 			}
 		}
 	})

@@ -1,9 +1,9 @@
 import type { Compute } from "ocel/config";
 import type { ContractContext, ContractRow } from "./contract";
 import {
+  bindingRows,
   envRows,
   healthRows,
-  linkRows,
   nativeRows,
   nextCacheRows,
   nextDataCacheRows,
@@ -96,7 +96,7 @@ const STORED = [
 ];
 const NEXT_SERVED = [...nextRoutingRows, ...nextCacheRows];
 const NEXT_STORED = [...nextStateRows, ...nextDataCacheRows];
-const LADDER = [...healthRows, ...staticRows, ...linkRows];
+const LADDER = [...healthRows, ...staticRows, ...bindingRows];
 
 export const spec: FixtureSpec[] = [
   {

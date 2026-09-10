@@ -14,38 +14,38 @@ import (
 )
 
 type publishedReader struct {
-	links   []providerkit.Link
-	failure error
+	bindings []providerkit.Binding
+	failure  error
 
 	mu    sync.Mutex
 	asked []string
 }
 
 func (r *publishedReader) Names(context.Context) ([]string, error) {
-	names := make([]string, 0, len(r.links))
-	for _, held := range r.links {
+	names := make([]string, 0, len(r.bindings))
+	for _, held := range r.bindings {
 		names = append(names, held.Name)
 	}
 	return names, nil
 }
 
-func (r *publishedReader) Published(context.Context) ([]providerkit.Link, error) {
-	return r.links, nil
+func (r *publishedReader) Published(context.Context) ([]providerkit.Binding, error) {
+	return r.bindings, nil
 }
 
-func (r *publishedReader) Resolve(_ context.Context, link string) (providerkit.Link, error) {
+func (r *publishedReader) Resolve(_ context.Context, binding string) (providerkit.Binding, error) {
 	r.mu.Lock()
-	r.asked = append(r.asked, link)
+	r.asked = append(r.asked, binding)
 	r.mu.Unlock()
 	if r.failure != nil {
-		return providerkit.Link{}, r.failure
+		return providerkit.Binding{}, r.failure
 	}
-	for _, held := range r.links {
-		if held.Name == link {
+	for _, held := range r.bindings {
+		if held.Name == binding {
 			return held, nil
 		}
 	}
-	return providerkit.Link{}, providerkit.Refuse(providerkit.CodeInvalid, "nothing published %s", link)
+	return providerkit.Binding{}, providerkit.Refuse(providerkit.CodeInvalid, "nothing published %s", binding)
 }
 
 func planUnderTransform() providerkit.StackPlan {
@@ -57,8 +57,8 @@ func planUnderTransform() providerkit.StackPlan {
 		},
 		Kind: providerkit.StackApp,
 		Resources: []providerkit.Resource{
-			{Name: "db", Type: providerkit.LinkPostgres, Postgres: &providerkit.PostgresSpec{}},
-			{Name: "uploads", Type: providerkit.LinkBucket, Bucket: &providerkit.BucketSpec{}},
+			{Name: "db", Type: providerkit.BindingPostgres, Postgres: &providerkit.PostgresSpec{}},
+			{Name: "uploads", Type: providerkit.BindingBucket, Bucket: &providerkit.BucketSpec{}},
 		},
 		App: &providerkit.AppPlan{
 			App:       "api",
@@ -87,10 +87,10 @@ func (e echoingEvaluator) Evaluate(_ context.Context, req transform.Request) ([]
 	return results, nil
 }
 
-func filledFromLink(link, property string) echoingEvaluator {
+func filledFromBinding(binding, property string) echoingEvaluator {
 	return echoingEvaluator{patch: func(surfaces []transform.Surfaces) {
 		surfaces[len(surfaces)-1]["lambda"]["runtime"] = map[string]any{
-			outputPlaceholderKey: map[string]any{"link": link, "property": property},
+			outputPlaceholderKey: map[string]any{"binding": binding, "property": property},
 		}
 	}}
 }
@@ -124,14 +124,14 @@ func TestAPlanWithNoTransformIsLeftExactlyAsItWasPlanned(t *testing.T) {
 	}
 }
 
-func TestATransformReadsALinkOutputThroughThePlansOwnLinks(t *testing.T) {
-	links := &publishedReader{links: []providerkit.Link{
-		{Type: providerkit.LinkPostgres, Name: "legacy", Properties: map[string]string{"runtime": "nodejs22.x"}},
+func TestATransformReadsABindingOutputThroughThePlansOwnBindings(t *testing.T) {
+	bindings := &publishedReader{bindings: []providerkit.Binding{
+		{Type: providerkit.BindingPostgres, Name: "legacy", Properties: map[string]string{"runtime": "nodejs22.x"}},
 	}}
 	plan := planUnderTransform()
-	plan.Links = links
+	plan.Bindings = bindings
 
-	evaluator := filledFromLink("legacy", "runtime")
+	evaluator := filledFromBinding("legacy", "runtime")
 
 	transformed, err := transformStackPlan(context.Background(), evaluator, plan)
 	if err != nil {
@@ -141,18 +141,18 @@ func TestATransformReadsALinkOutputThroughThePlansOwnLinks(t *testing.T) {
 		t.Fatal("transformStackPlan() applied nothing")
 	}
 	if got := transformed.functions["fn--api--users"].Runtime; got != "nodejs22.x" {
-		t.Errorf("the function runs %q, want the value the published link carries", got)
+		t.Errorf("the function runs %q, want the value the published binding carries", got)
 	}
-	if len(links.asked) != 1 || links.asked[0] != "legacy" {
-		t.Fatalf("the pass asked the plan's links for %v, want the one output the transform named", links.asked)
+	if len(bindings.asked) != 1 || bindings.asked[0] != "legacy" {
+		t.Fatalf("the pass asked the plan's bindings for %v, want the one output the transform named", bindings.asked)
 	}
 }
 
-func TestATransformReadingALinkThisPlanProvisionsIsRefused(t *testing.T) {
+func TestATransformReadingABindingThisPlanProvisionsIsRefused(t *testing.T) {
 	plan := planUnderTransform()
-	plan.Links = &publishedReader{}
+	plan.Bindings = &publishedReader{}
 
-	evaluator := filledFromLink("db", "runtime")
+	evaluator := filledFromBinding("db", "runtime")
 
 	_, err := transformStackPlan(context.Background(), evaluator, plan)
 	var provisioned *ProvisionedOutputError
@@ -163,11 +163,11 @@ func TestATransformReadingALinkThisPlanProvisionsIsRefused(t *testing.T) {
 
 func TestATransformReadingAnUnpublishedLinkNamesWhatIsPublished(t *testing.T) {
 	plan := planUnderTransform()
-	plan.Links = &publishedReader{links: []providerkit.Link{
-		{Type: providerkit.LinkBucket, Name: "archive", Properties: map[string]string{"bucket": "held"}},
+	plan.Bindings = &publishedReader{bindings: []providerkit.Binding{
+		{Type: providerkit.BindingBucket, Name: "archive", Properties: map[string]string{"bucket": "held"}},
 	}}
 
-	evaluator := filledFromLink("absent", "runtime")
+	evaluator := filledFromBinding("absent", "runtime")
 
 	_, err := transformStackPlan(context.Background(), evaluator, plan)
 	var unpublished *UnpublishedOutputError
@@ -175,37 +175,37 @@ func TestATransformReadingAnUnpublishedLinkNamesWhatIsPublished(t *testing.T) {
 		t.Fatalf("transformStackPlan() = %v, want an unpublished-output refusal", err)
 	}
 	if len(unpublished.Published) != 1 || unpublished.Published[0] != "archive" {
-		t.Errorf("the refusal lists %v as published, want what the plan's links actually carry", unpublished.Published)
+		t.Errorf("the refusal lists %v as published, want what the plan's bindings actually carry", unpublished.Published)
 	}
 }
 
-func TestATransformReadingALinkThisPlanOnlyBindsIsRead(t *testing.T) {
+func TestATransformReadingABindingThisPlanOnlyBindsIsRead(t *testing.T) {
 	plan := planUnderTransform()
-	plan.Resources[0].Linked = true
-	plan.Links = &publishedReader{links: []providerkit.Link{
-		{Type: providerkit.LinkPostgres, Name: "db", Properties: map[string]string{"runtime": "nodejs22.x"}},
+	plan.Resources[0].Binding = plan.Resources[0].Name
+	plan.Bindings = &publishedReader{bindings: []providerkit.Binding{
+		{Type: providerkit.BindingPostgres, Name: "db", Properties: map[string]string{"runtime": "nodejs22.x"}},
 	}}
 
-	evaluator := filledFromLink("db", "runtime")
+	evaluator := filledFromBinding("db", "runtime")
 
 	transformed, err := transformStackPlan(context.Background(), evaluator, plan)
 	if err != nil {
-		t.Fatalf("transformStackPlan() = %v, want the bound link's own published record read", err)
+		t.Fatalf("transformStackPlan() = %v, want the bound binding's own published record read", err)
 	}
 	if got := transformed.functions["fn--api--users"].Runtime; got != "nodejs22.x" {
-		t.Errorf("the function runs %q, want the value the bound link's record carries", got)
+		t.Errorf("the function runs %q, want the value the bound binding's record carries", got)
 	}
 }
 
-func TestAStoreThatFailsToResolveALinkIsNotReportedAsABadProperty(t *testing.T) {
+func TestAStoreThatFailsToResolveABindingIsNotReportedAsABadProperty(t *testing.T) {
 	torn := errors.New("the record's pair is torn")
 	plan := planUnderTransform()
-	plan.Links = &publishedReader{
-		links:   []providerkit.Link{{Type: providerkit.LinkPostgres, Name: "legacy"}},
-		failure: torn,
+	plan.Bindings = &publishedReader{
+		bindings: []providerkit.Binding{{Type: providerkit.BindingPostgres, Name: "legacy"}},
+		failure:  torn,
 	}
 
-	_, err := transformStackPlan(context.Background(), filledFromLink("legacy", "runtime"), plan)
+	_, err := transformStackPlan(context.Background(), filledFromBinding("legacy", "runtime"), plan)
 	if !errors.Is(err, torn) {
 		t.Fatalf("transformStackPlan() = %v, want the store's own failure carried out", err)
 	}
@@ -215,15 +215,15 @@ func TestAStoreThatFailsToResolveALinkIsNotReportedAsABadProperty(t *testing.T) 
 	}
 }
 
-func TestALinkCarryingNoSuchPropertyNamesWhatItDoesCarry(t *testing.T) {
+func TestABindingCarryingNoSuchPropertyNamesWhatItDoesCarry(t *testing.T) {
 	plan := planUnderTransform()
-	plan.Links = &publishedReader{links: []providerkit.Link{{
-		Type:       providerkit.LinkPostgres,
+	plan.Bindings = &publishedReader{bindings: []providerkit.Binding{{
+		Type:       providerkit.BindingPostgres,
 		Name:       "legacy",
 		Properties: map[string]string{"host": "db.internal", "port": "5432"},
 	}}}
 
-	_, err := transformStackPlan(context.Background(), filledFromLink("legacy", "runtime"), plan)
+	_, err := transformStackPlan(context.Background(), filledFromBinding("legacy", "runtime"), plan)
 	var property *OutputPropertyError
 	if !errors.As(err, &property) {
 		t.Fatalf("transformStackPlan() = %v, want an OutputPropertyError", err)
@@ -233,16 +233,16 @@ func TestALinkCarryingNoSuchPropertyNamesWhatItDoesCarry(t *testing.T) {
 	}
 }
 
-func TestEveryOutputOffTheSameLinkResolvesItOnce(t *testing.T) {
-	links := &publishedReader{links: []providerkit.Link{
-		{Type: providerkit.LinkPostgres, Name: "legacy", Properties: map[string]string{"runtime": "nodejs22.x"}},
+func TestEveryOutputOffTheSameBindingResolvesItOnce(t *testing.T) {
+	bindings := &publishedReader{bindings: []providerkit.Binding{
+		{Type: providerkit.BindingPostgres, Name: "legacy", Properties: map[string]string{"runtime": "nodejs22.x"}},
 	}}
 	plan := planUnderTransform()
-	plan.Links = links
+	plan.Bindings = bindings
 
 	evaluator := echoingEvaluator{patch: func(surfaces []transform.Surfaces) {
 		placeholder := map[string]any{
-			outputPlaceholderKey: map[string]any{"link": "legacy", "property": "runtime"},
+			outputPlaceholderKey: map[string]any{"binding": "legacy", "property": "runtime"},
 		}
 		surfaces[len(surfaces)-1]["lambda"]["runtime"] = placeholder
 		surfaces[len(surfaces)-1]["lambda"]["handler"] = placeholder
@@ -251,7 +251,7 @@ func TestEveryOutputOffTheSameLinkResolvesItOnce(t *testing.T) {
 	if _, err := transformStackPlan(context.Background(), evaluator, plan); err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
-	if len(links.asked) != 1 {
-		t.Errorf("the pass resolved %v, want one read for the one link both outputs name", links.asked)
+	if len(bindings.asked) != 1 {
+		t.Errorf("the pass resolved %v, want one read for the one binding both outputs name", bindings.asked)
 	}
 }

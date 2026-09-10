@@ -1,6 +1,6 @@
 import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { HARNESS_ONLY_ENV, localPostgresUrl, postgresLink } from "@ocel-tests/shared/env";
+import { HARNESS_ONLY_ENV, localPostgresUrl, postgresBinding } from "@ocel-tests/shared/env";
 import { SQL } from "bun";
 import { journeyConfigIn } from "../config";
 import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
@@ -87,7 +87,7 @@ async function writeDotfile(cell: CellContext, dir: string): Promise<void> {
   }
   if (migrates(cell.fixture.rows)) {
     lines.push(
-      `OCEL_RESOURCE_POSTGRES_main=${postgresLink("main", await freshDatabase(cell.slug))}`,
+      `OCEL_RESOURCE_POSTGRES_main=${postgresBinding("main", await freshDatabase(cell.slug))}`,
     );
   }
   await writeFile(path.join(dir, DOTFILE), `${lines.join("\n")}\n`, "utf8");
