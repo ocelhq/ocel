@@ -29,7 +29,7 @@ func runCertifier(t *testing.T, suite Suite) {
 		}
 		t.Fatal("the suite declares certifier behaviour and carries no constructor, so there is no provider to run it against")
 	}
-	provider, err := construct(context.Background(), suite.Options)
+	provider, err := construct(context.Background(), providerkit.Settings{Options: suite.Options})
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider", err)
 	}

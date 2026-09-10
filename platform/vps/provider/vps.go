@@ -125,8 +125,11 @@ func (p *Provider) Close() error {
 	return live.Close()
 }
 
-func New(_ context.Context, options providerkit.Options) (providerkit.Provider, error) {
-	decoded, err := providerkit.Decode[Options](options)
+func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
+	if err := settings.RefuseTransforms("vps"); err != nil {
+		return nil, err
+	}
+	decoded, err := providerkit.Decode[Options](settings.Options)
 	if err != nil {
 		return nil, err
 	}

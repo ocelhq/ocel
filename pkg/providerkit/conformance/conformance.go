@@ -8,7 +8,7 @@ import (
 )
 
 type Suite struct {
-	New func(ctx context.Context, options providerkit.Options) (providerkit.Provider, error)
+	New func(ctx context.Context, settings providerkit.Settings) (providerkit.Provider, error)
 
 	Spec providerkit.Spec
 
@@ -40,7 +40,7 @@ func runVendor(t *testing.T, suite Suite) {
 	if suite.New == nil {
 		t.Fatal("the suite carries vendor checks and no constructor, so there is no provider to run them against")
 	}
-	provider, err := suite.New(context.Background(), suite.Options)
+	provider, err := suite.New(context.Background(), providerkit.Settings{Options: suite.Options})
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider", err)
 	}

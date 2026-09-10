@@ -174,10 +174,10 @@ func TestArtifactsRemovePrefixLeavesTheRest(t *testing.T) {
 func TestNewRefusesOptionsTheReferenceProviderDoesNotAccept(t *testing.T) {
 	t.Parallel()
 
-	if _, err := fake.New(context.Background(), providerkit.Options{"regoin": "typo"}); err == nil {
+	if _, err := fake.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"regoin": "typo"}}); err == nil {
 		t.Fatal("New() accepted an option it does not know")
 	}
-	if _, err := fake.New(context.Background(), providerkit.Options{"region": "nowhere"}); err != nil {
+	if _, err := fake.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"region": "nowhere"}}); err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 }

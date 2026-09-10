@@ -35,7 +35,7 @@ func TestServeNeedsTheClientCertificate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(channel.ClientCertEnvVar, tc.cert)
 
-			err := Serve(Spec{Version: "test", New: func(context.Context, Options) (Provider, error) { return nil, nil }})
+			err := Serve(Spec{Version: "test", New: func(context.Context, Settings) (Provider, error) { return nil, nil }})
 			if err == nil || !strings.Contains(err.Error(), channel.ClientCertEnvVar) {
 				t.Fatalf("Serve() error = %v, want it to name the environment variable the CLI must set", err)
 			}
@@ -47,15 +47,15 @@ func TestSessionConstructsTheProviderExactlyOnce(t *testing.T) {
 	t.Parallel()
 
 	var built int
-	s := &session{spec: Spec{New: func(context.Context, Options) (Provider, error) {
+	s := &session{spec: Spec{New: func(context.Context, Settings) (Provider, error) {
 		built++
 		return stubProvider{}, nil
 	}}}
 
-	if err := s.configure(context.Background(), nil); err != nil {
+	if err := s.configure(context.Background(), Settings{}); err != nil {
 		t.Fatalf("configure() error = %v", err)
 	}
-	err := s.configure(context.Background(), nil)
+	err := s.configure(context.Background(), Settings{})
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
 		t.Errorf("a second configure: code = %v, want %v", got, connect.CodeFailedPrecondition)
 	}
@@ -67,14 +67,14 @@ func TestSessionConstructsTheProviderExactlyOnce(t *testing.T) {
 func TestSessionRefusesEveryRPCBeforeConfigure(t *testing.T) {
 	t.Parallel()
 
-	s := &session{spec: Spec{New: func(context.Context, Options) (Provider, error) { return stubProvider{}, nil }}}
+	s := &session{spec: Spec{New: func(context.Context, Settings) (Provider, error) { return stubProvider{}, nil }}}
 
 	_, err := s.use()
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
 		t.Fatalf("use() before configure: code = %v, want %v", got, connect.CodeFailedPrecondition)
 	}
 
-	if err := s.configure(context.Background(), nil); err != nil {
+	if err := s.configure(context.Background(), Settings{}); err != nil {
 		t.Fatalf("configure() error = %v", err)
 	}
 	if _, err := s.use(); err != nil {
@@ -85,11 +85,11 @@ func TestSessionRefusesEveryRPCBeforeConfigure(t *testing.T) {
 func TestSessionTurnsARefusedConstructionIntoInvalidArgument(t *testing.T) {
 	t.Parallel()
 
-	s := &session{spec: Spec{New: func(context.Context, Options) (Provider, error) {
+	s := &session{spec: Spec{New: func(context.Context, Settings) (Provider, error) {
 		return nil, Refuse(CodeInvalid, "unknown option \"regoin\"")
 	}}}
 
-	err := s.configure(context.Background(), Options{"regoin": "typo"})
+	err := s.configure(context.Background(), Settings{Options: Options{"regoin": "typo"}})
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
 		t.Fatalf("configure() with refused options: code = %v, want %v", got, connect.CodeInvalidArgument)
 	}
@@ -101,11 +101,11 @@ func TestSessionTurnsARefusedConstructionIntoInvalidArgument(t *testing.T) {
 func TestSessionReportsAFailedConstructionAsAFailure(t *testing.T) {
 	t.Parallel()
 
-	s := &session{spec: Spec{New: func(context.Context, Options) (Provider, error) {
+	s := &session{spec: Spec{New: func(context.Context, Settings) (Provider, error) {
 		return nil, errors.New("the vendor sdk is unreachable")
 	}}}
 
-	if got := connect.CodeOf(s.configure(context.Background(), nil)); got != connect.CodeInternal {
+	if got := connect.CodeOf(s.configure(context.Background(), Settings{})); got != connect.CodeInternal {
 		t.Fatalf("configure() with a failure: code = %v, want %v", got, connect.CodeInternal)
 	}
 }
@@ -113,9 +113,9 @@ func TestSessionReportsAFailedConstructionAsAFailure(t *testing.T) {
 func TestSessionRefusesAConstructorThatReturnsNothing(t *testing.T) {
 	t.Parallel()
 
-	s := &session{spec: Spec{New: func(context.Context, Options) (Provider, error) { return nil, nil }}}
+	s := &session{spec: Spec{New: func(context.Context, Settings) (Provider, error) { return nil, nil }}}
 
-	if got := connect.CodeOf(s.configure(context.Background(), nil)); got != connect.CodeInternal {
+	if got := connect.CodeOf(s.configure(context.Background(), Settings{})); got != connect.CodeInternal {
 		t.Fatalf("configure() with a nil provider: code = %v, want %v", got, connect.CodeInternal)
 	}
 }
@@ -125,7 +125,7 @@ func TestSessionConfigureIsSafeUnderConcurrency(t *testing.T) {
 
 	var mu sync.Mutex
 	var built int
-	s := &session{spec: Spec{New: func(context.Context, Options) (Provider, error) {
+	s := &session{spec: Spec{New: func(context.Context, Settings) (Provider, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		built++
@@ -137,7 +137,7 @@ func TestSessionConfigureIsSafeUnderConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_ = s.configure(context.Background(), nil)
+			_ = s.configure(context.Background(), Settings{})
 		}()
 	}
 	wg.Wait()

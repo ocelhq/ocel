@@ -273,6 +273,20 @@
     "slug": {
       "description": "The project's deployment identity. Every stack and resource ocel creates in your own account is keyed on it, so changing it forks a new project.",
       "type": "string"
+    },
+    "transforms": {
+      "description": "Transform modules applied while provisioning, in order — later modules win where their patches collide. Each is a path to a module whose default export is a defineTransform(...) result, keyed by the provider it patches.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
     }
   },
   "required": [

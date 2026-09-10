@@ -41,7 +41,7 @@ func driveOnce(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io
 		return err
 	}
 
-	providerConfig, err := providerConfig(desc)
+	providerConfig, err := providerConfig(cfg, desc)
 	if err != nil {
 		return err
 	}
@@ -65,8 +65,8 @@ func driveOnce(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io
 	return fn(runner)
 }
 
-func providerConfig(desc *projectconfig.ProviderDescriptor) (*contractv1.ProviderConfig, error) {
-	config := &contractv1.ProviderConfig{}
+func providerConfig(cfg *projectconfig.Config, desc *projectconfig.ProviderDescriptor) (*contractv1.ProviderConfig, error) {
+	config := &contractv1.ProviderConfig{Transforms: cfg.Transforms}
 	if desc == nil || len(desc.Options) == 0 {
 		return config, nil
 	}

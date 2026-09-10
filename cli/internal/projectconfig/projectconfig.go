@@ -81,6 +81,7 @@ type App struct {
 
 type Config struct {
 	Slug          string
+	Transforms    []string
 	Discovery     Discovery
 	Provider      *ProviderDescriptor
 	Edge          *EdgeDescriptor
@@ -170,6 +171,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Config, error) {
 
 	return &Config{
 		Slug:          doc.Slug,
+		Transforms:    doc.Transforms,
 		Discovery:     discovery,
 		Provider:      provider,
 		Edge:          edgeDescriptor,

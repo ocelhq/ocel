@@ -33,7 +33,7 @@ func servedProvider(t *testing.T, version string, provider providerkit.Provider)
 
 	spec := providerkit.Spec{
 		Version: version,
-		New: func(context.Context, providerkit.Options) (providerkit.Provider, error) {
+		New: func(context.Context, providerkit.Settings) (providerkit.Provider, error) {
 			return provider, nil
 		},
 	}

@@ -46,14 +46,14 @@ const artifactRootDirName = constants.ProjectStateDirName + "/output"
 type Options struct {
 	Region       string            `json:"region,omitempty" doc:"The AWS region to deploy into."`
 	VarsKey      string            `json:"varsKey,omitempty" pattern:"^arn:aws:kms:" doc:"ARN of a KMS key to encrypt this account's variables under. Omit it and ocel bootstrap --features vars-key makes a key ocel owns."`
-	Transforms   []string          `json:"transforms,omitempty" doc:"Transform modules to apply while provisioning, in order — later modules win where their patches collide. Each is a path to a module whose default export is a defineTransform(...) result."`
 	Certificates map[string]string `json:"certificates,omitempty" doc:"Certificates to serve a hostname with, keyed by hostname, valued by the ARN of an already-issued ACM certificate. A hostname left off gets a certificate ocel requests, validates and deletes again."`
 }
 
 type Provider struct {
-	options   Options
-	aws       aws.Config
-	namespace bootstrap.Namespace
+	options    Options
+	transforms []string
+	aws        aws.Config
+	namespace  bootstrap.Namespace
 
 	deployed memo[providerkit.Class, bootstrap.Deployed]
 	params   memo[classEdge, bootstrap.ClassParams]
@@ -67,8 +67,8 @@ type classEdge struct {
 	kind  edge.Kind
 }
 
-func New(ctx context.Context, options providerkit.Options) (providerkit.Provider, error) {
-	decoded, err := providerkit.Decode[Options](options)
+func New(ctx context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
+	decoded, err := providerkit.Decode[Options](settings.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -80,11 +80,11 @@ func New(ctx context.Context, options providerkit.Options) (providerkit.Provider
 	if err != nil {
 		return nil, err
 	}
-	return NewProvider(decoded, cfg, bootstrap.Namespace(ns)), nil
+	return NewProvider(decoded, settings.Transforms, cfg, bootstrap.Namespace(ns)), nil
 }
 
-func NewProvider(options Options, cfg aws.Config, ns bootstrap.Namespace) *Provider {
-	p := &Provider{options: options, aws: cfg, namespace: ns}
+func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootstrap.Namespace) *Provider {
+	p := &Provider{options: options, transforms: transforms, aws: cfg, namespace: ns}
 	p.releases = deploy.NewReleaser(deploy.ResolverFunc(p.release), &deploy.Realized{})
 	return p
 }
@@ -424,7 +424,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 
 		OriginSecret: params.OriginSecret,
 
-		Transform: p.transforms(root),
+		Transform: p.transformPass(root),
 	}
 	if params.EdgeCredentialsErr == nil {
 		cfg.EdgeAccessKeyID = params.EdgeCredentials.AccessKeyID
@@ -456,11 +456,11 @@ func (p *Provider) standing(held bootstrap.Deployed, class providerkit.Class) er
 	return nil
 }
 
-func (p *Provider) transforms(root string) transform.Evaluator {
-	if len(p.options.Transforms) == 0 {
+func (p *Provider) transformPass(root string) transform.Evaluator {
+	if len(p.transforms) == 0 {
 		return nil
 	}
-	return transform.NodePass{Root: root, Modules: p.options.Transforms}
+	return transform.NodePass{Root: root, Modules: p.transforms}
 }
 
 func tableARN(region, account, table string) string {

@@ -13,7 +13,7 @@ import (
 func TestTheOptionsAreAProjectAndARegionAndNothingElse(t *testing.T) {
 	t.Parallel()
 
-	p, err := gcp.New(context.Background(), providerkit.Options{"project": "acme-prod", "region": "europe-west1"})
+	p, err := gcp.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"project": "acme-prod", "region": "europe-west1"}})
 	if err != nil {
 		t.Fatalf("New() = %v, want a provider", err)
 	}
@@ -48,7 +48,7 @@ func TestAnOptionThisProviderDoesNotTakeIsRefused(t *testing.T) {
 			t.Parallel()
 
 			var refusal providerkit.Refusal
-			p, err := gcp.New(context.Background(), tc.options)
+			p, err := gcp.New(context.Background(), providerkit.Settings{Options: tc.options})
 			if !errors.As(err, &refusal) || refusal.Code != tc.code {
 				t.Fatalf("New() = %v, %v, want a %q refusal", p, err, tc.code)
 			}

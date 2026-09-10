@@ -2,14 +2,26 @@ package provider
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
+func TestProviderConfigCarriesTheProjectTransformModules(t *testing.T) {
+	modules := []string{"./transforms/network.transform.ts"}
+	config, err := providerConfig(&projectconfig.Config{Transforms: modules}, &projectconfig.ProviderDescriptor{Name: "aws"})
+	if err != nil {
+		t.Fatalf("providerConfig: %v", err)
+	}
+	if !slices.Equal(config.GetTransforms(), modules) {
+		t.Errorf("transforms = %v, want %v", config.GetTransforms(), modules)
+	}
+}
+
 func TestProviderConfigCarriesTheDescriptorOptionsOpaquely(t *testing.T) {
-	config, err := providerConfig(&projectconfig.ProviderDescriptor{
+	config, err := providerConfig(&projectconfig.Config{}, &projectconfig.ProviderDescriptor{
 		Name:    "aws",
 		Options: json.RawMessage(`{"region":"us-east-1"}`),
 	})
@@ -22,7 +34,7 @@ func TestProviderConfigCarriesTheDescriptorOptionsOpaquely(t *testing.T) {
 }
 
 func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
-	_, err := providerConfig(&projectconfig.ProviderDescriptor{
+	_, err := providerConfig(&projectconfig.Config{}, &projectconfig.ProviderDescriptor{
 		Name:    "aws",
 		Options: json.RawMessage(`["us-east-1"]`),
 	})
@@ -35,7 +47,7 @@ func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
 }
 
 func TestProviderConfigLeavesAnUnconfiguredProviderWithoutOptions(t *testing.T) {
-	config, err := providerConfig(&projectconfig.ProviderDescriptor{
+	config, err := providerConfig(&projectconfig.Config{}, &projectconfig.ProviderDescriptor{
 		Name:    "aws",
 		Options: json.RawMessage(`{}`),
 	})
