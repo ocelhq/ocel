@@ -75,13 +75,21 @@ func (s PreviewSite) labelParts(label string) string {
 	if len(parts) > 1 && parts[0] == s.slug {
 		names = []string{"project", "preview", "app"}
 	}
+	for len(names) < len(parts) {
+		names = append(names, "name")
+	}
+	return LabelParts(label, names...)
+}
+
+func LabelParts(label string, names ...string) string {
+	parts := strings.Split(label, PreviewAppSeparator)
 	described := make([]string, 0, len(parts))
 	for i, part := range parts {
-		name := "name"
 		if i < len(names) {
-			name = names[i]
+			described = append(described, fmt.Sprintf("%s %q (%d)", names[i], part, len(part)))
+			continue
 		}
-		described = append(described, fmt.Sprintf("%s %q (%d)", name, part, len(part)))
+		described = append(described, fmt.Sprintf("%q (%d)", part, len(part)))
 	}
 	return strings.Join(described, " + ")
 }
