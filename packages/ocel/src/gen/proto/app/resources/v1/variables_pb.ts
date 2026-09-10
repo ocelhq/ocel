@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file app/resources/v1/variables.proto.
  */
 export const file_app_resources_v1_variables: GenFile = /*@__PURE__*/
-  fileDesc("CiBhcHAvcmVzb3VyY2VzL3YxL3ZhcmlhYmxlcy5wcm90bxIQYXBwLnJlc291cmNlcy52MSLeAwoSVmFyaWFibGVEZWZpbml0aW9uEiYKA2tleRgBIAEoCUIZukgWchQQATIQXlteI1s6Y250cmw6XV0qJBI4CgVjbGFzcxgCIAEoDjIfLmFwcC5yZXNvdXJjZXMudjEuVmFyaWFibGVDbGFzc0IIukgFggECEAESGQoRY2xpZW50X2FjY2Vzc2libGUYAyABKAgSEAoIcmVxdWlyZWQYBCABKAgSNAoHZm9sZGVycxgFIAMoCUIjukggkgEdGAEiGXIXMhVeKC9bXi8jWzpjbnRybDpdXSspKyQSDgoGc291cmNlGAYgASgJEhUKDXNjaGVtYV9zb3VyY2UYByABKAkSEgoKaGFzX3NjaGVtYRgIIAEoCBLHAQoLZGVzY3JpcHRpb24YCSABKAlCsQG6SK0BugGpAQogdmFyaWFibGVzLmRlZmluaXRpb24uZGVzY3JpcHRpb24SS2EgZGVzY3JpcHRpb24gaXMgYXQgbW9zdCAxMjAgYnl0ZXMsIG9uZSBsaW5lLCBhbmQgaGFzIG5vIGNvbnRyb2wgY2hhcmFjdGVycxo4c2l6ZShieXRlcyh0aGlzKSkgPD0gMTIwICYmICF0aGlzLm1hdGNoZXMoJ1tbOmNudHJsOl1dJykiTgoRRGVjbGFyZUVudlJlcXVlc3QSOQoLZGVmaW5pdGlvbnMYASADKAsyJC5hcHAucmVzb3VyY2VzLnYxLlZhcmlhYmxlRGVmaW5pdGlvbiJzCgxWYXJpYWJsZUNlbGwSJgoDa2V5GAEgASgJQhm6SBZyFBABMhBeW14jWzpjbnRybDpdXSokEiwKBmZvbGRlchgCIAEoCUIcukgZchcyFV4oL1teLyNbOmNudHJsOl1dKykqJBINCgV2YWx1ZRgDIAEoCSJDChJEZWNsYXJlRW52UmVzcG9uc2USLQoFY2VsbHMYASADKAsyHi5hcHAucmVzb3VyY2VzLnYxLlZhcmlhYmxlQ2VsbCLeAQoPVmFyaWFibGVQcm9ibGVtEgsKA2tleRgBIAEoCRIsCgZmb2xkZXIYAiABKAlCHLpIGXIXMhVeKC9bXi8jWzpjbnRybDpdXSspKiQSPgoEa2luZBgDIAEoDjImLmFwcC5yZXNvdXJjZXMudjEuVmFyaWFibGVQcm9ibGVtLktpbmRCCLpIBYIBAhABEg4KBmRldGFpbBgEIAEoCSJACgRLaW5kEhQKEEtJTkRfVU5TUEVDSUZJRUQQABIQCgxLSU5EX01JU1NJTkcQARIQCgxLSU5EX0lOVkFMSUQQAiJPChhSZXBvcnRFbnZQcm9ibGVtc1JlcXVlc3QSMwoIcHJvYmxlbXMYASADKAsyIS5hcHAucmVzb3VyY2VzLnYxLlZhcmlhYmxlUHJvYmxlbSIbChlSZXBvcnRFbnZQcm9ibGVtc1Jlc3BvbnNlKp4BCg1WYXJpYWJsZUNsYXNzEh4KGlZBUklBQkxFX0NMQVNTX1VOU1BFQ0lGSUVEEAASGAoUVkFSSUFCTEVfQ0xBU1NfUExBSU4QARIcChhWQVJJQUJMRV9DTEFTU19TRU5TSVRJVkUQAhIZChVWQVJJQUJMRV9DTEFTU19TRUNSRVQQAxIaChZWQVJJQUJMRV9DTEFTU19ERVJJVkVEEARCP1o9Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vYXBwL3Jlc291cmNlcy92MTtyZXNvdXJjZXN2MWIGcHJvdG8z", [file_buf_validate_validate]);
+  fileDesc("CiBhcHAvcmVzb3VyY2VzL3YxL3ZhcmlhYmxlcy5wcm90bxIQYXBwLnJlc291cmNlcy52MSKGBAoSVmFyaWFibGVEZWZpbml0aW9uEiYKA2tleRgBIAEoCUIZukgWchQQATIQXlteI1s6Y250cmw6XV0qJBI4CgVjbGFzcxgCIAEoDjIfLmFwcC5yZXNvdXJjZXMudjEuVmFyaWFibGVDbGFzc0IIukgFggECEAESGQoRY2xpZW50X2FjY2Vzc2libGUYAyABKAgSEAoIcmVxdWlyZWQYBCABKAgSNAoHZm9sZGVycxgFIAMoCUIjukggkgEdGAEiGXIXMhVeKC9bXi8jWzpjbnRybDpdXSspKyQSDgoGc291cmNlGAYgASgJEhUKDXNjaGVtYV9zb3VyY2UYByABKAkSEgoKaGFzX3NjaGVtYRgIIAEoCBLHAQoLZGVzY3JpcHRpb24YCSABKAlCsQG6SK0BugGpAQogdmFyaWFibGVzLmRlZmluaXRpb24uZGVzY3JpcHRpb24SS2EgZGVzY3JpcHRpb24gaXMgYXQgbW9zdCAxMjAgYnl0ZXMsIG9uZSBsaW5lLCBhbmQgaGFzIG5vIGNvbnRyb2wgY2hhcmFjdGVycxo4c2l6ZShieXRlcyh0aGlzKSkgPD0gMTIwICYmICF0aGlzLm1hdGNoZXMoJ1tbOmNudHJsOl1dJykSJgoFZ3JvdXAYCiABKAlCF7pIFHISMhBeW14jWzpjbnRybDpdXSokIpACCg9Hcm91cERlZmluaXRpb24SJgoDa2V5GAEgASgJQhm6SBZyFBABMhBeW14jWzpjbnRybDpdXSokEhAKCHJlcXVpcmVkGAIgASgIEsIBCgtkZXNjcmlwdGlvbhgDIAEoCUKsAbpIqAG6AaQBCht2YXJpYWJsZXMuZ3JvdXAuZGVzY3JpcHRpb24SS2EgZGVzY3JpcHRpb24gaXMgYXQgbW9zdCAxMjAgYnl0ZXMsIG9uZSBsaW5lLCBhbmQgaGFzIG5vIGNvbnRyb2wgY2hhcmFjdGVycxo4c2l6ZShieXRlcyh0aGlzKSkgPD0gMTIwICYmICF0aGlzLm1hdGNoZXMoJ1tbOmNudHJsOl1dJykigQEKEURlY2xhcmVFbnZSZXF1ZXN0EjkKC2RlZmluaXRpb25zGAEgAygLMiQuYXBwLnJlc291cmNlcy52MS5WYXJpYWJsZURlZmluaXRpb24SMQoGZ3JvdXBzGAIgAygLMiEuYXBwLnJlc291cmNlcy52MS5Hcm91cERlZmluaXRpb24icwoMVmFyaWFibGVDZWxsEiYKA2tleRgBIAEoCUIZukgWchQQATIQXlteI1s6Y250cmw6XV0qJBIsCgZmb2xkZXIYAiABKAlCHLpIGXIXMhVeKC9bXi8jWzpjbnRybDpdXSspKiQSDQoFdmFsdWUYAyABKAkiQwoSRGVjbGFyZUVudlJlc3BvbnNlEi0KBWNlbGxzGAEgAygLMh4uYXBwLnJlc291cmNlcy52MS5WYXJpYWJsZUNlbGwi3gEKD1ZhcmlhYmxlUHJvYmxlbRILCgNrZXkYASABKAkSLAoGZm9sZGVyGAIgASgJQhy6SBlyFzIVXigvW14vI1s6Y250cmw6XV0rKSokEj4KBGtpbmQYAyABKA4yJi5hcHAucmVzb3VyY2VzLnYxLlZhcmlhYmxlUHJvYmxlbS5LaW5kQgi6SAWCAQIQARIOCgZkZXRhaWwYBCABKAkiQAoES2luZBIUChBLSU5EX1VOU1BFQ0lGSUVEEAASEAoMS0lORF9NSVNTSU5HEAESEAoMS0lORF9JTlZBTElEEAIiTwoYUmVwb3J0RW52UHJvYmxlbXNSZXF1ZXN0EjMKCHByb2JsZW1zGAEgAygLMiEuYXBwLnJlc291cmNlcy52MS5WYXJpYWJsZVByb2JsZW0iGwoZUmVwb3J0RW52UHJvYmxlbXNSZXNwb25zZSqeAQoNVmFyaWFibGVDbGFzcxIeChpWQVJJQUJMRV9DTEFTU19VTlNQRUNJRklFRBAAEhgKFFZBUklBQkxFX0NMQVNTX1BMQUlOEAESHAoYVkFSSUFCTEVfQ0xBU1NfU0VOU0lUSVZFEAISGQoVVkFSSUFCTEVfQ0xBU1NfU0VDUkVUEAMSGgoWVkFSSUFCTEVfQ0xBU1NfREVSSVZFRBAEQj9aPWdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2FwcC9yZXNvdXJjZXMvdjE7cmVzb3VyY2VzdjFiBnByb3RvMw", [file_buf_validate_validate]);
 
 /**
  * @generated from message app.resources.v1.VariableDefinition
@@ -61,6 +61,11 @@ export type VariableDefinition = Message<"app.resources.v1.VariableDefinition"> 
    * @generated from field: string description = 9;
    */
   description: string;
+
+  /**
+   * @generated from field: string group = 10;
+   */
+  group: string;
 };
 
 /**
@@ -71,6 +76,33 @@ export const VariableDefinitionSchema: GenMessage<VariableDefinition> = /*@__PUR
   messageDesc(file_app_resources_v1_variables, 0);
 
 /**
+ * @generated from message app.resources.v1.GroupDefinition
+ */
+export type GroupDefinition = Message<"app.resources.v1.GroupDefinition"> & {
+  /**
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * @generated from field: bool required = 2;
+   */
+  required: boolean;
+
+  /**
+   * @generated from field: string description = 3;
+   */
+  description: string;
+};
+
+/**
+ * Describes the message app.resources.v1.GroupDefinition.
+ * Use `create(GroupDefinitionSchema)` to create a new message.
+ */
+export const GroupDefinitionSchema: GenMessage<GroupDefinition> = /*@__PURE__*/
+  messageDesc(file_app_resources_v1_variables, 1);
+
+/**
  * @generated from message app.resources.v1.DeclareEnvRequest
  */
 export type DeclareEnvRequest = Message<"app.resources.v1.DeclareEnvRequest"> & {
@@ -78,6 +110,11 @@ export type DeclareEnvRequest = Message<"app.resources.v1.DeclareEnvRequest"> & 
    * @generated from field: repeated app.resources.v1.VariableDefinition definitions = 1;
    */
   definitions: VariableDefinition[];
+
+  /**
+   * @generated from field: repeated app.resources.v1.GroupDefinition groups = 2;
+   */
+  groups: GroupDefinition[];
 };
 
 /**
@@ -85,7 +122,7 @@ export type DeclareEnvRequest = Message<"app.resources.v1.DeclareEnvRequest"> & 
  * Use `create(DeclareEnvRequestSchema)` to create a new message.
  */
 export const DeclareEnvRequestSchema: GenMessage<DeclareEnvRequest> = /*@__PURE__*/
-  messageDesc(file_app_resources_v1_variables, 1);
+  messageDesc(file_app_resources_v1_variables, 2);
 
 /**
  * @generated from message app.resources.v1.VariableCell
@@ -112,7 +149,7 @@ export type VariableCell = Message<"app.resources.v1.VariableCell"> & {
  * Use `create(VariableCellSchema)` to create a new message.
  */
 export const VariableCellSchema: GenMessage<VariableCell> = /*@__PURE__*/
-  messageDesc(file_app_resources_v1_variables, 2);
+  messageDesc(file_app_resources_v1_variables, 3);
 
 /**
  * @generated from message app.resources.v1.DeclareEnvResponse
@@ -129,7 +166,7 @@ export type DeclareEnvResponse = Message<"app.resources.v1.DeclareEnvResponse"> 
  * Use `create(DeclareEnvResponseSchema)` to create a new message.
  */
 export const DeclareEnvResponseSchema: GenMessage<DeclareEnvResponse> = /*@__PURE__*/
-  messageDesc(file_app_resources_v1_variables, 3);
+  messageDesc(file_app_resources_v1_variables, 4);
 
 /**
  * @generated from message app.resources.v1.VariableProblem
@@ -161,7 +198,7 @@ export type VariableProblem = Message<"app.resources.v1.VariableProblem"> & {
  * Use `create(VariableProblemSchema)` to create a new message.
  */
 export const VariableProblemSchema: GenMessage<VariableProblem> = /*@__PURE__*/
-  messageDesc(file_app_resources_v1_variables, 4);
+  messageDesc(file_app_resources_v1_variables, 5);
 
 /**
  * @generated from enum app.resources.v1.VariableProblem.Kind
@@ -187,7 +224,7 @@ export enum VariableProblem_Kind {
  * Describes the enum app.resources.v1.VariableProblem.Kind.
  */
 export const VariableProblem_KindSchema: GenEnum<VariableProblem_Kind> = /*@__PURE__*/
-  enumDesc(file_app_resources_v1_variables, 4, 0);
+  enumDesc(file_app_resources_v1_variables, 5, 0);
 
 /**
  * @generated from message app.resources.v1.ReportEnvProblemsRequest
@@ -204,7 +241,7 @@ export type ReportEnvProblemsRequest = Message<"app.resources.v1.ReportEnvProble
  * Use `create(ReportEnvProblemsRequestSchema)` to create a new message.
  */
 export const ReportEnvProblemsRequestSchema: GenMessage<ReportEnvProblemsRequest> = /*@__PURE__*/
-  messageDesc(file_app_resources_v1_variables, 5);
+  messageDesc(file_app_resources_v1_variables, 6);
 
 /**
  * @generated from message app.resources.v1.ReportEnvProblemsResponse
@@ -217,7 +254,7 @@ export type ReportEnvProblemsResponse = Message<"app.resources.v1.ReportEnvProbl
  * Use `create(ReportEnvProblemsResponseSchema)` to create a new message.
  */
 export const ReportEnvProblemsResponseSchema: GenMessage<ReportEnvProblemsResponse> = /*@__PURE__*/
-  messageDesc(file_app_resources_v1_variables, 6);
+  messageDesc(file_app_resources_v1_variables, 7);
 
 /**
  * @generated from enum app.resources.v1.VariableClass
