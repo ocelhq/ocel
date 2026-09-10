@@ -92,17 +92,7 @@ type functionArgs struct {
 	MemorySizeMB   int
 	TimeoutSeconds int
 	InvokeMode     string
-	VPC            functionVPC
 	Tags           map[string]string
-}
-
-type functionVPC struct {
-	SubnetIDs        []string
-	SecurityGroupIDs []string
-}
-
-func (v functionVPC) placed() bool {
-	return len(v.SubnetIDs) > 0 || len(v.SecurityGroupIDs) > 0
 }
 
 type isrConfig struct {
@@ -462,22 +452,6 @@ func functionEnv(base map[string]string, args functionArgs, isr *isrConfig, byte
 	return env
 }
 
-func functionVPCConfig(logicalName string, v functionVPC) (lambda.FunctionVpcConfigPtrInput, error) {
-	if !v.placed() {
-		return nil, nil
-	}
-	if len(v.SubnetIDs) == 0 {
-		return nil, fmt.Errorf("a transform places %s in a VPC with %d security groups and no subnets; a Lambda reaches a VPC through the subnets it is given, so name at least one", logicalName, len(v.SecurityGroupIDs))
-	}
-	if len(v.SecurityGroupIDs) == 0 {
-		return nil, fmt.Errorf("a transform places %s in %d subnets with no security group; a Lambda in a VPC is refused without one, so name at least one", logicalName, len(v.SubnetIDs))
-	}
-	return lambda.FunctionVpcConfigArgs{
-		SubnetIds:        pulumi.ToStringArray(v.SubnetIDs),
-		SecurityGroupIds: pulumi.ToStringArray(v.SecurityGroupIDs),
-	}, nil
-}
-
 func lambdaLogGroupPrefixFor(base string) string {
 	return lambdaLogGroupPrefix + base + naming.WordSeparator
 }
@@ -513,11 +487,6 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		route = naming.PathSeparator + coord.Name
 	}
 
-	vpcConfig, err := functionVPCConfig(logicalName, args.VPC)
-	if err != nil {
-		return none, err
-	}
-
 	logs, err := newLambdaLogGroup(ctx, naming.ResourceID(naming.KindFunction, coord.Name, "logs"), resourceName, coord.Kind, route, args.Tags, opts...)
 	if err != nil {
 		return none, err
@@ -535,7 +504,6 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: env,
 		},
-		VpcConfig:     vpcConfig,
 		LoggingConfig: lambdaLogging(logs),
 
 		Tags: resourceTags(coord.Kind, route, args.Tags),

@@ -16,7 +16,7 @@ import (
 )
 
 type appWork struct {
-	transformed *transformedArgs
+	transformed *transformPatches
 	functions   appStackFunctions
 	role        executionRole
 	roleCoord   naming.Coordinate
@@ -45,7 +45,7 @@ func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error 
 	return stack.register(pctx)
 }
 
-func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedArgs) (*appWork, error) {
+func (r *release) appWork(plan providerkit.StackPlan, transformed *transformPatches) (*appWork, error) {
 	app := plan.App
 	project, stack := naming.Sanitize(plan.Ref.Project), plan.Ref.Name
 	sessions := newSessionScope(project, stack.Env, r.cfg.StateTableARN)
@@ -81,12 +81,13 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 	logical := make([]string, 0, len(app.Functions))
 	vpcAccess := false
 	for _, spec := range app.Functions {
-		declared, err := transformed.forSpec(app.Runtime, spec)
+		declared, err := translateFunctionSpec(app.Runtime, spec)
 		if err != nil {
 			return nil, err
 		}
+		declared.Tags = transformed.tagsFor(transformTypeFunction, spec.Name)
 		args[spec.Name] = declared
-		vpcAccess = vpcAccess || declared.VPC.placed()
+		vpcAccess = vpcAccess || transformed.placesInVPC(spec.Name)
 		functions = append(functions, appFunction{Logical: spec.Name, RouteID: spec.Route})
 		held, err := r.artifactAt(spec.Artifact)
 		if err != nil {
@@ -162,15 +163,6 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformedAr
 			Layers:    layers,
 		},
 	}, nil
-}
-
-func (t *transformedArgs) forSpec(runtime string, spec providerkit.FunctionSpec) (functionArgs, error) {
-	if t != nil {
-		if args, ok := t.functions[spec.Name]; ok {
-			return args, nil
-		}
-	}
-	return translateFunctionSpec(runtime, spec)
 }
 
 func (r *release) artifactAt(ref providerkit.ArtifactRef) (artifactRef, error) {

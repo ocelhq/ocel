@@ -1,7 +1,6 @@
 package deploy
 
 import (
-	"errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -11,11 +10,19 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 )
 
-const outputPlaceholderKey = "$ocelOutput"
+const (
+	outputPlaceholderKey = "$ocelOutput"
+	customBindingType    = "custom"
+)
 
 type outputRef struct {
-	Binding  string
+	Type     string
+	Name     string
 	Property string
+}
+
+func (r outputRef) String() string {
+	return fmt.Sprintf("bindings.%s.%s.%s", r.Type, r.Name, r.Property)
 }
 
 type outputSite struct {
@@ -40,29 +47,51 @@ type OutputPlaceholderError struct {
 
 func (e *OutputPlaceholderError) Error() string {
 	return fmt.Sprintf(
-		"a transform fills %s with a binding output that %s; author one as `bindings.<name>.<property>` from a callback transform",
+		"a transform fills %s with a binding output that %s; author one as `bindings.<type>.<name>.<property>`",
 		e.At, e.Reason)
+}
+
+type UnboundOutputError struct {
+	Ref      outputRef
+	At       outputSite
+	Declared []string
+}
+
+func (e *UnboundOutputError) Error() string {
+	var b strings.Builder
+	fmt.Fprintf(&b,
+		"a transform fills %s from %s, and this project binds no %s named %q. "+
+			"A binding output reads the record your config binds under that name, so key it under \"bindings\" in ocel.json, "+
+			"or read a record nothing declared as `bindings.custom.%s.%s`",
+		e.At, e.Ref, e.Ref.Type, e.Ref.Name, e.Ref.Name, e.Ref.Property)
+	if len(e.Declared) == 0 {
+		fmt.Fprint(&b, "\n\nThis project binds nothing at all.")
+		return b.String()
+	}
+	fmt.Fprintf(&b, "\n\nBound: %s.", strings.Join(e.Declared, ", "))
+	return b.String()
 }
 
 type UnpublishedOutputError struct {
 	Ref         outputRef
 	At          outputSite
+	Published   string
 	Class       string
 	Environment string
-	Published   []string
+	Carries     []string
 }
 
 func (e *UnpublishedOutputError) Error() string {
 	var b strings.Builder
 	fmt.Fprintf(&b,
-		"a transform fills %s from binding %q's %s, and nothing has published a record under that name to %s. "+
+		"a transform fills %s from %s, and nothing has published a record under %q to %s. "+
 			"Ocel never runs your infrastructure tool for you: run it, then deploy again",
-		e.At, e.Ref.Binding, e.Ref.Property, describeCoordinate(e.Class, e.Environment))
-	if len(e.Published) == 0 {
+		e.At, e.Ref, e.Published, describeCoordinate(e.Class, e.Environment))
+	if len(e.Carries) == 0 {
 		fmt.Fprintf(&b, "\n\nNothing at all is published to %s.", describeCoordinate(e.Class, e.Environment))
 		return b.String()
 	}
-	fmt.Fprintf(&b, "\n\nPublished to %s: %s.", describeCoordinate(e.Class, e.Environment), strings.Join(e.Published, ", "))
+	fmt.Fprintf(&b, "\n\nPublished to %s: %s.", describeCoordinate(e.Class, e.Environment), strings.Join(e.Carries, ", "))
 	return b.String()
 }
 
@@ -74,9 +103,9 @@ type OutputPropertyError struct {
 
 func (e *OutputPropertyError) Error() string {
 	return fmt.Sprintf(
-		"a transform fills %s from binding %q's %s, and the published record carries no such property. "+
+		"a transform fills %s from %s, and the published record carries no such property. "+
 			"The record carries %s — republish it with %s",
-		e.At, e.Ref.Binding, e.Ref.Property, carried(e.Carries), e.Ref.Property)
+		e.At, e.Ref, carried(e.Carries), e.Ref.Property)
 }
 
 type ProvisionedOutputError struct {
@@ -86,10 +115,10 @@ type ProvisionedOutputError struct {
 
 func (e *ProvisionedOutputError) Error() string {
 	return fmt.Sprintf(
-		"a transform fills %s from binding %q's %s, and this deploy provisions %q itself. "+
+		"a transform fills %s from %s, and this deploy provisions that %s itself. "+
 			"Ocel publishes what it provisions long after the transforms have run, so its outputs are not there to read: "+
-			"drop %q from the resource declarations and bind it through `bindings` if your own infrastructure owns it, or name a binding that does",
-		e.At, e.Ref.Binding, e.Ref.Property, e.Ref.Binding, e.Ref.Binding)
+			"key %q under \"bindings\" in ocel.json if your own infrastructure owns it, or name one that is bound",
+		e.At, e.Ref, e.Ref.Type, e.Ref.Name)
 }
 
 type EmptyOutputError struct {
@@ -99,49 +128,22 @@ type EmptyOutputError struct {
 
 func (e *EmptyOutputError) Error() string {
 	return fmt.Sprintf(
-		"a transform fills %s from binding %q's %s, and the published record carries nothing under it. "+
-			"A field an operator filled is never rendered as one they left alone, so this deploy stops here: republish %q with a value under %s",
-		e.At, e.Ref.Binding, e.Ref.Property, e.Ref.Binding, e.Ref.Property)
-}
-
-type OutputShapeError struct {
-	Ref outputRef
-	At  outputSite
-	Err error
-}
-
-func (e *OutputShapeError) Error() string {
-	return fmt.Sprintf(
-		"a transform fills %s from binding %q's %s, and the record's value is not what that field takes: %v",
-		e.At, e.Ref.Binding, e.Ref.Property, e.Err)
-}
-
-func (e *OutputShapeError) Unwrap() error { return e.Err }
-
-func nameOutputBehind(placed []placedOutput, resource string, err error) error {
-	var undecodable *surfaceFieldError
-	if !errors.As(err, &undecodable) {
-		return nil
-	}
-	for _, p := range placed {
-		if p.At == (outputSite{Resource: resource, Surface: undecodable.Surface, Field: undecodable.Field}) {
-			return &OutputShapeError{Ref: p.Ref, At: p.At, Err: err}
-		}
-	}
-	return nil
+		"a transform fills %s from %s, and the published record carries nothing under it. "+
+			"A field an operator filled is never rendered as one they left alone, so this deploy stops here: republish it with a value under %s",
+		e.At, e.Ref, e.Ref.Property)
 }
 
 func walkOutputs(candidates []transformCandidate, results []transform.Result, resolve func(outputRef, outputSite, any) (any, error)) error {
 	for i, result := range results {
-		for _, key := range slices.Sorted(maps.Keys(result.Surfaces)) {
-			args := result.Surfaces[key]
-			for _, field := range slices.Sorted(maps.Keys(args)) {
-				at := outputSite{Resource: candidates[i].name, Surface: key, Field: field}
-				resolved, err := mapOutputs(args[field], at, resolve)
+		for _, key := range slices.Sorted(maps.Keys(result.Patches)) {
+			patch := result.Patches[key]
+			for _, field := range slices.Sorted(maps.Keys(patch)) {
+				at := outputSite{Resource: candidates[i].key.Name, Surface: key, Field: field}
+				resolved, err := mapOutputs(patch[field], at, resolve)
 				if err != nil {
 					return err
 				}
-				args[field] = resolved
+				patch[field] = resolved
 			}
 		}
 	}
@@ -193,15 +195,19 @@ func readOutputRef(m map[string]any, at outputSite) (outputRef, bool, error) {
 	if !ok {
 		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: "names neither a binding nor a property"}
 	}
-	binding, _ := fields["binding"].(string)
+	kind, _ := fields["type"].(string)
+	name, _ := fields["name"].(string)
 	property, _ := fields["property"].(string)
-	if binding == "" {
-		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: "names no binding"}
+	if kind == "" {
+		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: "names no resource type"}
+	}
+	if name == "" {
+		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: fmt.Sprintf("names the type %q and no binding under it", kind)}
 	}
 	if property == "" {
-		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: fmt.Sprintf("names binding %q and no property on it", binding)}
+		return outputRef{}, false, &OutputPlaceholderError{At: at, Reason: fmt.Sprintf("names binding %s.%s and no property on it", kind, name)}
 	}
-	return outputRef{Binding: binding, Property: property}, true, nil
+	return outputRef{Type: kind, Name: name, Property: property}, true, nil
 }
 
 func carried(properties []string) string {

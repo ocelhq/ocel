@@ -8,58 +8,49 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 )
 
-func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan providerkit.StackPlan) (*transformedArgs, error) {
+func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan providerkit.StackPlan) (*transformPatches, error) {
 	if evaluator == nil {
 		return nil, nil
 	}
-	req := transform.Request{EnvClass: string(plan.Ref.Class), Env: plan.Ref.Name.Env}
+	project, stack := naming.Sanitize(plan.Ref.Project), plan.Ref.Name
+	req := transform.Request{
+		Provider: transform.Provider,
+		EnvClass: string(plan.Ref.Class),
+		Env:      stack.Env,
+	}
 	var candidates []transformCandidate
 
 	for _, resource := range plan.Resources {
-		name := resource.Name
 		switch resource.Type {
 		case providerkit.BindingPostgres:
-			args := translatePostgres(resource.Postgres)
-			req.Resources = append(req.Resources, transform.Resource{
-				Type: "postgres", Name: name, Surfaces: postgresSurfaces(args),
+			req.Resources = append(req.Resources, transform.Resource{Type: transformTypePostgres, Name: resource.Name})
+			candidates = append(candidates, transformCandidate{
+				key:   resourceKey{Type: transformTypePostgres, Name: resource.Name},
+				names: postgresResourceNames(project, stack.Env, resource.Name),
 			})
-			candidates = append(candidates, transformCandidate{name: name, apply: func(out *transformedArgs, result transform.Result) error {
-				applied, err := applyPostgresSurfaces(args, result)
-				out.postgres[name] = applied
-				return err
-			}})
 		case providerkit.BindingBucket:
-			args := translateBucket(resource.Bucket)
-			req.Resources = append(req.Resources, transform.Resource{
-				Type: "bucket", Name: name, Surfaces: bucketSurfaces(args),
+			req.Resources = append(req.Resources, transform.Resource{Type: transformTypeBucket, Name: resource.Name})
+			candidates = append(candidates, transformCandidate{
+				key:   resourceKey{Type: transformTypeBucket, Name: resource.Name},
+				names: bucketResourceNames(project, stack.Env, resource.Name, translateBucket(resource.Bucket)),
 			})
-			candidates = append(candidates, transformCandidate{name: name, apply: func(out *transformedArgs, result transform.Result) error {
-				applied, err := applyBucketSurfaces(args, result)
-				out.buckets[name] = applied
-				return err
-			}})
 		}
 	}
 
 	if app := plan.App; app != nil {
 		for _, spec := range app.Functions {
-			name := spec.Name
-			args, err := translateFunctionSpec(app.Runtime, spec)
-			if err != nil {
-				return nil, err
-			}
 			req.Resources = append(req.Resources, transform.Resource{
-				Type: "function", Name: name, App: app.App, Surfaces: functionSurfaces(args),
+				Type: transformTypeFunction, Name: spec.Name, App: app.App,
 			})
-			candidates = append(candidates, transformCandidate{name: name, apply: func(out *transformedArgs, result transform.Result) error {
-				applied, err := applyFunctionSurfaces(args, result)
-				out.functions[name] = applied
-				return err
-			}})
+			candidates = append(candidates, transformCandidate{
+				key:   resourceKey{Type: transformTypeFunction, Name: spec.Name},
+				names: functionResourceNames(project, stack, spec.Name),
+			})
 		}
 	}
 
@@ -73,25 +64,10 @@ func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan
 	if len(results) != len(candidates) {
 		return nil, fmt.Errorf("transforms returned %d results for %d resources", len(results), len(candidates))
 	}
-	placed, err := resolvePlanOutputs(ctx, plan, candidates, results)
-	if err != nil {
+	if err := resolvePlanOutputs(ctx, plan, candidates, results); err != nil {
 		return nil, err
 	}
-
-	out := &transformedArgs{
-		functions: map[string]functionArgs{},
-		buckets:   map[string]bucketArgs{},
-		postgres:  map[string]postgresArgs{},
-	}
-	for i, c := range candidates {
-		if err := c.apply(out, results[i]); err != nil {
-			if named := nameOutputBehind(placed, c.name, err); named != nil {
-				return nil, named
-			}
-			return nil, fmt.Errorf("transform %s: %w", c.name, err)
-		}
-	}
-	return out, nil
+	return indexPatches(candidates, results)
 }
 
 func translateFunctionSpec(runtime string, spec providerkit.FunctionSpec) (functionArgs, error) {
@@ -152,67 +128,91 @@ func managedRuntime(name string) string {
 	return providedFunctionRuntime
 }
 
-func resolvePlanOutputs(ctx context.Context, plan providerkit.StackPlan, candidates []transformCandidate, results []transform.Result) ([]placedOutput, error) {
+func resolvePlanOutputs(ctx context.Context, plan providerkit.StackPlan, candidates []transformCandidate, results []transform.Result) error {
 	var placed []placedOutput
 	if err := walkOutputs(candidates, results, func(ref outputRef, at outputSite, authored any) (any, error) {
 		placed = append(placed, placedOutput{Ref: ref, At: at})
 		return authored, nil
 	}); err != nil {
-		return nil, err
+		return err
 	}
 	if len(placed) == 0 {
-		return nil, nil
-	}
-	if err := refusePlanProvisionedOutputs(plan, placed); err != nil {
-		return nil, err
+		return nil
 	}
 	values, err := readPlanOutputs(ctx, plan, placed)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if err := walkOutputs(candidates, results, func(ref outputRef, _ outputSite, _ any) (any, error) {
+	return walkOutputs(candidates, results, func(ref outputRef, _ outputSite, _ any) (any, error) {
 		return values[ref], nil
-	}); err != nil {
-		return nil, err
-	}
-	return placed, nil
+	})
 }
 
-func refusePlanProvisionedOutputs(plan providerkit.StackPlan, placed []placedOutput) error {
-	for _, p := range placed {
-		if slices.ContainsFunc(plan.Resources, func(r providerkit.Resource) bool { return r.Name == p.Ref.Binding && r.Binding == "" }) {
-			return &ProvisionedOutputError{Ref: p.Ref, At: p.At}
-		}
+func publishedAs(plan providerkit.StackPlan, ref outputRef, at outputSite) (string, error) {
+	if ref.Type == customBindingType {
+		return ref.Name, nil
 	}
-	return nil
+	for _, resource := range plan.Resources {
+		if string(resource.Type) != ref.Type || resource.Name != ref.Name {
+			continue
+		}
+		if resource.Binding == "" {
+			return "", &ProvisionedOutputError{Ref: ref, At: at}
+		}
+		return resource.Binding, nil
+	}
+	return "", &UnboundOutputError{Ref: ref, At: at, Declared: declaredBindings(plan)}
+}
+
+func declaredBindings(plan providerkit.StackPlan) []string {
+	var out []string
+	for _, resource := range plan.Resources {
+		if resource.Binding == "" {
+			continue
+		}
+		out = append(out, string(resource.Type)+"."+resource.Name)
+	}
+	slices.Sort(out)
+	return out
 }
 
 func readPlanOutputs(ctx context.Context, plan providerkit.StackPlan, placed []placedOutput) (map[outputRef]any, error) {
+	published := make(map[outputRef]string, len(placed))
+	for _, p := range placed {
+		name, err := publishedAs(plan, p.Ref, p.At)
+		if err != nil {
+			return nil, err
+		}
+		published[p.Ref] = name
+	}
+
 	if plan.Bindings == nil {
 		return nil, fmt.Errorf(
-			"a transform fills %s from binding %q, and this deploy reached no variable store to read published records from",
-			placed[0].At, placed[0].Ref.Binding)
+			"a transform fills %s from %s, and this deploy reached no variable store to read published records from",
+			placed[0].At, placed[0].Ref)
 	}
 	names, err := plan.Bindings.Names(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("a transform fills %s from binding %q: %w", placed[0].At, placed[0].Ref.Binding, err)
+		return nil, fmt.Errorf("a transform fills %s from %s: %w", placed[0].At, placed[0].Ref, err)
 	}
 	slices.Sort(names)
 
 	wanted := make([]string, 0, len(placed))
 	for _, p := range placed {
-		if !slices.Contains(names, p.Ref.Binding) {
+		name := published[p.Ref]
+		if !slices.Contains(names, name) {
 			return nil, &UnpublishedOutputError{
-				Ref: p.Ref, At: p.At, Class: string(plan.Ref.Class), Environment: plan.Ref.Name.Env, Published: names,
+				Ref: p.Ref, At: p.At, Published: name,
+				Class: string(plan.Ref.Class), Environment: plan.Ref.Name.Env, Carries: names,
 			}
 		}
-		if !slices.Contains(wanted, p.Ref.Binding) {
-			wanted = append(wanted, p.Ref.Binding)
+		if !slices.Contains(wanted, name) {
+			wanted = append(wanted, name)
 		}
 	}
 	records, err := resolvePlanBindings(ctx, plan.Bindings, wanted)
 	if err != nil {
-		return nil, fmt.Errorf("a transform fills %s from binding %q: %w", placed[0].At, placed[0].Ref.Binding, err)
+		return nil, fmt.Errorf("a transform fills %s from %s: %w", placed[0].At, placed[0].Ref, err)
 	}
 
 	values := make(map[outputRef]any, len(placed))
@@ -220,7 +220,7 @@ func readPlanOutputs(ctx context.Context, plan providerkit.StackPlan, placed []p
 		if _, done := values[p.Ref]; done {
 			continue
 		}
-		record := records[p.Ref.Binding]
+		record := records[published[p.Ref]]
 		value, carries := record.Properties[p.Ref.Property]
 		if !carries {
 			return nil, &OutputPropertyError{Ref: p.Ref, At: p.At, Carries: slices.Sorted(maps.Keys(record.Properties))}

@@ -9,7 +9,7 @@ import (
 
 type fakeEvaluator struct {
 	seen transform.Request
-	out  []transform.Surfaces
+	out  []transform.Patches
 	tags map[string]string
 	err  error
 }
@@ -21,24 +21,24 @@ func (f *fakeEvaluator) Evaluate(_ context.Context, req transform.Request) ([]tr
 	}
 	out := f.out
 	if out == nil {
-		out = make([]transform.Surfaces, len(req.Resources))
-		for i, r := range req.Resources {
-			out[i] = r.Surfaces
+		out = make([]transform.Patches, len(req.Resources))
+		for i := range req.Resources {
+			out[i] = transform.Patches{}
 		}
 	}
 	results := make([]transform.Result, len(out))
-	for i, surfaces := range overTheWire(out) {
-		results[i] = transform.Result{Surfaces: surfaces, Tags: f.tags}
+	for i, patches := range overTheWire(out) {
+		results[i] = transform.Result{Patches: patches, Tags: f.tags}
 	}
 	return results, nil
 }
 
-func overTheWire(surfaces []transform.Surfaces) []transform.Surfaces {
-	encoded, err := json.Marshal(surfaces)
+func overTheWire(patches []transform.Patches) []transform.Patches {
+	encoded, err := json.Marshal(patches)
 	if err != nil {
 		panic(err)
 	}
-	var decoded []transform.Surfaces
+	var decoded []transform.Patches
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		panic(err)
 	}

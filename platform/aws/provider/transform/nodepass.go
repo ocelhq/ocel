@@ -14,6 +14,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 //go:generate pnpm --dir ../../../.. exec turbo run build --filter=@platform/aws-transform-runner
@@ -53,9 +54,9 @@ func (p NodePass) Evaluate(ctx context.Context, req Request) ([]Result, error) {
 
 	var decoded struct {
 		Resources []struct {
-			Name     string            `json:"name"`
-			Surfaces Surfaces          `json:"surfaces"`
-			Tags     map[string]string `json:"tags"`
+			Name    string            `json:"name"`
+			Patches Patches           `json:"patches"`
+			Tags    map[string]string `json:"tags"`
 		} `json:"resources"`
 	}
 	if err := json.Unmarshal(out, &decoded); err != nil {
@@ -70,7 +71,7 @@ func (p NodePass) Evaluate(ctx context.Context, req Request) ([]Result, error) {
 		if r.Name != req.Resources[i].Name {
 			return nil, fmt.Errorf("transforms returned %q where %q was asked for", r.Name, req.Resources[i].Name)
 		}
-		results[i] = Result{Surfaces: r.Surfaces, Tags: r.Tags}
+		results[i] = Result{Patches: r.Patches, Tags: r.Tags}
 	}
 	return results, nil
 }
@@ -94,6 +95,7 @@ func (p NodePass) bundle() (string, error) {
 			Loader:     api.LoaderTS,
 		},
 		Bundle:   true,
+		External: []string{"@pulumi/*"},
 		Platform: api.PlatformNode,
 		Format:   api.FormatESModule,
 		Outfile:  outfile,
@@ -145,7 +147,7 @@ func runNode(ctx context.Context, bundle string, payload []byte) ([]byte, error)
 	out, err := cmd.Output()
 	if err != nil {
 		if stderr.Len() > 0 {
-			return nil, fmt.Errorf("transforms rejected this deploy: %s", strings.TrimSpace(stderr.String()))
+			return nil, providerkit.Refuse(providerkit.CodeInvalid, "transforms rejected this deploy: %s", strings.TrimSpace(stderr.String()))
 		}
 		return nil, fmt.Errorf("run transforms: %w", err)
 	}
