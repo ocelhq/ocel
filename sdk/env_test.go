@@ -709,3 +709,272 @@ func TestDeploymentURLFailsWhenNoneWasDelivered(t *testing.T) {
 		t.Errorf("DeploymentURL() error = %v, want an *EnvValueError for %s", err, constants.AppURLEnvName)
 	}
 }
+
+type githubGroup struct {
+	ID     string `ocel:"GITHUB_ID"`
+	Secret string `ocel:"GITHUB_SECRET"`
+}
+
+func TestEnvLeavesAnOptionalGroupAbsentWhenNoMemberIsDelivered(t *testing.T) {
+	type env struct {
+		Region string       `ocel:"REGION,default=eu"`
+		GitHub *githubGroup `ocel:"github"`
+	}
+	got := ocel.Env[env]()
+	if got.GitHub != nil {
+		t.Errorf("GitHub = %#v, want nil", got.GitHub)
+	}
+	if got.Region != "eu" {
+		t.Errorf("Region = %q, want %q", got.Region, "eu")
+	}
+}
+
+func TestEnvReportsTheMissingMemberOfAHalfDeliveredOptionalGroup(t *testing.T) {
+	seen := discover(t, []cell{{Key: "GITHUB_ID", Value: "id"}})
+
+	ocel.Env[struct {
+		GitHub *githubGroup `ocel:"github"`
+	}]()
+
+	problems := reported(t, *seen)
+	if len(problems) != 1 {
+		t.Fatalf("problems = %v, want one", problems)
+	}
+	if p := problems[0]; p["key"] != "GITHUB_SECRET" || p["kind"] != "KIND_MISSING" {
+		t.Errorf("problem = %v", p)
+	}
+}
+
+func TestEnvResolvesAFullyDeliveredOptionalGroup(t *testing.T) {
+	t.Setenv("OCEL_VAR_GITHUB_ID", "id")
+	t.Setenv("OCEL_VAR_GITHUB_SECRET", "s3cret")
+
+	got := ocel.Env[struct {
+		GitHub *githubGroup `ocel:"github"`
+	}]()
+
+	if got.GitHub == nil {
+		t.Fatal("GitHub = nil, want the delivered group")
+	}
+	if got.GitHub.ID != "id" || got.GitHub.Secret != "s3cret" {
+		t.Errorf("GitHub = %+v", *got.GitHub)
+	}
+}
+
+func TestEnvOwesEveryMemberOfARequiredGroupTheStoreHasNoCellFor(t *testing.T) {
+	type smtp struct {
+		Host string `ocel:"SMTP_HOST"`
+		Port int    `ocel:"SMTP_PORT"`
+	}
+	seen := discover(t, nil)
+
+	ocel.Env[struct {
+		SMTP smtp `ocel:"smtp"`
+	}]()
+
+	problems := reported(t, *seen)
+	var keys []string
+	for _, p := range problems {
+		if p["kind"] != "KIND_MISSING" {
+			t.Errorf("problem = %v", p)
+		}
+		keys = append(keys, p["key"].(string))
+	}
+	if !equal(keys, []string{"SMTP_HOST", "SMTP_PORT"}) {
+		t.Errorf("missing keys = %v, want both members", keys)
+	}
+}
+
+type mixedGroup struct {
+	Anchor   string  `ocel:"MIXED_ANCHOR"`
+	Optional *string `ocel:"MIXED_OPTIONAL"`
+	Fallback string  `ocel:"MIXED_FALLBACK,default=d"`
+}
+
+func TestEnvDoesNotOweAGroupMemberSpelledOptionalWhileTheGroupIsOn(t *testing.T) {
+	seen := discover(t, []cell{{Key: "MIXED_ANCHOR", Value: "a"}})
+
+	ocel.Env[struct {
+		Mixed *mixedGroup `ocel:"mixed"`
+	}]()
+
+	if problems := reported(t, *seen); problems != nil {
+		t.Errorf("problems = %v, want none", problems)
+	}
+	declared := byPath(*seen, "/DeclareEnv")
+	for _, raw := range declared["definitions"].([]any) {
+		definition := raw.(map[string]any)
+		required := definition["required"] == true
+		if want := definition["key"] == "MIXED_ANCHOR"; required != want {
+			t.Errorf("%v required = %v, want %v", definition["key"], required, want)
+		}
+	}
+}
+
+func TestEnvResolvesAGroupMemberSpelledOptionalToNothing(t *testing.T) {
+	t.Setenv("OCEL_VAR_MIXED_ANCHOR", "a")
+
+	got := ocel.Env[struct {
+		Mixed *mixedGroup `ocel:"mixed"`
+	}]()
+
+	if got.Mixed == nil {
+		t.Fatal("Mixed = nil, want the group its anchor turned on")
+	}
+	if got.Mixed.Optional != nil || got.Mixed.Fallback != "d" {
+		t.Errorf("Mixed = %+v", *got.Mixed)
+	}
+}
+
+func TestEnvResolvesASecretInsideAGroup(t *testing.T) {
+	type stripe struct {
+		Account string      `ocel:"STRIPE_ACCOUNT"`
+		Key     ocel.Secret `ocel:"STRIPE_KEY"`
+	}
+	t.Setenv("OCEL_VAR_STRIPE_ACCOUNT", "acct")
+	t.Setenv("OCEL_VAR_STRIPE_KEY", "first")
+
+	got := ocel.Env[struct {
+		Stripe stripe `ocel:"stripe"`
+	}]()
+
+	if got.Stripe.Key.Key() != "STRIPE_KEY" || got.Stripe.Key.Value() != "first" {
+		t.Fatalf("Key = %s, Value() = %q", got.Stripe.Key, got.Stripe.Key.Value())
+	}
+	t.Setenv("OCEL_VAR_STRIPE_KEY", "rotated")
+	if v := got.Stripe.Key.Value(); v != "rotated" {
+		t.Errorf("Value() after rotation = %q, want %q", v, "rotated")
+	}
+}
+
+func TestEnvRefusesAGroupNestedInAGroup(t *testing.T) {
+	type inner struct {
+		Key string `ocel:"INNER_KEY"`
+	}
+	type outer struct {
+		Key   string `ocel:"OUTER_KEY"`
+		Inner inner  `ocel:"inner"`
+	}
+	err := definitionError(t, func() {
+		ocel.Env[struct {
+			Outer outer `ocel:"outer"`
+		}]()
+	})
+	if !strings.Contains(err.Error(), "Groups nest one level only") {
+		t.Errorf("error = %q", err)
+	}
+}
+
+func TestEnvDeclaresGroupsInDeclarationOrderWithWhatTurningThemOnDoes(t *testing.T) {
+	type mail struct {
+		Host string `ocel:"MAIL_HOST"`
+	}
+	type auth struct {
+		ID string `ocel:"AUTH_ID"`
+	}
+	seen := discover(t, []cell{{Key: "MAIL_HOST", Value: "h"}, {Key: "AUTH_ID", Value: "i"}})
+
+	ocel.Env[struct {
+		Mail mail  `ocel:"mail,description=Send mail"`
+		Auth *auth `ocel:"auth,description=Enable sign-in"`
+	}]()
+
+	declared := byPath(*seen, "/DeclareEnv")
+	want := []any{
+		map[string]any{"key": "mail", "required": true, "description": "Send mail"},
+		map[string]any{"key": "auth", "description": "Enable sign-in"},
+	}
+	if got := declared["groups"]; !equal(got, want) {
+		t.Errorf("groups = %v, want %v", got, want)
+	}
+	for _, raw := range declared["definitions"].([]any) {
+		definition := raw.(map[string]any)
+		wantGroup := "mail"
+		if definition["key"] == "AUTH_ID" {
+			wantGroup = "auth"
+		}
+		if definition["group"] != wantGroup {
+			t.Errorf("%v group = %v, want %q", definition["key"], definition["group"], wantGroup)
+		}
+	}
+}
+
+func TestEnvRefusesAKeyDeclaredBothInAGroupAndAtTopLevel(t *testing.T) {
+	type inGroup struct {
+		Key string `ocel:"SHARED_KEY"`
+	}
+	err := definitionError(t, func() {
+		ocel.Env[struct {
+			Group inGroup `ocel:"grouped"`
+			Loose string  `ocel:"SHARED_KEY"`
+		}]()
+	})
+	if !strings.Contains(err.Error(), "'SHARED_KEY' is declared by two fields") {
+		t.Errorf("error = %q", err)
+	}
+}
+
+func TestEnvRefusesTwoGroupsUnderOneName(t *testing.T) {
+	type first struct {
+		Key string `ocel:"FIRST_KEY"`
+	}
+	type second struct {
+		Key string `ocel:"SECOND_KEY"`
+	}
+	err := definitionError(t, func() {
+		ocel.Env[struct {
+			First  first  `ocel:"twice"`
+			Second second `ocel:"twice"`
+		}]()
+	})
+	if !strings.Contains(err.Error(), "twice") {
+		t.Errorf("error = %q", err)
+	}
+}
+
+func TestEnvRefusesAnUnexportedGroup(t *testing.T) {
+	type hidden struct {
+		Key string `ocel:"HIDDEN_KEY"`
+	}
+	err := definitionError(t, func() {
+		ocel.Env[struct {
+			hidden hidden `ocel:"hidden"`
+		}]()
+	})
+	if !strings.Contains(err.Error(), "unexported") {
+		t.Errorf("error = %q", err)
+	}
+}
+
+type inheritedGroup struct {
+	Token string `ocel:"INHERITED_TOKEN"`
+	Web   string `ocel:"INHERITED_WEB,folders=/web"`
+}
+
+func TestEnvOwesAScopedMemberOfAGroupARootValueTurnedOn(t *testing.T) {
+	seen := discover(t, []cell{{Key: "INHERITED_TOKEN", Value: "t"}})
+
+	ocel.Env[struct {
+		Inherited *inheritedGroup `ocel:"inherited"`
+	}]()
+
+	problems := reported(t, *seen)
+	if len(problems) != 1 {
+		t.Fatalf("problems = %v, want one", problems)
+	}
+	if p := problems[0]; p["key"] != "INHERITED_WEB" || p["folder"] != "/web" || p["kind"] != "KIND_MISSING" {
+		t.Errorf("problem = %v", p)
+	}
+}
+
+func TestEnvRefusesAGroupThatDeclaresNoVariables(t *testing.T) {
+	type empty struct{}
+	err := definitionError(t, func() {
+		ocel.Env[struct {
+			Empty empty `ocel:"empty"`
+		}]()
+	})
+	if !strings.Contains(err.Error(), "declares no variables") {
+		t.Errorf("error = %q", err)
+	}
+}
