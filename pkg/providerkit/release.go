@@ -86,6 +86,8 @@ type AppPlan struct {
 
 	AssetPrefix string
 
+	PreviewLabel string
+
 	Packed any
 
 	Proxied bool

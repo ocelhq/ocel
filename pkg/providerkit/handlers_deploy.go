@@ -458,6 +458,17 @@ func (r *deployRun) previewSite() edge.PreviewSite {
 	return edge.ProjectPreview(r.previewOn)
 }
 
+func (r *deployRun) previewLabel(slot int) string {
+	if r.world() != hostingGlobalPreview {
+		return ""
+	}
+	app := ""
+	if names := r.appNames(); len(names) > 1 && slot < len(names) {
+		app = names[slot]
+	}
+	return r.previewSite().Label(r.plan.Pointer, app)
+}
+
 func (r *deployRun) servedHostnames() [][]string {
 	if r.plan.Class == ClassPreview {
 		served := make([][]string, len(r.plan.Apps))
@@ -726,6 +737,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 					ISR:             facts.ISR,
 					Bytecode:        facts.Bytecode,
 					AssetPrefix:     facts.AssetPrefix,
+					PreviewLabel:    r.previewLabel(slot),
 					Guard:           facts.Guard,
 					Packed:          pack.Carry,
 					Proxied:         anyProxied(r.proxied, grants),

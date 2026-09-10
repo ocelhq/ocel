@@ -26,6 +26,10 @@ func ProjectPreview(baseDomain string) PreviewSite {
 
 func (s PreviewSite) Serves() bool { return s.base != "" }
 
+func (s PreviewSite) Label(pointer, app string) string {
+	return previewLabel(s.slug, pointer, app)
+}
+
 func (s PreviewSite) Host(pointer, app string) string {
 	return previewHost(s.slug, pointer, app, s.base)
 }

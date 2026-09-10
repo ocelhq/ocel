@@ -896,6 +896,52 @@ func TestDeployAnnouncesThePreviewHostnameOfTheGlobalWildcard(t *testing.T) {
 	}
 }
 
+func TestAGlobalPreviewDeployHandsTheReleaserTheLabelItsHostnameCarries(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	previewBootstrapped(t, client)
+	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
+	}
+
+	result, _ := deploy(t, client, previewDeployRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	want := edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", "")
+	for _, plan := range provider.Releases().(*fake.Releaser).Plans() {
+		if plan.App == nil {
+			continue
+		}
+		if plan.App.PreviewLabel != want {
+			t.Errorf("the plan for %s carries the preview label %q, want %q: a provider that routes the whole label to what it stood up "+
+				"has to name it what the hostname says", plan.App.App, plan.App.PreviewLabel, want)
+		}
+	}
+}
+
+func TestAPreviewDeployOnTheProjectsOwnWildcardHandsTheReleaserNoLabel(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	previewBootstrapped(t, client)
+
+	result, _ := deploy(t, client, previewRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	for _, plan := range provider.Releases().(*fake.Releaser).Plans() {
+		if plan.App == nil {
+			continue
+		}
+		if plan.App.PreviewLabel != "" {
+			t.Errorf("the plan for %s carries the preview label %q, want none: this project's own wildcard is answered per hostname, "+
+				"so nothing reads a name out of the label", plan.App.App, plan.App.PreviewLabel)
+		}
+	}
+}
+
 func TestDeployAnnouncesAPreviewHostnamePerAppWhenTheProjectCarriesMoreThanOne(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
