@@ -1,0 +1,5 @@
+error: a #[derive(ocel::Group)] struct takes no generic parameters, because what it declares is fixed once per binary.
+ --> tests/ui/generic_group_struct.rs:2:14
+  |
+2 | struct GitHub<T> {
+  |              ^^^

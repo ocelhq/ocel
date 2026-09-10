@@ -1,6 +1,4 @@
-type Maybe = Option<GitHub>;
-
-#[derive(ocel::Group)]
+#[derive(ocel::Env)]
 struct GitHub {
     #[ocel(key = "GITHUB_CLIENT_ID")]
     client_id: String,
@@ -9,7 +7,7 @@ struct GitHub {
 #[derive(ocel::Env)]
 struct Env {
     #[ocel(group)]
-    github: Maybe,
+    github: GitHub,
 }
 
 fn main() {}

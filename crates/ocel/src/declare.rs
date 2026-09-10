@@ -64,9 +64,9 @@ pub trait Declare: Sized {
 
 #[doc(hidden)]
 #[diagnostic::on_unimplemented(
-    message = "`{Self}` holds #[ocel(group)] fields of its own, and a group nests one level only.",
-    label = "this cannot be a group, because it is already made of groups",
-    note = "flatten the inner group's fields into `{Self}`, or declare it beside this group rather than inside it."
+    message = "`{Self}` is not an ocel::Group, so no #[ocel(group)] field can hold it.",
+    label = "this field holds a group",
+    note = "a group's struct carries #[derive(ocel::Group)], not #[derive(ocel::Env)], and holds no #[ocel(group)] fields of its own: a group nests one level only."
 )]
 pub trait Group: Declare {}
 
@@ -158,22 +158,29 @@ fn collected() -> Result<Declared, Error> {
 fn joined(all: &mut Declared) -> Result<(), Error> {
     for index in 0..all.groups.len() {
         let (key, members) = (all.groups[index].key, (all.groups[index].members)());
-        for member in members.variables {
-            let Some(held) = all.variables.iter_mut().find(|held| held.key == member.key) else {
-                return Err(Error::Definition {
-                    key: member.key.to_string(),
-                    detail: format!("belongs to the group '{key}', and nothing declares it."),
-                });
-            };
-            if let Some(seen) = held.group {
-                return Err(Error::Definition {
-                    key: member.key.to_string(),
-                    detail: format!(
+        for mut member in members.variables {
+            if let Some(held) = all.variables.iter().find(|held| held.key == member.key) {
+                let detail = match held.group {
+                    Some(seen) => format!(
                         "belongs to the group '{seen}' and to the group '{key}'. A variable belongs to one group."
                     ),
+                    None => {
+                        let (held, member) = (
+                            site(held.file, held.line),
+                            site(member.file, member.line),
+                        );
+                        format!(
+                            "is declared in {held} and in the group '{key}' at {member}. A key is declared exactly once, in exactly one file."
+                        )
+                    }
+                };
+                return Err(Error::Definition {
+                    key: member.key.to_string(),
+                    detail,
                 });
             }
-            held.group = Some(key);
+            member.group = Some(key);
+            all.variables.push(member);
         }
     }
     Ok(())

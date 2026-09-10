@@ -7,29 +7,29 @@ error[E0277]: the trait bound `Option<GitHub>: ocel::Declare` is not satisfied
 help: the following other types implement trait `ocel::Declare`
   --> tests/ui/aliased_optional_group.rs:3:10
    |
- 3 | #[derive(ocel::Env)]
-   |          ^^^^^^^^^ `GitHub`
+ 3 | #[derive(ocel::Group)]
+   |          ^^^^^^^^^^^ `GitHub`
 ...
  9 | #[derive(ocel::Env)]
    |          ^^^^^^^^^ `Env`
-   = note: this error originates in the derive macro `ocel::Env` (in Nightly builds, run with -Z macro-backtrace for more info)
+   = note: this error originates in the derive macro `ocel::Group` which comes from the expansion of the derive macro `ocel::Env` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0277]: `Option<GitHub>` holds #[ocel(group)] fields of its own, and a group nests one level only.
+error[E0277]: `Option<GitHub>` is not an ocel::Group, so no #[ocel(group)] field can hold it.
   --> tests/ui/aliased_optional_group.rs:12:13
    |
 12 |     github: Maybe,
-   |             ^^^^^ this cannot be a group, because it is already made of groups
+   |             ^^^^^ this field holds a group
    |
    = help: the trait `ocel::Group` is not implemented for `Option<GitHub>`
-   = note: flatten the inner group's fields into `Option<GitHub>`, or declare it beside this group rather than inside it.
+   = note: a group's struct carries #[derive(ocel::Group)], not #[derive(ocel::Env)], and holds no #[ocel(group)] fields of its own: a group nests one level only.
 help: the trait `ocel::Group` is implemented for `GitHub`
   --> tests/ui/aliased_optional_group.rs:3:10
    |
- 3 | #[derive(ocel::Env)]
-   |          ^^^^^^^^^
+ 3 | #[derive(ocel::Group)]
+   |          ^^^^^^^^^^^
 note: required by a bound in `one_level`
   --> tests/ui/aliased_optional_group.rs:9:10
    |
  9 | #[derive(ocel::Env)]
    |          ^^^^^^^^^ required by this bound in `one_level`
-   = note: this error originates in the derive macro `ocel::Env` (in Nightly builds, run with -Z macro-backtrace for more info)
+   = note: this error originates in the derive macro `ocel::Group` which comes from the expansion of the derive macro `ocel::Env` (in Nightly builds, run with -Z macro-backtrace for more info)

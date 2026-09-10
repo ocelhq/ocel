@@ -1,6 +1,6 @@
 struct Wrapper<T>(T);
 
-#[derive(ocel::Env)]
+#[derive(ocel::Group)]
 struct GitHub {
     #[ocel(key = "GITHUB_CLIENT_ID")]
     client_id: String,

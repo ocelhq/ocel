@@ -1,23 +1,23 @@
-error[E0277]: `Middle` holds #[ocel(group)] fields of its own, and a group nests one level only.
+error[E0277]: `Middle` is not an ocel::Group, so no #[ocel(group)] field can hold it.
   --> tests/ui/nested_group.rs:18:13
    |
 18 |     middle: Middle,
-   |             ^^^^^^ this cannot be a group, because it is already made of groups
+   |             ^^^^^^ this field holds a group
    |
 help: the trait `ocel::Group` is not implemented for `Middle`
   --> tests/ui/nested_group.rs:8:1
    |
  8 | struct Middle {
    | ^^^^^^^^^^^^^
-   = note: flatten the inner group's fields into `Middle`, or declare it beside this group rather than inside it.
+   = note: a group's struct carries #[derive(ocel::Group)], not #[derive(ocel::Env)], and holds no #[ocel(group)] fields of its own: a group nests one level only.
 help: the trait `ocel::Group` is implemented for `Inner`
   --> tests/ui/nested_group.rs:1:10
    |
- 1 | #[derive(ocel::Env)]
-   |          ^^^^^^^^^
+ 1 | #[derive(ocel::Group)]
+   |          ^^^^^^^^^^^
 note: required by a bound in `_::one_level`
   --> tests/ui/nested_group.rs:15:10
    |
 15 | #[derive(ocel::Env)]
    |          ^^^^^^^^^ required by this bound in `one_level`
-   = note: this error originates in the derive macro `ocel::Env` (in Nightly builds, run with -Z macro-backtrace for more info)
+   = note: this error originates in the derive macro `ocel::Group` which comes from the expansion of the derive macro `ocel::Env` (in Nightly builds, run with -Z macro-backtrace for more info)

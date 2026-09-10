@@ -5,9 +5,25 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, GenericArgument, PathArguments, Type};
 
-pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
-    let variables = variables(input)?;
-    let groups = groups(input)?;
+#[derive(Clone, Copy)]
+pub(crate) enum Kind {
+    Env,
+    Group,
+}
+
+impl Kind {
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Kind::Env => "ocel::Env",
+            Kind::Group => "ocel::Group",
+        }
+    }
+}
+
+pub(crate) fn derive(input: &DeriveInput, kind: Kind) -> syn::Result<TokenStream> {
+    let label = kind.label();
+    let variables = variables(input, label)?;
+    let groups = groups(input, label)?;
     let ident = &input.ident;
 
     let declared = variables.iter().map(|variable| {
@@ -113,9 +129,22 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
             };
         }
     });
-    let flat = groups
-        .is_empty()
-        .then(|| quote!(impl ::ocel::Group for #ident {}));
+    let (flat, submission) = match kind {
+        Kind::Group => (
+            groups
+                .is_empty()
+                .then(|| quote!(impl ::ocel::Group for #ident {})),
+            None,
+        ),
+        Kind::Env => (
+            None,
+            Some(quote! {
+                ::ocel::inventory::submit! {
+                    ::ocel::Registered(<#ident as ::ocel::Declare>::declared)
+                }
+            }),
+        ),
+    };
 
     Ok(quote! {
         impl ::ocel::Declare for #ident {
@@ -143,9 +172,7 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
 
         #nesting
 
-        ::ocel::inventory::submit! {
-            ::ocel::Registered(<#ident as ::ocel::Declare>::declared)
-        }
+        #submission
     })
 }
 
@@ -171,19 +198,20 @@ fn class(class: Class) -> TokenStream {
     }
 }
 
-fn named(
-    input: &DeriveInput,
-) -> syn::Result<&syn::punctuated::Punctuated<syn::Field, syn::Token![,]>> {
+fn named<'a>(
+    input: &'a DeriveInput,
+    label: &str,
+) -> syn::Result<&'a syn::punctuated::Punctuated<syn::Field, syn::Token![,]>> {
     let Data::Struct(data) = &input.data else {
         return Err(syn::Error::new_spanned(
             &input.ident,
-            "ocel::Env wants a struct whose fields are the variables it declares.",
+            format!("{label} wants a struct whose fields are the variables it declares."),
         ));
     };
     let Fields::Named(named) = &data.fields else {
         return Err(syn::Error::new_spanned(
             &input.ident,
-            "an ocel::Env struct has named fields.",
+            format!("a {label} struct has named fields."),
         ));
     };
     Ok(&named.named)
@@ -195,9 +223,9 @@ fn grouped(field: &syn::Field) -> syn::Result<bool> {
         .any(|entry| entry.name == "group"))
 }
 
-fn variables(input: &DeriveInput) -> syn::Result<Vec<Variable>> {
+fn variables(input: &DeriveInput, label: &str) -> syn::Result<Vec<Variable>> {
     let mut variables: Vec<Variable> = Vec::new();
-    for field in named(input)? {
+    for field in named(input, label)? {
         if grouped(field)? {
             continue;
         }
@@ -223,16 +251,15 @@ struct Group {
     span: Span,
 }
 
-fn groups(input: &DeriveInput) -> syn::Result<Vec<Group>> {
+fn groups(input: &DeriveInput, label: &str) -> syn::Result<Vec<Group>> {
     let mut groups: Vec<Group> = Vec::new();
-    for field in named(input)? {
+    for field in named(input, label)? {
         if !grouped(field)? {
             continue;
         }
-        let ident = field
-            .ident
-            .clone()
-            .ok_or_else(|| syn::Error::new_spanned(field, "an Env struct has named fields."))?;
+        let ident = field.ident.clone().ok_or_else(|| {
+            syn::Error::new_spanned(field, format!("a {label} struct has named fields."))
+        })?;
         let key = ident.to_string();
         let span = ident.span();
         if entries(&field.attrs)?.len() != 1 {
@@ -246,7 +273,7 @@ fn groups(input: &DeriveInput) -> syn::Result<Vec<Group>> {
             return Err(refused(
                 span,
                 &key,
-                "is tagged #[ocel(group)], so it holds an ocel::Env struct, or an Option of one to make the group optional.",
+                "is tagged #[ocel(group)], so it holds an ocel::Group struct, or an Option of one to make the group optional.",
             ));
         };
         groups.push(Group {

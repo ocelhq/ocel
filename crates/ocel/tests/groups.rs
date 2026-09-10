@@ -31,7 +31,7 @@ fn standing() {
     std::env::set_var("SMTP_HOST", "mail.example");
 }
 
-#[derive(ocel::Env, Debug)]
+#[derive(ocel::Group, Debug)]
 struct GitHub {
     #[ocel(key = "GITHUB_CLIENT_ID")]
     client_id: String,
@@ -39,7 +39,7 @@ struct GitHub {
     client_secret: ocel::Secret,
 }
 
-#[derive(ocel::Env, Debug)]
+#[derive(ocel::Group, Debug)]
 struct Smtp {
     #[ocel(key = "SMTP_HOST")]
     host: String,
@@ -47,7 +47,7 @@ struct Smtp {
     port: u16,
 }
 
-#[derive(ocel::Env, Debug)]
+#[derive(ocel::Group, Debug)]
 struct Analytics {
     #[ocel(key = "ANALYTICS_KEY")]
     key: Option<String>,
@@ -55,7 +55,7 @@ struct Analytics {
     host: String,
 }
 
-#[derive(ocel::Env, Debug)]
+#[derive(ocel::Group, Debug)]
 struct Telemetry {
     #[ocel(key = "TELEMETRY_TOKEN")]
     token: ocel::Secret,

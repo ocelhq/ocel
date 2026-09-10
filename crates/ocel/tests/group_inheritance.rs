@@ -10,7 +10,7 @@ struct Env {
 }
 
 #[allow(dead_code)]
-#[derive(ocel::Env)]
+#[derive(ocel::Group)]
 struct Inherited {
     #[ocel(key = "INHERITED_TOKEN")]
     token: String,

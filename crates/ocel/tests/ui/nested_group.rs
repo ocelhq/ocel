@@ -1,10 +1,10 @@
-#[derive(ocel::Env)]
+#[derive(ocel::Group)]
 struct Inner {
     #[ocel(key = "INNER")]
     inner: String,
 }
 
-#[derive(ocel::Env)]
+#[derive(ocel::Group)]
 struct Middle {
     #[ocel(key = "MIDDLE")]
     middle: String,

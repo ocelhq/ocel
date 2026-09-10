@@ -8,7 +8,7 @@ struct Env {
 }
 
 #[allow(dead_code)]
-#[derive(ocel::Env)]
+#[derive(ocel::Group)]
 struct GitHub {
     #[ocel(key = "GITHUB_CLIENT_ID")]
     client_id: String,
