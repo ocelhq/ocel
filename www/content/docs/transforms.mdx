@@ -44,12 +44,15 @@ the code it uploaded, the environment it sealed — is not on the type, and nami
 refuses the deploy.
 
 A module with no branch for the provider the project deploys to refuses the deploy, rather
-than quietly doing nothing.
+than quietly doing nothing, and so does a patch that reaches no resource the deploy stands up.
+
+`role` is the execution role every function in an app shares, so two functions patching it
+differently refuses rather than letting one win.
 
 | ocel resource | Pulumi resources |
 | --- | --- |
-| `function` | `lambda`, `url`, `logGroup` |
-| `bucket` | `bucket`, `publicAccessBlock`, `cors`, `uploadCompleterRole`, `uploadCompleterLogGroup`, `uploadCompleter`, `notification` |
+| `function` | `lambda`, `url`, `urlPermission`, `logGroup`, `role` |
+| `bucket` | `bucket`, `publicAccessBlock`, `cors`, `uploadCompleterRole`, `uploadCompleterS3Policy`, `uploadCompleterSessionsPolicy`, `uploadCompleterLogsPolicy`, `uploadCompleterLogGroup`, `uploadCompleter`, `uploadCompleterPermission`, `notification` |
 | `postgres` | `securityGroup`, `subnetGroup`, `cluster`, `instance` |
 
 ## Gates and tags
