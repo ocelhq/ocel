@@ -124,11 +124,34 @@ type variable struct {
 	folders     []string
 	description string
 	field       reflect.StructField
-	index       int
+	index       []int
+	group       string
 }
 
 func (v variable) required() bool {
 	return v.fallback == nil && v.field.Type.Kind() != reflect.Pointer
+}
+
+type group struct {
+	key         string
+	required    bool
+	description string
+	index       []int
+	members     []int
+}
+
+type declaration struct {
+	vars   []variable
+	groups []group
+}
+
+func (d declaration) group(key string) *group {
+	for i := range d.groups {
+		if d.groups[i].key == key {
+			return &d.groups[i]
+		}
+	}
+	return nil
 }
 
 func (v variable) parsed() bool {
@@ -173,6 +196,13 @@ func className(class resourcesv1.VariableClass) string {
 // delivered live, and read through [Secret.Value] on each use rather than
 // copied into the struct, since the value can rotate underneath the process.
 //
+// A nested struct field is a group: its tag names the group rather than a
+// variable, every field inside it is a member declared under that name, and
+// groups nest one level only. A pointer to a struct is an optional group,
+// absent until a member is delivered and then owed whole; a struct value is a
+// required group. A group's tag takes description=<TEXT>, saying what turning
+// the group on does.
+//
 // A pointer field is optional and stays nil when nothing is set. Any other
 // field is required unless it carries a default. A field may be a string, a
 // bool, any integer or float type, a [time.Duration], or a type implementing
@@ -188,54 +218,133 @@ func Env[T any]() T {
 	var out T
 	_, file, line, _ := runtime.Caller(1)
 
-	vars, err := definitions(reflect.TypeFor[T](), file)
+	decl, err := definitions(reflect.TypeFor[T](), file)
 	if err != nil {
 		panic(err)
 	}
 
 	if discovering() {
-		if err := declareEnv(vars, fmt.Sprintf("%s:%d", file, line)); err != nil {
+		if err := declareEnv(decl, fmt.Sprintf("%s:%d", file, line)); err != nil {
 			panic(fmt.Sprintf("ocel: declare env: %v", err))
 		}
 		return out
 	}
 
-	if err := resolve(reflect.ValueOf(&out).Elem(), vars); err != nil {
+	if err := resolve(reflect.ValueOf(&out).Elem(), decl); err != nil {
 		panic(err)
 	}
 	return out
 }
 
-func definitions(t reflect.Type, source string) ([]variable, error) {
+func definitions(t reflect.Type, source string) (declaration, error) {
 	if t.Kind() != reflect.Struct {
-		return nil, &EnvDefinitionError{Detail: fmt.Sprintf("Env wants a struct type, and %s is a %s.", t, t.Kind())}
+		return declaration{}, &EnvDefinitionError{Detail: fmt.Sprintf("Env wants a struct type, and %s is a %s.", t, t.Kind())}
 	}
 
 	ownerMu.Lock()
 	defer ownerMu.Unlock()
 
+	var decl declaration
+	for i := range t.NumField() {
+		field := t.Field(i)
+		if groupType(field.Type) == nil {
+			v, err := definition(field, field.Index)
+			if err != nil {
+				return declaration{}, err
+			}
+			decl.vars = append(decl.vars, v)
+			continue
+		}
+		g, err := groupDefinition(field)
+		if err != nil {
+			return declaration{}, err
+		}
+		if decl.group(g.key) != nil {
+			return declaration{}, &EnvDefinitionError{Detail: fmt.Sprintf("group %s is declared by two fields of the same struct. A group is declared by exactly one field.", g.key)}
+		}
+		members, err := groupVariables(groupType(field.Type), field.Index, g.key)
+		if err != nil {
+			return declaration{}, err
+		}
+		for _, member := range members {
+			g.members = append(g.members, len(decl.vars))
+			decl.vars = append(decl.vars, member)
+		}
+		decl.groups = append(decl.groups, g)
+	}
+	for _, v := range decl.vars {
+		if slices.ContainsFunc(decl.vars, func(seen variable) bool { return seen.key == v.key && !slices.Equal(seen.index, v.index) }) {
+			return declaration{}, &EnvDefinitionError{Key: v.key, Detail: "is declared by two fields of the same struct. A key is declared by exactly one field."}
+		}
+		if claimed, ok := owner[v.key]; ok && claimed != source {
+			return declaration{}, &EnvDefinitionError{Key: v.key, Detail: fmt.Sprintf("is already declared in %s. A key may be defined by exactly one file.", claimed)}
+		}
+	}
+	for _, v := range decl.vars {
+		owner[v.key] = source
+	}
+	return decl, nil
+}
+
+func groupType(t reflect.Type) reflect.Type {
+	original := t
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct || t == secretType || original.Implements(textUnmarshaler) || reflect.PointerTo(t).Implements(textUnmarshaler) {
+		return nil
+	}
+	return t
+}
+
+func groupDefinition(field reflect.StructField) (group, error) {
+	tag, ok := field.Tag.Lookup(envTag)
+	if !ok {
+		return group{}, &EnvDefinitionError{Detail: fmt.Sprintf("field %s carries no `%s` tag. Every Env group names the group it declares.", field.Name, envTag)}
+	}
+	if !field.IsExported() {
+		return group{}, &EnvDefinitionError{Detail: fmt.Sprintf("field %s is unexported, so nothing outside the package could read it. Export it.", field.Name)}
+	}
+	parts := strings.Split(tag, ",")
+	g := group{key: parts[0], required: field.Type.Kind() != reflect.Pointer, index: field.Index}
+	if g.key == "" || strings.ContainsAny(g.key, "#\n\r") {
+		return group{}, &EnvDefinitionError{Detail: fmt.Sprintf("field %s has an unusable group name.", field.Name)}
+	}
+	for _, option := range parts[1:] {
+		name, value, assigned := strings.Cut(option, "=")
+		if assigned && name == "description" {
+			g.description = value
+			continue
+		}
+		return group{}, &EnvDefinitionError{Detail: fmt.Sprintf("group %s has an unknown tag option '%s'. The option is description=<TEXT>.", g.key, option)}
+	}
+	if problem := descriptionProblem(g.description); problem != "" {
+		return group{}, &EnvDefinitionError{Detail: fmt.Sprintf("group %s has an unusable description: %s", g.key, problem)}
+	}
+	return g, nil
+}
+
+func groupVariables(t reflect.Type, prefix []int, key string) ([]variable, error) {
 	var vars []variable
 	for i := range t.NumField() {
 		field := t.Field(i)
-		v, err := definition(field, i)
+		if groupType(field.Type) != nil {
+			return nil, &EnvDefinitionError{Detail: fmt.Sprintf("group %s nests another group in field %s. Groups nest one level only.", key, field.Name)}
+		}
+		v, err := definition(field, append(slices.Clone(prefix), field.Index...))
 		if err != nil {
 			return nil, err
 		}
-		if slices.ContainsFunc(vars, func(seen variable) bool { return seen.key == v.key }) {
-			return nil, &EnvDefinitionError{Key: v.key, Detail: "is declared by two fields of the same struct. A key is declared by exactly one field."}
-		}
-		if claimed, ok := owner[v.key]; ok && claimed != source {
-			return nil, &EnvDefinitionError{Key: v.key, Detail: fmt.Sprintf("is already declared in %s. A key may be defined by exactly one file.", claimed)}
-		}
+		v.group = key
 		vars = append(vars, v)
 	}
-	for _, v := range vars {
-		owner[v.key] = source
+	if len(vars) == 0 {
+		return nil, &EnvDefinitionError{Detail: fmt.Sprintf("group %s declares no variables. A group holds the variables an app takes together, so it holds at least one.", key)}
 	}
 	return vars, nil
 }
 
-func definition(field reflect.StructField, index int) (variable, error) {
+func definition(field reflect.StructField, index []int) (variable, error) {
 	tag, ok := field.Tag.Lookup(envTag)
 	if !ok {
 		return variable{}, &EnvDefinitionError{Detail: fmt.Sprintf("field %s carries no `%s` tag. Every field of an Env struct names the variable it reads.", field.Name, envTag)}
@@ -350,9 +459,12 @@ func folderProblem(folder string) string {
 	return ""
 }
 
-func declareEnv(vars []variable, source string) error {
+func declareEnv(decl declaration, source string) error {
 	req := &resourcesv1.DeclareEnvRequest{}
-	for _, v := range vars {
+	for _, g := range decl.groups {
+		req.Groups = append(req.Groups, &resourcesv1.GroupDefinition{Key: g.key, Required: g.required, Description: g.description})
+	}
+	for _, v := range decl.vars {
 		req.Definitions = append(req.Definitions, &resourcesv1.VariableDefinition{
 			Key:         v.key,
 			Class:       v.class,
@@ -361,26 +473,30 @@ func declareEnv(vars []variable, source string) error {
 			Source:      source,
 			HasSchema:   v.parsed(),
 			Description: v.description,
+			Group:       v.group,
 		})
 	}
 	res, err := declareVariables(req)
 	if err != nil {
 		return err
 	}
-	problems := validate(vars, res.GetCells())
+	problems := validate(decl, res.GetCells())
 	if len(problems) == 0 {
 		return nil
 	}
 	return reportEnvProblems(&resourcesv1.ReportEnvProblemsRequest{Problems: problems})
 }
 
-func validate(vars []variable, cells []*resourcesv1.VariableCell) []*resourcesv1.VariableProblem {
+func validate(decl declaration, cells []*resourcesv1.VariableCell) []*resourcesv1.VariableProblem {
 	var problems []*resourcesv1.VariableProblem
-	for _, v := range vars {
+	for _, v := range decl.vars {
 		stored := slices.DeleteFunc(slices.Clone(cells), func(c *resourcesv1.VariableCell) bool { return c.GetKey() != v.key })
 
 		if v.required() {
 			for _, folder := range requiredFolders(v) {
+				if g := decl.group(v.group); g != nil && !g.required && !groupStored(decl, *g, cells, folder) {
+					continue
+				}
 				if !slices.ContainsFunc(stored, func(c *resourcesv1.VariableCell) bool { return c.GetFolder() == folder }) {
 					problems = append(problems, problem(v.key, folder, resourcesv1.VariableProblem_KIND_MISSING, ""))
 				}
@@ -399,6 +515,27 @@ func validate(vars []variable, cells []*resourcesv1.VariableCell) []*resourcesv1
 	return problems
 }
 
+func groupStored(decl declaration, g group, cells []*resourcesv1.VariableCell, folder string) bool {
+	for _, member := range g.members {
+		if storedAt(decl.vars[member], cells, folder) {
+			return true
+		}
+	}
+	return false
+}
+
+func storedAt(v variable, cells []*resourcesv1.VariableCell, folder string) bool {
+	at := func(where string) bool {
+		return slices.ContainsFunc(cells, func(c *resourcesv1.VariableCell) bool {
+			return c.GetKey() == v.key && c.GetFolder() == where
+		})
+	}
+	if len(v.folders) > 0 {
+		return folder != "" && slices.Contains(v.folders, folder) && at(folder)
+	}
+	return (folder != "" && at(folder)) || at("")
+}
+
 func requiredFolders(v variable) []string {
 	if len(v.folders) > 0 {
 		return v.folders
@@ -410,31 +547,67 @@ func problem(key, folder string, kind resourcesv1.VariableProblem_Kind, detail s
 	return &resourcesv1.VariableProblem{Key: key, Folder: folder, Kind: kind, Detail: detail}
 }
 
-func resolve(target reflect.Value, vars []variable) error {
-	for _, v := range vars {
-		if !inScope(v.folders) {
-			return &EnvScopeError{Key: v.key, Folders: v.folders, Binding: os.Getenv(constants.AppFolderEnvName)}
-		}
-		raw, ok := readDelivered(v.key)
-		if ok && v.live() {
-			target.Field(v.index).Set(reflect.ValueOf(Secret{key: v.key}))
+func resolve(target reflect.Value, decl declaration) error {
+	for i, v := range decl.vars {
+		g := decl.group(v.group)
+		if g == nil {
+			if err := resolveVariable(target, v); err != nil {
+				return err
+			}
 			continue
 		}
-		if !ok && v.fallback != nil {
-			raw, ok = *v.fallback, true
+		if g.members[0] != i {
+			continue
 		}
-		if !ok {
-			if v.field.Type.Kind() == reflect.Pointer {
-				continue
+		if !g.required && !groupDelivered(decl, *g) {
+			continue
+		}
+		field := target.FieldByIndex(g.index)
+		if field.Kind() == reflect.Pointer {
+			field.Set(reflect.New(field.Type().Elem()))
+		}
+		for _, member := range g.members {
+			if err := resolveVariable(target, decl.vars[member]); err != nil {
+				return err
 			}
-			return unset(v.key)
 		}
-		value, err := parse(v.field.Type, raw)
-		if err != nil {
-			return &EnvValueError{Key: v.key, Detail: fmt.Sprintf("is set but does not satisfy its type: %s. Fix it with `ocel env set %s=<VALUE>`.", v.complaint(err.Error()), v.key)}
-		}
-		target.Field(v.index).Set(value)
 	}
+	return nil
+}
+
+func groupDelivered(decl declaration, g group) bool {
+	for _, member := range g.members {
+		if _, ok := readDelivered(decl.vars[member].key); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func resolveVariable(target reflect.Value, v variable) error {
+	if !inScope(v.folders) {
+		return &EnvScopeError{Key: v.key, Folders: v.folders, Binding: os.Getenv(constants.AppFolderEnvName)}
+	}
+	field := target.FieldByIndex(v.index)
+	raw, ok := readDelivered(v.key)
+	if ok && v.live() {
+		field.Set(reflect.ValueOf(Secret{key: v.key}))
+		return nil
+	}
+	if !ok && v.fallback != nil {
+		raw, ok = *v.fallback, true
+	}
+	if !ok {
+		if v.field.Type.Kind() == reflect.Pointer {
+			return nil
+		}
+		return unset(v.key)
+	}
+	value, err := parse(v.field.Type, raw)
+	if err != nil {
+		return &EnvValueError{Key: v.key, Detail: fmt.Sprintf("is set but does not satisfy its type: %s. Fix it with `ocel env set %s=<VALUE>`.", v.complaint(err.Error()), v.key)}
+	}
+	field.Set(value)
 	return nil
 }
 
