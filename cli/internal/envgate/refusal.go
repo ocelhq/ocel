@@ -24,41 +24,40 @@ type Refusal struct {
 
 func (r *Refusal) Error() string {
 	owed := r.Owed()
-	lines := append(render(owed.GetCells(), r.grouping(), Plain), "", RemedyLine(owed.GetRemedy()))
+	lines := append(Lines(owed, Plain), "", RemedyLine(owed.GetRemedy()))
 	return strings.Join(lines, "\n")
-}
-
-func (r *Refusal) grouping() func(string) (string, string) {
-	return func(key string) (string, string) {
-		for _, definition := range r.Definitions {
-			if definition.GetKey() == key {
-				return definition.GetGroup(), groupDescription(r.Groups, definition.GetGroup())
-			}
-		}
-		return "", ""
-	}
 }
 
 func (r *Refusal) Owed() *streamv1.VariablesOwed {
 	cells := make([]*streamv1.OwedVariable, 0, len(r.Problems))
+	groups := make([]*streamv1.OwedGroup, 0, len(r.Groups))
+	listed := map[string]bool{}
 	for _, problem := range r.Problems {
+		definition := r.definition(problem.GetKey())
+		group := definition.GetGroup()
 		cells = append(cells, &streamv1.OwedVariable{
 			Key:         problem.GetKey(),
 			Folder:      problem.GetFolder(),
 			Reason:      reason(problem),
-			Description: r.description(problem.GetKey()),
+			Description: definition.GetDescription(),
+			Group:       group,
 		})
+		if group == "" || listed[group] {
+			continue
+		}
+		listed[group] = true
+		groups = append(groups, &streamv1.OwedGroup{Key: group, Description: groupDescription(r.Groups, group)})
 	}
-	return &streamv1.VariablesOwed{Cells: cells, Remedy: r.remedy()}
+	return &streamv1.VariablesOwed{Cells: cells, Remedy: r.remedy(), Groups: groups}
 }
 
-func (r *Refusal) description(key string) string {
+func (r *Refusal) definition(key string) *resourcesv1.VariableDefinition {
 	for _, definition := range r.Definitions {
 		if definition.GetKey() == key {
-			return definition.GetDescription()
+			return definition
 		}
 	}
-	return ""
+	return nil
 }
 
 func (r *Refusal) remedy() string {
@@ -113,16 +112,13 @@ func Headline(n int) string {
 	return fmt.Sprintf("%d variables are not ready — nothing has been built.", n)
 }
 
-func Lines(cells []*streamv1.OwedVariable, paint Paint) []string {
-	return render(cells, nil, paint)
-}
-
-func render(cells []*streamv1.OwedVariable, grouping func(string) (string, string), paint Paint) []string {
+func Lines(owed *streamv1.VariablesOwed, paint Paint) []string {
+	cells := owed.GetCells()
 	out := []string{paint.Fail(Mark) + " " + Headline(len(cells)), ""}
 	keyWidth, folderWidth := 0, 0
 	for _, cell := range cells {
 		width := len(cell.GetKey())
-		if group, _ := groupNameOf(grouping, cell); group != "" {
+		if cell.GetGroup() != "" {
 			width += len(indent)
 		}
 		keyWidth = max(keyWidth, width)
@@ -131,7 +127,7 @@ func render(cells []*streamv1.OwedVariable, grouping func(string) (string, strin
 
 	written := map[string]bool{}
 	for _, cell := range cells {
-		group, description := groupNameOf(grouping, cell)
+		group := cell.GetGroup()
 		if group == "" {
 			out = append(out, owedLines(cell, indent, keyWidth, folderWidth, paint)...)
 			continue
@@ -140,21 +136,14 @@ func render(cells []*streamv1.OwedVariable, grouping func(string) (string, strin
 			continue
 		}
 		written[group] = true
-		out = append(out, indent+paint.Faint(GroupHeadline(group, description)))
+		out = append(out, indent+paint.Faint(GroupHeadline(group, groupDescription(owed.GetGroups(), group))))
 		for _, held := range cells {
-			if name, _ := groupNameOf(grouping, held); name == group {
+			if held.GetGroup() == group {
 				out = append(out, owedLines(held, indent+indent, keyWidth-len(indent), folderWidth, paint)...)
 			}
 		}
 	}
 	return out
-}
-
-func groupNameOf(grouping func(string) (string, string), cell *streamv1.OwedVariable) (string, string) {
-	if grouping == nil {
-		return "", ""
-	}
-	return grouping(cell.GetKey())
 }
 
 func owedLines(cell *streamv1.OwedVariable, lead string, keyWidth, folderWidth int, paint Paint) []string {

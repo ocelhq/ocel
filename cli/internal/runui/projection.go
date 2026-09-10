@@ -504,7 +504,7 @@ func (p *projector) identity(m protoreflect.Message) []string {
 func (p *projector) waiting(m protoreflect.Message) []string {
 	ev := m.Interface().(*streamv1.WaitingEvent)
 	out := append(p.strand(warnMark, "paused"), "")
-	out = append(out, envgate.Lines(ev.GetOwed().GetCells(), p.owedPaint())...)
+	out = append(out, envgate.Lines(ev.GetOwed(), p.owedPaint())...)
 	return append(out,
 		"",
 		"  Fill them in at:",
@@ -550,7 +550,7 @@ func (p *projector) result(m protoreflect.Message) []string {
 	out := p.strand(failMark, "failed")
 	if owed := ev.GetOwed(); owed != nil {
 		out = append(out, "")
-		out = append(out, envgate.Lines(owed.GetCells(), p.owedPaint())...)
+		out = append(out, envgate.Lines(owed, p.owedPaint())...)
 		out = append(out, "", envgate.RemedyLine(owed.GetRemedy()))
 		if ev.GetDetail() != "" {
 			out = append(out, "")

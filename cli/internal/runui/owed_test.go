@@ -42,6 +42,35 @@ func TestOwedVariablesArePaintedOnlyWhenColourIsOn(t *testing.T) {
 	}
 }
 
+func TestTheDeployTUIHeadsAGroupOnce(t *testing.T) {
+	t.Parallel()
+	ev := &streamv1.RunEvent{Event: &streamv1.RunEvent_Waiting{Waiting: &streamv1.WaitingEvent{
+		Url: "http://127.0.0.1:5555/#t=abc",
+		Owed: &streamv1.VariablesOwed{
+			Cells: []*streamv1.OwedVariable{
+				{Key: "GITHUB_CLIENT_ID", Reason: "no value", Group: "github"},
+				{Key: "DATABASE_URL", Reason: "no value"},
+				{Key: "GITHUB_CLIENT_SECRET", Reason: "no value", Group: "github"},
+			},
+			Groups: []*streamv1.OwedGroup{{Key: "github", Description: "Sign in with GitHub"}},
+		},
+	}}}
+
+	got := strings.Join(newProjector(Presentation{Format: FormatHuman, Width: defaultWidth}).project(ev), "\n")
+	want := strings.Join([]string{
+		"  github — set together (Sign in with GitHub)",
+		"    ✗ GITHUB_CLIENT_ID      root  no value",
+		"    ✗ GITHUB_CLIENT_SECRET  root  no value",
+		"  ✗ DATABASE_URL            root  no value",
+	}, "\n")
+	if !strings.Contains(got, want) {
+		t.Errorf("waiting =\n%s\nwant it to contain\n%s", got, want)
+	}
+	if n := strings.Count(got, "set together"); n != 1 {
+		t.Errorf("waiting = %q, states %q %d times, want once for the group", got, "set together", n)
+	}
+}
+
 func TestARefusalIsTheFailureNotADetailUnderOne(t *testing.T) {
 	t.Parallel()
 	s, out, _ := newTestSession(t, "ocel deploy")
