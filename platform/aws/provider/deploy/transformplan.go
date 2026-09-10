@@ -146,8 +146,12 @@ func resolvePlanOutputs(ctx context.Context, plan providerkit.StackPlan, candida
 	if err != nil {
 		return err
 	}
-	return walkOutputs(candidates, results, func(ref outputRef, _ outputSite, _ any) (any, error) {
-		return values[ref], nil
+	return walkOutputs(candidates, results, func(ref outputRef, at outputSite, _ any) (any, error) {
+		value, resolved := values[ref]
+		if !resolved || emptyOutput(value) {
+			return nil, &EmptyOutputError{Ref: ref, At: at}
+		}
+		return value, nil
 	})
 }
 
