@@ -1,4 +1,4 @@
-package binding
+package link
 
 import (
 	"os"
@@ -11,8 +11,8 @@ import (
 
 const apiURL = "https://ocel.app"
 
-func sample() Binding {
-	return Binding{
+func sample() Link {
+	return Link{
 		APIURL:         apiURL,
 		OrganizationID: "org_1",
 		ProjectID:      "proj_1",
@@ -28,7 +28,7 @@ func TestRead(t *testing.T) {
 
 	unlinked := []struct {
 		name   string
-		stored *Binding
+		stored *Link
 		reason string
 	}{
 		{
@@ -53,12 +53,12 @@ func TestRead(t *testing.T) {
 				}
 			}
 
-			binding, err := Read(dir, apiURL)
+			link, err := Read(dir, apiURL)
 			if err != nil {
 				t.Fatalf("Read err = %v, want nil", err)
 			}
-			if binding != nil {
-				t.Fatalf("Read = %+v, %s", binding, tt.reason)
+			if link != nil {
+				t.Fatalf("Read = %+v, %s", link, tt.reason)
 			}
 		})
 	}
@@ -67,9 +67,9 @@ func TestRead(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		binding := sample()
-		binding.APIURL = apiURL + "/"
-		if err := Write(dir, binding); err != nil {
+		link := sample()
+		link.APIURL = apiURL + "/"
+		if err := Write(dir, link); err != nil {
 			t.Fatalf("Write err = %v", err)
 		}
 
@@ -98,8 +98,8 @@ func TestRead(t *testing.T) {
 
 		if _, err := Read(dir, apiURL); err == nil {
 			t.Fatal("Read err = nil, want an error for a malformed record")
-		} else if !strings.Contains(err.Error(), "ocel console unlink") {
-			t.Fatalf("err = %v, want it to suggest `ocel console unlink`", err)
+		} else if !strings.Contains(err.Error(), "ocel unlink") {
+			t.Fatalf("err = %v, want it to suggest `ocel unlink`", err)
 		}
 	})
 }
@@ -115,15 +115,15 @@ func TestWrite(t *testing.T) {
 			t.Fatalf("Write err = %v", err)
 		}
 
-		binding, err := Read(dir, apiURL)
+		link, err := Read(dir, apiURL)
 		if err != nil {
 			t.Fatalf("Read err = %v", err)
 		}
-		if binding == nil {
+		if link == nil {
 			t.Fatal("Read = nil, want the record just written")
 		}
-		if *binding != sample() {
-			t.Fatalf("Read = %+v, want %+v", *binding, sample())
+		if *link != sample() {
+			t.Fatalf("Read = %+v, want %+v", *link, sample())
 		}
 	})
 
@@ -147,17 +147,17 @@ func TestWrite(t *testing.T) {
 			t.Fatalf("Write err = %v", err)
 		}
 
-		replacement := Binding{APIURL: apiURL, OrganizationID: "org_2", ProjectID: "proj_2", ProjectName: "Other"}
+		replacement := Link{APIURL: apiURL, OrganizationID: "org_2", ProjectID: "proj_2", ProjectName: "Other"}
 		if err := Write(dir, replacement); err != nil {
 			t.Fatalf("Write err = %v", err)
 		}
 
-		binding, err := Read(dir, apiURL)
+		link, err := Read(dir, apiURL)
 		if err != nil {
 			t.Fatalf("Read err = %v", err)
 		}
-		if binding == nil || *binding != replacement {
-			t.Fatalf("Read = %+v, want %+v", binding, replacement)
+		if link == nil || *link != replacement {
+			t.Fatalf("Read = %+v, want %+v", link, replacement)
 		}
 	})
 }
@@ -171,7 +171,7 @@ func TestClear(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		stored      *Binding
+		stored      *Link
 		wantRemoved bool
 		reason      string
 	}{
@@ -213,12 +213,12 @@ func TestClear(t *testing.T) {
 				t.Fatalf("Clear removed = %v, %s", removed, tt.reason)
 			}
 
-			binding, err := Read(dir, apiURL)
+			link, err := Read(dir, apiURL)
 			if err != nil {
 				t.Fatalf("Read err = %v", err)
 			}
-			if binding != nil {
-				t.Fatalf("Read = %+v after Clear, want nil", binding)
+			if link != nil {
+				t.Fatalf("Read = %+v after Clear, want nil", link)
 			}
 		})
 	}

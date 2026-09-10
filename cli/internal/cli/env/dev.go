@@ -10,8 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/console/binding"
 	"github.com/ocelhq/ocel/cli/internal/console/envstore"
+	"github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
@@ -28,10 +28,10 @@ type devStore struct {
 
 func unlinked(key string) error {
 	if key == "" {
-		return fmt.Errorf("this project is not linked to a console, so nothing holds its dev values. For `ocel dev`, put KEY=VALUE lines in %s; to share values with your team, run `ocel console link`.", //nolint:staticcheck // ST1005: prose addressed to a person, ending in a sentence rather than wrapped by a caller
+		return fmt.Errorf("this project is not linked to a console, so nothing holds its dev values. For `ocel dev`, put KEY=VALUE lines in %s; to share values with your team, run `ocel link`.", //nolint:staticcheck // ST1005: prose addressed to a person, ending in a sentence rather than wrapped by a caller
 			dotenv.FileName)
 	}
-	return fmt.Errorf("this project is not linked to a console, so nothing holds %s. For `ocel dev`, put %s=<VALUE> in %s; to share values with your team, run `ocel console link`.", //nolint:staticcheck // ST1005: prose addressed to a person, ending in a sentence rather than wrapped by a caller
+	return fmt.Errorf("this project is not linked to a console, so nothing holds %s. For `ocel dev`, put %s=<VALUE> in %s; to share values with your team, run `ocel link`.", //nolint:staticcheck // ST1005: prose addressed to a person, ending in a sentence rather than wrapped by a caller
 		key, key, dotenv.FileName)
 }
 
@@ -47,11 +47,11 @@ func withDevStore(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts 
 	creds, credsErr := deps.LoadCredentials()
 	apiURL := console.EffectiveBaseURL(creds.APIURL)
 
-	link, err := binding.Read(cfg.Dir, apiURL)
+	record, err := link.Read(cfg.Dir, apiURL)
 	if err != nil {
 		return err
 	}
-	if link == nil {
+	if record == nil {
 		return unlinked(key)
 	}
 	if credsErr != nil {
@@ -59,7 +59,7 @@ func withDevStore(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts 
 		return &exitsig.ExitError{Code: 1}
 	}
 
-	return run(&devStore{client: envstore.New(apiURL), token: creds.AccessToken, projectID: link.ProjectID}, cfg)
+	return run(&devStore{client: envstore.New(apiURL), token: creds.AccessToken, projectID: record.ProjectID}, cfg)
 }
 
 func runEnvSetDevPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []envSetPair, opts envOptions, stdout, stderr io.Writer) error {

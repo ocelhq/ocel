@@ -13,9 +13,9 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/console/binding"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/console/envstore"
+	"github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -88,13 +88,13 @@ func setUpDevFixture(t *testing.T) (string, cmddeps.Deps, *fakeConsole) {
 	t.Cleanup(server.Close)
 	t.Setenv("OCEL_API_URL", server.URL)
 
-	if err := binding.Write(root, binding.Binding{
+	if err := link.Write(root, link.Link{
 		APIURL:         server.URL,
 		OrganizationID: "org",
 		ProjectID:      devProjectID,
 		ProjectName:    "Journey",
 	}); err != nil {
-		t.Fatalf("write the console binding: %v", err)
+		t.Fatalf("write the console link: %v", err)
 	}
 
 	deps := clitest.NewDeps()
@@ -194,7 +194,7 @@ func TestRunEnvDev(t *testing.T) {
 		if err == nil {
 			t.Fatal("runEnvSet --dev unlinked err = nil, want a refusal")
 		}
-		want := "this project is not linked to a console, so nothing holds LOG_LEVEL. For `ocel dev`, put LOG_LEVEL=<VALUE> in .env; to share values with your team, run `ocel console link`."
+		want := "this project is not linked to a console, so nothing holds LOG_LEVEL. For `ocel dev`, put LOG_LEVEL=<VALUE> in .env; to share values with your team, run `ocel link`."
 		if err.Error() != want {
 			t.Errorf("err = %q, want %q", err.Error(), want)
 		}
