@@ -682,3 +682,299 @@ def test_an_instance_taken_during_discovery_reads_the_environment_it_stands_in(c
         assert Env().greeting == "hello"
     finally:
         del os.environ["OCEL_VAR_GREETING"]
+
+
+def declare_env_bodies(collector):
+    return [body for path, _, body in collector.declares if path.endswith("/DeclareEnv")]
+
+
+def test_an_optional_group_nothing_is_delivered_for_reads_as_none(monkeypatch):
+    monkeypatch.delenv("GITHUB_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GITHUB_CLIENT_SECRET", raising=False)
+
+    class GitHub(ocel.Group):
+        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
+        client_secret: str = ocel.var(key="GITHUB_CLIENT_SECRET")
+
+    class Env(ocel.Env):
+        github: GitHub | None = None
+
+    assert Env().github is None
+
+
+def test_an_optional_group_every_member_is_delivered_for_resolves(monkeypatch):
+    monkeypatch.setenv("GITHUB_CLIENT_ID", "id")
+    monkeypatch.setenv("GITHUB_CLIENT_SECRET", "shh")
+
+    class GitHub(ocel.Group):
+        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
+        client_secret: str = ocel.var(key="GITHUB_CLIENT_SECRET")
+
+    class Env(ocel.Env):
+        github: GitHub | None = None
+
+    github = Env().github
+    assert (github.client_id, github.client_secret) == ("id", "shh")
+
+
+def test_a_secret_in_a_group_resolves_on_every_read(monkeypatch):
+    monkeypatch.setenv("OCEL_VAR_GITHUB_CLIENT_SECRET", "first")
+
+    class GitHub(ocel.Group):
+        client_secret: ocel.Secret = ocel.var(key="GITHUB_CLIENT_SECRET")
+
+    class Env(ocel.Env):
+        github: GitHub | None = None
+
+    secret = Env().github.client_secret
+    assert secret.value == "first"
+    monkeypatch.setenv("OCEL_VAR_GITHUB_CLIENT_SECRET", "rotated")
+    assert secret.value == "rotated"
+
+
+def test_an_optional_group_one_member_is_delivered_for_is_owed_the_rest(collector):
+    collector.cells = [VariableCell(key="GITHUB_CLIENT_ID", value="id")]
+
+    class GitHub(ocel.Group):
+        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
+        client_secret: str = ocel.var(key="GITHUB_CLIENT_SECRET")
+
+    class Env(ocel.Env):
+        github: GitHub | None = None
+
+    _ = Env
+    problems = collector.reported()
+    assert [(p.key, p.kind) for p in problems] == [
+        ("GITHUB_CLIENT_SECRET", VariableProblem.Kind.MISSING)
+    ]
+
+
+def test_an_optional_group_nothing_is_delivered_for_is_owed_nothing(collector):
+    class GitHub(ocel.Group):
+        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
+        client_secret: str = ocel.var(key="GITHUB_CLIENT_SECRET")
+
+    class Env(ocel.Env):
+        github: GitHub | None = None
+
+    _ = Env
+    assert collector.reported() == []
+
+
+def test_a_required_group_nothing_is_delivered_for_is_owed_every_member(collector):
+    class GitHub(ocel.Group):
+        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
+        client_secret: str = ocel.var(key="GITHUB_CLIENT_SECRET")
+
+    class Env(ocel.Env):
+        github: GitHub
+
+    _ = Env
+    assert [p.key for p in collector.reported()] == [
+        "GITHUB_CLIENT_ID",
+        "GITHUB_CLIENT_SECRET",
+    ]
+
+
+def test_a_member_spelled_optional_is_not_owed_when_the_group_is_on(collector):
+    collector.cells = [VariableCell(key="SMTP_HOST", value="mail.example")]
+
+    class Smtp(ocel.Group):
+        host: str = ocel.var(key="SMTP_HOST")
+        port: int = ocel.var(key="SMTP_PORT", default=587)
+        sender: str | None = ocel.var(key="SMTP_SENDER", default=None)
+
+    class Env(ocel.Env):
+        smtp: Smtp
+
+    _ = Env
+    assert collector.reported() == []
+    assert [d.required for d in collector.declared_env().definitions] == [True, False, False]
+
+
+def test_an_optional_group_of_members_all_spelled_optional_is_off_until_one_is_delivered(
+    collector, monkeypatch
+):
+    class Smtp(ocel.Group):
+        host: str | None = ocel.var(key="SMTP_HOST", default=None)
+        port: int = ocel.var(key="SMTP_PORT", default=587)
+
+    class Env(ocel.Env):
+        smtp: Smtp | None = None
+
+    monkeypatch.delenv("SMTP_HOST", raising=False)
+    monkeypatch.delenv("SMTP_PORT", raising=False)
+    assert collector.reported() == []
+    assert Env().smtp is None
+    monkeypatch.setenv("SMTP_PORT", "25")
+    assert Env().smtp.port == 25
+
+
+def test_a_group_reaches_the_dev_server_with_what_it_needs(collector):
+    class Smtp(ocel.Group):
+        host: str = ocel.var(key="SMTP_HOST")
+
+    class GitHub(ocel.Group):
+        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
+
+    class Env(ocel.Env):
+        database_url: str = ocel.var(key="DATABASE_URL")
+        github: GitHub | None = None
+        smtp: Smtp = ocel.group(description="Send mail")
+
+    _ = Env
+    declared = collector.declared_env()
+    assert [(d.key, d.group) for d in declared.definitions] == [
+        ("DATABASE_URL", ""),
+        ("GITHUB_CLIENT_ID", "github"),
+        ("SMTP_HOST", "smtp"),
+    ]
+    assert [(g.key, g.required, g.description) for g in declared.groups] == [
+        ("github", False, ""),
+        ("smtp", True, "Send mail"),
+    ]
+
+
+def test_a_group_declares_only_through_the_class_that_names_it(collector):
+    class GitHub(ocel.Group):
+        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
+
+    assert declare_env_bodies(collector) == []
+
+    class Env(ocel.Env):
+        github: GitHub | None = None
+
+    _ = Env
+    bodies = declare_env_bodies(collector)
+    assert len(bodies) == 1
+    assert [(d.key, d.group, d.required) for d in bodies[0].definitions] == [
+        ("GITHUB_CLIENT_ID", "github", True)
+    ]
+
+
+def test_a_member_is_not_reachable_beside_the_group_that_holds_it(monkeypatch):
+    monkeypatch.setenv("GITHUB_CLIENT_ID", "id")
+    monkeypatch.setenv("CLIENT_ID", "outer")
+
+    class GitHub(ocel.Group):
+        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
+
+    class Env(ocel.Env):
+        client_id: str
+        github: GitHub | None = None
+
+    env = Env()
+    assert env.client_id == "outer"
+    assert env.github.client_id == "id"
+
+
+def test_a_member_of_a_group_the_class_declares_nothing_beside_is_reached_through_it():
+    class GitHub(ocel.Group):
+        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
+
+    class Env(ocel.Env):
+        github: GitHub | None = None
+
+    assert not hasattr(Env, "client_id")
+
+
+def test_a_group_nesting_a_group_is_refused():
+    class Inner(ocel.Group):
+        token: str = ocel.var(key="TOKEN")
+
+    with pytest.raises(ocel.EnvDefinitionError) as raised:
+
+        class Outer(ocel.Group):
+            inner: Inner | None = None
+
+        _ = Outer
+
+    assert str(raised.value) == (
+        "Outer.inner holds a group of its own. A group holds variables, and groups nest "
+        "one level only."
+    )
+
+
+def test_a_key_a_group_and_the_class_both_declare_is_refused():
+    class Creds(ocel.Group):
+        token: str = ocel.var(key="TOKEN")
+
+    with pytest.raises(ocel.EnvDefinitionError) as raised:
+
+        class Env(ocel.Env):
+            token: str = ocel.var(key="TOKEN")
+            creds: Creds
+
+        _ = Env
+
+    assert str(raised.value) == (
+        "'TOKEN' is declared by two attributes of the same class. A key is declared by "
+        "exactly one attribute."
+    )
+
+
+def test_two_attributes_naming_one_group_are_refused():
+    class First(ocel.Group):
+        one: str = ocel.var(key="ONE")
+
+    class Second(ocel.Group):
+        two: str = ocel.var(key="TWO")
+
+    with pytest.raises(ocel.EnvDefinitionError) as raised:
+
+        class Env(ocel.Env):
+            first: First = ocel.group(key="creds")
+            second: Second = ocel.group(key="creds")
+
+        _ = Env
+
+    assert str(raised.value) == (
+        "'creds' is declared by two attributes of the same class. A group is declared by "
+        "exactly one attribute."
+    )
+
+
+def test_an_optional_group_a_live_member_alone_stands_for_is_on(collector):
+    collector.cells = [VariableCell(key="GITHUB_CLIENT_SECRET")]
+
+    class GitHub(ocel.Group):
+        client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
+        client_secret: ocel.Secret = ocel.var(key="GITHUB_CLIENT_SECRET")
+
+    class Env(ocel.Env):
+        github: GitHub | None = None
+
+    _ = Env
+    assert [p.key for p in collector.reported()] == ["GITHUB_CLIENT_ID"]
+
+
+def test_a_class_of_env_annotated_as_a_group_is_refused():
+    class Other(ocel.Env):
+        token: str = ocel.var(key="TOKEN")
+
+    with pytest.raises(ocel.EnvDefinitionError) as raised:
+
+        class Env(ocel.Env):
+            other: Other | None = None
+
+        _ = Env
+
+    assert str(raised.value) == (
+        "'OTHER' is read into Other, which declares variables of its own. The variables an "
+        "app takes together are a class of ocel.Group, and the attribute annotated with it "
+        "is the group."
+    )
+
+
+def test_a_scoped_member_of_a_group_a_root_value_turned_on_is_owed(collector):
+    collector.cells = [VariableCell(key="INHERITED_TOKEN", value="t")]
+
+    class Inherited(ocel.Group):
+        token: str = ocel.var(key="INHERITED_TOKEN")
+        web: str = ocel.var(key="INHERITED_WEB", folders=["/web"])
+
+    class Env(ocel.Env):
+        inherited: Inherited | None = None
+
+    _ = Env
+    assert [(p.key, p.folder) for p in collector.reported()] == [("INHERITED_WEB", "/web")]
