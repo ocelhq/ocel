@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -107,6 +108,15 @@ func (s *stack) reach(ctx context.Context, host Host, hostname string) error {
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
 	if binding.Hostname == "" {
 		return providerkit.Refuse(providerkit.CodeInvalid, "the %q edge is asked to bind a hostname nothing named", Kind)
+	}
+	if base, wild := strings.CutPrefix(binding.Hostname, "*."); wild {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"this project declares %s as its own preview domain, and the %q edge cannot serve one: it resolves a preview by handing the "+
+				"hostname's first label to Cloud Run as a service name, and a project's own wildcard leaves the project out of that label, "+
+				"so two projects previewing the same branch would name one service and one would answer for the other.\n"+
+				"Remove domains.preview from this project and run `ocel domain use '%s' --preview` against the bootstrap instead, "+
+				"which serves every project's previews from one wildcard with the project in the label",
+			edge.PreviewWildcard(base), Kind, edge.PreviewWildcard(base))
 	}
 	if !s.held.Front.standing() {
 		return providerkit.Refuse(providerkit.CodeNotReady,

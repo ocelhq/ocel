@@ -29,6 +29,7 @@ type world struct {
 	pinned   []string
 	backends map[string]map[string]bool
 	entries  map[string]map[string]bool
+	stood    map[string]map[string]declaration
 }
 
 func newWorld() *world {
@@ -40,6 +41,7 @@ func newWorld() *world {
 		routed:   map[string]map[string]string{},
 		backends: map[string]map[string]bool{"": {notFoundBackend: true}},
 		entries:  map[string]map[string]bool{},
+		stood:    map[string]map[string]declaration{},
 	}
 }
 
@@ -64,6 +66,7 @@ func (w *world) Up(_ context.Context, target Target, program Program, _ edge.Rep
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.ups = append(w.ups, stack)
+	w.stood[stack] = seen
 	standing := map[string]bool{}
 	for name, declaration := range seen {
 		if declaration.Token == backendToken {
@@ -83,6 +86,7 @@ func (w *world) Destroy(_ context.Context, target Target, _ edge.Reporter) error
 	defer w.mu.Unlock()
 	w.destroys = append(w.destroys, target.Name())
 	delete(w.backends, target.Name())
+	delete(w.stood, target.Name())
 	return nil
 }
 
@@ -174,6 +178,12 @@ func (w *world) hosts(urlMap string) map[string]string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return maps.Clone(w.routed[urlMap])
+}
+
+func (w *world) declarations(stack string) map[string]declaration {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return maps.Clone(w.stood[stack])
 }
 
 func (w *world) pins() []string {

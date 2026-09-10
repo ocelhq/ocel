@@ -63,9 +63,19 @@ func (e *Edge) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapO
 
 func (e *Edge) raise(ctx context.Context, class edge.Class, report edge.Reporter) (Front, error) {
 	names := frontNames(class)
+	var held previewEntry
+	if class == edge.ClassPreview {
+		heldPreview, err := e.heldPreview(ctx)
+		if err != nil {
+			return Front{}, err
+		}
+		held = heldPreview
+	}
 	outputs, err := e.deps.Stacks.Up(ctx, Target{Class: class}, frontProgram(frontSpec{
 		Project: e.deps.Project,
+		Region:  e.deps.Region,
 		Names:   names,
+		Preview: held,
 	}), report)
 	if err != nil {
 		return Front{}, err
@@ -176,6 +186,13 @@ func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error)
 	if hostname == "" {
 		return "", nil
 	}
+	if base, wild := strings.CutPrefix(hostname, "*."); wild {
+		held, err := e.heldPreview(ctx)
+		if err != nil || held.BaseDomain != base {
+			return "", err
+		}
+		return edge.PreviewEntryOwner, nil
+	}
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		record, err := providerkit.Held(ctx, e.deps.Records, e.claim(class, hostname))
 		if err != nil {
@@ -198,16 +215,6 @@ type claim struct {
 }
 
 func (e *Edge) ProjectOwner(slug string, class edge.Class) string { return Surface(slug, class) }
-
-func (e *Edge) ReconcilePreviewWildcard(context.Context, edge.PreviewWildcardSpec) (string, error) {
-	return "", providerkit.Refuse(providerkit.CodeInvalid,
-		"the %q edge does not route preview hostnames yet: whether one wildcard host rule and one serverless neg with a url mask can resolve a preview's "+
-			"slug--pointer--app label in a single dns label is undocumented, and it is being spiked before it is designed. "+
-			"Front previews with the cloudflare edge, or reach a preview at the url Cloud Run gives each service under the %q edge",
-		Kind, "direct")
-}
-
-func (e *Edge) DestroyPreviewWildcard(context.Context, string) error { return nil }
 
 func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	changes := make([]edge.PlanChange, 0, len(scope.Hostnames)*3+1)
@@ -239,13 +246,16 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 }
 
 func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.PlanGroup) {
+	base := strings.TrimPrefix(wildcard, "*.")
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanDelete,
 		Changes: []edge.PlanChange{
 			{Kind: "compute.URLMap host rule", Name: wildcard, Action: edge.PlanDelete},
-			{Kind: "certificatemanager.CertificateMapEntry", Name: naming.Sanitize(wildcard), Action: edge.PlanDelete},
+			{Kind: "compute.BackendService", Name: previewBackendName(base), Action: edge.PlanDelete},
+			{Kind: "compute.RegionNetworkEndpointGroup", Name: previewNEGName(base), Action: edge.PlanDelete},
+			{Kind: "certificatemanager.CertificateMapEntry", Name: previewEntryName(base), Action: edge.PlanDelete},
 		},
 	}, e.SharedPreviewRemoval()
 }

@@ -288,10 +288,17 @@ func (w *wildcards) routeInstalled(ctx context.Context) bool {
 }
 
 func (w *wildcards) served(ctx context.Context) ([]string, error) {
+	return ProjectsServedOnPreview(ctx, w.records, w.held.BaseDomain)
+}
+
+func ProjectsServedOnPreview(ctx context.Context, records RecordStore, baseDomain string) ([]string, error) {
+	if baseDomain == "" {
+		return nil, nil
+	}
 	under := EdgeStacksRecord(ClassPreview)
-	held, err := w.records.List(ctx, under)
+	held, err := records.List(ctx, under)
 	if err != nil {
-		return nil, fmt.Errorf("read the projects served on %s: %w", w.held.Hostname(), err)
+		return nil, fmt.Errorf("read the projects served on %s: %w", edge.PreviewWildcard(baseDomain), err)
 	}
 	var served []string
 	for _, record := range held {
@@ -303,7 +310,7 @@ func (w *wildcards) served(ctx context.Context) ([]string, error) {
 		if err := json.Unmarshal(record.Bytes, &state); err != nil {
 			return nil, fmt.Errorf("read %s: %w", record.Name, err)
 		}
-		if state.Edge.ServedOnGlobalPreview(w.held.BaseDomain) {
+		if state.Edge.ServedOnGlobalPreview(baseDomain) {
 			served = append(served, rest[0])
 		}
 	}

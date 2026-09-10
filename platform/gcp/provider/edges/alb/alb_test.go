@@ -2,7 +2,9 @@ package alb
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -36,6 +38,10 @@ func TestTheAlbEdgeIsAnEdge(t *testing.T) {
 			return front, edge.StackSpec{Slug: "shop", Class: providerkit.ClassProduction}
 		},
 		Hostname: "shop.example.com",
+		Previews: func(t *testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec) {
+			front, _ := fronting(t)
+			return front, edge.StackSpec{Slug: "shop", Class: providerkit.ClassPreview, PruneOnly: true}, previewWildcard()
+		},
 	})
 }
 
@@ -138,17 +144,275 @@ func TestAProjectReconciledBeforeItsClassHasALoadBalancerIsToldToBootstrapIt(t *
 	}
 }
 
-func TestAPreviewHostnameIsRefusedWhileTheWildcardIsBeingSpiked(t *testing.T) {
+const previewBase = "preview.example.com"
+
+const previewCertificate = "projects/acme-prod/locations/global/certificates/ocel-preview"
+
+func previewWildcard() edge.PreviewWildcardSpec {
+	return edge.PreviewWildcardSpec{BaseDomain: previewBase, Certificate: previewCertificate}
+}
+
+func TestOneHostRuleAndOneMaskedNegAnswerEveryPreviewHostname(t *testing.T) {
+	t.Parallel()
+
+	front, w := fronting(t)
+	published, err := front.ReconcilePreviewWildcard(context.Background(), previewWildcard())
+	if err != nil {
+		t.Fatalf("ReconcilePreviewWildcard = %v", err)
+	}
+	if published != frontAddress {
+		t.Errorf("ReconcilePreviewWildcard published %q, want the class front's address %q for DNS to point the wildcard at", published, frontAddress)
+	}
+
+	routed := w.hosts("ocel-alb-production-routes")
+	backend := routed[edge.PreviewWildcard(previewBase)]
+	if backend == "" {
+		t.Fatalf("the class url map routes %v, want one host rule for %s: every preview resolves through it and none writes its own",
+			routed, edge.PreviewWildcard(previewBase))
+	}
+	stood := w.declarations(FrontStack(providerkit.ClassPreview))
+	neg, declared := stood[previewNEGName(previewBase)]
+	if !declared {
+		t.Fatalf("the preview front stands up %v, want a serverless network endpoint group the host rule's backend reaches Cloud Run through", keys(stood))
+	}
+	if mask := cloudRunMask(neg); mask != "<service>."+previewBase {
+		t.Errorf("the neg carries the url mask %q, want %q: the mask is what turns a hostname's label into the Cloud Run service that answers it",
+			mask, "<service>."+previewBase)
+	}
+	if _, standing := stood[backend]; !standing {
+		t.Errorf("the host rule points at the backend %q, which the front stands up as %v", backend, keys(stood))
+	}
+	if _, entered := stood[previewEntryName(previewBase)]; !entered {
+		t.Errorf("the preview front stands up %v, want a certificate map entry: nothing terminates TLS for %s without one",
+			keys(stood), edge.PreviewWildcard(previewBase))
+	}
+}
+
+func TestTheWildcardIsOwnedByTheSharedPreviewEntryRatherThanByAProject(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	front, _ := fronting(t)
+	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
+		t.Fatalf("ReconcilePreviewWildcard = %v", err)
+	}
+
+	owner, err := front.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
+	if err != nil {
+		t.Fatalf("DomainOwner = %v", err)
+	}
+	if owner != edge.PreviewEntryOwner {
+		t.Errorf("DomainOwner(%s) = %q, want %q: the wildcard is the bootstrap's, and a project that asks whether it may bind it "+
+			"has to be told it is already served", edge.PreviewWildcard(previewBase), owner, edge.PreviewEntryOwner)
+	}
+	if owner, err := front.DomainOwner(ctx, edge.PreviewWildcard("other.example.com")); err != nil || owner != "" {
+		t.Errorf("DomainOwner(%s) = %q, %v, want nothing: no wildcard but the one raised is served", edge.PreviewWildcard("other.example.com"), owner, err)
+	}
+}
+
+func TestAPreviewWildcardWithNoCertificateIsRefusedRatherThanServedOnPlainHttp(t *testing.T) {
 	t.Parallel()
 
 	front, _ := fronting(t)
 	var refusal providerkit.Refusal
-	_, err := front.ReconcilePreviewWildcard(context.Background(), edge.PreviewWildcardSpec{BaseDomain: "preview.example.com"})
+	_, err := front.ReconcilePreviewWildcard(context.Background(), edge.PreviewWildcardSpec{BaseDomain: previewBase})
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("ReconcilePreviewWildcard = %v, want an %s refusal", err, providerkit.CodeInvalid)
+		t.Fatalf("ReconcilePreviewWildcard with no certificate = %v, want an %s refusal", err, providerkit.CodeInvalid)
 	}
-	if err := front.DestroyPreviewWildcard(context.Background(), "preview.example.com"); err != nil {
-		t.Errorf("DestroyPreviewWildcard = %v, want nothing to take down for a wildcard nothing claimed", err)
+}
+
+func TestRaisingTheClassFrontAgainLeavesTheWildcardRouting(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	front, w := fronting(t)
+	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
+		t.Fatalf("ReconcilePreviewWildcard = %v", err)
+	}
+	if _, err := front.Bootstrap(ctx, providerkit.ClassPreview); err != nil {
+		t.Fatalf("Bootstrap = %v", err)
+	}
+
+	stood := w.declarations(FrontStack(providerkit.ClassPreview))
+	if _, declared := stood[previewNEGName(previewBase)]; !declared {
+		t.Errorf("the front raised again stands up %v, and the wildcard's neg is gone from it: a bootstrap that reruns would "+
+			"take every preview in the class down", keys(stood))
+	}
+}
+
+func TestDestroyingThePreviewWildcardTakesItsRouteAndLeavesTheFrontStanding(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	front, w := fronting(t)
+	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
+		t.Fatalf("ReconcilePreviewWildcard = %v", err)
+	}
+	if err := front.DestroyPreviewWildcard(ctx, previewBase); err != nil {
+		t.Fatalf("DestroyPreviewWildcard = %v", err)
+	}
+
+	if routed := w.hosts("ocel-alb-production-routes"); routed[edge.PreviewWildcard(previewBase)] != "" {
+		t.Errorf("the class url map still routes %v after the wildcard was released", routed)
+	}
+	stood := w.declarations(FrontStack(providerkit.ClassPreview))
+	if _, declared := stood[previewNEGName(previewBase)]; declared {
+		t.Errorf("the front still stands up %v after the wildcard was released: bytes a release leaves behind must be zero", keys(stood))
+	}
+	if slices.Contains(w.torn(), FrontStack(providerkit.ClassPreview)) {
+		t.Error("releasing the wildcard destroyed the class front, which every project in the class is answered by")
+	}
+	owner, err := front.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
+	if err != nil || owner != "" {
+		t.Errorf("DomainOwner(%s) = %q, %v, want nothing serving a released wildcard", edge.PreviewWildcard(previewBase), owner, err)
+	}
+	if err := front.DestroyPreviewWildcard(ctx, previewBase); err != nil {
+		t.Errorf("DestroyPreviewWildcard again = %v, want a release to be re-entrant", err)
+	}
+}
+
+func TestThePreviewWildcardIsHeldWhileAProjectIsStillServedOnIt(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	front, _ := fronting(t)
+	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
+		t.Fatalf("ReconcilePreviewWildcard = %v", err)
+	}
+	servedOnPreview(t, front, "shop", previewBase)
+
+	var refusal providerkit.Refusal
+	err := front.DestroyPreviewWildcard(ctx, previewBase)
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("DestroyPreviewWildcard with a project still served = %v, want an %s refusal", err, providerkit.CodeInvalid)
+	}
+	if !strings.Contains(refusal.Message, "shop") {
+		t.Errorf("the refusal reads %q, want the projects that hold it named: they are what the operator has to release", refusal.Message)
+	}
+}
+
+func TestAPromotionOfAPreviewOnTheGlobalWildcardWritesNoHostRule(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	front, w := fronting(t)
+	if _, err := front.ReconcilePreviewWildcard(ctx, previewWildcard()); err != nil {
+		t.Fatalf("ReconcilePreviewWildcard = %v", err)
+	}
+	stack, err := front.Reconcile(ctx,
+		edge.StackSpec{Slug: "shop", Class: providerkit.ClassPreview, PruneOnly: true},
+		edge.StackState{GlobalPreview: previewBase})
+	if err != nil {
+		t.Fatalf("Reconcile = %v", err)
+	}
+	if !stack.State().ServedOnGlobalPreview(previewBase) {
+		t.Fatalf("state = %+v, want the stack to carry the wildcard it is served on", stack.State())
+	}
+	before := w.hosts("ocel-alb-production-routes")
+
+	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
+		App: "web", Identity: "b1", Physical: "shop--pr-7",
+		Revisions: map[string]string{"shop--pr-7": "shop--pr-7-00001"},
+	}); err != nil {
+		t.Fatalf("PutStaged = %v", err)
+	}
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}},
+		"pr-7", edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote = %v", err)
+	}
+
+	if after := w.hosts("ocel-alb-production-routes"); !maps.Equal(after, before) {
+		t.Errorf("the promotion left the class url map routing %v, want the %v it found: a preview on the shared wildcard "+
+			"resolves through the one host rule, and a write per preview is what this design exists to avoid", after, before)
+	}
+}
+
+func TestAProjectsOwnPreviewWildcardIsRefusedOnTheLoadBalancer(t *testing.T) {
+	t.Parallel()
+
+	_, _, stack := reconciledPreview(t)
+	var refusal providerkit.Refusal
+	err := stack.BindDomain(context.Background(), edge.DomainBinding{
+		Hostname: edge.PreviewWildcard("preview.shop.example"), App: "web", Certificate: previewCertificate,
+	})
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("BindDomain of a project's own preview wildcard = %v, want an %s refusal", err, providerkit.CodeInvalid)
+	}
+	if !strings.Contains(refusal.Message, "domains.preview") {
+		t.Errorf("the refusal reads %q, want what the project declared named: it is what has to be removed", refusal.Message)
+	}
+}
+
+func TestTheWildcardRemovalPlanNamesWhatComesDownAndWhatStands(t *testing.T) {
+	t.Parallel()
+
+	front, _ := fronting(t)
+	removed, kept := front.PreviewWildcardRemovals(edge.PreviewWildcard(previewBase))
+	named := map[string]bool{}
+	for _, change := range removed.Changes {
+		named[change.Kind] = true
+	}
+	for _, kind := range []string{
+		"compute.URLMap host rule",
+		"compute.BackendService",
+		"compute.RegionNetworkEndpointGroup",
+		"certificatemanager.CertificateMapEntry",
+	} {
+		if !named[kind] {
+			t.Errorf("the removal plan names %v, want a %s row: a plan that hides a resource leaves it standing and billing", removed.Changes, kind)
+		}
+	}
+	if kept.Action != edge.PlanKeep || kept.Reason == "" {
+		t.Errorf("the kept group = %+v, want the front kept with a reason", kept)
+	}
+}
+
+func keys(declarations map[string]declaration) []string {
+	return slices.Sorted(maps.Keys(declarations))
+}
+
+func cloudRunMask(neg declaration) string {
+	run, held := neg.Args["cloudRun"].(map[string]any)
+	if !held {
+		return ""
+	}
+	mask, _ := run["urlMask"].(string)
+	return mask
+}
+
+func reconciledPreview(t *testing.T) (*Edge, *world, edge.EdgeStack) {
+	t.Helper()
+	front, w := fronting(t)
+	stack, err := front.Reconcile(context.Background(),
+		edge.StackSpec{Slug: "shop", Class: providerkit.ClassPreview}, edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile(shop) = %v", err)
+	}
+	return front, w, stack
+}
+
+func servedOnPreview(t *testing.T, front *Edge, slug, base string) {
+	t.Helper()
+	ctx := context.Background()
+	stack, err := front.Reconcile(ctx,
+		edge.StackSpec{Slug: slug, Class: providerkit.ClassPreview, PruneOnly: true},
+		edge.StackState{GlobalPreview: base})
+	if err != nil {
+		t.Fatalf("Reconcile(%s) = %v", slug, err)
+	}
+	state := providerkit.EdgeStackState{Kind: Kind, Edge: stack.State()}
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := providerkit.EdgeStackRecord(providerkit.ClassPreview, slug)
+	record, err := providerkit.Held(ctx, front.deps.Records, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.Bytes = encoded
+	if _, err := front.deps.Records.Write(ctx, record); err != nil {
+		t.Fatal(err)
 	}
 }
 
