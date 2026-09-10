@@ -54,6 +54,7 @@ type Facts struct {
 	SignsOriginForwards   bool
 	ShieldsOrigin         bool
 	InvalidatesByCacheTag bool
+	RoutesPreviewsByLabel bool
 	CredentialScope       string
 }
 

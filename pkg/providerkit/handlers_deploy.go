@@ -459,14 +459,10 @@ func (r *deployRun) previewSite() edge.PreviewSite {
 }
 
 func (r *deployRun) previewLabel(slot int) string {
-	if r.world() != hostingGlobalPreview {
+	if r.world() != hostingGlobalPreview || !r.front.Facts().RoutesPreviewsByLabel {
 		return ""
 	}
-	app := ""
-	if names := r.appNames(); len(names) > 1 && slot < len(names) {
-		app = names[slot]
-	}
-	return r.previewSite().Label(r.plan.Pointer, app)
+	return r.previewSite().Label(r.plan.Pointer, edge.AppAt(r.appNames(), slot))
 }
 
 func (r *deployRun) servedHostnames() [][]string {
@@ -474,11 +470,7 @@ func (r *deployRun) servedHostnames() [][]string {
 		served := make([][]string, len(r.plan.Apps))
 		site, names := r.previewSite(), r.appNames()
 		for slot := range served {
-			app := ""
-			if len(names) > 1 {
-				app = names[slot]
-			}
-			if host := site.Host(r.plan.Pointer, app); host != "" {
+			if host := site.Host(r.plan.Pointer, edge.AppAt(names, slot)); host != "" {
 				served[slot] = []string{host}
 			}
 		}

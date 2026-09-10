@@ -896,10 +896,11 @@ func TestDeployAnnouncesThePreviewHostnameOfTheGlobalWildcard(t *testing.T) {
 	}
 }
 
-func TestAGlobalPreviewDeployHandsTheReleaserTheLabelItsHostnameCarries(t *testing.T) {
+func TestAGlobalPreviewDeployOnAnEdgeThatRoutesByLabelHandsTheReleaserTheLabelItsHostnameCarries(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	previewBootstrapped(t, client)
+	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).RoutesPreviewsByLabel(true)
 	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
 	}
@@ -915,8 +916,71 @@ func TestAGlobalPreviewDeployHandsTheReleaserTheLabelItsHostnameCarries(t *testi
 			continue
 		}
 		if plan.App.PreviewLabel != want {
-			t.Errorf("the plan for %s carries the preview label %q, want %q: a provider that routes the whole label to what it stood up "+
+			t.Errorf("the plan for %s carries the preview label %q, want %q: an edge that routes the whole label to what it stood up "+
 				"has to name it what the hostname says", plan.App.App, plan.App.PreviewLabel, want)
+		}
+	}
+}
+
+func TestAGlobalPreviewDeployOnAnEdgeThatDoesNotRouteByLabelHandsTheReleaserNoLabel(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	previewBootstrapped(t, client)
+	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
+	}
+
+	result, _ := deploy(t, client, previewDeployRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	for _, plan := range provider.Releases().(*fake.Releaser).Plans() {
+		if plan.App == nil {
+			continue
+		}
+		if plan.App.PreviewLabel != "" {
+			t.Errorf("the plan for %s carries the preview label %q, want none: this edge resolves a preview hostname itself, "+
+				"so it imposes no name on what the provider stands up", plan.App.App, plan.App.PreviewLabel)
+		}
+	}
+}
+
+func TestAGlobalPreviewDeployLabelsEachAppWithTheFirstLabelOfTheHostnameItAnnounced(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	previewBootstrapped(t, client)
+	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).RoutesPreviewsByLabel(true)
+	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
+	}
+
+	req := twoAppRequest()
+	req.Manifest.Domains = nil
+	req.Environment = &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7"}
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
+
+	result, _ := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	labels := map[string]string{}
+	for _, plan := range provider.Releases().(*fake.Releaser).Plans() {
+		if plan.App == nil {
+			continue
+		}
+		labels[plan.App.App] = plan.App.PreviewLabel
+	}
+	for _, app := range []string{"web", "admin"} {
+		urls := servedAppURLs(result, app)
+		if len(urls) != 1 {
+			t.Fatalf("the deploy announced %v for %s, want the one preview hostname it is served on", urls, app)
+		}
+		want, _, _ := strings.Cut(strings.TrimPrefix(urls[0], "https://"), ".")
+		if labels[app] != want {
+			t.Errorf("the plan for %s carries the preview label %q, and %s is the hostname announced: the label the edge hands over "+
+				"is the first label of that hostname or the preview answers nothing", app, labels[app], urls[0])
 		}
 	}
 }
