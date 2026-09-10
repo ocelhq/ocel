@@ -4,8 +4,10 @@ from ocel.env import (
     EnvDefinitionError,
     EnvScopeError,
     EnvValueError,
+    Group,
     Secret,
     deployment_url,
+    group,
     var,
 )
 from ocel.postgres import Postgres, postgres
@@ -15,10 +17,12 @@ __all__ = [
     "EnvDefinitionError",
     "EnvScopeError",
     "EnvValueError",
+    "Group",
     "Postgres",
     "Secret",
     "UnprovisionedResourceError",
     "deployment_url",
+    "group",
     "postgres",
     "var",
 ]
