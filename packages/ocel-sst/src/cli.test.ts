@@ -3,11 +3,17 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runLink } from "./cli.js";
 
-vi.mock("node:child_process", () => ({ spawnSync: vi.fn() }));
+vi.mock("node:child_process", () => {
+  const spawnSync = vi.fn();
+  return { spawnSync, default: { spawnSync } };
+});
 
 const resolve = vi.fn();
 
-vi.mock("node:module", () => ({ createRequire: () => ({ resolve }) }));
+vi.mock("node:module", () => {
+  const createRequire = () => ({ resolve });
+  return { createRequire, default: { createRequire } };
+});
 
 const run = vi.mocked(spawnSync);
 

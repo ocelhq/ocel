@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import crypto from "node:crypto";
 import { checkTarget, runLink, type Target } from "./cli.js";
 import { customLink, type DescribedCustom } from "./custom.js";
 import type { Grant, SSTInclude } from "./grants.js";
@@ -56,7 +56,8 @@ function linkProvider<I extends LinkInputs>(
   resolved: (inputs: I) => boolean,
 ) {
   const digestOf = (inputs: I) =>
-    createHash("sha256")
+    crypto
+      .createHash("sha256")
       .update(JSON.stringify(recordFor(inputs)))
       .digest("hex");
 

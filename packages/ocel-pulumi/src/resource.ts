@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import crypto from "node:crypto";
 import { createUrn, dynamic, type Input, type Resource } from "@pulumi/pulumi";
 import { checkTarget, runLink, type Target } from "./cli.js";
 import { customLink, type DescribedCustom } from "./custom.js";
@@ -65,7 +65,8 @@ function linkProvider<I extends LinkInputs>(
   resolved: (inputs: I) => boolean,
 ) {
   const digestOf = (inputs: I) =>
-    createHash("sha256")
+    crypto
+      .createHash("sha256")
       .update(JSON.stringify(recordFor(inputs)))
       .digest("hex");
 

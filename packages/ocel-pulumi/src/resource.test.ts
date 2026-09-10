@@ -30,13 +30,17 @@ vi.mock("@pulumi/pulumi", async (importOriginal) => {
   return { ...actual, dynamic: { ...actual.dynamic, Resource: FakeResource } };
 });
 
-vi.mock("node:child_process", () => ({ spawnSync: vi.fn() }));
+vi.mock("node:child_process", () => {
+  const spawnSync = vi.fn();
+  return { spawnSync, default: { spawnSync } };
+});
 
 const manifest = "/repo/app/node_modules/ocel/package.json";
 
-vi.mock("node:module", () => ({
-  createRequire: () => ({ resolve: () => manifest }),
-}));
+vi.mock("node:module", () => {
+  const createRequire = () => ({ resolve: () => manifest });
+  return { createRequire, default: { createRequire } };
+});
 
 const run = vi.mocked(spawnSync);
 
