@@ -67,7 +67,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
 
 env:
-  OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.0.1-ocel.1
+  OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.0.1-ocel.2
   OCEL_FLOCI_GCP_IMAGE: floci/floci-gcp:0.8.0
   NODE_VERSION: "22"
   PNPM_VERSION: "11.10.0"

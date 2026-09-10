@@ -37,7 +37,7 @@ permissions:
   packages: read
 
 env:
-  OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.0.1-ocel.1
+  OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.0.1-ocel.2
   OCEL_FLOCI_GCP_IMAGE: floci/floci-gcp:0.8.0
 
 jobs:
