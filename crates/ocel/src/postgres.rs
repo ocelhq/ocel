@@ -1,5 +1,5 @@
-use crate::declare::discovering;
 use crate::binding::{encoded, postgres};
+use crate::declare::discovering;
 use crate::proto::common::bindings::v1::PostgresProperties;
 use crate::Error;
 

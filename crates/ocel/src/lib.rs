@@ -26,10 +26,10 @@
 //! running the binary with `#[ocel::main]` on its `main`, without loading a value. At
 //! runtime `load` reads the bindings and the values the deploy delivered.
 
+mod binding;
 mod declare;
 mod env;
 mod error;
-mod binding;
 mod postgres;
 #[doc(hidden)]
 pub mod proto;
