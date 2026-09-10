@@ -65,7 +65,14 @@ the CNAME to write and renews through it. Every service behind the load balancer
 ingress `internal-and-cloud-load-balancing`, so its `run.app` URL stops answering from the
 internet.
 
-Preview hostnames are not routed by this edge yet, and
+Run `ocel domain use '*.preview.example.com' --preview` and previews are answered by the
+same load balancer: one host rule for the wildcard, and one serverless network endpoint
+group whose URL mask resolves each preview hostname to the Cloud Run service its first
+label names. A preview is a deploy and nothing else — no route is written when one is
+opened, and a hostname no preview stands behind is answered 404 by the load balancer. A
+project-level `domains.preview` is not served here, because that hostname leaves the
+project out of the label every service in the class is named by.
+
 [`cloudflare`](/docs/providers/cloudflare) is the edge bought independently of Google.
 
 Standing the load balancer up needs two more services on:
