@@ -126,9 +126,11 @@ export const customProvider = bindingProvider<CustomInputs>(
  * Publishes one Pulumi-defined resource as one ocel binding, as a side effect of
  * this update.
  *
- * The name is the one the app declares — `postgres("orders")` in ocel,
- * `postgres("orders", …)` here — and the resource is the postgres fields read
- * off whatever provisioned it, each of them an output this update resolves.
+ * The name is this program's own, published for an app's config to bind a
+ * declared resource to — `postgres("pulumi-pg-orders", …)` here, and
+ * `"bindings": { "postgres": { "orders": "pulumi-pg-orders" } }` in `ocel.json`
+ * — and the resource is the postgres fields read off whatever provisioned it,
+ * each of them an output this update resolves.
  * `class` defaults to production, `environment` names one preview environment,
  * and `project` is the directory holding `ocel.json`, which is the
  * directory Pulumi runs the program from unless it is given.
