@@ -6,12 +6,11 @@ import {
 import { rpc } from "../utils/rpc.js";
 import {
   complaint,
-  type Definitions,
+  type FlatDefinitions,
   isRequired,
   type VariableClass,
   type VariableDefinition,
 } from "./definition.js";
-import { sourceOf } from "./schema.js";
 import { parse } from "./standard.js";
 
 const WIRE_CLASS: Record<VariableClass, WireClass> = {
@@ -20,7 +19,25 @@ const WIRE_CLASS: Record<VariableClass, WireClass> = {
   secret: WireClass.SECRET,
 };
 
-export async function declareEnv(definitions: Definitions, source: string): Promise<void> {
+export async function declareEnv(
+  definitions: FlatDefinitions,
+  source: string,
+  schemaSource: string,
+): Promise<void> {
+  const groups = Object.values(
+    Object.entries(definitions).reduce<
+      Record<string, { key: string; required: boolean; description: string }>
+    >((all, [, definition]) => {
+      if (definition.group) {
+        all[definition.group] = {
+          key: definition.group,
+          required: !definition.groupOptional,
+          description: definition.groupDescription ?? "",
+        };
+      }
+      return all;
+    }, {}),
+  );
   const { cells } = await rpc.resource.declareEnv({
     definitions: Object.entries(definitions).map(([key, definition]) => ({
       key,
@@ -29,10 +46,12 @@ export async function declareEnv(definitions: Definitions, source: string): Prom
       required: isRequired(definition),
       folders: [...(definition.folders ?? [])],
       source,
-      schemaSource: sourceOf(definitions),
+      schemaSource,
       hasSchema: definition.schema !== undefined,
       ...(definition.description === undefined ? {} : { description: definition.description }),
+      ...(definition.group === undefined ? {} : { group: definition.group }),
     })),
+    groups,
   });
 
   const problems = validate(definitions, cells);
@@ -48,7 +67,7 @@ interface ReportedProblem {
   detail: string;
 }
 
-function validate(definitions: Definitions, cells: readonly VariableCell[]): ReportedProblem[] {
+function validate(definitions: FlatDefinitions, cells: readonly VariableCell[]): ReportedProblem[] {
   const problems: ReportedProblem[] = [];
 
   for (const [key, definition] of Object.entries(definitions)) {
@@ -56,6 +75,12 @@ function validate(definitions: Definitions, cells: readonly VariableCell[]): Rep
 
     if (isRequired(definition)) {
       for (const folder of requiredFolders(definition)) {
+        if (
+          definition.groupOptional &&
+          definition.group &&
+          !groupPresent(definitions, cells, definition.group, folder)
+        )
+          continue;
         if (!stored.some((c) => c.folder === folder)) {
           problems.push(problem(key, folder, VariableProblem_Kind.MISSING, ""));
         }
@@ -80,6 +105,31 @@ function validate(definitions: Definitions, cells: readonly VariableCell[]): Rep
   }
 
   return problems;
+}
+
+function groupPresent(
+  definitions: FlatDefinitions,
+  cells: readonly VariableCell[],
+  group: string,
+  folder: string,
+): boolean {
+  return Object.entries(definitions).some(
+    ([key, definition]) => definition.group === group && held(cells, key, definition, folder),
+  );
+}
+
+function held(
+  cells: readonly VariableCell[],
+  key: string,
+  definition: VariableDefinition,
+  folder: string,
+): boolean {
+  const at = (where: string) => cells.some((cell) => cell.key === key && cell.folder === where);
+  const scope = definition.folders ?? [];
+  if (scope.length > 0) {
+    return folder !== "" && scope.includes(folder) && at(folder);
+  }
+  return (folder !== "" && at(folder)) || at("");
 }
 
 function requiredFolders(definition: VariableDefinition): readonly string[] {

@@ -21,7 +21,9 @@ vi.mock("../utils/rpc", () => ({
   },
 }));
 
-const { defineEnv, EnvDefinitionError, EnvScopeError, EnvValueError } = await import("./index.js");
+const { defineEnv, group, EnvDefinitionError, EnvScopeError, EnvValueError } = await import(
+  "./index.js"
+);
 const { envSchema } = await import("./schema.js");
 
 async function flushDeclarations() {
@@ -169,6 +171,36 @@ describe("definition errors", () => {
 });
 
 describe("the declaration payload", () => {
+  it("declares an optional group and only reads it when a member is present", async () => {
+    source.override = "/app/src/env.ts";
+    vi.stubEnv("OCEL_PHASE", "discovery");
+    defineEnv({
+      github: group(
+        { GITHUB_ID: { class: "plain" }, GITHUB_SECRET: { class: "secret" } },
+        { optional: true, description: "Enable GitHub sign-in" },
+      ),
+    });
+    await flushDeclarations();
+    const [call] = declareEnvMock.mock.calls as unknown as [
+      [{ definitions: Array<Record<string, unknown>>; groups: Array<Record<string, unknown>> }],
+    ];
+    expect(call[0].definitions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "GITHUB_ID",
+          group: "github",
+          required: true,
+        }),
+      ]),
+    );
+    expect(call[0].groups).toEqual([
+      expect.objectContaining({
+        key: "github",
+        required: false,
+        description: "Enable GitHub sign-in",
+      }),
+    ]);
+  });
   it("carries every variable of one call, with its class and whether it is required", async () => {
     source.override = "/app/src/env.ts";
     defineEnv({
@@ -214,6 +246,7 @@ describe("the declaration payload", () => {
           hasSchema: true,
         },
       ],
+      groups: [],
     });
   });
 
@@ -235,6 +268,7 @@ describe("the declaration payload", () => {
           hasSchema: true,
         }),
       ],
+      groups: [],
     });
   });
 
@@ -972,5 +1006,346 @@ describe("a scoped read under `ocel dev`", () => {
     });
 
     expect(() => env.DEV_STALE_BINDING).toThrow(/project root/);
+  });
+});
+
+describe("reading a group", () => {
+  beforeEach(() => {
+    vi.stubEnv("OCEL_PHASE", "");
+  });
+
+  it("reads an optional group as undefined while no member is delivered", () => {
+    const env = defineEnv({
+      github: group(
+        { GROUP_OFF_ID: { class: "plain" }, GROUP_OFF_SECRET: { class: "sensitive" } },
+        { optional: true },
+      ),
+    });
+
+    expect(env.github).toBeUndefined();
+  });
+
+  it("stays off when every member is spelled optional and none is delivered", () => {
+    const env = defineEnv({
+      analytics: group(
+        {
+          GROUP_ALL_OPTIONAL: { class: "plain", schema: z.string().optional() },
+          GROUP_ALL_DEFAULTED: { class: "plain", schema: z.string().default("d") },
+        },
+        { optional: true },
+      ),
+    });
+
+    expect(env.analytics).toBeUndefined();
+  });
+
+  it("resolves every member once one of them is delivered", () => {
+    vi.stubEnv("GROUP_ON_ID", "an-id");
+    vi.stubEnv("OCEL_VAR_GROUP_ON_SECRET", "a-secret");
+    const env = defineEnv({
+      github: group(
+        { GROUP_ON_ID: { class: "plain" }, GROUP_ON_SECRET: { class: "sensitive" } },
+        { optional: true },
+      ),
+    });
+
+    expect(env.github).toEqual({ GROUP_ON_ID: "an-id", GROUP_ON_SECRET: "a-secret" });
+    expect(env.github?.GROUP_ON_ID).toBe("an-id");
+  });
+
+  it("throws for a member left unset once one member has turned the group on", () => {
+    vi.stubEnv("GROUP_PARTIAL_ID", "an-id");
+    const env = defineEnv({
+      github: group(
+        { GROUP_PARTIAL_ID: { class: "plain" }, GROUP_PARTIAL_SECRET: { class: "plain" } },
+        { optional: true },
+      ),
+    });
+
+    expect(() => env.github).toThrow(EnvValueError);
+    expect(() => env.github).toThrow(/GROUP_PARTIAL_SECRET/);
+  });
+
+  it("takes a required group as always on, so an unset member throws", () => {
+    const env = defineEnv({
+      smtp: group({ GROUP_REQUIRED_HOST: { class: "plain" } }),
+    });
+
+    expect(() => env.smtp).toThrow(EnvValueError);
+  });
+
+  it("hands back the same object on every read", () => {
+    vi.stubEnv("GROUP_MEMO_ID", "an-id");
+    const env = defineEnv({
+      github: group({ GROUP_MEMO_ID: { class: "plain" } }, { optional: true }),
+    });
+
+    expect(env.github).toBe(env.github);
+  });
+
+  it("re-reads a secret member when a later generation arrives", () => {
+    push(1, { GROUP_LIVE_TOKEN: "before" });
+    const env = defineEnv({
+      stripe: group({ GROUP_LIVE_TOKEN: { class: "secret" } }),
+    });
+    const first = env.stripe;
+
+    expect(first.GROUP_LIVE_TOKEN).toBe("before");
+    expect(env.stripe).toBe(first);
+
+    push(2, { GROUP_LIVE_TOKEN: "after" });
+    expect(env.stripe.GROUP_LIVE_TOKEN).toBe("after");
+    expect(env.stripe).not.toBe(first);
+  });
+
+  it("turns an optional group on from a member delivered over the live channel alone", () => {
+    push(1, { GROUP_LIVE_ONLY: "pushed" });
+    const env = defineEnv({
+      stripeOptional: group({ GROUP_LIVE_ONLY: { class: "secret" } }, { optional: true }),
+    });
+
+    expect(env.stripeOptional?.GROUP_LIVE_ONLY).toBe("pushed");
+  });
+
+  it("throws for a key a group holds, which is read through the group and not beside it", () => {
+    vi.stubEnv("GROUP_MEMBER_DIRECT", "an-id");
+    const env = defineEnv({
+      github: group({ GROUP_MEMBER_DIRECT: { class: "plain" } }),
+    }) as Record<string, unknown>;
+
+    expect(() => env.GROUP_MEMBER_DIRECT).toThrow(EnvValueError);
+  });
+});
+
+describe("group definition errors", () => {
+  it("refuses a group nested inside a group", () => {
+    expect(() =>
+      defineEnv({
+        outer: group({ inner: group({ GROUP_NESTED: { class: "plain" } }) } as never),
+      }),
+    ).toThrow(EnvDefinitionError);
+    expect(() =>
+      defineEnv({
+        outer2: group({ inner: group({ GROUP_NESTED_2: { class: "plain" } }) } as never),
+      }),
+    ).toThrow(/one level/i);
+  });
+
+  it("refuses one key claimed by two groups of the same call", () => {
+    expect(() =>
+      defineEnv({
+        first: group({ GROUP_SHARED_KEY: { class: "plain" } }),
+        second: group({ GROUP_SHARED_KEY: { class: "plain" } }),
+      }),
+    ).toThrow(EnvDefinitionError);
+  });
+
+  it("refuses a key declared both beside a group and inside it", () => {
+    expect(() =>
+      defineEnv({
+        GROUP_BESIDE_KEY: { class: "plain" },
+        first: group({ GROUP_BESIDE_KEY: { class: "plain" } }),
+      }),
+    ).toThrow(EnvDefinitionError);
+  });
+
+  it("names the group holding a duplicated key whichever side declared it first", () => {
+    expect(() =>
+      defineEnv({
+        GROUP_ORDER_A: { class: "plain" },
+        early: group({ GROUP_ORDER_A: { class: "plain" } }),
+      }),
+    ).toThrow(/group 'early'/);
+    expect(() =>
+      defineEnv({
+        late: group({ GROUP_ORDER_B: { class: "plain" } }),
+        GROUP_ORDER_B: { class: "plain" },
+      }),
+    ).toThrow(/group 'late'/);
+  });
+
+  it("refuses a group name carrying a delimiter or a control character", () => {
+    expect(() => defineEnv({ "bad#name": group({ GROUP_HASH: { class: "plain" } }) })).toThrow(
+      /usable group name/,
+    );
+    expect(() => defineEnv({ "two\nlines": group({ GROUP_CC: { class: "plain" } }) })).toThrow(
+      /usable group name/,
+    );
+  });
+
+  it("refuses a group description with controls or more than 120 bytes", () => {
+    expect(() =>
+      defineEnv({
+        wrapped: group({ GROUP_DESC_CC: { class: "plain" } }, { description: "two\nlines" }),
+      }),
+    ).toThrow(/unusable description/);
+    expect(() =>
+      defineEnv({
+        wrapped2: group({ GROUP_DESC_LONG: { class: "plain" } }, { description: "x".repeat(121) }),
+      }),
+    ).toThrow(/at most 120 bytes/);
+  });
+
+  it("refuses a group that declares no variables", () => {
+    expect(() => defineEnv({ hollow: group({}) })).toThrow(/no variables/);
+    expect(() => defineEnv({ hollow2: group({}, { optional: true }) })).toThrow(EnvDefinitionError);
+  });
+});
+
+describe("what a group declares", () => {
+  interface Payload {
+    definitions: Array<Record<string, unknown>>;
+    groups: Array<Record<string, unknown>>;
+  }
+
+  function declaredPayload(): Payload {
+    const [call] = declareEnvMock.mock.calls as unknown as [[Payload]];
+    return call![0];
+  }
+
+  it("carries each group once, in declaration order, with its description and requiredness", async () => {
+    source.override = "/app/src/env.ts";
+    defineEnv({
+      github: group(
+        { PAYLOAD_GITHUB_ID: { class: "plain" }, PAYLOAD_GITHUB_SECRET: { class: "secret" } },
+        { optional: true, description: "Enable GitHub sign-in" },
+      ),
+      smtp: group({ PAYLOAD_SMTP_HOST: { class: "plain" } }),
+    });
+    await flushDeclarations();
+
+    expect(declaredPayload().groups).toEqual([
+      { key: "github", required: false, description: "Enable GitHub sign-in" },
+      { key: "smtp", required: true, description: "" },
+    ]);
+  });
+
+  it("keeps members in declaration order, each naming the group holding it", async () => {
+    source.override = "/app/src/env.ts";
+    defineEnv({
+      PAYLOAD_LOOSE: { class: "plain" },
+      github2: group(
+        { PAYLOAD_ORDER_ID: { class: "plain" }, PAYLOAD_ORDER_SECRET: { class: "sensitive" } },
+        { optional: true },
+      ),
+    });
+    await flushDeclarations();
+
+    expect(declaredPayload().definitions.map((d) => [d.key, d.group])).toEqual([
+      ["PAYLOAD_LOOSE", undefined],
+      ["PAYLOAD_ORDER_ID", "github2"],
+      ["PAYLOAD_ORDER_SECRET", "github2"],
+    ]);
+  });
+
+  it("carries a member's own optionality, not the group's", async () => {
+    source.override = "/app/src/env.ts";
+    defineEnv({
+      github3: group(
+        {
+          PAYLOAD_MEMBER_REQUIRED: { class: "plain" },
+          PAYLOAD_MEMBER_OPTIONAL: { class: "plain", schema: z.string().optional() },
+        },
+        { optional: true },
+      ),
+    });
+    await flushDeclarations();
+
+    expect(declaredPayload().definitions.map((d) => [d.key, d.required])).toEqual([
+      ["PAYLOAD_MEMBER_REQUIRED", true],
+      ["PAYLOAD_MEMBER_OPTIONAL", false],
+    ]);
+  });
+});
+
+describe("validating a group against the stored cells", () => {
+  it("owes nothing for an optional group no cell has turned on", async () => {
+    defineEnv({
+      github4: group(
+        { CELLS_OFF_ID: { class: "plain" }, CELLS_OFF_SECRET: { class: "plain" } },
+        { optional: true },
+      ),
+    });
+    await flushDeclarations();
+
+    expect(reportEnvProblemsMock).not.toHaveBeenCalled();
+  });
+
+  it("owes nothing for an optional group whose members are all spelled optional", async () => {
+    defineEnv({
+      github5: group(
+        {
+          CELLS_ALL_OPTIONAL: { class: "plain", schema: z.string().optional() },
+          CELLS_ALL_DEFAULTED: { class: "plain", schema: z.string().default("d") },
+        },
+        { optional: true },
+      ),
+    });
+    await flushDeclarations();
+
+    expect(reportEnvProblemsMock).not.toHaveBeenCalled();
+  });
+
+  it("owes the rest of an optional group once one member has a cell", async () => {
+    declareEnvMock.mockResolvedValue({ cells: [cell("CELLS_PARTIAL_ID", "an-id")] });
+    defineEnv({
+      github6: group(
+        { CELLS_PARTIAL_ID: { class: "plain" }, CELLS_PARTIAL_SECRET: { class: "plain" } },
+        { optional: true },
+      ),
+    });
+    await flushDeclarations();
+
+    expect(reportEnvProblemsMock).toHaveBeenCalledWith({
+      problems: [{ key: "CELLS_PARTIAL_SECRET", folder: "", kind: 1, detail: "" }],
+    });
+  });
+
+  it("owes every member of a required group with nothing stored", async () => {
+    defineEnv({
+      smtp2: group({ CELLS_SMTP_HOST: { class: "plain" }, CELLS_SMTP_PORT: { class: "plain" } }),
+    });
+    await flushDeclarations();
+
+    expect(reportEnvProblemsMock).toHaveBeenCalledWith({
+      problems: [
+        { key: "CELLS_SMTP_HOST", folder: "", kind: 1, detail: "" },
+        { key: "CELLS_SMTP_PORT", folder: "", kind: 1, detail: "" },
+      ],
+    });
+  });
+
+  it("counts a member inherited from the root as turning the group on for a subfolder", async () => {
+    declareEnvMock.mockResolvedValue({ cells: [cell("CELLS_INHERITED_ID", "an-id")] });
+    defineEnv({
+      github8: group(
+        {
+          CELLS_INHERITED_ID: { class: "plain" },
+          CELLS_INHERITED_SECRET: { class: "plain", folders: ["/web"] },
+        },
+        { optional: true },
+      ),
+    });
+    await flushDeclarations();
+
+    expect(reportEnvProblemsMock).toHaveBeenCalledWith({
+      problems: [{ key: "CELLS_INHERITED_SECRET", folder: "/web", kind: 1, detail: "" }],
+    });
+  });
+
+  it("does not owe a member its own spelling makes optional when the group is on", async () => {
+    declareEnvMock.mockResolvedValue({ cells: [cell("CELLS_D1_ID", "an-id")] });
+    defineEnv({
+      github7: group(
+        {
+          CELLS_D1_ID: { class: "plain" },
+          CELLS_D1_EXTRA: { class: "plain", schema: z.string().optional() },
+        },
+        { optional: true },
+      ),
+    });
+    await flushDeclarations();
+
+    expect(reportEnvProblemsMock).not.toHaveBeenCalled();
   });
 });

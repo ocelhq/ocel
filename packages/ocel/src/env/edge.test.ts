@@ -4,9 +4,8 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 
-const { defineEnv, EnvDefinitionError, EnvEdgeError, EnvScopeError, EnvValueError } = await import(
-  "./edge.js"
-);
+const { defineEnv, group, EnvDefinitionError, EnvEdgeError, EnvScopeError, EnvValueError } =
+  await import("./edge.js");
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -148,6 +147,87 @@ describe("reading on the edge", () => {
 
     write("OCEL_VAR_EDGE_MEMO_UNSET", "set-late");
     expect(env.EDGE_MEMO_UNSET).toBe("set-late");
+  });
+});
+
+describe("reading a group on the edge", () => {
+  const written: string[] = [];
+
+  function write(key: string, value: string): void {
+    process.env[key] = value;
+    written.push(key);
+  }
+
+  afterEach(() => {
+    for (const key of written.splice(0)) delete process.env[key];
+  });
+
+  it("reads an optional group as undefined while no member is delivered", () => {
+    const env = defineEnv({
+      github: group({ EDGE_GROUP_OFF_ID: { class: "plain" } }, { optional: true }),
+    });
+
+    expect(env.github).toBeUndefined();
+  });
+
+  it("resolves every member once one of them is delivered", () => {
+    write("EDGE_GROUP_ON_ID", "an-id");
+    write("OCEL_VAR_EDGE_GROUP_ON_SECRET", "a-secret");
+    const env = defineEnv({
+      github: group(
+        { EDGE_GROUP_ON_ID: { class: "plain" }, EDGE_GROUP_ON_SECRET: { class: "sensitive" } },
+        { optional: true },
+      ),
+    });
+
+    expect(env.github).toEqual({
+      EDGE_GROUP_ON_ID: "an-id",
+      EDGE_GROUP_ON_SECRET: "a-secret",
+    });
+  });
+
+  it("throws for a member left unset once the group is on", () => {
+    write("EDGE_GROUP_PARTIAL_ID", "an-id");
+    const env = defineEnv({
+      github: group(
+        {
+          EDGE_GROUP_PARTIAL_ID: { class: "plain" },
+          EDGE_GROUP_PARTIAL_SECRET: { class: "plain" },
+        },
+        { optional: true },
+      ),
+    });
+
+    expect(() => env.github).toThrow(EnvValueError);
+  });
+
+  it("hands back the same object on every read", () => {
+    write("EDGE_GROUP_MEMO_ID", "first");
+    const env = defineEnv({
+      github: group({ EDGE_GROUP_MEMO_ID: { class: "plain" } }, { optional: true }),
+    });
+    const first = env.github;
+
+    expect(first).toEqual({ EDGE_GROUP_MEMO_ID: "first" });
+    process.env.EDGE_GROUP_MEMO_ID = "second";
+    expect(env.github).toBe(first);
+  });
+
+  it("refuses a secret member, as it refuses a secret beside a group", () => {
+    write("OCEL_VAR_EDGE_GROUP_SECRET", "would-be-stale");
+    const env = defineEnv({
+      stripe: group({ EDGE_GROUP_SECRET: { class: "secret" } }),
+    });
+
+    expect(() => env.stripe).toThrow(EnvEdgeError);
+  });
+
+  it("refuses a group nested inside a group", () => {
+    expect(() =>
+      defineEnv({
+        outer: group({ inner: group({ EDGE_GROUP_NESTED: { class: "plain" } }) } as never),
+      }),
+    ).toThrow(EnvDefinitionError);
   });
 });
 

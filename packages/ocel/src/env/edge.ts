@@ -1,53 +1,42 @@
-import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { callSiteFile } from "../utils/callsite.js";
+import { type Env, envAccessor, FIXED } from "./access.js";
 import {
-  type Definitions,
+  type EnvDefinitions,
   isLive,
   type VariableDefinition,
   validateDefinitions,
 } from "./definition.js";
 import { EnvEdgeError } from "./errors.js";
 import { assertInScope } from "./scope.js";
-import { coerce, readDelivered, undeclared } from "./value.js";
+import { coerce, readDelivered } from "./value.js";
 
+export type { Env } from "./access.js";
 export { EnvClientError } from "./client.js";
 export type {
   Definitions,
+  EnvDefinitions,
+  GroupDefinition,
+  GroupOptions,
   VariableClass,
   VariableDefinition,
 } from "./definition.js";
+export { group } from "./definition.js";
 export { type Deployment, deployment } from "./deployment.js";
 export { EnvDefinitionError, EnvEdgeError, EnvValueError } from "./errors.js";
 export { EnvScopeError } from "./scope.js";
 
-export type Env<TDefinitions extends Definitions> = {
-  readonly [K in keyof TDefinitions]: TDefinitions[K]["schema"] extends StandardSchemaV1
-    ? StandardSchemaV1.InferOutput<TDefinitions[K]["schema"]>
-    : string;
-};
-
 const ENTRY_GLOBAL = "__OCEL_EDGE_ENTRY";
 
-export function defineEnv<const TDefinitions extends Definitions>(
+export function defineEnv<const TDefinitions extends EnvDefinitions>(
   definitions: TDefinitions,
 ): Env<TDefinitions> {
   validateDefinitions(definitions, callSiteFile());
 
-  const resolved = new Map<string, unknown>();
-  return new Proxy({} as Env<TDefinitions>, {
-    get(_target, property) {
-      if (typeof property === "symbol") return undefined;
+  return envAccessor(definitions, { resolve, delivered, generationOf: () => FIXED });
+}
 
-      const key = property;
-      const definition = definitions[key];
-      if (!definition) throw undeclared(key);
-      if (resolved.has(key)) return resolved.get(key);
-
-      const value = resolve(key, definition);
-      resolved.set(key, value);
-      return value;
-    },
-  });
+function delivered(key: string): boolean {
+  return readDelivered(key) !== undefined;
 }
 
 function resolve(key: string, definition: VariableDefinition): unknown {
