@@ -1,6 +1,6 @@
-import { spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import childProcess from "node:child_process";
+import nodeModule from "node:module";
+import path from "node:path";
 
 export const source = "pulumi";
 
@@ -13,7 +13,7 @@ export interface Target {
 export function runLink(args: string[], target: Target, input?: string): void {
   checkTarget(target);
   const [runtime, entry] = ocelCommand(target.project);
-  const result = spawnSync(runtime, [entry, "link", ...args, ...flagsFor(target)], {
+  const result = childProcess.spawnSync(runtime, [entry, "link", ...args, ...flagsFor(target)], {
     cwd: target.project,
     input,
     encoding: "utf8",
@@ -68,7 +68,7 @@ function refusal(stderr: string, status: number | null): string {
 }
 
 function ocelCommand(project: string): [string, string] {
-  const require = createRequire(join(project, "ocel.json"));
+  const require = nodeModule.createRequire(path.join(project, "ocel.json"));
   let manifest: string;
   try {
     manifest = require.resolve("ocel/package.json");
@@ -78,5 +78,5 @@ function ocelCommand(project: string): [string, string] {
       { cause },
     );
   }
-  return [process.execPath, join(dirname(manifest), "bin", "run.js")];
+  return [process.execPath, path.join(path.dirname(manifest), "bin", "run.js")];
 }
