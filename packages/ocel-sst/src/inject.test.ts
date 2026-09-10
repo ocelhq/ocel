@@ -26,7 +26,7 @@ const util = {
 const root = "/repo/app";
 
 let outDir: string;
-let link: typeof import("./index.js").link;
+let bind: typeof import("./index.js").bind;
 
 beforeAll(async () => {
   const { build } = await import("vite");
@@ -45,7 +45,7 @@ beforeAll(async () => {
     },
   });
   (globalThis as { __sstInjectedUtil?: unknown }).__sstInjectedUtil = util;
-  ({ link } = await import(pathToFileURL(join(outDir, "index.js")).href));
+  ({ bind } = await import(pathToFileURL(join(outDir, "index.js")).href));
 }, 60_000);
 
 afterAll(async () => {
@@ -59,8 +59,8 @@ beforeEach(() => {
 });
 
 describe("reaching what SST injects into the config bundle", () => {
-  it("declares a postgres link from the injected util", () => {
-    link.postgres("orders", {
+  it("declares a postgres binding from the injected util", () => {
+    bind.postgres("orders", {
       host: "orders.internal",
       port: 5432,
       database: "orders",
@@ -69,12 +69,12 @@ describe("reaching what SST injects into the config bundle", () => {
     });
 
     expect(built).toHaveLength(1);
-    expect(built[0]?.name).toBe("ocel-link-orders");
+    expect(built[0]?.name).toBe("ocel-binding-orders");
     expect(built[0]?.props).toMatchObject({ project: root, class: "production" });
   });
 
-  it("declares a custom link from the injected util", () => {
-    link.custom("network", { properties: { subnetIds: ["subnet-1"] } });
+  it("declares a custom binding from the injected util", () => {
+    bind.custom("network", { properties: { subnetIds: ["subnet-1"] } });
 
     expect(built).toHaveLength(1);
     expect(built[0]?.props).toMatchObject({ project: root, name: "network" });

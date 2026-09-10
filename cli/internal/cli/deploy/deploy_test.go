@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -29,7 +28,7 @@ func TestToDeclarations(t *testing.T) {
 		resources := []declare.Resource{
 			{
 				Name:     "main",
-				Type:     linksv1.LinkType_LINK_TYPE_POSTGRES,
+				Type:     resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 				Postgres: &resourcesv1.PostgresConfig{Version: "17"},
 			},
 		}
@@ -43,8 +42,8 @@ func TestToDeclarations(t *testing.T) {
 		if d.Name != "main" {
 			t.Errorf("Name = %q, want %q", d.Name, "main")
 		}
-		if d.Type != linksv1.LinkType_LINK_TYPE_POSTGRES {
-			t.Errorf("Type = %v, want %v", d.Type, linksv1.LinkType_LINK_TYPE_POSTGRES)
+		if d.Type != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
+			t.Errorf("Type = %v, want %v", d.Type, resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
 		}
 		if d.Postgres.GetVersion() != "17" {
 			t.Errorf("Postgres.Version = %q, want %q", d.Postgres.GetVersion(), "17")
@@ -57,7 +56,7 @@ func TestToDeclarations(t *testing.T) {
 		configDir := t.TempDir()
 		resources := []declare.Resource{{
 			Name:   "main",
-			Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+			Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 			Source: filepath.Join(configDir, "shared", "db.ts") + ":3",
 		}}
 

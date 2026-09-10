@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/constants"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -605,29 +606,54 @@ export default {
 			},
 		},
 		{
-			name: "carries the links binding through unchanged",
+			name: "carries the bindings through in a deterministic order",
 			config: `
 export default {
   slug: "test-app",
-  links: ["main", "uploads"],
+  bindings: {
+    postgres: { orders: "sst-pg-orders", main: "sst-pg-main" },
+    bucket: { uploads: "legacy-uploads" },
+  },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
-				if !slices.Equal(cfg.Links, []string{"main", "uploads"}) {
-					t.Fatalf("Links = %v, want the listed names in the order they were written", cfg.Links)
+				want := []Binding{
+					{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", External: "sst-pg-main"},
+					{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", External: "sst-pg-orders"},
+					{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", External: "legacy-uploads"},
+				}
+				if !slices.Equal(cfg.Bindings, want) {
+					t.Fatalf("Bindings = %v, want %v sorted by type then name so a golden manifest stays stable", cfg.Bindings, want)
 				}
 			},
 		},
 		{
-			name: "a config listing no links binds none",
+			name: "one declared name under two types is two bindings",
+			config: `
+export default {
+  slug: "test-app",
+  bindings: {
+    postgres: { orders: "pg-orders" },
+    bucket: { orders: "s3-orders" },
+  },
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				if len(cfg.Bindings) != 2 {
+					t.Fatalf("Bindings = %v, want both: postgres(\"orders\") and bucket(\"orders\") are different resources", cfg.Bindings)
+				}
+			},
+		},
+		{
+			name: "a config binding nothing binds none",
 			config: `
 export default {
   slug: "test-app",
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
-				if len(cfg.Links) != 0 {
-					t.Fatalf("Links = %v, want nothing bound where nothing is listed", cfg.Links)
+				if len(cfg.Bindings) != 0 {
+					t.Fatalf("Bindings = %v, want nothing bound where nothing is written", cfg.Bindings)
 				}
 			},
 		},
@@ -914,24 +940,44 @@ export default {
 			wantErr: []string{"/shared"},
 		},
 		{
-			name: "rejects a link listed twice",
+			name: "rejects an empty published name",
 			config: `
 export default {
   slug: "test-app",
-  links: ["main", "main"],
+  bindings: { postgres: { main: "" } },
 };
 `,
-			wantErr: []string{"twice", "main"},
+			wantErr: []string{"main"},
 		},
 		{
-			name: "rejects a link name carrying the key separator",
+			name: "rejects a published name carrying the key separator",
 			config: `
 export default {
   slug: "test-app",
-  links: ["main#db"],
+  bindings: { postgres: { main: "main#db" } },
 };
 `,
 			wantErr: []string{"main#db"},
+		},
+		{
+			name: "rejects a type key nothing can be bound as",
+			config: `
+export default {
+  slug: "test-app",
+  bindings: { redis: { cache: "shared-redis" } },
+};
+`,
+			wantErr: []string{"redis", "postgres", "bucket"},
+		},
+		{
+			name: "rejects binding a container, which nothing publishes",
+			config: `
+export default {
+  slug: "test-app",
+  bindings: { container: { worker: "some-worker" } },
+};
+`,
+			wantErr: []string{"container", "postgres", "bucket"},
 		},
 		{
 			name: "names the edge spellings when the edge is not a marker",

@@ -9,7 +9,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -23,7 +22,7 @@ func runtimeProto(runtime Runtime) *contractv1.Runtime {
 }
 
 type Declaration struct {
-	Type     linksv1.LinkType
+	Type     resourcesv1.ResourceType
 	Name     string
 	Postgres *resourcesv1.PostgresConfig
 	Bucket   *resourcesv1.BucketConfig
@@ -47,14 +46,14 @@ type App struct {
 }
 
 type Usage struct {
-	Type  linksv1.LinkType
+	Type  resourcesv1.ResourceType
 	Name  string
 	Files []string
 }
 
 type DanglingUsageError struct {
 	App  string
-	Type linksv1.LinkType
+	Type resourcesv1.ResourceType
 	Name string
 }
 
@@ -121,8 +120,12 @@ func sourceOrUnknown(source string) string {
 	return source
 }
 
-func typeKind(t linksv1.LinkType) (naming.Kind, error) {
-	kind, ok := naming.KindOf(t)
+func typeKind(t resourcesv1.ResourceType) (naming.Kind, error) {
+	bound, bindable := naming.BindableAs(t)
+	if !bindable {
+		return "", fmt.Errorf("manifestbuilder: unsupported resource type %s", t)
+	}
+	kind, ok := naming.KindOf(bound)
 	if !ok {
 		return "", fmt.Errorf("manifestbuilder: unsupported resource type %s", t)
 	}
@@ -146,35 +149,43 @@ func describeFunction(f Function) string {
 }
 
 type identity struct {
-	typ  linksv1.LinkType
+	typ  resourcesv1.ResourceType
 	name string
 }
 
-type UnboundLinkError struct {
-	Link string
+type Binding struct {
+	Type     resourcesv1.ResourceType
+	Name     string
+	External string
 }
 
-func (e *UnboundLinkError) Error() string {
+type UndeclaredBindingError struct {
+	Type resourcesv1.ResourceType
+	Name string
+}
+
+func (e *UndeclaredBindingError) Error() string {
 	return fmt.Sprintf(
-		"manifestbuilder: `links` binds %q, which nothing in this project declares — a link binds a resource your app already declares, so declare it or drop it from the list",
-		e.Link,
+		"manifestbuilder: `bindings.%s` binds %q, which nothing in this project declares as a %s — a binding names a resource your app already declares, so declare it or drop it",
+		naming.ResourceTypeName(e.Type), e.Name, naming.ResourceTypeName(e.Type),
 	)
 }
 
-type AmbiguousLinkError struct {
-	Link   string
-	First  string
-	Second string
+type BindingTypeError struct {
+	Type     resourcesv1.ResourceType
+	Name     string
+	Declared resourcesv1.ResourceType
 }
 
-func (e *AmbiguousLinkError) Error() string {
+func (e *BindingTypeError) Error() string {
 	return fmt.Sprintf(
-		"manifestbuilder: `links` binds %q, which names both %s and %s — one published record cannot back two resources, so rename one of them",
-		e.Link, e.First, e.Second,
+		"manifestbuilder: `bindings.%s` binds %q, and this project declares %q as a %s — move it to `bindings.%s`, or declare it as a %s",
+		naming.ResourceTypeName(e.Type), e.Name, e.Name, naming.ResourceTypeName(e.Declared),
+		naming.ResourceTypeName(e.Declared), naming.ResourceTypeName(e.Type),
 	)
 }
 
-func Build(slug string, domains map[string][]string, apps []App, compute string, declarations []Declaration, links []string, functions []Function, variables map[string][]Variable) (*contractv1.Manifest, error) {
+func Build(slug string, domains map[string][]string, apps []App, compute string, declarations []Declaration, bindings []Binding, functions []Function, variables map[string][]Variable) (*contractv1.Manifest, error) {
 	if compute == "" {
 		return nil, fmt.Errorf("manifestbuilder: project %q was built with no compute resolved — every app on the wire has to name the compute it runs on, and the manifest is built after preflight so that a provider's own answer is what fills it", slug)
 	}
@@ -231,7 +242,7 @@ func Build(slug string, domains map[string][]string, apps []App, compute string,
 		return strings.Compare(a.LogicalName, b.LogicalName)
 	})
 
-	if err := bindLinks(resources, links); err != nil {
+	if err := bindBindings(resources, bindings); err != nil {
 		return nil, err
 	}
 
@@ -293,23 +304,24 @@ func Build(slug string, domains map[string][]string, apps []App, compute string,
 	}, nil
 }
 
-func bindLinks(resources []*contractv1.ManifestResource, links []string) error {
-	byID := make(map[string][]*contractv1.ManifestResource, len(resources))
+func bindBindings(resources []*contractv1.ManifestResource, bindings []Binding) error {
+	byIdentity := make(map[identity]*contractv1.ManifestResource, len(resources))
+	byName := make(map[string]resourcesv1.ResourceType, len(resources))
 	for _, r := range resources {
-		id := r.GetResource().GetName()
-		byID[id] = append(byID[id], r)
+		id := r.GetResource()
+		byIdentity[identity{typ: id.GetType(), name: id.GetName()}] = r
+		byName[id.GetName()] = id.GetType()
 	}
 
-	for _, link := range links {
-		bound := byID[link]
-		switch len(bound) {
-		case 0:
-			return &UnboundLinkError{Link: link}
-		case 1:
-			bound[0].Linked = true
-		default:
-			return &AmbiguousLinkError{Link: link, First: bound[0].GetLogicalName(), Second: bound[1].GetLogicalName()}
+	for _, binding := range bindings {
+		bound, declared := byIdentity[identity{typ: binding.Type, name: binding.Name}]
+		if !declared {
+			if other, named := byName[binding.Name]; named {
+				return &BindingTypeError{Type: binding.Type, Name: binding.Name, Declared: other}
+			}
+			return &UndeclaredBindingError{Type: binding.Type, Name: binding.Name}
 		}
+		bound.Binding = binding.External
 	}
 	return nil
 }

@@ -1,11 +1,11 @@
-/** A provider-native permission an app receives along with the link's properties. */
+/** A provider-native permission an app receives along with the binding's properties. */
 export interface Grant {
   actions: string[];
   resources: string[];
   label?: string;
 }
 
-/** One entry of an SST link's `include`: the permissions SST hands its own consumers. */
+/** One entry of an SST binding's `include`: the permissions SST hands its own consumers. */
 export interface SSTInclude {
   type?: string;
   effect?: string;
@@ -20,12 +20,12 @@ export function grantsFor(name: string, include: SSTInclude[] | undefined): Gran
   return include.map((entry) => {
     if (entry.type !== awsPermission) {
       throw new Error(
-        `link ${name} includes a ${entry.type ?? "nameless"} permission, and ocel delivers a link's permissions as ${awsPermission} grants. Link the resource without it, or describe the grants the app needs yourself.`,
+        `binding ${name} includes a ${entry.type ?? "nameless"} permission, and ocel delivers a binding's permissions as ${awsPermission} grants. Binding the resource without it, or describe the grants the app needs yourself.`,
       );
     }
     if (entry.effect && entry.effect !== "allow") {
       throw new Error(
-        `link ${name} includes a permission whose effect is ${entry.effect}; a link carries the permissions an app receives, never ones it is denied`,
+        `binding ${name} includes a permission whose effect is ${entry.effect}; a binding carries the permissions an app receives, never ones it is denied`,
       );
     }
     return {
@@ -42,12 +42,12 @@ export function scoped(name: string, grants: Grant[] | undefined): Grant[] | und
   for (const grant of grants) {
     if (grant.actions.length === 0 || grant.actions.some(unscopedAction)) {
       throw new Error(
-        `link ${name} carries a grant over ${grant.actions.join(", ") || "no action"}: an action naming a whole service reaches past the resource the link names`,
+        `binding ${name} carries a grant over ${grant.actions.join(", ") || "no action"}: an action naming a whole service reaches past the resource the binding names`,
       );
     }
     if (grant.resources.length === 0 || grant.resources.includes(wildcard)) {
       throw new Error(
-        `link ${name} carries a grant over ${grant.resources.join(", ") || "no resource"}: an app receives permissions for the resource it links and nothing else`,
+        `binding ${name} carries a grant over ${grant.resources.join(", ") || "no resource"}: an app receives permissions for the resource it bindings and nothing else`,
       );
     }
   }

@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 func fixtureRoot(t *testing.T, name string) string {
@@ -30,11 +30,11 @@ func sourceAt(root, file string) string {
 
 func monorepoDeclarations(root string) []Declaration {
 	return []Declaration{
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "shared/db.ts")},
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "analytics-db", Source: sourceAt(root, "shared/analytics.ts")},
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "audit-db", Source: sourceAt(root, "shared/audit.ts")},
-		{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "tenant-db", Source: sourceAt(root, "shared/tenant.ts")},
-		{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Source: sourceAt(root, "shared/files.ts")},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "shared/db.ts")},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "analytics-db", Source: sourceAt(root, "shared/analytics.ts")},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "audit-db", Source: sourceAt(root, "shared/audit.ts")},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "tenant-db", Source: sourceAt(root, "shared/tenant.ts")},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Source: sourceAt(root, "shared/files.ts")},
 	}
 }
 
@@ -56,7 +56,7 @@ func edgeStrings(usages []Usage) []string {
 
 func TestAContainerAppIsAttributedWithoutASecondInstallOnTheDevelopersDisk(t *testing.T) {
 	root := fixtureRoot(t, "uninstalled")
-	declarations := []Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "shared/db.ts")}}
+	declarations := []Declaration{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "shared/db.ts")}}
 
 	serverless := []App{{Name: "web", Path: "apps/web", Language: discovery.JS}}
 	if _, err := Compute(t.Context(), root, serverless, declarations); err == nil {
@@ -68,7 +68,7 @@ func TestAContainerAppIsAttributedWithoutASecondInstallOnTheDevelopersDisk(t *te
 		t.Fatalf("Compute() over a container app = %v — the image installs the app's dependencies, and the deploy already proved it", err)
 	}
 
-	if want := []string{"web -> LINK_TYPE_POSTGRES:main-db [apps/web/src/server.ts]"}; !reflect.DeepEqual(edgeStrings(usages), want) {
+	if want := []string{"web -> RESOURCE_TYPE_POSTGRES:main-db [apps/web/src/server.ts]"}; !reflect.DeepEqual(edgeStrings(usages), want) {
 		t.Errorf("edges = %v, want %v — the graph of the app's own files is what attribution needs", edgeStrings(usages), want)
 	}
 }
@@ -111,7 +111,7 @@ func TestAContainerAppsWorkspaceMembersAreReadRatherThanAssumedInstalled(t *test
 		root := workspaceFixture(t, false)
 
 		_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "apps/web", Language: discovery.JS, Container: true, Members: members}},
-			[]Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "packages/shared/index.ts")}})
+			[]Declaration{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "packages/shared/index.ts")}})
 		if err == nil {
 			t.Fatal("Compute() read a workspace member as a registry package the image installs, so every resource the member declares reaches the app with no edge and no complaint")
 		}
@@ -124,11 +124,11 @@ func TestAContainerAppsWorkspaceMembersAreReadRatherThanAssumedInstalled(t *test
 		root := workspaceFixture(t, true)
 
 		usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "apps/web", Language: discovery.JS, Container: true, Members: members}},
-			[]Declaration{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "packages/shared/index.ts")}})
+			[]Declaration{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "packages/shared/index.ts")}})
 		if err != nil {
 			t.Fatalf("Compute() = %v", err)
 		}
-		if want := []string{"web -> LINK_TYPE_POSTGRES:main-db [apps/web/src/server.ts]"}; !reflect.DeepEqual(edgeStrings(usages), want) {
+		if want := []string{"web -> RESOURCE_TYPE_POSTGRES:main-db [apps/web/src/server.ts]"}; !reflect.DeepEqual(edgeStrings(usages), want) {
 			t.Errorf("edges = %v, want %v — the app reaches the resource through a package of its own workspace", edgeStrings(usages), want)
 		}
 	})
@@ -152,11 +152,11 @@ func TestCompute(t *testing.T) {
 		}
 
 		want := []string{
-			"api -> LINK_TYPE_BUCKET:uploads [apps/api/src/server.ts]",
-			"api -> LINK_TYPE_POSTGRES:main-db [apps/api/src/reports.ts apps/api/src/server.ts]",
-			"api -> LINK_TYPE_POSTGRES:tenant-db [apps/api/src/server.ts]",
-			"worker -> LINK_TYPE_POSTGRES:analytics-db [apps/worker/src/jobs.ts apps/worker/src/worker.ts]",
-			"worker -> LINK_TYPE_POSTGRES:main-db [apps/worker/src/worker.ts]",
+			"api -> RESOURCE_TYPE_BUCKET:uploads [apps/api/src/server.ts]",
+			"api -> RESOURCE_TYPE_POSTGRES:main-db [apps/api/src/reports.ts apps/api/src/server.ts]",
+			"api -> RESOURCE_TYPE_POSTGRES:tenant-db [apps/api/src/server.ts]",
+			"worker -> RESOURCE_TYPE_POSTGRES:analytics-db [apps/worker/src/jobs.ts apps/worker/src/worker.ts]",
+			"worker -> RESOURCE_TYPE_POSTGRES:main-db [apps/worker/src/worker.ts]",
 		}
 		if got := edgeStrings(usages); !reflect.DeepEqual(got, want) {
 			t.Errorf("edges =\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
@@ -224,13 +224,13 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "jsx-in-js")
 
 		usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "apps/web", Language: discovery.JS}}, []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "metrics-db", Source: sourceAt(root, "shared/metrics.ts")},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "metrics-db", Source: sourceAt(root, "shared/metrics.ts")},
 		})
 		if err != nil {
 			t.Fatalf("Compute err = %v", err)
 		}
 
-		want := []string{"web -> LINK_TYPE_POSTGRES:metrics-db [apps/web/pages/index.js]"}
+		want := []string{"web -> RESOURCE_TYPE_POSTGRES:metrics-db [apps/web/pages/index.js]"}
 		if got := edgeStrings(usages); !reflect.DeepEqual(got, want) {
 			t.Errorf("edges = %v, want %v", got, want)
 		}
@@ -240,7 +240,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "computed-import")
 
 		_, err := Compute(t.Context(), root, []App{{Name: "worker", Path: "apps/worker", Language: discovery.JS}}, []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "metrics-db", Source: sourceAt(root, "shared/metrics.ts")},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "metrics-db", Source: sourceAt(root, "shared/metrics.ts")},
 		})
 
 		var unresolved *UnresolvedImportError
@@ -262,7 +262,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(t.Context(), root, monorepoApps(), []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: "shared/db.ts"},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: "shared/db.ts"},
 		})
 
 		var unresolved *UnresolvedDeclarationError
@@ -281,7 +281,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(t.Context(), root, monorepoApps(), []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db"},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db"},
 		})
 
 		var unresolved *UnresolvedDeclarationError
@@ -294,7 +294,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		usages, err := Compute(t.Context(), root, monorepoApps(), []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: "shared/db.ts:3"},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: "shared/db.ts:3"},
 		})
 		if err != nil {
 			t.Fatalf("Compute: %v", err)
@@ -308,7 +308,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(t.Context(), root, monorepoApps(), []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "node_modules/dep/index.ts")},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(root, "node_modules/dep/index.ts")},
 		})
 
 		var unresolved *UnresolvedDeclarationError
@@ -324,7 +324,7 @@ func TestCompute(t *testing.T) {
 		root := fixtureRoot(t, "monorepo")
 
 		_, err := Compute(t.Context(), root, monorepoApps(), []Declaration{
-			{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(t.TempDir(), "elsewhere.ts")},
+			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main-db", Source: sourceAt(t.TempDir(), "elsewhere.ts")},
 		})
 
 		var unresolved *UnresolvedDeclarationError

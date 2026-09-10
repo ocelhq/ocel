@@ -1,15 +1,15 @@
-import { defineTransform, links } from "ocel/providers/aws/transform";
+import { bindings, defineTransform } from "ocel/providers/aws/transform";
 
 export const placed = defineTransform({
   function: {
     vpc: {
-      subnetIds: links.network.privateSubnetIds,
-      securityGroupIds: links.whatever.anythingAtAll,
+      subnetIds: bindings.network.privateSubnetIds,
+      securityGroupIds: bindings.whatever.anythingAtAll,
     },
   },
 });
 
-export const perElement = defineTransform(({ links: published }) => ({
+export const perElement = defineTransform(({ bindings: published }) => ({
   function: {
     vpc: {
       subnetIds: [published.network.subnetA, published.network.subnetB],

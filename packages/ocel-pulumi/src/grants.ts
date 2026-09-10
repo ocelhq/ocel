@@ -1,6 +1,6 @@
 import type { Input } from "@pulumi/pulumi";
 
-/** A provider-native permission an app receives along with the link's properties. */
+/** A provider-native permission an app receives along with the binding's properties. */
 export interface Grant {
   actions: string[];
   resources: string[];
@@ -9,7 +9,7 @@ export interface Grant {
 
 /**
  * A grant as it is written in a Pulumi program, where the resource a permission
- * names is an output of the resource being linked and is resolved before the
+ * names is an output of the resource being bound and is resolved before the
  * record is published.
  */
 export interface GrantInput {
@@ -25,12 +25,12 @@ export function scoped(name: string, grants: Grant[] | undefined): Grant[] | und
   for (const grant of grants) {
     if (grant.actions.length === 0 || grant.actions.some(unscopedAction)) {
       throw new Error(
-        `link ${name} carries a grant over ${grant.actions.join(", ") || "no action"}: an action naming a whole service reaches past the resource the link names`,
+        `binding ${name} carries a grant over ${grant.actions.join(", ") || "no action"}: an action naming a whole service reaches past the resource the binding names`,
       );
     }
     if (grant.resources.length === 0 || grant.resources.includes(wildcard)) {
       throw new Error(
-        `link ${name} carries a grant over ${grant.resources.join(", ") || "no resource"}: an app receives permissions for the resource it links and nothing else`,
+        `binding ${name} carries a grant over ${grant.resources.join(", ") || "no resource"}: an app receives permissions for the resource it bindings and nothing else`,
       );
     }
   }

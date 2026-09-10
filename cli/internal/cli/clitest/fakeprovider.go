@@ -21,8 +21,9 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/naming"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -60,7 +61,7 @@ const FakeKnownSlugsEnvVar = "OCEL_TEST_FAKE_KNOWN_SLUGS"
 
 const FakeComputesEnvVar = "OCEL_TEST_FAKE_COMPUTES"
 
-const FakePublishedLinksEnvVar = "OCEL_TEST_FAKE_PUBLISHED_LINKS"
+const FakePublishedBindingsEnvVar = "OCEL_TEST_FAKE_PUBLISHED_BINDINGS"
 
 const FakePreflightJournalEnvVar = "OCEL_TEST_FAKE_PREFLIGHT_JOURNAL"
 
@@ -109,9 +110,9 @@ const (
 )
 
 const (
-	FakeAppURL      = "https://fake-app.example.com"
-	FakePromotionID = "prm_fake_1234"
-	FakeLinkSecret  = "pw-do-not-publish-9f2c"
+	FakeAppURL        = "https://fake-app.example.com"
+	FakePromotionID   = "prm_fake_1234"
+	FakeBindingSecret = "pw-do-not-publish-9f2c"
 )
 
 func FixtureDeploymentID(app string) string {
@@ -268,12 +269,12 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 		}
 	}
 
-	for _, message := range consumeFakeLinks(req.GetManifest()) {
+	for _, message := range consumeFakeBindings(req.GetManifest()) {
 		if err := stream.Send(fakeProgress(message)); err != nil {
 			return err
 		}
 	}
-	if refusal := refuseUnpublishedFakeLinks(req.GetManifest()); refusal != "" {
+	if refusal := refuseUnpublishedFakeBindings(req.GetManifest()); refusal != "" {
 		return stream.Send(&progressv1.OperationEvent{
 			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: refusal}},
 		})
@@ -317,7 +318,7 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 			Apps:        fakeAppResults(req.GetManifest()),
 			PromotionId: FakePromotionID,
 			FlipBound:   fakeFlipBound(),
-			Links:       fakeLinks(req.GetManifest()),
+			Bindings:    fakeBindings(req.GetManifest()),
 		}},
 	})
 }
@@ -389,9 +390,9 @@ func fakeFlipBound() *progressv1.FlipBound {
 	return &progressv1.FlipBound{TypicalMs: ms, Published: published == "published"}
 }
 
-func fakePublishedLinks() []string {
+func fakePublishedBindings() []string {
 	var out []string
-	for _, name := range strings.Split(os.Getenv(FakePublishedLinksEnvVar), ",") {
+	for _, name := range strings.Split(os.Getenv(FakePublishedBindingsEnvVar), ",") {
 		if name = strings.TrimSpace(name); name != "" {
 			out = append(out, name)
 		}
@@ -399,34 +400,34 @@ func fakePublishedLinks() []string {
 	return out
 }
 
-func consumeFakeLinks(m *contractv1.Manifest) []string {
-	published := fakePublishedLinks()
+func consumeFakeBindings(m *contractv1.Manifest) []string {
+	published := fakePublishedBindings()
 	var out []string
 	for _, r := range m.GetResources() {
 		id := r.GetResource().GetName()
-		if r.GetLinked() {
-			out = append(out, "LINK bound="+r.GetLogicalName()+" name="+id)
+		if r.GetBinding() != "" {
+			out = append(out, "BINDING bound="+r.GetLogicalName()+" name="+id)
 			continue
 		}
 		if slices.Contains(published, id) {
-			out = append(out, "LINK shadowed="+r.GetLogicalName()+" name="+id)
+			out = append(out, "BINDING shadowed="+r.GetLogicalName()+" name="+id)
 		}
 	}
 	return out
 }
 
-func refuseUnpublishedFakeLinks(m *contractv1.Manifest) string {
-	published := fakePublishedLinks()
+func refuseUnpublishedFakeBindings(m *contractv1.Manifest) string {
+	published := fakePublishedBindings()
 	var missing []string
 	for _, r := range m.GetResources() {
-		if r.GetLinked() && !slices.Contains(published, r.GetResource().GetName()) {
+		if r.GetBinding() != "" && !slices.Contains(published, r.GetResource().GetName()) {
 			missing = append(missing, r.GetResource().GetName())
 		}
 	}
 	if len(missing) == 0 {
 		return ""
 	}
-	return "nothing has published a link named " + strings.Join(missing, ", ") + " to production"
+	return "nothing has published a binding named " + strings.Join(missing, ", ") + " to production"
 }
 
 func fakeAppResults(m *contractv1.Manifest) []*progressv1.AppResult {
@@ -441,33 +442,33 @@ func fakeAppResults(m *contractv1.Manifest) []*progressv1.AppResult {
 	return out
 }
 
-func fakeLinks(m *contractv1.Manifest) []*linksv1.Link {
-	out := make([]*linksv1.Link, 0, len(m.GetResources()))
+func fakeBindings(m *contractv1.Manifest) []*bindingsv1.Binding {
+	out := make([]*bindingsv1.Binding, 0, len(m.GetResources()))
 	for _, r := range m.GetResources() {
-		if r.GetLinked() {
+		if r.GetBinding() != "" {
 			continue
 		}
-		link := &linksv1.Link{
+		binding := &bindingsv1.Binding{
 			Name: r.GetLogicalName(),
-			Grants: []*linksv1.Grant{{
+			Grants: []*bindingsv1.Grant{{
 				Actions:   []string{"fake:connect"},
 				Resources: []string{"fake:resource/main"},
 				Label:     "connect",
 			}},
 		}
 		switch r.GetResource().GetType() {
-		case linksv1.LinkType_LINK_TYPE_BUCKET:
-			link.Properties = &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: r.GetResource().GetName() + "-" + FakeLinkSecret}}
+		case resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET:
+			binding.Properties = &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: r.GetResource().GetName() + "-" + FakeBindingSecret}}
 		default:
-			link.Properties = &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
+			binding.Properties = &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 				Host:     "db.fake.internal",
 				Port:     5432,
 				Username: "app",
-				Password: FakeLinkSecret,
+				Password: FakeBindingSecret,
 				Database: r.GetResource().GetName(),
 			}}
 		}
-		out = append(out, link)
+		out = append(out, binding)
 	}
 	return out
 }
@@ -1574,10 +1575,10 @@ func validateFixtureManifest(m *contractv1.Manifest) error {
 		if r.GetLogicalName() == "" {
 			return fmt.Errorf("resource %s carries no logical name", r.GetResource().GetType())
 		}
-		if _, ok := naming.KindOf(r.GetResource().GetType()); !ok {
+		if _, ok := naming.BindableAs(r.GetResource().GetType()); !ok {
 			return fmt.Errorf("resource %s has type %v, which names no resource kind", r.GetLogicalName(), r.GetResource().GetType())
 		}
-		if r.GetResource().GetType() == linksv1.LinkType_LINK_TYPE_POSTGRES && r.GetPostgres().GetVersion() != "17" {
+		if r.GetResource().GetType() == resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES && r.GetPostgres().GetVersion() != "17" {
 			return fmt.Errorf("resource %s postgres version = %q, want %q", r.GetLogicalName(), r.GetPostgres().GetVersion(), "17")
 		}
 		declared[r.GetLogicalName()] = true

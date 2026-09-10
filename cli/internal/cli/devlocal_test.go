@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
-const localLink = `{"name":"main","postgres":{"host":"localhost","port":5432,"database":"app","username":"app","password":"pw"}}`
+const localBinding = `{"name":"main","postgres":{"host":"localhost","port":5432,"database":"app","username":"app","password":"pw"}}`
 
 func localDeps(t *testing.T) cmddeps.Deps {
 	t.Helper()
@@ -45,7 +45,7 @@ func TestRunDevLocal(t *testing.T) {
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
-		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "OCEL_RESOURCE_POSTGRES_main="+localLink+"\n")
+		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "OCEL_RESOURCE_POSTGRES_main="+localBinding+"\n")
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
@@ -63,8 +63,8 @@ func TestRunDevLocal(t *testing.T) {
 			t.Fatalf("read env dump: %v", readErr)
 		}
 		env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-		if got := env["OCEL_RESOURCE_POSTGRES_main"]; got != localLink {
-			t.Fatalf("app env OCEL_RESOURCE_POSTGRES_main = %q, want the dotfile's own %q", got, localLink)
+		if got := env["OCEL_RESOURCE_POSTGRES_main"]; got != localBinding {
+			t.Fatalf("app env OCEL_RESOURCE_POSTGRES_main = %q, want the dotfile's own %q", got, localBinding)
 		}
 		if _, ok := env[constants.RuntimeAddressEnvName]; !ok {
 			t.Error("the app was told no runtime address, so it can declare nothing")
@@ -105,7 +105,7 @@ func TestRunRunLocal(t *testing.T) {
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
-		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "OCEL_RESOURCE_POSTGRES_main="+localLink+"\n")
+		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "OCEL_RESOURCE_POSTGRES_main="+localBinding+"\n")
 
 		envDumpPath := filepath.Join(root, "env.out")
 		var stdout, stderr syncBuffer
@@ -119,8 +119,8 @@ func TestRunRunLocal(t *testing.T) {
 			t.Fatalf("read env dump: %v", readErr)
 		}
 		env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-		if got := env["OCEL_RESOURCE_POSTGRES_main"]; got != localLink {
-			t.Fatalf("command env OCEL_RESOURCE_POSTGRES_main = %q, want the dotfile's own %q", got, localLink)
+		if got := env["OCEL_RESOURCE_POSTGRES_main"]; got != localBinding {
+			t.Fatalf("command env OCEL_RESOURCE_POSTGRES_main = %q, want the dotfile's own %q", got, localBinding)
 		}
 	})
 }

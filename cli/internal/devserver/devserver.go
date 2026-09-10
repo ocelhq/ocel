@@ -27,7 +27,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -277,7 +277,7 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var toResolve, buckets []resourceregistry.Entry
 	for _, e := range s.registry.Snapshot() {
-		if e.Type == linksv1.LinkType_LINK_TYPE_BUCKET {
+		if e.Type == resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET {
 			buckets = append(buckets, e)
 		} else {
 			toResolve = append(toResolve, e)
@@ -320,17 +320,22 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 func (s *Server) bucketResources(buckets []resourceregistry.Entry) []resolve.Resource {
 	out := make([]resolve.Resource, 0, len(buckets))
 	for _, b := range buckets {
-		value, _ := protojson.Marshal(&linksv1.Link{
+		value, _ := protojson.Marshal(&bindingsv1.Binding{
 			Name:       b.Name,
-			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: b.Name}},
+			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: b.Name}},
 		})
 		out = append(out, resolve.Resource{
 			Name: b.Name,
 			Type: b.Type,
-			Env:  map[string]string{naming.ResourceEnvName(b.Type, b.Name): string(value)},
+			Env:  map[string]string{bucketEnvName(b.Type, b.Name): string(value)},
 		})
 	}
 	return out
+}
+
+func bucketEnvName(t resourcesv1.ResourceType, name string) string {
+	bound, _ := naming.BindableAs(t)
+	return naming.ResourceEnvName(bound, name)
 }
 
 func (s *Server) Discover(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer) error {

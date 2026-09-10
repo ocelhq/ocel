@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
 const defaultPostgresVersion = "17"
@@ -25,7 +25,7 @@ func PostgresVersion(v string) PostgresOption {
 	return func(c *resourcesv1.PostgresConfig) { c.Version = v }
 }
 
-// A PostgresDB is a postgres database an app declares and reads its link from.
+// A PostgresDB is a postgres database an app declares and reads its binding from.
 type PostgresDB struct {
 	name string
 
@@ -36,7 +36,7 @@ type PostgresDB struct {
 
 // Postgres declares a postgres database named name and returns the handle an app
 // reads it through. Call it from a file under the project's discovery folder: during
-// discovery the call is the declaration, and at runtime it reads the link the
+// discovery the call is the declaration, and at runtime it reads the binding the
 // deploy delivered for that name.
 func Postgres(name string, opts ...PostgresOption) *PostgresDB {
 	if discovering() {
@@ -47,7 +47,7 @@ func Postgres(name string, opts ...PostgresOption) *PostgresDB {
 		_, file, line, _ := runtime.Caller(1)
 		err := declare(&resourcesv1.DeclareRequest{
 			Resource: &resourcesv1.ResourceIdentifier{
-				Type: linksv1.LinkType_LINK_TYPE_POSTGRES,
+				Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 				Name: name,
 			},
 			Config: &resourcesv1.DeclareRequest_Postgres{Postgres: config},
@@ -63,8 +63,8 @@ func Postgres(name string, opts ...PostgresOption) *PostgresDB {
 // Name is the name the database was declared under.
 func (p *PostgresDB) Name() string { return p.name }
 
-// ConnectionString is the postgres URL of the delivered link, with the
-// credentials percent-encoded. It fails when no link was delivered for the
+// ConnectionString is the postgres URL of the delivered binding, with the
+// credentials percent-encoded. It fails when no binding was delivered for the
 // name, and during discovery.
 func (p *PostgresDB) ConnectionString() (string, error) {
 	properties, err := p.properties("ConnectionString")
@@ -80,8 +80,8 @@ func (p *PostgresDB) ConnectionString() (string, error) {
 	return dsn.String(), nil
 }
 
-// Pool is the connection pool over the delivered link. It is opened on the first
-// call and the same pool is returned on every one after. It fails when no link
+// Pool is the connection pool over the delivered binding. It is opened on the first
+// call and the same pool is returned on every one after. It fails when no binding
 // was delivered for the name, and during discovery.
 func (p *PostgresDB) Pool(ctx context.Context) (*pgxpool.Pool, error) {
 	if discovering() {
@@ -98,11 +98,11 @@ func (p *PostgresDB) Pool(ctx context.Context) (*pgxpool.Pool, error) {
 	return p.pool, p.err
 }
 
-func (p *PostgresDB) properties(access string) (*linksv1.PostgresProperties, error) {
+func (p *PostgresDB) properties(access string) (*bindingsv1.PostgresProperties, error) {
 	if discovering() {
 		return nil, &UnprovisionedError{Resource: p.resource(), Access: access}
 	}
-	delivered, err := link(p.name, linksv1.LinkType_LINK_TYPE_POSTGRES)
+	delivered, err := binding(p.name, bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
 	if err != nil {
 		return nil, err
 	}

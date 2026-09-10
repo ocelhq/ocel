@@ -24,7 +24,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -239,7 +238,7 @@ func TestDevRefusal(t *testing.T) {
 func TestRefusalsNameTheCommandThatRan(t *testing.T) {
 	t.Run("a resource refusal names the command and the flag it was run with", func(t *testing.T) {
 		missing := &resolve.Missing{Resources: []resourceregistry.Entry{
-			{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES},
+			{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
 		}}
 
 		got := localResourceRefusal(missing, nil, invocation{name: "run", local: true}).Error()

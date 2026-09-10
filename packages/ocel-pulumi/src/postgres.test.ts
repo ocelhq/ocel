@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { source } from "./cli.js";
-import { postgresLink } from "./postgres.js";
+import { postgresBinding } from "./postgres.js";
 
 function repoRoot() {
   let dir = new URL("./", import.meta.url);
@@ -16,13 +16,13 @@ function repoRoot() {
 }
 
 const fixture = JSON.parse(
-  readFileSync(new URL("proto/common/links/v1/fixtures/postgres.json", repoRoot()), "utf8"),
+  readFileSync(new URL("proto/common/bindings/v1/fixtures/postgres.json", repoRoot()), "utf8"),
 );
 
-describe("the record a postgres link publishes as", () => {
+describe("the record a postgres binding publishes as", () => {
   it("is the conformance fixture, sourced to pulumi", () => {
     expect(
-      postgresLink(fixture.name, {
+      postgresBinding(fixture.name, {
         properties: {
           database: fixture.postgres.database,
           username: fixture.postgres.username,
@@ -35,7 +35,7 @@ describe("the record a postgres link publishes as", () => {
   });
 
   it("carries the grants it was handed", () => {
-    const link = postgresLink("orders", {
+    const binding = postgresBinding("orders", {
       properties: fixture.postgres,
       grants: [
         {
@@ -45,7 +45,7 @@ describe("the record a postgres link publishes as", () => {
       ],
     });
 
-    expect(link.grants).toEqual([
+    expect(binding.grants).toEqual([
       {
         actions: ["rds-db:connect"],
         resources: ["arn:aws:rds-db:us-east-1:1:dbuser:cluster/operator"],
@@ -53,9 +53,9 @@ describe("the record a postgres link publishes as", () => {
     ]);
   });
 
-  it("refuses a grant reaching past the resource the link names", () => {
+  it("refuses a grant reaching past the resource the binding names", () => {
     expect(() =>
-      postgresLink("orders", {
+      postgresBinding("orders", {
         properties: fixture.postgres,
         grants: [{ actions: ["rds-db:connect"], resources: ["*"] }],
       }),
@@ -64,7 +64,7 @@ describe("the record a postgres link publishes as", () => {
 
   it("refuses a grant over a whole service", () => {
     expect(() =>
-      postgresLink("orders", {
+      postgresBinding("orders", {
         properties: fixture.postgres,
         grants: [{ actions: ["rds-db:*"], resources: ["arn:aws:rds-db:us-east-1:1:x"] }],
       }),
@@ -73,27 +73,27 @@ describe("the record a postgres link publishes as", () => {
 
   it("refuses a resource missing a field an app resolving it reads", () => {
     const { password, ...rest } = fixture.postgres;
-    expect(() => postgresLink("orders", { properties: rest })).toThrow(/carries no password/);
+    expect(() => postgresBinding("orders", { properties: rest })).toThrow(/carries no password/);
   });
 
   it("refuses a port that is not a whole number", () => {
     expect(() =>
-      postgresLink("orders", {
+      postgresBinding("orders", {
         properties: { ...fixture.postgres, port: "not-a-port" },
       }),
     ).toThrow(/port/);
   });
 
   it("reads a port a provider handed over as a string", () => {
-    const link = postgresLink("orders", {
+    const binding = postgresBinding("orders", {
       properties: { ...fixture.postgres, port: "5433" },
     });
 
-    expect(link.postgres.port).toBe(5433);
+    expect(binding.postgres.port).toBe(5433);
   });
 
   it("refuses a record under no name", () => {
-    expect(() => postgresLink("", { properties: fixture.postgres })).toThrow(
+    expect(() => postgresBinding("", { properties: fixture.postgres })).toThrow(
       /published under no name/,
     );
   });

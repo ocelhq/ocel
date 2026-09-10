@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/pkg/constants"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 func pythonApp(t *testing.T) string {
@@ -33,14 +33,14 @@ func pythonRoots(t *testing.T, root string, paths []string) []discovery.Root {
 func TestPythonReachGrantsAResourceTheAppsEntryImports(t *testing.T) {
 	root := pythonApp(t)
 	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
-	want := []Usage{{App: "web", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"server/main.py"}}}
+	want := []Usage{{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"server/main.py"}}}
 	if !slices.EqualFunc(usages, want, func(a, b Usage) bool {
 		return a.App == b.App && a.Type == b.Type && a.Name == b.Name && slices.Equal(a.Files, b.Files)
 	}) {
@@ -51,7 +51,7 @@ func TestPythonReachGrantsAResourceTheAppsEntryImports(t *testing.T) {
 func TestPythonReachGrantsNothingFromAModuleNoEntryImports(t *testing.T) {
 	root := pythonApp(t)
 	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "unused", "__init__.py") + ":1",
 	}})
@@ -68,7 +68,7 @@ func TestPythonReachRefusesAnImportOnlyRunningTheAppWouldResolve(t *testing.T) {
 	write(t, filepath.Join(root, "server", "main.py"), "import importlib\n\nname = \""+constants.DefaultDiscoveryDirName+"\"\nmodule = importlib.import_module(name)\n")
 
 	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
@@ -88,7 +88,7 @@ func TestPythonReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 	}
 
 	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":3",
 	}})
@@ -110,7 +110,7 @@ func TestPythonReachSearchesTheDiscoveryPathsTheProjectConfigures(t *testing.T) 
 
 	app := App{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, []string{"decls"})}
 	usages, err := Compute(t.Context(), root, []App{app}, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "decls", "__init__.py") + ":1",
 	}})
@@ -127,7 +127,7 @@ func TestPythonReachFollowsAnImportModuleCallThatWritesTheModuleOut(t *testing.T
 	write(t, filepath.Join(root, "server", "main.py"), "import importlib\n\nmodule = importlib.import_module(\""+constants.DefaultDiscoveryDirName+"\")\n")
 
 	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
@@ -144,7 +144,7 @@ func TestPythonReachReadsNoEntryFromTheAppsTestFiles(t *testing.T) {
 	write(t, filepath.Join(root, "server", "conftest.py"), "import importlib\n\nname = \""+constants.DefaultDiscoveryDirName+"\"\nmodule = importlib.import_module(name)\n")
 
 	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})
@@ -161,7 +161,7 @@ func TestPythonReachReportsASyntaxErrorWithoutTheLineItIsOn(t *testing.T) {
 	write(t, filepath.Join(root, "server", "settings.py"), "password = \"s3cretpassword\" if\n")
 
 	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Python, Roots: pythonRoots(t, root, nil)}}, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
 	}})

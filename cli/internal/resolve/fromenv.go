@@ -7,7 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	"github.com/ocelhq/ocel/pkg/naming"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 type Missing struct {
@@ -22,18 +22,20 @@ func (m *Missing) Error() string {
 	return "no value for resource " + strings.Join(names, ", ")
 }
 
-func EnvFragment(t linksv1.LinkType) (string, error) {
-	if _, ok := naming.KindOf(t); !ok {
+func EnvFragment(t resourcesv1.ResourceType) (string, error) {
+	bound, bindable := naming.BindableAs(t)
+	if !bindable {
 		return "", fmt.Errorf("resource has unsupported type %s", t)
 	}
-	return naming.EnvFragment(t), nil
+	return naming.EnvFragment(bound), nil
 }
 
-func EnvName(t linksv1.LinkType, name string) (string, error) {
-	if _, err := EnvFragment(t); err != nil {
-		return "", err
+func EnvName(t resourcesv1.ResourceType, name string) (string, error) {
+	bound, bindable := naming.BindableAs(t)
+	if !bindable {
+		return "", fmt.Errorf("resource has unsupported type %s", t)
 	}
-	return naming.ResourceEnvName(t, name), nil
+	return naming.ResourceEnvName(bound, name), nil
 }
 
 func FromEnv(resources []resourceregistry.Entry, env map[string]string) ([]Resource, error) {

@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { envSchema, sourceOf } from "../src/env/schema.js";
-import { LinkType } from "../src/gen/proto/common/links/v1/links_pb.js";
+import { BindingType } from "../src/gen/proto/common/bindings/v1/bindings_pb.js";
 import { siteOfThisFile } from "./fixtures/callsite/postgres/index.js";
 
 const declareMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
@@ -25,7 +25,7 @@ describe("declarationSite", () => {
 
     expect(declareMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        resource: { name: "main", type: LinkType.POSTGRES },
+        resource: { name: "main", type: BindingType.POSTGRES },
         source: `${fileURLToPath(import.meta.url)}:${Number(line) + 1}`,
       }),
     );

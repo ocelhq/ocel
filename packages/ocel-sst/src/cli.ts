@@ -10,10 +10,10 @@ export interface Target {
   environment?: string;
 }
 
-export function runLink(args: string[], target: Target, input?: string): void {
+export function runBindings(args: string[], target: Target, input?: string): void {
   checkTarget(target);
   const [runtime, entry] = ocelCommand(target.project);
-  const result = childProcess.spawnSync(runtime, [entry, "link", ...args, ...flagsFor(target)], {
+  const result = childProcess.spawnSync(runtime, [entry, "binding", ...args, ...flagsFor(target)], {
     cwd: target.project,
     input,
     encoding: "utf8",
@@ -29,12 +29,12 @@ export function runLink(args: string[], target: Target, input?: string): void {
 export function checkTarget(target: Target): void {
   if (!target.project) {
     throw new Error(
-      "an ocel project is required: it is the directory holding ocel.json, whose apps consume this link, and it is never read from an SST stage or stack name",
+      "an ocel project is required: it is the directory holding ocel.json, whose apps consume this binding, and it is never read from an SST stage or stack name",
     );
   }
   if (target.class !== "production" && target.class !== "preview") {
     throw new Error(
-      `class ${JSON.stringify(target.class ?? null)} is neither "production" nor "preview": a link is published to an ocel class, never to a stage or stack name`,
+      `class ${JSON.stringify(target.class ?? null)} is neither "production" nor "preview": a binding is published to an ocel class, never to a stage or stack name`,
     );
   }
   if (target.environment === classWideMarker) {
@@ -44,7 +44,7 @@ export function checkTarget(target: Target): void {
   }
   if (target.environment && target.class !== "preview") {
     throw new Error(
-      `environment ${target.environment} is named alongside class ${target.class}: a link is published to a class and, in preview, to one preview environment`,
+      `environment ${target.environment} is named alongside class ${target.class}: a binding is published to a class and, in preview, to one preview environment`,
     );
   }
 }
@@ -62,7 +62,7 @@ const classWideMarker = "*";
 function refusal(stderr: string, status: number | null): string {
   const said = stderr.trim();
   if (!said) {
-    return `ocel link exited ${status ?? "on a signal"} without saying why`;
+    return `ocel binding exited ${status ?? "on a signal"} without saying why`;
   }
   return said;
 }

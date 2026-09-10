@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -26,7 +26,7 @@ type Record struct {
 	Environment   Environment `json:"environment"`
 	PromotionID   string      `json:"promotionId"`
 	Tag           string      `json:"tag,omitempty"`
-	Links         []Link      `json:"links"`
+	Bindings      []Binding   `json:"bindings"`
 	Usages        []Usage     `json:"usages"`
 	DeployedAt    time.Time   `json:"deployedAt"`
 }
@@ -36,7 +36,7 @@ type Environment struct {
 	Identity string `json:"identity,omitempty"`
 }
 
-type Link struct {
+type Binding struct {
 	Name    string   `json:"name"`
 	Type    string   `json:"type"`
 	Source  string   `json:"source,omitempty"`
@@ -62,21 +62,21 @@ type Deploy struct {
 	Tag         string
 }
 
-func Derive(d Deploy, manifest *contractv1.Manifest, links []*linksv1.Link) Record {
+func Derive(d Deploy, manifest *contractv1.Manifest, bindings []*bindingsv1.Binding) Record {
 	return Record{
 		Slug:        d.Slug,
 		Environment: d.Environment,
 		PromotionID: d.PromotionID,
 		Tag:         d.Tag,
-		Links:       deriveLinks(links),
+		Bindings:    deriveBindings(bindings),
 		Usages:      deriveUsages(manifest),
 	}
 }
 
-func deriveLinks(links []*linksv1.Link) []Link {
-	out := make([]Link, 0, len(links))
-	for _, l := range links {
-		keys := naming.LinkPropertyNames(l)
+func deriveBindings(bindings []*bindingsv1.Binding) []Binding {
+	out := make([]Binding, 0, len(bindings))
+	for _, l := range bindings {
+		keys := naming.BindingPropertyNames(l)
 		if keys == nil {
 			keys = []string{}
 		}
@@ -86,7 +86,7 @@ func deriveLinks(links []*linksv1.Link) []Link {
 			grants = append(grants, Grant{Verb: g.GetLabel(), Actions: append([]string(nil), g.GetActions()...)})
 		}
 
-		out = append(out, Link{Name: l.GetName(), Type: naming.LinkTypeOf(l).String(), Source: l.GetSource(), VarKeys: keys, Grants: grants})
+		out = append(out, Binding{Name: l.GetName(), Type: naming.BindingTypeOf(l).String(), Source: l.GetSource(), VarKeys: keys, Grants: grants})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
@@ -113,8 +113,8 @@ func Write(projectDir string, r Record) error {
 	if r.DeployedAt.IsZero() {
 		r.DeployedAt = time.Now().UTC()
 	}
-	if r.Links == nil {
-		r.Links = []Link{}
+	if r.Bindings == nil {
+		r.Bindings = []Binding{}
 	}
 	if r.Usages == nil {
 		r.Usages = []Usage{}

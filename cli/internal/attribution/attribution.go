@@ -14,11 +14,11 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 type Declaration struct {
-	Type   linksv1.LinkType
+	Type   resourcesv1.ResourceType
 	Name   string
 	Source string
 }
@@ -42,18 +42,18 @@ var reaches = map[discovery.Language]Reach{discovery.JS: jsReach{}, discovery.Go
 
 type Usage struct {
 	App   string
-	Type  linksv1.LinkType
+	Type  resourcesv1.ResourceType
 	Name  string
 	Files []string
 }
 
 type identity struct {
-	typ  linksv1.LinkType
+	typ  resourcesv1.ResourceType
 	name string
 }
 
 type UnresolvedDeclarationError struct {
-	Type   linksv1.LinkType
+	Type   resourcesv1.ResourceType
 	Name   string
 	Source string
 }

@@ -3,12 +3,12 @@ package resourceregistry
 import (
 	"sync"
 
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 type Entry struct {
 	Name string
-	Type linksv1.LinkType
+	Type resourcesv1.ResourceType
 }
 
 type Registry struct {

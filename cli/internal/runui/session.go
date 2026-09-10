@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/pkg/naming"
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
@@ -314,8 +314,8 @@ func (s *Session) ingestSpan(span *progressv1.SpanEvent) {
 	)
 }
 
-func (s *Session) Deployed(headline string, urlNote string, flip Flip, links []*linksv1.Link, functions []*progressv1.FunctionOutput) {
-	s.logOutputs(links, functions)
+func (s *Session) Deployed(headline string, urlNote string, flip Flip, bindings []*bindingsv1.Binding, functions []*progressv1.FunctionOutput) {
+	s.logOutputs(bindings, functions)
 	s.result(&streamv1.RunResultEvent{
 		Success:   true,
 		Headline:  headline,
@@ -392,9 +392,9 @@ func (s *Session) logf(format string, args ...any) {
 	_, _ = s.logWriter.Write([]byte(fmt.Sprintf(format, args...) + "\n"))
 }
 
-func (s *Session) logOutputs(links []*linksv1.Link, functions []*progressv1.FunctionOutput) {
-	for _, l := range links {
-		s.logf("[output] %s", formatLink(l))
+func (s *Session) logOutputs(bindings []*bindingsv1.Binding, functions []*progressv1.FunctionOutput) {
+	for _, l := range bindings {
+		s.logf("[output] %s", formatBinding(l))
 	}
 	for _, f := range functions {
 		s.logf("[output] %s: %s", f.GetLogicalName(), f.GetUrl())
@@ -463,11 +463,11 @@ func relLog(logPath string) string {
 	return logPath
 }
 
-func formatLink(l *linksv1.Link) string {
+func formatBinding(l *bindingsv1.Binding) string {
 	switch p := l.GetProperties().(type) {
-	case *linksv1.Link_Postgres:
+	case *bindingsv1.Binding_Postgres:
 		return fmt.Sprintf("%s: postgres://%s@%s:%d/%s", l.GetName(), p.Postgres.GetUsername(), p.Postgres.GetHost(), p.Postgres.GetPort(), p.Postgres.GetDatabase())
-	case *linksv1.Link_Bucket:
+	case *bindingsv1.Binding_Bucket:
 		return fmt.Sprintf("%s: bucket %s", l.GetName(), p.Bucket.GetBucket())
 	}
 	return l.GetName()

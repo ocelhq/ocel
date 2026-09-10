@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/pkg/constants"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 func write(t *testing.T, path, body string) {
@@ -36,7 +36,7 @@ func TestGoReachGrantsAResourceTheAppsMainImports(t *testing.T) {
 	root := goApp(t)
 	apps := []App{{Name: "web", Path: "server", Language: discovery.Go}}
 	declarations := []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "declarations.go") + ":1",
 	}}
@@ -45,7 +45,7 @@ func TestGoReachGrantsAResourceTheAppsMainImports(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
-	want := []Usage{{App: "web", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"server"}}}
+	want := []Usage{{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"server"}}}
 	if !slices.EqualFunc(usages, want, func(a, b Usage) bool {
 		return a.App == b.App && a.Type == b.Type && a.Name == b.Name && slices.Equal(a.Files, b.Files)
 	}) {
@@ -57,7 +57,7 @@ func TestGoReachGrantsNothingFromAPackageNoMainImports(t *testing.T) {
 	root := goApp(t)
 	apps := []App{{Name: "web", Path: "server", Language: discovery.Go}}
 	declarations := []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "unused", "unused.go") + ":1",
 	}}
@@ -77,7 +77,7 @@ func TestGoReachReportsWhatGoListSaid(t *testing.T) {
 	write(t, filepath.Join(root, "server", "main.go"), "package main\n\nimport _ \"example.com/web/missing\"\n\nfunc main() {}\n")
 
 	declarations := []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "server", "main.go") + ":1",
 	}}
@@ -98,7 +98,7 @@ func TestGoReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 	}
 
 	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "infra.go") + ":5",
 	}})
@@ -122,7 +122,7 @@ func TestGoReachStopsAtTheModuleTheAppLivesIn(t *testing.T) {
 	write(t, filepath.Join(root, "shared", constants.DefaultDiscoveryDirName, "declarations.go"), "package "+constants.DefaultDiscoveryDirName+"\n")
 
 	usages, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, []Declaration{{
-		Type:   linksv1.LinkType_LINK_TYPE_POSTGRES,
+		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "shared", constants.DefaultDiscoveryDirName, "declarations.go") + ":1",
 	}})

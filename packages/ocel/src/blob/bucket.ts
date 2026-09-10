@@ -1,4 +1,5 @@
-import { type BucketProperties, LinkType } from "../gen/proto/common/links/v1/links_pb.js";
+import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
+import type { BucketProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import { declarationSite } from "../utils/callsite.js";
 import { defer } from "../utils/defer.js";
 import { getConfig } from "../utils/get-config.js";
@@ -14,7 +15,7 @@ export interface BucketOptions<TUploaders extends Record<string, AnyUploader>> {
 export type ResolvedBucketConfig = Pick<BucketProperties, "bucket">;
 
 export class Bucket<TUploaders extends Record<string, AnyUploader> = Record<string, AnyUploader>> {
-  private type = LinkType.BUCKET;
+  private type = ResourceType.BUCKET;
 
   constructor(
     public name: string,

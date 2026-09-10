@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 func TestCollect(t *testing.T) {
@@ -58,11 +58,11 @@ function declareResource(body: unknown) {
 }
 
 declareResource({
-  resource: { type: "LINK_TYPE_POSTGRES", name: "main" },
+  resource: { type: "BINDING_TYPE_POSTGRES", name: "main" },
   postgres: { version: "17" },
 });
 declareResource({
-  resource: { type: "LINK_TYPE_POSTGRES", name: "reporting" },
+  resource: { type: "BINDING_TYPE_POSTGRES", name: "reporting" },
   postgres: { version: "16" },
 });
 export {};
@@ -86,8 +86,8 @@ export {};
 
 		byName := make(map[string]string, len(resources))
 		for _, r := range resources {
-			if r.Type != linksv1.LinkType_LINK_TYPE_POSTGRES {
-				t.Errorf("resource %q Type = %v, want %v", r.Name, r.Type, linksv1.LinkType_LINK_TYPE_POSTGRES)
+			if r.Type != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
+				t.Errorf("resource %q Type = %v, want %v", r.Name, r.Type, resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
 			}
 			byName[r.Name] = r.Postgres.GetVersion()
 		}
@@ -123,7 +123,7 @@ await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+c
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
-    resource: { type: "LINK_TYPE_POSTGRES", name: "prepared-once" },
+    resource: { type: "BINDING_TYPE_POSTGRES", name: "prepared-once" },
     postgres: { version: "17" },
   }),
 });

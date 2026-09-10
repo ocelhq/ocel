@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -51,7 +51,7 @@ func TestServiceMap(t *testing.T) {
 		clitest.WaitForNoStaleSocket(t, sockPath)
 	})
 
-	t.Run("var keys and grant verbs come from the link, and no property value does", func(t *testing.T) {
+	t.Run("var keys and grant verbs come from the binding, and no property value does", func(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
@@ -69,19 +69,19 @@ func TestServiceMap(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read service map: %v", err)
 		}
-		if strings.Contains(string(raw), clitest.FakeLinkSecret) {
+		if strings.Contains(string(raw), clitest.FakeBindingSecret) {
 			t.Errorf("service map = %s, want no property value in it", raw)
 		}
 
 		got := readServiceMap(t, root)
-		want := []servicemap.Link{{
+		want := []servicemap.Binding{{
 			Name:    "db--main",
-			Type:    linksv1.LinkType_LINK_TYPE_POSTGRES.String(),
+			Type:    bindingsv1.BindingType_BINDING_TYPE_POSTGRES.String(),
 			VarKeys: []string{"database", "host", "password", "port", "username"},
 			Grants:  []servicemap.Grant{{Verb: "connect", Actions: []string{"fake:connect"}}},
 		}}
-		if !reflect.DeepEqual(got.Links, want) {
-			t.Errorf("links = %+v, want %+v", got.Links, want)
+		if !reflect.DeepEqual(got.Bindings, want) {
+			t.Errorf("bindings = %+v, want %+v", got.Bindings, want)
 		}
 
 		clitest.WaitForNoStaleSocket(t, sockPath)

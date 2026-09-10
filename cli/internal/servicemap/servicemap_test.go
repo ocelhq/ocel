@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
@@ -22,8 +22,8 @@ func fixtureManifest() *contractv1.Manifest {
 	return &contractv1.Manifest{
 		Slug: "proj-123",
 		Resources: []*contractv1.ManifestResource{
-			{LogicalName: "db--main", Resource: &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main"}},
-			{LogicalName: "bucket--uploads", Resource: &resourcesv1.ResourceIdentifier{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads"}},
+			{LogicalName: "db--main", Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"}},
+			{LogicalName: "bucket--uploads", Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads"}},
 		},
 		Usages: []*contractv1.ManifestUsage{
 			{App: "api", Resource: "db--main", Files: []string{"apps/api/src/server.ts", "shared/db.ts"}},
@@ -32,25 +32,25 @@ func fixtureManifest() *contractv1.Manifest {
 	}
 }
 
-func fixtureLinks() []*linksv1.Link {
-	return []*linksv1.Link{
+func fixtureBindings() []*bindingsv1.Binding {
+	return []*bindingsv1.Binding{
 		{
 			Name: "db--main",
-			Properties: &linksv1.Link_Postgres{Postgres: &linksv1.PostgresProperties{
+			Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
 				Host:     "db.internal",
 				Port:     5432,
 				Username: "app",
 				Password: fixtureSecret,
 				Database: "main",
 			}},
-			Grants: []*linksv1.Grant{
+			Grants: []*bindingsv1.Grant{
 				{Actions: []string{"fake:connect"}, Resources: []string{"fake:resource/main-" + fixtureSecret}, Label: "connect"},
 			},
 		},
 		{
 			Name:       "bucket--uploads",
-			Properties: &linksv1.Link_Bucket{Bucket: &linksv1.BucketProperties{Bucket: "proj-123-uploads-" + fixtureSecret}},
-			Grants: []*linksv1.Grant{
+			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "proj-123-uploads-" + fixtureSecret}},
+			Grants: []*bindingsv1.Grant{
 				{Actions: []string{"fake:get", "fake:put"}, Resources: []string{"fake:resource/uploads-" + fixtureSecret}},
 			},
 		},
@@ -72,7 +72,7 @@ func TestDerive(t *testing.T) {
 	t.Run("the edges are the manifest's usages", func(t *testing.T) {
 		t.Parallel()
 
-		got := Derive(fixtureDeploy(), fixtureManifest(), fixtureLinks())
+		got := Derive(fixtureDeploy(), fixtureManifest(), fixtureBindings())
 
 		want := []Usage{
 			{App: "api", Resource: "db--main", Files: []string{"apps/api/src/server.ts", "shared/db.ts"}},
@@ -83,32 +83,32 @@ func TestDerive(t *testing.T) {
 		}
 	})
 
-	t.Run("an orphan link is a node with no edge", func(t *testing.T) {
+	t.Run("an orphan binding is a node with no edge", func(t *testing.T) {
 		t.Parallel()
 
-		got := Derive(fixtureDeploy(), fixtureManifest(), fixtureLinks())
+		got := Derive(fixtureDeploy(), fixtureManifest(), fixtureBindings())
 
-		names := make([]string, 0, len(got.Links))
-		for _, l := range got.Links {
+		names := make([]string, 0, len(got.Bindings))
+		for _, l := range got.Bindings {
 			names = append(names, l.Name)
 		}
 		if !reflect.DeepEqual(names, []string{"bucket--uploads", "db--main"}) {
-			t.Errorf("links = %v, want every link including the unused one", names)
+			t.Errorf("bindings = %v, want every binding including the unused one", names)
 		}
 		for _, u := range got.Usages {
 			if u.Resource == "bucket--uploads" {
-				t.Errorf("usages = %+v, want no edge for the unused link", got.Usages)
+				t.Errorf("usages = %+v, want no edge for the unused binding", got.Usages)
 			}
 		}
 	})
 
-	t.Run("var keys and grant verbs sit on the link, never on the edge", func(t *testing.T) {
+	t.Run("var keys and grant verbs sit on the binding, never on the edge", func(t *testing.T) {
 		t.Parallel()
 
-		got := Derive(fixtureDeploy(), fixtureManifest(), fixtureLinks())
+		got := Derive(fixtureDeploy(), fixtureManifest(), fixtureBindings())
 
-		var db Link
-		for _, l := range got.Links {
+		var db Binding
+		for _, l := range got.Bindings {
 			if l.Name == "db--main" {
 				db = l
 			}
@@ -132,17 +132,17 @@ func TestDerive(t *testing.T) {
 			delete(edge, key)
 		}
 		if len(edge) != 0 {
-			t.Errorf("usage carries %v, want the link's own fields joined rather than copied", edge)
+			t.Errorf("usage carries %v, want the binding's own fields joined rather than copied", edge)
 		}
 	})
 
-	t.Run("a link the provider reported nothing for is absent", func(t *testing.T) {
+	t.Run("a binding the provider reported nothing for is absent", func(t *testing.T) {
 		t.Parallel()
 
 		got := Derive(fixtureDeploy(), fixtureManifest(), nil)
 
-		if len(got.Links) != 0 {
-			t.Errorf("links = %+v, want none when the deploy reported none", got.Links)
+		if len(got.Bindings) != 0 {
+			t.Errorf("bindings = %+v, want none when the deploy reported none", got.Bindings)
 		}
 		if len(got.Usages) != 2 {
 			t.Errorf("usages = %+v, want the manifest's edges regardless", got.Usages)
@@ -152,7 +152,7 @@ func TestDerive(t *testing.T) {
 	t.Run("carries the deploy context", func(t *testing.T) {
 		t.Parallel()
 
-		got := Derive(fixtureDeploy(), fixtureManifest(), fixtureLinks())
+		got := Derive(fixtureDeploy(), fixtureManifest(), fixtureBindings())
 
 		if got.Slug != "proj-123" || got.PromotionID != "prm_1" || got.Tag != "v9" {
 			t.Errorf("record = %+v, want the deploy's slug, promotion and tag", got)
@@ -170,7 +170,7 @@ func TestWrite(t *testing.T) {
 		t.Parallel()
 		dir := t.TempDir()
 
-		if err := Write(dir, Derive(fixtureDeploy(), fixtureManifest(), fixtureLinks())); err != nil {
+		if err := Write(dir, Derive(fixtureDeploy(), fixtureManifest(), fixtureBindings())); err != nil {
 			t.Fatalf("Write() error = %v", err)
 		}
 

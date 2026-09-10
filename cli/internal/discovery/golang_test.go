@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/constants"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 func goFixture(t *testing.T, module string) string {
@@ -112,7 +112,7 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 		t.Fatalf("declares = %v, want exactly one", declares)
 	}
 	resource := declares[0].GetResource()
-	if resource.GetName() != "main" || resource.GetType() != linksv1.LinkType_LINK_TYPE_POSTGRES {
+	if resource.GetName() != "main" || resource.GetType() != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
 		t.Errorf("resource = %v, want the postgres named main", resource)
 	}
 	source := declares[0].GetSource()

@@ -22,26 +22,26 @@ describe("defineTransform", () => {
     const rules = defineTransform((inputs) => {
       seen = Object.keys(inputs);
       return {
-        function: { vpc: { subnetIds: inputs.links.network!.subnetIds } },
+        function: { vpc: { subnetIds: inputs.bindings.network!.subnetIds } },
       };
     });
 
-    expect(seen).toEqual(["links"]);
+    expect(seen).toEqual(["bindings"]);
     expect(rules[0]!.function!.vpc).toEqual({
-      subnetIds: { $ocelOutput: { link: "network", property: "subnetIds" } },
+      subnetIds: { $ocelOutput: { binding: "network", property: "subnetIds" } },
     });
   });
 
   it("keeps a callback returning a list in the order it was written", () => {
-    const rules = defineTransform(({ links }) => [
+    const rules = defineTransform(({ bindings }) => [
       { function: { lambda: { memorySizeMb: 512 } } },
-      { function: { vpc: { securityGroupIds: [links.network!.primaryGroupId!] } } },
+      { function: { vpc: { securityGroupIds: [bindings.network!.primaryGroupId!] } } },
     ]);
 
     expect(rules).toHaveLength(2);
     expect(rules[0]!.function!.lambda).toEqual({ memorySizeMb: 512 });
     expect(rules[1]!.function!.vpc).toEqual({
-      securityGroupIds: [{ $ocelOutput: { link: "network", property: "primaryGroupId" } }],
+      securityGroupIds: [{ $ocelOutput: { binding: "network", property: "primaryGroupId" } }],
     });
   });
 

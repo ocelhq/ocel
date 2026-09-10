@@ -5,12 +5,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
 type Resource struct {
 	Name     string
-	Type     linksv1.LinkType
+	Type     resourcesv1.ResourceType
 	Postgres *resourcesv1.PostgresConfig
 	Bucket   *resourcesv1.BucketConfig
 	Source   string
@@ -18,7 +17,7 @@ type Resource struct {
 
 func Parse(req *resourcesv1.DeclareRequest) (Resource, error) {
 	id := req.GetResource()
-	if _, ok := naming.KindOf(id.GetType()); !ok {
+	if _, ok := naming.BindableAs(id.GetType()); !ok {
 		return Resource{}, fmt.Errorf("unsupported resource type: %s", id.GetType())
 	}
 	if !configMatches(req, id.GetType()) {
@@ -34,11 +33,11 @@ func Parse(req *resourcesv1.DeclareRequest) (Resource, error) {
 	}, nil
 }
 
-func configMatches(req *resourcesv1.DeclareRequest, t linksv1.LinkType) bool {
+func configMatches(req *resourcesv1.DeclareRequest, t resourcesv1.ResourceType) bool {
 	switch t {
-	case linksv1.LinkType_LINK_TYPE_POSTGRES:
+	case resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES:
 		return req.GetPostgres() != nil
-	case linksv1.LinkType_LINK_TYPE_BUCKET:
+	case resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET:
 		return req.GetBucket() != nil
 	}
 	return false

@@ -10,7 +10,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -19,14 +20,14 @@ func TestEnvFragment(t *testing.T) {
 
 	for _, tt := range []struct {
 		name    string
-		typ     linksv1.LinkType
+		typ     resourcesv1.ResourceType
 		want    string
 		wantErr bool
 	}{
-		{"renders the env fragment", linksv1.LinkType_LINK_TYPE_POSTGRES, "POSTGRES", false},
-		{"renders the env fragment for buckets", linksv1.LinkType_LINK_TYPE_BUCKET, "BUCKET", false},
-		{"rejects an unspecified type", linksv1.LinkType_LINK_TYPE_UNSPECIFIED, "", true},
-		{"rejects an unknown type", linksv1.LinkType(99), "", true},
+		{"renders the env fragment", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "POSTGRES", false},
+		{"renders the env fragment for buckets", resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, "BUCKET", false},
+		{"rejects an unspecified type", resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED, "", true},
+		{"rejects an unknown type", resourcesv1.ResourceType(99), "", true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -48,7 +49,7 @@ func TestEnvFragment(t *testing.T) {
 }
 
 func TestResolve(t *testing.T) {
-	onePostgres := []resourceregistry.Entry{{Name: "main", Type: linksv1.LinkType_LINK_TYPE_POSTGRES}}
+	onePostgres := []resourceregistry.Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
 
 	t.Run("an empty registry yields no resources without calling resolve", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -108,12 +109,12 @@ func TestResolve(t *testing.T) {
 		if got[0].Name != "main" {
 			t.Fatalf("Name = %q, want %q", got[0].Name, "main")
 		}
-		if got[0].Type != linksv1.LinkType_LINK_TYPE_POSTGRES {
+		if got[0].Type != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
 			t.Fatalf("Type = %v, want POSTGRES", got[0].Type)
 		}
 	})
 
-	t.Run("injects the link under the canonical env key", func(t *testing.T) {
+	t.Run("injects the binding under the canonical env key", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_ = json.NewEncoder(w).Encode(resolveResponseBody{
 				Env: map[string]string{
@@ -138,12 +139,12 @@ func TestResolve(t *testing.T) {
 			t.Fatalf("Env missing key %q, got %+v", key, got[0].Env)
 		}
 
-		var link linksv1.Link
-		if err := protojson.Unmarshal([]byte(raw), &link); err != nil {
-			t.Fatalf("Env[%q] = %q is not a link: %v", key, raw, err)
+		var binding bindingsv1.Binding
+		if err := protojson.Unmarshal([]byte(raw), &binding); err != nil {
+			t.Fatalf("Env[%q] = %q is not a binding: %v", key, raw, err)
 		}
-		if link.GetPostgres().GetHost() != "resolved" || link.GetPostgres().GetDatabase() != "main" {
-			t.Fatalf("link = %v, want host resolved and database main", &link)
+		if binding.GetPostgres().GetHost() != "resolved" || binding.GetPostgres().GetDatabase() != "main" {
+			t.Fatalf("binding = %v, want host resolved and database main", &binding)
 		}
 	})
 

@@ -3,7 +3,7 @@ package resolve
 import (
 	"context"
 
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
 type Account struct {
@@ -17,7 +17,7 @@ type Account struct {
 
 type Resource struct {
 	Name string
-	Type linksv1.LinkType
+	Type resourcesv1.ResourceType
 	Env  map[string]string
 }
 

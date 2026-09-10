@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	linksv1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
 )
 
 func definition(key string, class resourcesv1.VariableClass) *resourcesv1.VariableDefinition {
@@ -282,13 +281,13 @@ func TestToApps(t *testing.T) {
 		t.Parallel()
 
 		got := toApps([]projectconfig.App{{Name: "admin"}, {Name: "web"}}, []attribution.Usage{
-			{App: "web", Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/server.ts"}},
-			{App: "admin", Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}},
+			{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/server.ts"}},
+			{App: "admin", Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}},
 		}, "serverless", nil)
 
 		want := []manifestbuilder.App{
-			{Name: "admin", Usages: []manifestbuilder.Usage{{Type: linksv1.LinkType_LINK_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}}}},
-			{Name: "web", Usages: []manifestbuilder.Usage{{Type: linksv1.LinkType_LINK_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/server.ts"}}}},
+			{Name: "admin", Usages: []manifestbuilder.Usage{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}}}},
+			{Name: "web", Usages: []manifestbuilder.Usage{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/server.ts"}}}},
 		}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("toApps() = %+v, want %+v", got, want)

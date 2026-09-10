@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { LinkType } from "../gen/proto/common/links/v1/links_pb.js";
-import { getConfig, getRuntimeAddress, linkKey, linkTypeOf } from "./get-config.js";
+import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
+import { bindingKey, bindingTypeOf, getConfig, getRuntimeAddress } from "./get-config.js";
 
 const LIVE_VALUES = Symbol.for("ocel.env.liveValues");
 
@@ -33,12 +33,12 @@ describe("getConfig", () => {
     process.env[key] = value;
   };
 
-  it("keys a link by its type's enum name", () => {
-    expect(linkKey("main", LinkType.POSTGRES)).toBe("OCEL_RESOURCE_POSTGRES_main");
-    expect(linkKey("storage", LinkType.BUCKET)).toBe("OCEL_RESOURCE_BUCKET_storage");
+  it("keys a binding by its type's enum name", () => {
+    expect(bindingKey("main", BindingType.POSTGRES)).toBe("OCEL_RESOURCE_POSTGRES_main");
+    expect(bindingKey("storage", BindingType.BUCKET)).toBe("OCEL_RESOURCE_BUCKET_storage");
   });
 
-  it("reads a POSTGRES link's typed properties from OCEL_RESOURCE_POSTGRES_<id>", () => {
+  it("reads a POSTGRES binding's typed properties from OCEL_RESOURCE_POSTGRES_<id>", () => {
     setEnv("OCEL_RESOURCE_POSTGRES_main", postgresRecord);
 
     expect(getConfig("main", "postgres")).toMatchObject({
@@ -50,7 +50,7 @@ describe("getConfig", () => {
     });
   });
 
-  it("reads a BUCKET link's typed properties from OCEL_RESOURCE_BUCKET_<id>", () => {
+  it("reads a BUCKET binding's typed properties from OCEL_RESOURCE_BUCKET_<id>", () => {
     setEnv("OCEL_RESOURCE_BUCKET_storage", bucketRecord);
 
     expect(getConfig("storage", "bucket")).toMatchObject({
@@ -76,11 +76,11 @@ describe("getConfig", () => {
     expect(getConfig("main", "postgres").host).toBe("live");
   });
 
-  it("refuses a link of another type, naming both", () => {
+  it("refuses a binding of another type, naming both", () => {
     setEnv("OCEL_RESOURCE_POSTGRES_main", bucketRecord);
 
     expect(() => getConfig("main", "postgres")).toThrow(
-      "OCEL_RESOURCE_POSTGRES_main carries a BUCKET link, and this app reads it as a POSTGRES",
+      "OCEL_RESOURCE_POSTGRES_main carries a BUCKET binding, and this app reads it as a POSTGRES",
     );
   });
 
@@ -88,15 +88,15 @@ describe("getConfig", () => {
     setEnv("OCEL_RESOURCE_BUCKET_storage", JSON.stringify({ name: "storage" }));
 
     expect(() => getConfig("storage", "bucket")).toThrow(
-      "carries a UNSPECIFIED link, and this app reads it as a BUCKET",
+      "carries a UNSPECIFIED binding, and this app reads it as a BUCKET",
     );
   });
 
-  it("refuses a payload that is not a link record", () => {
+  it("refuses a payload that is not a binding record", () => {
     setEnv("OCEL_RESOURCE_BUCKET_storage", "shop-storage");
 
     expect(() => getConfig("storage", "bucket")).toThrow(
-      "OCEL_RESOURCE_BUCKET_storage does not carry a link record",
+      "OCEL_RESOURCE_BUCKET_storage does not carry a binding record",
     );
   });
 
@@ -105,17 +105,19 @@ describe("getConfig", () => {
   });
 });
 
-describe("linkTypeOf", () => {
+describe("bindingTypeOf", () => {
   it("is the type the properties case declares", () => {
     expect(
-      linkTypeOf({
+      bindingTypeOf({
         properties: { case: "postgres", value: {} },
       } as never),
-    ).toBe(LinkType.POSTGRES);
-    expect(linkTypeOf({ properties: { case: "bucket", value: {} } } as never)).toBe(
-      LinkType.BUCKET,
+    ).toBe(BindingType.POSTGRES);
+    expect(bindingTypeOf({ properties: { case: "bucket", value: {} } } as never)).toBe(
+      BindingType.BUCKET,
     );
-    expect(linkTypeOf({ properties: { case: undefined } } as never)).toBe(LinkType.UNSPECIFIED);
+    expect(bindingTypeOf({ properties: { case: undefined } } as never)).toBe(
+      BindingType.UNSPECIFIED,
+    );
   });
 });
 

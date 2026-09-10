@@ -149,7 +149,7 @@ globalThis.__ocelRegister.push(
   fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ resource: { type: "LINK_TYPE_POSTGRES", name: "main" }, postgres: { version: "17" }, source: "`+constants.DefaultDiscoveryDirName+`/main.ts:1" }),
+    body: JSON.stringify({ resource: { type: "RESOURCE_TYPE_POSTGRES", name: "main" }, postgres: { version: "17" }, source: "`+constants.DefaultDiscoveryDirName+`/main.ts:1" }),
   }),
 );
 export {};
