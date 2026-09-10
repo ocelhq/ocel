@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/transform/transformtest"
 )
@@ -26,10 +25,9 @@ const conformanceModule = `
 func TestSurfaceConformance(t *testing.T) {
 	t.Parallel()
 
-	rendered := map[string]map[string]string{
+	rendered := map[string]map[string]resourceRef{
 		transformTypeFunction: functionResourceNames("proj", naming.StackName{Env: "prod", App: "api"}, "api"),
-		transformTypeBucket: bucketResourceNames("proj", "prod", "uploads",
-			translateBucket(&providerkit.BucketSpec{AllowedOrigins: []string{"https://acme.test"}})),
+		transformTypeBucket:   bucketResourceNames("proj", "prod", "uploads"),
 		transformTypePostgres: postgresResourceNames("proj", "prod", "main"),
 	}
 
@@ -61,7 +59,27 @@ func TestSurfaceConformance(t *testing.T) {
 		}
 	}
 
-	if _, err := indexPatches(candidates, results); err != nil {
-		t.Errorf("index the patches every key carries: %v", err)
+	filled := make([]transform.Result, len(results))
+	wanted := map[resourceRef]bool{}
+	for i, result := range results {
+		patches := transform.Patches{}
+		for key := range result.Patches {
+			patches[key] = map[string]any{"description": candidates[i].key.Type + " " + key}
+			wanted[rendered[candidates[i].key.Type][key]] = true
+		}
+		filled[i] = transform.Result{Patches: patches}
+	}
+
+	held, err := indexPatches(candidates, filled)
+	if err != nil {
+		t.Fatalf("index the patches every key carries: %v", err)
+	}
+	for ref := range wanted {
+		if _, registered := held.patches[ref]; !registered {
+			t.Errorf("nothing was registered for %s %s, so a patch on it would reach no resource", ref.Token, ref.Name)
+		}
+	}
+	if len(held.patches) != len(wanted) {
+		t.Errorf("indexPatches registered %d resources for %d keys", len(held.patches), len(wanted))
 	}
 }

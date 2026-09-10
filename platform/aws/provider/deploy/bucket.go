@@ -53,6 +53,8 @@ type bucketArgs struct {
 
 	CORS corsRule
 
+	PatchedCORS bool
+
 	NotificationEvents []string
 
 	UploadCompleterRuntime        string
@@ -124,18 +126,20 @@ func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args 
 		return err
 	}
 
-	if len(args.CORS.AllowedOrigins) > 0 {
+	if len(args.CORS.AllowedOrigins) > 0 || args.PatchedCORS {
+		rules := s3.BucketCorsConfigurationV2CorsRuleArray{}
+		if len(args.CORS.AllowedOrigins) > 0 {
+			rules = append(rules, &s3.BucketCorsConfigurationV2CorsRuleArgs{
+				AllowedMethods: pulumi.ToStringArray(args.CORS.AllowedMethods),
+				AllowedOrigins: pulumi.ToStringArray(args.CORS.AllowedOrigins),
+				AllowedHeaders: pulumi.ToStringArray(args.CORS.AllowedHeaders),
+				ExposeHeaders:  pulumi.ToStringArray(args.CORS.ExposeHeaders),
+				MaxAgeSeconds:  pulumi.Int(args.CORS.MaxAgeSeconds),
+			})
+		}
 		if _, err := s3.NewBucketCorsConfigurationV2(ctx, naming.ResourceID(at.Kind, at.Name, "cors"), &s3.BucketCorsConfigurationV2Args{
-			Bucket: bucket.ID(),
-			CorsRules: s3.BucketCorsConfigurationV2CorsRuleArray{
-				&s3.BucketCorsConfigurationV2CorsRuleArgs{
-					AllowedMethods: pulumi.ToStringArray(args.CORS.AllowedMethods),
-					AllowedOrigins: pulumi.ToStringArray(args.CORS.AllowedOrigins),
-					AllowedHeaders: pulumi.ToStringArray(args.CORS.AllowedHeaders),
-					ExposeHeaders:  pulumi.ToStringArray(args.CORS.ExposeHeaders),
-					MaxAgeSeconds:  pulumi.Int(args.CORS.MaxAgeSeconds),
-				},
-			},
+			Bucket:    bucket.ID(),
+			CorsRules: rules,
 		}); err != nil {
 			return err
 		}

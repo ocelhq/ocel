@@ -99,19 +99,25 @@ func filledFromBinding(kind, name, property string) patchingEvaluator {
 	}}
 }
 
-func TestAPassOverTheWholePlanOffersEveryResourceAndFunctionToTheTransform(t *testing.T) {
+func offered(t *testing.T, plan providerkit.StackPlan) (*fakeEvaluator, []string) {
+	t.Helper()
 	evaluator := &fakeEvaluator{}
-
-	if _, err := transformStackPlan(context.Background(), evaluator, planUnderTransform()); err != nil {
+	if _, err := transformStackPlan(context.Background(), evaluator, plan); err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
 	var seen []string
 	for _, resource := range evaluator.seen.Resources {
 		seen = append(seen, resource.Type+":"+resource.Name)
 	}
-	want := []string{"postgres:db", "bucket:uploads", "function:fn--api--users"}
+	return evaluator, seen
+}
+
+func TestAnAppStackOffersOnlyTheFunctionsItStandsUp(t *testing.T) {
+	evaluator, seen := offered(t, planUnderTransform())
+
+	want := []string{"function:fn--api--users"}
 	if strings.Join(seen, ",") != strings.Join(want, ",") {
-		t.Fatalf("the transform was offered %v, want %v — one pass over the whole plan", seen, want)
+		t.Fatalf("the app stack offered %v, want %v — a patch on a resource this stack never constructs reaches nothing", seen, want)
 	}
 	if evaluator.seen.Provider != transform.Provider {
 		t.Errorf("the transform was told provider %q, want %q", evaluator.seen.Provider, transform.Provider)
@@ -150,14 +156,52 @@ func TestAPatchLandsOnThePulumiResourceThatOcelConstructsForIt(t *testing.T) {
 	}
 }
 
-func TestAPatchOnAResourceThisDeployNeverConstructsIsRefused(t *testing.T) {
+func TestAnInfraStackOffersTheResourcesItStandsUpAndNotTheOnesItIsHandled(t *testing.T) {
+	plan := planUnderTransform()
+	plan.App = nil
+	plan.Kind = providerkit.StackInfra
+	plan.Resources[0].Binding = "legacy-orders"
+
+	_, seen := offered(t, plan)
+
+	want := []string{"bucket:uploads"}
+	if strings.Join(seen, ",") != strings.Join(want, ",") {
+		t.Fatalf("the infra stack offered %v, want %v — a bound resource is somebody else's to patch", seen, want)
+	}
+}
+
+func TestAPatchOnAResourceThisProviderNeverConstructsIsRefused(t *testing.T) {
+	plan := planUnderTransform()
+	plan.App = nil
+	plan.Kind = providerkit.StackInfra
 	evaluator := patchingEvaluator{patch: func(patches []transform.Patches) {
-		patches[1]["cors"] = map[string]any{"corsRules": []any{}}
+		patches[1]["queue"] = map[string]any{"fifo": true}
 	}}
 
-	_, err := transformStackPlan(context.Background(), evaluator, planUnderTransform())
-	if err == nil || !strings.Contains(err.Error(), "cors") {
-		t.Fatalf("transformStackPlan() = %v, want the bucket's unbuilt cors resource refused by name", err)
+	_, err := transformStackPlan(context.Background(), evaluator, plan)
+	if err == nil || !strings.Contains(err.Error(), "queue") {
+		t.Fatalf("transformStackPlan() = %v, want the resource this provider never constructs refused by name", err)
+	}
+}
+
+func TestABucketWithNoDeclaredOriginsCanStillBeGivenCORSByATransform(t *testing.T) {
+	plan := planUnderTransform()
+	plan.App = nil
+	plan.Kind = providerkit.StackInfra
+	evaluator := patchingEvaluator{patch: func(patches []transform.Patches) {
+		patches[1]["cors"] = map[string]any{"corsRules": []any{map[string]any{"allowedMethods": []any{"GET"}}}}
+	}}
+
+	transformed, err := transformStackPlan(context.Background(), evaluator, plan)
+	if err != nil {
+		t.Fatalf("transformStackPlan() = %v, want a transform allowed to add CORS to a bucket that declares no origins", err)
+	}
+	if !transformed.opensCORS("uploads") {
+		t.Fatal("the bucket was not marked as opened by the patch, so the deploy would construct nothing for it")
+	}
+	names := bucketResourceNames("shop", "production", "uploads")
+	if _, registered := transformed.patches[names["cors"]]; !registered {
+		t.Error("nothing was registered for the bucket's cors resource")
 	}
 }
 
