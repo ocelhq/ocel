@@ -67,7 +67,6 @@ func (e *Edge) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapO
 }
 
 func (e *Edge) raise(ctx context.Context, class edge.Class, report edge.Reporter) (Front, error) {
-	names := frontNames(class)
 	var held previewEntry
 	if class == edge.ClassPreview {
 		heldPreview, err := e.heldPreview(ctx)
@@ -76,6 +75,11 @@ func (e *Edge) raise(ctx context.Context, class edge.Class, report edge.Reporter
 		}
 		held = heldPreview
 	}
+	return e.raiseServing(ctx, class, held, report)
+}
+
+func (e *Edge) raiseServing(ctx context.Context, class edge.Class, held previewEntry, report edge.Reporter) (Front, error) {
+	names := frontNames(class)
 	outputs, err := e.deps.Stacks.Up(ctx, Target{Class: class}, frontProgram(frontSpec{
 		Project: e.deps.Project,
 		Region:  e.deps.Region,

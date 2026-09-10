@@ -60,14 +60,15 @@ func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWi
 			"the %q edge terminates TLS for %s at the load balancer, so its certificate map needs the wildcard certificate, and this reconcile carries none",
 			Kind, wildcard)
 	}
-	if err := e.rememberPreview(ctx, previewEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate}); err != nil {
-		return "", err
-	}
-	front, err := e.raise(ctx, edge.ClassPreview, edge.DiscardReporter())
+	entry := previewEntry{BaseDomain: spec.BaseDomain, Certificate: spec.Certificate}
+	front, err := e.raiseServing(ctx, edge.ClassPreview, entry, edge.DiscardReporter())
 	if err != nil {
 		return "", err
 	}
 	if err := e.deps.Routes.Route(ctx, front.URLMap, wildcard, previewBackendName(spec.BaseDomain)); err != nil {
+		return "", err
+	}
+	if err := e.rememberPreview(ctx, entry); err != nil {
 		return "", err
 	}
 	return front.Address, nil
@@ -98,14 +99,15 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 			return err
 		}
 	}
+	if front.standing() {
+		if _, err := e.raiseServing(ctx, edge.ClassPreview, previewEntry{}, edge.DiscardReporter()); err != nil {
+			return err
+		}
+	}
 	if err := providerkit.Forget(ctx, e.deps.Records, e.previewRecord()); err != nil {
 		return fmt.Errorf("release which wildcard the %s edge served previews on: %w", Kind, err)
 	}
-	if !front.standing() {
-		return nil
-	}
-	_, err = e.raise(ctx, edge.ClassPreview, edge.DiscardReporter())
-	return err
+	return nil
 }
 
 func previewResourceName(baseDomain string, role ...string) string {

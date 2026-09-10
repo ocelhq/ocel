@@ -30,6 +30,7 @@ type world struct {
 	backends map[string]map[string]bool
 	entries  map[string]map[string]bool
 	stood    map[string]map[string]declaration
+	breaks   map[string]error
 }
 
 func newWorld() *world {
@@ -42,6 +43,7 @@ func newWorld() *world {
 		backends: map[string]map[string]bool{"": {notFoundBackend: true}},
 		entries:  map[string]map[string]bool{},
 		stood:    map[string]map[string]declaration{},
+		breaks:   map[string]error{},
 	}
 }
 
@@ -65,6 +67,9 @@ func (w *world) Up(_ context.Context, target Target, program Program, _ edge.Rep
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if broken := w.breaks[stack]; broken != nil {
+		return nil, broken
+	}
 	w.ups = append(w.ups, stack)
 	w.stood[stack] = seen
 	standing := map[string]bool{}
@@ -178,6 +183,12 @@ func (w *world) hosts(urlMap string) map[string]string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return maps.Clone(w.routed[urlMap])
+}
+
+func (w *world) breakUp(stack string, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.breaks[stack] = err
 }
 
 func (w *world) declarations(stack string) map[string]declaration {
