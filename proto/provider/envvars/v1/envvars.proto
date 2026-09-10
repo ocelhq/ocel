@@ -5,7 +5,7 @@ option go_package = "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1;envvar
 
 import "buf/validate/validate.proto";
 import "common/environment/v1/environment.proto";
-import "common/links/v1/links.proto";
+import "common/bindings/v1/bindings.proto";
 
 service EnvVarsService {
     rpc SetValue(SetValueRequest) returns (SetValueResponse);
@@ -24,11 +24,11 @@ service EnvVarsService {
 
     rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse);
 
-    rpc SetLink(SetLinkRequest) returns (SetLinkResponse);
+    rpc SetBinding(SetBindingRequest) returns (SetBindingResponse);
 
-    rpc RemoveLink(RemoveLinkRequest) returns (RemoveLinkResponse);
+    rpc RemoveBinding(RemoveBindingRequest) returns (RemoveBindingResponse);
 
-    rpc ListLinks(ListLinksRequest) returns (ListLinksResponse);
+    rpc ListBindings(ListBindingsRequest) returns (ListBindingsResponse);
 }
 
 message Coordinate {
@@ -167,12 +167,12 @@ message ListVersionsResponse {
   repeated VersionEntry versions = 1;
 }
 
-message SetLinkRequest {
+message SetBindingRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   common.environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
-    id: "envvars.link.tier"
-    message: "a link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    id: "envvars.binding.tier"
+    message: "a binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
     expression: "this in [1, 2]"
   }];
 
@@ -185,21 +185,21 @@ message SetLinkRequest {
     }
   ];
 
-  common.links.v1.Link link = 4 [(buf.validate.field).required = true];
+  common.bindings.v1.Binding binding = 4 [(buf.validate.field).required = true];
 
   string owner = 5;
 }
 
-message SetLinkResponse {
+message SetBindingResponse {
   uint64 version = 1;
 }
 
-message RemoveLinkRequest {
+message RemoveBindingRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   common.environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
-    id: "envvars.link.tier"
-    message: "a link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    id: "envvars.binding.tier"
+    message: "a binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
     expression: "this in [1, 2]"
   }];
 
@@ -215,16 +215,16 @@ message RemoveLinkRequest {
   string name = 4 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
 }
 
-message RemoveLinkResponse {
+message RemoveBindingResponse {
   bool removed = 1;
 }
 
-message ListLinksRequest {
+message ListBindingsRequest {
   string slug = 1 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
 
   common.environment.v1.Tier tier = 2 [(buf.validate.field).cel = {
-    id: "envvars.link.tier"
-    message: "a link is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
+    id: "envvars.binding.tier"
+    message: "a binding is published to an ocel coordinate, never to a stage or a stack name: name the preview or the production tier"
     expression: "this in [1, 2]"
   }];
 
@@ -238,14 +238,14 @@ message ListLinksRequest {
   ];
 }
 
-message ListLinksResponse {
-  repeated LinkSummary links = 1;
+message ListBindingsResponse {
+  repeated BindingSummary bindings = 1;
 }
 
-message LinkSummary {
+message BindingSummary {
   string name = 1;
 
-  common.links.v1.LinkType type = 2;
+  common.bindings.v1.BindingType type = 2;
 
   string source = 3;
 

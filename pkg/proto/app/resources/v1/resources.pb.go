@@ -7,7 +7,7 @@
 package resourcesv1
 
 import (
-	v1 "github.com/ocelhq/ocel/pkg/proto/common/links/v1"
+	v1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -24,7 +24,7 @@ const (
 
 type ResourceIdentifier struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          v1.LinkType            `protobuf:"varint,1,opt,name=type,proto3,enum=common.links.v1.LinkType" json:"type,omitempty"`
+	Type          v1.BindingType         `protobuf:"varint,1,opt,name=type,proto3,enum=common.bindings.v1.BindingType" json:"type,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -60,11 +60,11 @@ func (*ResourceIdentifier) Descriptor() ([]byte, []int) {
 	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ResourceIdentifier) GetType() v1.LinkType {
+func (x *ResourceIdentifier) GetType() v1.BindingType {
 	if x != nil {
 		return x.Type
 	}
-	return v1.LinkType(0)
+	return v1.BindingType(0)
 }
 
 func (x *ResourceIdentifier) GetName() string {
@@ -300,9 +300,9 @@ var File_app_resources_v1_resources_proto protoreflect.FileDescriptor
 
 const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\n" +
-	" app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto\x1a\x1bcommon/links/v1/links.proto\"W\n" +
-	"\x12ResourceIdentifier\x12-\n" +
-	"\x04type\x18\x01 \x01(\x0e2\x19.common.links.v1.LinkTypeR\x04type\x12\x12\n" +
+	" app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto\x1a!common/bindings/v1/bindings.proto\"]\n" +
+	"\x12ResourceIdentifier\x123\n" +
+	"\x04type\x18\x01 \x01(\x0e2\x1f.common.bindings.v1.BindingTypeR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x11\n" +
 	"\x0fDeclareResponse\"\xee\x01\n" +
 	"\x0eDeclareRequest\x12@\n" +
@@ -340,14 +340,14 @@ var file_app_resources_v1_resources_proto_goTypes = []any{
 	(*DeclareRequest)(nil),            // 2: app.resources.v1.DeclareRequest
 	(*PostgresConfig)(nil),            // 3: app.resources.v1.PostgresConfig
 	(*BucketConfig)(nil),              // 4: app.resources.v1.BucketConfig
-	(v1.LinkType)(0),                  // 5: common.links.v1.LinkType
+	(v1.BindingType)(0),               // 5: common.bindings.v1.BindingType
 	(*DeclareEnvRequest)(nil),         // 6: app.resources.v1.DeclareEnvRequest
 	(*ReportEnvProblemsRequest)(nil),  // 7: app.resources.v1.ReportEnvProblemsRequest
 	(*DeclareEnvResponse)(nil),        // 8: app.resources.v1.DeclareEnvResponse
 	(*ReportEnvProblemsResponse)(nil), // 9: app.resources.v1.ReportEnvProblemsResponse
 }
 var file_app_resources_v1_resources_proto_depIdxs = []int32{
-	5, // 0: app.resources.v1.ResourceIdentifier.type:type_name -> common.links.v1.LinkType
+	5, // 0: app.resources.v1.ResourceIdentifier.type:type_name -> common.bindings.v1.BindingType
 	0, // 1: app.resources.v1.DeclareRequest.resource:type_name -> app.resources.v1.ResourceIdentifier
 	3, // 2: app.resources.v1.DeclareRequest.postgres:type_name -> app.resources.v1.PostgresConfig
 	4, // 3: app.resources.v1.DeclareRequest.bucket:type_name -> app.resources.v1.BucketConfig

@@ -55,14 +55,15 @@ const (
 	// EnvVarsServiceListVersionsProcedure is the fully-qualified name of the EnvVarsService's
 	// ListVersions RPC.
 	EnvVarsServiceListVersionsProcedure = "/provider.envvars.v1.EnvVarsService/ListVersions"
-	// EnvVarsServiceSetLinkProcedure is the fully-qualified name of the EnvVarsService's SetLink RPC.
-	EnvVarsServiceSetLinkProcedure = "/provider.envvars.v1.EnvVarsService/SetLink"
-	// EnvVarsServiceRemoveLinkProcedure is the fully-qualified name of the EnvVarsService's RemoveLink
+	// EnvVarsServiceSetBindingProcedure is the fully-qualified name of the EnvVarsService's SetBinding
 	// RPC.
-	EnvVarsServiceRemoveLinkProcedure = "/provider.envvars.v1.EnvVarsService/RemoveLink"
-	// EnvVarsServiceListLinksProcedure is the fully-qualified name of the EnvVarsService's ListLinks
-	// RPC.
-	EnvVarsServiceListLinksProcedure = "/provider.envvars.v1.EnvVarsService/ListLinks"
+	EnvVarsServiceSetBindingProcedure = "/provider.envvars.v1.EnvVarsService/SetBinding"
+	// EnvVarsServiceRemoveBindingProcedure is the fully-qualified name of the EnvVarsService's
+	// RemoveBinding RPC.
+	EnvVarsServiceRemoveBindingProcedure = "/provider.envvars.v1.EnvVarsService/RemoveBinding"
+	// EnvVarsServiceListBindingsProcedure is the fully-qualified name of the EnvVarsService's
+	// ListBindings RPC.
+	EnvVarsServiceListBindingsProcedure = "/provider.envvars.v1.EnvVarsService/ListBindings"
 )
 
 // EnvVarsServiceClient is a client for the provider.envvars.v1.EnvVarsService service.
@@ -75,9 +76,9 @@ type EnvVarsServiceClient interface {
 	SetReference(context.Context, *v1.SetReferenceRequest) (*v1.SetReferenceResponse, error)
 	ListReferences(context.Context, *v1.ListReferencesRequest) (*v1.ListReferencesResponse, error)
 	ListVersions(context.Context, *v1.ListVersionsRequest) (*v1.ListVersionsResponse, error)
-	SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error)
-	RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error)
-	ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error)
+	SetBinding(context.Context, *v1.SetBindingRequest) (*v1.SetBindingResponse, error)
+	RemoveBinding(context.Context, *v1.RemoveBindingRequest) (*v1.RemoveBindingResponse, error)
+	ListBindings(context.Context, *v1.ListBindingsRequest) (*v1.ListBindingsResponse, error)
 }
 
 // NewEnvVarsServiceClient constructs a client for the provider.envvars.v1.EnvVarsService service.
@@ -139,22 +140,22 @@ func NewEnvVarsServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(envVarsServiceMethods.ByName("ListVersions")),
 			connect.WithClientOptions(opts...),
 		),
-		setLink: connect.NewClient[v1.SetLinkRequest, v1.SetLinkResponse](
+		setBinding: connect.NewClient[v1.SetBindingRequest, v1.SetBindingResponse](
 			httpClient,
-			baseURL+EnvVarsServiceSetLinkProcedure,
-			connect.WithSchema(envVarsServiceMethods.ByName("SetLink")),
+			baseURL+EnvVarsServiceSetBindingProcedure,
+			connect.WithSchema(envVarsServiceMethods.ByName("SetBinding")),
 			connect.WithClientOptions(opts...),
 		),
-		removeLink: connect.NewClient[v1.RemoveLinkRequest, v1.RemoveLinkResponse](
+		removeBinding: connect.NewClient[v1.RemoveBindingRequest, v1.RemoveBindingResponse](
 			httpClient,
-			baseURL+EnvVarsServiceRemoveLinkProcedure,
-			connect.WithSchema(envVarsServiceMethods.ByName("RemoveLink")),
+			baseURL+EnvVarsServiceRemoveBindingProcedure,
+			connect.WithSchema(envVarsServiceMethods.ByName("RemoveBinding")),
 			connect.WithClientOptions(opts...),
 		),
-		listLinks: connect.NewClient[v1.ListLinksRequest, v1.ListLinksResponse](
+		listBindings: connect.NewClient[v1.ListBindingsRequest, v1.ListBindingsResponse](
 			httpClient,
-			baseURL+EnvVarsServiceListLinksProcedure,
-			connect.WithSchema(envVarsServiceMethods.ByName("ListLinks")),
+			baseURL+EnvVarsServiceListBindingsProcedure,
+			connect.WithSchema(envVarsServiceMethods.ByName("ListBindings")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -170,9 +171,9 @@ type envVarsServiceClient struct {
 	setReference   *connect.Client[v1.SetReferenceRequest, v1.SetReferenceResponse]
 	listReferences *connect.Client[v1.ListReferencesRequest, v1.ListReferencesResponse]
 	listVersions   *connect.Client[v1.ListVersionsRequest, v1.ListVersionsResponse]
-	setLink        *connect.Client[v1.SetLinkRequest, v1.SetLinkResponse]
-	removeLink     *connect.Client[v1.RemoveLinkRequest, v1.RemoveLinkResponse]
-	listLinks      *connect.Client[v1.ListLinksRequest, v1.ListLinksResponse]
+	setBinding     *connect.Client[v1.SetBindingRequest, v1.SetBindingResponse]
+	removeBinding  *connect.Client[v1.RemoveBindingRequest, v1.RemoveBindingResponse]
+	listBindings   *connect.Client[v1.ListBindingsRequest, v1.ListBindingsResponse]
 }
 
 // SetValue calls provider.envvars.v1.EnvVarsService.SetValue.
@@ -247,27 +248,27 @@ func (c *envVarsServiceClient) ListVersions(ctx context.Context, req *v1.ListVer
 	return nil, err
 }
 
-// SetLink calls provider.envvars.v1.EnvVarsService.SetLink.
-func (c *envVarsServiceClient) SetLink(ctx context.Context, req *v1.SetLinkRequest) (*v1.SetLinkResponse, error) {
-	response, err := c.setLink.CallUnary(ctx, connect.NewRequest(req))
+// SetBinding calls provider.envvars.v1.EnvVarsService.SetBinding.
+func (c *envVarsServiceClient) SetBinding(ctx context.Context, req *v1.SetBindingRequest) (*v1.SetBindingResponse, error) {
+	response, err := c.setBinding.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
 	return nil, err
 }
 
-// RemoveLink calls provider.envvars.v1.EnvVarsService.RemoveLink.
-func (c *envVarsServiceClient) RemoveLink(ctx context.Context, req *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error) {
-	response, err := c.removeLink.CallUnary(ctx, connect.NewRequest(req))
+// RemoveBinding calls provider.envvars.v1.EnvVarsService.RemoveBinding.
+func (c *envVarsServiceClient) RemoveBinding(ctx context.Context, req *v1.RemoveBindingRequest) (*v1.RemoveBindingResponse, error) {
+	response, err := c.removeBinding.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
 	return nil, err
 }
 
-// ListLinks calls provider.envvars.v1.EnvVarsService.ListLinks.
-func (c *envVarsServiceClient) ListLinks(ctx context.Context, req *v1.ListLinksRequest) (*v1.ListLinksResponse, error) {
-	response, err := c.listLinks.CallUnary(ctx, connect.NewRequest(req))
+// ListBindings calls provider.envvars.v1.EnvVarsService.ListBindings.
+func (c *envVarsServiceClient) ListBindings(ctx context.Context, req *v1.ListBindingsRequest) (*v1.ListBindingsResponse, error) {
+	response, err := c.listBindings.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -284,9 +285,9 @@ type EnvVarsServiceHandler interface {
 	SetReference(context.Context, *v1.SetReferenceRequest) (*v1.SetReferenceResponse, error)
 	ListReferences(context.Context, *v1.ListReferencesRequest) (*v1.ListReferencesResponse, error)
 	ListVersions(context.Context, *v1.ListVersionsRequest) (*v1.ListVersionsResponse, error)
-	SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error)
-	RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error)
-	ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error)
+	SetBinding(context.Context, *v1.SetBindingRequest) (*v1.SetBindingResponse, error)
+	RemoveBinding(context.Context, *v1.RemoveBindingRequest) (*v1.RemoveBindingResponse, error)
+	ListBindings(context.Context, *v1.ListBindingsRequest) (*v1.ListBindingsResponse, error)
 }
 
 // NewEnvVarsServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -344,22 +345,22 @@ func NewEnvVarsServiceHandler(svc EnvVarsServiceHandler, opts ...connect.Handler
 		connect.WithSchema(envVarsServiceMethods.ByName("ListVersions")),
 		connect.WithHandlerOptions(opts...),
 	)
-	envVarsServiceSetLinkHandler := connect.NewUnaryHandlerSimple(
-		EnvVarsServiceSetLinkProcedure,
-		svc.SetLink,
-		connect.WithSchema(envVarsServiceMethods.ByName("SetLink")),
+	envVarsServiceSetBindingHandler := connect.NewUnaryHandlerSimple(
+		EnvVarsServiceSetBindingProcedure,
+		svc.SetBinding,
+		connect.WithSchema(envVarsServiceMethods.ByName("SetBinding")),
 		connect.WithHandlerOptions(opts...),
 	)
-	envVarsServiceRemoveLinkHandler := connect.NewUnaryHandlerSimple(
-		EnvVarsServiceRemoveLinkProcedure,
-		svc.RemoveLink,
-		connect.WithSchema(envVarsServiceMethods.ByName("RemoveLink")),
+	envVarsServiceRemoveBindingHandler := connect.NewUnaryHandlerSimple(
+		EnvVarsServiceRemoveBindingProcedure,
+		svc.RemoveBinding,
+		connect.WithSchema(envVarsServiceMethods.ByName("RemoveBinding")),
 		connect.WithHandlerOptions(opts...),
 	)
-	envVarsServiceListLinksHandler := connect.NewUnaryHandlerSimple(
-		EnvVarsServiceListLinksProcedure,
-		svc.ListLinks,
-		connect.WithSchema(envVarsServiceMethods.ByName("ListLinks")),
+	envVarsServiceListBindingsHandler := connect.NewUnaryHandlerSimple(
+		EnvVarsServiceListBindingsProcedure,
+		svc.ListBindings,
+		connect.WithSchema(envVarsServiceMethods.ByName("ListBindings")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/provider.envvars.v1.EnvVarsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -380,12 +381,12 @@ func NewEnvVarsServiceHandler(svc EnvVarsServiceHandler, opts ...connect.Handler
 			envVarsServiceListReferencesHandler.ServeHTTP(w, r)
 		case EnvVarsServiceListVersionsProcedure:
 			envVarsServiceListVersionsHandler.ServeHTTP(w, r)
-		case EnvVarsServiceSetLinkProcedure:
-			envVarsServiceSetLinkHandler.ServeHTTP(w, r)
-		case EnvVarsServiceRemoveLinkProcedure:
-			envVarsServiceRemoveLinkHandler.ServeHTTP(w, r)
-		case EnvVarsServiceListLinksProcedure:
-			envVarsServiceListLinksHandler.ServeHTTP(w, r)
+		case EnvVarsServiceSetBindingProcedure:
+			envVarsServiceSetBindingHandler.ServeHTTP(w, r)
+		case EnvVarsServiceRemoveBindingProcedure:
+			envVarsServiceRemoveBindingHandler.ServeHTTP(w, r)
+		case EnvVarsServiceListBindingsProcedure:
+			envVarsServiceListBindingsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -427,14 +428,14 @@ func (UnimplementedEnvVarsServiceHandler) ListVersions(context.Context, *v1.List
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.envvars.v1.EnvVarsService.ListVersions is not implemented"))
 }
 
-func (UnimplementedEnvVarsServiceHandler) SetLink(context.Context, *v1.SetLinkRequest) (*v1.SetLinkResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.envvars.v1.EnvVarsService.SetLink is not implemented"))
+func (UnimplementedEnvVarsServiceHandler) SetBinding(context.Context, *v1.SetBindingRequest) (*v1.SetBindingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.envvars.v1.EnvVarsService.SetBinding is not implemented"))
 }
 
-func (UnimplementedEnvVarsServiceHandler) RemoveLink(context.Context, *v1.RemoveLinkRequest) (*v1.RemoveLinkResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.envvars.v1.EnvVarsService.RemoveLink is not implemented"))
+func (UnimplementedEnvVarsServiceHandler) RemoveBinding(context.Context, *v1.RemoveBindingRequest) (*v1.RemoveBindingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.envvars.v1.EnvVarsService.RemoveBinding is not implemented"))
 }
 
-func (UnimplementedEnvVarsServiceHandler) ListLinks(context.Context, *v1.ListLinksRequest) (*v1.ListLinksResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.envvars.v1.EnvVarsService.ListLinks is not implemented"))
+func (UnimplementedEnvVarsServiceHandler) ListBindings(context.Context, *v1.ListBindingsRequest) (*v1.ListBindingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.envvars.v1.EnvVarsService.ListBindings is not implemented"))
 }
