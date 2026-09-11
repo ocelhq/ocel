@@ -148,5 +148,5 @@ func pollForToken(ctx context.Context, client *auth.Client, device *auth.DeviceC
 }
 
 func describeConnError(err error, apiURL string) error {
-	return fmt.Errorf("%w (target: %s, override with $OCEL_API_URL)", err, apiURL)
+	return fmt.Errorf("%w (target: %s, override with $OCEL_CONSOLE_URL)", err, apiURL)
 }

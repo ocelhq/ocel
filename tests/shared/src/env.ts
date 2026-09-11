@@ -29,7 +29,7 @@ export function localPostgresUrl(): string {
 }
 
 export function consoleUrl(): string {
-  return process.env.OCEL_API_URL ?? "http://localhost:3000";
+  return process.env.OCEL_CONSOLE_URL ?? "http://localhost:3000";
 }
 
 export function applyConsoleEnvDefaults() {

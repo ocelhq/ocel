@@ -105,7 +105,7 @@ set -a && . /home/vndaba/Dev/ocelhq/.env && set +a && \
 ADAPTER_DIR="/home/vndaba/Dev/ocelhq" \
 GITHUB_RUN_ID="<RUN_ID>" \
 OCEL_ACCESS_TOKEN=thisdoesntmatter \
-OCEL_API_URL=https://ocel.app \
+OCEL_CONSOLE_URL=https://ocel.app \
 OCEL_E2E_SIDECAR_DIR="/home/vndaba/Dev/ocelhq-work/sidecar" \
 OCEL_E2E_DEPLOY_TIMEOUT_MS=540000 \
 HEADLESS=true \
@@ -140,7 +140,7 @@ signal rather than polling — returning before it finishes has done nothing.
 - `HEADLESS=true` matches upstream CI, which sets it in `run-tests.js`. Invoking
   `pnpm jest` directly leaves it unset, and `playwright.ts` reads it as a bare
   boolean — so the run executes `itHeaded` cases upstream always skips.
-- `OCEL_ACCESS_TOKEN` / `OCEL_API_URL` are inert — `ocel preview up` makes no
+- `OCEL_ACCESS_TOKEN` / `OCEL_CONSOLE_URL` are inert — `ocel preview up` makes no
   control-plane call. They are kept to match CI.
 
 `deploy.mjs` prints `[ocel-e2e] preview <ref> of project <slug> in <dir>` to

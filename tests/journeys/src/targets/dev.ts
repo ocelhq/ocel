@@ -54,7 +54,7 @@ function childEnv(token: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     OCEL_ACCESS_TOKEN: token,
-    OCEL_API_URL: consoleUrl(),
+    OCEL_CONSOLE_URL: consoleUrl(),
   };
   for (const name of HARNESS_ONLY_ENV) {
     delete env[name];

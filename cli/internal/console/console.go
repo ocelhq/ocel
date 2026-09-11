@@ -7,8 +7,10 @@ import (
 
 const DefaultBaseURL = "https://ocel.app"
 
+const URLEnvVar = "OCEL_CONSOLE_URL"
+
 func ResolveBaseURL() string {
-	if v := strings.TrimSpace(os.Getenv("OCEL_API_URL")); v != "" {
+	if v := strings.TrimSpace(os.Getenv(URLEnvVar)); v != "" {
 		return v
 	}
 	if os.Getenv("OCEL_DEV") != "" {
@@ -18,7 +20,7 @@ func ResolveBaseURL() string {
 }
 
 func EffectiveBaseURL(credsURL string) string {
-	if v := strings.TrimSpace(os.Getenv("OCEL_API_URL")); v != "" {
+	if v := strings.TrimSpace(os.Getenv(URLEnvVar)); v != "" {
 		return strings.TrimRight(v, "/")
 	}
 	if credsURL != "" {

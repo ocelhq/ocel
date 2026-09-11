@@ -62,7 +62,7 @@ func procTreeSubprocessCmd(t *testing.T, root, apiURL string, appArgs []string) 
 		"OCEL_TEST_PROCTREE_ROOT="+root,
 		"OCEL_TEST_PROCTREE_ARGS="+strings.Join(appArgs, procTreeArgsSep),
 		"OCEL_ACCESS_TOKEN=tok",
-		"OCEL_API_URL="+apiURL,
+		"OCEL_CONSOLE_URL="+apiURL,
 	)
 	return cmd
 }
