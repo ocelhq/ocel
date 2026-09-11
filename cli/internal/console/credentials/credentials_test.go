@@ -3,12 +3,14 @@ package credentials
 import (
 	"errors"
 	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/console"
 )
 
 func TestLoad(t *testing.T) {
 	t.Run("an env token overrides everything else", func(t *testing.T) {
 		t.Setenv(envAccessToken, "env-token-123")
-		t.Setenv(envAPIURL, "http://localhost:3000")
+		t.Setenv(console.URLEnvVar, "http://localhost:3000")
 
 		creds, err := Load()
 		if err != nil {
@@ -24,7 +26,7 @@ func TestLoad(t *testing.T) {
 
 	t.Run("an env token without an API URL", func(t *testing.T) {
 		t.Setenv(envAccessToken, "env-token-only")
-		t.Setenv(envAPIURL, "")
+		t.Setenv(console.URLEnvVar, "")
 
 		creds, err := Load()
 		if err != nil {

@@ -86,7 +86,7 @@ func setUpDevFixture(t *testing.T) (string, cmddeps.Deps, *fakeConsole) {
 	console := &fakeConsole{values: map[string]string{}}
 	server := httptest.NewServer(console)
 	t.Cleanup(server.Close)
-	t.Setenv("OCEL_API_URL", server.URL)
+	t.Setenv("OCEL_CONSOLE_URL", server.URL)
 
 	if err := link.Write(root, link.Link{
 		APIURL:         server.URL,
@@ -185,7 +185,7 @@ func TestRunEnvDev(t *testing.T) {
 
 	t.Run("refuses to write when nothing is linked, rather than writing .env behind the developer", func(t *testing.T) {
 		root := setUpEnvFixture(t)
-		t.Setenv("OCEL_API_URL", "http://127.0.0.1:1")
+		t.Setenv("OCEL_CONSOLE_URL", "http://127.0.0.1:1")
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 

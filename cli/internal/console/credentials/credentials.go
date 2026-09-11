@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/zalando/go-keyring"
+
+	"github.com/ocelhq/ocel/cli/internal/console"
 )
 
 const (
@@ -76,10 +78,7 @@ func Save(creds Credentials) (Backend, error) {
 	return BackendFile, nil
 }
 
-const (
-	envAccessToken = "OCEL_ACCESS_TOKEN"
-	envAPIURL      = "OCEL_API_URL"
-)
+const envAccessToken = "OCEL_ACCESS_TOKEN"
 
 func Load() (Credentials, error) {
 	var creds Credentials
@@ -87,7 +86,7 @@ func Load() (Credentials, error) {
 	if token := os.Getenv(envAccessToken); token != "" {
 		return Credentials{
 			AccessToken: token,
-			APIURL:      os.Getenv(envAPIURL),
+			APIURL:      os.Getenv(console.URLEnvVar),
 		}, nil
 	}
 

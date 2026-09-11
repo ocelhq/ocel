@@ -96,7 +96,7 @@ async function writeDotfile(cell: CellContext, dir: string): Promise<void> {
 
 function childEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
-  for (const name of [...HARNESS_ONLY_ENV, "OCEL_ACCESS_TOKEN", "OCEL_API_URL"]) {
+  for (const name of [...HARNESS_ONLY_ENV, "OCEL_ACCESS_TOKEN", "OCEL_CONSOLE_URL"]) {
     delete env[name];
   }
   return env;

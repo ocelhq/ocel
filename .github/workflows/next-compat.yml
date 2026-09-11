@@ -138,7 +138,7 @@ jobs:
     env:
       ADAPTER_DIR: ${{ github.workspace }}/adapter
       OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
-      OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
+      OCEL_CONSOLE_URL: ${{ vars.E2E_OCEL_API_URL }}
       OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
       AWS_REGION: ${{ vars.E2E_AWS_REGION }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
@@ -185,7 +185,7 @@ jobs:
     env:
       ADAPTER_DIR: ${{ github.workspace }}/adapter
       OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
-      OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
+      OCEL_CONSOLE_URL: ${{ vars.E2E_OCEL_API_URL }}
       OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
       AWS_REGION: ${{ vars.E2E_AWS_REGION }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
@@ -399,7 +399,7 @@ jobs:
           NEXT_TEST_CLEANUP_SCRIPT_PATH: ${{ github.workspace }}/adapter/tests/next-compat/cleanup.mjs
 
           OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
-          OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
+          OCEL_CONSOLE_URL: ${{ vars.E2E_OCEL_API_URL }}
           OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
         shell: bash
         run: |
@@ -440,7 +440,7 @@ jobs:
       ADAPTER_DIR: ${{ github.workspace }}/adapter
       NEXTJS_DIR: ${{ github.workspace }}/nextjs
       OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
-      OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
+      OCEL_CONSOLE_URL: ${{ vars.E2E_OCEL_API_URL }}
       OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
       AWS_REGION: ${{ vars.E2E_AWS_REGION }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
@@ -568,7 +568,7 @@ jobs:
     env:
       ADAPTER_DIR: ${{ github.workspace }}/adapter
       OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
-      OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
+      OCEL_CONSOLE_URL: ${{ vars.E2E_OCEL_API_URL }}
       OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
       AWS_REGION: ${{ vars.E2E_AWS_REGION }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
