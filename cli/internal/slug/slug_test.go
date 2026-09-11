@@ -1,4 +1,4 @@
-package cli
+package slug
 
 import (
 	"strings"
@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
-func TestSlugify(t *testing.T) {
+func TestFrom(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -26,12 +26,12 @@ func TestSlugify(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := slugify(tc.name)
+			got := From(tc.name)
 			if got != tc.want {
-				t.Errorf("slugify(%q) = %q, want %q", tc.name, got, tc.want)
+				t.Errorf("From(%q) = %q, want %q", tc.name, got, tc.want)
 			}
 			if got != "" && !projectconfig.ValidSlug(got) {
-				t.Errorf("slugify(%q) = %q, which is not a valid slug", tc.name, got)
+				t.Errorf("From(%q) = %q, which is not a valid slug", tc.name, got)
 			}
 		})
 	}

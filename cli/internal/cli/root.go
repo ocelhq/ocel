@@ -19,6 +19,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/deploy"
 	"github.com/ocelhq/ocel/cli/internal/cli/doctor"
 	"github.com/ocelhq/ocel/cli/internal/cli/env"
+	"github.com/ocelhq/ocel/cli/internal/cli/link"
+	"github.com/ocelhq/ocel/cli/internal/cli/login"
 	"github.com/ocelhq/ocel/cli/internal/cli/permissions"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/console/envstore"
@@ -83,12 +85,18 @@ func init() {
 	rootCmd.AddCommand(env.NewCommand(s))
 	rootCmd.AddCommand(rollbackCmd)
 	rootCmd.AddCommand(deploymentsCmd)
-	rootCmd.AddCommand(loginCmd)
-	rootCmd.AddCommand(logoutCmd)
 
 	rootCmd.AddCommand(bootstrap.NewCommand(s))
 	rootCmd.AddCommand(permissions.NewCommand(s))
 	rootCmd.AddCommand(doctor.NewCommand(s))
+
+	rootCmd.AddGroup(
+		&cobra.Group{ID: coreGroup, Title: "CORE COMMANDS"},
+		&cobra.Group{ID: consoleGroup, Title: "CONSOLE COMMANDS"},
+	)
+	loginCmd, logoutCmd, linkCmd := login.NewCommand(s), login.NewLogoutCommand(s), link.NewCommand(s)
+	readsConsoleURL(rootCmd, loginCmd, logoutCmd, linkCmd)
+	addConsoleCommands(rootCmd, loginCmd, logoutCmd, linkCmd, link.NewUnlinkCommand(s))
 
 	installHelpStyle(rootCmd)
 }
