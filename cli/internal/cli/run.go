@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/cli/link"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
@@ -74,16 +75,16 @@ func runRun(ctx context.Context, deps cmddeps.Deps, local bool, cwd string, appA
 		return runOnceAsFollower(ctx, deps, leaderAddr, appArgs, stdout, stderr, stdin)
 	}
 
-	var link *devConsole
+	var consoleLink *devConsole
 	if !local {
 		apiURL := console.EffectiveBaseURL(creds.APIURL)
-		bound, bindErr := ensureConsoleLink(ctx, deps, cfg.Dir, apiURL, stdout, stderr, stdin)
+		bound, bindErr := link.Ensure(ctx, deps, cfg.Dir, apiURL, stdout, stderr, stdin)
 		if bindErr != nil {
 			return bindErr
 		}
-		link = &devConsole{apiURL: apiURL, token: creds.AccessToken, projectID: bound.ProjectID}
+		consoleLink = &devConsole{apiURL: apiURL, token: creds.AccessToken, projectID: bound.ProjectID}
 	}
-	return runStandalone(ctx, deps, link, cfg, appArgs, stdout, stderr, stdin)
+	return runStandalone(ctx, deps, consoleLink, cfg, appArgs, stdout, stderr, stdin)
 }
 
 func runningDevServer(root string) (string, bool, error) {

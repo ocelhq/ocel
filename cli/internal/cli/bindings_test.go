@@ -486,11 +486,10 @@ func TestBindingCommands(t *testing.T) {
 	t.Run("`ocel link` is a different command", func(t *testing.T) {
 		t.Parallel()
 
-		if linkCmd.Parent() != rootCmd {
-			t.Errorf("`ocel link` hangs off %v, want the root command", linkCmd.Parent())
-		}
-		if unlinkCmd.Parent() != rootCmd {
-			t.Errorf("`ocel unlink` hangs off %v, want the root command", unlinkCmd.Parent())
+		for _, name := range []string{"link", "unlink"} {
+			if cmd, _, err := rootCmd.Find([]string{name}); err != nil || cmd.Name() != name || cmd.Parent() != rootCmd {
+				t.Errorf("`ocel %s` does not hang off the root command", name)
+			}
 		}
 		if bindingsCmd.Parent() != rootCmd {
 			t.Errorf("`ocel bindings` hangs off %v, want the root command", bindingsCmd.Parent())

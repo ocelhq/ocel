@@ -19,6 +19,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/cli/link"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
@@ -96,16 +97,16 @@ func runDev(ctx context.Context, deps cmddeps.Deps, local bool, cwd string, appA
 			return runFollower(ctx, deps, role.LeaderAddr, appArgs, stdout, stderr, stdin)
 		}
 
-		var link *devConsole
+		var consoleLink *devConsole
 		if !local {
 			apiURL := console.EffectiveBaseURL(creds.APIURL)
-			bound, bindErr := ensureConsoleLink(ctx, deps, cfg.Dir, apiURL, stdout, stderr, stdin)
+			bound, bindErr := link.Ensure(ctx, deps, cfg.Dir, apiURL, stdout, stderr, stdin)
 			if bindErr != nil {
 				return bindErr
 			}
-			link = &devConsole{apiURL: apiURL, token: creds.AccessToken, projectID: bound.ProjectID}
+			consoleLink = &devConsole{apiURL: apiURL, token: creds.AccessToken, projectID: bound.ProjectID}
 		}
-		if err := runLeader(ctx, deps, role, link, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, election.ErrLost) {
+		if err := runLeader(ctx, deps, role, consoleLink, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, election.ErrLost) {
 			return err
 		}
 	}

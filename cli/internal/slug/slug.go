@@ -1,4 +1,4 @@
-package cli
+package slug
 
 import (
 	"regexp"
@@ -7,7 +7,7 @@ import (
 
 var nonSlugChars = regexp.MustCompile(`[^a-z0-9]+`)
 
-func slugify(name string) string {
+func From(name string) string {
 	lower := strings.ToLower(name)
 	slug := nonSlugChars.ReplaceAllString(lower, "-")
 	slug = strings.Trim(slug, "-")

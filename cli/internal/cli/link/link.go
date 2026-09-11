@@ -1,4 +1,4 @@
-package cli
+package link
 
 import (
 	"bufio"
@@ -11,65 +11,66 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/console/auth"
-	"github.com/ocelhq/ocel/cli/internal/console/link"
+	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/console/project"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
-	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/slug"
 )
 
-type linkOptions struct {
+type options struct {
 	org    string
 	create bool
 	apiURL string
 }
 
-var linkOpts linkOptions
-
-var linkCmd = &cobra.Command{
-	Use:   "link [project]",
-	Short: "Link this directory to an Ocel console project",
-	Long: "Records this working tree's console project in " + constants.ProjectStateDirName + "/console.json,\n" +
-		"which is untracked — a clone can be linked to a different account or\n" +
-		"project, or to none at all.\n\n" +
-		"With no arguments on a terminal, pick from your existing projects or\n" +
-		"create a new one. Otherwise name an existing project's slug, or pass\n" +
-		"--create to make a new project named after this directory.",
-	Args: cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("determine working directory: %w", err)
-		}
-
-		projectRef := ""
-		if len(args) > 0 {
-			projectRef = args[0]
-		}
-
-		deps := newDeps()
-		opts := linkOpts
-		creds, _ := deps.LoadCredentials()
-		opts.apiURL = console.EffectiveBaseURL(creds.APIURL)
-
-		return runLink(cmd.Context(), deps, cwd, projectRef, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
-	},
+func NewCommand(deps cmddeps.Deps) *cobra.Command {
+	var opts options
+	cmd := &cobra.Command{
+		Use:   "link [project]",
+		Short: "Link this directory to a console project",
+		Example: "  $ ocel link\n" +
+			"  $ ocel link my-app\n" +
+			"  $ ocel link my-app --org acme\n" +
+			"  $ ocel link --create \"My App\"",
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("determine working directory: %w", err)
+			}
+			dir, err := projectDir(cmd.Context(), deps, cwd)
+			if err != nil {
+				return err
+			}
+			projectRef := ""
+			if len(args) > 0 {
+				projectRef = args[0]
+			}
+			opts := opts
+			creds, _ := deps.LoadCredentials()
+			opts.apiURL = console.EffectiveBaseURL(creds.APIURL)
+			return run(cmd.Context(), deps, dir, projectRef, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		},
+	}
+	cmd.Flags().StringVar(&opts.org, "org", "", "Organization `slug`, instead of picking one")
+	cmd.Flags().BoolVar(&opts.create, "create", false, "Create the project, named [project] or after this directory")
+	return cmd
 }
 
-func init() {
-	linkCmd.Flags().StringVar(&linkOpts.org, "org", "", "Select an organization by slug, bypassing the interactive picker")
-	linkCmd.Flags().BoolVar(&linkOpts.create, "create", false, "Create a new project instead of selecting an existing one")
+var (
+	check = color.New(color.FgGreen).Sprint("✓")
+	bold  = color.New(color.Bold).SprintFunc()
+)
 
-	rootCmd.AddCommand(linkCmd)
-	rootCmd.AddCommand(unlinkCmd)
-}
-
-func runLink(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, opts linkOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func run(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef string, opts options, stdout, stderr io.Writer, stdin io.Reader) error {
 	creds, err := deps.LoadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
@@ -77,50 +78,46 @@ func runLink(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef stri
 	}
 
 	apiURL := strings.TrimRight(opts.apiURL, "/")
-	// TODO: linkCmd installs no interrupt handler, so SIGINT still hard-kills here —
-	// migrating these reads to the prompt package without also adding installInterruptHandler
+	// TODO: link installs no interrupt handler, so SIGINT still hard-kills here —
+	// migrating these reads to the prompt package without also installing deps.Interrupt
 	// would look like a cleanup but would reintroduce the raw-mode/masked-SIGINT bug
-	// this package's other commands fixed (see #245).
+	// the other commands fixed (see #245).
 	scanner := bufio.NewScanner(stdin)
 	projectRef = strings.TrimSpace(projectRef)
 
-	if existing, err := link.Read(projectDir, apiURL); err != nil {
+	if existing, err := consolelink.Read(projectDir, apiURL); err != nil {
 		return err
 	} else if existing != nil {
-		fmt.Fprintf(stdout, "This directory is linked to %s. Re-linking.\n", existing.ProjectName)
+		fmt.Fprintf(stdout, "Re-linking (currently %s)\n", existing.ProjectName)
 	}
 
 	authClient := auth.New(apiURL)
 	projectClient := project.New(apiURL)
 
-	org, err := pickOrganization(ctx, authClient, creds.AccessToken, opts, stdout, stdin, scanner)
+	org, err := pickOrganization(ctx, deps, authClient, creds.AccessToken, opts, stdout, stdin, scanner)
 	if err != nil {
 		return err
 	}
 	if err := authClient.SetActiveOrganization(ctx, creds.AccessToken, org.ID); err != nil {
 		return fmt.Errorf("failed to set active organization: %w", err)
 	}
-	fmt.Fprintf(stdout, "✓ Using organization %s\n", org.Name)
 
 	var projects []project.Project
-	err = withSpinner(stdout, "Loading projects...", func() error {
+	err = withSpinner(deps, stdout, "Loading projects…", func() error {
 		list, listErr := projectClient.ListProjects(ctx, creds.AccessToken)
-		if listErr != nil {
-			return listErr
-		}
 		projects = list
-		return nil
+		return listErr
 	})
 	if err != nil {
 		return fmt.Errorf("failed to list projects: %w", err)
 	}
 
-	selected, err := selectOrCreateProject(ctx, projectClient, creds.AccessToken, projectDir, projectRef, opts, projects, org, stdout, stdin, scanner)
+	selected, err := selectOrCreateProject(ctx, deps, projectClient, creds.AccessToken, projectDir, projectRef, opts, projects, org, stdout, stdin, scanner)
 	if err != nil {
 		return err
 	}
 
-	if err := link.Write(projectDir, link.Link{
+	if err := consolelink.Write(projectDir, consolelink.Link{
 		APIURL:         apiURL,
 		OrganizationID: org.ID,
 		ProjectID:      selected.ID,
@@ -129,12 +126,12 @@ func runLink(ctx context.Context, deps cmddeps.Deps, projectDir, projectRef stri
 		return err
 	}
 
-	fmt.Fprintf(stdout, "✓ Linked to %s (%s)\n", selected.Name, selected.Slug)
+	fmt.Fprintf(stdout, "%s Linked to %s in %s\n", check, bold(selected.Slug), org.Name)
 	return nil
 }
 
-func ensureConsoleLink(ctx context.Context, deps cmddeps.Deps, projectDir, apiURL string, stdout, stderr io.Writer, stdin io.Reader) (*link.Link, error) {
-	existing, err := link.Read(projectDir, apiURL)
+func Ensure(ctx context.Context, deps cmddeps.Deps, projectDir, apiURL string, stdout, stderr io.Writer, stdin io.Reader) (*consolelink.Link, error) {
+	existing, err := consolelink.Read(projectDir, apiURL)
 	if err != nil {
 		return nil, err
 	}
@@ -147,11 +144,11 @@ func ensureConsoleLink(ctx context.Context, deps cmddeps.Deps, projectDir, apiUR
 	}
 
 	fmt.Fprintln(stdout, "This directory isn't linked to a console project yet.")
-	if err := runLink(ctx, deps, projectDir, "", linkOptions{apiURL: apiURL}, stdout, stderr, stdin); err != nil {
+	if err := run(ctx, deps, projectDir, "", options{apiURL: apiURL}, stdout, stderr, stdin); err != nil {
 		return nil, err
 	}
 
-	existing, err = link.Read(projectDir, apiURL)
+	existing, err = consolelink.Read(projectDir, apiURL)
 	if err != nil {
 		return nil, err
 	}
@@ -163,17 +160,22 @@ func ensureConsoleLink(ctx context.Context, deps cmddeps.Deps, projectDir, apiUR
 
 func selectOrCreateProject(
 	ctx context.Context,
+	deps cmddeps.Deps,
 	client *project.Client,
 	accessToken, projectDir, projectRef string,
-	opts linkOptions,
+	opts options,
 	projects []project.Project,
 	org *auth.Organization,
 	stdout io.Writer,
 	stdin io.Reader,
 	scanner *bufio.Scanner,
 ) (*project.Project, error) {
+	create := func(name string) (*project.Project, error) {
+		return createProject(ctx, deps, client, accessToken, name, org, stdout)
+	}
+
 	if opts.create {
-		return createProject(ctx, client, accessToken, defaultProjectName(projectDir, projectRef), org, stdout)
+		return create(defaultProjectName(projectDir, projectRef))
 	}
 
 	if projectRef != "" {
@@ -197,7 +199,7 @@ func selectOrCreateProject(
 
 	if len(projects) == 0 {
 		fmt.Fprintf(stdout, "%s has no projects yet.\n", org.Name)
-		return createProject(ctx, client, accessToken, promptProjectName(projectDir, stdout, scanner), org, stdout)
+		return create(promptProjectName(projectDir, stdout, scanner))
 	}
 
 	fmt.Fprintf(stdout, "Projects in %s:\n", org.Name)
@@ -218,7 +220,7 @@ func selectOrCreateProject(
 	case selection == "":
 		return nil, errors.New("no project selected; rerun `ocel link`")
 	case strings.EqualFold(selection, "n"):
-		return createProject(ctx, client, accessToken, promptProjectName(projectDir, stdout, scanner), org, stdout)
+		return create(promptProjectName(projectDir, stdout, scanner))
 	}
 
 	if idx, convErr := strconv.Atoi(selection); convErr == nil {
@@ -235,32 +237,29 @@ func selectOrCreateProject(
 	return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
 }
 
-func createProject(ctx context.Context, client *project.Client, accessToken, name string, org *auth.Organization, stdout io.Writer) (*project.Project, error) {
+func createProject(ctx context.Context, deps cmddeps.Deps, client *project.Client, accessToken, name string, org *auth.Organization, stdout io.Writer) (*project.Project, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.New("project name required — pass it as an argument, e.g. `ocel link --create my-app`")
 	}
-	slug := slugify(name)
-	if slug == "" {
+	projectSlug := slug.From(name)
+	if projectSlug == "" {
 		return nil, fmt.Errorf("could not derive a valid slug from %q — try a name with at least one alphanumeric character", name)
 	}
 
 	var created *project.Project
-	err := withSpinner(stdout, fmt.Sprintf("Creating project %q...", name), func() error {
-		p, createErr := client.CreateProject(ctx, accessToken, name, slug)
-		if createErr != nil {
-			return createErr
-		}
+	err := withSpinner(deps, stdout, fmt.Sprintf("Creating %s…", projectSlug), func() error {
+		p, createErr := client.CreateProject(ctx, accessToken, name, projectSlug)
 		created = p
-		return nil
+		return createErr
 	})
 	if err != nil {
 		if project.IsConflict(err) {
-			return nil, fmt.Errorf("a project with slug %q already exists in %s — run `ocel link %s` to link to it", slug, org.Name, slug)
+			return nil, fmt.Errorf("a project with slug %q already exists in %s — run `ocel link %s` to link to it", projectSlug, org.Name, projectSlug)
 		}
 		return nil, fmt.Errorf("failed to create project: %w", err)
 	}
-	fmt.Fprintf(stdout, "✓ Created project (id: %s)\n", created.ID)
+	fmt.Fprintf(stdout, "%s Created %s\n", check, created.Name)
 	return created, nil
 }
 
@@ -282,22 +281,19 @@ func promptProjectName(projectDir string, stdout io.Writer, scanner *bufio.Scann
 	return fallback
 }
 
-func pickOrganization(ctx context.Context, client *auth.Client, accessToken string, opts linkOptions, stdout io.Writer, stdin io.Reader, scanner *bufio.Scanner) (*auth.Organization, error) {
+func pickOrganization(ctx context.Context, deps cmddeps.Deps, client *auth.Client, accessToken string, opts options, stdout io.Writer, stdin io.Reader, scanner *bufio.Scanner) (*auth.Organization, error) {
 	var orgs []auth.Organization
-	err := withSpinner(stdout, "Resolving organization...", func() error {
+	err := withSpinner(deps, stdout, "Loading organizations…", func() error {
 		list, listErr := client.ListOrganizations(ctx, accessToken)
-		if listErr != nil {
-			return listErr
-		}
 		orgs = list
-		return nil
+		return listErr
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list organizations: %w", err)
 	}
 
 	if len(orgs) == 0 {
-		return nil, errors.New("you don't belong to any organization yet — create one on the Ocel dashboard first")
+		return nil, errors.New("you don't belong to any organization yet — create one in the Ocel console first")
 	}
 
 	if opts.org != "" {
@@ -317,7 +313,7 @@ func pickOrganization(ctx context.Context, client *auth.Client, accessToken stri
 		return nil, fmt.Errorf("multiple organizations found; pass --org <slug>. available: %s", joinOrgSlugs(orgs))
 	}
 
-	fmt.Fprintln(stdout, "Multiple organizations found:")
+	fmt.Fprintln(stdout, "Organizations:")
 	for i, org := range orgs {
 		fmt.Fprintf(stdout, "  %d) %s (%s)\n", i+1, org.Name, org.Slug)
 	}
@@ -346,6 +342,16 @@ func pickOrganization(ctx context.Context, client *auth.Client, accessToken stri
 		}
 	}
 	return nil, fmt.Errorf("invalid selection %q; rerun `ocel link`", selection)
+}
+
+func withSpinner(deps cmddeps.Deps, stdout io.Writer, label string, fn func() error) error {
+	present := deps.Presentation(stdout)
+	if !present.TTY {
+		return fn()
+	}
+	s := runui.StartSpinner(present, stdout, label)
+	defer s.Stop()
+	return fn()
 }
 
 func joinOrgSlugs(orgs []auth.Organization) string {
