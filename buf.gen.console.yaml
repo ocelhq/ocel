@@ -1,0 +1,14 @@
+version: v2
+clean: true
+inputs:
+  - directory: proto
+    paths:
+      - proto/provider/envvars
+      - proto/common/environment
+      - proto/common/bindings
+plugins:
+  - local: protoc-gen-es
+    out: console/connectors/src/gen
+    include_imports: true
+    opt:
+      - target=ts

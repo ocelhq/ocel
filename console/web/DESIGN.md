@@ -22,6 +22,8 @@ colors:
   grid-dark: "#1c1f22"
   go: "#1a9e57"
   go-dark: "#3ecf7a"
+  warn: "oklch(0.5423 0.1315 66.11)"
+  warn-dark: "oklch(0.8 0.132 76.5)"
   destructive: "oklch(0.577 0.245 27.33)"
   destructive-dark: "oklch(0.627 0.22 25)"
   terminal: "#16181a"
@@ -232,7 +234,8 @@ outcome rather than decorate a surface.
 
 ### Tertiary
 - **Go** (`{colors.go}`, dark `{colors.go-dark}`): a succeeded outcome dot and the copied-confirmation check. Only where something actually succeeded.
-- **Destructive** (`{colors.destructive}`, dark `{colors.destructive-dark}`): a failed outcome dot, the failure banner's border and text, and an app's reported error. Only where something actually failed.
+- **Warn** (`{colors.warn}`, dark `{colors.warn-dark}`): what is owed but not yet wrong — a required value nobody has filled, an incomplete group, an owed tally, a stale override. Carried as text or a 10% fill behind text, never a solid fill.
+- **Destructive** (`{colors.destructive}`, dark `{colors.destructive-dark}`): a failed outcome dot, the failure banner's border and text, an app's reported error, a save that conflicted or was refused, and a value that fails its schema. Only where an operation actually failed or a value is actually invalid — an unfilled requirement is Warn, not Destructive.
 
 ### Named Rules
 **The One Annotation Rule.** Electric owns less than ten percent of any view. On the
@@ -467,8 +470,13 @@ the same dot ground the map will use. The loading state is the drawing before th
 
 ### Do:
 - **Do** keep every corner square. `--radius: 0rem` is the invariant, and each primitive restates it so a library component cannot arrive rounded.
-- **Do** set every label, table header, chip, caption and stamp in mono uppercase 11px at 0.14em in Body colour.
-- **Do** keep literal strings — paths, urls, keys, binding names, commands — in mono at their own case, exactly as the CLI reported them.
+- **Do** set every label, table header, caption and stamp in uppercase 11px at 0.14em at weight 500 in Body colour, at one weight. A table's column heads are that label and nothing else, so none of them inherits a `th`'s bold.
+- **Do** set that register in **sans**. Mono is not perceivable there: `text-transform: uppercase` removes every `l`/`1`/`I` and `O`/`0` carrier mono exists to disambiguate, and 0.14em tracking has already destroyed the advance rhythm, so the two faces differ by 2% of width and one serifed `I`. A face the reader cannot perceive is cost without benefit. Measured, then changed.
+- **Do** reserve mono for the two jobs where a reader does character-by-character work: **a value being proofread or pasted** (the value field, and a revealed value) and **a command to type** (the command pane, an inline `ocel …`). At 13px in Plex Sans `I` and `l` are identical bare stems; in Plex Mono they are not, and that discrimination is the whole reason the font is here.
+- **Don't** set an identifier in mono merely because it is one. SCREAMING_SNAKE_CASE already says "literal" and costs nothing to render; a leading `/` says path; a chip says name; `tabular-nums` says digits. Keys, paths, group names, environment names and versions are sans. Mono as a badge of technicality is a costume.
+- **Do** draw from one scale: 11px sans label (500), 12px sans meta, 13px sans key (500) and path (400), 13px mono value, 14px sans body, 14px sans subject (600). Title sizes (18/22/34) are a separate register and do not mix into it.
+- **Scope, as of this commit:** `ui/vars` (the variables table, in both the console and `ocel env ui`) and the variables page's own stamp follow the rule above. The rest of the console — the deployments table, overview tiles, run detail, the switchers — still sets the label register in mono from `app/(dashboard)/label.ts`. That is a known inconsistency held deliberately to keep the blast radius small; the register is forked in three places and wants collapsing into one token before the family changes console-wide.
+- **Do** size an icon from the text beside it — 14px inline with 11–14px text, 16px for a standalone control or mark, 24px for the figure in an overlay or empty state.
 - **Do** make the tonal step carry meaning: app tiles Paper, resource tiles Fog.
 - **Do** step a border rather than lift a surface: hairline at rest, Steel on hover, Ink when selected.
 - **Do** draw relationships as dashed 1.5px Steel beziers at 60% with no arrowheads, going solid Ink only when active.
@@ -481,6 +489,7 @@ the same dot ground the map will use. The loading state is the drawing before th
 - **Don't** add shadows, glows, blurs or gradients. Overlays use a flat 10% black scrim.
 - **Don't** bring the site's landing apparatus here: no grid paper, no registration crosses, no rotated figure captions, no marquee, no 1.5px rules.
 - **Don't** set Label type in Steel. It fails contrast at 11px; Steel is a line colour.
+- **Don't** stand a character in for an icon: no `△` for a warning, no `▸`/`▾` for a caret, no `→` for an arrow. Phosphor draws all three.
 - **Don't** put an outcome dot on a ghost tile, or a status colour on anything that has not actually reported one.
 - **Don't** introduce a second accent, a chart palette, or a new typeface outside `app/fonts.ts`. Plex Sans, Space Grotesk for headings, Plex Mono, and Archivo for the wordmark are the whole set.
 - **Don't** stand in for a brand mark with a letter, an emoji or a coloured square.

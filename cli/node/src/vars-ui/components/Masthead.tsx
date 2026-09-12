@@ -1,46 +1,59 @@
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { CheckCircleIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import {
+  Button,
+  doneLabel,
+  glyph,
+  owedCount,
+  role,
+  SectionLabel,
+  type State,
+  store,
+  tallyLine,
+  useValue,
+} from "@ui/vars";
 
-import { doneLabel, owedCount, type State, tallyLine } from "../model";
-import { useValue } from "../signals";
-import { dirty, finishing, leave, leaveDiscarding, saving } from "../store";
-import { Glyph, SectionLabel } from "./Chip";
+import { cn } from "../lib/utils";
 
 export function Masthead({ current }: { current: State }) {
   const owed = owedCount(current);
   const recovery = current.recovery !== undefined;
-  const pending = useValue(dirty).length;
-  const isSaving = useValue(saving);
-  const isFinishing = useValue(finishing);
+  const pending = useValue(store.dirty).length;
+  const isSaving = useValue(store.saving);
+  const isFinishing = useValue(store.finishing);
   const busy = isSaving || isFinishing;
   return (
-    <header className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b-[1.5px] border-foreground pb-6">
+    <header className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-border pb-6">
       <div>
         <SectionLabel className="mb-1">Variables</SectionLabel>
-        <h1 className="font-sans text-[34px] leading-[1.15] font-semibold tracking-[-0.02em]">
+        <h1 className="font-heading text-[34px] leading-[1.15] font-semibold tracking-[-0.02em]">
           {current.slug}{" "}
-          <span className="font-mono text-lg font-normal tracking-normal text-muted-foreground">
+          <span className="font-sans text-lg font-normal tracking-normal text-muted-foreground">
             · {current.tier}
           </span>
         </h1>
         <p
           data-slot="tally"
           className={cn(
-            "mt-2 inline-flex items-center gap-1.5 font-mono text-[13px]",
-            owed === 0 ? "text-held" : "text-destructive",
+            role.body,
+            "mt-2 inline-flex items-center gap-1.5",
+            owed === 0 ? "text-go" : "text-warn",
           )}
         >
-          {owed === 0 ? <Glyph>✓</Glyph> : <Glyph>●</Glyph>}
+          {owed === 0 ? (
+            <CheckCircleIcon weight="fill" className={glyph.control} />
+          ) : (
+            <WarningCircleIcon weight="fill" className={glyph.control} />
+          )}
           {tallyLine(owed)}
         </p>
       </div>
       {!recovery &&
         (pending > 0 ? (
-          <Button variant="outline" size="sm" disabled={busy} onClick={leaveDiscarding}>
+          <Button variant="outline" size="sm" disabled={busy} onClick={store.leaveDiscarding}>
             Return without saving
           </Button>
         ) : (
-          <Button variant="outline" size="sm" disabled={busy} onClick={leave}>
+          <Button variant="outline" size="sm" disabled={busy} onClick={store.leave}>
             {doneLabel(owed)}
           </Button>
         ))}

@@ -3,6 +3,7 @@ packages:
   - console/*
   - cli/node
   - packages/*
+  - ui/*
   - frameworks/*/*
   - platform/aws/functions/*
   - platform/aws/runtime
