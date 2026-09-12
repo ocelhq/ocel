@@ -13,7 +13,7 @@ import { createTestSessionWithOrganization } from "../../../../test/auth-harness
 import { setupTestDatabase } from "../../../../test/db";
 import { projectObjectPrefix, storeBucket } from "../../blob/store";
 import { createProject } from "../route";
-import { deleteProject, getProjectById } from "./route";
+import { deleteProject, getProjectById, updateProject } from "./route";
 
 const blobStore = new S3Client({
   region: process.env.OCEL_BLOB_REGION ?? "us-east-1",
@@ -312,5 +312,85 @@ describe("deleteProject", () => {
     } finally {
       await session.cleanup();
     }
+  });
+});
+
+function patchRequest(body: unknown, headers: Headers) {
+  return new Request("http://localhost/api/projects/x", {
+    method: "PATCH",
+    headers: { ...Object.fromEntries(headers), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("updateProject", () => {
+  beforeAll(async () => {
+    await setupTestDatabase();
+  });
+
+  it("replaces the frameworks, dropping duplicates", async () => {
+    const session = await createTestSessionWithOrganization();
+
+    try {
+      const created = await createProjectFor(session, "frameworks-replace");
+      const response = await updateProject(
+        patchRequest({ frameworks: ["nextjs", "go", "nextjs"] }, session.headers),
+        created.id,
+      );
+
+      expect(response.status).toBe(200);
+      expect((await response.json()).frameworks).toEqual(["nextjs", "go"]);
+
+      const cleared = await updateProject(
+        patchRequest({ frameworks: [] }, session.headers),
+        created.id,
+      );
+      expect((await cleared.json()).frameworks).toEqual([]);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("rejects a framework it does not know with 400", async () => {
+    const session = await createTestSessionWithOrganization();
+
+    try {
+      const created = await createProjectFor(session, "frameworks-unknown");
+      const response = await updateProject(
+        patchRequest({ frameworks: ["cobol"] }, session.headers),
+        created.id,
+      );
+
+      expect(response.status).toBe(400);
+      const [row] = await db.select().from(project).where(eq(project.id, created.id));
+      expect(row.frameworks).toEqual([]);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("leaves a Project in another org untouched and answers 404", async () => {
+    const owner = await createTestSessionWithOrganization();
+    const stranger = await createTestSessionWithOrganization();
+
+    try {
+      const created = await createProjectFor(owner, "frameworks-foreign");
+      const response = await updateProject(
+        patchRequest({ frameworks: ["go"] }, stranger.headers),
+        created.id,
+      );
+
+      expect(response.status).toBe(404);
+      const [row] = await db.select().from(project).where(eq(project.id, created.id));
+      expect(row.frameworks).toEqual([]);
+    } finally {
+      await owner.cleanup();
+      await stranger.cleanup();
+    }
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    const response = await updateProject(patchRequest({ frameworks: [] }, new Headers()), "x");
+    expect(response.status).toBe(401);
   });
 });

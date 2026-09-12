@@ -52,7 +52,7 @@
         "noLabelWithoutControl": {
           "level": "error",
           "options": {
-            "inputComponents": ["Checkbox"]
+            "inputComponents": ["Checkbox", "Input", "Textarea"]
           }
         }
       },
@@ -75,6 +75,20 @@
     }
   },
   "overrides": [
+    {
+      "includes": ["**/components/ui/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useKeyWithClickEvents": "off",
+            "useSemanticElements": "off"
+          },
+          "suspicious": {
+            "noDocumentCookie": "off"
+          }
+        }
+      }
+    },
     {
       "includes": ["platform/aws/provider/edges/cloudfront/resolver/src/**"],
       "javascript": {

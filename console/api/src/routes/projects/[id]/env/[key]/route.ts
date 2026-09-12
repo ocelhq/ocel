@@ -2,7 +2,7 @@ import { db } from "@console/db";
 import { projectEnvValue } from "@console/db/schema";
 import { and, eq } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
-import { findOwnedProject } from "../owned";
+import { findOwnedProject } from "../../owned";
 import { envKeySchema, putEnvValueSchema } from "../validation";
 
 type Addressed = { ok: true; projectId: string; key: string } | { ok: false; refusal: Response };

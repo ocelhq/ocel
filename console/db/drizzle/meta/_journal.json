@@ -22,6 +22,20 @@
       "when": 1783699018394,
       "tag": "0002_mature_jack_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789121046633,
+      "tag": "0003_shallow_captain_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789204866057,
+      "tag": "0004_parallel_major_mapleleaf",
+      "breakpoints": true
     }
   ]
 }

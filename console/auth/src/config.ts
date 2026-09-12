@@ -3,6 +3,7 @@ import * as schema from "@console/db/schema";
 import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer, deviceAuthorization, organization } from "better-auth/plugins";
+import { asc, eq } from "drizzle-orm";
 import { OCEL_CLI_CLIENT_ID } from "./constants";
 
 export const authConfig = {
@@ -21,6 +22,24 @@ export const authConfig = {
   },
   session: {
     expiresIn: 60 * 60 * 24 * 30,
+  },
+  databaseHooks: {
+    session: {
+      create: {
+        before: async (session) => {
+          const [membership] = await db
+            .select({ organizationId: schema.member.organizationId })
+            .from(schema.member)
+            .where(eq(schema.member.userId, session.userId))
+            .orderBy(asc(schema.member.createdAt))
+            .limit(1);
+
+          return {
+            data: { ...session, activeOrganizationId: membership?.organizationId ?? null },
+          };
+        },
+      },
+    },
   },
   plugins: [
     organization(),

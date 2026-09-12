@@ -5,13 +5,34 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --animate-wiggle: ocel-wiggle 450ms ease-out;
+
+  @keyframes ocel-wiggle {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    20% {
+      transform: rotate(-12deg);
+    }
+    40% {
+      transform: rotate(10deg);
+    }
+    60% {
+      transform: rotate(-6deg);
+    }
+    80% {
+      transform: rotate(3deg);
+    }
+  }
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
   --font-serif: var(--font-serif);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-heading);
   --font-display: var(--font-display);
 
   --color-dim: var(--dim);
@@ -19,6 +40,11 @@
   --color-chip: var(--chip);
   --color-grid: var(--grid);
   --color-hard-shadow: var(--hard-shadow);
+  --color-go: var(--go);
+  --color-terminal: var(--terminal);
+  --color-terminal-rule: var(--terminal-rule);
+  --color-terminal-foreground: var(--terminal-foreground);
+  --color-terminal-ink: var(--terminal-ink);
 
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -108,6 +134,11 @@
   --chip: #f1f1f1;
   --grid: #ececec;
   --hard-shadow: #e8e8e8;
+  --go: #1a9e57;
+  --terminal: #16181a;
+  --terminal-rule: #2a2d31;
+  --terminal-foreground: #9aa0a8;
+  --terminal-ink: #f2f1ec;
 }
 
 .dark {
@@ -158,6 +189,7 @@
   --chip: #22252a;
   --grid: #1c1f22;
   --hard-shadow: #000000;
+  --go: #3ecf7a;
 }
 
 @layer base {
@@ -181,6 +213,11 @@
   pre,
   samp {
     font-family: var(--font-mono);
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-heading);
   }
 }
 
@@ -264,4 +301,54 @@
   background: transparent;
   font-size: 13px;
   line-height: 1.85;
+}
+
+[data-service-map] .react-flow__node {
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+}
+
+[data-service-map] .react-flow__node:focus,
+[data-service-map] .react-flow__node:focus-visible,
+[data-service-map] .react-flow__node.selected {
+  outline: none;
+  box-shadow: none;
+}
+
+[data-service-map] .react-flow__handle {
+  width: 0;
+  height: 0;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+}
+
+[data-service-map] .react-flow__edge .react-flow__edge-path,
+[data-service-map] .react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 1.5;
+}
+
+[data-service-map] .react-flow__edge:focus,
+[data-service-map] .react-flow__edge:focus-visible {
+  outline: none;
+}
+
+[data-service-map] .react-flow__attribution {
+  display: none;
+}
+
+[data-service-map] .react-flow__panel,
+[data-service-map] .react-flow__controls {
+  box-shadow: none;
+  border-radius: 0;
+}
+
+[data-service-map] .react-flow__nodesselection-rect,
+[data-service-map] .react-flow__selection {
+  border: 1px solid var(--foreground);
+  background: transparent;
+  border-radius: 0;
 }
