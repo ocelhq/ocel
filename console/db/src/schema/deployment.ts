@@ -67,6 +67,14 @@ export type DeploymentVariable = {
   class: VariableClass;
   folder?: string;
   description?: string;
+  group?: string;
+  required?: boolean;
+};
+
+export type DeploymentVariableGroup = {
+  key: string;
+  required: boolean;
+  description?: string;
 };
 
 export type DeploymentApp = {
@@ -102,6 +110,7 @@ export type DeploymentTopology = {
   apps: DeploymentApp[];
   resources: DeploymentResource[];
   usages: DeploymentUsage[];
+  variableGroups?: DeploymentVariableGroup[];
 };
 
 export const deployment = pgTable(

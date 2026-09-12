@@ -60,6 +60,9 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 
 - **`packages/`** — everything published to npm, and nothing else. `@ocel/*` is public
   API; nothing internal may claim it.
+- **`ui/<surface>/`** — a React surface more than one product renders, and the tokens it
+  renders in. Published nowhere, so it may not live in `packages/`; depended on by the
+  CLI's node half and by the console, and depending on neither.
 - **`console/`** — Ocel's hosted control plane. Never call it a cloud.
 - **`platform/<vendor>/`** — code targeting someone else's infrastructure. Each vendor
   holds its provisioning/deploy Go **and** the JS that runs on it. A second origin cloud

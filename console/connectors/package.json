@@ -1,0 +1,25 @@
+{
+  "name": "@console/connectors",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "what the console asks a connector in the customer's account, and how an answer comes back",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.12.1",
+    "@connectrpc/connect": "^2.1.0",
+    "@connectrpc/connect-node": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.1.9"
+  }
+}

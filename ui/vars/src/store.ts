@@ -1,0 +1,818 @@
+import { parseDotenv } from "./dotenv";
+import {
+  type Address,
+  addressKey,
+  applyDotenv,
+  type Bundle,
+  baselineOf,
+  blockedVariableGroupColumns,
+  type CopyPlan,
+  catalogueOf,
+  type DropOutcome,
+  dirtyEntries,
+  editable,
+  environmentsOf,
+  listingOf,
+  names,
+  owedLensCount,
+  owedSet,
+  owedVariableGroupCellsOf,
+  type Problem,
+  planCopy,
+  plural,
+  reduceSave,
+  removeSummary,
+  revealable,
+  type SaveResult,
+  type State,
+  saveSummary,
+  unfilledOwed,
+  type VariableGroupPending,
+  type VariableGroupState,
+  type Version,
+  variableGroupBlockLine,
+  variableGroupColumn,
+  variableGroupColumnKey,
+  variableGroupOn,
+  variableGroupStateOf,
+  variableGroupStatesOf,
+  variantsOf,
+} from "./model";
+import { conflict, port, type Revealed, sessionPort, VarsError } from "./port";
+import { computed, signal } from "./signals";
+
+export const state = signal<State | null>(null);
+export const saving = signal(false);
+export const farewell = signal<string | null>(null);
+
+export const environment = signal("");
+export const search = signal("");
+export const owedOnly = signal(false);
+export const selected = signal<ReadonlySet<string>>(new Set());
+export const extras = signal<readonly Address[]>([]);
+export const expanded = signal<ReadonlySet<string>>(new Set());
+export const spotlight = signal<string | null>(null);
+export const focusing = signal<string | null>(null);
+
+export const drafts = signal<ReadonlyMap<string, string>>(new Map());
+export const variableGroupRemovals = signal<ReadonlySet<string>>(new Set());
+export const variableGroupsOn = signal<ReadonlySet<string>>(new Set());
+export const baselines = signal<ReadonlyMap<string, string>>(new Map());
+export const revealErrors = signal<ReadonlyMap<string, string>>(new Map());
+export const problems = signal<ReadonlyMap<string, Problem>>(new Map());
+export const outcome = signal<{ text: string; tone?: "owed" } | null>(null);
+
+export const dragTarget = signal<string | null>(null);
+export const dropped = signal<(DropOutcome & { name: string }) | null>(null);
+
+export interface Removal {
+  cells: { at: Address; version: number }[];
+}
+
+export const removing = signal<Removal | null>(null);
+
+export interface CopyDialog {
+  tier: string;
+  plan: CopyPlan;
+  chosen: ReadonlySet<string>;
+  overwriting: boolean;
+  open: ReadonlySet<string>;
+  busy: boolean;
+  error: string | null;
+}
+
+export const copying = signal<CopyDialog | null>(null);
+export const copyLoading = signal(false);
+
+export const drawer = signal<Address | null>(null);
+export const history = signal<Version[] | null>(null);
+export const historyError = signal<string | null>(null);
+
+const emptyState: State = {
+  slug: "",
+  tier: "",
+  other: "",
+  environments: [],
+  matrix: { columns: [], rows: [], apps: [] },
+};
+
+export const catalogue = computed(() => catalogueOf(state.value ?? emptyState, extras.value));
+
+export const variants = computed(() => catalogue.value.variants);
+
+export const environments = computed(() => (state.value ? environmentsOf(state.value) : []));
+
+export const dirty = computed(() => dirtyEntries(catalogue.value, drafts.value, baselines.value));
+
+export const owed = computed(() => owedSet(state.value?.recovery));
+
+export const owedLens = computed(() =>
+  owedLensCount(state.value ?? emptyState, catalogue.value, owed.value),
+);
+
+function variableGroupPending(): VariableGroupPending {
+  return {
+    drafts: drafts.value,
+    removals: variableGroupRemovals.value,
+    switchedOn: variableGroupsOn.value,
+  };
+}
+
+export const variableGroupStates = computed(() => {
+  const current = state.value ?? emptyState;
+  const pending = variableGroupPending();
+  const base = variableGroupStatesOf(current, "", pending);
+  if (environment.value === "") return base;
+  return [...base, ...variableGroupStatesOf(current, environment.value, pending)];
+});
+
+export const owedVariableGroupCells = computed(() =>
+  owedVariableGroupCellsOf(variableGroupStates.value),
+);
+
+export const bundleStates = computed(() => {
+  const at = environment.value;
+  const out = new Map<string, VariableGroupState[]>();
+  for (const derived of variableGroupStates.value) {
+    if (derived.environment !== at) continue;
+    const held = out.get(derived.group.key);
+    if (held) held.push(derived);
+    else out.set(derived.group.key, [derived]);
+  }
+  return out as ReadonlyMap<string, readonly VariableGroupState[]>;
+});
+
+export function bundleOpen(
+  states: ReadonlyMap<string, readonly VariableGroupState[]>,
+  bundle: Bundle,
+): boolean {
+  const held = states.get(bundle.group.key);
+  return held === undefined || held.length === 0 || held.some(variableGroupOn);
+}
+
+export const collapsed = signal<ReadonlySet<string>>(new Set());
+
+export function bundleFolderKey(group: string, folder: string): string {
+  return `${group} ${folder}`;
+}
+
+export function toggleBundleFolder(group: string, folder: string): void {
+  const next = new Set(collapsed.value);
+  const key = bundleFolderKey(group, folder);
+  if (!next.delete(key)) next.add(key);
+  collapsed.value = next;
+}
+
+export function toggleBundle(group: string, on: boolean): void {
+  for (const derived of bundleStates.value.get(group) ?? []) {
+    toggleVariableGroup(group, derived.folder, on);
+  }
+}
+
+export const listing = computed(() =>
+  listingOf(state.value ?? emptyState, catalogue.value, owed.value, {
+    environment: environment.value,
+    query: search.value,
+    owedOnly: owedOnly.value,
+  }),
+);
+
+export const visible = computed(() => {
+  const shown = listing.value;
+  const states = bundleStates.value;
+  const lines = [
+    ...shown.keys,
+    ...shown.groups
+      .filter((group) => expanded.value.has(group.folder))
+      .flatMap((group) => group.lines),
+    ...shown.bundles
+      .filter((bundle) => bundleOpen(states, bundle))
+      .flatMap((bundle) => [
+        ...bundle.root,
+        ...bundle.folders
+          .filter(
+            (within) => !collapsed.value.has(bundleFolderKey(bundle.group.key, within.folder)),
+          )
+          .flatMap((within) => within.lines),
+      ]),
+  ];
+  return lines.filter((line) => editable(line.variant)).map((line) => line.variant);
+});
+
+export const unfilled = computed(() =>
+  unfilledOwed(catalogue.value, owed.value, drafts.value, baselines.value),
+);
+
+export const finishing = signal(false);
+export const finishError = signal<string | null>(null);
+
+export async function load(): Promise<void> {
+  try {
+    state.value = await port().read();
+  } catch (thrown) {
+    farewell.value = `Could not read this project's variables: ${message(thrown)}`;
+    return;
+  }
+  void attend();
+  owedOnly.value = unfilled.value.length > 0;
+  expanded.value = new Set(
+    listing.value.groups.filter((group) => group.owed > 0).map((group) => group.folder),
+  );
+}
+
+async function attend(): Promise<void> {
+  const session = sessionPort();
+  if (session === null) return;
+  while (farewell.value === null) {
+    try {
+      await session.attend();
+    } catch {}
+    if (farewell.value !== null) return;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
+
+function message(thrown: unknown): string {
+  return thrown instanceof Error ? thrown.message : String(thrown);
+}
+
+async function refresh(): Promise<void> {
+  try {
+    state.value = await port().read();
+  } catch (thrown) {
+    outcome.value = {
+      text: `The page could not re-read the variables, so what is on screen may be out of date: ${message(thrown)}`,
+      tone: "owed",
+    };
+  }
+}
+
+export function toggleGroup(folder: string): void {
+  const next = new Set(expanded.value);
+  if (!next.delete(folder)) next.add(folder);
+  expanded.value = next;
+}
+
+function expand(folder: string): void {
+  if (folder === "" || expanded.value.has(folder)) return;
+  expanded.value = new Set([...expanded.value, folder]);
+}
+
+export function revealGroup(folder: string): void {
+  search.value = "";
+  owedOnly.value = false;
+  expand(folder);
+  spotlight.value = folder;
+}
+
+export function spotlighted(): void {
+  spotlight.value = null;
+}
+
+export function focused(): void {
+  focusing.value = null;
+}
+
+export function pickEnvironment(name: string): void {
+  environment.value = name;
+  selected.value = new Set();
+}
+
+export function setSearch(text: string): void {
+  search.value = text;
+  selected.value = new Set();
+}
+
+export function showOwed(on: boolean): void {
+  owedOnly.value = on;
+  selected.value = new Set();
+}
+
+export function toggleSelected(at: Address): void {
+  const next = new Set(selected.value);
+  const key = addressKey(at);
+  if (!next.delete(key)) next.add(key);
+  selected.value = next;
+}
+
+export function selectVisible(on: boolean): void {
+  selected.value = on ? new Set(visible.value.map((v) => addressKey(v.at))) : new Set();
+}
+
+export function clearSelection(): void {
+  selected.value = new Set();
+}
+
+function remember(at: Address): void {
+  if (variants.value.has(addressKey(at))) return;
+  extras.value = [...extras.value, at];
+}
+
+export function addOverride(at: Address): void {
+  remember(at);
+  environment.value = at.environment;
+  search.value = "";
+  owedOnly.value = false;
+  selected.value = new Set();
+  expand(at.folder);
+  focusing.value = addressKey(at);
+}
+
+export function setFor(at: Address): void {
+  remember(at);
+  expand(at.folder);
+  focusing.value = addressKey(at);
+}
+
+export function dismiss(at: Address): void {
+  const key = addressKey(at);
+  extras.value = extras.value.filter((extra) => addressKey(extra) !== key);
+  const next = new Map(drafts.value);
+  next.delete(key);
+  drafts.value = next;
+}
+
+export function setDraft(at: Address, value: string): void {
+  remember(at);
+  const key = addressKey(at);
+  const next = new Map(drafts.value);
+  if (value === baselineOf(at, baselines.value)) next.delete(key);
+  else next.set(key, value);
+  drafts.value = next;
+}
+
+export function discard(): void {
+  drafts.value = new Map();
+  problems.value = new Map();
+  outcome.value = null;
+}
+
+export async function reveal(cells: readonly Address[]): Promise<void> {
+  const asked = cells.filter((at) => {
+    const variant = variants.value.get(addressKey(at));
+    return variant !== undefined && revealable(variant);
+  });
+  if (asked.length === 0) return;
+  let read: Revealed;
+  try {
+    read = await port().reveal(asked);
+  } catch (thrown) {
+    const errors = new Map(revealErrors.value);
+    for (const at of asked) errors.set(addressKey(at), message(thrown));
+    revealErrors.value = errors;
+    return;
+  }
+  const values = new Map(baselines.value);
+  const errors = new Map(revealErrors.value);
+  for (const found of read.values) {
+    values.set(addressKey(found), found.value);
+    errors.delete(addressKey(found));
+  }
+  for (const failed of read.errors) {
+    errors.set(addressKey(failed), failed.error);
+    values.delete(addressKey(failed));
+  }
+  baselines.value = values;
+  revealErrors.value = errors;
+}
+
+export function hide(cells: readonly Address[]): void {
+  const values = new Map(baselines.value);
+  const errors = new Map(revealErrors.value);
+  for (const at of cells) {
+    values.delete(addressKey(at));
+    errors.delete(addressKey(at));
+  }
+  baselines.value = values;
+  revealErrors.value = errors;
+}
+
+export const shown = computed(() => {
+  const open = visible.value.filter(revealable);
+  return open.length > 0 && open.every((v) => baselines.value.has(addressKey(v.at)));
+});
+
+export function toggleRevealVisible(): void {
+  const cells = visible.value.filter(revealable).map((v) => v.at);
+  if (shown.value) hide(cells);
+  else void reveal(cells);
+}
+
+function chosen(): Address[] {
+  return variantsOf(catalogue.value)
+    .filter((v) => selected.value.has(addressKey(v.at)))
+    .map((v) => v.at);
+}
+
+export function revealSelected(): Promise<void> {
+  return reveal(chosen());
+}
+
+export function hideSelected(): void {
+  hide(chosen());
+}
+
+export async function copyValue(at: Address): Promise<void> {
+  if (!baselines.value.has(addressKey(at))) await reveal([at]);
+  const value = baselines.value.get(addressKey(at));
+  if (value === undefined) {
+    outcome.value = { text: `Could not read the value of ${at.key} to copy it.`, tone: "owed" };
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(value);
+    outcome.value = { text: `Copied the value of ${at.key}.` };
+  } catch (thrown) {
+    outcome.value = { text: `Could not copy: ${message(thrown)}`, tone: "owed" };
+  }
+}
+
+async function attempt(at: Address, run: () => Promise<unknown>): Promise<SaveResult> {
+  try {
+    await run();
+    return { at, ok: true };
+  } catch (thrown) {
+    return {
+      at,
+      ok: false,
+      status: thrown instanceof VarsError ? thrown.status : 0,
+      message: message(thrown),
+    };
+  }
+}
+
+function settle(results: SaveResult[]): ReturnType<typeof reduceSave> {
+  const reduced = reduceSave(drafts.value, baselines.value, problems.value, results);
+  drafts.value = reduced.drafts;
+  baselines.value = reduced.baselines;
+  problems.value = reduced.problems;
+  return reduced;
+}
+
+export async function save(): Promise<void> {
+  const pending = dirty.value;
+  if ((pending.length === 0 && variableGroupRemovals.value.size === 0) || saving.value) return;
+  const states = variableGroupStates.value;
+  const blocked = blockedVariableGroupColumns(states);
+  const open = (at: Address) => !blocked.has(variableGroupColumn(at.folder, at.environment));
+  const held = pending.filter((draft) => open(draft.at));
+  const dropping = [...variableGroupRemovals.value].flatMap((key) => {
+    const variant = variants.value.get(key);
+    return variant?.set && !variant.reference && open(variant.at) ? [variant] : [];
+  });
+  const refused = blocked.size === 0 ? null : variableGroupBlockLine(states);
+  if (held.length === 0 && dropping.length === 0) {
+    if (refused) outcome.value = { text: refused, tone: "owed" };
+    return;
+  }
+  saving.value = true;
+  outcome.value = null;
+  try {
+    const results = await Promise.all(
+      held.map((draft) =>
+        attempt(draft.at, () => port().set(draft.at, draft.value, draft.version)),
+      ),
+    );
+    const removed = await Promise.all(
+      dropping.map((variant) =>
+        attempt(variant.at, () => port().remove(variant.at, variant.version)),
+      ),
+    );
+    const attempted = new Set(dropping.map((variant) => addressKey(variant.at)));
+    variableGroupRemovals.value = new Set([
+      ...[...variableGroupRemovals.value].filter((key) => !attempted.has(key)),
+      ...removed.filter((result) => !result.ok).map((result) => addressKey(result.at)),
+    ]);
+    await refresh();
+    const reduced = settle(results);
+    const switched = variableGroupsOn.value;
+    variableGroupsOn.value = new Set(
+      variableGroupStates.value
+        .filter((derived) => derived.status === "off")
+        .map((derived) =>
+          variableGroupColumnKey(derived.group.key, derived.folder, derived.environment),
+        )
+        .filter((key) => switched.has(key)),
+    );
+    const cleared = removed.filter((result) => result.ok).length;
+    outcome.value = {
+      text: [
+        saveSummary(reduced),
+        cleared > 0 ? `Removed ${plural(cleared, "group value")}.` : "",
+        refused ?? "",
+      ]
+        .filter((part) => part !== "")
+        .join(" "),
+      ...((reduced.saved < results.length || refused !== null) && { tone: "owed" as const }),
+    };
+    await reveal(
+      results
+        .filter((result) => !result.ok && result.status === conflict)
+        .map((result) => result.at),
+    );
+  } finally {
+    saving.value = false;
+  }
+}
+
+export function toggleVariableGroup(group: string, folder: string, on: boolean): void {
+  const current = state.value;
+  if (!current) return;
+  const at = environment.value;
+  const derived = variableGroupStateOf(current, group, folder, at, variableGroupPending());
+  if (!derived) return;
+  const column = variableGroupColumnKey(group, folder, at);
+  const switchedOn = new Set(variableGroupsOn.value);
+  const removals = new Set(variableGroupRemovals.value);
+  const remaining = new Map(drafts.value);
+  if (on) {
+    switchedOn.add(column);
+    for (const member of derived.members) {
+      for (const address of member.addresses) removals.delete(addressKey(address));
+    }
+    variableGroupsOn.value = switchedOn;
+    variableGroupRemovals.value = removals;
+    for (const member of derived.members) remember(member.at);
+    search.value = "";
+    owedOnly.value = false;
+    expand(folder);
+    const first = derived.owed[0] ?? derived.members[0];
+    if (first) focusing.value = addressKey(first.at);
+    return;
+  }
+  switchedOn.delete(column);
+  for (const member of derived.members) {
+    for (const address of member.addresses) {
+      const key = addressKey(address);
+      remaining.delete(key);
+      const variant = variants.value.get(key);
+      if (variant?.set && !variant.reference) removals.add(key);
+    }
+  }
+  variableGroupsOn.value = switchedOn;
+  variableGroupRemovals.value = removals;
+  drafts.value = remaining;
+}
+
+export function askRemoval(cells: readonly Address[]): void {
+  const held = cells
+    .map((at) => variants.value.get(addressKey(at)))
+    .filter((v) => v?.set && !v.reference)
+    .map((v) => ({ at: v!.at, version: v!.version }));
+  if (held.length === 0) return;
+  removing.value = { cells: held };
+}
+
+export function cancelRemoval(): void {
+  if (saving.value) return;
+  removing.value = null;
+}
+
+export async function confirmRemoval(): Promise<void> {
+  const asked = removing.value;
+  if (!asked || saving.value) return;
+  saving.value = true;
+  outcome.value = null;
+  try {
+    const results = await Promise.all(
+      asked.cells.map(({ at, version }) => attempt(at, () => port().remove(at, version))),
+    );
+    await refresh();
+    const reduced = settle(results);
+    hide(results.filter((r) => r.ok).map((r) => r.at));
+    outcome.value = {
+      text: removeSummary(reduced),
+      ...(reduced.saved < results.length && { tone: "owed" as const }),
+    };
+    removing.value = null;
+    selected.value = new Set();
+  } finally {
+    saving.value = false;
+  }
+}
+
+export function applyDrop(name: string, text: string, into: string): void {
+  const out = applyDotenv(catalogue.value, parseDotenv(text), into);
+  const added = [...extras.value];
+  const known = new Set(added.map(addressKey));
+  const next = new Map(drafts.value);
+  for (const fill of out.fills) {
+    if (fill.materialise && !known.has(addressKey(fill.at))) {
+      added.push(fill.at);
+      known.add(addressKey(fill.at));
+    }
+    if (fill.value === baselineOf(fill.at, baselines.value)) {
+      next.delete(addressKey(fill.at));
+    } else {
+      next.set(addressKey(fill.at), fill.value);
+    }
+  }
+  extras.value = added;
+  drafts.value = next;
+  dropped.value = { ...out, name };
+  dragTarget.value = null;
+  if (out.fills.length > 0) expand(into);
+}
+
+export function importFile(file: File, into: string): void {
+  void file.text().then((text) => applyDrop(file.name, text, into));
+}
+
+export function dismissDrop(): void {
+  dropped.value = null;
+}
+
+export async function openCopy(): Promise<void> {
+  const current = state.value;
+  if (!current || copyLoading.value) return;
+  copyLoading.value = true;
+  outcome.value = null;
+  try {
+    const other = await port().other();
+    const plan = planCopy(catalogue.value, current.environments, other.values);
+    copying.value = {
+      tier: other.tier,
+      plan,
+      chosen: new Set(plan.fills.map((cell) => addressKey(cell.at))),
+      overwriting: false,
+      open: new Set([""]),
+      busy: false,
+      error: null,
+    };
+  } catch (thrown) {
+    outcome.value = {
+      text: `Could not read the ${current.other} values: ${message(thrown)}`,
+      tone: "owed",
+    };
+  } finally {
+    copyLoading.value = false;
+  }
+}
+
+export function toggleCopy(cells: readonly Address[], on?: boolean): void {
+  const dialog = copying.value;
+  if (!dialog || dialog.busy) return;
+  const next = new Set(dialog.chosen);
+  for (const at of cells) {
+    const key = addressKey(at);
+    const want = on ?? !next.has(key);
+    if (want) next.add(key);
+    else next.delete(key);
+  }
+  copying.value = { ...dialog, chosen: next };
+}
+
+export function toggleOverwriting(): void {
+  const dialog = copying.value;
+  if (!dialog || dialog.busy) return;
+  const overwriting = !dialog.overwriting;
+  const chosen = new Set(dialog.chosen);
+  if (!overwriting) {
+    for (const cell of dialog.plan.overwrites) chosen.delete(addressKey(cell.at));
+  }
+  copying.value = { ...dialog, overwriting, chosen };
+}
+
+export function toggleBranch(target: string): void {
+  const dialog = copying.value;
+  if (!dialog) return;
+  const open = new Set(dialog.open);
+  if (!open.delete(target)) open.add(target);
+  copying.value = { ...dialog, open };
+}
+
+export function closeCopy(): void {
+  if (copying.value?.busy) return;
+  copying.value = null;
+}
+
+export async function confirmCopy(): Promise<void> {
+  const dialog = copying.value;
+  if (!dialog || dialog.busy) return;
+  const cells = [...dialog.plan.fills, ...dialog.plan.overwrites].filter((cell) =>
+    dialog.chosen.has(addressKey(cell.at)),
+  );
+  if (cells.length === 0) return;
+  copying.value = { ...dialog, busy: true, error: null };
+  saving.value = true;
+  try {
+    const answer = await port().copy(
+      cells.map((cell) => ({ ...cell.at, version: cell.hereVersion })),
+    );
+    const added = [...extras.value];
+    const known = new Set(added.map(addressKey));
+    for (const cell of cells) {
+      if (cell.materialise && !known.has(addressKey(cell.at))) {
+        added.push(cell.at);
+        known.add(addressKey(cell.at));
+      }
+    }
+    extras.value = added;
+    await refresh();
+    const results: SaveResult[] = answer.map((result) => {
+      const at = { key: result.key, folder: result.folder, environment: result.environment };
+      if (result.saved) return { at, ok: true };
+      return {
+        at,
+        ok: false,
+        status: result.conflict ? conflict : 0,
+        message: result.error ?? "the copy failed",
+      };
+    });
+    const reduced = settle(results);
+    const total = results.length;
+    const why: string[] = [];
+    if (reduced.conflicted > 0) why.push(`${reduced.conflicted} changed here underneath you`);
+    if (reduced.failed > 0) why.push(`${reduced.failed} failed`);
+    outcome.value =
+      reduced.saved === total
+        ? { text: `Copied ${plural(total, "value")} from ${dialog.tier}.` }
+        : {
+            text: `Copied ${reduced.saved} of ${plural(total, "value")} from ${dialog.tier}; ${names(why)} — see the marked rows.`,
+            tone: "owed",
+          };
+    copying.value = null;
+    await reveal(results.filter((r) => !r.ok && r.status === conflict).map((r) => r.at));
+  } catch (thrown) {
+    copying.value = { ...dialog, busy: false, error: message(thrown) };
+  } finally {
+    saving.value = false;
+  }
+}
+
+export function openDrawer(at: Address): void {
+  drawer.value = at;
+  history.value = null;
+  historyError.value = null;
+  void port()
+    .history(at)
+    .then(
+      (read) => {
+        if (drawer.value && addressKey(drawer.value) === addressKey(at)) {
+          history.value = read;
+        }
+      },
+      (thrown: unknown) => {
+        if (drawer.value && addressKey(drawer.value) === addressKey(at)) {
+          historyError.value = message(thrown);
+        }
+      },
+    );
+}
+
+export function closeDrawer(): void {
+  drawer.value = null;
+}
+
+export function leave(): void {
+  void sessionPort()
+    ?.done()
+    .catch(() => {});
+  farewell.value = "Returned to the terminal. You can close this tab.";
+}
+
+export function leaveDiscarding(): void {
+  discard();
+  leave();
+}
+
+export async function resume(): Promise<void> {
+  if (finishing.value || saving.value) return;
+  finishing.value = true;
+  finishError.value = null;
+  try {
+    if (dirty.value.length > 0) {
+      await save();
+      if (dirty.value.length > 0) {
+        finishError.value =
+          "Some rows did not save, so the deploy cannot resume yet; sort them out above and try again.";
+        return;
+      }
+    }
+    if (unfilled.value.length > 0) {
+      finishError.value = `The deploy still needs ${plural(unfilled.value.length, "cell")} filled.`;
+      return;
+    }
+    await sessionPort()?.done();
+    farewell.value = "Saved. The deploy is resuming in the terminal; you can close this tab.";
+  } catch (thrown) {
+    finishError.value = message(thrown);
+  } finally {
+    finishing.value = false;
+  }
+}
+
+export async function abandon(): Promise<void> {
+  if (finishing.value) return;
+  finishing.value = true;
+  finishError.value = null;
+  try {
+    await sessionPort()?.abandon();
+    farewell.value =
+      "Abandoned. The deploy fails in the terminal with the cells it was refused; you can close this tab.";
+  } catch (thrown) {
+    finishError.value = message(thrown);
+  } finally {
+    finishing.value = false;
+  }
+}

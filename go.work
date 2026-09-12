@@ -4,11 +4,13 @@ use (
 	./cli
 	./pkg/channel
 	./pkg/configdoc
+	./pkg/connectorkit
 	./pkg/constants
 	./pkg/naming
 	./pkg/proto
 	./pkg/providerkit
 	./pkg/providerkit/pulumi
+	./platform/aws/connector
 	./platform/aws/provider
 	./platform/aws/runtime
 	./platform/edge/cloudflare/deploy

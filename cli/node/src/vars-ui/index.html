@@ -7,6 +7,12 @@
     <meta name="color-scheme" content="light dark" />
     <title>Variables</title>
     <link rel="stylesheet" href="/app.css" />
+    <script>
+      const dark = window.matchMedia("(prefers-color-scheme: dark)");
+      const paint = () => document.documentElement.classList.toggle("dark", dark.matches);
+      paint();
+      dark.addEventListener("change", paint);
+    </script>
   </head>
   <body>
     <main id="root" aria-busy="true">
