@@ -1,6 +1,6 @@
 {
   "$schema": "https://ui.shadcn.com/schema.json",
-  "style": "base-sera",
+  "style": "base-lyra",
   "rsc": true,
   "tsx": true,
   "tailwind": {
@@ -20,8 +20,6 @@
     "hooks": "@/hooks"
   },
   "menuColor": "default",
-  "menuAccent": "bold",
-  "registries": {
-    "@svgl": "https://svgl.app/r/{name}.json"
-  }
+  "menuAccent": "subtle",
+  "registries": {}
 }

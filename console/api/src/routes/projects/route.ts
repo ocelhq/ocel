@@ -59,6 +59,7 @@ export async function createProject(request: Request): Promise<Response> {
         name: parsed.data.name,
         slug: parsed.data.slug,
         description: parsed.data.description ?? null,
+        frameworks: parsed.data.frameworks ?? [],
         createdBy: session.userId,
       })
       .returning();

@@ -43,6 +43,7 @@ var languageExtensions = map[string]Language{
 	".rs":  Rust,
 	".ts":  JS,
 	".tsx": JS,
+	".cts": JS,
 	".js":  JS,
 	".jsx": JS,
 	".mjs": JS,

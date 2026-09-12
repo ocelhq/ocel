@@ -1,7 +1,7 @@
 import { db } from "@console/db";
 import { projectEnvValue } from "@console/db/schema";
 import { eq } from "drizzle-orm";
-import { findOwnedProject } from "./owned";
+import { findOwnedProject } from "../owned";
 
 export async function listProjectEnv(request: Request, id: string): Promise<Response> {
   const owned = await findOwnedProject(request, id);

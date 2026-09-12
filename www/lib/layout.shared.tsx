@@ -1,6 +1,6 @@
 import type { BaseLayoutProps } from "fumadocs-ui/layouts/shared";
-import { GithubIcon } from "@/components/github-icon";
-import { Lockup } from "@/components/logo";
+import { GithubIcon } from "@/components/docs/github-icon";
+import { Lockup } from "@/components/docs/logo";
 
 export function baseOptions(): BaseLayoutProps {
   return {

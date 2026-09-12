@@ -10,16 +10,16 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  ocel-cloud:
-    image: postgres:16
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5433:5432"
-    volumes:
-      - ocel_cloud_data:/var/lib/postgresql/data
+  # ocel-cloud:
+  #   image: postgres:16
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #   ports:
+  #     - "5433:5432"
+  #   volumes:
+  #     - ocel_cloud_data:/var/lib/postgresql/data
 
   minio:
     image: quay.io/minio/minio
@@ -50,14 +50,14 @@ services:
       mc mb --ignore-existing local/ocel-dev
       "
 
-  dynamodb:
-    image: amazon/dynamodb-local
-    restart: unless-stopped
-    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
-    ports:
-      - "8000:8000"
+  # dynamodb:
+  #   image: amazon/dynamodb-local
+  #   restart: unless-stopped
+  #   command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+  #   ports:
+  #     - "8000:8000"
 
 volumes:
   postgres_data:
-  ocel_cloud_data:
+  # ocel_cloud_data:
   minio_data:

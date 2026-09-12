@@ -1,27 +1,13 @@
 import type { Metadata } from "next";
-import { Archivo, IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import { ThemeProvider } from "next-themes";
 import "./globals.css";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-sans",
-});
-const ibmPlexMono = IBM_Plex_Mono({
-  weight: ["400", "500", "600"],
-  subsets: ["latin"],
-  variable: "--font-mono",
-});
-const archivo = Archivo({
-  weight: ["800"],
-  subsets: ["latin"],
-  variable: "--font-display",
-});
+import { fontVariables } from "./fonts";
 
 export const metadata: Metadata = {
-  title: "Ocel — Deploy apps to your own cloud",
-  description:
-    'The deploy experience you love, running in the account you already pay for. Zero-config deploys, real dev infra, and an SDK that turns postgres("main") into a database.',
+  title: "Ocel Console",
+  description: "Manage Ocel deployments in your cloud account.",
 };
 
 export default function RootLayout({
@@ -32,16 +18,19 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={cn(
-        "h-full",
-        "antialiased",
-        "font-sans",
-        spaceGrotesk.variable,
-        ibmPlexMono.variable,
-        archivo.variable,
-      )}
+      suppressHydrationWarning
+      className={cn("h-full", "antialiased", "font-sans", fontVariables)}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col text-sm/5">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <TooltipProvider>{children}</TooltipProvider>
+        </ThemeProvider>
+      </body>
     </html>
   );
 }

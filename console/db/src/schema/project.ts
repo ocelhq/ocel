@@ -1,6 +1,29 @@
 import { relations } from "drizzle-orm";
-import { pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { organization, user } from "./auth-schema";
+
+export const FRAMEWORKS = [
+  "nextjs",
+  "react",
+  "astro",
+  "remix",
+  "nuxt",
+  "sveltekit",
+  "node",
+  "express",
+  "fastify",
+  "hono",
+  "bun",
+  "deno",
+  "go",
+  "python",
+  "django",
+  "rust",
+] as const;
+
+export type Framework = (typeof FRAMEWORKS)[number];
+
+export const framework = pgEnum("framework", FRAMEWORKS);
 
 export const project = pgTable(
   "project",
@@ -12,6 +35,7 @@ export const project = pgTable(
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     description: text("description"),
+    frameworks: framework("frameworks").array().notNull().default([]),
     createdBy: text("created_by").references(() => user.id, {
       onDelete: "set null",
     }),

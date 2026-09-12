@@ -2,8 +2,8 @@ import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layo
 import { createRelativeLink } from "fumadocs-ui/mdx";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CompareWith } from "@/components/compare";
-import { getMDXComponents } from "@/components/mdx";
+import { CompareWith } from "@/components/docs/compare";
+import { getMDXComponents } from "@/components/docs/mdx";
 import { source } from "@/lib/source";
 
 export default async function Page(props: PageProps<"/docs/[[...slug]]">) {

@@ -7,6 +7,7 @@ import { db } from "@console/db";
 import { project } from "@console/db/schema";
 import { and, eq } from "drizzle-orm";
 import { deleteProjectObjects } from "../../blob/store";
+import { updateProjectSchema } from "../validation";
 
 export async function getProjectById(request: Request, id: string): Promise<Response> {
   const userId = await getSessionUserId(request.headers);
@@ -26,6 +27,39 @@ export async function getProjectById(request: Request, id: string): Promise<Resp
   }
 
   return Response.json(found, { status: 200 });
+}
+
+export async function updateProject(request: Request, id: string): Promise<Response> {
+  const session = await getActiveOrganizationSession(request.headers);
+  if (!session) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: "Invalid request body" }, { status: 400 });
+  }
+  const parsed = updateProjectSchema.safeParse(body);
+  if (!parsed.success) {
+    return Response.json(
+      { error: "Invalid request", issues: parsed.error.issues },
+      { status: 400 },
+    );
+  }
+
+  const [updated] = await db
+    .update(project)
+    .set({ frameworks: parsed.data.frameworks })
+    .where(and(eq(project.id, id), eq(project.organizationId, session.activeOrganizationId)))
+    .returning();
+
+  if (!updated) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  return Response.json(updated, { status: 200 });
 }
 
 export async function deleteProject(request: Request, id: string): Promise<Response> {
