@@ -3,7 +3,6 @@ package devserver
 import (
 	"context"
 	"errors"
-	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
@@ -16,7 +15,7 @@ import (
 
 func declareEnv(t *testing.T, url string, definitions ...*resourcesv1.VariableDefinition) *resourcesv1.DeclareEnvResponse {
 	t.Helper()
-	client := resourcesv1connect.NewResourceServiceClient(http.DefaultClient, url)
+	client := resourcesv1connect.NewResourceServiceClient(testClient, url)
 	resp, err := client.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{Definitions: definitions})
 	if err != nil {
 		t.Fatalf("DeclareEnv: %v", err)
@@ -26,7 +25,7 @@ func declareEnv(t *testing.T, url string, definitions ...*resourcesv1.VariableDe
 
 func reportProblems(t *testing.T, url string, problems ...*resourcesv1.VariableProblem) {
 	t.Helper()
-	client := resourcesv1connect.NewResourceServiceClient(http.DefaultClient, url)
+	client := resourcesv1connect.NewResourceServiceClient(testClient, url)
 	if _, err := client.ReportEnvProblems(context.Background(), &resourcesv1.ReportEnvProblemsRequest{Problems: problems}); err != nil {
 		t.Fatalf("ReportEnvProblems: %v", err)
 	}

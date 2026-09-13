@@ -24,7 +24,7 @@ func serveBlob(t *testing.T, handler http.HandlerFunc) blobv1connect.BucketServi
 	ts := httptest.NewServer(s.Mux())
 	t.Cleanup(ts.Close)
 
-	return blobv1connect.NewBucketServiceClient(http.DefaultClient, ts.URL)
+	return blobv1connect.NewBucketServiceClient(testClient, ts.URL)
 }
 
 func TestPresignUpload(t *testing.T) {

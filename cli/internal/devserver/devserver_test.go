@@ -90,7 +90,7 @@ func declareResource(t *testing.T, url, name string, typ resourcesv1.ResourceTyp
 
 func postSync(t *testing.T, url string) int {
 	t.Helper()
-	resp, err := http.Post(url+"/sync", "application/octet-stream", nil)
+	resp, err := testClient.Post(url+"/sync", "application/octet-stream", nil)
 	if err != nil {
 		t.Fatalf("POST /sync: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestSync(t *testing.T) {
 		t.Parallel()
 		url := serve(t, newDevServer("https://api.example.com"))
 
-		resp, err := http.Get(url + "/sync")
+		resp, err := testClient.Get(url + "/sync")
 		if err != nil {
 			t.Fatalf("GET /sync: %v", err)
 		}
