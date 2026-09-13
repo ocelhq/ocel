@@ -314,7 +314,7 @@ func (a *addons) verify() error {
 				told = append(told, describeAddon(other))
 			}
 		}
-		return fmt.Errorf("no native addon under %s can be loaded on %s, the architecture this app declares: %s; reinstall its dependencies on a host of the declared architecture, or declare the one they were built for",
+		return fmt.Errorf("no native addon under %s can be loaded on %s, the architecture this app declares: %s; a package that builds or fetches its addon while it installs cannot be installed for another machine, so install the app's dependencies on a linux host of the declared architecture, declare the architecture they were built for, or set \"compute\": \"container\" to install them inside the app's image",
 			traced.pkg, providerkit.Architecture(a.arch), strings.Join(told, ", "))
 	}
 	return nil
