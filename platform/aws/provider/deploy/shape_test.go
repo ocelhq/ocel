@@ -126,7 +126,7 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 	}
 	run("container", containerWork.run)
 	run("substrate", (&substrateWork{class: providerkit.ClassProduction, boundary: containerCfg.AppBoundaryARN}).run)
-	run("infra", func(pctx *pulumi.Context) error {
+	run(naming.InfraApp, func(pctx *pulumi.Context) error {
 		if err := registerPostgres(pctx, "shop", "prod", "main", translatePostgres(nil), "vpc-1", "10.0.0.0/16", []string{"subnet-a"}); err != nil {
 			return err
 		}
