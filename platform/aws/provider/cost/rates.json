@@ -1,0 +1,681 @@
+{
+  "version": "2026-09-13",
+  "currency": "USD",
+  "rates": [
+    {
+      "id": "aws/lambda/requests",
+      "region": "us-east-1",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000002"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20260911173510/us-east-1/index.json#GU2ZS9HVP6QTQ7KE",
+      "verified": "2026-09-13",
+      "query": {
+        "group": "AWS-Lambda-Requests",
+        "service": "AWSLambda",
+        "usagetype": "Request"
+      }
+    },
+    {
+      "id": "aws/lambda/requests-arm",
+      "region": "us-east-1",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000002"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20260911173510/us-east-1/index.json#K7BX6567RJ67A2KE",
+      "verified": "2026-09-13",
+      "query": {
+        "group": "AWS-Lambda-Requests-ARM",
+        "service": "AWSLambda",
+        "usagetype": "Request-ARM"
+      }
+    },
+    {
+      "id": "aws/lambda/duration",
+      "region": "us-east-1",
+      "unit": "GB-Seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000166667"
+        },
+        {
+          "start": "6000000000",
+          "price": "0.000015"
+        },
+        {
+          "start": "15000000000",
+          "price": "0.0000133334"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20260911173510/us-east-1/index.json#TG3M4CAGBA3NYQBH",
+      "verified": "2026-09-13",
+      "query": {
+        "group": "AWS-Lambda-Duration",
+        "service": "AWSLambda",
+        "usagetype": "Lambda-GB-Second"
+      }
+    },
+    {
+      "id": "aws/lambda/duration-arm",
+      "region": "us-east-1",
+      "unit": "GB-Seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000133334"
+        },
+        {
+          "start": "7500000000",
+          "price": "0.0000120001"
+        },
+        {
+          "start": "18750000000",
+          "price": "0.0000106667"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/20260911173510/us-east-1/index.json#72SBSFWPMDTH8S3J",
+      "verified": "2026-09-13",
+      "query": {
+        "group": "AWS-Lambda-Duration-ARM",
+        "service": "AWSLambda",
+        "usagetype": "Lambda-GB-Second-ARM"
+      }
+    },
+    {
+      "id": "aws/logs/ingest",
+      "region": "us-east-1",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.5"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20260911134405/us-east-1/index.json#96K55R2PV3ZZZ3AM",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "AmazonCloudWatch",
+        "usagetype": "DataProcessing-Bytes"
+      }
+    },
+    {
+      "id": "aws/logs/storage",
+      "region": "us-east-1",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.03"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/20260911134405/us-east-1/index.json#JRHJQ2UMPUB5K73A",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "AmazonCloudWatch",
+        "usagetype": "TimedStorage-ByteHrs"
+      }
+    },
+    {
+      "id": "aws/s3/storage",
+      "region": "us-east-1",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.023"
+        },
+        {
+          "start": "51200",
+          "price": "0.022"
+        },
+        {
+          "start": "512000",
+          "price": "0.021"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20260911124507/us-east-1/index.json#WP9ANXZGBYYSGJEA",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "AmazonS3",
+        "usagetype": "TimedStorage-ByteHrs",
+        "volumeType": "Standard"
+      }
+    },
+    {
+      "id": "aws/s3/requests-tier1",
+      "region": "us-east-1",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20260911124507/us-east-1/index.json#E9YHNFENF4XQBZR6",
+      "verified": "2026-09-13",
+      "query": {
+        "group": "S3-API-Tier1",
+        "service": "AmazonS3",
+        "usagetype": "Requests-Tier1"
+      }
+    },
+    {
+      "id": "aws/s3/requests-tier2",
+      "region": "us-east-1",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000004"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/20260911124507/us-east-1/index.json#ZWQ6Q48CRJXX4FXE",
+      "verified": "2026-09-13",
+      "query": {
+        "group": "S3-API-Tier2",
+        "service": "AmazonS3",
+        "usagetype": "Requests-Tier2"
+      }
+    },
+    {
+      "id": "aws/rds/aurora-serverless-v2",
+      "region": "us-east-1",
+      "unit": "ACU-Hr",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.12"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20260911124502/us-east-1/index.json#AVKW7ZJP8D72HNQC",
+      "verified": "2026-09-13",
+      "query": {
+        "databaseEngine": "Aurora PostgreSQL",
+        "service": "AmazonRDS",
+        "usagetype": "Aurora:ServerlessV2Usage"
+      }
+    },
+    {
+      "id": "aws/rds/aurora-storage",
+      "region": "us-east-1",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20260911124502/us-east-1/index.json#7GYUVAA992PFJPCB",
+      "verified": "2026-09-13",
+      "query": {
+        "databaseEngine": "Aurora PostgreSQL",
+        "service": "AmazonRDS",
+        "usagetype": "Aurora:StorageUsage"
+      }
+    },
+    {
+      "id": "aws/rds/aurora-io",
+      "region": "us-east-1",
+      "unit": "IOs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000002"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonRDS/20260911124502/us-east-1/index.json#7JDSZP38DMKT9B86",
+      "verified": "2026-09-13",
+      "query": {
+        "databaseEngine": "Aurora PostgreSQL",
+        "service": "AmazonRDS",
+        "usagetype": "Aurora:StorageIOUsage"
+      }
+    },
+    {
+      "id": "aws/secretsmanager/secret",
+      "region": "us-east-1",
+      "unit": "Secrets",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.4"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/us-east-1/index.json#BJ3PQ9BYGU6P632F",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "AWSSecretsManager",
+        "usagetype": "USE1-AWSSecretsManager-Secrets"
+      }
+    },
+    {
+      "id": "aws/secretsmanager/requests",
+      "region": "us-east-1",
+      "unit": "API Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/20260911124610/us-east-1/index.json#4MDZ5VNEJPMUTG9B",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "AWSSecretsManager",
+        "usagetype": "USE1-AWSSecretsManagerAPIRequest"
+      }
+    },
+    {
+      "id": "aws/kms/key",
+      "region": "us-east-1",
+      "unit": "Keys",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20260911124601/us-east-1/index.json#U553K98XGDXCYHWS",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "awskms",
+        "usagetype": "us-east-1-KMS-Keys"
+      }
+    },
+    {
+      "id": "aws/kms/requests",
+      "region": "us-east-1",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000003"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/awskms/20260911124601/us-east-1/index.json#MFEBZPX8NHM5FY7Z",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "awskms",
+        "usagetype": "us-east-1-KMS-Requests"
+      }
+    },
+    {
+      "id": "aws/fargate/vcpu",
+      "region": "us-east-1",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.04048"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/us-east-1/index.json#8CESGAFWKAJ98PME",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "AmazonECS",
+        "usagetype": "USE1-Fargate-vCPU-Hours:perCPU"
+      }
+    },
+    {
+      "id": "aws/fargate/memory",
+      "region": "us-east-1",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.004445"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/us-east-1/index.json#PBZNQUSEXZUC34C9",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "AmazonECS",
+        "usagetype": "USE1-Fargate-GB-Hours"
+      }
+    },
+    {
+      "id": "aws/fargate/vcpu-arm",
+      "region": "us-east-1",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.03238"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/us-east-1/index.json#XSZATS4VYMDC9CYN",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "AmazonECS",
+        "usagetype": "USE1-Fargate-ARM-vCPU-Hours:perCPU"
+      }
+    },
+    {
+      "id": "aws/fargate/memory-arm",
+      "region": "us-east-1",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.00356"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECS/20260911124425/us-east-1/index.json#UNH9KPQP7W7C66C9",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "AmazonECS",
+        "usagetype": "USE1-Fargate-ARM-GB-Hours"
+      }
+    },
+    {
+      "id": "aws/alb/hours",
+      "region": "us-east-1",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0225"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/us-east-1/index.json#37CUWUT8GSNQEPUV",
+      "verified": "2026-09-13",
+      "query": {
+        "operation": "LoadBalancing:Application",
+        "service": "AWSELB",
+        "usagetype": "LoadBalancerUsage"
+      }
+    },
+    {
+      "id": "aws/alb/lcu",
+      "region": "us-east-1",
+      "unit": "LCU-Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.008"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSELB/20260911124544/us-east-1/index.json#P2XGEJ8N3KU52WA8",
+      "verified": "2026-09-13",
+      "query": {
+        "operation": "LoadBalancing:Application",
+        "service": "AWSELB",
+        "usagetype": "LCUUsage"
+      }
+    },
+    {
+      "id": "aws/dynamodb/write",
+      "region": "us-east-1",
+      "unit": "WriteRequestUnits",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000000625"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/20260911124422/us-east-1/index.json#FGXVD96DKJMUASY3",
+      "verified": "2026-09-13",
+      "query": {
+        "group": "DDB-WriteUnits",
+        "service": "AmazonDynamoDB",
+        "usagetype": "WriteRequestUnits"
+      }
+    },
+    {
+      "id": "aws/dynamodb/read",
+      "region": "us-east-1",
+      "unit": "ReadRequestUnits",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000000125"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/20260911124422/us-east-1/index.json#4W4ZMC46EHE8XTTZ",
+      "verified": "2026-09-13",
+      "query": {
+        "group": "DDB-ReadUnits",
+        "service": "AmazonDynamoDB",
+        "usagetype": "ReadRequestUnits"
+      }
+    },
+    {
+      "id": "aws/dynamodb/storage",
+      "region": "us-east-1",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "25",
+          "price": "0.25"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/20260911124422/us-east-1/index.json#F3E2EDSYC6ZNW7XP",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "AmazonDynamoDB",
+        "usagetype": "TimedStorage-ByteHrs",
+        "volumeType": "Amazon DynamoDB - Indexed DataStore"
+      }
+    },
+    {
+      "id": "aws/sqs/requests",
+      "region": "us-east-1",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000004"
+        },
+        {
+          "start": "100000000000",
+          "price": "0.0000003"
+        },
+        {
+          "start": "200000000000",
+          "price": "0.00000024"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSQueueService/20260911124607/us-east-1/index.json#8RN6B8U4MERHRXP3",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "AWSQueueService",
+        "usagetype": "Requests-RBP"
+      }
+    },
+    {
+      "id": "aws/sqs/requests-fifo",
+      "region": "us-east-1",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000005"
+        },
+        {
+          "start": "100000000000",
+          "price": "0.0000004"
+        },
+        {
+          "start": "200000000000",
+          "price": "0.00000035"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSQueueService/20260911124607/us-east-1/index.json#624ZQ7K46KHFAD9Y",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "AWSQueueService",
+        "usagetype": "Requests-FIFO-RBP"
+      }
+    },
+    {
+      "id": "aws/apigateway/rest-requests",
+      "region": "us-east-1",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000035"
+        },
+        {
+          "start": "333000000",
+          "price": "0.0000028"
+        },
+        {
+          "start": "1000000000",
+          "price": "0.00000238"
+        },
+        {
+          "start": "20000000000",
+          "price": "0.00000151"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonApiGateway/20260911124408/us-east-1/index.json#KKDZ3TFSXUSMCZ3A",
+      "verified": "2026-09-13",
+      "query": {
+        "operation": "ApiGatewayRequest",
+        "service": "AmazonApiGateway",
+        "usagetype": "USE1-ApiGatewayRequest"
+      }
+    },
+    {
+      "id": "aws/cloudfront/requests-https",
+      "unit": "Requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000001"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/20260911124415/global/index.json#NPFD6SEH9MXS8M4J",
+      "verified": "2026-09-13",
+      "query": {
+        "index": "global",
+        "service": "AmazonCloudFront",
+        "usagetype": "US-Requests-Tier2-HTTPS"
+      }
+    },
+    {
+      "id": "aws/cloudfront/data-out",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.085"
+        },
+        {
+          "start": "10240",
+          "price": "0.08"
+        },
+        {
+          "start": "51200",
+          "price": "0.06"
+        },
+        {
+          "start": "153600",
+          "price": "0.04"
+        },
+        {
+          "start": "512000",
+          "price": "0.03"
+        },
+        {
+          "start": "1048576",
+          "price": "0.025"
+        },
+        {
+          "start": "5242880",
+          "price": "0.02"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/20260911124415/global/index.json#GV2WFGX37Q9PDSHF",
+      "verified": "2026-09-13",
+      "query": {
+        "index": "global",
+        "service": "AmazonCloudFront",
+        "usagetype": "US-DataTransfer-Out-Bytes"
+      }
+    },
+    {
+      "id": "aws/cloudfront/functions",
+      "unit": "Invocations",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "2000000",
+          "price": "0.0000001"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/20260911124415/global/index.json#QAZUUEJG8GARJCET",
+      "verified": "2026-09-13",
+      "query": {
+        "index": "global",
+        "service": "AmazonCloudFront",
+        "usagetype": "Executions-CloudFrontFunctions"
+      }
+    },
+    {
+      "id": "aws/datatransfer/out",
+      "region": "us-east-1",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.09"
+        },
+        {
+          "start": "10240",
+          "price": "0.085"
+        },
+        {
+          "start": "51200",
+          "price": "0.07"
+        },
+        {
+          "start": "153600",
+          "price": "0.05"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/20260911133359/us-east-1/index.json#HQEH3ZWJVT46JHRG",
+      "verified": "2026-09-13",
+      "query": {
+        "fromLocation": "US East (N. Virginia)",
+        "service": "AWSDataTransfer",
+        "toLocation": "External",
+        "usagetype": "DataTransfer-Out-Bytes"
+      }
+    },
+    {
+      "id": "aws/ecr/storage",
+      "region": "us-east-1",
+      "unit": "GB-Mo",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.1"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonECR/20260911124425/us-east-1/index.json#KJC988R4J65BDMTQ",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "AmazonECR",
+        "usagetype": "TimedStorage-ByteHrs"
+      }
+    }
+  ]
+}

@@ -27,6 +27,7 @@ const (
 	tfECSTaskDefinition  = "aws_ecs_task_definition"
 	tfECSService         = "aws_ecs_service"
 	tfLoadBalancer       = "aws_lb"
+	tfECRRepository      = "aws_ecr_repository"
 
 	lambdaDefaultMemoryMB    = 128
 	lambdaDefaultEphemeralMB = 512
@@ -140,9 +141,13 @@ func (s shaper) container(scope string, app providerkit.AppEntry) {
 		"runtime_platform":         map[string]any{"cpu_architecture": "X86_64", "operating_system_family": "LINUX"},
 	})
 	s.plain(scope, tfECSService, app.App, map[string]any{
-		"desired_count": fargateDesiredCount,
-		"launch_type":   "FARGATE",
+		"desired_count":    fargateDesiredCount,
+		"launch_type":      "FARGATE",
+		"cpu":              containerCPU,
+		"memory":           containerMemory,
+		"runtime_platform": map[string]any{"cpu_architecture": "X86_64", "operating_system_family": "LINUX"},
 	})
+	s.plain(scope, tfECRRepository, app.App, map[string]any{"image_tag_mutability": "IMMUTABLE"})
 }
 
 func (s shaper) substrate(scope string, class providerkit.Class) {

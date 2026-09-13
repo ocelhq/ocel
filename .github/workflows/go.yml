@@ -75,11 +75,12 @@ jobs:
             sums: |
               platform/gcp/provider/go.sum
           - name: providerkit
-            dirs: platform/vps/provider pkg/providerkit pkg/providerkit/pulumi platform/edge/cloudflare/deploy platform/edge/contract
-            packages: ./platform/vps/provider/... ./pkg/providerkit/... ./pkg/providerkit/pulumi/... ./platform/edge/cloudflare/deploy/... ./platform/edge/contract/...
+            dirs: platform/vps/provider pkg/providerkit pkg/providerkit/pulumi pkg/costkit platform/edge/cloudflare/deploy platform/edge/contract
+            packages: ./platform/vps/provider/... ./pkg/providerkit/... ./pkg/providerkit/pulumi/... ./pkg/costkit/... ./platform/edge/cloudflare/deploy/... ./platform/edge/contract/...
             sums: |
               platform/vps/provider/go.sum
               pkg/providerkit/go.sum
+              pkg/costkit/go.sum
               pkg/providerkit/pulumi/go.sum
               platform/edge/cloudflare/deploy/go.sum
               platform/edge/contract/go.sum

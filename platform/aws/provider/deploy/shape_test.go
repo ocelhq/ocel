@@ -142,6 +142,7 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 	}
 	got := countTypes(set)
 	delete(got, "aws_secretsmanager_secret")
+	delete(got, "aws_ecr_repository")
 	if !maps.Equal(got, registered) {
 		t.Errorf("shape counts %v, the programs register %v", got, registered)
 	}

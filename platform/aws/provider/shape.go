@@ -7,6 +7,7 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/cost"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
@@ -58,4 +59,8 @@ func (p *Provider) Shape(ctx context.Context, req providerkit.ShapeRequest) (*co
 		tree.Add(environment, string(Vendor), tfAPIGatewayRestAPI, req.Plan.Slug, p.aws.Region, map[string]any{"endpoint_configuration": map[string]any{"types": []any{"REGIONAL"}}})
 	}
 	return tree.Set(providerkit.CostSource), nil
+}
+
+func (p *Provider) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
+	return cost.Price(req)
 }

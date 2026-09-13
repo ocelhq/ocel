@@ -417,8 +417,25 @@
       "name": "api",
       "region": "us-east-1",
       "properties": {
+        "cpu": "512",
         "desired_count": 1,
-        "launch_type": "FARGATE"
+        "launch_type": "FARGATE",
+        "memory": "1024",
+        "runtime_platform": {
+          "cpu_architecture": "X86_64",
+          "operating_system_family": "LINUX"
+        }
+      }
+    },
+    {
+      "id": "project:shop/environment:pr-42/app:api/aws_ecr_repository:api",
+      "scope": "project:shop/environment:pr-42/app:api",
+      "vendor": "aws",
+      "type": "aws_ecr_repository",
+      "name": "api",
+      "region": "us-east-1",
+      "properties": {
+        "image_tag_mutability": "IMMUTABLE"
       }
     },
     {
