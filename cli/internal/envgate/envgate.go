@@ -7,6 +7,8 @@ import (
 	"slices"
 	"sync"
 
+	connect "connectrpc.com/connect"
+
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -135,7 +137,7 @@ func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, err
 	if len(wanted) > 0 {
 		found, err := g.values.Reveal(ctx, wanted)
 		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", describeAll(wanted), err)
+			return nil, connect.NewError(connect.CodeOf(err), fmt.Errorf("read %s: %w", describeAll(wanted), err))
 		}
 		if g.plaintext == nil {
 			g.plaintext = map[Cell]revealed{}
