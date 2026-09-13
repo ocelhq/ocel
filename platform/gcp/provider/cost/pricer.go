@@ -10,10 +10,18 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 )
 
+const Vendor = "gcp"
+
 //go:embed rates.json
 var rates []byte
 
-var card = sync.OnceValues(func() (*costkit.Card, error) { return costkit.Load(rates) })
+var Card = sync.OnceValues(func() (*costkit.Card, error) { return costkit.Load(rates) })
+
+var Notes = []string{
+	"list prices for the regions the card names and for global SKUs; a resource elsewhere is left unpriced unless a note above says otherwise",
+	"the free tier Cloud Run and Cloud Storage apply as a billing discount is not applied; a free first tier the catalog publishes is spent once per account across every resource sharing it",
+	"the forwarding rule is priced as the project's first five, which share one hourly charge",
+}
 
 const (
 	usageRequests        = "monthly_requests"
@@ -52,7 +60,7 @@ var (
 	thousand     = decimal.NewFromInt(1000)
 )
 
-var table = costkit.Table{
+var Table = costkit.Table{
 	"google_cloud_run_v2_service":                      cloudRunService,
 	"google_firestore_database":                        firestoreDatabase,
 	"google_storage_bucket":                            storageBucket,
@@ -72,11 +80,11 @@ var table = costkit.Table{
 }
 
 func Price(req *costv1.PriceRequest, edges ...costkit.EdgePricer) (*costv1.Estimate, error) {
-	held, err := card()
+	held, err := Card()
 	if err != nil {
 		return nil, err
 	}
-	merged, pricing, err := costkit.Priced(held, table, edges...)
+	merged, pricing, err := costkit.Priced(held, Table, edges...)
 	if err != nil {
 		return nil, err
 	}
@@ -84,11 +92,7 @@ func Price(req *costv1.PriceRequest, edges ...costkit.EdgePricer) (*costv1.Estim
 	if err != nil {
 		return nil, err
 	}
-	estimate.Notes = append(estimate.Notes,
-		"list prices for the regions the card names and for global SKUs; a resource elsewhere is left unpriced unless a note above says otherwise",
-		"the free tier Cloud Run and Cloud Storage apply as a billing discount is not applied; a free first tier the catalog publishes is spent once per account across every resource sharing it",
-		"the forwarding rule is priced as the project's first five, which share one hourly charge",
-	)
+	estimate.Notes = append(estimate.Notes, Notes...)
 	return estimate, nil
 }
 

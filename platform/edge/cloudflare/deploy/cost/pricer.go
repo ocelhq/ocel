@@ -22,6 +22,10 @@ var rates []byte
 
 var Card = sync.OnceValues(func() (*costkit.Card, error) { return costkit.Load(rates) })
 
+var Notes = []string{
+	"Workers, Durable Objects and R2 carry one global price, so the estimate does not move with the region",
+}
+
 const (
 	usageRequests     = "monthly_requests"
 	usageCPUTime      = "cpu_time_ms"

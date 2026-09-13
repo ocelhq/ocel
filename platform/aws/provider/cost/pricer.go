@@ -10,10 +10,18 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 )
 
+const Vendor = "aws"
+
 //go:embed rates.json
 var rates []byte
 
-var card = sync.OnceValues(func() (*costkit.Card, error) { return costkit.Load(rates) })
+var Card = sync.OnceValues(func() (*costkit.Card, error) { return costkit.Load(rates) })
+
+var Notes = []string{
+	"list prices for us-east-1; a resource in another region is left unpriced",
+	"an always-free allowance the price list folds into a first tier is spent once per account across every resource sharing it; allowances the price list leaves out, such as Lambda's, are not applied",
+	"CloudFront is priced at its United States rates whichever price class the distribution carries",
+}
 
 const (
 	usageRequests          = "monthly_requests"
@@ -72,7 +80,7 @@ var (
 	secondsPerMonth = costkit.MonthlyHours.Mul(decimal.NewFromInt(secondsPerHour))
 )
 
-var table = costkit.Table{
+var Table = costkit.Table{
 	"aws_lambda_function":             lambdaFunction,
 	"aws_lambda_function_url":         free,
 	"aws_lambda_layer_version":        free,
@@ -98,11 +106,11 @@ var table = costkit.Table{
 }
 
 func Price(req *costv1.PriceRequest, edges ...costkit.EdgePricer) (*costv1.Estimate, error) {
-	held, err := card()
+	held, err := Card()
 	if err != nil {
 		return nil, err
 	}
-	merged, pricing, err := costkit.Priced(held, table, edges...)
+	merged, pricing, err := costkit.Priced(held, Table, edges...)
 	if err != nil {
 		return nil, err
 	}
@@ -110,11 +118,7 @@ func Price(req *costv1.PriceRequest, edges ...costkit.EdgePricer) (*costv1.Estim
 	if err != nil {
 		return nil, err
 	}
-	estimate.Notes = append(estimate.Notes,
-		"list prices for us-east-1; a resource in another region is left unpriced",
-		"an always-free allowance the price list folds into a first tier is spent once per account across every resource sharing it; allowances the price list leaves out, such as Lambda's, are not applied",
-		"CloudFront is priced at its United States rates whichever price class the distribution carries",
-	)
+	estimate.Notes = append(estimate.Notes, Notes...)
 	return estimate, nil
 }
 
