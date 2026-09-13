@@ -35,10 +35,7 @@ def reference(request: ReferenceRequest) -> None:
         with _client() as client:
             client.reference(request)
     except Exception as error:
-        kind = request.resource.type.name.lower()
-        raise RuntimeError(
-            f"ocel: reference {kind} '{request.resource.name}': {_said(error)}"
-        ) from None
+        raise _unreferenced(request, error) from None
 
 
 def declare_env(request: DeclareEnvRequest) -> DeclareEnvResponse:
@@ -61,6 +58,11 @@ def _failed(request: DeclareRequest, error: Exception) -> RuntimeError:
     said = _said(error)
     kind = request.config.field if request.config else "resource"
     return RuntimeError(f"ocel: declare {kind} '{request.resource.name}': {said}")
+
+
+def _unreferenced(request: ReferenceRequest, error: Exception) -> RuntimeError:
+    kind = request.resource.type.name.lower()
+    return RuntimeError(f"ocel: reference {kind} '{request.resource.name}': {_said(error)}")
 
 
 def _env_failed(error: Exception) -> RuntimeError:

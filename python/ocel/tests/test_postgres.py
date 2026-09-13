@@ -10,8 +10,8 @@ from ocel.gen.app.resources.v1.resources_pb import ResourceType
 def test_a_declared_database_reaches_the_dev_server_with_the_file_that_declared_it(collector):
     postgres("main")
 
-    assert len(collector.declares) == 1
-    path, protocol, declared = collector.declares[0]
+    assert len(collector.requests) == 1
+    path, protocol, declared = collector.requests[0]
     assert path == "/app.resources.v1.ResourceService/Declare"
     assert protocol == "1"
     assert declared.resource.type is ResourceType.POSTGRES
@@ -29,8 +29,8 @@ def test_a_referenced_database_reaches_the_dev_server_as_a_reference_and_never_a
     db = postgres_ref("main")
 
     assert db.name == "main"
-    assert len(collector.declares) == 1
-    path, protocol, referenced = collector.declares[0]
+    assert len(collector.requests) == 1
+    path, protocol, referenced = collector.requests[0]
     assert path == "/app.resources.v1.ResourceService/Reference"
     assert protocol == "1"
     assert referenced.resource.type is ResourceType.POSTGRES
@@ -91,7 +91,7 @@ def test_a_database_reached_during_discovery_says_it_is_not_provisioned_yet(coll
 def test_a_declared_version_replaces_the_one_ocel_picks(collector):
     postgres("main", version="16")
 
-    assert collector.declares[0][2].config.value.version == "16"
+    assert collector.requests[0][2].config.value.version == "16"
 
 
 def test_a_declaration_the_server_refuses_says_what_it_said(monkeypatch):
