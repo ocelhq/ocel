@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"cloud.google.com/go/storage"
 	"google.golang.org/api/artifactregistry/v1"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -104,5 +105,55 @@ func TestARepositoryOfAnotherFormatIsRefusedRatherThanMended(t *testing.T) {
 	_, err := repositoryStanding("ocel-acme-prod-production", &artifactregistry.Repository{Format: "MAVEN"})
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 		t.Fatalf("repositoryStanding() over a MAVEN repository = %v, want an %s refusal: Artifact Registry never changes a format, so no patch mends this", err, providerkit.CodeInvalid)
+	}
+}
+
+func TestABucketIsCreatedUnderUniformAccessWithPublicAccessPrevented(t *testing.T) {
+	t.Parallel()
+
+	attrs := bucketAttrs("europe-west1", item{Kind: KindBucket, Name: "ocel-acme-prod-production-state", Versioned: true})
+	if !attrs.UniformBucketLevelAccess.Enabled {
+		t.Error("the bucket is created with object ACLs live, and an ACL on one object would reach past the IAM the bootstrap grants")
+	}
+	if attrs.PublicAccessPrevention != storage.PublicAccessPreventionEnforced {
+		t.Errorf("the bucket is created under public access prevention %v, want it enforced: an allUsers grant would publish every artifact and stack state in it",
+			attrs.PublicAccessPrevention)
+	}
+	if !attrs.VersioningEnabled || attrs.Location != "europe-west1" {
+		t.Errorf("the bucket is created as %+v, want the versioning and location the item names kept", attrs)
+	}
+}
+
+func TestABucketThatDriftedOpenIsMended(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		held  *storage.BucketAttrs
+		mends bool
+	}{
+		"the bucket this bootstrap made": {held: bucketAttrs("europe-west1", item{Kind: KindBucket})},
+		"one whose access went back to ACLs": {
+			held:  &storage.BucketAttrs{PublicAccessPrevention: storage.PublicAccessPreventionEnforced},
+			mends: true,
+		},
+		"one that may be granted to allUsers": {
+			held: &storage.BucketAttrs{
+				UniformBucketLevelAccess: storage.UniformBucketLevelAccess{Enabled: true},
+				PublicAccessPrevention:   storage.PublicAccessPreventionInherited,
+			},
+			mends: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			stands := bucketStanding(tc.held)
+			if !stands.held {
+				t.Error("a bucket that stands reads as absent, and the bootstrap would try to create it again")
+			}
+			if mends := stands.mends != ""; mends != tc.mends {
+				t.Errorf("bucketStanding() mends %q, want mending=%t: what the survey does not report, the apply does not do", stands.mends, tc.mends)
+			}
+		})
 	}
 }

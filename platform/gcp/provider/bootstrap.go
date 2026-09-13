@@ -35,6 +35,8 @@ const (
 	reasonUnpruned  = "it stands under cleanup policies this bootstrap did not name, and what prunes the images a deploy pushes would then be rules nothing here wrote"
 
 	reasonUnprotected = "it stands with delete protection off, and one call would take every record both classes hold with it"
+
+	reasonUnlocked = "it stands open to object ACLs or to allUsers, and what a deploy writes in it is reached by IAM alone"
 )
 
 const passphraseBytes = 32
@@ -296,6 +298,8 @@ func (b bootstrapper) mend(ctx context.Context, read survey, held item) error {
 		return b.protectDatabase(ctx)
 	case KindRepository:
 		return b.pruneRepository(ctx, held.Name)
+	case KindBucket:
+		return b.lockBucket(ctx, held.Name)
 	default:
 		return b.make(ctx, read, held)
 	}
@@ -381,9 +385,35 @@ func (b bootstrapper) makeBucket(ctx context.Context, read survey, held item) er
 	if err != nil {
 		return err
 	}
-	attrs := &storage.BucketAttrs{Location: read.Region, VersioningEnabled: held.Versioned}
-	if err := client.Bucket(held.Name).Create(ctx, read.Project, attrs); err != nil && !taken(err) {
+	if err := client.Bucket(held.Name).Create(ctx, read.Project, bucketAttrs(read.Region, held)); err != nil && !taken(err) {
 		return fmt.Errorf("create the %s bucket: %w", held.Name, err)
+	}
+	return nil
+}
+
+func bucketAttrs(region string, held item) *storage.BucketAttrs {
+	return &storage.BucketAttrs{
+		Location:                 region,
+		VersioningEnabled:        held.Versioned,
+		UniformBucketLevelAccess: storage.UniformBucketLevelAccess{Enabled: true},
+		PublicAccessPrevention:   storage.PublicAccessPreventionEnforced,
+	}
+}
+
+func locked(attrs *storage.BucketAttrs) bool {
+	return attrs.UniformBucketLevelAccess.Enabled && attrs.PublicAccessPrevention == storage.PublicAccessPreventionEnforced
+}
+
+func (b bootstrapper) lockBucket(ctx context.Context, name string) error {
+	client, err := b.clients.Storage()
+	if err != nil {
+		return err
+	}
+	if _, err := client.Bucket(name).Update(ctx, storage.BucketAttrsToUpdate{
+		UniformBucketLevelAccess: &storage.UniformBucketLevelAccess{Enabled: true},
+		PublicAccessPrevention:   storage.PublicAccessPreventionEnforced,
+	}); err != nil {
+		return fmt.Errorf("hold the %s bucket to IAM alone: %w", name, err)
 	}
 	return nil
 }

@@ -172,7 +172,7 @@ func (b bootstrapper) stands(ctx context.Context, held item) (standing, error) {
 	case KindDatabase:
 		return b.databaseStands(ctx)
 	case KindBucket:
-		return stood(b.bucketStands(ctx, held.Name))
+		return b.bucketStands(ctx, held.Name)
 	case KindKeyRing:
 		return stood(b.keyRingStands(ctx))
 	case KindKey:
@@ -214,18 +214,26 @@ func databasePath(c *clients) string {
 	return "projects/" + c.project + "/databases/" + c.Database()
 }
 
-func (b bootstrapper) bucketStands(ctx context.Context, name string) (bool, error) {
+func (b bootstrapper) bucketStands(ctx context.Context, name string) (standing, error) {
 	client, err := b.clients.Storage()
 	if err != nil {
-		return false, err
+		return standing{}, err
 	}
-	if _, err := client.Bucket(name).Attrs(ctx); err != nil {
+	attrs, err := client.Bucket(name).Attrs(ctx)
+	if err != nil {
 		if errors.Is(err, storage.ErrBucketNotExist) || absent(err) {
-			return false, nil
+			return standing{}, nil
 		}
-		return false, fmt.Errorf("read the %s bucket: %w", name, err)
+		return standing{}, fmt.Errorf("read the %s bucket: %w", name, err)
 	}
-	return true, nil
+	return bucketStanding(attrs), nil
+}
+
+func bucketStanding(attrs *storage.BucketAttrs) standing {
+	if !locked(attrs) {
+		return standing{held: true, mends: reasonUnlocked}
+	}
+	return standing{held: true}
 }
 
 func (b bootstrapper) keyRingStands(ctx context.Context) (bool, error) {
