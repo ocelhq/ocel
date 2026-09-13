@@ -764,7 +764,6 @@ func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 			actions: []string{
 				"logs:CreateLogGroup",
 				"logs:DeleteLogGroup",
-				"logs:DescribeLogGroups",
 				"logs:ListTagsForResource",
 				"logs:PutRetentionPolicy",
 				"logs:TagResource",
