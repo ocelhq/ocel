@@ -23,15 +23,19 @@ var nextConfigNames = []string{"next.config.js", "next.config.mjs", "next.config
 
 func detectFramework(dir string) (string, error) {
 	node := regularFile(filepath.Join(dir, nodeManifest))
-	named := make([]string, 0, 3)
+	named := make([]string, 0, 4)
 	if node {
 		named = append(named, providerkit.RuntimeNode)
 	}
 	if regularFile(filepath.Join(dir, goModule)) {
 		named = append(named, providerkit.RuntimeGo)
 	}
-	if regularFile(filepath.Join(dir, pythonProject)) || regularFile(filepath.Join(dir, pythonRequirements)) {
+	python := regularFile(filepath.Join(dir, pythonProject)) || regularFile(filepath.Join(dir, pythonRequirements))
+	if python {
 		named = append(named, providerkit.RuntimePython)
+	}
+	if !node && !python && regularFile(filepath.Join(dir, rustManifest)) {
+		named = append(named, providerkit.RuntimeRust)
 	}
 	switch len(named) {
 	case 1:
@@ -47,12 +51,9 @@ func detectFramework(dir string) (string, error) {
 		}
 		return providerkit.RuntimeNode, nil
 	case 0:
-		if regularFile(filepath.Join(dir, rustManifest)) {
-			return "", nil
-		}
 		return "", fmt.Errorf(
-			"nothing in %s says what this app is built with: it holds no %s, %s, %s or %s, so set \"framework\" to one of %s",
-			dir, nodeManifest, goModule, pythonProject, pythonRequirements, quoted(providerkit.Runtimes()),
+			"nothing in %s says what this app is built with: it holds no %s, %s, %s, %s or %s, so set \"framework\" to one of %s",
+			dir, nodeManifest, goModule, pythonProject, pythonRequirements, rustManifest, quoted(providerkit.Runtimes()),
 		)
 	default:
 		return "", fmt.Errorf(

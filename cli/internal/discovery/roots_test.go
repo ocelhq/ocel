@@ -311,6 +311,37 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 	})
 }
 
+func TestLanguageOfTakesTheRuntimeAnAppNamesOverTheManifestBesideIt(t *testing.T) {
+	for _, tc := range []struct {
+		runtime string
+		want    Language
+	}{
+		{providerkit.RuntimeNode, JS},
+		{providerkit.RuntimeNext, JS},
+		{providerkit.RuntimeGo, Go},
+		{providerkit.RuntimePython, Python},
+		{providerkit.RuntimeRust, Rust},
+	} {
+		t.Run(tc.runtime, func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, filepath.Join(dir, "package.json"), "{}")
+
+			if got := LanguageOf(tc.runtime, dir); got != tc.want {
+				t.Errorf("LanguageOf(%q) = %q, want %q — every runtime an app may declare says which language attribution reads it in, and a package.json beside it holds only what its tooling reads", tc.runtime, got, tc.want)
+			}
+		})
+	}
+
+	t.Run("no runtime named", func(t *testing.T) {
+		dir := t.TempDir()
+		write(t, filepath.Join(dir, "Cargo.toml"), "")
+
+		if got := LanguageOf("", dir); got != Rust {
+			t.Errorf("LanguageOf(\"\") = %q, want %q — a container app names no runtime and is read in the language of the manifest beside it", got, Rust)
+		}
+	})
+}
+
 func TestLanguageOfApp(t *testing.T) {
 	for _, tc := range []struct {
 		manifest string

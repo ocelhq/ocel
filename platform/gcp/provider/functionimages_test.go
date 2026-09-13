@@ -33,6 +33,7 @@ func TestTheBaseAFunctionRunsOnIsPinnedByDigestPerRuntime(t *testing.T) {
 		providerkit.RuntimeNode,
 		providerkit.RuntimeGo,
 		providerkit.RuntimePython,
+		providerkit.RuntimeRust,
 	} {
 		t.Run(runtime, func(t *testing.T) {
 			p, asked := basedOn(t, v1.Config{})
