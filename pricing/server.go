@@ -47,14 +47,14 @@ func Handler(store costkit.Store, opts Options) http.Handler {
 	return mux
 }
 
-func Tokens(raw string) []string {
-	var tokens []string
-	for _, token := range strings.Split(raw, ",") {
-		if trimmed := strings.TrimSpace(token); trimmed != "" {
-			tokens = append(tokens, trimmed)
+func Commas(raw string) []string {
+	var held []string
+	for _, item := range strings.Split(raw, ",") {
+		if trimmed := strings.TrimSpace(item); trimmed != "" {
+			held = append(held, trimmed)
 		}
 	}
-	return tokens
+	return held
 }
 
 func allowed(next http.Handler, tokens []string) http.Handler {

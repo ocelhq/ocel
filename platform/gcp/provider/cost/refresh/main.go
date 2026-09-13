@@ -12,12 +12,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost/catalog"
 )
 
-const (
-	queryService     = "service"
-	queryDescription = "description"
-	queryRegion      = "region"
-)
-
 func main() {
 	card := flag.String("card", "platform/gcp/provider/cost/rates.json", "the rate card to refresh in place")
 	flag.Parse()
@@ -48,7 +42,7 @@ func run(path, key string) error {
 		if rate.Query == nil {
 			continue
 		}
-		service := rate.Query[queryService]
+		service := rate.Query[costkit.QueryService]
 		skus, listed := held[service]
 		if !listed {
 			if skus, err = catalog.List(context.Background(), catalog.Host, service, key); err != nil {
@@ -56,7 +50,7 @@ func run(path, key string) error {
 			}
 			held[service] = skus
 		}
-		matched := catalog.Match(skus, rate.Query[queryDescription], rate.Query[queryRegion])
+		matched := catalog.Match(skus, rate.Query[costkit.QueryDescription], rate.Query[costkit.QueryRegion])
 		if len(matched) != 1 {
 			names := make([]string, 0, len(matched))
 			for _, sku := range matched {

@@ -18,13 +18,6 @@ import (
 	"github.com/ocelhq/ocel/pricing/store/postgres"
 )
 
-const (
-	queryService = "service"
-	queryIndex   = "index"
-	querySource  = "static"
-	globalIndex  = "global"
-)
-
 type AWSTarget struct {
 	Service string
 	Region  string
@@ -33,14 +26,14 @@ type AWSTarget struct {
 func AWSTargets(card *costkit.Card) []AWSTarget {
 	var targets []AWSTarget
 	for _, rate := range card.Rates {
-		if !strings.HasPrefix(rate.ID, postgres.VendorAWS+"/") || rate.Query == nil || rate.Query[querySource] != "" {
+		if !strings.HasPrefix(rate.ID, postgres.VendorAWS+"/") || rate.Query == nil || rate.Query[costkit.QuerySource] != "" {
 			continue
 		}
 		region := rate.Region
-		if rate.Query[queryIndex] == globalIndex {
+		if rate.Query[costkit.QueryIndex] == costkit.Global {
 			region = ""
 		}
-		target := AWSTarget{Service: rate.Query[queryService], Region: region}
+		target := AWSTarget{Service: rate.Query[costkit.QueryService], Region: region}
 		if target.Service != "" && !slices.Contains(targets, target) {
 			targets = append(targets, target)
 		}
@@ -60,7 +53,7 @@ func GCPServices(card *costkit.Card) []string {
 		if !strings.HasPrefix(rate.ID, postgres.VendorGCP+"/") || rate.Query == nil {
 			continue
 		}
-		if service := rate.Query[queryService]; service != "" && !slices.Contains(services, service) {
+		if service := rate.Query[costkit.QueryService]; service != "" && !slices.Contains(services, service) {
 			services = append(services, service)
 		}
 	}
@@ -116,7 +109,7 @@ func (a AWS) Run(ctx context.Context, service, region string) error {
 		return err
 	})
 	if err != nil {
-		return fmt.Errorf("%s in %s: %w", service, orGlobal(region), err)
+		return fmt.Errorf("%s in %s: %w", service, costkit.OrGlobal(region), err)
 	}
 	return held.Commit(version, a.now())
 }
@@ -186,11 +179,4 @@ func (g GCP) now() time.Time {
 		return g.Now()
 	}
 	return time.Now().UTC()
-}
-
-func orGlobal(region string) string {
-	if region == "" {
-		return globalIndex
-	}
-	return region
 }

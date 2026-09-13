@@ -539,3 +539,12 @@ func TestAStoreThatFallsBackCarriesTheRateNoteIntoTheEstimate(t *testing.T) {
 		t.Errorf("notes = %v, want the note the store's fallback carries", est.GetNotes())
 	}
 }
+
+func TestTheGlobalIndexStandsInForTheRegionARateDoesNotName(t *testing.T) {
+	if got := costkit.OrGlobal(""); got != costkit.Global {
+		t.Errorf("OrGlobal(\"\") = %q, want %q", got, costkit.Global)
+	}
+	if got := costkit.OrGlobal("eu-west-1"); got != "eu-west-1" {
+		t.Errorf("OrGlobal(eu-west-1) = %q, want the region itself", got)
+	}
+}

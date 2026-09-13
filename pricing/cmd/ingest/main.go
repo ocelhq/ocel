@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"slices"
-	"strings"
 	"syscall"
 
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost/catalog"
@@ -24,20 +23,10 @@ func main() {
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	if err := run(log, list(*services), list(*regions), *vendor); err != nil {
+	if err := run(log, pricing.Commas(*services), pricing.Commas(*regions), *vendor); err != nil {
 		log.Error("the ingest stopped", "error", err.Error())
 		os.Exit(1)
 	}
-}
-
-func list(raw string) []string {
-	var held []string
-	for _, item := range strings.Split(raw, ",") {
-		if trimmed := strings.TrimSpace(item); trimmed != "" {
-			held = append(held, trimmed)
-		}
-	}
-	return held
 }
 
 func run(log *slog.Logger, services, regions []string, vendor string) error {

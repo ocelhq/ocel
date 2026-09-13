@@ -19,13 +19,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/cost/offer"
 )
 
-const (
-	queryService = "service"
-	queryIndex   = "index"
-	querySource  = "static"
-	globalIndex  = "global"
-)
-
 type group struct{ service, region string }
 
 func main() {
@@ -50,14 +43,14 @@ func run(path, cache string) error {
 	groups := map[group][]*costkit.Rate{}
 	for i := range card.Rates {
 		rate := &card.Rates[i]
-		if rate.Query == nil || rate.Query[querySource] != "" {
+		if rate.Query == nil || rate.Query[costkit.QuerySource] != "" {
 			continue
 		}
 		region := rate.Region
-		if rate.Query[queryIndex] == globalIndex {
+		if rate.Query[costkit.QueryIndex] == costkit.Global {
 			region = ""
 		}
-		held := group{rate.Query[queryService], region}
+		held := group{rate.Query[costkit.QueryService], region}
 		groups[held] = append(groups[held], rate)
 	}
 	order := make([]group, 0, len(groups))
@@ -89,7 +82,7 @@ func run(path, cache string) error {
 }
 
 func ensure(cache, service, region string) (string, error) {
-	file := filepath.Join(cache, service+"-"+orGlobal(region)+".json")
+	file := filepath.Join(cache, service+"-"+costkit.OrGlobal(region)+".json")
 	if _, err := os.Stat(file); err == nil {
 		return file, nil
 	}
@@ -196,7 +189,7 @@ func matches(attributes, query map[string]string, region string) bool {
 		return false
 	}
 	for key, want := range query {
-		if key == queryService || key == queryIndex {
+		if key == costkit.QueryService || key == costkit.QueryIndex {
 			continue
 		}
 		if attributes[key] != want {
@@ -204,11 +197,4 @@ func matches(attributes, query map[string]string, region string) bool {
 		}
 	}
 	return true
-}
-
-func orGlobal(region string) string {
-	if region == "" {
-		return globalIndex
-	}
-	return region
 }

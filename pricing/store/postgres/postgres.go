@@ -21,14 +21,6 @@ const (
 	VendorAWS = "aws"
 	VendorGCP = "gcp"
 
-	queryService     = "service"
-	queryIndex       = "index"
-	querySource      = "static"
-	queryDescription = "description"
-	queryRegion      = "region"
-	globalIndex      = "global"
-	globalRegion     = "global"
-
 	basisTimeout = 2 * time.Second
 
 	defaultCacheTTL = 10 * time.Minute
@@ -161,7 +153,7 @@ func (s *Store) Lookup(id, region string) (costkit.Rate, bool, bool) {
 		return base, false, false
 	}
 	vendor, _, _ := strings.Cut(id, "/")
-	if base.Query != nil && base.Query[querySource] == "" && (vendor == VendorAWS || vendor == VendorGCP) {
+	if base.Query != nil && base.Query[costkit.QuerySource] == "" && (vendor == VendorAWS || vendor == VendorGCP) {
 		tiers, err := s.tiers(vendor, base)
 		switch {
 		case err != nil || !usable(base, tiers):
@@ -198,12 +190,12 @@ func (s *Store) tiers(vendor string, rate costkit.Rate) ([]costkit.Tier, error) 
 
 func (s *Store) awsTiers(ctx context.Context, rate costkit.Rate) ([]costkit.Tier, error) {
 	region := rate.Region
-	if rate.Query[queryIndex] == globalIndex {
+	if rate.Query[costkit.QueryIndex] == costkit.Global {
 		region = ""
 	}
 	attributes := map[string]string{}
 	for key, want := range rate.Query {
-		if key == queryService || key == queryIndex {
+		if key == costkit.QueryService || key == costkit.QueryIndex {
 			continue
 		}
 		attributes[key] = want
@@ -213,7 +205,7 @@ func (s *Store) awsTiers(ctx context.Context, rate costkit.Rate) ([]costkit.Tier
 		return nil, err
 	}
 	rows, err := s.pool.Query(ctx, `SELECT sku FROM aws_products WHERE service = $1 AND region = $2 AND attributes @> $3::jsonb`,
-		rate.Query[queryService], region, string(selector))
+		rate.Query[costkit.QueryService], region, string(selector))
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +214,7 @@ func (s *Store) awsTiers(ctx context.Context, rate costkit.Rate) ([]costkit.Tier
 		return nil, err
 	}
 	if len(skus) != 1 {
-		return nil, fmt.Errorf("%s: %d products carry %v in %s", rate.ID, len(skus), attributes, orGlobal(region))
+		return nil, fmt.Errorf("%s: %d products carry %v in %s", rate.ID, len(skus), attributes, costkit.OrGlobal(region))
 	}
 	priced, err := s.pool.Query(ctx, `SELECT begin_range, price FROM aws_prices WHERE sku = $1 ORDER BY begin_range`, skus[0])
 	if err != nil {
@@ -236,12 +228,12 @@ func (s *Store) awsTiers(ctx context.Context, rate costkit.Rate) ([]costkit.Tier
 }
 
 func (s *Store) gcpTiers(ctx context.Context, rate costkit.Rate) ([]costkit.Tier, error) {
-	region := rate.Query[queryRegion]
+	region := rate.Query[costkit.QueryRegion]
 	if region == "" {
-		region = globalRegion
+		region = costkit.Global
 	}
 	rows, err := s.pool.Query(ctx, `SELECT tiers FROM gcp_skus WHERE service = $1 AND position($2 in description) > 0 AND $3 = ANY (regions)`,
-		rate.Query[queryService], rate.Query[queryDescription], region)
+		rate.Query[costkit.QueryService], rate.Query[costkit.QueryDescription], region)
 	if err != nil {
 		return nil, err
 	}
@@ -250,18 +242,11 @@ func (s *Store) gcpTiers(ctx context.Context, rate costkit.Rate) ([]costkit.Tier
 		return nil, err
 	}
 	if len(held) != 1 {
-		return nil, fmt.Errorf("%s: %d skus describe %q in %s", rate.ID, len(held), rate.Query[queryDescription], region)
+		return nil, fmt.Errorf("%s: %d skus describe %q in %s", rate.ID, len(held), rate.Query[costkit.QueryDescription], region)
 	}
 	var tiers []costkit.Tier
 	if err := json.Unmarshal(held[0], &tiers); err != nil {
 		return nil, fmt.Errorf("%s: %w", rate.ID, err)
 	}
 	return tiers, nil
-}
-
-func orGlobal(region string) string {
-	if region == "" {
-		return globalIndex
-	}
-	return region
 }

@@ -28,6 +28,23 @@ type Rate struct {
 	Query     map[string]string `json:"query,omitempty"`
 }
 
+const (
+	QueryService     = "service"
+	QueryIndex       = "index"
+	QuerySource      = "static"
+	QueryDescription = "description"
+	QueryRegion      = "region"
+
+	Global = "global"
+)
+
+func OrGlobal(region string) string {
+	if region == "" {
+		return Global
+	}
+	return region
+}
+
 type Allowance string
 
 const (

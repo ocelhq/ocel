@@ -57,7 +57,7 @@ func run(log *slog.Logger) error {
 	}
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", port),
-		Handler:           pricing.Handler(store, pricing.Options{Tokens: pricing.Tokens(os.Getenv(pricing.TokensVariable)), Logger: log}),
+		Handler:           pricing.Handler(store, pricing.Options{Tokens: pricing.Commas(os.Getenv(pricing.TokensVariable)), Logger: log}),
 		ReadHeaderTimeout: readTimeout,
 		WriteTimeout:      writeTimeout,
 	}
