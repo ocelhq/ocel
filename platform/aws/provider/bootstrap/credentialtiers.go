@@ -567,7 +567,7 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 		},
 		{
 			actions:   []string{"logs:DescribeLogGroups"},
-			resources: []string{appLogGroupARN, functionLogGroupARN},
+			resources: []string{unscopedResource},
 		},
 	}
 }

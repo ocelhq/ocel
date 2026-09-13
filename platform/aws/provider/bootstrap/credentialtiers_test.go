@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"encoding/json"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -329,22 +330,44 @@ func TestDeployTierPublishesTheRuntimeStackAndNoOtherStack(t *testing.T) {
 
 func TestDeployTierOwnsTheLogGroupsItCreates(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
-	scoped := map[string]string{
+	want := map[string]string{
 		"logs:CreateLogGroup":      conditionJSON(t, taggedOnCreate()),
 		"logs:DeleteLogGroup":      conditionJSON(t, taggedByOcel()),
 		"logs:ListTagsForResource": conditionJSON(t, taggedByOcel()),
 		"logs:PutRetentionPolicy":  conditionJSON(t, taggedByOcel()),
 		"logs:TagResource":         conditionJSON(t, taggedByOcel()),
 		"logs:UntagResource":       conditionJSON(t, taggedByOcel()),
-		"logs:DescribeLogGroups":   conditionJSON(t, nil),
 	}
 	for _, resource := range []string{appLogGroupARN, functionLogGroupARN} {
-		for action, condition := range scoped {
-			if !grants[grant{action: action, resource: resource, condition: condition}] {
-				t.Errorf("the deploy tier does not grant %s on %s under %s, so a log group is either never made with a retention, never reclaimed by the teardown, or reachable beyond what ocel tagged", action, resource, condition)
+		got := logsGrantsOn(grants, resource)
+		if !maps.Equal(got, want) {
+			t.Errorf("the deploy tier grants %v on %s, want exactly %v, so a log group is either never made with a retention, never reclaimed by the teardown, or reachable beyond what ocel tagged", got, resource, want)
+		}
+	}
+}
+
+func TestDeployTierListsLogGroupsOnTheOnlyResourceAWSAccepts(t *testing.T) {
+	for tier, document := range map[string]string{"deploy": mustRender(t, DeployCredentialPermissions)} {
+		grants := grantsOf(t, document)
+		if !grants[grant{action: "logs:DescribeLogGroups", resource: unscopedResource, condition: conditionJSON(t, nil)}] {
+			t.Errorf("the %s tier does not grant logs:DescribeLogGroups on %q, the only resource IAM evaluates it against, so CloudFormation cannot read back a log group it manages", tier, unscopedResource)
+		}
+		for g := range grants {
+			if g.action == "logs:DescribeLogGroups" && g.resource != unscopedResource {
+				t.Errorf("the %s tier grants logs:DescribeLogGroups on %s, an ARN IAM never matches for an action with no resource type", tier, g.resource)
 			}
 		}
 	}
+}
+
+func logsGrantsOn(grants map[grant]bool, resource string) map[string]string {
+	got := map[string]string{}
+	for g := range grants {
+		if g.resource == resource && strings.HasPrefix(g.action, "logs:") {
+			got[g.action] = g.condition
+		}
+	}
+	return got
 }
 
 func conditionJSON(t *testing.T, condition map[string]any) string {
@@ -485,7 +508,7 @@ func TestBootstrapTierOwnsOnlyTheLogGroupsItsStacksDeclare(t *testing.T) {
 		}
 	}
 	for g := range grants {
-		if strings.HasPrefix(g.action, "logs:") && g.resource != scope && g.resource != appLogGroupARN && g.resource != functionLogGroupARN {
+		if strings.HasPrefix(g.action, "logs:") && g.resource != scope && g.resource != unscopedResource && g.resource != appLogGroupARN && g.resource != functionLogGroupARN {
 			t.Errorf("the bootstrap tier grants %s on %s, beyond the log groups a bootstrap or a deploy owns", g.action, g.resource)
 		}
 	}
