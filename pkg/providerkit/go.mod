@@ -12,9 +12,11 @@ require (
 	github.com/ocelhq/ocel/pkg/channel v0.0.0
 	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
 	github.com/ocelhq/ocel/pkg/constants v0.0.0
+	github.com/ocelhq/ocel/pkg/costkit v0.0.0
 	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/proto v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
+	github.com/shopspring/decimal v1.4.0
 	golang.org/x/sync v0.22.0
 	google.golang.org/protobuf v1.36.12
 )
@@ -65,3 +67,5 @@ replace github.com/ocelhq/ocel/pkg/proto => ../proto
 replace github.com/ocelhq/ocel/platform/edge/contract => ../../platform/edge/contract
 
 replace github.com/ocelhq/ocel/pkg/configdoc => ../configdoc
+
+replace github.com/ocelhq/ocel/pkg/costkit => ../costkit

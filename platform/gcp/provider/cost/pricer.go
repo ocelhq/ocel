@@ -104,9 +104,10 @@ func cloudRunService(r *costkit.Subject) {
 	} else {
 		requests := r.Usage(usageRequests, requestsBand)
 		r.Add(costkit.Component{Name: "Requests", Unit: "requests", Rate: "gcp/run/requests", Quantity: requests, UsageBased: true})
-		seconds := requests.Mul(r.Usage(usageRequestDuration, durationBand)).Div(thousand)
-		r.Add(costkit.Component{Name: "CPU during requests", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-active", Quantity: seconds.Mul(cpu), UsageBased: true})
-		r.Add(costkit.Component{Name: "Memory during requests", Unit: "GiB-seconds", Rate: "gcp/run/memory-active", Quantity: seconds.Mul(memoryGiB), UsageBased: true})
+		r.Add(costkit.Component{Name: "CPU during requests", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-active", UsageBased: true,
+			Quantity: requests.Mul(r.Usage(usageRequestDuration, durationBand)).Div(thousand).Mul(cpu)})
+		r.Add(costkit.Component{Name: "Memory during requests", Unit: "GiB-seconds", Rate: "gcp/run/memory-active", UsageBased: true,
+			Quantity: requests.Mul(r.Usage(usageRequestDuration, durationBand)).Div(thousand).Mul(memoryGiB)})
 	}
 	if r.String("ingress") == ingressEverywhere {
 		r.Add(costkit.Component{Name: "Data transfer out to internet", Unit: "GiB", Rate: "gcp/network/premium-egress", Quantity: r.Usage(usageDataOut, egressBand), UsageBased: true})

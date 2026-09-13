@@ -28,6 +28,7 @@ func Run(t *testing.T, suite Suite) {
 	t.Run("optional sets", func(t *testing.T) { runOptionalSets(t, suite) })
 	t.Run("wire", func(t *testing.T) { runWire(t, suite) })
 	t.Run("certifier", func(t *testing.T) { runCertifier(t, suite) })
+	t.Run("cost", func(t *testing.T) { runCost(t, suite) })
 	t.Run("vendor", func(t *testing.T) { runVendor(t, suite) })
 }
 

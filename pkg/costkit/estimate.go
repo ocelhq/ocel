@@ -258,6 +258,7 @@ func price(card *Card, subject *Subject) pricedResource {
 			continue
 		}
 		cost, marginal := rate.Cost(b.Quantity)
+		cost = cost.Round(moneyPlaces)
 		component.UnitPrice = marginal.String()
 		component.MonthlyCost = money(cost)
 		priced++
@@ -301,7 +302,9 @@ func rollUp(scopes []*costv1.Scope, fixed, usage map[string]decimal.Decimal) []*
 	return totals
 }
 
-func money(amount decimal.Decimal) string { return amount.StringFixed(2) }
+const moneyPlaces = 2
+
+func money(amount decimal.Decimal) string { return amount.StringFixed(moneyPlaces) }
 
 func Struct(values map[string]any) *structpb.Struct {
 	s, err := structpb.NewStruct(values)
