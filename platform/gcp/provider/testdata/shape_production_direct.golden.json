@@ -131,6 +131,7 @@
       "name": "ocel-shop-prod-web-entry-d0cb45",
       "region": "europe-west1",
       "properties": {
+        "ingress": "INGRESS_TRAFFIC_ALL",
         "template": {
           "containers": [
             {
@@ -157,6 +158,7 @@
       "name": "ocel-shop-prod-api-c58886",
       "region": "europe-west1",
       "properties": {
+        "ingress": "INGRESS_TRAFFIC_ALL",
         "template": {
           "containers": [
             {
