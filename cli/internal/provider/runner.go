@@ -361,6 +361,9 @@ func Stream[Req any](
 
 func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[progressv1.OperationEvent], callErr error, onEvent func(*progressv1.OperationEvent)) error {
 	if callErr != nil {
+		if cancelled(callErr) {
+			return fmt.Errorf("provider: %s was cancelled: %w", rpc, callErr)
+		}
 		return fmt.Errorf("provider: call %s: %w", rpc, callErr)
 	}
 	defer stream.Close()
@@ -379,12 +382,19 @@ func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[p
 	}
 
 	if err := stream.Err(); err != nil {
+		if cancelled(err) {
+			return fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
+		}
 		if connect.CodeOf(err) == connect.CodeInvalidArgument {
 			return fmt.Errorf("provider: call %s: %w", rpc, err)
 		}
 		return fmt.Errorf("provider: provider connection lost: %w", err)
 	}
 	return fmt.Errorf("provider: provider closed the %s stream without a result", rpc)
+}
+
+func cancelled(err error) bool {
+	return errors.Is(err, context.Canceled) || connect.CodeOf(err) == connect.CodeCanceled
 }
 
 var (
