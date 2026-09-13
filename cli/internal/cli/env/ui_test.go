@@ -6,6 +6,8 @@ import (
 	"io"
 	"testing"
 
+	connect "connectrpc.com/connect"
+
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -93,6 +95,40 @@ func TestRunnerValues(t *testing.T) {
 			override := stored(t, rows, "STRIPE_API_KEY")
 			if override.Environment != "staging" {
 				t.Errorf("STRIPE_API_KEY = %+v, want it to name the environment that holds it", override)
+			}
+			return nil
+		})
+	})
+
+	t.Run("a refused reveal hands back the provider's own typed error", func(t *testing.T) {
+		root := setUpEnvFixture(t)
+
+		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *provider.Runner, values envwire.Values) error {
+			vars, err := runner.Vars()
+			if err != nil {
+				t.Fatalf("reach the provider's variable store: %v", err)
+			}
+			if _, err := vars.SetReference(ctx, &envvarsv1.SetReferenceRequest{
+				Tier:       envTier(envOptions{}),
+				Coordinate: &envvarsv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY"},
+				Target:     &envvarsv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"},
+			}); err != nil {
+				t.Fatalf("SetReference: %v", err)
+			}
+
+			_, direct := vars.RevealValues(ctx, &envvarsv1.RevealValuesRequest{
+				Tier:  envTier(envOptions{}),
+				Slug:  slug,
+				Cells: []*envvarsv1.Coordinate{{Slug: slug, Key: "STRIPE_API_KEY"}},
+			})
+
+			_, _, err = revealOne(ctx, values, envgate.Cell{Key: "STRIPE_API_KEY"})
+			var wire *connect.Error
+			if !errors.As(err, &wire) {
+				t.Fatalf("Reveal over a reference to nothing err = %v, want a *connect.Error a caller can read the code off", err)
+			}
+			if wire.Code() != connect.CodeOf(direct) {
+				t.Errorf("Reveal err code = %v, want %v: the code the provider answered with", wire.Code(), connect.CodeOf(direct))
 			}
 			return nil
 		})

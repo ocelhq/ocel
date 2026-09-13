@@ -2,7 +2,6 @@ package envwire
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	connect "connectrpc.com/connect"
@@ -162,7 +161,7 @@ func (v Values) reveal(ctx context.Context, rows []envgate.Address) (*envvarsv1.
 		Cells: named,
 	})
 	if err != nil {
-		return nil, errors.New(err.Error())
+		return nil, err
 	}
 	return resp, nil
 }
