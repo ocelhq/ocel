@@ -228,6 +228,7 @@
       "name": "ocel-shop-pr-42-web-entry-461bda",
       "region": "europe-west1",
       "properties": {
+        "ingress": "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER",
         "template": {
           "containers": [
             {
@@ -287,6 +288,7 @@
       "name": "ocel-shop-pr-42-api-3e2a72",
       "region": "europe-west1",
       "properties": {
+        "ingress": "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER",
         "template": {
           "containers": [
             {

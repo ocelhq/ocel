@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/shopspring/decimal"
@@ -101,11 +102,19 @@ func (s *Subject) value(path string) (any, bool) {
 	}
 	var current any = s.Resource.GetProperties().AsMap()
 	for _, segment := range strings.Split(path, ".") {
-		object, ok := current.(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		if current, ok = object[segment]; !ok {
+		switch held := current.(type) {
+		case map[string]any:
+			var ok bool
+			if current, ok = held[segment]; !ok {
+				return nil, false
+			}
+		case []any:
+			index, err := strconv.Atoi(segment)
+			if err != nil || index < 0 || index >= len(held) {
+				return nil, false
+			}
+			current = held[index]
+		default:
 			return nil, false
 		}
 	}

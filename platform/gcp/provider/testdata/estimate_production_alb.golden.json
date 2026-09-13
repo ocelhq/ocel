@@ -1,0 +1,390 @@
+{
+  "currency": "USD",
+  "ratesVersion": "2026-09-13",
+  "profile": "moderate",
+  "resources": [
+    {
+      "resource": "project:shop/shared:production/google_firestore_database:ocel",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Document reads",
+          "unit": "reads",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0.0000003",
+          "monthlyCost": "0.30",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 reads",
+          "rateRef": "gcp/firestore/reads"
+        },
+        {
+          "name": "Document writes",
+          "unit": "writes",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000009",
+          "monthlyCost": "0.09",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 writes",
+          "rateRef": "gcp/firestore/writes"
+        },
+        {
+          "name": "Storage",
+          "unit": "GiB-month",
+          "monthlyQuantity": "1",
+          "unitPrice": "0.15",
+          "monthlyCost": "0.15",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GiB-month",
+          "rateRef": "gcp/firestore/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.54"
+    },
+    {
+      "resource": "project:shop/shared:production/google_storage_bucket:ocel-acme-prod-production",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Storage",
+          "unit": "GiB-month",
+          "monthlyQuantity": "10",
+          "unitPrice": "0.02",
+          "monthlyCost": "0.20",
+          "usageBased": true,
+          "assumption": "moderate profile: 10 GiB-month",
+          "rateRef": "gcp/storage/standard"
+        },
+        {
+          "name": "Class A operations",
+          "unit": "operations",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.000005",
+          "monthlyCost": "0.05",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 operations",
+          "rateRef": "gcp/storage/class-a"
+        },
+        {
+          "name": "Class B operations",
+          "unit": "operations",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000004",
+          "monthlyCost": "0.04",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 operations",
+          "rateRef": "gcp/storage/class-b"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.29"
+    },
+    {
+      "resource": "project:shop/shared:production/google_storage_bucket:ocel-acme-prod-production-state",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Storage",
+          "unit": "GiB-month",
+          "monthlyQuantity": "10",
+          "unitPrice": "0.02",
+          "monthlyCost": "0.20",
+          "usageBased": true,
+          "assumption": "moderate profile: 10 GiB-month",
+          "rateRef": "gcp/storage/standard"
+        },
+        {
+          "name": "Class A operations",
+          "unit": "operations",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.000005",
+          "monthlyCost": "0.05",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 operations",
+          "rateRef": "gcp/storage/class-a"
+        },
+        {
+          "name": "Class B operations",
+          "unit": "operations",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000004",
+          "monthlyCost": "0.04",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 operations",
+          "rateRef": "gcp/storage/class-b"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.29"
+    },
+    {
+      "resource": "project:shop/shared:production/google_kms_key_ring:ocel",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/google_kms_crypto_key:production",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Active key version",
+          "unit": "version-months",
+          "monthlyQuantity": "1",
+          "unitPrice": "0.06",
+          "monthlyCost": "0.06",
+          "rateRef": "gcp/kms/key-version"
+        },
+        {
+          "name": "Cryptographic operations",
+          "unit": "operations",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.000003",
+          "monthlyCost": "0.03",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 operations",
+          "rateRef": "gcp/kms/operations"
+        }
+      ],
+      "monthlyFixed": "0.06",
+      "monthlyUsage": "0.03"
+    },
+    {
+      "resource": "project:shop/shared:production/google_service_account:ocel-production",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/google_artifact_registry_repository:ocel-acme-prod-production",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Storage",
+          "unit": "GiB-month",
+          "monthlyQuantity": "5",
+          "unitPrice": "0.1",
+          "monthlyCost": "0.45",
+          "usageBased": true,
+          "assumption": "moderate profile: 5 GiB-month",
+          "rateRef": "gcp/artifactregistry/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.45"
+    },
+    {
+      "resource": "project:shop/shared:production/google_secret_manager_secret:ocel-production-pulumi-passphrase",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Active versions",
+          "unit": "version-months",
+          "monthlyQuantity": "1",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 version-months",
+          "rateRef": "gcp/secretmanager/version"
+        },
+        {
+          "name": "Access operations",
+          "unit": "operations",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 operations",
+          "rateRef": "gcp/secretmanager/access"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.00"
+    },
+    {
+      "resource": "project:shop/shared:production/google_compute_global_address:ocel-alb-production-address",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/google_compute_backend_service:ocel-alb-production-notfound",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/google_certificate_manager_certificate_map:ocel-alb-production-certs",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/google_compute_url_map:ocel-alb-production-routes",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/google_compute_target_https_proxy:ocel-alb-production-https",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/google_compute_global_forwarding_rule:ocel-alb-production-forward",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Forwarding rule",
+          "unit": "hours",
+          "monthlyQuantity": "730",
+          "unitPrice": "0.025",
+          "monthlyCost": "18.25",
+          "rateRef": "gcp/lb/forwarding-rule"
+        },
+        {
+          "name": "Data processed",
+          "unit": "GiB",
+          "monthlyQuantity": "10",
+          "unitPrice": "0.008",
+          "monthlyCost": "0.08",
+          "usageBased": true,
+          "assumption": "moderate profile: 10 GiB",
+          "rateRef": "gcp/lb/data-processed"
+        }
+      ],
+      "monthlyFixed": "18.25",
+      "monthlyUsage": "0.08"
+    },
+    {
+      "resource": "project:shop/environment:prod/app:web/google_cloud_run_v2_service:ocel-shop-prod-web-entry-d0cb45",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0.0000004",
+          "monthlyCost": "0.40",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 requests",
+          "rateRef": "gcp/run/requests"
+        },
+        {
+          "name": "CPU during requests",
+          "unit": "vCPU-seconds",
+          "monthlyQuantity": "200000",
+          "unitPrice": "0.000024",
+          "monthlyCost": "4.80",
+          "usageBased": true,
+          "assumption": "moderate profile: 200000 vCPU-seconds",
+          "rateRef": "gcp/run/cpu-active"
+        },
+        {
+          "name": "Memory during requests",
+          "unit": "GiB-seconds",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000025",
+          "monthlyCost": "0.25",
+          "usageBased": true,
+          "rateRef": "gcp/run/memory-active"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "5.45"
+    },
+    {
+      "resource": "project:shop/environment:prod/app:web/google_certificate_manager_certificate_map_entry:ocel-alb-shop-production-shop-example-com-cert",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/environment:prod/app:web/google_compute_region_network_endpoint_group:ocel-alb-shop-production-shop-example-com-neg",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/environment:prod/app:web/google_compute_backend_service:ocel-alb-shop-production-shop-example-com",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Cache egress",
+          "unit": "GiB",
+          "monthlyQuantity": "10",
+          "unitPrice": "0.08",
+          "monthlyCost": "0.80",
+          "usageBased": true,
+          "assumption": "moderate profile: 10 GiB",
+          "rateRef": "gcp/cdn/cache-egress"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.80"
+    },
+    {
+      "resource": "project:shop/environment:prod/app:api/google_cloud_run_v2_service:ocel-shop-prod-api-c58886",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "CPU, always allocated",
+          "unit": "vCPU-seconds",
+          "monthlyQuantity": "2628000",
+          "unitPrice": "0.000018",
+          "monthlyCost": "47.30",
+          "rateRef": "gcp/run/cpu-always"
+        },
+        {
+          "name": "Memory, always allocated",
+          "unit": "GiB-seconds",
+          "monthlyQuantity": "1314000",
+          "unitPrice": "0.000002",
+          "monthlyCost": "2.63",
+          "rateRef": "gcp/run/memory-always"
+        }
+      ],
+      "monthlyFixed": "49.93",
+      "monthlyUsage": "0.00"
+    }
+  ],
+  "scopes": [
+    {
+      "scope": "project:shop",
+      "monthlyFixed": "68.24",
+      "monthlyUsage": "7.93"
+    },
+    {
+      "scope": "project:shop/shared:production",
+      "monthlyFixed": "18.31",
+      "monthlyUsage": "1.68"
+    },
+    {
+      "scope": "project:shop/environment:prod",
+      "monthlyFixed": "49.93",
+      "monthlyUsage": "6.25"
+    },
+    {
+      "scope": "project:shop/environment:prod/app:web",
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "6.25"
+    },
+    {
+      "scope": "project:shop/environment:prod/app:api",
+      "monthlyFixed": "49.93",
+      "monthlyUsage": "0.00"
+    }
+  ],
+  "coverage": {
+    "supported": 10,
+    "free": 9,
+    "supportedTypes": [
+      "google_artifact_registry_repository",
+      "google_certificate_manager_certificate_map",
+      "google_certificate_manager_certificate_map_entry",
+      "google_cloud_run_v2_service",
+      "google_compute_backend_service",
+      "google_compute_global_address",
+      "google_compute_global_forwarding_rule",
+      "google_compute_region_network_endpoint_group",
+      "google_compute_target_https_proxy",
+      "google_compute_url_map",
+      "google_firestore_database",
+      "google_kms_crypto_key",
+      "google_kms_key_ring",
+      "google_secret_manager_secret",
+      "google_service_account",
+      "google_storage_bucket"
+    ]
+  },
+  "notes": [
+    "list prices for europe-west1 and global SKUs; a resource in another region is left unpriced",
+    "the free tier Cloud Run and Cloud Storage apply as a billing discount is not applied; a free first tier the catalog publishes is",
+    "the forwarding rule is priced as the project's first five, which share one hourly charge"
+  ],
+  "monthlyFixed": "68.24",
+  "monthlyUsage": "7.93"
+}

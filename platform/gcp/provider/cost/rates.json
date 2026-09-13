@@ -1,0 +1,385 @@
+{
+  "version": "2026-09-13",
+  "currency": "USD",
+  "rates": [
+    {
+      "id": "gcp/run/requests",
+      "region": "",
+      "unit": "requests",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000004"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "Cloud Run Requests"
+      }
+    },
+    {
+      "id": "gcp/run/cpu-active",
+      "region": "europe-west1",
+      "unit": "vCPU-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000024"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "CPU Allocation Time",
+        "region": "europe-west1"
+      }
+    },
+    {
+      "id": "gcp/run/memory-active",
+      "region": "europe-west1",
+      "unit": "GiB-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "Memory Allocation Time",
+        "region": "europe-west1"
+      }
+    },
+    {
+      "id": "gcp/run/cpu-always",
+      "region": "europe-west1",
+      "unit": "vCPU-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000018"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "CPU Allocation Time (Instance-based billing)",
+        "region": "europe-west1"
+      }
+    },
+    {
+      "id": "gcp/run/memory-always",
+      "region": "europe-west1",
+      "unit": "GiB-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000002"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "Memory Allocation Time (Instance-based billing)",
+        "region": "europe-west1"
+      }
+    },
+    {
+      "id": "gcp/storage/standard",
+      "region": "europe-west1",
+      "unit": "GiB-month",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.020"
+        }
+      ],
+      "source": "https://cloud.google.com/storage/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "95FF-2EF5-5EA1",
+        "description": "Standard Storage Belgium",
+        "region": "europe-west1"
+      }
+    },
+    {
+      "id": "gcp/storage/class-a",
+      "region": "europe-west1",
+      "unit": "operations",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000005"
+        }
+      ],
+      "source": "https://cloud.google.com/storage/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "95FF-2EF5-5EA1",
+        "description": "Class A Operations Belgium",
+        "region": "europe-west1"
+      }
+    },
+    {
+      "id": "gcp/storage/class-b",
+      "region": "europe-west1",
+      "unit": "operations",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000004"
+        }
+      ],
+      "source": "https://cloud.google.com/storage/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "95FF-2EF5-5EA1",
+        "description": "Class B Operations Belgium",
+        "region": "europe-west1"
+      }
+    },
+    {
+      "id": "gcp/artifactregistry/storage",
+      "region": "",
+      "unit": "GiB-month",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "0.5",
+          "price": "0.10"
+        }
+      ],
+      "source": "https://cloud.google.com/artifact-registry/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "149C-F9EC-3994",
+        "description": "Artifact Registry Storage"
+      }
+    },
+    {
+      "id": "gcp/secretmanager/version",
+      "region": "",
+      "unit": "version-months",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "6",
+          "price": "0.06"
+        }
+      ],
+      "source": "https://cloud.google.com/secret-manager/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "EE82-7A5E-871C",
+        "description": "Secret version replica storage"
+      }
+    },
+    {
+      "id": "gcp/secretmanager/access",
+      "region": "",
+      "unit": "operations",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "10000",
+          "price": "0.000003"
+        }
+      ],
+      "source": "https://cloud.google.com/secret-manager/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "EE82-7A5E-871C",
+        "description": "Secret access operations"
+      }
+    },
+    {
+      "id": "gcp/kms/key-version",
+      "region": "",
+      "unit": "version-months",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.06"
+        }
+      ],
+      "source": "https://cloud.google.com/kms/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "EE2F-D110-890C",
+        "description": "Active software symmetric key versions"
+      }
+    },
+    {
+      "id": "gcp/kms/operations",
+      "region": "",
+      "unit": "operations",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000003"
+        }
+      ],
+      "source": "https://cloud.google.com/kms/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "EE2F-D110-890C",
+        "description": "Cryptographic operations with a software key"
+      }
+    },
+    {
+      "id": "gcp/firestore/reads",
+      "region": "europe-west1",
+      "unit": "reads",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000003"
+        }
+      ],
+      "source": "https://cloud.google.com/firestore/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "EE2C-7FAC-5E08",
+        "description": "Cloud Firestore Read Ops",
+        "region": "europe-west1"
+      }
+    },
+    {
+      "id": "gcp/firestore/writes",
+      "region": "europe-west1",
+      "unit": "writes",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000009"
+        }
+      ],
+      "source": "https://cloud.google.com/firestore/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "EE2C-7FAC-5E08",
+        "description": "Cloud Firestore Entity Writes",
+        "region": "europe-west1"
+      }
+    },
+    {
+      "id": "gcp/firestore/storage",
+      "region": "europe-west1",
+      "unit": "GiB-month",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.15"
+        }
+      ],
+      "source": "https://cloud.google.com/firestore/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "EE2C-7FAC-5E08",
+        "description": "Cloud Firestore Storage",
+        "region": "europe-west1"
+      }
+    },
+    {
+      "id": "gcp/lb/forwarding-rule",
+      "region": "",
+      "unit": "hours",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.025"
+        }
+      ],
+      "source": "https://cloud.google.com/load-balancing/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "E505-1604-58F8",
+        "description": "Global Forwarding Rule Minimum Service Charge"
+      }
+    },
+    {
+      "id": "gcp/lb/data-processed",
+      "region": "europe-west1",
+      "unit": "GiB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.008"
+        }
+      ],
+      "source": "https://cloud.google.com/load-balancing/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "E505-1604-58F8",
+        "description": "Global External Application Load Balancer Data Processing",
+        "region": "europe-west1"
+      }
+    },
+    {
+      "id": "gcp/cdn/cache-egress",
+      "region": "",
+      "unit": "GiB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.08"
+        },
+        {
+          "start": "10240",
+          "price": "0.055"
+        },
+        {
+          "start": "153600",
+          "price": "0.03"
+        }
+      ],
+      "source": "https://cloud.google.com/cdn/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "E505-1604-58F8",
+        "description": "Cloud CDN Cache Egress from Europe to Europe"
+      }
+    },
+    {
+      "id": "gcp/network/premium-egress",
+      "region": "",
+      "unit": "GiB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.12"
+        },
+        {
+          "start": "1024",
+          "price": "0.11"
+        },
+        {
+          "start": "10240",
+          "price": "0.08"
+        }
+      ],
+      "source": "https://cloud.google.com/vpc/network-pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "Cloud Run Network Internet Egress Europe to Europe"
+      }
+    }
+  ]
+}

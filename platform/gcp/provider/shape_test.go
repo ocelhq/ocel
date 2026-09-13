@@ -10,11 +10,15 @@ func TestTheServiceShapeMatchesWhatServiceOfSends(t *testing.T) {
 	t.Parallel()
 
 	for _, compute := range []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer} {
-		sent, err := serviceOf(serving{service: "svc", image: "img", compute: compute, health: "/healthz"})
+		sent, err := serviceOf(serving{service: "svc", image: "img", compute: compute, health: "/healthz", ingress: ingressLoadBalancer})
 		if err != nil {
 			t.Fatal(err)
 		}
-		shaped := serviceProperties(compute)["template"].(map[string]any)
+		properties := serviceProperties(compute, ingressLoadBalancer)
+		if properties["ingress"] != sent.Ingress {
+			t.Errorf("%s: shaped ingress %v, serviceOf sends %v", compute, properties["ingress"], sent.Ingress)
+		}
+		shaped := properties["template"].(map[string]any)
 		scaling := shaped["scaling"].(map[string]any)
 		if int64(scaling["min_instance_count"].(int)) != sent.Template.Scaling.MinInstanceCount {
 			t.Errorf("%s: shaped min instances %v, serviceOf sends %d", compute, scaling["min_instance_count"], sent.Template.Scaling.MinInstanceCount)

@@ -7,6 +7,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
@@ -54,6 +55,11 @@ func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*cost
 		tree.Add(shared, string(Vendor), typ, item.Name, region, itemProperties(item, region))
 	}
 
+	front, err := p.Edges().Open(req.Edge)
+	if err != nil {
+		return nil, err
+	}
+	ingress := ingressFor(factsOf(front))
 	fronted := req.Edge == alb.Kind
 	if fronted {
 		previewBase := ""
@@ -72,7 +78,7 @@ func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*cost
 			if err != nil {
 				return nil, err
 			}
-			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(providerkit.ComputeContainer))
+			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(providerkit.ComputeContainer, ingress))
 		} else {
 			specs := req.Functions[app.App]
 			if len(specs) == 0 {
@@ -83,7 +89,7 @@ func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*cost
 				if err != nil {
 					return nil, err
 				}
-				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(providerkit.ComputeServerless))
+				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(providerkit.ComputeServerless, ingress))
 			}
 		}
 		if fronted {
@@ -116,12 +122,13 @@ func itemProperties(item item, region string) map[string]any {
 	return map[string]any{}
 }
 
-func serviceProperties(compute providerkit.Compute) map[string]any {
+func serviceProperties(compute providerkit.Compute, ingress string) map[string]any {
 	minInstances := revisionMinInstancesServerless
 	if compute == providerkit.ComputeContainer {
 		minInstances = revisionMinInstancesContainer
 	}
 	return map[string]any{
+		"ingress": ingress,
 		"template": map[string]any{
 			"scaling": map[string]any{"min_instance_count": minInstances},
 			"containers": []any{map[string]any{
@@ -132,4 +139,8 @@ func serviceProperties(compute providerkit.Compute) map[string]any {
 			}},
 		},
 	}
+}
+
+func (p *Provider) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
+	return cost.Price(req)
 }
