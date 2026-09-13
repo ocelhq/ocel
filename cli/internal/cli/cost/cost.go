@@ -3,6 +3,7 @@ package cost
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -50,7 +51,7 @@ func newScanCommand(deps cmddeps.Deps) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&opts.Env, "env", envProduction, "Environment to price: production or preview")
-	cmd.Flags().StringVar(&opts.Profile, "profile", profileModerate, "Usage assumptions for the usage-based rows: light, moderate or heavy")
+	cmd.Flags().StringVar(&opts.Profile, "profile", profileName(defaultProfile), "Usage assumptions for the usage-based rows: "+strings.Join(profileNames(), ", "))
 	cmd.Flags().StringVar(&opts.Usage, "usage", "", "YAML or JSON `file` of monthly quantities keyed by resource id, overriding the profile")
 	return cmd
 }

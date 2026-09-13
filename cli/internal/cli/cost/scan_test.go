@@ -19,7 +19,7 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 )
 
-const apiFunction = "environment:prod/app:api/fake_function:fn--api--api"
+const apiFunction = "project:" + clitest.FixtureSlug + "/environment:prod/app:api/fake_function:fn--api--api"
 
 func scanFixture(t *testing.T) (string, cmddeps.Deps) {
 	t.Helper()
@@ -42,8 +42,9 @@ func scan(t *testing.T, deps cmddeps.Deps, root string, opts Options) string {
 }
 
 type scanJSON struct {
-	Resources json.RawMessage `json:"resources"`
-	Estimate  json.RawMessage `json:"estimate"`
+	Resources   json.RawMessage `json:"resources"`
+	Estimate    json.RawMessage `json:"estimate"`
+	Assumptions []string        `json:"assumptions"`
 }
 
 func TestScan(t *testing.T) {
@@ -108,6 +109,35 @@ func TestScan(t *testing.T) {
 		if !strings.Contains(out, "fake_function") {
 			t.Errorf("stdout = %q, want the api app priced as one function without a build", out)
 		}
+		if !strings.Contains(out, "Assumption: nothing is built, so each serverless app is priced as one function") {
+			t.Errorf("stdout = %q, want the one-function-per-app assumption said out loud", out)
+		}
+	})
+
+	t.Run("it carries the unbuilt assumption in the JSON envelope and none when the build is read", func(t *testing.T) {
+		root, deps := scanFixture(t)
+		deps.Presentation = func(io.Writer) runui.Presentation {
+			return runui.Resolve(runui.Origin{LogFormat: runui.FormatJSON})
+		}
+
+		var built scanJSON
+		if err := json.Unmarshal([]byte(scan(t, deps, root, Options{})), &built); err != nil {
+			t.Fatal(err)
+		}
+		if len(built.Assumptions) != 0 {
+			t.Errorf("assumptions with a build = %v, want none", built.Assumptions)
+		}
+
+		deps.CollectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
+			return nil, appbuilder.ErrNoBuildOutput
+		}
+		var unbuilt scanJSON
+		if err := json.Unmarshal([]byte(scan(t, deps, root, Options{})), &unbuilt); err != nil {
+			t.Fatal(err)
+		}
+		if len(unbuilt.Assumptions) != 1 || !strings.Contains(unbuilt.Assumptions[0], "one function") {
+			t.Errorf("assumptions without a build = %v, want the one-function-per-app assumption", unbuilt.Assumptions)
+		}
 	})
 
 	t.Run("it prices the preview environment when asked", func(t *testing.T) {
@@ -155,7 +185,7 @@ func TestScan(t *testing.T) {
 		if set.GetSource() != "ocel" || len(set.GetResources()) != 2 {
 			t.Errorf("resources = %v, want the ocel source with the function and the postgres", &set)
 		}
-		if estimate.GetProfile() != "moderate" || estimate.GetMonthlyFixed() != "14.60" || estimate.GetMonthlyUsage() != "1.00" {
+		if estimate.GetProfile() != costv1.Profile_PROFILE_MODERATE || estimate.GetMonthlyFixed() != "14.60" || estimate.GetMonthlyUsage() != "1.00" {
 			t.Errorf("estimate = profile %q fixed %q usage %q, want moderate 14.60 1.00", estimate.GetProfile(), estimate.GetMonthlyFixed(), estimate.GetMonthlyUsage())
 		}
 	})

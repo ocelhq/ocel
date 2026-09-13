@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"slices"
+	"strings"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -33,12 +36,33 @@ const (
 	envProduction = "production"
 	envPreview    = "preview"
 
-	profileLight    = "light"
-	profileModerate = "moderate"
-	profileHeavy    = "heavy"
+	defaultProfile = costv1.Profile_PROFILE_MODERATE
+	profilePrefix  = "PROFILE_"
+
+	unbuiltAssumption = "nothing is built, so each serverless app is priced as one function; run `ocel build` first to price the functions the build stands up"
 )
 
-var profiles = []string{profileLight, profileModerate, profileHeavy}
+func profiles() []costv1.Profile {
+	held := make([]costv1.Profile, 0, len(costv1.Profile_name)-1)
+	for _, value := range slices.Sorted(maps.Keys(costv1.Profile_name)) {
+		if profile := costv1.Profile(value); profile != costv1.Profile_PROFILE_UNSPECIFIED {
+			held = append(held, profile)
+		}
+	}
+	return held
+}
+
+func profileName(profile costv1.Profile) string {
+	return strings.ToLower(strings.TrimPrefix(profile.String(), profilePrefix))
+}
+
+func profileNames() []string {
+	names := make([]string, 0, len(profiles()))
+	for _, profile := range profiles() {
+		names = append(names, profileName(profile))
+	}
+	return names
+}
 
 type Options struct {
 	Env     string
@@ -65,7 +89,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 	}
 
 	return provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
-		manifest, err := scanManifest(ctx, deps, cfg, env, stderr)
+		manifest, assumptions, err := scanManifest(ctx, deps, cfg, env, stderr)
 		if err != nil {
 			return err
 		}
@@ -88,8 +112,8 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 		if err != nil {
 			return err
 		}
-		estimates := make(map[string]*costv1.Estimate, len(profiles))
-		for _, held := range profiles {
+		estimates := make(map[costv1.Profile]*costv1.Estimate, len(profiles()))
+		for _, held := range profiles() {
 			estimate, err := pricer.Price(ctx, &costv1.PriceRequest{
 				Resources: set,
 				Usage:     &costv1.Usage{Profile: held, Resources: overrides},
@@ -103,9 +127,9 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 			estimates[held] = estimate
 		}
 		if deps.Presentation(stdout).Format == runui.FormatJSON {
-			return writeJSON(stdout, set, estimates[profile])
+			return writeJSON(stdout, set, estimates[profile], assumptions)
 		}
-		return render(stdout, cfg.Slug, set, estimates, profile)
+		return render(stdout, cfg.Slug, set, estimates, profile, assumptions)
 	})
 }
 
@@ -127,16 +151,16 @@ func environmentOf(name string) (*environmentv1.Environment, error) {
 	return nil, fmt.Errorf("the environment to price is %s or %s, not %q", envProduction, envPreview, name)
 }
 
-func profileOf(name string) (string, error) {
+func profileOf(name string) (costv1.Profile, error) {
 	if name == "" {
-		return profileModerate, nil
+		return defaultProfile, nil
 	}
-	for _, held := range profiles {
-		if held == name {
+	for _, held := range profiles() {
+		if profileName(held) == name {
 			return held, nil
 		}
 	}
-	return "", fmt.Errorf("the usage profile is %s, %s or %s, not %q", profileLight, profileModerate, profileHeavy, name)
+	return costv1.Profile_PROFILE_UNSPECIFIED, fmt.Errorf("the usage profile is one of %s, not %q", strings.Join(profileNames(), ", "), name)
 }
 
 func usageFile(path string) (map[string]*structpb.Struct, error) {
@@ -172,19 +196,25 @@ func (unread) Reveal(context.Context, []envgate.Address) (map[envgate.Cell]strin
 
 const unbuiltDigest = "0000000000000000000000000000000000000000000000000000000000000000"
 
-func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, env *environmentv1.Environment, out io.Writer) (*contractv1.Manifest, error) {
+func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, env *environmentv1.Environment, out io.Writer) (*contractv1.Manifest, []string, error) {
 	gate := envgate.New(unread{}, envwire.Scope(cfg, env.GetTier() == environmentv1.Tier_TIER_PREVIEW, ""))
 	resources, err := deps.CollectDeclarations(ctx, cfg, gate, out, out)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	var assumptions []string
 	functions, err := deps.CollectAppFunctions(cfg.Dir)
 	if errors.Is(err, appbuilder.ErrNoBuildOutput) {
 		functions = unbuiltFunctions(cfg)
+		assumptions = append(assumptions, unbuiltAssumption)
 	} else if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return manifestbuilder.Build(cfg.Slug, cfg.Domains, scannedApps(cfg), string(providerkit.ComputeServerless), manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.Bindings), functions, nil)
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, scannedApps(cfg), string(providerkit.ComputeServerless), manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.Bindings), functions, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	return manifest, assumptions, nil
 }
 
 func scannedApps(cfg *projectconfig.Config) []manifestbuilder.App {
@@ -219,7 +249,7 @@ func unbuiltFunctions(cfg *projectconfig.Config) []manifestbuilder.Function {
 	return functions
 }
 
-func writeJSON(stdout io.Writer, set *costv1.ResourceSet, estimate *costv1.Estimate) error {
+func writeJSON(stdout io.Writer, set *costv1.ResourceSet, estimate *costv1.Estimate, assumptions []string) error {
 	resources, err := protojson.Marshal(set)
 	if err != nil {
 		return err
@@ -228,7 +258,14 @@ func writeJSON(stdout io.Writer, set *costv1.ResourceSet, estimate *costv1.Estim
 	if err != nil {
 		return err
 	}
-	encoded, err := json.Marshal(map[string]json.RawMessage{"resources": resources, "estimate": priced})
+	if assumptions == nil {
+		assumptions = []string{}
+	}
+	encoded, err := json.Marshal(struct {
+		Resources   json.RawMessage `json:"resources"`
+		Estimate    json.RawMessage `json:"estimate"`
+		Assumptions []string        `json:"assumptions"`
+	}{resources, priced, assumptions})
 	if err != nil {
 		return err
 	}
