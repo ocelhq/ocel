@@ -4,7 +4,7 @@ import { project } from "@console/db/schema";
 import { and, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { requireOrganization } from "@/lib/access";
-import { connectorFor, dial } from "@/lib/connectors";
+import { abilityFor, connectorFor, dial } from "@/lib/connectors";
 import { latestTopology, namedEnvironments } from "@/lib/project-variables";
 import { stateOf } from "@/lib/variables";
 import { PageShell } from "../../../page-shell";
@@ -49,12 +49,14 @@ export default async function VariablesPage({
   }
 
   const environments = await namedEnvironments(found.id);
-  const connector = await connectorFor(session.activeOrganizationId, latest.row.providerName);
+  const connector = await connectorFor(session.activeOrganizationId, latest.row.target);
+  const can = await abilityFor(session, connector);
 
   let stored: readonly Stored[] = [];
   let refusal = null;
-  if (connector !== null) {
-    const answer = await envvars.list(await dial(session, connector), held, found.slug);
+  const dialled = connector === null ? null : await dial(session, connector);
+  if (dialled !== null) {
+    const answer = await envvars.list(dialled, held, found.slug);
     if (answer.done) {
       stored = answer.result;
     } else {
@@ -62,13 +64,14 @@ export default async function VariablesPage({
     }
   }
 
-  const readOnly = connector === null || refusal !== null;
+  const readOnly = dialled === null || refusal !== null;
   const state = stateOf(
     found.slug,
     held,
     latest.row.topology,
     stored,
     environments,
+    can,
     readOnly ? "unknown" : "live",
   );
   const now = new Date().toISOString();
@@ -81,9 +84,9 @@ export default async function VariablesPage({
         promotion={latest.row.promotionId}
         provider={latest.row.providerName}
         region={latest.row.providerRegion}
-        live={connector !== null && refusal === null}
+        live={dialled !== null && refusal === null}
       />
-      {connector === null && <NoConnector vendor={latest.row.providerName} />}
+      {dialled === null && <NoConnector vendor={latest.row.providerName} />}
       {refusal !== null && <Refused reason={refusal.reason} message={refusal.message} />}
       <VariablesTable projectId={found.id} environment={held} initial={state} readOnly={readOnly} />
     </PageShell>

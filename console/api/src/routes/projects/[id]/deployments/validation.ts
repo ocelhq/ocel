@@ -111,6 +111,14 @@ export const deploymentRecordSchema = z
       name: z.string().min(1).max(64),
       region: z.string().max(64).optional(),
     }),
+    target: z
+      .string()
+      .min(1)
+      .max(256)
+      .regex(
+        /^[^/\s]+(?:\/[^/\s]+)+$/,
+        "A target names its vendor and the account it fingerprints",
+      ),
     edge: z.object({ kind: z.string().min(1).max(64) }).optional(),
     trigger: triggerSchema.default({ kind: "cli" }),
     git: gitSchema.optional(),

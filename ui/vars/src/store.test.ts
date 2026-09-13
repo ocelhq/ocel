@@ -52,6 +52,7 @@ function reset(current: State | null): void {
   store.variableGroupsOn.value = new Set();
   store.outcome.value = null;
   store.saving.value = false;
+  store.dropped.value = null;
 }
 
 const derivedOf = (group: string, folder: string, environment = "") =>
@@ -390,5 +391,29 @@ describe("applyDrop", () => {
     reset(current);
     store.applyDrop("dropped.env", "GITHUB_ID=from-the-file\n", "");
     expect(statusOf("github", "")).toBe("partial");
+  });
+});
+
+describe("ability", () => {
+  beforeEach(() => reset(github()));
+
+  it("reports what the state grants, and everything when it grants nothing explicitly", () => {
+    expect(store.ability.value).toEqual({ write: true, reveal: true });
+    reset({ ...github(), can: { write: false, reveal: true } });
+    expect(store.ability.value).toEqual({ write: false, reveal: true });
+  });
+
+  it("fills nothing from a dropped .env when the caller cannot write", () => {
+    reset({ ...github(), can: { write: false, reveal: true } });
+    store.applyDrop("prod.env", "GITHUB_ID=abc\n", "");
+    expect(store.drafts.value.size).toBe(0);
+    expect(store.dropped.value).toBeNull();
+  });
+
+  it("still fills from a dropped .env when the caller can write", () => {
+    store.applyDrop("prod.env", "GITHUB_ID=abc\n", "");
+    expect(
+      store.drafts.value.get(addressKey({ key: "GITHUB_ID", folder: "", environment: "" })),
+    ).toBe("abc");
   });
 });

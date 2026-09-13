@@ -1,7 +1,7 @@
 import type { Stored } from "@console/connectors";
 import type { DeploymentTopology } from "@console/db/schema";
 import { describe, expect, it } from "vitest";
-import { matrixOf } from "./variables";
+import { matrixOf, stateOf } from "./variables";
 
 const app = (
   name: string,
@@ -115,5 +115,21 @@ describe("matrixOf", () => {
       [],
     );
     expect(matrix.rows).toHaveLength(0);
+  });
+});
+
+describe("stateOf", () => {
+  const held = topology([app("web", undefined, [{ key: "API", class: "plain", required: true }])]);
+
+  it("carries the caller's ability onto the state the table renders", () => {
+    expect(
+      stateOf("acme", "production", held, [], [], { write: true, reveal: false }),
+    ).toMatchObject({ can: { write: true, reveal: false }, values: "live" });
+  });
+
+  it("names no ability the caller does not hold, and stays unknown when nothing was read", () => {
+    expect(
+      stateOf("acme", "preview", held, [], [], { write: false, reveal: false }, "unknown"),
+    ).toMatchObject({ can: { write: false, reveal: false }, values: "unknown" });
   });
 });

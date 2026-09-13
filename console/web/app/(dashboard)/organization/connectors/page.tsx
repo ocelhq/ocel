@@ -39,7 +39,9 @@ export default async function OrganizationConnectorsPage() {
     );
   }
 
-  const seen = await Promise.all(rows.map((row) => capabilities(row.url)));
+  const seen = await Promise.all(
+    rows.map((row) => (row.url === null ? null : capabilities(row.url))),
+  );
 
   return (
     <PageShell title="Connectors">
@@ -57,7 +59,12 @@ export default async function OrganizationConnectorsPage() {
               </span>
               <div className="flex min-w-56 flex-1 flex-col gap-1">
                 <p className="font-mono text-[13px]">{row.target}</p>
-                <p className="font-mono text-xs break-all text-muted-foreground">{row.url}</p>
+                <p className="font-mono text-xs break-all text-muted-foreground">
+                  {row.url ?? "no address published"}
+                </p>
+                <p className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+                  {row.form} · {row.reach}
+                </p>
               </div>
               <div className="flex min-w-40 flex-col gap-1">
                 <p className="flex items-center gap-2 text-sm">

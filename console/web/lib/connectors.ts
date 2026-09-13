@@ -2,14 +2,23 @@ import type { ActiveOrganizationSession } from "@console/auth";
 import type { Connector as Dialled } from "@console/connectors";
 import { db } from "@console/db";
 import { type Connector, connector } from "@console/db/schema";
+import type { Ability } from "@ui/vars";
 import { and, eq } from "drizzle-orm";
 import { roleOf } from "./access";
-import { scopesFor } from "./connector-policy";
+import { abilityOf, scopesFor } from "./connector-policy";
 import { connectorToken } from "./connector-token";
 
 export type { Connector };
 
-export async function dial(session: ActiveOrganizationSession, held: Connector): Promise<Dialled> {
+const barred: Ability = { write: false, reveal: false };
+
+export async function dial(
+  session: ActiveOrganizationSession,
+  held: Connector,
+): Promise<Dialled | null> {
+  if (held.url === null) {
+    return null;
+  }
   const role = await roleOf(session.userId, session.activeOrganizationId);
   return {
     id: held.id,
@@ -24,26 +33,32 @@ export async function dial(session: ActiveOrganizationSession, held: Connector):
   };
 }
 
+export async function abilityFor(
+  session: ActiveOrganizationSession,
+  held: Connector | null,
+): Promise<Ability> {
+  if (held === null || held.url === null) {
+    return barred;
+  }
+  const role = await roleOf(session.userId, session.activeOrganizationId);
+  return abilityOf(scopesFor(role, held.capabilities));
+}
+
 export async function connectorsOf(organizationId: string): Promise<Connector[]> {
   return db.select().from(connector).where(eq(connector.organizationId, organizationId));
 }
 
 export async function connectorFor(
   organizationId: string,
-  vendor: string | null,
+  target: string | null,
 ): Promise<Connector | null> {
-  if (vendor === null) {
+  if (target === null || target === "") {
     return null;
   }
   const [found] = await db
     .select()
     .from(connector)
-    .where(
-      and(
-        eq(connector.organizationId, organizationId),
-        eq(connector.vendor, vendor as Connector["vendor"]),
-      ),
-    );
+    .where(and(eq(connector.organizationId, organizationId), eq(connector.target, target)));
   return found ?? null;
 }
 

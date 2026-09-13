@@ -1,4 +1,5 @@
 import type { Scope } from "@console/connectors";
+import type { Ability } from "@ui/vars";
 
 const byRole: Record<string, readonly Scope[]> = {
   owner: ["envvars.read", "envvars.write", "envvars.reveal"],
@@ -14,4 +15,11 @@ export function scopesFor(role: string, capabilities: readonly string[]): Scope[
     }
   }
   return [...granted].filter((scope) => capabilities.includes(scope));
+}
+
+export function abilityOf(scopes: readonly Scope[]): Ability {
+  return {
+    write: scopes.includes("envvars.write"),
+    reveal: scopes.includes("envvars.reveal"),
+  };
 }

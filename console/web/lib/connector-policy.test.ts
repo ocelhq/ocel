@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scopesFor } from "./connector-policy";
+import { abilityOf, scopesFor } from "./connector-policy";
 
 const everything = ["envvars.read", "envvars.write", "envvars.reveal"];
 
@@ -30,5 +30,26 @@ describe("scopesFor", () => {
 
   it("drops what the connector does not answer", () => {
     expect(scopesFor("owner", ["envvars.read"])).toEqual(["envvars.read"]);
+  });
+});
+
+describe("abilityOf", () => {
+  it("lets an owner write and reveal", () => {
+    expect(abilityOf(scopesFor("owner", everything))).toEqual({ write: true, reveal: true });
+  });
+
+  it("lets an admin write but not reveal", () => {
+    expect(abilityOf(scopesFor("admin", everything))).toEqual({ write: true, reveal: false });
+  });
+
+  it("lets a member do neither", () => {
+    expect(abilityOf(scopesFor("member", everything))).toEqual({ write: false, reveal: false });
+  });
+
+  it("takes nothing the connector does not advertise", () => {
+    expect(abilityOf(scopesFor("owner", ["envvars.read"]))).toEqual({
+      write: false,
+      reveal: false,
+    });
   });
 });

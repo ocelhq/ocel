@@ -50,6 +50,13 @@
       "when": 1789287589141,
       "tag": "0006_magenta_spyke",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789288931837,
+      "tag": "0007_curious_the_renegades",
+      "breakpoints": true
     }
   ]
 }

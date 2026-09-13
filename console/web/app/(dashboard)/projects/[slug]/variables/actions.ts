@@ -1,12 +1,18 @@
 "use server";
 
-import { type Connector as Dialled, envvars, type Stored, ValueError } from "@console/connectors";
+import {
+  type Connector as Dialled,
+  envvars,
+  type Refusal,
+  statusOf,
+  ValueError,
+} from "@console/connectors";
 import { db } from "@console/db";
 import { type EnvironmentClass, project } from "@console/db/schema";
 import type { Address, OtherValue, State, Version } from "@ui/vars";
 import { and, eq } from "drizzle-orm";
 import { requireOrganization } from "@/lib/access";
-import { connectorFor, dial } from "@/lib/connectors";
+import { abilityFor, connectorFor, dial } from "@/lib/connectors";
 import { latestTopology, namedEnvironments } from "@/lib/project-variables";
 import { stateOf } from "@/lib/variables";
 
@@ -14,6 +20,10 @@ export type Answer<T> = { ok: true; result: T } | { ok: false; status: number; m
 
 function failed(status: number, message: string): Answer<never> {
   return { ok: false, status, message };
+}
+
+function refused(refusal: Refusal): Answer<never> {
+  return failed(statusOf(refusal), refusal.message);
 }
 
 interface Reached {
@@ -39,19 +49,15 @@ async function reach(projectId: string, env: string): Promise<Answer<Reached>> {
   if (latest.error || latest.row === null) {
     return failed(409, "this project has reported no deploy, so nothing names its variables");
   }
-  const connector = await connectorFor(session.activeOrganizationId, latest.row.providerName);
+  const connector = await connectorFor(session.activeOrganizationId, latest.row.target);
   if (connector === null) {
     return failed(409, "no connector runs in the account that holds these values");
   }
-  return {
-    ok: true,
-    result: {
-      slug: found.slug,
-      projectId: found.id,
-      connector: await dial(session, connector),
-      held,
-    },
-  };
+  const dialled = await dial(session, connector);
+  if (dialled === null) {
+    return failed(409, "this connector publishes no address the console can reach");
+  }
+  return { ok: true, result: { slug: found.slug, projectId: found.id, connector: dialled, held } };
 }
 
 async function attempt<T>(run: () => Promise<Answer<T>>): Promise<Answer<T>> {
@@ -83,22 +89,22 @@ export async function readState(projectId: string, env: string): Promise<Answer<
       return failed(409, "this project has reported no deploy");
     }
     const environments = await namedEnvironments(found.id);
-    const connector = await connectorFor(session.activeOrganizationId, latest.row.providerName);
-    let stored: readonly Stored[] = [];
-    if (connector === null) {
+    const connector = await connectorFor(session.activeOrganizationId, latest.row.target);
+    const can = await abilityFor(session, connector);
+    const dialled = connector === null ? null : await dial(session, connector);
+    if (dialled === null) {
       return {
         ok: true,
-        result: stateOf(found.slug, held, latest.row.topology, [], environments, "unknown"),
+        result: stateOf(found.slug, held, latest.row.topology, [], environments, can, "unknown"),
       };
     }
-    const answer = await envvars.list(await dial(session, connector), held, found.slug);
+    const answer = await envvars.list(dialled, held, found.slug);
     if (!answer.done) {
-      return failed(502, answer.refusal.message);
+      return refused(answer.refusal);
     }
-    stored = answer.result;
     return {
       ok: true,
-      result: stateOf(found.slug, held, latest.row.topology, stored, environments),
+      result: stateOf(found.slug, held, latest.row.topology, answer.result, environments, can),
     };
   });
 }
@@ -114,7 +120,7 @@ export async function revealValues(
     const { slug, connector, held } = reached.result;
     const answer = await envvars.reveal(connector, held, slug, cells);
     if (!answer.done) {
-      return failed(502, answer.refusal.message);
+      return refused(answer.refusal);
     }
     return { ok: true, result: { values: answer.result, errors: [] } };
   });
@@ -133,7 +139,7 @@ export async function setValue(
     const { slug, connector, held } = reached.result;
     const answer = await envvars.set(connector, held, slug, at, value, version);
     if (!answer.done) {
-      return failed(502, answer.refusal.message);
+      return refused(answer.refusal);
     }
     return { ok: true, result: null };
   });
@@ -151,7 +157,7 @@ export async function removeValue(
     const { slug, connector, held } = reached.result;
     const answer = await envvars.remove(connector, held, slug, at, version);
     if (!answer.done) {
-      return failed(502, answer.refusal.message);
+      return refused(answer.refusal);
     }
     return { ok: true, result: null };
   });
@@ -168,7 +174,7 @@ export async function listVersions(
     const { slug, connector, held } = reached.result;
     const answer = await envvars.versions(connector, held, slug, at);
     if (!answer.done) {
-      return failed(502, answer.refusal.message);
+      return refused(answer.refusal);
     }
     return { ok: true, result: answer.result };
   });
@@ -185,7 +191,7 @@ export async function otherValues(
     const other: EnvironmentClass = held === "production" ? "preview" : "production";
     const listed = await envvars.list(connector, other, slug);
     if (!listed.done) {
-      return failed(502, listed.refusal.message);
+      return refused(listed.refusal);
     }
     const readable = listed.result.filter((value) => value.reference === undefined);
     const shown = await envvars.reveal(connector, other, slug, readable);
@@ -232,7 +238,7 @@ export async function copyValues(
     const other: EnvironmentClass = held === "production" ? "preview" : "production";
     const shown = await envvars.reveal(connector, other, slug, cells);
     if (!shown.done) {
-      return failed(502, shown.refusal.message);
+      return refused(shown.refusal);
     }
     const source = new Map(
       shown.result.map((value) => [

@@ -16,6 +16,7 @@ export async function latestTopology(
         promotionId: deployment.promotionId,
         providerName: deployment.providerName,
         providerRegion: deployment.providerRegion,
+        target: deployment.target,
         tag: deployment.tag,
       })
       .from(deployment)

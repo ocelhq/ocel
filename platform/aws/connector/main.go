@@ -7,13 +7,16 @@ import (
 	"os"
 	"sync"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
+	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
@@ -50,6 +53,15 @@ func run(addr, region, config string) error {
 		return err
 	}
 
+	who, err := sts.NewFromConfig(cfg).GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return fmt.Errorf("resolve AWS account id: %w", err)
+	}
+	fingerprint, err := target.ForAWS(aws.ToString(who.Account), cfg.Region, string(ns))
+	if err != nil {
+		return err
+	}
+
 	held := &deployments{
 		namespace: bootstrap.Namespace(ns),
 		stacks:    cloudformation.NewFromConfig(cfg),
@@ -59,7 +71,7 @@ func run(addr, region, config string) error {
 	return connectorkit.Serve(connectorkit.Spec{
 		Version:        version,
 		Vendor:         "aws",
-		Target:         fmt.Sprintf("aws/%s/%s", cfg.Region, ns),
+		Target:         fingerprint,
 		Addr:           addr,
 		Console:        trust.Console,
 		ConnectorID:    trust.ConnectorID,

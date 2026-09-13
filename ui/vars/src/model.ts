@@ -60,11 +60,17 @@ export interface Recovery {
   owed: Cell[];
 }
 
+export interface Ability {
+  write: boolean;
+  reveal: boolean;
+}
+
 export interface State {
   slug: string;
   tier: string;
   other: string;
   values?: "live" | "unknown";
+  can?: Ability;
   environments: string[];
   matrix: {
     columns: string[];
@@ -196,6 +202,12 @@ function materialised(cell: MatrixCell): boolean {
 
 export function unknownValues(current: State): boolean {
   return current.values === "unknown";
+}
+
+const unrestricted: Ability = { write: true, reveal: true };
+
+export function abilityOf(current: State | null | undefined): Ability {
+  return current?.can ?? unrestricted;
 }
 
 export interface Catalogue {

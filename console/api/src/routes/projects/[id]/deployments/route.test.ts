@@ -41,6 +41,7 @@ function record(overrides: Record<string, unknown> = {}) {
     outcome: "succeeded",
     environment: { class: "production" },
     provider: { name: "aws", region: "us-east-1" },
+    target: "aws/123456789012/us-east-1/main",
     apps: [
       {
         name: "web",
@@ -135,6 +136,40 @@ describe("createDeployment", () => {
       const secondBody = await readJson<CreatedBody>(second);
       expect(secondBody.id).toBe(firstBody.id);
       expect(secondBody.outcome).toBe("succeeded");
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("refuses a record that names no target", async () => {
+    const session = await createTestSessionWithOrganization();
+    try {
+      const created = await createProjectFor(session, "deploy-no-target");
+
+      const response = await createDeployment(
+        postRequest(session.headers, record({ target: undefined })),
+        created.id,
+      );
+
+      expect(response.status).toBe(400);
+      expect((await readJson<IssueBody>(response)).issues[0].path).toEqual(["target"]);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("refuses a target that fingerprints nothing past its vendor", async () => {
+    const session = await createTestSessionWithOrganization();
+    try {
+      const created = await createProjectFor(session, "deploy-bare-target");
+
+      const response = await createDeployment(
+        postRequest(session.headers, record({ target: "aws" })),
+        created.id,
+      );
+
+      expect(response.status).toBe(400);
+      expect((await readJson<IssueBody>(response)).issues[0].path).toEqual(["target"]);
     } finally {
       await session.cleanup();
     }
@@ -342,6 +377,7 @@ describe("listDeployments", () => {
         startedAt: Date.parse("2025-12-31T23:58:00.000Z"),
         environment: { class: "preview", identity: "pr-7" },
         provider: { name: "aws", region: "us-east-1" },
+        target: "aws/123456789012/us-east-1/main",
         tag: null,
         edgeKind: null,
         error: null,
