@@ -38,6 +38,7 @@ type GCPSKU struct {
 type Ingest struct {
 	ctx     context.Context
 	tx      pgx.Tx
+	store   *Store
 	batch   *pgx.Batch
 	vendor  string
 	service string
@@ -57,7 +58,7 @@ func (s *Store) IngestAWS(ctx context.Context, service, region string) (*Ingest,
 		_ = tx.Rollback(ctx)
 		return nil, err
 	}
-	return &Ingest{ctx: ctx, tx: tx, batch: &pgx.Batch{}, vendor: VendorAWS, service: service, region: region}, nil
+	return &Ingest{ctx: ctx, tx: tx, store: s, batch: &pgx.Batch{}, vendor: VendorAWS, service: service, region: region}, nil
 }
 
 func (s *Store) IngestGCP(ctx context.Context, service string) (*Ingest, error) {
@@ -69,7 +70,7 @@ func (s *Store) IngestGCP(ctx context.Context, service string) (*Ingest, error) 
 		_ = tx.Rollback(ctx)
 		return nil, err
 	}
-	return &Ingest{ctx: ctx, tx: tx, batch: &pgx.Batch{}, vendor: VendorGCP, service: service}, nil
+	return &Ingest{ctx: ctx, tx: tx, store: s, batch: &pgx.Batch{}, vendor: VendorGCP, service: service}, nil
 }
 
 func (i *Ingest) Product(product AWSProduct) error {
@@ -126,7 +127,11 @@ func (i *Ingest) Commit(version string, fetched time.Time) error {
 		i.vendor, i.service, i.region, version, fetched); err != nil {
 		return err
 	}
-	return i.tx.Commit(i.ctx)
+	if err := i.tx.Commit(i.ctx); err != nil {
+		return err
+	}
+	i.store.forget()
+	return nil
 }
 
 func (i *Ingest) Close() { _ = i.tx.Rollback(i.ctx) }

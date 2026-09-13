@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -29,17 +30,40 @@ const (
 	globalRegion     = "global"
 
 	basisTimeout = 2 * time.Second
+
+	defaultCacheTTL = 10 * time.Minute
 )
 
 //go:embed migrations/*.sql
 var migrations embed.FS
 
+type Option func(*Store)
+
+func CacheTTL(held time.Duration) Option {
+	return func(s *Store) { s.ttl = held }
+}
+
+type held[T any] struct {
+	value T
+	at    time.Time
+}
+
+type answer struct {
+	rate     costkit.Rate
+	fellBack bool
+}
+
 type Store struct {
 	pool *pgxpool.Pool
 	card *costkit.Card
+	ttl  time.Duration
+
+	mu    sync.Mutex
+	rates map[string]held[answer]
+	basis *held[string]
 }
 
-func Open(ctx context.Context, url string, card *costkit.Card) (*Store, error) {
+func Open(ctx context.Context, url string, card *costkit.Card, opts ...Option) (*Store, error) {
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("rate store: %w", err)
@@ -48,8 +72,21 @@ func Open(ctx context.Context, url string, card *costkit.Card) (*Store, error) {
 		pool.Close()
 		return nil, err
 	}
-	return &Store{pool: pool, card: card}, nil
+	store := &Store{pool: pool, card: card, ttl: defaultCacheTTL, rates: map[string]held[answer]{}}
+	for _, opt := range opts {
+		opt(store)
+	}
+	return store, nil
 }
+
+func (s *Store) forget() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	clear(s.rates)
+	s.basis = nil
+}
+
+func (s *Store) fresh(at time.Time) bool { return time.Since(at) < s.ttl }
 
 func (s *Store) Close() { s.pool.Close() }
 
@@ -90,29 +127,52 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 
 func (s *Store) Basis() (currency, version string) {
 	currency, version = s.card.Basis()
+	s.mu.Lock()
+	cached := s.basis
+	s.mu.Unlock()
+	if cached != nil && s.fresh(cached.at) {
+		return currency, cached.value
+	}
 	ctx, stop := context.WithTimeout(context.Background(), basisTimeout)
 	defer stop()
 	var fetched *time.Time
-	if err := s.pool.QueryRow(ctx, `SELECT max(fetched_at) FROM ingests`).Scan(&fetched); err != nil || fetched == nil {
+	if err := s.pool.QueryRow(ctx, `SELECT max(fetched_at) FROM ingests`).Scan(&fetched); err != nil {
 		return currency, version
 	}
-	return currency, fetched.UTC().Format(time.DateOnly)
+	if fetched != nil {
+		version = fetched.UTC().Format(time.DateOnly)
+	}
+	s.mu.Lock()
+	s.basis = &held[string]{value: version, at: time.Now()}
+	s.mu.Unlock()
+	return currency, version
 }
 
 func (s *Store) Lookup(id, region string) (costkit.Rate, bool, bool) {
+	key := id + "\x00" + region
+	s.mu.Lock()
+	cached, known := s.rates[key]
+	s.mu.Unlock()
+	if known && s.fresh(cached.at) {
+		return cached.value.rate, true, cached.value.fellBack
+	}
 	base, found, fellBack := s.card.Lookup(id, region)
 	if !found {
 		return base, false, false
 	}
 	vendor, _, _ := strings.Cut(id, "/")
-	if base.Query == nil || base.Query[querySource] != "" || (vendor != VendorAWS && vendor != VendorGCP) {
-		return base, true, fellBack
+	if base.Query != nil && base.Query[querySource] == "" && (vendor == VendorAWS || vendor == VendorGCP) {
+		tiers, err := s.tiers(vendor, base)
+		switch {
+		case err != nil || !usable(base, tiers):
+			fellBack = true
+		default:
+			base.Tiers = tiers
+		}
 	}
-	tiers, err := s.tiers(vendor, base)
-	if err != nil || !usable(base, tiers) {
-		return base, true, true
-	}
-	base.Tiers = tiers
+	s.mu.Lock()
+	s.rates[key] = held[answer]{value: answer{rate: base, fellBack: fellBack}, at: time.Now()}
+	s.mu.Unlock()
 	return base, true, fellBack
 }
 

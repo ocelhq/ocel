@@ -15,7 +15,7 @@ const (
 	lock = 0x0ce1c057
 )
 
-func Store(t *testing.T) *postgres.Store {
+func Store(t *testing.T, opts ...postgres.Option) *postgres.Store {
 	t.Helper()
 	url := os.Getenv(URLVariable)
 	if url == "" {
@@ -26,7 +26,7 @@ func Store(t *testing.T) *postgres.Store {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	store, err := postgres.Open(ctx, url, card)
+	store, err := postgres.Open(ctx, url, card, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}

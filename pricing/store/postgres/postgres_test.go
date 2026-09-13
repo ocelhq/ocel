@@ -15,24 +15,7 @@ import (
 
 func TestAnIngestedPriceWinsOverTheEmbeddedCard(t *testing.T) {
 	store := pgtest.Store(t)
-	ctx := context.Background()
-
-	ingest, err := store.IngestAWS(ctx, "AWSLambda", "us-east-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ingest.Close()
-	if err := ingest.Product(postgres.AWSProduct{SKU: "TESTSKU", Attributes: map[string]string{
-		"group": "AWS-Lambda-Requests", "usagetype": "Request", "regionCode": "us-east-1",
-	}}); err != nil {
-		t.Fatal(err)
-	}
-	if err := ingest.Price(postgres.AWSPrice{SKU: "TESTSKU", Unit: "Requests", BeginRange: decimal.Zero, EndRange: "Inf", Price: decimal.NewFromFloat(0.5)}); err != nil {
-		t.Fatal(err)
-	}
-	if err := ingest.Commit("20260101000000", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
-		t.Fatal(err)
-	}
+	lambdaRequests(t, store, 0.5)
 
 	rate, found, fellBack := store.Lookup("aws/lambda/requests", "us-east-1")
 	if !found || fellBack {
@@ -100,4 +83,82 @@ func sameTiers(got, want []costkit.Tier) bool {
 		}
 	}
 	return true
+}
+
+func lambdaRequests(t *testing.T, store *postgres.Store, price float64) {
+	t.Helper()
+	ctx := context.Background()
+	ingest, err := store.IngestAWS(ctx, "AWSLambda", "us-east-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ingest.Close()
+	if err := ingest.Product(postgres.AWSProduct{SKU: "TESTSKU", Attributes: map[string]string{
+		"group": "AWS-Lambda-Requests", "usagetype": "Request", "regionCode": "us-east-1",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ingest.Price(postgres.AWSPrice{SKU: "TESTSKU", Unit: "Requests", BeginRange: decimal.Zero, EndRange: "Inf", Price: decimal.NewFromFloat(price)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ingest.Commit("20260101000000", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func behindTheStoresBack(t *testing.T, store *postgres.Store, price float64) {
+	t.Helper()
+	if _, err := store.Pool().Exec(context.Background(), `UPDATE aws_prices SET price = $1 WHERE sku = 'TESTSKU'`, price); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func requestPrice(t *testing.T, store *postgres.Store) decimal.Decimal {
+	t.Helper()
+	rate, found, _ := store.Lookup("aws/lambda/requests", "us-east-1")
+	if !found {
+		t.Fatal("the card names no aws/lambda/requests")
+	}
+	if len(rate.Tiers) != 1 {
+		t.Fatalf("tiers = %v, want the single ingested tier", rate.Tiers)
+	}
+	return rate.Tiers[0].Price
+}
+
+func TestARateAlreadyLookedUpIsNotReadFromThePriceStoreAgain(t *testing.T) {
+	store := pgtest.Store(t)
+	lambdaRequests(t, store, 0.5)
+	if got := requestPrice(t, store); !got.Equal(decimal.NewFromFloat(0.5)) {
+		t.Fatalf("price = %s, want the ingested 0.5", got)
+	}
+
+	behindTheStoresBack(t, store, 0.9)
+
+	if got := requestPrice(t, store); !got.Equal(decimal.NewFromFloat(0.5)) {
+		t.Errorf("price = %s, want the rate it already read rather than a second round trip", got)
+	}
+}
+
+func TestAnIngestLetsGoOfWhatTheStoreHeld(t *testing.T) {
+	store := pgtest.Store(t)
+	lambdaRequests(t, store, 0.5)
+	requestPrice(t, store)
+
+	lambdaRequests(t, store, 0.9)
+
+	if got := requestPrice(t, store); !got.Equal(decimal.NewFromFloat(0.9)) {
+		t.Errorf("price = %s, want the price the second ingest wrote", got)
+	}
+}
+
+func TestARateReadLongerAgoThanTheTTLIsReadAgain(t *testing.T) {
+	store := pgtest.Store(t, postgres.CacheTTL(time.Nanosecond))
+	lambdaRequests(t, store, 0.5)
+	requestPrice(t, store)
+
+	behindTheStoresBack(t, store, 0.9)
+
+	if got := requestPrice(t, store); !got.Equal(decimal.NewFromFloat(0.9)) {
+		t.Errorf("price = %s, want a rate held no longer than the ttl allows", got)
+	}
 }
