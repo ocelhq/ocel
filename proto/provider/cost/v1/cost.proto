@@ -1,0 +1,145 @@
+syntax = "proto3";
+package provider.cost.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1;costv1";
+
+import "buf/validate/validate.proto";
+import "google/protobuf/struct.proto";
+
+service CostService {
+    rpc Price(PriceRequest) returns (Estimate);
+}
+
+message ResourceSet {
+  string source = 1 [(buf.validate.field).string.min_len = 1];
+
+  repeated Scope scopes = 2;
+
+  repeated Resource resources = 3;
+}
+
+message Scope {
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+
+  string parent = 2;
+
+  string kind = 3 [(buf.validate.field).string.min_len = 1];
+
+  string name = 4;
+}
+
+message Resource {
+  string id = 1 [(buf.validate.field).string.min_len = 1];
+
+  string scope = 2 [(buf.validate.field).string.min_len = 1];
+
+  string vendor = 3 [(buf.validate.field).string.min_len = 1];
+
+  string type = 4 [(buf.validate.field).string.min_len = 1];
+
+  string name = 5;
+
+  string region = 6;
+
+  google.protobuf.Struct properties = 7;
+
+  repeated string unknown = 8;
+
+  map<string, string> tags = 9;
+}
+
+message PriceRequest {
+  ResourceSet resources = 1 [(buf.validate.field).required = true];
+
+  Usage usage = 2;
+}
+
+message Usage {
+  string profile = 1 [(buf.validate.field).string = {in: ["", "light", "moderate", "heavy"]}];
+
+  map<string, google.protobuf.Struct> resources = 2;
+}
+
+message Estimate {
+  string currency = 1;
+
+  string rates_version = 2;
+
+  string profile = 3;
+
+  repeated ResourceEstimate resources = 4;
+
+  repeated ScopeTotal scopes = 5;
+
+  Coverage coverage = 6;
+
+  repeated string notes = 7;
+
+  string monthly_fixed = 8;
+
+  string monthly_usage = 9;
+}
+
+message ResourceEstimate {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_PRICED = 1;
+    STATUS_FREE = 2;
+    STATUS_UNSUPPORTED = 3;
+    STATUS_NO_PRICE = 4;
+  }
+
+  string resource = 1;
+
+  Status status = 2;
+
+  repeated CostComponent components = 3;
+
+  string monthly_fixed = 4;
+
+  string monthly_usage = 5;
+}
+
+message CostComponent {
+  string name = 1;
+
+  string unit = 2;
+
+  string monthly_quantity = 3;
+
+  string unit_price = 4;
+
+  string monthly_cost = 5;
+
+  bool usage_based = 6;
+
+  string assumption = 7;
+
+  bool price_not_found = 8;
+
+  string rate_ref = 9;
+
+  repeated string depends_on_unknown = 10;
+}
+
+message ScopeTotal {
+  string scope = 1;
+
+  string monthly_fixed = 2;
+
+  string monthly_usage = 3;
+}
+
+message Coverage {
+  uint32 supported = 1;
+
+  uint32 free = 2;
+
+  uint32 unsupported = 3;
+
+  uint32 no_price = 4;
+
+  map<string, uint32> unsupported_types = 5;
+
+  repeated string supported_types = 6;
+}

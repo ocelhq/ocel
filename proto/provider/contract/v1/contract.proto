@@ -10,6 +10,7 @@ import "common/environment/v1/environment.proto";
 import "common/plan/v1/plan.proto";
 import "common/progress/v1/progress.proto";
 import "google/protobuf/struct.proto";
+import "provider/cost/v1/cost.proto";
 
 service ProviderService {
     rpc Configure(ConfigureRequest) returns (ConfigureResponse);
@@ -63,6 +64,8 @@ service ProviderService {
     rpc InstallConnector(InstallConnectorRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc RemoveConnector(RemoveConnectorRequest) returns (stream common.progress.v1.OperationEvent);
+
+    rpc Shape(ShapeRequest) returns (provider.cost.v1.ResourceSet);
 }
 
 message ProviderConfig {
@@ -263,6 +266,16 @@ message DeployRequest {
   bool dry = 5;
 
   ImageRegistry image_registry = 6;
+}
+
+message ShapeRequest {
+  Manifest manifest = 1 [(buf.validate.field).required = true];
+
+  common.environment.v1.Environment environment = 2;
+
+  EdgeSelection edge = 3;
+
+  repeated string features = 4;
 }
 
 message ImageRegistry {
