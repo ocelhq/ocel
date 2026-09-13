@@ -57,6 +57,7 @@ func Bundle(t Target) error {
 	}
 
 	native := &addons{arch: t.Runtime.Arch}
+	platform := &platformPackages{arch: t.Runtime.Arch}
 	result := api.Build(api.BuildOptions{
 		EntryPoints:       []string{t.Entrypoint},
 		AbsWorkingDir:     filepath.Dir(t.Entrypoint),
@@ -76,7 +77,7 @@ func Bundle(t Target) error {
 			"__dirname":  "__ocelDirname",
 			"__filename": "__ocelFilename",
 		},
-		Plugins: []api.Plugin{native.plugin()},
+		Plugins: []api.Plugin{platform.plugin(), native.plugin()},
 	})
 	if len(result.Errors) > 0 {
 		msgs := api.FormatMessages(result.Errors, api.FormatMessagesOptions{Color: false})
@@ -92,6 +93,13 @@ func Bundle(t Target) error {
 		return err
 	}
 	if err := native.copyInto(t.FuncDir); err != nil {
+		return err
+	}
+	if err := platform.installInto(t.App, t.FuncDir, func(said string) {
+		if t.Log != nil && strings.TrimSpace(said) != "" {
+			fmt.Fprintf(t.Log, "ocel: installing %s's platform packages reported:\n%s\n", t.App, strings.TrimRight(said, "\n"))
+		}
+	}); err != nil {
 		return err
 	}
 	return describeArtifact(t.App, t.Runtime, HandlerFile, nil, t.FuncDir, t.AppDir)

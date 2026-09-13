@@ -103,6 +103,10 @@ func pipArgs(target, requirements, platform string) []string {
 }
 
 func copySourceTree(source, dest string) error {
+	return copyTree(source, dest, leftBehindByTheBuildHost)
+}
+
+func copyTree(source, dest string, skip func(name string) bool) error {
 	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -111,7 +115,7 @@ func copySourceTree(source, dest string) error {
 		if err != nil {
 			return err
 		}
-		if rel != "." && leftBehindByTheBuildHost(entry.Name()) {
+		if rel != "." && skip(entry.Name()) {
 			if entry.IsDir() {
 				return fs.SkipDir
 			}

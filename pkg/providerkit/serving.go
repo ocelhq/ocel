@@ -47,6 +47,21 @@ func GoArch(declared string) (string, bool) {
 	return "", false
 }
 
+const (
+	NodePackageOS   = "linux"
+	NodePackageLibc = "glibc"
+)
+
+func NodePackageCPU(declared string) (string, bool) {
+	switch Architecture(declared) {
+	case ArchX8664:
+		return "x64", true
+	case ArchARM64:
+		return "arm64", true
+	}
+	return "", false
+}
+
 const PythonVersion = "3.13"
 
 func PythonPlatformTag(declared string) (string, bool) {
