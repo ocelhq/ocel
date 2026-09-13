@@ -24,6 +24,8 @@ const (
 	basisTimeout = 2 * time.Second
 
 	defaultCacheTTL = 10 * time.Minute
+
+	migrateLock = 0x0ce1c0de
 )
 
 //go:embed migrations/*.sql
@@ -85,10 +87,6 @@ func (s *Store) Close() { s.pool.Close() }
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
 
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
-	if _, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
-		version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
-		return fmt.Errorf("rate store: %w", err)
-	}
 	entries, err := migrations.ReadDir("migrations")
 	if err != nil {
 		return err
@@ -98,8 +96,21 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 		names = append(names, entry.Name())
 	}
 	slices.Sort(names)
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("rate store: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, migrateLock); err != nil {
+		return fmt.Errorf("rate store: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+		version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+		return fmt.Errorf("rate store: %w", err)
+	}
 	for _, name := range names {
-		applied, err := pool.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING`, name)
+		applied, err := tx.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING`, name)
 		if err != nil {
 			return fmt.Errorf("rate store: %s: %w", name, err)
 		}
@@ -110,9 +121,12 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 		if err != nil {
 			return err
 		}
-		if _, err := pool.Exec(ctx, string(statements)); err != nil {
+		if _, err := tx.Exec(ctx, string(statements)); err != nil {
 			return fmt.Errorf("rate store: %s: %w", name, err)
 		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("rate store: %w", err)
 	}
 	return nil
 }
