@@ -143,6 +143,10 @@ jobs:
         if: matrix.group.name == 'cli'
         run: uv sync --all-extras --frozen --directory python
 
+      - name: The musl targets the rust compile suite builds for
+        if: matrix.group.name == 'cli'
+        run: rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+
       - name: The ocel package the cli e2e deploys against
         if: matrix.group.name == 'cli'
         run: pnpm turbo run build --filter=ocel
