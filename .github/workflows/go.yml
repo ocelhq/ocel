@@ -8,6 +8,7 @@ on:
       - "sdk/**"
       - "pkg/**"
       - "platform/**"
+      - "pricing/**"
       - "packages/ocel/**"
       - "tests/fixtures/sdk/go/**"
       - "tests/fixtures/sdk/python/**"
@@ -41,6 +42,59 @@ env:
   OCEL_FLOCI_GCP_IMAGE: floci/floci-gcp:0.8.0
 
 jobs:
+  pricing:
+    if: github.event.action != 'closed'
+    name: pricing
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pricing
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PRICING_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/pricing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: pricing/go.sum
+
+      - name: Setup gobuildcache
+        uses: ./.github/actions/gobuildcache
+        with:
+          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
+          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
+          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+
+      - name: golangci-lint
+        run: cd pricing && golangci-lint run ./...
+
+      - name: go build
+        run: go build ./pricing/...
+
+      - name: go test -race
+        run: go test -race -count=1 ./pricing/...
+
+      - name: The container the pricer ships as
+        run: docker build -f pricing/Dockerfile -t ocel-pricing:ci .
+
   go:
     if: github.event.action != 'closed'
     name: ${{ matrix.group.name }}

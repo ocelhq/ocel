@@ -1,0 +1,207 @@
+package postgres
+
+import (
+	"context"
+	"embed"
+	"encoding/json"
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
+
+	"github.com/ocelhq/ocel/pkg/costkit"
+)
+
+const (
+	VendorAWS = "aws"
+	VendorGCP = "gcp"
+
+	queryService     = "service"
+	queryIndex       = "index"
+	querySource      = "static"
+	queryDescription = "description"
+	queryRegion      = "region"
+	globalIndex      = "global"
+	globalRegion     = "global"
+
+	basisTimeout = 2 * time.Second
+)
+
+//go:embed migrations/*.sql
+var migrations embed.FS
+
+type Store struct {
+	pool *pgxpool.Pool
+	card *costkit.Card
+}
+
+func Open(ctx context.Context, url string, card *costkit.Card) (*Store, error) {
+	pool, err := pgxpool.New(ctx, url)
+	if err != nil {
+		return nil, fmt.Errorf("rate store: %w", err)
+	}
+	if err := Migrate(ctx, pool); err != nil {
+		pool.Close()
+		return nil, err
+	}
+	return &Store{pool: pool, card: card}, nil
+}
+
+func (s *Store) Close() { s.pool.Close() }
+
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }
+
+func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
+	if _, err := pool.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+		version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+		return fmt.Errorf("rate store: %w", err)
+	}
+	entries, err := migrations.ReadDir("migrations")
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		applied, err := pool.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING`, name)
+		if err != nil {
+			return fmt.Errorf("rate store: %s: %w", name, err)
+		}
+		if applied.RowsAffected() == 0 {
+			continue
+		}
+		statements, err := migrations.ReadFile("migrations/" + name)
+		if err != nil {
+			return err
+		}
+		if _, err := pool.Exec(ctx, string(statements)); err != nil {
+			return fmt.Errorf("rate store: %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) Basis() (currency, version string) {
+	currency, version = s.card.Basis()
+	ctx, stop := context.WithTimeout(context.Background(), basisTimeout)
+	defer stop()
+	var fetched *time.Time
+	if err := s.pool.QueryRow(ctx, `SELECT max(fetched_at) FROM ingests`).Scan(&fetched); err != nil || fetched == nil {
+		return currency, version
+	}
+	return currency, fetched.UTC().Format(time.DateOnly)
+}
+
+func (s *Store) Lookup(id, region string) (costkit.Rate, bool, bool) {
+	base, found, fellBack := s.card.Lookup(id, region)
+	if !found {
+		return base, false, false
+	}
+	vendor, _, _ := strings.Cut(id, "/")
+	if base.Query == nil || base.Query[querySource] != "" || (vendor != VendorAWS && vendor != VendorGCP) {
+		return base, true, fellBack
+	}
+	tiers, err := s.tiers(vendor, base)
+	if err != nil || !usable(base, tiers) {
+		return base, true, true
+	}
+	base.Tiers = tiers
+	return base, true, fellBack
+}
+
+func usable(base costkit.Rate, tiers []costkit.Tier) bool {
+	if len(tiers) == 0 || !tiers[0].Start.IsZero() {
+		return false
+	}
+	if !slices.IsSortedFunc(tiers, func(a, b costkit.Tier) int { return a.Start.Cmp(b.Start) }) {
+		return false
+	}
+	allows := len(tiers) > 1 && tiers[0].Price.IsZero()
+	return allows == (base.Allowance != "")
+}
+
+func (s *Store) tiers(vendor string, rate costkit.Rate) ([]costkit.Tier, error) {
+	ctx, stop := context.WithTimeout(context.Background(), basisTimeout)
+	defer stop()
+	if vendor == VendorAWS {
+		return s.awsTiers(ctx, rate)
+	}
+	return s.gcpTiers(ctx, rate)
+}
+
+func (s *Store) awsTiers(ctx context.Context, rate costkit.Rate) ([]costkit.Tier, error) {
+	region := rate.Region
+	if rate.Query[queryIndex] == globalIndex {
+		region = ""
+	}
+	attributes := map[string]string{}
+	for key, want := range rate.Query {
+		if key == queryService || key == queryIndex {
+			continue
+		}
+		attributes[key] = want
+	}
+	selector, err := json.Marshal(attributes)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.pool.Query(ctx, `SELECT sku FROM aws_products WHERE service = $1 AND region = $2 AND attributes @> $3`,
+		rate.Query[queryService], region, string(selector))
+	if err != nil {
+		return nil, err
+	}
+	skus, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, err
+	}
+	if len(skus) != 1 {
+		return nil, fmt.Errorf("%s: %d products carry %v in %s", rate.ID, len(skus), attributes, orGlobal(region))
+	}
+	priced, err := s.pool.Query(ctx, `SELECT begin_range, price FROM aws_prices WHERE sku = $1 ORDER BY begin_range`, skus[0])
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(priced, func(row pgx.CollectableRow) (costkit.Tier, error) {
+		var start, price decimal.Decimal
+		err := row.Scan(&start, &price)
+		return costkit.Tier{Start: start, Price: price}, err
+	})
+}
+
+func (s *Store) gcpTiers(ctx context.Context, rate costkit.Rate) ([]costkit.Tier, error) {
+	region := rate.Query[queryRegion]
+	if region == "" {
+		region = globalRegion
+	}
+	rows, err := s.pool.Query(ctx, `SELECT tiers FROM gcp_skus WHERE service = $1 AND position($2 in description) > 0 AND $3 = ANY (regions)`,
+		rate.Query[queryService], rate.Query[queryDescription], region)
+	if err != nil {
+		return nil, err
+	}
+	held, err := pgx.CollectRows(rows, pgx.RowTo[[]byte])
+	if err != nil {
+		return nil, err
+	}
+	if len(held) != 1 {
+		return nil, fmt.Errorf("%s: %d skus describe %q in %s", rate.ID, len(held), rate.Query[queryDescription], region)
+	}
+	var tiers []costkit.Tier
+	if err := json.Unmarshal(held[0], &tiers); err != nil {
+		return nil, fmt.Errorf("%s: %w", rate.ID, err)
+	}
+	return tiers, nil
+}
+
+func orGlobal(region string) string {
+	if region == "" {
+		return globalIndex
+	}
+	return region
+}

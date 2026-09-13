@@ -84,6 +84,13 @@ func RunCost(t *testing.T, provider contractv1connect.ProviderServiceClient, pri
 		inventoryHoldsTogether(t, set, vendor)
 	})
 
+	RunPricing(t, pricer, set)
+}
+
+func RunPricing(t *testing.T, pricer costv1connect.CostServiceClient, set *costv1.ResourceSet) {
+	t.Helper()
+	ctx := context.Background()
+
 	estimates := map[costv1.Profile]*costv1.Estimate{}
 	for _, profile := range costkit.Profiles() {
 		est, err := pricer.Price(ctx, &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: profile}})

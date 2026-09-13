@@ -21,6 +21,7 @@ use (
 	./platform/gcp/provider
 	./platform/vps/connector
 	./platform/vps/provider
+	./pricing
 	./sdk
 	./tests/fixtures/deploy/go/server
 	./tests/fixtures/sdk/go

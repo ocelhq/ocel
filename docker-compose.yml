@@ -9,6 +9,38 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  pricing-createdb:
+    image: postgres:16
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: postgres
+    entrypoint: >
+      /bin/sh -c "
+      psql -h postgres -U postgres -tc \"SELECT 1 FROM pg_database WHERE datname = 'pricing'\" | grep -q 1 ||
+      createdb -h postgres -U postgres pricing
+      "
+
+  pricing:
+    build:
+      context: .
+      dockerfile: pricing/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      pricing-createdb:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/pricing
+      PORT: "8090"
+    ports:
+      - "8090:8090"
 
   ocel-cloud:
     image: postgres:16

@@ -66,6 +66,11 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 - **`ui/theme/`** — the tokens and register dials every surface renders in, `www`
   included, and the `DESIGN.md` that governs them. No React; depends on nothing.
 - **`console/`** — Ocel's hosted control plane. Never call it a cloud.
+- **`pricing/`** — the hosted pricer: `CostService.Price` served over every vendor's rules,
+  with a postgres rate store fed by the vendors' bulk price lists and the embedded cards as
+  the offline fallback. Stateless beyond the store, holds no customer data, runs as one
+  container. May import `pkg/` and each vendor's `cost` package, and nothing else under a
+  vendor.
 - **`platform/<vendor>/`** — code targeting someone else's infrastructure. Each vendor
   holds its provisioning/deploy Go **and** the JS that runs on it. A second origin cloud
   lands here as a sibling. No import crosses from one vendor into another.
