@@ -3,6 +3,7 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -247,4 +248,21 @@ func sourceFile(t *testing.T, source string) string {
 		t.Errorf("source = %q, want the file as an absolute path", source)
 	}
 	return file
+}
+
+func TestTheRustLauncherRunsACrateReachedThroughASymlink(t *testing.T) {
+	needsCargo(t)
+	crate := rustFixture(t, rustBinManifest)
+	link := filepath.Join(t.TempDir(), "server")
+	if err := os.Symlink(crate, link); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd, err := launchers[Rust].Command(context.Background(), link, Root{Dir: link, Language: Rust}, "http://127.0.0.1:1234")
+	if err != nil {
+		t.Fatalf("Command: %v", err)
+	}
+	if want := []string{"--bin", "web"}; !slices.Equal(cmd.Args[len(cmd.Args)-2:], want) {
+		t.Errorf("Args = %q, want the crate's binary %q", cmd.Args, want)
+	}
 }
