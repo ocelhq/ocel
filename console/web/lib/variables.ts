@@ -6,6 +6,7 @@ import type {
   EnvironmentClass,
 } from "@console/db/schema";
 import type {
+  Ability,
   AppResolution,
   Cell,
   Class,
@@ -176,6 +177,7 @@ export function stateOf(
   topology: DeploymentTopology,
   stored: readonly Stored[],
   environments: readonly string[],
+  can: Ability,
   values: "live" | "unknown" = "live",
 ): State {
   return {
@@ -183,6 +185,7 @@ export function stateOf(
     tier: held,
     other: held === "production" ? "preview" : "production",
     values,
+    can,
     environments: [...environments],
     matrix: matrixOf(topology, stored, held === "preview" ? environments : []),
   };
@@ -190,5 +193,12 @@ export function stateOf(
 
 export type Latest = Pick<
   Deployment,
-  "id" | "topology" | "deployedAt" | "promotionId" | "providerName" | "providerRegion" | "tag"
+  | "id"
+  | "topology"
+  | "deployedAt"
+  | "promotionId"
+  | "providerName"
+  | "providerRegion"
+  | "target"
+  | "tag"
 >;

@@ -4,6 +4,7 @@ import { cn } from "../lib/utils";
 import { addressKey, plural } from "../model";
 import { useValue } from "../signals";
 import {
+  ability,
   askRemoval,
   clearSelection,
   hideSelected,
@@ -18,6 +19,7 @@ export function BulkBar() {
   const picked = useValue(selected);
   const known = useValue(variants);
   const busy = useValue(saving);
+  const can = useValue(ability);
   if (picked.size === 0) return null;
   const cells = [...picked]
     .map((key) => known.get(key))
@@ -39,22 +41,28 @@ export function BulkBar() {
         Unselect all
       </Button>
       <span className="flex-1" />
-      <Button variant="outline" size="xs" onClick={() => void revealSelected()}>
-        Reveal
-      </Button>
-      <Button variant="outline" size="xs" onClick={hideSelected}>
-        Hide
-      </Button>
-      <Button
-        variant="destructive"
-        size="xs"
-        data-action="remove"
-        disabled={removable.length === 0 || busy}
-        onClick={() => askRemoval(removable)}
-      >
-        <TrashIcon />
-        Remove {removable.length > 0 ? plural(removable.length, "value") : "values"}
-      </Button>
+      {can.reveal && (
+        <>
+          <Button variant="outline" size="xs" onClick={() => void revealSelected()}>
+            Reveal
+          </Button>
+          <Button variant="outline" size="xs" onClick={hideSelected}>
+            Hide
+          </Button>
+        </>
+      )}
+      {can.write && (
+        <Button
+          variant="destructive"
+          size="xs"
+          data-action="remove"
+          disabled={removable.length === 0 || busy}
+          onClick={() => askRemoval(removable)}
+        >
+          <TrashIcon />
+          Remove {removable.length > 0 ? plural(removable.length, "value") : "values"}
+        </Button>
+      )}
     </div>
   );
 }

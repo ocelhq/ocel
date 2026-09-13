@@ -10,6 +10,7 @@ use (
 	./pkg/proto
 	./pkg/providerkit
 	./pkg/providerkit/pulumi
+	./pkg/target
 	./platform/aws/connector
 	./platform/aws/provider
 	./platform/aws/runtime

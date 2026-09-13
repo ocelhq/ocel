@@ -1,6 +1,7 @@
 import { parseDotenv } from "./dotenv";
 import {
   type Address,
+  abilityOf,
   addressKey,
   applyDotenv,
   type Bundle,
@@ -95,6 +96,8 @@ const emptyState: State = {
   environments: [],
   matrix: { columns: [], rows: [], apps: [] },
 };
+
+export const ability = computed(() => abilityOf(state.value));
 
 export const catalogue = computed(() => catalogueOf(state.value ?? emptyState, extras.value));
 
@@ -592,6 +595,10 @@ export async function confirmRemoval(): Promise<void> {
 }
 
 export function applyDrop(name: string, text: string, into: string): void {
+  if (!ability.value.write) {
+    dragTarget.value = null;
+    return;
+  }
   const out = applyDotenv(catalogue.value, parseDotenv(text), into);
   const added = [...extras.value];
   const known = new Set(added.map(addressKey));

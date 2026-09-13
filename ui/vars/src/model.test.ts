@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   type Address,
+  abilityOf,
   addressKey,
   applyDotenv,
   catalogueOf,
@@ -851,5 +852,23 @@ describe("labels", () => {
     expect(tallyLine(1)).toBe("1 cell to fill");
     expect(doneLabel(0)).toBe("Return to the terminal");
     expect(doneLabel(3)).toBe("Return with 3 cells still to fill");
+  });
+});
+
+describe("abilityOf", () => {
+  it("leaves a state that names no ability able to write and reveal", () => {
+    expect(abilityOf(stateOf([]))).toEqual({ write: true, reveal: true });
+    expect(abilityOf(null)).toEqual({ write: true, reveal: true });
+  });
+
+  it("reports exactly what the state grants", () => {
+    expect(abilityOf({ ...stateOf([]), can: { write: true, reveal: false } })).toEqual({
+      write: true,
+      reveal: false,
+    });
+    expect(abilityOf({ ...stateOf([]), can: { write: false, reveal: false } })).toEqual({
+      write: false,
+      reveal: false,
+    });
   });
 });

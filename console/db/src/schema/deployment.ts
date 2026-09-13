@@ -128,6 +128,7 @@ export const deployment = pgTable(
     tag: text("tag"),
     providerName: text("provider_name").notNull(),
     providerRegion: text("provider_region"),
+    target: text("target").notNull(),
     edgeKind: text("edge_kind"),
     outcome: deploymentOutcome("outcome").notNull(),
     error: text("error"),

@@ -3,11 +3,14 @@ module github.com/ocelhq/ocel/platform/aws/connector
 go 1.27.0
 
 require (
+	github.com/aws/aws-sdk-go-v2 v1.46.0
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.74.0
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.0
 	github.com/aws/aws-sdk-go-v2/service/kms v1.55.0
+	github.com/aws/aws-sdk-go-v2/service/sts v1.45.0
 	github.com/ocelhq/ocel/pkg/connectorkit v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
+	github.com/ocelhq/ocel/pkg/target v0.0.0
 	github.com/ocelhq/ocel/platform/aws/provider v0.0.0
 )
 
@@ -19,7 +22,6 @@ require (
 	connectrpc.com/validate v0.6.0 // indirect
 	github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
-	github.com/aws/aws-sdk-go-v2 v1.46.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.14 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.31 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.30 // indirect
@@ -39,7 +41,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.71.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.33.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.38.0 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.45.0 // indirect
 	github.com/aws/smithy-go v1.28.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
@@ -114,3 +115,5 @@ replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 replace github.com/ocelhq/ocel/platform/aws/provider => ../provider
 
 replace github.com/ocelhq/ocel/pkg/providerkit/pulumi => ../../../pkg/providerkit/pulumi
+
+replace github.com/ocelhq/ocel/pkg/target => ../../../pkg/target

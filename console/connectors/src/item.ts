@@ -18,6 +18,12 @@ export class ValueError extends Error {
   }
 }
 
+const statuses: Partial<Record<RefusalReason, number>> = { denied: 403 };
+
+export function statusOf(refusal: Refusal): number {
+  return statuses[refusal.reason] ?? 502;
+}
+
 export function refuse(reason: RefusalReason, message: string): Outcome<never> {
   return { done: false, refusal: { reason, message } };
 }

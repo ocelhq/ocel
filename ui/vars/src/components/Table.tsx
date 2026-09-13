@@ -19,6 +19,7 @@ import { type DragEvent, Fragment, useEffect, useRef, useState } from "react";
 import { glyph, role } from "../lib/type";
 import { cn } from "../lib/utils";
 import {
+  abilityOf,
   addressKey,
   type Bundle,
   baselineOf,
@@ -40,6 +41,7 @@ import {
 } from "../model";
 import { useValue } from "../signals";
 import {
+  ability,
   addOverride,
   applyDrop,
   askRemoval,
@@ -178,6 +180,7 @@ export function Table() {
   const shownRows = useValue(visible);
   const picked = useValue(selected);
   const revealed = useValue(shown);
+  const can = useValue(ability);
   const owedLens = useValue(owedOnly);
   const total =
     list.keys.length +
@@ -225,17 +228,19 @@ export function Table() {
                   Value
                 </th>
                 <th scope="col" className={cellTools}>
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    className={cn(role.meta, "text-foreground")}
-                    data-action="reveal-all"
-                    aria-pressed={revealed}
-                    disabled={shownRows.filter(revealable).length === 0}
-                    onClick={toggleRevealVisible}
-                  >
-                    {revealed ? "Hide all" : "Reveal all"}
-                  </Button>
+                  {can.reveal && (
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      className={cn(role.meta, "text-foreground")}
+                      data-action="reveal-all"
+                      aria-pressed={revealed}
+                      disabled={shownRows.filter(revealable).length === 0}
+                      onClick={toggleRevealVisible}
+                    >
+                      {revealed ? "Hide all" : "Reveal all"}
+                    </Button>
+                  )}
                 </th>
               </tr>
             </thead>
@@ -269,9 +274,9 @@ export function Table() {
           <div
             data-slot="dropzone"
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 border border-primary bg-background text-center"
+            className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 border border-electric bg-background text-center"
           >
-            <DownloadIcon className={cn(glyph.figure, "text-primary")} />
+            <DownloadIcon className={cn(glyph.figure, "text-electric")} />
             <p className={cn(role.body, "text-foreground")}>
               Drop to fill {folderName(target)} values
             </p>
@@ -291,7 +296,9 @@ export function Table() {
 }
 
 function BundleSection({ bundle }: { bundle: Bundle }) {
-  const unknown = useValue(state)?.values === "unknown";
+  const current = useValue(state);
+  const unknown = current?.values === "unknown";
+  const shut = unknown || !abilityOf(current).write;
   const states = useValue(bundleStates);
   const on = bundleOpen(states, bundle);
   const shutFolders = useValue(collapsed);
@@ -309,8 +316,14 @@ function BundleSection({ bundle }: { bundle: Bundle }) {
             <Switch
               data-slot="group-switch"
               checked={on}
-              disabled={unknown}
-              title={unknown ? "the console cannot read these values" : undefined}
+              disabled={shut}
+              title={
+                unknown
+                  ? "the console cannot read these values"
+                  : shut
+                    ? "your role cannot change these values"
+                    : undefined
+              }
               aria-label={`${on ? "switch off" : "switch on"} ${bundle.group.key}`}
               onCheckedChange={(next) => toggleBundle(bundle.group.key, next)}
             />
@@ -374,7 +387,7 @@ function BundleSection({ bundle }: { bundle: Bundle }) {
                     </button>
                     <FolderIcon
                       weight="fill"
-                      className={cn(glyph.control, "shrink-0 text-folder")}
+                      className={cn(glyph.control, "shrink-0 text-amber")}
                     />
                     <span className={pathName}>{within.folder}</span>
                     <span className={note}>{plural(within.lines.length, "key")}</span>
@@ -402,6 +415,7 @@ function Toolbar() {
   const query = useValue(search);
   const owedLens = useValue(owedOnly);
   const loading = useValue(copyLoading);
+  const can = useValue(ability);
   const owing = useValue(owedLensCount);
   const folders = current.matrix.columns.filter((folder) => folder !== "");
   const items = [
@@ -469,46 +483,50 @@ function Toolbar() {
           if (file) importFile(file, into);
         }}
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="outline" size="xs" data-action="import" />}>
-          <UploadSimpleIcon />
-          Import .env
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Fill values in</DropdownMenuLabel>
-            <DropdownMenuItem
-              onClick={() => {
-                setInto("");
-                picker.current?.click();
-              }}
-            >
-              root
-            </DropdownMenuItem>
-            {folders.map((folder) => (
+      {can.write && (
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="outline" size="xs" data-action="import" />}>
+            <UploadSimpleIcon />
+            Import .env
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Fill values in</DropdownMenuLabel>
               <DropdownMenuItem
-                key={folder}
                 onClick={() => {
-                  setInto(folder);
+                  setInto("");
                   picker.current?.click();
                 }}
               >
-                {folder}
+                root
               </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Button
-        variant="outline"
-        size="xs"
-        data-action="copy-other"
-        disabled={loading}
-        onClick={() => void openCopy()}
-      >
-        <ArrowLeftIcon />
-        {loading ? "Reading…" : `Copy from ${current.other}`}
-      </Button>
+              {folders.map((folder) => (
+                <DropdownMenuItem
+                  key={folder}
+                  onClick={() => {
+                    setInto(folder);
+                    picker.current?.click();
+                  }}
+                >
+                  {folder}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      {can.write && can.reveal && (
+        <Button
+          variant="outline"
+          size="xs"
+          data-action="copy-other"
+          disabled={loading}
+          onClick={() => void openCopy()}
+        >
+          <ArrowLeftIcon />
+          {loading ? "Reading…" : `Copy from ${current.other}`}
+        </Button>
+      )}
     </div>
   );
 }
@@ -573,7 +591,7 @@ function FolderGroup({ group, open }: { group: Group; open: boolean }) {
                 className={cn(glyph.control, "transition-transform", open && "rotate-90")}
               />
             </button>
-            <FolderIcon weight="fill" className={cn(glyph.control, "shrink-0 text-folder")} />
+            <FolderIcon weight="fill" className={cn(glyph.control, "shrink-0 text-amber")} />
             <span className={pathName}>{group.folder}</span>
             <span className={note}>{plural(group.keys, "key")}</span>
             {readers.length > 0 && <span className={note}>read by {names(readers)}</span>}
@@ -724,6 +742,7 @@ function Value({ line }: { line: KeyLine }) {
   const typed = useValue(drafts);
   const trouble = useValue(problems);
   const wanted = useValue(focusing);
+  const can = useValue(ability);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (wanted !== key) return;
@@ -795,13 +814,13 @@ function Value({ line }: { line: KeyLine }) {
           role.mono,
           "h-full min-w-0 flex-1 rounded-none border-0 bg-transparent px-3 placeholder:font-sans hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset",
           concealing && "placeholder:font-mono placeholder:text-foreground",
-          dirty && "bg-primary/5 text-foreground",
+          dirty && "bg-electric/5 text-foreground",
         )}
         value={draft}
         autoComplete="off"
         spellCheck={false}
-        disabled={variant.orphaned || variant.unknown}
-        title={stamp}
+        disabled={variant.orphaned || variant.unknown || !can.write}
+        title={can.write ? stamp : `${stamp} · your role cannot change it`}
         placeholder={
           variant.unknown
             ? "unknown"
@@ -857,18 +876,20 @@ function Actions({ line }: { line: KeyLine }) {
   const busy = useValue(saving);
   const revealed = useValue(baselines).has(addressKey(variant.at));
   const known = useValue(catalogue);
+  const can = useValue(ability);
   const env = variant.at.environment;
   const removal = variant.orphaned
     ? `Remove the ${env} override — ${env} no longer exists`
     : env === ""
       ? "Remove value"
       : `Remove the ${env} override`;
-  const overrides = overrideOptions(current, known, variant.at);
-  const folders = variant.at.folder === "" ? setForOptions(known, row) : [];
-  const removable = variant.set && !variant.reference;
+  const overrides = can.write ? overrideOptions(current, known, variant.at) : [];
+  const folders = can.write && variant.at.folder === "" ? setForOptions(known, row) : [];
+  const showValue = can.reveal && revealable(variant);
+  const removable = can.write && variant.set && !variant.reference;
   return (
     <span className="inline-flex items-center justify-end gap-1">
-      {revealable(variant) && (
+      {showValue && (
         <Button
           variant="ghost"
           size="icon-sm"
@@ -914,7 +935,7 @@ function Actions({ line }: { line: KeyLine }) {
               Details and history
             </DropdownMenuItem>
           </DropdownMenuGroup>
-          {(overrides.length > 0 || folders.length > 0 || revealable(variant) || variant.extra) && (
+          {(overrides.length > 0 || folders.length > 0 || showValue || variant.extra) && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
@@ -936,7 +957,7 @@ function Actions({ line }: { line: KeyLine }) {
                     Override for {name}
                   </DropdownMenuItem>
                 ))}
-                {revealable(variant) && (
+                {showValue && (
                   <DropdownMenuItem onClick={() => void copyValue(variant.at)}>
                     Copy value
                   </DropdownMenuItem>
