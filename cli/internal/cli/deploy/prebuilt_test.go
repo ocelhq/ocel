@@ -23,6 +23,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func newBuildManifestSession(t *testing.T) (*runui.Session, *bytes.Buffer) {
@@ -86,7 +87,7 @@ func prebuiltConfig(root string) *projectconfig.Config {
 	return &projectconfig.Config{
 		Dir:  root,
 		Slug: "prebuilt",
-		Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "serverless"}},
+		Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "serverless", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeNode}}},
 	}
 }
 

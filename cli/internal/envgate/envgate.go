@@ -51,8 +51,9 @@ type Values interface {
 }
 
 type App struct {
-	Name   string
-	Folder string
+	Name    string
+	Folder  string
+	Runtime string
 }
 
 type Scope struct {
@@ -60,6 +61,13 @@ type Scope struct {
 	Preview     bool
 	Environment string
 	Browser     bool
+}
+
+func (s Scope) OcelWrites(key string, folders []string) bool {
+	return slices.ContainsFunc(s.Apps, func(app App) bool {
+		reached := len(folders) == 0 || slices.Contains(folders, app.Folder)
+		return reached && providerkit.OcelWritten(app.Runtime, key)
+	})
 }
 
 type Gate struct {
@@ -171,8 +179,8 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_DERIVED {
 			return nil, fmt.Errorf("%s is declared as derived, a class ocel writes for the resources an app binds and prunes on its own; declare it as plain, sensitive or secret", definition.GetKey())
 		}
-		if providerkit.OcelWritten(definition.GetKey()) {
-			return nil, fmt.Errorf("%s is written by ocel for every app, from the hostname this deploy serves it on, so a declared one would be overwritten before anything read it; read it from `ocel/env` as `deployment.url` instead of declaring it", definition.GetKey())
+		if g.scope.OcelWrites(definition.GetKey(), definition.GetFolders()) {
+			return nil, fmt.Errorf("%s is written by ocel for the apps this declaration reaches, from the hostname this deploy serves it on, so a declared one would be overwritten before anything read it; read it from `ocel/env` as `deployment.url` instead of declaring it", definition.GetKey())
 		}
 	}
 	for _, group := range req.GetGroups() {

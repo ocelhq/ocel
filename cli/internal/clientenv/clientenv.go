@@ -29,6 +29,7 @@ var recordPath = filepath.Join(constants.ProjectStateDirName, "output", "client-
 type App struct {
 	Name      string
 	Dir       string
+	Runtime   string
 	Variables []manifestbuilder.Variable
 }
 
@@ -51,6 +52,7 @@ func Generate(projectDir string, apps []App) error {
 }
 
 func GenerateKeys(projectDir string, app App, keys []Key) error {
+	keys = Offered(keys, app.Runtime)
 	path := accessorPath(projectDir, app.Name, app.Dir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
@@ -248,7 +250,7 @@ func Keys(variables []manifestbuilder.Variable) ([]Key, error) {
 		}
 		keys = append(keys, key)
 	}
-	return withBuiltIn(keys), nil
+	return keys, nil
 }
 
 func key(name, source, schemaSource string, schema bool) (Key, error) {
@@ -272,8 +274,11 @@ func sourceOrUnknown(source string) string {
 	return source
 }
 
-func withBuiltIn(keys []Key) []Key {
-	keys = append(keys, Key{Name: providerkit.ClientURLEnvName})
+func Offered(keys []Key, runtime string) []Key {
+	keys = slices.Clone(keys)
+	if providerkit.OcelWritten(runtime, providerkit.ClientURLEnvName) {
+		keys = append(keys, Key{Name: providerkit.ClientURLEnvName})
+	}
 	slices.SortFunc(keys, func(a, b Key) int { return strings.Compare(a.Name, b.Name) })
 	return slices.CompactFunc(keys, func(a, b Key) bool { return a.Name == b.Name })
 }
@@ -294,7 +299,7 @@ func Declared(definitions []*resourcesv1.VariableDefinition) ([]Key, error) {
 		}
 		keys = append(keys, key)
 	}
-	return withBuiltIn(keys), nil
+	return keys, nil
 }
 
 func digests(app App) map[string]string {

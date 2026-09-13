@@ -75,7 +75,7 @@ func TestResolvedEnv(t *testing.T) {
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := toMap(mergeEnv(base, projectEnv, live, dotfile, resources, "", ""))
+		got := toMap(mergeEnv(base, projectEnv, live, dotfile, resources, "", "", envgate.Scope{}))
 
 		cases := map[string]string{
 			"PATH":                        "/bin",
@@ -100,7 +100,7 @@ func TestResolvedEnv(t *testing.T) {
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := resolvedEnv(projectEnv, live, nil, resources, "", "")
+		got := resolvedEnv(projectEnv, live, nil, resources, "", "", envgate.Scope{})
 
 		cases := map[string]string{
 			"PROJECT_ONLY":                "p",
@@ -118,12 +118,12 @@ func TestResolvedEnv(t *testing.T) {
 	t.Run("the app folder is always stated", func(t *testing.T) {
 		t.Parallel()
 
-		bound := resolvedEnv(nil, nil, nil, nil, "", "/web")
+		bound := resolvedEnv(nil, nil, nil, nil, "", "/web", envgate.Scope{})
 		if bound[constants.AppFolderEnvName] != "/web" {
 			t.Errorf("%s = %q, want %q", constants.AppFolderEnvName, bound[constants.AppFolderEnvName], "/web")
 		}
 
-		unbound := resolvedEnv(nil, nil, nil, nil, "", "")
+		unbound := resolvedEnv(nil, nil, nil, nil, "", "", envgate.Scope{})
 		folder, ok := unbound[constants.AppFolderEnvName]
 		if !ok {
 			t.Fatalf("resolvedEnv = %v, want %s written even for an unbound app", unbound, constants.AppFolderEnvName)
@@ -132,7 +132,7 @@ func TestResolvedEnv(t *testing.T) {
 			t.Errorf("%s = %q, want the project root spelled as the empty string", constants.AppFolderEnvName, folder)
 		}
 
-		stale := toMap(mergeEnv([]string{constants.AppFolderEnvName + "=/stale"}, nil, nil, nil, nil, "", ""))
+		stale := toMap(mergeEnv([]string{constants.AppFolderEnvName + "=/stale"}, nil, nil, nil, nil, "", "", envgate.Scope{}))
 		if stale[constants.AppFolderEnvName] != "" {
 			t.Errorf("%s = %q, want the shell's stale binding overwritten", constants.AppFolderEnvName, stale[constants.AppFolderEnvName])
 		}
@@ -144,6 +144,7 @@ func TestResolvedEnv(t *testing.T) {
 			[]resolve.Resource{{Name: "main", Env: map[string]string{constants.AppFolderEnvName: "/from-resource"}}},
 			"",
 			"/web",
+			envgate.Scope{},
 		)
 		if contested[constants.AppFolderEnvName] != "/web" {
 			t.Errorf("%s = %q, want the binding dev states to outrank every source it merges", constants.AppFolderEnvName, contested[constants.AppFolderEnvName])
@@ -1012,10 +1013,12 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 }
 
 func TestDevGivesEveryAppItsURL(t *testing.T) {
+	node := envgate.Scope{Apps: []envgate.App{{Name: "web", Runtime: providerkit.RuntimeNext}}}
+
 	t.Run("localhost on the default port where nothing names one", func(t *testing.T) {
 		t.Setenv("PORT", "")
 
-		got := resolvedEnv(nil, nil, nil, nil, "", "")
+		got := resolvedEnv(nil, nil, nil, nil, "", "", node)
 		for _, key := range []string{constants.AppURLEnvName, providerkit.ClientURLEnvName} {
 			if want := "http://localhost:3000"; got[key] != want {
 				t.Errorf("%s = %q, want %q — dev never leaves it unset, so an app may read it without a fallback", key, got[key], want)
@@ -1023,10 +1026,23 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		}
 	})
 
+	t.Run("the browser's copy only where an app's bundle reads it", func(t *testing.T) {
+		t.Setenv("PORT", "")
+		dotfile := map[string]string{providerkit.ClientURLEnvName: "https://mine.example"}
+
+		got := resolvedEnv(nil, nil, dotfile, nil, "", "", envgate.Scope{Apps: []envgate.App{{Name: "api", Runtime: providerkit.RuntimeGo}}})
+		if want := "http://localhost:3000"; got[constants.AppURLEnvName] != want {
+			t.Errorf("%s = %q, want %q for every app", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
+		}
+		if want := "https://mine.example"; got[providerkit.ClientURLEnvName] != want {
+			t.Errorf("%s = %q, want the go app's own %q: nothing in a go app reads ocel's copy, so writing one overwrites its value", providerkit.ClientURLEnvName, got[providerkit.ClientURLEnvName], want)
+		}
+	})
+
 	t.Run("the port the project names", func(t *testing.T) {
 		t.Setenv("PORT", "")
 
-		got := resolvedEnv(nil, nil, map[string]string{"PORT": "4321"}, nil, "", "")
+		got := resolvedEnv(nil, nil, map[string]string{"PORT": "4321"}, nil, "", "", node)
 		if want := "http://localhost:4321"; got[constants.AppURLEnvName] != want {
 			t.Errorf("%s = %q, want %q", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
 		}
@@ -1035,11 +1051,39 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 	t.Run("the port the shell exports", func(t *testing.T) {
 		t.Setenv("PORT", "8080")
 
-		got := resolvedEnv(nil, nil, nil, nil, "", "")
+		got := resolvedEnv(nil, nil, nil, nil, "", "", node)
 		if want := "http://localhost:8080"; got[constants.AppURLEnvName] != want {
 			t.Errorf("%s = %q, want %q — the app is spawned with the shell's environment under it", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
 		}
 	})
+}
+
+func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
+	t.Setenv("PORT", "")
+	root := t.TempDir()
+	cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{
+		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeNext}},
+		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeGo}},
+		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Runtime: projectconfig.Runtime{Name: providerkit.RuntimePython}},
+	}}
+
+	for _, tc := range []struct {
+		name    string
+		cwd     string
+		written bool
+	}{
+		{name: "inside the go app", cwd: filepath.Join(root, "apps", "api", "cmd"), written: false},
+		{name: "inside an app whose path only shares a prefix with the next app's", cwd: filepath.Join(root, "apps", "web-hooks"), written: false},
+		{name: "inside the next app", cwd: filepath.Join(root, "apps", "web"), written: true},
+		{name: "at the project root, where no one app is the target", cwd: root, written: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolvedEnv(nil, nil, nil, nil, "", "", targetScope(cfg, tc.cwd))
+			if _, written := got[providerkit.ClientURLEnvName]; written != tc.written {
+				t.Errorf("%s written = %v, want %v — a command run inside one app reads only that app's runtime, and elsewhere any app in the project", providerkit.ClientURLEnvName, written, tc.written)
+			}
+		})
+	}
 }
 
 func readTestFile(t *testing.T, path string) string {
