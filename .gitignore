@@ -223,3 +223,6 @@ platform/vps/provider/cmd/proxyctl/proxyctl
 .turbo
 
 .vscode/
+
+# Local design-review working files.
+.impeccable/
