@@ -1,59 +1,52 @@
 package cloudflare
 
 import (
+	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const (
-	Vendor = "cloudflare"
+const entryWorker = "entry"
 
-	TypeAccountSubscription = "cloudflare_account_subscription"
-	TypeWorkersScript       = "cloudflare_workers_script"
-	TypeR2Bucket            = "cloudflare_r2_bucket"
-
-	entryWorker = "entry"
+var (
+	_ costkit.EdgeShaper = (*provider)(nil)
+	_ costkit.EdgePricer = (*provider)(nil)
 )
 
-type Shaped struct {
-	Name       string
-	Type       string
-	Properties map[string]any
-}
-
-type Shape struct {
-	Shared      []Shaped
-	Environment []Shaped
-}
-
-func ShapeEdge(namespace string, class edge.Class) (Shape, error) {
-	store, err := storeScriptNameFor(namespace, class)
+func (p *provider) ShapeCost(site costkit.EdgeSite) (costkit.EdgeShape, error) {
+	store, err := storeScriptNameFor(p.namespace, site.Class)
 	if err != nil {
-		return Shape{}, err
+		return costkit.EdgeShape{}, err
 	}
-	writer, err := isrWriterScriptNameFor(namespace, class)
+	writer, err := isrWriterScriptNameFor(p.namespace, site.Class)
 	if err != nil {
-		return Shape{}, err
+		return costkit.EdgeShape{}, err
 	}
-	cache, err := cacheStoreNameFor(namespace, class)
+	cache, err := cacheStoreNameFor(p.namespace, site.Class)
 	if err != nil {
-		return Shape{}, err
+		return costkit.EdgeShape{}, err
 	}
-	shape := Shape{
-		Shared: []Shaped{
-			{Name: workersPaidPlan, Type: TypeAccountSubscription, Properties: map[string]any{"rate_plan": map[string]any{"id": workersPaidPlan}}},
-			{Name: cache, Type: TypeR2Bucket, Properties: map[string]any{"storage_class": "Standard"}},
-			{Name: store, Type: TypeWorkersScript, Properties: durableObjectScript(deploymentsStoreWorker)},
-			{Name: writer, Type: TypeWorkersScript, Properties: durableObjectScript(isrWriterWorker)},
+	shape := costkit.EdgeShape{
+		Vendor: cost.Vendor,
+		Shared: []costkit.Shaped{
+			{Name: workersPaidPlan, Type: cost.TypeAccountSubscription, Properties: map[string]any{"rate_plan": map[string]any{"id": workersPaidPlan}}},
+			{Name: cache, Type: cost.TypeR2Bucket, Properties: map[string]any{"storage_class": "Standard"}},
+			{Name: store, Type: cost.TypeWorkersScript, Properties: durableObjectScript(deploymentsStoreWorker)},
+			{Name: writer, Type: cost.TypeWorkersScript, Properties: durableObjectScript(isrWriterWorker)},
 		},
-		Environment: []Shaped{
-			{Name: entryWorker, Type: TypeWorkersScript, Properties: map[string]any{"durable_objects": []any{}}},
+		Environment: []costkit.Shaped{
+			{Name: entryWorker, Type: cost.TypeWorkersScript, Properties: map[string]any{"durable_objects": []any{}}},
 		},
 	}
-	if class == edge.ClassPreview {
-		shape.Shared = append(shape.Shared, Shaped{Name: previewEntryScript, Type: TypeWorkersScript, Properties: map[string]any{"durable_objects": []any{}}})
+	if site.Class == edge.ClassPreview {
+		shape.Shared = append(shape.Shared, costkit.Shaped{Name: previewEntryScript, Type: cost.TypeWorkersScript, Properties: map[string]any{"durable_objects": []any{}}})
 	}
 	return shape, nil
 }
+
+func (p *provider) CostCard() (*costkit.Card, error) { return cost.Card() }
+
+func (p *provider) CostTable() costkit.Table { return cost.Table }
 
 func durableObjectScript(worker durableObjectWorker) map[string]any {
 	classes := make([]any, 0, len(worker.classes))

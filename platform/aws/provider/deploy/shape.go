@@ -64,7 +64,7 @@ func Shape(ctx context.Context, evaluator transform.Evaluator, region string, re
 	}
 	substrate := false
 	for _, app := range req.Plan.Apps {
-		scope := tree.Scope(scopes.Environment, "app", app.App)
+		scope := tree.Scope(scopes.Environment, costkit.ScopeApp, app.App)
 		if app.Compute() == providerkit.ComputeContainer {
 			shape.container(scope, app)
 			substrate = true
@@ -172,6 +172,10 @@ func (s shaper) postgres(scope, project, env string, resource providerkit.Resour
 	s.add(scope, tfRDSClusterInstance, resource.Name, map[string]any{
 		"engine":         args.Engine,
 		"instance_class": args.InstanceClass,
+		"serverlessv2_scaling_configuration": map[string]any{
+			"min_capacity": args.MinCapacity,
+			"max_capacity": args.MaxCapacity,
+		},
 	}, names["instance"])
 	s.plain(scope, tfSecret, resource.Name, map[string]any{"managed_by": "rds"})
 }

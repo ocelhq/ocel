@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"slices"
 
 	"github.com/ocelhq/ocel/pkg/costkit"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
@@ -9,39 +10,29 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cost"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
-	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
-const (
-	scopeProject     = "project"
-	scopeShared      = "shared"
-	scopeEnvironment = "environment"
-
-	tfCloudFrontDistribution = "aws_cloudfront_distribution"
-	tfAPIGatewayRestAPI      = "aws_api_gateway_rest_api"
-
-	cloudFrontPriceClass = "PriceClass_All"
-)
+const tfDataTransfer = "aws_data_transfer"
 
 func (p *Provider) Shape(ctx context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
 	tree := &costkit.Tree{}
-	project := tree.Scope("", scopeProject, req.Plan.Slug)
-	shared := tree.Scope(project, scopeShared, string(req.Plan.Class))
-	environment := tree.Scope(project, scopeEnvironment, req.Plan.Env)
+	project := tree.Scope("", costkit.ScopeProject, req.Plan.Slug)
+	shared := tree.Scope(project, costkit.ScopeShared, string(req.Plan.Class))
+	environment := tree.Scope(project, costkit.ScopeEnvironment, req.Plan.Env)
 
 	var options []bootstrap.ShapeOption
 	if p.options.VarsKey != "" {
 		options = append(options, bootstrap.WithVarsKey(p.options.VarsKey))
 	}
-	standing, err := bootstrap.Shape(p.namespace, string(req.Plan.Class), req.Features, options...)
+	features := req.Features
+	if !slices.Contains(features, bootstrap.FeatureVarsKey) {
+		features = append(slices.Clone(features), bootstrap.FeatureVarsKey)
+	}
+	standing, err := bootstrap.Shape(p.namespace, string(req.Plan.Class), features, options...)
 	if err != nil {
 		return nil, err
 	}
-	for _, item := range standing {
-		tree.Add(shared, string(Vendor), item.Type, item.Name, p.aws.Region, item.Properties)
-	}
+	tree.AddShaped(shared, string(Vendor), p.aws.Region, standing)
 
 	if err := deploy.Shape(ctx, p.transformPass(projectRoot()), p.aws.Region, req, tree, deploy.ShapeScopes{
 		Environment: environment,
@@ -50,29 +41,31 @@ func (p *Provider) Shape(ctx context.Context, req providerkit.ShapeRequest) (*co
 		return nil, err
 	}
 
-	switch req.Edge {
-	case cloudfront.Kind:
-		tree.Add(environment, string(Vendor), tfCloudFrontDistribution, req.Plan.Slug, p.aws.Region, map[string]any{"price_class": cloudFrontPriceClass})
-		if req.Plan.Class == providerkit.ClassPreview {
-			tree.Add(shared, string(Vendor), tfCloudFrontDistribution, "preview-wildcard", p.aws.Region, map[string]any{"price_class": cloudFrontPriceClass})
-		}
-	case apigateway.Kind:
-		tree.Add(environment, string(Vendor), tfAPIGatewayRestAPI, req.Plan.Slug, p.aws.Region, map[string]any{"endpoint_configuration": map[string]any{"types": []any{"REGIONAL"}}})
-	case cloudflare.Kind:
-		shape, err := cloudflare.ShapeEdge(string(p.namespace), req.Plan.Class)
-		if err != nil {
-			return nil, err
-		}
-		for _, item := range shape.Shared {
-			tree.Add(shared, cloudflare.Vendor, item.Type, item.Name, "", item.Properties)
-		}
-		for _, item := range shape.Environment {
-			tree.Add(environment, cloudflare.Vendor, item.Type, item.Name, "", item.Properties)
+	front, err := p.edges().Open(req.Edge)
+	if err != nil {
+		return nil, err
+	}
+	site := costkit.EdgeSite{Slug: req.Plan.Slug, Class: req.Plan.Class, Region: p.aws.Region}
+	for _, app := range req.Plan.Apps {
+		site.Apps = append(site.Apps, costkit.EdgeApp{Name: app.App, Hostnames: providerkit.ProductionHostnames(app)})
+	}
+	shape, err := costkit.ShapeEdge(front, site)
+	if err != nil {
+		return nil, err
+	}
+	tree.AddEdge(costkit.EdgeScopes{Shared: shared, Environment: environment}, shape)
+	if !shape.BillsEgress {
+		for _, app := range req.Plan.Apps {
+			tree.Add(tree.Scope(environment, costkit.ScopeApp, app.App), string(Vendor), tfDataTransfer, app.App, p.aws.Region, map[string]any{})
 		}
 	}
-	return tree.Set(providerkit.CostSource), nil
+	return tree.Set(providerkit.CostSource)
 }
 
 func (p *Provider) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
-	return cost.Price(req)
+	edges, err := providerkit.EdgePricers(p.edges())
+	if err != nil {
+		return nil, err
+	}
+	return cost.Price(req, edges...)
 }
