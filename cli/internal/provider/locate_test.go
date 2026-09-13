@@ -23,7 +23,7 @@ func releaseServing(t *testing.T, names ...string) *httptest.Server {
 	var checksums strings.Builder
 	for _, name := range names {
 		for i, platform := range providers.Platforms {
-			asset := providers.AssetName(name, locatedVersion, platform.GOOS, platform.GOARCH)
+			asset := providers.AssetName(providers.KindProvider, name, locatedVersion, platform.GOOS, platform.GOARCH)
 			fmt.Fprintf(&checksums, "%064x  %s\n", i+1, asset)
 		}
 	}
@@ -59,7 +59,7 @@ func TestTheLockIsWrittenBesideTheConfigOnTheFirstRunOfAVersion(t *testing.T) {
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	if _, err := locate(context.Background(), store, projectDir, "aws"); err == nil {
+	if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform); err == nil {
 		t.Fatal("locate() error = nil, want the fetch of an archive this release does not serve to fail")
 	}
 
@@ -89,7 +89,7 @@ func TestALockWrittenOnOnePlatformMatchesTheOneWrittenOnAnother(t *testing.T) {
 	for _, host := range []providers.Platform{{GOOS: "darwin", GOARCH: "arm64"}, {GOOS: "linux", GOARCH: "amd64"}} {
 		projectDir := t.TempDir()
 		store := storeOn(t, server, host.GOOS, host.GOARCH)
-		_, _ = locate(context.Background(), store, projectDir, "aws")
+		_, _ = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform)
 
 		raw, err := os.ReadFile(lockfile.Path(projectDir))
 		if err != nil {
@@ -119,7 +119,7 @@ func TestALockPinningAnotherVersionIsRefusedRatherThanRewritten(t *testing.T) {
 		t.Fatalf("read the lock: %v", err)
 	}
 
-	_, err = locate(context.Background(), store, projectDir, "aws")
+	_, err = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform)
 	if err == nil {
 		t.Fatal("locate() error = nil, want a lock pinning another version refused")
 	}
@@ -176,7 +176,7 @@ func TestAPinnedLockIsNotRewrittenOrRefetched(t *testing.T) {
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	_, _ = locate(context.Background(), store, projectDir, "aws")
+	_, _ = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform)
 	first, err := os.ReadFile(lockfile.Path(projectDir))
 	if err != nil {
 		t.Fatalf("read the lock: %v", err)
@@ -184,7 +184,7 @@ func TestAPinnedLockIsNotRewrittenOrRefetched(t *testing.T) {
 
 	server.Close()
 
-	if _, err := locate(context.Background(), store, projectDir, "aws"); err == nil {
+	if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform); err == nil {
 		t.Fatal("locate() error = nil, want the fetch to fail against a closed release")
 	}
 	second, err := os.ReadFile(lockfile.Path(projectDir))
@@ -203,7 +203,7 @@ func TestAProviderTheLockDoesNotPinIsRefusedByName(t *testing.T) {
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	_, err := locate(context.Background(), store, projectDir, "nowhere")
+	_, err := locate(context.Background(), store, providers.KindProvider, projectDir, "nowhere", store.Platform)
 	if err == nil {
 		t.Fatal("locate() error = nil, want the unpinned provider refused")
 	}
@@ -220,7 +220,7 @@ func TestAProvidersDirResolvesWithNothingOnPATH(t *testing.T) {
 	store.Override = t.TempDir()
 	t.Setenv("PATH", t.TempDir())
 
-	dir := filepath.Join(store.Override, "aws", locatedVersion, "linux-amd64")
+	dir := filepath.Join(store.Override, "provider", "aws", locatedVersion, "linux-amd64")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestAProvidersDirResolvesWithNothingOnPATH(t *testing.T) {
 	}
 
 	projectDir := t.TempDir()
-	got, err := locate(context.Background(), store, projectDir, "aws")
+	got, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform)
 	if err != nil {
 		t.Fatalf("locate: %v", err)
 	}

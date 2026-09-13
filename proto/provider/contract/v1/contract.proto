@@ -57,6 +57,12 @@ service ProviderService {
     rpc RemoveHostname(HostnameRequest) returns (stream common.progress.v1.OperationEvent);
 
     rpc GetHostnameStatus(HostnameRequest) returns (GetHostnameStatusResponse);
+
+    rpc DescribeConnectorTarget(DescribeConnectorTargetRequest) returns (DescribeConnectorTargetResponse);
+
+    rpc InstallConnector(InstallConnectorRequest) returns (stream common.progress.v1.OperationEvent);
+
+    rpc RemoveConnector(RemoveConnectorRequest) returns (stream common.progress.v1.OperationEvent);
 }
 
 message ProviderConfig {
@@ -672,3 +678,31 @@ enum HostTrustReason {
 
   HOST_TRUST_REASON_HOST_KEY_MISMATCH = 2;
 }
+
+message DescribeConnectorTargetRequest {}
+
+message DescribeConnectorTargetResponse {
+  string target_fingerprint = 1;
+
+  string hostname = 2;
+
+  string arch = 3;
+
+  InstalledConnector installed = 4;
+}
+
+message InstalledConnector {
+  string version = 1;
+
+  string public_key = 2;
+}
+
+message InstallConnectorRequest {
+  bytes binary = 1 [(buf.validate.field).bytes.min_len = 1];
+
+  string version = 2 [(buf.validate.field).string.min_len = 1];
+
+  bytes config_json = 3 [(buf.validate.field).bytes.min_len = 1];
+}
+
+message RemoveConnectorRequest {}

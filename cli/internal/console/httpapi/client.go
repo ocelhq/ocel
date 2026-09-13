@@ -54,6 +54,10 @@ func (c *Client) Put(ctx context.Context, path, accessToken string, body, out an
 	return c.withJSON(ctx, http.MethodPut, path, accessToken, body, out)
 }
 
+func (c *Client) Patch(ctx context.Context, path, accessToken string, body, out any) error {
+	return c.withJSON(ctx, http.MethodPatch, path, accessToken, body, out)
+}
+
 func (c *Client) withJSON(ctx context.Context, method, path, accessToken string, body, out any) error {
 	payload, err := json.Marshal(body)
 	if err != nil {

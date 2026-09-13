@@ -73,28 +73,28 @@ func New(version string) (*Store, error) {
 
 func (s *Store) Fetches() bool { return s.Override == "" }
 
-func (s *Store) Binary(ctx context.Context, name, digest string) (string, error) {
+func (s *Store) Binary(ctx context.Context, kind Kind, name string, platform Platform, digest string) (string, error) {
 	if err := checkName(name); err != nil {
 		return "", err
 	}
-	executable := ExecutableName(name, s.Platform.GOOS)
+	executable := ExecutableName(kind, name, platform.GOOS)
 
 	if s.Override != "" {
-		path := filepath.Join(s.Override, name, s.Version, s.Platform.Dir(), executable)
+		path := filepath.Join(s.Override, string(kind), name, s.Version, platform.Dir(), executable)
 		if _, err := os.Stat(path); err != nil {
-			return "", fmt.Errorf("%s is %s, which holds no %s provider %s for %s — build the providers this CLI's own version needs, or unset %s to fetch them",
-				OverrideEnvVar, s.Override, name, s.Version, s.Platform.Dir(), OverrideEnvVar)
+			return "", fmt.Errorf("%s is %s, which holds no %s %s %s for %s — build the binaries this CLI's own version needs, or unset %s to fetch them",
+				OverrideEnvVar, s.Override, name, kind, s.Version, platform.Dir(), OverrideEnvVar)
 		}
 		return path, nil
 	}
 
-	dir := filepath.Join(s.Dir, name, s.Version, s.Platform.Dir())
+	dir := filepath.Join(s.Dir, string(kind), name, s.Version, platform.Dir())
 	path := filepath.Join(dir, executable)
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
 	}
 
-	if err := s.install(ctx, name, digest, dir, executable); err != nil {
+	if err := s.install(ctx, kind, name, platform, digest, dir, executable); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -109,12 +109,12 @@ func (s *Store) Checksums(ctx context.Context) (map[string]string, error) {
 	return ParseChecksums(body)
 }
 
-func (s *Store) install(ctx context.Context, name, digest, dir, executable string) error {
+func (s *Store) install(ctx context.Context, kind Kind, name string, platform Platform, digest, dir, executable string) error {
 	if digest == "" {
-		return fmt.Errorf("no lock pins the %s provider %s for %s", name, s.Version, s.Platform.Dir())
+		return fmt.Errorf("no lock pins the %s %s %s for %s", name, kind, s.Version, platform.Dir())
 	}
 
-	asset := AssetName(name, s.Version, s.Platform.GOOS, s.Platform.GOARCH)
+	asset := AssetName(kind, name, s.Version, platform.GOOS, platform.GOARCH)
 	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
 		return fmt.Errorf("make the provider cache at %s: %w", s.Dir, err)
 	}
@@ -130,7 +130,7 @@ func (s *Store) install(ctx context.Context, name, digest, dir, executable strin
 	}
 
 	unpacked := filepath.Join(staged, "unpacked")
-	if err := unpack(archive, s.Platform.GOOS, unpacked); err != nil {
+	if err := unpack(archive, platform.GOOS, unpacked); err != nil {
 		return fmt.Errorf("unpack %s: %w", asset, err)
 	}
 	if _, err := os.Stat(filepath.Join(unpacked, executable)); err != nil {

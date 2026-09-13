@@ -144,6 +144,7 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 		helper + ":" + ProxyHelperMount + ":ro",
 		stood.pins + ":" + proxyPinsMount + ":ro",
 		filepath.Join(dir, "data") + ":" + proxyDataMount,
+		ConnectorRun + ":" + ConnectorRun + ":ro",
 	})), "networks="+ProxyNetwork+" ", "networks="+stood.network+" ", 1))
 	if observed[stated.ID()] != stated.Digest() {
 		box, _ := exec.Command(dockerEngine, "inspect", "--type", "container", "--format", ProxyFactTemplate, stood.name).Output()

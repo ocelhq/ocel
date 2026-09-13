@@ -17,7 +17,7 @@ func TestANameThatIsNotOneSegmentNeverReachesAPath(t *testing.T) {
 			Version:  testVersion,
 			Platform: Platform{GOOS: "linux", GOARCH: "amd64"},
 		}
-		_, err := store.Binary(context.Background(), name, "deadbeef")
+		_, err := store.Binary(context.Background(), KindProvider, name, store.Platform, "deadbeef")
 		if err == nil {
 			t.Errorf("Binary(%q) error = nil, want the name refused before it is joined into a path", name)
 			continue
@@ -43,7 +43,7 @@ func TestAnEscapingNameIsRefusedAgainstADirectoryOfProviders(t *testing.T) {
 		Version:  testVersion,
 		Platform: Platform{GOOS: "linux", GOARCH: "amd64"},
 	}
-	if _, err := store.Binary(context.Background(), "../outside", "deadbeef"); err == nil {
+	if _, err := store.Binary(context.Background(), KindProvider, "../outside", store.Platform, "deadbeef"); err == nil {
 		t.Fatal("Binary() error = nil, want a name climbing out of the providers directory refused")
 	}
 }

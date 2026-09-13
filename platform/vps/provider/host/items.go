@@ -61,6 +61,7 @@ type Item struct {
 	Owner   string
 	Content []byte
 	Class   providerkit.Class
+	Watch   []string
 	Slow    bool
 	Note    string
 }
@@ -127,7 +128,7 @@ func (i Item) command() string {
 	case KindEngine:
 		return engineCommand()
 	case KindUnit:
-		return unitCommand()
+		return unitCommand(i)
 	case KindNetwork:
 		return networkCommand()
 	case KindContainer:
@@ -150,7 +151,7 @@ func (i Item) probe() string {
 	case KindEngine:
 		return engineProbe()
 	case KindUnit:
-		return unitProbe()
+		return unitProbe(i)
 	case KindNetwork:
 		return networkProbe()
 	case KindContainer:

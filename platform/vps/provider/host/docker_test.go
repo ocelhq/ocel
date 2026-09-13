@@ -58,7 +58,7 @@ esac`)
 func probed(t *testing.T, held engine) map[string]string {
 	t.Helper()
 	dir := daemon(t, held)
-	cmd := exec.Command("/bin/sh", "-c", engineProbe()+"\n"+unitProbe())
+	cmd := exec.Command("/bin/sh", "-c", engineProbe()+"\n"+unitProbe(unitItem()))
 	cmd.Env = []string{"PATH=" + dir}
 	var stderr strings.Builder
 	cmd.Stderr = &stderr

@@ -14,30 +14,43 @@ import (
 const Name = "ocel.lock"
 
 type Lock struct {
-	CLI       string                       `json:"cli"`
-	Providers map[string]map[string]string `json:"providers"`
+	CLI        string                       `json:"cli"`
+	Providers  map[string]map[string]string `json:"providers"`
+	Connectors map[string]map[string]string `json:"connectors"`
 }
 
 func FromChecksums(version string, sums map[string]string) Lock {
-	lock := Lock{CLI: version, Providers: map[string]map[string]string{}}
+	lock := Lock{
+		CLI:        version,
+		Providers:  map[string]map[string]string{},
+		Connectors: map[string]map[string]string{},
+	}
 	for asset, digest := range sums {
 		parsed, ok := providers.ParseAssetName(asset)
 		if !ok || parsed.Version != version {
 			continue
 		}
 		platform := providers.Platform{GOOS: parsed.GOOS, GOARCH: parsed.GOARCH}
-		pinned, held := lock.Providers[parsed.Name]
-		if !held {
+		held := lock.pinned(parsed.Kind)
+		pinned, known := held[parsed.Name]
+		if !known {
 			pinned = map[string]string{}
-			lock.Providers[parsed.Name] = pinned
+			held[parsed.Name] = pinned
 		}
 		pinned[platform.Dir()] = digest
 	}
 	return lock
 }
 
-func (l Lock) Digest(name, platform string) (string, bool) {
-	digest, held := l.Providers[name][platform]
+func (l Lock) pinned(kind providers.Kind) map[string]map[string]string {
+	if kind == providers.KindConnector {
+		return l.Connectors
+	}
+	return l.Providers
+}
+
+func (l Lock) Digest(kind providers.Kind, name, platform string) (string, bool) {
+	digest, held := l.pinned(kind)[name][platform]
 	return digest, held
 }
 

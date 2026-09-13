@@ -208,6 +208,7 @@ func proxyBinds() []string {
 		ProxyHelper + ":" + ProxyHelperMount + ":ro",
 		ProxyPins + ":" + proxyPinsMount + ":ro",
 		ProxyData + ":" + proxyDataMount,
+		ConnectorRun + ":" + ConnectorRun + ":ro",
 	}
 }
 
