@@ -133,7 +133,7 @@ export const gaps: Gap[] = [
     affects: [
       {
         on: ["aws", "aws.floci"],
-        cells: ["deploy/node/web", "deploy/python/web", "deploy/go/web"],
+        cells: ["deploy/node/web", "deploy/python/web", "deploy/go/web", "deploy/rust/web"],
         variants: GATEWAY,
         tests: [{ row: EMPTY_BODY_ROW }],
       },
@@ -191,7 +191,8 @@ export const gaps: Gap[] = [
   },
   {
     id: "next-on-cloud-run",
-    reason: "gcp phase 3 serves node, go and python; a Next app has no router in front of it there",
+    reason:
+      "gcp phase 3 serves node, go, python and rust; a Next app has no router in front of it there",
     issue: 1097,
     affects: [
       {
