@@ -15,14 +15,15 @@ import (
 type fakeNpm struct {
 	argv     string
 	manifest string
+	npmrc    string
 }
 
 func installFakeNpm(t *testing.T, body string) fakeNpm {
 	t.Helper()
 	bin := t.TempDir()
 	record := t.TempDir()
-	npm := fakeNpm{argv: filepath.Join(record, "argv"), manifest: filepath.Join(record, "package.json")}
-	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$@\" > %q\ncp package.json %q\n%s", npm.argv, npm.manifest, body)
+	npm := fakeNpm{argv: filepath.Join(record, "argv"), manifest: filepath.Join(record, "package.json"), npmrc: filepath.Join(record, ".npmrc")}
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$@\" > %q\ncp package.json %q\ncp .npmrc %q 2>/dev/null\n%s", npm.argv, npm.manifest, npm.npmrc, body)
 	if err := os.WriteFile(filepath.Join(bin, "npm"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -284,5 +285,23 @@ func TestAPlatformPackageImportedThroughAnAliasIsInstalledUnderTheAlias(t *testi
 	}
 	if got := runNode(t, l.funcDir); !strings.Contains(got, "target build") {
 		t.Errorf("bundle printed %q, want the package installed for the target to answer", got)
+	}
+}
+
+func TestAPlatformPackageInstallReadsTheProjectsNpmConfig(t *testing.T) {
+	const registry = "@plat-dep:registry=https://npm.internal.example/\n"
+	npm := installFakeNpm(t, linuxInstall(t, "x64", "glibc"))
+	files := tree{".npmrc": registry, "pnpm-workspace.yaml": "packages: [apps/*]\n"}
+	for rel, contents := range platformSplitApp() {
+		files["apps/api/"+rel] = contents
+	}
+	l := newLayout(t, files)
+	writeTree(t, filepath.Dir(l.appSrc), tree{".npmrc": "registry=https://outside.example/\n"})
+
+	if err := Bundle(context.Background(), l.target("apps/api/server.js")); err != nil {
+		t.Fatalf("Bundle: %v", err)
+	}
+	if got, err := os.ReadFile(npm.npmrc); err != nil || string(got) != registry {
+		t.Errorf("npm ran beside .npmrc %q (%v), want the project's %q: a scoped or private registry is missed and the public one answers for it", got, err, registry)
 	}
 }
