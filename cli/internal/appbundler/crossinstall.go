@@ -35,7 +35,7 @@ type platformPackages struct {
 	arch string
 
 	mu     sync.Mutex
-	split  map[string]bool
+	split  map[string]*manifest
 	wanted map[string][]string
 }
 
@@ -57,7 +57,7 @@ func (p *platformPackages) plugin() api.Plugin {
 					return api.OnResolveResult{}, nil
 				}
 				root, _, inPackage := packageRoot(filepath.Dir(resolved.Path))
-				if !inPackage || !p.splitsByPlatform(root) {
+				if !inPackage || !p.splitsByPlatform(root, specifierPackage(args.Path)) {
 					return api.OnResolveResult{}, nil
 				}
 				return api.OnResolveResult{Path: args.Path, External: true}, nil
@@ -66,29 +66,53 @@ func (p *platformPackages) plugin() api.Plugin {
 	}
 }
 
-func (p *platformPackages) splitsByPlatform(root string) bool {
+func (p *platformPackages) splitsByPlatform(root, imported string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if split, seen := p.split[root]; seen {
-		return split
-	}
-	pkg, err := readManifest(root)
-	split := err == nil && pkg.Version != "" && slices.ContainsFunc(slices.Collect(maps.Keys(pkg.OptionalDependencies)), func(dep string) bool {
-		if platformVariantName.MatchString(dep) {
-			return true
-		}
-		installed, found := installedManifest(root, dep)
-		return found && (len(installed.OS) > 0 || len(installed.CPU) > 0)
-	})
 	if p.split == nil {
-		p.split = map[string]bool{}
+		p.split = map[string]*manifest{}
 		p.wanted = map[string][]string{}
 	}
-	p.split[root] = split
-	if split && !slices.Contains(p.wanted[pkg.Name], pkg.Version) {
-		p.wanted[pkg.Name] = append(p.wanted[pkg.Name], pkg.Version)
+	pkg, seen := p.split[root]
+	if !seen {
+		pkg = platformSplit(root)
+		p.split[root] = pkg
 	}
-	return split
+	if pkg == nil {
+		return false
+	}
+	spec := pkg.Version
+	if imported != pkg.Name {
+		spec = "npm:" + pkg.Name + "@" + pkg.Version
+	}
+	if !slices.Contains(p.wanted[imported], spec) {
+		p.wanted[imported] = append(p.wanted[imported], spec)
+	}
+	return true
+}
+
+func platformSplit(root string) *manifest {
+	pkg, err := readManifest(root)
+	if err != nil || pkg.Version == "" {
+		return nil
+	}
+	for dep := range pkg.OptionalDependencies {
+		if platformVariantName.MatchString(dep) {
+			return &pkg
+		}
+		if installed, found := installedManifest(root, dep); found && (len(installed.OS) > 0 || len(installed.CPU) > 0) {
+			return &pkg
+		}
+	}
+	return nil
+}
+
+func specifierPackage(specifier string) string {
+	parts := strings.SplitN(specifier, "/", 3)
+	if strings.HasPrefix(specifier, "@") && len(parts) > 1 {
+		return parts[0] + "/" + parts[1]
+	}
+	return parts[0]
 }
 
 var platformVariantName = regexp.MustCompile(`(?:^|[/-])(?:aix|android|darwin|freebsd|linux|openbsd|sunos|win32)-(?:arm|arm64|ia32|loong64|mips64el|ppc64|riscv64|s390x|universal|x64)(?:-|$)`)

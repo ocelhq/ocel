@@ -253,3 +253,36 @@ func TestAPlatformPackageWhoseHostVariantWasNeverInstalledIsStillInstalledForThe
 		t.Errorf("bundle printed %q, want the package installed for the target to answer", got)
 	}
 }
+
+func TestAPlatformPackageImportedThroughAnAliasIsInstalledUnderTheAlias(t *testing.T) {
+	files := stagedPlatDep()
+	files["node_modules/img/package.json"] = files["node_modules/plat-dep/package.json"]
+	files["node_modules/img/index.js"] = files["node_modules/plat-dep/index.js"]
+	delete(files, "node_modules/plat-dep/package.json")
+	delete(files, "node_modules/plat-dep/index.js")
+	files["node_modules/@plat-dep/linux-x64/package.json"] = `{"name":"@plat-dep/linux-x64","version":"1.2.3","os":["linux"],"cpu":["x64"]}`
+	npm := installFakeNpm(t, stagedInstall(t, files))
+	app := platformSplitApp()
+	app["server.js"] = "import answer from 'img';\nconsole.log(answer);\n"
+	app["node_modules/img/package.json"] = app["node_modules/plat-dep/package.json"]
+	app["node_modules/img/index.js"] = app["node_modules/plat-dep/index.js"]
+	delete(app, "node_modules/plat-dep/package.json")
+	delete(app, "node_modules/plat-dep/index.js")
+	l := newLayout(t, app)
+
+	if err := Bundle(context.Background(), l.target("server.js")); err != nil {
+		t.Fatalf("Bundle: %v", err)
+	}
+	var manifest struct {
+		Dependencies map[string]string `json:"dependencies"`
+	}
+	if err := json.Unmarshal([]byte(readFile(t, npm.manifest)), &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Dependencies["img"] != "npm:plat-dep@1.2.3" || len(manifest.Dependencies) != 1 {
+		t.Errorf("npm installs %v, want plat-dep under the alias the app imports it by", manifest.Dependencies)
+	}
+	if got := runNode(t, l.funcDir); !strings.Contains(got, "target build") {
+		t.Errorf("bundle printed %q, want the package installed for the target to answer", got)
+	}
+}
