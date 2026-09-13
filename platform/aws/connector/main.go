@@ -7,11 +7,13 @@ import (
 	"os"
 	"sync"
 
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -20,13 +22,16 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var version = "dev"
 
+const runtimeAPIEnvVar = "AWS_LAMBDA_RUNTIME_API"
+
 func main() {
 	addr := flag.String("addr", "127.0.0.1:7777", "address to serve on")
-	region := flag.String("region", os.Getenv("OCEL_AWS_REGION"), "AWS region the target is bootstrapped in")
+	region := flag.String("region", os.Getenv(edge.AWSRegionVar), "AWS region the target is bootstrapped in")
 	config := flag.String("config", os.Getenv("OCEL_CONNECTOR_CONFIG"), "path to the connector config naming the console, this connector and its grants")
 	flag.Parse()
 
@@ -39,7 +44,7 @@ func main() {
 func run(addr, region, config string) error {
 	ctx := context.Background()
 
-	trust, err := connectorkit.LoadConfig(config)
+	trust, err := connectorkit.Configured(config)
 	if err != nil {
 		return err
 	}
@@ -68,7 +73,7 @@ func run(addr, region, config string) error {
 		read:      map[kit.Class]bootstrap.Deployed{},
 	}
 
-	return connectorkit.Serve(connectorkit.Spec{
+	spec := connectorkit.Spec{
 		Version:        version,
 		Vendor:         "aws",
 		Target:         fingerprint,
@@ -83,7 +88,18 @@ func run(addr, region, config string) error {
 			Records: awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: held},
 			Sealer:  awsports.Sealer{KMS: kms.NewFromConfig(cfg), Keys: held},
 		},
-	})
+	}
+
+	if os.Getenv(runtimeAPIEnvVar) == "" {
+		return connectorkit.Serve(spec)
+	}
+
+	mux, err := connectorkit.Mux(spec)
+	if err != nil {
+		return err
+	}
+	lambda.StartWithOptions(httpadapter.NewV2(mux).ProxyWithContext, lambda.WithContext(ctx))
+	return nil
 }
 
 type deployments struct {

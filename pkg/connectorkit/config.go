@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"slices"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 type Config struct {
@@ -18,20 +20,31 @@ type Config struct {
 
 var grantable = []string{CapabilityEnvVarsRead, CapabilityEnvVarsWrite, CapabilityEnvVarsReveal}
 
+func Configured(path string) (Config, error) {
+	if carried := os.Getenv(providerkit.ConnectorConfigEnvVar); carried != "" {
+		return ParseConfig([]byte(carried), providerkit.ConnectorConfigEnvVar)
+	}
+	return LoadConfig(path)
+}
+
 func LoadConfig(path string) (Config, error) {
 	if path == "" {
-		return Config{}, fmt.Errorf("connectorkit: no config path, so nothing names the console this connector trusts")
+		return Config{}, fmt.Errorf("connectorkit: nothing names the console this connector trusts: neither %s nor a config file", providerkit.ConnectorConfigEnvVar)
 	}
 	read, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("read connector config: %w", err)
 	}
+	return ParseConfig(read, path)
+}
+
+func ParseConfig(raw []byte, from string) (Config, error) {
 	var cfg Config
-	if err := json.Unmarshal(read, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parse connector config %s: %w", path, err)
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return Config{}, fmt.Errorf("parse connector config %s: %w", from, err)
 	}
 	if err := cfg.check(); err != nil {
-		return Config{}, fmt.Errorf("connector config %s: %w", path, err)
+		return Config{}, fmt.Errorf("connector config %s: %w", from, err)
 	}
 	return cfg, nil
 }

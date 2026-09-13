@@ -42,6 +42,7 @@ func (h *handlers) DescribeConnectorTarget(ctx context.Context, _ *contractv1.De
 		resp.Installed = &contractv1.InstalledConnector{
 			Version:   described.Installed.Version,
 			PublicKey: described.Installed.PublicKey,
+			Compute:   string(described.Installed.Compute),
 		}
 	}
 	return resp, nil
@@ -59,6 +60,7 @@ func (h *handlers) InstallConnector(ctx context.Context, req *contractv1.Install
 				Binary:  req.GetBinary(),
 				Version: req.GetVersion(),
 				Config:  req.GetConfigJson(),
+				Compute: Compute(req.GetCompute()),
 			}, report)
 			return err
 		})
@@ -86,6 +88,7 @@ func connectorResult(at ConnectorAddress) *progressv1.OperationEvent {
 			Connector: &progressv1.ConnectorInstalled{
 				Url:       at.URL,
 				PublicKey: at.PublicKey,
+				Compute:   string(at.Compute),
 			},
 		}},
 	}

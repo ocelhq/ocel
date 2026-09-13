@@ -102,10 +102,10 @@ func TestRenderedDescriptionsFitTheirLimits(t *testing.T) {
 func TestSSMDescriptionsFitTheirLimits(t *testing.T) {
 	for _, class := range []string{ClassProduction, ClassPreview} {
 		t.Run(class, func(t *testing.T) {
-			cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+			stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 			frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-			if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), defaultNamespace, class, everything(), nil, nil); err != nil {
+			if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, class, everything(), nil, nil); err != nil {
 				t.Fatalf("Run: %v", err)
 			}
 			if len(ssmc.descriptions) == 0 {

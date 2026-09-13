@@ -144,7 +144,7 @@ type ProxyState struct {
 	Pins        []Pin
 	PreviewBase string
 	Retiring    string
-	Connector   bool
+	Connector   string
 }
 
 const (
@@ -331,16 +331,23 @@ func previewRoutes(base string) ([]caddyRoute, error) {
 	}, nil
 }
 
-func connectorForwarding() caddyRoute {
+func connectorForwarding(hostname string) caddyRoute {
 	return caddyRoute{
 		Identity: connectorRoute,
-		Match:    []caddyMatch{{Path: []string{ConnectorPath, ConnectorPath + "/*"}}},
+		Match:    []caddyMatch{{Host: hostnamesOf(hostname), Path: []string{ConnectorPath, ConnectorPath + "/*"}}},
 		Handle: []caddyForward{
 			namingTheEdge(),
 			{Handler: rewriteHandler, StripPathPrefix: ConnectorPath},
 			{Handler: forwardHandler, Upstreams: []caddyDial{{Dial: ConnectorDial}}},
 		},
 	}
+}
+
+func connectorHostOf(route caddyRoute) string {
+	if len(route.Match) != 1 || len(route.Match[0].hosts()) != 1 {
+		return ""
+	}
+	return route.Match[0].hosts()[0]
 }
 
 func matching(identity string, hostnames []string, upstream string) caddyRoute {
@@ -355,8 +362,8 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 		return nil, err
 	}
 	routes := make([]caddyRoute, 0, len(state.Claims)+len(state.Routes)+2)
-	if state.Connector {
-		routes = append(routes, connectorForwarding())
+	if state.Connector != "" {
+		routes = append(routes, connectorForwarding(state.Connector))
 	}
 	claimed := map[claimKey][]string{}
 	for _, claim := range slices.SortedFunc(slices.Values(state.Claims), func(a, b HostClaim) int {
@@ -628,10 +635,11 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 			continue
 		}
 		if route.Identity == connectorRoute {
-			if !routeEqual(route, connectorForwarding()) {
+			hosts := connectorHostOf(route)
+			if hosts == "" || !routeEqual(route, connectorForwarding(hosts)) {
 				return ProxyState{}, unwritten("route", route.Identity)
 			}
-			state.Connector = true
+			state.Connector = hosts
 			continue
 		}
 		if base, named := previewRouteOf(route); named != "" {

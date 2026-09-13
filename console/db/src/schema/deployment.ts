@@ -31,6 +31,7 @@ export type ResourceType = (typeof RESOURCE_TYPES)[number];
 
 export const COMPUTE_KINDS = ["serverless", "container"] as const;
 export type ComputeKind = (typeof COMPUTE_KINDS)[number];
+export const computeKind = pgEnum("compute_kind", COMPUTE_KINDS);
 
 export const APP_OUTCOMES = ["succeeded", "failed", "skipped"] as const;
 export type AppOutcome = (typeof APP_OUTCOMES)[number];

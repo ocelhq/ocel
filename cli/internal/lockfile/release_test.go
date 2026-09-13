@@ -46,7 +46,7 @@ func TestTheLockPinsWhatGoreleaserActuallyBuilt(t *testing.T) {
 	}
 	for _, kind := range providers.Kinds {
 		for name, pinned := range lock.pinned(kind) {
-			for _, platform := range kind.Platforms() {
+			for _, platform := range kind.PlatformsFor(name) {
 				if _, held := pinned[platform.Dir()]; !held {
 					t.Errorf("the release ships no %s %s for %s", name, kind, platform.Dir())
 				}

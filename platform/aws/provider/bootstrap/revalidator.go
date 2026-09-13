@@ -145,7 +145,7 @@ func revalidatorResources(ns Namespace, code payloads.Placement) string {
         - ReportBatchItemFailures
       ScalingConfig:
         MaximumConcurrency: %d
-`+lambdaLogGroupResource("Revalidator"), ns.policyName("revalidator"), revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
+`+lambdaLogGroupResource("Revalidator"), ns.PolicyName("revalidator"), revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
 		revalidatorAssetBucketEnvVar,
 		revalidatorBatchSize, revalidatorMaxConcurrency)

@@ -453,13 +453,13 @@ func TestRunRevalidator(t *testing.T) {
 			{ClassPreview, isrStack(ClassPreview)},
 		} {
 			t.Run(tc.class, func(t *testing.T) {
-				cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+				stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 				frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-				if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), defaultNamespace, tc.class, everything(), nil, nil); err != nil {
+				if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, tc.class, everything(), nil, nil); err != nil {
 					t.Fatalf("run: %v", err)
 				}
-				template := cfn.template(tc.stackName)
+				template := stacks.template(tc.stackName)
 				for _, name := range []string{
 					"Revalidator", "RevalidatorRole", "RevalidatorQueueConsumer",
 				} {

@@ -27,14 +27,22 @@ func (h *connectorHost) DescribeConnectorTarget(context.Context) (providerkit.Co
 		Fingerprint: "vps/SHA256:AAAA/ocel",
 		Hostname:    "box.example.com",
 		Arch:        "arm64",
-		Installed:   &providerkit.ConnectorRelease{Version: "0.4.1", PublicKey: "ZmFrZQ=="},
+		Installed:   &providerkit.ConnectorRelease{Version: "0.4.1", PublicKey: "ZmFrZQ==", Compute: providerkit.ComputeContainer},
 	}, nil
 }
 
 func (h *connectorHost) InstallConnector(_ context.Context, install providerkit.ConnectorInstall, report providerkit.Reporter) (providerkit.ConnectorAddress, error) {
 	h.install = install
 	report.Say("wrote the connector")
-	return providerkit.ConnectorAddress{URL: "https://box.example.com/" + constants.ProjectStateDirName + "/connector", PublicKey: "ZmFrZQ=="}, nil
+	compute := install.Compute
+	if compute == "" {
+		compute = providerkit.ComputeContainer
+	}
+	return providerkit.ConnectorAddress{
+		URL:       "https://box.example.com/" + constants.ProjectStateDirName + "/connector",
+		PublicKey: "ZmFrZQ==",
+		Compute:   compute,
+	}, nil
 }
 
 func (h *connectorHost) RemoveConnector(context.Context, providerkit.Reporter) error {
@@ -176,5 +184,54 @@ func TestRemovingAConnectorReachesTheProvider(t *testing.T) {
 	}
 	if !held.removed {
 		t.Error("the provider was never asked to take the connector off")
+	}
+}
+
+func TestTheComputeTheCallerAsksForReachesTheProviderAndItsChoiceComesBack(t *testing.T) {
+	held := &connectorHost{Full: fake.Full{Provider: fake.NewProvider(fake.Options{})}}
+	client := connectorServing(t, held)
+
+	stream, err := client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
+		Binary: []byte("#!/bin/sh\n"), Version: "0.4.1", ConfigJson: []byte(`{"console":"https://ocel.app"}`),
+		Compute: string(providerkit.ComputeServerless),
+	})
+	result := finalResult(t, stream, err)
+	if held.install.Compute != providerkit.ComputeServerless {
+		t.Errorf("the provider was asked for %q, want the compute the caller named", held.install.Compute)
+	}
+	if result.GetConnector().GetCompute() != string(providerkit.ComputeServerless) {
+		t.Errorf("compute = %q, want what the provider settled on so the console records it", result.GetConnector().GetCompute())
+	}
+}
+
+func TestAnUnsetComputeLeavesTheChoiceToTheProvider(t *testing.T) {
+	held := &connectorHost{Full: fake.Full{Provider: fake.NewProvider(fake.Options{})}}
+	client := connectorServing(t, held)
+
+	stream, err := client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
+		Binary: []byte("#!/bin/sh\n"), Version: "0.4.1", ConfigJson: []byte(`{"console":"https://ocel.app"}`),
+	})
+	result := finalResult(t, stream, err)
+	if held.install.Compute != "" {
+		t.Errorf("the provider was asked for %q, want nothing named so it picks its own default", held.install.Compute)
+	}
+	if result.GetConnector().GetCompute() != string(providerkit.ComputeContainer) {
+		t.Errorf("compute = %q, want the provider's own default carried back", result.GetConnector().GetCompute())
+	}
+}
+
+func TestAComputeOutsideTheVocabularyIsRefusedBeforeTheProviderSeesIt(t *testing.T) {
+	held := &connectorHost{Full: fake.Full{Provider: fake.NewProvider(fake.Options{})}}
+	client := connectorServing(t, held)
+
+	err := closed(client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
+		Binary: []byte("#!/bin/sh\n"), Version: "0.4.1", ConfigJson: []byte(`{"console":"https://ocel.app"}`),
+		Compute: "vm",
+	}))
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("InstallConnector() naming a compute outside the wire pin = %v, want invalid argument", err)
+	}
+	if held.install.Version != "" {
+		t.Error("the provider was handed an install naming a compute the wire does not admit")
 	}
 }

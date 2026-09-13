@@ -1,6 +1,8 @@
 package bootstrap
 
 import (
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+
 	"context"
 	"maps"
 	"path"
@@ -405,7 +407,7 @@ func TestCheckDeployed(t *testing.T) {
 					Present:   true,
 					Schema:    3,
 					Digest:    "written-digest",
-					Intended:  TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction)),
+					Intended:  cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction)),
 					WrittenBy: "1.4.0",
 				},
 				{Name: coreStackName + "-" + FeatureISR, Feature: FeatureISR},
@@ -498,7 +500,7 @@ func TestCheckDeployed(t *testing.T) {
 
 	t.Run("a stack written from this build reads as current", func(t *testing.T) {
 		api := stubDescriber{coreStackName: outputs(map[string]string{outputInfraClass: ClassProduction}).
-			stamped(Stamp{Schema: RequiredSchema, Digest: TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction))})}
+			stamped(Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction))})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {
@@ -636,11 +638,11 @@ func TestAssetBucketGrantsCloudFrontRead(t *testing.T) {
 
 func TestStackWaitersPollFarSoonerThanTheSDKDefault(t *testing.T) {
 	create := cloudformation.StackCreateCompleteWaiterOptions{}
-	stackCreateCadence(&create)
+	cfn.CreateCadence(&create)
 	update := cloudformation.StackUpdateCompleteWaiterOptions{}
-	stackUpdateCadence(&update)
+	cfn.UpdateCadence(&update)
 	removal := cloudformation.StackDeleteCompleteWaiterOptions{}
-	stackDeleteCadence(&removal)
+	cfn.DeleteCadence(&removal)
 
 	cadences := map[string][2]time.Duration{
 		"create": {create.MinDelay, create.MaxDelay},

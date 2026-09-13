@@ -12,6 +12,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
 var healPrincipals = map[string]bool{
@@ -45,7 +46,7 @@ func restampOnly(c cfntypes.ResourceChange) bool {
 		len(c.Scope) == 1 && c.Scope[0] == cfntypes.ResourceAttributeTags
 }
 
-func healable(ns Namespace) changeReview {
+func healable(ns Namespace) cfn.ChangeReview {
 	return func(stackName string, changes []cfntypes.ResourceChange) error {
 		return healableChange(ns, stackName, changes)
 	}
@@ -76,7 +77,7 @@ func healableChange(ns Namespace, stackName string, changes []cfntypes.ResourceC
 	return nil
 }
 
-func admitReplacements(ns Namespace, accept bool, log func(string)) changeReview {
+func admitReplacements(ns Namespace, accept bool, log func(string)) cfn.ChangeReview {
 	return func(stackName string, changes []cfntypes.ResourceChange) error {
 		var replaced []string
 		for _, c := range changes {
@@ -185,7 +186,7 @@ func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale
 		return false, fmt.Errorf("this provider has no feature named %q", stale.Feature)
 	}
 
-	current, err := describeStack(ctx, apis.CFN, stale.Name)
+	current, err := cfn.DescribeStack(ctx, apis.CFN, stale.Name)
 	if err != nil || current == nil {
 		return false, err
 	}
@@ -204,17 +205,17 @@ func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale
 	if err != nil {
 		return false, err
 	}
-	tags := stampTags(ns, Stamp{Schema: RequiredSchema, Digest: TemplateDigest(stack.body), WrittenBy: writer.String()})
+	tags := stampTags(ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(stack.body), WrittenBy: writer.String()})
 	capabilities := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
-	if err := updateCFNStack(ctx, apis.CFN, ns, stale.Name, stack.body, stack.params, capabilities, tags, healable(ns)); err != nil {
+	if err := cfn.Update(ctx, apis.CFN, ns, stale.Name, stack.body, stack.params, capabilities, tags, healable(ns)); err != nil {
 		return false, err
 	}
 	log(fmt.Sprintf("refreshed %s", stale.Name))
 	return true, nil
 }
 
-func waitOutRun(ctx context.Context, cfn CFNAPI, stale StackStamp, log func(string)) error {
-	settled, err := settleStack(ctx, cfn, stale.Name, log)
+func waitOutRun(ctx context.Context, stacks cfn.API, stale StackStamp, log func(string)) error {
+	settled, err := settleStack(ctx, stacks, stale.Name, log)
 	if err != nil {
 		return err
 	}
@@ -222,7 +223,7 @@ func waitOutRun(ctx context.Context, cfn CFNAPI, stale StackStamp, log func(stri
 		log(fmt.Sprintf("%s is still being written by another run, and this deploy runs against it as it stands", stale.Name))
 		return nil
 	}
-	stack, err := describeStack(ctx, cfn, stale.Name)
+	stack, err := cfn.DescribeStack(ctx, stacks, stale.Name)
 	if err != nil {
 		return err
 	}
@@ -235,9 +236,9 @@ func waitOutRun(ctx context.Context, cfn CFNAPI, stale StackStamp, log func(stri
 
 const settleAttempts = 6
 
-func settleStack(ctx context.Context, cfn CFNAPI, stackName string, log func(string)) (bool, error) {
+func settleStack(ctx context.Context, stacks cfn.API, stackName string, log func(string)) (bool, error) {
 	for attempt := 0; ; attempt++ {
-		stack, err := describeStack(ctx, cfn, stackName)
+		stack, err := cfn.DescribeStack(ctx, stacks, stackName)
 		if err != nil {
 			return false, err
 		}
@@ -248,7 +249,7 @@ func settleStack(ctx context.Context, cfn CFNAPI, stackName string, log func(str
 			return false, nil
 		}
 		log(fmt.Sprintf("%s is %s under another run; look %d of %d before this deploy stops waiting on it", stackName, stack.StackStatus, attempt+1, settleAttempts))
-		if err := holdBefore(ctx, changeSetDelay(attempt)); err != nil {
+		if err := cfn.HoldBefore(ctx, cfn.ChangeSetDelay(attempt)); err != nil {
 			return false, err
 		}
 	}

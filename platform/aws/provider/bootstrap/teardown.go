@@ -1,26 +1,19 @@
 package bootstrap
 
 import (
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
-	smithy "github.com/aws/smithy-go"
 )
-
-type CFNTeardownAPI interface {
-	CFNDescriber
-	DeleteStack(ctx context.Context, in *cloudformation.DeleteStackInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error)
-}
 
 type IAMKeyAPI interface {
 	ListAccessKeys(ctx context.Context, in *iam.ListAccessKeysInput, optFns ...func(*iam.Options)) (*iam.ListAccessKeysOutput, error)
@@ -37,16 +30,11 @@ type IAMTeardownAPI interface {
 	IAMBoundaryAPI
 }
 
-type BucketEmptierAPI interface {
-	ListObjectVersions(ctx context.Context, in *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error)
-	DeleteObjects(ctx context.Context, in *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
-}
-
 type TeardownAPIs struct {
-	CFN     CFNTeardownAPI
+	CFN     cfn.TeardownAPI
 	SSM     SSMAPI
 	IAM     IAMTeardownAPI
-	Buckets BucketEmptierAPI
+	Buckets cfn.BucketEmptierAPI
 }
 
 func SiblingClassOf(class string) (string, error) {
@@ -76,7 +64,7 @@ func ClassParamNames(ns Namespace, class string) ([]string, error) {
 	return append(params, secret), nil
 }
 
-func PassphraseHeldBySibling(ctx context.Context, api CFNDescriber, ns Namespace, class string) (bool, error) {
+func PassphraseHeldBySibling(ctx context.Context, api cfn.Describer, ns Namespace, class string) (bool, error) {
 	sibling, err := SiblingClassOf(class)
 	if err != nil {
 		return false, err
@@ -85,7 +73,7 @@ func PassphraseHeldBySibling(ctx context.Context, api CFNDescriber, ns Namespace
 	if err != nil {
 		return false, err
 	}
-	out, err := stackOutputs(ctx, api, stackName)
+	out, err := cfn.StackOutputs(ctx, api, stackName)
 	if err != nil {
 		return false, err
 	}
@@ -112,21 +100,21 @@ func FeatureDeleteOrder(names []string) ([]string, error) {
 	return out, nil
 }
 
-func deleteFeatureStacks(ctx context.Context, cfn CFNTeardownAPI, ns Namespace, class string, names []string, log func(string)) error {
+func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, class string, names []string, log func(string)) error {
 	order, err := FeatureDeleteOrder(names)
 	if err != nil {
 		return err
 	}
 	for _, name := range order {
 		stackName := ns.FeatureStackName(name, class)
-		out, err := stackOutputs(ctx, cfn, stackName)
+		out, err := cfn.StackOutputs(ctx, stacks, stackName)
 		if err != nil {
 			return err
 		}
 		if out == nil {
 			continue
 		}
-		if err := deleteCFNStack(ctx, cfn, stackName); err != nil {
+		if err := cfn.Delete(ctx, stacks, stackName); err != nil {
 			return err
 		}
 		if log != nil {
@@ -172,7 +160,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 				continue
 			}
 			report(progress, fmt.Sprintf("Emptying %s", bucket))
-			if err := emptyBucket(ctx, apis.Buckets, bucket); err != nil {
+			if err := cfn.EmptyBucket(ctx, apis.Buckets, bucket); err != nil {
 				return err
 			}
 		}
@@ -202,7 +190,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 		}
 
 		report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", stackName))
-		if err := deleteCFNStack(ctx, apis.CFN, stackName); err != nil {
+		if err := cfn.Delete(ctx, apis.CFN, stackName); err != nil {
 			return err
 		}
 	} else {
@@ -302,91 +290,4 @@ func releaseAppBoundary(ctx context.Context, iamClient IAMBoundaryAPI, policyARN
 		}
 		marker = out.Marker
 	}
-}
-
-const deleteBatchSize = 1000
-
-func emptyBucket(ctx context.Context, api BucketEmptierAPI, bucket string) error {
-	var keyMarker, versionMarker *string
-	for {
-		out, err := api.ListObjectVersions(ctx, &s3.ListObjectVersionsInput{
-			Bucket:          aws.String(bucket),
-			KeyMarker:       keyMarker,
-			VersionIdMarker: versionMarker,
-			MaxKeys:         aws.Int32(deleteBatchSize),
-		})
-		if err != nil {
-			if bucketGone(err) {
-				return nil
-			}
-			return fmt.Errorf("list %s: %w", bucket, err)
-		}
-		ids := make([]s3types.ObjectIdentifier, 0, len(out.Versions)+len(out.DeleteMarkers))
-		for _, v := range out.Versions {
-			ids = append(ids, s3types.ObjectIdentifier{Key: v.Key, VersionId: v.VersionId})
-		}
-		for _, m := range out.DeleteMarkers {
-			ids = append(ids, s3types.ObjectIdentifier{Key: m.Key, VersionId: m.VersionId})
-		}
-		if len(ids) > 0 {
-			deleted, err := api.DeleteObjects(ctx, &s3.DeleteObjectsInput{
-				Bucket: aws.String(bucket),
-				Delete: &s3types.Delete{Objects: ids, Quiet: aws.Bool(true)},
-			})
-			if err != nil {
-				if bucketGone(err) {
-					return nil
-				}
-				return fmt.Errorf("delete objects in %s: %w", bucket, err)
-			}
-			if err := refusedObjects(bucket, deleted.Errors); err != nil {
-				return err
-			}
-		}
-		if out.IsTruncated == nil || !*out.IsTruncated {
-			return nil
-		}
-		keyMarker, versionMarker = out.NextKeyMarker, out.NextVersionIdMarker
-	}
-}
-
-func bucketGone(err error) bool {
-	var missing *s3types.NoSuchBucket
-	if errors.As(err, &missing) {
-		return true
-	}
-	var apiErr smithy.APIError
-	return errors.As(err, &apiErr) && (apiErr.ErrorCode() == "NoSuchBucket" || apiErr.ErrorCode() == "NotFound")
-}
-
-const refusedObjectsShown = 10
-
-func refusedObjects(bucket string, refused []s3types.Error) error {
-	if len(refused) == 0 {
-		return nil
-	}
-	shown := refused
-	if len(shown) > refusedObjectsShown {
-		shown = shown[:refusedObjectsShown]
-	}
-	reasons := make([]string, 0, len(shown))
-	for _, e := range shown {
-		reasons = append(reasons, fmt.Sprintf("%s: %s (%s)", aws.ToString(e.Key), aws.ToString(e.Message), aws.ToString(e.Code)))
-	}
-	more := ""
-	if len(refused) > len(shown) {
-		more = fmt.Sprintf(" (and %d more)", len(refused)-len(shown))
-	}
-	return fmt.Errorf("empty %s: S3 refused %d object(s): %s%s", bucket, len(refused), strings.Join(reasons, "; "), more)
-}
-
-func deleteCFNStack(ctx context.Context, cfn CFNTeardownAPI, stackName string) error {
-	if _, err := cfn.DeleteStack(ctx, &cloudformation.DeleteStackInput{StackName: aws.String(stackName)}); err != nil {
-		return fmt.Errorf("delete %s stack: %w", stackName, err)
-	}
-	w := cloudformation.NewStackDeleteCompleteWaiter(cfn, stackDeleteCadence)
-	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, stackWaitTimeout); err != nil {
-		return fmt.Errorf("wait for %s delete: %w", stackName, err)
-	}
-	return nil
 }

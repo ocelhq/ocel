@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
 func NameStacks(ns Namespace, described providerkit.Bootstrap) providerkit.Bootstrap {
@@ -29,7 +30,7 @@ func NameStacks(ns Namespace, described providerkit.Bootstrap) providerkit.Boots
 
 const planFanOut = 4
 
-func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, req Request, groups []providerkit.ChangeGroup) ([]providerkit.ChangeGroup, error) {
+func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request, groups []providerkit.ChangeGroup) ([]providerkit.ChangeGroup, error) {
 	target, err := bootstrapFor(read.ns, read.class)
 	if err != nil {
 		return nil, err
@@ -68,18 +69,18 @@ func PlanChanges(ctx context.Context, cfn CFNAPI, read Reading, req Request, gro
 			group.Changes = templateChanges(stack.body, group.Action)
 			planned[i] = group
 		case group.Action == providerkit.ActionDelete:
-			plan(func() { planned[i] = planDelete(ctx, cfn, group, stack.body) })
+			plan(func() { planned[i] = planDelete(ctx, stacks, group, stack.body) })
 		case group.Action == providerkit.ActionUpdate:
-			plan(func() { planned[i] = planUpdate(ctx, cfn, read.ns, group, stack, req.Writer) })
+			plan(func() { planned[i] = planUpdate(ctx, stacks, read.ns, group, stack, req.Writer) })
 		default:
 			planned[i] = group
 		}
 	}
 	work.Wait()
-	return append(planned, planRuntimeLayers(ctx, cfn, read, req)), nil
+	return append(planned, planRuntimeLayers(ctx, stacks, read, req)), nil
 }
 
-func PlanRemoval(ctx context.Context, cfn CFNAPI, read Reading) ([]providerkit.ChangeGroup, error) {
+func PlanRemoval(ctx context.Context, stacks cfn.API, read Reading) ([]providerkit.ChangeGroup, error) {
 	if !read.Deployed.Present {
 		return nil, nil
 	}
@@ -104,7 +105,7 @@ func PlanRemoval(ctx context.Context, cfn CFNAPI, read Reading) ([]providerkit.C
 	groups := make([]providerkit.ChangeGroup, 0, len(order)+2)
 	for _, feature := range append(order, "") {
 		if feature == "" {
-			groups = append(groups, removeRuntimeLayers(ctx, cfn, read))
+			groups = append(groups, removeRuntimeLayers(ctx, stacks, read))
 		}
 		name := coreStack
 		if feature != "" {
@@ -125,7 +126,7 @@ func PlanRemoval(ctx context.Context, cfn CFNAPI, read Reading) ([]providerkit.C
 			varsKey:        broughtVarsKey(read.Deployed.Outputs),
 		})
 		if ok {
-			group = noteStranded(planDelete(ctx, cfn, group, stack.body))
+			group = noteStranded(planDelete(ctx, stacks, group, stack.body))
 		}
 		groups = append(groups, group)
 	}
@@ -168,9 +169,9 @@ func renderGroup(target spec, feature string, in featureInputs) (featureStack, b
 	return f.planned(in), true
 }
 
-func planUpdate(ctx context.Context, cfn CFNAPI, ns Namespace, group providerkit.ChangeGroup, stack featureStack, writer providerkit.Writer) providerkit.ChangeGroup {
-	tags := stampTags(ns, Stamp{Schema: RequiredSchema, Digest: TemplateDigest(stack.body), WrittenBy: writer.String()})
-	id, changes, err := planCFNStack(ctx, cfn, ns, group.Name, stack.body, stack.params,
+func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, group providerkit.ChangeGroup, stack featureStack, writer providerkit.Writer) providerkit.ChangeGroup {
+	tags := stampTags(ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(stack.body), WrittenBy: writer.String()})
+	id, changes, err := cfn.Plan(ctx, stacks, ns, group.Name, stack.body, stack.params,
 		[]cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}, tags)
 	if err != nil {
 		group.Reason = providerkit.WithoutDetail(group.Reason)
@@ -180,15 +181,15 @@ func planUpdate(ctx context.Context, cfn CFNAPI, ns Namespace, group providerkit
 		group.Reason = "version stamp is behind; no resource changes"
 		return group
 	}
-	discardChangeSet(ctx, cfn, id)
+	cfn.DiscardChangeSet(ctx, stacks, id)
 	if group.Changes = resourceChanges(changes); len(group.Changes) == 0 {
 		group.Reason = providerkit.WithoutDetail(group.Reason)
 	}
 	return group
 }
 
-func planDelete(ctx context.Context, cfn CFNAPI, group providerkit.ChangeGroup, body string) providerkit.ChangeGroup {
-	standing, err := stackResources(ctx, cfn, group.Name)
+func planDelete(ctx context.Context, stacks cfn.API, group providerkit.ChangeGroup, body string) providerkit.ChangeGroup {
+	standing, err := stackResources(ctx, stacks, group.Name)
 	if err != nil {
 		group.Changes = templateChanges(body, providerkit.ActionDelete)
 		group.Reason = providerkit.WithoutDetail(group.Reason)
@@ -205,11 +206,11 @@ func planDelete(ctx context.Context, cfn CFNAPI, group providerkit.ChangeGroup, 
 	return group
 }
 
-func stackResources(ctx context.Context, cfn CFNAPI, stackName string) ([]templateResource, error) {
+func stackResources(ctx context.Context, stacks cfn.API, stackName string) ([]templateResource, error) {
 	var out []templateResource
 	var token *string
 	for {
-		page, err := cfn.ListStackResources(ctx, &cloudformation.ListStackResourcesInput{
+		page, err := stacks.ListStackResources(ctx, &cloudformation.ListStackResourcesInput{
 			StackName: aws.String(stackName),
 			NextToken: token,
 		})

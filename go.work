@@ -16,6 +16,7 @@ use (
 	./platform/aws/runtime
 	./platform/edge/cloudflare/deploy
 	./platform/edge/contract
+	./platform/gcp/connector
 	./platform/gcp/provider
 	./platform/vps/connector
 	./platform/vps/provider

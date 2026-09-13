@@ -230,7 +230,7 @@ func TestNoTierMintsARoleThatCanOutgrowItsBoundary(t *testing.T) {
 					continue
 				}
 				for _, resource := range stringsOf(t, statement.Resource, "Resource") {
-					if resource == defaultNamespace.scopedARNs().bootstrapRole {
+					if resource == defaultNamespace.ScopedARNs().bootstrapRole {
 						continue
 					}
 					if !boundaryScopes(statement.Condition) {
@@ -294,7 +294,7 @@ func TestDeployTierWithholdsWhatDefinesTheBootstrapTier(t *testing.T) {
 
 func TestDeployTierPublishesTheRuntimeStackAndNoOtherStack(t *testing.T) {
 	grants := grantsOf(t, mustRender(t, DeployCredentialPermissions))
-	r := defaultNamespace.scopedARNs()
+	r := defaultNamespace.ScopedARNs()
 	unconditional := conditionJSON(t, nil)
 
 	for _, action := range []string{
@@ -349,11 +349,11 @@ func TestDeployTierOwnsTheLogGroupsItCreates(t *testing.T) {
 func TestEveryTierListsLogGroupsOnTheOnlyResourceAWSAccepts(t *testing.T) {
 	for tier, document := range bothTiers(t) {
 		grants := grantsOf(t, document)
-		if !grants[grant{action: "logs:DescribeLogGroups", resource: unscopedResource, condition: conditionJSON(t, nil)}] {
-			t.Errorf("the %s tier does not grant logs:DescribeLogGroups on %q, the only resource IAM evaluates it against, so CloudFormation cannot read back a log group it manages", tier, unscopedResource)
+		if !grants[grant{action: "logs:DescribeLogGroups", resource: UnscopedResource, condition: conditionJSON(t, nil)}] {
+			t.Errorf("the %s tier does not grant logs:DescribeLogGroups on %q, the only resource IAM evaluates it against, so CloudFormation cannot read back a log group it manages", tier, UnscopedResource)
 		}
 		for g := range grants {
-			if g.action == "logs:DescribeLogGroups" && g.resource != unscopedResource {
+			if g.action == "logs:DescribeLogGroups" && g.resource != UnscopedResource {
 				t.Errorf("the %s tier grants logs:DescribeLogGroups on %s, an ARN IAM never matches for an action with no resource type", tier, g.resource)
 			}
 		}
@@ -388,7 +388,7 @@ func TestOnlyTheEdgeUserIsMintedAndItCarriesNoManagedPolicy(t *testing.T) {
 			if !strings.HasPrefix(g.action, "iam:") || !strings.Contains(g.action, "User") && !strings.Contains(g.action, "AccessKey") {
 				continue
 			}
-			if g.resource != defaultNamespace.scopedARNs().edgeUser {
+			if g.resource != defaultNamespace.ScopedARNs().edgeUser {
 				t.Errorf("the %s tier grants %s on %q, which is not the edge user", tier, g.action, g.resource)
 			}
 		}
@@ -458,7 +458,7 @@ func TestNoTierTagsAKeyItDoesNotAlreadyOwn(t *testing.T) {
 			if len(tagging) == 0 {
 				continue
 			}
-			if !conditionNames(statement.Condition, "aws:ResourceTag/"+varsKeyComponentTagKey) {
+			if !conditionNames(statement.Condition, "aws:ResourceTag/"+VarsKeyComponentTagKey) {
 				t.Errorf(
 					"the %s tier grants %s on %s with no aws:ResourceTag condition, so it may tag a key ocel never made and then open what that key seals",
 					tier, strings.Join(tagging, ", "), strings.Join(stringsOf(t, statement.Resource, "Resource"), ", "),
@@ -517,7 +517,7 @@ func TestBootstrapTierOwnsOnlyTheLogGroupsItsStacksDeclare(t *testing.T) {
 		}
 		switch g.resource {
 		case scope, appLogGroupARN, functionLogGroupARN:
-		case unscopedResource:
+		case UnscopedResource:
 			if g.action != "logs:DescribeLogGroups" {
 				t.Errorf("the bootstrap tier grants %s on %q, which reaches every log group in the account", g.action, g.resource)
 			}

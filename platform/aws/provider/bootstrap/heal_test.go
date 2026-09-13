@@ -1,6 +1,8 @@
 package bootstrap
 
 import (
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+
 	"context"
 	"strings"
 	"sync"
@@ -220,36 +222,36 @@ func (l *healLog) says(substr string) bool {
 
 func standingBootstrap(t *testing.T) (*fakeCFN, APIs) {
 	t.Helper()
-	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	frontedBy(t, &fakeEdge{kind: "cloudflare"})
-	apis := apisOf(cfn, ssmc, iamc, preloadedStore())
+	apis := apisOf(stacks, ssmc, iamc, preloadedStore())
 	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	return cfn, apis
+	return stacks, apis
 }
 
 func TestChangeSets(t *testing.T) {
 	t.Run("a bootstrap that has not moved plans nothing and leaves nothing behind", func(t *testing.T) {
-		cfn, apis := standingBootstrap(t)
-		before := cfn.updates
+		stacks, apis := standingBootstrap(t)
+		before := stacks.updates
 
 		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		if cfn.updates != before {
-			t.Errorf("a re-run applied %d change sets, want none: an unchanged bootstrap is left alone", cfn.updates-before)
+		if stacks.updates != before {
+			t.Errorf("a re-run applied %d change sets, want none: an unchanged bootstrap is left alone", stacks.updates-before)
 		}
-		if left := cfn.leftBehind(); len(left) != 0 {
+		if left := stacks.leftBehind(); len(left) != 0 {
 			t.Errorf("change sets %v were neither applied nor deleted", left)
 		}
 	})
 
 	t.Run("a replacement stops a bootstrap that was not told to accept one", func(t *testing.T) {
-		cfn, apis := standingBootstrap(t)
+		stacks, apis := standingBootstrap(t)
 		stack := isrStack(ClassProduction)
-		cfn.fallBehind(stack)
-		cfn.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
+		stacks.fallBehind(stack)
+		stacks.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
 
 		err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil, nil)
 		if err == nil {
@@ -258,23 +260,23 @@ func TestChangeSets(t *testing.T) {
 		if !strings.Contains(err.Error(), "RevalidateQueue") {
 			t.Errorf("refusal = %q, want it to name RevalidateQueue", err)
 		}
-		if left := cfn.leftBehind(); len(left) != 0 {
+		if left := stacks.leftBehind(); len(left) != 0 {
 			t.Errorf("change sets %v were neither applied nor deleted", left)
 		}
 	})
 
 	t.Run("accepting replacements writes the stack", func(t *testing.T) {
-		cfn, apis := standingBootstrap(t)
+		stacks, apis := standingBootstrap(t)
 		stack := isrStack(ClassProduction)
-		cfn.fallBehind(stack)
-		cfn.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
+		stacks.fallBehind(stack)
+		stacks.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
 
 		req := everything()
 		req.AcceptReplacements = true
 		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		if cfn.template(stack) == behindTemplate {
+		if stacks.template(stack) == behindTemplate {
 			t.Error("the stack was left at the older template even though replacements were accepted")
 		}
 	})
@@ -284,9 +286,9 @@ func TestHeal(t *testing.T) {
 	all := HealRequest{Features: featureNames(), Writer: "1.4.0"}
 
 	t.Run("a required feature stack that has fallen behind is written back", func(t *testing.T) {
-		cfn, apis := standingBootstrap(t)
+		stacks, apis := standingBootstrap(t)
 		stack := isrStack(ClassProduction)
-		cfn.fallBehind(stack)
+		stacks.fallBehind(stack)
 		var log healLog
 
 		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, log.write)
@@ -296,7 +298,7 @@ func TestHeal(t *testing.T) {
 		if !healed {
 			t.Fatal("a stale feature stack was left behind")
 		}
-		if cfn.template(stack) == behindTemplate {
+		if stacks.template(stack) == behindTemplate {
 			t.Error("the stale template is still what the account carries")
 		}
 		if !log.says("refreshed " + stack) {
@@ -305,69 +307,69 @@ func TestHeal(t *testing.T) {
 	})
 
 	t.Run("core never heals", func(t *testing.T) {
-		cfn, apis := standingBootstrap(t)
-		cfn.fallBehind(coreStackName)
+		stacks, apis := standingBootstrap(t)
+		stacks.fallBehind(coreStackName)
 		var log healLog
 
 		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, log.write)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
-		if healed || cfn.template(coreStackName) != behindTemplate {
+		if healed || stacks.template(coreStackName) != behindTemplate {
 			t.Error("the bootstrap's core was rewritten by a heal; only an explicit bootstrap may write it")
 		}
 	})
 
 	t.Run("a stack this deploy does not need is left alone", func(t *testing.T) {
-		cfn, apis := standingBootstrap(t)
+		stacks, apis := standingBootstrap(t)
 		stack := optStack(ClassProduction)
-		cfn.fallBehind(stack)
+		stacks.fallBehind(stack)
 		var log healLog
 
 		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: []string{FeatureISR}, Writer: "1.4.0"}, log.write)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
-		if healed || cfn.template(stack) != behindTemplate {
+		if healed || stacks.template(stack) != behindTemplate {
 			t.Error("a feature stack no required feature names was refreshed anyway")
 		}
 	})
 
 	t.Run("a change the rule refuses leaves the stack as it stands", func(t *testing.T) {
-		cfn, apis := standingBootstrap(t)
+		stacks, apis := standingBootstrap(t)
 		stack := isrStack(ClassProduction)
-		cfn.fallBehind(stack)
-		cfn.plan(stack, change(cfntypes.ChangeActionRemove, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementFalse))
+		stacks.fallBehind(stack)
+		stacks.plan(stack, change(cfntypes.ChangeActionRemove, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementFalse))
 		var log healLog
 
 		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, log.write)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
-		if healed || cfn.template(stack) != behindTemplate {
+		if healed || stacks.template(stack) != behindTemplate {
 			t.Error("a refused change was applied anyway")
 		}
 		if !log.says("RevalidateQueue") {
 			t.Errorf("heal said %v, want it to name what stopped it", log.lines)
 		}
-		if left := cfn.leftBehind(); len(left) != 0 {
+		if left := stacks.leftBehind(); len(left) != 0 {
 			t.Errorf("change sets %v were neither applied nor deleted", left)
 		}
 	})
 
 	t.Run("a stack another run is writing is left to that run", func(t *testing.T) {
 		holdNothing(t)
-		cfn, apis := standingBootstrap(t)
+		stacks, apis := standingBootstrap(t)
 		stack := isrStack(ClassProduction)
-		cfn.fallBehind(stack)
-		cfn.busy(stack, changeSetAttempts*2)
+		stacks.fallBehind(stack)
+		stacks.busy(stack, cfn.ChangeSetAttempts*2)
 		var log healLog
 
 		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, log.write)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
-		if healed || cfn.template(stack) != behindTemplate {
+		if healed || stacks.template(stack) != behindTemplate {
 			t.Error("a stack another run was still writing was written over")
 		}
 		if !log.says("still being written") {
@@ -377,17 +379,17 @@ func TestHeal(t *testing.T) {
 
 	t.Run("a stack that settles still behind is left to whoever wrote it", func(t *testing.T) {
 		holdNothing(t)
-		cfn, apis := standingBootstrap(t)
+		stacks, apis := standingBootstrap(t)
 		stack := isrStack(ClassProduction)
-		cfn.fallBehind(stack)
-		cfn.busy(stack, 3)
+		stacks.fallBehind(stack)
+		stacks.busy(stack, 3)
 		var log healLog
 
 		healed, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, all, log.write)
 		if err != nil {
 			t.Fatalf("Heal: %v", err)
 		}
-		if healed || cfn.template(stack) != behindTemplate {
+		if healed || stacks.template(stack) != behindTemplate {
 			t.Error("a stack that had just been written by another run was written over")
 		}
 		if !log.says("still behind") {

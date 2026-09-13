@@ -1,4 +1,4 @@
-package gcp
+package ports
 
 import (
 	"context"
@@ -25,23 +25,23 @@ const (
 	revisionTokenSize = 16
 )
 
-type records struct {
-	clients *clients
+type Records struct {
+	Clients *Clients
 }
 
-func (r records) collection(name providerkit.RecordName) (*firestore.CollectionRef, providerkit.Class, error) {
+func (r Records) collection(name providerkit.RecordName) (*firestore.CollectionRef, providerkit.Class, error) {
 	class, named := providerkit.ClassOf(name)
 	if !named {
-		return nil, "", classless(name)
+		return nil, "", Classless(name)
 	}
-	client, err := r.clients.Firestore()
+	client, err := r.Clients.Firestore()
 	if err != nil {
 		return nil, class, err
 	}
 	return client.Collection(recordCollection + string(class)), class, nil
 }
 
-func (r records) absent(ctx context.Context, collection *firestore.CollectionRef, class providerkit.Class) error {
+func (r Records) absent(ctx context.Context, collection *firestore.CollectionRef, class providerkit.Class) error {
 	documents := collection.Select().Limit(1).Documents(ctx)
 	defer documents.Stop()
 	if _, err := documents.Next(); status.Code(err) == codes.NotFound {
@@ -50,7 +50,7 @@ func (r records) absent(ctx context.Context, collection *firestore.CollectionRef
 	return providerkit.ErrNoRecord
 }
 
-func (r records) Read(ctx context.Context, name providerkit.RecordName) (providerkit.Record, error) {
+func (r Records) Read(ctx context.Context, name providerkit.RecordName) (providerkit.Record, error) {
 	collection, class, err := r.collection(name)
 	if err != nil {
 		return providerkit.Record{}, err
@@ -65,7 +65,7 @@ func (r records) Read(ctx context.Context, name providerkit.RecordName) (provide
 	return recordOf(name, snapshot), nil
 }
 
-func (r records) Write(ctx context.Context, record providerkit.Record) (providerkit.Revision, error) {
+func (r Records) Write(ctx context.Context, record providerkit.Record) (providerkit.Revision, error) {
 	collection, class, err := r.collection(record.Name)
 	if err != nil {
 		return "", err
@@ -74,7 +74,7 @@ func (r records) Write(ctx context.Context, record providerkit.Record) (provider
 	if err != nil {
 		return "", err
 	}
-	client, err := r.clients.Firestore()
+	client, err := r.Clients.Firestore()
 	if err != nil {
 		return "", err
 	}
@@ -87,7 +87,7 @@ func (r records) Write(ctx context.Context, record providerkit.Record) (provider
 	return next, nil
 }
 
-func (r records) WritePair(ctx context.Context, first, second providerkit.Record) error {
+func (r Records) WritePair(ctx context.Context, first, second providerkit.Record) error {
 	collection, class, err := r.collection(first.Name)
 	if err != nil {
 		return err
@@ -106,7 +106,7 @@ func (r records) WritePair(ctx context.Context, first, second providerkit.Record
 			return err
 		}
 	}
-	client, err := r.clients.Firestore()
+	client, err := r.Clients.Firestore()
 	if err != nil {
 		return err
 	}
@@ -130,12 +130,12 @@ func (r records) WritePair(ctx context.Context, first, second providerkit.Record
 	return nil
 }
 
-func (r records) Remove(ctx context.Context, name providerkit.RecordName, expected providerkit.Revision) error {
+func (r Records) Remove(ctx context.Context, name providerkit.RecordName, expected providerkit.Revision) error {
 	collection, class, err := r.collection(name)
 	if err != nil {
 		return err
 	}
-	client, err := r.clients.Firestore()
+	client, err := r.Clients.Firestore()
 	if err != nil {
 		return err
 	}
@@ -159,7 +159,7 @@ func (r records) Remove(ctx context.Context, name providerkit.RecordName, expect
 	return nil
 }
 
-func (r records) List(ctx context.Context, under providerkit.RecordName) ([]providerkit.Record, error) {
+func (r Records) List(ctx context.Context, under providerkit.RecordName) ([]providerkit.Record, error) {
 	collection, class, err := r.collection(under)
 	if err != nil {
 		return nil, err
@@ -237,7 +237,7 @@ func revisionHeld(tx *firestore.Transaction, reference *firestore.DocumentRef) (
 	return revisionOf(snapshot), true, nil
 }
 
-func (r records) writeFailed(name providerkit.RecordName, class providerkit.Class, err error) error {
+func (r Records) writeFailed(name providerkit.RecordName, class providerkit.Class, err error) error {
 	if errors.Is(err, providerkit.ErrStale) || errors.Is(err, providerkit.ErrNoRecord) {
 		return err
 	}
@@ -247,10 +247,10 @@ func (r records) writeFailed(name providerkit.RecordName, class providerkit.Clas
 	return fmt.Errorf("write %s: %w", name, err)
 }
 
-func (r records) unbootstrapped(class providerkit.Class) error {
+func (r Records) unbootstrapped(class providerkit.Class) error {
 	return providerkit.Refuse(providerkit.CodeNotReady,
 		"this project keeps no %q Firestore database, so there is nowhere to hold a record.\nRun `%s` to create it, then try again",
-		r.clients.Database(), providerkit.BootstrapCommand(class))
+		r.Clients.Database(), providerkit.BootstrapCommand(class))
 }
 
 func recordOf(name providerkit.RecordName, snapshot *firestore.DocumentSnapshot) providerkit.Record {

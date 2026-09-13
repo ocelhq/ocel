@@ -1,4 +1,4 @@
-import { CONNECTOR_FORMS, CONNECTOR_REACHES, CONNECTOR_VENDORS } from "@console/db/schema";
+import { COMPUTE_KINDS, CONNECTOR_REACHES, CONNECTOR_VENDORS } from "@console/db/schema";
 import { z } from "zod";
 
 const targetSchema = z
@@ -10,7 +10,6 @@ const targetSchema = z
 export const upsertConnectorSchema = z.object({
   target: targetSchema,
   vendor: z.enum(CONNECTOR_VENDORS),
-  form: z.enum(CONNECTOR_FORMS),
   reach: z.enum(CONNECTOR_REACHES).default("dial"),
 });
 
@@ -19,8 +18,12 @@ export const patchConnectorSchema = z
     url: z.url().max(2048).nullable().optional(),
     publicKey: z.string().min(1).max(256).nullable().optional(),
     tlsPin: z.string().min(1).max(256).nullable().optional(),
+    compute: z.enum(COMPUTE_KINDS).optional(),
   })
-  .refine((body) => Object.keys(body).length > 0, "Name at least one of url, publicKey or tlsPin");
+  .refine(
+    (body) => Object.keys(body).length > 0,
+    "Name at least one of url, publicKey, tlsPin or compute",
+  );
 
 export const heartbeatSchema = z.object({
   version: z.string().min(1).max(64),

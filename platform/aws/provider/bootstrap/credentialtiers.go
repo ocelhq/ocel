@@ -14,17 +14,17 @@ const (
 	managedByTagKey     = "ocel:managed-by"
 	managedByTagPattern = "ocel-cli/*"
 
-	lambdaServicePrincipal = "lambda.amazonaws.com"
+	LambdaServicePrincipal = "lambda.amazonaws.com"
 
 	ecsTasksPrincipal = "ecs-tasks.amazonaws.com"
 
-	lambdaBasicExecutionPolicyARN = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+	LambdaBasicExecutionPolicyARN = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 	lambdaVPCAccessPolicyARN      = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 	ecsTaskExecutionPolicyARN     = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 )
 
 const (
-	anyKeyARN = "arn:aws:kms:*:*:key/*"
+	AnyKeyARN = "arn:aws:kms:*:*:key/*"
 
 	parameterARNPrefix = "arn:aws:ssm:*:*:parameter"
 
@@ -53,15 +53,15 @@ const (
 
 	bootstrapEventSourceARN = "arn:aws:lambda:*:*:event-source-mapping:*"
 
-	unscopedResource = "*"
+	UnscopedResource = "*"
 )
 
-type scopedARNs struct {
+type ScopedARNs struct {
 	bootstrapBucket    string
 	bootstrapObject    string
-	bootstrapTable     string
-	bootstrapTablePart string
-	bootstrapStack     string
+	BootstrapTable     string
+	BootstrapTablePart string
+	BootstrapStack     string
 	bootstrapChangeSet string
 	runtimeStack       string
 	runtimeChangeSet   string
@@ -80,12 +80,12 @@ type scopedARNs struct {
 	anyParam           string
 }
 
-func (n Namespace) scopedARNs() scopedARNs {
+func (n Namespace) ScopedARNs() ScopedARNs {
 	core := n.CoreStackName()
-	a := scopedARNs{
+	a := ScopedARNs{
 		bootstrapBucket:    "arn:aws:s3:::" + core + "*",
-		bootstrapTable:     "arn:aws:dynamodb:*:*:table/" + core + "*",
-		bootstrapStack:     "arn:aws:cloudformation:*:*:stack/" + core + "*/*",
+		BootstrapTable:     "arn:aws:dynamodb:*:*:table/" + core + "*",
+		BootstrapStack:     "arn:aws:cloudformation:*:*:stack/" + core + "*/*",
 		bootstrapChangeSet: "arn:aws:cloudformation:*:*:changeSet/" + string(n) + "-*/*",
 		runtimeStack:       "arn:aws:cloudformation:*:*:stack/" + core + "-runtime*/*",
 		runtimeChangeSet:   "arn:aws:cloudformation:*:*:changeSet/" + core + "-runtime*/*",
@@ -103,15 +103,15 @@ func (n Namespace) scopedARNs() scopedARNs {
 		anyParam:           parameterARNPrefix + n.paramRoot() + "/*",
 	}
 	a.bootstrapObject = a.bootstrapBucket + "/*"
-	a.bootstrapTablePart = a.bootstrapTable + "/*"
+	a.BootstrapTablePart = a.BootstrapTable + "/*"
 	a.stackRecord = a.stackRecordTree + "/*"
 	return a
 }
 
-type grantStatement struct {
-	actions   []string
-	resources []string
-	condition map[string]any
+type GrantStatement struct {
+	Actions   []string
+	Resources []string
+	Condition map[string]any
 }
 
 func inCallerAccount() map[string]any {
@@ -151,7 +151,7 @@ func mergeConditions(conditions ...map[string]any) map[string]any {
 
 func attachedPolicyIsAServiceRole(resourceTagged bool) map[string]any {
 	condition := map[string]any{
-		"ArnEquals": map[string]any{"iam:PolicyARN": []string{lambdaBasicExecutionPolicyARN, lambdaVPCAccessPolicyARN, ecsTaskExecutionPolicyARN}},
+		"ArnEquals": map[string]any{"iam:PolicyARN": []string{LambdaBasicExecutionPolicyARN, lambdaVPCAccessPolicyARN, ecsTaskExecutionPolicyARN}},
 	}
 	if resourceTagged {
 		condition["StringLike"] = map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagPattern}
@@ -160,7 +160,7 @@ func attachedPolicyIsAServiceRole(resourceTagged bool) map[string]any {
 }
 
 func passedToLambda(resourceTagged bool) map[string]any {
-	return passedTo(lambdaServicePrincipal, resourceTagged)
+	return passedTo(LambdaServicePrincipal, resourceTagged)
 }
 
 func passedToECSTasks() map[string]any {
@@ -199,26 +199,26 @@ func varsKeyLifecycleActions() []string {
 	}
 }
 
-func bootstrapAccess(r scopedARNs) []grantStatement {
-	return []grantStatement{
+func bootstrapAccess(r ScopedARNs) []GrantStatement {
+	return []GrantStatement{
 		{
-			actions: []string{
+			Actions: []string{
 				"s3:AbortMultipartUpload",
 				"s3:DeleteObject",
 				"s3:GetObject",
 				"s3:ListMultipartUploadParts",
 				"s3:PutObject",
 			},
-			resources: []string{r.bootstrapObject},
-			condition: inCallerAccount(),
+			Resources: []string{r.bootstrapObject},
+			Condition: inCallerAccount(),
 		},
 		{
-			actions:   []string{"s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"},
-			resources: []string{r.bootstrapBucket},
-			condition: inCallerAccount(),
+			Actions:   []string{"s3:GetBucketLocation", "s3:ListBucket", "s3:ListBucketMultipartUploads"},
+			Resources: []string{r.bootstrapBucket},
+			Condition: inCallerAccount(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"dynamodb:BatchGetItem",
 				"dynamodb:BatchWriteItem",
 				"dynamodb:DeleteItem",
@@ -228,43 +228,43 @@ func bootstrapAccess(r scopedARNs) []grantStatement {
 				"dynamodb:Query",
 				"dynamodb:UpdateItem",
 			},
-			resources: []string{r.bootstrapTable, r.bootstrapTablePart},
+			Resources: []string{r.BootstrapTable, r.BootstrapTablePart},
 		},
 		{
-			actions:   []string{"ssm:GetParameter", "ssm:GetParameters"},
-			resources: []string{r.passphraseParam, r.edgeParam, r.originParam, r.stackRecord},
+			Actions:   []string{"ssm:GetParameter", "ssm:GetParameters"},
+			Resources: []string{r.passphraseParam, r.edgeParam, r.originParam, r.stackRecord},
 		},
 		{
-			actions:   []string{"ssm:DeleteParameter", "ssm:PutParameter"},
-			resources: []string{r.stackRecord},
+			Actions:   []string{"ssm:DeleteParameter", "ssm:PutParameter"},
+			Resources: []string{r.stackRecord},
 		},
 		{
-			actions:   []string{"kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey"},
-			resources: []string{anyKeyARN},
-			condition: map[string]any{
-				"StringEquals": map[string]any{"aws:ResourceTag/" + varsKeyComponentTagKey: varsKeyComponentTagValue},
+			Actions:   []string{"kms:Decrypt", "kms:DescribeKey", "kms:Encrypt", "kms:GenerateDataKey"},
+			Resources: []string{AnyKeyARN},
+			Condition: map[string]any{
+				"StringEquals": map[string]any{"aws:ResourceTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
 			},
 		},
 		{
-			actions:   []string{"cloudformation:DescribeStacks"},
-			resources: []string{r.bootstrapStack},
+			Actions:   []string{"cloudformation:DescribeStacks"},
+			Resources: []string{r.BootstrapStack},
 		},
 		{
-			actions:   []string{"sts:GetCallerIdentity"},
-			resources: []string{unscopedResource},
+			Actions:   []string{"sts:GetCallerIdentity"},
+			Resources: []string{UnscopedResource},
 		},
 	}
 }
 
-func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
-	return []grantStatement{
+func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
+	return []GrantStatement{
 		{
-			actions:   []string{"lambda:CreateFunction"},
-			resources: []string{appFunctionARN},
-			condition: taggedOnCreate(),
+			Actions:   []string{"lambda:CreateFunction"},
+			Resources: []string{appFunctionARN},
+			Condition: taggedOnCreate(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"lambda:AddPermission",
 				"lambda:CreateFunctionUrlConfig",
 				"lambda:DeleteFunction",
@@ -283,25 +283,25 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"lambda:UpdateFunctionConfiguration",
 				"lambda:UpdateFunctionUrlConfig",
 			},
-			resources: []string{appFunctionARN},
-			condition: taggedByOcel(),
+			Resources: []string{appFunctionARN},
+			Condition: taggedByOcel(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"lambda:DeleteLayerVersion",
 				"lambda:GetLayerVersion",
 				"lambda:ListLayerVersions",
 				"lambda:PublishLayerVersion",
 			},
-			resources: []string{appLayerARN},
+			Resources: []string{appLayerARN},
 		},
 		{
-			actions:   []string{"iam:CreateRole"},
-			resources: []string{appRoleARN},
-			condition: mergeConditions(taggedOnCreate(), withinAppBoundary(ns)),
+			Actions:   []string{"iam:CreateRole"},
+			Resources: []string{appRoleARN},
+			Condition: mergeConditions(taggedOnCreate(), withinAppBoundary(ns)),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"iam:DeleteRole",
 				"iam:GetRole",
 				"iam:GetRolePolicy",
@@ -313,49 +313,49 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"iam:UntagRole",
 				"iam:UpdateRole",
 			},
-			resources: []string{appRoleARN},
-			condition: taggedByOcel(),
+			Resources: []string{appRoleARN},
+			Condition: taggedByOcel(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"iam:DeleteRolePolicy",
 				"iam:PutRolePermissionsBoundary",
 				"iam:PutRolePolicy",
 			},
-			resources: []string{appRoleARN},
-			condition: mergeConditions(taggedByOcel(), withinAppBoundary(ns)),
+			Resources: []string{appRoleARN},
+			Condition: mergeConditions(taggedByOcel(), withinAppBoundary(ns)),
 		},
 		{
-			actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
-			resources: []string{appRoleARN},
-			condition: mergeConditions(attachedPolicyIsAServiceRole(true), withinAppBoundary(ns)),
+			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
+			Resources: []string{appRoleARN},
+			Condition: mergeConditions(attachedPolicyIsAServiceRole(true), withinAppBoundary(ns)),
 		},
 		{
-			actions:   []string{"iam:PassRole"},
-			resources: []string{appRoleARN},
-			condition: passedToLambda(true),
+			Actions:   []string{"iam:PassRole"},
+			Resources: []string{appRoleARN},
+			Condition: passedToLambda(true),
 		},
 		{
-			actions:   []string{"iam:PassRole"},
-			resources: []string{appRoleARN},
-			condition: passedToECSTasks(),
+			Actions:   []string{"iam:PassRole"},
+			Resources: []string{appRoleARN},
+			Condition: passedToECSTasks(),
 		},
 		{
-			actions:   []string{"iam:CreateServiceLinkedRole"},
-			resources: []string{ecsLinkedRoleARN},
-			condition: linkedRoleFor("ecs.amazonaws.com"),
+			Actions:   []string{"iam:CreateServiceLinkedRole"},
+			Resources: []string{ecsLinkedRoleARN},
+			Condition: linkedRoleFor("ecs.amazonaws.com"),
 		},
 		{
-			actions:   []string{"iam:CreateServiceLinkedRole"},
-			resources: []string{elbLinkedRoleARN},
-			condition: linkedRoleFor("elasticloadbalancing.amazonaws.com"),
+			Actions:   []string{"iam:CreateServiceLinkedRole"},
+			Resources: []string{elbLinkedRoleARN},
+			Condition: linkedRoleFor("elasticloadbalancing.amazonaws.com"),
 		},
 		{
-			actions:   []string{"ecr:GetAuthorizationToken"},
-			resources: []string{unscopedResource},
+			Actions:   []string{"ecr:GetAuthorizationToken"},
+			Resources: []string{UnscopedResource},
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"ecr:BatchCheckLayerAvailability",
 				"ecr:BatchGetImage",
 				"ecr:CompleteLayerUpload",
@@ -369,41 +369,41 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"ecr:TagResource",
 				"ecr:UploadLayerPart",
 			},
-			resources: []string{appRepositoryARN},
-			condition: inCallerAccount(),
+			Resources: []string{appRepositoryARN},
+			Condition: inCallerAccount(),
 		},
 		{
-			actions:   []string{"ecs:CreateCluster"},
-			resources: []string{substrateClusterARN},
-			condition: taggedOnCreate(),
+			Actions:   []string{"ecs:CreateCluster"},
+			Resources: []string{substrateClusterARN},
+			Condition: taggedOnCreate(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"ecs:DeleteCluster",
 				"ecs:DescribeClusters",
 				"ecs:ListTagsForResource",
 				"ecs:TagResource",
 				"ecs:UntagResource",
 			},
-			resources: []string{substrateClusterARN},
-			condition: taggedByOcel(),
+			Resources: []string{substrateClusterARN},
+			Condition: taggedByOcel(),
 		},
 		{
-			actions:   []string{"ecs:RegisterTaskDefinition"},
-			resources: []string{unscopedResource},
-			condition: taggedOnCreate(),
+			Actions:   []string{"ecs:RegisterTaskDefinition"},
+			Resources: []string{UnscopedResource},
+			Condition: taggedOnCreate(),
 		},
 		{
-			actions:   []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition"},
-			resources: []string{unscopedResource},
+			Actions:   []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition"},
+			Resources: []string{UnscopedResource},
 		},
 		{
-			actions:   []string{"ecs:CreateService"},
-			resources: []string{substrateServiceARN},
-			condition: taggedOnCreate(),
+			Actions:   []string{"ecs:CreateService"},
+			Resources: []string{substrateServiceARN},
+			Condition: taggedOnCreate(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"ecs:DeleteService",
 				"ecs:DescribeServices",
 				"ecs:ListTagsForResource",
@@ -411,11 +411,11 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"ecs:UntagResource",
 				"ecs:UpdateService",
 			},
-			resources: []string{substrateServiceARN},
-			condition: taggedByOcel(),
+			Resources: []string{substrateServiceARN},
+			Condition: taggedByOcel(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"elasticloadbalancing:DescribeListenerAttributes",
 				"elasticloadbalancing:DescribeListeners",
 				"elasticloadbalancing:DescribeLoadBalancerAttributes",
@@ -426,15 +426,15 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"elasticloadbalancing:DescribeTargetGroups",
 				"elasticloadbalancing:DescribeTargetHealth",
 			},
-			resources: []string{unscopedResource},
+			Resources: []string{UnscopedResource},
 		},
 		{
-			actions:   []string{"elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:CreateTargetGroup"},
-			resources: []string{substrateBalancerARN, appTargetGroupARN},
-			condition: taggedOnCreate(),
+			Actions:   []string{"elasticloadbalancing:CreateLoadBalancer", "elasticloadbalancing:CreateTargetGroup"},
+			Resources: []string{substrateBalancerARN, appTargetGroupARN},
+			Condition: taggedOnCreate(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"elasticloadbalancing:AddTags",
 				"elasticloadbalancing:CreateListener",
 				"elasticloadbalancing:CreateRule",
@@ -452,21 +452,21 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"elasticloadbalancing:SetSecurityGroups",
 				"elasticloadbalancing:SetSubnets",
 			},
-			resources: []string{substrateBalancerARN, substrateListenerARN, substrateRuleARN, appTargetGroupARN},
-			condition: taggedByOcel(),
+			Resources: []string{substrateBalancerARN, substrateListenerARN, substrateRuleARN, appTargetGroupARN},
+			Condition: taggedByOcel(),
 		},
 		{
-			actions:   []string{"elasticloadbalancing:AddTags"},
-			resources: []string{substrateBalancerARN, substrateListenerARN, substrateRuleARN, appTargetGroupARN},
-			condition: taggedOnCreate(),
+			Actions:   []string{"elasticloadbalancing:AddTags"},
+			Resources: []string{substrateBalancerARN, substrateListenerARN, substrateRuleARN, appTargetGroupARN},
+			Condition: taggedOnCreate(),
 		},
 		{
-			actions:   []string{"s3:CreateBucket"},
-			resources: []string{appBucketARN},
-			condition: inCallerAccount(),
+			Actions:   []string{"s3:CreateBucket"},
+			Resources: []string{appBucketARN},
+			Condition: inCallerAccount(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"s3:DeleteBucket",
 				"s3:GetAccelerateConfiguration",
 				"s3:GetBucket*",
@@ -478,21 +478,21 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"s3:PutBucketPublicAccessBlock",
 				"s3:PutBucketTagging",
 			},
-			resources: []string{appBucketARN},
-			condition: inCallerAccount(),
+			Resources: []string{appBucketARN},
+			Condition: inCallerAccount(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"rds:AddTagsToResource",
 				"rds:CreateDBCluster",
 				"rds:CreateDBInstance",
 				"rds:CreateDBSubnetGroup",
 			},
-			resources: []string{appClusterARN, appInstanceARN, appSubnetGroupARN},
-			condition: taggedOnCreate(),
+			Resources: []string{appClusterARN, appInstanceARN, appSubnetGroupARN},
+			Condition: taggedOnCreate(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"rds:DeleteDBCluster",
 				"rds:DeleteDBInstance",
 				"rds:DeleteDBSubnetGroup",
@@ -505,11 +505,11 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"rds:ModifyDBSubnetGroup",
 				"rds:RemoveTagsFromResource",
 			},
-			resources: []string{appClusterARN, appInstanceARN, appSubnetGroupARN},
-			condition: taggedByOcel(),
+			Resources: []string{appClusterARN, appInstanceARN, appSubnetGroupARN},
+			Condition: taggedByOcel(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"ec2:DescribeManagedPrefixLists",
 				"ec2:DescribeNetworkInterfaces",
 				"ec2:DescribeSecurityGroupRules",
@@ -519,22 +519,22 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"rds:DescribeDBEngineVersions",
 				"rds:DescribeOrderableDBInstanceOptions",
 			},
-			resources: []string{unscopedResource},
+			Resources: []string{UnscopedResource},
 		},
 		{
-			actions:   []string{"ec2:CreateSecurityGroup"},
-			resources: []string{appSecurityGroupARN, appVPCARN},
-			condition: taggedOnCreate(),
+			Actions:   []string{"ec2:CreateSecurityGroup"},
+			Resources: []string{appSecurityGroupARN, appVPCARN},
+			Condition: taggedOnCreate(),
 		},
 		{
-			actions:   []string{"ec2:CreateTags"},
-			resources: []string{appSecurityGroupARN},
-			condition: map[string]any{
+			Actions:   []string{"ec2:CreateTags"},
+			Resources: []string{appSecurityGroupARN},
+			Condition: map[string]any{
 				"StringEquals": map[string]any{"ec2:CreateAction": "CreateSecurityGroup"},
 			},
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"ec2:AuthorizeSecurityGroupEgress",
 				"ec2:AuthorizeSecurityGroupIngress",
 				"ec2:DeleteSecurityGroup",
@@ -542,82 +542,82 @@ func appProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"ec2:RevokeSecurityGroupEgress",
 				"ec2:RevokeSecurityGroupIngress",
 			},
-			resources: []string{appSecurityGroupARN},
-			condition: taggedByOcel(),
+			Resources: []string{appSecurityGroupARN},
+			Condition: taggedByOcel(),
 		},
 		{
-			actions:   []string{"secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"},
-			resources: []string{appSecretARN},
+			Actions:   []string{"secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"},
+			Resources: []string{appSecretARN},
 		},
 		{
-			actions:   []string{"logs:CreateLogGroup"},
-			resources: []string{appLogGroupARN, functionLogGroupARN},
-			condition: taggedOnCreate(),
+			Actions:   []string{"logs:CreateLogGroup"},
+			Resources: []string{appLogGroupARN, functionLogGroupARN},
+			Condition: taggedOnCreate(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"logs:DeleteLogGroup",
 				"logs:ListTagsForResource",
 				"logs:PutRetentionPolicy",
 				"logs:TagResource",
 				"logs:UntagResource",
 			},
-			resources: []string{appLogGroupARN, functionLogGroupARN},
-			condition: taggedByOcel(),
+			Resources: []string{appLogGroupARN, functionLogGroupARN},
+			Condition: taggedByOcel(),
 		},
 		{
-			actions:   []string{"logs:DescribeLogGroups"},
-			resources: []string{unscopedResource},
+			Actions:   []string{"logs:DescribeLogGroups"},
+			Resources: []string{UnscopedResource},
 		},
 	}
 }
 
-func runtimeProvisioning(r scopedARNs) []grantStatement {
-	return []grantStatement{
+func runtimeProvisioning(r ScopedARNs) []GrantStatement {
+	return []GrantStatement{
 		{
-			actions: []string{
+			Actions: []string{
 				"cloudformation:CreateChangeSet",
 				"cloudformation:CreateStack",
 				"cloudformation:DescribeStackEvents",
 			},
-			resources: []string{r.runtimeStack},
+			Resources: []string{r.runtimeStack},
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"cloudformation:DeleteChangeSet",
 				"cloudformation:DescribeChangeSet",
 				"cloudformation:ExecuteChangeSet",
 			},
-			resources: []string{r.runtimeStack, r.runtimeChangeSet},
+			Resources: []string{r.runtimeStack, r.runtimeChangeSet},
 		},
 	}
 }
 
-func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
-	return []grantStatement{
+func bootstrapProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
+	return []GrantStatement{
 		{
-			actions: []string{
+			Actions: []string{
 				"cloudformation:CreateChangeSet",
 				"cloudformation:CreateStack",
 				"cloudformation:DeleteStack",
 				"cloudformation:DescribeStackEvents",
 			},
-			resources: []string{r.bootstrapStack},
+			Resources: []string{r.BootstrapStack},
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"cloudformation:DeleteChangeSet",
 				"cloudformation:DescribeChangeSet",
 				"cloudformation:ExecuteChangeSet",
 			},
-			resources: []string{r.bootstrapStack, r.bootstrapChangeSet},
+			Resources: []string{r.BootstrapStack, r.bootstrapChangeSet},
 		},
 		{
-			actions:   []string{"s3:CreateBucket"},
-			resources: []string{r.bootstrapBucket},
+			Actions:   []string{"s3:CreateBucket"},
+			Resources: []string{r.bootstrapBucket},
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"s3:DeleteBucket",
 				"s3:DeleteBucketPolicy",
 				"s3:GetBucket*",
@@ -631,16 +631,16 @@ func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"s3:PutEncryptionConfiguration",
 				"s3:PutLifecycleConfiguration",
 			},
-			resources: []string{r.bootstrapBucket},
-			condition: inCallerAccount(),
+			Resources: []string{r.bootstrapBucket},
+			Condition: inCallerAccount(),
 		},
 		{
-			actions:   []string{"s3:DeleteObjectVersion", "s3:GetObjectVersion"},
-			resources: []string{r.bootstrapObject},
-			condition: inCallerAccount(),
+			Actions:   []string{"s3:DeleteObjectVersion", "s3:GetObjectVersion"},
+			Resources: []string{r.bootstrapObject},
+			Condition: inCallerAccount(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"dynamodb:CreateTable",
 				"dynamodb:DeleteTable",
 				"dynamodb:DescribeContinuousBackups",
@@ -654,42 +654,42 @@ func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"dynamodb:UpdateTable",
 				"dynamodb:UpdateTimeToLive",
 			},
-			resources: []string{r.bootstrapTable, r.bootstrapTablePart},
+			Resources: []string{r.BootstrapTable, r.BootstrapTablePart},
 		},
 		{
-			actions:   []string{"kms:CreateKey"},
-			resources: []string{unscopedResource},
-			condition: map[string]any{
-				"StringEquals": map[string]any{"aws:RequestTag/" + varsKeyComponentTagKey: varsKeyComponentTagValue},
+			Actions:   []string{"kms:CreateKey"},
+			Resources: []string{UnscopedResource},
+			Condition: map[string]any{
+				"StringEquals": map[string]any{"aws:RequestTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
 			},
 		},
 		{
-			actions:   varsKeyLifecycleActions(),
-			resources: []string{anyKeyARN},
-			condition: map[string]any{
-				"StringEquals": map[string]any{"aws:ResourceTag/" + varsKeyComponentTagKey: varsKeyComponentTagValue},
+			Actions:   varsKeyLifecycleActions(),
+			Resources: []string{AnyKeyARN},
+			Condition: map[string]any{
+				"StringEquals": map[string]any{"aws:ResourceTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
 			},
 		},
 		{
-			actions:   []string{"kms:DescribeKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags"},
-			resources: []string{anyKeyARN},
-			condition: map[string]any{
+			Actions:   []string{"kms:DescribeKey", "kms:GetKeyPolicy", "kms:GetKeyRotationStatus", "kms:ListResourceTags"},
+			Resources: []string{AnyKeyARN},
+			Condition: map[string]any{
 				"ForAnyValue:StringLike": map[string]any{"kms:ResourceAliases": ns.varsKeyAliasFor("*")},
 			},
 		},
 		{
-			actions:   []string{"kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"},
-			resources: []string{r.varsAlias},
+			Actions:   []string{"kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"},
+			Resources: []string{r.varsAlias},
 		},
 		{
-			actions:   []string{"kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"},
-			resources: []string{anyKeyARN},
-			condition: map[string]any{
-				"StringEquals": map[string]any{"aws:ResourceTag/" + varsKeyComponentTagKey: varsKeyComponentTagValue},
+			Actions:   []string{"kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"},
+			Resources: []string{AnyKeyARN},
+			Condition: map[string]any{
+				"StringEquals": map[string]any{"aws:ResourceTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
 			},
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"iam:CreatePolicy",
 				"iam:CreatePolicyVersion",
 				"iam:DeletePolicy",
@@ -702,19 +702,19 @@ func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"iam:TagPolicy",
 				"iam:UntagPolicy",
 			},
-			resources: []string{r.appBoundary},
+			Resources: []string{r.appBoundary},
 		},
 		{
-			actions:   []string{"iam:DeleteRolePermissionsBoundary"},
-			resources: []string{appRoleARN},
-			condition: taggedByOcel(),
+			Actions:   []string{"iam:DeleteRolePermissionsBoundary"},
+			Resources: []string{appRoleARN},
+			Condition: taggedByOcel(),
 		},
 		{
-			actions:   []string{"iam:CreateRole", "iam:TagRole"},
-			resources: []string{r.bootstrapRole},
+			Actions:   []string{"iam:CreateRole", "iam:TagRole"},
+			Resources: []string{r.bootstrapRole},
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"iam:DeleteRole",
 				"iam:DeleteRolePolicy",
 				"iam:GetRole",
@@ -727,20 +727,20 @@ func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"iam:UpdateAssumeRolePolicy",
 				"iam:UpdateRole",
 			},
-			resources: []string{r.bootstrapRole},
+			Resources: []string{r.bootstrapRole},
 		},
 		{
-			actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
-			resources: []string{r.bootstrapRole},
-			condition: attachedPolicyIsAServiceRole(false),
+			Actions:   []string{"iam:AttachRolePolicy", "iam:DetachRolePolicy"},
+			Resources: []string{r.bootstrapRole},
+			Condition: attachedPolicyIsAServiceRole(false),
 		},
 		{
-			actions:   []string{"iam:PassRole"},
-			resources: []string{r.bootstrapRole},
-			condition: passedToLambda(false),
+			Actions:   []string{"iam:PassRole"},
+			Resources: []string{r.bootstrapRole},
+			Condition: passedToLambda(false),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"lambda:AddPermission",
 				"lambda:CreateFunction",
 				"lambda:CreateFunctionUrlConfig",
@@ -758,10 +758,10 @@ func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"lambda:UpdateFunctionConfiguration",
 				"lambda:UpdateFunctionUrlConfig",
 			},
-			resources: []string{r.bootstrapFunction},
+			Resources: []string{r.bootstrapFunction},
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"logs:CreateLogGroup",
 				"logs:DeleteLogGroup",
 				"logs:ListTagsForResource",
@@ -769,26 +769,26 @@ func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"logs:TagResource",
 				"logs:UntagResource",
 			},
-			resources: []string{r.bootstrapLogGroup},
+			Resources: []string{r.bootstrapLogGroup},
 		},
 		{
-			actions:   []string{"lambda:CreateEventSourceMapping"},
-			resources: []string{unscopedResource},
-			condition: map[string]any{
+			Actions:   []string{"lambda:CreateEventSourceMapping"},
+			Resources: []string{UnscopedResource},
+			Condition: map[string]any{
 				"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction},
 			},
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"lambda:DeleteEventSourceMapping",
 				"lambda:GetEventSourceMapping",
 				"lambda:UpdateEventSourceMapping",
 			},
-			resources: []string{bootstrapEventSourceARN},
-			condition: inCallerAccount(),
+			Resources: []string{bootstrapEventSourceARN},
+			Condition: inCallerAccount(),
 		},
 		{
-			actions: []string{
+			Actions: []string{
 				"sqs:CreateQueue",
 				"sqs:DeleteQueue",
 				"sqs:GetQueueAttributes",
@@ -798,23 +798,23 @@ func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"sqs:TagQueue",
 				"sqs:UntagQueue",
 			},
-			resources: []string{r.bootstrapQueue},
+			Resources: []string{r.bootstrapQueue},
 		},
 		{
-			actions:   []string{"ssm:AddTagsToResource", "ssm:DeleteParameter", "ssm:DeleteParameters", "ssm:PutParameter"},
-			resources: []string{r.anyParam},
+			Actions:   []string{"ssm:AddTagsToResource", "ssm:DeleteParameter", "ssm:DeleteParameters", "ssm:PutParameter"},
+			Resources: []string{r.anyParam},
 		},
 		{
-			actions:   []string{"ssm:GetParametersByPath"},
-			resources: []string{r.stackRecordTree, r.stackRecord},
+			Actions:   []string{"ssm:GetParametersByPath"},
+			Resources: []string{r.stackRecordTree, r.stackRecord},
 		},
 	}
 }
 
-func edgePrincipal(r scopedARNs) []grantStatement {
-	return []grantStatement{
+func edgePrincipal(r ScopedARNs) []GrantStatement {
+	return []GrantStatement{
 		{
-			actions: []string{
+			Actions: []string{
 				"iam:CreateAccessKey",
 				"iam:CreateUser",
 				"iam:DeleteAccessKey",
@@ -830,18 +830,18 @@ func edgePrincipal(r scopedARNs) []grantStatement {
 				"iam:PutUserPolicy",
 				"iam:UpdateAccessKey",
 			},
-			resources: []string{r.edgeUser},
+			Resources: []string{r.edgeUser},
 		},
 	}
 }
 
-func deployTier(ns Namespace) []grantStatement {
-	r := ns.scopedARNs()
+func deployTier(ns Namespace) []GrantStatement {
+	r := ns.ScopedARNs()
 	return slices.Concat(bootstrapAccess(r), appProvisioning(ns, r), runtimeProvisioning(r))
 }
 
-func bootstrapTier(ns Namespace) []grantStatement {
-	r := ns.scopedARNs()
+func bootstrapTier(ns Namespace) []GrantStatement {
+	r := ns.ScopedARNs()
 	return slices.Concat(bootstrapAccess(r), appProvisioning(ns, r), runtimeProvisioning(r), bootstrapProvisioning(ns, r), edgePrincipal(r))
 }
 
@@ -853,20 +853,24 @@ func BootstrapCredentialPermissions(ns Namespace) (string, error) {
 	return credentialPolicy("bootstrap", bootstrapTier(ns))
 }
 
-func credentialPolicy(tier string, grants []grantStatement) (string, error) {
+func PolicyStatements(grants []GrantStatement) []map[string]any {
 	statements := make([]map[string]any, 0, len(grants))
 	for _, grant := range grants {
 		statement := map[string]any{
 			"Effect":   "Allow",
-			"Action":   oneOrMany(grant.actions),
-			"Resource": oneOrMany(grant.resources),
+			"Action":   oneOrMany(grant.Actions),
+			"Resource": oneOrMany(grant.Resources),
 		}
-		if len(grant.condition) > 0 {
-			statement["Condition"] = grant.condition
+		if len(grant.Condition) > 0 {
+			statement["Condition"] = grant.Condition
 		}
 		statements = append(statements, statement)
 	}
-	out, err := json.MarshalIndent(map[string]any{"Version": "2012-10-17", "Statement": statements}, "", "  ")
+	return statements
+}
+
+func credentialPolicy(tier string, grants []GrantStatement) (string, error) {
+	out, err := json.MarshalIndent(map[string]any{"Version": "2012-10-17", "Statement": PolicyStatements(grants)}, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("render the %s credential policy: %w", tier, err)
 	}

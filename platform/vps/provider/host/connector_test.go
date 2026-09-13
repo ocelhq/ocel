@@ -221,7 +221,7 @@ func TestTheProxyForwardsTheConnectorPathAheadOfEverySurface(t *testing.T) {
 
 	state := ProxyState{
 		Grace:     DeployWindow,
-		Connector: true,
+		Connector: "box.example.com",
 		Claims:    []HostClaim{{Hostname: "box.example.com", Owner: surface, Pointer: pointed, App: "web"}},
 		Routes:    []AppRoute{{RouteKey: keyed("web"), Upstream: "web:3000"}},
 	}
@@ -237,8 +237,9 @@ func TestTheProxyForwardsTheConnectorPathAheadOfEverySurface(t *testing.T) {
 			identities(routes))
 	}
 	first := routes[0]
-	if len(first.Match) != 1 || first.Match[0].Host != nil {
-		t.Errorf("the connector route matches %v, want a path on whatever hostname the box answers to", first.Match)
+	if len(first.Match) != 1 || !slices.Equal(first.Match[0].hosts(), []string{"box.example.com"}) {
+		t.Errorf("the connector route matches %v, want the box hostname: a route with no host matcher is one Caddy orders no certificate for, and the console dials the connector over https",
+			first.Match)
 	}
 	if !slices.Equal(first.Match[0].Path, []string{ConnectorPath, ConnectorPath + "/*"}) {
 		t.Errorf("the connector route matches paths %v, want %s and everything under it", first.Match[0].Path, ConnectorPath)
@@ -256,8 +257,32 @@ func TestTheProxyForwardsTheConnectorPathAheadOfEverySurface(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadProxyState: %v", err)
 	}
-	if !held.Connector {
-		t.Error("the route the render wrote reads back as one ocel did not write, so the next deploy takes it with it")
+	if held.Connector != "box.example.com" {
+		t.Errorf("the route the render wrote reads back as %q, so the next deploy takes it with it", held.Connector)
+	}
+}
+
+func TestAConnectorRouteWithNoHostMatcherIsNotOneOcelWrote(t *testing.T) {
+	t.Parallel()
+
+	rendered := mustRender(t, ProxyState{Grace: DeployWindow, Connector: "box.example.com"})
+	var read caddyConfig
+	if err := json.Unmarshal(rendered, &read); err != nil {
+		t.Fatal(err)
+	}
+	server := read.Apps.HTTP.Servers[proxyServer]
+	for at, route := range server.Routes {
+		if route.Identity == connectorRoute {
+			server.Routes[at].Match = []caddyMatch{{Path: route.Match[0].Path}}
+		}
+	}
+	read.Apps.HTTP.Servers[proxyServer] = server
+	stripped, err := json.Marshal(read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadProxyState(stripped); err == nil {
+		t.Error("a connector route carrying no host matcher read back as one ocel wrote, and Caddy orders no certificate for a route that matches every hostname")
 	}
 }
 
@@ -272,8 +297,8 @@ func TestABoxWithNoConnectorForwardsNothingToOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadProxyState: %v", err)
 	}
-	if held.Connector {
-		t.Error("a config carrying no connector route read back as one that does")
+	if held.Connector != "" {
+		t.Errorf("a config carrying no connector route read back as %q", held.Connector)
 	}
 }
 

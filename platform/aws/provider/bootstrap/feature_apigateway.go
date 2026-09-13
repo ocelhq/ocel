@@ -99,7 +99,7 @@ func invokeRoleResource(ns Namespace, class edge.Class) string {
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub '${%s}/*'
-`, class, ns.EdgeInvokeRoleName(class), ns.policyName("edge-invoke"), paramAssetBucketARN)
+`, class, ns.EdgeInvokeRoleName(class), ns.PolicyName("edge-invoke"), paramAssetBucketARN)
 }
 
 func notFoundAPIResource(ns Namespace, class edge.Class) string {

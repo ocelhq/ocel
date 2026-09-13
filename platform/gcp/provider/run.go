@@ -41,6 +41,7 @@ type serving struct {
 	health  string
 	public  bool
 	memory  int
+	most    int
 	timeout time.Duration
 	ingress string
 }
@@ -80,6 +81,9 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 		},
 	}
 	scaling := &run.GoogleCloudRunV2RevisionScaling{ForceSendFields: []string{"MinInstanceCount"}}
+	if s.most > 0 {
+		scaling.MaxInstanceCount = int64(s.most)
+	}
 	if s.compute == providerkit.ComputeContainer {
 		scaling.MinInstanceCount = 1
 		container.StartupProbe = &run.GoogleCloudRunV2Probe{

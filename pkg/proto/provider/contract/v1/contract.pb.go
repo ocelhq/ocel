@@ -4423,6 +4423,7 @@ type InstalledConnector struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
 	PublicKey     string                 `protobuf:"bytes,2,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	Compute       string                 `protobuf:"bytes,3,opt,name=compute,proto3" json:"compute,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4471,11 +4472,19 @@ func (x *InstalledConnector) GetPublicKey() string {
 	return ""
 }
 
+func (x *InstalledConnector) GetCompute() string {
+	if x != nil {
+		return x.Compute
+	}
+	return ""
+}
+
 type InstallConnectorRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Binary        []byte                 `protobuf:"bytes,1,opt,name=binary,proto3" json:"binary,omitempty"`
 	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	ConfigJson    []byte                 `protobuf:"bytes,3,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`
+	Compute       string                 `protobuf:"bytes,4,opt,name=compute,proto3" json:"compute,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4529,6 +4538,13 @@ func (x *InstallConnectorRequest) GetConfigJson() []byte {
 		return x.ConfigJson
 	}
 	return nil
+}
+
+func (x *InstallConnectorRequest) GetCompute() string {
+	if x != nil {
+		return x.Compute
+	}
+	return ""
 }
 
 type RemoveConnectorRequest struct {
@@ -4915,16 +4931,19 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x12target_fingerprint\x18\x01 \x01(\tR\x11targetFingerprint\x12\x1a\n" +
 	"\bhostname\x18\x02 \x01(\tR\bhostname\x12\x12\n" +
 	"\x04arch\x18\x03 \x01(\tR\x04arch\x12F\n" +
-	"\tinstalled\x18\x04 \x01(\v2(.provider.contract.v1.InstalledConnectorR\tinstalled\"M\n" +
+	"\tinstalled\x18\x04 \x01(\v2(.provider.contract.v1.InstalledConnectorR\tinstalled\"g\n" +
 	"\x12InstalledConnector\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1d\n" +
 	"\n" +
-	"public_key\x18\x02 \x01(\tR\tpublicKey\"\x87\x01\n" +
+	"public_key\x18\x02 \x01(\tR\tpublicKey\x12\x18\n" +
+	"\acompute\x18\x03 \x01(\tR\acompute\"\xc2\x01\n" +
 	"\x17InstallConnectorRequest\x12\x1f\n" +
 	"\x06binary\x18\x01 \x01(\fB\a\xbaH\x04z\x02\x10\x01R\x06binary\x12!\n" +
 	"\aversion\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aversion\x12(\n" +
 	"\vconfig_json\x18\x03 \x01(\fB\a\xbaH\x04z\x02\x10\x01R\n" +
-	"configJson\"\x18\n" +
+	"configJson\x129\n" +
+	"\acompute\x18\x04 \x01(\tB\x1f\xbaH\x1c\xd8\x01\x01r\x17R\n" +
+	"serverlessR\tcontainerR\acompute\"\x18\n" +
 	"\x16RemoveConnectorRequest*l\n" +
 	"\x0eCredentialTier\x12\x1f\n" +
 	"\x1bCREDENTIAL_TIER_UNSPECIFIED\x10\x00\x12\x1d\n" +

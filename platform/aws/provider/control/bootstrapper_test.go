@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -378,7 +379,7 @@ func (e *teardownEdge) Teardown(_ context.Context, class edge.Class) error {
 }
 
 type teardownCFN struct {
-	bootstrap.CFNAPI
+	cfn.API
 
 	present   map[string]bootstrap.Deployed
 	resources map[string][]cfntypes.StackResourceSummary

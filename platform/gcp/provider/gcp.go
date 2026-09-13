@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const Vendor providerkit.Vendor = "gcp"
@@ -78,6 +79,8 @@ func (p *Provider) Names() Names { return p.clients.Names }
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
 
+func (p *Provider) Region() string { return p.options.Region }
+
 func (p *Provider) Serves() []providerkit.BindingType { return resources.Serves(p) }
 
 func (p *Provider) Computes() []providerkit.Compute {
@@ -94,9 +97,11 @@ func (p *Provider) Releases() providerkit.Releaser {
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return artifacts{clients: p.clients} }
 
-func (p *Provider) Records() providerkit.RecordStore { return records{clients: p.clients} }
+func (p *Provider) Records() providerkit.RecordStore {
+	return ports.Records{Clients: p.clients.Runtime()}
+}
 
-func (p *Provider) Sealer() providerkit.Sealer { return sealer{clients: p.clients} }
+func (p *Provider) Sealer() providerkit.Sealer { return ports.Sealer{Clients: p.clients.Runtime()} }
 
 func (p *Provider) Credentials() providerkit.Credentials {
 	return Credentials{

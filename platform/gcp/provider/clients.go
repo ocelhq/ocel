@@ -21,6 +21,7 @@ import (
 	"google.golang.org/api/serviceusage/v1"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 type memo[T any] struct {
@@ -39,8 +40,7 @@ type clients struct {
 	region   string
 	endpoint string
 
-	firestore memo[*firestore.Client]
-	kms       memo[*kms.KeyManagementClient]
+	runtime   memo[*ports.Clients]
 	storage   memo[*storage.Client]
 	databases memo[*firestoreadmin.Service]
 	secrets   memo[*secretmanager.Service]
@@ -54,12 +54,10 @@ type clients struct {
 	projects  memo[*cloudresourcemanager.Service]
 }
 
-func (c *clients) emulated() bool { return c.endpoint != "" }
-
 func opened[T any](c *clients, held *memo[T], doing string, open func() (T, error)) (T, error) {
 	client, err := held.held(func() (T, error) {
 		if !c.emulated() {
-			if _, err := google.FindDefaultCredentials(context.Background(), cloudPlatformScope); err != nil {
+			if _, err := google.FindDefaultCredentials(context.Background(), ports.CloudPlatformScope); err != nil {
 				var nothing T
 				return nothing, unauthenticated()
 			}
@@ -77,70 +75,57 @@ func opened[T any](c *clients, held *memo[T], doing string, open func() (T, erro
 	return nothing, fmt.Errorf("open the %s client for project %s: %w", doing, c.project, err)
 }
 
-func (c *clients) Firestore() (*firestore.Client, error) {
-	return opened(c, &c.firestore, "Firestore", func() (*firestore.Client, error) {
-		return firestore.NewClientWithDatabase(
-			context.Background(), c.project, c.Database(), EmulatorGRPC(c.endpoint)...)
-	})
-}
-
-func (c *clients) KMS() (*kms.KeyManagementClient, error) {
-	return opened(c, &c.kms, "Cloud KMS", func() (*kms.KeyManagementClient, error) {
-		return kms.NewKeyManagementClient(context.Background(), EmulatorGRPC(c.endpoint)...)
-	})
-}
-
 func (c *clients) Storage() (*storage.Client, error) {
 	return opened(c, &c.storage, "Cloud Storage", func() (*storage.Client, error) {
-		return storage.NewClient(context.Background(), EmulatorStorage(c.endpoint)...)
+		return storage.NewClient(context.Background(), ports.EmulatorStorage(c.endpoint)...)
 	})
 }
 
 func (c *clients) Databases() (*firestoreadmin.Service, error) {
 	return opened(c, &c.databases, "Firestore admin", func() (*firestoreadmin.Service, error) {
-		return firestoreadmin.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+		return firestoreadmin.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 
 func (c *clients) Secrets() (*secretmanager.Service, error) {
 	return opened(c, &c.secrets, "Secret Manager", func() (*secretmanager.Service, error) {
-		return secretmanager.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+		return secretmanager.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 
 func (c *clients) Services() (*serviceusage.Service, error) {
 	return opened(c, &c.services, "Service Usage", func() (*serviceusage.Service, error) {
-		return serviceusage.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+		return serviceusage.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 
 func (c *clients) Repositories() (*artifactregistry.Service, error) {
 	return opened(c, &c.images, "Artifact Registry", func() (*artifactregistry.Service, error) {
-		return artifactregistry.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+		return artifactregistry.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 
 func (c *clients) Run() (*run.Service, error) {
 	return opened(c, &c.runs, "Cloud Run", func() (*run.Service, error) {
-		return run.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+		return run.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 
 func (c *clients) Compute() (*compute.Service, error) {
 	return opened(c, &c.compute, "Compute Engine", func() (*compute.Service, error) {
-		return compute.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+		return compute.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 
 func (c *clients) Certificates() (*certmanager.Service, error) {
 	return opened(c, &c.certs, "Certificate Manager", func() (*certmanager.Service, error) {
-		return certmanager.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+		return certmanager.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 
 func (c *clients) Accounts() (*iam.Service, error) {
 	return opened(c, &c.accounts, "IAM", func() (*iam.Service, error) {
-		return iam.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+		return iam.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
 
@@ -159,6 +144,24 @@ func (c *clients) Principal(ctx context.Context) (string, error) {
 
 func (c *clients) Projects() (*cloudresourcemanager.Service, error) {
 	return opened(c, &c.projects, "Resource Manager", func() (*cloudresourcemanager.Service, error) {
-		return cloudresourcemanager.NewService(context.Background(), EmulatorREST(c.endpoint)...)
+		return cloudresourcemanager.NewService(context.Background(), ports.EmulatorREST(c.endpoint)...)
 	})
 }
+
+func (c *clients) emulated() bool { return c.endpoint != "" }
+
+func (c *clients) Runtime() *ports.Clients {
+	held, _ := c.runtime.held(func() (*ports.Clients, error) {
+		return &ports.Clients{
+			Namespace: c.namespace,
+			Project:   c.project,
+			Region:    c.region,
+			Endpoint:  c.endpoint,
+		}, nil
+	})
+	return held
+}
+
+func (c *clients) Firestore() (*firestore.Client, error) { return c.Runtime().Firestore() }
+
+func (c *clients) KMS() (*kms.KeyManagementClient, error) { return c.Runtime().KMS() }

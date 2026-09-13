@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -78,7 +79,7 @@ type Clients struct {
 	APIGateway APIGatewayAPI
 	Routing    RoutingAPI
 	Dynamo     awsports.DynamoAPI
-	CFN        bootstrap.CFNDescriber
+	CFN        cfn.Describer
 	Region     string
 	Namespace  bootstrap.Namespace
 }

@@ -73,7 +73,7 @@ func namesOf(t *testing.T, n Namespace) map[string]string {
 		"revalidate dlq":        dlq,
 		"preview queue":         previewQueue,
 		"preview dlq":           previewDLQ,
-		"cache policy name":     n.policyName("edge-cache"),
+		"cache policy name":     n.PolicyName("edge-cache"),
 	}
 }
 
