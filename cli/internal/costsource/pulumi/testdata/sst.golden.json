@@ -1,0 +1,199 @@
+{
+  "source": "sst",
+  "scopes": [
+    {
+      "id": "stage:victor",
+      "kind": "stage",
+      "name": "victor"
+    },
+    {
+      "id": "stage:victor/component:Vpc",
+      "parent": "stage:victor",
+      "kind": "component",
+      "name": "Vpc"
+    },
+    {
+      "id": "stage:victor/component:Orders",
+      "parent": "stage:victor",
+      "kind": "component",
+      "name": "Orders"
+    },
+    {
+      "id": "stage:victor/component:Api",
+      "parent": "stage:victor",
+      "kind": "component",
+      "name": "Api"
+    },
+    {
+      "id": "stage:victor/component:Uploads",
+      "parent": "stage:victor",
+      "kind": "component",
+      "name": "Uploads"
+    }
+  ],
+  "resources": [
+    {
+      "id": "urn:pulumi:victor::with-sst::sst:aws:Vpc$aws:ec2/vpc:Vpc::Vpc",
+      "scope": "stage:victor/component:Vpc",
+      "vendor": "aws",
+      "type": "aws_vpc",
+      "name": "Vpc",
+      "region": "us-east-1",
+      "properties": {
+        "cidr_block": "10.0.0.0/16",
+        "enable_dns_hostnames": true,
+        "tags": {
+          "sst:app": "with-sst",
+          "sst:stage": "victor"
+        }
+      },
+      "tags": {
+        "sst:app": "with-sst",
+        "sst:stage": "victor"
+      }
+    },
+    {
+      "id": "urn:pulumi:victor::with-sst::sst:aws:Vpc$aws:ec2/internetGateway:InternetGateway::Vpc InternetGateway",
+      "scope": "stage:victor/component:Vpc",
+      "vendor": "aws",
+      "type": "aws_internet_gateway",
+      "name": "Vpc InternetGateway",
+      "region": "us-east-1",
+      "properties": {},
+      "unknown": [
+        "vpc_id"
+      ]
+    },
+    {
+      "id": "urn:pulumi:victor::with-sst::sst:aws:Vpc$aws:ec2/eip:Eip::Vpc ElasticIp1",
+      "scope": "stage:victor/component:Vpc",
+      "vendor": "aws",
+      "type": "aws_eip",
+      "name": "Vpc ElasticIp1",
+      "region": "us-east-1",
+      "properties": {
+        "vpc": true
+      }
+    },
+    {
+      "id": "urn:pulumi:victor::with-sst::sst:aws:Vpc$aws:ec2/natGateway:NatGateway::Vpc NatGateway1",
+      "scope": "stage:victor/component:Vpc",
+      "vendor": "aws",
+      "type": "aws_nat_gateway",
+      "name": "Vpc NatGateway1",
+      "region": "us-east-1",
+      "properties": {},
+      "unknown": [
+        "allocation_id",
+        "subnet_id"
+      ]
+    },
+    {
+      "id": "urn:pulumi:victor::with-sst::sst:aws:Vpc$aws:ec2/subnet:Subnet::Vpc PrivateSubnet1",
+      "scope": "stage:victor/component:Vpc",
+      "vendor": "aws",
+      "type": "aws_subnet",
+      "name": "Vpc PrivateSubnet1",
+      "region": "us-east-1",
+      "properties": {
+        "availability_zone": "us-east-1a",
+        "cidr_block": "10.0.1.0/24"
+      }
+    },
+    {
+      "id": "urn:pulumi:victor::with-sst::sst:aws:Vpc$aws:ec2/securityGroup:SecurityGroup::Vpc SecurityGroup",
+      "scope": "stage:victor/component:Vpc",
+      "vendor": "aws",
+      "type": "aws_security_group",
+      "name": "Vpc SecurityGroup",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "urn:pulumi:victor::with-sst::sst:aws:Postgres$aws:rds/cluster:Cluster::Orders Cluster",
+      "scope": "stage:victor/component:Orders",
+      "vendor": "aws",
+      "type": "aws_rds_cluster",
+      "name": "Orders Cluster",
+      "region": "us-east-1",
+      "properties": {
+        "database_name": "orders",
+        "engine": "aurora-postgresql",
+        "engine_mode": "provisioned"
+      },
+      "unknown": [
+        "master_password"
+      ]
+    },
+    {
+      "id": "urn:pulumi:victor::with-sst::sst:aws:Postgres$aws:rds/clusterInstance:ClusterInstance::Orders Instance1",
+      "scope": "stage:victor/component:Orders",
+      "vendor": "aws",
+      "type": "aws_rds_cluster_instance",
+      "name": "Orders Instance1",
+      "region": "us-east-1",
+      "properties": {
+        "instance_class": "db.serverless",
+        "serverlessv2_scaling_configuration": {
+          "max_capacity": 4,
+          "min_capacity": 0.5
+        }
+      }
+    },
+    {
+      "id": "urn:pulumi:victor::with-sst::sst:aws:Function$aws:lambda/function:Function::Api Function",
+      "scope": "stage:victor/component:Api",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "Api Function",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "memory_size": 2048,
+        "runtime": "nodejs22.x",
+        "timeout": 20
+      }
+    },
+    {
+      "id": "urn:pulumi:victor::with-sst::sst:aws:Function$aws:cloudwatch/logGroup:LogGroup::Api LogGroup",
+      "scope": "stage:victor/component:Api",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "Api LogGroup",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 30
+      }
+    },
+    {
+      "id": "urn:pulumi:victor::with-sst::aws:ec2/vpcEndpoint:VpcEndpoint::Kms",
+      "scope": "stage:victor",
+      "vendor": "aws",
+      "type": "aws_vpc_endpoint",
+      "name": "Kms",
+      "region": "us-east-1",
+      "properties": {
+        "private_dns_enabled": true,
+        "service_name": "com.amazonaws.us-east-1.kms",
+        "subnet_ids": [
+          "subnet-1",
+          "subnet-2"
+        ],
+        "vpc_endpoint_type": "Interface"
+      }
+    },
+    {
+      "id": "urn:pulumi:victor::with-sst::sst:aws:Bucket$aws:s3/bucket:Bucket::Uploads Bucket",
+      "scope": "stage:victor/component:Uploads",
+      "vendor": "aws",
+      "type": "aws_s3_bucket",
+      "name": "Uploads Bucket",
+      "region": "us-east-1",
+      "properties": {
+        "force_destroy": true
+      }
+    }
+  ]
+}
