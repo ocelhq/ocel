@@ -91,7 +91,7 @@ func tagInvalidatorResources(ns Namespace, code payloads.Placement, class string
       MemorySize: %d
       Timeout: %d
       Role: !GetAtt TagInvalidatorRole.Arn
-      Code:
+`+lambdaLoggingConfig("TagInvalidator")+`      Code:
         S3Bucket: %s
         S3Key: %s
       Environment:
@@ -117,7 +117,7 @@ func tagInvalidatorResources(ns Namespace, code payloads.Placement, class string
       FilterCriteria:
         Filters:
           - Pattern: '%s'
-`, tagInvalidatorDLQRetentionSeconds, ns.policyName("tag-invalidator"),
+`+lambdaLogGroupResource("TagInvalidator"), tagInvalidatorDLQRetentionSeconds, ns.policyName("tag-invalidator"),
 		tagInvalidatorRuntime, tagInvalidatorArchitecture, tagInvalidatorHandler, tagInvalidatorMemoryMB, tagInvalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
 		tagInvalidatorStateTableEnvVar, tagInvalidatorClassEnvVar, class,

@@ -67,6 +67,7 @@ type scopedARNs struct {
 	runtimeChangeSet   string
 	bootstrapRole      string
 	bootstrapFunction  string
+	bootstrapLogGroup  string
 	bootstrapQueue     string
 	edgeUser           string
 	appBoundary        string
@@ -90,6 +91,7 @@ func (n Namespace) scopedARNs() scopedARNs {
 		runtimeChangeSet:   "arn:aws:cloudformation:*:*:changeSet/" + core + "-runtime*/*",
 		bootstrapRole:      "arn:aws:iam::*:role/" + core + "*",
 		bootstrapFunction:  "arn:aws:lambda:*:*:function:" + core + "*",
+		bootstrapLogGroup:  "arn:aws:logs:*:*:log-group:/aws/lambda/" + core + "*",
 		bootstrapQueue:     "arn:aws:sqs:*:*:" + string(n) + "-*",
 		edgeUser:           "arn:aws:iam::*:user/" + string(n) + "-edge*",
 		appBoundary:        "arn:aws:iam::*:policy/" + n.AppBoundaryNameFor(ClassProduction) + "*",
@@ -757,6 +759,18 @@ func bootstrapProvisioning(ns Namespace, r scopedARNs) []grantStatement {
 				"lambda:UpdateFunctionUrlConfig",
 			},
 			resources: []string{r.bootstrapFunction},
+		},
+		{
+			actions: []string{
+				"logs:CreateLogGroup",
+				"logs:DeleteLogGroup",
+				"logs:DescribeLogGroups",
+				"logs:ListTagsForResource",
+				"logs:PutRetentionPolicy",
+				"logs:TagResource",
+				"logs:UntagResource",
+			},
+			resources: []string{r.bootstrapLogGroup},
 		},
 		{
 			actions:   []string{"lambda:CreateEventSourceMapping"},
