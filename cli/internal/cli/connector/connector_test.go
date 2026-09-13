@@ -29,10 +29,11 @@ const (
 
 type consoleServer struct {
 	*httptest.Server
-	rows     []map[string]any
-	upserted []map[string]any
-	patched  []map[string]any
-	deleted  []string
+	rows        []map[string]any
+	upserted    []map[string]any
+	patched     []map[string]any
+	deleted     []string
+	refusePatch bool
 }
 
 func newConsoleServer(t *testing.T, rows ...map[string]any) *consoleServer {
@@ -54,6 +55,10 @@ func newConsoleServer(t *testing.T, rows ...map[string]any) *consoleServer {
 			c.rows = append(c.rows, held)
 			_ = json.NewEncoder(w).Encode(held)
 		case strings.HasPrefix(r.URL.Path, "/api/connectors/") && r.Method == http.MethodPatch:
+			if c.refusePatch {
+				http.Error(w, "nope", http.StatusInternalServerError)
+				return
+			}
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			c.patched = append(c.patched, body)
@@ -193,6 +198,29 @@ func TestAddGrantsRevealOnlyWhenItIsAskedFor(t *testing.T) {
 	grants, _ := config["grants"].([]any)
 	if len(grants) != 2 || grants[0] != "envvars.read" || grants[1] != "envvars.reveal" {
 		t.Errorf("grants = %v, want read and reveal and no write", grants)
+	}
+}
+
+func TestAFailedAddSaysRunningItAgainFinishesIt(t *testing.T) {
+	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	srv := newConsoleServer(t)
+	srv.refusePatch = true
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL),
+		opened(t, srv), &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("a console that refused the address answered no error")
+	}
+	said := err.Error()
+	if !strings.Contains(said, "ocel connector add") || !strings.Contains(said, "already holds this target") {
+		t.Errorf("runAdd err = %q, and a half-finished add has to say that the console holds the target and that re-running finishes it", said)
+	}
+	if len(srv.upserted) != 1 {
+		t.Errorf("upserts = %v, want the one the run made before it failed", srv.upserted)
 	}
 }
 

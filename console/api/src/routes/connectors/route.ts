@@ -3,6 +3,7 @@ import { db } from "@console/db";
 import { connector } from "@console/db/schema";
 import { eq } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
+import { changingSession } from "./changing";
 import { upsertConnectorSchema } from "./validation";
 
 export async function listConnectors(request: Request): Promise<Response> {
@@ -21,9 +22,9 @@ export async function listConnectors(request: Request): Promise<Response> {
 }
 
 export async function upsertConnector(request: Request): Promise<Response> {
-  const session = await getActiveOrganizationSession(request.headers);
-  if (!session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const changing = await changingSession(request);
+  if (!changing.ok) {
+    return changing.refusal;
   }
 
   let body: unknown;
@@ -44,7 +45,7 @@ export async function upsertConnector(request: Request): Promise<Response> {
     .insert(connector)
     .values({
       id: uuidv7(),
-      organizationId: session.activeOrganizationId,
+      organizationId: changing.session.activeOrganizationId,
       target: parsed.data.target,
       vendor: parsed.data.vendor,
       reach: parsed.data.reach,

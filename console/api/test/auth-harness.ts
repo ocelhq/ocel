@@ -3,14 +3,11 @@ import { db } from "@console/db";
 import { organization, user } from "@console/db/schema";
 import { eq } from "drizzle-orm";
 
-export async function createTestSessionWithOrganization() {
-  const suffix = crypto.randomUUID();
-  const email = `test-${suffix}@example.test`;
-
+async function signUpTestUser(suffix: string) {
   const signUpResult = await auth.api.signUpEmail({
     body: {
       name: "Test User",
-      email,
+      email: `test-${suffix}@example.test`,
       password: "password1234",
     },
   });
@@ -19,9 +16,36 @@ export async function createTestSessionWithOrganization() {
     throw new Error("signUpEmail did not return a session token");
   }
 
-  const headers = new Headers({
-    Authorization: `Bearer ${signUpResult.token}`,
+  return {
+    user: signUpResult.user,
+    token: signUpResult.token,
+    headers: new Headers({ Authorization: `Bearer ${signUpResult.token}` }),
+  };
+}
+
+export async function createTestSessionWithRole(organizationId: string, role: string) {
+  const joined = await signUpTestUser(crypto.randomUUID());
+
+  await auth.api.addMember({
+    body: { userId: joined.user.id, organizationId, role },
   });
+  await auth.api.setActiveOrganization({
+    body: { organizationId },
+    headers: joined.headers,
+  });
+
+  return {
+    ...joined,
+    async cleanup() {
+      await db.delete(user).where(eq(user.id, joined.user.id));
+    },
+  };
+}
+
+export async function createTestSessionWithOrganization() {
+  const suffix = crypto.randomUUID();
+  const signUpResult = await signUpTestUser(suffix);
+  const { headers } = signUpResult;
 
   const createdOrganization = await auth.api.createOrganization({
     body: {

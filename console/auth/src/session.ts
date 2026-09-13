@@ -21,6 +21,21 @@ export async function verifyOrganizationMembership(
   return rows.length > 0;
 }
 
+export async function roleOf(userId: string, organizationId: string): Promise<string> {
+  const [held] = await db
+    .select({ role: member.role })
+    .from(member)
+    .where(and(eq(member.userId, userId), eq(member.organizationId, organizationId)))
+    .limit(1);
+  return held?.role ?? "";
+}
+
+const administrative = new Set(["owner", "admin"]);
+
+export function administers(role: string): boolean {
+  return role.split(",").some((named) => administrative.has(named.trim()));
+}
+
 export async function getSessionUserId(headers: Headers): Promise<string | null> {
   const session = await auth.api.getSession({ headers });
   return session?.user.id ?? null;

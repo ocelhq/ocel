@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -68,8 +69,35 @@ func Read(ctx context.Context, api cfn.Describer, ns bootstrap.Namespace) (Stand
 	}, nil
 }
 
+func varsKeys(ctx context.Context, api cfn.Describer, ns bootstrap.Namespace) ([]string, error) {
+	held := make([]string, 0, 2)
+	for _, class := range []string{bootstrap.ClassProduction, bootstrap.ClassPreview} {
+		deployed, err := bootstrap.CheckDeployedFor(ctx, api, ns, class)
+		if err != nil {
+			return nil, err
+		}
+		if !deployed.Present || deployed.VarsKeyARN == "" {
+			continue
+		}
+		if !slices.Contains(held, deployed.VarsKeyARN) {
+			held = append(held, deployed.VarsKeyARN)
+		}
+	}
+	if len(held) == 0 {
+		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+			"neither the %s nor the %s class of %s is bootstrapped with a key variables are sealed under, so the connector would read nothing: bootstrap this account and run ocel connector add again",
+			bootstrap.ClassProduction, bootstrap.ClassPreview, ns)
+	}
+	return held, nil
+}
+
 func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Release,
 	writer providerkit.Writer, progress func(string)) (string, error) {
+	keys, err := varsKeys(ctx, apis.CFN, ns)
+	if err != nil {
+		return "", err
+	}
+
 	bucket, err := codeBucket(ctx, apis, ns, writer, progress)
 	if err != nil {
 		return "", err
@@ -85,7 +113,7 @@ func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Rel
 	}
 	say(progress, "connector "+release.Version+" staged at "+at.Key)
 
-	template, err := templateFor(ns, at, release.Version, release.Config)
+	template, err := templateFor(ns, at, release.Version, release.Config, keys)
 	if err != nil {
 		return "", err
 	}
@@ -217,10 +245,15 @@ func codeTemplate() string {
 	return string(rendered)
 }
 
-func templateFor(ns bootstrap.Namespace, at payloads.Placement, version string, config []byte) (string, error) {
+func templateFor(ns bootstrap.Namespace, at payloads.Placement, version string, config []byte,
+	keys []string) (string, error) {
 	if len(config) == 0 {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
 			"this install carries no connector config, so nothing would name the console the function trusts")
+	}
+	if len(keys) == 0 {
+		return "", providerkit.Refuse(providerkit.CodeInvalid,
+			"this install names no key variables are sealed under, so the connector would reach every key in the account")
 	}
 	rendered, err := json.MarshalIndent(map[string]any{
 		"AWSTemplateFormatVersion": "2010-09-09",
@@ -244,7 +277,7 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, version string, 
 					"ManagedPolicyArns": []string{bootstrap.LambdaBasicExecutionPolicyARN},
 					"Policies": []map[string]any{{
 						"PolicyName":     ns.PolicyName("connector"),
-						"PolicyDocument": map[string]any{"Version": "2012-10-17", "Statement": statements(ns)},
+						"PolicyDocument": map[string]any{"Version": "2012-10-17", "Statement": statements(ns, keys)},
 					}},
 				},
 			},
@@ -344,7 +377,7 @@ func say(progress func(string), message string) {
 	}
 }
 
-func tier(ns bootstrap.Namespace) []bootstrap.GrantStatement {
+func tier(ns bootstrap.Namespace, keys []string) []bootstrap.GrantStatement {
 	r := ns.ScopedARNs()
 	return []bootstrap.GrantStatement{
 		{
@@ -359,7 +392,7 @@ func tier(ns bootstrap.Namespace) []bootstrap.GrantStatement {
 		},
 		{
 			Actions:   []string{"kms:Decrypt", "kms:Encrypt"},
-			Resources: []string{bootstrap.AnyKeyARN},
+			Resources: keys,
 			Condition: map[string]any{
 				"StringEquals": map[string]any{"aws:ResourceTag/" + bootstrap.VarsKeyComponentTagKey: bootstrap.VarsKeyComponentTagValue},
 			},
@@ -375,6 +408,6 @@ func tier(ns bootstrap.Namespace) []bootstrap.GrantStatement {
 	}
 }
 
-func statements(ns bootstrap.Namespace) []map[string]any {
-	return bootstrap.PolicyStatements(tier(ns))
+func statements(ns bootstrap.Namespace, keys []string) []map[string]any {
+	return bootstrap.PolicyStatements(tier(ns, keys))
 }
