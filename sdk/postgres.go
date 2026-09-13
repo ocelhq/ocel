@@ -60,6 +60,22 @@ func Postgres(name string, opts ...PostgresOption) *PostgresDB {
 	return &PostgresDB{name: name}
 }
 
+// PostgresRef references the postgres database named name, declared once elsewhere in
+// the project in any language, and returns the same handle [Postgres] does. It never
+// declares. Call it from a file under the project's discovery folder and import that
+// file from the app: during discovery the call records that the file uses the
+// database, so the deploy grants it to every app that imports the file, and at runtime
+// it reads the binding delivered for that name.
+func PostgresRef(name string) *PostgresDB {
+	if discovering() {
+		_, file, line, _ := runtime.Caller(1)
+		if err := reference(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, name, fmt.Sprintf("%s:%d", file, line)); err != nil {
+			panic(fmt.Sprintf("ocel: reference postgres %q: %v", name, err))
+		}
+	}
+	return &PostgresDB{name: name}
+}
+
 // Name is the name the database was declared under.
 func (p *PostgresDB) Name() string { return p.name }
 
