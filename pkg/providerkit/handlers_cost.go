@@ -21,7 +21,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("this provider does not describe the resources a deploy would create"))
 	}
 	plan, err := buildDeployPlan(&contractv1.DeployRequest{
-		Manifest:    req.GetManifest(),
+		Manifest:    unshipped(req.GetManifest()),
 		Environment: req.GetEnvironment(),
 		Edge:        req.GetEdge(),
 	}, "")
@@ -54,6 +54,17 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	}
 	set.Source = CostSource
 	return set, nil
+}
+
+const scanDeploymentID = "00000000000000000000000000000000"
+
+func unshipped(manifest *contractv1.Manifest) *contractv1.Manifest {
+	for _, app := range manifest.GetApps() {
+		if app.GetDeploymentId() == "" {
+			app.DeploymentId = scanDeploymentID
+		}
+	}
+	return manifest
 }
 
 func shapedFunctions(provider Provider, manifest *contractv1.Manifest) map[string][]FunctionSpec {
