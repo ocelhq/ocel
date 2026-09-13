@@ -61,7 +61,7 @@ func lifecycle(t *testing.T) journey {
 }
 
 func (j journey) installed() string {
-	return filepath.Join(j.providers, "aws", unreleasedVersion, runtime.GOOS+"-"+runtime.GOARCH, "provider-aws")
+	return filepath.Join(j.providers, "provider", "aws", unreleasedVersion, runtime.GOOS+"-"+runtime.GOARCH, "provider-aws")
 }
 
 func (j journey) declaration(t *testing.T) string {
