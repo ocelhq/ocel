@@ -103,6 +103,8 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 - **`tests/`** — the suites that drive the real binary — the journeys, the dev-server
   suite and the Next compatibility harness — and under `tests/fixtures/<concern>/` the
   apps they drive. A fixture directory exercises one concern and nothing else.
+- **`infra/`** — the repo's own ocel project: the resource and variable declarations the
+  CLI discovers by default when it deploys ocelhq itself. Product code never reads it.
 - **`docs/agents/`** — configuration the agent skills read. Not product documentation;
   nothing that explains the code belongs here.
 - **`.github/`** — CI. **`.changeset/`** — the release mechanism; the workflow runs the
