@@ -417,6 +417,42 @@ func TestABindingThisDeployProvisionsIsDeliveredAsItsRecordRatherThanAsNothing(t
 	}
 }
 
+func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheAppsRuntime(t *testing.T) {
+	for runtime, want := range map[string][]string{
+		providerkit.RuntimeNext: {"REGION"},
+		providerkit.RuntimeGo:   {providerkit.ClientURLEnvName, "REGION"},
+	} {
+		t.Run(runtime, func(t *testing.T) {
+			builtProject(t)
+			client, provider := deployServed(t)
+			held := staging(t, provider)
+
+			req := namingARegistry(containerDeployRequest("/healthz"))
+			req.Manifest.Apps[0].Runtime = &contractv1.Runtime{Name: runtime}
+			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, constants.AppURLEnvName, "https://shop.example")
+			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, providerkit.ClientURLEnvName, "https://shop.example")
+			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
+
+			result, _ := deploy(t, client, req)
+			if result == nil || !result.GetSuccess() {
+				t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+			}
+
+			staged := held.records()
+			if len(staged) != 1 {
+				t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
+			}
+			var named []string
+			for _, variable := range staged[0].Variables {
+				named = append(named, variable.Key)
+			}
+			if !slices.Equal(named, want) {
+				t.Errorf("a %s app's staged record names %v, want %v: ocel writes %s only for an app whose bundle reads it, so on any other it is the app's own value", runtime, named, want, providerkit.ClientURLEnvName)
+			}
+		})
+	}
+}
+
 func TestTheStagedRecordNamesEveryValueTheAppDeclaresAndCarriesNone(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)

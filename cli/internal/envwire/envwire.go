@@ -19,6 +19,8 @@ import (
 
 const RootApp = "this project's app"
 
+const RootRuntime = providerkit.RuntimeNode
+
 func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
 	assets, err := node.VarsUI()
 	if err != nil {
@@ -83,11 +85,11 @@ func DevScope(cfg *projectconfig.Config) envgate.Scope {
 
 func Apps(cfg *projectconfig.Config) []envgate.App {
 	if len(cfg.Apps) == 0 {
-		return []envgate.App{{Name: RootApp}}
+		return []envgate.App{{Name: RootApp, Runtime: RootRuntime}}
 	}
 	apps := make([]envgate.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
-		apps = append(apps, envgate.App{Name: a.Name, Folder: a.Folder})
+		apps = append(apps, envgate.App{Name: a.Name, Folder: a.Folder, Runtime: a.Runtime.Name})
 	}
 	return apps
 }

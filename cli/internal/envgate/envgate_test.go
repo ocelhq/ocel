@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 type fakeValues struct {
@@ -404,6 +406,61 @@ func TestDeclareEnv(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "DATABASE_URL") {
 			t.Errorf("err = %v, want the key it refused named", err)
+		}
+	})
+
+	t.Run("refuses the deployment url only where ocel writes it for an app in scope", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			runtime string
+			key     string
+			refused bool
+		}{
+			{runtime: providerkit.RuntimeGo, key: constants.AppURLEnvName, refused: true},
+			{runtime: providerkit.RuntimeNext, key: providerkit.ClientURLEnvName, refused: true},
+			{runtime: providerkit.RuntimeNode, key: providerkit.ClientURLEnvName, refused: true},
+			{runtime: providerkit.RuntimeGo, key: providerkit.ClientURLEnvName, refused: false},
+		} {
+			t.Run(tc.key+" for a "+tc.runtime+" app", func(t *testing.T) {
+				t.Parallel()
+				g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api", Runtime: tc.runtime}}})
+
+				_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+					Definitions: []*resourcesv1.VariableDefinition{def(tc.key, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
+				})
+				if refused := err != nil; refused != tc.refused {
+					t.Errorf("err = %v, want refused %v — ocel writes %s only for an app whose bundle reads it", err, tc.refused, providerkit.ClientURLEnvName)
+				}
+			})
+		}
+	})
+
+	t.Run("refuses the browser's deployment url only where the declaration reaches an app whose bundle reads it", func(t *testing.T) {
+		t.Parallel()
+		mixed := envgate.Scope{Apps: []envgate.App{
+			{Name: "web", Folder: "/web", Runtime: providerkit.RuntimeNext},
+			{Name: "api", Folder: "/api", Runtime: providerkit.RuntimeGo},
+		}}
+		for _, tc := range []struct {
+			name    string
+			folders []string
+			refused bool
+		}{
+			{name: "scoped to the go app", folders: []string{"/api"}, refused: false},
+			{name: "scoped to the next app", folders: []string{"/web"}, refused: true},
+			{name: "unscoped, so reaching both", refused: true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				g := prefetched(t, newFakeValues(), mixed)
+
+				_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+					Definitions: []*resourcesv1.VariableDefinition{scoped(providerkit.ClientURLEnvName, tc.folders...)},
+				})
+				if refused := err != nil; refused != tc.refused {
+					t.Errorf("err = %v, want refused %v — a declaration is refused for the apps its folders reach, not for the project", err, tc.refused)
+				}
+			})
 		}
 	})
 

@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -85,7 +86,7 @@ func runRun(ctx context.Context, deps cmddeps.Deps, local bool, cwd string, appA
 		}
 		consoleLink = &devConsole{apiURL: apiURL, token: creds.AccessToken, projectID: bound.ProjectID}
 	}
-	return runStandalone(ctx, deps, consoleLink, cfg, appArgs, stdout, stderr, stdin)
+	return runStandalone(ctx, deps, consoleLink, cfg, targetScope(cfg, cwd), appArgs, stdout, stderr, stdin)
 }
 
 func runningDevServer(root string) (devlock.Lease, bool, error) {
@@ -111,7 +112,7 @@ func runOnceAsFollower(ctx context.Context, deps cmddeps.Deps, leader devlock.Le
 	return runChildOnce(ctx, deps, appArgs, env, stdin, stdout, stderr)
 }
 
-func runStandalone(ctx context.Context, deps cmddeps.Deps, link *devConsole, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runStandalone(ctx context.Context, deps cmddeps.Deps, link *devConsole, cfg *projectconfig.Config, scope envgate.Scope, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	file, err := dotenv.Load(cfg.Dir)
 	if err != nil {
 		return err
@@ -141,7 +142,7 @@ func runStandalone(ctx context.Context, deps cmddeps.Deps, link *devConsole, cfg
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
 
-	resolved, err := discoverAndSync(ctx, srv, cfg, file.Values, invocation{name: "run", local: link == nil}, stdout, stderr)
+	resolved, err := discoverAndSync(ctx, srv, cfg, file.Values, scope, invocation{name: "run", local: link == nil}, stdout, stderr)
 	if err != nil {
 		return err
 	}
