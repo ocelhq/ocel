@@ -73,7 +73,10 @@ func (p *platformPackages) splitsByPlatform(root string) bool {
 		return split
 	}
 	pkg, err := readManifest(root)
-	split := err == nil && pkg.Version != "" && slices.ContainsFunc(sortedKeys(pkg.OptionalDependencies), func(dep string) bool {
+	split := err == nil && pkg.Version != "" && slices.ContainsFunc(slices.Collect(maps.Keys(pkg.OptionalDependencies)), func(dep string) bool {
+		if platformVariantName.MatchString(dep) {
+			return true
+		}
 		installed, found := installedManifest(root, dep)
 		return found && (len(installed.OS) > 0 || len(installed.CPU) > 0)
 	})
@@ -87,6 +90,8 @@ func (p *platformPackages) splitsByPlatform(root string) bool {
 	}
 	return split
 }
+
+var platformVariantName = regexp.MustCompile(`(?:^|[/-])(?:aix|android|darwin|freebsd|linux|openbsd|sunos|win32)-(?:arm|arm64|ia32|loong64|mips64el|ppc64|riscv64|s390x|universal|x64)(?:-|$)`)
 
 func readManifest(dir string) (manifest, error) {
 	var pkg manifest
