@@ -930,17 +930,37 @@ func (b bootstrapper) takeKey(ctx context.Context, name string) error {
 	if key == nil {
 		return nil
 	}
-	if !usable(key.GetPrimary()) {
-		return nil
+	versions := client.ListCryptoKeyVersions(ctx, &kmspb.ListCryptoKeyVersionsRequest{Parent: keyPath(b.clients, name)})
+	var held []*kmspb.CryptoKeyVersion
+	for {
+		version, err := versions.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("list the versions the %s key holds: %w", name, err)
+		}
+		held = append(held, version)
 	}
-	if _, err := dialled(ctx, func() (*kmspb.CryptoKeyVersion, error) {
-		return client.DestroyCryptoKeyVersion(ctx, &kmspb.DestroyCryptoKeyVersionRequest{
-			Name: key.GetPrimary().GetName(),
-		})
-	}); err != nil {
-		return fmt.Errorf("schedule the %s key's material for destruction: %w", name, err)
+	for _, version := range destroyable(held) {
+		if _, err := dialled(ctx, func() (*kmspb.CryptoKeyVersion, error) {
+			return client.DestroyCryptoKeyVersion(ctx, &kmspb.DestroyCryptoKeyVersionRequest{Name: version})
+		}); err != nil {
+			return fmt.Errorf("schedule the %s key's material for destruction: %w", name, err)
+		}
 	}
 	return nil
+}
+
+func destroyable(versions []*kmspb.CryptoKeyVersion) []string {
+	var named []string
+	for _, version := range versions {
+		switch version.GetState() {
+		case kmspb.CryptoKeyVersion_ENABLED, kmspb.CryptoKeyVersion_DISABLED:
+			named = append(named, version.GetName())
+		}
+	}
+	return named
 }
 
 func (b bootstrapper) takeDatabase(ctx context.Context, read survey) error {
