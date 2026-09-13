@@ -2,7 +2,7 @@ import { db } from "@console/db";
 import * as schema from "@console/db/schema";
 import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { bearer, deviceAuthorization, organization } from "better-auth/plugins";
+import { bearer, deviceAuthorization, jwt, organization } from "better-auth/plugins";
 import { asc, eq } from "drizzle-orm";
 import { OCEL_CLI_CLIENT_ID } from "./constants";
 
@@ -44,6 +44,10 @@ export const authConfig = {
   plugins: [
     organization(),
     bearer(),
+    jwt({
+      jwks: { keyPairConfig: { alg: "EdDSA", crv: "Ed25519" } },
+      disableSettingJwtHeader: true,
+    }),
     deviceAuthorization({
       verificationUri: "/device",
       validateClient: async (clientId) => clientId === OCEL_CLI_CLIENT_ID,

@@ -43,6 +43,13 @@
       "when": 1789214760091,
       "tag": "0005_flowery_squadron_supreme",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789287589141,
+      "tag": "0006_magenta_spyke",
+      "breakpoints": true
     }
   ]
 }

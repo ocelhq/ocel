@@ -1,24 +1,43 @@
-import { type Client, Code, ConnectError, createClient } from "@connectrpc/connect";
+import {
+  type Client,
+  Code,
+  ConnectError,
+  createClient,
+  type Interceptor,
+} from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
 
 import { EnvVarsService } from "./gen/provider/envvars/v1/envvars_pb";
 import { type Outcome, refuse, ValueError } from "./item";
 
+export const SCOPES = ["envvars.read", "envvars.write", "envvars.reveal"] as const;
+
+export type Scope = (typeof SCOPES)[number];
+
 export interface Connector {
   id: string;
   url: string;
+  token: string;
   capabilities: readonly string[];
 }
 
 export type Vars = Client<typeof EnvVarsService>;
 
-// TODO(alpha): #1134 has the connector polling the console for work items rather than
-// answering a URL the console dials. Every caller already awaits an Outcome, so the
-// change lands here and nowhere else.
+function bearing(token: string): Interceptor {
+  return (next) => (request) => {
+    request.header.set("Authorization", `Bearer ${token}`);
+    return next(request);
+  };
+}
+
 export function vars(connector: Connector): Vars {
   return createClient(
     EnvVarsService,
-    createConnectTransport({ baseUrl: connector.url, httpVersion: "1.1" }),
+    createConnectTransport({
+      baseUrl: connector.url,
+      httpVersion: "1.1",
+      interceptors: [bearing(connector.token)],
+    }),
   );
 }
 

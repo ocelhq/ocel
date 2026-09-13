@@ -24,17 +24,22 @@ const version = "0.0.0-alpha"
 func main() {
 	addr := flag.String("addr", "127.0.0.1:7777", "address to serve on")
 	region := flag.String("region", os.Getenv("OCEL_AWS_REGION"), "AWS region the target is bootstrapped in")
-	reveal := flag.Bool("reveal", false, "answer RevealValues, so the console can show plain and sensitive values")
+	config := flag.String("config", os.Getenv("OCEL_CONNECTOR_CONFIG"), "path to the connector config naming the console, this connector and its grants")
 	flag.Parse()
 
-	if err := run(*addr, *region, *reveal); err != nil {
+	if err := run(*addr, *region, *config); err != nil {
 		fmt.Fprintln(os.Stderr, "ocel connector:", err)
 		os.Exit(1)
 	}
 }
 
-func run(addr, region string, reveal bool) error {
+func run(addr, region, config string) error {
 	ctx := context.Background()
+
+	trust, err := connectorkit.LoadConfig(config)
+	if err != nil {
+		return err
+	}
 
 	ns, err := providerkit.NamespaceFromEnv()
 	if err != nil {
@@ -52,11 +57,14 @@ func run(addr, region string, reveal bool) error {
 	}
 
 	return connectorkit.Serve(connectorkit.Spec{
-		Version: version,
-		Vendor:  "aws",
-		Target:  fmt.Sprintf("aws/%s/%s", cfg.Region, ns),
-		Addr:    addr,
-		Reveal:  reveal,
+		Version:        version,
+		Vendor:         "aws",
+		Target:         fmt.Sprintf("aws/%s/%s", cfg.Region, ns),
+		Addr:           addr,
+		Console:        trust.Console,
+		ConnectorID:    trust.ConnectorID,
+		OrganizationID: trust.OrganizationID,
+		Grants:         trust.Grants,
 		Vars: providerkit.Vars{
 			Records: awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: held},
 			Sealer:  awsports.Sealer{KMS: kms.NewFromConfig(cfg), Keys: held},

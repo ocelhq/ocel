@@ -4,7 +4,7 @@ import { project } from "@console/db/schema";
 import { and, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { requireOrganization } from "@/lib/access";
-import { connectorFor } from "@/lib/connectors";
+import { connectorFor, dial } from "@/lib/connectors";
 import { latestTopology, namedEnvironments } from "@/lib/project-variables";
 import { stateOf } from "@/lib/variables";
 import { PageShell } from "../../../page-shell";
@@ -54,11 +54,7 @@ export default async function VariablesPage({
   let stored: readonly Stored[] = [];
   let refusal = null;
   if (connector !== null) {
-    const answer = await envvars.list(
-      { id: connector.id, url: connector.url, capabilities: connector.capabilities },
-      held,
-      found.slug,
-    );
+    const answer = await envvars.list(await dial(session, connector), held, found.slug);
     if (answer.done) {
       stored = answer.result;
     } else {
