@@ -2,9 +2,6 @@ package varsui
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/pkg/channel"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -101,17 +99,17 @@ func Serve(ctx context.Context, opts Options) (*Session, error) {
 		return nil, fmt.Errorf("open a loopback port for the variables UI: %w", err)
 	}
 
-	token := make([]byte, 32)
-	if _, err := rand.Read(token); err != nil {
+	token, err := channel.NewSessionToken()
+	if err != nil {
 		listener.Close()
-		return nil, fmt.Errorf("generate the variables UI session token: %w", err)
+		return nil, err
 	}
 
 	if opts.Absence <= 0 {
 		opts.Absence = DefaultAbsence
 	}
 	s := &Session{
-		Token:    base64.RawURLEncoding.EncodeToString(token),
+		Token:    token,
 		opts:     opts,
 		listener: listener,
 		done:     make(chan struct{}),
@@ -178,34 +176,7 @@ func (s *Session) handler() http.Handler {
 }
 
 func (s *Session) guard(next http.Handler) http.Handler {
-	address := s.listener.Addr().String()
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Host != address {
-			refuse(w, "this request names a host other than the session's own; a name that resolves here later is not this session")
-			return
-		}
-		if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+address {
-			refuse(w, "this request comes from another origin")
-			return
-		}
-		if !s.authorized(r.Header.Get("Authorization")) {
-			refuse(w, "this request carries no valid session token")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (s *Session) authorized(header string) bool {
-	const prefix = "Bearer "
-	if len(header) <= len(prefix) || header[:len(prefix)] != prefix {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(header[len(prefix):]), []byte(s.Token)) == 1
-}
-
-func refuse(w http.ResponseWriter, reason string) {
-	http.Error(w, reason, http.StatusForbidden)
+	return channel.LoopbackGuard(s.listener.Addr().String(), s.Token, next)
 }
 
 func (s *Session) handleState(w http.ResponseWriter, r *http.Request) {
