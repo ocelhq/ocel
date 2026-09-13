@@ -39,10 +39,11 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 
 	captured := &boundedCapture{}
 	tee := io.MultiWriter(buildOut, captured)
-	resources, err := deps.CollectDeclarations(ctx, cfg, gate, tee, tee)
+	collected, err := deps.CollectDeclarations(ctx, cfg, gate, tee, tee)
 	if err != nil {
 		return nil, captured.annotate(err)
 	}
+	resources := collected.Resources
 	warnings, err := envgate.Lint(gate.Definitions(), envwire.Apps(cfg), cfg.Path)
 	if err != nil {
 		return nil, err

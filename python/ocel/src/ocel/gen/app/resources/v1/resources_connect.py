@@ -14,7 +14,7 @@ from connectrpc.errors import ConnectError
 from connectrpc.method import IdempotencyLevel, MethodInfo
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, Endpoint, EndpointSync
 
-from .resources_pb import DeclareRequest, DeclareResponse
+from .resources_pb import DeclareRequest, DeclareResponse, ReferenceRequest, ReferenceResponse
 from .variables_pb import DeclareEnvRequest, DeclareEnvResponse, ReportEnvProblemsRequest, ReportEnvProblemsResponse
 
 if TYPE_CHECKING:
@@ -28,6 +28,9 @@ if TYPE_CHECKING:
 
 class ResourceService(Protocol):
     async def declare(self, request: DeclareRequest, ctx: RequestContext[DeclareRequest, DeclareResponse]) -> DeclareResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def reference(self, request: ReferenceRequest, ctx: RequestContext[ReferenceRequest, ReferenceResponse]) -> ReferenceResponse:
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
     async def declare_env(self, request: DeclareEnvRequest, ctx: RequestContext[DeclareEnvRequest, DeclareEnvResponse]) -> DeclareEnvResponse:
@@ -59,6 +62,16 @@ class ResourceServiceASGIApplication(ConnectASGIApplication[ResourceService]):
                         idempotency_level=IdempotencyLevel.UNKNOWN,
                     ),
                     function=svc.declare,
+                ),
+                "/app.resources.v1.ResourceService/Reference": Endpoint.unary(
+                    method=MethodInfo(
+                        name="Reference",
+                        service_name="app.resources.v1.ResourceService",
+                        input=ReferenceRequest,
+                        output=ReferenceResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=svc.reference,
                 ),
                 "/app.resources.v1.ResourceService/DeclareEnv": Endpoint.unary(
                     method=MethodInfo(
@@ -114,6 +127,26 @@ class ResourceServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
         )
 
+    async def reference(
+        self,
+        request: ReferenceRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> ReferenceResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Reference",
+                service_name="app.resources.v1.ResourceService",
+                input=ReferenceRequest,
+                output=ReferenceResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
     async def declare_env(
         self,
         request: DeclareEnvRequest,
@@ -158,6 +191,9 @@ class ResourceServiceSync(Protocol):
     def declare(self, request: DeclareRequest, ctx: RequestContext[DeclareRequest, DeclareResponse]) -> DeclareResponse:
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    def reference(self, request: ReferenceRequest, ctx: RequestContext[ReferenceRequest, ReferenceResponse]) -> ReferenceResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
     def declare_env(self, request: DeclareEnvRequest, ctx: RequestContext[DeclareEnvRequest, DeclareEnvResponse]) -> DeclareEnvResponse:
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -185,6 +221,16 @@ class ResourceServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.UNKNOWN,
                     ),
                     function=service.declare,
+                ),
+                "/app.resources.v1.ResourceService/Reference": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="Reference",
+                        service_name="app.resources.v1.ResourceService",
+                        input=ReferenceRequest,
+                        output=ReferenceResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=service.reference,
                 ),
                 "/app.resources.v1.ResourceService/DeclareEnv": EndpointSync.unary(
                     method=MethodInfo(
@@ -234,6 +280,25 @@ class ResourceServiceClientSync(ConnectClientSync):
                 service_name="app.resources.v1.ResourceService",
                 input=DeclareRequest,
                 output=DeclareResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def reference(
+        self,
+        request: ReferenceRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> ReferenceResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Reference",
+                service_name="app.resources.v1.ResourceService",
+                input=ReferenceRequest,
+                output=ReferenceResponse,
                 idempotency_level=IdempotencyLevel.UNKNOWN,
             ),
             headers=headers,

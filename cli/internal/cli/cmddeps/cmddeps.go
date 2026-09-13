@@ -26,7 +26,7 @@ type Deps struct {
 	BuildAppImages      func(ctx context.Context, cfg *projectconfig.Config, out io.Writer) (map[string]string, error)
 	CollectAppFunctions func(projectDir string) ([]manifestbuilder.Function, error)
 	DeploymentID        func(projectDir, app string) (string, error)
-	CollectDeclarations func(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error)
+	CollectDeclarations func(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) (declare.Collected, error)
 	OpenBrowser         func(url string) error
 	ServeVarsUI         func(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error)
 	CurrentGitBranch    func(dir string) (string, error)

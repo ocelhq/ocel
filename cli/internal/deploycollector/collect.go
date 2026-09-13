@@ -42,24 +42,24 @@ func Prepare(cfg *projectconfig.Config) (Prepared, error) {
 	return Prepared{discovery: prepared, fingerprint: fingerprint}, nil
 }
 
-func PrepareAndCollect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error) {
+func PrepareAndCollect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) (declare.Collected, error) {
 	prepared, err := Prepare(cfg)
 	if err != nil {
-		return nil, err
+		return declare.Collected{}, err
 	}
 	return Collect(ctx, cfg, gate, prepared, stdout, stderr)
 }
 
-func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, prepared Prepared, stdout, stderr io.Writer) ([]declare.Resource, error) {
+func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, prepared Prepared, stdout, stderr io.Writer) (declare.Collected, error) {
 	c := New(gate)
 
 	if err := gate.Prefetch(ctx); err != nil {
-		return nil, err
+		return declare.Collected{}, err
 	}
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return nil, fmt.Errorf("start deploy collector: %w", err)
+		return declare.Collected{}, fmt.Errorf("start deploy collector: %w", err)
 	}
 	httpSrv := &http.Server{Handler: c.Mux()}
 	go httpSrv.Serve(listener)
@@ -68,7 +68,7 @@ func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate,
 	collectorAddr := "http://" + listener.Addr().String()
 
 	if err := discovery.Run(ctx, cfg.Dir, prepared.discovery, collectorAddr, stdout, stderr); err != nil {
-		return nil, err
+		return declare.Collected{}, err
 	}
 
 	return c.Snapshot(), nil

@@ -259,6 +259,94 @@ func (*DeclareRequest_Postgres) isDeclareRequest_Config() {}
 
 func (*DeclareRequest_Bucket) isDeclareRequest_Config() {}
 
+type ReferenceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Resource      *ResourceIdentifier    `protobuf:"bytes,1,opt,name=resource,proto3" json:"resource,omitempty"`
+	Source        string                 `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReferenceRequest) Reset() {
+	*x = ReferenceRequest{}
+	mi := &file_app_resources_v1_resources_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReferenceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReferenceRequest) ProtoMessage() {}
+
+func (x *ReferenceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_app_resources_v1_resources_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReferenceRequest.ProtoReflect.Descriptor instead.
+func (*ReferenceRequest) Descriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ReferenceRequest) GetResource() *ResourceIdentifier {
+	if x != nil {
+		return x.Resource
+	}
+	return nil
+}
+
+func (x *ReferenceRequest) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+type ReferenceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReferenceResponse) Reset() {
+	*x = ReferenceResponse{}
+	mi := &file_app_resources_v1_resources_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReferenceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReferenceResponse) ProtoMessage() {}
+
+func (x *ReferenceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_app_resources_v1_resources_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReferenceResponse.ProtoReflect.Descriptor instead.
+func (*ReferenceResponse) Descriptor() ([]byte, []int) {
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{4}
+}
+
 type PostgresConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
@@ -268,7 +356,7 @@ type PostgresConfig struct {
 
 func (x *PostgresConfig) Reset() {
 	*x = PostgresConfig{}
-	mi := &file_app_resources_v1_resources_proto_msgTypes[3]
+	mi := &file_app_resources_v1_resources_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -280,7 +368,7 @@ func (x *PostgresConfig) String() string {
 func (*PostgresConfig) ProtoMessage() {}
 
 func (x *PostgresConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_app_resources_v1_resources_proto_msgTypes[3]
+	mi := &file_app_resources_v1_resources_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -293,7 +381,7 @@ func (x *PostgresConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostgresConfig.ProtoReflect.Descriptor instead.
 func (*PostgresConfig) Descriptor() ([]byte, []int) {
-	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{3}
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *PostgresConfig) GetVersion() string {
@@ -312,7 +400,7 @@ type BucketConfig struct {
 
 func (x *BucketConfig) Reset() {
 	*x = BucketConfig{}
-	mi := &file_app_resources_v1_resources_proto_msgTypes[4]
+	mi := &file_app_resources_v1_resources_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -324,7 +412,7 @@ func (x *BucketConfig) String() string {
 func (*BucketConfig) ProtoMessage() {}
 
 func (x *BucketConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_app_resources_v1_resources_proto_msgTypes[4]
+	mi := &file_app_resources_v1_resources_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -337,7 +425,7 @@ func (x *BucketConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BucketConfig.ProtoReflect.Descriptor instead.
 func (*BucketConfig) Descriptor() ([]byte, []int) {
-	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{4}
+	return file_app_resources_v1_resources_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *BucketConfig) GetAllowedOrigins() []string {
@@ -361,7 +449,11 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\bpostgres\x18\x02 \x01(\v2 .app.resources.v1.PostgresConfigH\x00R\bpostgres\x128\n" +
 	"\x06bucket\x18\x03 \x01(\v2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x12\x16\n" +
 	"\x06source\x18\x04 \x01(\tR\x06sourceB\b\n" +
-	"\x06config\"*\n" +
+	"\x06config\"l\n" +
+	"\x10ReferenceRequest\x12@\n" +
+	"\bresource\x18\x01 \x01(\v2$.app.resources.v1.ResourceIdentifierR\bresource\x12\x16\n" +
+	"\x06source\x18\x02 \x01(\tR\x06source\"\x13\n" +
+	"\x11ReferenceResponse\"*\n" +
 	"\x0ePostgresConfig\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\"7\n" +
 	"\fBucketConfig\x12'\n" +
@@ -370,9 +462,10 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n" +
 	"\x14RESOURCE_TYPE_BUCKET\x10\x02\x12\x1b\n" +
-	"\x17RESOURCE_TYPE_CONTAINER\x10\x032\xa8\x02\n" +
+	"\x17RESOURCE_TYPE_CONTAINER\x10\x032\xfe\x02\n" +
 	"\x0fResourceService\x12N\n" +
-	"\aDeclare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n" +
+	"\aDeclare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12T\n" +
+	"\tReference\x12\".app.resources.v1.ReferenceRequest\x1a#.app.resources.v1.ReferenceResponse\x12W\n" +
 	"\n" +
 	"DeclareEnv\x12#.app.resources.v1.DeclareEnvRequest\x1a$.app.resources.v1.DeclareEnvResponse\x12l\n" +
 	"\x11ReportEnvProblems\x12*.app.resources.v1.ReportEnvProblemsRequest\x1a+.app.resources.v1.ReportEnvProblemsResponseB?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3"
@@ -390,35 +483,40 @@ func file_app_resources_v1_resources_proto_rawDescGZIP() []byte {
 }
 
 var file_app_resources_v1_resources_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_app_resources_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_app_resources_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_app_resources_v1_resources_proto_goTypes = []any{
 	(ResourceType)(0),                 // 0: app.resources.v1.ResourceType
 	(*ResourceIdentifier)(nil),        // 1: app.resources.v1.ResourceIdentifier
 	(*DeclareResponse)(nil),           // 2: app.resources.v1.DeclareResponse
 	(*DeclareRequest)(nil),            // 3: app.resources.v1.DeclareRequest
-	(*PostgresConfig)(nil),            // 4: app.resources.v1.PostgresConfig
-	(*BucketConfig)(nil),              // 5: app.resources.v1.BucketConfig
-	(*DeclareEnvRequest)(nil),         // 6: app.resources.v1.DeclareEnvRequest
-	(*ReportEnvProblemsRequest)(nil),  // 7: app.resources.v1.ReportEnvProblemsRequest
-	(*DeclareEnvResponse)(nil),        // 8: app.resources.v1.DeclareEnvResponse
-	(*ReportEnvProblemsResponse)(nil), // 9: app.resources.v1.ReportEnvProblemsResponse
+	(*ReferenceRequest)(nil),          // 4: app.resources.v1.ReferenceRequest
+	(*ReferenceResponse)(nil),         // 5: app.resources.v1.ReferenceResponse
+	(*PostgresConfig)(nil),            // 6: app.resources.v1.PostgresConfig
+	(*BucketConfig)(nil),              // 7: app.resources.v1.BucketConfig
+	(*DeclareEnvRequest)(nil),         // 8: app.resources.v1.DeclareEnvRequest
+	(*ReportEnvProblemsRequest)(nil),  // 9: app.resources.v1.ReportEnvProblemsRequest
+	(*DeclareEnvResponse)(nil),        // 10: app.resources.v1.DeclareEnvResponse
+	(*ReportEnvProblemsResponse)(nil), // 11: app.resources.v1.ReportEnvProblemsResponse
 }
 var file_app_resources_v1_resources_proto_depIdxs = []int32{
-	0, // 0: app.resources.v1.ResourceIdentifier.type:type_name -> app.resources.v1.ResourceType
-	1, // 1: app.resources.v1.DeclareRequest.resource:type_name -> app.resources.v1.ResourceIdentifier
-	4, // 2: app.resources.v1.DeclareRequest.postgres:type_name -> app.resources.v1.PostgresConfig
-	5, // 3: app.resources.v1.DeclareRequest.bucket:type_name -> app.resources.v1.BucketConfig
-	3, // 4: app.resources.v1.ResourceService.Declare:input_type -> app.resources.v1.DeclareRequest
-	6, // 5: app.resources.v1.ResourceService.DeclareEnv:input_type -> app.resources.v1.DeclareEnvRequest
-	7, // 6: app.resources.v1.ResourceService.ReportEnvProblems:input_type -> app.resources.v1.ReportEnvProblemsRequest
-	2, // 7: app.resources.v1.ResourceService.Declare:output_type -> app.resources.v1.DeclareResponse
-	8, // 8: app.resources.v1.ResourceService.DeclareEnv:output_type -> app.resources.v1.DeclareEnvResponse
-	9, // 9: app.resources.v1.ResourceService.ReportEnvProblems:output_type -> app.resources.v1.ReportEnvProblemsResponse
-	7, // [7:10] is the sub-list for method output_type
-	4, // [4:7] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	0,  // 0: app.resources.v1.ResourceIdentifier.type:type_name -> app.resources.v1.ResourceType
+	1,  // 1: app.resources.v1.DeclareRequest.resource:type_name -> app.resources.v1.ResourceIdentifier
+	6,  // 2: app.resources.v1.DeclareRequest.postgres:type_name -> app.resources.v1.PostgresConfig
+	7,  // 3: app.resources.v1.DeclareRequest.bucket:type_name -> app.resources.v1.BucketConfig
+	1,  // 4: app.resources.v1.ReferenceRequest.resource:type_name -> app.resources.v1.ResourceIdentifier
+	3,  // 5: app.resources.v1.ResourceService.Declare:input_type -> app.resources.v1.DeclareRequest
+	4,  // 6: app.resources.v1.ResourceService.Reference:input_type -> app.resources.v1.ReferenceRequest
+	8,  // 7: app.resources.v1.ResourceService.DeclareEnv:input_type -> app.resources.v1.DeclareEnvRequest
+	9,  // 8: app.resources.v1.ResourceService.ReportEnvProblems:input_type -> app.resources.v1.ReportEnvProblemsRequest
+	2,  // 9: app.resources.v1.ResourceService.Declare:output_type -> app.resources.v1.DeclareResponse
+	5,  // 10: app.resources.v1.ResourceService.Reference:output_type -> app.resources.v1.ReferenceResponse
+	10, // 11: app.resources.v1.ResourceService.DeclareEnv:output_type -> app.resources.v1.DeclareEnvResponse
+	11, // 12: app.resources.v1.ResourceService.ReportEnvProblems:output_type -> app.resources.v1.ReportEnvProblemsResponse
+	9,  // [9:13] is the sub-list for method output_type
+	5,  // [5:9] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_app_resources_v1_resources_proto_init() }
@@ -437,7 +535,7 @@ func file_app_resources_v1_resources_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_resources_v1_resources_proto_rawDesc), len(file_app_resources_v1_resources_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

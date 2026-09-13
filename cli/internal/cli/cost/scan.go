@@ -198,10 +198,11 @@ const unbuiltDigest = "000000000000000000000000000000000000000000000000000000000
 
 func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, env *environmentv1.Environment, out io.Writer) (*contractv1.Manifest, []string, error) {
 	gate := envgate.New(unread{}, envwire.Scope(cfg, env.GetTier() == environmentv1.Tier_TIER_PREVIEW, ""))
-	resources, err := deps.CollectDeclarations(ctx, cfg, gate, out, out)
+	collected, err := deps.CollectDeclarations(ctx, cfg, gate, out, out)
 	if err != nil {
 		return nil, nil, err
 	}
+	resources := collected.Resources
 	var assumptions []string
 	functions, err := deps.CollectAppFunctions(cfg.Dir)
 	if errors.Is(err, appbuilder.ErrNoBuildOutput) {

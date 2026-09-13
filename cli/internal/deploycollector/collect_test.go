@@ -26,10 +26,11 @@ func TestCollect(t *testing.T) {
 		}
 
 		var stdout, stderr bytes.Buffer
-		resources, err := PrepareAndCollect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
+		collected, err := PrepareAndCollect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 		}
+		resources := collected.Resources
 		if len(resources) != 0 {
 			t.Fatalf("Collect() returned %d resources, want none: %+v", len(resources), resources)
 		}
@@ -75,10 +76,11 @@ export {};
 		}
 
 		var stdout, stderr bytes.Buffer
-		resources, err := PrepareAndCollect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
+		collected, err := PrepareAndCollect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
 		if err != nil {
 			t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 		}
+		resources := collected.Resources
 
 		if len(resources) != 2 {
 			t.Fatalf("Collect() returned %d resources, want 2: %+v", len(resources), resources)
@@ -130,12 +132,12 @@ await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+c
 `)
 
 	var stdout, stderr bytes.Buffer
-	resources, err := Collect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), prepared, &stdout, &stderr)
+	collected, err := Collect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), prepared, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 	}
-	if len(resources) != 1 || resources[0].Name != "prepared-once" {
-		t.Fatalf("Collect() returned %+v, want the declare of the bundle Prepare built rather than a second bundle", resources)
+	if resources := collected.Resources; len(resources) != 1 || resources[0].Name != "prepared-once" {
+		t.Fatalf("Collect() returned %+v, want the declare of the bundle Prepare built rather than a second bundle", collected.Resources)
 	}
 }
 

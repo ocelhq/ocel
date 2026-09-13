@@ -8,6 +8,8 @@ import "app/resources/v1/variables.proto";
 service ResourceService {
     rpc Declare(DeclareRequest) returns (DeclareResponse);
 
+    rpc Reference(ReferenceRequest) returns (ReferenceResponse);
+
     rpc DeclareEnv(DeclareEnvRequest) returns (DeclareEnvResponse);
 
     rpc ReportEnvProblems(ReportEnvProblemsRequest) returns (ReportEnvProblemsResponse);
@@ -37,6 +39,15 @@ message DeclareRequest {
   }
 
   string source = 4;
+}
+
+message ReferenceRequest {
+  ResourceIdentifier resource = 1;
+
+  string source = 2;
+}
+
+message ReferenceResponse {
 }
 
 message PostgresConfig {

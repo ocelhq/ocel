@@ -21,11 +21,11 @@ import (
 )
 
 func declaring(deps *cmddeps.Deps, definitions ...*resourcesv1.VariableDefinition) {
-	deps.CollectDeclarations = func(ctx context.Context, _ *projectconfig.Config, gate *envgate.Gate, _, _ io.Writer) ([]declare.Resource, error) {
+	deps.CollectDeclarations = func(ctx context.Context, _ *projectconfig.Config, gate *envgate.Gate, _, _ io.Writer) (declare.Collected, error) {
 		if _, err := gate.DeclareEnv(ctx, &resourcesv1.DeclareEnvRequest{Definitions: definitions}); err != nil {
-			return nil, err
+			return declare.Collected{}, err
 		}
-		return nil, nil
+		return declare.Collected{}, nil
 	}
 }
 
@@ -171,8 +171,8 @@ export default {
 		root := setUpGenerateFixture(t, generateSoloConfig, "")
 
 		deps := newDeps()
-		deps.CollectDeclarations = func(context.Context, *projectconfig.Config, *envgate.Gate, io.Writer, io.Writer) ([]declare.Resource, error) {
-			return nil, errors.New("discovery blew up")
+		deps.CollectDeclarations = func(context.Context, *projectconfig.Config, *envgate.Gate, io.Writer, io.Writer) (declare.Collected, error) {
+			return declare.Collected{}, errors.New("discovery blew up")
 		}
 
 		var stdout, stderr bytes.Buffer

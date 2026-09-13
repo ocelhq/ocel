@@ -35,6 +35,9 @@ const (
 const (
 	// ResourceServiceDeclareProcedure is the fully-qualified name of the ResourceService's Declare RPC.
 	ResourceServiceDeclareProcedure = "/app.resources.v1.ResourceService/Declare"
+	// ResourceServiceReferenceProcedure is the fully-qualified name of the ResourceService's Reference
+	// RPC.
+	ResourceServiceReferenceProcedure = "/app.resources.v1.ResourceService/Reference"
 	// ResourceServiceDeclareEnvProcedure is the fully-qualified name of the ResourceService's
 	// DeclareEnv RPC.
 	ResourceServiceDeclareEnvProcedure = "/app.resources.v1.ResourceService/DeclareEnv"
@@ -46,6 +49,7 @@ const (
 // ResourceServiceClient is a client for the app.resources.v1.ResourceService service.
 type ResourceServiceClient interface {
 	Declare(context.Context, *v1.DeclareRequest) (*v1.DeclareResponse, error)
+	Reference(context.Context, *v1.ReferenceRequest) (*v1.ReferenceResponse, error)
 	DeclareEnv(context.Context, *v1.DeclareEnvRequest) (*v1.DeclareEnvResponse, error)
 	ReportEnvProblems(context.Context, *v1.ReportEnvProblemsRequest) (*v1.ReportEnvProblemsResponse, error)
 }
@@ -67,6 +71,12 @@ func NewResourceServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(resourceServiceMethods.ByName("Declare")),
 			connect.WithClientOptions(opts...),
 		),
+		reference: connect.NewClient[v1.ReferenceRequest, v1.ReferenceResponse](
+			httpClient,
+			baseURL+ResourceServiceReferenceProcedure,
+			connect.WithSchema(resourceServiceMethods.ByName("Reference")),
+			connect.WithClientOptions(opts...),
+		),
 		declareEnv: connect.NewClient[v1.DeclareEnvRequest, v1.DeclareEnvResponse](
 			httpClient,
 			baseURL+ResourceServiceDeclareEnvProcedure,
@@ -85,6 +95,7 @@ func NewResourceServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 // resourceServiceClient implements ResourceServiceClient.
 type resourceServiceClient struct {
 	declare           *connect.Client[v1.DeclareRequest, v1.DeclareResponse]
+	reference         *connect.Client[v1.ReferenceRequest, v1.ReferenceResponse]
 	declareEnv        *connect.Client[v1.DeclareEnvRequest, v1.DeclareEnvResponse]
 	reportEnvProblems *connect.Client[v1.ReportEnvProblemsRequest, v1.ReportEnvProblemsResponse]
 }
@@ -92,6 +103,15 @@ type resourceServiceClient struct {
 // Declare calls app.resources.v1.ResourceService.Declare.
 func (c *resourceServiceClient) Declare(ctx context.Context, req *v1.DeclareRequest) (*v1.DeclareResponse, error) {
 	response, err := c.declare.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// Reference calls app.resources.v1.ResourceService.Reference.
+func (c *resourceServiceClient) Reference(ctx context.Context, req *v1.ReferenceRequest) (*v1.ReferenceResponse, error) {
+	response, err := c.reference.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -119,6 +139,7 @@ func (c *resourceServiceClient) ReportEnvProblems(ctx context.Context, req *v1.R
 // ResourceServiceHandler is an implementation of the app.resources.v1.ResourceService service.
 type ResourceServiceHandler interface {
 	Declare(context.Context, *v1.DeclareRequest) (*v1.DeclareResponse, error)
+	Reference(context.Context, *v1.ReferenceRequest) (*v1.ReferenceResponse, error)
 	DeclareEnv(context.Context, *v1.DeclareEnvRequest) (*v1.DeclareEnvResponse, error)
 	ReportEnvProblems(context.Context, *v1.ReportEnvProblemsRequest) (*v1.ReportEnvProblemsResponse, error)
 }
@@ -134,6 +155,12 @@ func NewResourceServiceHandler(svc ResourceServiceHandler, opts ...connect.Handl
 		ResourceServiceDeclareProcedure,
 		svc.Declare,
 		connect.WithSchema(resourceServiceMethods.ByName("Declare")),
+		connect.WithHandlerOptions(opts...),
+	)
+	resourceServiceReferenceHandler := connect.NewUnaryHandlerSimple(
+		ResourceServiceReferenceProcedure,
+		svc.Reference,
+		connect.WithSchema(resourceServiceMethods.ByName("Reference")),
 		connect.WithHandlerOptions(opts...),
 	)
 	resourceServiceDeclareEnvHandler := connect.NewUnaryHandlerSimple(
@@ -152,6 +179,8 @@ func NewResourceServiceHandler(svc ResourceServiceHandler, opts ...connect.Handl
 		switch r.URL.Path {
 		case ResourceServiceDeclareProcedure:
 			resourceServiceDeclareHandler.ServeHTTP(w, r)
+		case ResourceServiceReferenceProcedure:
+			resourceServiceReferenceHandler.ServeHTTP(w, r)
 		case ResourceServiceDeclareEnvProcedure:
 			resourceServiceDeclareEnvHandler.ServeHTTP(w, r)
 		case ResourceServiceReportEnvProblemsProcedure:
@@ -167,6 +196,10 @@ type UnimplementedResourceServiceHandler struct{}
 
 func (UnimplementedResourceServiceHandler) Declare(context.Context, *v1.DeclareRequest) (*v1.DeclareResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.resources.v1.ResourceService.Declare is not implemented"))
+}
+
+func (UnimplementedResourceServiceHandler) Reference(context.Context, *v1.ReferenceRequest) (*v1.ReferenceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.resources.v1.ResourceService.Reference is not implemented"))
 }
 
 func (UnimplementedResourceServiceHandler) DeclareEnv(context.Context, *v1.DeclareEnvRequest) (*v1.DeclareEnvResponse, error) {

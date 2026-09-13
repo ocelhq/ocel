@@ -131,6 +131,13 @@ func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*r
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
+func (s *Server) Reference(_ context.Context, req *resourcesv1.ReferenceRequest) (*resourcesv1.ReferenceResponse, error) {
+	if _, err := declare.ParseReference(req); err != nil {
+		return nil, err
+	}
+	return &resourcesv1.ReferenceResponse{}, nil
+}
+
 func (s *Server) UseValues(values map[string]string, scope envgate.Scope) {
 	s.env.use(values, scope)
 }
