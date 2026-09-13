@@ -13,6 +13,9 @@ import (
 type rustReach struct{}
 
 func (rustReach) Entries(ctx context.Context, root string, app App) (map[string]Reachability, error) {
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
 	dir := filepath.Join(root, filepath.FromSlash(app.Path))
 	workspace, err := cargo.Metadata(ctx, dir, "--offline")
 	if err != nil {
