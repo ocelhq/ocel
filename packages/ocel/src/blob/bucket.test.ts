@@ -3,9 +3,10 @@ import { z } from "zod";
 import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 
 const declareMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
+const referenceMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
 vi.mock("../utils/rpc", () => ({
-  rpc: { resource: { declare: declareMock } },
+  rpc: { resource: { declare: declareMock, reference: referenceMock } },
 }));
 
 const { bucket } = await import("./bucket.js");
@@ -63,6 +64,49 @@ describe("Bucket discovery declare", () => {
           value: { allowedOrigins: ["https://app.example.com"] },
         },
       }),
+    );
+  });
+});
+
+describe("bucket.ref()", () => {
+  beforeEach(() => {
+    declareMock.mockClear();
+    referenceMock.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("references a BUCKET during discovery and declares neither it nor its origins", () => {
+    vi.stubEnv("OCEL_PHASE", "discovery");
+
+    const storage = bucket.ref("storage", { uploaders: { avatar } });
+
+    expect(referenceMock).toHaveBeenCalledWith(
+      expect.objectContaining({ resource: { name: "storage", type: BindingType.BUCKET } }),
+    );
+    expect(declareMock).not.toHaveBeenCalled();
+    expect(storage.uploaders).toEqual({ avatar });
+  });
+
+  it("refuses its record during discovery, as the declaration does", () => {
+    vi.stubEnv("OCEL_PHASE", "discovery");
+
+    expect(() => bucket.ref("storage", { uploaders: { avatar } }).__config()).toThrow(
+      UnprovisionedResourceError,
+    );
+  });
+
+  it("reads the record the declaration reads", () => {
+    vi.stubEnv("OCEL_PHASE", "");
+    vi.stubEnv(
+      "OCEL_RESOURCE_BUCKET_storage",
+      JSON.stringify({ name: "storage", bucket: { bucket: "uploads" } }),
+    );
+
+    expect(bucket.ref("storage", { uploaders: { avatar } }).__config()).toEqual(
+      bucket("storage", { uploaders: { avatar } }).__config(),
     );
   });
 });

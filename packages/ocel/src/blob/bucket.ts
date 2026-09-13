@@ -4,6 +4,7 @@ import { declarationSite } from "../utils/callsite.js";
 import { defer } from "../utils/defer.js";
 import { getConfig } from "../utils/get-config.js";
 import { unprovisioned, unprovisionedPhase } from "../utils/phase.js";
+import { reference } from "../utils/reference.js";
 import { rpc } from "../utils/rpc.js";
 import type { AnyUploader } from "./types.js";
 
@@ -12,29 +13,18 @@ export interface BucketOptions<TUploaders extends Record<string, AnyUploader>> {
   uploaders: TUploaders;
 }
 
+/** The options of {@link bucket.ref}: the declaration owns the bucket's own configuration. */
+export interface BucketRefOptions<TUploaders extends Record<string, AnyUploader>> {
+  uploaders: TUploaders;
+}
+
 export type ResolvedBucketConfig = Pick<BucketProperties, "bucket">;
 
 export class Bucket<TUploaders extends Record<string, AnyUploader> = Record<string, AnyUploader>> {
-  private type = ResourceType.BUCKET;
-
   constructor(
     public name: string,
     public uploaders: TUploaders,
-    public allowedOrigins: string[],
-  ) {
-    if (process.env.OCEL_PHASE === "discovery") {
-      defer(
-        rpc.resource.declare({
-          resource: { name, type: this.type },
-          config: {
-            case: "bucket",
-            value: { allowedOrigins },
-          },
-          source: declarationSite(),
-        }),
-      );
-    }
-  }
+  ) {}
 
   __config(): ResolvedBucketConfig {
     if (unprovisionedPhase()) {
@@ -44,9 +34,38 @@ export class Bucket<TUploaders extends Record<string, AnyUploader> = Record<stri
   }
 }
 
+/**
+ * Declares a bucket named `name` and returns the handle its uploaders are served through.
+ * Call it from a file under the project's discovery folder: during discovery the call is
+ * the declaration, and at runtime it reads the binding the deploy delivered for that name.
+ */
 export function bucket<TUploaders extends Record<string, AnyUploader>>(
   name: string,
   options: BucketOptions<TUploaders>,
 ): Bucket<TUploaders> {
-  return new Bucket(name, options.uploaders, options.allowedOrigins ?? []);
+  if (unprovisionedPhase()) {
+    defer(
+      rpc.resource.declare({
+        resource: { name, type: ResourceType.BUCKET },
+        config: { case: "bucket", value: { allowedOrigins: options.allowedOrigins ?? [] } },
+        source: declarationSite(),
+      }),
+    );
+  }
+  return new Bucket(name, options.uploaders);
 }
+
+/**
+ * References the bucket named `name`, declared once elsewhere in the project in any
+ * language, and returns the same handle {@link bucket} does. It never declares. Call it
+ * from a file under the project's discovery folder and import that file from the app:
+ * during discovery the call records that the file uses the bucket, so the deploy grants it
+ * to every app that imports the file.
+ */
+bucket.ref = <TUploaders extends Record<string, AnyUploader>>(
+  name: string,
+  options: BucketRefOptions<TUploaders>,
+): Bucket<TUploaders> => {
+  reference(ResourceType.BUCKET, name);
+  return new Bucket(name, options.uploaders);
+};

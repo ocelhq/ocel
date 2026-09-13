@@ -1,5 +1,5 @@
 export { UnprovisionedResourceError } from "../utils/phase.js";
-export { Bucket, type BucketOptions, bucket } from "./bucket.js";
+export { Bucket, type BucketOptions, type BucketRefOptions, bucket } from "./bucket.js";
 export {
   type BucketContext,
   resolveBucketContext,
