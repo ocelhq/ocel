@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 )
 
@@ -83,6 +84,9 @@ func newMux(spec Spec) *http.ServeMux {
 	path, handler = envvarsv1connect.NewEnvVarsServiceHandler(kit, interceptors)
 	mux.Handle(path, handler)
 
+	path, handler = costv1connect.NewCostServiceHandler(kit, interceptors)
+	mux.Handle(path, handler)
+
 	return mux
 }
 
@@ -95,6 +99,7 @@ type handlers struct {
 var (
 	_ contractv1connect.ProviderServiceHandler = (*handlers)(nil)
 	_ envvarsv1connect.EnvVarsServiceHandler   = (*handlers)(nil)
+	_ costv1connect.CostServiceHandler         = (*handlers)(nil)
 )
 
 type session struct {
