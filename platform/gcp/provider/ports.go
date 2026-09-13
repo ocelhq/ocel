@@ -9,12 +9,8 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
-
-func classless(what any) error {
-	return providerkit.Refuse(providerkit.CodeInvalid,
-		"%s names no class, and this project keeps each class's state apart from the other class's", what)
-}
 
 type edges struct {
 	namespace providerkit.Namespace
@@ -79,8 +75,8 @@ func (dns) Open(kind providerkit.DNSKind, zone string) (edge.DNSWriter, error) {
 var (
 	_ providerkit.Bootstrapper  = bootstrapper{}
 	_ providerkit.ArtifactStore = artifacts{}
-	_ providerkit.RecordStore   = records{}
-	_ providerkit.Sealer        = sealer{}
+	_ providerkit.RecordStore   = ports.Records{}
+	_ providerkit.Sealer        = ports.Sealer{}
 	_ providerkit.EdgeRegistry  = edges{}
 	_ providerkit.DNSRegistry   = dns{}
 )

@@ -53,7 +53,6 @@ async function paired() {
         body: JSON.stringify({
           target: "vps/SHA256:abc/ocel",
           vendor: "vps",
-          form: "service",
         }),
       }),
     )

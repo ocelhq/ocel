@@ -20,7 +20,7 @@ describe("connectorFor", () => {
           organizationId,
           target: "aws/111111111111/us-east-1/main",
           vendor: "aws",
-          form: "service",
+          compute: "container",
           url: "http://127.0.0.1:7777",
         },
         {
@@ -28,14 +28,14 @@ describe("connectorFor", () => {
           organizationId,
           target: "aws/222222222222/eu-west-1/main",
           vendor: "aws",
-          form: "lambda",
+          compute: "serverless",
           url: "http://127.0.0.1:7778",
         },
       ]);
 
       const found = await connectorFor(organizationId, "aws/222222222222/eu-west-1/main");
       expect(found?.id).toBe(`second-${organizationId}`);
-      expect(found?.form).toBe("lambda");
+      expect(found?.compute).toBe("serverless");
       expect(found?.reach).toBe("dial");
     } finally {
       await session.cleanup();
@@ -62,7 +62,7 @@ describe("connectorFor", () => {
         organizationId,
         target: "gcp/ocel-prod/europe-west1/main",
         vendor: "gcp" as const,
-        form: "cloud-run" as const,
+        compute: "serverless" as const,
       };
       await db.insert(connector).values({ id: `one-${organizationId}`, ...row });
       await expect(

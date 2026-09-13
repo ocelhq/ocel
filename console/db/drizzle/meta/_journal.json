@@ -57,6 +57,13 @@
       "when": 1789288931837,
       "tag": "0007_curious_the_renegades",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789301592058,
+      "tag": "0008_glamorous_mulholland_black",
+      "breakpoints": true
     }
   ]
 }

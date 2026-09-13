@@ -117,7 +117,7 @@ func tagInvalidatorResources(ns Namespace, code payloads.Placement, class string
       FilterCriteria:
         Filters:
           - Pattern: '%s'
-`+lambdaLogGroupResource("TagInvalidator"), tagInvalidatorDLQRetentionSeconds, ns.policyName("tag-invalidator"),
+`+lambdaLogGroupResource("TagInvalidator"), tagInvalidatorDLQRetentionSeconds, ns.PolicyName("tag-invalidator"),
 		tagInvalidatorRuntime, tagInvalidatorArchitecture, tagInvalidatorHandler, tagInvalidatorMemoryMB, tagInvalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
 		tagInvalidatorStateTableEnvVar, tagInvalidatorClassEnvVar, class,

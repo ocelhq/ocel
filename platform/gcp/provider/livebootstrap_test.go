@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 func endpoint() string { return os.Getenv("OCEL_FLOCI_GCP_ENDPOINT") }
@@ -30,7 +31,7 @@ func servicesEnabled(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	service, err := serviceusage.NewService(ctx, gcp.EmulatorREST(endpoint())...)
+	service, err := serviceusage.NewService(ctx, ports.EmulatorREST(endpoint())...)
 	if err != nil {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
@@ -252,7 +253,7 @@ func servicesDisabled(t *testing.T, api string) {
 	}
 
 	ctx := context.Background()
-	service, err := serviceusage.NewService(ctx, gcp.EmulatorREST(endpoint())...)
+	service, err := serviceusage.NewService(ctx, ports.EmulatorREST(endpoint())...)
 	if err != nil {
 		t.Fatalf("reach the emulator's service usage API: %v", err)
 	}
@@ -309,7 +310,7 @@ func interrupt(t *testing.T, p *gcp.Provider, class providerkit.Class) {
 	t.Helper()
 
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, gcp.EmulatorStorage(endpoint())...)
+	client, err := storage.NewClient(ctx, ports.EmulatorStorage(endpoint())...)
 	if err != nil {
 		t.Fatalf("reach the emulator's object store: %v", err)
 	}
@@ -330,7 +331,7 @@ func TestLiveAStateBucketHoldingAStackIsNotSweptOutFromUnderIt(t *testing.T) {
 	bootstrapper := bootstrapped(t, p, class)
 
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, gcp.EmulatorStorage(endpoint())...)
+	client, err := storage.NewClient(ctx, ports.EmulatorStorage(endpoint())...)
 	if err != nil {
 		t.Fatalf("reach the emulator's object store: %v", err)
 	}
@@ -407,7 +408,7 @@ func passphraseHeld(t *testing.T, class providerkit.Class) []byte {
 	t.Helper()
 
 	ctx := context.Background()
-	service, err := secretmanager.NewService(ctx, gcp.EmulatorREST(endpoint())...)
+	service, err := secretmanager.NewService(ctx, ports.EmulatorREST(endpoint())...)
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
@@ -483,7 +484,7 @@ func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) 
 	bootstrapper := bootstrapped(t, p, class)
 
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, gcp.EmulatorStorage(endpoint())...)
+	client, err := storage.NewClient(ctx, ports.EmulatorStorage(endpoint())...)
 	if err != nil {
 		t.Fatalf("reach the emulator's object store: %v", err)
 	}
@@ -579,7 +580,7 @@ func stamped(t *testing.T, class providerkit.Class, body string) {
 	t.Helper()
 
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, gcp.EmulatorStorage(endpoint())...)
+	client, err := storage.NewClient(ctx, ports.EmulatorStorage(endpoint())...)
 	if err != nil {
 		t.Fatalf("reach the emulator's object store: %v", err)
 	}
@@ -600,7 +601,7 @@ func TestLiveASecretWithNoVersionInItIsNotStandingAndAReApplyMintsOne(t *testing
 	bootstrapper := bootstrapped(t, p, class)
 
 	ctx := context.Background()
-	service, err := secretmanager.NewService(ctx, gcp.EmulatorREST(endpoint())...)
+	service, err := secretmanager.NewService(ctx, ports.EmulatorREST(endpoint())...)
 	if err != nil {
 		t.Fatalf("reach the emulator's secret manager: %v", err)
 	}
@@ -785,7 +786,7 @@ func TestLiveASharedRowNamesTheSiblingClassInEveryPlanItAppearsIn(t *testing.T) 
 
 func accounts(t *testing.T) *iam.Service {
 	t.Helper()
-	service, err := iam.NewService(context.Background(), gcp.EmulatorREST(endpoint())...)
+	service, err := iam.NewService(context.Background(), ports.EmulatorREST(endpoint())...)
 	if err != nil {
 		t.Fatalf("reach the IAM API: %v", err)
 	}

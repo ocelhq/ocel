@@ -33,7 +33,7 @@ function deleteRequest(headers: Headers) {
   return new Request("http://localhost/api/connectors/x", { method: "DELETE", headers });
 }
 
-const dialled = { target: vpsTarget, vendor: "vps", form: "service", reach: "dial" };
+const dialled = { target: vpsTarget, vendor: "vps", reach: "dial" };
 
 describe("PUT /api/connectors", () => {
   beforeAll(async () => {
@@ -50,8 +50,8 @@ describe("PUT /api/connectors", () => {
       const body = await response.json();
       expect(body.target).toBe(vpsTarget);
       expect(body.vendor).toBe("vps");
-      expect(body.form).toBe("service");
       expect(body.reach).toBe("dial");
+      expect(body.compute).toBeNull();
       expect(body.url).toBeNull();
       expect(body.organizationId).toBe(session.organization.id);
       expect(body.id).toBeTruthy();
@@ -116,7 +116,7 @@ describe("PUT /api/connectors", () => {
     }
   });
 
-  it("refuses a vendor and a form outside the enums", async () => {
+  it("refuses a vendor and a reach outside the enums", async () => {
     const session = await createTestSessionWithOrganization();
 
     try {
@@ -125,7 +125,7 @@ describe("PUT /api/connectors", () => {
           .status,
       ).toBe(400);
       expect(
-        (await upsertConnector(putRequest({ ...dialled, form: "daemon" }, session.headers))).status,
+        (await upsertConnector(putRequest({ ...dialled, reach: "poll" }, session.headers))).status,
       ).toBe(400);
     } finally {
       await session.cleanup();
@@ -173,7 +173,7 @@ describe("PATCH and DELETE /api/connectors/{id}", () => {
     await setupTestDatabase();
   });
 
-  it("writes back the url, the public key and the tls pin", async () => {
+  it("writes back the url, the public key, the tls pin and the compute the provider chose", async () => {
     const session = await createTestSessionWithOrganization();
 
     try {
@@ -184,6 +184,7 @@ describe("PATCH and DELETE /api/connectors/{id}", () => {
             url: "https://box.example/.ocel/connector",
             publicKey: "aGk=",
             tlsPin: "sha256/xyz",
+            compute: "serverless",
           },
           session.headers,
         ),
@@ -195,6 +196,7 @@ describe("PATCH and DELETE /api/connectors/{id}", () => {
       expect(body.url).toBe("https://box.example/.ocel/connector");
       expect(body.publicKey).toBe("aGk=");
       expect(body.tlsPin).toBe("sha256/xyz");
+      expect(body.compute).toBe("serverless");
     } finally {
       await session.cleanup();
     }
@@ -208,6 +210,9 @@ describe("PATCH and DELETE /api/connectors/{id}", () => {
       expect((await updateConnector(patchRequest({}, session.headers), held.id)).status).toBe(400);
       expect(
         (await updateConnector(patchRequest({ url: "box" }, session.headers), held.id)).status,
+      ).toBe(400);
+      expect(
+        (await updateConnector(patchRequest({ compute: "vm" }, session.headers), held.id)).status,
       ).toBe(400);
     } finally {
       await session.cleanup();

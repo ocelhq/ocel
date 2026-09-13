@@ -12,6 +12,7 @@ import (
 	"google.golang.org/api/iterator"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 var artifactStores = []string{providerkit.StoreFunctions, providerkit.StoreAssets, providerkit.StoreCache}
@@ -22,7 +23,7 @@ type artifacts struct {
 
 func (a artifacts) bucket(class providerkit.Class) (*storage.BucketHandle, error) {
 	if class == "" {
-		return nil, classless("an artifact")
+		return nil, ports.Classless("an artifact")
 	}
 	client, err := a.clients.Storage()
 	if err != nil {

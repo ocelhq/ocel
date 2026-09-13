@@ -57,7 +57,7 @@ func newConsoleServer(t *testing.T, rows ...map[string]any) *consoleServer {
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			c.patched = append(c.patched, body)
-			held := map[string]any{"id": "con_1", "target": fingerprint, "vendor": "vps", "form": "service", "reach": "dial"}
+			held := map[string]any{"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial"}
 			for key, value := range body {
 				held[key] = value
 			}
@@ -99,7 +99,7 @@ func resolved(t *testing.T, root string) *projectconfig.Config {
 func opened(t *testing.T, srv *consoleServer) options {
 	t.Helper()
 
-	return options{form: formService, write: true, apiURL: srv.URL, console: consoleconnector.New(srv.URL)}
+	return options{write: true, apiURL: srv.URL, console: consoleconnector.New(srv.URL)}
 }
 
 func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
@@ -119,7 +119,7 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 	if len(srv.upserted) != 1 {
 		t.Fatalf("upserts = %v, want one", srv.upserted)
 	}
-	want := map[string]any{"target": fingerprint, "vendor": "vps", "form": "service", "reach": "dial"}
+	want := map[string]any{"target": fingerprint, "vendor": "vps", "reach": "dial"}
 	for key, value := range want {
 		if srv.upserted[0][key] != value {
 			t.Errorf("upsert %s = %v, want %v", key, srv.upserted[0][key], value)
@@ -133,6 +133,9 @@ func TestAddPairsTheTargetWithTheConsoleAndInstallsTheAsset(t *testing.T) {
 	}
 	if srv.patched[0]["publicKey"] == "" {
 		t.Error("the console was told no public key, so it can verify no heartbeat")
+	}
+	if srv.patched[0]["compute"] != "container" {
+		t.Errorf("patched compute = %v, want the compute the provider chose for itself", srv.patched[0]["compute"])
 	}
 
 	log, err := clitest.LoadFakeConnectorLog(os.Getenv(clitest.FakeConnectorLogEnvVar))
@@ -196,7 +199,7 @@ func TestAddGrantsRevealOnlyWhenItIsAskedFor(t *testing.T) {
 func TestRemoveTakesTheConnectorOffTheBoxAndForgetsTheRow(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	srv := newConsoleServer(t, map[string]any{
-		"id": "con_1", "target": fingerprint, "vendor": "vps", "form": "service", "reach": "dial",
+		"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial",
 		"capabilities": []string{"envvars.read"},
 	})
 	linked(t, root, srv.URL)
@@ -225,7 +228,7 @@ func TestRemoveForgetsTheRowEvenWhenTheMachineAnswersNothing(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	t.Setenv(clitest.FakeConnectorRefuseEnvVar, "this machine is not reachable")
 	srv := newConsoleServer(t, map[string]any{
-		"id": "con_1", "target": fingerprint, "vendor": "vps", "form": "service", "reach": "dial",
+		"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial",
 	})
 	linked(t, root, srv.URL)
 
@@ -246,7 +249,7 @@ func TestStatusSaysWhatTheConsoleHolds(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	seen := time.Now().Add(-10 * time.Second)
 	srv := newConsoleServer(t, map[string]any{
-		"id": "con_1", "target": fingerprint, "vendor": "vps", "form": "service", "reach": "dial",
+		"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial",
 		"url": "https://" + hostname + "/" + constants.ProjectStateDirName + "/connector", "capabilities": []string{"envvars.read", "envvars.write"},
 		"connectedAt": seen, "lastSeenAt": seen,
 	})
@@ -260,7 +263,7 @@ func TestStatusSaysWhatTheConsoleHolds(t *testing.T) {
 	if err := runStatus(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opened(t, srv), &stdout); err != nil {
 		t.Fatalf("runStatus err = %v", err)
 	}
-	for _, want := range []string{fingerprint, "service over dial", "online", "envvars.read, envvars.write"} {
+	for _, want := range []string{fingerprint, "container over dial", "online", "envvars.read, envvars.write"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("stdout = %q, want it to carry %q", stdout.String(), want)
 		}
@@ -327,31 +330,47 @@ func TestBeingLoggedOutIsPointedAtOcelLogin(t *testing.T) {
 	}
 }
 
-func TestAVendorThatServesItsOwnVariablesInstallsNothing(t *testing.T) {
+func TestTheVendorIsWhateverTheConfigPointsAtAndNoTableGatesIt(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{
-		Path:     "ocel.aws.json",
-		Provider: &projectconfig.ProviderDescriptor{Name: "aws"},
-	}
-	_, err := vendored(cfg, formService)
-	if err == nil {
-		t.Fatal("vendored() = nil, want an aws target refused")
-	}
-	if !strings.Contains(err.Error(), "aws") {
-		t.Errorf("err = %v, want it to name the vendor it refused", err)
+	for _, vendor := range []string{"aws", "gcp", "vps", "nowhere"} {
+		cfg := &projectconfig.Config{
+			Path:     "ocel." + vendor + ".json",
+			Provider: &projectconfig.ProviderDescriptor{Name: vendor},
+		}
+		named, err := vendored(cfg)
+		if err != nil {
+			t.Fatalf("vendored(%s) = %v, want the vendor the config names", vendor, err)
+		}
+		if named != vendor {
+			t.Errorf("vendored(%s) = %q, want %q", vendor, named, vendor)
+		}
 	}
 }
 
-func TestAFormNoMachineTakesIsRefused(t *testing.T) {
-	t.Parallel()
+func TestTheComputeGoesToTheProviderUntouched(t *testing.T) {
+	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
 
-	cfg := &projectconfig.Config{
-		Path:     "ocel.vps.json",
-		Provider: &projectconfig.ProviderDescriptor{Name: "vps"},
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	opts := opened(t, srv)
+	opts.compute = "serverless"
+	if err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runAdd err = %v", err)
 	}
-	if _, err := vendored(cfg, "lambda"); err == nil {
-		t.Fatal("vendored() = nil, want a form no machine takes refused")
+
+	log, err := clitest.LoadFakeConnectorLog(os.Getenv(clitest.FakeConnectorLogEnvVar))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if log.Compute != "serverless" {
+		t.Errorf("the provider was asked for %q, want the compute the flag named carried through with no vendor table in the way", log.Compute)
+	}
+	if len(srv.patched) != 1 || srv.patched[0]["compute"] != "serverless" {
+		t.Errorf("patches = %v, want the console told what the provider settled on", srv.patched)
 	}
 }
 

@@ -19,7 +19,7 @@ type Connector struct {
 	OrganizationID string     `json:"organizationId"`
 	Target         string     `json:"target"`
 	Vendor         string     `json:"vendor"`
-	Form           string     `json:"form"`
+	Compute        *string    `json:"compute"`
 	Reach          string     `json:"reach"`
 	URL            *string    `json:"url"`
 	PublicKey      *string    `json:"publicKey"`
@@ -57,13 +57,13 @@ func (c Connector) Liveness(now time.Time) Liveness {
 type Upsert struct {
 	Target string `json:"target"`
 	Vendor string `json:"vendor"`
-	Form   string `json:"form"`
 	Reach  string `json:"reach"`
 }
 
 type Address struct {
 	URL       string `json:"url"`
-	PublicKey string `json:"publicKey"`
+	PublicKey string `json:"publicKey,omitempty"`
+	Compute   string `json:"compute,omitempty"`
 }
 
 type Client struct {

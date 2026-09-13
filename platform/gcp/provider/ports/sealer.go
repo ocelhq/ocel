@@ -1,4 +1,4 @@
-package gcp
+package ports
 
 import (
 	"context"
@@ -11,23 +11,23 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-type sealer struct {
-	clients *clients
+type Sealer struct {
+	Clients *Clients
 }
 
-func (s sealer) key(at providerkit.Coordinate) (string, error) {
+func (s Sealer) key(at providerkit.Coordinate) (string, error) {
 	if at.Class == "" {
-		return "", classless("a value")
+		return "", Classless("a value")
 	}
-	return keyPath(s.clients, string(at.Class)), nil
+	return s.Clients.KeyPath(string(at.Class)), nil
 }
 
-func (s sealer) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
+func (s Sealer) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
 	key, err := s.key(at)
 	if err != nil {
 		return nil, err
 	}
-	client, err := s.clients.KMS()
+	client, err := s.Clients.KMS()
 	if err != nil {
 		return nil, err
 	}
@@ -42,12 +42,12 @@ func (s sealer) Seal(ctx context.Context, at providerkit.Coordinate, plaintext [
 	return sealed.GetCiphertext(), nil
 }
 
-func (s sealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (s Sealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
 	key, err := s.key(at)
 	if err != nil {
 		return nil, err
 	}
-	client, err := s.clients.KMS()
+	client, err := s.Clients.KMS()
 	if err != nil {
 		return nil, err
 	}
@@ -62,11 +62,11 @@ func (s sealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []by
 	return opened.GetPlaintext(), nil
 }
 
-func (s sealer) keyless(class providerkit.Class, doing string, err error) error {
+func (s Sealer) keyless(class providerkit.Class, doing string, err error) error {
 	if status.Code(err) == codes.NotFound {
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"this project holds no %s key on the %s ring to seal a %s value under, and a key is the one bootstrap item with a standing cost.\nRun `%s` to add one, then try again",
-			class, s.clients.KeyRing(), class, providerkit.BootstrapVarsKeyCommand(class))
+			class, s.Clients.KeyRing(), class, providerkit.BootstrapVarsKeyCommand(class))
 	}
 	return fmt.Errorf("%s: %w", doing, err)
 }

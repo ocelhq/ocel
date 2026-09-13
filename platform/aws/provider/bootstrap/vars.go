@@ -13,8 +13,8 @@ const (
 	outputVarsKeyARN     = "VarsKeyArn"
 	outputVarsKeyBrought = "VarsKeyBrought"
 
-	varsKeyComponentTagKey   = "ocel:component"
-	varsKeyComponentTagValue = "vars-key"
+	VarsKeyComponentTagKey   = "ocel:component"
+	VarsKeyComponentTagValue = "vars-key"
 )
 
 func varsKeyResources(ns Namespace, class string) string {
@@ -41,7 +41,7 @@ func varsKeyResources(ns Namespace, class string) string {
     Properties:
       AliasName: %s
       TargetKeyId: !Ref VarsKey
-`, class, varsKeyComponentTagKey, varsKeyComponentTagValue, class, ns.varsKeyAliasFor(class))
+`, class, VarsKeyComponentTagKey, VarsKeyComponentTagValue, class, ns.varsKeyAliasFor(class))
 }
 
 func varsKeyOutputs() string {

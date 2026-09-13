@@ -74,6 +74,32 @@ builds:
       - goos: windows
         goarch: arm64
 
+  - id: connector-aws
+    dir: platform/aws/connector
+    main: .
+    binary: connector-aws
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos: [linux]
+    goarch: [arm64]
+
+  - id: connector-gcp
+    dir: platform/gcp/connector
+    main: .
+    binary: connector-gcp
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos: [linux]
+    goarch: [amd64]
+
   - id: connector-vps
     dir: platform/vps/connector
     main: .
@@ -119,6 +145,16 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+
+  - id: connector-aws
+    ids: [connector-aws]
+    name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: []
+
+  - id: connector-gcp
+    ids: [connector-gcp]
+    name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: []
 
   - id: connector-vps
     ids: [connector-vps]

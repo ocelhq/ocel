@@ -3,15 +3,18 @@ module github.com/ocelhq/ocel/platform/aws/connector
 go 1.27.0
 
 require (
+	github.com/aws/aws-lambda-go v1.54.0
 	github.com/aws/aws-sdk-go-v2 v1.46.0
 	github.com/aws/aws-sdk-go-v2/service/cloudformation v1.74.0
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.0
 	github.com/aws/aws-sdk-go-v2/service/kms v1.55.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.0
+	github.com/awslabs/aws-lambda-go-api-proxy v0.16.2
 	github.com/ocelhq/ocel/pkg/connectorkit v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
 	github.com/ocelhq/ocel/pkg/target v0.0.0
 	github.com/ocelhq/ocel/platform/aws/provider v0.0.0
+	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 )
 
 require (
@@ -73,7 +76,6 @@ require (
 	github.com/ocelhq/ocel/pkg/constants v0.0.0 // indirect
 	github.com/ocelhq/ocel/pkg/naming v0.0.0 // indirect
 	github.com/ocelhq/ocel/pkg/proto v0.0.0 // indirect
-	github.com/ocelhq/ocel/platform/edge/contract v0.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect

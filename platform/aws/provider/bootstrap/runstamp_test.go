@@ -5,31 +5,32 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
 func TestRunStamps(t *testing.T) {
 	t.Run("every stack it writes carries the schema, its own digest and the writer", func(t *testing.T) {
-		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		req := everything()
 		req.Writer = "1.9.0"
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, req, nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		for _, name := range cfn.stacks() {
-			stamp := cfn.stampOf(name)
+		for _, name := range stacks.stacks() {
+			stamp := stacks.stampOf(name)
 			if stamp.Schema != RequiredSchema {
 				t.Errorf("%s carries schema %d, want %d", name, stamp.Schema, RequiredSchema)
 			}
-			if want := TemplateDigest(cfn.template(name)); stamp.Digest != want {
+			if want := cfn.TemplateDigest(stacks.template(name)); stamp.Digest != want {
 				t.Errorf("%s carries digest %q, want the sha256 of its own body %q", name, stamp.Digest, want)
 			}
 			if stamp.WrittenBy != "1.9.0" {
 				t.Errorf("%s was written by %q, want 1.9.0", name, stamp.WrittenBy)
 			}
 		}
-		deployed, err := CheckDeployed(context.Background(), cfn, defaultNamespace)
+		deployed, err := CheckDeployed(context.Background(), stacks, defaultNamespace)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
@@ -39,14 +40,14 @@ func TestRunStamps(t *testing.T) {
 	})
 
 	t.Run("a dev build stamps a version that never parses", func(t *testing.T) {
-		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{})
 
 		req := Request{Writer: "dev+cafebabe"}
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, req, nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		stamp := cfn.stampOf(coreStackName)
+		stamp := stacks.stampOf(coreStackName)
 		if stamp.WrittenBy != "dev+cafebabe" {
 			t.Errorf("written by %q, want dev+cafebabe", stamp.WrittenBy)
 		}

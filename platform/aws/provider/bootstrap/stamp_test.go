@@ -1,6 +1,8 @@
 package bootstrap
 
 import (
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -14,7 +16,7 @@ func TestTemplateDigest(t *testing.T) {
 		t.Parallel()
 
 		body := coreStackTemplate(defaultNamespace, ClassProduction)
-		if TemplateDigest(body) != TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction)) {
+		if cfn.TemplateDigest(body) != cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction)) {
 			t.Fatal("rendering the same template twice must produce the same digest")
 		}
 	})
@@ -22,7 +24,7 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("different bytes different digest", func(t *testing.T) {
 		t.Parallel()
 
-		if TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction)) == TemplateDigest(coreStackTemplate(defaultNamespace, ClassPreview)) {
+		if cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction)) == cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassPreview)) {
 			t.Fatal("two different template bodies must not share a digest")
 		}
 	})
@@ -30,9 +32,9 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("digest is hex sha256", func(t *testing.T) {
 		t.Parallel()
 
-		got := TemplateDigest("")
+		got := cfn.TemplateDigest("")
 		if got != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
-			t.Fatalf("TemplateDigest(\"\") = %q, want the sha256 of no bytes", got)
+			t.Fatalf("cfn.TemplateDigest(\"\") = %q, want the sha256 of no bytes", got)
 		}
 	})
 
@@ -42,7 +44,7 @@ func TestTemplateDigest(t *testing.T) {
 		in := featureInputs{ns: defaultNamespace, class: ClassProduction, refs: stackRefs{assetBucket: "bucket-one", assetBucketARN: "arn:one"}}
 		other := in
 		other.refs = stackRefs{assetBucket: "bucket-two", assetBucketARN: "arn:two"}
-		if TemplateDigest(imageOptimizationTemplate(in).body) != TemplateDigest(imageOptimizationTemplate(other).body) {
+		if cfn.TemplateDigest(imageOptimizationTemplate(in).body) != cfn.TemplateDigest(imageOptimizationTemplate(other).body) {
 			t.Fatal("the digest must not move when only a cross-stack parameter value moves")
 		}
 	})

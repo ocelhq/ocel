@@ -5,11 +5,8 @@ import (
 	"os"
 	"strings"
 
-	"google.golang.org/api/option"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const emulatorEndpointVariable = "OCEL_FLOCI_GCP_ENDPOINT"
@@ -25,7 +22,7 @@ func emulatorEndpoint() (string, error) {
 }
 
 func loopback(endpoint string) bool {
-	host := hostPort(endpoint)
+	host := ports.HostPort(endpoint)
 	if named, _, err := net.SplitHostPort(host); err == nil {
 		host = named
 	}
@@ -35,38 +32,4 @@ func loopback(endpoint string) bool {
 	}
 	address := net.ParseIP(host)
 	return address != nil && address.IsLoopback()
-}
-
-func EmulatorREST(endpoint string) []option.ClientOption {
-	if endpoint == "" {
-		return nil
-	}
-	return []option.ClientOption{option.WithEndpoint(endpoint), option.WithoutAuthentication()}
-}
-
-func EmulatorGRPC(endpoint string) []option.ClientOption {
-	if endpoint == "" {
-		return nil
-	}
-	return []option.ClientOption{
-		option.WithEndpoint(hostPort(endpoint)),
-		option.WithoutAuthentication(),
-		option.WithGRPCDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
-	}
-}
-
-func hostPort(endpoint string) string {
-	authority := strings.TrimPrefix(strings.TrimPrefix(endpoint, "http://"), "https://")
-	authority, _, _ = strings.Cut(authority, "/")
-	return authority
-}
-
-func EmulatorStorage(endpoint string) []option.ClientOption {
-	if endpoint == "" {
-		return nil
-	}
-	return []option.ClientOption{
-		option.WithEndpoint(endpoint + "/storage/v1/"),
-		option.WithoutAuthentication(),
-	}
 }

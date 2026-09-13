@@ -118,7 +118,7 @@ func edgeUserResource(ns Namespace, userName, class string, optimizer bool) stri
                 Condition:
                   StringEquals:
                     kms:ViaService: !Sub 'sqs.${AWS::Region}.amazonaws.com'
-%s`, class, userName, ns.policyName("edge-cache"),
+%s`, class, userName, ns.PolicyName("edge-cache"),
 		paramAssetBucketARN, paramAssetBucketARN,
 		paramStateTableARN, paramStateTableARN, StateTableIndexName,
 		paramRevalidateQueueARN, invoke)

@@ -11,6 +11,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
@@ -142,8 +143,8 @@ func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request
 	}
 	stackName := target.ns.runtimeStackName(target.class)
 	body := runtimeLayerTemplate(target.ns, target.class, code)
-	tags := stampTags(target.ns, Stamp{Schema: RequiredSchema, Digest: TemplateDigest(body), WrittenBy: req.Writer.String()})
-	if err := upsertCFNStack(ctx, apis.CFN, target.ns, stackName, body, nil, nil, tags, nil); err != nil {
+	tags := stampTags(target.ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(body), WrittenBy: req.Writer.String()})
+	if err := cfn.Upsert(ctx, apis.CFN, target.ns, stackName, body, nil, nil, tags, nil); err != nil {
 		return err
 	}
 	logf(fmt.Sprintf("applied %s", stackName))
@@ -197,8 +198,8 @@ func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class str
 	return standing, nil
 }
 
-func publishedRuntimeLayers(ctx context.Context, api CFNDescriber, ns Namespace, class string) (map[string]string, error) {
-	out, err := stackOutputs(ctx, api, ns.runtimeStackName(class))
+func publishedRuntimeLayers(ctx context.Context, api cfn.Describer, ns Namespace, class string) (map[string]string, error) {
+	out, err := cfn.StackOutputs(ctx, api, ns.runtimeStackName(class))
 	if err != nil {
 		return nil, err
 	}
@@ -225,10 +226,10 @@ func runtimeStackHeldElsewhere(err error) bool {
 	if errors.As(err, &api) && api.ErrorCode() == "AlreadyExistsException" {
 		return true
 	}
-	return isValidationErrorContaining(err, "state and can not be updated")
+	return cfn.IsValidationErrorContaining(err, "state and can not be updated")
 }
 
-func planRuntimeLayers(ctx context.Context, cfn CFNAPI, read Reading, req Request) providerkit.ChangeGroup {
+func planRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading, req Request) providerkit.ChangeGroup {
 	stamp := read.Deployed.RuntimeStack
 	group := providerkit.ChangeGroup{Kind: providerkit.StackGroupKind, Name: read.ns.runtimeStackName(read.class)}
 	body, err := runtimeLayerTemplateAt(read.ns, read.class, read.Deployed.ArtifactBucket)
@@ -244,12 +245,12 @@ func planRuntimeLayers(ctx context.Context, cfn CFNAPI, read Reading, req Reques
 		group.Action, group.Reason = providerkit.ActionKeep, "already current"
 	default:
 		group.Action = providerkit.ActionUpdate
-		group = planUpdate(ctx, cfn, read.ns, group, featureStack{body: body}, req.Writer)
+		group = planUpdate(ctx, stacks, read.ns, group, featureStack{body: body}, req.Writer)
 	}
 	return group
 }
 
-func removeRuntimeLayers(ctx context.Context, cfn CFNAPI, read Reading) providerkit.ChangeGroup {
+func removeRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading) providerkit.ChangeGroup {
 	group := providerkit.ChangeGroup{
 		Kind:   providerkit.StackGroupKind,
 		Name:   read.ns.runtimeStackName(read.class),
@@ -259,16 +260,16 @@ func removeRuntimeLayers(ctx context.Context, cfn CFNAPI, read Reading) provider
 	if err != nil {
 		return group
 	}
-	return planDelete(ctx, cfn, group, body)
+	return planDelete(ctx, stacks, group, body)
 }
 
-func deleteRuntimeLayerStack(ctx context.Context, cfn CFNTeardownAPI, ns Namespace, class string, log func(string)) error {
+func deleteRuntimeLayerStack(ctx context.Context, stacks cfn.TeardownAPI, ns Namespace, class string, log func(string)) error {
 	stackName := ns.runtimeStackName(class)
-	stack, err := describeStack(ctx, cfn, stackName)
+	stack, err := cfn.DescribeStack(ctx, stacks, stackName)
 	if err != nil || stack == nil {
 		return err
 	}
-	if err := deleteCFNStack(ctx, cfn, stackName); err != nil {
+	if err := cfn.Delete(ctx, stacks, stackName); err != nil {
 		return err
 	}
 	if log != nil {

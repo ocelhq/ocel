@@ -9,6 +9,7 @@ import (
 	"google.golang.org/api/googleapi"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 type ProjectReader interface {
@@ -20,7 +21,7 @@ type resourceManager struct {
 }
 
 func (r resourceManager) Reaches(ctx context.Context, project string) error {
-	service, err := cloudresourcemanager.NewService(ctx, EmulatorREST(r.endpoint)...)
+	service, err := cloudresourcemanager.NewService(ctx, ports.EmulatorREST(r.endpoint)...)
 	if err != nil {
 		return unauthenticated()
 	}

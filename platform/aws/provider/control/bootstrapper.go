@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -30,12 +31,12 @@ type IAMAPI interface {
 }
 
 type Bootstrapper struct {
-	CFN     bootstrap.CFNAPI
+	CFN     cfn.API
 	SSM     SSMAPI
 	IAM     IAMAPI
 	KMS     bootstrap.KeyAPI
 	Store   bootstrap.ObjectStore
-	Buckets bootstrap.BucketEmptierAPI
+	Buckets cfn.BucketEmptierAPI
 	Edge    edge.Edge
 	Edges   providerkit.EdgeRegistry
 	Region  string

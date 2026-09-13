@@ -91,7 +91,7 @@ func imageOptimizerResources(ns Namespace, code payloads.Placement) string {
       TargetFunctionArn: !GetAtt ImageOptimizer.Arn
       AuthType: AWS_IAM
       InvokeMode: RESPONSE_STREAM
-`+lambdaLogGroupResource("ImageOptimizer"), ns.policyName("image-optimizer-read"), optimizerRuntime, optimizerArchitecture, optimizerHandler, optimizerMemoryMB, optimizerTimeoutSeconds,
+`+lambdaLogGroupResource("ImageOptimizer"), ns.PolicyName("image-optimizer-read"), optimizerRuntime, optimizerArchitecture, optimizerHandler, optimizerMemoryMB, optimizerTimeoutSeconds,
 		code.Bucket, code.Key, optimizerBucketEnvVar, optimizerThreadpoolSize,
 		optimizerComponentTagKey, optimizerComponentTagValue)
 }

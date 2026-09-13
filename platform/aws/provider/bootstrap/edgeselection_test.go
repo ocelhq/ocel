@@ -1,6 +1,8 @@
 package bootstrap
 
 import (
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+
 	"context"
 	"slices"
 	"strings"
@@ -14,21 +16,21 @@ var everyEdgeKind = []edge.Kind{KindCloudflare, KindCloudFront, KindAPIGateway}
 func TestTheCoreIsTheSameWhicheverEdgeFrontsIt(t *testing.T) {
 	for _, class := range []string{ClassProduction, ClassPreview} {
 		t.Run(class, func(t *testing.T) {
-			want := TemplateDigest(coreStackTemplate(defaultNamespace, class))
+			want := cfn.TemplateDigest(coreStackTemplate(defaultNamespace, class))
 			core, err := defaultNamespace.StackNameFor(class)
 			if err != nil {
 				t.Fatalf("StackNameFor: %v", err)
 			}
 			for _, kind := range everyEdgeKind {
-				cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
-				apis := apisFronting(cfn, ssmc, iamc, preloadedStore(), &fakeEdge{kind: kind})
+				stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+				apis := apisFronting(stacks, ssmc, iamc, preloadedStore(), &fakeEdge{kind: kind})
 				if err := Run(context.Background(), apis, defaultNamespace, class, Request{}, nil, nil); err != nil {
 					t.Fatalf("bootstrapping behind the %s edge: %v", kind, err)
 				}
-				if got := TemplateDigest(cfn.template(core)); got != want {
+				if got := cfn.TemplateDigest(stacks.template(core)); got != want {
 					t.Errorf("the %s edge wrote a core whose digest is %q, want %q: the core is what every edge stands beside, not part of one", kind, got, want)
 				}
-				if got := cfn.stampOf(core).Digest; got != want {
+				if got := stacks.stampOf(core).Digest; got != want {
 					t.Errorf("the %s edge stamped the core %q, want %q", kind, got, want)
 				}
 			}
@@ -75,47 +77,47 @@ func TestReadingABootstrapSeesEveryEdgeThatStands(t *testing.T) {
 
 func TestBootstrappingOneEdgeLeavesAnotherEdgesStackAlone(t *testing.T) {
 	ctx := context.Background()
-	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	store := preloadedStore()
 
-	cloudflare := apisFronting(cfn, ssmc, iamc, store, &fakeEdge{kind: KindCloudflare})
+	cloudflare := apisFronting(stacks, ssmc, iamc, store, &fakeEdge{kind: KindCloudflare})
 	if err := Run(ctx, cloudflare, defaultNamespace, ClassProduction, Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}, nil, nil); err != nil {
 		t.Fatalf("bootstrapping behind the cloudflare edge: %v", err)
 	}
 
 	standing := defaultNamespace.FeatureStackName(FeatureCloudflareEdge, ClassProduction)
-	settled := len(cfn.events)
-	restamps := cfn.restamps
+	settled := len(stacks.events)
+	restamps := stacks.restamps
 
-	cloudfront := apisFronting(cfn, ssmc, iamc, store, &fakeEdge{kind: KindCloudFront})
+	cloudfront := apisFronting(stacks, ssmc, iamc, store, &fakeEdge{kind: KindCloudFront})
 	if err := Run(ctx, cloudfront, defaultNamespace, ClassProduction, Request{Features: []string{FeatureCloudFrontEdge}}, nil, nil); err != nil {
 		t.Fatalf("bootstrapping behind the cloudfront edge: %v", err)
 	}
 
 	written := defaultNamespace.FeatureStackName(FeatureCloudFrontEdge, ClassProduction)
-	if !slices.Contains(cfn.stacks(), written) {
-		t.Fatalf("stacks = %v, want the cloudfront edge among them", cfn.stacks())
+	if !slices.Contains(stacks.stacks(), written) {
+		t.Fatalf("stacks = %v, want the cloudfront edge among them", stacks.stacks())
 	}
-	for _, event := range cfn.events[settled:] {
+	for _, event := range stacks.events[settled:] {
 		if strings.HasSuffix(event, standing) {
 			t.Errorf("the run %s the edge it was not asked for; switching the front an account is bootstrapped behind takes nothing away from the one it stood behind", event)
 		}
 	}
-	if cfn.restamps != restamps {
-		t.Errorf("the run restamped %d stacks, want none of them the edge it was not asked for", cfn.restamps-restamps)
+	if stacks.restamps != restamps {
+		t.Errorf("the run restamped %d stacks, want none of them the edge it was not asked for", stacks.restamps-restamps)
 	}
-	if !slices.Contains(cfn.stacks(), standing) {
-		t.Errorf("stacks = %v, want the cloudflare edge still standing", cfn.stacks())
+	if !slices.Contains(stacks.stacks(), standing) {
+		t.Errorf("stacks = %v, want the cloudflare edge still standing", stacks.stacks())
 	}
 }
 
 func TestAnEdgeFeatureStandsItsOwnEdgeUpWhateverFrontsTheRun(t *testing.T) {
 	ctx := context.Background()
-	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	registry := newFakeEdges(&fakeEdge{kind: KindCloudflare, out: edge.BootstrapOutput{
 		Values: map[string]string{"namespaceId": "ns-cloudflare"},
 	}})
-	apis := apisAcross(cfn, ssmc, iamc, preloadedStore(), &fakeEdge{kind: KindCloudFront}, registry)
+	apis := apisAcross(stacks, ssmc, iamc, preloadedStore(), &fakeEdge{kind: KindCloudFront}, registry)
 
 	if err := Run(ctx, apis, defaultNamespace, ClassProduction,
 		Request{Features: []string{FeatureISR, FeatureCloudflareEdge, FeatureCloudFrontEdge}}, nil, nil); err != nil {
@@ -136,9 +138,9 @@ func TestAnEdgeFeatureStandsItsOwnEdgeUpWhateverFrontsTheRun(t *testing.T) {
 }
 
 func TestTheFrontThisRunPicksIsBootstrappedOnce(t *testing.T) {
-	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	front := &fakeEdge{kind: KindCloudflare}
-	apis := apisFronting(cfn, ssmc, iamc, preloadedStore(), front)
+	apis := apisFronting(stacks, ssmc, iamc, preloadedStore(), front)
 
 	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction,
 		Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}, nil, nil); err != nil {
@@ -151,11 +153,11 @@ func TestTheFrontThisRunPicksIsBootstrappedOnce(t *testing.T) {
 
 func TestRemovingAnEdgeFeatureTearsItsEdgeDownBeforeSeveringWhatReachesIt(t *testing.T) {
 	ctx := context.Background()
-	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	store := preloadedStore()
 	registry := newFakeEdges(&fakeEdge{kind: KindCloudflare})
 	stood := Request{Features: []string{FeatureISR, FeatureCloudflareEdge, FeatureCloudFrontEdge}}
-	apis := apisAcross(cfn, ssmc, iamc, store, &fakeEdge{kind: KindCloudFront}, registry)
+	apis := apisAcross(stacks, ssmc, iamc, store, &fakeEdge{kind: KindCloudFront}, registry)
 
 	if err := Run(ctx, apis, defaultNamespace, ClassProduction, stood, nil, nil); err != nil {
 		t.Fatalf("standing the cloudflare edge up behind the cloudfront front: %v", err)

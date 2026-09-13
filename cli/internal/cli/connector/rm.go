@@ -18,7 +18,7 @@ import (
 
 func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, _ *consolelink.Link,
 	opts options, stdout, stderr io.Writer) error {
-	if _, err := vendored(cfg, formService); err != nil {
+	if _, err := vendored(cfg); err != nil {
 		return err
 	}
 	access, err := token(deps)

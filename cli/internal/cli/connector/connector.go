@@ -25,14 +25,10 @@ var (
 	bold  = color.New(color.Bold).SprintFunc()
 )
 
-const (
-	formService = "service"
-	reachDial   = "dial"
-	vendorVPS   = "vps"
-)
+const reachDial = "dial"
 
 type options struct {
-	form    string
+	compute string
 	reveal  bool
 	write   bool
 	apiURL  string
@@ -77,7 +73,7 @@ func newAddCommand(deps cmddeps.Deps) *cobra.Command {
 			})
 		},
 	}
-	cmd.Flags().StringVar(&opts.form, "form", formService, "How the connector runs on the target: `service` is the only form a machine takes")
+	cmd.Flags().StringVar(&opts.compute, "compute", "", "What the connector runs on: `serverless` or container, and the provider's own default when this names neither")
 	cmd.Flags().BoolVar(&opts.reveal, "allow-reveal", false, "Let the console read secret values back in the clear")
 	cmd.Flags().BoolVar(&opts.write, "allow-write", true, "Let the console write values")
 	return cmd
@@ -153,24 +149,17 @@ func token(deps cmddeps.Deps) (string, error) {
 	return creds.AccessToken, nil
 }
 
-func vendored(cfg *projectconfig.Config, form string) (string, error) {
+func vendored(cfg *projectconfig.Config) (string, error) {
 	desc, err := cfg.RequireProvider()
 	if err != nil {
 		return "", err
-	}
-	if desc.Name != vendorVPS {
-		return "", fmt.Errorf("a connector is installed onto a machine, and %s deploys through %s — the console reaches a %s target through the provider it runs itself, so nothing is installed there",
-			cfg.Path, desc.Name, desc.Name)
-	}
-	if form != formService {
-		return "", fmt.Errorf("a machine runs the connector as a %s, and this names %q", formService, form)
 	}
 	return desc.Name, nil
 }
 
 func printed(out io.Writer, held consoleconnector.Connector, live consoleconnector.Liveness) {
 	fmt.Fprintf(out, "%s\n", bold(held.Target))
-	fmt.Fprintf(out, "  form %s over %s, %s\n", held.Form, held.Reach, live)
+	fmt.Fprintf(out, "  compute %s over %s, %s\n", named(held.Compute, "unset"), held.Reach, live)
 	fmt.Fprintf(out, "  url %s\n", named(held.URL, "none"))
 	fmt.Fprintf(out, "  can %s\n", listed(held.Capabilities))
 	if held.LastDenied != nil {

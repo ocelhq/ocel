@@ -334,17 +334,17 @@ func TestEdgeUserOptimizer(t *testing.T) {
 
 func TestRunOptimizer(t *testing.T) {
 	t.Run("first bootstrap places the payload before the stack that names it", func(t *testing.T) {
-		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		store := newFakeObjectStore()
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionBootstrap(defaultNamespace)); err != nil {
+		if err := runAll(context.Background(), apisOf(stacks, ssmc, iamc, store), productionBootstrap(defaultNamespace)); err != nil {
 			t.Fatalf("run: %v", err)
 		}
-		if want := 2 + len(featureNames()); cfn.creates != want || cfn.updates != 0 {
-			t.Errorf("settled the bootstrap in %d creates + %d updates, want one create each for core, its runtime and its %d features", cfn.creates, cfn.updates, len(featureNames()))
+		if want := 2 + len(featureNames()); stacks.creates != want || stacks.updates != 0 {
+			t.Errorf("settled the bootstrap in %d creates + %d updates, want one create each for core, its runtime and its %d features", stacks.creates, stacks.updates, len(featureNames()))
 		}
-		final := cfn.template(optStack(ClassProduction))
+		final := stacks.template(optStack(ClassProduction))
 		if !strings.Contains(final, "AWS::Lambda::Url") {
 			t.Errorf("the settled template carries no optimizer:\n%s", final)
 		}
@@ -354,11 +354,11 @@ func TestRunOptimizer(t *testing.T) {
 	})
 
 	t.Run("an account already holding the payloads uploads nothing", func(t *testing.T) {
-		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		store := preloadedStore()
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := runAll(context.Background(), apisOf(cfn, ssmc, iamc, store), productionBootstrap(defaultNamespace)); err != nil {
+		if err := runAll(context.Background(), apisOf(stacks, ssmc, iamc, store), productionBootstrap(defaultNamespace)); err != nil {
 			t.Fatalf("run: %v", err)
 		}
 		if store.puts != 0 {
@@ -369,15 +369,15 @@ func TestRunOptimizer(t *testing.T) {
 
 func TestCheckDeployedOptimizer(t *testing.T) {
 	t.Run("reads the optimizer URL", func(t *testing.T) {
-		cfn := newFakeCFN()
-		cfn.seed(coreStackName, "Outputs:\n")
-		cfn.seed(optStack(ClassProduction), "Outputs:\n  "+outputImageOptimizerURL+":\n    Value: 'https://abc.lambda-url.us-east-1.on.aws/'\n")
+		stacks := newFakeCFN()
+		stacks.seed(coreStackName, "Outputs:\n")
+		stacks.seed(optStack(ClassProduction), "Outputs:\n  "+outputImageOptimizerURL+":\n    Value: 'https://abc.lambda-url.us-east-1.on.aws/'\n")
 
-		deployed, err := CheckDeployed(context.Background(), cfn, defaultNamespace)
+		deployed, err := CheckDeployed(context.Background(), stacks, defaultNamespace)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		if want := cfn.output(optStack(ClassProduction), outputImageOptimizerURL); deployed.ImageOptimizerURL != want {
+		if want := stacks.output(optStack(ClassProduction), outputImageOptimizerURL); deployed.ImageOptimizerURL != want {
 			t.Errorf("ImageOptimizerURL = %q, want %q", deployed.ImageOptimizerURL, want)
 		}
 

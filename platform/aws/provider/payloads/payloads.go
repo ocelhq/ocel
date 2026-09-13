@@ -52,15 +52,19 @@ func TagPublisher() Payload { return tagPublisher }
 
 func TagInvalidator() Payload { return tagInvalidator }
 
-func load(name string) Payload {
-	data, err := embedded.ReadFile(path.Join("dist", name))
-	if err != nil {
-		panic(fmt.Sprintf("payloads: %v", err))
-	}
+func Of(data []byte) Payload {
 	sum := sha256.Sum256(data)
 	return Payload{
 		Bytes:          data,
 		SHA256:         hex.EncodeToString(sum[:]),
 		ChecksumSHA256: base64.StdEncoding.EncodeToString(sum[:]),
 	}
+}
+
+func load(name string) Payload {
+	data, err := embedded.ReadFile(path.Join("dist", name))
+	if err != nil {
+		panic(fmt.Sprintf("payloads: %v", err))
+	}
+	return Of(data)
 }

@@ -134,7 +134,7 @@ func tagPublisherResources(ns Namespace, code payloads.Placement, class string) 
       FilterCriteria:
         Filters:
           - Pattern: '%s'
-`+lambdaLogGroupResource("TagPublisher"), tagPublisherDLQRetentionSeconds, ns.policyName("tag-publisher"),
+`+lambdaLogGroupResource("TagPublisher"), tagPublisherDLQRetentionSeconds, ns.PolicyName("tag-publisher"),
 		writerParam, seedParam, writerParam, seedParam,
 		tagPublisherRuntime, tagPublisherArchitecture, tagPublisherHandler, tagPublisherMemoryMB, tagPublisherTimeoutSeconds,
 		code.Bucket, code.Key,

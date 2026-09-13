@@ -695,6 +695,8 @@ message InstalledConnector {
   string version = 1;
 
   string public_key = 2;
+
+  string compute = 3;
 }
 
 message InstallConnectorRequest {
@@ -703,6 +705,8 @@ message InstallConnectorRequest {
   string version = 2 [(buf.validate.field).string.min_len = 1];
 
   bytes config_json = 3 [(buf.validate.field).bytes.min_len = 1];
+
+  string compute = 4 [(buf.validate.field).string = {in: ["serverless", "container"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 }
 
 message RemoveConnectorRequest {}

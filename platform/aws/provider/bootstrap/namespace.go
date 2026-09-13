@@ -130,8 +130,8 @@ func (n Namespace) revalidateQueueNames(class string) (queue, dlq string) {
 	return base + ".fifo", base + "-dlq.fifo"
 }
 
-func (n Namespace) policyName(what string) string { return string(n) + "-" + what }
+func (n Namespace) PolicyName(what string) string { return string(n) + "-" + what }
 
-func (n Namespace) changeSetNameFor(stackName string) string {
+func (n Namespace) ChangeSetNameFor(stackName string) string {
 	return fmt.Sprintf("%s-%d", stackName, time.Now().UnixNano())
 }

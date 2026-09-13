@@ -147,9 +147,9 @@ func (e *mintingEdge) Teardown(context.Context, edge.Class) error {
 
 func TestDroppingTheEdgeFeatureLeavesTheNextBootstrapAbleToRun(t *testing.T) {
 	ctx := context.Background()
-	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	front := &mintingEdge{fakeEdge: &fakeEdge{kind: "cloudflare"}}
-	apis := apisFronting(cfn, ssmc, iamc, preloadedStore(), front)
+	apis := apisFronting(stacks, ssmc, iamc, preloadedStore(), front)
 	fronted := Request{Features: []string{FeatureISR, FeatureCloudflareEdge}}
 
 	if err := Run(ctx, apis, defaultNamespace, ClassProduction, fronted, nil, nil); err != nil {

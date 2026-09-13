@@ -162,14 +162,14 @@ func TestTagInvalidator(t *testing.T) {
 			{"preview", previewBootstrap(defaultNamespace), isrStack(ClassPreview)},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				cfn := newFakeCFN()
+				stacks := newFakeCFN()
 				frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-				if err := runAll(context.Background(), apisOf(cfn, newFakeSSM(), &fakeIAM{}, preloadedStore()), tc.target); err != nil {
+				if err := runAll(context.Background(), apisOf(stacks, newFakeSSM(), &fakeIAM{}, preloadedStore()), tc.target); err != nil {
 					t.Fatalf("run: %v", err)
 				}
 				for _, name := range invalidatorResourceNames {
-					if !strings.Contains(cfn.template(tc.stackName), name+":") {
+					if !strings.Contains(stacks.template(tc.stackName), name+":") {
 						t.Errorf("%s declares no %s, so no front ever hears a raise", tc.stackName, name)
 					}
 				}

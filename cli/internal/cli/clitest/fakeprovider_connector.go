@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const (
@@ -27,6 +28,7 @@ type FakeConnectorLog struct {
 	Binary     []byte `json:"binary"`
 	Version    string `json:"version"`
 	ConfigJSON []byte `json:"configJson"`
+	Compute    string `json:"compute"`
 }
 
 func LoadFakeConnectorLog(path string) (FakeConnectorLog, error) {
@@ -72,6 +74,7 @@ func (s *deployFakeProviderServer) DescribeConnectorTarget(context.Context, *con
 func (s *deployFakeProviderServer) InstallConnector(_ context.Context, req *contractv1.InstallConnectorRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
 	if err := recordFakeConnector(func(held *FakeConnectorLog) {
 		held.Installed, held.Binary, held.Version, held.ConfigJSON = true, req.GetBinary(), req.GetVersion(), req.GetConfigJson()
+		held.Compute = req.GetCompute()
 	}); err != nil {
 		return err
 	}
@@ -87,6 +90,7 @@ func (s *deployFakeProviderServer) InstallConnector(_ context.Context, req *cont
 		Result: &progressv1.ResultEvent{Success: true, Connector: &progressv1.ConnectorInstalled{
 			Url:       "https://" + os.Getenv(FakeConnectorHostEnvVar) + "/" + constants.ProjectStateDirName + "/connector",
 			PublicKey: "ZmFrZS1jb25uZWN0b3Ita2V5",
+			Compute:   fakeCompute(req.GetCompute()),
 		}},
 	}})
 }
@@ -101,4 +105,11 @@ func (s *deployFakeProviderServer) RemoveConnector(_ context.Context, _ *contrac
 	return stream.Send(&progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{
 		Result: &progressv1.ResultEvent{Success: true},
 	}})
+}
+
+func fakeCompute(asked string) string {
+	if asked == "" {
+		return string(providerkit.ComputeContainer)
+	}
+	return asked
 }

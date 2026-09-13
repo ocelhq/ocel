@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
 const (
@@ -39,6 +40,8 @@ type Names struct {
 }
 
 func (n Names) Namespace() providerkit.Namespace { return n.namespace }
+
+func (n Names) Project() string { return n.project }
 
 func (n Names) Bucket(class providerkit.Class) string {
 	return string(n.namespace) + "-" + n.project + "-" + string(class)
@@ -106,9 +109,27 @@ func serviceHash(parts ...string) string {
 	return hex.EncodeToString(sum[:])[:serviceHashLen]
 }
 
-func (n Names) Database() string { return string(n.namespace) }
+const connectorSuffix = "-connector"
 
-func (n Names) KeyRing() string { return string(n.namespace) }
+func (n Names) Connector() string { return string(n.namespace) + connectorSuffix }
+
+func (n Names) ConnectorAccountEmail() string {
+	return n.Connector() + "@" + n.project + accountDomain
+}
+
+func (n Names) connectorFits() error {
+	if held := len(n.Connector()); held > maxAccountID {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"the %q service account the connector runs as is %d characters and IAM takes %d.\n"+
+				"Name a shorter namespace in %s",
+			n.Connector(), held, maxAccountID, providerkit.NamespaceEnvVar)
+	}
+	return nil
+}
+
+func (n Names) Database() string { return ports.Database(n.namespace) }
+
+func (n Names) KeyRing() string { return ports.KeyRing(n.namespace) }
 
 func (n Names) PassphraseSecret(class providerkit.Class) string {
 	return string(n.namespace) + "-" + string(class) + passphraseSuffix

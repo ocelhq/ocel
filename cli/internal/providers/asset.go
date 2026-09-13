@@ -26,9 +26,9 @@ var Kinds = []Kind{KindProvider, KindConnector}
 
 func (k Kind) assetPrefix() string { return "ocel-" + string(k) + "-" }
 
-func (k Kind) Platforms() []Platform {
+func (k Kind) PlatformsFor(name string) []Platform {
 	if k == KindConnector {
-		return ConnectorPlatforms
+		return connectorPlatforms[name]
 	}
 	return Platforms
 }
@@ -48,9 +48,10 @@ var Platforms = []Platform{
 	{GOOS: "windows", GOARCH: "amd64"},
 }
 
-var ConnectorPlatforms = []Platform{
-	{GOOS: "linux", GOARCH: "amd64"},
-	{GOOS: "linux", GOARCH: "arm64"},
+var connectorPlatforms = map[string][]Platform{
+	"aws": {{GOOS: "linux", GOARCH: "arm64"}},
+	"gcp": {{GOOS: "linux", GOARCH: "amd64"}},
+	"vps": {{GOOS: "linux", GOARCH: "amd64"}, {GOOS: "linux", GOARCH: "arm64"}},
 }
 
 func archiveExtension(goos string) string {

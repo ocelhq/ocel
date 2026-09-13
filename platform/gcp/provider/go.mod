@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	cloud.google.com/go/firestore v1.24.0
+	cloud.google.com/go/iam v1.12.0
 	cloud.google.com/go/kms v1.33.0
 	cloud.google.com/go/storage v1.64.0
 	github.com/google/go-containerregistry v0.21.7
@@ -28,7 +29,6 @@ require (
 	cloud.google.com/go/auth v0.23.2 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
-	cloud.google.com/go/iam v1.12.0 // indirect
 	cloud.google.com/go/longrunning v1.2.0 // indirect
 	cloud.google.com/go/monitoring v1.30.0 // indirect
 	connectrpc.com/connect v1.20.0 // indirect

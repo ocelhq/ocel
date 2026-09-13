@@ -21,7 +21,7 @@ import (
 
 func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, link *consolelink.Link,
 	opts options, stdout, stderr io.Writer) error {
-	vendor, err := vendored(cfg, opts.form)
+	vendor, err := vendored(cfg)
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,6 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 		held, err := opts.console.Upsert(ctx, access, consoleconnector.Upsert{
 			Target: described.GetTargetFingerprint(),
 			Vendor: vendor,
-			Form:   opts.form,
 			Reach:  reachDial,
 		})
 		if err != nil {
@@ -70,6 +69,7 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 			Binary:     binary,
 			Version:    version.Version,
 			ConfigJson: config,
+			Compute:    opts.compute,
 		}, contractv1connect.ProviderServiceClient.InstallConnector, func(ev *progressv1.OperationEvent) {
 			if said := ev.GetProgress().GetMessage(); said != "" {
 				fmt.Fprintf(stdout, "  %s\n", said)
@@ -81,13 +81,14 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 		if err != nil {
 			return err
 		}
-		if at.GetUrl() == "" || at.GetPublicKey() == "" {
-			return fmt.Errorf("the provider installed the connector and named neither an address nor a key, so the console has nothing to dial")
+		if at.GetUrl() == "" {
+			return fmt.Errorf("the provider installed the connector and named no address, so the console has nothing to dial")
 		}
 
 		paired, err := opts.console.Address(ctx, access, held.ID, consoleconnector.Address{
 			URL:       at.GetUrl(),
 			PublicKey: at.GetPublicKey(),
+			Compute:   at.GetCompute(),
 		})
 		if err != nil {
 			return fmt.Errorf("tell the console where to dial this connector: %w", err)

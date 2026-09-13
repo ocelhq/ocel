@@ -63,7 +63,7 @@ export default async function OrganizationConnectorsPage() {
                   {row.url ?? "no address published"}
                 </p>
                 <p className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
-                  {row.form} · {row.reach}
+                  {row.compute ?? "compute unset"} · {row.reach}
                 </p>
               </div>
               <div className="flex min-w-40 flex-col gap-1">

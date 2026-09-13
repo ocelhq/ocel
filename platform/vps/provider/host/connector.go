@@ -126,7 +126,7 @@ func keyPathed(config []byte) ([]byte, error) {
 	return append(written, '\n'), nil
 }
 
-func (c *Connector) Install(ctx context.Context, binary, config []byte, report providerkit.Reporter) (ConnectorStanding, error) {
+func (c *Connector) Install(ctx context.Context, hostname string, binary, config []byte, report providerkit.Reporter) (ConnectorStanding, error) {
 	written, err := keyPathed(config)
 	if err != nil {
 		return ConnectorStanding{}, err
@@ -150,15 +150,15 @@ func (c *Connector) Install(ctx context.Context, binary, config []byte, report p
 		}
 		say(report, "wrote "+item.ID())
 	}
-	if err := c.Route(ctx, true); err != nil {
+	if err := c.Route(ctx, hostname); err != nil {
 		return ConnectorStanding{}, err
 	}
-	say(report, "the proxy forwards "+ConnectorPath+" to "+ConnectorSocket)
+	say(report, "the proxy forwards "+hostname+ConnectorPath+" to "+ConnectorSocket+", and holds a certificate for "+hostname)
 	return c.Describe(ctx)
 }
 
 func (c *Connector) Remove(ctx context.Context, report providerkit.Reporter) error {
-	if err := c.Route(ctx, false); err != nil {
+	if err := c.Route(ctx, ""); err != nil {
 		return err
 	}
 	say(report, "the proxy forwards "+ConnectorPath+" nowhere")
@@ -182,9 +182,9 @@ func connectorRemoval() string {
 	}, "\n")
 }
 
-func (c *Connector) Route(ctx context.Context, on bool) error {
+func (c *Connector) Route(ctx context.Context, hostname string) error {
 	return c.host.reshape(ctx, func(state ProxyState) (ProxyState, error) {
-		state.Connector = on
+		state.Connector = hostname
 		return state, nil
 	})
 }

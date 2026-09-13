@@ -189,6 +189,8 @@ message ConnectorInstalled {
   string url = 1;
 
   string public_key = 2;
+
+  string compute = 3;
 }
 
 message FunctionOutput {

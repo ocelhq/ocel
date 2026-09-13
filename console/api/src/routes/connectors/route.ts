@@ -47,14 +47,12 @@ export async function upsertConnector(request: Request): Promise<Response> {
       organizationId: session.activeOrganizationId,
       target: parsed.data.target,
       vendor: parsed.data.vendor,
-      form: parsed.data.form,
       reach: parsed.data.reach,
     })
     .onConflictDoUpdate({
       target: [connector.organizationId, connector.target],
       set: {
         vendor: parsed.data.vendor,
-        form: parsed.data.form,
         reach: parsed.data.reach,
       },
     })

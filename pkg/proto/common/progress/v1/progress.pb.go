@@ -1207,6 +1207,7 @@ type ConnectorInstalled struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	PublicKey     string                 `protobuf:"bytes,2,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	Compute       string                 `protobuf:"bytes,3,opt,name=compute,proto3" json:"compute,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1251,6 +1252,13 @@ func (x *ConnectorInstalled) GetUrl() string {
 func (x *ConnectorInstalled) GetPublicKey() string {
 	if x != nil {
 		return x.PublicKey
+	}
+	return ""
+}
+
+func (x *ConnectorInstalled) GetCompute() string {
+	if x != nil {
+		return x.Compute
 	}
 	return ""
 }
@@ -1437,11 +1445,12 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x04apps\x18\t \x03(\v2\x1d.common.progress.v1.AppResultR\x04apps\x12\x18\n" +
 	"\arefused\x18\n" +
 	" \x01(\bR\arefused\x12D\n" +
-	"\tconnector\x18\v \x01(\v2&.common.progress.v1.ConnectorInstalledR\tconnector\"E\n" +
+	"\tconnector\x18\v \x01(\v2&.common.progress.v1.ConnectorInstalledR\tconnector\"_\n" +
 	"\x12ConnectorInstalled\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x1d\n" +
 	"\n" +
-	"public_key\x18\x02 \x01(\tR\tpublicKey\"E\n" +
+	"public_key\x18\x02 \x01(\tR\tpublicKey\x12\x18\n" +
+	"\acompute\x18\x03 \x01(\tR\acompute\"E\n" +
 	"\x0eFunctionOutput\x12!\n" +
 	"\flogical_name\x18\x02 \x01(\tR\vlogicalName\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\"H\n" +

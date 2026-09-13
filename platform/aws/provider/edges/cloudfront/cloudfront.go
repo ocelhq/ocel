@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -66,7 +67,7 @@ type Clients struct {
 	KeyValueStore KeyValueStoreAPI
 	Dynamo        awsports.DynamoAPI
 	SSM           SSMAPI
-	CFN           bootstrap.CFNDescriber
+	CFN           cfn.Describer
 	Region        string
 	Namespace     bootstrap.Namespace
 }

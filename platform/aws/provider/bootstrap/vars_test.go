@@ -191,10 +191,10 @@ func TestVarsKey(t *testing.T) {
 
 			tagged := false
 			for _, tag := range key.Properties.Tags {
-				tagged = tagged || tag.Key == varsKeyComponentTagKey && tag.Value == varsKeyComponentTagValue
+				tagged = tagged || tag.Key == VarsKeyComponentTagKey && tag.Value == VarsKeyComponentTagValue
 			}
 			if !tagged {
-				t.Errorf("VarsKey Tags = %+v, want %s=%s, which is what the bootstrap credential policy scopes key lifecycle to", key.Properties.Tags, varsKeyComponentTagKey, varsKeyComponentTagValue)
+				t.Errorf("VarsKey Tags = %+v, want %s=%s, which is what the bootstrap credential policy scopes key lifecycle to", key.Properties.Tags, VarsKeyComponentTagKey, VarsKeyComponentTagValue)
 			}
 
 			alias, ok := tmpl.Resources["VarsKeyAlias"]
@@ -313,15 +313,15 @@ func TestRunVars(t *testing.T) {
 	})
 
 	t.Run("a run that asks for the key raises a stack of its own", func(t *testing.T) {
-		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
 		req := Request{Features: []string{FeatureVarsKey}}
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, req, nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
-		tmpl := parseVarsTemplate(t, cfn.template(defaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction)))
+		tmpl := parseVarsTemplate(t, stacks.template(defaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction)))
 		for _, name := range []string{"VarsKey", "VarsKeyAlias"} {
 			if _, ok := tmpl.Resources[name]; !ok {
 				t.Errorf("the vars-key stack does not declare %s", name)
@@ -333,15 +333,15 @@ func TestRunVars(t *testing.T) {
 	})
 
 	t.Run("a run that does not ask for the key makes none", func(t *testing.T) {
-		cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-		if err := Run(context.Background(), apisOf(cfn, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, Request{}, nil, nil); err != nil {
+		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, Request{}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
 		stack := defaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction)
-		if slices.Contains(cfn.stacks(), stack) {
+		if slices.Contains(stacks.stacks(), stack) {
 			t.Errorf("%s stands after a run that never asked for it; bootstrap creates nothing that bills while idle", stack)
 		}
 	})

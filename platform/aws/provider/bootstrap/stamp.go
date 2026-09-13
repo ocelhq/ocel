@@ -1,23 +1,16 @@
 package bootstrap
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"slices"
 	"strconv"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
-const (
-	TagSchema         = "ocel:schema"
-	TagDigest         = "ocel:digest"
-	TagBootstrappedBy = "ocel:bootstrapped-by"
-	TagNamespace      = "ocel:namespace"
-)
+const TagSchema = "ocel:schema"
 
 type Stamp struct {
 	Schema    int
@@ -53,37 +46,13 @@ func (d Deployed) Stale(required []string) []StackStamp {
 	return out
 }
 
-func TemplateDigest(body string) string {
-	sum := sha256.Sum256([]byte(body))
-	return hex.EncodeToString(sum[:])
-}
-
 func stampTags(ns Namespace, s Stamp) []cfntypes.Tag {
 	return []cfntypes.Tag{
-		{Key: aws.String(TagNamespace), Value: aws.String(string(ns))},
+		{Key: aws.String(cfn.TagNamespace), Value: aws.String(string(ns))},
 		{Key: aws.String(TagSchema), Value: aws.String(strconv.Itoa(s.Schema))},
-		{Key: aws.String(TagDigest), Value: aws.String(s.Digest)},
-		{Key: aws.String(TagBootstrappedBy), Value: aws.String(s.WrittenBy)},
+		{Key: aws.String(cfn.TagDigest), Value: aws.String(s.Digest)},
+		{Key: aws.String(cfn.TagBootstrappedBy), Value: aws.String(s.WrittenBy)},
 	}
-}
-
-func onlyDevWriterMoved(have, want []cfntypes.Tag) bool {
-	from := providerkit.Writer(readStamp(have).WrittenBy)
-	to := providerkit.Writer(readStamp(want).WrittenBy)
-	if from == to || !from.Development() || !to.Development() {
-		return false
-	}
-	return sameStackTags(withoutTag(have, TagBootstrappedBy), withoutTag(want, TagBootstrappedBy))
-}
-
-func withoutTag(tags []cfntypes.Tag, key string) []cfntypes.Tag {
-	out := make([]cfntypes.Tag, 0, len(tags))
-	for _, tag := range tags {
-		if aws.ToString(tag.Key) != key {
-			out = append(out, tag)
-		}
-	}
-	return out
 }
 
 func readStamp(tags []cfntypes.Tag) Stamp {
@@ -93,9 +62,9 @@ func readStamp(tags []cfntypes.Tag) Stamp {
 		switch aws.ToString(tag.Key) {
 		case TagSchema:
 			s.Schema, _ = strconv.Atoi(value)
-		case TagDigest:
+		case cfn.TagDigest:
 			s.Digest = value
-		case TagBootstrappedBy:
+		case cfn.TagBootstrappedBy:
 			s.WrittenBy = value
 		}
 	}
