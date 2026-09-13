@@ -2,12 +2,16 @@ package clitest
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 
 	"github.com/ocelhq/ocel/pkg/costkit"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -89,9 +93,30 @@ func (s *deployFakeProviderServer) Inventory(_ context.Context, req *contractv1.
 }
 
 func (s *deployFakeProviderServer) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
+	return price(req)
+}
+
+func price(req *costv1.PriceRequest) (*costv1.Estimate, error) {
 	card, err := costkit.Load([]byte(costRates))
 	if err != nil {
 		return nil, err
 	}
 	return costkit.Estimate(card, costTable, req)
+}
+
+type costServer struct {
+	costv1connect.UnimplementedCostServiceHandler
+}
+
+func (costServer) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
+	return price(req)
+}
+
+func ServeCostService(t *testing.T) string {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.Handle(costv1connect.NewCostServiceHandler(costServer{}))
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	return server.URL
 }

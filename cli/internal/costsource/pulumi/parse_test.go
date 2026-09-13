@@ -204,3 +204,11 @@ func TestSomethingThatIsNoneOfTheThreeEnvelopesIsRefused(t *testing.T) {
 		}
 	}
 }
+
+func TestTheStackFallsOutOfTheURNsWhenTheCallerDoesNotNameIt(t *testing.T) {
+	set := parse(t, "preview.json", pulumi.Options{Source: pulumi.SourcePulumi})
+
+	if got := set.GetScopes()[0].GetName(); got != "dev" {
+		t.Errorf("root scope name = %q, want the stack the urns were written under", got)
+	}
+}

@@ -163,7 +163,11 @@ const kindComponent = "component"
 
 func build(records []record, config map[string]any, opts Options) (*costv1.ResourceSet, error) {
 	tree := &costkit.Tree{}
-	root := tree.Scope("", opts.kind(), opts.Name)
+	name := opts.Name
+	if name == "" && len(records) > 0 {
+		name = urnStack(records[0].URN)
+	}
+	root := tree.Scope("", opts.kind(), name)
 	byURN := make(map[string]record, len(records))
 	for _, held := range records {
 		if held.op != opDelete {
@@ -207,6 +211,15 @@ func build(records []record, config map[string]any, opts Options) (*costv1.Resou
 		resource.Tags = tags(held.Inputs)
 	}
 	return tree.Set(opts.Source)
+}
+
+func urnStack(urn string) string {
+	rest, held := strings.CutPrefix(urn, "urn:pulumi:")
+	if !held {
+		return ""
+	}
+	stack, _, _ := strings.Cut(rest, "::")
+	return stack
 }
 
 func urnName(urn string) string {

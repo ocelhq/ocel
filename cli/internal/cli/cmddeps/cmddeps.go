@@ -32,6 +32,7 @@ type Deps struct {
 	CurrentGitBranch    func(dir string) (string, error)
 	DiscoverPRNumber    func() string
 	RunPackageManager   func(ctx context.Context, dir string, argv []string, output io.Writer) error
+	RunTool             func(ctx context.Context, dir string, argv []string, stderr io.Writer) ([]byte, error)
 	HostTrust           provider.Trust
 	StdinIsTerminal     func(r io.Reader) bool
 	ConfigPath          func() string
