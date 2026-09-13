@@ -12,7 +12,7 @@ function Group() {
       {items.map((item) => (
         <span key={item}>
           {item}
-          &nbsp;&nbsp;<span className="text-primary">✕</span>&nbsp;&nbsp;
+          &nbsp;&nbsp;<span className="text-electric">✕</span>&nbsp;&nbsp;
         </span>
       ))}
     </span>

@@ -67,7 +67,7 @@ function Panel({ here }: { here: string }) {
           <ArrowRightIcon className={cn(glyph.inline, "text-muted-foreground")} />
           <div className="flex flex-col">
             <SectionLabel className="mb-0">Destination</SectionLabel>
-            <span className={cn(role.path, "text-primary")}>{here}</span>
+            <span className={cn(role.path, "text-electric")}>{here}</span>
           </div>
         </div>
 
@@ -159,7 +159,7 @@ function Branch({ branch }: { branch: CopyBranch }) {
       <div className="flex items-center gap-2 py-2">
         <button
           type="button"
-          className="inline-flex size-6 items-center justify-center text-muted-foreground hover:text-primary"
+          className="inline-flex size-6 items-center justify-center text-muted-foreground hover:text-foreground"
           aria-expanded={open}
           aria-label={`${open ? "collapse" : "expand"} ${folderName(branch.folder)}`}
           onClick={() => toggleBranch(branch.folder)}

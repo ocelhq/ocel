@@ -83,7 +83,7 @@ function SelectContent({
           data-slot="select-content"
           data-align-trigger={alignItemWithTrigger}
           className={cn(
-            "relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 overflow-x-hidden overflow-y-auto rounded-none border-[1.5px] border-foreground bg-popover text-popover-foreground shadow-[6px_6px_0_var(--hard-shadow)]",
+            "relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 overflow-x-hidden overflow-y-auto rounded-none border border-float bg-popover text-popover-foreground shadow-float",
             className,
           )}
           {...props}
@@ -113,7 +113,7 @@ function SelectItem({ className, children, ...props }: SelectPrimitive.Item.Prop
       data-slot="select-item"
       className={cn(
         role.path,
-        "relative flex w-full cursor-default items-center gap-2 rounded-none py-1.5 pr-8 pl-3 outline-hidden select-none focus:bg-muted focus:text-primary data-disabled:pointer-events-none data-disabled:opacity-45",
+        "relative flex w-full cursor-default items-center gap-2 rounded-none py-1.5 pr-8 pl-3 outline-hidden select-none focus:bg-muted focus:text-foreground data-disabled:pointer-events-none data-disabled:opacity-45",
         className,
       )}
       {...props}

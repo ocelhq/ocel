@@ -32,6 +32,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-register="landing"
       className={cn(
         "h-full",
         "antialiased",

@@ -35,8 +35,8 @@ export const source = loader({
 
 export const tabColors: Record<string, string> = {
   guide: "var(--electric)",
-  cli: "var(--color-amber-500)",
-  sdk: "var(--color-violet-500)",
+  cli: "var(--amber)",
+  sdk: "var(--violet)",
 };
 
 export function layoutTree(): PageTree.Root {

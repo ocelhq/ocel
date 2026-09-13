@@ -32,6 +32,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
+      data-register="read"
       suppressHydrationWarning
       className={`${grotesk.variable} ${plexSans.variable} ${plexMono.variable} ${archivo.variable}`}
     >

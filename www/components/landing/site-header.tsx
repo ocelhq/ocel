@@ -52,11 +52,12 @@ export function SiteHeader() {
           </button>
           <Link
             href="#"
-            className="hidden text-[13px] font-medium text-foreground transition-colors hover:text-primary sm:block"
+            className="hidden text-[13px] font-medium text-foreground transition-colors hover:text-electric sm:block"
           >
             Sign in
           </Link>
           <Button
+            nativeButton={false}
             render={<Link href="#" />}
             className="h-auto rounded-none bg-foreground px-4 py-2 text-[13px] font-semibold tracking-normal text-background normal-case hover:bg-foreground/85"
           >

@@ -1,27 +1,42 @@
 ---
 name: Ocel
-description: Deploys apps to your own cloud. One theme, two registers.
+description: The landing and read registers of Ocel's design system.
 colors:
-  electric: "#1f35ff"
-  ink: "#0a0a0a"
-  body: "#555555"
+  electric: "oklch(0.4924 0.2858 266.52)"
+  electric-dark: "oklch(0.587 0.225 270.16)"
+  ink: "oklch(0.1448 0 0)"
+  ink-dark: "oklch(0.9575 0.0067 97.35)"
+  paper: "oklch(1 0 0)"
+  paper-dark: "oklch(0.1809 0.0052 248.12)"
+  fog: "oklch(0.9581 0 0)"
+  fog-dark: "oklch(0.2513 0.0057 248.07)"
+  tile-dark: "oklch(0.2077 0.005 248.07)"
+  body: "oklch(0.4495 0 0)"
+  body-dark: "oklch(0.7034 0.0135 255.53)"
+  hairline: "oklch(0.9128 0 0)"
+  hairline-dark: "oklch(0.2958 0.0084 255.57)"
   steel: "#8a8a8a"
-  fog: "#f1f1f1"
-  paper: "#ffffff"
-  go: "#1a9e57"
-  hairline: "color-mix(in srgb, #0a0a0a 12%, transparent)"
-  grid: "#ececec"
+  steel-dark: "#5f646b"
   faint: "#c9c9c9"
+  faint-dark: "#3a3e44"
+  grid: "#ececec"
+  grid-dark: "#1c1f22"
+  hard-shadow: "#e8e8e8"
+  hard-shadow-dark: "#000000"
+  go: "#1a9e57"
+  go-dark: "#3ecf7a"
+  warn: "oklch(0.5423 0.1315 66.11)"
+  warn-dark: "oklch(0.8 0.132 76.5)"
+  destructive: "oklch(0.577 0.245 27.33)"
+  destructive-dark: "oklch(0.627 0.22 25)"
+  amber: "#e8a33d"
+  amber-dark: "#e0a44a"
+  violet: "oklch(0.606 0.25 292.72)"
+  violet-dark: "oklch(0.702 0.183 293.54)"
   terminal: "#16181a"
   terminal-rule: "#2a2d31"
-  electric-dark: "#4d68ff"
-  ink-dark: "#f2f1ec"
-  body-dark: "#9aa0a8"
-  steel-dark: "#5f646b"
-  fog-dark: "#16181a"
-  paper-dark: "#101214"
-  go-dark: "#3ecf7a"
-  hairline-dark: "#2a2d31"
+  terminal-foreground: "#9aa0a8"
+  terminal-ink: "#f2f1ec"
 typography:
   display:
     fontFamily: "Space Grotesk, IBM Plex Sans, system-ui, sans-serif"
@@ -47,9 +62,27 @@ typography:
     fontWeight: 400
     lineHeight: 1.55
     letterSpacing: "normal"
+  statement:
+    fontFamily: "Space Grotesk, IBM Plex Sans, system-ui, sans-serif"
+    fontSize: "clamp(2.375rem, 4vw, 3.125rem)"
+    fontWeight: 600
+    lineHeight: 1.1
+    letterSpacing: "-0.03em"
+  index:
+    fontFamily: "Space Grotesk, IBM Plex Sans, system-ui, sans-serif"
+    fontSize: "2.5rem"
+    fontWeight: 600
+    lineHeight: 1.1
+    letterSpacing: "-0.035em"
   body:
     fontFamily: "IBM Plex Sans, system-ui, sans-serif"
     fontSize: "1rem"
+    fontWeight: 400
+    lineHeight: 1.6
+    letterSpacing: "normal"
+  small:
+    fontFamily: "IBM Plex Sans, system-ui, sans-serif"
+    fontSize: "0.9375rem"
     fontWeight: 400
     lineHeight: 1.6
     letterSpacing: "normal"
@@ -127,13 +160,17 @@ components:
 
 # Design System: Ocel
 
+Invariants, tokens, register dials and named exceptions live in `ui/theme/DESIGN.md`.
+This file covers the landing and read registers' components, and defers to that file
+wherever the two disagree.
+
 ## Overview
 
 **Creative North Star: "The Engineering Drawing"**
 
 Ocel's surfaces are drawn, not decorated. White paper, black ink, hairline rules, and
-one electric annotation. Every element sits square on the page; nothing is rounded,
-lifted, or blurred. Type does the work a drawing's line weights do: a grotesk for the
+one electric annotation. Every element sits square on the page; nothing is rounded or
+blurred. Type does the work a drawing's line weights do: a grotesk for the
 titles, a humanist sans for the reading, and a mono for every caption, label, and
 command. Code and terminal output are the figures on the sheet, so they get the most
 careful framing on the page.
@@ -149,7 +186,7 @@ drafting apparatus is left visible.
 **Key Characteristics:**
 - Paper and ink first. Electric is an annotation, never a surface.
 - Zero radius everywhere, enforced globally.
-- Depth by rule and tone, never by shadow.
+- Depth by rule and tone. Only landing figures lift, on a zero-blur print offset.
 - Mono uppercase labels with wide tracking name every section, column, and tab.
 - Real code and real terminal output are the illustrations.
 - The landing register may show the grid, crosses, captions, and heavy rules. The docs and dashboard register may not.
@@ -175,11 +212,11 @@ A monochrome drawing with one saturated line and one confirmation green.
 - **Go** (`{colors.go}`, dark `{colors.go-dark}`): the check mark in terminal output and success states. It appears only where something actually succeeded.
 
 ### Named Rules
-**The One Annotation Rule.** Electric owns less than ten percent of any view. It underlines, marks, and points. It never fills a section, a card, or a button on any surface.
+**The One Annotation Rule.** Electric owns less than ten percent of any view. It underlines, marks, and points. It never fills a card or a button on any surface. The landing register may stamp one Electric fill per section, such as the pricing header band or the terminal cursor.
 
 **The Dark Screen Rule.** Terminal and code panes keep their dark palette in light mode. They are screens set into the drawing, not part of the paper.
 
-**The Same Ink Rule.** Landing, docs, and dashboard draw from one token set. A new color on one surface is a new color on all of them, so it must earn a place in this file first.
+**The Same Ink Rule.** Landing, docs, and dashboard draw from `ui/theme/src/tokens.css`. A new color on one surface is a new color on all of them, so it earns a place there first.
 
 ## Typography
 
@@ -195,6 +232,9 @@ A monochrome drawing with one saturated line and one confirmation green.
 - **Headline** (600, 1.375rem, 1.25, -0.03em): section headings. In docs they carry 2.5rem of space above; the landing sets its section headings larger at 34px with -0.02em.
 - **Title** (600, 1.0625rem, 1.4): sub-headings, tile titles, and sidebar navigation, which is set in the display face at 0.875rem.
 - **Lede** (400, 1.125rem, 1.55): the one sentence under a display title, in Body color, held to about 34 characters. Nowhere else.
+- **Statement** (600, 38px to 50px, 1.1, -0.03em): the landing's full-width statements and closing call, set between Headline and Display. Landing register only.
+- **Index** (600, 2.5rem, 1.1, -0.035em): the docs index and comparison page titles.
+- **Small** (400, 0.9375rem, 1.6): landing running text and buttons, docs table cells and the compare panes.
 - **Body** (400, 1rem, 1.6): prose in Body color. Max width follows the docs column, about 65 to 75 characters. On the docs index the prose is held to 35rem while figures, tiles, and tabs keep the full 56rem column.
 - **Label** (500 mono, 0.6875rem, 0.14em, uppercase): sidebar separators, table of contents heading, table headers, the docs badge, keyboard keys, figure captions, and content tabs. Steel, except tabs, which are controls: Body at rest and Ink when active.
 - **Filename** (400 mono, 0.75rem): the title bar of a code block. A path is code, so it keeps its case and its natural tracking.
@@ -221,10 +261,10 @@ Dividers are structural. A hairline under the hero, under table rows, and betwee
 
 ## Elevation & Depth
 
-No shadows. The system is flat by construction; the docs stylesheet strips every shadow the docs framework ships, including on code blocks and keyboard keys. Depth comes from three things only: a hairline rule, a tonal step from Paper to Fog, and the dark terminal material set into the page. The landing header uses a translucent paper with backdrop blur so content passes beneath it, and that is the only blur in the system.
+No blurred shadows. The docs stylesheet strips every shadow the docs framework ships, including on code blocks and keyboard keys, and the read register sets the float shadow to none. The landing register frames its figures, the terminal and the pricing table, with a 1.5px Ink border and the float shadow: a 6px zero-blur offset in Hard Shadow. Depth in docs comes from three things only: a hairline rule, a tonal step from Paper to Fog, and the dark terminal material set into the page. The landing header uses a translucent paper with backdrop blur so content passes beneath it, and that is the only blur in the system.
 
 ### Named Rules
-**The No Shadow Rule.** Nothing casts a shadow. A surface that needs to separate from the page gets a hairline or steps to Fog. Hover never lifts; it darkens a border or tints a fill.
+**The No Blur Rule.** Nothing casts a soft shadow. A surface that needs to separate from the page gets a hairline or steps to Fog; a landing figure takes the float offset. Hover never lifts; it darkens a border or tints a fill.
 
 ## Shapes
 
@@ -263,7 +303,7 @@ Cards are tiles, not cards. They never float.
 - **Error:** destructive red border and 20% ring on the console; docs have no forms.
 
 ### Navigation
-- **Docs sidebar:** display face at 0.875rem, separators in Label type, tabs colored per root (Deploy in Electric, CLI in amber, SDK in violet) through the tab icon only. Collapse control centered.
+- **Docs sidebar:** display face at 0.875rem, separators in Label type, tabs colored per root (Deploy in Electric, CLI in Amber, SDK in Violet) through the tab icon only. Collapse control centered.
 - **Landing header:** sticky, translucent Paper at 85% with backdrop blur, 1.5px Ink rule beneath. Wordmark left, 13px medium links in Body hovering to Ink, an "ALPHA" mono label, a mono theme toggle framed by a hairline, and the Ink CTA.
 
 ### Terminal
@@ -293,9 +333,9 @@ An inline SVG figure: framework logos across the top, a terminal in the middle, 
 - **Do** use the cut-ring mark and lowercase Archivo wordmark exactly as built. It is the one curve in the system.
 
 ### Don't:
-- **Don't** let Electric fill a button, card, section, or background on any surface. Under ten percent, as annotation only.
-- **Don't** add shadows, glows, blurs, or gradients. The header's backdrop blur and the hero's radial grid mask are the two exceptions, both landing only.
+- **Don't** let Electric fill a button, card, or background on any surface. Under ten percent, as annotation only, plus one landing stamp per section.
+- **Don't** add blurred shadows, glows, blurs, or gradients. The header's backdrop blur and the hero's radial grid mask are the two exceptions, both landing only.
 - **Don't** bring the landing's drafting apparatus into docs or the dashboard. Those surfaces stay quiet so the work is the only thing that stands out.
-- **Don't** invent a second accent. Amber and violet exist only as sidebar tab colors; they never appear in content.
+- **Don't** invent a second accent. Amber and Violet colour category icons only; they never appear in content.
 - **Don't** render code or terminal output as images or screenshots.
 - **Don't** set headings, buttons, or labels in a fourth typeface. Grotesk, Plex Sans, Plex Mono, and Archivo for the wordmark are the whole set.

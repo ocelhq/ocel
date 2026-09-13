@@ -22,6 +22,7 @@
     "@console/resources": "workspace:*",
     "@dagrejs/dagre": "^3.1.1",
     "@phosphor-icons/react": "^2.1.10",
+    "@ui/theme": "workspace:^",
     "@ui/vars": "workspace:^",
     "@xyflow/react": "^12.11.6",
     "better-auth": "^1.6.23",
