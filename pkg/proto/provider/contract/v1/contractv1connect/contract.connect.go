@@ -103,6 +103,15 @@ const (
 	// ProviderServiceGetHostnameStatusProcedure is the fully-qualified name of the ProviderService's
 	// GetHostnameStatus RPC.
 	ProviderServiceGetHostnameStatusProcedure = "/provider.contract.v1.ProviderService/GetHostnameStatus"
+	// ProviderServiceDescribeConnectorTargetProcedure is the fully-qualified name of the
+	// ProviderService's DescribeConnectorTarget RPC.
+	ProviderServiceDescribeConnectorTargetProcedure = "/provider.contract.v1.ProviderService/DescribeConnectorTarget"
+	// ProviderServiceInstallConnectorProcedure is the fully-qualified name of the ProviderService's
+	// InstallConnector RPC.
+	ProviderServiceInstallConnectorProcedure = "/provider.contract.v1.ProviderService/InstallConnector"
+	// ProviderServiceRemoveConnectorProcedure is the fully-qualified name of the ProviderService's
+	// RemoveConnector RPC.
+	ProviderServiceRemoveConnectorProcedure = "/provider.contract.v1.ProviderService/RemoveConnector"
 )
 
 // ProviderServiceClient is a client for the provider.contract.v1.ProviderService service.
@@ -130,6 +139,9 @@ type ProviderServiceClient interface {
 	AddHostname(context.Context, *v1.HostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	RemoveHostname(context.Context, *v1.HostnameRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 	GetHostnameStatus(context.Context, *v1.HostnameRequest) (*v1.GetHostnameStatusResponse, error)
+	DescribeConnectorTarget(context.Context, *v1.DescribeConnectorTargetRequest) (*v1.DescribeConnectorTargetResponse, error)
+	InstallConnector(context.Context, *v1.InstallConnectorRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
+	RemoveConnector(context.Context, *v1.RemoveConnectorRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error)
 }
 
 // NewProviderServiceClient constructs a client for the provider.contract.v1.ProviderService
@@ -281,6 +293,24 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("GetHostnameStatus")),
 			connect.WithClientOptions(opts...),
 		),
+		describeConnectorTarget: connect.NewClient[v1.DescribeConnectorTargetRequest, v1.DescribeConnectorTargetResponse](
+			httpClient,
+			baseURL+ProviderServiceDescribeConnectorTargetProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("DescribeConnectorTarget")),
+			connect.WithClientOptions(opts...),
+		),
+		installConnector: connect.NewClient[v1.InstallConnectorRequest, v11.OperationEvent](
+			httpClient,
+			baseURL+ProviderServiceInstallConnectorProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("InstallConnector")),
+			connect.WithClientOptions(opts...),
+		),
+		removeConnector: connect.NewClient[v1.RemoveConnectorRequest, v11.OperationEvent](
+			httpClient,
+			baseURL+ProviderServiceRemoveConnectorProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("RemoveConnector")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -309,6 +339,9 @@ type providerServiceClient struct {
 	addHostname               *connect.Client[v1.HostnameRequest, v11.OperationEvent]
 	removeHostname            *connect.Client[v1.HostnameRequest, v11.OperationEvent]
 	getHostnameStatus         *connect.Client[v1.HostnameRequest, v1.GetHostnameStatusResponse]
+	describeConnectorTarget   *connect.Client[v1.DescribeConnectorTargetRequest, v1.DescribeConnectorTargetResponse]
+	installConnector          *connect.Client[v1.InstallConnectorRequest, v11.OperationEvent]
+	removeConnector           *connect.Client[v1.RemoveConnectorRequest, v11.OperationEvent]
 }
 
 // Configure calls provider.contract.v1.ProviderService.Configure.
@@ -478,6 +511,25 @@ func (c *providerServiceClient) GetHostnameStatus(ctx context.Context, req *v1.H
 	return nil, err
 }
 
+// DescribeConnectorTarget calls provider.contract.v1.ProviderService.DescribeConnectorTarget.
+func (c *providerServiceClient) DescribeConnectorTarget(ctx context.Context, req *v1.DescribeConnectorTargetRequest) (*v1.DescribeConnectorTargetResponse, error) {
+	response, err := c.describeConnectorTarget.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// InstallConnector calls provider.contract.v1.ProviderService.InstallConnector.
+func (c *providerServiceClient) InstallConnector(ctx context.Context, req *v1.InstallConnectorRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.installConnector.CallServerStream(ctx, connect.NewRequest(req))
+}
+
+// RemoveConnector calls provider.contract.v1.ProviderService.RemoveConnector.
+func (c *providerServiceClient) RemoveConnector(ctx context.Context, req *v1.RemoveConnectorRequest) (*connect.ServerStreamForClient[v11.OperationEvent], error) {
+	return c.removeConnector.CallServerStream(ctx, connect.NewRequest(req))
+}
+
 // ProviderServiceHandler is an implementation of the provider.contract.v1.ProviderService service.
 type ProviderServiceHandler interface {
 	Configure(context.Context, *v1.ConfigureRequest) (*v1.ConfigureResponse, error)
@@ -503,6 +555,9 @@ type ProviderServiceHandler interface {
 	AddHostname(context.Context, *v1.HostnameRequest, *connect.ServerStream[v11.OperationEvent]) error
 	RemoveHostname(context.Context, *v1.HostnameRequest, *connect.ServerStream[v11.OperationEvent]) error
 	GetHostnameStatus(context.Context, *v1.HostnameRequest) (*v1.GetHostnameStatusResponse, error)
+	DescribeConnectorTarget(context.Context, *v1.DescribeConnectorTargetRequest) (*v1.DescribeConnectorTargetResponse, error)
+	InstallConnector(context.Context, *v1.InstallConnectorRequest, *connect.ServerStream[v11.OperationEvent]) error
+	RemoveConnector(context.Context, *v1.RemoveConnectorRequest, *connect.ServerStream[v11.OperationEvent]) error
 }
 
 // NewProviderServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -650,6 +705,24 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("GetHostnameStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
+	providerServiceDescribeConnectorTargetHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceDescribeConnectorTargetProcedure,
+		svc.DescribeConnectorTarget,
+		connect.WithSchema(providerServiceMethods.ByName("DescribeConnectorTarget")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerServiceInstallConnectorHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceInstallConnectorProcedure,
+		svc.InstallConnector,
+		connect.WithSchema(providerServiceMethods.ByName("InstallConnector")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerServiceRemoveConnectorHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceRemoveConnectorProcedure,
+		svc.RemoveConnector,
+		connect.WithSchema(providerServiceMethods.ByName("RemoveConnector")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/provider.contract.v1.ProviderService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProviderServiceConfigureProcedure:
@@ -698,6 +771,12 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceRemoveHostnameHandler.ServeHTTP(w, r)
 		case ProviderServiceGetHostnameStatusProcedure:
 			providerServiceGetHostnameStatusHandler.ServeHTTP(w, r)
+		case ProviderServiceDescribeConnectorTargetProcedure:
+			providerServiceDescribeConnectorTargetHandler.ServeHTTP(w, r)
+		case ProviderServiceInstallConnectorProcedure:
+			providerServiceInstallConnectorHandler.ServeHTTP(w, r)
+		case ProviderServiceRemoveConnectorProcedure:
+			providerServiceRemoveConnectorHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -797,4 +876,16 @@ func (UnimplementedProviderServiceHandler) RemoveHostname(context.Context, *v1.H
 
 func (UnimplementedProviderServiceHandler) GetHostnameStatus(context.Context, *v1.HostnameRequest) (*v1.GetHostnameStatusResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.GetHostnameStatus is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) DescribeConnectorTarget(context.Context, *v1.DescribeConnectorTargetRequest) (*v1.DescribeConnectorTargetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.DescribeConnectorTarget is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) InstallConnector(context.Context, *v1.InstallConnectorRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.InstallConnector is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) RemoveConnector(context.Context, *v1.RemoveConnectorRequest, *connect.ServerStream[v11.OperationEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.contract.v1.ProviderService.RemoveConnector is not implemented"))
 }

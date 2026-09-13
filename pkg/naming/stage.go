@@ -10,6 +10,7 @@ const (
 	UnitEnvironment = "environment"
 	UnitEdge        = "edge"
 	UnitPromotion   = "promotion"
+	UnitConnector   = "connector"
 
 	PhaseBuilding     = "building"
 	PhaseUploading    = "uploading"

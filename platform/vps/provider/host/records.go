@@ -17,8 +17,8 @@ import (
 var recordsScript []byte
 
 const (
-	exitNoRecord = 3
-	exitStale    = 4
+	ExitNoRecord = 3
+	ExitStale    = 4
 )
 
 const (
@@ -27,16 +27,24 @@ const (
 	acknowledged  = "removed"
 )
 
-type Records struct{ host *Host }
+type RecordTransport interface {
+	Holds(ctx context.Context, class providerkit.Class) (bool, error)
 
-func NewRecords(h *Host) *Records { return &Records{host: h} }
+	Records(ctx context.Context, class providerkit.Class, stdin io.Reader, argv ...string) (string, error)
+}
+
+type Records struct{ over RecordTransport }
+
+func NewRecords(h *Host) *Records { return &Records{over: sshRecords{host: h}} }
+
+func RecordsOver(over RecordTransport) *Records { return &Records{over: over} }
 
 func (r *Records) tier(ctx context.Context, name providerkit.RecordName) (providerkit.Class, string, bool, error) {
 	class, encoded, err := located(name)
 	if err != nil {
 		return "", "", false, err
 	}
-	stood, err := r.host.holds(ctx, class)
+	stood, err := r.over.Holds(ctx, class)
 	if err != nil {
 		return "", "", false, err
 	}
@@ -172,26 +180,38 @@ func (r *Records) List(ctx context.Context, under providerkit.RecordName) ([]pro
 }
 
 func (r *Records) helper(ctx context.Context, class providerkit.Class, stdin io.Reader, args ...string) (string, error) {
+	return r.over.Records(ctx, class, stdin, args...)
+}
+
+type sshRecords struct{ host *Host }
+
+func (s sshRecords) Holds(ctx context.Context, class providerkit.Class) (bool, error) {
+	return s.host.holds(ctx, class)
+}
+
+func (s sshRecords) Records(ctx context.Context, class providerkit.Class, stdin io.Reader, argv ...string) (string, error) {
 	command := quoted(recordsHelper) + " " + quoted(string(class))
-	for _, arg := range args {
+	for _, arg := range argv {
 		command += " " + quoted(arg)
 	}
-	elevation, refused := r.host.elevate(ctx)
-	result, err := r.host.stream(ctx, command, stdin, elevation)
+	elevation, refused := s.host.elevate(ctx)
+	result, err := s.host.stream(ctx, command, stdin, elevation)
 	if err != nil {
 		return "", err
 	}
 	switch result.Code {
 	case 0:
 		return result.Stdout, nil
-	case exitNoRecord:
+	case ExitNoRecord:
 		return "", providerkit.ErrNoRecord
-	case exitStale:
+	case ExitStale:
 		return "", providerkit.ErrStale
 	default:
-		return "", unelevated(refused, r.host.refuse("records "+args[0], result))
+		return "", unelevated(refused, s.host.refuse("records "+argv[0], result))
 	}
 }
+
+const RecordsHelper = recordsHelper
 
 func minted(rendered string) (providerkit.Revision, error) {
 	revision := strings.TrimSpace(rendered)

@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appimages"
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/cli/connector"
 	"github.com/ocelhq/ocel/cli/internal/cli/deploy"
 	"github.com/ocelhq/ocel/cli/internal/cli/doctor"
 	"github.com/ocelhq/ocel/cli/internal/cli/env"
@@ -95,8 +96,9 @@ func init() {
 		&cobra.Group{ID: consoleGroup, Title: "CONSOLE COMMANDS"},
 	)
 	loginCmd, logoutCmd, linkCmd := login.NewCommand(s), login.NewLogoutCommand(s), link.NewCommand(s)
-	readsConsoleURL(rootCmd, loginCmd, logoutCmd, linkCmd)
-	addConsoleCommands(rootCmd, loginCmd, logoutCmd, linkCmd, link.NewUnlinkCommand(s))
+	connectorCmd := connector.NewCommand(s)
+	readsConsoleURL(rootCmd, loginCmd, logoutCmd, linkCmd, connectorCmd)
+	addConsoleCommands(rootCmd, loginCmd, logoutCmd, linkCmd, link.NewUnlinkCommand(s), connectorCmd)
 
 	installHelpStyle(rootCmd)
 }

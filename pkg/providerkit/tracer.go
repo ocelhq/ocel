@@ -98,6 +98,7 @@ const (
 	edgeUnitTitle        = "Edge"
 	promotionUnitTitle   = "Promotion"
 	infraUnitTitle       = "Shared infrastructure"
+	connectorUnitTitle   = "Connector"
 )
 
 func UnitStage(name, title string, phases ...progressv1.Phase) Stage {

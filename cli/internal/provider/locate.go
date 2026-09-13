@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
 	"github.com/ocelhq/ocel/cli/internal/providers"
@@ -14,12 +15,28 @@ func Locate(ctx context.Context, projectDir, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return locate(ctx, store, projectDir, name)
+	return locate(ctx, store, providers.KindProvider, projectDir, name, store.Platform)
 }
 
-func locate(ctx context.Context, store *providers.Store, projectDir, name string) (string, error) {
+func Connector(ctx context.Context, projectDir, name string, platform providers.Platform) ([]byte, error) {
+	store, err := providers.New(version.Version)
+	if err != nil {
+		return nil, err
+	}
+	path, err := locate(ctx, store, providers.KindConnector, projectDir, name, platform)
+	if err != nil {
+		return nil, err
+	}
+	read, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read the %s connector built for %s: %w", name, platform.Dir(), err)
+	}
+	return read, nil
+}
+
+func locate(ctx context.Context, store *providers.Store, kind providers.Kind, projectDir, name string, platform providers.Platform) (string, error) {
 	if !store.Fetches() {
-		return store.Binary(ctx, name, "")
+		return store.Binary(ctx, kind, name, platform, "")
 	}
 
 	lock, err := pins(ctx, store, projectDir)
@@ -27,12 +44,11 @@ func locate(ctx context.Context, store *providers.Store, projectDir, name string
 		return "", err
 	}
 
-	platform := store.Platform.Dir()
-	digest, pinned := lock.Digest(name, platform)
+	digest, pinned := lock.Digest(kind, name, platform.Dir())
 	if !pinned {
-		return "", fmt.Errorf("%s pins no %s provider %s for %s — release %s ships no such archive", lockfile.Name, name, store.Version, platform, store.Version)
+		return "", fmt.Errorf("%s pins no %s %s %s for %s — release %s ships no such archive", lockfile.Name, name, kind, store.Version, platform.Dir(), store.Version)
 	}
-	return store.Binary(ctx, name, digest)
+	return store.Binary(ctx, kind, name, platform, digest)
 }
 
 func Pin(ctx context.Context, projectDir string) error {

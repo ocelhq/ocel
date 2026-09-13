@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -76,9 +77,9 @@ func Serve(spec Spec) error {
 		return err
 	}
 
-	ln, err := net.Listen("tcp", spec.Addr)
+	ln, err := listen(spec.Addr)
 	if err != nil {
-		return fmt.Errorf("bind connector listener: %w", err)
+		return err
 	}
 	defer ln.Close()
 
@@ -109,7 +110,7 @@ func Serve(spec Spec) error {
 		}).run(ctx, retired)
 	}
 
-	fmt.Printf("ocel connector %s: %s on http://%s\n", spec.Version, spec.Vendor, ln.Addr())
+	fmt.Printf("ocel connector %s: %s on %s %s\n", spec.Version, spec.Vendor, ln.Addr().Network(), ln.Addr())
 
 	select {
 	case <-ctx.Done():
@@ -122,6 +123,48 @@ func Serve(spec Spec) error {
 		}
 		return nil
 	}
+}
+
+const socketScheme = "unix://"
+
+const socketMode = 0o660
+
+func listen(addr string) (net.Listener, error) {
+	path, socketed := strings.CutPrefix(addr, socketScheme)
+	if !socketed {
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			return nil, fmt.Errorf("bind connector listener: %w", err)
+		}
+		return ln, nil
+	}
+	if path == "" {
+		return nil, fmt.Errorf("connectorkit: %s names no socket to bind", addr)
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("clear the socket %s a run before this one left: %w", path, err)
+	}
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		return nil, fmt.Errorf("bind connector listener: %w", err)
+	}
+	if err := os.Chmod(path, socketMode); err != nil {
+		ln.Close()
+		return nil, fmt.Errorf("set the mode on %s, which the proxy in front of this connector connects over: %w", path, err)
+	}
+	return ln, nil
+}
+
+func PublicKey(configPath string) (string, error) {
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		return "", err
+	}
+	held, err := LoadOrCreateIdentity(cfg.KeyPath)
+	if err != nil {
+		return "", err
+	}
+	return held.PublicKey(), nil
 }
 
 func Mux(spec Spec) (*http.ServeMux, error) {

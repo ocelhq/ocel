@@ -65,8 +65,12 @@ fi
 sh "$script"`
 }
 
-func unitCommand() string {
-	return "systemctl enable --now " + quoted(dockerUnit)
+func unitCommand(i Item) string {
+	name := quoted(i.Name)
+	if len(i.Watch) == 0 {
+		return "systemctl enable --now " + name
+	}
+	return "set -e\nsystemctl daemon-reload\nsystemctl enable " + name + "\nsystemctl restart " + name
 }
 
 func engineProbe() string {
@@ -77,10 +81,25 @@ if systemctl cat ` + quoted(dockerUnit) + ` >/dev/null 2>&1; then engine=present
 fi`
 }
 
-func unitProbe() string {
-	return `if systemctl cat ` + quoted(dockerUnit) + ` >/dev/null 2>&1; then
-active=$(systemctl is-active ` + quoted(dockerUnit) + ` 2>/dev/null || true)
-enabled=$(systemctl is-enabled ` + quoted(dockerUnit) + ` 2>/dev/null || true)
-` + reports(quoted(KindUnit), quoted(dockerUnit), "0", quoted(rootOwner), `"$(printf 'active=%s\nenabled=%s\n' "$active" "$enabled" | sha256sum | cut -d' ' -f1)"`) + `
+func unitProbe(i Item) string {
+	name := quoted(i.Name)
+	watching := ""
+	for _, path := range i.Watch {
+		watching += "printf 'watch=%s\\n' \"$(sha256sum " + quoted(path) + " 2>/dev/null | cut -d' ' -f1)\"\n"
+	}
+	return `if systemctl cat ` + name + ` >/dev/null 2>&1; then
+active=$(systemctl is-active ` + name + ` 2>/dev/null || true)
+enabled=$(systemctl is-enabled ` + name + ` 2>/dev/null || true)
+facts=$( printf 'active=%s\nenabled=%s\n' "$active" "$enabled"
+` + watching + `)
+` + reports(quoted(KindUnit), name, "0", quoted(rootOwner), `"$(printf '%s\n' "$facts" | sha256sum | cut -d' ' -f1)"`) + `
 fi`
+}
+
+func unitWatchFacts(watched ...[]byte) []byte {
+	facts := unitFacts
+	for _, content := range watched {
+		facts += "watch=" + contentSum(content) + "\n"
+	}
+	return []byte(facts)
 }

@@ -15,9 +15,23 @@ func checkName(name string) error {
 	return nil
 }
 
-const assetPrefix = "ocel-provider-"
+type Kind string
 
-const executablePrefix = "provider-"
+const (
+	KindProvider  Kind = "provider"
+	KindConnector Kind = "connector"
+)
+
+var Kinds = []Kind{KindProvider, KindConnector}
+
+func (k Kind) assetPrefix() string { return "ocel-" + string(k) + "-" }
+
+func (k Kind) Platforms() []Platform {
+	if k == KindConnector {
+		return ConnectorPlatforms
+	}
+	return Platforms
+}
 
 type Platform struct {
 	GOOS   string
@@ -34,6 +48,11 @@ var Platforms = []Platform{
 	{GOOS: "windows", GOARCH: "amd64"},
 }
 
+var ConnectorPlatforms = []Platform{
+	{GOOS: "linux", GOARCH: "amd64"},
+	{GOOS: "linux", GOARCH: "arm64"},
+}
+
 func archiveExtension(goos string) string {
 	if goos == "windows" {
 		return ".zip"
@@ -41,18 +60,19 @@ func archiveExtension(goos string) string {
 	return ".tar.gz"
 }
 
-func AssetName(name, version, goos, goarch string) string {
-	return assetPrefix + name + "_" + version + "_" + goos + "_" + goarch + archiveExtension(goos)
+func AssetName(kind Kind, name, version, goos, goarch string) string {
+	return kind.assetPrefix() + name + "_" + version + "_" + goos + "_" + goarch + archiveExtension(goos)
 }
 
-func ExecutableName(name, goos string) string {
+func ExecutableName(kind Kind, name, goos string) string {
 	if goos == "windows" {
-		return executablePrefix + name + ".exe"
+		return string(kind) + "-" + name + ".exe"
 	}
-	return executablePrefix + name
+	return string(kind) + "-" + name
 }
 
 type Asset struct {
+	Kind    Kind
 	Name    string
 	Version string
 	GOOS    string
@@ -64,17 +84,21 @@ func ParseAssetName(asset string) (Asset, bool) {
 	if len(fields) != 4 {
 		return Asset{}, false
 	}
-	name, version, goos, tail := fields[0], fields[1], fields[2], fields[3]
-	if !strings.HasPrefix(name, assetPrefix) {
-		return Asset{}, false
+	head, version, goos, tail := fields[0], fields[1], fields[2], fields[3]
+	for _, kind := range Kinds {
+		name, prefixed := strings.CutPrefix(head, kind.assetPrefix())
+		if !prefixed {
+			continue
+		}
+		goarch, found := strings.CutSuffix(tail, archiveExtension(goos))
+		if !found {
+			return Asset{}, false
+		}
+		parsed := Asset{Kind: kind, Name: name, Version: version, GOOS: goos, GOARCH: goarch}
+		if parsed.Name == "" || parsed.Version == "" || parsed.GOOS == "" || parsed.GOARCH == "" {
+			return Asset{}, false
+		}
+		return parsed, true
 	}
-	goarch, found := strings.CutSuffix(tail, archiveExtension(goos))
-	if !found {
-		return Asset{}, false
-	}
-	parsed := Asset{Name: strings.TrimPrefix(name, assetPrefix), Version: version, GOOS: goos, GOARCH: goarch}
-	if parsed.Name == "" || parsed.Version == "" || parsed.GOOS == "" || parsed.GOARCH == "" {
-		return Asset{}, false
-	}
-	return parsed, true
+	return Asset{}, false
 }

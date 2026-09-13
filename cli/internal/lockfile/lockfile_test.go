@@ -16,6 +16,8 @@ const releaseChecksums = `d0d0 ocel_0.2.0_linux_amd64.tar.gz
 0004 ocel-provider-aws_0.2.0_linux_arm64.tar.gz
 0005 ocel-provider-aws_0.2.0_windows_amd64.zip
 0006 ocel-provider-vps_0.2.0_linux_amd64.tar.gz
+0007 ocel-connector-vps_0.2.0_linux_amd64.tar.gz
+0008 ocel-connector-vps_0.2.0_linux_arm64.tar.gz
 beef ocel-provider-aws_0.1.0_linux_amd64.tar.gz
 `
 
@@ -55,17 +57,26 @@ func TestTheLockHoldsEveryProviderOfTheVersionItPins(t *testing.T) {
 	if lock.CLI != "0.2.0" {
 		t.Fatalf("lock.CLI = %q, want %q", lock.CLI, "0.2.0")
 	}
-	if got, held := lock.Digest("aws", "windows-amd64"); !held || got != "0005" {
+	if got, held := lock.Digest(providers.KindProvider, "aws", "windows-amd64"); !held || got != "0005" {
 		t.Fatalf("Digest(aws, windows-amd64) = %q, %v, want %q, true", got, held, "0005")
 	}
 	if len(lock.Providers["aws"]) != 5 {
 		t.Fatalf("aws pins %d platforms, want the five the release ships", len(lock.Providers["aws"]))
 	}
-	if _, held := lock.Digest("aws", "linux-386"); held {
+	if _, held := lock.Digest(providers.KindProvider, "aws", "linux-386"); held {
 		t.Fatal("the lock pinned a platform the release does not ship")
 	}
 	if _, held := lock.Providers["ocel"]; held {
 		t.Fatal("the CLI's own archive was pinned as a provider")
+	}
+	if got, held := lock.Digest(providers.KindConnector, "vps", "linux-arm64"); !held || got != "0008" {
+		t.Fatalf("Digest(connector, vps, linux-arm64) = %q, %v, want %q, true", got, held, "0008")
+	}
+	if _, held := lock.Providers["vps"]; !held {
+		t.Fatal("the vps provider and the vps connector share a name, and pinning one dropped the other")
+	}
+	if _, held := lock.Digest(providers.KindProvider, "vps", "linux-arm64"); held {
+		t.Fatal("a connector archive was pinned as a provider")
 	}
 }
 

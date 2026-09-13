@@ -40,8 +40,8 @@ function layout() {
       cli = join(REPO_ROOT, binary.path);
       continue;
     }
-    const name = binary.extra.ID.replace(/^provider-/, "");
-    const dir = join(PROVIDERS, name, version, `${binary.goos}-${binary.goarch}`);
+    const [kind, name] = binary.extra.ID.split(/-(.*)/s);
+    const dir = join(PROVIDERS, kind, name, version, `${binary.goos}-${binary.goarch}`);
     mkdirSync(dir, { recursive: true });
     copyFileSync(join(REPO_ROOT, binary.path), join(dir, binary.name));
   }

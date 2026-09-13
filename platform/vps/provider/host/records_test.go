@@ -62,22 +62,22 @@ func TestTheRecordsHelperComparesAndSetsUnderItsOwnLock(t *testing.T) {
 		t.Fatalf("read back %q at %q, want %q at %q", body, revision, "one", first)
 	}
 
-	if _, code := helper(t, dir, "", "write", name, ""); code != exitStale {
-		t.Errorf("a write at a taken name naming no revision exited %d, want %d", code, exitStale)
+	if _, code := helper(t, dir, "", "write", name, ""); code != ExitStale {
+		t.Errorf("a write at a taken name naming no revision exited %d, want %d", code, ExitStale)
 	}
 	second := helperWrite(t, dir, name, first, "two")
-	if _, code := helper(t, dir, "", "write", name, first); code != exitStale {
-		t.Errorf("a second write at a revision that moved exited %d, want %d", code, exitStale)
+	if _, code := helper(t, dir, "", "write", name, first); code != ExitStale {
+		t.Errorf("a second write at a revision that moved exited %d, want %d", code, ExitStale)
 	}
 
-	if _, code := helper(t, dir, "", "remove", name, first); code != exitStale {
-		t.Errorf("a removal at a revision that moved exited %d, want %d", code, exitStale)
+	if _, code := helper(t, dir, "", "remove", name, first); code != ExitStale {
+		t.Errorf("a removal at a revision that moved exited %d, want %d", code, ExitStale)
 	}
 	if _, code := helper(t, dir, "", "remove", name, second); code != 0 {
 		t.Errorf("a removal at the revision held exited %d, want it gone", code)
 	}
-	if _, code := helper(t, dir, "", "read", name); code != exitNoRecord {
-		t.Errorf("a read after a removal exited %d, want %d", code, exitNoRecord)
+	if _, code := helper(t, dir, "", "read", name); code != ExitNoRecord {
+		t.Errorf("a read after a removal exited %d, want %d", code, ExitNoRecord)
 	}
 }
 
@@ -93,8 +93,8 @@ func TestTheRecordsHelperRefusesAPairWhereEitherHalfMoved(t *testing.T) {
 	}
 	held, _ := helperRead(t, dir, one)
 	moved := "a revision nobody wrote"
-	if _, code := helper(t, dir, encoded("two")+"\n"+encoded("two")+"\n", "pair", one, held, two, moved); code != exitStale {
-		t.Fatalf("a pair where one half moved exited %d, want %d", code, exitStale)
+	if _, code := helper(t, dir, encoded("two")+"\n"+encoded("two")+"\n", "pair", one, held, two, moved); code != ExitStale {
+		t.Fatalf("a pair where one half moved exited %d, want %d", code, ExitStale)
 	}
 	for _, name := range []string{one, two} {
 		if _, body := helperRead(t, dir, name); body != "one" {

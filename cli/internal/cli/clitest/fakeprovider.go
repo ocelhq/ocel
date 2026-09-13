@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -909,6 +910,7 @@ func (s *deployFakeProviderServer) Configure(ctx context.Context, req *contractv
 type fakeProviderOptions struct {
 	Region       string            `json:"region"`
 	Certificates map[string]string `json:"certificates"`
+	SSH          json.RawMessage   `json:"ssh"`
 }
 
 func decodeFakeProviderOptions(config *contractv1.ProviderConfig) (fakeProviderOptions, error) {

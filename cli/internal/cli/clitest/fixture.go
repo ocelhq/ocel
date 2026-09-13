@@ -180,11 +180,11 @@ func InstallProvider(t *testing.T, name string, place func(dest string) error) s
 		dir = t.TempDir()
 		t.Setenv(providers.OverrideEnvVar, dir)
 	}
-	held := filepath.Join(dir, name, version.Version, runtime.GOOS+"-"+runtime.GOARCH)
+	held := filepath.Join(dir, string(providers.KindProvider), name, version.Version, runtime.GOOS+"-"+runtime.GOARCH)
 	if err := os.MkdirAll(held, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", held, err)
 	}
-	dest := filepath.Join(held, providers.ExecutableName(name, runtime.GOOS))
+	dest := filepath.Join(held, providers.ExecutableName(providers.KindProvider, name, runtime.GOOS))
 	if err := place(dest); err != nil {
 		t.Fatalf("install the %s provider at %s: %v", name, dest, err)
 	}

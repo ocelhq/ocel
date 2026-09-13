@@ -181,6 +181,14 @@ message ResultEvent {
   // The request was refused: the stream's own error is the verdict, and this envelope
   // carries only what the run learned before the refusal.
   bool refused = 10;
+
+  ConnectorInstalled connector = 11;
+}
+
+message ConnectorInstalled {
+  string url = 1;
+
+  string public_key = 2;
 }
 
 message FunctionOutput {

@@ -74,6 +74,19 @@ builds:
       - goos: windows
         goarch: arm64
 
+  - id: connector-vps
+    dir: platform/vps/connector
+    main: .
+    binary: connector-vps
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos: [linux]
+    goarch: [amd64, arm64]
+
 archives:
   - id: cli
     ids: [ocel]
@@ -106,6 +119,11 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+
+  - id: connector-vps
+    ids: [connector-vps]
+    name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: []
 
 checksum:
   name_template: checksums.txt

@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"io/fs"
 	"strings"
 
@@ -44,9 +45,21 @@ func (i Item) mint() string {
 ` + quoted(SealHelper) + " " + quoted(string(i.Class)) + " init; fi"
 }
 
-type Sealer struct{ host *Host }
+type SealTransport interface {
+	Seal(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error)
+}
 
-func NewSealer(h *Host) *Sealer { return &Sealer{host: h} }
+type Sealer struct{ over SealTransport }
+
+func NewSealer(h *Host) *Sealer { return &Sealer{over: sshSeal{host: h}} }
+
+func SealerOver(over SealTransport) *Sealer { return &Sealer{over: over} }
+
+type sshSeal struct{ host *Host }
+
+func (s sshSeal) Seal(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error) {
+	return s.host.granted(ctx, what, argv, stdin)
+}
 
 func (s *Sealer) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
 	return s.through(ctx, "seal", at, plaintext)
@@ -62,7 +75,7 @@ func (s *Sealer) through(ctx context.Context, verb string, at providerkit.Coordi
 		return nil, err
 	}
 	fed := append([]byte(base64.StdEncoding.EncodeToString(body)), '\n')
-	rendered, err := s.host.granted(ctx, verb+" a value at "+at.Name, argv, bytes.NewReader(fed))
+	rendered, err := s.over.Seal(ctx, verb+" a value at "+at.Name, argv, bytes.NewReader(fed))
 	if err != nil {
 		return nil, err
 	}

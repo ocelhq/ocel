@@ -623,8 +623,8 @@ func TestAppRoutesAreReachedByTheHostnamesTheirOwnSurfaceClaims(t *testing.T) {
 		if strings.Contains(route.Identity, otherSurface) {
 			want = "blog.example.com"
 		}
-		if !slices.Equal(route.Match[0].Host, []string{want}) {
-			t.Errorf("the route %q answers %v, want the %q its own surface claims", route.Identity, route.Match[0].Host, want)
+		if !slices.Equal(route.Match[0].hosts(), []string{want}) {
+			t.Errorf("the route %q answers %v, want the %q its own surface claims", route.Identity, route.Match[0].hosts(), want)
 		}
 	}
 }
@@ -680,7 +680,7 @@ func matchedBy(t *testing.T, rendered []byte) map[string][]string {
 		}
 		answered[route.Identity] = []string{}
 		for _, match := range route.Match {
-			answered[route.Identity] = append(answered[route.Identity], match.Host...)
+			answered[route.Identity] = append(answered[route.Identity], match.hosts()...)
 		}
 	}
 	return answered

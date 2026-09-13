@@ -76,7 +76,7 @@ func TestThePreviewEntryAndItsProbeAreTwoRoutesMatchingOneHostnameEach(t *testin
 	found := map[string][]string{}
 	for _, route := range routes {
 		if len(route.Match) == 1 {
-			found[route.Identity] = route.Match[0].Host
+			found[route.Identity] = route.Match[0].hosts()
 		}
 	}
 	for identity, want := range map[string]string{

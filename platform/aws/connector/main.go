@@ -22,7 +22,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 )
 
-const version = "0.0.0-alpha"
+var version = "dev"
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:7777", "address to serve on")

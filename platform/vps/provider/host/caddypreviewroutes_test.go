@@ -59,7 +59,7 @@ func TestTwoLivePreviewsOfOneAppAnswerOnTheirOwnHostnameEach(t *testing.T) {
 			continue
 		}
 		pointer := strings.Split(named, claimSeparator)[1]
-		answered[pointer] = route.Match[0].Host
+		answered[pointer] = route.Match[0].hosts()
 	}
 	for _, claim := range twoBranchesOfOneApp().Claims {
 		if !slices.Equal(answered[claim.Pointer], []string{claim.Hostname}) {

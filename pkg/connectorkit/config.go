@@ -11,6 +11,7 @@ type Config struct {
 	Console        string   `json:"console"`
 	ConnectorID    string   `json:"connectorId"`
 	OrganizationID string   `json:"organizationId"`
+	Target         string   `json:"target,omitempty"`
 	Grants         []string `json:"grants"`
 	KeyPath        string   `json:"keyPath"`
 }

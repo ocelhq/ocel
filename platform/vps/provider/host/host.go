@@ -158,6 +158,8 @@ func (h *Host) elevate(ctx context.Context) (string, error) {
 	return h.elevation, nil
 }
 
+func (h *Host) Arch(ctx context.Context) (string, error) { return h.arch(ctx) }
+
 func (h *Host) arch(ctx context.Context) (string, error) {
 	h.knowing.Lock()
 	defer h.knowing.Unlock()
