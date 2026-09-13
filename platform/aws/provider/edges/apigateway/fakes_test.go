@@ -825,7 +825,8 @@ type fakeDynamo struct {
 	calls    []string
 	pageSize int
 
-	putErr error
+	putErr    error
+	beforePut func(key string, items map[string]map[string]ddbtypes.AttributeValue)
 }
 
 func newFakeDynamo() *fakeDynamo {
@@ -854,6 +855,9 @@ func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...
 		return nil, f.putErr
 	}
 	key := dynamoKey(in.Item)
+	if f.beforePut != nil {
+		f.beforePut(key, f.items)
+	}
 	held, err := conditionHolds(in, f.items[key])
 	if err != nil {
 		return nil, err

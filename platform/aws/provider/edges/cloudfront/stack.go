@@ -203,36 +203,57 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	if err != nil {
 		return err
 	}
-	hostnames := s.servedHostnames(pointer)
-	if len(hostnames) > 0 {
-		published, err := s.routeFor(ctx, c, promotion)
-		if err != nil {
-			return err
-		}
-		puts := make(map[string]route, len(hostnames))
-		for _, hostname := range hostnames {
-			puts[hostname] = published
-		}
-		if err := s.routes(c).apply(ctx, puts, nil); err != nil {
-			return err
-		}
+	if err := s.publish(ctx, c, promotion, pointer); err != nil {
+		return err
 	}
 	if err := s.ledger(c).Promote(ctx, promotion, pointer, report); err != nil {
-		return errors.Join(err, s.unpublishUnrecorded(ctx, c, pointer))
+		return errors.Join(err, s.republish(ctx, c, pointer))
 	}
 	return nil
 }
 
-func (s *stack) unpublishUnrecorded(ctx context.Context, c Clients, pointer string) error {
-	host := s.previewHost(pointer)
-	if host == "" {
+func (s *stack) publish(ctx context.Context, c Clients, promotion edge.Promotion, pointer string) error {
+	hostnames := s.servedHostnames(pointer)
+	if len(hostnames) == 0 {
 		return nil
 	}
-	pointers, err := s.ledger(c).Pointers(ctx)
-	if err != nil || slices.Contains(pointers, pointerOr(pointer)) {
+	published, err := s.routeFor(ctx, c, promotion)
+	if err != nil {
 		return err
 	}
-	return s.routes(c).apply(ctx, nil, []string{host})
+	puts := make(map[string]route, len(hostnames))
+	for _, hostname := range hostnames {
+		puts[hostname] = published
+	}
+	return s.routes(c).apply(ctx, puts, nil)
+}
+
+func (s *stack) republish(ctx context.Context, c Clients, pointer string) error {
+	hostnames := s.servedHostnames(pointer)
+	if len(hostnames) == 0 {
+		return nil
+	}
+	active, found, err := s.activePromotion(ctx, c, pointer)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return s.routes(c).apply(ctx, nil, hostnames)
+	}
+	return s.publish(ctx, c, active, pointer)
+}
+
+func (s *stack) activePromotion(ctx context.Context, c Clients, pointer string) (edge.Promotion, bool, error) {
+	history, err := s.ledger(c).History(ctx, pointer)
+	if err != nil {
+		return edge.Promotion{}, false, err
+	}
+	for _, entry := range history {
+		if entry.Active {
+			return entry.Promotion, true, nil
+		}
+	}
+	return edge.Promotion{}, false, nil
 }
 
 func (s *stack) servedHostnames(pointer string) []string {
