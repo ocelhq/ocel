@@ -73,7 +73,7 @@ func imageOptimizerResources(ns Namespace, code payloads.Placement) string {
       MemorySize: %d
       Timeout: %d
       Role: !GetAtt ImageOptimizerRole.Arn
-      Code:
+`+lambdaLoggingConfig("ImageOptimizer")+`      Code:
         S3Bucket: %s
         S3Key: %s
       Environment:
@@ -91,7 +91,7 @@ func imageOptimizerResources(ns Namespace, code payloads.Placement) string {
       TargetFunctionArn: !GetAtt ImageOptimizer.Arn
       AuthType: AWS_IAM
       InvokeMode: RESPONSE_STREAM
-`, ns.policyName("image-optimizer-read"), optimizerRuntime, optimizerArchitecture, optimizerHandler, optimizerMemoryMB, optimizerTimeoutSeconds,
+`+lambdaLogGroupResource("ImageOptimizer"), ns.policyName("image-optimizer-read"), optimizerRuntime, optimizerArchitecture, optimizerHandler, optimizerMemoryMB, optimizerTimeoutSeconds,
 		code.Bucket, code.Key, optimizerBucketEnvVar, optimizerThreadpoolSize,
 		optimizerComponentTagKey, optimizerComponentTagValue)
 }

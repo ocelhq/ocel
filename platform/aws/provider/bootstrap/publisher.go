@@ -107,7 +107,7 @@ func tagPublisherResources(ns Namespace, code payloads.Placement, class string) 
       MemorySize: %d
       Timeout: %d
       Role: !GetAtt TagPublisherRole.Arn
-      Code:
+`+lambdaLoggingConfig("TagPublisher")+`      Code:
         S3Bucket: %s
         S3Key: %s
       Environment:
@@ -134,7 +134,7 @@ func tagPublisherResources(ns Namespace, code payloads.Placement, class string) 
       FilterCriteria:
         Filters:
           - Pattern: '%s'
-`, tagPublisherDLQRetentionSeconds, ns.policyName("tag-publisher"),
+`+lambdaLogGroupResource("TagPublisher"), tagPublisherDLQRetentionSeconds, ns.policyName("tag-publisher"),
 		writerParam, seedParam, writerParam, seedParam,
 		tagPublisherRuntime, tagPublisherArchitecture, tagPublisherHandler, tagPublisherMemoryMB, tagPublisherTimeoutSeconds,
 		code.Bucket, code.Key,

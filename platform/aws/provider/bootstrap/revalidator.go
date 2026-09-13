@@ -127,7 +127,7 @@ func revalidatorResources(ns Namespace, code payloads.Placement) string {
       MemorySize: %d
       Timeout: %d
       Role: !GetAtt RevalidatorRole.Arn
-      Code:
+`+lambdaLoggingConfig("Revalidator")+`      Code:
         S3Bucket: %s
         S3Key: %s
       Environment:
@@ -145,7 +145,7 @@ func revalidatorResources(ns Namespace, code payloads.Placement) string {
         - ReportBatchItemFailures
       ScalingConfig:
         MaximumConcurrency: %d
-`, ns.policyName("revalidator"), revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
+`+lambdaLogGroupResource("Revalidator"), ns.policyName("revalidator"), revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
 		revalidatorAssetBucketEnvVar,
 		revalidatorBatchSize, revalidatorMaxConcurrency)

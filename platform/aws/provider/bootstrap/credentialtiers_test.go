@@ -466,3 +466,27 @@ func mustRender(t *testing.T, render func(Namespace) (string, error)) string {
 	}
 	return document
 }
+
+func TestBootstrapTierOwnsOnlyTheLogGroupsItsStacksDeclare(t *testing.T) {
+	grants := grantsOf(t, mustRender(t, BootstrapCredentialPermissions))
+	scope := "arn:aws:logs:*:*:log-group:/aws/lambda/" + defaultNamespace.CoreStackName() + "*"
+	unconditional := conditionJSON(t, nil)
+	for _, action := range []string{
+		"logs:CreateLogGroup",
+		"logs:DeleteLogGroup",
+		"logs:DescribeLogGroups",
+		"logs:ListTagsForResource",
+		"logs:PutRetentionPolicy",
+		"logs:TagResource",
+		"logs:UntagResource",
+	} {
+		if !grants[grant{action: action, resource: scope, condition: unconditional}] {
+			t.Errorf("the bootstrap tier does not grant %s on %s, so a bootstrap stack cannot create, bound or reclaim the log group its function writes to", action, scope)
+		}
+	}
+	for g := range grants {
+		if strings.HasPrefix(g.action, "logs:") && g.resource != scope && g.resource != appLogGroupARN && g.resource != functionLogGroupARN {
+			t.Errorf("the bootstrap tier grants %s on %s, beyond the log groups a bootstrap or a deploy owns", g.action, g.resource)
+		}
+	}
+}
