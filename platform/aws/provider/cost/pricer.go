@@ -120,23 +120,21 @@ func Price(req *costv1.PriceRequest, edges ...costkit.EdgePricer) (*costv1.Estim
 
 func free(r *costkit.Subject) { r.Free() }
 
-func arm(r *costkit.Subject) bool {
-	archs := r.List("architectures")
-	return len(archs) > 0 && archs[0] == "arm64"
+func lambdaRates(r *costkit.Subject) (requests, duration string) {
+	if archs := r.List("architectures"); len(archs) > 0 && archs[0] == "arm64" {
+		return "aws/lambda/requests-arm", "aws/lambda/duration-arm"
+	}
+	return "aws/lambda/requests", "aws/lambda/duration"
 }
 
 func lambdaFunction(r *costkit.Subject) {
-	requests, duration := "aws/lambda/requests", "aws/lambda/duration"
-	if arm(r) {
-		requests, duration = "aws/lambda/requests-arm", "aws/lambda/duration-arm"
-	}
-	monthly := r.Usage(usageRequests, requestsBand)
-	r.Add(costkit.Component{Name: "Requests", Unit: "requests", Rate: requests, Quantity: monthly, UsageBased: true})
-	memory := r.Number("memory_size")
-	seconds := r.Usage(usageRequestDuration, durationBand).Div(thousand)
+	requests, _ := lambdaRates(r)
+	r.Add(costkit.Component{Name: "Requests", Unit: "requests", Rate: requests, Quantity: r.Usage(usageRequests, requestsBand), UsageBased: true})
+	_, duration := lambdaRates(r)
+	seconds := r.Usage(usageRequests, requestsBand).Mul(r.Usage(usageRequestDuration, durationBand)).Div(thousand)
 	r.Add(costkit.Component{
 		Name: "Duration", Unit: "GB-seconds", Rate: duration, UsageBased: true,
-		Quantity: monthly.Mul(seconds).Mul(memory).Div(decimal.NewFromInt(lambdaGB)),
+		Quantity: seconds.Mul(r.Number("memory_size")).Div(decimal.NewFromInt(lambdaGB)),
 	})
 }
 
@@ -176,15 +174,19 @@ func secret(r *costkit.Subject) {
 	r.Add(costkit.Component{Name: "API calls", Unit: "requests", Rate: "aws/secretsmanager/requests", Quantity: r.Usage(usageRequests, apiCallsBand), UsageBased: true})
 }
 
-func fargateService(r *costkit.Subject) {
-	vcpu, memory := "aws/fargate/vcpu", "aws/fargate/memory"
+func fargateRates(r *costkit.Subject) (vcpu, memory string) {
 	if r.String("runtime_platform.cpu_architecture") == "ARM64" {
-		vcpu, memory = "aws/fargate/vcpu-arm", "aws/fargate/memory-arm"
+		return "aws/fargate/vcpu-arm", "aws/fargate/memory-arm"
 	}
-	tasks := r.Number("desired_count")
-	hours := tasks.Mul(costkit.MonthlyHours)
-	r.Add(costkit.Component{Name: "vCPU", Unit: "vCPU-hours", Rate: vcpu, Quantity: hours.Mul(r.Number("cpu")).Div(decimal.NewFromInt(fargateCPUUnits))})
-	r.Add(costkit.Component{Name: "Memory", Unit: "GB-hours", Rate: memory, Quantity: hours.Mul(r.Number("memory")).Div(decimal.NewFromInt(fargateMemoryMB))})
+	return "aws/fargate/vcpu", "aws/fargate/memory"
+}
+
+func fargateService(r *costkit.Subject) {
+	hours := func() decimal.Decimal { return r.Number("desired_count").Mul(costkit.MonthlyHours) }
+	vcpu, _ := fargateRates(r)
+	r.Add(costkit.Component{Name: "vCPU", Unit: "vCPU-hours", Rate: vcpu, Quantity: hours().Mul(r.Number("cpu")).Div(decimal.NewFromInt(fargateCPUUnits))})
+	_, memory := fargateRates(r)
+	r.Add(costkit.Component{Name: "Memory", Unit: "GB-hours", Rate: memory, Quantity: hours().Mul(r.Number("memory")).Div(decimal.NewFromInt(fargateMemoryMB))})
 }
 
 func loadBalancer(r *costkit.Subject) {

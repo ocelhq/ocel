@@ -31,6 +31,7 @@ const (
 	usageVersions        = "active_secret_versions"
 
 	ingressEverywhere = "INGRESS_TRAFFIC_ALL"
+	cpuIdle           = "template.containers.0.resources.cpu_idle"
 	mebibytesPerGiB   = 1024
 	secondsPerHour    = 3600
 )
@@ -94,20 +95,27 @@ func Price(req *costv1.PriceRequest, edges ...costkit.EdgePricer) (*costv1.Estim
 func free(r *costkit.Subject) { r.Free() }
 
 func cloudRunService(r *costkit.Subject) {
-	cpu := r.Number("template.containers.0.resources.limits.cpu")
-	memoryGiB := quantityMiB(r.String("template.containers.0.resources.limits.memory")).Div(decimal.NewFromInt(mebibytesPerGiB))
-	if !r.Bool("template.containers.0.resources.cpu_idle") {
-		warm, _ := r.Number("template.scaling.min_instance_count").Mul(costkit.MonthlyHours).Float64()
-		seconds := r.Usage(usageInstanceHours, costkit.Band{Light: warm, Moderate: warm, Heavy: warm}).Mul(decimal.NewFromInt(secondsPerHour))
-		r.Add(costkit.Component{Name: "CPU, always allocated", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-always", Quantity: seconds.Mul(cpu)})
-		r.Add(costkit.Component{Name: "Memory, always allocated", Unit: "GiB-seconds", Rate: "gcp/run/memory-always", Quantity: seconds.Mul(memoryGiB)})
+	cpu := func() decimal.Decimal { return r.Number("template.containers.0.resources.limits.cpu") }
+	memoryGiB := func() decimal.Decimal {
+		return quantityMiB(r.String("template.containers.0.resources.limits.memory")).Div(decimal.NewFromInt(mebibytesPerGiB))
+	}
+	billing := []string{cpuIdle}
+	if !r.Bool(cpuIdle) {
+		seconds := func() decimal.Decimal {
+			warm, _ := r.Number("template.scaling.min_instance_count").Mul(costkit.MonthlyHours).Float64()
+			return r.Usage(usageInstanceHours, costkit.Band{Light: warm, Moderate: warm, Heavy: warm}).Mul(decimal.NewFromInt(secondsPerHour))
+		}
+		r.Add(costkit.Component{Name: "CPU, always allocated", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-always", Quantity: seconds().Mul(cpu()), Needs: billing})
+		r.Add(costkit.Component{Name: "Memory, always allocated", Unit: "GiB-seconds", Rate: "gcp/run/memory-always", Quantity: seconds().Mul(memoryGiB()), Needs: billing})
 	} else {
-		requests := r.Usage(usageRequests, requestsBand)
-		r.Add(costkit.Component{Name: "Requests", Unit: "requests", Rate: "gcp/run/requests", Quantity: requests, UsageBased: true})
+		seconds := func() decimal.Decimal {
+			return r.Usage(usageRequests, requestsBand).Mul(r.Usage(usageRequestDuration, durationBand)).Div(thousand)
+		}
+		r.Add(costkit.Component{Name: "Requests", Unit: "requests", Rate: "gcp/run/requests", Quantity: r.Usage(usageRequests, requestsBand), UsageBased: true, Needs: billing})
 		r.Add(costkit.Component{Name: "CPU during requests", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-active", UsageBased: true,
-			Quantity: requests.Mul(r.Usage(usageRequestDuration, durationBand)).Div(thousand).Mul(cpu)})
+			Quantity: seconds().Mul(cpu()), Needs: billing})
 		r.Add(costkit.Component{Name: "Memory during requests", Unit: "GiB-seconds", Rate: "gcp/run/memory-active", UsageBased: true,
-			Quantity: requests.Mul(r.Usage(usageRequestDuration, durationBand)).Div(thousand).Mul(memoryGiB)})
+			Quantity: seconds().Mul(memoryGiB()), Needs: billing})
 	}
 	if r.String("ingress") == ingressEverywhere {
 		r.Add(costkit.Component{Name: "Data transfer out to internet", Unit: "GiB", Rate: "gcp/network/premium-egress", Quantity: r.Usage(usageDataOut, egressBand), UsageBased: true})

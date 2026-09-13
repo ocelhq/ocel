@@ -47,6 +47,7 @@ type Component struct {
 	Quantity   decimal.Decimal
 	UsageBased bool
 	Assumption string
+	Needs      []string
 }
 
 type Pricing func(*Subject)
@@ -83,8 +84,11 @@ func (s *Subject) Add(c Component) {
 			c.Assumption = fmt.Sprintf("%s profile: %s %s", ProfileName(s.profile), c.Quantity, c.Unit)
 		}
 	}
-	s.built = append(s.built, built{Component: c, unknown: slices.Clone(s.unknown)})
-	s.usageKeys, s.fromFile = nil, nil
+	for _, path := range c.Needs {
+		s.touch(path)
+	}
+	s.built = append(s.built, built{Component: c, unknown: s.unknown})
+	s.usageKeys, s.fromFile, s.unknown = nil, nil, nil
 }
 
 func (s *Subject) Usage(key string, band Band) decimal.Decimal {
@@ -163,9 +167,18 @@ func (s *Subject) Unknown(path string) bool {
 	return slices.Contains(s.Resource.GetUnknown(), path)
 }
 
-func (s *Subject) value(path string) (any, bool) {
-	if s.Unknown(path) {
+func (s *Subject) touch(path string) bool {
+	if !s.Unknown(path) {
+		return false
+	}
+	if !slices.Contains(s.unknown, path) {
 		s.unknown = append(s.unknown, path)
+	}
+	return true
+}
+
+func (s *Subject) value(path string) (any, bool) {
+	if s.touch(path) {
 		return nil, false
 	}
 	return walk(s.Resource.GetProperties().AsMap(), path)
@@ -328,10 +341,13 @@ type ledger struct {
 	notes []string
 }
 
+const AllowanceAssumed = "a free allowance the account gets once is assumed unspent: a scan cannot see what the account already used this month, so a deploy beside other use of the same allowance costs more than shown"
+
 func (l *ledger) charge(rate Rate, quantity decimal.Decimal) (cost, marginal decimal.Decimal) {
 	if rate.Allowance != AllowanceAccount {
 		return rate.Cost(quantity)
 	}
+	l.note(AllowanceAssumed)
 	key := rateKey{rate.ID, rate.Region}
 	from := l.spent[key]
 	l.spent[key] = from.Add(quantity)

@@ -175,3 +175,30 @@ func TestPriceOfAFunctionWithUnknownArchitecturesIsNotGuessedAsX86(t *testing.T)
 		}
 	}
 }
+
+func TestPriceOfAServiceWithAnUnknownCPUStillPricesItsMemory(t *testing.T) {
+	_, pricer := costServed(t)
+
+	properties, _ := structpb.NewStruct(map[string]any{"desired_count": 1, "memory": 2048, "runtime_platform": map[string]any{"cpu_architecture": "ARM64"}})
+	set := &costv1.ResourceSet{
+		Source: "ocel",
+		Scopes: []*costv1.Scope{{Id: "p", Kind: "project", Name: "shop"}},
+		Resources: []*costv1.Resource{{
+			Id: "p/aws_ecs_service:svc", Scope: "p", Vendor: "aws", Type: "aws_ecs_service", Name: "svc", Region: "us-east-1",
+			Properties: properties, Unknown: []string{"cpu"},
+		}},
+	}
+	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	if err != nil {
+		t.Fatalf("Price() = %v", err)
+	}
+	if got := componentNamed(t, est, "p/aws_ecs_service:svc", "vCPU"); got.GetMonthlyCost() != "" || !slices.Contains(got.GetDependsOnUnknown(), "cpu") {
+		t.Errorf("vCPU = %v, want it unpriced and naming cpu", got)
+	}
+	if got := componentNamed(t, est, "p/aws_ecs_service:svc", "Memory"); got.GetMonthlyCost() != "5.20" || len(got.GetDependsOnUnknown()) != 0 {
+		t.Errorf("memory = %v, want 5.20 (2 GB for 730 h at the arm64 rate 0.00356) untouched by the unknown cpu", got)
+	}
+	if got := estimateNamed(t, est, "p/aws_ecs_service:svc"); got.GetStatus() != costv1.ResourceEstimate_STATUS_PRICED {
+		t.Errorf("status = %v, want priced for what is known", got.GetStatus())
+	}
+}
