@@ -1,5 +1,5 @@
 import { createNodeMiddleware, createProbot } from "probot";
-import { env } from "../../../ocel/vars";
+import { env } from "../../../infra/vars";
 import { app as githubApp } from "./app";
 import { clientFor } from "./github";
 import { createApp, privateKey } from "./http";
