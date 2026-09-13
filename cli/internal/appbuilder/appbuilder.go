@@ -230,7 +230,7 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 	if err := run(ctx, builderPath, builderEnv(node.AdapterPath(cfg.Dir), rootEnv), payload, stderr); err != nil {
 		return err
 	}
-	if err := bundlePlanned(outputDir, stderr); err != nil {
+	if err := bundlePlanned(ctx, outputDir, stderr); err != nil {
 		return err
 	}
 	return recordDetectedDeploymentID(cfg.Dir, outputDir, detectedID)
@@ -308,7 +308,7 @@ func recordDetectedDeploymentID(projectDir, outputDir, id string) error {
 	return nil
 }
 
-func bundlePlanned(outputDir string, stderr io.Writer) error {
+func bundlePlanned(ctx context.Context, outputDir string, stderr io.Writer) error {
 	planPath := filepath.Join(outputDir, buildPlanFileName)
 	raw, err := os.ReadFile(planPath)
 	if err != nil {
@@ -336,7 +336,7 @@ func bundlePlanned(outputDir string, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if err := appbundler.Bundle(appbundler.Target{
+		if err := appbundler.Bundle(ctx, appbundler.Target{
 			App:        filepath.Base(appDir),
 			Runtime:    fn.Runtime,
 			Entrypoint: fn.Entrypoint,

@@ -1,6 +1,7 @@
 package appbundler
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -104,7 +105,7 @@ func TestBundle(t *testing.T) {
 			"node_modules/cjs-dep/index.js":     "module.exports = { mark: 'cjs' };\n",
 		})
 
-		if err := Bundle(l.target("server.js")); err != nil {
+		if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 			t.Fatalf("Bundle: %v", err)
 		}
 
@@ -166,7 +167,7 @@ func TestBundle(t *testing.T) {
 				"module.exports = { shape: typeof __dirname + ':' + typeof __filename + ':' + typeof path.join };\n",
 		})
 
-		if err := Bundle(l.target("server.js")); err != nil {
+		if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 			t.Fatalf("Bundle: %v", err)
 		}
 		if got, want := runNode(t, l.funcDir), "string:string:function"; !strings.Contains(got, want) {
@@ -185,7 +186,7 @@ func TestBundle(t *testing.T) {
 			"node_modules/native-dep/build/Release/addon.node": elfAddon(providerkit.ArchX8664, "fake"),
 		})
 
-		if err := Bundle(l.target("server.js")); err != nil {
+		if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 			t.Fatalf("Bundle: %v", err)
 		}
 
@@ -216,7 +217,7 @@ func TestBundle(t *testing.T) {
 		files["server.js"] = imports.String() + logs.String()
 		l := newLayout(t, files)
 
-		if err := Bundle(l.target("server.js")); err != nil {
+		if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 			t.Fatalf("Bundle: %v", err)
 		}
 
@@ -245,7 +246,7 @@ func TestBundle(t *testing.T) {
 					"node_modules/" + loader + "/index.js":     "module.exports = () => ({});\n",
 				})
 
-				err := Bundle(l.target("server.js"))
+				err := Bundle(context.Background(), l.target("server.js"))
 				if err == nil {
 					t.Fatal("Bundle succeeded, want a build error rather than a function that dies at cold start")
 				}
@@ -270,7 +271,7 @@ func TestBundle(t *testing.T) {
 			"node_modules/bindings/index.js":      "module.exports = () => ({});\n",
 		})
 
-		if err := Bundle(l.target("server.js")); err != nil {
+		if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 			t.Fatalf("Bundle: %v (a dependency the entrypoint never reaches must not block the build)", err)
 		}
 		if got := runNode(t, l.funcDir); !strings.Contains(got, "plain") {
@@ -288,7 +289,7 @@ func TestBundle(t *testing.T) {
 			"node_modules/bindings-lite/index.js":     "exports.tag = 'lite';\n",
 		})
 
-		if err := Bundle(l.target("server.js")); err != nil {
+		if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 			t.Fatalf("Bundle: %v", err)
 		}
 		if got := runNode(t, l.funcDir); !strings.Contains(got, "lite") {
@@ -305,7 +306,7 @@ func TestBundle(t *testing.T) {
 				"package.json": appPkg,
 				"server.js":    "console.log('hi');" + extra,
 			})
-			if err := Bundle(l.target("server.js")); err != nil {
+			if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 				t.Fatalf("Bundle: %v", err)
 			}
 			var descriptor edge.ServeDescriptor
@@ -380,7 +381,7 @@ func TestBundle(t *testing.T) {
 				tt.mut(&target)
 			}
 
-			err := Bundle(target)
+			err := Bundle(context.Background(), target)
 			if err == nil {
 				t.Fatal("Bundle succeeded, want a build error rather than a function that breaks at cold start")
 			}
@@ -502,7 +503,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 		t.Parallel()
 
 		l := newLayout(t, held(elfAddon(providerkit.ArchARM64, "aarch64")))
-		if err := Bundle(on(l, providerkit.ArchARM64)); err != nil {
+		if err := Bundle(context.Background(), on(l, providerkit.ArchARM64)); err != nil {
 			t.Fatalf("Bundle: %v", err)
 		}
 		if got := readFile(t, filepath.Join(l.funcDir, filepath.FromSlash(addonPath))); got != elfAddon(providerkit.ArchARM64, "aarch64") {
@@ -514,7 +515,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 		t.Parallel()
 
 		l := newLayout(t, held(elfAddon(providerkit.ArchX8664, "amd64")))
-		err := Bundle(on(l, providerkit.ArchARM64))
+		err := Bundle(context.Background(), on(l, providerkit.ArchARM64))
 		if err == nil {
 			t.Fatal("Bundle succeeded, want a refusal rather than a function that dies at its first require")
 		}
@@ -550,7 +551,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 				t.Parallel()
 
 				l := newLayout(t, prebuilt)
-				if err := Bundle(on(l, arch)); err != nil {
+				if err := Bundle(context.Background(), on(l, arch)); err != nil {
 					t.Fatalf("Bundle: %v", err)
 				}
 				for name, rel := range kept {
@@ -584,7 +585,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 			"node_modules/multi-dep/prebuilds/linux-arm64.node":  elfAddon(providerkit.ArchARM64, "aarch64"),
 			"node_modules/multi-dep/prebuilds/darwin-arm64.node": "\xcf\xfa\xed\xfe" + strings.Repeat("\x00", 28),
 		})
-		err := Bundle(on(l, providerkit.ArchX8664))
+		err := Bundle(context.Background(), on(l, providerkit.ArchX8664))
 		if err == nil {
 			t.Fatal("Bundle succeeded, want a refusal rather than a function that dies at its first require")
 		}
@@ -599,7 +600,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 		t.Parallel()
 
 		l := newLayout(t, held("\xcf\xfa\xed\xfe"+strings.Repeat("\x00", 28)))
-		err := Bundle(on(l, providerkit.ArchX8664))
+		err := Bundle(context.Background(), on(l, providerkit.ArchX8664))
 		if err == nil {
 			t.Fatal("Bundle succeeded, want a mach-o addon refused as not linux")
 		}

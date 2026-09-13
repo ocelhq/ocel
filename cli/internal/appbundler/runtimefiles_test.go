@@ -2,6 +2,7 @@ package appbundler
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 )
@@ -12,7 +13,7 @@ func bundleLog(t *testing.T, files tree, entry string) string {
 	target := l.target(entry)
 	var log bytes.Buffer
 	target.Log = &log
-	if err := Bundle(target); err != nil {
+	if err := Bundle(context.Background(), target); err != nil {
 		t.Fatal(err)
 	}
 	return log.String()

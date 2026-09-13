@@ -1,6 +1,7 @@
 package appbundler
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -45,7 +46,7 @@ type Target struct {
 	Log        io.Writer
 }
 
-func Bundle(t Target) error {
+func Bundle(ctx context.Context, t Target) error {
 	if err := t.validate(); err != nil {
 		return err
 	}
@@ -95,7 +96,7 @@ func Bundle(t Target) error {
 	if err := native.copyInto(t.FuncDir); err != nil {
 		return err
 	}
-	if err := platform.installInto(t.App, t.FuncDir, func(said string) {
+	if err := platform.installInto(ctx, t.App, t.FuncDir, func(said string) {
 		if t.Log != nil && strings.TrimSpace(said) != "" {
 			fmt.Fprintf(t.Log, "ocel: installing %s's platform packages reported:\n%s\n", t.App, strings.TrimRight(said, "\n"))
 		}
