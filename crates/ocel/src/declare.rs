@@ -4,9 +4,9 @@ use crate::proto::app::resources::v1::declare_request::Config;
 use crate::proto::app::resources::v1::variable_problem::Kind;
 use crate::proto::app::resources::v1::ResourceType;
 use crate::proto::app::resources::v1::{
-    DeclareEnvRequest, DeclareRequest, GroupDefinition, PostgresConfig, ReportEnvProblemsRequest,
-    ResourceIdentifier, ResourceServiceClient, VariableCell, VariableClass, VariableDefinition,
-    VariableProblem,
+    DeclareEnvRequest, DeclareRequest, GroupDefinition, PostgresConfig, ReferenceRequest,
+    ReportEnvProblemsRequest, ResourceIdentifier, ResourceServiceClient, VariableCell,
+    VariableClass, VariableDefinition, VariableProblem,
 };
 use crate::Error;
 
@@ -19,6 +19,7 @@ const DISCOVERY_PHASE: &str = "discovery";
 pub struct DeclaredResource {
     pub name: &'static str,
     pub version: &'static str,
+    pub reference: bool,
     pub file: &'static str,
     pub line: u32,
 }
@@ -124,12 +125,14 @@ fn collected() -> Result<Declared, Error> {
 
     for one in structs {
         for resource in one.resources {
-            claim(
-                &mut resource_owners,
-                resource.name,
-                site(resource.file, resource.line),
-                "A resource name is declared exactly once, in exactly one file.",
-            )?;
+            if !resource.reference {
+                claim(
+                    &mut resource_owners,
+                    resource.name,
+                    site(resource.file, resource.line),
+                    "A resource name is declared exactly once, in exactly one file.",
+                )?;
+            }
             all.resources.push(resource);
         }
         for variable in one.variables {
@@ -236,6 +239,13 @@ async fn post_all(declared: &Declared) -> Result<(), Error> {
         connectrpc::client::ClientConfig::new(base),
     );
     for resource in &declared.resources {
+        if resource.reference {
+            client
+                .reference(reference(resource))
+                .await
+                .map_err(|err| unreferenced(resource, err.to_string()))?;
+            continue;
+        }
         client
             .declare(request(resource))
             .await
@@ -415,6 +425,19 @@ fn request(resource: &DeclaredResource) -> DeclareRequest {
     }
 }
 
+fn reference(resource: &DeclaredResource) -> ReferenceRequest {
+    ReferenceRequest {
+        resource: ResourceIdentifier {
+            r#type: ResourceType::RESOURCE_TYPE_POSTGRES.into(),
+            name: resource.name.to_string(),
+            ..Default::default()
+        }
+        .into(),
+        source: source(resource.file, resource.line),
+        ..Default::default()
+    }
+}
+
 fn source(file: &str, line: u32) -> String {
     let path = std::path::Path::new(file);
     let absolute = if path.is_absolute() {
@@ -434,6 +457,14 @@ fn source_root() -> std::path::PathBuf {
 
 fn failed(resource: &DeclaredResource, said: String) -> Error {
     Error::Declare {
+        kind: KIND.to_string(),
+        name: resource.name.to_string(),
+        said,
+    }
+}
+
+fn unreferenced(resource: &DeclaredResource, said: String) -> Error {
+    Error::Reference {
         kind: KIND.to_string(),
         name: resource.name.to_string(),
         said,

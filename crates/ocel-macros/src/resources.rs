@@ -1,4 +1,4 @@
-use crate::attribute::entries;
+use crate::attribute::{entries, Value};
 use crate::source::source;
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -10,6 +10,7 @@ struct Resource {
     ident: syn::Ident,
     name: String,
     version: String,
+    reference: bool,
     file: String,
     line: u32,
 }
@@ -19,10 +20,10 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
     let ident = &input.ident;
 
     let declared = resources.iter().map(|resource| {
-        let (name, version) = (&resource.name, &resource.version);
+        let (name, version, reference) = (&resource.name, &resource.version, resource.reference);
         let (file, line) = (&resource.file, resource.line);
         quote! {
-            ::ocel::DeclaredResource { name: #name, version: #version, file: #file, line: #line }
+            ::ocel::DeclaredResource { name: #name, version: #version, reference: #reference, file: #file, line: #line }
         }
     });
     let fields = resources.iter().map(|resource| {
@@ -86,17 +87,35 @@ fn resources(input: &DeriveInput) -> syn::Result<Vec<Resource>> {
 
         let mut name = ident.to_string();
         let mut version = DEFAULT_VERSION.to_string();
+        let mut versioned = None;
+        let mut reference = false;
         for entry in entries(&field.attrs)? {
             match entry.name.to_string().as_str() {
                 "name" => name = entry.literal()?.to_string(),
-                "version" => version = entry.literal()?.to_string(),
+                "version" => {
+                    version = entry.literal()?.to_string();
+                    versioned = Some(entry.span());
+                }
+                "reference" if matches!(entry.value, Value::Flag) => reference = true,
+                "reference" => {
+                    return Err(syn::Error::new(
+                        entry.span(),
+                        format!("field {ident} has 'reference' with a value, and it is a bare flag: #[ocel(reference)]."),
+                    ))
+                }
                 other => {
                     return Err(syn::Error::new(
                         entry.span(),
-                        format!("field {ident} has an unknown attribute '{other}'. The attributes are name = \"<NAME>\" and version = \"<VERSION>\"."),
+                        format!("field {ident} has an unknown attribute '{other}'. The attributes are name = \"<NAME>\", version = \"<VERSION>\" and reference."),
                     ))
                 }
             }
+        }
+        if let (true, Some(span)) = (reference, versioned) {
+            return Err(syn::Error::new(
+                span,
+                format!("field {ident} references '{name}', and a reference carries no version: the one declaration of '{name}' sets it."),
+            ));
         }
         if let Some(seen) = resources.iter().find(|seen| seen.name == name) {
             return Err(syn::Error::new_spanned(
@@ -112,6 +131,7 @@ fn resources(input: &DeriveInput) -> syn::Result<Vec<Resource>> {
             ident,
             name,
             version,
+            reference,
             file,
             line,
         });

@@ -2,7 +2,8 @@
 
 use buffa::Message;
 use ocel::proto::app::resources::v1::{
-    DeclareEnvRequest, DeclareEnvResponse, DeclareRequest, ReportEnvProblemsRequest, VariableCell,
+    DeclareEnvRequest, DeclareEnvResponse, DeclareRequest, ReferenceRequest,
+    ReportEnvProblemsRequest, VariableCell,
 };
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -10,6 +11,7 @@ use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 
 pub const DECLARE: &str = "/app.resources.v1.ResourceService/Declare";
+pub const REFERENCE: &str = "/app.resources.v1.ResourceService/Reference";
 pub const DECLARE_ENV: &str = "/app.resources.v1.ResourceService/DeclareEnv";
 pub const REPORT_ENV_PROBLEMS: &str = "/app.resources.v1.ResourceService/ReportEnvProblems";
 
@@ -22,6 +24,10 @@ pub struct Received {
 
 impl Received {
     pub fn declare(&self) -> DeclareRequest {
+        self.decode()
+    }
+
+    pub fn reference(&self) -> ReferenceRequest {
         self.decode()
     }
 

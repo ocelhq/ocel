@@ -38,6 +38,18 @@ const FIXED: &str = "what it declares is fixed once per binary";
 ///
 /// A field's name defaults to its identifier and its version to `17`. Every field is an
 /// `ocel::Postgres`, and anything else is a compile error naming the field.
+///
+/// A field marked `reference` names a database declared once elsewhere in the project, in
+/// any language, and never declares it. It hands back the same handle, and an app that
+/// links the struct is granted the database at deploy. A reference carries no version.
+///
+/// ```ignore
+/// #[derive(ocel::Resources, Clone)]
+/// pub struct Shared {
+///     #[ocel(name = "main", reference)]
+///     pub db: ocel::Postgres,
+/// }
+/// ```
 #[proc_macro_derive(Resources, attributes(ocel))]
 pub fn resources(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);

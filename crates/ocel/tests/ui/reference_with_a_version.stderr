@@ -1,0 +1,5 @@
+error: field db references 'main', and a reference carries no version: the one declaration of 'main' sets it.
+ --> tests/ui/reference_with_a_version.rs:3:38
+  |
+3 |     #[ocel(name = "main", reference, version = "16")]
+  |                                      ^^^^^^^
