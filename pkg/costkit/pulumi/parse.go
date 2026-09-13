@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/costkit"
@@ -176,21 +177,29 @@ func build(records []record, config map[string]any, opts Options) (*costv1.Resou
 	}
 	regions := providerRegions(records)
 	scopes := map[string]string{}
-	var scopeOf func(urn string) string
-	scopeOf = func(urn string) string {
+	var scopeOf func(urn string, walked []string) (string, error)
+	scopeOf = func(urn string, walked []string) (string, error) {
 		held, known := byURN[urn]
 		if !known || held.Type == typeStack {
-			return root
+			return root, nil
 		}
 		if id, built := scopes[urn]; built {
-			return id
+			return id, nil
 		}
+		if slices.Contains(walked, urn) {
+			return "", fmt.Errorf("this names a parent chain that never reaches the stack: %s", strings.Join(append(walked, urn), " is parented by "))
+		}
+		walked = append(walked, urn)
 		if held.Custom {
-			return scopeOf(held.Parent)
+			return scopeOf(held.Parent, walked)
 		}
-		id := tree.Scope(scopeOf(held.Parent), kindComponent, urnName(urn))
+		parent, err := scopeOf(held.Parent, walked)
+		if err != nil {
+			return "", err
+		}
+		id := tree.Scope(parent, kindComponent, urnName(urn))
 		scopes[urn] = id
-		return id
+		return id, nil
 	}
 	for _, held := range records {
 		if held.op == opDelete || !held.Custom || held.Type == typeStack || strings.HasPrefix(held.Type, providerTypeHead) {
@@ -206,7 +215,11 @@ func build(records []record, config map[string]any, opts Options) (*costv1.Resou
 			region = configRegion(config, pkg)
 		}
 		props, unknown := properties(held.Inputs)
-		resource := tree.Add(scopeOf(held.Parent), vendor, tf, urnName(held.URN), region, props, unknown...)
+		scope, err := scopeOf(held.Parent, nil)
+		if err != nil {
+			return nil, err
+		}
+		resource := tree.Add(scope, vendor, tf, urnName(held.URN), region, props, unknown...)
 		resource.Id = held.URN
 		resource.Tags = tags(held.Inputs)
 	}

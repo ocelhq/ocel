@@ -227,3 +227,21 @@ func TestAListHoldingAnUnknownIsUnknownWholeRatherThanShortByOne(t *testing.T) {
 		t.Errorf("properties = %v, want no list a caller could count", endpoint.GetProperties().AsMap())
 	}
 }
+
+func TestAParentChainThatLoopsIsRefusedRatherThanFollowed(t *testing.T) {
+	const stack = "urn:pulumi:dev::shop::"
+	raw := `{"deployment":{"resources":[
+		{"urn":"` + stack + `my:mod:A::a","type":"my:mod:A","custom":false,"parent":"` + stack + `my:mod:B::b"},
+		{"urn":"` + stack + `my:mod:B::b","type":"my:mod:B","custom":false,"parent":"` + stack + `my:mod:A::a"},
+		{"urn":"` + stack + `aws:s3/bucket:Bucket::assets","type":"aws:s3/bucket:Bucket","custom":true,"parent":"` + stack + `my:mod:A::a","inputs":{}}
+	]}}`
+
+	_, err := pulumi.Parse([]byte(raw), pulumi.Options{Source: pulumi.SourcePulumi, Name: "dev"})
+
+	if err == nil {
+		t.Fatalf("Parse() = no error, want a refusal rather than a stack overflow")
+	}
+	if !strings.Contains(err.Error(), stack+"my:mod:A::a") || !strings.Contains(err.Error(), stack+"my:mod:B::b") {
+		t.Errorf("Parse() = %v, want the urns the cycle runs through", err)
+	}
+}
