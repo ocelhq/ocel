@@ -2,8 +2,10 @@ package gcp
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
+	"cloud.google.com/go/kms/apiv1/kmspb"
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/artifactregistry/v1"
 
@@ -105,6 +107,24 @@ func TestARepositoryOfAnotherFormatIsRefusedRatherThanMended(t *testing.T) {
 	_, err := repositoryStanding("ocel-acme-prod-production", &artifactregistry.Repository{Format: "MAVEN"})
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 		t.Fatalf("repositoryStanding() over a MAVEN repository = %v, want an %s refusal: Artifact Registry never changes a format, so no patch mends this", err, providerkit.CodeInvalid)
+	}
+}
+
+func TestRemovingAKeyDestroysEveryVersionItStillHolds(t *testing.T) {
+	t.Parallel()
+
+	key := "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production/cryptoKeyVersions/"
+	named := destroyable([]*kmspb.CryptoKeyVersion{
+		{Name: key + "1", State: kmspb.CryptoKeyVersion_DESTROYED},
+		{Name: key + "2", State: kmspb.CryptoKeyVersion_ENABLED},
+		{Name: key + "3", State: kmspb.CryptoKeyVersion_DISABLED},
+		{Name: key + "4", State: kmspb.CryptoKeyVersion_DESTROY_SCHEDULED},
+		{Name: key + "5", State: kmspb.CryptoKeyVersion_PENDING_GENERATION},
+		{Name: key + "6", State: kmspb.CryptoKeyVersion_ENABLED},
+	})
+	if want := []string{key + "2", key + "3", key + "6"}; !slices.Equal(named, want) {
+		t.Errorf("removal destroys %v, want %v: every bootstrap after the first minted a version, and a version left enabled keeps billing and keeps opening what it sealed",
+			named, want)
 	}
 }
 
