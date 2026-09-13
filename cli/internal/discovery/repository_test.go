@@ -173,6 +173,9 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 			}
 			return nil
 		}
+		if entry.Type()&fs.ModeSymlink != 0 {
+			return nil
+		}
 		rel, err := filepath.Rel(repo, path)
 		if err != nil {
 			return err
