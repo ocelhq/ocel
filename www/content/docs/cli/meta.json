@@ -21,6 +21,7 @@
     "---Account---",
     "login",
     "logout",
+    "connector",
     "doctor",
     "run"
   ]

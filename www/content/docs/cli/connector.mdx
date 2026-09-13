@@ -1,0 +1,56 @@
+---
+title: ocel connector
+description: Let the console reach this target's variables.
+---
+
+```bash
+ocel connector add
+```
+
+Puts a connector on the target this project's config names, and tells the console where to
+dial it. Sign in and link the directory first, with [`ocel login`](/docs/cli/login) and
+[`ocel link`](/docs/link).
+
+What the console may do through the connector is settled when you add it. Read variables it
+always may; write them it may unless you withhold that, and read a secret value back in the
+clear only if you grant it:
+
+```bash
+ocel connector add --allow-write=false --allow-reveal
+```
+
+| Flag | What it does |
+| --- | --- |
+| `--compute` | What the connector runs on: `serverless` or `container`, and the provider's own default when you name neither. |
+| `--allow-reveal` | Let the console read secret values back in the clear. Withheld unless you pass it. |
+| `--allow-write` | Let the console write values. Granted unless you pass `--allow-write=false`. |
+
+## One connector per target
+
+A target holds one connector. A second `add` against the same target repoints the one
+already there rather than standing up another — so it is also how you change what the
+console may do, and how you finish an add that stopped partway.
+
+## ocel connector status
+
+```bash
+ocel connector status
+```
+
+Names every connector this organization has: the target it sits on, what it runs on, the
+address the console dials, whether it has been heard from lately, what it may do, and the
+last thing it refused. Pass `--config` and it narrows to the target that config names.
+
+## ocel connector rm
+
+```bash
+ocel connector rm
+```
+
+Takes the connector off the target, then forgets it in the console. If the machine does not
+finish giving it up, the console keeps its record and says so, so nothing is forgotten while
+something is still installed.
+
+| Flag | What it does |
+| --- | --- |
+| `--target` | Delete the console's record of the connector with this fingerprint — the one `ocel connector status` prints — when the target itself cannot be reached. Nothing on the box is touched. |
