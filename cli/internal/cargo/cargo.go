@@ -59,6 +59,9 @@ func (p Package) Bins() []Target {
 }
 
 func (w Workspace) PackageAt(dir string) (Package, bool) {
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
 	for _, p := range w.Packages {
 		if p.Dir() == dir {
 			return p, true

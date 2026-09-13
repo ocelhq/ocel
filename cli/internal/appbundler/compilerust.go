@@ -35,9 +35,6 @@ func (c Compilation) compileRust(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if source, err = filepath.EvalSymlinks(source); err != nil {
-		return err
-	}
 	workspace, err := cargo.Metadata(ctx, source, "--no-deps")
 	if err != nil {
 		return fmt.Errorf("app %q: %w", c.App, err)
