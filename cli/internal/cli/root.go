@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/bootstrap"
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/cli/connector"
+	"github.com/ocelhq/ocel/cli/internal/cli/cost"
 	"github.com/ocelhq/ocel/cli/internal/cli/deploy"
 	"github.com/ocelhq/ocel/cli/internal/cli/doctor"
 	"github.com/ocelhq/ocel/cli/internal/cli/env"
@@ -89,6 +90,7 @@ func init() {
 
 	rootCmd.AddCommand(bootstrap.NewCommand(s))
 	rootCmd.AddCommand(permissions.NewCommand(s))
+	rootCmd.AddCommand(cost.NewCommand(s))
 	rootCmd.AddCommand(doctor.NewCommand(s))
 
 	rootCmd.AddGroup(

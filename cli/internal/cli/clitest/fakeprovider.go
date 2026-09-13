@@ -29,6 +29,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -150,6 +151,9 @@ func RunFakeProvider() int {
 	mux.Handle(path, handler)
 
 	path, handler = envvarsv1connect.NewEnvVarsServiceHandler(fake)
+	mux.Handle(path, handler)
+
+	path, handler = costv1connect.NewCostServiceHandler(fake)
 	mux.Handle(path, handler)
 
 	fmt.Println(channel.FormatReadinessLine(version.Version, channel.FormatUnixAddr(sockPath), identity.CertificateDER()))

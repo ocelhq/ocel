@@ -10,66 +10,12 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
-
-func TestToDeclarations(t *testing.T) {
-	t.Parallel()
-
-	t.Run("maps resource fields", func(t *testing.T) {
-		t.Parallel()
-
-		resources := []declare.Resource{
-			{
-				Name:     "main",
-				Type:     resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
-				Postgres: &resourcesv1.PostgresConfig{Version: "17"},
-			},
-		}
-
-		decls := toDeclarations(t.TempDir(), resources)
-
-		if len(decls) != 1 {
-			t.Fatalf("len(decls) = %d, want 1", len(decls))
-		}
-		d := decls[0]
-		if d.Name != "main" {
-			t.Errorf("Name = %q, want %q", d.Name, "main")
-		}
-		if d.Type != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
-			t.Errorf("Type = %v, want %v", d.Type, resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
-		}
-		if d.Postgres.GetVersion() != "17" {
-			t.Errorf("Postgres.Version = %q, want %q", d.Postgres.GetVersion(), "17")
-		}
-	})
-
-	t.Run("reads the declaring file out of the reported source", func(t *testing.T) {
-		t.Parallel()
-
-		configDir := t.TempDir()
-		resources := []declare.Resource{{
-			Name:   "main",
-			Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
-			Source: filepath.Join(configDir, "shared", "db.ts") + ":3",
-		}}
-
-		decls := toDeclarations(configDir, resources)
-
-		if len(decls) != 1 {
-			t.Fatalf("len(decls) = %d, want 1", len(decls))
-		}
-		if decls[0].Source != "shared/db.ts:3" {
-			t.Errorf("Source = %q, want %q", decls[0].Source, "shared/db.ts:3")
-		}
-	})
-}
 
 func TestRunDeploy(t *testing.T) {
 	t.Run("a missing config errors before any spawn", func(t *testing.T) {

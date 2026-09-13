@@ -126,6 +126,7 @@ require (
 	github.com/morikuni/aec v1.1.0 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
+	github.com/ocelhq/ocel/pkg/costkit v0.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
@@ -135,6 +136,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.11.1 // indirect
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
+	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/spf13/afero v1.14.0 // indirect
 	github.com/spf13/cast v1.9.2 // indirect
@@ -186,3 +188,5 @@ replace github.com/ocelhq/ocel/platform/edge/contract => ../platform/edge/contra
 replace github.com/ocelhq/ocel/pkg/configdoc => ../pkg/configdoc
 
 replace github.com/ocelhq/ocel/pkg/constants => ../pkg/constants
+
+replace github.com/ocelhq/ocel/pkg/costkit => ../pkg/costkit

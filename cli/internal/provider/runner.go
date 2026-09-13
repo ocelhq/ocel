@@ -22,6 +22,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -123,6 +124,7 @@ type Runner struct {
 	network, address string
 	client           contractv1connect.ProviderServiceClient
 	vars             envvarsv1connect.EnvVarsServiceClient
+	cost             costv1connect.CostServiceClient
 
 	closeOnce sync.Once
 }
@@ -302,11 +304,21 @@ func (r *Runner) dial(ready channel.Readiness) error {
 	r.network, r.address = network, address
 	r.client = contractv1connect.NewProviderServiceClient(httpClient, "https://localhost", opts)
 	r.vars = envvarsv1connect.NewEnvVarsServiceClient(httpClient, "https://localhost", opts)
+	r.cost = costv1connect.NewCostServiceClient(httpClient, "https://localhost", opts)
 	return nil
 }
 
 func (r *Runner) Name() string {
 	return r.providerName
+}
+
+func (r *Runner) Cost() (costv1connect.CostServiceClient, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.cost == nil {
+		return nil, ErrClientUnavailable
+	}
+	return r.cost, nil
 }
 
 func (r *Runner) Vars() (envvarsv1connect.EnvVarsServiceClient, error) {
