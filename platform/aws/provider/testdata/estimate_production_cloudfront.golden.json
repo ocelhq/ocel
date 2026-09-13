@@ -1,0 +1,892 @@
+{
+  "currency": "USD",
+  "ratesVersion": "2026-09-13",
+  "profile": "moderate",
+  "resources": [
+    {
+      "resource": "project:shop/shared:production/aws_s3_bucket:StateBucket",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Storage",
+          "unit": "GB-month",
+          "monthlyQuantity": "10",
+          "unitPrice": "0.023",
+          "monthlyCost": "0.23",
+          "usageBased": true,
+          "assumption": "moderate profile: 10 GB-month",
+          "rateRef": "aws/s3/storage"
+        },
+        {
+          "name": "PUT, COPY, POST, LIST requests",
+          "unit": "requests",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.000005",
+          "monthlyCost": "0.05",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 requests",
+          "rateRef": "aws/s3/requests-tier1"
+        },
+        {
+          "name": "GET and other requests",
+          "unit": "requests",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000004",
+          "monthlyCost": "0.04",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 requests",
+          "rateRef": "aws/s3/requests-tier2"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.32"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_dynamodb_table:StateTable",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Write request units",
+          "unit": "WRU",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.000000625",
+          "monthlyCost": "0.06",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 WRU",
+          "rateRef": "aws/dynamodb/write"
+        },
+        {
+          "name": "Read request units",
+          "unit": "RRU",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.000000125",
+          "monthlyCost": "0.01",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 RRU",
+          "rateRef": "aws/dynamodb/read"
+        },
+        {
+          "name": "Storage",
+          "unit": "GB-month",
+          "monthlyQuantity": "1",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GB-month",
+          "rateRef": "aws/dynamodb/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.08"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_s3_bucket:ArtifactBucket",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Storage",
+          "unit": "GB-month",
+          "monthlyQuantity": "10",
+          "unitPrice": "0.023",
+          "monthlyCost": "0.23",
+          "usageBased": true,
+          "assumption": "moderate profile: 10 GB-month",
+          "rateRef": "aws/s3/storage"
+        },
+        {
+          "name": "PUT, COPY, POST, LIST requests",
+          "unit": "requests",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.000005",
+          "monthlyCost": "0.05",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 requests",
+          "rateRef": "aws/s3/requests-tier1"
+        },
+        {
+          "name": "GET and other requests",
+          "unit": "requests",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000004",
+          "monthlyCost": "0.04",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 requests",
+          "rateRef": "aws/s3/requests-tier2"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.32"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_s3_bucket:AssetBucket",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Storage",
+          "unit": "GB-month",
+          "monthlyQuantity": "10",
+          "unitPrice": "0.023",
+          "monthlyCost": "0.23",
+          "usageBased": true,
+          "assumption": "moderate profile: 10 GB-month",
+          "rateRef": "aws/s3/storage"
+        },
+        {
+          "name": "PUT, COPY, POST, LIST requests",
+          "unit": "requests",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.000005",
+          "monthlyCost": "0.05",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 requests",
+          "rateRef": "aws/s3/requests-tier1"
+        },
+        {
+          "name": "GET and other requests",
+          "unit": "requests",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000004",
+          "monthlyCost": "0.04",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 requests",
+          "rateRef": "aws/s3/requests-tier2"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.32"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_dynamodb_table:VarsTable",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Write request units",
+          "unit": "WRU",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.000000625",
+          "monthlyCost": "0.06",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 WRU",
+          "rateRef": "aws/dynamodb/write"
+        },
+        {
+          "name": "Read request units",
+          "unit": "RRU",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.000000125",
+          "monthlyCost": "0.01",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 RRU",
+          "rateRef": "aws/dynamodb/read"
+        },
+        {
+          "name": "Storage",
+          "unit": "GB-month",
+          "monthlyQuantity": "1",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GB-month",
+          "rateRef": "aws/dynamodb/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.08"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_lambda_layer_version:RuntimeLayerX8664",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_lambda_layer_version:RuntimeLayerArm64",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_sqs_queue:RevalidateDeadLetterQueue",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.0000005",
+          "monthlyCost": "0.01",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 requests",
+          "rateRef": "aws/sqs/requests-fifo"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.01"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_sqs_queue:RevalidateQueue",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.0000005",
+          "monthlyCost": "0.01",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 requests",
+          "rateRef": "aws/sqs/requests-fifo"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.01"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_lambda_function:Revalidator",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0.0000002",
+          "monthlyCost": "0.20",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 requests",
+          "rateRef": "aws/lambda/requests-arm"
+        },
+        {
+          "name": "Duration",
+          "unit": "GB-seconds",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000133334",
+          "monthlyCost": "1.33",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 GB-seconds",
+          "rateRef": "aws/lambda/duration-arm"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "1.53"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_lambda_event_source_mapping:RevalidatorQueueConsumer",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:RevalidatorLogGroup",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Ingested",
+          "unit": "GB",
+          "monthlyQuantity": "1",
+          "unitPrice": "0.5",
+          "monthlyCost": "0.50",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GB",
+          "rateRef": "aws/logs/ingest"
+        },
+        {
+          "name": "Stored",
+          "unit": "GB-month",
+          "monthlyQuantity": "0.5",
+          "unitPrice": "0.03",
+          "monthlyCost": "0.02",
+          "usageBased": true,
+          "assumption": "moderate profile: 0.5 GB-month",
+          "rateRef": "aws/logs/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.52"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_sqs_queue:TagInvalidatorDeadLetterQueue",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.0000004",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 requests",
+          "rateRef": "aws/sqs/requests"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.00"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_lambda_function:TagInvalidator",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0.0000002",
+          "monthlyCost": "0.20",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 requests",
+          "rateRef": "aws/lambda/requests-arm"
+        },
+        {
+          "name": "Duration",
+          "unit": "GB-seconds",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000133334",
+          "monthlyCost": "1.33",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 GB-seconds",
+          "rateRef": "aws/lambda/duration-arm"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "1.53"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_lambda_event_source_mapping:TagInvalidatorStream",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:TagInvalidatorLogGroup",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Ingested",
+          "unit": "GB",
+          "monthlyQuantity": "1",
+          "unitPrice": "0.5",
+          "monthlyCost": "0.50",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GB",
+          "rateRef": "aws/logs/ingest"
+        },
+        {
+          "name": "Stored",
+          "unit": "GB-month",
+          "monthlyQuantity": "0.5",
+          "unitPrice": "0.03",
+          "monthlyCost": "0.02",
+          "usageBased": true,
+          "assumption": "moderate profile: 0.5 GB-month",
+          "rateRef": "aws/logs/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.52"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_lambda_function:ImageOptimizer",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0.0000002",
+          "monthlyCost": "0.20",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 requests",
+          "rateRef": "aws/lambda/requests-arm"
+        },
+        {
+          "name": "Duration",
+          "unit": "GB-seconds",
+          "monthlyQuantity": "345507.8125",
+          "unitPrice": "0.0000133334",
+          "monthlyCost": "4.61",
+          "usageBased": true,
+          "assumption": "moderate profile: 345507.8125 GB-seconds",
+          "rateRef": "aws/lambda/duration-arm"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "4.81"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_lambda_function_url:ImageOptimizerUrl",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:ImageOptimizerLogGroup",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Ingested",
+          "unit": "GB",
+          "monthlyQuantity": "1",
+          "unitPrice": "0.5",
+          "monthlyCost": "0.50",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GB",
+          "rateRef": "aws/logs/ingest"
+        },
+        {
+          "name": "Stored",
+          "unit": "GB-month",
+          "monthlyQuantity": "0.5",
+          "unitPrice": "0.03",
+          "monthlyCost": "0.02",
+          "usageBased": true,
+          "assumption": "moderate profile: 0.5 GB-month",
+          "rateRef": "aws/logs/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.52"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_cloudfront_key_value_store:EdgeRoutes",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_cloudfront_function:EdgeResolver",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Invocations",
+          "unit": "invocations",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 invocations",
+          "rateRef": "aws/cloudfront/functions"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.00"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_cloudfront_function:EdgeEmptyBody",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Invocations",
+          "unit": "invocations",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 invocations",
+          "rateRef": "aws/cloudfront/functions"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.00"
+    },
+    {
+      "resource": "project:shop/environment:prod/aws_rds_cluster:main",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Aurora Serverless v2 capacity",
+          "unit": "ACU-hours",
+          "monthlyQuantity": "730",
+          "unitPrice": "0.12",
+          "monthlyCost": "87.60",
+          "usageBased": true,
+          "assumption": "moderate profile: 730 ACU-hours",
+          "rateRef": "aws/rds/aurora-serverless-v2"
+        },
+        {
+          "name": "Storage",
+          "unit": "GB-month",
+          "monthlyQuantity": "10",
+          "unitPrice": "0.1",
+          "monthlyCost": "1.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 10 GB-month",
+          "rateRef": "aws/rds/aurora-storage"
+        },
+        {
+          "name": "I/O requests",
+          "unit": "requests",
+          "monthlyQuantity": "10000000",
+          "unitPrice": "0.0000002",
+          "monthlyCost": "2.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000000 requests",
+          "rateRef": "aws/rds/aurora-io"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "90.60"
+    },
+    {
+      "resource": "project:shop/environment:prod/aws_rds_cluster_instance:main",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/environment:prod/aws_secretsmanager_secret:main",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Secret",
+          "unit": "secret-months",
+          "monthlyQuantity": "1",
+          "unitPrice": "0.4",
+          "monthlyCost": "0.40",
+          "rateRef": "aws/secretsmanager/secret"
+        },
+        {
+          "name": "API calls",
+          "unit": "requests",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.000005",
+          "monthlyCost": "0.05",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 requests",
+          "rateRef": "aws/secretsmanager/requests"
+        }
+      ],
+      "monthlyFixed": "0.40",
+      "monthlyUsage": "0.05"
+    },
+    {
+      "resource": "project:shop/environment:prod/aws_s3_bucket:uploads",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Storage",
+          "unit": "GB-month",
+          "monthlyQuantity": "10",
+          "unitPrice": "0.023",
+          "monthlyCost": "0.23",
+          "usageBased": true,
+          "assumption": "moderate profile: 10 GB-month",
+          "rateRef": "aws/s3/storage"
+        },
+        {
+          "name": "PUT, COPY, POST, LIST requests",
+          "unit": "requests",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.000005",
+          "monthlyCost": "0.05",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 requests",
+          "rateRef": "aws/s3/requests-tier1"
+        },
+        {
+          "name": "GET and other requests",
+          "unit": "requests",
+          "monthlyQuantity": "100000",
+          "unitPrice": "0.0000004",
+          "monthlyCost": "0.04",
+          "usageBased": true,
+          "assumption": "moderate profile: 100000 requests",
+          "rateRef": "aws/s3/requests-tier2"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.32"
+    },
+    {
+      "resource": "project:shop/environment:prod/aws_lambda_function:uploads-upload-completer",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0.0000002",
+          "monthlyCost": "0.20",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 requests",
+          "rateRef": "aws/lambda/requests"
+        },
+        {
+          "name": "Duration",
+          "unit": "GB-seconds",
+          "monthlyQuantity": "25000",
+          "unitPrice": "0.0000166667",
+          "monthlyCost": "0.42",
+          "usageBased": true,
+          "assumption": "moderate profile: 25000 GB-seconds",
+          "rateRef": "aws/lambda/duration"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.62"
+    },
+    {
+      "resource": "project:shop/environment:prod/aws_cloudwatch_log_group:uploads-upload-completer",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Ingested",
+          "unit": "GB",
+          "monthlyQuantity": "1",
+          "unitPrice": "0.5",
+          "monthlyCost": "0.50",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GB",
+          "rateRef": "aws/logs/ingest"
+        },
+        {
+          "name": "Stored",
+          "unit": "GB-month",
+          "monthlyQuantity": "0.5",
+          "unitPrice": "0.03",
+          "monthlyCost": "0.02",
+          "usageBased": true,
+          "assumption": "moderate profile: 0.5 GB-month",
+          "rateRef": "aws/logs/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.52"
+    },
+    {
+      "resource": "project:shop/environment:prod/app:web/aws_lambda_function:fn--web--entry",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0.0000002",
+          "monthlyCost": "0.20",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 requests",
+          "rateRef": "aws/lambda/requests-arm"
+        },
+        {
+          "name": "Duration",
+          "unit": "GB-seconds",
+          "monthlyQuantity": "345507.8125",
+          "unitPrice": "0.0000133334",
+          "monthlyCost": "4.61",
+          "usageBased": true,
+          "assumption": "moderate profile: 345507.8125 GB-seconds",
+          "rateRef": "aws/lambda/duration-arm"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "4.81"
+    },
+    {
+      "resource": "project:shop/environment:prod/app:web/aws_cloudwatch_log_group:fn--web--entry",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Ingested",
+          "unit": "GB",
+          "monthlyQuantity": "1",
+          "unitPrice": "0.5",
+          "monthlyCost": "0.50",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GB",
+          "rateRef": "aws/logs/ingest"
+        },
+        {
+          "name": "Stored",
+          "unit": "GB-month",
+          "monthlyQuantity": "0.5",
+          "unitPrice": "0.03",
+          "monthlyCost": "0.02",
+          "usageBased": true,
+          "assumption": "moderate profile: 0.5 GB-month",
+          "rateRef": "aws/logs/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.52"
+    },
+    {
+      "resource": "project:shop/environment:prod/app:web/aws_lambda_function_url:fn--web--entry",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/environment:prod/app:api/aws_ecs_task_definition:api",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/environment:prod/app:api/aws_ecs_service:api",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "vCPU",
+          "unit": "vCPU-hours",
+          "monthlyQuantity": "365",
+          "unitPrice": "0.04048",
+          "monthlyCost": "14.78",
+          "rateRef": "aws/fargate/vcpu"
+        },
+        {
+          "name": "Memory",
+          "unit": "GB-hours",
+          "monthlyQuantity": "730",
+          "unitPrice": "0.004445",
+          "monthlyCost": "3.24",
+          "rateRef": "aws/fargate/memory"
+        }
+      ],
+      "monthlyFixed": "18.02",
+      "monthlyUsage": "0.00"
+    },
+    {
+      "resource": "project:shop/environment:prod/app:api/aws_ecr_repository:api",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Storage",
+          "unit": "GB-month",
+          "monthlyQuantity": "5",
+          "unitPrice": "0.1",
+          "monthlyCost": "0.50",
+          "usageBased": true,
+          "assumption": "moderate profile: 5 GB-month",
+          "rateRef": "aws/ecr/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.50"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_ecs_cluster:ocel-containers",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_lb:ocel-containers",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Application load balancer",
+          "unit": "hours",
+          "monthlyQuantity": "730",
+          "unitPrice": "0.0225",
+          "monthlyCost": "16.43",
+          "rateRef": "aws/alb/hours"
+        },
+        {
+          "name": "Load balancer capacity units",
+          "unit": "LCU-hours",
+          "monthlyQuantity": "50",
+          "unitPrice": "0.008",
+          "monthlyCost": "0.40",
+          "usageBased": true,
+          "assumption": "moderate profile: 50 LCU-hours",
+          "rateRef": "aws/alb/lcu"
+        }
+      ],
+      "monthlyFixed": "16.43",
+      "monthlyUsage": "0.40"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:ocel-containers",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Ingested",
+          "unit": "GB",
+          "monthlyQuantity": "1",
+          "unitPrice": "0.5",
+          "monthlyCost": "0.50",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GB",
+          "rateRef": "aws/logs/ingest"
+        },
+        {
+          "name": "Stored",
+          "unit": "GB-month",
+          "monthlyQuantity": "0.5",
+          "unitPrice": "0.03",
+          "monthlyCost": "0.02",
+          "usageBased": true,
+          "assumption": "moderate profile: 0.5 GB-month",
+          "rateRef": "aws/logs/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.52"
+    },
+    {
+      "resource": "project:shop/environment:prod/aws_cloudfront_distribution:shop",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "HTTPS requests",
+          "unit": "requests",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0.000001",
+          "monthlyCost": "1.00",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 requests",
+          "rateRef": "aws/cloudfront/requests-https"
+        },
+        {
+          "name": "Data transfer out to internet",
+          "unit": "GB",
+          "monthlyQuantity": "10",
+          "unitPrice": "0.085",
+          "monthlyCost": "0.85",
+          "usageBased": true,
+          "assumption": "moderate profile: 10 GB",
+          "rateRef": "aws/cloudfront/data-out"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "1.85"
+    }
+  ],
+  "scopes": [
+    {
+      "scope": "project:shop",
+      "monthlyFixed": "34.85",
+      "monthlyUsage": "111.23"
+    },
+    {
+      "scope": "project:shop/shared:production",
+      "monthlyFixed": "16.43",
+      "monthlyUsage": "11.46"
+    },
+    {
+      "scope": "project:shop/environment:prod",
+      "monthlyFixed": "18.42",
+      "monthlyUsage": "99.77"
+    },
+    {
+      "scope": "project:shop/environment:prod/app:web",
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "5.32"
+    },
+    {
+      "scope": "project:shop/environment:prod/app:api",
+      "monthlyFixed": "18.02",
+      "monthlyUsage": "0.50"
+    }
+  ],
+  "coverage": {
+    "supported": 28,
+    "free": 10,
+    "supportedTypes": [
+      "aws_cloudfront_distribution",
+      "aws_cloudfront_function",
+      "aws_cloudfront_key_value_store",
+      "aws_cloudwatch_log_group",
+      "aws_dynamodb_table",
+      "aws_ecr_repository",
+      "aws_ecs_cluster",
+      "aws_ecs_service",
+      "aws_ecs_task_definition",
+      "aws_lambda_event_source_mapping",
+      "aws_lambda_function",
+      "aws_lambda_function_url",
+      "aws_lambda_layer_version",
+      "aws_lb",
+      "aws_rds_cluster",
+      "aws_rds_cluster_instance",
+      "aws_s3_bucket",
+      "aws_secretsmanager_secret",
+      "aws_sqs_queue"
+    ]
+  },
+  "notes": [
+    "list prices for us-east-1; a resource in another region is left unpriced",
+    "always-free allowances are not applied, except where the price list folds one into the first tier",
+    "CloudFront is priced at its United States rates whichever price class the distribution carries"
+  ],
+  "monthlyFixed": "34.85",
+  "monthlyUsage": "111.23"
+}

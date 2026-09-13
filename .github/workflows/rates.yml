@@ -1,0 +1,45 @@
+name: Rates
+
+on:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    name: refresh the rate cards from the vendors' price lists
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: |
+            platform/aws/provider/go.sum
+            platform/gcp/provider/go.sum
+
+      - name: Refresh the AWS card
+        run: go run -C platform/aws/provider ./cost/refresh -card cost/rates.json
+
+      - name: Refresh the GCP card
+        if: ${{ secrets.GCP_BILLING_API_KEY != '' }}
+        env:
+          GCP_BILLING_API_KEY: ${{ secrets.GCP_BILLING_API_KEY }}
+        run: go run -C platform/gcp/provider ./cost/refresh -card cost/rates.json
+
+      - name: Open a pull request with what moved
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/rates-refresh
+          commit-message: "chore(cost): refresh the rate cards"
+          title: "chore(cost): refresh the rate cards"
+          body: The rate cards, rewritten from the vendors' current price lists by the weekly refresh.
+          delete-branch: true

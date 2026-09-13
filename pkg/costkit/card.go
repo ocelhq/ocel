@@ -17,12 +17,13 @@ type Card struct {
 }
 
 type Rate struct {
-	ID       string `json:"id"`
-	Region   string `json:"region,omitempty"`
-	Unit     string `json:"unit"`
-	Tiers    []Tier `json:"tiers"`
-	Source   string `json:"source"`
-	Verified string `json:"verified"`
+	ID       string            `json:"id"`
+	Region   string            `json:"region,omitempty"`
+	Unit     string            `json:"unit"`
+	Tiers    []Tier            `json:"tiers"`
+	Source   string            `json:"source"`
+	Verified string            `json:"verified"`
+	Query    map[string]string `json:"query,omitempty"`
 }
 
 type Tier struct {
