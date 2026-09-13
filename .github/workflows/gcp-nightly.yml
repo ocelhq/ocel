@@ -65,6 +65,9 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
+      - name: The musl targets a rust fixture compiles for
+        run: rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
