@@ -15,8 +15,4 @@ export const env = defineEnv({
   REPORT_SECRET: {
     class: "secret",
   },
-  ANOTHER_TEST: {
-    class: "plain",
-    folders: ["/web-app"],
-  },
 });

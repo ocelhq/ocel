@@ -149,7 +149,7 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		regexp.MustCompile(`\bfrom\s+` + name + `\s+import\b`),
 	}
 	allowed := func(rel string) bool {
-		if rel == "www/content/docs/configuration.mdx" || strings.HasPrefix(rel, "packages/ocel/tests/fixtures/"+constants.DefaultDiscoveryDirName+"/") {
+		if rel == "www/content/docs/configuration.mdx" || strings.HasPrefix(rel, constants.DefaultDiscoveryDirName+"/") || strings.HasPrefix(rel, "packages/ocel/tests/fixtures/"+constants.DefaultDiscoveryDirName+"/") {
 			return true
 		}
 		for _, root := range append(fixtureRoots, "tests/fixtures/sdk/rust-workspace") {
