@@ -12,6 +12,7 @@ type Config struct {
 	ConnectorID    string   `json:"connectorId"`
 	OrganizationID string   `json:"organizationId"`
 	Grants         []string `json:"grants"`
+	KeyPath        string   `json:"keyPath"`
 }
 
 var grantable = []string{CapabilityEnvVarsRead, CapabilityEnvVarsWrite, CapabilityEnvVarsReveal}

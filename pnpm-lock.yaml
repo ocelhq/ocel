@@ -371,6 +371,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/pg@8.20.0)(better-sqlite3@13.0.3)(bun-types@1.4.0)(kysely@0.29.2)(pg@8.22.0)
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.12
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -7247,6 +7250,9 @@ packages:
 
   jose@5.2.3:
     resolution: {integrity: sha512-KUXdbctm1uHVL8BYhnyHkgp3zDX5KW8ZhAKVFEfUbU2P8Alpzjb+48hHvjOdQIyPshoblhzsuqOwEEAbtHVirA==}
+
+  jose@6.2.12:
+    resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
 
   jose@6.2.3:
     resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
@@ -14854,6 +14860,8 @@ snapshots:
   jose@5.2.3: {}
 
   jose@6.2.3: {}
+  jose@6.2.12: {}
+
 
   joycon@3.1.1: {}
 

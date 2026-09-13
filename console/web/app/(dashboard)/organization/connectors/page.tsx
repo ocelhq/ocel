@@ -33,14 +33,14 @@ export default async function OrganizationConnectorsPage() {
             things it must never store itself — variable values today, logs and spend later. Ocel
             never deploys or provisions from the browser.
           </p>
-          <CommandPane command="ocel console connector add" />
+          <CommandPane command="ocel connector add" />
         </PageNotice>
       </PageShell>
     );
   }
 
   const seen = await Promise.all(
-    rows.map((row) => (row.url === null ? null : capabilities(row.url))),
+    rows.map((row) => (row.url === null || row.publicKey !== null ? null : capabilities(row.url))),
   );
 
   return (
@@ -101,7 +101,7 @@ export default async function OrganizationConnectorsPage() {
           One connector per bootstrapped target. It runs under that target’s own credentials, and
           the console can ask it only for the day-2 things — never a deploy.
         </p>
-        <CommandPane command="ocel console connector add" />
+        <CommandPane command="ocel connector add" />
       </PageNotice>
     </PageShell>
   );

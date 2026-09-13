@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	connect "connectrpc.com/connect"
 	"connectrpc.com/validate"
@@ -42,6 +43,12 @@ type Spec struct {
 	Grants []string
 
 	Vars providerkit.Vars
+
+	Identity Identity
+
+	KeyPath string
+
+	ConfigPath string
 }
 
 func (s Spec) capabilities() []string {
@@ -54,6 +61,14 @@ func Serve(spec Spec) error {
 	}
 	if spec.Vars.Sealer == nil {
 		return errors.New("connectorkit: Spec.Vars.Sealer is required")
+	}
+
+	if spec.KeyPath != "" && !spec.Identity.Held() {
+		held, err := LoadOrCreateIdentity(spec.KeyPath)
+		if err != nil {
+			return err
+		}
+		spec.Identity = held
 	}
 
 	mux, err := Mux(spec)
@@ -75,10 +90,31 @@ func Serve(spec Spec) error {
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()
 
+	retired := make(chan struct{})
+	if spec.Identity.Held() {
+		origin, err := originOf(spec.Console)
+		if err != nil {
+			return err
+		}
+		go (&beat{
+			origin:       origin,
+			connectorID:  spec.ConnectorID,
+			version:      spec.Version,
+			capabilities: spec.capabilities(),
+			identity:     spec.Identity,
+			keyPath:      spec.KeyPath,
+			configPath:   spec.ConfigPath,
+			client:       &http.Client{Timeout: 20 * time.Second},
+			every:        beatEvery,
+		}).run(ctx, retired)
+	}
+
 	fmt.Printf("ocel connector %s: %s on http://%s\n", spec.Version, spec.Vendor, ln.Addr())
 
 	select {
 	case <-ctx.Done():
+		return srv.Close()
+	case <-retired:
 		return srv.Close()
 	case err := <-served:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {

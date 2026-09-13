@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { auth } from "@console/auth";
+import { auth, consoleOrigin } from "@console/auth";
 import type { Scope } from "@console/connectors";
 
 export interface Reach {
@@ -10,14 +10,6 @@ export interface Reach {
 }
 
 const lifetime = 60;
-
-export function consoleOrigin(): string {
-  const named = process.env.BETTER_AUTH_URL;
-  if (!named) {
-    throw new Error("BETTER_AUTH_URL is unset, so nothing names this console to a connector");
-  }
-  return new URL(named).origin;
-}
 
 export async function connectorToken(reach: Reach): Promise<string> {
   const issued = Math.floor(Date.now() / 1000);

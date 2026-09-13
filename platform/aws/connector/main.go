@@ -77,6 +77,8 @@ func run(addr, region, config string) error {
 		ConnectorID:    trust.ConnectorID,
 		OrganizationID: trust.OrganizationID,
 		Grants:         trust.Grants,
+		KeyPath:        trust.KeyPath,
+		ConfigPath:     config,
 		Vars: providerkit.Vars{
 			Records: awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: held},
 			Sealer:  awsports.Sealer{KMS: kms.NewFromConfig(cfg), Keys: held},

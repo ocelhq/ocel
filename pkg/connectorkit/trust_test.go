@@ -5,8 +5,11 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -280,5 +283,57 @@ func TestGetValueAsksForRevealOnlyWhenItReveals(t *testing.T) {
 		Reveal:     true,
 	}); connect.CodeOf(err) == connect.CodePermissionDenied {
 		t.Fatalf("GetValue(reveal) under the reveal scope = %v, want it past the guard", err)
+	}
+}
+
+func saying(t *testing.T, run func()) string {
+	t.Helper()
+
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Pipe() error = %v", err)
+	}
+	held := os.Stdout
+	os.Stdout = write
+	defer func() { os.Stdout = held }()
+
+	run()
+
+	if err := write.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	said, err := io.ReadAll(read)
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+	return string(said)
+}
+
+func TestEveryRequestSaysWhoAskedAndHowItWent(t *testing.T) {
+	at := consoleServing(t)
+	vars := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorkit.CapabilityEnvVarsRead}}))
+
+	said := saying(t, func() {
+		if _, err := vars.ListValues(context.Background(), &envvarsv1.ListValuesRequest{
+			Tier: environmentv1.Tier_TIER_PRODUCTION,
+			Slug: "shop",
+		}); err != nil {
+			t.Fatalf("ListValues() error = %v", err)
+		}
+		_, _ = vars.SetValue(context.Background(), &envvarsv1.SetValueRequest{
+			Tier:       environmentv1.Tier_TIER_PRODUCTION,
+			Coordinate: &envvarsv1.Coordinate{Slug: "shop", Key: "TOKEN"},
+			Value:      "held",
+		})
+	})
+
+	want := []string{
+		"act=user-1 org=" + organizationID + " procedure=" + envvarsv1connect.EnvVarsServiceListValuesProcedure + " outcome=pass\n",
+		"act=user-1 org=" + organizationID + " procedure=" + envvarsv1connect.EnvVarsServiceSetValueProcedure + " outcome=denied\n",
+	}
+	for _, line := range want {
+		if !strings.Contains(said, line) {
+			t.Fatalf("the connector said %q, which carries no %q", said, line)
+		}
 	}
 }

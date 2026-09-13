@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { afterEach, expect, it } from "vitest";
-import { vars } from "./transport";
+import { capabilitiesURL, vars } from "./transport";
 
 let server: Server | undefined;
 
@@ -32,4 +32,14 @@ it("carries the token as a bearer credential", async () => {
   });
 
   expect(seen).toEqual(["Bearer minted.jwt.value"]);
+});
+
+it("asks for capabilities under the path the connector is published at", () => {
+  expect(capabilitiesURL("https://box.example/.ocel/connector")).toBe(
+    "https://box.example/.ocel/connector/v1/capabilities",
+  );
+  expect(capabilitiesURL("https://box.example/.ocel/connector/")).toBe(
+    "https://box.example/.ocel/connector/v1/capabilities",
+  );
+  expect(capabilitiesURL("http://127.0.0.1:7777")).toBe("http://127.0.0.1:7777/v1/capabilities");
 });
