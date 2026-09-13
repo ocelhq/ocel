@@ -83,10 +83,29 @@ What an app is built with, when ocel is not to read it off the app's own directo
 }
 ```
 
-One of `node`, `next`, `go` or `python`. Left off, ocel reads the app's directory: a
+One of `node`, `next`, `go`, `python` or `rust`. Left off, ocel reads the app's directory: a
 `package.json` that names `next` as a dependency or sits beside a `next.config.*` is next,
-a `package.json` on its own is node, a `go.mod` is go, and a `pyproject.toml` or
-`requirements.txt` is python.
+a `package.json` on its own is node, a `go.mod` is go, a `pyproject.toml` or
+`requirements.txt` is python, and a `Cargo.toml` is rust. A `Cargo.toml` beside a
+`package.json`, `pyproject.toml` or `requirements.txt` builds that app's native extension,
+so the app is node, next or python.
+
+A rust app's crate builds one binary. ocel compiles it with `cargo` for the app's `arch`
+as a static musl binary, so the matching target must be installed:
+`rustup target add x86_64-unknown-linux-musl` or `aarch64-unknown-linux-musl`.
+
+That is enough for a pure-Rust crate. A crate that compiles C, through `ring`, `aws-lc-rs` or
+`openssl-sys`, also needs a musl C cross toolchain for the target, most of all for `arm64`
+built on an x86_64 machine. Name its compiler with `CC_aarch64_unknown_linux_musl`, and its
+linker in `.cargo/config.toml`:
+
+```toml title=".cargo/config.toml"
+[target.aarch64-unknown-linux-musl]
+linker = "aarch64-linux-musl-gcc"
+```
+
+or with `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER`. ocel links with `rust-lld` only when
+neither names a linker for the target.
 
 ## arch
 

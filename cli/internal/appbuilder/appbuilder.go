@@ -237,7 +237,7 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 }
 
 func compiledFromSource(runtime string) bool {
-	return runtime == providerkit.RuntimeGo || runtime == providerkit.RuntimePython
+	return runtime == providerkit.RuntimeGo || runtime == providerkit.RuntimePython || runtime == providerkit.RuntimeRust
 }
 
 func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App, outputDir string, stderr io.Writer) error {
