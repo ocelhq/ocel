@@ -158,8 +158,9 @@ type fakeGateway struct {
 	stageErr    error
 	resourceErr error
 
-	deleteErr     error
-	deleteRefused int
+	deleteErr       error
+	deleteRefused   int
+	deleteDomainErr error
 
 	beforeRule func(*fakeGateway, int32)
 }
@@ -758,6 +759,9 @@ func (f *fakeGateway) DeleteDomainName(_ context.Context, in *apigateway.DeleteD
 	defer f.mu.Unlock()
 	name := aws.ToString(in.DomainName)
 	f.record("DeleteDomainName " + name)
+	if f.deleteDomainErr != nil {
+		return nil, f.deleteDomainErr
+	}
 	if _, ok := f.domains[name]; !ok {
 		return nil, &agtypes.NotFoundException{Message: aws.String("no domain " + name)}
 	}

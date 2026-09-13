@@ -433,9 +433,11 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return err
 	}
 	var errs []error
+	unbound := true
 	for _, hostname := range s.state.Bound {
 		if err := s.UnbindDomain(ctx, hostname); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
+			unbound = false
 		}
 	}
 	unrouted := s.unroutePreviews(ctx, c)
@@ -459,7 +461,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		}
 	}
 	s.own.Distribution, s.state.Front = "", ""
-	if unrouted == nil && gone && s.provisioned() {
+	if unbound && unrouted == nil && gone && s.provisioned() {
 		if err := s.ledger(c).Destroy(ctx); err != nil {
 			errs = append(errs, err)
 		}

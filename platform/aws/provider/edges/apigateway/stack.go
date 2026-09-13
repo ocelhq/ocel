@@ -470,9 +470,11 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return err
 	}
 	var errs []error
+	unbound := true
 	for _, hostname := range s.state.Bound {
 		if err := s.UnbindDomain(ctx, hostname); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
+			unbound = false
 		}
 	}
 	ledger := s.ledger(c)
@@ -496,6 +498,9 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return errors.Join(append(errs, drained)...)
 	}
 	s.own.API = ""
+	if !unbound {
+		return errors.Join(errs...)
+	}
 	if err := ledger.Destroy(ctx); err != nil {
 		errs = append(errs, err)
 	}
