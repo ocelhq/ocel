@@ -171,6 +171,9 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 }
 
 func stackOn(p *provider, state edge.StackState) *stack {
+	if p.store == nil {
+		p.store = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	}
 	s := &stack{p: p, state: state}
 	if err := state.Adapter.Into(&s.own); err != nil {
 		panic(err)
