@@ -33,22 +33,21 @@ type Spec struct {
 
 	Addr string
 
-	Reveal bool
+	Console string
+
+	ConnectorID string
+
+	OrganizationID string
+
+	Grants []string
 
 	Vars providerkit.Vars
 }
 
 func (s Spec) capabilities() []string {
-	out := []string{CapabilityEnvVarsRead, CapabilityEnvVarsWrite}
-	if s.Reveal {
-		out = append(out, CapabilityEnvVarsReveal)
-	}
-	return out
+	return s.Grants
 }
 
-// TODO(alpha): the connector answers an unauthenticated port and the console dials it
-// directly. #1134 has it polling the console outbound under a pinned Ed25519 identity;
-// neither the identity nor the poll transport exists yet.
 func Serve(spec Spec) error {
 	if spec.Vars.Records == nil {
 		return errors.New("connectorkit: Spec.Vars.Records is required")
@@ -57,13 +56,18 @@ func Serve(spec Spec) error {
 		return errors.New("connectorkit: Spec.Vars.Sealer is required")
 	}
 
+	mux, err := Mux(spec)
+	if err != nil {
+		return err
+	}
+
 	ln, err := net.Listen("tcp", spec.Addr)
 	if err != nil {
 		return fmt.Errorf("bind connector listener: %w", err)
 	}
 	defer ln.Close()
 
-	srv := &http.Server{Handler: Mux(spec)}
+	srv := &http.Server{Handler: mux}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -84,13 +88,27 @@ func Serve(spec Spec) error {
 	}
 }
 
-func Mux(spec Spec) *http.ServeMux {
+func Mux(spec Spec) (*http.ServeMux, error) {
+	if err := (Config{
+		Console:        spec.Console,
+		ConnectorID:    spec.ConnectorID,
+		OrganizationID: spec.OrganizationID,
+		Grants:         spec.Grants,
+	}).check(); err != nil {
+		return nil, fmt.Errorf("connectorkit: %w", err)
+	}
+
+	guard, err := newTrust(spec)
+	if err != nil {
+		return nil, fmt.Errorf("connectorkit: %w", err)
+	}
+
 	mux := http.NewServeMux()
 
 	source := providerkit.StandingVars(spec.Vars)
 	path, handler := envvarsv1connect.NewEnvVarsServiceHandler(
 		&providerkit.VarsHandler{Source: source},
-		connect.WithInterceptors(validate.NewInterceptor()),
+		connect.WithInterceptors(validate.NewInterceptor(), guard.interceptor()),
 	)
 	mux.Handle(path, handler)
 
@@ -104,5 +122,5 @@ func Mux(spec Spec) *http.ServeMux {
 		})
 	})
 
-	return mux
+	return mux, nil
 }

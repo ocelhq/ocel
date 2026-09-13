@@ -1,8 +1,28 @@
+import type { ActiveOrganizationSession } from "@console/auth";
+import type { Connector as Dialled } from "@console/connectors";
 import { db } from "@console/db";
 import { type Connector, connector } from "@console/db/schema";
 import { and, eq } from "drizzle-orm";
+import { roleOf } from "./access";
+import { scopesFor } from "./connector-policy";
+import { connectorToken } from "./connector-token";
 
 export type { Connector };
+
+export async function dial(session: ActiveOrganizationSession, held: Connector): Promise<Dialled> {
+  const role = await roleOf(session.userId, session.activeOrganizationId);
+  return {
+    id: held.id,
+    url: held.url,
+    capabilities: held.capabilities,
+    token: await connectorToken({
+      connectorId: held.id,
+      organizationId: session.activeOrganizationId,
+      userId: session.userId,
+      scope: scopesFor(role, held.capabilities),
+    }),
+  };
+}
 
 export async function connectorsOf(organizationId: string): Promise<Connector[]> {
   return db.select().from(connector).where(eq(connector.organizationId, organizationId));
