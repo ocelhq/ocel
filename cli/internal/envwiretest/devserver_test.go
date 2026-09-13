@@ -63,8 +63,8 @@ func TestDevserverDiscover(t *testing.T) {
 			for _, key := range keys {
 				named = append(named, key.Name)
 			}
-			if want := []string{"NEXT_PUBLIC_OCEL_URL", "PUBLIC_SITE_URL"}; !slices.Equal(named, want) {
-				t.Errorf("client keys = %+v, want %v — the declared one beside the deployment url every app is handed", keys, want)
+			if want := []string{"PUBLIC_SITE_URL"}; !slices.Equal(named, want) {
+				t.Errorf("client keys = %+v, want %v — only what was declared, since the deployment url is offered per app, where ocel writes it for that app's runtime", keys, want)
 			}
 		})
 

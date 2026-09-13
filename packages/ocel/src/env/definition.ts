@@ -125,7 +125,10 @@ export const URL_KEY = "OCEL_URL";
 
 export const CLIENT_URL_KEY = "NEXT_PUBLIC_OCEL_URL";
 
-const RESERVED_KEYS = [URL_KEY, CLIENT_URL_KEY];
+const RESERVED_KEYS: ReadonlyMap<string, string> = new Map([
+  [URL_KEY, "every app"],
+  [CLIENT_URL_KEY, "every Node and Next.js app"],
+]);
 
 const KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 
@@ -200,9 +203,10 @@ function validateDefinition(key: string, definition: VariableDefinition, source:
       `'${key}' is not a usable variable name: use upper-case letters, digits and underscores, starting with a letter or underscore.`,
     );
   }
-  if (RESERVED_KEYS.includes(key)) {
+  const writtenFor = RESERVED_KEYS.get(key);
+  if (writtenFor !== undefined) {
     throw new EnvDefinitionError(
-      `'${key}' is written by Ocel for every app, from the hostname the deploy serves it on, so a declared one would be overwritten before anything read it. Read it as \`deployment.url\` from 'ocel/env'.`,
+      `'${key}' is written by Ocel for ${writtenFor}, from the hostname the deploy serves it on, so a declared one would be overwritten before anything read it. Read it as \`deployment.url\` from 'ocel/env'.`,
     );
   }
   const claimed = owner.get(key);

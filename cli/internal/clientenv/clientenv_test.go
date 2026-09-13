@@ -78,7 +78,7 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		if err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("NEXT_PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, Runtime: "next", Variables: []manifestbuilder.Variable{clientVar("NEXT_PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -110,7 +110,7 @@ func TestGenerate(t *testing.T) {
 		site := clientVar("NEXT_PUBLIC_SITE_URL", "https://example.com")
 		site.Source, site.SchemaSource = envModule, schemaModule
 
-		if err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{site, port}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, Runtime: "next", Variables: []manifestbuilder.Variable{site, port}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -347,16 +347,42 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		if err := Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, Runtime: "node", Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
 		got := read(t, filepath.Join(dir, constants.ProjectStateDirName, "env-client.ts"))
 		if !strings.Contains(got, "NEXT_PUBLIC_OCEL_URL: inlined(schema, \"NEXT_PUBLIC_OCEL_URL\", process.env.NEXT_PUBLIC_OCEL_URL)") {
-			t.Errorf("accessor =\n%s\nwant the deployment url every app is handed, declared or not", got)
+			t.Errorf("accessor =\n%s\nwant the deployment url ocel writes for a node app, declared or not", got)
 		}
 		if strings.Contains(got, "STRIPE_API_KEY") {
 			t.Errorf("accessor =\n%s\nwant no server value in a browser bundle", got)
+		}
+	})
+
+	t.Run("offers the built-in deployment url only to an app ocel writes it for", func(t *testing.T) {
+		t.Parallel()
+		for name, tc := range map[string]struct {
+			runtime string
+			offered bool
+		}{
+			"a next app":                      {runtime: "next", offered: true},
+			"a node app":                      {runtime: "node", offered: true},
+			"a container app with no runtime": {runtime: "", offered: false},
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				dir := appDir(t)
+
+				if err := Generate(dir, []App{{Dir: dir, Runtime: tc.runtime}}); err != nil {
+					t.Fatalf("Generate: %v", err)
+				}
+
+				got := read(t, filepath.Join(dir, constants.ProjectStateDirName, "env-client.ts"))
+				if offered := strings.Contains(got, "NEXT_PUBLIC_OCEL_URL"); offered != tc.offered {
+					t.Errorf("accessor =\n%s\nwant NEXT_PUBLIC_OCEL_URL offered %v: an accessor that names a key the deploy never writes reads undefined in the browser", got, tc.offered)
+				}
+			})
 		}
 	})
 

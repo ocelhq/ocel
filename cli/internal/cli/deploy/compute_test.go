@@ -7,10 +7,34 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/attribution"
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
+
+func TestAnAppOnlyItsUsagesNameCarriesTheRuntimeItsURLIsWrittenFor(t *testing.T) {
+	t.Parallel()
+	usages := []attribution.Usage{{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"}}
+
+	t.Run("the node builder's runtime where no function names one", func(t *testing.T) {
+		t.Parallel()
+		got := toApps(nil, usages, "container", nil, nil)
+		if len(got) != 1 || got[0].Runtime.Name != providerkit.RuntimeNode {
+			t.Errorf("toApps() = %+v, want web on %q: the CLI writes %s for this project's unnamed app, so the provider must read the same runtime or record ocel's copy as declared", got, providerkit.RuntimeNode, providerkit.ClientURLEnvName)
+		}
+	})
+
+	t.Run("the runtime its own functions name", func(t *testing.T) {
+		t.Parallel()
+		functions := []manifestbuilder.Function{{App: "web", Runtime: manifestbuilder.Runtime{Name: providerkit.RuntimeNext}}}
+		got := toApps(nil, usages, "serverless", nil, functions)
+		if len(got) != 1 || got[0].Runtime.Name != providerkit.RuntimeNext {
+			t.Errorf("toApps() = %+v, want web on %q: a next app keeps the runtime that serves its cache", got, providerkit.RuntimeNext)
+		}
+	})
+}
 
 func TestTheManifestCarriesEveryAppsCompute(t *testing.T) {
 	t.Run("an app the config names carries the compute resolved onto it", func(t *testing.T) {
@@ -58,7 +82,7 @@ func TestAnAppOnlyItsUsagesNameTakesTheProvidersDefaultCompute(t *testing.T) {
 
 	got := toApps(nil, []attribution.Usage{
 		{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"},
-	}, "container", nil)
+	}, "container", nil, nil)
 
 	if len(got) != 1 || got[0].Compute != "container" {
 		t.Errorf("toApps() = %+v, want the one attributed app carrying %q", got, "container")

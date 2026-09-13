@@ -1,6 +1,8 @@
 package appurl_test
 
 import (
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/appurl"
@@ -102,11 +104,17 @@ func TestPreview(t *testing.T) {
 func TestPrepend(t *testing.T) {
 	t.Parallel()
 
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{
+		{Name: "web", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeNext}},
+		{Name: "api", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeGo}},
+		{Name: "docs"},
+	}}
 	byApp := map[string][]manifestbuilder.Variable{
-		"web": {{Key: "LOG_LEVEL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "info"}},
-		"api": nil,
+		"web":  {{Key: "LOG_LEVEL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "info"}},
+		"api":  nil,
+		"docs": nil,
 	}
-	appurl.Prepend(byApp, map[string]string{"web": "https://acme.com"})
+	appurl.Prepend(cfg, byApp, map[string]string{"web": "https://acme.com", "api": "https://api.acme.com"})
 
 	held := map[string]manifestbuilder.Variable{}
 	for _, v := range byApp["web"] {
@@ -127,23 +135,39 @@ func TestPrepend(t *testing.T) {
 	if held["LOG_LEVEL"].Value != "info" {
 		t.Errorf("web variables = %+v, want the declared ones kept", byApp["web"])
 	}
-	if len(byApp["api"]) != 0 {
-		t.Errorf("api variables = %+v, want none where the app has no hostname", byApp["api"])
+	if got := keys(byApp["api"]); !slices.Equal(got, []string{constants.AppURLEnvName}) {
+		t.Errorf("api variables = %v, want only %s: a go app has no bundle to read %s, and a value of its own under that name would be overwritten", got, constants.AppURLEnvName, providerkit.ClientURLEnvName)
+	}
+	if len(byApp["docs"]) != 0 {
+		t.Errorf("docs variables = %+v, want none where the app has no hostname", byApp["docs"])
 	}
 }
 
 func TestBuildEnv(t *testing.T) {
 	t.Parallel()
 
-	env := appurl.BuildEnv(map[string]string{envwire.RootApp: "https://acme.com"})
+	env := appurl.BuildEnv(&projectconfig.Config{}, map[string]string{envwire.RootApp: "https://acme.com"})
 	if got, want := env[""][constants.AppURLEnvName], "https://acme.com"; got != want {
 		t.Errorf("build env = %v, want the unnamed app keyed as the builder keys it, holding %q", env, want)
 	}
 	if got, want := env[""][providerkit.ClientURLEnvName], "https://acme.com"; got != want {
-		t.Errorf("build env %s = %q, want %q", providerkit.ClientURLEnvName, got, want)
+		t.Errorf("build env %s = %q, want %q: an app `apps` does not name is built by the node builder", providerkit.ClientURLEnvName, got, want)
 	}
 
-	if got := appurl.BuildEnv(map[string]string{"api": ""})["api"]; len(got) != 0 {
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api", Runtime: projectconfig.Runtime{Name: providerkit.RuntimePython}}}}
+	if got := appurl.BuildEnv(cfg, map[string]string{"api": "https://api.acme.com"})["api"]; !maps.Equal(got, map[string]string{constants.AppURLEnvName: "https://api.acme.com"}) {
+		t.Errorf("build env = %v, want only %s for a python app", got, constants.AppURLEnvName)
+	}
+
+	if got := appurl.BuildEnv(cfg, map[string]string{"api": ""})["api"]; len(got) != 0 {
 		t.Errorf("build env = %v, want the key absent where the app is served on no hostname, rather than an empty string a build would parse", got)
 	}
+}
+
+func keys(variables []manifestbuilder.Variable) []string {
+	out := make([]string, 0, len(variables))
+	for _, v := range variables {
+		out = append(out, v.Key)
+	}
+	return out
 }

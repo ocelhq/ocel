@@ -266,7 +266,7 @@ func TestToApps(t *testing.T) {
 		got := toApps([]projectconfig.App{
 			{Name: "admin", Folder: "/admin"},
 			{Name: "web"},
-		}, nil, "serverless", nil)
+		}, nil, "serverless", nil, nil)
 
 		want := []manifestbuilder.App{
 			{Name: "admin", Folder: "/admin"},
@@ -283,7 +283,7 @@ func TestToApps(t *testing.T) {
 		got := toApps([]projectconfig.App{{Name: "admin"}, {Name: "web"}}, []attribution.Usage{
 			{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/server.ts"}},
 			{App: "admin", Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}},
-		}, "serverless", nil)
+		}, "serverless", nil, nil)
 
 		want := []manifestbuilder.App{
 			{Name: "admin", Usages: []manifestbuilder.Usage{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}}}},

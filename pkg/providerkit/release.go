@@ -126,8 +126,14 @@ const (
 	ClientURLEnvName = "NEXT_PUBLIC_OCEL_URL"
 )
 
-func OcelWritten(key string) bool {
-	return key == constants.AppURLEnvName || key == ClientURLEnvName
+func OcelWritten(runtime, key string) bool {
+	switch key {
+	case constants.AppURLEnvName:
+		return true
+	case ClientURLEnvName:
+		return runtime == RuntimeNode || runtime == RuntimeNext
+	}
+	return false
 }
 
 func (v AppValues) Injected() map[string]string {
