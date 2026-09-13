@@ -169,7 +169,7 @@ func (j *journey) apart(t *testing.T) {
 }
 
 func (j journey) installed() string {
-	return filepath.Join(j.providers, "vps", unreleasedVersion, runtime.GOOS+"-"+runtime.GOARCH, "provider-vps")
+	return filepath.Join(j.providers, "provider", "vps", unreleasedVersion, runtime.GOOS+"-"+runtime.GOARCH, "provider-vps")
 }
 
 func (j journey) declaration(t *testing.T, login string) string {
