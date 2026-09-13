@@ -1,6 +1,7 @@
 package pulumi
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -43,7 +44,16 @@ var bridged = map[string]string{
 	"gcp:serviceaccount/account":                 "google_service_account",
 }
 
-func token(typ string) (vendor, tf string, ok bool) {
+func Vendors() []string {
+	out := make([]string, 0, len(packages))
+	for _, held := range packages {
+		out = append(out, held.vendor)
+	}
+	slices.Sort(out)
+	return out
+}
+
+func Token(typ string) (vendor, tf string, ok bool) {
 	pkg, rest, found := strings.Cut(typ, ":")
 	if !found {
 		return "", "", false

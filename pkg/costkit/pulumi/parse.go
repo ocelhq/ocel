@@ -196,7 +196,7 @@ func build(records []record, config map[string]any, opts Options) (*costv1.Resou
 		if held.op == opDelete || !held.Custom || held.Type == typeStack || strings.HasPrefix(held.Type, providerTypeHead) {
 			continue
 		}
-		vendor, tf, ok := token(held.Type)
+		vendor, tf, ok := Token(held.Type)
 		if !ok {
 			continue
 		}

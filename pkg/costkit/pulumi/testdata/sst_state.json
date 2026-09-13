@@ -1,0 +1,185 @@
+{
+  "deployment": {
+    "resources": [
+      {
+        "urn": "urn:pulumi:victor::with-sst::pulumi:pulumi:Stack::with-sst-victor",
+        "type": "pulumi:pulumi:Stack",
+        "custom": false
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0",
+        "type": "pulumi:providers:aws",
+        "custom": true,
+        "inputs": {
+          "region": "us-east-1"
+        },
+        "id": "a1b2c3d4-0000-4000-8000-000000000001"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::sst:aws:Vpc::Vpc",
+        "type": "sst:aws:Vpc",
+        "custom": false,
+        "parent": "urn:pulumi:victor::with-sst::pulumi:pulumi:Stack::with-sst-victor"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::sst:aws:Vpc$aws:ec2/vpc:Vpc::Vpc",
+        "type": "aws:ec2/vpc:Vpc",
+        "custom": true,
+        "parent": "urn:pulumi:victor::with-sst::sst:aws:Vpc::Vpc",
+        "inputs": {
+          "cidrBlock": "10.0.0.0/16",
+          "enableDnsHostnames": true,
+          "tags": {
+            "sst:app": "with-sst",
+            "sst:stage": "victor"
+          }
+        },
+        "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::sst:aws:Vpc$aws:ec2/internetGateway:InternetGateway::Vpc InternetGateway",
+        "type": "aws:ec2/internetGateway:InternetGateway",
+        "custom": true,
+        "parent": "urn:pulumi:victor::with-sst::sst:aws:Vpc::Vpc",
+        "inputs": {
+          "vpcId": "04da6b54-80e4-46f7-96ec-b56ff0331ba9"
+        },
+        "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::sst:aws:Vpc$aws:ec2/eip:Eip::Vpc ElasticIp1",
+        "type": "aws:ec2/eip:Eip",
+        "custom": true,
+        "parent": "urn:pulumi:victor::with-sst::sst:aws:Vpc::Vpc",
+        "inputs": {
+          "vpc": true
+        },
+        "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::sst:aws:Vpc$aws:ec2/natGateway:NatGateway::Vpc NatGateway1",
+        "type": "aws:ec2/natGateway:NatGateway",
+        "custom": true,
+        "parent": "urn:pulumi:victor::with-sst::sst:aws:Vpc::Vpc",
+        "inputs": {
+          "subnetId": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+          "allocationId": "04da6b54-80e4-46f7-96ec-b56ff0331ba9"
+        },
+        "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::sst:aws:Vpc$aws:ec2/subnet:Subnet::Vpc PrivateSubnet1",
+        "type": "aws:ec2/subnet:Subnet",
+        "custom": true,
+        "parent": "urn:pulumi:victor::with-sst::sst:aws:Vpc::Vpc",
+        "inputs": {
+          "cidrBlock": "10.0.1.0/24",
+          "availabilityZone": "us-east-1a"
+        },
+        "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::sst:aws:Vpc$aws:ec2/securityGroup:SecurityGroup::Vpc SecurityGroup",
+        "type": "aws:ec2/securityGroup:SecurityGroup",
+        "custom": true,
+        "parent": "urn:pulumi:victor::with-sst::sst:aws:Vpc::Vpc",
+        "inputs": {},
+        "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::sst:aws:Postgres::Orders",
+        "type": "sst:aws:Postgres",
+        "custom": false,
+        "parent": "urn:pulumi:victor::with-sst::pulumi:pulumi:Stack::with-sst-victor"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::sst:aws:Postgres$aws:rds/cluster:Cluster::Orders Cluster",
+        "type": "aws:rds/cluster:Cluster",
+        "custom": true,
+        "parent": "urn:pulumi:victor::with-sst::sst:aws:Postgres::Orders",
+        "inputs": {
+          "engine": "aurora-postgresql",
+          "engineMode": "provisioned",
+          "databaseName": "orders",
+          "masterPassword": {
+            "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+            "ciphertext": "v1:zzz"
+          }
+        },
+        "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::sst:aws:Postgres$aws:rds/clusterInstance:ClusterInstance::Orders Instance1",
+        "type": "aws:rds/clusterInstance:ClusterInstance",
+        "custom": true,
+        "parent": "urn:pulumi:victor::with-sst::sst:aws:Postgres::Orders",
+        "inputs": {
+          "instanceClass": "db.serverless",
+          "serverlessv2ScalingConfiguration": {
+            "minCapacity": 0.5,
+            "maxCapacity": 4
+          }
+        },
+        "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::sst:aws:Function::Api",
+        "type": "sst:aws:Function",
+        "custom": false,
+        "parent": "urn:pulumi:victor::with-sst::pulumi:pulumi:Stack::with-sst-victor"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::sst:aws:Function$aws:lambda/function:Function::Api Function",
+        "type": "aws:lambda/function:Function",
+        "custom": true,
+        "parent": "urn:pulumi:victor::with-sst::sst:aws:Function::Api",
+        "inputs": {
+          "memorySize": 1024,
+          "architectures": [
+            "arm64"
+          ],
+          "runtime": "nodejs22.x",
+          "timeout": 20
+        },
+        "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::sst:aws:Function$aws:cloudwatch/logGroup:LogGroup::Api LogGroup",
+        "type": "aws:cloudwatch/logGroup:LogGroup",
+        "custom": true,
+        "parent": "urn:pulumi:victor::with-sst::sst:aws:Function::Api",
+        "inputs": {
+          "retentionInDays": 30
+        },
+        "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::aws:ec2/vpcEndpoint:VpcEndpoint::S3",
+        "type": "aws:ec2/vpcEndpoint:VpcEndpoint",
+        "custom": true,
+        "parent": "urn:pulumi:victor::with-sst::pulumi:pulumi:Stack::with-sst-victor",
+        "inputs": {
+          "vpcEndpointType": "Gateway",
+          "serviceName": "com.amazonaws.us-east-1.s3"
+        },
+        "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+      },
+      {
+        "urn": "urn:pulumi:victor::with-sst::aws:ec2/vpcEndpoint:VpcEndpoint::Kms",
+        "type": "aws:ec2/vpcEndpoint:VpcEndpoint",
+        "custom": true,
+        "parent": "urn:pulumi:victor::with-sst::pulumi:pulumi:Stack::with-sst-victor",
+        "inputs": {
+          "vpcEndpointType": "Interface",
+          "serviceName": "com.amazonaws.us-east-1.kms",
+          "privateDnsEnabled": true,
+          "subnetIds": [
+            "subnet-1",
+            "subnet-2"
+          ]
+        },
+        "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+      }
+    ]
+  }
+}

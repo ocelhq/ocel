@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ocelhq/ocel/cli/internal/costsource/pulumi"
+	"github.com/ocelhq/ocel/pkg/costkit/pulumi"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden files")

@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/ocelhq/ocel/pkg/costkit/pulumi"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	aws "github.com/ocelhq/ocel/platform/aws/provider/cost"
@@ -60,20 +61,28 @@ func TestTheServicePricesAnInventoryExactlyAsTheProviderDoes(t *testing.T) {
 	}
 }
 
-const sstInventory = "../cli/internal/costsource/pulumi/testdata/sst.golden.json"
-
-func TestAnSSTStageParsedByTheCLIPricesEndToEnd(t *testing.T) {
-	raw, err := os.ReadFile(sstInventory)
+func sstStage(t *testing.T) *costv1.ResourceSet {
+	t.Helper()
+	state, err := os.ReadFile(filepath.Join("testdata", "sst_state.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var set costv1.ResourceSet
-	if err := protojson.Unmarshal(raw, &set); err != nil {
+	diff, err := os.ReadFile(filepath.Join("testdata", "sst_diff.json"))
+	if err != nil {
 		t.Fatal(err)
 	}
+	set, err := pulumi.Merge(state, diff, pulumi.Options{Source: pulumi.SourceSST, Name: "victor"})
+	if err != nil {
+		t.Fatalf("Merge() = %v", err)
+	}
+	return set
+}
+
+func TestAnSSTStagePricesEndToEnd(t *testing.T) {
+	set := sstStage(t)
 	_, pricer := served(t, pricing.Options{})
 
-	estimate, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: &set, Usage: &costv1.Usage{Profile: costv1.Profile_PROFILE_MODERATE}})
+	estimate, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: costv1.Profile_PROFILE_MODERATE}})
 	if err != nil {
 		t.Fatalf("Price() = %v", err)
 	}

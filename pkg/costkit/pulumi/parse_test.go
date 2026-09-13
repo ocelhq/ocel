@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/costsource/pulumi"
+	"github.com/ocelhq/ocel/pkg/costkit/pulumi"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 )
 
