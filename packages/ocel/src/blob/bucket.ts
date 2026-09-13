@@ -14,9 +14,10 @@ export interface BucketOptions<TUploaders extends Record<string, AnyUploader>> {
 }
 
 /** The options of {@link bucket.ref}: the declaration owns the bucket's own configuration. */
-export interface BucketRefOptions<TUploaders extends Record<string, AnyUploader>> {
-  uploaders: TUploaders;
-}
+export type BucketRefOptions<TUploaders extends Record<string, AnyUploader>> = Pick<
+  BucketOptions<TUploaders>,
+  "uploaders"
+>;
 
 export type ResolvedBucketConfig = Pick<BucketProperties, "bucket">;
 
