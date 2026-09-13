@@ -265,7 +265,9 @@ func TestAPlatformPackageImportedThroughAnAliasIsInstalledUnderTheAlias(t *testi
 	npm := installFakeNpm(t, stagedInstall(t, files))
 	app := platformSplitApp()
 	app["server.js"] = "import answer from 'img';\nconsole.log(answer);\n"
-	app["node_modules/img/package.json"] = app["node_modules/plat-dep/package.json"]
+	app["node_modules/img/package.json"] = `{"name":"plat-dep","version":"1.2.3","main":"index.js","dependencies":{"helper-dep":"^2.0.0"},` +
+		`"optionalDependencies":{"@plat-dep/darwin-arm64":"1.2.3","@plat-dep/linux-x64":"1.2.3"}}`
+	app["node_modules/helper-dep/package.json"] = `{"name":"helper-dep","version":"2.1.0"}`
 	app["node_modules/img/index.js"] = app["node_modules/plat-dep/index.js"]
 	delete(app, "node_modules/plat-dep/package.json")
 	delete(app, "node_modules/plat-dep/index.js")
@@ -275,13 +277,17 @@ func TestAPlatformPackageImportedThroughAnAliasIsInstalledUnderTheAlias(t *testi
 		t.Fatalf("Bundle: %v", err)
 	}
 	var manifest struct {
-		Dependencies map[string]string `json:"dependencies"`
+		Dependencies map[string]string         `json:"dependencies"`
+		Overrides    map[string]map[string]any `json:"overrides"`
 	}
 	if err := json.Unmarshal([]byte(readFile(t, npm.manifest)), &manifest); err != nil {
 		t.Fatal(err)
 	}
 	if manifest.Dependencies["img"] != "npm:plat-dep@1.2.3" || len(manifest.Dependencies) != 1 {
 		t.Errorf("npm installs %v, want plat-dep under the alias the app imports it by", manifest.Dependencies)
+	}
+	if manifest.Overrides["img"]["helper-dep"] != "2.1.0" || len(manifest.Overrides) != 1 {
+		t.Errorf("npm installs with overrides %v, want helper-dep pinned under img: npm applies an aliased edge's overrides only by its alias", manifest.Overrides)
 	}
 	if got := runNode(t, l.funcDir); !strings.Contains(got, "target build") {
 		t.Errorf("bundle printed %q, want the package installed for the target to answer", got)
@@ -304,4 +310,36 @@ func TestAPlatformPackageInstallReadsTheProjectsNpmConfig(t *testing.T) {
 	if got, err := os.ReadFile(npm.npmrc); err != nil || string(got) != registry {
 		t.Errorf("npm ran beside .npmrc %q (%v), want the project's %q: a scoped or private registry is missed and the public one answers for it", got, err, registry)
 	}
+}
+
+func TestAPlatformPackageInstallPinsWhatItDependsOnToTheVersionsTheAppInstalled(t *testing.T) {
+	npm := installFakeNpm(t, linuxInstall(t, "x64", "glibc"))
+	files := platformSplitApp()
+	files["node_modules/plat-dep/package.json"] = `{"name":"plat-dep","version":"1.2.3","main":"index.js","dependencies":{"helper-dep":"^2.0.0"},` +
+		`"optionalDependencies":{"@plat-dep/darwin-arm64":"1.2.3","@plat-dep/linux-x64":"1.2.3"}}`
+	files["node_modules/helper-dep/package.json"] = `{"name":"helper-dep","version":"2.1.0","dependencies":{"deep-dep":"^1.0.0"}}`
+	files["node_modules/helper-dep/node_modules/deep-dep/package.json"] = `{"name":"deep-dep","version":"1.4.0"}`
+	files["node_modules/deep-dep/package.json"] = `{"name":"deep-dep","version":"9.0.0"}`
+	l := newLayout(t, files)
+
+	if err := Bundle(context.Background(), l.target("server.js")); err != nil {
+		t.Fatalf("Bundle: %v", err)
+	}
+	var manifest struct {
+		Overrides map[string]any `json:"overrides"`
+	}
+	if err := json.Unmarshal([]byte(readFile(t, npm.manifest)), &manifest); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"plat-dep@1.2.3": map[string]any{"helper-dep": map[string]any{".": "2.1.0", "deep-dep": "1.4.0"}}}
+	if got, _ := json.Marshal(manifest.Overrides); string(got) != string(must(json.Marshal(want))) {
+		t.Errorf("npm installs with overrides %s, want %s: what plat-dep depends on floats to whatever the registry holds today", got, must(json.Marshal(want)))
+	}
+}
+
+func must(data []byte, err error) []byte {
+	if err != nil {
+		panic(err)
+	}
+	return data
 }

@@ -28,6 +28,7 @@ type resolvingForSplit struct{}
 type manifest struct {
 	Name                 string            `json:"name"`
 	Version              string            `json:"version"`
+	Dependencies         map[string]string `json:"dependencies"`
 	OptionalDependencies map[string]string `json:"optionalDependencies"`
 	OS                   []string          `json:"os"`
 	CPU                  []string          `json:"cpu"`
@@ -37,9 +38,10 @@ type manifest struct {
 type platformPackages struct {
 	arch string
 
-	mu     sync.Mutex
-	split  map[string]*manifest
-	wanted map[string][]string
+	mu       sync.Mutex
+	split    map[string]*manifest
+	wanted   map[string][]string
+	imported map[string]string
 }
 
 func (p *platformPackages) plugin() api.Plugin {
@@ -75,6 +77,7 @@ func (p *platformPackages) splitsByPlatform(root, imported string) bool {
 	if p.split == nil {
 		p.split = map[string]*manifest{}
 		p.wanted = map[string][]string{}
+		p.imported = map[string]string{}
 	}
 	pkg, seen := p.split[root]
 	if !seen {
@@ -88,6 +91,7 @@ func (p *platformPackages) splitsByPlatform(root, imported string) bool {
 	if imported != pkg.Name {
 		spec = "npm:" + pkg.Name + "@" + pkg.Version
 	}
+	p.imported[imported] = root
 	if !slices.Contains(p.wanted[imported], spec) {
 		p.wanted[imported] = append(p.wanted[imported], spec)
 	}
@@ -103,7 +107,7 @@ func platformSplit(root string) *manifest {
 		if platformVariantName.MatchString(dep) {
 			return &pkg
 		}
-		if installed, found := installedManifest(root, dep); found && (len(installed.OS) > 0 || len(installed.CPU) > 0) {
+		if installed, _, found := installedManifest(root, dep); found && installed.platformVariant() {
 			return &pkg
 		}
 	}
@@ -129,17 +133,64 @@ func readManifest(dir string) (manifest, error) {
 	return pkg, json.Unmarshal(raw, &pkg)
 }
 
-func installedManifest(from, name string) (manifest, bool) {
+func installedManifest(from, name string) (manifest, string, bool) {
 	for dir := from; ; dir = filepath.Dir(dir) {
 		if filepath.Base(dir) != nodeModulesDirName {
-			if pkg, err := readManifest(filepath.Join(dir, nodeModulesDirName, filepath.FromSlash(name))); err == nil {
-				return pkg, true
+			root := filepath.Join(dir, nodeModulesDirName, filepath.FromSlash(name))
+			if pkg, err := readManifest(root); err == nil {
+				return pkg, root, true
 			}
 		}
 		if filepath.Dir(dir) == dir {
-			return manifest{}, false
+			return manifest{}, "", false
 		}
 	}
+}
+
+func (m manifest) platformVariant() bool {
+	return len(m.OS) > 0 || len(m.CPU) > 0
+}
+
+func (p *platformPackages) pins() map[string]any {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	pins := map[string]any{}
+	for imported, root := range p.imported {
+		pkg := p.split[root]
+		pinned := installedGraph(root, *pkg, []string{root})
+		if len(pinned) == 0 {
+			continue
+		}
+		if imported == pkg.Name {
+			imported += "@" + pkg.Version
+		}
+		pins[imported] = pinned
+	}
+	return pins
+}
+
+func installedGraph(root string, pkg manifest, path []string) map[string]any {
+	pinned := map[string]any{}
+	for _, deps := range []map[string]string{pkg.Dependencies, pkg.OptionalDependencies} {
+		for dep := range deps {
+			child, childRoot, found := installedManifest(root, dep)
+			if !found || child.platformVariant() || slices.Contains(path, childRoot) {
+				continue
+			}
+			version := child.Version
+			if child.Name != dep {
+				version = "npm:" + child.Name + "@" + child.Version
+			}
+			below := installedGraph(childRoot, child, append(slices.Clone(path), childRoot))
+			if len(below) == 0 {
+				pinned[dep] = version
+				continue
+			}
+			below["."] = version
+			pinned[dep] = below
+		}
+	}
+	return pinned
 }
 
 func sortedKeys[V any](m map[string]V) []string {
@@ -183,7 +234,7 @@ func (p *platformPackages) installInto(ctx context.Context, app, source, funcDir
 		return err
 	}
 	defer os.RemoveAll(staging)
-	if err := writeJSON(filepath.Join(staging, "package.json"), map[string]any{"private": true, "dependencies": wanted}); err != nil {
+	if err := writeJSON(filepath.Join(staging, "package.json"), map[string]any{"private": true, "dependencies": wanted, "overrides": p.pins()}); err != nil {
 		return err
 	}
 	if config, found := projectNpmConfig(source); found {
