@@ -9,7 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -257,5 +259,36 @@ func mapKeys[V any](held map[string]V) func(func(string) bool) {
 				return
 			}
 		}
+	}
+}
+
+func TestReplacingTheCodeBucketIsRefused(t *testing.T) {
+	t.Parallel()
+
+	err := reviewing(defaultNamespace, nil)(StackName(defaultNamespace), []cfntypes.ResourceChange{{
+		LogicalResourceId: aws.String("CodeBucket"),
+		ResourceType:      aws.String("AWS::S3::Bucket"),
+		Action:            cfntypes.ChangeActionModify,
+		Replacement:       cfntypes.ReplacementTrue,
+	}})
+	if err == nil {
+		t.Fatal("reviewing() = nil, want a template that replaces the bucket the connector's code sits in refused")
+	}
+	if !strings.Contains(err.Error(), "CodeBucket") {
+		t.Errorf("reviewing() = %q, want it to name what would be replaced", err)
+	}
+}
+
+func TestAnInPlaceUpdateOfTheFunctionPasses(t *testing.T) {
+	t.Parallel()
+
+	err := reviewing(defaultNamespace, nil)(StackName(defaultNamespace), []cfntypes.ResourceChange{{
+		LogicalResourceId: aws.String("Function"),
+		ResourceType:      aws.String("AWS::Lambda::Function"),
+		Action:            cfntypes.ChangeActionModify,
+		Replacement:       cfntypes.ReplacementFalse,
+	}})
+	if err != nil {
+		t.Fatalf("reviewing() = %v, want a new connector release written in place", err)
 	}
 }

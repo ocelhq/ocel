@@ -1,6 +1,10 @@
 package providerkit
 
-import "context"
+import (
+	"context"
+	"slices"
+	"strings"
+)
 
 const ConnectorConfigEnvVar = "OCEL_CONNECTOR_CONFIG_JSON"
 
@@ -36,4 +40,18 @@ type ConnectorHost interface {
 	InstallConnector(ctx context.Context, install ConnectorInstall, report Reporter) (ConnectorAddress, error)
 
 	RemoveConnector(ctx context.Context, report Reporter) error
+}
+
+func ConnectorCompute(requested Compute, supported ...Compute) (Compute, error) {
+	if len(supported) == 0 {
+		return "", Refuse(CodeInvalid, "this target stands no connector, so it hands out no compute to run one on")
+	}
+	if requested == "" {
+		return supported[0], nil
+	}
+	if slices.Contains(supported, requested) {
+		return requested, nil
+	}
+	return "", Refuse(CodeInvalid, "this target runs the connector on %s; %s is not a compute it hands out",
+		strings.Join(ComputeNames(supported), " or "), requested)
 }

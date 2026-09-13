@@ -28,20 +28,21 @@ const (
 
 	parameterARNPrefix = "arn:aws:ssm:*:*:parameter"
 
-	appBucketARN        = "arn:aws:s3:::*"
-	appFunctionARN      = "arn:aws:lambda:*:*:function:*"
-	appLayerARN         = "arn:aws:lambda:*:*:layer:*"
-	appRoleARN          = "arn:aws:iam::*:role/*"
-	appSecretARN        = "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
-	appClusterARN       = "arn:aws:rds:*:*:cluster:*"
-	appInstanceARN      = "arn:aws:rds:*:*:db:*"
-	appSubnetGroupARN   = "arn:aws:rds:*:*:subgrp:*"
-	appSecurityGroupARN = "arn:aws:ec2:*:*:security-group/*"
-	appVPCARN           = "arn:aws:ec2:*:*:vpc/*"
-	appRepositoryARN    = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"
-	appLogGroupARN      = "arn:aws:logs:*:*:log-group:/ocel/*"
-	functionLogGroupARN = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
-	appTargetGroupARN   = "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
+	appBucketARN         = "arn:aws:s3:::*"
+	appFunctionARN       = "arn:aws:lambda:*:*:function:*"
+	appLayerARN          = "arn:aws:lambda:*:*:layer:*"
+	appRoleARN           = "arn:aws:iam::*:role/*"
+	appSecretARN         = "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
+	appClusterARN        = "arn:aws:rds:*:*:cluster:*"
+	appInstanceARN       = "arn:aws:rds:*:*:db:*"
+	appSubnetGroupARN    = "arn:aws:rds:*:*:subgrp:*"
+	appSecurityGroupARN  = "arn:aws:ec2:*:*:security-group/*"
+	appVPCARN            = "arn:aws:ec2:*:*:vpc/*"
+	appRepositoryARN     = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"
+	appLogGroupARN       = "arn:aws:logs:*:*:log-group:/ocel/*"
+	functionLogGroupARN  = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
+	appTargetGroupARN    = "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
+	appTaskDefinitionARN = "arn:aws:ecs:*:*:task-definition/*:*"
 
 	substrateClusterARN  = "arn:aws:ecs:*:*:cluster/ocel-*"
 	substrateServiceARN  = "arn:aws:ecs:*:*:service/ocel-*/*"
@@ -390,7 +391,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		},
 		{
 			Actions:   []string{"ecs:RegisterTaskDefinition"},
-			Resources: []string{UnscopedResource},
+			Resources: []string{appTaskDefinitionARN},
 			Condition: taggedOnCreate(),
 		},
 		{

@@ -1,4 +1,11 @@
-export const REFUSALS = ["offline", "incompatible", "denied", "lost-lease", "failed"] as const;
+export const REFUSALS = [
+  "offline",
+  "incompatible",
+  "denied",
+  "unauthenticated",
+  "lost-lease",
+  "failed",
+] as const;
 
 export type RefusalReason = (typeof REFUSALS)[number];
 
@@ -18,7 +25,7 @@ export class ValueError extends Error {
   }
 }
 
-const statuses: Partial<Record<RefusalReason, number>> = { denied: 403 };
+const statuses: Partial<Record<RefusalReason, number>> = { denied: 403, unauthenticated: 500 };
 
 export function statusOf(refusal: Refusal): number {
   return statuses[refusal.reason] ?? 502;

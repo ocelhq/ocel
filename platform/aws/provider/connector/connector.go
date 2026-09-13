@@ -35,6 +35,10 @@ const (
 
 func StackName(ns bootstrap.Namespace) string { return string(ns) + "-connector" }
 
+func reviewing(ns bootstrap.Namespace, progress func(string)) cfn.ChangeReview {
+	return bootstrap.AdmitReplacements(ns, false, progress)
+}
+
 type APIs struct {
 	CFN     cfn.API
 	Buckets cfn.BucketEmptierAPI
@@ -118,7 +122,8 @@ func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Rel
 		return "", err
 	}
 	if err := cfn.Upsert(ctx, apis.CFN, ns, StackName(ns), template, nil,
-		[]cfntypes.Capability{cfntypes.CapabilityCapabilityIam}, tagsFor(ns, template, writer), nil); err != nil {
+		[]cfntypes.Capability{cfntypes.CapabilityCapabilityIam}, tagsFor(ns, template, writer),
+		reviewing(ns, progress)); err != nil {
 		return "", err
 	}
 

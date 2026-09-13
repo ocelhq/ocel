@@ -1,9 +1,10 @@
 import { db } from "@console/db";
 import { connector } from "@console/db/schema";
+import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createTestSessionWithOrganization } from "@/test/auth-harness";
 import { setupTestDatabase } from "@/test/db";
-import { connectorFor } from "./connectors";
+import { connectorFor, noteDenial } from "./connectors";
 
 describe("connectorFor", () => {
   beforeAll(async () => {
@@ -68,6 +69,42 @@ describe("connectorFor", () => {
       await expect(
         db.insert(connector).values({ id: `two-${organizationId}`, ...row }),
       ).rejects.toThrow();
+    } finally {
+      await session.cleanup();
+    }
+  });
+});
+
+describe("noteDenial", () => {
+  beforeAll(async () => {
+    await setupTestDatabase();
+  });
+
+  it("writes what the connector refused, and leaves every other refusal unrecorded", async () => {
+    const session = await createTestSessionWithOrganization();
+    const organizationId = session.organization.id;
+    const id = `denied-${organizationId}`;
+    try {
+      await db.insert(connector).values({
+        id,
+        organizationId,
+        target: "aws/444444444444/us-east-1/main",
+        vendor: "aws",
+        url: "http://127.0.0.1:7777",
+      });
+
+      await noteDenial(id, "set", { reason: "offline", message: "nothing answered" });
+      const [untouched] = await db.select().from(connector).where(eq(connector.id, id));
+      expect(untouched.lastDenied).toBeNull();
+
+      await noteDenial(id, "set", {
+        reason: "denied",
+        message: "the token carries no envvars.write scope",
+      });
+      const [row] = await db.select().from(connector).where(eq(connector.id, id));
+      expect(row.lastDenied?.verb).toBe("set");
+      expect(row.lastDenied?.message).toBe("the token carries no envvars.write scope");
+      expect(Date.parse(row.lastDenied?.at ?? "")).not.toBeNaN();
     } finally {
       await session.cleanup();
     }

@@ -1,6 +1,7 @@
 package connectorkit
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -70,14 +71,7 @@ func TestAConnectorThatHoldsNoKeyStillServes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mux, err := Mux(Spec{
-		Version:        "0.0.0",
-		Vendor:         "aws",
-		Console:        cfg.Console,
-		ConnectorID:    cfg.ConnectorID,
-		OrganizationID: cfg.OrganizationID,
-		Grants:         cfg.Grants,
-	})
+	mux, err := Mux(Spec{Config: cfg, Version: "0.0.0", Vendor: "aws"})
 	if err != nil {
 		t.Fatalf("Mux with no identity = %v, want a mux a probed form can serve", err)
 	}
@@ -89,7 +83,7 @@ func TestAConnectorThatHoldsNoKeyStillServes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Errorf("the capabilities probe answered %s, and a keyless form is the one the console probes", resp.Status)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("the capabilities probe answered %s, and nothing answers it without the console's token", resp.Status)
 	}
 }

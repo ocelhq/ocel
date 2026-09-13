@@ -1,3 +1,6 @@
+import { db } from "@console/db";
+import { deployment } from "@console/db/schema";
+import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createTestSessionWithOrganization } from "../../../../../test/auth-harness";
 import { setupTestDatabase } from "../../../../../test/db";
@@ -113,6 +116,38 @@ describe("createDeployment", () => {
         deployedAt: Date.parse("2026-01-01T00:00:00.000Z"),
       });
       expect(body.id).toBeTruthy();
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("answers 409 when the run conflicted and was gone before it could be read back", async () => {
+    const session = await createTestSessionWithOrganization();
+    try {
+      const created = await createProjectFor(session, "deploy-vanished");
+
+      const first = await createDeployment(postRequest(session.headers, record()), created.id);
+      expect(first.status).toBe(201);
+
+      const insert = db.insert.bind(db);
+      db.insert = ((table: Parameters<typeof insert>[0]) => {
+        db.insert = insert;
+        return {
+          values: () => ({
+            onConflictDoNothing: () => ({
+              returning: async () => {
+                await db
+                  .delete(deployment)
+                  .where(and(eq(deployment.projectId, created.id), eq(deployment.runId, "run-1")));
+                return [];
+              },
+            }),
+          }),
+        };
+      }) as typeof db.insert;
+
+      const second = await createDeployment(postRequest(session.headers, record()), created.id);
+      expect(second.status).toBe(409);
     } finally {
       await session.cleanup();
     }

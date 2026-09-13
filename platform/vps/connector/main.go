@@ -49,16 +49,11 @@ func run(listen, config string, printing, reporting bool) error {
 	}
 
 	return connectorkit.Serve(connectorkit.Spec{
-		Version:        version,
-		Vendor:         "vps",
-		Target:         trust.Target,
-		Addr:           listen,
-		Console:        trust.Console,
-		ConnectorID:    trust.ConnectorID,
-		OrganizationID: trust.OrganizationID,
-		Grants:         trust.Grants,
-		KeyPath:        trust.KeyPath,
-		ConfigPath:     config,
+		Config:     trust,
+		Version:    version,
+		Vendor:     "vps",
+		Addr:       listen,
+		ConfigPath: config,
 		Vars: providerkit.Vars{
 			Records: host.RecordsOver(hostports.Records{}),
 			Sealer:  host.SealerOver(hostports.Sealer{}),

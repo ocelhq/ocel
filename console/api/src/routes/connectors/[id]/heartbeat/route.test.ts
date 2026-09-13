@@ -28,6 +28,18 @@ async function bearer(privateKey: KeyObject, id: string, audience = origin) {
     .sign(privateKey);
 }
 
+async function stale(privateKey: KeyObject, id: string) {
+  const issued = Math.floor(Date.now() / 1000) - 3600;
+  return new SignJWT({})
+    .setProtectedHeader({ alg: "EdDSA" })
+    .setIssuer(id)
+    .setSubject(id)
+    .setAudience(origin)
+    .setIssuedAt(issued)
+    .setExpirationTime(issued + 86_400)
+    .sign(privateKey);
+}
+
 function beat(
   token: string | null,
   body: unknown = { version: "0.0.0-alpha", capabilities: ["envvars.read"] },
@@ -51,7 +63,7 @@ async function paired() {
         method: "PUT",
         headers: { ...Object.fromEntries(session.headers), "Content-Type": "application/json" },
         body: JSON.stringify({
-          target: "vps/SHA256:abc/ocel",
+          target: "vps/sha256:abc/ocel",
           vendor: "vps",
         }),
       }),
@@ -65,6 +77,20 @@ describe("POST /api/connectors/{id}/heartbeat", () => {
   beforeAll(async () => {
     process.env.BETTER_AUTH_URL = origin;
     await setupTestDatabase();
+  });
+
+  it("refuses a token minted an hour ago, however far off its expiry is", async () => {
+    const { session, keys, id } = await paired();
+
+    try {
+      const response = await connectorHeartbeat(beat(await stale(keys.privateKey, id)), id);
+      expect(response.status).toBe(401);
+
+      const [row] = await db.select().from(connector).where(eq(connector.id, id));
+      expect(row.lastSeenAt).toBeNull();
+    } finally {
+      await session.cleanup();
+    }
   });
 
   it("answers 204 and moves the liveness columns", async () => {

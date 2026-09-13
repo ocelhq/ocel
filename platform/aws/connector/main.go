@@ -62,7 +62,7 @@ func run(addr, region, config string) error {
 	if err != nil {
 		return fmt.Errorf("resolve AWS account id: %w", err)
 	}
-	fingerprint, err := target.ForAWS(aws.ToString(who.Account), cfg.Region, string(ns))
+	trust.Target, err = target.Fingerprint("aws", aws.ToString(who.Account), cfg.Region, string(ns))
 	if err != nil {
 		return err
 	}
@@ -74,16 +74,11 @@ func run(addr, region, config string) error {
 	}
 
 	spec := connectorkit.Spec{
-		Version:        version,
-		Vendor:         "aws",
-		Target:         fingerprint,
-		Addr:           addr,
-		Console:        trust.Console,
-		ConnectorID:    trust.ConnectorID,
-		OrganizationID: trust.OrganizationID,
-		Grants:         trust.Grants,
-		KeyPath:        trust.KeyPath,
-		ConfigPath:     config,
+		Config:     trust,
+		Version:    version,
+		Vendor:     "aws",
+		Addr:       addr,
+		ConfigPath: config,
 		Vars: providerkit.Vars{
 			Records: awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: held},
 			Sealer:  awsports.Sealer{KMS: kms.NewFromConfig(cfg), Keys: held},

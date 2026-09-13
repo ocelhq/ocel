@@ -64,6 +64,11 @@ const refusals: Record<RefusalReason, { heading: string; body: string; command?:
     body: "Its credentials in your account do not permit reading variables. Nothing was changed.",
     command: "ocel connector status",
   },
+  unauthenticated: {
+    heading: "The connector refused the console’s token",
+    body: "The connector would not accept the credential the console signs for it, so it answered nothing. Nothing in your cloud was changed, and this is the console’s side to fix.",
+    command: "ocel connector status",
+  },
   "lost-lease": {
     heading: "The request timed out",
     body: "The connector took the work and never reported back. Nothing was retried, so nothing ran twice.",

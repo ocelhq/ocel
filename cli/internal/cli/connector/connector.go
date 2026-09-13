@@ -29,6 +29,7 @@ const reachDial = "dial"
 
 type options struct {
 	compute string
+	target  string
 	reveal  bool
 	write   bool
 	apiURL  string
@@ -84,7 +85,7 @@ func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "rm",
 		Short:   "Take the connector off this target and forget it in the console",
-		Example: "  $ ocel connector rm --config ocel.vps.json",
+		Example: "  $ ocel connector rm --config ocel.vps.json\n  $ ocel connector rm --target vps/sha256:abc/ocel",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return withOptions(cmd, deps, &opts, func(ctx context.Context, cfg *projectconfig.Config, link *consolelink.Link) error {
@@ -92,6 +93,7 @@ func newRemoveCommand(deps cmddeps.Deps) *cobra.Command {
 			})
 		},
 	}
+	cmd.Flags().StringVar(&opts.target, "target", "", "The `fingerprint` ocel connector status prints, to forget a connector whose target will not answer")
 	return cmd
 }
 

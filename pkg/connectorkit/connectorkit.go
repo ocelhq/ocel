@@ -27,33 +27,19 @@ const (
 )
 
 type Spec struct {
+	Config
+
 	Version string
 
 	Vendor string
 
-	Target string
-
 	Addr string
-
-	Console string
-
-	ConnectorID string
-
-	OrganizationID string
-
-	Grants []string
 
 	Vars providerkit.Vars
 
 	Identity Identity
 
-	KeyPath string
-
 	ConfigPath string
-}
-
-func (s Spec) capabilities() []string {
-	return s.Grants
 }
 
 func Serve(spec Spec) error {
@@ -101,7 +87,7 @@ func Serve(spec Spec) error {
 			origin:       origin,
 			connectorID:  spec.ConnectorID,
 			version:      spec.Version,
-			capabilities: spec.capabilities(),
+			capabilities: spec.Grants,
 			identity:     spec.Identity,
 			keyPath:      spec.KeyPath,
 			configPath:   spec.ConfigPath,
@@ -168,12 +154,7 @@ func PublicKey(configPath string) (string, error) {
 }
 
 func Mux(spec Spec) (*http.ServeMux, error) {
-	if err := (Config{
-		Console:        spec.Console,
-		ConnectorID:    spec.ConnectorID,
-		OrganizationID: spec.OrganizationID,
-		Grants:         spec.Grants,
-	}).check(); err != nil {
+	if err := spec.check(); err != nil {
 		return nil, fmt.Errorf("connectorkit: %w", err)
 	}
 
@@ -193,13 +174,25 @@ func Mux(spec Spec) (*http.ServeMux, error) {
 
 	mux.HandleFunc("GET /v1/capabilities", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if _, err := guard.caller(r.Context(), r.Header.Get("Authorization")); err != nil {
+			w.WriteHeader(refusedStatus(err))
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"version":      spec.Version,
 			"vendor":       spec.Vendor,
 			"target":       spec.Target,
-			"capabilities": spec.capabilities(),
+			"capabilities": spec.Grants,
 		})
 	})
 
 	return mux, nil
+}
+
+func refusedStatus(err error) int {
+	if connect.CodeOf(err) == connect.CodePermissionDenied {
+		return http.StatusForbidden
+	}
+	return http.StatusUnauthorized
 }

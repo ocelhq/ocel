@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"slices"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	consoleconnector "github.com/ocelhq/ocel/cli/internal/console/connector"
 	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
@@ -28,19 +26,21 @@ func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 
 	fingerprint, unreached := taken(ctx, deps, cfg, opts, stdout, stderr)
 	if fingerprint == "" {
-		return unreached
+		if opts.target == "" {
+			return fmt.Errorf("%w\n\nThe console still holds this target; nothing was forgotten. Reach the machine and run this again, or read the fingerprint with `ocel connector status` and run `ocel connector rm --target <fingerprint>` to forget it in the console alone", unreached)
+		}
+		return forgotten(ctx, opts, access, opts.target, stdout)
 	}
 
-	held, err := opts.console.List(ctx, access)
+	held, err := opts.console.ByTarget(ctx, access, fingerprint)
 	if err != nil {
 		return err
 	}
-	at := slices.IndexFunc(held, func(row consoleconnector.Connector) bool { return row.Target == fingerprint })
-	if at < 0 {
+	if held == nil {
 		fmt.Fprintf(stdout, "%s The console holds no connector for %s\n", check, bold(fingerprint))
 		return nil
 	}
-	if err := opts.console.Remove(ctx, access, held[at].ID); err != nil {
+	if err := opts.console.Remove(ctx, access, held.ID); err != nil {
 		return fmt.Errorf("forget this connector in the console: %w", err)
 	}
 	if unreached != nil {
@@ -52,8 +52,28 @@ func runRemove(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 	return nil
 }
 
+func forgotten(ctx context.Context, opts options, access, fingerprint string, stdout io.Writer) error {
+	held, err := opts.console.ByTarget(ctx, access, fingerprint)
+	if err != nil {
+		return err
+	}
+	if held == nil {
+		fmt.Fprintf(stdout, "%s The console holds no connector for %s\n", check, bold(fingerprint))
+		return nil
+	}
+	if err := opts.console.Remove(ctx, access, held.ID); err != nil {
+		return fmt.Errorf("forget this connector in the console: %w", err)
+	}
+	fmt.Fprintf(stdout, "%s The console has forgotten %s; the target itself was never reached, so what is on it stays\n",
+		check, bold(fingerprint))
+	return nil
+}
+
 func taken(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, opts options,
 	stdout, stderr io.Writer) (string, error) {
+	if opts.target != "" {
+		return "", fmt.Errorf("this run names a target, so the machine behind %s was never asked", opts.target)
+	}
 	var fingerprint string
 	err := provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
 		client, err := runner.Client()
@@ -72,8 +92,5 @@ func taken(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, op
 				}
 			})
 	})
-	if err != nil && fingerprint == "" {
-		return "", fmt.Errorf("%w\n\nThe console still holds this target; nothing was forgotten. Reach the machine and run this again", err)
-	}
 	return fingerprint, err
 }

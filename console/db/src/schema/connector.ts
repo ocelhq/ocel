@@ -3,10 +3,6 @@ import { jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex } from "drizzle-or
 import { organization } from "./auth-schema";
 import { computeKind } from "./deployment";
 
-export const CONNECTOR_VENDORS = ["aws", "gcp", "vps"] as const;
-export type ConnectorVendor = (typeof CONNECTOR_VENDORS)[number];
-export const connectorVendor = pgEnum("connector_vendor", CONNECTOR_VENDORS);
-
 export const CONNECTOR_REACHES = ["dial"] as const;
 export type ConnectorReach = (typeof CONNECTOR_REACHES)[number];
 export const connectorReach = pgEnum("connector_reach", CONNECTOR_REACHES);
@@ -21,7 +17,7 @@ export const connector = pgTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     target: text("target").notNull(),
-    vendor: connectorVendor("vendor").notNull(),
+    vendor: text("vendor").notNull(),
     compute: computeKind("compute"),
     reach: connectorReach("reach").notNull().default("dial"),
     url: text("url"),

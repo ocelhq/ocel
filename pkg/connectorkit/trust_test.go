@@ -119,17 +119,19 @@ func (c *console) token(t *testing.T, held minted) string {
 	return string(signed)
 }
 
-func connectorServing(t *testing.T, at *console, grants []string, options ...connect.ClientOption) envvarsv1connect.EnvVarsServiceClient {
+func connectorStanding(t *testing.T, at *console, grants []string) *httptest.Server {
 	t.Helper()
 
 	mux, err := connectorkit.Mux(connectorkit.Spec{
-		Version:        "test",
-		Vendor:         "fake",
-		Target:         "fake/shop",
-		Console:        at.origin,
-		ConnectorID:    connectorID,
-		OrganizationID: organizationID,
-		Grants:         grants,
+		Config: connectorkit.Config{
+			Console:        at.origin,
+			ConnectorID:    connectorID,
+			OrganizationID: organizationID,
+			Target:         "fake/shop",
+			Grants:         grants,
+		},
+		Version: "test",
+		Vendor:  "fake",
 		Vars: providerkit.Vars{
 			Records: fake.NewRecords(),
 			Sealer:  fake.NewSealer(),
@@ -140,8 +142,72 @@ func connectorServing(t *testing.T, at *console, grants []string, options ...con
 	}
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
+	return server
+}
 
+func connectorServing(t *testing.T, at *console, grants []string, options ...connect.ClientOption) envvarsv1connect.EnvVarsServiceClient {
+	t.Helper()
+
+	server := connectorStanding(t, at, grants)
 	return envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL, options...)
+}
+
+func probed(t *testing.T, server *httptest.Server, token string) *http.Response {
+	t.Helper()
+
+	request, err := http.NewRequest(http.MethodGet, server.URL+"/v1/capabilities", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+	response, err := server.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { response.Body.Close() })
+	return response
+}
+
+func TestAnUnauthenticatedCapabilitiesProbeIsRefused(t *testing.T) {
+	at := consoleServing(t)
+	server := connectorStanding(t, at, everything())
+
+	if response := probed(t, server, ""); response.StatusCode != http.StatusUnauthorized {
+		t.Errorf("an unauthenticated capabilities probe answered %s, want 401", response.Status)
+	}
+}
+
+func TestACapabilitiesProbeUnderAnotherAccountsTokenIsRefused(t *testing.T) {
+	at := consoleServing(t)
+	server := connectorStanding(t, at, everything())
+	token := at.token(t, minted{subject: "org:someone-else", scope: []string{connectorkit.CapabilityEnvVarsRead}})
+
+	if response := probed(t, server, token); response.StatusCode != http.StatusForbidden {
+		t.Errorf("a capabilities probe for another account answered %s, want 403", response.Status)
+	}
+}
+
+func TestACapabilitiesProbeUnderAConsoleTokenAnswers(t *testing.T) {
+	at := consoleServing(t)
+	server := connectorStanding(t, at, everything())
+	token := at.token(t, minted{scope: []string{connectorkit.CapabilityEnvVarsRead}})
+
+	response := probed(t, server, token)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("a capabilities probe under a console token answered %s, want 200", response.Status)
+	}
+	var read struct {
+		Target       string   `json:"target"`
+		Capabilities []string `json:"capabilities"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&read); err != nil {
+		t.Fatal(err)
+	}
+	if read.Target != "fake/shop" || len(read.Capabilities) != 3 {
+		t.Errorf("the probe answered %+v, want the target and every grant this connector holds", read)
+	}
 }
 
 func bearer(token string) connect.ClientOption {

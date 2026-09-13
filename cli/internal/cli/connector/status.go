@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	consoleconnector "github.com/ocelhq/ocel/cli/internal/console/connector"
@@ -51,12 +50,11 @@ func runStatus(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config
 		}
 		return 0
 	})
-	now := time.Now()
 	for at, row := range held {
 		if at > 0 {
 			fmt.Fprintln(stdout)
 		}
-		printed(stdout, row, row.Liveness(now))
+		printed(stdout, row, row.Liveness())
 	}
 	return nil
 }

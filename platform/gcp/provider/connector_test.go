@@ -190,21 +190,21 @@ func TestTheConnectorIsNamedForTheNamespaceAndFitsWhatIAMTakes(t *testing.T) {
 func TestAnUnsetComputeTakesTheCloudRunServiceThatScalesToNothing(t *testing.T) {
 	t.Parallel()
 
-	held, err := connectorComputeOf("")
+	held, err := providerkit.ConnectorCompute("", connectorCompute)
 	if err != nil {
-		t.Fatalf("connectorComputeOf(\"\") = %v, want the provider to pick for itself", err)
+		t.Fatalf("providerkit.ConnectorCompute(\"\", connectorCompute) = %v, want the provider to pick for itself", err)
 	}
 	if held != providerkit.ComputeServerless {
-		t.Errorf("connectorComputeOf(\"\") = %q, want %q", held, providerkit.ComputeServerless)
+		t.Errorf("providerkit.ConnectorCompute(\"\", connectorCompute) = %q, want %q", held, providerkit.ComputeServerless)
 	}
 }
 
 func TestAComputeThisProjectDoesNotRunTheConnectorOnIsRefusedHere(t *testing.T) {
 	t.Parallel()
 
-	_, err := connectorComputeOf(providerkit.ComputeContainer)
+	_, err := providerkit.ConnectorCompute(providerkit.ComputeContainer, connectorCompute)
 	if err == nil {
-		t.Fatal("connectorComputeOf(container) = nil, want the compute no gcp connector is built for refused by the provider")
+		t.Fatal("ConnectorCompute(container) = nil, want the compute no gcp connector is built for refused by the provider")
 	}
 	if !strings.Contains(err.Error(), string(providerkit.ComputeContainer)) {
 		t.Errorf("err = %v, want it to name the compute it refused", err)

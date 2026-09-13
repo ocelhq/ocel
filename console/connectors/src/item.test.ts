@@ -10,8 +10,17 @@ describe("statusOf", () => {
     }
   });
 
+  it("answers 500 for a connector that refused the console's own token", () => {
+    const refused = refuse("unauthenticated", "the connector refused the console's token");
+    expect(refused.done).toBe(false);
+    if (!refused.done) {
+      expect(statusOf(refused.refusal)).toBe(500);
+    }
+  });
+
   it("answers 502 for every other refusal, because the console reached nothing useful", () => {
-    for (const reason of REFUSALS.filter((held) => held !== "denied")) {
+    const own = ["denied", "unauthenticated"];
+    for (const reason of REFUSALS.filter((held) => !own.includes(held))) {
       expect(statusOf({ reason, message: "" })).toBe(502);
     }
   });

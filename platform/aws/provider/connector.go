@@ -16,14 +16,6 @@ var _ providerkit.ConnectorHost = (*Provider)(nil)
 
 const connectorCompute = providerkit.ComputeServerless
 
-func connectorComputeOf(asked providerkit.Compute) (providerkit.Compute, error) {
-	if asked == "" || asked == connectorCompute {
-		return connectorCompute, nil
-	}
-	return "", providerkit.Refuse(providerkit.CodeInvalid,
-		"this account runs the connector on a function, which is %s; %s is not yet built for aws", connectorCompute, asked)
-}
-
 func (p *Provider) connectorAPIs() awsconnector.APIs {
 	return awsconnector.APIs{
 		CFN:     cloudformation.NewFromConfig(p.aws),
@@ -37,7 +29,7 @@ func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.Con
 	if err != nil {
 		return providerkit.ConnectorTarget{}, err
 	}
-	fingerprint, err := target.ForAWS(account, p.aws.Region, string(p.namespace))
+	fingerprint, err := target.Fingerprint("aws", account, p.aws.Region, string(p.namespace))
 	if err != nil {
 		return providerkit.ConnectorTarget{}, err
 	}
@@ -58,7 +50,7 @@ func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.Con
 
 func (p *Provider) InstallConnector(ctx context.Context, install providerkit.ConnectorInstall,
 	report providerkit.Reporter) (providerkit.ConnectorAddress, error) {
-	compute, err := connectorComputeOf(install.Compute)
+	compute, err := providerkit.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}

@@ -77,7 +77,7 @@ func healableChange(ns Namespace, stackName string, changes []cfntypes.ResourceC
 	return nil
 }
 
-func admitReplacements(ns Namespace, accept bool, log func(string)) cfn.ChangeReview {
+func AdmitReplacements(ns Namespace, accept bool, log func(string)) cfn.ChangeReview {
 	return func(stackName string, changes []cfntypes.ResourceChange) error {
 		var replaced []string
 		for _, c := range changes {
