@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -110,15 +110,11 @@ func load(offers map[string]*offer, cache, service, region string) (*offer, erro
 	file := filepath.Join(cache, service+"-"+orGlobal(region)+".json")
 	raw, err := os.ReadFile(file)
 	if err != nil {
-		resp, err := http.Get(host + path)
+		req, err := http.NewRequest(http.MethodGet, host+path, nil)
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("GET %s: %s", path, resp.Status)
-		}
-		if raw, err = io.ReadAll(resp.Body); err != nil {
+		if raw, err = costkit.Fetch(context.Background(), req); err != nil {
 			return nil, err
 		}
 		if err := os.MkdirAll(cache, 0o755); err != nil {

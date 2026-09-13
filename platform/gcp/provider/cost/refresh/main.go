@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,6 +21,7 @@ import (
 const (
 	host             = "https://cloudbilling.googleapis.com/v1"
 	keyVariable      = "GCP_BILLING_API_KEY"
+	keyHeader        = "x-goog-api-key"
 	queryService     = "service"
 	queryDescription = "description"
 	queryRegion      = "region"
@@ -115,21 +116,18 @@ func list(service, key string) ([]sku, error) {
 	var skus []sku
 	token := ""
 	for {
-		endpoint := host + "/services/" + service + "/skus?pageSize=5000&key=" + url.QueryEscape(key)
+		endpoint := host + "/services/" + service + "/skus?pageSize=5000"
 		if token != "" {
 			endpoint += "&pageToken=" + url.QueryEscape(token)
 		}
-		resp, err := http.Get(endpoint)
+		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 		if err != nil {
 			return nil, err
 		}
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		req.Header.Set(keyHeader, key)
+		body, err := costkit.Fetch(context.Background(), req)
 		if err != nil {
-			return nil, err
-		}
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("list skus of %s: %s", service, resp.Status)
+			return nil, fmt.Errorf("list skus of %s: %w", service, err)
 		}
 		var page struct {
 			SKUs          []sku  `json:"skus"`
