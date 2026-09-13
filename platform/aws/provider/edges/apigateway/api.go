@@ -335,15 +335,19 @@ func publish(ctx context.Context, c Clients, api string) error {
 		StageName: aws.String(stageName),
 	}
 	if !staged {
-		in.Variables = map[string]string{
-			entryVariable:  unsetVariable,
-			assetsVariable: unsetVariable,
-		}
+		in.Variables = unsetVariables()
 	}
 	if _, err := c.APIGateway.CreateDeployment(ctx, in); err != nil {
 		return fmt.Errorf("deploy REST API %s to its %s stage: %w", api, stageName, err)
 	}
 	return nil
+}
+
+func unsetVariables() map[string]string {
+	return map[string]string{
+		entryVariable:  unsetVariable,
+		assetsVariable: unsetVariable,
+	}
 }
 
 func stagePresent(ctx context.Context, c Clients, api string) (bool, error) {
