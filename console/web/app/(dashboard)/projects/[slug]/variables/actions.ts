@@ -12,7 +12,7 @@ import { type EnvironmentClass, project } from "@console/db/schema";
 import type { Address, OtherValue, State, Version } from "@ui/vars";
 import { and, eq } from "drizzle-orm";
 import { requireOrganization } from "@/lib/access";
-import { abilityFor, connectorFor, dial } from "@/lib/connectors";
+import { abilityFor, connectorFor, dial, noteDenial } from "@/lib/connectors";
 import { latestTopology, namedEnvironments } from "@/lib/project-variables";
 import { stateOf } from "@/lib/variables";
 
@@ -22,7 +22,12 @@ function failed(status: number, message: string): Answer<never> {
   return { ok: false, status, message };
 }
 
-function refused(refusal: Refusal): Answer<never> {
+async function refused(
+  connectorId: string,
+  verb: string,
+  refusal: Refusal,
+): Promise<Answer<never>> {
+  await noteDenial(connectorId, verb, refusal);
   return failed(statusOf(refusal), refusal.message);
 }
 
@@ -100,7 +105,7 @@ export async function readState(projectId: string, env: string): Promise<Answer<
     }
     const answer = await envvars.list(dialled, held, found.slug);
     if (!answer.done) {
-      return refused(answer.refusal);
+      return refused(dialled.id, "list", answer.refusal);
     }
     return {
       ok: true,
@@ -120,7 +125,7 @@ export async function revealValues(
     const { slug, connector, held } = reached.result;
     const answer = await envvars.reveal(connector, held, slug, cells);
     if (!answer.done) {
-      return refused(answer.refusal);
+      return refused(connector.id, "reveal", answer.refusal);
     }
     return { ok: true, result: { values: answer.result, errors: [] } };
   });
@@ -139,7 +144,7 @@ export async function setValue(
     const { slug, connector, held } = reached.result;
     const answer = await envvars.set(connector, held, slug, at, value, version);
     if (!answer.done) {
-      return refused(answer.refusal);
+      return refused(connector.id, "set", answer.refusal);
     }
     return { ok: true, result: null };
   });
@@ -157,7 +162,7 @@ export async function removeValue(
     const { slug, connector, held } = reached.result;
     const answer = await envvars.remove(connector, held, slug, at, version);
     if (!answer.done) {
-      return refused(answer.refusal);
+      return refused(connector.id, "remove", answer.refusal);
     }
     return { ok: true, result: null };
   });
@@ -174,7 +179,7 @@ export async function listVersions(
     const { slug, connector, held } = reached.result;
     const answer = await envvars.versions(connector, held, slug, at);
     if (!answer.done) {
-      return refused(answer.refusal);
+      return refused(connector.id, "versions", answer.refusal);
     }
     return { ok: true, result: answer.result };
   });
@@ -191,7 +196,7 @@ export async function otherValues(
     const other: EnvironmentClass = held === "production" ? "preview" : "production";
     const listed = await envvars.list(connector, other, slug);
     if (!listed.done) {
-      return refused(listed.refusal);
+      return refused(connector.id, "list", listed.refusal);
     }
     const readable = listed.result.filter((value) => value.reference === undefined);
     const shown = await envvars.reveal(connector, other, slug, readable);
@@ -238,7 +243,7 @@ export async function copyValues(
     const other: EnvironmentClass = held === "production" ? "preview" : "production";
     const shown = await envvars.reveal(connector, other, slug, cells);
     if (!shown.done) {
-      return refused(shown.refusal);
+      return refused(connector.id, "reveal", shown.refusal);
     }
     const source = new Map(
       shown.result.map((value) => [
@@ -255,6 +260,9 @@ export async function copyValues(
       }
       try {
         const answer = await envvars.set(connector, held, slug, at, value, at.version);
+        if (!answer.done) {
+          await noteDenial(connector.id, "set", answer.refusal);
+        }
         results.push(
           answer.done
             ? { ...at, saved: true }

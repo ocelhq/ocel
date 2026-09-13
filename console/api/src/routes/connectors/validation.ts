@@ -1,15 +1,27 @@
-import { COMPUTE_KINDS, CONNECTOR_REACHES, CONNECTOR_VENDORS } from "@console/db/schema";
+import { COMPUTE_KINDS, CONNECTOR_REACHES } from "@console/db/schema";
 import { z } from "zod";
+
+const SEGMENT = "[a-z0-9._:-]+";
+
+const vendorSchema = z
+  .string()
+  .max(64)
+  .regex(
+    new RegExp(`^${SEGMENT}$`),
+    "A vendor carries lower-case letters, digits, dot, underscore, colon and dash",
+  );
 
 const targetSchema = z
   .string()
-  .min(1)
   .max(256)
-  .regex(/^[^/\s]+(?:\/[^/\s]+)+$/, "A target names its vendor and the account it fingerprints");
+  .regex(
+    new RegExp(`^${SEGMENT}(?:/${SEGMENT})+$`),
+    "A target names its vendor and the account it fingerprints",
+  );
 
 export const upsertConnectorSchema = z.object({
   target: targetSchema,
-  vendor: z.enum(CONNECTOR_VENDORS),
+  vendor: vendorSchema,
   reach: z.enum(CONNECTOR_REACHES).default("dial"),
 });
 

@@ -7,6 +7,7 @@ import {
 } from "@console/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
+import { readBody } from "../../../../body";
 import { findOwnedProject } from "../owned";
 import { deploymentRecordSchema } from "./validation";
 
@@ -46,19 +47,9 @@ export async function createDeployment(request: Request, id: string): Promise<Re
     return owned.refusal;
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Invalid request body" }, { status: 400 });
-  }
-
-  const parsed = deploymentRecordSchema.safeParse(body);
-  if (!parsed.success) {
-    return Response.json(
-      { error: "Invalid request", issues: parsed.error.issues },
-      { status: 400 },
-    );
+  const parsed = await readBody(request, deploymentRecordSchema);
+  if (!parsed.ok) {
+    return parsed.refusal;
   }
 
   const record = parsed.data;
@@ -96,6 +87,13 @@ export async function createDeployment(request: Request, id: string): Promise<Re
         .from(deployment)
         .where(and(eq(deployment.projectId, owned.projectId), eq(deployment.runId, record.runId)))
     )[0];
+
+  if (!row) {
+    return Response.json(
+      { error: "This run was recorded and then taken away before it could be read back" },
+      { status: 409 },
+    );
+  }
 
   return Response.json(
     {

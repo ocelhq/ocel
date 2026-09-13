@@ -61,6 +61,12 @@ export async function ask<T>(run: () => Promise<T>): Promise<Outcome<T>> {
       if (thrown.code === Code.Unimplemented) {
         return refuse("incompatible", thrown.rawMessage);
       }
+      if (thrown.code === Code.Unauthenticated) {
+        return refuse(
+          "unauthenticated",
+          `the connector refused the console's token: ${thrown.rawMessage}`,
+        );
+      }
       return refuse("offline", thrown.rawMessage);
     }
     if (thrown instanceof ValueError) throw thrown;
@@ -74,9 +80,20 @@ export function capabilitiesURL(url: string): string {
   return base.toString();
 }
 
-export async function capabilities(url: string): Promise<Outcome<ReadonlyArray<string>>> {
+export async function capabilities(
+  url: string,
+  token: string,
+): Promise<Outcome<ReadonlyArray<string>>> {
   try {
-    const response = await fetch(capabilitiesURL(url));
+    const response = await fetch(capabilitiesURL(url), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.status === 401 || response.status === 403) {
+      return refuse(
+        "unauthenticated",
+        `the connector refused the console's token with ${response.status}`,
+      );
+    }
     if (!response.ok) {
       return refuse("incompatible", `the connector answered ${response.status}`);
     }

@@ -56,23 +56,18 @@ func run(listen, config string, reporting bool) error {
 		return fmt.Errorf("%s and %s name the project and region this connector reads records in, and one of them is unset",
 			ports.ProjectEnvVar, ports.RegionEnvVar)
 	}
-	fingerprint, err := target.ForGCP(project, region, string(ns))
+	trust.Target, err = target.Fingerprint(vendor, project, region, string(ns))
 	if err != nil {
 		return err
 	}
 
 	bindings := &ports.Clients{Namespace: ns, Project: project, Region: region}
 	return connectorkit.Serve(connectorkit.Spec{
-		Version:        version,
-		Vendor:         vendor,
-		Target:         fingerprint,
-		Addr:           listen,
-		Console:        trust.Console,
-		ConnectorID:    trust.ConnectorID,
-		OrganizationID: trust.OrganizationID,
-		Grants:         trust.Grants,
-		KeyPath:        trust.KeyPath,
-		ConfigPath:     config,
+		Config:     trust,
+		Version:    version,
+		Vendor:     vendor,
+		Addr:       listen,
+		ConfigPath: config,
 		Vars: providerkit.Vars{
 			Records: ports.Records{Clients: bindings},
 			Sealer:  ports.Sealer{Clients: bindings},

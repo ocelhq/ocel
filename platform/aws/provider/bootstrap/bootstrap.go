@@ -394,7 +394,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 
 	progressf(target.stackStep)
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
-	review := admitReplacements(target.ns, req.AcceptReplacements, logf)
+	review := AdmitReplacements(target.ns, req.AcceptReplacements, logf)
 	coreBody := target.core()
 	coreTags := stampTags(target.ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
 	if err := cfn.Upsert(ctx, apis.CFN, target.ns, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {

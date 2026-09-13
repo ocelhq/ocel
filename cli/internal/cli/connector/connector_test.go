@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	fingerprint = "vps/SHA256:AAAA/ocel"
+	fingerprint = "vps/sha256:aaaa/ocel"
 	hostname    = "box.example.com"
 )
 
@@ -252,7 +252,7 @@ func TestRemoveTakesTheConnectorOffTheBoxAndForgetsTheRow(t *testing.T) {
 	}
 }
 
-func TestRemoveForgetsTheRowEvenWhenTheMachineAnswersNothing(t *testing.T) {
+func TestAnUnreachableMachineIsPointedAtRmTarget(t *testing.T) {
 	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
 	t.Setenv(clitest.FakeConnectorRefuseEnvVar, "this machine is not reachable")
 	srv := newConsoleServer(t, map[string]any{
@@ -268,8 +268,64 @@ func TestRemoveForgetsTheRowEvenWhenTheMachineAnswersNothing(t *testing.T) {
 	if err == nil {
 		t.Fatal("runRemove err = nil, want the unreachable machine reported")
 	}
+	said := err.Error()
+	if !strings.Contains(said, "ocel connector status") || !strings.Contains(said, "rm --target") {
+		t.Errorf("runRemove err = %q, want it to name the remedy for a target that will not answer", said)
+	}
 	if len(srv.deleted) != 0 {
 		t.Fatalf("deleted = %v: with no fingerprint there is no row to key on", srv.deleted)
+	}
+}
+
+func TestRmTargetForgetsTheRowWithoutTouchingTheTarget(t *testing.T) {
+	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	t.Setenv(clitest.FakeConnectorRefuseEnvVar, "this machine is not reachable")
+	srv := newConsoleServer(t, map[string]any{
+		"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial",
+	})
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	opts := opened(t, srv)
+	opts.target = fingerprint
+
+	var stdout bytes.Buffer
+	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runRemove err = %v", err)
+	}
+	if len(srv.deleted) != 1 || srv.deleted[0] != "con_1" {
+		t.Fatalf("deleted = %v, want the row keyed by the target the flag named", srv.deleted)
+	}
+	if log, err := clitest.LoadFakeConnectorLog(os.Getenv(clitest.FakeConnectorLogEnvVar)); err == nil && log.Removed {
+		t.Error("the provider was asked to take the connector off a machine this run was told not to reach")
+	}
+	if !strings.Contains(stdout.String(), "never reached") {
+		t.Errorf("stdout = %q, want it to say the target itself was left alone", stdout.String())
+	}
+}
+
+func TestRmTargetSaysSoWhenTheConsoleHoldsNoSuchTarget(t *testing.T) {
+	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	opts := opened(t, srv)
+	opts.target = fingerprint
+
+	var stdout bytes.Buffer
+	if err := runRemove(context.Background(), deps, resolved(t, root), read(t, root, srv.URL), opts, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runRemove err = %v", err)
+	}
+	if len(srv.deleted) != 0 {
+		t.Fatalf("deleted = %v, want nothing deleted", srv.deleted)
+	}
+	if !strings.Contains(stdout.String(), "holds no connector") {
+		t.Errorf("stdout = %q, want it to say the console holds no such target", stdout.String())
 	}
 }
 
@@ -279,7 +335,7 @@ func TestStatusSaysWhatTheConsoleHolds(t *testing.T) {
 	srv := newConsoleServer(t, map[string]any{
 		"id": "con_1", "target": fingerprint, "vendor": "vps", "compute": "container", "reach": "dial",
 		"url": "https://" + hostname + "/" + constants.ProjectStateDirName + "/connector", "capabilities": []string{"envvars.read", "envvars.write"},
-		"connectedAt": seen, "lastSeenAt": seen,
+		"connectedAt": seen, "lastSeenAt": seen, "online": true,
 	})
 	linked(t, root, srv.URL)
 

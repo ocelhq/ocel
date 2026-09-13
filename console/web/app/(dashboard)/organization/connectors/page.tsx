@@ -1,6 +1,7 @@
+import { type Liveness, liveness } from "@console/api";
 import { capabilities } from "@console/connectors";
 import { requireOrganization } from "@/lib/access";
-import { connectorsOf, type Liveness, liveness } from "@/lib/connectors";
+import { connectorsOf, dial } from "@/lib/connectors";
 import { CommandPane } from "../../command-pane";
 import { ProviderMark } from "../../marks";
 import { PageNotice, PageShell } from "../../page-shell";
@@ -40,7 +41,13 @@ export default async function OrganizationConnectorsPage() {
   }
 
   const seen = await Promise.all(
-    rows.map((row) => (row.url === null || row.publicKey !== null ? null : capabilities(row.url))),
+    rows.map(async (row) => {
+      if (row.url === null || row.publicKey !== null) {
+        return null;
+      }
+      const dialled = await dial(session, row);
+      return dialled === null ? null : await capabilities(dialled.url, dialled.token);
+    }),
   );
 
   return (

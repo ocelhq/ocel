@@ -360,6 +360,29 @@ func TestEveryTierListsLogGroupsOnTheOnlyResourceAWSAccepts(t *testing.T) {
 	}
 }
 
+func TestEveryTierScopesTaskDefinitionsToWhatAWSEvaluates(t *testing.T) {
+	unscopable := []string{"ecs:DeregisterTaskDefinition", "ecs:DescribeTaskDefinition"}
+	for tier, document := range bothTiers(t) {
+		grants := grantsOf(t, document)
+		if !grants[grant{action: "ecs:RegisterTaskDefinition", resource: appTaskDefinitionARN, condition: conditionJSON(t, taggedOnCreate())}] {
+			t.Errorf("the %s tier does not grant ecs:RegisterTaskDefinition on %s under a create tag, so a container release either cannot register its family or registers one nothing marks as Ocel's", tier, appTaskDefinitionARN)
+		}
+		for _, action := range unscopable {
+			if !grants[grant{action: action, resource: UnscopedResource, condition: conditionJSON(t, nil)}] {
+				t.Errorf("the %s tier does not grant %s on %q, the only resource IAM evaluates it against, so a container release cannot read back or reclaim its task definition", tier, action, UnscopedResource)
+			}
+		}
+		for g := range grants {
+			if g.action == "ecs:RegisterTaskDefinition" && g.resource != appTaskDefinitionARN {
+				t.Errorf("the %s tier grants ecs:RegisterTaskDefinition on %s, which reaches past the task definitions a deploy registers", tier, g.resource)
+			}
+			if slices.Contains(unscopable, g.action) && g.resource != UnscopedResource {
+				t.Errorf("the %s tier grants %s on %s, an ARN IAM never matches for an action with no resource type", tier, g.action, g.resource)
+			}
+		}
+	}
+}
+
 func logsGrantsOn(grants map[grant]bool, resource string) map[string]string {
 	got := map[string]string{}
 	for g := range grants {

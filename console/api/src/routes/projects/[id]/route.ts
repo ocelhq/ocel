@@ -6,6 +6,7 @@ import {
 import { db } from "@console/db";
 import { project } from "@console/db/schema";
 import { and, eq } from "drizzle-orm";
+import { readBody } from "../../../body";
 import { deleteProjectObjects } from "../../blob/store";
 import { updateProjectSchema } from "../validation";
 
@@ -35,18 +36,9 @@ export async function updateProject(request: Request, id: string): Promise<Respo
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Invalid request body" }, { status: 400 });
-  }
-  const parsed = updateProjectSchema.safeParse(body);
-  if (!parsed.success) {
-    return Response.json(
-      { error: "Invalid request", issues: parsed.error.issues },
-      { status: 400 },
-    );
+  const parsed = await readBody(request, updateProjectSchema);
+  if (!parsed.ok) {
+    return parsed.refusal;
   }
 
   const [updated] = await db

@@ -1,5 +1,5 @@
 import { type ActiveOrganizationSession, roleOf } from "@console/auth";
-import type { Connector as Dialled } from "@console/connectors";
+import type { Connector as Dialled, Refusal } from "@console/connectors";
 import { db } from "@console/db";
 import { type Connector, connector } from "@console/db/schema";
 import type { Ability } from "@ui/vars";
@@ -61,16 +61,16 @@ export async function connectorFor(
   return found ?? null;
 }
 
-const onlineWithin = 90_000;
-
-export type Liveness = "online" | "offline" | "never";
-
-export function liveness(held: Pick<Connector, "connectedAt" | "lastSeenAt">): Liveness {
-  if (held.connectedAt === null) {
-    return "never";
+export async function noteDenial(
+  connectorId: string,
+  verb: string,
+  refusal: Refusal,
+): Promise<void> {
+  if (refusal.reason !== "denied") {
+    return;
   }
-  if (held.lastSeenAt === null) {
-    return "offline";
-  }
-  return Date.now() - held.lastSeenAt.getTime() < onlineWithin ? "online" : "offline";
+  await db
+    .update(connector)
+    .set({ lastDenied: { verb, at: new Date().toISOString(), message: refusal.message } })
+    .where(eq(connector.id, connectorId));
 }

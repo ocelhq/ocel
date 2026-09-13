@@ -1,6 +1,7 @@
 import { db } from "@console/db";
 import { connector } from "@console/db/schema";
 import { eq } from "drizzle-orm";
+import { readBody } from "../../../body";
 import { patchConnectorSchema } from "../validation";
 import { findOwnedConnector } from "./owned";
 
@@ -10,18 +11,9 @@ export async function updateConnector(request: Request, id: string): Promise<Res
     return owned.refusal;
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Invalid request body" }, { status: 400 });
-  }
-  const parsed = patchConnectorSchema.safeParse(body);
-  if (!parsed.success) {
-    return Response.json(
-      { error: "Invalid request", issues: parsed.error.issues },
-      { status: 400 },
-    );
+  const parsed = await readBody(request, patchConnectorSchema);
+  if (!parsed.ok) {
+    return parsed.refusal;
   }
 
   const [held] = await db

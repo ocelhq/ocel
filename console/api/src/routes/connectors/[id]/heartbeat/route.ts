@@ -3,6 +3,7 @@ import { db } from "@console/db";
 import { connector } from "@console/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { importJWK, jwtVerify } from "jose";
+import { readBody } from "../../../../body";
 import { heartbeatSchema } from "../../validation";
 
 function verifying(publicKey: string) {
@@ -36,23 +37,16 @@ export async function connectorHeartbeat(request: Request, id: string): Promise<
       subject: held.id,
       audience: consoleOrigin(),
       algorithms: ["EdDSA"],
+      maxTokenAge: "5m",
+      clockTolerance: 30,
     });
   } catch {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Invalid request body" }, { status: 400 });
-  }
-  const parsed = heartbeatSchema.safeParse(body);
-  if (!parsed.success) {
-    return Response.json(
-      { error: "Invalid request", issues: parsed.error.issues },
-      { status: 400 },
-    );
+  const parsed = await readBody(request, heartbeatSchema);
+  if (!parsed.ok) {
+    return parsed.refusal;
   }
 
   const now = new Date();

@@ -42,7 +42,12 @@ type beat struct {
 	every        time.Duration
 
 	greeted bool
-	said    int
+	said    spoken
+}
+
+type spoken struct {
+	unreached bool
+	status    int
 }
 
 func (b *beat) token() (string, error) {
@@ -116,21 +121,21 @@ func (b *beat) run(ctx context.Context, retired chan<- struct{}) {
 			if ctx.Err() != nil {
 				return
 			}
-			if b.said != -1 {
+			if !b.said.unreached {
 				fmt.Printf("connector %s: heartbeat did not reach %s: %v\n", b.connectorID, b.origin, err)
-				b.said = -1
+				b.said = spoken{unreached: true}
 			}
 		case status >= 200 && status < 300:
 			b.greeted = true
-			b.said = 0
+			b.said = spoken{}
 		case status == http.StatusNotFound && b.greeted:
 			b.wipe()
 			close(retired)
 			return
 		default:
-			if b.said != status {
+			if b.said.unreached || b.said.status != status {
 				fmt.Printf("connector %s: heartbeat to %s answered %d\n", b.connectorID, b.origin, status)
-				b.said = status
+				b.said = spoken{status: status}
 			}
 		}
 

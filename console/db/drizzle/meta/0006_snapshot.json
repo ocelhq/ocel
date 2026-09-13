@@ -1,5 +1,5 @@
 {
-  "id": "2fef6ca0-5a5f-4f04-960d-e34c7f4c4be4",
+  "id": "833d3540-0db1-4929-bbcb-fee24f59bd96",
   "prevId": "346c005a-3c98-440a-8426-598107e7fb60",
   "version": "7",
   "dialect": "postgresql",
@@ -801,16 +801,42 @@
         },
         "vendor": {
           "name": "vendor",
-          "type": "connector_vendor",
-          "typeSchema": "public",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "compute": {
+          "name": "compute",
+          "type": "compute_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reach": {
+          "name": "reach",
+          "type": "connector_reach",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'dial'"
         },
         "url": {
           "name": "url",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "public_key": {
+          "name": "public_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tls_pin": {
+          "name": "tls_pin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "version": {
           "name": "version",
@@ -834,6 +860,12 @@
         "last_seen_at": {
           "name": "last_seen_at",
           "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_denied": {
+          "name": "last_denied",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -955,6 +987,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "target": {
+          "name": "target",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "edge_kind": {
           "name": "edge_kind",
@@ -1574,13 +1612,19 @@
     }
   },
   "enums": {
-    "public.connector_vendor": {
-      "name": "connector_vendor",
+    "public.connector_reach": {
+      "name": "connector_reach",
       "schema": "public",
       "values": [
-        "aws",
-        "gcp",
-        "vps"
+        "dial"
+      ]
+    },
+    "public.compute_kind": {
+      "name": "compute_kind",
+      "schema": "public",
+      "values": [
+        "serverless",
+        "container"
       ]
     },
     "public.deployment_kind": {

@@ -3,6 +3,7 @@ package connector
 import (
 	"context"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/console/httpapi"
@@ -29,6 +30,7 @@ type Connector struct {
 	ConnectedAt    *time.Time `json:"connectedAt"`
 	LastSeenAt     *time.Time `json:"lastSeenAt"`
 	LastDenied     *Denial    `json:"lastDenied"`
+	Online         bool       `json:"online"`
 }
 
 type Liveness string
@@ -39,15 +41,11 @@ const (
 	Never   Liveness = "never"
 )
 
-const onlineWithin = 90 * time.Second
-
-func (c Connector) Liveness(now time.Time) Liveness {
+func (c Connector) Liveness() Liveness {
 	switch {
 	case c.ConnectedAt == nil:
 		return Never
-	case c.LastSeenAt == nil:
-		return Offline
-	case now.Sub(*c.LastSeenAt) < onlineWithin:
+	case c.Online:
 		return Online
 	default:
 		return Offline
@@ -90,6 +88,18 @@ func (c *Client) List(ctx context.Context, accessToken string) ([]Connector, err
 		return nil, err
 	}
 	return held, nil
+}
+
+func (c *Client) ByTarget(ctx context.Context, accessToken, fingerprint string) (*Connector, error) {
+	held, err := c.List(ctx, accessToken)
+	if err != nil {
+		return nil, err
+	}
+	at := slices.IndexFunc(held, func(row Connector) bool { return row.Target == fingerprint })
+	if at < 0 {
+		return nil, nil
+	}
+	return &held[at], nil
 }
 
 func (c *Client) Upsert(ctx context.Context, accessToken string, taken Upsert) (*Connector, error) {

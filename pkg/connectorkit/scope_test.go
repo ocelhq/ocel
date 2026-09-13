@@ -119,7 +119,7 @@ func signingConsole(t *testing.T) (origin string, token string) {
 func TestAnUnlistedProcedureIsDeniedUnderEveryScope(t *testing.T) {
 	origin, token := signingConsole(t)
 
-	guard, err := newTrust(Spec{
+	guard, err := newTrust(Spec{Config: Config{
 		Console:        origin,
 		ConnectorID:    "conn-shop",
 		OrganizationID: "org-shop",
@@ -128,7 +128,7 @@ func TestAnUnlistedProcedureIsDeniedUnderEveryScope(t *testing.T) {
 			CapabilityEnvVarsWrite,
 			CapabilityEnvVarsReveal,
 		},
-	})
+	}})
 	if err != nil {
 		t.Fatalf("newTrust() error = %v", err)
 	}

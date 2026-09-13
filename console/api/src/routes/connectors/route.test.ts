@@ -10,7 +10,7 @@ import { setupTestDatabase } from "../../../test/db";
 import { deleteConnector, updateConnector } from "./[id]/route";
 import { listConnectors, upsertConnector } from "./route";
 
-const vpsTarget = "vps/SHA256:abc/ocel";
+const vpsTarget = "vps/sha256:abc/ocel";
 
 function putRequest(body: unknown, headers: Headers) {
   return new Request("http://localhost/api/connectors", {
@@ -119,13 +119,35 @@ describe("PUT /api/connectors", () => {
     }
   });
 
-  it("refuses a vendor and a reach outside the enums", async () => {
+  it("takes a vendor no table in the console names", async () => {
     const session = await createTestSessionWithOrganization();
 
     try {
+      const response = await upsertConnector(
+        putRequest({ target: "azure/sub-1/westeurope/ocel", vendor: "azure" }, session.headers),
+      );
+      expect(response.status).toBe(200);
+      expect((await response.json()).vendor).toBe("azure");
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("refuses a vendor outside the segment charset and a reach outside the enum", async () => {
+    const session = await createTestSessionWithOrganization();
+
+    try {
+      for (const vendor of ["AWS", "aws/two", "aws two", ""]) {
+        expect(
+          (await upsertConnector(putRequest({ ...dialled, vendor }, session.headers))).status,
+        ).toBe(400);
+      }
       expect(
-        (await upsertConnector(putRequest({ ...dialled, vendor: "azure" }, session.headers)))
-          .status,
+        (
+          await upsertConnector(
+            putRequest({ ...dialled, target: "vps/SHA256:abc/ocel" }, session.headers),
+          )
+        ).status,
       ).toBe(400);
       expect(
         (await upsertConnector(putRequest({ ...dialled, reach: "poll" }, session.headers))).status,
@@ -194,6 +216,34 @@ describe("GET /api/connectors", () => {
     } finally {
       await session.cleanup();
       await other.cleanup();
+    }
+  });
+
+  it("says whether each row is online, so nothing downstream recomputes the threshold", async () => {
+    const session = await createTestSessionWithOrganization();
+
+    try {
+      const held = await (await upsertConnector(putRequest(dialled, session.headers))).json();
+
+      const never = await (await listConnectors(getRequest(session.headers))).json();
+      expect(never[0].online).toBe(false);
+
+      const now = new Date();
+      await db
+        .update(connector)
+        .set({ connectedAt: now, lastSeenAt: now })
+        .where(eq(connector.id, held.id));
+      const fresh = await (await listConnectors(getRequest(session.headers))).json();
+      expect(fresh[0].online).toBe(true);
+
+      await db
+        .update(connector)
+        .set({ lastSeenAt: new Date(Date.now() - 600_000) })
+        .where(eq(connector.id, held.id));
+      const stale = await (await listConnectors(getRequest(session.headers))).json();
+      expect(stale[0].online).toBe(false);
+    } finally {
+      await session.cleanup();
     }
   });
 

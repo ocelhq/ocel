@@ -49,21 +49,12 @@ var _ providerkit.ConnectorHost = (*Provider)(nil)
 
 const connectorCompute = providerkit.ComputeServerless
 
-func connectorComputeOf(asked providerkit.Compute) (providerkit.Compute, error) {
-	if asked == "" || asked == connectorCompute {
-		return connectorCompute, nil
-	}
-	return "", providerkit.Refuse(providerkit.CodeInvalid,
-		"this project runs the connector on a Cloud Run service that scales to nothing, which is %s; %s is not yet built for gcp",
-		connectorCompute, asked)
-}
-
 func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.ConnectorTarget, error) {
 	names := p.Names()
 	if err := names.connectorFits(); err != nil {
 		return providerkit.ConnectorTarget{}, err
 	}
-	fingerprint, err := target.ForGCP(p.options.Project, p.options.Region, string(names.Namespace()))
+	fingerprint, err := target.Fingerprint("gcp", p.options.Project, p.options.Region, string(names.Namespace()))
 	if err != nil {
 		return providerkit.ConnectorTarget{}, err
 	}
@@ -83,7 +74,7 @@ func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.Con
 
 func (p *Provider) InstallConnector(ctx context.Context, install providerkit.ConnectorInstall,
 	report providerkit.Reporter) (providerkit.ConnectorAddress, error) {
-	compute, err := connectorComputeOf(install.Compute)
+	compute, err := providerkit.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}
