@@ -18,9 +18,9 @@ import { ladderRows } from "./targets/aws/ladder";
 import { pulumiHooks } from "./targets/aws/ladder-pulumi";
 import { sstHooks } from "./targets/aws/ladder-sst";
 import type { CellContext } from "./targets/types";
-import { BASE, HTTP_VARIANTS, NEXT_VARIANTS, runsOn, type Variant } from "./variants";
+import { apiGateway, BASE, HTTP_VARIANTS, NEXT_VARIANTS, runsOn, type Variant } from "./variants";
 
-export type Runtime = "node" | "next" | "go" | "python";
+export type Runtime = "node" | "next" | "go" | "python" | "rust";
 
 export type Kind = "composite" | "ladder" | "workspace";
 
@@ -137,6 +137,19 @@ export const spec: FixtureSpec[] = [
     targets: ["aws", "vps", "gcp"],
     base: ["vps", "gcp"],
     variants: HTTP_VARIANTS,
+  },
+  {
+    name: "rust",
+    concern: "deploy",
+    dir: "deploy/rust",
+    runtime: "rust",
+    kind: "composite",
+    rows: RUNTIME_NEUTRAL,
+    apps: ["web"],
+    legs: SERVES,
+    targets: ["aws", "gcp"],
+    base: ["gcp"],
+    variants: [apiGateway],
   },
   {
     name: "next",

@@ -335,3 +335,24 @@ func TestTheGoFixtureDeploysFromJSONAlone(t *testing.T) {
 		t.Fatalf("apps = %+v", cfg.Apps)
 	}
 }
+
+func TestTheRustFixtureDeploysFromJSONAlone(t *testing.T) {
+	dir := filepath.Join(fixturetest.RepoDir(t), "tests", "fixtures", "deploy", "rust")
+	for _, path := range fixturetest.ConfigsIn(t, dir) {
+		if projectconfig.IsProgram(path) {
+			t.Fatalf("the rust fixture still carries %s", filepath.Base(path))
+		}
+	}
+
+	t.Setenv("PATH", "")
+	cfg, err := projectconfig.Resolve(t.Context(), dir, "")
+	if err != nil {
+		t.Fatalf("resolve the rust fixture with no node on PATH: %v", err)
+	}
+	if cfg.Provider == nil || cfg.Provider.Name != "aws" {
+		t.Fatalf("provider = %+v", cfg.Provider)
+	}
+	if len(cfg.Apps) != 1 || cfg.Apps[0].Runtime.Name != "rust" {
+		t.Fatalf("apps = %+v, want the one app read as rust off its Cargo.toml", cfg.Apps)
+	}
+}

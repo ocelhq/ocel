@@ -165,6 +165,7 @@ describe("what a run selects", () => {
       "deploy/node-api-gateway",
       "deploy/go-api-gateway",
       "deploy/python-api-gateway",
+      "deploy/rust-api-gateway",
     ]);
   });
 
