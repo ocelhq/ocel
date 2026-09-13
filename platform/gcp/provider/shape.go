@@ -7,6 +7,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -60,6 +61,18 @@ func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*cost
 		return nil, err
 	}
 	ingress := ingressFor(factsOf(front))
+	if req.Edge == cloudflare.Kind {
+		shape, err := cloudflare.ShapeEdge(string(p.Names().Namespace()), req.Plan.Class)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range shape.Shared {
+			tree.Add(shared, cloudflare.Vendor, item.Type, item.Name, "", item.Properties)
+		}
+		for _, item := range shape.Environment {
+			tree.Add(environment, cloudflare.Vendor, item.Type, item.Name, "", item.Properties)
+		}
+	}
 	fronted := req.Edge == alb.Kind
 	if fronted {
 		previewBase := ""

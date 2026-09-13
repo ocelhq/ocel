@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 const (
@@ -57,6 +58,17 @@ func (p *Provider) Shape(ctx context.Context, req providerkit.ShapeRequest) (*co
 		}
 	case apigateway.Kind:
 		tree.Add(environment, string(Vendor), tfAPIGatewayRestAPI, req.Plan.Slug, p.aws.Region, map[string]any{"endpoint_configuration": map[string]any{"types": []any{"REGIONAL"}}})
+	case cloudflare.Kind:
+		shape, err := cloudflare.ShapeEdge(string(p.namespace), req.Plan.Class)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range shape.Shared {
+			tree.Add(shared, cloudflare.Vendor, item.Type, item.Name, "", item.Properties)
+		}
+		for _, item := range shape.Environment {
+			tree.Add(environment, cloudflare.Vendor, item.Type, item.Name, "", item.Properties)
+		}
 	}
 	return tree.Set(providerkit.CostSource), nil
 }

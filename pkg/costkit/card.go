@@ -102,3 +102,18 @@ func (r Rate) Cost(quantity decimal.Decimal) (cost, marginal decimal.Decimal) {
 	}
 	return cost, marginal
 }
+
+func Merge(primary *Card, others ...*Card) *Card {
+	merged := &Card{Version: primary.Version, Currency: primary.Currency, index: map[rateKey]int{}}
+	for _, card := range append([]*Card{primary}, others...) {
+		for _, rate := range card.Rates {
+			key := rateKey{rate.ID, rate.Region}
+			if _, held := merged.index[key]; held {
+				continue
+			}
+			merged.index[key] = len(merged.Rates)
+			merged.Rates = append(merged.Rates, rate)
+		}
+	}
+	return merged
+}

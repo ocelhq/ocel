@@ -1,0 +1,465 @@
+{
+  "source": "ocel",
+  "scopes": [
+    {
+      "id": "project:shop",
+      "kind": "project",
+      "name": "shop"
+    },
+    {
+      "id": "project:shop/shared:production",
+      "parent": "project:shop",
+      "kind": "shared",
+      "name": "production"
+    },
+    {
+      "id": "project:shop/environment:prod",
+      "parent": "project:shop",
+      "kind": "environment",
+      "name": "prod"
+    },
+    {
+      "id": "project:shop/environment:prod/app:web",
+      "parent": "project:shop/environment:prod",
+      "kind": "app",
+      "name": "web"
+    }
+  ],
+  "resources": [
+    {
+      "id": "project:shop/shared:production/aws_s3_bucket:StateBucket",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_s3_bucket",
+      "name": "StateBucket",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_dynamodb_table:StateTable",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_dynamodb_table",
+      "name": "StateTable",
+      "region": "us-east-1",
+      "properties": {
+        "billing_mode": "PAY_PER_REQUEST",
+        "stream_enabled": true
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_s3_bucket:ArtifactBucket",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_s3_bucket",
+      "name": "ArtifactBucket",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_s3_bucket:AssetBucket",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_s3_bucket",
+      "name": "AssetBucket",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_dynamodb_table:VarsTable",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_dynamodb_table",
+      "name": "VarsTable",
+      "region": "us-east-1",
+      "properties": {
+        "billing_mode": "PAY_PER_REQUEST",
+        "stream_enabled": false
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_layer_version:RuntimeLayerX8664",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_layer_version",
+      "name": "RuntimeLayerX8664",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_layer_version:RuntimeLayerArm64",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_layer_version",
+      "name": "RuntimeLayerArm64",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_sqs_queue:RevalidateDeadLetterQueue",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_sqs_queue",
+      "name": "RevalidateDeadLetterQueue",
+      "region": "us-east-1",
+      "properties": {
+        "fifo_queue": true
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_sqs_queue:RevalidateQueue",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_sqs_queue",
+      "name": "RevalidateQueue",
+      "region": "us-east-1",
+      "properties": {
+        "fifo_queue": true
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_function:Revalidator",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "Revalidator",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "memory_size": 512,
+        "runtime": "nodejs22.x",
+        "timeout": 150
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_event_source_mapping:RevalidatorQueueConsumer",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_event_source_mapping",
+      "name": "RevalidatorQueueConsumer",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_cloudwatch_log_group:RevalidatorLogGroup",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "RevalidatorLogGroup",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_sqs_queue:TagInvalidatorDeadLetterQueue",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_sqs_queue",
+      "name": "TagInvalidatorDeadLetterQueue",
+      "region": "us-east-1",
+      "properties": {
+        "fifo_queue": false
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_function:TagInvalidator",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "TagInvalidator",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "memory_size": 512,
+        "runtime": "nodejs22.x",
+        "timeout": 60
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_event_source_mapping:TagInvalidatorStream",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_event_source_mapping",
+      "name": "TagInvalidatorStream",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_cloudwatch_log_group:TagInvalidatorLogGroup",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "TagInvalidatorLogGroup",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_function:ImageOptimizer",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "ImageOptimizer",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "memory_size": 1769,
+        "runtime": "nodejs22.x",
+        "timeout": 20
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_function_url:ImageOptimizerUrl",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_function_url",
+      "name": "ImageOptimizerUrl",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_cloudwatch_log_group:ImageOptimizerLogGroup",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "ImageOptimizerLogGroup",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_sqs_queue:TagPublisherDeadLetterQueue",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_sqs_queue",
+      "name": "TagPublisherDeadLetterQueue",
+      "region": "us-east-1",
+      "properties": {
+        "fifo_queue": false
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_function:TagPublisher",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "TagPublisher",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "memory_size": 512,
+        "runtime": "nodejs22.x",
+        "timeout": 60
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_lambda_event_source_mapping:TagPublisherStream",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_event_source_mapping",
+      "name": "TagPublisherStream",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:production/aws_cloudwatch_log_group:TagPublisherLogGroup",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "TagPublisherLogGroup",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/aws_rds_cluster:main",
+      "scope": "project:shop/environment:prod",
+      "vendor": "aws",
+      "type": "aws_rds_cluster",
+      "name": "main",
+      "region": "us-east-1",
+      "properties": {
+        "engine": "aurora-postgresql",
+        "engine_mode": "provisioned",
+        "engine_version": "16.4",
+        "manage_master_user_password": true,
+        "serverlessv2_scaling_configuration": {
+          "max_capacity": 2,
+          "min_capacity": 0
+        }
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/aws_rds_cluster_instance:main",
+      "scope": "project:shop/environment:prod",
+      "vendor": "aws",
+      "type": "aws_rds_cluster_instance",
+      "name": "main",
+      "region": "us-east-1",
+      "properties": {
+        "engine": "aurora-postgresql",
+        "instance_class": "db.serverless"
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/aws_secretsmanager_secret:main",
+      "scope": "project:shop/environment:prod",
+      "vendor": "aws",
+      "type": "aws_secretsmanager_secret",
+      "name": "main",
+      "region": "us-east-1",
+      "properties": {
+        "managed_by": "rds"
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/aws_s3_bucket:uploads",
+      "scope": "project:shop/environment:prod",
+      "vendor": "aws",
+      "type": "aws_s3_bucket",
+      "name": "uploads",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/environment:prod/aws_lambda_function:uploads-upload-completer",
+      "scope": "project:shop/environment:prod",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "uploads-upload-completer",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "x86_64"
+        ],
+        "ephemeral_storage": {
+          "size": 512
+        },
+        "memory_size": 128,
+        "runtime": "provided.al2023",
+        "timeout": 30
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/aws_cloudwatch_log_group:uploads-upload-completer",
+      "scope": "project:shop/environment:prod",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "uploads-upload-completer",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/app:web/aws_lambda_function:fn--web--entry",
+      "scope": "project:shop/environment:prod/app:web",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "fn--web--entry",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "ephemeral_storage": {
+          "size": 512
+        },
+        "memory_size": 1769,
+        "runtime": "nodejs24.x",
+        "timeout": 30
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/app:web/aws_cloudwatch_log_group:fn--web--entry",
+      "scope": "project:shop/environment:prod/app:web",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "fn--web--entry",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/app:web/aws_lambda_function_url:fn--web--entry",
+      "scope": "project:shop/environment:prod/app:web",
+      "vendor": "aws",
+      "type": "aws_lambda_function_url",
+      "name": "fn--web--entry",
+      "region": "us-east-1",
+      "properties": {
+        "invoke_mode": "RESPONSE_STREAM"
+      }
+    },
+    {
+      "id": "project:shop/shared:production/cloudflare_account_subscription:Workers Paid",
+      "scope": "project:shop/shared:production",
+      "vendor": "cloudflare",
+      "type": "cloudflare_account_subscription",
+      "name": "Workers Paid",
+      "properties": {
+        "rate_plan": {
+          "id": "Workers Paid"
+        }
+      }
+    },
+    {
+      "id": "project:shop/shared:production/cloudflare_r2_bucket:ocel-edge-cache",
+      "scope": "project:shop/shared:production",
+      "vendor": "cloudflare",
+      "type": "cloudflare_r2_bucket",
+      "name": "ocel-edge-cache",
+      "properties": {
+        "storage_class": "Standard"
+      }
+    },
+    {
+      "id": "project:shop/shared:production/cloudflare_workers_script:ocel-deployments-store",
+      "scope": "project:shop/shared:production",
+      "vendor": "cloudflare",
+      "type": "cloudflare_workers_script",
+      "name": "ocel-deployments-store",
+      "properties": {
+        "durable_objects": [
+          "DeploymentsStore"
+        ]
+      }
+    },
+    {
+      "id": "project:shop/shared:production/cloudflare_workers_script:ocel-isr-writer",
+      "scope": "project:shop/shared:production",
+      "vendor": "cloudflare",
+      "type": "cloudflare_workers_script",
+      "name": "ocel-isr-writer",
+      "properties": {
+        "durable_objects": [
+          "IsrDeploy",
+          "IsrSnapshot"
+        ]
+      }
+    },
+    {
+      "id": "project:shop/environment:prod/cloudflare_workers_script:entry",
+      "scope": "project:shop/environment:prod",
+      "vendor": "cloudflare",
+      "type": "cloudflare_workers_script",
+      "name": "entry",
+      "properties": {
+        "durable_objects": []
+      }
+    }
+  ]
+}

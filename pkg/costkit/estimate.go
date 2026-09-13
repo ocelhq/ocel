@@ -310,3 +310,11 @@ func Struct(values map[string]any) *structpb.Struct {
 	}
 	return s
 }
+
+func Tables(tables ...Table) Table {
+	merged := Table{}
+	for _, table := range tables {
+		maps.Copy(merged, table)
+	}
+	return merged
+}
