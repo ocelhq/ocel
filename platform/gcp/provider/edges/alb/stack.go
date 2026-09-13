@@ -188,7 +188,6 @@ func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 		return s.e.deps.Stacks.Destroy(ctx, target, edge.DiscardReporter())
 	}
 	_, err := s.e.deps.Stacks.Up(ctx, target, bindingProgram(bindingSpec{
-		Project:        s.e.deps.Project,
 		Region:         s.e.deps.Region,
 		Slug:           s.state.Slug,
 		Class:          s.state.Class,

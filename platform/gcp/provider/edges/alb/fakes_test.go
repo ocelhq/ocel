@@ -212,7 +212,7 @@ var _ Entries = (*world)(nil)
 func declared(program Program) (map[string]declaration, error) {
 	seen := map[string]declaration{}
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
-		return program(ctx)
+		return program(ctx, "acme-prod")
 	}, pulumi.WithMocks("alb", "test", mocks{mu: &sync.Mutex{}, seen: seen}))
 	return seen, err
 }

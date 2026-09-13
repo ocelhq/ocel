@@ -10,11 +10,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 )
 
-func (p *Provider) serviceFor(plan providerkit.StackPlan, app *providerkit.AppPlan, function string) (string, error) {
+func serviceFor(names Names, plan providerkit.StackPlan, app *providerkit.AppPlan, function string) (string, error) {
 	if app.PreviewLabel != "" {
-		return p.Names().PreviewService(app.PreviewLabel, app.App, function)
+		return names.PreviewService(app.PreviewLabel, app.App, function)
 	}
-	return p.Names().Service(plan.Ref.Project, plan.Ref.Name.Env, app.App, function)
+	return names.Service(plan.Ref.Project, plan.Ref.Name.Env, app.App, function)
 }
 
 func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.Function, error) {
@@ -22,7 +22,11 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 	if app == nil {
 		return nil, nil
 	}
-	account := p.Names().RuntimeAccountEmail(plan.Ref.Class)
+	names, err := p.Names(ctx)
+	if err != nil {
+		return nil, err
+	}
+	account := names.RuntimeAccountEmail(plan.Ref.Class)
 	standing := make([]providerkit.Function, 0, len(app.Functions))
 	for _, spec := range app.Functions {
 		if err := runsX8664(spec.Runtime.Arch, "function "+spec.Name); err != nil {
@@ -32,7 +36,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 			return nil, providerkit.Refuse(providerkit.CodeInvalid,
 				"function %s carries no image, and a function on Cloud Run is the container a registry coordinate names", spec.Name)
 		}
-		service, err := p.serviceFor(plan, app, spec.Name)
+		service, err := serviceFor(names, plan, app, spec.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -86,7 +90,11 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"app %s carries no health check path, and up means a 2xx on the path the wire named rather than on one this provider chose", app.App)
 	}
-	service, err := p.serviceFor(plan, app, app.App)
+	names, err := p.Names(ctx)
+	if err != nil {
+		return nil, err
+	}
+	service, err := serviceFor(names, plan, app, app.App)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +106,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 		service: service,
 		image:   app.Image,
 		env:     values,
-		account: p.Names().RuntimeAccountEmail(plan.Ref.Class),
+		account: names.RuntimeAccountEmail(plan.Ref.Class),
 		compute: providerkit.ComputeContainer,
 		health:  app.HealthCheckPath,
 		public:  true,

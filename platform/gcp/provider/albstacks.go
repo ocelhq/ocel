@@ -20,9 +20,14 @@ const cloudStorageScheme = "gs"
 
 type albStacks struct{ p *Provider }
 
-type albProgram struct{ run alb.Program }
+type albProgram struct {
+	run     alb.Program
+	project string
+}
 
-func (a albProgram) Run(ctx *pulumi.Context, _ providerkit.StackPlan) error { return a.run(ctx) }
+func (a albProgram) Run(ctx *pulumi.Context, _ providerkit.StackPlan) error {
+	return a.run(ctx, a.project)
+}
 
 func (s albStacks) Up(
 	ctx context.Context,
@@ -75,15 +80,20 @@ func (s albStacks) opened(
 	target alb.Target,
 	program alb.Program,
 ) (*kitpulumi.Adapter, providerkit.StackPlan, error) {
-	passphrase, err := s.passphrase(ctx, target.Class)
+	clients, err := s.p.stood(ctx)
 	if err != nil {
 		return nil, providerkit.StackPlan{}, err
 	}
-	config, plan := s.config(target, passphrase, program)
+	passphrase, err := s.passphrase(ctx, clients, target.Class)
+	if err != nil {
+		return nil, providerkit.StackPlan{}, err
+	}
+	config, plan := s.config(clients, target, passphrase, program)
 	return kitpulumi.New(config), plan, nil
 }
 
 func (s albStacks) config(
+	clients *clients,
 	target alb.Target,
 	passphrase string,
 	program alb.Program,
@@ -91,17 +101,17 @@ func (s albStacks) config(
 	project := naming.PulumiProject(target.Prefix())
 	config := kitpulumi.Config{
 		Access: kitpulumi.Access{
-			BackendURL: naming.StateBackendURL(cloudStorageScheme, s.p.Names().StateBucket(target.Class), project),
+			BackendURL: naming.StateBackendURL(cloudStorageScheme, clients.StateBucket(target.Class), project),
 			Passphrase: passphrase,
 			Project:    project,
 			Env: map[string]string{
-				"GOOGLE_PROJECT": s.p.options.Project,
-				"GOOGLE_REGION":  s.p.options.Region,
+				"GOOGLE_PROJECT": clients.project,
+				"GOOGLE_REGION":  clients.region,
 			},
 		},
 	}
 	if program != nil {
-		config.Program = albProgram{run: program}
+		config.Program = albProgram{run: program, project: clients.project}
 	}
 	if target.Slug == "" {
 		config.Refresh = refreshesTheFront
@@ -114,13 +124,13 @@ func (s albStacks) config(
 
 func refreshesTheFront(providerkit.StackRef, kitpulumi.Op) bool { return true }
 
-func (s albStacks) passphrase(ctx context.Context, class edge.Class) (string, error) {
-	secrets, err := s.p.clients.Secrets()
+func (s albStacks) passphrase(ctx context.Context, clients *clients, class edge.Class) (string, error) {
+	secrets, err := clients.Secrets()
 	if err != nil {
 		return "", err
 	}
-	secret := s.p.Names().PassphraseSecret(class)
-	name := "projects/" + s.p.options.Project + "/secrets/" + secret + "/versions/latest"
+	secret := clients.PassphraseSecret(class)
+	name := "projects/" + clients.project + "/secrets/" + secret + "/versions/latest"
 	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*secretmanager.AccessSecretVersionResponse, error) {
 		return secrets.Projects.Secrets.Versions.Access(name).Context(ctx).Do(call...)
 	})

@@ -59,6 +59,58 @@ const (
 	protectionOff   = "DELETE_PROTECTION_DISABLED"
 )
 
+type bootstrapGate struct{ p *Provider }
+
+func (g bootstrapGate) Catalogue() []providerkit.Feature { return bootstrapper{}.Catalogue() }
+
+func (g bootstrapGate) stood(ctx context.Context) (bootstrapper, error) {
+	held, err := g.p.stood(ctx)
+	if err != nil {
+		return bootstrapper{}, err
+	}
+	return bootstrapper{clients: held, fronts: g.p.Edges()}, nil
+}
+
+func (g bootstrapGate) Describe(ctx context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
+	b, err := g.stood(ctx)
+	if err != nil {
+		return providerkit.Bootstrap{}, err
+	}
+	return b.Describe(ctx, class)
+}
+
+func (g bootstrapGate) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
+	b, err := g.stood(ctx)
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	return b.Plan(ctx, req)
+}
+
+func (g bootstrapGate) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+	b, err := g.stood(ctx)
+	if err != nil {
+		return err
+	}
+	return b.Apply(ctx, req, report)
+}
+
+func (g bootstrapGate) PlanRemoval(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
+	b, err := g.stood(ctx)
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	return b.PlanRemoval(ctx, class)
+}
+
+func (g bootstrapGate) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
+	b, err := g.stood(ctx)
+	if err != nil {
+		return err
+	}
+	return b.Remove(ctx, class, report)
+}
+
 type bootstrapper struct {
 	clients *clients
 	fronts  providerkit.EdgeRegistry

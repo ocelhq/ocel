@@ -9,7 +9,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type Program func(ctx *pulumi.Context) error
+type Program func(ctx *pulumi.Context, project string) error
 
 type Target struct {
 	Class edge.Class

@@ -25,11 +25,11 @@ func TestEachProjectsBindingKeepsItsStateUnderAPrefixOfItsOwn(t *testing.T) {
 		{Class: class, Slug: "shop"},
 		{Class: class, Slug: "blog"},
 	} {
-		config, _ := stacks.config(target, "secret", nil)
+		config, _ := stacks.config(stacks.p.standing, target, "secret", nil)
 		prefixes[target.Slug] = config.Access.BackendURL
 	}
 
-	bucket := "gs://" + stacking(t).p.Names().StateBucket(class) + "/"
+	bucket := "gs://" + stacking(t).p.standing.StateBucket(class) + "/"
 	for slug, url := range prefixes {
 		if !strings.HasPrefix(url, bucket) {
 			t.Errorf("the %q stack keeps state at %q, want it in the class's own state bucket %q", slug, url, bucket)
@@ -45,7 +45,7 @@ func TestTheFrontIsRefreshedBeforeItIsRaisedSoTheRoutesWrittenBesideItSurvive(t 
 	t.Parallel()
 
 	stacks := stacking(t)
-	front, plan := stacks.config(alb.Target{Class: providerkit.ClassProduction}, "secret", nil)
+	front, plan := stacks.config(stacks.p.standing, alb.Target{Class: providerkit.ClassProduction}, "secret", nil)
 	if front.Refresh == nil || !front.Refresh(plan.Ref, kitpulumi.OpProvision) {
 		t.Error("the front stack is raised without a refresh, and its url map ignores changes to hostRules and pathMatchers by holding " +
 			"what state says: state that never saw the host rules a bind wrote puts every project in the class back to unrouted")

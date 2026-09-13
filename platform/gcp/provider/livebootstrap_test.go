@@ -180,10 +180,10 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 	class := providerkit.ClassProduction
 	here := bootstrapped(t, p, class)
 
-	t.Setenv(providerkit.NamespaceEnvVar, p.Names().Namespace().String()+"-beside")
+	t.Setenv(providerkit.NamespaceEnvVar, names(t, p).Namespace().String()+"-beside")
 	beside := newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
-	if beside.Names().Bucket(class) == p.Names().Bucket(class) {
-		t.Fatalf("both namespaces name the bucket %s, and this test turns on them naming different ones", beside.Names().Bucket(class))
+	if names(t, beside).Bucket(class) == names(t, p).Bucket(class) {
+		t.Fatalf("both namespaces name the bucket %s, and this test turns on them naming different ones", names(t, beside).Bucket(class))
 	}
 
 	ctx := context.Background()
@@ -193,7 +193,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 		t.Fatalf("Describe() under a second namespace = %v", err)
 	}
 	if described.Present {
-		t.Errorf("Describe() under namespace %s reads the bootstrap standing under %s as its own", beside.Names().Namespace(), p.Names().Namespace())
+		t.Errorf("Describe() under namespace %s reads the bootstrap standing under %s as its own", names(t, beside).Namespace(), names(t, p).Namespace())
 	}
 
 	plan, err := elsewhere.Plan(ctx, providerkit.BootstrapRequest{Class: class})
@@ -209,7 +209,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 			}
 			if change.Action != providerkit.ActionCreate {
 				t.Errorf("Plan() under namespace %s shows %s %s as %q, want a create: nothing of it stands yet",
-					beside.Names().Namespace(), change.Kind, change.Name, change.Action)
+					names(t, beside).Namespace(), change.Kind, change.Name, change.Action)
 			}
 		}
 	}
@@ -219,8 +219,8 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 
 	bootstrapped(t, beside, class)
 	for what, bootstrapper := range map[string]providerkit.Bootstrapper{
-		p.Names().Namespace().String():      here,
-		beside.Names().Namespace().String(): elsewhere,
+		names(t, p).Namespace().String():      here,
+		names(t, beside).Namespace().String(): elsewhere,
 	} {
 		standing, err := bootstrapper.Describe(ctx, class)
 		if err != nil {
@@ -800,7 +800,7 @@ func TestLiveTheRuntimeAccountStandsWithTheGrantADeployNeeds(t *testing.T) {
 
 	ctx := context.Background()
 	service := accounts(t)
-	path := "projects/" + liveProject() + "/serviceAccounts/" + p.Names().RuntimeAccountEmail(class)
+	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).RuntimeAccountEmail(class)
 	if _, err := service.Projects.ServiceAccounts.Get(path).Context(ctx).Do(); err != nil {
 		t.Fatalf("Get(%s) after a bootstrap = %v, want the account every app in the class runs as", path, err)
 	}
@@ -835,7 +835,7 @@ func TestLiveRemovingABootstrapTakesTheRuntimeAccountWithIt(t *testing.T) {
 		t.Fatalf("Remove(%s) = %v", class, err)
 	}
 
-	path := "projects/" + liveProject() + "/serviceAccounts/" + p.Names().RuntimeAccountEmail(class)
+	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).RuntimeAccountEmail(class)
 	if _, err := accounts(t).Projects.ServiceAccounts.Get(path).Context(ctx).Do(); err == nil {
 		t.Errorf("%s still stands after the bootstrap that named it was removed, and an identity nothing runs as is one more thing to explain", path)
 	}

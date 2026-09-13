@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"cloud.google.com/go/firestore"
@@ -149,6 +150,25 @@ func (c *clients) Projects() (*cloudresourcemanager.Service, error) {
 }
 
 func (c *clients) emulated() bool { return c.endpoint != "" }
+
+func (c *clients) location() string {
+	return "projects/" + c.project + "/locations/" + c.region
+}
+
+func (c *clients) servicePath(service string) string {
+	return c.location() + "/services/" + service
+}
+
+func (c *clients) certificatesGlobal() string {
+	return "projects/" + c.project + "/locations/global"
+}
+
+func (c *clients) backendLink(backend string) string {
+	if strings.Contains(backend, "/") {
+		return backend
+	}
+	return "projects/" + c.project + "/global/backendServices/" + backend
+}
 
 func (c *clients) Runtime() *ports.Clients {
 	held, _ := c.runtime.held(func() (*ports.Clients, error) {

@@ -42,8 +42,16 @@ func (ApplicationDefault) Token(ctx context.Context) (string, error) {
 	return token.AccessToken, nil
 }
 
+type ProjectSource interface {
+	Project(ctx context.Context) (string, error)
+}
+
+type Named string
+
+func (n Named) Project(context.Context) (string, error) { return string(n), nil }
+
 type Credentials struct {
-	Project string
+	Project ProjectSource
 	Region  string
 
 	Tokens TokenSource
@@ -58,9 +66,13 @@ type Credentials struct {
 const emulatorPrincipal = "emulator"
 
 func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
+	project, err := c.Project.Project(ctx)
+	if err != nil {
+		return providerkit.Identity{}, err
+	}
 	identity := providerkit.Identity{
 		Provider:  Vendor,
-		Account:   c.Project,
+		Account:   project,
 		Principal: emulatorPrincipal,
 		Location:  c.Region,
 	}
@@ -79,9 +91,9 @@ func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 	}
 	if c.Projects == nil {
 		return providerkit.Identity{}, providerkit.Refuse(providerkit.CodeDenied,
-			"nothing here can ask whether this credential reaches project %s, and a credential nothing vouched for deploys nothing", c.Project)
+			"nothing here can ask whether this credential reaches project %s, and a credential nothing vouched for deploys nothing", project)
 	}
-	if err := c.Projects.Reaches(ctx, c.Project); err != nil {
+	if err := c.Projects.Reaches(ctx, project); err != nil {
 		return providerkit.Identity{}, err
 	}
 	return identity, nil
@@ -139,8 +151,12 @@ func askTokenInfo(ctx context.Context, endpoint, token string) (string, int, err
 func (c Credentials) Permissions(tier providerkit.CredentialTier) (edge.CredentialDocument, error) {
 	switch tier {
 	case providerkit.TierBootstrap, providerkit.TierDeploy:
+		project, err := c.Project.Project(context.Background())
+		if err != nil {
+			return edge.CredentialDocument{}, err
+		}
 		return edge.CredentialDocument{
-			Heading:  fmt.Sprintf("the roles a %s credential is granted on project %s", tier, c.Project),
+			Heading:  fmt.Sprintf("the roles a %s credential is granted on project %s", tier, project),
 			Document: strings.Join(rolesFor(tier), "\n"),
 		}, nil
 	default:

@@ -34,13 +34,17 @@ var itemTypes = map[Kind]string{
 }
 
 func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
+	names, err := p.named()
+	if err != nil {
+		return nil, err
+	}
 	tree := &costkit.Tree{}
 	region := p.options.Region
 	project := tree.Scope("", costkit.ScopeProject, req.Plan.Slug)
 	shared := tree.Scope(project, costkit.ScopeShared, string(req.Plan.Class))
 	environment := tree.Scope(project, costkit.ScopeEnvironment, req.Plan.Env)
 
-	for _, item := range bootstrapItems(p.Names(), req.Plan.Class, false) {
+	for _, item := range bootstrapItems(names, req.Plan.Class, false) {
 		typ, priced := itemTypes[item.Kind]
 		if !priced {
 			return nil, providerkit.Refuse(providerkit.CodeInvalid, "bootstrap item %s has no shape", item.ID())
@@ -67,7 +71,7 @@ func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*cost
 	for _, app := range req.Plan.Apps {
 		scope := tree.Scope(environment, costkit.ScopeApp, app.App)
 		if app.Compute() == providerkit.ComputeContainer {
-			service, err := p.Names().Service(req.Plan.Slug, req.Plan.Env, app.App, app.App)
+			service, err := names.Service(req.Plan.Slug, req.Plan.Env, app.App, app.App)
 			if err != nil {
 				return nil, err
 			}
@@ -78,7 +82,7 @@ func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*cost
 				specs = []providerkit.FunctionSpec{{Name: app.App}}
 			}
 			for _, spec := range specs {
-				service, err := p.Names().Service(req.Plan.Slug, req.Plan.Env, app.App, spec.Name)
+				service, err := names.Service(req.Plan.Slug, req.Plan.Env, app.App, spec.Name)
 				if err != nil {
 					return nil, err
 				}

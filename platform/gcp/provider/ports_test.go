@@ -22,11 +22,20 @@ func standing(t *testing.T) *gcp.Provider {
 
 func newProvider(t *testing.T, options gcp.Options) *gcp.Provider {
 	t.Helper()
-	p, err := gcp.NewProvider(context.Background(), options)
+	p, err := gcp.NewProvider(options)
 	if err != nil {
 		t.Fatalf("NewProvider(%+v) = %v", options, err)
 	}
 	return p
+}
+
+func names(t *testing.T, p *gcp.Provider) gcp.Names {
+	t.Helper()
+	held, err := p.Names(context.Background())
+	if err != nil {
+		t.Fatalf("Names() = %v", err)
+	}
+	return held
 }
 
 func TestTheAlbEdgeIsRegisteredAndOpensWithTheProvidersOwnPorts(t *testing.T) {

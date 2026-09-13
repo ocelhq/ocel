@@ -50,11 +50,14 @@ var _ providerkit.ConnectorHost = (*Provider)(nil)
 const connectorCompute = providerkit.ComputeServerless
 
 func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.ConnectorTarget, error) {
-	names := p.Names()
+	names, err := p.Names(ctx)
+	if err != nil {
+		return providerkit.ConnectorTarget{}, err
+	}
 	if err := names.connectorFits(); err != nil {
 		return providerkit.ConnectorTarget{}, err
 	}
-	fingerprint, err := target.Fingerprint("gcp", p.options.Project, p.options.Region, string(names.Namespace()))
+	fingerprint, err := target.Fingerprint("gcp", names.project, p.options.Region, string(names.Namespace()))
 	if err != nil {
 		return providerkit.ConnectorTarget{}, err
 	}
@@ -78,7 +81,10 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}
-	names := p.Names()
+	names, err := p.Names(ctx)
+	if err != nil {
+		return providerkit.ConnectorAddress{}, err
+	}
 	if err := names.connectorFits(); err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}
@@ -86,7 +92,7 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 		return providerkit.ConnectorAddress{}, providerkit.Refuse(providerkit.CodeInvalid,
 			"this install carries no connector config, so nothing would name the console the service trusts")
 	}
-	if p.clients.emulated() {
+	if p.emulated() {
 		return providerkit.ConnectorAddress{}, providerkit.Refuse(providerkit.CodeNotReady,
 			"this run talks to an emulator, which stands up no Cloud Run service and hands out no url a console could dial: add the connector against the project itself")
 	}
@@ -111,7 +117,7 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 		most:    connectorInstances,
 		env: map[string]string{
 			providerkit.NamespaceEnvVar:       string(names.Namespace()),
-			ports.ProjectEnvVar:               p.options.Project,
+			ports.ProjectEnvVar:               names.project,
 			ports.RegionEnvVar:                p.options.Region,
 			connectorVersionEnv:               install.Version,
 			providerkit.ConnectorConfigEnvVar: string(install.Config),
@@ -128,7 +134,10 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 }
 
 func (p *Provider) RemoveConnector(ctx context.Context, report providerkit.Reporter) error {
-	names := p.Names()
+	names, err := p.Names(ctx)
+	if err != nil {
+		return err
+	}
 	if err := p.tearDown(ctx, names.Connector(), report); err != nil {
 		return err
 	}
@@ -142,11 +151,15 @@ func (p *Provider) RemoveConnector(ctx context.Context, report providerkit.Repor
 }
 
 func (p *Provider) connectorService(ctx context.Context) (*run.GoogleCloudRunV2Service, error) {
-	services, err := p.clients.Run()
+	clients, err := p.stood(ctx)
 	if err != nil {
 		return nil, err
 	}
-	path := p.servicePath(p.Names().Connector())
+	services, err := clients.Run()
+	if err != nil {
+		return nil, err
+	}
+	path := clients.servicePath(clients.Connector())
 	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(path).Context(ctx).Do(call...)
 	})
@@ -154,7 +167,7 @@ func (p *Provider) connectorService(ctx context.Context) (*run.GoogleCloudRunV2S
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read the Cloud Run service %s: %w", p.Names().Connector(), err)
+		return nil, fmt.Errorf("read the Cloud Run service %s: %w", clients.Connector(), err)
 	}
 	return held, nil
 }
@@ -199,7 +212,11 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, report pr
 	if err != nil {
 		return "", err
 	}
-	ref := p.Names().RepositoryPath(p.options.Region, providerkit.ClassProduction) +
+	names, err := p.Names(ctx)
+	if err != nil {
+		return "", err
+	}
+	ref := names.RepositoryPath(p.options.Region, providerkit.ClassProduction) +
 		"/" + connectorImageName + ":" + naming.DigestTag(digest.String())
 	push := providerkit.ImagePush{App: connectorImageName, Target: ref, Digest: digest.String(), Built: built}
 
@@ -257,12 +274,15 @@ func connectorImage(base v1.Image, binary []byte) (v1.Image, error) {
 }
 
 func (p *Provider) standConnectorAccount(ctx context.Context, report providerkit.Reporter) error {
-	names := p.Names()
-	service, err := p.clients.Accounts()
+	names, err := p.stood(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+p.options.Project,
+	service, err := names.Accounts()
+	if err != nil {
+		return err
+	}
+	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+names.project,
 		&iam.CreateServiceAccountRequest{
 			AccountId: names.Connector(),
 			ServiceAccount: &iam.ServiceAccount{
@@ -290,18 +310,22 @@ func (p *Provider) forgetConnectorGrants(ctx context.Context, report providerkit
 }
 
 func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) error {
-	service, err := p.clients.Projects()
+	clients, err := p.stood(ctx)
 	if err != nil {
 		return err
 	}
-	member := "serviceAccount:" + p.Names().ConnectorAccountEmail()
-	onlyThisDatabase := databaseCondition(p.options.Project, p.Names().Namespace())
+	service, err := clients.Projects()
+	if err != nil {
+		return err
+	}
+	member := "serviceAccount:" + clients.ConnectorAccountEmail()
+	onlyThisDatabase := databaseCondition(clients.project, clients.Namespace())
 	var refused error
 	for attempt := range connectorBindAttempts {
 		if attempt > 0 && !waited(ctx, attempt) {
 			return ctx.Err()
 		}
-		policy, err := attempted(ctx, service.Projects.GetIamPolicy(p.options.Project,
+		policy, err := attempted(ctx, service.Projects.GetIamPolicy(clients.project,
 			&cloudresourcemanager.GetIamPolicyRequest{
 				Options: &cloudresourcemanager.GetPolicyOptions{RequestedPolicyVersion: conditionalPolicyVersion},
 			}).Context(ctx).Do)
@@ -314,7 +338,7 @@ func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) erro
 		}
 		policy.Bindings = bindings
 		policy.Version = conditionalPolicyVersion
-		_, refused = attempted(ctx, service.Projects.SetIamPolicy(p.options.Project,
+		_, refused = attempted(ctx, service.Projects.SetIamPolicy(clients.project,
 			&cloudresourcemanager.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
 		if refused == nil {
 			return nil
@@ -324,7 +348,7 @@ func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) erro
 		}
 	}
 	return fmt.Errorf("let %s read and write the %s database's records: %w",
-		member, ports.Database(p.Names().Namespace()), refused)
+		member, ports.Database(clients.Namespace()), refused)
 }
 
 func databaseCondition(project string, ns providerkit.Namespace) *cloudresourcemanager.Expr {
@@ -343,13 +367,17 @@ func sameCondition(held, want *cloudresourcemanager.Expr) bool {
 }
 
 func (p *Provider) bindConnectorKeys(ctx context.Context, granting bool, report providerkit.Reporter) error {
-	client, err := p.clients.KMS()
+	clients, err := p.stood(ctx)
 	if err != nil {
 		return err
 	}
-	member := "serviceAccount:" + p.Names().ConnectorAccountEmail()
+	client, err := clients.KMS()
+	if err != nil {
+		return err
+	}
+	member := "serviceAccount:" + clients.ConnectorAccountEmail()
 	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
-		key := keyPath(p.clients, string(class))
+		key := keyPath(clients, string(class))
 		if _, err := dialled(ctx, func() (*kmspb.CryptoKey, error) {
 			return client.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: key})
 		}); err != nil {
@@ -437,27 +465,35 @@ func boundKeyMember(bindings []*iampb.Binding, role, member string, granting boo
 }
 
 func (p *Provider) takeConnectorAccount(ctx context.Context, report providerkit.Reporter) error {
-	service, err := p.clients.Accounts()
+	clients, err := p.stood(ctx)
 	if err != nil {
 		return err
 	}
-	name := p.Names().Connector()
+	service, err := clients.Accounts()
+	if err != nil {
+		return err
+	}
+	name := clients.Connector()
 	if _, err := attempted(ctx, service.Projects.ServiceAccounts.Delete(
-		accountPath(p.clients, name)).Context(ctx).Do); err != nil && !absent(err) {
+		accountPath(clients, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the %s service account: %w", name, err)
 	}
 	if report != nil {
-		report.Say("Took away " + p.Names().ConnectorAccountEmail())
+		report.Say("Took away " + clients.ConnectorAccountEmail())
 	}
 	return nil
 }
 
 func (p *Provider) takeConnectorImages(ctx context.Context, report providerkit.Reporter) error {
-	service, err := p.clients.Repositories()
+	clients, err := p.stood(ctx)
 	if err != nil {
 		return err
 	}
-	held := repositoryPath(p.clients, p.Names().Repository(providerkit.ClassProduction)) +
+	service, err := clients.Repositories()
+	if err != nil {
+		return err
+	}
+	held := repositoryPath(clients, clients.Repository(providerkit.ClassProduction)) +
 		"/packages/" + connectorImageName
 	if _, err := attempted(ctx, service.Projects.Locations.Repositories.Packages.Delete(
 		held).Context(ctx).Do); err != nil && !absent(err) {

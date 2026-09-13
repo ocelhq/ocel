@@ -8,7 +8,6 @@ import (
 
 func binding(hosts map[string]Host) Program {
 	return bindingProgram(bindingSpec{
-		Project:        "acme-prod",
 		Region:         "europe-west1",
 		Slug:           "shop",
 		Class:          providerkit.ClassProduction,
@@ -20,7 +19,7 @@ func binding(hosts map[string]Host) Program {
 func TestTheFrontendStandsOneLoadBalancerUpForTheWholeClass(t *testing.T) {
 	t.Parallel()
 
-	seen, err := declared(frontProgram(frontSpec{Project: "acme-prod", Names: frontNames(providerkit.ClassProduction)}))
+	seen, err := declared(frontProgram(frontSpec{Names: frontNames(providerkit.ClassProduction)}))
 	if err != nil {
 		t.Fatalf("the frontend program = %v", err)
 	}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
-	"strings"
 
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
@@ -22,8 +21,8 @@ func (p *Provider) Route(ctx context.Context, urlMap, hostname, backend string) 
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"route %q through url map %q onto backend %q: a host rule names all three", hostname, urlMap, backend)
 	}
-	return p.rewrite(ctx, urlMap, "route "+hostname+" through the load balancer", func(held *compute.UrlMap) bool {
-		return routed(held, hostname, p.backendLink(backend))
+	return p.rewrite(ctx, urlMap, "route "+hostname+" through the load balancer", func(clients *clients, held *compute.UrlMap) bool {
+		return routed(held, hostname, clients.backendLink(backend))
 	})
 }
 
@@ -32,7 +31,7 @@ func (p *Provider) Hold(ctx context.Context, urlMap, hostname string) error {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"hold %q on url map %q until its app releases: a host rule names both", hostname, urlMap)
 	}
-	return p.rewrite(ctx, urlMap, "answer "+hostname+" with a 404 until its app has released", func(held *compute.UrlMap) bool {
+	return p.rewrite(ctx, urlMap, "answer "+hostname+" with a 404 until its app has released", func(_ *clients, held *compute.UrlMap) bool {
 		return unclaimed(held, hostname)
 	})
 }
@@ -41,35 +40,32 @@ func (p *Provider) Unroute(ctx context.Context, urlMap, hostname string) error {
 	if urlMap == "" || hostname == "" {
 		return nil
 	}
-	return p.rewrite(ctx, urlMap, "stop routing "+hostname+" through the load balancer", func(held *compute.UrlMap) bool {
+	return p.rewrite(ctx, urlMap, "stop routing "+hostname+" through the load balancer", func(_ *clients, held *compute.UrlMap) bool {
 		return unrouted(held, hostname)
 	})
 }
 
-func (p *Provider) backendLink(backend string) string {
-	if strings.Contains(backend, "/") {
-		return backend
+func (p *Provider) rewrite(ctx context.Context, urlMap, doing string, change func(*clients, *compute.UrlMap) bool) error {
+	clients, err := p.stood(ctx)
+	if err != nil {
+		return err
 	}
-	return "projects/" + p.options.Project + "/global/backendServices/" + backend
-}
-
-func (p *Provider) rewrite(ctx context.Context, urlMap, doing string, change func(*compute.UrlMap) bool) error {
-	engine, err := p.clients.Compute()
+	engine, err := clients.Compute()
 	if err != nil {
 		return err
 	}
 	return p.settled(ctx, doing, func() error {
 		held, err := attempted(ctx, func(call ...googleapi.CallOption) (*compute.UrlMap, error) {
-			return engine.UrlMaps.Get(p.options.Project, urlMap).Context(ctx).Do(call...)
+			return engine.UrlMaps.Get(clients.project, urlMap).Context(ctx).Do(call...)
 		})
 		if err != nil {
 			return fmt.Errorf("read the url map %s: %w", urlMap, err)
 		}
-		if !change(held) {
+		if !change(clients, held) {
 			return nil
 		}
-		return p.settle(ctx, engine, doing, func(call ...googleapi.CallOption) (*compute.Operation, error) {
-			return engine.UrlMaps.Patch(p.options.Project, urlMap, &compute.UrlMap{
+		return p.settle(ctx, clients, engine, doing, func(call ...googleapi.CallOption) (*compute.Operation, error) {
+			return engine.UrlMaps.Patch(clients.project, urlMap, &compute.UrlMap{
 				Fingerprint:     held.Fingerprint,
 				HostRules:       held.HostRules,
 				PathMatchers:    held.PathMatchers,
@@ -150,6 +146,7 @@ func unrouted(held *compute.UrlMap, hostname string) bool {
 
 func (p *Provider) settle(
 	ctx context.Context,
+	clients *clients,
 	engine *compute.Service,
 	doing string,
 	call func(...googleapi.CallOption) (*compute.Operation, error),
@@ -163,7 +160,7 @@ func (p *Provider) settle(
 			return started, nil
 		}
 		return attempted(ctx, func(opt ...googleapi.CallOption) (*compute.Operation, error) {
-			return engine.GlobalOperations.Get(p.options.Project, started.Name).Context(ctx).Do(opt...)
+			return engine.GlobalOperations.Get(clients.project, started.Name).Context(ctx).Do(opt...)
 		})
 	}, func(op *compute.Operation) bool { return op != nil && op.Status == operationDone })
 	if err != nil {

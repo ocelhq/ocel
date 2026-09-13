@@ -46,7 +46,6 @@ func frontNames(class edge.Class) names {
 }
 
 type frontSpec struct {
-	Project string
 	Region  string
 	Names   names
 	Preview previewEntry
@@ -65,16 +64,16 @@ func refusingRouteAction() compute.URLMapDefaultRouteActionPtrInput {
 	}
 }
 
-func previewWildcardResources(ctx *pulumi.Context, spec frontSpec) error {
+func previewWildcardResources(ctx *pulumi.Context, spec frontSpec, project string) error {
 	base := spec.Preview.BaseDomain
 	if base == "" {
 		return nil
 	}
-	project := pulumi.String(spec.Project)
+	held := pulumi.String(project)
 	entry := previewEntryName(base)
 	if _, err := certificatemanager.NewCertificateMapEntry(ctx, entry, &certificatemanager.CertificateMapEntryArgs{
 		Name:         pulumi.String(entry),
-		Project:      project,
+		Project:      held,
 		Map:          pulumi.String(spec.Names.CertificateMap),
 		Hostname:     pulumi.String(edge.PreviewWildcard(base)),
 		Certificates: pulumi.StringArray{pulumi.String(spec.Preview.Certificate)},
@@ -84,7 +83,7 @@ func previewWildcardResources(ctx *pulumi.Context, spec frontSpec) error {
 	neg := previewNEGName(base)
 	group, err := compute.NewRegionNetworkEndpointGroup(ctx, neg, &compute.RegionNetworkEndpointGroupArgs{
 		Name:                pulumi.String(neg),
-		Project:             project,
+		Project:             held,
 		Region:              pulumi.String(spec.Region),
 		NetworkEndpointType: pulumi.String(serverlessNEG),
 		CloudRun: &compute.RegionNetworkEndpointGroupCloudRunArgs{
@@ -97,7 +96,7 @@ func previewWildcardResources(ctx *pulumi.Context, spec frontSpec) error {
 	backend := previewBackendName(base)
 	_, err = compute.NewBackendService(ctx, backend, &compute.BackendServiceArgs{
 		Name:                pulumi.String(backend),
-		Project:             project,
+		Project:             held,
 		Protocol:            pulumi.String("HTTPS"),
 		LoadBalancingScheme: pulumi.String(externalManaged),
 		EnableCdn:           pulumi.Bool(true),
@@ -120,11 +119,11 @@ func previewWildcardResources(ctx *pulumi.Context, spec frontSpec) error {
 }
 
 func frontProgram(spec frontSpec) Program {
-	return func(ctx *pulumi.Context) error {
-		project := pulumi.String(spec.Project)
+	return func(ctx *pulumi.Context, project string) error {
+		held := pulumi.String(project)
 		address, err := compute.NewGlobalAddress(ctx, spec.Names.Address, &compute.GlobalAddressArgs{
 			Name:        pulumi.String(spec.Names.Address),
-			Project:     project,
+			Project:     held,
 			AddressType: pulumi.String("EXTERNAL"),
 		})
 		if err != nil {
@@ -132,7 +131,7 @@ func frontProgram(spec frontSpec) Program {
 		}
 		notFound, err := compute.NewBackendService(ctx, spec.Names.NotFound, &compute.BackendServiceArgs{
 			Name:                pulumi.String(spec.Names.NotFound),
-			Project:             project,
+			Project:             held,
 			Protocol:            pulumi.String("HTTPS"),
 			LoadBalancingScheme: pulumi.String(externalManaged),
 			Description: pulumi.String(
@@ -144,14 +143,14 @@ func frontProgram(spec frontSpec) Program {
 		certificates, err := certificatemanager.NewCertificateMapResource(ctx, spec.Names.CertificateMap,
 			&certificatemanager.CertificateMapResourceArgs{
 				Name:    pulumi.String(spec.Names.CertificateMap),
-				Project: project,
+				Project: held,
 			})
 		if err != nil {
 			return err
 		}
 		routes, err := compute.NewURLMap(ctx, spec.Names.URLMap, &compute.URLMapArgs{
 			Name:               pulumi.String(spec.Names.URLMap),
-			Project:            project,
+			Project:            held,
 			DefaultService:     notFound.SelfLink,
 			DefaultRouteAction: refusingRouteAction(),
 		}, pulumi.IgnoreChanges(frontRouting))
@@ -160,16 +159,16 @@ func frontProgram(spec frontSpec) Program {
 		}
 		proxy, err := compute.NewTargetHttpsProxy(ctx, spec.Names.Proxy, &compute.TargetHttpsProxyArgs{
 			Name:           pulumi.String(spec.Names.Proxy),
-			Project:        project,
+			Project:        held,
 			UrlMap:         routes.SelfLink,
-			CertificateMap: pulumi.Sprintf(certificateHost, spec.Project, spec.Names.CertificateMap),
+			CertificateMap: pulumi.Sprintf(certificateHost, project, spec.Names.CertificateMap),
 		})
 		if err != nil {
 			return err
 		}
 		if _, err := compute.NewGlobalForwardingRule(ctx, spec.Names.Rule, &compute.GlobalForwardingRuleArgs{
 			Name:                pulumi.String(spec.Names.Rule),
-			Project:             project,
+			Project:             held,
 			Target:              proxy.SelfLink,
 			IpAddress:           address.Address,
 			PortRange:           pulumi.String(httpsPortRange),
@@ -178,7 +177,7 @@ func frontProgram(spec frontSpec) Program {
 		}); err != nil {
 			return err
 		}
-		if err := previewWildcardResources(ctx, spec); err != nil {
+		if err := previewWildcardResources(ctx, spec, project); err != nil {
 			return err
 		}
 		ctx.Export(outputAddress, address.Address)

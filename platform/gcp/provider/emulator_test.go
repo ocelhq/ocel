@@ -27,7 +27,7 @@ func TestWhoamiNamesTheProviderTheIdentityCameFrom(t *testing.T) {
 	server := tokenInfo(t, `{"email":"deployer@acme.iam.gserviceaccount.com"}`)
 
 	identity, err := gcp.Credentials{
-		Project:      "acme-prod",
+		Project:      gcp.Named("acme-prod"),
 		Region:       "europe-west1",
 		Tokens:       heldToken{token: heldAccessToken},
 		TokenInfoURL: server.URL,
@@ -51,7 +51,7 @@ func TestWhoamiAsksWhetherTheCredentialReachesTheProjectItWillDeployInto(t *test
 
 		reader := &reachedProject{}
 		if _, err := (gcp.Credentials{
-			Project:      "acme-prod",
+			Project:      gcp.Named("acme-prod"),
 			Region:       "europe-west1",
 			Tokens:       heldToken{token: heldAccessToken},
 			TokenInfoURL: server.URL,
@@ -70,7 +70,7 @@ func TestWhoamiAsksWhetherTheCredentialReachesTheProjectItWillDeployInto(t *test
 		denied := providerkit.Refuse(providerkit.CodeDenied, "this credential cannot see project acme-prod")
 		var refusal providerkit.Refusal
 		_, err := gcp.Credentials{
-			Project:      "acme-prod",
+			Project:      gcp.Named("acme-prod"),
 			Region:       "europe-west1",
 			Tokens:       heldToken{token: heldAccessToken},
 			TokenInfoURL: server.URL,
@@ -88,7 +88,7 @@ func TestAgainstTheEmulatorWhoamiSkipsGooglesTokenEndpointAndSaysWhereItIs(t *te
 	endpoint := "http://127.0.0.1:4588"
 	reader := &reachedProject{}
 	identity, err := gcp.Credentials{
-		Project:  "floci-local",
+		Project:  gcp.Named("floci-local"),
 		Region:   "europe-west1",
 		Tokens:   heldToken{err: errors.New("google: could not find default credentials")},
 		Endpoint: endpoint,
@@ -146,7 +146,7 @@ func TestAnEmulatorEndpointBeyondLoopbackIsRefusedRatherThanAddressedWithoutCred
 			t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", endpoint)
 
 			var refusal providerkit.Refusal
-			_, err := gcp.NewProvider(context.Background(), gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+			_, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"})
 			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 				t.Fatalf("NewProvider() with %s naming %q = %v, want an %s refusal: every client at that endpoint is built with no authentication at all",
 					"OCEL_FLOCI_GCP_ENDPOINT", endpoint, err, providerkit.CodeInvalid)
@@ -160,7 +160,7 @@ func TestAnEmulatorEndpointOnLoopbackIsAddressed(t *testing.T) {
 		t.Run(endpoint, func(t *testing.T) {
 			t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", endpoint)
 
-			p, err := gcp.NewProvider(context.Background(), gcp.Options{Project: "floci-local", Region: "europe-west1"})
+			p, err := gcp.NewProvider(gcp.Options{Project: "floci-local", Region: "europe-west1"})
 			if err != nil {
 				t.Fatalf("NewProvider() against %q = %v, want the emulator addressed", endpoint, err)
 			}
