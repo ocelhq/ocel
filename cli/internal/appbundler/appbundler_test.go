@@ -518,7 +518,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 		if err == nil {
 			t.Fatal("Bundle succeeded, want a refusal rather than a function that dies at its first require")
 		}
-		for _, want := range []string{"addon.node", providerkit.ArchX8664, providerkit.ArchARM64} {
+		for _, want := range []string{"addon.node", providerkit.ArchX8664, providerkit.ArchARM64, `"compute": "container"`} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to name %q", err, want)
 			}
