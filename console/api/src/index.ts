@@ -3,6 +3,9 @@ export { detectUploads } from "./routes/blob/detect/route";
 export { presignUpload } from "./routes/blob/presign/route";
 export { uploadStatus } from "./routes/blob/status/route";
 export { verifyUploadSignature } from "./routes/blob/verify/route";
+export { connectorHeartbeat } from "./routes/connectors/[id]/heartbeat/route";
+export { deleteConnector, updateConnector } from "./routes/connectors/[id]/route";
+export { listConnectors, upsertConnector } from "./routes/connectors/route";
 export {
   createDeployment,
   getDeployment,

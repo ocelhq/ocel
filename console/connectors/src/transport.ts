@@ -68,9 +68,15 @@ export async function ask<T>(run: () => Promise<T>): Promise<Outcome<T>> {
   }
 }
 
+export function capabilitiesURL(url: string): string {
+  const base = new URL(url);
+  base.pathname = `${base.pathname.replace(/\/+$/, "")}/v1/capabilities`;
+  return base.toString();
+}
+
 export async function capabilities(url: string): Promise<Outcome<ReadonlyArray<string>>> {
   try {
-    const response = await fetch(new URL("/v1/capabilities", url));
+    const response = await fetch(capabilitiesURL(url));
     if (!response.ok) {
       return refuse("incompatible", `the connector answered ${response.status}`);
     }

@@ -43,7 +43,7 @@ export function NoConnector({ vendor }: { vendor: string | null }) {
         {vendor ? ` your ${vendor} account` : " your own cloud"} and the console never holds them,
         so reading one needs a connector running there.
       </p>
-      <CommandPane command="ocel console connector add" />
+      <CommandPane command="ocel connector add" />
     </Notice>
   );
 }
@@ -52,17 +52,17 @@ const refusals: Record<RefusalReason, { heading: string; body: string; command?:
   offline: {
     heading: "The connector isn’t answering",
     body: "Nothing in your cloud is affected, and your values are untouched. The keys below are what the last deploy reported.",
-    command: "ocel console connector status",
+    command: "ocel connector status",
   },
   incompatible: {
     heading: "The connector is a different version",
     body: "This console and the connector in your account no longer agree on the contract, so it refused rather than guess.",
-    command: "ocel console connector add",
+    command: "ocel connector add",
   },
   denied: {
     heading: "The connector refused",
     body: "Its credentials in your account do not permit reading variables. Nothing was changed.",
-    command: "ocel console connector status",
+    command: "ocel connector status",
   },
   "lost-lease": {
     heading: "The request timed out",

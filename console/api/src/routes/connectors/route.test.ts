@@ -1,0 +1,258 @@
+import { db } from "@console/db";
+import { connector } from "@console/db/schema";
+import { and, eq } from "drizzle-orm";
+import { beforeAll, describe, expect, it } from "vitest";
+import { createTestSessionWithOrganization } from "../../../test/auth-harness";
+import { setupTestDatabase } from "../../../test/db";
+import { deleteConnector, updateConnector } from "./[id]/route";
+import { listConnectors, upsertConnector } from "./route";
+
+const vpsTarget = "vps/SHA256:abc/ocel";
+
+function putRequest(body: unknown, headers: Headers) {
+  return new Request("http://localhost/api/connectors", {
+    method: "PUT",
+    headers: { ...Object.fromEntries(headers), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+function patchRequest(body: unknown, headers: Headers) {
+  return new Request("http://localhost/api/connectors/x", {
+    method: "PATCH",
+    headers: { ...Object.fromEntries(headers), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+function getRequest(headers: Headers) {
+  return new Request("http://localhost/api/connectors", { headers });
+}
+
+function deleteRequest(headers: Headers) {
+  return new Request("http://localhost/api/connectors/x", { method: "DELETE", headers });
+}
+
+const dialled = { target: vpsTarget, vendor: "vps", form: "service", reach: "dial" };
+
+describe("PUT /api/connectors", () => {
+  beforeAll(async () => {
+    await setupTestDatabase();
+  });
+
+  it("creates the row in the caller's active org", async () => {
+    const session = await createTestSessionWithOrganization();
+
+    try {
+      const response = await upsertConnector(putRequest(dialled, session.headers));
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.target).toBe(vpsTarget);
+      expect(body.vendor).toBe("vps");
+      expect(body.form).toBe("service");
+      expect(body.reach).toBe("dial");
+      expect(body.url).toBeNull();
+      expect(body.organizationId).toBe(session.organization.id);
+      expect(body.id).toBeTruthy();
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("converges on the same row for the same target and keeps the url and key", async () => {
+    const session = await createTestSessionWithOrganization();
+
+    try {
+      const first = await (await upsertConnector(putRequest(dialled, session.headers))).json();
+      await updateConnector(
+        patchRequest(
+          { url: "https://box.example/.ocel/connector", publicKey: "aGk=" },
+          session.headers,
+        ),
+        first.id,
+      );
+
+      const again = await upsertConnector(putRequest(dialled, session.headers));
+      expect(again.status).toBe(200);
+      const body = await again.json();
+      expect(body.id).toBe(first.id);
+      expect(body.url).toBe("https://box.example/.ocel/connector");
+      expect(body.publicKey).toBe("aGk=");
+
+      const rows = await db
+        .select()
+        .from(connector)
+        .where(eq(connector.organizationId, session.organization.id));
+      expect(rows).toHaveLength(1);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("lets two orgs hold the same target", async () => {
+    const one = await createTestSessionWithOrganization();
+    const two = await createTestSessionWithOrganization();
+
+    try {
+      expect((await upsertConnector(putRequest(dialled, one.headers))).status).toBe(200);
+      expect((await upsertConnector(putRequest(dialled, two.headers))).status).toBe(200);
+    } finally {
+      await one.cleanup();
+      await two.cleanup();
+    }
+  });
+
+  it("refuses a target that names no account", async () => {
+    const session = await createTestSessionWithOrganization();
+
+    try {
+      const response = await upsertConnector(
+        putRequest({ ...dialled, target: "vps" }, session.headers),
+      );
+      expect(response.status).toBe(400);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("refuses a vendor and a form outside the enums", async () => {
+    const session = await createTestSessionWithOrganization();
+
+    try {
+      expect(
+        (await upsertConnector(putRequest({ ...dialled, vendor: "azure" }, session.headers)))
+          .status,
+      ).toBe(400);
+      expect(
+        (await upsertConnector(putRequest({ ...dialled, form: "daemon" }, session.headers))).status,
+      ).toBe(400);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    expect((await upsertConnector(putRequest(dialled, new Headers()))).status).toBe(401);
+  });
+});
+
+describe("GET /api/connectors", () => {
+  beforeAll(async () => {
+    await setupTestDatabase();
+  });
+
+  it("lists the active org's rows and none from another", async () => {
+    const session = await createTestSessionWithOrganization();
+    const other = await createTestSessionWithOrganization();
+
+    try {
+      await upsertConnector(putRequest(dialled, session.headers));
+      await upsertConnector(
+        putRequest({ ...dialled, target: "aws/1/eu-west-1/ocel", vendor: "aws" }, other.headers),
+      );
+
+      const response = await listConnectors(getRequest(session.headers));
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toHaveLength(1);
+      expect(body[0].target).toBe(vpsTarget);
+    } finally {
+      await session.cleanup();
+      await other.cleanup();
+    }
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    expect((await listConnectors(getRequest(new Headers()))).status).toBe(401);
+  });
+});
+
+describe("PATCH and DELETE /api/connectors/{id}", () => {
+  beforeAll(async () => {
+    await setupTestDatabase();
+  });
+
+  it("writes back the url, the public key and the tls pin", async () => {
+    const session = await createTestSessionWithOrganization();
+
+    try {
+      const held = await (await upsertConnector(putRequest(dialled, session.headers))).json();
+      const response = await updateConnector(
+        patchRequest(
+          {
+            url: "https://box.example/.ocel/connector",
+            publicKey: "aGk=",
+            tlsPin: "sha256/xyz",
+          },
+          session.headers,
+        ),
+        held.id,
+      );
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.url).toBe("https://box.example/.ocel/connector");
+      expect(body.publicKey).toBe("aGk=");
+      expect(body.tlsPin).toBe("sha256/xyz");
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("refuses a body naming nothing and a url that is not one", async () => {
+    const session = await createTestSessionWithOrganization();
+
+    try {
+      const held = await (await upsertConnector(putRequest(dialled, session.headers))).json();
+      expect((await updateConnector(patchRequest({}, session.headers), held.id)).status).toBe(400);
+      expect(
+        (await updateConnector(patchRequest({ url: "box" }, session.headers), held.id)).status,
+      ).toBe(400);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("deletes the row and answers 204", async () => {
+    const session = await createTestSessionWithOrganization();
+
+    try {
+      const held = await (await upsertConnector(putRequest(dialled, session.headers))).json();
+      const response = await deleteConnector(deleteRequest(session.headers), held.id);
+
+      expect(response.status).toBe(204);
+      const rows = await db
+        .select()
+        .from(connector)
+        .where(and(eq(connector.id, held.id)));
+      expect(rows).toHaveLength(0);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("hides another org's row behind a 404", async () => {
+    const session = await createTestSessionWithOrganization();
+    const other = await createTestSessionWithOrganization();
+
+    try {
+      const held = await (await upsertConnector(putRequest(dialled, session.headers))).json();
+
+      expect(
+        (await updateConnector(patchRequest({ url: "https://x.test/c" }, other.headers), held.id))
+          .status,
+      ).toBe(404);
+      expect((await deleteConnector(deleteRequest(other.headers), held.id)).status).toBe(404);
+    } finally {
+      await session.cleanup();
+      await other.cleanup();
+    }
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    expect(
+      (await updateConnector(patchRequest({ url: "https://x.test/c" }, new Headers()), "x")).status,
+    ).toBe(401);
+  });
+});
