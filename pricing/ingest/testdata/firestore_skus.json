@@ -64,6 +64,20 @@
           }
         }
       ]
+    },
+    {
+      "skuId": "GGGG-HHHH-IIII",
+      "description": "Cloud Firestore Nightly Backup",
+      "serviceRegions": [
+        "europe-west1"
+      ],
+      "category": {
+        "serviceDisplayName": "Firestore",
+        "resourceFamily": "Storage",
+        "resourceGroup": "Backup",
+        "usageType": "OnDemand"
+      },
+      "pricingInfo": []
     }
   ],
   "nextPageToken": ""

@@ -82,15 +82,21 @@ func run(log *slog.Logger, services, regions []string, vendor string) error {
 		log.Warn("the Cloud Billing catalog answers registered callers only, so GCP prices stay on the embedded card", "variable", catalog.KeyVariable)
 		return nil
 	}
-	loader := ingest.GCP{Store: store, Key: key}
+	loader := ingest.GCP{Store: store, Key: key, Log: log}
+	skipped := 0
 	for _, service := range ingest.GCPServices(card) {
 		if len(services) > 0 && !slices.Contains(services, service) {
 			continue
 		}
 		log.Info("ingesting a billing catalog", "vendor", postgres.VendorGCP, "service", service)
-		if err := loader.Run(ctx, service); err != nil {
+		result, err := loader.Run(ctx, service)
+		if err != nil {
 			return err
 		}
+		skipped += result.Skipped
+	}
+	if skipped > 0 {
+		return fmt.Errorf("%d skus stayed on the embedded card because the catalog priced them in a way this cannot read", skipped)
 	}
 	return nil
 }

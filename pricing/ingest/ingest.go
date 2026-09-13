@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -127,43 +128,57 @@ func (a AWS) now() time.Time {
 	return time.Now().UTC()
 }
 
+type Result struct {
+	Skipped int
+}
+
 type GCP struct {
 	Store *postgres.Store
 	Host  string
 	Key   string
+	Log   *slog.Logger
 	Now   func() time.Time
 }
 
-func (g GCP) Run(ctx context.Context, service string) error {
+func (g GCP) Run(ctx context.Context, service string) (Result, error) {
 	host := g.Host
 	if host == "" {
 		host = catalog.Host
 	}
 	skus, err := catalog.List(ctx, host, service, g.Key)
 	if err != nil {
-		return err
+		return Result{}, err
 	}
 	held, err := g.Store.IngestGCP(ctx, service)
 	if err != nil {
-		return err
+		return Result{}, err
 	}
 	defer held.Close()
 
+	var result Result
 	for _, sku := range skus {
 		tiers, _, err := catalog.Tiers(sku)
-
 		if err != nil {
+			result.Skipped++
+			g.log().Warn("this sku stays on the embedded card", "vendor", postgres.VendorGCP, "service", service, "sku", sku.SKUID, "reason", err.Error())
 			continue
 		}
 		if err := held.SKU(postgres.GCPSKU{
 			ID: sku.SKUID, Service: service, Description: sku.Description,
 			Category: sku.Category, Regions: sku.ServiceRegions, Tiers: tiers,
 		}); err != nil {
-			return err
+			return result, err
 		}
 	}
 	at := g.now()
-	return held.Commit(at.UTC().Format(time.RFC3339), at)
+	return result, held.Commit(at.UTC().Format(time.RFC3339), at)
+}
+
+func (g GCP) log() *slog.Logger {
+	if g.Log != nil {
+		return g.Log
+	}
+	return slog.New(slog.DiscardHandler)
 }
 
 func (g GCP) now() time.Time {

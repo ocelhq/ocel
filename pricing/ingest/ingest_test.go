@@ -1,9 +1,12 @@
 package ingest_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,7 +96,7 @@ func TestTheFirestoreCatalogPricesThroughTheStore(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	loader := ingest.GCP{Store: store, Host: server.URL, Key: "a-key"}
-	if err := loader.Run(context.Background(), "EE2C-7FAC-5E08"); err != nil {
+	if _, err := loader.Run(context.Background(), "EE2C-7FAC-5E08"); err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
 
@@ -103,6 +106,28 @@ func TestTheFirestoreCatalogPricesThroughTheStore(t *testing.T) {
 	}
 	if len(rate.Tiers) != 2 || !rate.Tiers[1].Price.Equal(decimal.RequireFromString("0.0000005")) {
 		t.Errorf("tiers = %v, want both of the catalog's tiered rates", rate.Tiers)
+	}
+}
+
+func TestASKUThePricerCannotReadIsCountedAndNamed(t *testing.T) {
+	store := pgtest.Store(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "testdata/firestore_skus.json")
+	}))
+	t.Cleanup(server.Close)
+	var logged bytes.Buffer
+
+	loader := ingest.GCP{Store: store, Host: server.URL, Key: "a-key", Log: slog.New(slog.NewTextHandler(&logged, nil))}
+	result, err := loader.Run(context.Background(), "EE2C-7FAC-5E08")
+	if err != nil {
+		t.Fatalf("Run() = %v", err)
+	}
+
+	if result.Skipped != 1 {
+		t.Errorf("skipped = %d, want the one sku that carries no pricing", result.Skipped)
+	}
+	if !strings.Contains(logged.String(), "GGGG-HHHH-IIII") || !strings.Contains(logged.String(), "carries no pricing") {
+		t.Errorf("the ingest logged %q, want the sku it skipped and why", logged.String())
 	}
 }
 
