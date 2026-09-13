@@ -68,7 +68,8 @@ pub use ocel_macros::Group;
 
 #[doc(hidden)]
 pub use declare::{
-    Check, Declare, Declared, DeclaredGroup, DeclaredResource, DeclaredVariable, Group, Registered,
+    Check, Claim, Declare, Declared, DeclaredGroup, DeclaredVariable, Group, Registered,
+    ResourceField,
 };
 #[doc(hidden)]
 pub use env::{check, group_present, optional, secret, value, Boolean, Class};

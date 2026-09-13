@@ -20,10 +20,15 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
     let ident = &input.ident;
 
     let declared = resources.iter().map(|resource| {
-        let (name, version, reference) = (&resource.name, &resource.version, resource.reference);
+        let (name, version) = (&resource.name, &resource.version);
         let (file, line) = (&resource.file, resource.line);
+        let claim = if resource.reference {
+            quote!(::ocel::Claim::References)
+        } else {
+            quote!(::ocel::Claim::Declares { version: #version })
+        };
         quote! {
-            ::ocel::DeclaredResource { name: #name, version: #version, reference: #reference, file: #file, line: #line }
+            ::ocel::ResourceField { name: #name, claim: #claim, file: #file, line: #line }
         }
     });
     let fields = resources.iter().map(|resource| {

@@ -16,10 +16,15 @@ const SOURCE_ROOT_ENV: &str = "OCEL_SOURCE_ROOT";
 const DISCOVERY_PHASE: &str = "discovery";
 
 #[doc(hidden)]
-pub struct DeclaredResource {
+pub enum Claim {
+    Declares { version: &'static str },
+    References,
+}
+
+#[doc(hidden)]
+pub struct ResourceField {
     pub name: &'static str,
-    pub version: &'static str,
-    pub reference: bool,
+    pub claim: Claim,
     pub file: &'static str,
     pub line: u32,
 }
@@ -52,7 +57,7 @@ pub struct DeclaredGroup {
 
 #[doc(hidden)]
 pub struct Declared {
-    pub resources: Vec<DeclaredResource>,
+    pub resources: Vec<ResourceField>,
     pub variables: Vec<DeclaredVariable>,
     pub groups: Vec<DeclaredGroup>,
 }
@@ -125,7 +130,7 @@ fn collected() -> Result<Declared, Error> {
 
     for one in structs {
         for resource in one.resources {
-            if !resource.reference {
+            if let Claim::Declares { .. } = resource.claim {
                 claim(
                     &mut resource_owners,
                     resource.name,
@@ -239,17 +244,18 @@ async fn post_all(declared: &Declared) -> Result<(), Error> {
         connectrpc::client::ClientConfig::new(base),
     );
     for resource in &declared.resources {
-        if resource.reference {
-            client
+        match resource.claim {
+            Claim::Declares { version } => client
+                .declare(request(resource, version))
+                .await
+                .map(drop)
+                .map_err(|err| failed(resource, err.to_string()))?,
+            Claim::References => client
                 .reference(reference(resource))
                 .await
-                .map_err(|err| unreferenced(resource, err.to_string()))?;
-            continue;
+                .map(drop)
+                .map_err(|err| unreferenced(resource, err.to_string()))?,
         }
-        client
-            .declare(request(resource))
-            .await
-            .map_err(|err| failed(resource, err.to_string()))?;
     }
     if declared.variables.is_empty() {
         return Ok(());
@@ -408,7 +414,7 @@ fn problem(key: &str, folder: &str, kind: Kind, detail: String) -> VariableProbl
     }
 }
 
-fn request(resource: &DeclaredResource) -> DeclareRequest {
+fn request(resource: &ResourceField, version: &str) -> DeclareRequest {
     DeclareRequest {
         resource: ResourceIdentifier {
             r#type: ResourceType::RESOURCE_TYPE_POSTGRES.into(),
@@ -417,7 +423,7 @@ fn request(resource: &DeclaredResource) -> DeclareRequest {
         }
         .into(),
         config: Some(Config::from(PostgresConfig {
-            version: resource.version.to_string(),
+            version: version.to_string(),
             ..Default::default()
         })),
         source: source(resource.file, resource.line),
@@ -425,7 +431,7 @@ fn request(resource: &DeclaredResource) -> DeclareRequest {
     }
 }
 
-fn reference(resource: &DeclaredResource) -> ReferenceRequest {
+fn reference(resource: &ResourceField) -> ReferenceRequest {
     ReferenceRequest {
         resource: ResourceIdentifier {
             r#type: ResourceType::RESOURCE_TYPE_POSTGRES.into(),
@@ -455,7 +461,7 @@ fn source_root() -> std::path::PathBuf {
     }
 }
 
-fn failed(resource: &DeclaredResource, said: String) -> Error {
+fn failed(resource: &ResourceField, said: String) -> Error {
     Error::Declare {
         kind: KIND.to_string(),
         name: resource.name.to_string(),
@@ -463,7 +469,7 @@ fn failed(resource: &DeclaredResource, said: String) -> Error {
     }
 }
 
-fn unreferenced(resource: &DeclaredResource, said: String) -> Error {
+fn unreferenced(resource: &ResourceField, said: String) -> Error {
     Error::Reference {
         kind: KIND.to_string(),
         name: resource.name.to_string(),
