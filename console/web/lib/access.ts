@@ -5,7 +5,7 @@ import {
 } from "@console/auth";
 import { db } from "@console/db";
 import { member, organization, user } from "@console/db/schema";
-import { and, asc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
@@ -46,15 +46,6 @@ export async function getViewer(userId: string) {
     .from(user)
     .where(eq(user.id, userId));
   return viewer ?? null;
-}
-
-export async function roleOf(userId: string, organizationId: string): Promise<string> {
-  const [held] = await db
-    .select({ role: member.role })
-    .from(member)
-    .where(and(eq(member.userId, userId), eq(member.organizationId, organizationId)))
-    .limit(1);
-  return held?.role ?? "";
 }
 
 export async function listMemberships(userId: string) {

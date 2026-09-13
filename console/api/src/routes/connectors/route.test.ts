@@ -2,7 +2,10 @@ import { db } from "@console/db";
 import { connector } from "@console/db/schema";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { createTestSessionWithOrganization } from "../../../test/auth-harness";
+import {
+  createTestSessionWithOrganization,
+  createTestSessionWithRole,
+} from "../../../test/auth-harness";
 import { setupTestDatabase } from "../../../test/db";
 import { deleteConnector, updateConnector } from "./[id]/route";
 import { listConnectors, upsertConnector } from "./route";
@@ -135,6 +138,37 @@ describe("PUT /api/connectors", () => {
   it("returns 401 when unauthenticated", async () => {
     expect((await upsertConnector(putRequest(dialled, new Headers()))).status).toBe(401);
   });
+
+  it("refuses a plain member with 403", async () => {
+    const session = await createTestSessionWithOrganization();
+    const plain = await createTestSessionWithRole(session.organization.id, "member");
+
+    try {
+      const response = await upsertConnector(putRequest(dialled, plain.headers));
+      expect(response.status).toBe(403);
+      expect(
+        await db
+          .select()
+          .from(connector)
+          .where(eq(connector.organizationId, session.organization.id)),
+      ).toHaveLength(0);
+    } finally {
+      await plain.cleanup();
+      await session.cleanup();
+    }
+  });
+
+  it("lets an admin hold a target", async () => {
+    const session = await createTestSessionWithOrganization();
+    const deputy = await createTestSessionWithRole(session.organization.id, "admin");
+
+    try {
+      expect((await upsertConnector(putRequest(dialled, deputy.headers))).status).toBe(200);
+    } finally {
+      await deputy.cleanup();
+      await session.cleanup();
+    }
+  });
 });
 
 describe("GET /api/connectors", () => {
@@ -165,6 +199,22 @@ describe("GET /api/connectors", () => {
 
   it("returns 401 when unauthenticated", async () => {
     expect((await listConnectors(getRequest(new Headers()))).status).toBe(401);
+  });
+
+  it("lists for a plain member", async () => {
+    const session = await createTestSessionWithOrganization();
+    const plain = await createTestSessionWithRole(session.organization.id, "member");
+
+    try {
+      await upsertConnector(putRequest(dialled, session.headers));
+
+      const response = await listConnectors(getRequest(plain.headers));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toHaveLength(1);
+    } finally {
+      await plain.cleanup();
+      await session.cleanup();
+    }
   });
 });
 
@@ -259,5 +309,30 @@ describe("PATCH and DELETE /api/connectors/{id}", () => {
     expect(
       (await updateConnector(patchRequest({ url: "https://x.test/c" }, new Headers()), "x")).status,
     ).toBe(401);
+  });
+
+  it("refuses a plain member with 403 and leaves the url alone", async () => {
+    const session = await createTestSessionWithOrganization();
+    const plain = await createTestSessionWithRole(session.organization.id, "member");
+
+    try {
+      const held = await (await upsertConnector(putRequest(dialled, session.headers))).json();
+
+      expect(
+        (
+          await updateConnector(
+            patchRequest({ url: "https://attacker.example/c" }, plain.headers),
+            held.id,
+          )
+        ).status,
+      ).toBe(403);
+      expect((await deleteConnector(deleteRequest(plain.headers), held.id)).status).toBe(403);
+
+      const [row] = await db.select().from(connector).where(eq(connector.id, held.id));
+      expect(row.url).toBeNull();
+    } finally {
+      await plain.cleanup();
+      await session.cleanup();
+    }
   });
 });

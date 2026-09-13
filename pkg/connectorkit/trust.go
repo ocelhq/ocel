@@ -83,7 +83,12 @@ func (t *trust) interceptor() connect.Interceptor {
 				t.say("-", procedure, "denied")
 				return nil, err
 			}
-			want := scopeOf(procedure, request.Any())
+			want, mapped := scopeOf(procedure, request.Any())
+			if !mapped {
+				t.say(caller.act, procedure, "denied")
+				return nil, connect.NewError(connect.CodePermissionDenied,
+					fmt.Errorf("no scope maps %s", procedure))
+			}
 			if !slices.Contains(t.grants, want) {
 				t.say(caller.act, procedure, "denied")
 				return nil, connect.NewError(connect.CodePermissionDenied,
@@ -185,21 +190,26 @@ func stringsOf(claimed any) ([]string, bool) {
 	return nil, false
 }
 
-func scopeOf(procedure string, message any) string {
+func scopeOf(procedure string, message any) (string, bool) {
 	switch procedure {
 	case envvarsv1connect.EnvVarsServiceSetValueProcedure,
 		envvarsv1connect.EnvVarsServiceDeleteValueProcedure,
 		envvarsv1connect.EnvVarsServiceSetReferenceProcedure,
 		envvarsv1connect.EnvVarsServiceSetBindingProcedure,
 		envvarsv1connect.EnvVarsServiceRemoveBindingProcedure:
-		return CapabilityEnvVarsWrite
+		return CapabilityEnvVarsWrite, true
 	case envvarsv1connect.EnvVarsServiceRevealValuesProcedure:
-		return CapabilityEnvVarsReveal
+		return CapabilityEnvVarsReveal, true
 	case envvarsv1connect.EnvVarsServiceGetValueProcedure:
 		if asked, ok := message.(*envvarsv1.GetValueRequest); ok && asked.GetReveal() {
-			return CapabilityEnvVarsReveal
+			return CapabilityEnvVarsReveal, true
 		}
-		return CapabilityEnvVarsRead
+		return CapabilityEnvVarsRead, true
+	case envvarsv1connect.EnvVarsServiceListValuesProcedure,
+		envvarsv1connect.EnvVarsServiceListReferencesProcedure,
+		envvarsv1connect.EnvVarsServiceListVersionsProcedure,
+		envvarsv1connect.EnvVarsServiceListBindingsProcedure:
+		return CapabilityEnvVarsRead, true
 	}
-	return CapabilityEnvVarsRead
+	return "", false
 }

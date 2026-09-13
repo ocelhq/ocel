@@ -3,6 +3,7 @@ package connector
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -18,6 +19,10 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
+
+func unfinished(err error) error {
+	return fmt.Errorf("%w; the console already holds this target, so running ocel connector add again finishes it", err)
+}
 
 func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, link *consolelink.Link,
 	opts options, stdout, stderr io.Writer) error {
@@ -79,10 +84,11 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 			}
 		})
 		if err != nil {
-			return err
+			return unfinished(err)
 		}
 		if at.GetUrl() == "" {
-			return fmt.Errorf("the provider installed the connector and named no address, so the console has nothing to dial")
+			return unfinished(errors.New(
+				"the provider installed the connector and named no address, so the console has nothing to dial"))
 		}
 
 		paired, err := opts.console.Address(ctx, access, held.ID, consoleconnector.Address{
@@ -91,7 +97,7 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 			Compute:   at.GetCompute(),
 		})
 		if err != nil {
-			return fmt.Errorf("tell the console where to dial this connector: %w", err)
+			return unfinished(fmt.Errorf("tell the console where to dial this connector: %w", err))
 		}
 
 		fmt.Fprintf(stdout, "%s Connector on %s, dialled at %s\n", check, bold(paired.Target), at.GetUrl())

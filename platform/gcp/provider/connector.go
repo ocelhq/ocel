@@ -41,6 +41,8 @@ const (
 	connectorSealingRole  = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
 	connectorAccountNote  = "the identity the ocel connector answers the console as"
 	connectorBindAttempts = 4
+
+	conditionalPolicyVersion = 3
 )
 
 var _ providerkit.ConnectorHost = (*Provider)(nil)
@@ -302,21 +304,25 @@ func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) erro
 		return err
 	}
 	member := "serviceAccount:" + p.Names().ConnectorAccountEmail()
+	onlyThisDatabase := databaseCondition(p.options.Project, p.Names().Namespace())
 	var refused error
 	for attempt := range connectorBindAttempts {
 		if attempt > 0 && !waited(ctx, attempt) {
 			return ctx.Err()
 		}
 		policy, err := attempted(ctx, service.Projects.GetIamPolicy(p.options.Project,
-			&cloudresourcemanager.GetIamPolicyRequest{}).Context(ctx).Do)
+			&cloudresourcemanager.GetIamPolicyRequest{
+				Options: &cloudresourcemanager.GetPolicyOptions{RequestedPolicyVersion: conditionalPolicyVersion},
+			}).Context(ctx).Do)
 		if err != nil {
 			return fmt.Errorf("read who may read this project's records: %w", err)
 		}
-		bindings, changed := boundMember(policy.Bindings, connectorRecordsRole, member, granting)
+		bindings, changed := boundMember(policy.Bindings, connectorRecordsRole, member, onlyThisDatabase, granting)
 		if !changed {
 			return nil
 		}
 		policy.Bindings = bindings
+		policy.Version = conditionalPolicyVersion
 		_, refused = attempted(ctx, service.Projects.SetIamPolicy(p.options.Project,
 			&cloudresourcemanager.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
 		if refused == nil {
@@ -326,7 +332,23 @@ func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) erro
 			break
 		}
 	}
-	return fmt.Errorf("let %s read and write this project's records: %w", member, refused)
+	return fmt.Errorf("let %s read and write the %s database's records: %w",
+		member, ports.Database(p.Names().Namespace()), refused)
+}
+
+func databaseCondition(project string, ns providerkit.Namespace) *cloudresourcemanager.Expr {
+	return &cloudresourcemanager.Expr{
+		Title: "ocel " + string(ns) + " database",
+		Expression: fmt.Sprintf("resource.name == %q",
+			fmt.Sprintf("projects/%s/databases/%s", project, ports.Database(ns))),
+	}
+}
+
+func sameCondition(held, want *cloudresourcemanager.Expr) bool {
+	if held == nil || want == nil {
+		return held == nil && want == nil
+	}
+	return held.Expression == want.Expression
 }
 
 func (p *Provider) bindConnectorKeys(ctx context.Context, granting bool, report providerkit.Reporter) error {
@@ -368,9 +390,10 @@ func (p *Provider) bindConnectorKeys(ctx context.Context, granting bool, report 
 	return nil
 }
 
-func boundMember(bindings []*cloudresourcemanager.Binding, role, member string, granting bool) ([]*cloudresourcemanager.Binding, bool) {
+func boundMember(bindings []*cloudresourcemanager.Binding, role, member string,
+	condition *cloudresourcemanager.Expr, granting bool) ([]*cloudresourcemanager.Binding, bool) {
 	for _, binding := range bindings {
-		if binding.Role != role {
+		if binding.Role != role || !sameCondition(binding.Condition, condition) {
 			continue
 		}
 		at := slices.Index(binding.Members, member)
@@ -390,7 +413,11 @@ func boundMember(bindings []*cloudresourcemanager.Binding, role, member string, 
 	if !granting {
 		return bindings, false
 	}
-	return append(bindings, &cloudresourcemanager.Binding{Role: role, Members: []string{member}}), true
+	return append(bindings, &cloudresourcemanager.Binding{
+		Role:      role,
+		Members:   []string{member},
+		Condition: condition,
+	}), true
 }
 
 func boundKeyMember(bindings []*iampb.Binding, role, member string, granting bool) ([]*iampb.Binding, bool) {

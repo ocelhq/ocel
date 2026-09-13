@@ -99,20 +99,55 @@ func TestAProjectGrantIsAddedOnceAndTakenAwayOnce(t *testing.T) {
 	t.Parallel()
 
 	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
-	bindings, changed := boundMember(nil, connectorRecordsRole, member, true)
+	only := databaseCondition("example-project", "ocel")
+	bindings, changed := boundMember(nil, connectorRecordsRole, member, only, true)
 	if !changed || len(bindings) != 1 || !slices.Contains(bindings[0].Members, member) {
 		t.Fatalf("granting on an empty policy = %+v, %v", bindings, changed)
 	}
-	if _, again := boundMember(bindings, connectorRecordsRole, member, true); again {
+	if bindings[0].Condition == nil ||
+		bindings[0].Condition.Expression != `resource.name == "projects/example-project/databases/ocel"` {
+		t.Fatalf("the grant carries %+v, and an unconditional roles/datastore.user reaches every database in the project",
+			bindings[0].Condition)
+	}
+	if _, again := boundMember(bindings, connectorRecordsRole, member, only, true); again {
 		t.Error("granting twice rewrote the policy, so every install would churn the project's IAM")
 	}
 
-	bindings, changed = boundMember(bindings, connectorRecordsRole, member, false)
+	bindings, changed = boundMember(bindings, connectorRecordsRole, member, only, false)
 	if !changed || slices.Contains(bindings[0].Members, member) {
 		t.Errorf("revoking left %+v, want the connector off the binding", bindings)
 	}
-	if _, again := boundMember(bindings, connectorRecordsRole, member, false); again {
+	if _, again := boundMember(bindings, connectorRecordsRole, member, only, false); again {
 		t.Error("revoking twice rewrote the policy, so rm on a target with no connector would still write IAM")
+	}
+}
+
+func TestAnotherNamespacesConditionalGrantIsADifferentBinding(t *testing.T) {
+	t.Parallel()
+
+	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
+	shop := databaseCondition("example-project", "shop")
+	held := []*cloudresourcemanager.Binding{
+		{Role: connectorRecordsRole, Members: []string{member}, Condition: shop},
+		{Role: connectorRecordsRole, Members: []string{member}},
+	}
+
+	bindings, changed := boundMember(held, connectorRecordsRole, member,
+		databaseCondition("example-project", "ocel"), true)
+	if !changed || len(bindings) != 3 {
+		t.Fatalf("granting for another namespace = %+v, %v, want a third binding of its own", bindings, changed)
+	}
+
+	bindings, changed = boundMember(bindings, connectorRecordsRole, member,
+		databaseCondition("example-project", "ocel"), false)
+	if !changed {
+		t.Fatal("revoking changed nothing")
+	}
+	if !slices.Contains(bindings[0].Members, member) || !slices.Contains(bindings[1].Members, member) {
+		t.Errorf("revoking left %+v, and removing one namespace's grant may not touch another's or the unconditional one", bindings)
+	}
+	if slices.Contains(bindings[2].Members, member) {
+		t.Errorf("revoking left %+v, want the connector off its own binding", bindings[2])
 	}
 }
 
@@ -120,10 +155,11 @@ func TestAnotherMembersGrantSurvivesTheConnectorsRemoval(t *testing.T) {
 	t.Parallel()
 
 	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
+	only := databaseCondition("example-project", "ocel")
 	held := []*cloudresourcemanager.Binding{
-		{Role: connectorRecordsRole, Members: []string{"user:someone@example.com", member}},
+		{Role: connectorRecordsRole, Members: []string{"user:someone@example.com", member}, Condition: only},
 	}
-	bindings, changed := boundMember(held, connectorRecordsRole, member, false)
+	bindings, changed := boundMember(held, connectorRecordsRole, member, only, false)
 	if !changed {
 		t.Fatal("revoking changed nothing")
 	}

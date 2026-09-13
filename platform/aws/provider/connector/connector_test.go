@@ -3,10 +3,13 @@ package connector
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -14,6 +17,11 @@ import (
 )
 
 const defaultNamespace = bootstrap.Namespace(providerkit.DefaultNamespace)
+
+var sealingKeys = []string{
+	"arn:aws:kms:eu-west-1:111122223333:key/production-key",
+	"arn:aws:kms:eu-west-1:111122223333:key/preview-key",
+}
 
 func TestTheStackStandsApartFromEveryBootstrapStack(t *testing.T) {
 	t.Parallel()
@@ -38,7 +46,7 @@ func TestTheTierGrantsNothingADeployWouldNeed(t *testing.T) {
 	t.Parallel()
 
 	held := map[string]bool{}
-	for _, statement := range tier(defaultNamespace) {
+	for _, statement := range tier(defaultNamespace, sealingKeys) {
 		for _, action := range statement.Actions {
 			held[action] = true
 		}
@@ -78,7 +86,8 @@ func TestTheTemplateCarriesTheCodeTheBucketStagesAndTheConfigItRuns(t *testing.T
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
-	rendered, err := templateFor(defaultNamespace, at, "0.9.9", []byte(`{"console":"https://console.example.com"}`))
+	rendered, err := templateFor(defaultNamespace, at, "0.9.9",
+		[]byte(`{"console":"https://console.example.com"}`), sealingKeys)
 	if err != nil {
 		t.Fatalf("templateFor: %v", err)
 	}
@@ -127,6 +136,67 @@ func TestTheTemplateCarriesTheCodeTheBucketStagesAndTheConfigItRuns(t *testing.T
 	}
 	if read.Outputs[outputVersion].Value != "0.9.9" {
 		t.Errorf("the stack reports version %v, want the release this install carried", read.Outputs[outputVersion].Value)
+	}
+}
+
+func TestTheKeyGrantNamesTheKeysThisNamespaceSealedUnderAndNoOther(t *testing.T) {
+	t.Parallel()
+
+	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
+	rendered, err := templateFor(defaultNamespace, at, "0.9.9",
+		[]byte(`{"console":"https://console.example.com"}`), sealingKeys)
+	if err != nil {
+		t.Fatalf("templateFor: %v", err)
+	}
+
+	if strings.Contains(rendered, bootstrap.AnyKeyARN) {
+		t.Errorf("the connector policy names %s, so a compromised connector would decrypt every namespace's variables in the account", bootstrap.AnyKeyARN)
+	}
+	for _, key := range sealingKeys {
+		if !strings.Contains(rendered, key) {
+			t.Errorf("the connector policy names no %s, and that is a key this namespace seals variables under", key)
+		}
+	}
+
+	for _, statement := range tier(defaultNamespace, sealingKeys) {
+		if !slices.Contains(statement.Actions, "kms:Decrypt") {
+			continue
+		}
+		if !slices.Equal(statement.Resources, sealingKeys) {
+			t.Errorf("the key grant reaches %v, want %v alone", statement.Resources, sealingKeys)
+		}
+		if statement.Condition == nil {
+			t.Error("the key grant carries no tag condition, and the tag is what keeps a renamed key out")
+		}
+	}
+}
+
+type noStacks struct{}
+
+func (noStacks) DescribeStacks(context.Context, *cloudformation.DescribeStacksInput,
+	...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
+	return &cloudformation.DescribeStacksOutput{}, nil
+}
+
+func TestAnAccountWithNoBootstrappedKeyRefusesTheInstall(t *testing.T) {
+	t.Parallel()
+
+	_, err := varsKeys(context.Background(), noStacks{}, defaultNamespace)
+	if err == nil {
+		t.Fatal("an account with neither class bootstrapped rendered a policy, and it would name no key to scope the grant to")
+	}
+	if !strings.Contains(err.Error(), "ocel connector add") {
+		t.Errorf("the refusal reads %q, and it should say what finishes the install", err)
+	}
+}
+
+func TestATemplateNamingNoKeyIsRefused(t *testing.T) {
+	t.Parallel()
+
+	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
+	if _, err := templateFor(defaultNamespace, at, "0.9.9",
+		[]byte(`{"console":"https://console.example.com"}`), nil); err == nil {
+		t.Error("a template naming no key rendered, and an empty Resources list is a policy CloudFormation refuses or a grant that reaches nothing")
 	}
 }
 
