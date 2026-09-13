@@ -44,7 +44,7 @@ type AppConfig struct {
 	Path       string           `json:"path" doc:"The app's directory, relative to the config."`
 	Entrypoint string           `json:"entrypoint,omitempty" doc:"The file the app is served from, when it is not the one ocel would detect."`
 	Compute    string           `json:"compute,omitempty" doc:"What the app runs on: serverless functions packed per route, or one container image serving everything." enum:"serverless,container"`
-	Framework  string           `json:"framework,omitempty" doc:"What a serverless app is built with, when ocel is not to read it off the app's own manifest." enum:"node,next,go,python"`
+	Framework  string           `json:"framework,omitempty" doc:"What a serverless app is built with, when ocel is not to read it off the app's own manifest." enum:"node,next,go,python,rust"`
 	Arch       string           `json:"arch,omitempty" doc:"The processor architecture a serverless app's functions are built for. Left off, the provider's default architecture." enum:"x86_64,arm64"`
 	Folder     string           `json:"folder,omitempty" doc:"The variables folder this app reads, when it does not read the project's own."`
 	Domains    *AppDomainConfig `json:"domains,omitempty" doc:"The hostnames this app is served on."`
