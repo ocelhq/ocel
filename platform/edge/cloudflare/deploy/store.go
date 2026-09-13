@@ -183,7 +183,7 @@ func (p *provider) storeAttempt(ctx context.Context, endpoint, slug, secret, met
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	res, err := http.DefaultClient.Do(req)
+	res, err := p.storeClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("call deployments store %s %s: %w", method, subpath, err)
 	}
@@ -199,4 +199,11 @@ func (p *provider) storeAttempt(ctx context.Context, endpoint, slug, secret, met
 		}
 	}
 	return res, nil
+}
+
+func (p *provider) storeClient() *http.Client {
+	if p.store != nil {
+		return p.store
+	}
+	return http.DefaultClient
 }

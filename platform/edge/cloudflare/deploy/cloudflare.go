@@ -54,6 +54,7 @@ func observability() map[string]any {
 
 type provider struct {
 	client    *cf.Client
+	store     *http.Client
 	namespace string
 
 	zoneMu    sync.Mutex
