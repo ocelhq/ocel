@@ -6,7 +6,7 @@ export function Cursor() {
   return (
     <span
       aria-hidden
-      className="ml-1 inline-block h-4 w-[9px] -translate-y-[2px] animate-blink bg-primary align-middle"
+      className="ml-1 inline-block h-4 w-[9px] -translate-y-[2px] animate-blink bg-electric align-middle"
     />
   );
 }
@@ -38,7 +38,7 @@ export function Terminal({ title, children, className, bodyClassName, onClick }:
     <div
       {...interactive}
       className={cn(
-        "min-w-0 max-w-full border-[1.5px] border-foreground bg-card shadow-[6px_6px_0_0_var(--hard-shadow)]",
+        "min-w-0 max-w-full border-[1.5px] border-foreground bg-card shadow-float",
         onClick && "cursor-pointer",
         className,
       )}
@@ -46,7 +46,7 @@ export function Terminal({ title, children, className, bodyClassName, onClick }:
       <div className="flex items-center gap-1.5 border-b-[1.5px] border-foreground px-3.5 py-2.5">
         <span className="size-[9px] shrink-0 rounded-full border-[1.5px] border-foreground" />
         <span className="size-[9px] shrink-0 rounded-full border-[1.5px] border-foreground" />
-        <span className="size-[9px] shrink-0 rounded-full bg-primary" />
+        <span className="size-[9px] shrink-0 rounded-full bg-electric" />
         <span className="ml-2 truncate font-mono text-[11px] text-dim">{title}</span>
       </div>
       <div className={cn("overflow-x-auto px-5.5 py-4.5 font-mono", bodyClassName)}>{children}</div>

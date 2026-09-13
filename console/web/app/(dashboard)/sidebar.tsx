@@ -239,7 +239,7 @@ function OrganizationSwitcher({
       itemToStringLabel={(item) => item.name}
     >
       <div ref={anchorRef} className="flex h-9 items-center gap-2 px-2">
-        <span className="grid size-5 shrink-0 place-items-center bg-sidebar-primary text-[11px] font-semibold text-sidebar-primary-foreground">
+        <span className="grid size-5 shrink-0 place-items-center bg-foreground text-[11px] font-semibold text-background">
           {initials(active.name)}
         </span>
         <span className="min-w-0 flex-1 truncate font-medium">{active.name}</span>
@@ -286,7 +286,7 @@ function ViewerAvatar({ viewer, size }: { viewer: Viewer; size?: "sm" | "default
   return (
     <Avatar size={size} className="after:border-0">
       {viewer.image && <AvatarImage src={viewer.image} alt="" />}
-      <AvatarFallback className="bg-sidebar-primary text-[11px] font-semibold text-sidebar-primary-foreground">
+      <AvatarFallback className="bg-foreground text-[11px] font-semibold text-background">
         {initials(viewer.name)}
       </AvatarFallback>
     </Avatar>

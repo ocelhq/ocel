@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "vitest run"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -13,6 +14,7 @@
     "@phosphor-icons/react": "^2.1.10",
     "@pierre/diffs": "^1.4.1",
     "@types/mdx": "^2.0.14",
+    "@ui/theme": "workspace:^",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.6",
     "fumadocs-core": "^16.15.7",
@@ -34,7 +36,8 @@
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.9"
   },
   "packageManager": "pnpm@11.10.0"
 }

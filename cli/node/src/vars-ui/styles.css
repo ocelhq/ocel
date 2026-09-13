@@ -1,6 +1,7 @@
 @import "tailwindcss" source(none);
 @import "shadcn/tailwind.css";
-@import "@ui/vars/tokens.css";
+@import "@ui/theme/tokens.css";
+@import "@ui/theme/base.css";
 
 @source "./";
 @source "../../../../ui/vars/src";
@@ -20,6 +21,6 @@
 
 @layer base {
   a:hover {
-    color: var(--primary);
+    color: var(--electric);
   }
 }

@@ -9,7 +9,7 @@ export function Wordmark({ markSize = 20, textSize = 17 }: WordmarkProps) {
     <span className="flex items-center gap-[9px]">
       <span
         aria-hidden
-        className="inline-block bg-primary"
+        className="inline-block bg-electric"
         style={{
           width: markSize,
           height: markSize,

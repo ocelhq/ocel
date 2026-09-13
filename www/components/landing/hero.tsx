@@ -31,10 +31,10 @@ export function Hero() {
             "radial-gradient(ellipse 75% 95% at 62% 45%,transparent 25%,var(--background) 80%)",
         }}
       />
-      <span className="absolute left-[41%] top-[30px] font-mono text-[15px] text-primary">+</span>
+      <span className="absolute left-[41%] top-[30px] font-mono text-[15px] text-electric">+</span>
       <span className="absolute right-16 top-9 font-mono text-[15px] text-faint">+</span>
       <span className="absolute bottom-10 left-9 font-mono text-[15px] text-faint">+</span>
-      <span className="absolute bottom-[52px] right-[36%] font-mono text-[15px] text-primary">
+      <span className="absolute bottom-[52px] right-[36%] font-mono text-[15px] text-electric">
         +
       </span>
       <span className="absolute right-[-34px] top-1/2 hidden origin-center rotate-90 font-mono text-[10.5px] tracking-[0.14em] text-dim md:block">
@@ -43,17 +43,17 @@ export function Hero() {
 
       <div className="relative mx-auto grid max-w-[1180px] grid-cols-1 gap-11 px-5 pb-[58px] pt-16 md:grid-cols-[1fr_1.06fr] md:px-10">
         <div>
-          <div className="mb-[18px] font-mono text-xs tracking-[0.08em] text-primary">
+          <div className="mb-[18px] font-mono text-xs tracking-[0.08em] text-electric">
             $ npm i -g @ocel/cli
           </div>
           <h1 className="text-[54px] font-semibold leading-[1.04] tracking-[-0.03em] text-foreground text-pretty">
             Deploy apps to
-            <span className="text-primary"> your own cloud.</span>
+            <span className="text-electric"> your own cloud.</span>
           </h1>
           <p className="mt-5 max-w-[44ch] text-[16.5px] leading-[1.62] text-muted-foreground">
             The deploy experience you love, running in the account you already pay for. Zero-config
             deploys, real dev infra, and an SDK that turns{" "}
-            <span className="bg-chip px-[5px] py-px font-mono text-[14.5px]">postgres("main")</span>{" "}
+            <span className="bg-chip px-[5px] py-px font-mono text-[0.85em]">postgres("main")</span>{" "}
             into a database.
           </p>
           <div className="mt-7 flex items-center gap-3">
@@ -92,7 +92,7 @@ export function Hero() {
             <span className="text-dim">···········</span> 3s
           </div>
           <div>
-            <span className="text-primary">→</span> https://api.acme.dev{" "}
+            <span className="text-electric">→</span> https://api.acme.dev{" "}
             <span className="text-dim">deployed to</span> aws:acme-prod
           </div>
           {step === 0 && (
@@ -110,7 +110,7 @@ export function Hero() {
           )}
           {step >= 2 && (
             <div>
-              <span className="text-primary">→</span> opening github.com/login/oauth …
+              <span className="text-electric">→</span> opening github.com/login/oauth …
             </div>
           )}
           {step >= 3 && (
@@ -119,7 +119,7 @@ export function Hero() {
                 <span className="text-chart-2">✓</span> authenticated as{" "}
                 <span className="bg-chip px-1">@you</span>{" "}
                 <span className="text-dim">
-                  — <span className="text-primary">heading to your console →</span>
+                  — <span className="text-electric">heading to your console →</span>
                 </span>
               </div>
               <div>

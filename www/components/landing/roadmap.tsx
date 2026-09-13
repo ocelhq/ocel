@@ -25,9 +25,9 @@ const columns: Column[] = [
   },
   {
     label: "IN PROGRESS",
-    dot: "bg-primary animate-pulse motion-reduce:animate-none",
+    dot: "bg-electric animate-pulse motion-reduce:animate-none",
     icon: CircleHalfIcon,
-    iconClass: "text-primary",
+    iconClass: "text-electric",
     items: [
       "Cron & workflow primitives",
       "Containers as a deploy target",
@@ -51,7 +51,7 @@ export function Roadmap() {
         FIG. 03 — ROADMAP
       </span>
       <div className="mx-auto max-w-[1180px] px-5 pb-24 pt-16 md:px-10 md:pb-[116px] md:pt-[84px]">
-        <div className="mb-3.5 font-mono text-xs tracking-[0.08em] text-primary">
+        <div className="mb-3.5 font-mono text-xs tracking-[0.08em] text-electric">
           ROADMAP — IN THE OPEN
         </div>
         <h2 className="max-w-[24ch] text-[34px] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
@@ -103,7 +103,7 @@ export function Roadmap() {
 
         <a
           href="https://github.com/ocel/ocel"
-          className="mt-5 inline-block font-mono text-[13px] text-primary hover:underline"
+          className="mt-5 inline-block font-mono text-[13px] text-electric hover:underline"
         >
           → track the full board on github
         </a>

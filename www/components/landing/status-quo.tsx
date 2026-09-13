@@ -52,7 +52,7 @@ function Trade({ good, bad }: { good: string; bad: ReactNode }) {
         <p className="text-[15px] font-medium leading-[1.55] text-foreground">{good}</p>
       </div>
       <div className="flex gap-3">
-        <span className="mt-px font-mono text-[13px] text-primary">✕</span>
+        <span className="mt-px font-mono text-[13px] text-electric">✕</span>
         <p className="text-[15px] leading-[1.55] text-muted-foreground">{bad}</p>
       </div>
     </div>
@@ -75,7 +75,7 @@ function Panel({
   return (
     <div className={`p-7 md:p-9 ${className ?? ""}`}>
       <div className="font-mono text-[11px] tracking-[0.1em] text-dim">{label}</div>
-      <h3 className="mt-3 text-[21px] font-semibold leading-[1.2] tracking-[-0.01em] text-foreground">
+      <h3 className="mt-3 text-[22px] font-semibold leading-[1.2] tracking-[-0.01em] text-foreground">
         {question}
       </h3>
       {children}
@@ -88,9 +88,9 @@ export function StatusQuo() {
   return (
     <section className="relative overflow-hidden border-t-[1.5px] border-foreground">
       <span className="absolute right-10 top-11 font-mono text-[15px] text-faint">+</span>
-      <span className="absolute bottom-12 left-10 font-mono text-[15px] text-primary">+</span>
+      <span className="absolute bottom-12 left-10 font-mono text-[15px] text-electric">+</span>
       <div className="mx-auto max-w-[1180px] px-5 py-16 md:px-10 md:py-[84px]">
-        <div className="mb-3.5 font-mono text-xs tracking-[0.08em] text-primary">
+        <div className="mb-3.5 font-mono text-xs tracking-[0.08em] text-electric">
           THE STATUS QUO
         </div>
         <h2 className="text-[34px] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
@@ -137,7 +137,7 @@ export function StatusQuo() {
               choose
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 top-1/2 h-[0.12em] translate-y-[1.5px] rounded-full bg-primary"
+                className="pointer-events-none absolute inset-x-0 top-1/2 h-[0.12em] translate-y-[1.5px] rounded-full bg-electric"
               />
             </span>
             .
@@ -145,7 +145,7 @@ export function StatusQuo() {
           <div className="mt-9 flex justify-center">
             <svg
               viewBox="0 0 24 24"
-              className="h-10 w-10 animate-bob text-primary"
+              className="h-10 w-10 animate-bob text-electric"
               fill="none"
               stroke="currentColor"
               strokeWidth={2.75}

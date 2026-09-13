@@ -91,7 +91,7 @@ export function Author({ name }: { name: string | null }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 text-foreground">
       <Avatar className="size-5">
-        <AvatarFallback className="bg-muted text-[10px] text-muted-foreground">
+        <AvatarFallback className="bg-muted text-[11px] text-muted-foreground">
           {initials(name)}
         </AvatarFallback>
       </Avatar>
@@ -139,7 +139,7 @@ export function AuthorMark({
         render={<span role="img" aria-label={`${name}, ${via}`} className="inline-flex" />}
       >
         <Avatar className="size-5">
-          <AvatarFallback className="bg-muted text-[10px] text-muted-foreground">
+          <AvatarFallback className="bg-muted text-[11px] text-muted-foreground">
             {initials(name)}
           </AvatarFallback>
         </Avatar>

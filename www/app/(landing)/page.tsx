@@ -47,7 +47,7 @@ export default function Home() {
 }
 
 function Eyebrow({ children }: { children: ReactNode }) {
-  return <div className="mb-3.5 font-mono text-xs tracking-[0.08em] text-primary">{children}</div>;
+  return <div className="mb-3.5 font-mono text-xs tracking-[0.08em] text-electric">{children}</div>;
 }
 
 function SectionHeading({ children }: { children: ReactNode }) {
@@ -74,7 +74,7 @@ function DarkCodePane({
   return (
     <div
       className={cn(
-        "min-w-0 max-w-full self-start border-[1.5px] border-foreground bg-[#0a0a0a] shadow-[6px_6px_0_0_var(--hard-shadow)]",
+        "min-w-0 max-w-full self-start border-[1.5px] border-foreground bg-[#0a0a0a] shadow-float",
         className,
       )}
     >
@@ -141,7 +141,7 @@ function Cli() {
           <div>
             <Eyebrow>01 — THE CLI</Eyebrow>
             <SectionHeading>
-              Works with the framework <span className="text-primary">you already use.</span>
+              Works with the framework <span className="text-electric">you already use.</span>
             </SectionHeading>
             <p className="mt-[18px] max-w-[46ch] text-[15px] leading-[1.65] text-muted-foreground">
               Zero-config deploys into the account you already own — the one thing everything else
@@ -167,7 +167,7 @@ function Cli() {
                 href="https://ocel.app/docs/cli/frameworks"
                 target="_blank"
                 rel="noreferrer"
-                className="font-mono text-[13px] text-primary underline-offset-4 hover:underline"
+                className="font-mono text-[13px] text-electric underline-offset-4 hover:underline"
               >
                 CLI docs — frameworks ↗
               </a>
@@ -187,7 +187,7 @@ function Cli() {
               <div key={cmd.name} className="flex">
                 <span className="w-6 shrink-0" />
                 <span
-                  className={`w-[76px] shrink-0 ${cmd.primary ? "text-primary" : "text-foreground"}`}
+                  className={`w-[76px] shrink-0 ${cmd.primary ? "text-electric" : "text-foreground"}`}
                 >
                   {cmd.name}
                 </span>
@@ -294,10 +294,10 @@ async function Sdk() {
 
           <div aria-hidden className="hidden items-center md:flex">
             <span className="animate-flow h-[3px] flex-1" />
-            <span className="size-0 border-y-[6px] border-l-[8px] border-y-transparent border-l-primary" />
+            <span className="size-0 border-y-[6px] border-l-[8px] border-y-transparent border-l-electric" />
           </div>
 
-          <div className="min-w-0 border-[1.5px] border-foreground bg-card shadow-[6px_6px_0_0_var(--hard-shadow)]">
+          <div className="min-w-0 border-[1.5px] border-foreground bg-card shadow-float">
             <div className="flex items-center gap-2.5 border-b-[1.5px] border-foreground px-4 py-3">
               <FaAws className="size-6 shrink-0 text-foreground" />
               <span className="text-[13px] font-semibold text-foreground">Your AWS account</span>
@@ -330,6 +330,7 @@ async function Sdk() {
         <div className="mt-12 flex justify-center">
           <Button
             variant="outline"
+            nativeButton={false}
             render={<Link href="https://ocel.app/docs/sdk" target="_blank" rel="noreferrer" />}
             className="h-auto rounded-none border-foreground px-6 py-3 text-[13px] font-semibold normal-case tracking-normal"
           >
@@ -360,7 +361,7 @@ const devModeTiles: { label: string; visual: ReactNode; copy: string }[] = [
     visual: (
       <div className="flex items-center gap-2 font-mono text-[12.5px]">
         <span className="text-dim line-through decoration-dim">.env</span>
-        <span className="text-primary">→</span>
+        <span className="text-electric">→</span>
         <span className="bg-chip px-2 py-[3px] text-foreground">process.env</span>
       </div>
     ),
@@ -398,7 +399,7 @@ const devModeTiles: { label: string; visual: ReactNode; copy: string }[] = [
 function DevMode() {
   return (
     <section className="relative border-t border-border">
-      <span className="absolute left-[44%] top-10 font-mono text-[15px] text-primary">+</span>
+      <span className="absolute left-[44%] top-10 font-mono text-[15px] text-electric">+</span>
       <div className="mx-auto max-w-[1180px] px-5 py-16 md:px-10 md:py-[84px]">
         <div className="grid grid-cols-1 gap-12 md:grid-cols-2">
           <div>
@@ -431,7 +432,7 @@ function DevMode() {
             <div className="text-dim">&nbsp;&nbsp;bucket uploads ······ connected</div>
             <div className="text-dim">&nbsp;&nbsp;queue emails ········ connected</div>
             <div className="mt-2">
-              <span className="text-primary">→</span> watching src/{" "}
+              <span className="text-electric">→</span> watching src/{" "}
               <span className="text-dim">— your team gets their own sandboxes too</span>
             </div>
           </Terminal>
@@ -475,7 +476,7 @@ function Console() {
             Nothing hosted in ours.
           </p>
         </div>
-        <div className="mt-14 border-[1.5px] border-foreground bg-card shadow-[6px_6px_0_0_var(--hard-shadow)]">
+        <div className="mt-14 border-[1.5px] border-foreground bg-card shadow-float">
           <Image
             src="/dashboard.png"
             alt="The Ocel console showing a project overview pointed at your own AWS account"
@@ -535,7 +536,7 @@ function Pricing() {
             cloud for. Ocel runs in your account — the only bill is the one you already have.
           </p>
         </div>
-        <div className="min-w-0 border-[1.5px] border-foreground bg-card font-mono text-sm text-foreground shadow-[6px_6px_0_0_var(--hard-shadow)]">
+        <div className="min-w-0 border-[1.5px] border-foreground bg-card font-mono text-sm text-foreground shadow-float">
           <div className="flex justify-between gap-4 border-b border-border px-5 py-4">
             <span className="text-dim">20 seats × $20/mo, elsewhere</span>
             <span>$400/mo</span>
@@ -544,7 +545,7 @@ function Pricing() {
             <span className="text-dim">markup on your compute</span>
             <span>10–1000%</span>
           </div>
-          <div className="flex justify-between bg-primary px-5 py-4 text-primary-foreground">
+          <div className="flex justify-between bg-electric px-5 py-4 text-electric-foreground">
             <span>ocel markup, forever</span>
             <span className="font-semibold">$0</span>
           </div>
@@ -605,8 +606,8 @@ function CtaBand() {
   return (
     <section className="relative overflow-hidden bg-foreground px-5 py-16 text-center md:px-10 md:py-20">
       <span className="absolute left-[60px] top-10 font-mono text-[15px] text-dim">+</span>
-      <span className="absolute bottom-11 right-20 font-mono text-[15px] text-primary">+</span>
-      <h2 className="text-pretty text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-background md:text-[40px]">
+      <span className="absolute bottom-11 right-20 font-mono text-[15px] text-electric">+</span>
+      <h2 className="text-pretty text-[34px] font-semibold leading-[1.1] tracking-[-0.03em] text-background md:text-[40px]">
         Deploy to your own cloud in minutes.
       </h2>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -649,7 +650,7 @@ function OneMoreThing() {
       />
       <div className="relative">
         <h2 className="text-pretty text-[38px] font-semibold leading-[1.08] tracking-[-0.03em] text-foreground md:text-[54px]">
-          Oh — and it's <span className="text-primary">open source.</span>
+          Oh — and it's <span className="text-electric">open source.</span>
         </h2>
         <p className="mx-auto mt-[18px] max-w-[52ch] text-[15px] leading-[1.65] text-muted-foreground">
           MIT licensed. Nothing runs in our account. If you stopped using Ocel tomorrow, the

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
+@import "@ui/theme/tokens.css";
 
 @theme inline {
   --font-sans: var(--font-plex-sans), system-ui, sans-serif;
@@ -8,17 +9,16 @@
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
 }
 
-:root {
-  --electric: #1f35ff;
-  --ink: #0a0a0a;
-  --body: #555555;
-  --steel: #8a8a8a;
-  --fog: #f1f1f1;
-  --tile: var(--fog);
-  --paper: #ffffff;
-  --go: #1a9e57;
-  --rule: var(--ink);
-  --hairline: color-mix(in srgb, var(--ink) 12%, transparent);
+:root,
+.dark {
+  --ink: var(--foreground);
+  --body: var(--muted-foreground);
+  --steel: var(--dim);
+  --fog: var(--muted);
+  --tile: var(--muted);
+  --paper: var(--background);
+  --rule: var(--foreground);
+  --hairline: var(--border);
 
   --color-fd-background: var(--paper);
   --color-fd-foreground: var(--ink);
@@ -30,7 +30,7 @@
   --color-fd-card-foreground: var(--ink);
   --color-fd-border: var(--hairline);
   --color-fd-primary: var(--electric);
-  --color-fd-primary-foreground: var(--paper);
+  --color-fd-primary-foreground: var(--electric-foreground);
   --color-fd-secondary: var(--fog);
   --color-fd-secondary-foreground: var(--ink);
   --color-fd-accent: var(--fog);
@@ -41,16 +41,7 @@
 }
 
 .dark {
-  --electric: #4d68ff;
-  --ink: #f2f1ec;
-  --body: #9aa0a8;
-  --steel: #5f646b;
-  --fog: #16181a;
-  --tile: #1c1f22;
-  --paper: #101214;
-  --go: #3ecf7a;
-  --rule: #2a2d31;
-  --hairline: #2a2d31;
+  --rule: var(--border);
 }
 
 #nd-sidebar button[data-search-full],
@@ -60,14 +51,14 @@
 
 .dark #nd-sidebar button[data-search-full],
 .dark #nd-sidebar button[aria-haspopup="dialog"] {
-  background: #1c1f22;
+  background: var(--card);
 }
 
 .dark #nd-sidebar {
-  --color-fd-muted: #1c1f22;
-  --color-fd-secondary: #1c1f22;
-  --color-fd-accent: #22262a;
-  --color-fd-border: #34383d;
+  --color-fd-muted: var(--card);
+  --color-fd-secondary: var(--card);
+  --color-fd-accent: var(--muted);
+  --color-fd-border: var(--border);
 }
 
 *,

@@ -94,7 +94,7 @@ spacing:
   dot-gap: "24px"
 components:
   button-primary:
-    backgroundColor: "{colors.electric}"
+    backgroundColor: "{colors.ink}"
     textColor: "{colors.paper}"
     rounded: "{rounded.none}"
     padding: "0 10px"
@@ -164,7 +164,7 @@ components:
     padding: "0 20px"
     height: "56px"
   badge-live:
-    backgroundColor: "{colors.electric}"
+    backgroundColor: "{colors.ink}"
     textColor: "{colors.paper}"
     rounded: "{rounded.none}"
     height: "20px"
@@ -183,6 +183,10 @@ components:
 ---
 
 # Design System: Ocel Console
+
+Invariants, tokens, register dials and named exceptions live in `ui/theme/DESIGN.md`.
+This file covers the operate register's components, and defers to that file wherever the
+two disagree.
 
 ## Overview
 
@@ -206,9 +210,9 @@ where an app reads a resource. It is a drawing of a deployment, stamped with whe
 true, and it mutates nothing.
 
 **Key Characteristics:**
-- Paper and hairlines only. Electric appears on focus rings, the active nav item and the identity square, nowhere else.
+- Paper and hairlines only. Electric appears on focus rings, the active nav item, a changed value and a drop target, nowhere else.
 - Zero radius, enforced by `--radius: 0rem` and explicit square variants on every primitive.
-- Depth by hairline and one tonal step to Fog. No shadow, no glow, no blur.
+- Depth by hairline and one tonal step to Fog. Floating layers take a zero-blur 3px offset. No glow, no blur.
 - Mono uppercase Label type names every section, column, chip and stamp.
 - Canvases may carry a faint dot ground; no other surface carries any ground.
 - Every view of infrastructure carries its "as at" stamp in Label type.
@@ -219,7 +223,7 @@ Monochrome paper and ink, one electric annotation, and two status colors that re
 outcome rather than decorate a surface.
 
 ### Primary
-- **Electric** (`{colors.electric}`, dark `{colors.electric-dark}`): the annotation. Focus rings at 40-50% opacity, the active sidebar item, the organization and viewer identity square, and the animated flow stripe. It is also `--ring`, `--sidebar-primary` and `--chart-1`.
+- **Electric** (`{colors.electric}`, dark `{colors.electric-dark}`): the annotation. Focus rings at 40-50% opacity, the active sidebar item, a changed value's 5% tint and a drop target. It is also `--ring`, `--sidebar-primary` and `--chart-1`, never `--primary`.
 
 ### Neutral
 - **Ink** (`{colors.ink}`, dark `{colors.ink-dark}`): headings, tile titles, values in a field row, the selected tile's border. Dark ink is warm off-white.
@@ -239,9 +243,8 @@ outcome rather than decorate a surface.
 
 ### Named Rules
 **The One Annotation Rule.** Electric owns less than ten percent of any view. On the
-console it is a focus ring, the active nav item, the identity square, and the Badge on
-the production promotion that is currently live. It never fills a tile, a panel, a banner
-or a status.
+console it is a focus ring, the active nav item, a changed value and a drop target. It
+never fills a tile, a panel, a banner, a badge, a button, an identity square or a status.
 
 **The Outcome Colour Rule.** Go and Destructive report a record, never a mood. A 8px dot
 carries them on a tile; a ghost tile carries no dot at all, because a torn-down thing has
@@ -330,15 +333,16 @@ console has a ground of any kind.
 
 ## Elevation & Depth
 
-Flat by construction. The console uses three depth devices and no others: a hairline
-border, one tonal step from Paper to Fog, and the dark terminal material of the command
-pane. Nothing lifts on hover; hover darkens a border to Steel or tints a fill to Fog.
+Flat by construction. The console uses four depth devices and no others: a hairline
+border, one tonal step from Paper to Fog, the dark terminal material of the command pane,
+and the float dial on layers that sit above the page — menus, popovers, comboboxes,
+selects and dialogs — a 10% Ink ring with a 3px zero-blur offset in Hard Shadow. Nothing lifts on hover; hover darkens a border to Steel or tints a fill to Fog.
 Overlays sit on a flat 10% black scrim with no backdrop blur. The canvas library's own
 node shadows, outlines and radii are stripped to zero in the global stylesheet.
 
 ### Named Rules
-**The No Shadow Rule.** Nothing casts a shadow, glows, or blurs what is behind it. A
-surface that needs to separate gets a hairline or steps to Fog.
+**The No Blur Rule.** Nothing casts a soft shadow, glows, or blurs what is behind it. A
+floating layer takes the float dial; anything on the page gets a hairline or steps to Fog.
 
 **The Tonal Step Rule.** One step only, and it carries meaning: an app tile is Paper, a
 resource tile is Fog. The map reads as two materials — the things you wrote and the things
@@ -364,9 +368,9 @@ animation.
 ## Components
 
 ### Buttons
-Printed and exact. Flat fill, square, no shadow, and a 1px downward nudge on press.
+Printed and exact. Flat Ink fill, square, no shadow, and a 1px downward nudge on press.
 - **Shape:** square (0px radius)
-- **Primary:** Electric fill, Paper text, 32px tall, 10px side padding, 14px medium. Hover drops the fill to 80%.
+- **Primary:** Ink fill, Paper text, 32px tall, 10px side padding, 14px medium. Hover drops the fill to 80%.
 - **Outline:** Paper fill, Ink text, hairline border. Hover tints to Fog.
 - **Ghost:** no border or fill at rest; hover tints to Fog.
 - **Destructive:** Destructive text on a 10% Destructive fill. No solid red fill anywhere.
@@ -402,7 +406,7 @@ rows, hover tints to Fog at 50%. The whole row navigates and the first cell carr
 real link. One colour per row: the status dot (Go for a deployed promotion, Faint for a
 teardown, Destructive for a failure). Apps are marks only, with a Destructive dot on a
 failed app and nothing on a succeeded one. The environment Badge is outline, except the
-production run that is currently live, which takes the Electric fill. Author is an
+production run that is currently live, which takes the Ink fill. Author is an
 Avatar with initials; trigger is the terminal mark and the command that ran. Every state
 renders the same column heads: empty, error and no-older notices sit inside the body as
 one spanning cell.
@@ -423,10 +427,10 @@ dim `# stage` line where each began; the stage trace is not drawn.
 
 ### Badges
 The shadcn Badge, square, 20px tall. Outline for every environment except the live
-production promotion, which is the one Electric fill on a run page or row.
+production promotion, which is the one Ink fill on a run page or row.
 
 ### Popover
-The shadcn Popover, square, no shadow beyond its ring. Holds a command pane behind an
+The shadcn Popover, square, its ring and the float offset and nothing more. Holds a command pane behind an
 action the console cannot run itself.
 
 ### Command Pane
@@ -485,8 +489,8 @@ the same dot ground the map will use. The loading state is the drawing before th
 - **Do** confine the dot ground to canvases, and give every state of a canvas the same ground.
 
 ### Don't:
-- **Don't** let Electric fill a tile, panel, banner, chip or status. Focus ring, active nav item and identity square only.
-- **Don't** add shadows, glows, blurs or gradients. Overlays use a flat 10% black scrim.
+- **Don't** let Electric fill anything: tile, panel, banner, chip, badge, button, identity square or status.
+- **Don't** add soft shadows, glows, blurs or gradients. Floating layers use the float dial; overlays use a flat 10% black scrim.
 - **Don't** bring the site's landing apparatus here: no grid paper, no registration crosses, no rotated figure captions, no marquee, no 1.5px rules.
 - **Don't** set Label type in Steel. It fails contrast at 11px; Steel is a line colour.
 - **Don't** stand a character in for an icon: no `△` for a warning, no `▸`/`▾` for a caret, no `→` for an arrow. Phosphor draws all three.
