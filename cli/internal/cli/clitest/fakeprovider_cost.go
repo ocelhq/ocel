@@ -53,7 +53,7 @@ var costTable = costkit.Table{
 	},
 }
 
-func (s *deployFakeProviderServer) Shape(_ context.Context, req *contractv1.ShapeRequest) (*costv1.ResourceSet, error) {
+func (s *deployFakeProviderServer) Inventory(_ context.Context, req *contractv1.InventoryRequest) (*costv1.ResourceSet, error) {
 	manifest := req.GetManifest()
 	env := providerkit.ProductionEnv
 	if req.GetEnvironment().GetTier() == environmentv1.Tier_TIER_PREVIEW {
@@ -63,7 +63,7 @@ func (s *deployFakeProviderServer) Shape(_ context.Context, req *contractv1.Shap
 	project := tree.Scope("", costkit.ScopeProject, manifest.GetSlug())
 	environment := tree.Scope(project, costkit.ScopeEnvironment, env)
 	for _, held := range manifest.GetResources() {
-		if typ, shaped := costTypes[held.GetResource().GetType()]; shaped && held.GetBinding() == "" {
+		if typ, priced := costTypes[held.GetResource().GetType()]; priced && held.GetBinding() == "" {
 			tree.Add(environment, costVendor, typ, held.GetLogicalName(), costRegion, map[string]any{"name": held.GetLogicalName()})
 		}
 	}

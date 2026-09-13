@@ -29,45 +29,45 @@ func declaredCounts(t *testing.T, program Program) map[string]int {
 	for name, held := range seen {
 		tf, known := pulumiTokens[held.Token]
 		if !known {
-			t.Fatalf("%s is a %s the shape has no name for", name, held.Token)
+			t.Fatalf("%s is a %s the inventory has no type for", name, held.Token)
 		}
 		counts[tf]++
 	}
 	return counts
 }
 
-func shapedCounts(shaped []costkit.Shaped) map[string]int {
+func itemCounts(items []costkit.Item) map[string]int {
 	counts := map[string]int{}
-	for _, s := range shaped {
+	for _, s := range items {
 		counts[s.Type]++
 	}
 	return counts
 }
 
-func TestTheFrontShapeMatchesTheFrontProgram(t *testing.T) {
+func TestTheFrontInventoryMatchesTheFrontProgram(t *testing.T) {
 	t.Parallel()
 
 	spec := frontSpec{Region: "europe-west1", Names: frontNames(providerkit.ClassPreview),
 		Preview: previewEntry{BaseDomain: "preview.example.com", Certificate: "cert"}}
 	registered := declaredCounts(t, frontProgram(spec))
-	shaped := shapedCounts(ShapeFront(providerkit.ClassPreview, "preview.example.com"))
-	if !maps.Equal(registered, shaped) {
-		t.Errorf("the front program registers %v, the shape lists %v", registered, shaped)
+	listed := itemCounts(InventoryFront(providerkit.ClassPreview, "preview.example.com"))
+	if !maps.Equal(registered, listed) {
+		t.Errorf("the front program registers %v, the inventory lists %v", registered, listed)
 	}
 
 	registered = declaredCounts(t, frontProgram(frontSpec{Names: frontNames(providerkit.ClassProduction)}))
-	shaped = shapedCounts(ShapeFront(providerkit.ClassProduction, ""))
-	if !maps.Equal(registered, shaped) {
-		t.Errorf("without a preview base the front program registers %v, the shape lists %v", registered, shaped)
+	listed = itemCounts(InventoryFront(providerkit.ClassProduction, ""))
+	if !maps.Equal(registered, listed) {
+		t.Errorf("without a preview base the front program registers %v, the inventory lists %v", registered, listed)
 	}
-	for _, s := range ShapeFront(providerkit.ClassProduction, "") {
+	for _, s := range InventoryFront(providerkit.ClassProduction, "") {
 		if s.Type == tfGlobalForwardingRule && s.Properties["network_tier"] != premiumTier {
 			t.Errorf("forwarding rule = %v, want the premium tier the program asks for", s.Properties)
 		}
 	}
 }
 
-func TestTheHostShapeMatchesTheBindingProgram(t *testing.T) {
+func TestTheHostInventoryMatchesTheBindingProgram(t *testing.T) {
 	t.Parallel()
 
 	hosts := map[string]Host{
@@ -75,11 +75,11 @@ func TestTheHostShapeMatchesTheBindingProgram(t *testing.T) {
 		"admin.example.com": {Certificate: "cert", Service: "svc-b", Backend: backendName("shop", providerkit.ClassProduction, "admin.example.com")},
 	}
 	registered := declaredCounts(t, binding(hosts))
-	shaped := shapedCounts(ShapeHosts("shop", providerkit.ClassProduction, []string{"shop.example.com", "admin.example.com"}))
-	if !maps.Equal(registered, shaped) {
-		t.Errorf("the binding program registers %v, the shape lists %v", registered, shaped)
+	listed := itemCounts(InventoryHosts("shop", providerkit.ClassProduction, []string{"shop.example.com", "admin.example.com"}))
+	if !maps.Equal(registered, listed) {
+		t.Errorf("the binding program registers %v, the inventory lists %v", registered, listed)
 	}
-	for _, s := range ShapeHosts("shop", providerkit.ClassProduction, []string{"shop.example.com"}) {
+	for _, s := range InventoryHosts("shop", providerkit.ClassProduction, []string{"shop.example.com"}) {
 		if s.Type == tfBackendService && s.Properties["enable_cdn"] != true {
 			t.Errorf("a host's backend = %v, want the CDN the program enables", s.Properties)
 		}

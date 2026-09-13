@@ -65,7 +65,7 @@ service ProviderService {
 
     rpc RemoveConnector(RemoveConnectorRequest) returns (stream common.progress.v1.OperationEvent);
 
-    rpc Shape(ShapeRequest) returns (provider.cost.v1.ResourceSet);
+    rpc Inventory(InventoryRequest) returns (provider.cost.v1.ResourceSet);
 }
 
 message ProviderConfig {
@@ -268,7 +268,7 @@ message DeployRequest {
   ImageRegistry image_registry = 6;
 }
 
-message ShapeRequest {
+message InventoryRequest {
   Manifest manifest = 1 [(buf.validate.field).required = true];
 
   common.environment.v1.Environment environment = 2;

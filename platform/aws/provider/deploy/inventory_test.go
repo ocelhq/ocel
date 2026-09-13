@@ -32,10 +32,10 @@ var pulumiTokens = map[string]string{
 	"aws:lb/loadBalancer:LoadBalancer":        "aws_lb",
 }
 
-func shapeRequest(t *testing.T) providerkit.ShapeRequest {
+func inventoryRequest(t *testing.T) providerkit.InventoryRequest {
 	t.Helper()
 	release := fixedRelease(t)
-	return providerkit.ShapeRequest{
+	return providerkit.InventoryRequest{
 		Plan: providerkit.DeployPlan{
 			Slug:  "shop",
 			Class: providerkit.ClassProduction,
@@ -57,16 +57,16 @@ func shapeRequest(t *testing.T) providerkit.ShapeRequest {
 	}
 }
 
-func shaped(t *testing.T, evaluator transform.Evaluator, req providerkit.ShapeRequest) *costv1.ResourceSet {
+func inventoried(t *testing.T, evaluator transform.Evaluator, req providerkit.InventoryRequest) *costv1.ResourceSet {
 	t.Helper()
 	tree := &costkit.Tree{}
 	project := tree.Scope("", "project", "shop")
-	scopes := ShapeScopes{
+	scopes := InventoryScopes{
 		Shared:      tree.Scope(project, "shared", "production"),
 		Environment: tree.Scope(project, "environment", "prod"),
 	}
-	if err := Shape(context.Background(), evaluator, "us-east-1", req, tree, scopes); err != nil {
-		t.Fatalf("Shape() = %v", err)
+	if err := Inventory(context.Background(), evaluator, "us-east-1", req, tree, scopes); err != nil {
+		t.Fatalf("Inventory() = %v", err)
 	}
 	set, err := tree.Set("ocel")
 	if err != nil {
@@ -83,7 +83,7 @@ func countTypes(set *costv1.ResourceSet) map[string]int {
 	return counts
 }
 
-func shapedNamed(t *testing.T, set *costv1.ResourceSet, typ, name string) map[string]any {
+func itemNamed(t *testing.T, set *costv1.ResourceSet, typ, name string) map[string]any {
 	t.Helper()
 	for _, r := range set.GetResources() {
 		if r.GetType() == typ && r.GetName() == name {
@@ -105,10 +105,10 @@ func (s secretedCluster) NewResource(args pulumi.MockResourceArgs) (string, reso
 	return id, state, err
 }
 
-func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
+func TestTheInventoryRegistersWhatTheProgramsRegister(t *testing.T) {
 	t.Parallel()
 
-	set := shaped(t, nil, shapeRequest(t))
+	set := inventoried(t, nil, inventoryRequest(t))
 
 	rec := &inputRecorder{}
 	run := func(name string, program func(*pulumi.Context) error) {
@@ -148,7 +148,7 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 	delete(got, "aws_secretsmanager_secret")
 	delete(got, "aws_ecr_repository")
 	if !maps.Equal(got, registered) {
-		t.Errorf("shape counts %v, the programs register %v", got, registered)
+		t.Errorf("the inventory counts %v, the programs register %v", got, registered)
 	}
 
 	entry := recordedOf(t, rec, "aws:lambda/function:Function")
@@ -157,30 +157,30 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 			entry = rec.recorded[key]
 		}
 	}
-	lambda := shapedNamed(t, set, "aws_lambda_function", "fn--web--entry")
+	lambda := itemNamed(t, set, "aws_lambda_function", "fn--web--entry")
 	if lambda["memory_size"] != entry["memorySize"].NumberValue() || lambda["timeout"] != entry["timeout"].NumberValue() {
-		t.Errorf("shaped lambda = %v, program registered memory %v timeout %v", lambda, entry["memorySize"], entry["timeout"])
+		t.Errorf("inventoried lambda = %v, program registered memory %v timeout %v", lambda, entry["memorySize"], entry["timeout"])
 	}
 	if arch := lambda["architectures"].([]any); arch[0] != entry["architectures"].ArrayValue()[0].StringValue() {
-		t.Errorf("shaped architectures = %v, program registered %v", arch, entry["architectures"])
+		t.Errorf("inventoried architectures = %v, program registered %v", arch, entry["architectures"])
 	}
 	task := recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")
-	definition := shapedNamed(t, set, "aws_ecs_task_definition", "api")
+	definition := itemNamed(t, set, "aws_ecs_task_definition", "api")
 	if definition["cpu"] != task["cpu"].StringValue() || definition["memory"] != task["memory"].StringValue() {
-		t.Errorf("shaped task = %v, program registered cpu %v memory %v", definition, task["cpu"], task["memory"])
+		t.Errorf("inventoried task = %v, program registered cpu %v memory %v", definition, task["cpu"], task["memory"])
 	}
 	cluster := recordedOf(t, rec, "aws:rds/cluster:Cluster")
-	scaling := shapedNamed(t, set, "aws_rds_cluster", "main")["serverlessv2_scaling_configuration"].(map[string]any)
+	scaling := itemNamed(t, set, "aws_rds_cluster", "main")["serverlessv2_scaling_configuration"].(map[string]any)
 	registeredScaling := cluster["serverlessv2ScalingConfiguration"].ObjectValue()
 	if scaling["min_capacity"] != registeredScaling["minCapacity"].NumberValue() || scaling["max_capacity"] != registeredScaling["maxCapacity"].NumberValue() {
-		t.Errorf("shaped scaling = %v, program registered %v", scaling, registeredScaling)
+		t.Errorf("inventoried scaling = %v, program registered %v", scaling, registeredScaling)
 	}
 }
 
-func TestShapeScopesAppsUnderTheEnvironmentAndTheSubstrateAsShared(t *testing.T) {
+func TestTheInventoryScopesAppsUnderTheEnvironmentAndTheSubstrateAsShared(t *testing.T) {
 	t.Parallel()
 
-	set := shaped(t, nil, shapeRequest(t))
+	set := inventoried(t, nil, inventoryRequest(t))
 
 	scopeOf := map[string]string{}
 	for _, r := range set.GetResources() {
@@ -199,7 +199,7 @@ func TestShapeScopesAppsUnderTheEnvironmentAndTheSubstrateAsShared(t *testing.T)
 		}
 	}
 	if _, bound := scopeOf["aws_s3_bucket:shared"]; bound {
-		t.Error("a bound resource is someone else's bill, and was shaped anyway")
+		t.Error("a bound resource is someone else's bill, and was inventoried anyway")
 	}
 	if n := len(set.GetScopes()); n != 5 {
 		t.Errorf("scopes = %d, want project, shared, environment and two apps", n)
@@ -209,17 +209,17 @@ func TestShapeScopesAppsUnderTheEnvironmentAndTheSubstrateAsShared(t *testing.T)
 	}
 }
 
-func TestAnAppWithNoBuildShapesOneFunction(t *testing.T) {
+func TestAnAppWithNoBuildInventoriesOneFunction(t *testing.T) {
 	t.Parallel()
 
-	req := shapeRequest(t)
+	req := inventoryRequest(t)
 	req.Functions = nil
-	set := shaped(t, nil, req)
+	set := inventoried(t, nil, req)
 
 	if got := countTypes(set)["aws_lambda_function"]; got != 2 {
 		t.Errorf("lambdas = %d, want one for web and the upload completer", got)
 	}
-	if memory := shapedNamed(t, set, "aws_lambda_function", "web")["memory_size"]; memory != float64(nextBundleFunctionMemoryMB) {
+	if memory := itemNamed(t, set, "aws_lambda_function", "web")["memory_size"]; memory != float64(nextBundleFunctionMemoryMB) {
 		t.Errorf("a next app's stand-in function has %v MB, want %d", memory, nextBundleFunctionMemoryMB)
 	}
 }
@@ -234,18 +234,18 @@ const sizingModule = `
 	}))
 `
 
-func TestTransformsResizeTheShapeAndBindingOutputsStayUnknown(t *testing.T) {
+func TestTransformsResizeTheInventoryAndBindingOutputsStayUnknown(t *testing.T) {
 	t.Parallel()
 
 	root := transformtest.Root(t, map[string]string{"sizing.transform.ts": sizingModule})
 	evaluator := transform.NodePass{Root: root, Modules: []string{"./sizing.transform.ts"}}
-	set := shaped(t, evaluator, shapeRequest(t))
+	set := inventoried(t, evaluator, inventoryRequest(t))
 
-	lambda := shapedNamed(t, set, "aws_lambda_function", "fn--web--entry")
+	lambda := itemNamed(t, set, "aws_lambda_function", "fn--web--entry")
 	if lambda["memory_size"] != float64(2048) {
 		t.Errorf("memory_size = %v, want the transform's 2048", lambda["memory_size"])
 	}
-	scaling := shapedNamed(t, set, "aws_rds_cluster", "main")["serverlessv2_scaling_configuration"].(map[string]any)
+	scaling := itemNamed(t, set, "aws_rds_cluster", "main")["serverlessv2_scaling_configuration"].(map[string]any)
 	if scaling["min_capacity"] != 0.5 || scaling["max_capacity"] != float64(8) {
 		t.Errorf("scaling = %v, want the transform's 0.5 to 8", scaling)
 	}

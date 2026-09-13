@@ -1751,7 +1751,7 @@ func (x *DeployRequest) GetImageRegistry() *ImageRegistry {
 	return nil
 }
 
-type ShapeRequest struct {
+type InventoryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Manifest      *Manifest              `protobuf:"bytes,1,opt,name=manifest,proto3" json:"manifest,omitempty"`
 	Environment   *v1.Environment        `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
@@ -1760,20 +1760,20 @@ type ShapeRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ShapeRequest) Reset() {
-	*x = ShapeRequest{}
+func (x *InventoryRequest) Reset() {
+	*x = InventoryRequest{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ShapeRequest) String() string {
+func (x *InventoryRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ShapeRequest) ProtoMessage() {}
+func (*InventoryRequest) ProtoMessage() {}
 
-func (x *ShapeRequest) ProtoReflect() protoreflect.Message {
+func (x *InventoryRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1785,26 +1785,26 @@ func (x *ShapeRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ShapeRequest.ProtoReflect.Descriptor instead.
-func (*ShapeRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use InventoryRequest.ProtoReflect.Descriptor instead.
+func (*InventoryRequest) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{21}
 }
 
-func (x *ShapeRequest) GetManifest() *Manifest {
+func (x *InventoryRequest) GetManifest() *Manifest {
 	if x != nil {
 		return x.Manifest
 	}
 	return nil
 }
 
-func (x *ShapeRequest) GetEnvironment() *v1.Environment {
+func (x *InventoryRequest) GetEnvironment() *v1.Environment {
 	if x != nil {
 		return x.Environment
 	}
 	return nil
 }
 
-func (x *ShapeRequest) GetEdge() *EdgeSelection {
+func (x *InventoryRequest) GetEdge() *EdgeSelection {
 	if x != nil {
 		return x.Edge
 	}
@@ -4765,8 +4765,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x03tag\x18\x03 \x01(\tB\x1a\xbaH\x17r\x15\x18@2\x11^[A-Za-z0-9._-]*$R\x03tag\x127\n" +
 	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x10\n" +
 	"\x03dry\x18\x05 \x01(\bR\x03dry\x12J\n" +
-	"\x0eimage_registry\x18\x06 \x01(\v2#.provider.contract.v1.ImageRegistryR\rimageRegistry\"\xd1\x01\n" +
-	"\fShapeRequest\x12B\n" +
+	"\x0eimage_registry\x18\x06 \x01(\v2#.provider.contract.v1.ImageRegistryR\rimageRegistry\"\xd5\x01\n" +
+	"\x10InventoryRequest\x12B\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x1e.provider.contract.v1.ManifestB\x06\xbaH\x03\xc8\x01\x01R\bmanifest\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x127\n" +
 	"\x04edge\x18\x03 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\x82\x01\n" +
@@ -5024,7 +5024,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0fHostTrustReason\x12!\n" +
 	"\x1dHOST_TRUST_REASON_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"HOST_TRUST_REASON_UNKNOWN_HOST_KEY\x10\x01\x12'\n" +
-	"#HOST_TRUST_REASON_HOST_KEY_MISMATCH\x10\x022\x81\x16\n" +
+	"#HOST_TRUST_REASON_HOST_KEY_MISMATCH\x10\x022\x89\x16\n" +
 	"\x0fProviderService\x12\\\n" +
 	"\tConfigure\x12&.provider.contract.v1.ConfigureRequest\x1a'.provider.contract.v1.ConfigureResponse\x12S\n" +
 	"\x06Deploy\x12#.provider.contract.v1.DeployRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12Y\n" +
@@ -5051,8 +5051,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x11GetHostnameStatus\x12%.provider.contract.v1.HostnameRequest\x1a/.provider.contract.v1.GetHostnameStatusResponse\x12\x86\x01\n" +
 	"\x17DescribeConnectorTarget\x124.provider.contract.v1.DescribeConnectorTargetRequest\x1a5.provider.contract.v1.DescribeConnectorTargetResponse\x12g\n" +
 	"\x10InstallConnector\x12-.provider.contract.v1.InstallConnectorRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12e\n" +
-	"\x0fRemoveConnector\x12,.provider.contract.v1.RemoveConnectorRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12J\n" +
-	"\x05Shape\x12\".provider.contract.v1.ShapeRequest\x1a\x1d.provider.cost.v1.ResourceSetBBZ@github.com/ocelhq/ocel/pkg/proto/provider/contract/v1;contractv1b\x06proto3"
+	"\x0fRemoveConnector\x12,.provider.contract.v1.RemoveConnectorRequest\x1a\".common.progress.v1.OperationEvent0\x01\x12R\n" +
+	"\tInventory\x12&.provider.contract.v1.InventoryRequest\x1a\x1d.provider.cost.v1.ResourceSetBBZ@github.com/ocelhq/ocel/pkg/proto/provider/contract/v1;contractv1b\x06proto3"
 
 var (
 	file_provider_contract_v1_contract_proto_rawDescOnce sync.Once
@@ -5095,7 +5095,7 @@ var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(*ManifestFunction)(nil),                // 23: provider.contract.v1.ManifestFunction
 	(*ManifestResource)(nil),                // 24: provider.contract.v1.ManifestResource
 	(*DeployRequest)(nil),                   // 25: provider.contract.v1.DeployRequest
-	(*ShapeRequest)(nil),                    // 26: provider.contract.v1.ShapeRequest
+	(*InventoryRequest)(nil),                // 26: provider.contract.v1.InventoryRequest
 	(*ImageRegistry)(nil),                   // 27: provider.contract.v1.ImageRegistry
 	(*BootstrapRequest)(nil),                // 28: provider.contract.v1.BootstrapRequest
 	(*DescribeBootstrapRequest)(nil),        // 29: provider.contract.v1.DescribeBootstrapRequest
@@ -5184,9 +5184,9 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	77,  // 27: provider.contract.v1.DeployRequest.environment:type_name -> common.environment.v1.Environment
 	38,  // 28: provider.contract.v1.DeployRequest.edge:type_name -> provider.contract.v1.EdgeSelection
 	27,  // 29: provider.contract.v1.DeployRequest.image_registry:type_name -> provider.contract.v1.ImageRegistry
-	16,  // 30: provider.contract.v1.ShapeRequest.manifest:type_name -> provider.contract.v1.Manifest
-	77,  // 31: provider.contract.v1.ShapeRequest.environment:type_name -> common.environment.v1.Environment
-	38,  // 32: provider.contract.v1.ShapeRequest.edge:type_name -> provider.contract.v1.EdgeSelection
+	16,  // 30: provider.contract.v1.InventoryRequest.manifest:type_name -> provider.contract.v1.Manifest
+	77,  // 31: provider.contract.v1.InventoryRequest.environment:type_name -> common.environment.v1.Environment
+	38,  // 32: provider.contract.v1.InventoryRequest.edge:type_name -> provider.contract.v1.EdgeSelection
 	72,  // 33: provider.contract.v1.BootstrapRequest.tier:type_name -> common.environment.v1.Tier
 	38,  // 34: provider.contract.v1.BootstrapRequest.edge:type_name -> provider.contract.v1.EdgeSelection
 	78,  // 35: provider.contract.v1.BootstrapRequest.consented:type_name -> common.plan.v1.ChangePlan
@@ -5264,7 +5264,7 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	65,  // 107: provider.contract.v1.ProviderService.DescribeConnectorTarget:input_type -> provider.contract.v1.DescribeConnectorTargetRequest
 	68,  // 108: provider.contract.v1.ProviderService.InstallConnector:input_type -> provider.contract.v1.InstallConnectorRequest
 	69,  // 109: provider.contract.v1.ProviderService.RemoveConnector:input_type -> provider.contract.v1.RemoveConnectorRequest
-	26,  // 110: provider.contract.v1.ProviderService.Shape:input_type -> provider.contract.v1.ShapeRequest
+	26,  // 110: provider.contract.v1.ProviderService.Inventory:input_type -> provider.contract.v1.InventoryRequest
 	7,   // 111: provider.contract.v1.ProviderService.Configure:output_type -> provider.contract.v1.ConfigureResponse
 	81,  // 112: provider.contract.v1.ProviderService.Deploy:output_type -> common.progress.v1.OperationEvent
 	81,  // 113: provider.contract.v1.ProviderService.Bootstrap:output_type -> common.progress.v1.OperationEvent
@@ -5291,7 +5291,7 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	66,  // 134: provider.contract.v1.ProviderService.DescribeConnectorTarget:output_type -> provider.contract.v1.DescribeConnectorTargetResponse
 	81,  // 135: provider.contract.v1.ProviderService.InstallConnector:output_type -> common.progress.v1.OperationEvent
 	81,  // 136: provider.contract.v1.ProviderService.RemoveConnector:output_type -> common.progress.v1.OperationEvent
-	82,  // 137: provider.contract.v1.ProviderService.Shape:output_type -> provider.cost.v1.ResourceSet
+	82,  // 137: provider.contract.v1.ProviderService.Inventory:output_type -> provider.cost.v1.ResourceSet
 	111, // [111:138] is the sub-list for method output_type
 	84,  // [84:111] is the sub-list for method input_type
 	84,  // [84:84] is the sub-list for extension type_name

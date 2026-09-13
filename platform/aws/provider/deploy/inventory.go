@@ -34,59 +34,59 @@ const (
 	fargateDesiredCount      = 1
 )
 
-type ShapeScopes struct {
+type InventoryScopes struct {
 	Environment string
 	Shared      string
 }
 
-type shapedPatches struct {
+type inventoryPatches struct {
 	patches map[resourceRef]map[string]any
 	unknown map[resourceRef][]string
 }
 
-func Shape(ctx context.Context, evaluator transform.Evaluator, region string, req providerkit.ShapeRequest, tree *costkit.Tree, scopes ShapeScopes) error {
+func Inventory(ctx context.Context, evaluator transform.Evaluator, region string, req providerkit.InventoryRequest, tree *costkit.Tree, scopes InventoryScopes) error {
 	project := naming.Sanitize(req.Plan.Slug)
-	patched, err := shapeTransforms(ctx, evaluator, project, req)
+	patched, err := inventoryTransforms(ctx, evaluator, project, req)
 	if err != nil {
 		return err
 	}
-	shape := shaper{tree: tree, region: region, patched: patched}
+	take := inventorier{tree: tree, region: region, patched: patched}
 	for _, resource := range req.Resources {
 		if resource.Binding != "" {
 			continue
 		}
 		switch resource.Type {
 		case providerkit.BindingPostgres:
-			shape.postgres(scopes.Environment, project, req.Plan.Env, resource)
+			take.postgres(scopes.Environment, project, req.Plan.Env, resource)
 		case providerkit.BindingBucket:
-			shape.bucket(scopes.Environment, project, req.Plan.Env, resource)
+			take.bucket(scopes.Environment, project, req.Plan.Env, resource)
 		}
 	}
 	substrate := false
 	for _, app := range req.Plan.Apps {
 		scope := tree.Scope(scopes.Environment, costkit.ScopeApp, app.App)
 		if app.Compute() == providerkit.ComputeContainer {
-			shape.container(scope, app)
+			take.container(scope, app)
 			substrate = true
 			continue
 		}
-		if err := shape.functions(scope, project, app, req.Functions[app.App]); err != nil {
+		if err := take.functions(scope, project, app, req.Functions[app.App]); err != nil {
 			return err
 		}
 	}
 	if substrate {
-		shape.substrate(scopes.Shared, req.Plan.Class)
+		take.substrate(scopes.Shared, req.Plan.Class)
 	}
 	return nil
 }
 
-type shaper struct {
+type inventorier struct {
 	tree    *costkit.Tree
 	region  string
-	patched shapedPatches
+	patched inventoryPatches
 }
 
-func (s shaper) add(scope, typ, name string, properties map[string]any, ref resourceRef) {
+func (s inventorier) add(scope, typ, name string, properties map[string]any, ref resourceRef) {
 	unknown := s.patched.unknown[ref]
 	for key, value := range s.patched.patches[ref] {
 		field := snake(key)
@@ -99,11 +99,11 @@ func (s shaper) add(scope, typ, name string, properties map[string]any, ref reso
 	s.tree.Add(scope, vendor, typ, name, s.region, properties, unknown...)
 }
 
-func (s shaper) plain(scope, typ, name string, properties map[string]any) {
+func (s inventorier) plain(scope, typ, name string, properties map[string]any) {
 	s.tree.Add(scope, vendor, typ, name, s.region, properties)
 }
 
-func (s shaper) functions(scope, project string, app providerkit.AppEntry, specs []providerkit.FunctionSpec) error {
+func (s inventorier) functions(scope, project string, app providerkit.AppEntry, specs []providerkit.FunctionSpec) error {
 	runtime := app.Manifest.GetRuntime().GetName()
 	if len(specs) == 0 {
 		specs = []providerkit.FunctionSpec{{Name: app.App, URL: true}}
@@ -133,7 +133,7 @@ func (s shaper) functions(scope, project string, app providerkit.AppEntry, specs
 	return nil
 }
 
-func (s shaper) container(scope string, app providerkit.AppEntry) {
+func (s inventorier) container(scope string, app providerkit.AppEntry) {
 	s.plain(scope, tfECSTaskDefinition, app.App, map[string]any{
 		"cpu":                      containerCPU,
 		"memory":                   containerMemory,
@@ -150,13 +150,13 @@ func (s shaper) container(scope string, app providerkit.AppEntry) {
 	s.plain(scope, tfECRRepository, app.App, map[string]any{"image_tag_mutability": "IMMUTABLE"})
 }
 
-func (s shaper) substrate(scope string, class providerkit.Class) {
+func (s inventorier) substrate(scope string, class providerkit.Class) {
 	s.plain(scope, tfECSCluster, SubstrateSlug, map[string]any{})
 	s.plain(scope, tfLoadBalancer, SubstrateSlug, map[string]any{"load_balancer_type": "application", "internal": false})
 	s.plain(scope, tfLogGroup, SubstrateSlug, map[string]any{"retention_in_days": substrateLogRetentionDays, "name": "/ocel/containers/" + string(class)})
 }
 
-func (s shaper) postgres(scope, project, env string, resource providerkit.Resource) {
+func (s inventorier) postgres(scope, project, env string, resource providerkit.Resource) {
 	args := translatePostgres(resource.Postgres)
 	names := postgresResourceNames(project, env, resource.Name)
 	s.add(scope, tfRDSCluster, resource.Name, map[string]any{
@@ -180,7 +180,7 @@ func (s shaper) postgres(scope, project, env string, resource providerkit.Resour
 	s.plain(scope, tfSecret, resource.Name, map[string]any{"managed_by": "rds"})
 }
 
-func (s shaper) bucket(scope, project, env string, resource providerkit.Resource) {
+func (s inventorier) bucket(scope, project, env string, resource providerkit.Resource) {
 	names := bucketResourceNames(project, env, resource.Name)
 	s.add(scope, tfS3Bucket, resource.Name, map[string]any{}, names["bucket"])
 	s.add(scope, tfLambdaFunction, resource.Name+"-"+uploadCompleterLocalName, map[string]any{
@@ -193,8 +193,8 @@ func (s shaper) bucket(scope, project, env string, resource providerkit.Resource
 	s.add(scope, tfLogGroup, resource.Name+"-"+uploadCompleterLocalName, map[string]any{"retention_in_days": lambdaLogRetentionDays}, names["uploadCompleterLogGroup"])
 }
 
-func shapeTransforms(ctx context.Context, evaluator transform.Evaluator, project string, req providerkit.ShapeRequest) (shapedPatches, error) {
-	held := shapedPatches{patches: map[resourceRef]map[string]any{}, unknown: map[resourceRef][]string{}}
+func inventoryTransforms(ctx context.Context, evaluator transform.Evaluator, project string, req providerkit.InventoryRequest) (inventoryPatches, error) {
+	held := inventoryPatches{patches: map[resourceRef]map[string]any{}, unknown: map[resourceRef][]string{}}
 	if evaluator == nil {
 		return held, nil
 	}

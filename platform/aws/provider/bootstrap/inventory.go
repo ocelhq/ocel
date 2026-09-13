@@ -11,15 +11,15 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
-type ShapeOption func(*featureInputs)
+type InventoryOption func(*featureInputs)
 
-func WithVarsKey(arn string) ShapeOption {
+func WithVarsKey(arn string) InventoryOption {
 	return func(in *featureInputs) { in.varsKey = arn }
 }
 
-const shapedArtifactBucket = "artifacts"
+const inventoryArtifactBucket = "artifacts"
 
-var shapedTypes = map[string]shapedType{
+var inventoryTypes = map[string]inventoryType{
 	"AWS::S3::Bucket":                 {token: "aws_s3_bucket"},
 	"AWS::DynamoDB::Table":            {token: "aws_dynamodb_table", properties: dynamoProperties},
 	"AWS::KMS::Key":                   {token: "aws_kms_key"},
@@ -34,13 +34,13 @@ var shapedTypes = map[string]shapedType{
 	"AWS::ApiGateway::RestApi":        {token: "aws_api_gateway_rest_api"},
 }
 
-type shapedType struct {
+type inventoryType struct {
 	token      string
 	properties func(map[string]any) map[string]any
 }
 
-func Shape(ns Namespace, class string, features []string, options ...ShapeOption) ([]costkit.Shaped, error) {
-	in := featureInputs{ns: ns, class: class, artifactBucket: shapedArtifactBucket}
+func Inventory(ns Namespace, class string, features []string, options ...InventoryOption) ([]costkit.Item, error) {
+	in := featureInputs{ns: ns, class: class, artifactBucket: inventoryArtifactBucket}
 	for _, option := range options {
 		option(&in)
 	}
@@ -48,7 +48,7 @@ func Shape(ns Namespace, class string, features []string, options ...ShapeOption
 	for _, name := range features {
 		in.alongside[name] = true
 	}
-	bodies := []string{coreStackTemplate(ns, class), runtimeLayerTemplate(ns, class, shapedLayerPlacements())}
+	bodies := []string{coreStackTemplate(ns, class), runtimeLayerTemplate(ns, class, inventoryLayerPlacements())}
 	for _, name := range features {
 		f, known := featureNamed(name)
 		if !known {
@@ -56,33 +56,33 @@ func Shape(ns Namespace, class string, features []string, options ...ShapeOption
 		}
 		bodies = append(bodies, f.planned(in).body)
 	}
-	var shaped []costkit.Shaped
+	var items []costkit.Item
 	for _, body := range bodies {
-		shaped = append(shaped, shapeTemplate(body)...)
+		items = append(items, inventoryTemplate(body)...)
 	}
-	return shaped, nil
+	return items, nil
 }
 
-func shapedLayerPlacements() map[string]payloads.Placement {
+func inventoryLayerPlacements() map[string]payloads.Placement {
 	placed := map[string]payloads.Placement{}
 	for _, arch := range runtimeArches() {
-		placed[arch] = payloads.Placement{Bucket: shapedArtifactBucket, Key: "runtime/" + arch, SHA256: strings.Repeat("0", 64)}
+		placed[arch] = payloads.Placement{Bucket: inventoryArtifactBucket, Key: "runtime/" + arch, SHA256: strings.Repeat("0", 64)}
 	}
 	return placed
 }
 
-func shapeTemplate(body string) []costkit.Shaped {
+func inventoryTemplate(body string) []costkit.Item {
 	resources := templateSection(body, "Resources")
 	if resources == nil {
 		return nil
 	}
-	var out []costkit.Shaped
+	var out []costkit.Item
 	for i := 0; i+1 < len(resources.Content); i += 2 {
 		kind := mappingValue(resources.Content[i+1], "Type")
 		if kind == nil {
 			continue
 		}
-		typ, priced := shapedTypes[kind.Value]
+		typ, priced := inventoryTypes[kind.Value]
 		if !priced {
 			continue
 		}
@@ -90,7 +90,7 @@ func shapeTemplate(body string) []costkit.Shaped {
 		if raw, ok := generic(mappingValue(resources.Content[i+1], "Properties")).(map[string]any); ok && typ.properties != nil {
 			properties = typ.properties(raw)
 		}
-		out = append(out, costkit.Shaped{Name: resources.Content[i].Value, Type: typ.token, Properties: properties})
+		out = append(out, costkit.Item{Name: resources.Content[i].Value, Type: typ.token, Properties: properties})
 	}
 	return out
 }

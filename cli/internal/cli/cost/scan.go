@@ -97,7 +97,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 		if err != nil {
 			return err
 		}
-		set, err := client.Shape(ctx, &contractv1.ShapeRequest{
+		set, err := client.Inventory(ctx, &contractv1.InventoryRequest{
 			Manifest:    manifest,
 			Environment: env,
 			Edge:        edgewire.Selection(cfg),

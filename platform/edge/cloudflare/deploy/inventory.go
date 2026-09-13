@@ -9,39 +9,39 @@ import (
 const entryWorker = "entry"
 
 var (
-	_ costkit.EdgeShaper = (*provider)(nil)
-	_ costkit.EdgePricer = (*provider)(nil)
+	_ costkit.EdgeInventorier = (*provider)(nil)
+	_ costkit.EdgePricer      = (*provider)(nil)
 )
 
-func (p *provider) ShapeCost(site costkit.EdgeSite) (costkit.EdgeShape, error) {
+func (p *provider) CostInventory(site costkit.EdgeSite) (costkit.EdgeInventory, error) {
 	store, err := storeScriptNameFor(p.namespace, site.Class)
 	if err != nil {
-		return costkit.EdgeShape{}, err
+		return costkit.EdgeInventory{}, err
 	}
 	writer, err := isrWriterScriptNameFor(p.namespace, site.Class)
 	if err != nil {
-		return costkit.EdgeShape{}, err
+		return costkit.EdgeInventory{}, err
 	}
 	cache, err := cacheStoreNameFor(p.namespace, site.Class)
 	if err != nil {
-		return costkit.EdgeShape{}, err
+		return costkit.EdgeInventory{}, err
 	}
-	shape := costkit.EdgeShape{
+	inventory := costkit.EdgeInventory{
 		Vendor: cost.Vendor,
-		Shared: []costkit.Shaped{
+		Shared: []costkit.Item{
 			{Name: workersPaidPlan, Type: cost.TypeAccountSubscription, Properties: map[string]any{"rate_plan": map[string]any{"id": workersPaidPlan}}},
 			{Name: cache, Type: cost.TypeR2Bucket, Properties: map[string]any{"storage_class": "Standard"}},
 			{Name: store, Type: cost.TypeWorkersScript, Properties: durableObjectScript(deploymentsStoreWorker)},
 			{Name: writer, Type: cost.TypeWorkersScript, Properties: durableObjectScript(isrWriterWorker)},
 		},
-		Environment: []costkit.Shaped{
+		Environment: []costkit.Item{
 			{Name: entryWorker, Type: cost.TypeWorkersScript, Properties: map[string]any{"durable_objects": []any{}}},
 		},
 	}
 	if site.Class == edge.ClassPreview {
-		shape.Shared = append(shape.Shared, costkit.Shaped{Name: previewEntryScript, Type: cost.TypeWorkersScript, Properties: map[string]any{"durable_objects": []any{}}})
+		inventory.Shared = append(inventory.Shared, costkit.Item{Name: previewEntryScript, Type: cost.TypeWorkersScript, Properties: map[string]any{"durable_objects": []any{}}})
 	}
-	return shape, nil
+	return inventory, nil
 }
 
 func (p *provider) CostCard() (*costkit.Card, error) { return cost.Card() }

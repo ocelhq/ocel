@@ -7,7 +7,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type Shaped struct {
+type Item struct {
 	Name       string
 	Type       string
 	Properties map[string]any
@@ -25,17 +25,17 @@ type EdgeApp struct {
 	Hostnames []string
 }
 
-type EdgeShape struct {
+type EdgeInventory struct {
 	Vendor      string
 	Region      string
 	BillsEgress bool
-	Shared      []Shaped
-	Environment []Shaped
-	Apps        map[string][]Shaped
+	Shared      []Item
+	Environment []Item
+	Apps        map[string][]Item
 }
 
-type EdgeShaper interface {
-	ShapeCost(site EdgeSite) (EdgeShape, error)
+type EdgeInventorier interface {
+	CostInventory(site EdgeSite) (EdgeInventory, error)
 }
 
 type EdgePricer interface {
@@ -43,12 +43,12 @@ type EdgePricer interface {
 	CostTable() Table
 }
 
-func ShapeEdge(front edge.Edge, site EdgeSite) (EdgeShape, error) {
-	shaper, shapes := front.(EdgeShaper)
-	if !shapes {
-		return EdgeShape{}, nil
+func InventoryEdge(front edge.Edge, site EdgeSite) (EdgeInventory, error) {
+	inventorier, takes := front.(EdgeInventorier)
+	if !takes {
+		return EdgeInventory{}, nil
 	}
-	return shaper.ShapeCost(site)
+	return inventorier.CostInventory(site)
 }
 
 type EdgeScopes struct {
@@ -56,11 +56,11 @@ type EdgeScopes struct {
 	Environment string
 }
 
-func (t *Tree) AddEdge(scopes EdgeScopes, shape EdgeShape) {
-	t.AddShaped(scopes.Shared, shape.Vendor, shape.Region, shape.Shared)
-	t.AddShaped(scopes.Environment, shape.Vendor, shape.Region, shape.Environment)
-	for _, app := range slices.Sorted(maps.Keys(shape.Apps)) {
-		t.AddShaped(t.Scope(scopes.Environment, ScopeApp, app), shape.Vendor, shape.Region, shape.Apps[app])
+func (t *Tree) AddEdge(scopes EdgeScopes, inventory EdgeInventory) {
+	t.AddItems(scopes.Shared, inventory.Vendor, inventory.Region, inventory.Shared)
+	t.AddItems(scopes.Environment, inventory.Vendor, inventory.Region, inventory.Environment)
+	for _, app := range slices.Sorted(maps.Keys(inventory.Apps)) {
+		t.AddItems(t.Scope(scopes.Environment, ScopeApp, app), inventory.Vendor, inventory.Region, inventory.Apps[app])
 	}
 }
 
