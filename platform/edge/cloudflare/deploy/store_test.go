@@ -67,10 +67,12 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if owner == "" || body.Force {
-			owner, live = body.OwnerToken, body.Secret
+		if owner != "" && !body.Force {
+			w.WriteHeader(http.StatusConflict)
+			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"ownerToken": owner, "secret": live})
+		owner, live = body.OwnerToken, body.Secret
+		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("PUT /{slug}/staged", authed(func(w http.ResponseWriter, r *http.Request) {
 		var rec edge.DeploymentRecord

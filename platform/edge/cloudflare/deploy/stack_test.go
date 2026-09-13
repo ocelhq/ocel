@@ -3,6 +3,7 @@ package cloudflare
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -448,19 +450,33 @@ func TestReconcile(t *testing.T) {
 		}
 	})
 
-	t.Run("the identity the instance reports is the one persisted", func(t *testing.T) {
-		store := fakeStoreServer(t, "s3cr3t")
+	t.Run("the identity a first reconcile mints is the one persisted", func(t *testing.T) {
+		store := fakeStoreServer(t, "")
 		m := previewZoneMock()
+		p := m.provider(t)
 
-		state, err := reconcileState(t, m.provider(t), previewSpec(store.URL, "v3"), edge.StackState{})
+		state, err := reconcileState(t, p, previewSpec(store.URL, "v3"), edge.StackState{})
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
-		if state.Secret != "s3cr3t" {
-			t.Errorf("persisted secret = %q, want the instance's own", state.Secret)
+		if state.Secret == "" || state.OwnerToken == "" {
+			t.Fatalf("persisted identity = %q/%q, want the minted pair", state.Secret, state.OwnerToken)
 		}
-		if state.OwnerToken != storeOwnerToken {
-			t.Errorf("persisted owner token = %q, want the instance's own", state.OwnerToken)
+		if err := p.putVersionStamp(t.Context(), store.URL, "acme-web", state.Secret, "v3"); err != nil {
+			t.Errorf("the persisted secret does not authenticate: %v", err)
+		}
+	})
+
+	t.Run("a store already seeded by another deploy refuses this one, and never hands its identity over", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+
+		_, err := reconcileState(t, m.provider(t), previewSpec(store.URL, "v3"), edge.StackState{})
+		if !errors.Is(err, errStoreIdentityHeld) {
+			t.Fatalf("Reconcile err = %v, want %v", err, errStoreIdentityHeld)
+		}
+		if strings.Contains(err.Error(), "s3cr3t") {
+			t.Errorf("err = %v, want it to keep the standing secret out of the message", err)
 		}
 	})
 
@@ -658,24 +674,18 @@ func TestEnsureInstance(t *testing.T) {
 		}
 	})
 
-	t.Run("the identity an already-seeded instance reports is adopted", func(t *testing.T) {
+	t.Run("an already-seeded instance holds its identity against a state that lost it", func(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
 		p := &provider{}
 
-		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), edge.StackState{})
-		if err != nil {
-			t.Fatalf("ensureInstance: %v", err)
+		_, _, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), edge.StackState{})
+		if !errors.Is(err, errStoreIdentityHeld) {
+			t.Fatalf("ensureInstance err = %v, want %v", err, errStoreIdentityHeld)
 		}
-		if len(stamps) != 0 {
-			t.Errorf("stamps = %v, want none: this reconcile read no version stamp of its own", stamps)
-		}
-		if id.secret != "s3cr3t" || id.ownerToken != storeOwnerToken {
-			t.Fatalf("identity = %+v, want the pair the instance already carries", id)
-		}
-		if err := p.putVersionStamp(t.Context(), srv.URL, "acme-web", id.secret, "v2"); err != nil {
-			t.Fatalf("the adopted secret does not authenticate: %v", err)
+		if err := p.putVersionStamp(t.Context(), srv.URL, "acme-web", "s3cr3t", "v2"); err != nil {
+			t.Fatalf("the standing secret no longer authenticates: %v", err)
 		}
 	})
 
