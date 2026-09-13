@@ -1,6 +1,7 @@
 package appbundler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -53,7 +54,7 @@ func TestAPackageShippingOnePackagePerPlatformIsInstalledForTheDeclaredArchitect
 			target := l.target("server.js")
 			target.Runtime.Arch = arch
 
-			if err := Bundle(target); err != nil {
+			if err := Bundle(context.Background(), target); err != nil {
 				t.Fatalf("Bundle: %v", err)
 			}
 
@@ -89,7 +90,7 @@ func TestADependencyThatDoesNotSplitByPlatformIsBundledWithoutAnInstall(t *testi
 		"node_modules/plain-optional/package.json": `{"name":"plain-optional","version":"1.0.0"}`,
 	})
 
-	if err := Bundle(l.target("server.js")); err != nil {
+	if err := Bundle(context.Background(), l.target("server.js")); err != nil {
 		t.Fatalf("Bundle: %v", err)
 	}
 	if _, err := os.Stat(npm.argv); err == nil {
@@ -104,7 +105,7 @@ func TestAPlatformPackageInstallThatFailsFailsTheBuild(t *testing.T) {
 	installFakeNpm(t, "echo 'npm error 404 plat-dep@1.2.3 is not in this registry' >&2\nexit 1\n")
 	l := newLayout(t, platformSplitApp())
 
-	err := Bundle(l.target("server.js"))
+	err := Bundle(context.Background(), l.target("server.js"))
 	if err == nil {
 		t.Fatal("Bundle succeeded, want a refusal rather than a function carrying the build host's platform package")
 	}
@@ -119,7 +120,7 @@ func TestAPlatformPackageWithNoNpmToInstallItFailsTheBuild(t *testing.T) {
 	t.Setenv("PATH", "")
 	l := newLayout(t, platformSplitApp())
 
-	err := Bundle(l.target("server.js"))
+	err := Bundle(context.Background(), l.target("server.js"))
 	if err == nil {
 		t.Fatal("Bundle succeeded, want a refusal rather than a function carrying the build host's platform package")
 	}
@@ -141,7 +142,7 @@ func TestAPlatformPackageReachedAtTwoVersionsFailsTheBuild(t *testing.T) {
 	files["node_modules/wrapper-dep/node_modules/plat-dep/index.js"] = "module.exports = require('@plat-dep/darwin-arm64');\n"
 	l := newLayout(t, files)
 
-	err := Bundle(l.target("server.js"))
+	err := Bundle(context.Background(), l.target("server.js"))
 	if err == nil {
 		t.Fatal("Bundle succeeded, want a refusal: one function directory holds one plat-dep, so one of its importers would load a version it was not installed with")
 	}
@@ -152,5 +153,19 @@ func TestAPlatformPackageReachedAtTwoVersionsFailsTheBuild(t *testing.T) {
 	}
 	if _, err := os.Stat(npm.argv); err == nil {
 		t.Error("npm ran for packages the function directory cannot hold side by side")
+	}
+}
+
+func TestAPlatformPackageInstallStopsWhenTheBuildIsCancelled(t *testing.T) {
+	npm := installFakeNpm(t, linuxInstall)
+	l := newLayout(t, platformSplitApp())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := Bundle(ctx, l.target("server.js")); err == nil {
+		t.Fatal("Bundle succeeded under a cancelled build, want it to stop")
+	}
+	if _, err := os.Stat(npm.argv); err == nil {
+		t.Error("npm ran for a build that was already cancelled")
 	}
 }

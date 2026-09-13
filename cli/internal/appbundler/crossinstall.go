@@ -2,6 +2,7 @@ package appbundler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -115,7 +116,7 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
-func (p *platformPackages) installInto(app, funcDir string, log func(string)) error {
+func (p *platformPackages) installInto(ctx context.Context, app, funcDir string, log func(string)) error {
 	p.mu.Lock()
 	reached := p.wanted
 	p.mu.Unlock()
@@ -150,7 +151,7 @@ func (p *platformPackages) installInto(app, funcDir string, log func(string)) er
 	if err := writeJSON(filepath.Join(staging, "package.json"), map[string]any{"private": true, "dependencies": wanted}); err != nil {
 		return err
 	}
-	cmd := exec.Command(npmCommand, npmInstallArgs(cpu)...)
+	cmd := exec.CommandContext(ctx, npmCommand, npmInstallArgs(cpu)...)
 	cmd.Dir = staging
 	var said bytes.Buffer
 	cmd.Stdout = &said
