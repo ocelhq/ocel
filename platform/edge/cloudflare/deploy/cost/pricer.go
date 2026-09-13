@@ -7,7 +7,14 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/ocelhq/ocel/pkg/costkit"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+)
+
+const (
+	Vendor = "cloudflare"
+
+	TypeAccountSubscription = "cloudflare_account_subscription"
+	TypeWorkersScript       = "cloudflare_workers_script"
+	TypeR2Bucket            = "cloudflare_r2_bucket"
 )
 
 //go:embed rates.json
@@ -45,9 +52,9 @@ var (
 )
 
 var Table = costkit.Table{
-	cloudflare.TypeAccountSubscription: subscription,
-	cloudflare.TypeWorkersScript:       workersScript,
-	cloudflare.TypeR2Bucket:            r2Bucket,
+	TypeAccountSubscription: subscription,
+	TypeWorkersScript:       workersScript,
+	TypeR2Bucket:            r2Bucket,
 }
 
 func subscription(r *costkit.Subject) {
@@ -58,8 +65,7 @@ func workersScript(r *costkit.Subject) {
 	requests := r.Usage(usageRequests, requestsBand)
 	r.Add(costkit.Component{Name: "Requests", Unit: "requests", Rate: "cloudflare/workers/requests", Quantity: requests, UsageBased: true})
 	r.Add(costkit.Component{Name: "CPU time", Unit: "CPU-milliseconds", Rate: "cloudflare/workers/cpu-time", Quantity: requests.Mul(r.Usage(usageCPUTime, cpuBand)), UsageBased: true})
-	classes, _ := r.Resource.GetProperties().AsMap()["durable_objects"].([]any)
-	if len(classes) == 0 {
+	if len(r.List("durable_objects")) == 0 {
 		return
 	}
 	calls := r.Usage(usageObjectCalls, objectCalls)

@@ -68,7 +68,11 @@ func shaped(t *testing.T, evaluator transform.Evaluator, req providerkit.ShapeRe
 	if err := Shape(context.Background(), evaluator, "us-east-1", req, tree, scopes); err != nil {
 		t.Fatalf("Shape() = %v", err)
 	}
-	return tree.Set("ocel")
+	set, err := tree.Set("ocel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return set
 }
 
 func countTypes(set *costv1.ResourceSet) map[string]int {

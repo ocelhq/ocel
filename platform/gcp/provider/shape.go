@@ -4,20 +4,12 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/costkit"
-	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 const (
-	scopeProject     = "project"
-	scopeShared      = "shared"
-	scopeEnvironment = "environment"
-	scopeApp         = "app"
-
 	tfCloudRunService     = "google_cloud_run_v2_service"
 	tfFirestoreDatabase   = "google_firestore_database"
 	tfStorageBucket       = "google_storage_bucket"
@@ -44,9 +36,9 @@ var itemTypes = map[Kind]string{
 func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
 	tree := &costkit.Tree{}
 	region := p.options.Region
-	project := tree.Scope("", scopeProject, req.Plan.Slug)
-	shared := tree.Scope(project, scopeShared, string(req.Plan.Class))
-	environment := tree.Scope(project, scopeEnvironment, req.Plan.Env)
+	project := tree.Scope("", costkit.ScopeProject, req.Plan.Slug)
+	shared := tree.Scope(project, costkit.ScopeShared, string(req.Plan.Class))
+	environment := tree.Scope(project, costkit.ScopeEnvironment, req.Plan.Env)
 
 	for _, item := range bootstrapItems(p.Names(), req.Plan.Class, false) {
 		typ, priced := itemTypes[item.Kind]
@@ -61,31 +53,19 @@ func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*cost
 		return nil, err
 	}
 	ingress := ingressFor(factsOf(front))
-	if req.Edge == cloudflare.Kind {
-		shape, err := cloudflare.ShapeEdge(string(p.Names().Namespace()), req.Plan.Class)
-		if err != nil {
-			return nil, err
-		}
-		for _, item := range shape.Shared {
-			tree.Add(shared, cloudflare.Vendor, item.Type, item.Name, "", item.Properties)
-		}
-		for _, item := range shape.Environment {
-			tree.Add(environment, cloudflare.Vendor, item.Type, item.Name, "", item.Properties)
-		}
+	site := costkit.EdgeSite{Slug: req.Plan.Slug, Class: req.Plan.Class, Region: region}
+	for _, app := range req.Plan.Apps {
+		site.Apps = append(site.Apps, costkit.EdgeApp{Name: app.App, Hostnames: providerkit.ProductionHostnames(app)})
 	}
-	fronted := req.Edge == alb.Kind
-	if fronted {
-		previewBase := ""
-		if req.Plan.Class == providerkit.ClassPreview {
-			previewBase = "preview"
-		}
-		for _, item := range alb.ShapeFront(req.Plan.Class, previewBase) {
-			tree.Add(shared, string(Vendor), item.Type, item.Name, region, item.Properties)
-		}
+	shape, err := costkit.ShapeEdge(front, site)
+	if err != nil {
+		return nil, err
 	}
+	tree.AddShaped(shared, shape.Vendor, shape.Region, shape.Shared)
+	tree.AddShaped(environment, shape.Vendor, shape.Region, shape.Environment)
 
 	for _, app := range req.Plan.Apps {
-		scope := tree.Scope(environment, scopeApp, app.App)
+		scope := tree.Scope(environment, costkit.ScopeApp, app.App)
 		if app.Compute() == providerkit.ComputeContainer {
 			service, err := p.Names().Service(req.Plan.Slug, req.Plan.Env, app.App, app.App)
 			if err != nil {
@@ -105,22 +85,9 @@ func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*cost
 				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(providerkit.ComputeServerless, ingress))
 			}
 		}
-		if fronted {
-			for _, item := range alb.ShapeHosts(req.Plan.Slug, req.Plan.Class, productionHostnames(app)) {
-				tree.Add(scope, string(Vendor), item.Type, item.Name, region, item.Properties)
-			}
-		}
+		tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
 	}
-	return tree.Set(providerkit.CostSource), nil
-}
-
-func productionHostnames(app providerkit.AppEntry) []string {
-	for _, domains := range app.Manifest.GetDomains() {
-		if domains.GetTier() == environmentv1.Tier_TIER_PRODUCTION {
-			return domains.GetHostnames()
-		}
-	}
-	return nil
+	return tree.Set(providerkit.CostSource)
 }
 
 func itemProperties(item item, region string) map[string]any {
@@ -155,5 +122,9 @@ func serviceProperties(compute providerkit.Compute, ingress string) map[string]a
 }
 
 func (p *Provider) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
-	return cost.Price(req)
+	edges, err := providerkit.EdgePricers(p.Edges())
+	if err != nil {
+		return nil, err
+	}
+	return cost.Price(req, edges...)
 }

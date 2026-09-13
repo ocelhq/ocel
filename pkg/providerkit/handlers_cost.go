@@ -3,9 +3,9 @@ package providerkit
 import (
 	"context"
 	"errors"
-	"slices"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
@@ -36,11 +36,6 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	for _, feature := range req.GetFeatures() {
-		if !slices.Contains(features, feature) {
-			features = append(features, feature)
-		}
-	}
 	set, err := shaper.Shape(ctx, ShapeRequest{
 		Plan:       plan,
 		Edge:       gate.Edge,
@@ -59,6 +54,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 const scanDeploymentID = "00000000000000000000000000000000"
 
 func unshipped(manifest *contractv1.Manifest) *contractv1.Manifest {
+	manifest = proto.Clone(manifest).(*contractv1.Manifest)
 	for _, app := range manifest.GetApps() {
 		if app.GetDeploymentId() == "" {
 			app.DeploymentId = scanDeploymentID

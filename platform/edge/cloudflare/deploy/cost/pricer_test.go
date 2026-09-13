@@ -3,6 +3,8 @@ package cost_test
 import (
 	"testing"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/ocelhq/ocel/pkg/costkit"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -12,23 +14,23 @@ import (
 
 func shapedSet(t *testing.T, class edge.Class) *costv1.ResourceSet {
 	t.Helper()
-	shape, err := cloudflare.ShapeEdge("ocel", class)
+	shape, err := costkit.ShapeEdge(cloudflare.New("ocel"), costkit.EdgeSite{Slug: "shop", Class: class})
 	if err != nil {
 		t.Fatal(err)
 	}
 	tree := &costkit.Tree{}
-	shared := tree.Scope("", "shared", string(class))
-	environment := tree.Scope("", "environment", "prod")
-	for _, item := range shape.Shared {
-		tree.Add(shared, cloudflare.Vendor, item.Type, item.Name, "", item.Properties)
+	tree.AddEdge(costkit.EdgeScopes{
+		Shared:      tree.Scope("", costkit.ScopeShared, string(class)),
+		Environment: tree.Scope("", costkit.ScopeEnvironment, "prod"),
+	}, shape)
+	set, err := tree.Set("ocel")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, item := range shape.Environment {
-		tree.Add(environment, cloudflare.Vendor, item.Type, item.Name, "", item.Properties)
-	}
-	return tree.Set("ocel")
+	return set
 }
 
-func priced(t *testing.T, set *costv1.ResourceSet, profile string) *costv1.Estimate {
+func priced(t *testing.T, set *costv1.ResourceSet, profile costv1.Profile) *costv1.Estimate {
 	t.Helper()
 	card, err := cost.Card()
 	if err != nil {
@@ -64,11 +66,11 @@ func TestTheEdgeShapesItsPlanStoreWriterCacheAndEntry(t *testing.T) {
 	counts := map[string]int{}
 	for _, r := range set.GetResources() {
 		counts[r.GetType()]++
-		if r.GetVendor() != cloudflare.Vendor {
+		if r.GetVendor() != cost.Vendor {
 			t.Errorf("%s is %s", r.GetId(), r.GetVendor())
 		}
 	}
-	if counts[cloudflare.TypeAccountSubscription] != 1 || counts[cloudflare.TypeR2Bucket] != 1 || counts[cloudflare.TypeWorkersScript] != 3 {
+	if counts[cost.TypeAccountSubscription] != 1 || counts[cost.TypeR2Bucket] != 1 || counts[cost.TypeWorkersScript] != 3 {
 		t.Errorf("counts = %v, want the plan, the cache bucket, and the store, writer and entry workers", counts)
 	}
 	preview := shapedSet(t, edge.ClassPreview)
@@ -81,9 +83,9 @@ func TestAModerateMonthStaysInsideThePaidPlansAllowances(t *testing.T) {
 	t.Parallel()
 
 	set := shapedSet(t, edge.ClassProduction)
-	est := priced(t, set, "moderate")
+	est := priced(t, set, costv1.Profile_PROFILE_MODERATE)
 
-	plan := estimateOfType(t, est, set, cloudflare.TypeAccountSubscription, "shared:production")
+	plan := estimateOfType(t, est, set, cost.TypeAccountSubscription, "shared:production")
 	if plan.GetMonthlyFixed() != "5.00" {
 		t.Errorf("plan = %s, want the 5.00 the paid plan costs", plan.GetMonthlyFixed())
 	}
@@ -99,19 +101,44 @@ func TestAHeavyMonthBillsRequestsPastTheAllowance(t *testing.T) {
 	t.Parallel()
 
 	set := shapedSet(t, edge.ClassProduction)
-	est := priced(t, set, "heavy")
+	est := priced(t, set, costv1.Profile_PROFILE_HEAVY)
 
-	entry := estimateOfType(t, est, set, cloudflare.TypeWorkersScript, "environment:prod")
+	entry := estimateOfType(t, est, set, cost.TypeWorkersScript, "environment:prod")
 	var requests *costv1.CostComponent
 	for _, c := range entry.GetComponents() {
 		if c.GetName() == "Requests" {
 			requests = c
 		}
 	}
-	if requests.GetMonthlyCost() != "0.00" || requests.GetMonthlyQuantity() != "10000000" {
-		t.Errorf("10M requests = %v, want the plan's included 10M and nothing billed", requests)
+	if requests.GetMonthlyCost() != "3.00" || requests.GetMonthlyQuantity() != "10000000" {
+		t.Errorf("entry's 10M requests = %v, want 3.00: the shared workers spent the plan's included 10M first", requests)
 	}
-	if cost := estimateOfType(t, est, set, cloudflare.TypeR2Bucket, "shared:production").GetMonthlyUsage(); cost != "1.35" {
-		t.Errorf("r2 at 100 GB = %s, want 1.35 (90 GB past the 10 included at 0.015)", cost)
+	if got := estimateOfType(t, est, set, cost.TypeR2Bucket, "shared:production").GetMonthlyUsage(); got != "1.35" {
+		t.Errorf("r2 at 100 GB = %s, want 1.35 (90 GB past the 10 included at 0.015)", got)
+	}
+}
+
+func TestTheIncludedRequestsAreSpentOnceAcrossEveryWorker(t *testing.T) {
+	t.Parallel()
+
+	set := shapedSet(t, edge.ClassProduction)
+	est := priced(t, set, costv1.Profile_PROFILE_HEAVY)
+
+	var billed int
+	var total decimal.Decimal
+	for _, r := range est.GetResources() {
+		for _, c := range r.GetComponents() {
+			if c.GetName() != "Requests" {
+				continue
+			}
+			cost, _ := decimal.NewFromString(c.GetMonthlyCost())
+			total = total.Add(cost)
+			if cost.IsPositive() {
+				billed++
+			}
+		}
+	}
+	if billed != 2 || total.String() != "6" {
+		t.Errorf("three workers at 10M requests each billed %d workers for %s; want the plan's 10M spent once, then 20M at 0.30 a million", billed, total)
 	}
 }

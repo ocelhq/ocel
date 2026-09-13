@@ -84,8 +84,8 @@ func RunCost(t *testing.T, provider contractv1connect.ProviderServiceClient, pri
 		shapeHoldsTogether(t, set, vendor)
 	})
 
-	estimates := map[string]*costv1.Estimate{}
-	for _, profile := range []string{costkit.ProfileLight, costkit.ProfileModerate, costkit.ProfileHeavy} {
+	estimates := map[costv1.Profile]*costv1.Estimate{}
+	for _, profile := range costkit.Profiles() {
 		est, err := pricer.Price(ctx, &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: profile}})
 		if connect.CodeOf(err) == connect.CodeUnimplemented {
 			t.Fatal("this provider shapes a deploy and prices nothing, so a scan would list resources with no number beside them")
@@ -97,13 +97,13 @@ func RunCost(t *testing.T, provider contractv1connect.ProviderServiceClient, pri
 	}
 
 	t.Run("every shaped resource is priced or declared free", func(t *testing.T) {
-		estimateHoldsTogether(t, set, estimates[costkit.ProfileModerate])
+		estimateHoldsTogether(t, set, estimates[costkit.DefaultProfile])
 	})
 	t.Run("a heavier profile never costs less", func(t *testing.T) {
 		profilesAreMonotone(t, estimates)
 	})
 	t.Run("an unknown property is never priced as zero", func(t *testing.T) {
-		unknownIsNeverZero(t, pricer, set, estimates[costkit.ProfileModerate])
+		unknownIsNeverZero(t, pricer, set, estimates[costkit.DefaultProfile])
 	})
 }
 
@@ -157,7 +157,7 @@ func shapeHoldsTogether(t *testing.T, set *costv1.ResourceSet, vendor string) {
 
 func estimateHoldsTogether(t *testing.T, set *costv1.ResourceSet, est *costv1.Estimate) {
 	t.Helper()
-	if est.GetCurrency() == "" || est.GetRatesVersion() == "" || est.GetProfile() != costkit.ProfileModerate {
+	if est.GetCurrency() == "" || est.GetRatesVersion() == "" || est.GetProfile() != costkit.DefaultProfile {
 		t.Errorf("estimate header = %s %q %s", est.GetCurrency(), est.GetRatesVersion(), est.GetProfile())
 	}
 	if len(est.GetResources()) != len(set.GetResources()) {
@@ -217,9 +217,9 @@ func estimateHoldsTogether(t *testing.T, set *costv1.ResourceSet, est *costv1.Es
 	}
 }
 
-func profilesAreMonotone(t *testing.T, estimates map[string]*costv1.Estimate) {
+func profilesAreMonotone(t *testing.T, estimates map[costv1.Profile]*costv1.Estimate) {
 	t.Helper()
-	light, moderate, heavy := estimates[costkit.ProfileLight], estimates[costkit.ProfileModerate], estimates[costkit.ProfileHeavy]
+	light, moderate, heavy := estimates[costv1.Profile_PROFILE_LIGHT], estimates[costv1.Profile_PROFILE_MODERATE], estimates[costv1.Profile_PROFILE_HEAVY]
 	if light.GetMonthlyFixed() != moderate.GetMonthlyFixed() || moderate.GetMonthlyFixed() != heavy.GetMonthlyFixed() {
 		t.Errorf("fixed cost moves with the profile: %s, %s, %s", light.GetMonthlyFixed(), moderate.GetMonthlyFixed(), heavy.GetMonthlyFixed())
 	}
