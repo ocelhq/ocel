@@ -359,11 +359,13 @@ func appArtifactRoot(outputDir, funcDir string) (string, error) {
 	return appDir, nil
 }
 
+var ErrNoBuildOutput = errors.New("no build output")
+
 func CollectFunctions(projectDir string) ([]manifestbuilder.Function, error) {
 	outputDir := filepath.Join(projectDir, constants.ProjectStateDirName, outputDirName)
 	if _, err := os.Stat(outputDir); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("no build output at %s; run `ocel build` first", filepath.Join(constants.ProjectStateDirName, outputDirName))
+			return nil, fmt.Errorf("%w at %s; run `ocel build` first", ErrNoBuildOutput, filepath.Join(constants.ProjectStateDirName, outputDirName))
 		}
 		return nil, err
 	}

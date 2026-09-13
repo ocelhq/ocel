@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/manifestwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
@@ -117,7 +118,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, err
 	}
 
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages, compute, images), compute, toDeclarations(cfg.Dir, resources), toBindings(cfg.Bindings), functions, variablesByApp(variables, functions))
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages, compute, images), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.Bindings), functions, variablesByApp(variables, functions))
 	if err != nil {
 		return nil, err
 	}
@@ -276,10 +277,6 @@ func servedByFunctions(functions []manifestbuilder.Function, cfg *projectconfig.
 	})
 }
 
-func runtimeOf(runtime projectconfig.Runtime) manifestbuilder.Runtime {
-	return manifestbuilder.Runtime{Name: runtime.Name, Arch: runtime.Arch}
-}
-
 func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string, images map[string]string) []manifestbuilder.App {
 	byApp := make(map[string][]manifestbuilder.Usage, len(apps))
 	for _, u := range usages {
@@ -292,7 +289,7 @@ func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string
 		named[a.Name] = true
 		out = append(out, manifestbuilder.App{
 			Name:            a.Name,
-			Runtime:         runtimeOf(a.Runtime),
+			Runtime:         manifestwire.Runtime(a.Runtime),
 			Compute:         a.Compute,
 			Domains:         a.Domains,
 			Folder:          a.Folder,
@@ -425,36 +422,10 @@ func detectedApps(functions []manifestbuilder.Function) []string {
 	return detected
 }
 
-func toDeclarations(configDir string, resources []declare.Resource) []manifestbuilder.Declaration {
-	decls := make([]manifestbuilder.Declaration, len(resources))
-	for i, r := range resources {
-		var source string
-		if site, ok := attribution.DeclaringSite(configDir, r.Source); ok {
-			source = site.String()
-		}
-		decls[i] = manifestbuilder.Declaration{
-			Type:     r.Type,
-			Name:     r.Name,
-			Postgres: r.Postgres,
-			Bucket:   r.Bucket,
-			Source:   source,
-		}
-	}
-	return decls
-}
-
 func toAttributionDeclarations(resources []declare.Resource) []attribution.Declaration {
 	decls := make([]attribution.Declaration, len(resources))
 	for i, r := range resources {
 		decls[i] = attribution.Declaration{Type: r.Type, Name: r.Name, Source: r.Source}
 	}
 	return decls
-}
-
-func toBindings(bindings []projectconfig.Binding) []manifestbuilder.Binding {
-	out := make([]manifestbuilder.Binding, 0, len(bindings))
-	for _, b := range bindings {
-		out = append(out, manifestbuilder.Binding{Type: b.Type, Name: b.Name, External: b.External})
-	}
-	return out
 }
