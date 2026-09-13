@@ -274,8 +274,6 @@ message ShapeRequest {
   common.environment.v1.Environment environment = 2;
 
   EdgeSelection edge = 3;
-
-  repeated string features = 4;
 }
 
 message ImageRegistry {

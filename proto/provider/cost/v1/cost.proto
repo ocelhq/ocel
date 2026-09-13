@@ -54,8 +54,15 @@ message PriceRequest {
   Usage usage = 2;
 }
 
+enum Profile {
+  PROFILE_UNSPECIFIED = 0;
+  PROFILE_LIGHT = 1;
+  PROFILE_MODERATE = 2;
+  PROFILE_HEAVY = 3;
+}
+
 message Usage {
-  string profile = 1 [(buf.validate.field).string = {in: ["", "light", "moderate", "heavy"]}];
+  Profile profile = 1 [(buf.validate.field).enum.defined_only = true];
 
   map<string, google.protobuf.Struct> resources = 2;
 }
@@ -65,7 +72,7 @@ message Estimate {
 
   string rates_version = 2;
 
-  string profile = 3;
+  Profile profile = 3;
 
   repeated ResourceEstimate resources = 4;
 

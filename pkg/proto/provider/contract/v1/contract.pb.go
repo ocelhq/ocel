@@ -1756,7 +1756,6 @@ type ShapeRequest struct {
 	Manifest      *Manifest              `protobuf:"bytes,1,opt,name=manifest,proto3" json:"manifest,omitempty"`
 	Environment   *v1.Environment        `protobuf:"bytes,2,opt,name=environment,proto3" json:"environment,omitempty"`
 	Edge          *EdgeSelection         `protobuf:"bytes,3,opt,name=edge,proto3" json:"edge,omitempty"`
-	Features      []string               `protobuf:"bytes,4,rep,name=features,proto3" json:"features,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1808,13 +1807,6 @@ func (x *ShapeRequest) GetEnvironment() *v1.Environment {
 func (x *ShapeRequest) GetEdge() *EdgeSelection {
 	if x != nil {
 		return x.Edge
-	}
-	return nil
-}
-
-func (x *ShapeRequest) GetFeatures() []string {
-	if x != nil {
-		return x.Features
 	}
 	return nil
 }
@@ -4773,12 +4765,11 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x03tag\x18\x03 \x01(\tB\x1a\xbaH\x17r\x15\x18@2\x11^[A-Za-z0-9._-]*$R\x03tag\x127\n" +
 	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x10\n" +
 	"\x03dry\x18\x05 \x01(\bR\x03dry\x12J\n" +
-	"\x0eimage_registry\x18\x06 \x01(\v2#.provider.contract.v1.ImageRegistryR\rimageRegistry\"\xed\x01\n" +
+	"\x0eimage_registry\x18\x06 \x01(\v2#.provider.contract.v1.ImageRegistryR\rimageRegistry\"\xd1\x01\n" +
 	"\fShapeRequest\x12B\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x1e.provider.contract.v1.ManifestB\x06\xbaH\x03\xc8\x01\x01R\bmanifest\x12D\n" +
 	"\venvironment\x18\x02 \x01(\v2\".common.environment.v1.EnvironmentR\venvironment\x127\n" +
-	"\x04edge\x18\x03 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x1a\n" +
-	"\bfeatures\x18\x04 \x03(\tR\bfeatures\"\x82\x01\n" +
+	"\x04edge\x18\x03 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\"\x82\x01\n" +
 	"\rImageRegistry\x12\x16\n" +
 	"\x06server\x18\x01 \x01(\tR\x06server\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x1a\n" +
