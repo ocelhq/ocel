@@ -104,7 +104,7 @@ export interface AppConfig {
   /** The variables folder this app reads, when it does not read the project's own. */
   folder?: string;
   /** What a serverless app is built with, when ocel is not to read it off the app's own manifest. */
-  framework?: "node" | "next" | "go" | "python";
+  framework?: "node" | "next" | "go" | "python" | "rust";
   /** How a container app is checked before it is served. */
   health?: HealthConfig;
   /** The app's name. It is a label of every resource the app deploys and of its preview hostname, so it is a DNS label. */
