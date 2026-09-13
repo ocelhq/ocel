@@ -326,6 +326,7 @@
           "monthlyQuantity": "1314000",
           "unitPrice": "0.000002",
           "monthlyCost": "2.63",
+          "assumption": "moderate profile: 1314000 GiB-seconds",
           "rateRef": "gcp/run/memory-always"
         }
       ],
@@ -383,6 +384,7 @@
     ]
   },
   "notes": [
+    "a free allowance the account gets once is assumed unspent: a scan cannot see what the account already used this month, so a deploy beside other use of the same allowance costs more than shown",
     "list prices for the regions the card names and for global SKUs; a resource elsewhere is left unpriced unless a note above says otherwise",
     "the free tier Cloud Run and Cloud Storage apply as a billing discount is not applied; a free first tier the catalog publishes is spent once per account across every resource sharing it",
     "the forwarding rule is priced as the project's first five, which share one hourly charge"

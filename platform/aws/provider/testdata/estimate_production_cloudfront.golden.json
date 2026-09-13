@@ -914,6 +914,7 @@
     ]
   },
   "notes": [
+    "a free allowance the account gets once is assumed unspent: a scan cannot see what the account already used this month, so a deploy beside other use of the same allowance costs more than shown",
     "list prices for us-east-1; a resource in another region is left unpriced",
     "an always-free allowance the price list folds into a first tier is spent once per account across every resource sharing it; allowances the price list leaves out, such as Lambda's, are not applied",
     "CloudFront is priced at its United States rates whichever price class the distribution carries"

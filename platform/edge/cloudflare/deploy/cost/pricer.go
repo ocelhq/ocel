@@ -35,6 +35,7 @@ const (
 	usageObjectStored = "durable_object_storage_gb"
 
 	durableObjectGB = 0.128
+	durableObjects  = "durable_objects"
 )
 
 var (
@@ -62,19 +63,18 @@ func subscription(r *costkit.Subject) {
 }
 
 func workersScript(r *costkit.Subject) {
-	requests := r.Usage(usageRequests, requestsBand)
-	r.Add(costkit.Component{Name: "Requests", Unit: "requests", Rate: "cloudflare/workers/requests", Quantity: requests, UsageBased: true})
-	r.Add(costkit.Component{Name: "CPU time", Unit: "CPU-milliseconds", Rate: "cloudflare/workers/cpu-time", Quantity: requests.Mul(r.Usage(usageCPUTime, cpuBand)), UsageBased: true})
-	if len(r.List("durable_objects")) == 0 {
+	r.Add(costkit.Component{Name: "Requests", Unit: "requests", Rate: "cloudflare/workers/requests", Quantity: r.Usage(usageRequests, requestsBand), UsageBased: true})
+	r.Add(costkit.Component{Name: "CPU time", Unit: "CPU-milliseconds", Rate: "cloudflare/workers/cpu-time", Quantity: r.Usage(usageRequests, requestsBand).Mul(r.Usage(usageCPUTime, cpuBand)), UsageBased: true})
+	if len(r.List(durableObjects)) == 0 {
 		return
 	}
-	calls := r.Usage(usageObjectCalls, objectCalls)
-	r.Add(costkit.Component{Name: "Durable Object requests", Unit: "requests", Rate: "cloudflare/durable-objects/requests", Quantity: calls, UsageBased: true})
-	seconds := calls.Mul(r.Usage(usageObjectTime, objectTimeBand)).Div(thousand)
-	r.Add(costkit.Component{Name: "Durable Object duration", Unit: "GB-seconds", Rate: "cloudflare/durable-objects/duration", Quantity: seconds.Mul(decimal.NewFromFloat(durableObjectGB)), UsageBased: true})
-	r.Add(costkit.Component{Name: "Rows read", Unit: "rows", Rate: "cloudflare/durable-objects/rows-read", Quantity: r.Usage(usageRowsRead, rowsReadBand), UsageBased: true})
-	r.Add(costkit.Component{Name: "Rows written", Unit: "rows", Rate: "cloudflare/durable-objects/rows-written", Quantity: r.Usage(usageRowsWritten, rowsWriteBand), UsageBased: true})
-	r.Add(costkit.Component{Name: "Stored data", Unit: "GB-month", Rate: "cloudflare/durable-objects/storage", Quantity: r.Usage(usageObjectStored, objectStorage), UsageBased: true})
+	held := []string{durableObjects}
+	r.Add(costkit.Component{Name: "Durable Object requests", Unit: "requests", Rate: "cloudflare/durable-objects/requests", Quantity: r.Usage(usageObjectCalls, objectCalls), UsageBased: true, Needs: held})
+	seconds := r.Usage(usageObjectCalls, objectCalls).Mul(r.Usage(usageObjectTime, objectTimeBand)).Div(thousand)
+	r.Add(costkit.Component{Name: "Durable Object duration", Unit: "GB-seconds", Rate: "cloudflare/durable-objects/duration", Quantity: seconds.Mul(decimal.NewFromFloat(durableObjectGB)), UsageBased: true, Needs: held})
+	r.Add(costkit.Component{Name: "Rows read", Unit: "rows", Rate: "cloudflare/durable-objects/rows-read", Quantity: r.Usage(usageRowsRead, rowsReadBand), UsageBased: true, Needs: held})
+	r.Add(costkit.Component{Name: "Rows written", Unit: "rows", Rate: "cloudflare/durable-objects/rows-written", Quantity: r.Usage(usageRowsWritten, rowsWriteBand), UsageBased: true, Needs: held})
+	r.Add(costkit.Component{Name: "Stored data", Unit: "GB-month", Rate: "cloudflare/durable-objects/storage", Quantity: r.Usage(usageObjectStored, objectStorage), UsageBased: true, Needs: held})
 }
 
 func r2Bucket(r *costkit.Subject) {

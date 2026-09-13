@@ -3,6 +3,7 @@ package costkit_test
 import (
 	"errors"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 
@@ -60,6 +61,22 @@ var widgets = costkit.Table{
 			Quantity: r.Usage("standard.storage_gb", costkit.Band{Light: 1, Moderate: 10, Heavy: 100})})
 	},
 	"test_trinket": func(r *costkit.Subject) { r.Free() },
+	"test_pair": func(r *costkit.Subject) {
+		r.Add(costkit.Component{Name: "Size", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("size").Mul(costkit.MonthlyHours)})
+		r.Add(costkit.Component{Name: "Count", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("count").Mul(costkit.MonthlyHours)})
+	},
+	"test_twice": func(r *costkit.Subject) {
+		r.Add(costkit.Component{Name: "Size", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("size").Mul(costkit.MonthlyHours)})
+		r.Add(costkit.Component{Name: "Double", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("size").Mul(costkit.MonthlyHours).Mul(decimal.NewFromInt(2))})
+	},
+	"test_gated": func(r *costkit.Subject) {
+		if r.Bool("premium") {
+			r.Add(costkit.Component{Name: "Standing", Unit: "hour", Rate: "gadget/hours", Quantity: costkit.MonthlyHours, Needs: []string{"premium"}})
+			return
+		}
+		r.Add(costkit.Component{Name: "Standing", Unit: "hour", Rate: "widget/hours", Quantity: costkit.MonthlyHours, Needs: []string{"premium"}})
+		r.Add(costkit.Component{Name: "Storage", Unit: "GB-month", Rate: "widget/storage", Quantity: decimal.NewFromInt(1), Needs: []string{"premium"}})
+	},
 }
 
 func resource(id, scope, typ, region string, props map[string]any, unknown ...string) *costv1.Resource {
@@ -278,6 +295,59 @@ func TestAnAccountAllowanceIsSpentOnceAcrossTheResourcesSharingIt(t *testing.T) 
 	}
 	if est.GetMonthlyUsage() != "0.80" {
 		t.Errorf("total = %s, want 0.80 (180 reads of 80 past one shared allowance)", est.GetMonthlyUsage())
+	}
+}
+
+func TestAnAccountAllowanceSaysOnceThatItIsAssumedUnspent(t *testing.T) {
+	s := set()
+	s.Resources = []*costv1.Resource{
+		resource("r1", "p/e", "test_reader", "eu-west-1", map[string]any{}),
+		resource("r2", "p/e", "test_reader", "eu-west-1", map[string]any{}),
+	}
+	est := estimate(t, &costv1.PriceRequest{Resources: s})
+
+	if strings.Join(est.GetNotes(), "|") != costkit.AllowanceAssumed {
+		t.Errorf("notes = %v, want the unspent-allowance assumption once", est.GetNotes())
+	}
+
+	if notes := estimate(t, &costv1.PriceRequest{Resources: set()}).GetNotes(); slices.Contains(notes, costkit.AllowanceAssumed) {
+		t.Errorf("notes = %v, want no account assumption where only a per-resource allowance applied", notes)
+	}
+}
+
+func TestAnUnknownTaintsOnlyTheComponentsThatReadIt(t *testing.T) {
+	s := set()
+	s.Resources = []*costv1.Resource{
+		resource("pair", "p/e", "test_pair", "eu-west-1", map[string]any{"count": 2}, "size"),
+		resource("twice", "p/e", "test_twice", "eu-west-1", map[string]any{}, "size"),
+		resource("gated", "p/e", "test_gated", "eu-west-1", map[string]any{}, "premium"),
+	}
+	est := estimate(t, &costv1.PriceRequest{Resources: s})
+
+	pair := byID(est, "pair")
+	size, count := pair.GetComponents()[0], pair.GetComponents()[1]
+	if size.GetMonthlyCost() != "" || strings.Join(size.GetDependsOnUnknown(), ",") != "size" {
+		t.Errorf("size = %v, want it unpriced over the unknown", size)
+	}
+	if count.GetMonthlyCost() != "146.00" || len(count.GetDependsOnUnknown()) != 0 {
+		t.Errorf("count = %v, want 146.00 untouched by an unknown it never read", count)
+	}
+	if pair.GetStatus() != costv1.ResourceEstimate_STATUS_PRICED || pair.GetMonthlyFixed() != "146.00" {
+		t.Errorf("pair = %v %s", pair.GetStatus(), pair.GetMonthlyFixed())
+	}
+	for _, c := range byID(est, "twice").GetComponents() {
+		if c.GetMonthlyCost() != "" || strings.Join(c.GetDependsOnUnknown(), ",") != "size" {
+			t.Errorf("%s = %v, want every component that reads the unknown left unpriced and naming it once", c.GetName(), c)
+		}
+	}
+	gated := byID(est, "gated")
+	if len(gated.GetComponents()) != 2 {
+		t.Fatalf("gated = %v, want the two components of the branch an unknown gate falls into", gated)
+	}
+	for _, c := range gated.GetComponents() {
+		if c.GetMonthlyCost() != "" || strings.Join(c.GetDependsOnUnknown(), ",") != "premium" {
+			t.Errorf("%s = %v, want every component behind the unknown gate left unpriced and naming it once", c.GetName(), c)
+		}
 	}
 }
 
