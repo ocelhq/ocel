@@ -22,7 +22,7 @@ services:
       - ocel_cloud_data:/var/lib/postgresql/data
 
   minio:
-    image: minio/minio
+    image: quay.io/minio/minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -40,7 +40,7 @@ services:
       retries: 12
 
   minio-createbucket:
-    image: minio/mc
+    image: quay.io/minio/mc
     depends_on:
       minio:
         condition: service_healthy
