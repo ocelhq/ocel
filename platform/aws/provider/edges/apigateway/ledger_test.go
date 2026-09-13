@@ -56,3 +56,42 @@ func TestPromoteLeavesTheStageOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 		}
 	}
 }
+
+func TestDestroyKeepsTheLedgerWhileAHostnameIsStillBound(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	stack := reconciled(t, w)
+	staged(t, stack, entryFunction, "assets/")
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", Certificate: "arn:aws:acm:eu-west-1:123456789012:certificate/abc"}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+	w.gateway.deleteDomainErr = errors.New("the domain name is in use")
+
+	if err := stack.Destroy(ctx); err == nil {
+		t.Fatal("Destroy = nil, want the unbind failure surfaced")
+	}
+	if !ledgerRowsHeld(w) {
+		t.Error("the deployments ledger was erased while shop.example.com is still bound; a re-run would not know to unbind it")
+	}
+
+	w.gateway.deleteDomainErr = nil
+	if err := stack.Destroy(ctx); err != nil {
+		t.Fatalf("re-run: %v", err)
+	}
+	if ledgerRowsHeld(w) {
+		t.Error("the ledger survived the re-run that unbound every hostname")
+	}
+}
+
+func ledgerRowsHeld(w *world) bool {
+	w.dynamo.mu.Lock()
+	defer w.dynamo.mu.Unlock()
+	for key := range w.dynamo.items {
+		if strings.HasPrefix(key, "ledger#") {
+			return true
+		}
+	}
+	return false
+}

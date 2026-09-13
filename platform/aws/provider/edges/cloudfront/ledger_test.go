@@ -51,3 +51,29 @@ func TestPromoteLeavesTheRouteOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 		}
 	}
 }
+
+func TestDestroyKeepsTheLedgerWhileAHostnameIsStillBound(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	stack := reconciled(t, w)
+	bound(t, stack)
+	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	w.front.aliasErr = errors.New("the distribution is being updated")
+
+	if err := stack.Destroy(ctx); err == nil {
+		t.Fatal("Destroy = nil, want the unbind failure surfaced")
+	}
+	if len(w.dynamo.items) == 0 {
+		t.Error("the deployments ledger was erased while the hostname is still bound; a re-run would not know to unbind it")
+	}
+
+	w.front.aliasErr = nil
+	if err := stack.Destroy(ctx); err != nil {
+		t.Fatalf("re-run: %v", err)
+	}
+	if len(w.dynamo.items) != 0 {
+		t.Errorf("the ledger left %d items behind after the re-run, want none", len(w.dynamo.items))
+	}
+}
