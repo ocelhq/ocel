@@ -130,6 +130,7 @@ require (
 	github.com/natefinch/atomic v1.0.1 // indirect
 	github.com/nxadm/tail v1.4.11 // indirect
 	github.com/ocelhq/ocel/pkg/channel v0.0.0 // indirect
+	github.com/ocelhq/ocel/pkg/costkit v0.0.0
 	github.com/ocelhq/ocel/pkg/proto v0.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
@@ -222,3 +223,5 @@ replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy
 
 replace github.com/ocelhq/ocel/pkg/configdoc => ../../../pkg/configdoc
+
+replace github.com/ocelhq/ocel/pkg/costkit => ../../../pkg/costkit
