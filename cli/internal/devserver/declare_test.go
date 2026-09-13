@@ -3,7 +3,6 @@ package devserver
 import (
 	"context"
 	"errors"
-	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -17,7 +16,7 @@ func serveResources(t *testing.T) resourcesv1connect.ResourceServiceClient {
 	t.Helper()
 	ts := httptest.NewServer(New("http://127.0.0.1:0", "leader-tok", "proj_1", "http://127.0.0.1:0").Mux())
 	t.Cleanup(ts.Close)
-	return resourcesv1connect.NewResourceServiceClient(http.DefaultClient, ts.URL)
+	return resourcesv1connect.NewResourceServiceClient(testClient, ts.URL)
 }
 
 func TestDeclareEnvFolderScopes(t *testing.T) {
