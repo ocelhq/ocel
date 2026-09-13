@@ -5,54 +5,25 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"net/http"
-	"net/url"
 	"os"
-	"slices"
-	"sort"
-	"strings"
 	"time"
 
-	"github.com/shopspring/decimal"
-
 	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/platform/gcp/provider/cost/catalog"
 )
 
 const (
-	host             = "https://cloudbilling.googleapis.com/v1"
-	keyVariable      = "GCP_BILLING_API_KEY"
-	keyHeader        = "x-goog-api-key"
 	queryService     = "service"
 	queryDescription = "description"
 	queryRegion      = "region"
-	globalRegion     = "global"
-	nanosPerUnit     = 1_000_000_000
 )
-
-type sku struct {
-	SKUID          string   `json:"skuId"`
-	Description    string   `json:"description"`
-	ServiceRegions []string `json:"serviceRegions"`
-	PricingInfo    []struct {
-		PricingExpression struct {
-			UsageUnit   string `json:"usageUnit"`
-			TieredRates []struct {
-				StartUsageAmount float64 `json:"startUsageAmount"`
-				UnitPrice        struct {
-					Units string `json:"units"`
-					Nanos int64  `json:"nanos"`
-				} `json:"unitPrice"`
-			} `json:"tieredRates"`
-		} `json:"pricingExpression"`
-	} `json:"pricingInfo"`
-}
 
 func main() {
 	card := flag.String("card", "platform/gcp/provider/cost/rates.json", "the rate card to refresh in place")
 	flag.Parse()
-	key := os.Getenv(keyVariable)
+	key := os.Getenv(catalog.KeyVariable)
 	if key == "" {
-		fmt.Fprintf(os.Stderr, "%s names no API key, and the Cloud Billing Catalog answers registered callers only\n", keyVariable)
+		fmt.Fprintf(os.Stderr, "%s names no API key, and the Cloud Billing Catalog answers registered callers only\n", catalog.KeyVariable)
 		os.Exit(1)
 	}
 	if err := run(*card, key); err != nil {
@@ -70,7 +41,7 @@ func run(path, key string) error {
 	if err := json.Unmarshal(raw, &card); err != nil {
 		return err
 	}
-	catalog := map[string][]sku{}
+	held := map[string][]catalog.SKU{}
 	today := time.Now().UTC().Format(time.DateOnly)
 	for i := range card.Rates {
 		rate := &card.Rates[i]
@@ -78,22 +49,22 @@ func run(path, key string) error {
 			continue
 		}
 		service := rate.Query[queryService]
-		skus, held := catalog[service]
-		if !held {
-			if skus, err = list(service, key); err != nil {
+		skus, listed := held[service]
+		if !listed {
+			if skus, err = catalog.List(context.Background(), catalog.Host, service, key); err != nil {
 				return fmt.Errorf("%s: %w", rate.ID, err)
 			}
-			catalog[service] = skus
+			held[service] = skus
 		}
-		matched := match(skus, rate.Query)
+		matched := catalog.Match(skus, rate.Query[queryDescription], rate.Query[queryRegion])
 		if len(matched) != 1 {
 			names := make([]string, 0, len(matched))
-			for _, s := range matched {
-				names = append(names, s.Description)
+			for _, sku := range matched {
+				names = append(names, sku.Description)
 			}
 			return fmt.Errorf("%s: query %v matches %d skus: %v", rate.ID, rate.Query, len(matched), names)
 		}
-		tiers, unit, err := tiersOf(matched[0])
+		tiers, unit, err := catalog.Tiers(matched[0])
 		if err != nil {
 			return fmt.Errorf("%s: %w", rate.ID, err)
 		}
@@ -101,7 +72,7 @@ func run(path, key string) error {
 			fmt.Fprintf(os.Stderr, "%s: the catalog bills in %q, the card says %q\n", rate.ID, unit, rate.Unit)
 		}
 		rate.Tiers = tiers
-		rate.Source = "https://cloud.google.com/skus?filter=" + url.QueryEscape(matched[0].SKUID)
+		rate.Source = catalog.Source(matched[0])
 		rate.Verified = today
 	}
 	card.Version = today
@@ -110,75 +81,4 @@ func run(path, key string) error {
 		return err
 	}
 	return os.WriteFile(path, append(out, '\n'), 0o644)
-}
-
-func list(service, key string) ([]sku, error) {
-	var skus []sku
-	token := ""
-	for {
-		endpoint := host + "/services/" + service + "/skus?pageSize=5000"
-		if token != "" {
-			endpoint += "&pageToken=" + url.QueryEscape(token)
-		}
-		req, err := http.NewRequest(http.MethodGet, endpoint, nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set(keyHeader, key)
-		body, err := costkit.Fetch(context.Background(), req)
-		if err != nil {
-			return nil, fmt.Errorf("list skus of %s: %w", service, err)
-		}
-		var page struct {
-			SKUs          []sku  `json:"skus"`
-			NextPageToken string `json:"nextPageToken"`
-		}
-		if err := json.Unmarshal(body, &page); err != nil {
-			return nil, err
-		}
-		skus = append(skus, page.SKUs...)
-		if page.NextPageToken == "" {
-			return skus, nil
-		}
-		token = page.NextPageToken
-	}
-}
-
-func match(skus []sku, query map[string]string) []sku {
-	region := query[queryRegion]
-	if region == "" {
-		region = globalRegion
-	}
-	var matched []sku
-	for _, s := range skus {
-		if !strings.Contains(s.Description, query[queryDescription]) {
-			continue
-		}
-		if !slices.Contains(s.ServiceRegions, region) {
-			continue
-		}
-		matched = append(matched, s)
-	}
-	return matched
-}
-
-func tiersOf(s sku) ([]costkit.Tier, string, error) {
-	if len(s.PricingInfo) == 0 {
-		return nil, "", fmt.Errorf("sku %s carries no pricing", s.SKUID)
-	}
-	expression := s.PricingInfo[0].PricingExpression
-	var tiers []costkit.Tier
-	for _, tier := range expression.TieredRates {
-		units, err := decimal.NewFromString(tier.UnitPrice.Units)
-		if err != nil {
-			return nil, "", fmt.Errorf("sku %s: units %q: %w", s.SKUID, tier.UnitPrice.Units, err)
-		}
-		price := units.Add(decimal.NewFromInt(tier.UnitPrice.Nanos).Div(decimal.NewFromInt(nanosPerUnit)))
-		tiers = append(tiers, costkit.Tier{Start: decimal.NewFromFloat(tier.StartUsageAmount), Price: price})
-	}
-	if len(tiers) == 0 {
-		return nil, "", fmt.Errorf("sku %s carries no tiered rates", s.SKUID)
-	}
-	sort.Slice(tiers, func(i, j int) bool { return tiers[i].Start.LessThan(tiers[j].Start) })
-	return tiers, expression.UsageUnit, nil
 }

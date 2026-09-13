@@ -1,0 +1,89 @@
+{
+  "formatVersion": "v1.0",
+  "disclaimer": "This pricing list is for informational purposes only.",
+  "offerCode": "AWSLambda",
+  "version": "20260911124513",
+  "publicationDate": "2026-09-11T12:45:13Z",
+  "products": {
+    "REQSKU": {
+      "sku": "REQSKU",
+      "attributes": {
+        "servicecode": "AWSLambda",
+        "regionCode": "us-east-1",
+        "group": "AWS-Lambda-Requests",
+        "usagetype": "Request"
+      }
+    },
+    "DURSKU": {
+      "sku": "DURSKU",
+      "attributes": {
+        "servicecode": "AWSLambda",
+        "regionCode": "us-east-1",
+        "group": "AWS-Lambda-Duration",
+        "usagetype": "Lambda-GB-Second"
+      }
+    }
+  },
+  "terms": {
+    "Reserved": {
+      "REQSKU": {
+        "REQSKU.4NA7Y494T4": {
+          "offerTermCode": "4NA7Y494T4",
+          "sku": "REQSKU",
+          "priceDimensions": {
+            "d": {
+              "unit": "Quantity",
+              "beginRange": "0",
+              "endRange": "Inf",
+              "pricePerUnit": {
+                "USD": "9.99"
+              }
+            }
+          }
+        }
+      }
+    },
+    "OnDemand": {
+      "REQSKU": {
+        "REQSKU.JRTCKXETXF": {
+          "offerTermCode": "JRTCKXETXF",
+          "sku": "REQSKU",
+          "priceDimensions": {
+            "a": {
+              "unit": "Requests",
+              "beginRange": "0",
+              "endRange": "Inf",
+              "pricePerUnit": {
+                "USD": "0.0000009"
+              }
+            }
+          }
+        }
+      },
+      "DURSKU": {
+        "DURSKU.JRTCKXETXF": {
+          "offerTermCode": "JRTCKXETXF",
+          "sku": "DURSKU",
+          "priceDimensions": {
+            "a": {
+              "unit": "GB-Seconds",
+              "beginRange": "0",
+              "endRange": "6000000000",
+              "pricePerUnit": {
+                "USD": "0.00002"
+              }
+            },
+            "b": {
+              "unit": "GB-Seconds",
+              "beginRange": "6000000000",
+              "endRange": "Inf",
+              "pricePerUnit": {
+                "USD": "0.00001"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

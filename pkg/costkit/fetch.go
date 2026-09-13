@@ -31,23 +31,43 @@ func Fetch(ctx context.Context, req *http.Request) ([]byte, error) {
 	return DefaultFetcher.Fetch(ctx, req)
 }
 
+func Stream(ctx context.Context, req *http.Request, consume func(io.Reader) error) error {
+	return DefaultFetcher.Stream(ctx, req, consume)
+}
+
 type retryable struct{ err error }
 
 func (r retryable) Error() string { return r.err.Error() }
 
 func (f Fetcher) Fetch(ctx context.Context, req *http.Request) ([]byte, error) {
+	var body []byte
+	err := f.Stream(ctx, req, func(r io.Reader) error {
+		read, err := io.ReadAll(r)
+		if err != nil {
+			return retryable{err}
+		}
+		body = read
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+func (f Fetcher) Stream(ctx context.Context, req *http.Request, consume func(io.Reader) error) error {
 	if req.Body != nil {
-		return nil, fmt.Errorf("%s %s: a request with a body is not retried", req.Method, req.URL.Path)
+		return fmt.Errorf("%s %s: a request with a body is not retried", req.Method, req.URL.Path)
 	}
 	var last error
 	for attempt := range f.Attempts {
-		body, wait, err := f.once(req.WithContext(ctx))
+		wait, err := f.once(req.WithContext(ctx), consume)
 		if err == nil {
-			return body, nil
+			return nil
 		}
 		var again retryable
 		if !errors.As(err, &again) {
-			return nil, err
+			return err
 		}
 		last = again.err
 		if attempt == f.Attempts-1 {
@@ -57,33 +77,29 @@ func (f Fetcher) Fetch(ctx context.Context, req *http.Request) ([]byte, error) {
 			wait = f.backoff(attempt)
 		}
 		if err := f.sleep(ctx, min(wait, f.Ceiling)); err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return nil, fmt.Errorf("%s %s after %d attempts: %w", req.Method, req.URL.Path, f.Attempts, last)
+	return fmt.Errorf("%s %s after %d attempts: %w", req.Method, req.URL.Path, f.Attempts, last)
 }
 
-func (f Fetcher) once(req *http.Request) ([]byte, time.Duration, error) {
+func (f Fetcher) once(req *http.Request, consume func(io.Reader) error) (time.Duration, error) {
 	resp, err := f.Client.Do(req)
 	if err != nil {
 		var failed *url.Error
 		if errors.As(err, &failed) {
 			err = failed.Err
 		}
-		return nil, 0, retryable{err}
+		return 0, retryable{err}
 	}
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusOK:
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, 0, retryable{err}
-		}
-		return body, 0, nil
+		return 0, consume(resp.Body)
 	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
-		return nil, retryAfter(resp.Header.Get("Retry-After")), retryable{errors.New(resp.Status)}
+		return retryAfter(resp.Header.Get("Retry-After")), retryable{errors.New(resp.Status)}
 	default:
-		return nil, 0, fmt.Errorf("%s %s: %s", req.Method, req.URL.Path, resp.Status)
+		return 0, fmt.Errorf("%s %s: %s", req.Method, req.URL.Path, resp.Status)
 	}
 }
 

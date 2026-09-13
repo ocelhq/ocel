@@ -2,7 +2,6 @@ package postgres_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -10,37 +9,12 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/costkit"
 	"github.com/ocelhq/ocel/pricing"
+	"github.com/ocelhq/ocel/pricing/internal/pgtest"
 	"github.com/ocelhq/ocel/pricing/store/postgres"
 )
 
-const urlVariable = "PRICING_TEST_DATABASE_URL"
-
-func opened(t *testing.T) *postgres.Store {
-	t.Helper()
-	url := os.Getenv(urlVariable)
-	if url == "" {
-		t.Skipf("%s names no database", urlVariable)
-	}
-	card, err := pricing.Cards()
-	if err != nil {
-		t.Fatal(err)
-	}
-	store, err := postgres.Open(context.Background(), url, card)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(store.Close)
-	if err := postgres.Migrate(context.Background(), store.Pool()); err != nil {
-		t.Fatalf("Migrate() a second time = %v", err)
-	}
-	if _, err := store.Pool().Exec(context.Background(), `TRUNCATE aws_products, aws_prices, gcp_skus, ingests`); err != nil {
-		t.Fatal(err)
-	}
-	return store
-}
-
 func TestAnIngestedPriceWinsOverTheEmbeddedCard(t *testing.T) {
-	store := opened(t)
+	store := pgtest.Store(t)
 	ctx := context.Background()
 
 	ingest, err := store.IngestAWS(ctx, "AWSLambda", "us-east-1")
@@ -73,7 +47,7 @@ func TestAnIngestedPriceWinsOverTheEmbeddedCard(t *testing.T) {
 }
 
 func TestARateNoIngestAnsweredFallsBackToTheCard(t *testing.T) {
-	store := opened(t)
+	store := pgtest.Store(t)
 	card, err := pricing.Cards()
 	if err != nil {
 		t.Fatal(err)
@@ -92,7 +66,7 @@ func TestARateNoIngestAnsweredFallsBackToTheCard(t *testing.T) {
 }
 
 func TestAVendorWithNoIngestIsAnsweredByItsCardAlone(t *testing.T) {
-	store := opened(t)
+	store := pgtest.Store(t)
 	card, err := pricing.Cards()
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +83,7 @@ func TestAVendorWithNoIngestIsAnsweredByItsCardAlone(t *testing.T) {
 }
 
 func TestARateTheCardNeverNamesIsNotFound(t *testing.T) {
-	store := opened(t)
+	store := pgtest.Store(t)
 
 	if _, found, _ := store.Lookup("aws/nothing/at-all", "us-east-1"); found {
 		t.Error("the store answered for a rate no card names")

@@ -1,0 +1,78 @@
+{
+  "formatVersion": "v1.0",
+  "disclaimer": "This pricing list is for informational purposes only.",
+  "offerCode": "AmazonVPC",
+  "version": "20260911124513",
+  "publicationDate": "2026-09-11T12:45:13Z",
+  "products": {
+    "NATSKU": {
+      "sku": "NATSKU",
+      "productFamily": "NAT Gateway",
+      "attributes": {
+        "servicecode": "AmazonEC2",
+        "regionCode": "us-east-1",
+        "usagetype": "NatGateway-Hours",
+        "operation": "NatGateway",
+        "group": "NGW:NatGateway"
+      }
+    },
+    "EIPSKU": {
+      "sku": "EIPSKU",
+      "attributes": {
+        "servicecode": "AmazonVPC",
+        "regionCode": "us-east-1",
+        "usagetype": "USE1-PublicIPv4:InUseAddress",
+        "group": "VPCPublicIPv4Address"
+      }
+    }
+  },
+  "terms": {
+    "Reserved": {
+      "NATSKU": {
+        "NATSKU.4NA7Y494T4": {
+          "offerTermCode": "4NA7Y494T4",
+          "sku": "NATSKU",
+          "termAttributes": {"LeaseContractLength": "1yr", "PurchaseOption": "All Upfront"},
+          "priceDimensions": {
+            "NATSKU.4NA7Y494T4.2TG2D8R56U": {
+              "unit": "Quantity",
+              "beginRange": "0",
+              "endRange": "Inf",
+              "pricePerUnit": {"USD": "999.0000000000"}
+            }
+          }
+        }
+      }
+    },
+    "OnDemand": {
+      "NATSKU": {
+        "NATSKU.JRTCKXETXF": {
+          "offerTermCode": "JRTCKXETXF",
+          "sku": "NATSKU",
+          "priceDimensions": {
+            "NATSKU.JRTCKXETXF.6YS6EN2CT7": {
+              "unit": "Hrs",
+              "beginRange": "0",
+              "endRange": "Inf",
+              "pricePerUnit": {"USD": "0.0450000000"}
+            }
+          }
+        }
+      },
+      "EIPSKU": {
+        "EIPSKU.JRTCKXETXF": {
+          "offerTermCode": "JRTCKXETXF",
+          "sku": "EIPSKU",
+          "priceDimensions": {
+            "EIPSKU.JRTCKXETXF.6YS6EN2CT7": {
+              "unit": "Hrs",
+              "beginRange": "0",
+              "endRange": "Inf",
+              "pricePerUnit": {"USD": "0.0050000000"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

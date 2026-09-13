@@ -152,7 +152,7 @@ func (s *Store) awsTiers(ctx context.Context, rate costkit.Rate) ([]costkit.Tier
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.pool.Query(ctx, `SELECT sku FROM aws_products WHERE service = $1 AND region = $2 AND attributes @> $3`,
+	rows, err := s.pool.Query(ctx, `SELECT sku FROM aws_products WHERE service = $1 AND region = $2 AND attributes @> $3::jsonb`,
 		rate.Query[queryService], region, string(selector))
 	if err != nil {
 		return nil, err

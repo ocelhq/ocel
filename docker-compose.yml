@@ -53,6 +53,19 @@ services:
     volumes:
       - ocel_cloud_data:/var/lib/postgresql/data
 
+  pricing-ingest:
+    build:
+      context: .
+      dockerfile: pricing/Dockerfile
+    depends_on:
+      pricing-createdb:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/pricing
+      GCP_BILLING_API_KEY: ${GCP_BILLING_API_KEY:-}
+    entrypoint: ["/usr/local/bin/pricing-ingest"]
+    restart: "no"
+
   minio:
     image: quay.io/minio/minio
     restart: unless-stopped
