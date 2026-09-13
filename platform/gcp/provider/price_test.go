@@ -2,7 +2,10 @@ package gcp_test
 
 import (
 	"context"
+	"strings"
 	"testing"
+
+	"google.golang.org/protobuf/types/known/structpb"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -102,12 +105,41 @@ func TestPriceOfADirectDeployBillsEgressOnTheService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Shape() = %v", err)
 	}
-	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: "heavy"}})
+	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: costv1.Profile_PROFILE_HEAVY}})
 	if err != nil {
 		t.Fatalf("Price() = %v", err)
 	}
 	function := estimateOfType(t, est, set, "google_cloud_run_v2_service", "project:shop/environment:prod/app:web")
 	if got := componentNamed(t, est, function.GetResource(), "Data transfer out to internet"); got.GetMonthlyCost() != "12.00" || got.GetAssumption() != "heavy profile: 100 GiB" {
 		t.Errorf("egress = %v, want 12.00 for the heavy profile's 100 GiB at 0.12", got)
+	}
+}
+
+func TestPriceOfAServiceOutsideTheNamedRegionsFallsBackToTierOne(t *testing.T) {
+	_, pricer := costServed(t)
+
+	properties, _ := structpb.NewStruct(map[string]any{
+		"ingress": "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER",
+		"template": map[string]any{
+			"scaling":    map[string]any{"min_instance_count": 1},
+			"containers": []any{map[string]any{"resources": map[string]any{"cpu_idle": false, "limits": map[string]any{"cpu": "1", "memory": "512Mi"}}}},
+		},
+	})
+	set := &costv1.ResourceSet{
+		Source: "ocel",
+		Scopes: []*costv1.Scope{{Id: "p", Kind: "project", Name: "shop"}},
+		Resources: []*costv1.Resource{{
+			Id: "p/svc", Scope: "p", Vendor: "gcp", Type: "google_cloud_run_v2_service", Name: "svc", Region: "europe-west9", Properties: properties,
+		}},
+	}
+	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	if err != nil {
+		t.Fatalf("Price() = %v", err)
+	}
+	if got := componentNamed(t, est, "p/svc", "CPU, always allocated"); got.GetMonthlyCost() != "47.30" {
+		t.Errorf("cpu = %v, want 47.30 at the tier-1 rate", got)
+	}
+	if len(est.GetNotes()) == 0 || !strings.Contains(est.GetNotes()[0], "tier-1") {
+		t.Errorf("notes = %v, want the fallback's note first", est.GetNotes())
 	}
 }

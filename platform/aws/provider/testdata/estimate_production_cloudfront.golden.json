@@ -1,7 +1,7 @@
 {
   "currency": "USD",
   "ratesVersion": "2026-09-13",
-  "profile": "moderate",
+  "profile": "PROFILE_MODERATE",
   "resources": [
     {
       "resource": "project:shop/shared:production/aws_s3_bucket:StateBucket",
@@ -476,19 +476,35 @@
       "monthlyUsage": "0.00"
     },
     {
-      "resource": "project:shop/environment:prod/aws_rds_cluster:main",
+      "resource": "project:shop/shared:production/aws_kms_key:VarsKey",
       "status": "STATUS_PRICED",
       "components": [
         {
-          "name": "Aurora Serverless v2 capacity",
-          "unit": "ACU-hours",
-          "monthlyQuantity": "730",
-          "unitPrice": "0.12",
-          "monthlyCost": "87.60",
-          "usageBased": true,
-          "assumption": "moderate profile: 730 ACU-hours",
-          "rateRef": "aws/rds/aurora-serverless-v2"
+          "name": "Customer managed key",
+          "unit": "key-months",
+          "monthlyQuantity": "1",
+          "unitPrice": "1",
+          "monthlyCost": "1.00",
+          "rateRef": "aws/kms/key"
         },
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "10000",
+          "unitPrice": "0.000003",
+          "monthlyCost": "0.03",
+          "usageBased": true,
+          "assumption": "moderate profile: 10000 requests",
+          "rateRef": "aws/kms/requests"
+        }
+      ],
+      "monthlyFixed": "1.00",
+      "monthlyUsage": "0.03"
+    },
+    {
+      "resource": "project:shop/environment:prod/aws_rds_cluster:main",
+      "status": "STATUS_PRICED",
+      "components": [
         {
           "name": "Storage",
           "unit": "GB-month",
@@ -502,20 +518,34 @@
         {
           "name": "I/O requests",
           "unit": "requests",
-          "monthlyQuantity": "10000000",
+          "monthlyQuantity": "10512000",
           "unitPrice": "0.0000002",
-          "monthlyCost": "2.00",
+          "monthlyCost": "2.10",
           "usageBased": true,
-          "assumption": "moderate profile: 10000000 requests",
+          "assumption": "moderate profile: 10512000 requests",
           "rateRef": "aws/rds/aurora-io"
         }
       ],
       "monthlyFixed": "0.00",
-      "monthlyUsage": "90.60"
+      "monthlyUsage": "3.10"
     },
     {
       "resource": "project:shop/environment:prod/aws_rds_cluster_instance:main",
-      "status": "STATUS_FREE"
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Aurora Serverless v2 capacity",
+          "unit": "ACU-hours",
+          "monthlyQuantity": "730",
+          "unitPrice": "0.12",
+          "monthlyCost": "87.60",
+          "usageBased": true,
+          "assumption": "moderate profile: 730 ACU-hours",
+          "rateRef": "aws/rds/aurora-serverless-v2"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "87.60"
     },
     {
       "resource": "project:shop/environment:prod/aws_secretsmanager_secret:main",
@@ -762,16 +792,16 @@
         {
           "name": "Load balancer capacity units",
           "unit": "LCU-hours",
-          "monthlyQuantity": "50",
+          "monthlyQuantity": "292",
           "unitPrice": "0.008",
-          "monthlyCost": "0.40",
+          "monthlyCost": "2.34",
           "usageBased": true,
-          "assumption": "moderate profile: 50 LCU-hours",
+          "assumption": "moderate profile: 292 LCU-hours",
           "rateRef": "aws/alb/lcu"
         }
       ],
       "monthlyFixed": "16.43",
-      "monthlyUsage": "0.40"
+      "monthlyUsage": "2.34"
     },
     {
       "resource": "project:shop/shared:production/aws_cloudwatch_log_group:ocel-containers",
@@ -833,18 +863,18 @@
   "scopes": [
     {
       "scope": "project:shop",
-      "monthlyFixed": "34.85",
-      "monthlyUsage": "111.26"
+      "monthlyFixed": "35.85",
+      "monthlyUsage": "113.33"
     },
     {
       "scope": "project:shop/shared:production",
-      "monthlyFixed": "16.43",
-      "monthlyUsage": "11.47"
+      "monthlyFixed": "17.43",
+      "monthlyUsage": "13.44"
     },
     {
       "scope": "project:shop/environment:prod",
       "monthlyFixed": "18.42",
-      "monthlyUsage": "99.79"
+      "monthlyUsage": "99.89"
     },
     {
       "scope": "project:shop/environment:prod/app:web",
@@ -858,8 +888,8 @@
     }
   ],
   "coverage": {
-    "supported": 28,
-    "free": 10,
+    "supported": 30,
+    "free": 9,
     "supportedTypes": [
       "aws_cloudfront_distribution",
       "aws_cloudfront_function",
@@ -870,6 +900,7 @@
       "aws_ecs_cluster",
       "aws_ecs_service",
       "aws_ecs_task_definition",
+      "aws_kms_key",
       "aws_lambda_event_source_mapping",
       "aws_lambda_function",
       "aws_lambda_function_url",
@@ -884,9 +915,9 @@
   },
   "notes": [
     "list prices for us-east-1; a resource in another region is left unpriced",
-    "always-free allowances are not applied, except where the price list folds one into the first tier",
+    "an always-free allowance the price list folds into a first tier is spent once per account across every resource sharing it; allowances the price list leaves out, such as Lambda's, are not applied",
     "CloudFront is priced at its United States rates whichever price class the distribution carries"
   ],
-  "monthlyFixed": "34.85",
-  "monthlyUsage": "111.26"
+  "monthlyFixed": "35.85",
+  "monthlyUsage": "113.33"
 }

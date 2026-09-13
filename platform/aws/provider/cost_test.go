@@ -111,8 +111,8 @@ func TestShapeDescribesAProductionDeployBehindCloudFront(t *testing.T) {
 	golden(t, "shape_production_cloudfront", set)
 
 	counts := typeCounts(set)
-	if counts["aws_cloudfront_distribution"] != 1 || counts["aws_lb"] != 1 || counts["aws_rds_cluster"] != 1 || counts["aws_kms_key"] != 0 {
-		t.Errorf("counts = %v", counts)
+	if counts["aws_cloudfront_distribution"] != 1 || counts["aws_lb"] != 1 || counts["aws_rds_cluster"] != 1 || counts["aws_kms_key"] != 1 || counts["aws_data_transfer"] != 0 {
+		t.Errorf("counts = %v, want the distribution, the substrate, the cluster, the vars key and no origin egress behind CloudFront", counts)
 	}
 	if counts["aws_lambda_function"] != 1+1+3 {
 		t.Errorf("lambdas = %d, want the app's, the upload completer's and the three the next runtime's features stand up", counts["aws_lambda_function"])
@@ -165,7 +165,32 @@ func TestShapeBehindAPIGatewayStandsUpARestAPIPerDeploy(t *testing.T) {
 	golden(t, "shape_production_apigateway", set)
 
 	counts := typeCounts(set)
-	if counts["aws_api_gateway_rest_api"] != 2 || counts["aws_cloudfront_distribution"] != 0 || counts["aws_lb"] != 0 {
-		t.Errorf("counts = %v, want the shared 404 responder and the project's own REST API, no CloudFront and no substrate", counts)
+	if counts["aws_api_gateway_rest_api"] != 2 || counts["aws_cloudfront_distribution"] != 0 || counts["aws_lb"] != 0 || counts["aws_data_transfer"] != 1 {
+		t.Errorf("counts = %v, want the shared 404 responder and the project's own REST API, the app's egress, no CloudFront and no substrate", counts)
+	}
+}
+
+func TestShapeWithABroughtVarsKeyStandsUpNoKey(t *testing.T) {
+	p := provider.NewProvider(provider.Options{Region: "us-east-1", VarsKey: "arn:aws:kms:us-east-1:1:key/k"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
+	spec := providerkit.Spec{
+		Version: "test",
+		New:     func(context.Context, providerkit.Settings) (providerkit.Provider, error) { return p, nil },
+	}
+	server := httptest.NewServer(providerkit.ConformanceMux(spec))
+	t.Cleanup(server.Close)
+	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    shopManifest(),
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+	if typeCounts(set)["aws_kms_key"] != 0 {
+		t.Errorf("counts = %v, want no KMS key when the account brought one", typeCounts(set))
 	}
 }

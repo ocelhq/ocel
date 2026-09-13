@@ -38,6 +38,91 @@
       }
     },
     {
+      "id": "gcp/run/cpu-active",
+      "region": "us-central1",
+      "unit": "vCPU-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000024"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "CPU Allocation Time",
+        "region": "us-central1"
+      }
+    },
+    {
+      "id": "gcp/run/cpu-active",
+      "region": "us-east1",
+      "unit": "vCPU-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000024"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "CPU Allocation Time",
+        "region": "us-east1"
+      }
+    },
+    {
+      "id": "gcp/run/cpu-active",
+      "region": "us-east4",
+      "unit": "vCPU-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000024"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "CPU Allocation Time",
+        "region": "us-east4"
+      }
+    },
+    {
+      "id": "gcp/run/cpu-active",
+      "region": "asia-east1",
+      "unit": "vCPU-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000024"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "CPU Allocation Time",
+        "region": "asia-east1"
+      }
+    },
+    {
+      "id": "gcp/run/cpu-active",
+      "unit": "vCPU-seconds",
+      "note": "Cloud Run outside the regions the card names is priced at the tier-1 rate; a tier-2 region bills more",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000024"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13"
+    },
+    {
       "id": "gcp/run/memory-active",
       "region": "europe-west1",
       "unit": "GiB-seconds",
@@ -54,6 +139,91 @@
         "description": "Memory Allocation Time",
         "region": "europe-west1"
       }
+    },
+    {
+      "id": "gcp/run/memory-active",
+      "region": "us-central1",
+      "unit": "GiB-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "Memory Allocation Time",
+        "region": "us-central1"
+      }
+    },
+    {
+      "id": "gcp/run/memory-active",
+      "region": "us-east1",
+      "unit": "GiB-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "Memory Allocation Time",
+        "region": "us-east1"
+      }
+    },
+    {
+      "id": "gcp/run/memory-active",
+      "region": "us-east4",
+      "unit": "GiB-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "Memory Allocation Time",
+        "region": "us-east4"
+      }
+    },
+    {
+      "id": "gcp/run/memory-active",
+      "region": "asia-east1",
+      "unit": "GiB-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "Memory Allocation Time",
+        "region": "asia-east1"
+      }
+    },
+    {
+      "id": "gcp/run/memory-active",
+      "unit": "GiB-seconds",
+      "note": "Cloud Run outside the regions the card names is priced at the tier-1 rate; a tier-2 region bills more",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.0000025"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13"
     },
     {
       "id": "gcp/run/cpu-always",
@@ -74,6 +244,91 @@
       }
     },
     {
+      "id": "gcp/run/cpu-always",
+      "region": "us-central1",
+      "unit": "vCPU-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000018"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "CPU Allocation Time (Instance-based billing)",
+        "region": "us-central1"
+      }
+    },
+    {
+      "id": "gcp/run/cpu-always",
+      "region": "us-east1",
+      "unit": "vCPU-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000018"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "CPU Allocation Time (Instance-based billing)",
+        "region": "us-east1"
+      }
+    },
+    {
+      "id": "gcp/run/cpu-always",
+      "region": "us-east4",
+      "unit": "vCPU-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000018"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "CPU Allocation Time (Instance-based billing)",
+        "region": "us-east4"
+      }
+    },
+    {
+      "id": "gcp/run/cpu-always",
+      "region": "asia-east1",
+      "unit": "vCPU-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000018"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "CPU Allocation Time (Instance-based billing)",
+        "region": "asia-east1"
+      }
+    },
+    {
+      "id": "gcp/run/cpu-always",
+      "unit": "vCPU-seconds",
+      "note": "Cloud Run outside the regions the card names is priced at the tier-1 rate; a tier-2 region bills more",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000018"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13"
+    },
+    {
       "id": "gcp/run/memory-always",
       "region": "europe-west1",
       "unit": "GiB-seconds",
@@ -90,6 +345,91 @@
         "description": "Memory Allocation Time (Instance-based billing)",
         "region": "europe-west1"
       }
+    },
+    {
+      "id": "gcp/run/memory-always",
+      "region": "us-central1",
+      "unit": "GiB-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000002"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "Memory Allocation Time (Instance-based billing)",
+        "region": "us-central1"
+      }
+    },
+    {
+      "id": "gcp/run/memory-always",
+      "region": "us-east1",
+      "unit": "GiB-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000002"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "Memory Allocation Time (Instance-based billing)",
+        "region": "us-east1"
+      }
+    },
+    {
+      "id": "gcp/run/memory-always",
+      "region": "us-east4",
+      "unit": "GiB-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000002"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "Memory Allocation Time (Instance-based billing)",
+        "region": "us-east4"
+      }
+    },
+    {
+      "id": "gcp/run/memory-always",
+      "region": "asia-east1",
+      "unit": "GiB-seconds",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000002"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13",
+      "query": {
+        "service": "152E-C115-5142",
+        "description": "Memory Allocation Time (Instance-based billing)",
+        "region": "asia-east1"
+      }
+    },
+    {
+      "id": "gcp/run/memory-always",
+      "unit": "GiB-seconds",
+      "note": "Cloud Run outside the regions the card names is priced at the tier-1 rate; a tier-2 region bills more",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.000002"
+        }
+      ],
+      "source": "https://cloud.google.com/run/pricing",
+      "verified": "2026-09-13"
     },
     {
       "id": "gcp/storage/standard",
@@ -149,6 +489,7 @@
       "id": "gcp/artifactregistry/storage",
       "region": "",
       "unit": "GiB-month",
+      "allowance": "account",
       "tiers": [
         {
           "start": "0",
@@ -170,6 +511,7 @@
       "id": "gcp/secretmanager/version",
       "region": "",
       "unit": "version-months",
+      "allowance": "account",
       "tiers": [
         {
           "start": "0",
@@ -191,6 +533,7 @@
       "id": "gcp/secretmanager/access",
       "region": "",
       "unit": "operations",
+      "allowance": "account",
       "tiers": [
         {
           "start": "0",

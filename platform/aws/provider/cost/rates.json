@@ -452,6 +452,7 @@
       "id": "aws/dynamodb/storage",
       "region": "us-east-1",
       "unit": "GB-Mo",
+      "allowance": "account",
       "tiers": [
         {
           "start": "0",
@@ -611,6 +612,7 @@
     {
       "id": "aws/cloudfront/functions",
       "unit": "Invocations",
+      "allowance": "account",
       "tiers": [
         {
           "start": "0",

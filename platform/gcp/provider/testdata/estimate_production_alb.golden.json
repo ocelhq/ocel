@@ -1,7 +1,7 @@
 {
   "currency": "USD",
   "ratesVersion": "2026-09-13",
-  "profile": "moderate",
+  "profile": "PROFILE_MODERATE",
   "resources": [
     {
       "resource": "project:shop/shared:production/google_firestore_database:ocel",
@@ -317,6 +317,7 @@
           "monthlyQuantity": "2628000",
           "unitPrice": "0.000018",
           "monthlyCost": "47.30",
+          "assumption": "moderate profile: 2628000 vCPU-seconds",
           "rateRef": "gcp/run/cpu-always"
         },
         {
@@ -382,8 +383,8 @@
     ]
   },
   "notes": [
-    "list prices for europe-west1 and global SKUs; a resource in another region is left unpriced",
-    "the free tier Cloud Run and Cloud Storage apply as a billing discount is not applied; a free first tier the catalog publishes is",
+    "list prices for the regions the card names and for global SKUs; a resource elsewhere is left unpriced unless a note above says otherwise",
+    "the free tier Cloud Run and Cloud Storage apply as a billing discount is not applied; a free first tier the catalog publishes is spent once per account across every resource sharing it",
     "the forwarding rule is priced as the project's first five, which share one hourly charge"
   ],
   "monthlyFixed": "68.24",
