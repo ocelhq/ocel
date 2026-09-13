@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -77,6 +79,24 @@ func TestShapeHandsTheProviderTheDeployItWouldMake(t *testing.T) {
 		if resource.GetVendor() != "fake" || resource.GetRegion() != "nowhere" {
 			t.Errorf("resource %s carries vendor %q region %q", resource.GetId(), resource.GetVendor(), resource.GetRegion())
 		}
+	}
+}
+
+func TestPriceRefusesAUsageFileTheProviderCannotRead(t *testing.T) {
+	client, pricer := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
+
+	set, err := client.Shape(context.Background(), shapeRequest())
+	if err != nil {
+		t.Fatalf("Shape() error = %v", err)
+	}
+	override, _ := structpb.NewStruct(map[string]any{"monthly_requets": 5})
+	_, err = pricer.Price(context.Background(), &costv1.PriceRequest{
+		Resources: set,
+		Usage:     &costv1.Usage{Resources: map[string]*structpb.Struct{set.GetResources()[0].GetId(): override}},
+	})
+	var connectErr *connect.Error
+	if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "monthly_requets") {
+		t.Fatalf("Price() error = %v, want InvalidArgument naming the key nothing reads", err)
 	}
 }
 

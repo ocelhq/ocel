@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ocelhq/ocel/pkg/costkit"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 )
@@ -91,6 +92,10 @@ func (h *handlers) Price(ctx context.Context, req *costv1.PriceRequest) (*costv1
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("this provider carries no rate card"))
 	}
 	estimate, err := pricer.Price(ctx, req)
+	var usage *costkit.UsageError
+	if errors.As(err, &usage) {
+		return nil, RefusalError(Refuse(CodeInvalid, "%s", err))
+	}
 	if err != nil {
 		return nil, RefusalError(err)
 	}
