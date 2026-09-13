@@ -96,7 +96,7 @@ func Bundle(ctx context.Context, t Target) error {
 	if err := native.copyInto(t.FuncDir); err != nil {
 		return err
 	}
-	if err := platform.installInto(ctx, t.App, t.FuncDir, func(said string) {
+	if err := platform.installInto(ctx, t.App, filepath.Dir(t.Entrypoint), t.FuncDir, func(said string) {
 		if t.Log != nil && strings.TrimSpace(said) != "" {
 			fmt.Fprintf(t.Log, "ocel: installing %s's platform packages reported:\n%s\n", t.App, strings.TrimRight(said, "\n"))
 		}

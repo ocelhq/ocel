@@ -18,7 +18,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-const npmCommand = "npm"
+const (
+	npmCommand    = "npm"
+	npmConfigFile = ".npmrc"
+)
 
 type resolvingForSplit struct{}
 
@@ -148,7 +151,7 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
-func (p *platformPackages) installInto(ctx context.Context, app, funcDir string, log func(string)) error {
+func (p *platformPackages) installInto(ctx context.Context, app, source, funcDir string, log func(string)) error {
 	p.mu.Lock()
 	reached := p.wanted
 	p.mu.Unlock()
@@ -182,6 +185,11 @@ func (p *platformPackages) installInto(ctx context.Context, app, funcDir string,
 	defer os.RemoveAll(staging)
 	if err := writeJSON(filepath.Join(staging, "package.json"), map[string]any{"private": true, "dependencies": wanted}); err != nil {
 		return err
+	}
+	if config, found := projectNpmConfig(source); found {
+		if err := copyFile(config, filepath.Join(staging, npmConfigFile), 0o600); err != nil {
+			return err
+		}
 	}
 	cmd := exec.CommandContext(ctx, npmCommand, npmInstallArgs(cpu)...)
 	cmd.Dir = staging
@@ -238,6 +246,25 @@ func allows(declared []string, value string) bool {
 		return false
 	}
 	return !slices.ContainsFunc(declared, func(entry string) bool { return !strings.HasPrefix(entry, "!") })
+}
+
+func projectNpmConfig(from string) (string, bool) {
+	for dir := from; ; dir = filepath.Dir(dir) {
+		config := filepath.Join(dir, npmConfigFile)
+		if info, err := os.Stat(config); err == nil && info.Mode().IsRegular() {
+			return config, true
+		}
+		if holdsAny(dir, ".git", "pnpm-workspace.yaml") || filepath.Dir(dir) == dir {
+			return "", false
+		}
+	}
+}
+
+func holdsAny(dir string, names ...string) bool {
+	return slices.ContainsFunc(names, func(name string) bool {
+		_, err := os.Stat(filepath.Join(dir, name))
+		return err == nil
+	})
 }
 
 func npmInstallArgs(cpu string) []string {
