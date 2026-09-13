@@ -254,7 +254,7 @@ func (s *Subject) Has(path string) bool {
 	return ok
 }
 
-func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estimate, error) {
+func Estimate(store Store, table Table, req *costv1.PriceRequest) (*costv1.Estimate, error) {
 	set := req.GetResources()
 	if set == nil {
 		return nil, fmt.Errorf("nothing to price")
@@ -263,9 +263,10 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 	if profile == costv1.Profile_PROFILE_UNSPECIFIED {
 		profile = DefaultProfile
 	}
+	currency, version := store.Basis()
 	est := &costv1.Estimate{
-		Currency:     card.Currency,
-		RatesVersion: card.Version,
+		Currency:     currency,
+		RatesVersion: version,
 		Profile:      profile,
 		Coverage:     &costv1.Coverage{UnsupportedTypes: map[string]uint32{}},
 	}
@@ -273,7 +274,7 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 	fixed := map[string]decimal.Decimal{}
 	usage := map[string]decimal.Decimal{}
 	var totalFixed, totalUsage decimal.Decimal
-	account := &ledger{card: card, spent: map[rateKey]decimal.Decimal{}}
+	account := &ledger{store: store, spent: map[rateKey]decimal.Decimal{}}
 	priced := map[string]bool{}
 	for _, resource := range set.GetResources() {
 		pricing, known := table[resource.GetType()]
@@ -336,7 +337,7 @@ type pricedResource struct {
 }
 
 type ledger struct {
-	card  *Card
+	store Store
 	spent map[rateKey]decimal.Decimal
 	notes []string
 }
@@ -381,7 +382,7 @@ func (l *ledger) price(subject *Subject) pricedResource {
 			continue
 		}
 		component.MonthlyQuantity = b.Quantity.String()
-		rate, found, fellBack := l.card.Lookup(b.Rate, subject.Region)
+		rate, found, fellBack := l.store.Lookup(b.Rate, subject.Region)
 		if !found {
 			component.PriceNotFound = true
 			continue

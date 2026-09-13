@@ -100,6 +100,13 @@ func (r Rate) allows() bool {
 	return len(r.Tiers) > 1 && r.Tiers[0].Price.IsZero()
 }
 
+type Store interface {
+	Lookup(id, region string) (rate Rate, found, fellBack bool)
+	Basis() (currency, version string)
+}
+
+func (c *Card) Basis() (currency, version string) { return c.Currency, c.Version }
+
 func (c *Card) Lookup(id, region string) (rate Rate, found, fellBack bool) {
 	if i, ok := c.index[rateKey{id, region}]; ok {
 		return c.Rates[i], true, false

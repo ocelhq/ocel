@@ -473,3 +473,69 @@ func TestATreeReportsAPropertyItCannotCarry(t *testing.T) {
 		t.Fatalf("Set() error = %v, want one naming the resource", err)
 	}
 }
+
+type stubStore struct {
+	currency, version string
+	rates             map[string]costkit.Rate
+	fellBack          map[string]bool
+	asked             []string
+}
+
+func (s *stubStore) Basis() (string, string) { return s.currency, s.version }
+
+func (s *stubStore) Lookup(id, region string) (costkit.Rate, bool, bool) {
+	s.asked = append(s.asked, id+"@"+region)
+	rate, found := s.rates[id]
+	return rate, found, s.fellBack[id]
+}
+
+func TestAStoreOtherThanACardSuppliesThePrices(t *testing.T) {
+	store := &stubStore{
+		currency: "EUR", version: "2026-10-01",
+		rates: map[string]costkit.Rate{
+			"widget/hours": {ID: "widget/hours", Unit: "hour", Tiers: []costkit.Tier{{Price: decimal.NewFromFloat(0.5)}}},
+		},
+		fellBack: map[string]bool{"widget/hours": true},
+	}
+
+	est, err := costkit.Estimate(store, widgets, &costv1.PriceRequest{Resources: &costv1.ResourceSet{
+		Source:    "ocel",
+		Scopes:    []*costv1.Scope{{Id: "p", Kind: "project", Name: "shop"}},
+		Resources: []*costv1.Resource{resource("g", "p", "test_gadget", "eu-west-1", map[string]any{"size": 2})},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if est.GetCurrency() != "EUR" || est.GetRatesVersion() != "2026-10-01" {
+		t.Errorf("header = %s %s, want the store's own", est.GetCurrency(), est.GetRatesVersion())
+	}
+	if !slices.Contains(store.asked, "widget/hours@eu-west-1") {
+		t.Errorf("asked = %v, want the rate looked up in the resource's region", store.asked)
+	}
+	if got := byID(est, "g").GetMonthlyFixed(); got != "730.00" {
+		t.Errorf("fixed = %s, want 2 × 730 hours at the store's 0.5", got)
+	}
+}
+
+func TestAStoreThatFallsBackCarriesTheRateNoteIntoTheEstimate(t *testing.T) {
+	store := &stubStore{
+		currency: "USD", version: "2026-10-01",
+		rates: map[string]costkit.Rate{
+			"widget/hours": {ID: "widget/hours", Unit: "hour", Note: "priced from the embedded card", Tiers: []costkit.Tier{{Price: decimal.NewFromInt(1)}}},
+		},
+		fellBack: map[string]bool{"widget/hours": true},
+	}
+
+	est, err := costkit.Estimate(store, widgets, &costv1.PriceRequest{Resources: &costv1.ResourceSet{
+		Source:    "ocel",
+		Scopes:    []*costv1.Scope{{Id: "p", Kind: "project", Name: "shop"}},
+		Resources: []*costv1.Resource{resource("g", "p", "test_gadget", "eu-west-1", map[string]any{"size": 1})},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(est.GetNotes(), "priced from the embedded card") {
+		t.Errorf("notes = %v, want the note the store's fallback carries", est.GetNotes())
+	}
+}
