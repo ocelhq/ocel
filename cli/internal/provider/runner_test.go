@@ -326,12 +326,64 @@ func TestDeploy(t *testing.T) {
 			if err == nil {
 				t.Fatal("Deploy() error = nil, want an error after the provider was killed mid-call")
 			}
+			if strings.Contains(err.Error(), "cancelled") || errors.Is(err, context.Canceled) {
+				t.Errorf("Deploy() error = %q, want a dead provider not reported as a cancellation", err)
+			}
 		case <-time.After(5 * time.Second):
 			t.Fatal("Deploy() hung after the provider was killed mid-call")
 		}
 
 		r.Close()
 		assertNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("cancelling the run is reported as a cancellation rather than a lost connection", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		r, _ := spawnFake(t, ctx, "hang-deploy", Config{})
+
+		if err := r.Ready(ctx); err != nil {
+			t.Fatalf("Ready() error = %v, want nil", err)
+		}
+
+		called, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		var gotFirstEvent atomic.Bool
+		deployErrCh := make(chan error, 1)
+		go func() {
+			deployErrCh <- Stream(called, r, "Deploy", &contractv1.DeployRequest{
+				Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
+			}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { gotFirstEvent.Store(true) })
+		}()
+
+		deadline := time.Now().Add(2 * time.Second)
+		for !gotFirstEvent.Load() && time.Now().Before(deadline) {
+			time.Sleep(5 * time.Millisecond)
+		}
+		if !gotFirstEvent.Load() {
+			t.Fatal("never received the first OperationEvent before the cancel deadline")
+		}
+		cancel()
+
+		select {
+		case err := <-deployErrCh:
+			if err == nil {
+				t.Fatal("Deploy() error = nil, want the cancellation reported")
+			}
+			if !strings.Contains(err.Error(), "cancelled") {
+				t.Errorf("Deploy() error = %q, want it to say the run was cancelled", err)
+			}
+			if strings.Contains(err.Error(), "connection lost") {
+				t.Errorf("Deploy() error = %q, want a ctrl-C not dressed up as a lost connection", err)
+			}
+			if !errors.Is(err, context.Canceled) {
+				t.Errorf("Deploy() error = %q, want it to carry context.Canceled", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("Deploy() hung after the run was cancelled")
+		}
 	})
 
 	t.Run("a terminal failure carries the provider's message verbatim", func(t *testing.T) {
