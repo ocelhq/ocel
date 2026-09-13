@@ -96,9 +96,9 @@ Binding, confirmed by the owner:
   blue accent, and the shared token set in `app/globals.css`. The console is the docs
   register of the www design system: paper, hairlines, and type, none of the landing
   page's drafting apparatus.
-- **Icons and brand marks.** Phosphor for interface icons, simple-icons and the SVGs
-  under `public/frameworks/` for framework and vendor marks. A thing with a brand mark
-  is shown with it.
+- **Icons and brand marks.** Phosphor for interface icons, simple-icons and the inline
+  SVG components under `components/marks/` for framework and vendor marks. A thing with
+  a brand mark is shown with it.
 - **Voice.** Plain, direct, no hype. Every empty state names the command that fills it
   and says why the console cannot. Never use words to describe what a command or
   record shows better.
