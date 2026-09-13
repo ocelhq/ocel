@@ -7,6 +7,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 )
 
 func componentNamed(t *testing.T, est *costv1.Estimate, resource, name string) *costv1.CostComponent {
@@ -96,5 +97,44 @@ func TestPriceOutsideTheCardsRegionIsSaidNotGuessed(t *testing.T) {
 	}
 	if got := estimateNamed(t, est, "p/aws_lb:x"); got.GetStatus() != costv1.ResourceEstimate_STATUS_NO_PRICE || est.GetCoverage().GetNoPrice() != 1 {
 		t.Errorf("an ALB in a region the card lacks = %v", got)
+	}
+}
+
+func TestPriceBehindCloudflareCarriesTheEdgesOwnBill(t *testing.T) {
+	client, pricer := costServed(t)
+
+	manifest := shopManifest()
+	manifest.Apps = manifest.Apps[:1]
+	manifest.Containers = nil
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    manifest,
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+		Edge:        &contractv1.EdgeSelection{Kind: string(cloudflare.Kind)},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+	golden(t, "shape_production_cloudflare", set)
+	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	if err != nil {
+		t.Fatalf("Price() = %v", err)
+	}
+	golden(t, "estimate_production_cloudflare", est)
+
+	vendors := map[string]int{}
+	for _, r := range set.GetResources() {
+		vendors[r.GetVendor()]++
+	}
+	if vendors["cloudflare"] != 5 || vendors["aws"] == 0 {
+		t.Errorf("vendors = %v, want the plan, cache, store, writer and entry beside the AWS origin", vendors)
+	}
+	if typeCounts(set)["aws_lambda_function"] != 1+1+4 {
+		t.Errorf("lambdas = %d, want the app's, the upload completer's, and the four that isr, image optimization and the cloudflare edge stand up", typeCounts(set)["aws_lambda_function"])
+	}
+	if cov := est.GetCoverage(); cov.GetUnsupported() != 0 {
+		t.Errorf("coverage = %v, want every cloudflare resource priced by the edge's own card", cov)
+	}
+	if typeCounts(set)["aws_cloudfront_distribution"] != 0 {
+		t.Error("a project fronted by cloudflare stands up no CloudFront distribution")
 	}
 }

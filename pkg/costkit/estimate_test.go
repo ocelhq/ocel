@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shopspring/decimal"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/ocelhq/ocel/pkg/costkit"
@@ -209,5 +210,32 @@ func TestACardRefusesARateWithoutProvenance(t *testing.T) {
 	_, err := costkit.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","tiers":[{"price":"1"}]}]}`))
 	if err == nil || !strings.Contains(err.Error(), "a") {
 		t.Fatalf("Load() error = %v, want one naming rate a", err)
+	}
+}
+
+func TestMergedCardsAndTablesPriceEachVendorsOwn(t *testing.T) {
+	primary, _ := costkit.Load([]byte(card))
+	other, _ := costkit.Load([]byte(`{"version":"v2","currency":"USD","rates":[
+		{"id":"gizmo/each","unit":"each","tiers":[{"price":"2"}],"source":"https://example.test","verified":"2026-09-01"},
+		{"id":"widget/hours","unit":"hour","tiers":[{"price":"99"}],"source":"https://example.test","verified":"2026-09-01"}]}`))
+	table := costkit.Tables(widgets, costkit.Table{
+		"test_gizmo": func(r *costkit.Subject) {
+			r.Add(costkit.Component{Name: "Each", Unit: "each", Rate: "gizmo/each", Quantity: decimal.NewFromInt(3)})
+		},
+	})
+	s := set()
+	s.Resources = append(s.Resources, resource("z", "p/e", "test_gizmo", "eu-west-1", map[string]any{}))
+	est, err := costkit.Estimate(costkit.Merge(primary, other), table, &costv1.PriceRequest{Resources: s})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if est.GetRatesVersion() != "2026-09-01" {
+		t.Errorf("version = %s, want the primary card's", est.GetRatesVersion())
+	}
+	if byID(est, "z").GetMonthlyFixed() != "6.00" {
+		t.Errorf("gizmo = %s, want 6.00", byID(est, "z").GetMonthlyFixed())
+	}
+	if byID(est, "w").GetMonthlyFixed() != "73.00" {
+		t.Errorf("widget = %s, want the primary card's 0.10 rate to win over the other card's 99", byID(est, "w").GetMonthlyFixed())
 	}
 }

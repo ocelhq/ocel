@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/costkit"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	edgecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 )
 
 //go:embed rates.json
@@ -74,7 +75,11 @@ func Price(req *costv1.PriceRequest) (*costv1.Estimate, error) {
 	if err != nil {
 		return nil, err
 	}
-	estimate, err := costkit.Estimate(held, table, req)
+	edge, err := edgecost.Card()
+	if err != nil {
+		return nil, err
+	}
+	estimate, err := costkit.Estimate(costkit.Merge(held, edge), costkit.Tables(table, edgecost.Table), req)
 	if err != nil {
 		return nil, err
 	}
