@@ -1,6 +1,6 @@
 import type { Framework } from "@console/db/schema";
 import { CubeIcon } from "@phosphor-icons/react/dist/ssr";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { type FrameworkEntry, frameworkCatalog } from "@/lib/frameworks";
 
 const VISIBLE = 3;
@@ -8,27 +8,24 @@ const VISIBLE = 3;
 const tile = "bg-background not-first:-ml-px";
 
 function FrameworkAvatar({ entry }: { entry: FrameworkEntry }) {
+  const Light = entry.logo?.light;
+  const Dark = entry.logo?.dark;
   return (
     <Avatar title={entry.label} aria-hidden className={tile}>
-      {entry.logo && (
-        <AvatarImage
-          src={entry.logo.light}
-          alt=""
-          className={`m-auto size-4 object-contain ${entry.logo.dark ? "dark:hidden" : ""}`}
-        />
+      {Light && <Light className={`m-auto size-4 object-contain ${Dark ? "dark:hidden" : ""}`} />}
+      {Dark && <Dark className="m-auto hidden size-4 object-contain dark:block" />}
+      {!Light && (
+        <AvatarFallback className="bg-background">
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className="size-4"
+            fill={`#${entry.icon.hex}`}
+          >
+            <path d={entry.icon.path} />
+          </svg>
+        </AvatarFallback>
       )}
-      {entry.logo?.dark && (
-        <AvatarImage
-          src={entry.logo.dark}
-          alt=""
-          className="m-auto hidden size-4 object-contain dark:block"
-        />
-      )}
-      <AvatarFallback className="bg-background">
-        <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4" fill={`#${entry.icon.hex}`}>
-          <path d={entry.icon.path} />
-        </svg>
-      </AvatarFallback>
     </Avatar>
   );
 }

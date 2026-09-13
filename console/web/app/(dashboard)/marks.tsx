@@ -16,7 +16,7 @@ import {
   siPython,
   siRust,
 } from "simple-icons";
-import { RdsIcon, S3Icon } from "@/components/marks/aws";
+import { AwsIcon, RdsIcon, S3Icon } from "@/components/marks/aws";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { frameworkCatalog } from "@/lib/frameworks";
 
@@ -59,18 +59,11 @@ function FrameworkMark({ framework, size }: { framework: Framework; size: number
   if (!entry.logo) {
     return <Glyph icon={entry.icon} size={size} />;
   }
+  const { light: Light, dark: Dark } = entry.logo;
   return (
     <span className="shrink-0" style={{ width: size, height: size }}>
-      {/** biome-ignore lint/performance/noImgElement: brand marks are static svg files */}
-      <img
-        src={entry.logo.light}
-        alt=""
-        className={`size-full object-contain ${entry.logo.dark ? "dark:hidden" : ""}`}
-      />
-      {entry.logo.dark && (
-        /** biome-ignore lint/performance/noImgElement: brand marks are static svg files */
-        <img src={entry.logo.dark} alt="" className="hidden size-full object-contain dark:block" />
-      )}
+      <Light className={`size-full object-contain ${Dark ? "dark:hidden" : ""}`} />
+      {Dark && <Dark className="hidden size-full object-contain dark:block" />}
     </span>
   );
 }
@@ -131,10 +124,7 @@ export function ProviderMark({
     if (Aws) {
       return <Aws className="shrink-0 text-muted-foreground" style={style} />;
     }
-    return (
-      /** biome-ignore lint/performance/noImgElement: brand marks are static svg files */
-      <img src="/providers/aws.svg" alt="" className="shrink-0 object-contain" style={style} />
-    );
+    return <AwsIcon className="shrink-0 object-contain" style={style} />;
   }
 
   const mark = providerMarks[name];

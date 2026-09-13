@@ -453,7 +453,7 @@ border, Body icon; hover steps the border to Steel and the icon to Ink.
 
 ### Marks
 - **Pairing:** the main mark is what the thing *is* (framework, runtime, or resource type) at 20px; the corner mark is the provider service it landed on at 14px. An app carries its framework or runtime mark; a resource carries its type mark plus the provider mark.
-- **Sources:** simple-icons for runtimes, providers and databases, rendered at the brand's own hex; local SVGs under `public/frameworks/` for frameworks, with a dark variant swapped by theme when one exists; Phosphor for the generic fallbacks (cube, package, cloud, drives) in Body colour.
+- **Sources:** simple-icons for runtimes, providers and databases, rendered at the brand's own hex; inline SVG components under `components/marks/` for frameworks, with a dark variant swapped by theme when one exists; Phosphor for the generic fallbacks (cube, package, cloud, drives) in Body colour.
 - **Never** a letter, an emoji, or a coloured square standing in for a brand that has a mark.
 
 ### Navigation
