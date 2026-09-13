@@ -27,10 +27,6 @@ const certificateExpiry = 30 * 24 * time.Hour
 
 var issuance = patience{attempts: 100, ceiling: 15 * time.Second}
 
-func (p *Provider) certificatesGlobal() string {
-	return "projects/" + p.options.Project + "/locations/global"
-}
-
 const maxCertificateName = 63
 
 func authorizationID(hostname string) string { return certificateName(hostname, "auth") }
@@ -46,14 +42,14 @@ func certificateName(hostname string, role ...string) string {
 func authorizedDomain(hostname string) string { return strings.TrimPrefix(hostname, "*.") }
 
 func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
-	certificates, err := p.clients.Certificates()
+	clients, err := p.stood(ctx)
 	if err != nil {
 		return providerkit.Certificate{}, err
 	}
-	name := p.certificatesGlobal() + "/certificates/" + certificateName(req.Hostname)
+	name := clients.certificatesGlobal() + "/certificates/" + certificateName(req.Hostname)
 	held := providerkit.Certificate{ID: name, Requested: true, Written: req.Held.Written, Owed: req.Held.Owed}
 
-	authorization, err := p.authorized(ctx, certificates, req)
+	authorization, err := p.authorized(ctx, clients, req)
 	if err != nil {
 		return providerkit.Certificate{}, err
 	}
@@ -65,7 +61,7 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 	if err != nil {
 		return held, err
 	}
-	if err := p.certified(ctx, certificates, req, name, authorization.Name); err != nil {
+	if err := p.certified(ctx, clients, req, name, authorization.Name); err != nil {
 		return held, err
 	}
 	return held, nil
@@ -73,11 +69,15 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 
 func (p *Provider) authorized(
 	ctx context.Context,
-	certificates *certmanager.Service,
+	clients *clients,
 	req providerkit.CertificateRequest,
 ) (*certmanager.DnsAuthorization, error) {
+	certificates, err := clients.Certificates()
+	if err != nil {
+		return nil, err
+	}
 	id := authorizationID(req.Hostname)
-	name := p.certificatesGlobal() + "/dnsAuthorizations/" + id
+	name := clients.certificatesGlobal() + "/dnsAuthorizations/" + id
 	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.DnsAuthorization, error) {
 		return certificates.Projects.Locations.DnsAuthorizations.Get(name).Context(ctx).Do(call...)
 	})
@@ -93,7 +93,7 @@ func (p *Provider) authorized(
 	err = p.awaitCertificates(ctx, certificates, "authorize "+req.Hostname,
 		func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
 			return certificates.Projects.Locations.DnsAuthorizations.
-				Create(p.certificatesGlobal(), &certmanager.DnsAuthorization{Domain: authorizedDomain(req.Hostname)}).
+				Create(clients.certificatesGlobal(), &certmanager.DnsAuthorization{Domain: authorizedDomain(req.Hostname)}).
 				DnsAuthorizationId(id).Context(ctx).Do(call...)
 		})
 	if err != nil {
@@ -113,13 +113,29 @@ func (p *Provider) authorized(
 	return held, nil
 }
 
+func (p *Provider) certificates(ctx context.Context) (*clients, *certmanager.Service, error) {
+	clients, err := p.stood(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	certificates, err := clients.Certificates()
+	if err != nil {
+		return nil, nil, err
+	}
+	return clients, certificates, nil
+}
+
 func (p *Provider) certified(
 	ctx context.Context,
-	certificates *certmanager.Service,
+	clients *clients,
 	req providerkit.CertificateRequest,
 	name, authorization string,
 ) error {
-	_, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
+	certificates, err := clients.Certificates()
+	if err != nil {
+		return err
+	}
+	_, err = attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 		return certificates.Projects.Locations.Certificates.Get(name).Context(ctx).Do(call...)
 	})
 	switch {
@@ -133,7 +149,7 @@ func (p *Provider) certified(
 		err = p.awaitCertificates(ctx, certificates, "certify "+req.Hostname,
 			func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
 				return certificates.Projects.Locations.Certificates.
-					Create(p.certificatesGlobal(), &certmanager.Certificate{
+					Create(clients.certificatesGlobal(), &certmanager.Certificate{
 						Managed: &certmanager.ManagedCertificate{
 							Domains:           []string{req.Hostname},
 							DnsAuthorizations: []string{authorization},
@@ -194,7 +210,7 @@ func (p *Provider) InspectCertificate(
 	if !cert.Held() {
 		return providerkit.CertificateHealth{}, nil
 	}
-	certificates, err := p.clients.Certificates()
+	_, certificates, err := p.certificates(ctx)
 	if err != nil {
 		return providerkit.CertificateHealth{}, err
 	}
@@ -236,11 +252,11 @@ func covered(held *certmanager.Certificate) []string {
 }
 
 func (p *Provider) Entered(ctx context.Context, certificateMap string) ([]string, error) {
-	certificates, err := p.clients.Certificates()
+	clients, certificates, err := p.certificates(ctx)
 	if err != nil {
 		return nil, err
 	}
-	parent := p.certificatesGlobal() + "/certificateMaps/" + certificateMap
+	parent := clients.certificatesGlobal() + "/certificateMaps/" + certificateMap
 	var bound []string
 	for page := ""; ; {
 		held, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.ListCertificateMapEntriesResponse, error) {
@@ -270,7 +286,7 @@ func (p *Provider) DiscardCertificate(ctx context.Context, cert providerkit.Cert
 	if !cert.Held() {
 		return nil
 	}
-	certificates, err := p.clients.Certificates()
+	_, certificates, err := p.certificates(ctx)
 	if err != nil {
 		return err
 	}

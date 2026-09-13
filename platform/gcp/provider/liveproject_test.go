@@ -27,7 +27,7 @@ func repositoryHeld(t *testing.T, p *gcp.Provider, class providerkit.Class) *art
 	if err != nil {
 		t.Fatalf("reach Artifact Registry: %v", err)
 	}
-	name := "projects/" + liveProject() + "/locations/" + liveRegion() + "/repositories/" + p.Names().Repository(class)
+	name := "projects/" + liveProject() + "/locations/" + liveRegion() + "/repositories/" + names(t, p).Repository(class)
 	held, err := service.Projects.Locations.Repositories.Get(name).Context(ctx).Do()
 	if err != nil {
 		t.Fatalf("Get(%s) after a bootstrap = %v, want the repository the deploy pushes images to", name, err)
@@ -70,7 +70,7 @@ func TestProjectARepositoryWhoseCleanupPolicyWasEditedAwayIsMendedByTheNextBoots
 	if err != nil {
 		t.Fatalf("reach Artifact Registry: %v", err)
 	}
-	name := "projects/" + liveProject() + "/locations/" + liveRegion() + "/repositories/" + p.Names().Repository(class)
+	name := "projects/" + liveProject() + "/locations/" + liveRegion() + "/repositories/" + names(t, p).Repository(class)
 	if _, err := service.Projects.Locations.Repositories.Patch(name, &artifactregistry.Repository{}).
 		UpdateMask("cleanup_policies").Context(ctx).Do(); err != nil {
 		t.Fatalf("take the cleanup policies off %s: %v", name, err)

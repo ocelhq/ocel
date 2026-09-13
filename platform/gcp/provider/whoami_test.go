@@ -49,7 +49,7 @@ func TestWhoamiNamesTheProjectTheRegionAndWhoTheTokenBelongsTo(t *testing.T) {
 	server := tokenInfo(t, `{"email":"deployer@acme.iam.gserviceaccount.com","email_verified":"true"}`)
 
 	identity, err := gcp.Credentials{
-		Project:      "acme-prod",
+		Project:      gcp.Named("acme-prod"),
 		Region:       "europe-west1",
 		Tokens:       heldToken{token: heldAccessToken},
 		TokenInfoURL: server.URL,
@@ -84,7 +84,7 @@ func TestWhoamiRefusesWhenThereAreNoApplicationDefaultCredentials(t *testing.T) 
 		{
 			name: "no credentials to mint a token from",
 			held: gcp.Credentials{
-				Project:      "acme-prod",
+				Project:      gcp.Named("acme-prod"),
 				Tokens:       heldToken{err: errors.New("google: could not find default credentials")},
 				TokenInfoURL: server.URL,
 			},
@@ -92,7 +92,7 @@ func TestWhoamiRefusesWhenThereAreNoApplicationDefaultCredentials(t *testing.T) 
 		{
 			name: "a token nothing will vouch for",
 			held: gcp.Credentials{
-				Project:      "acme-prod",
+				Project:      gcp.Named("acme-prod"),
 				Tokens:       heldToken{token: "expired"},
 				TokenInfoURL: server.URL,
 			},
@@ -100,7 +100,7 @@ func TestWhoamiRefusesWhenThereAreNoApplicationDefaultCredentials(t *testing.T) 
 		{
 			name: "nothing listening where the token endpoint should be",
 			held: gcp.Credentials{
-				Project:      "acme-prod",
+				Project:      gcp.Named("acme-prod"),
 				Tokens:       heldToken{token: heldAccessToken},
 				TokenInfoURL: unreachable(t),
 			},
@@ -142,7 +142,7 @@ func TestTheAccessTokenReachesNoUrlAndNoErrorString(t *testing.T) {
 			t.Parallel()
 
 			_, err := gcp.Credentials{
-				Project:      "acme-prod",
+				Project:      gcp.Named("acme-prod"),
 				Tokens:       heldToken{token: heldAccessToken},
 				TokenInfoURL: endpoint,
 			}.Whoami(context.Background())
@@ -177,7 +177,7 @@ func TestAThrottledTokenEndpointIsRetriedAndThenSaidToBeBusy(t *testing.T) {
 		t.Cleanup(server.Close)
 
 		identity, err := gcp.Credentials{
-			Project:      "acme-prod",
+			Project:      gcp.Named("acme-prod"),
 			Tokens:       heldToken{token: heldAccessToken},
 			TokenInfoURL: server.URL,
 			Projects:     &reachedProject{},
@@ -210,7 +210,7 @@ func TestAThrottledTokenEndpointIsRetriedAndThenSaidToBeBusy(t *testing.T) {
 
 			var refusal providerkit.Refusal
 			_, err := gcp.Credentials{
-				Project:      "acme-prod",
+				Project:      gcp.Named("acme-prod"),
 				Tokens:       heldToken{token: heldAccessToken},
 				TokenInfoURL: server.URL,
 			}.Whoami(context.Background())

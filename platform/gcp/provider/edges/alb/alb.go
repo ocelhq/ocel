@@ -81,7 +81,6 @@ func (e *Edge) raise(ctx context.Context, class edge.Class, report edge.Reporter
 func (e *Edge) raiseServing(ctx context.Context, class edge.Class, held previewEntry, report edge.Reporter) (Front, error) {
 	names := frontNames(class)
 	outputs, err := e.deps.Stacks.Up(ctx, Target{Class: class}, frontProgram(frontSpec{
-		Project: e.deps.Project,
 		Region:  e.deps.Region,
 		Names:   names,
 		Preview: held,

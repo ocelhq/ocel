@@ -12,7 +12,6 @@ import (
 )
 
 type bindingSpec struct {
-	Project        string
 	Region         string
 	Slug           string
 	Class          edge.Class
@@ -21,8 +20,8 @@ type bindingSpec struct {
 }
 
 func bindingProgram(spec bindingSpec) Program {
-	return func(ctx *pulumi.Context) error {
-		project := pulumi.String(spec.Project)
+	return func(ctx *pulumi.Context, in string) error {
+		project := pulumi.String(in)
 		for _, hostname := range slices.Sorted(maps.Keys(spec.Hosts)) {
 			host := spec.Hosts[hostname]
 			if host.Certificate != "" {

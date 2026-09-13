@@ -79,7 +79,7 @@ func TestAProductionReleaseIsNamedNoDifferentlyForCarryingNoPreviewLabel(t *test
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	want, err := p.Names().Service("shop", providerkit.ProductionEnv, "web", "web")
+	want, err := names(t, p).Service("shop", providerkit.ProductionEnv, "web", "web")
 	if err != nil {
 		t.Fatal(err)
 	}

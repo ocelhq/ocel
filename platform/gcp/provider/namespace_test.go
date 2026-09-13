@@ -1,7 +1,6 @@
 package gcp_test
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -22,7 +21,7 @@ func TestEveryNameThisProviderDerivesCarriesTheNamespace(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(providerkit.NamespaceEnvVar, tc.namespace)
 
-			names := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Names()
+			names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 			for what, got := range map[string]string{
 				"artifact bucket":   names.Bucket(providerkit.ClassProduction),
 				"state bucket":      names.StateBucket(providerkit.ClassPreview),
@@ -112,7 +111,7 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 			t.Setenv(providerkit.NamespaceEnvVar, tc.namespace)
 
 			var refusal providerkit.Refusal
-			p, err := gcp.NewProvider(context.Background(), gcp.Options{Project: tc.project, Region: "europe-west1"})
+			p, err := gcp.NewProvider(gcp.Options{Project: tc.project, Region: "europe-west1"})
 			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 				t.Fatalf("NewProvider() under namespace %q = %v, %v, want an %s refusal", tc.namespace, p, err, providerkit.CodeInvalid)
 			}
@@ -126,7 +125,7 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 func TestTheLongestNamespaceARuntimeAccountLeavesRoomForIsTaken(t *testing.T) {
 	t.Setenv(providerkit.NamespaceEnvVar, strings.Repeat("a", 19))
 
-	if _, err := gcp.NewProvider(context.Background(), gcp.Options{Project: "acme-prod", Region: "europe-west1"}); err != nil {
+	if _, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"}); err != nil {
 		t.Fatalf("NewProvider() under a 19 character namespace = %v, want it taken: Google gives a service account id 30 characters and the longest class is 10", err)
 	}
 }

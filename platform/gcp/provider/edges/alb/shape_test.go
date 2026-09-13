@@ -47,7 +47,7 @@ func shapedCounts(shaped []costkit.Shaped) map[string]int {
 func TestTheFrontShapeMatchesTheFrontProgram(t *testing.T) {
 	t.Parallel()
 
-	spec := frontSpec{Project: "acme-prod", Region: "europe-west1", Names: frontNames(providerkit.ClassPreview),
+	spec := frontSpec{Region: "europe-west1", Names: frontNames(providerkit.ClassPreview),
 		Preview: previewEntry{BaseDomain: "preview.example.com", Certificate: "cert"}}
 	registered := declaredCounts(t, frontProgram(spec))
 	shaped := shapedCounts(ShapeFront(providerkit.ClassPreview, "preview.example.com"))
@@ -55,7 +55,7 @@ func TestTheFrontShapeMatchesTheFrontProgram(t *testing.T) {
 		t.Errorf("the front program registers %v, the shape lists %v", registered, shaped)
 	}
 
-	registered = declaredCounts(t, frontProgram(frontSpec{Project: "acme-prod", Names: frontNames(providerkit.ClassProduction)}))
+	registered = declaredCounts(t, frontProgram(frontSpec{Names: frontNames(providerkit.ClassProduction)}))
 	shaped = shapedCounts(ShapeFront(providerkit.ClassProduction, ""))
 	if !maps.Equal(registered, shaped) {
 		t.Errorf("without a preview base the front program registers %v, the shape lists %v", registered, shaped)

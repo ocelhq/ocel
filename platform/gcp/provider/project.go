@@ -18,15 +18,18 @@ const (
 
 const unsetProject = "(unset)"
 
-func resolveProject(ctx context.Context, named string) (string, error) {
-	for _, ambient := range []func() string{
-		func() string { return named },
-		func() string { return os.Getenv(projectVariable) },
-		func() string { return os.Getenv(cloudSDKVariable) },
-		func() string { return credentialProject(ctx) },
-		func() string { return gcloudProject(ctx) },
-	} {
-		if project := strings.TrimSpace(ambient()); project != "" {
+func namedProject(named string) string {
+	for _, held := range []string{named, os.Getenv(projectVariable), os.Getenv(cloudSDKVariable)} {
+		if project := strings.TrimSpace(held); project != "" {
+			return project
+		}
+	}
+	return ""
+}
+
+func ambientProject(ctx context.Context) (string, error) {
+	for _, ambient := range []func(context.Context) string{credentialProject, gcloudProject} {
+		if project := strings.TrimSpace(ambient(ctx)); project != "" {
 			return project, nil
 		}
 	}
@@ -34,6 +37,13 @@ func resolveProject(ctx context.Context, named string) (string, error) {
 		"option %q names no Google Cloud project and nothing around this run names one either: "+
 			"not the application default credentials, not %s, not %s, and not gcloud's own config.\n"+
 			"Name it in the options, or run `gcloud config set project <id>`",
+		"project", projectVariable, cloudSDKVariable)
+}
+
+func unnamedProject() error {
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"option %q names no Google Cloud project and neither %s nor %s does. "+
+			"A scan reads no credentials and runs no gcloud to find one, so name it in the options or in one of them",
 		"project", projectVariable, cloudSDKVariable)
 }
 

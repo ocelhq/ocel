@@ -18,18 +18,22 @@ import (
 var artifactStores = []string{providerkit.StoreFunctions, providerkit.StoreAssets, providerkit.StoreCache}
 
 type artifacts struct {
-	clients *clients
+	p *Provider
 }
 
-func (a artifacts) bucket(class providerkit.Class) (*storage.BucketHandle, error) {
+func (a artifacts) bucket(ctx context.Context, class providerkit.Class) (*storage.BucketHandle, error) {
 	if class == "" {
 		return nil, ports.Classless("an artifact")
 	}
-	client, err := a.clients.Storage()
+	clients, err := a.p.stood(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return client.Bucket(a.clients.Bucket(class)), nil
+	client, err := clients.Storage()
+	if err != nil {
+		return nil, err
+	}
+	return client.Bucket(clients.Bucket(class)), nil
 }
 
 func objectName(ref providerkit.ArtifactRef) (string, error) {
@@ -43,12 +47,12 @@ func objectName(ref providerkit.ArtifactRef) (string, error) {
 		ref.Bucket, providerkit.StoreFunctions, providerkit.StoreAssets, providerkit.StoreCache)
 }
 
-func (a artifacts) object(ref providerkit.ArtifactRef) (*storage.ObjectHandle, error) {
+func (a artifacts) object(ctx context.Context, ref providerkit.ArtifactRef) (*storage.ObjectHandle, error) {
 	name, err := objectName(ref)
 	if err != nil {
 		return nil, err
 	}
-	bucket, err := a.bucket(ref.Class)
+	bucket, err := a.bucket(ctx, ref.Class)
 	if err != nil {
 		return nil, err
 	}
@@ -56,23 +60,23 @@ func (a artifacts) object(ref providerkit.ArtifactRef) (*storage.ObjectHandle, e
 }
 
 func (a artifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
-	object, err := a.object(ref)
+	object, err := a.object(ctx, ref)
 	if err != nil {
 		return err
 	}
 	writer := object.NewWriter(ctx)
 	if _, err := io.Copy(writer, body); err != nil {
 		writer.Close()
-		return a.storeless(ref.Class, fmt.Errorf("upload %s: %w", object.ObjectName(), err))
+		return a.storeless(ctx, ref.Class, fmt.Errorf("upload %s: %w", object.ObjectName(), err))
 	}
 	if err := writer.Close(); err != nil {
-		return a.storeless(ref.Class, fmt.Errorf("upload %s: %w", object.ObjectName(), err))
+		return a.storeless(ctx, ref.Class, fmt.Errorf("upload %s: %w", object.ObjectName(), err))
 	}
 	return nil
 }
 
 func (a artifacts) Has(ctx context.Context, ref providerkit.ArtifactRef) (bool, error) {
-	object, err := a.object(ref)
+	object, err := a.object(ctx, ref)
 	if err != nil {
 		return false, err
 	}
@@ -80,13 +84,13 @@ func (a artifacts) Has(ctx context.Context, ref providerkit.ArtifactRef) (bool, 
 		if errors.Is(err, storage.ErrObjectNotExist) {
 			return false, nil
 		}
-		return false, a.storeless(ref.Class, fmt.Errorf("look for %s: %w", object.ObjectName(), err))
+		return false, a.storeless(ctx, ref.Class, fmt.Errorf("look for %s: %w", object.ObjectName(), err))
 	}
 	return true, nil
 }
 
 func (a artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.ReadCloser, error) {
-	object, err := a.object(ref)
+	object, err := a.object(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +99,7 @@ func (a artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.Re
 		if errors.Is(err, storage.ErrObjectNotExist) {
 			return nil, providerkit.Refuse(providerkit.CodeInvalid, "no artifact at %s", object.ObjectName())
 		}
-		return nil, a.storeless(ref.Class, fmt.Errorf("read %s: %w", object.ObjectName(), err))
+		return nil, a.storeless(ctx, ref.Class, fmt.Errorf("read %s: %w", object.ObjectName(), err))
 	}
 	return reader, nil
 }
@@ -105,7 +109,7 @@ func (a artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, pr
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"an empty prefix names every artifact this project keeps")
 	}
-	bucket, err := a.bucket(class)
+	bucket, err := a.bucket(ctx, class)
 	if err != nil {
 		return err
 	}
@@ -146,11 +150,12 @@ func absent(err error) bool {
 	return errors.As(err, &answered) && answered.Code == http.StatusNotFound
 }
 
-func (a artifacts) storeless(class providerkit.Class, err error) error {
-	if errors.Is(err, storage.ErrBucketNotExist) || absent(err) {
+func (a artifacts) storeless(ctx context.Context, class providerkit.Class, err error) error {
+	names, named := a.p.Names(ctx)
+	if named == nil && (errors.Is(err, storage.ErrBucketNotExist) || absent(err)) {
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"this project has no %s bucket, so it has no %s artifact store yet.\nRun `%s` to create it, then try again",
-			a.clients.Bucket(class), class, providerkit.BootstrapCommand(class))
+			names.Bucket(class), class, providerkit.BootstrapCommand(class))
 	}
 	return err
 }

@@ -49,7 +49,7 @@ func live(t *testing.T) *gcp.Provider {
 
 func liveNames(t *testing.T) gcp.Names {
 	t.Helper()
-	return live(t).Names()
+	return names(t, live(t))
 }
 
 func TestLiveCredentials(t *testing.T) {

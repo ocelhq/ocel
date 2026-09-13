@@ -14,7 +14,7 @@ var cloudRunName = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
 
 func serviceNames(t *testing.T) gcp.Names {
 	t.Helper()
-	return newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Names()
+	return names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 }
 
 func TestAServiceIsNamedForTheProjectEnvironmentAndAppItServes(t *testing.T) {

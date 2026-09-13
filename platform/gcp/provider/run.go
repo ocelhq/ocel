@@ -132,18 +132,10 @@ func trafficTo(revision string) []*run.GoogleCloudRunV2TrafficTarget {
 
 func (p *Provider) heldAs(image string) string {
 	repository, digest, pinned := strings.Cut(image, "@")
-	if !pinned || !p.clients.emulated() {
+	if !pinned || !p.emulated() {
 		return image
 	}
 	return repository + ":" + naming.DigestTag(digest)
-}
-
-func (p *Provider) location() string {
-	return "projects/" + p.options.Project + "/locations/" + p.options.Region
-}
-
-func (p *Provider) servicePath(service string) string {
-	return p.location() + "/services/" + service
 }
 
 type release struct {
@@ -152,11 +144,15 @@ type release struct {
 }
 
 func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Reporter) (release, error) {
-	services, err := p.clients.Run()
+	clients, err := p.stood(ctx)
 	if err != nil {
 		return release{}, err
 	}
-	path := p.servicePath(s.service)
+	services, err := clients.Run()
+	if err != nil {
+		return release{}, err
+	}
+	path := clients.servicePath(s.service)
 	s.image = p.heldAs(s.image)
 	desired, err := serviceOf(s)
 	if err != nil {
@@ -173,7 +169,7 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 		}
 		err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 			return services.Projects.Locations.Services.
-				Create(p.location(), desired).ServiceId(s.service).Context(ctx).Do(call...)
+				Create(clients.location(), desired).ServiceId(s.service).Context(ctx).Do(call...)
 		})
 	case err != nil:
 		return release{}, fmt.Errorf("read the Cloud Run service %s: %w", s.service, err)
@@ -209,11 +205,15 @@ func (p *Provider) Pin(ctx context.Context, service, revision string) error {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"%s is asked to serve a revision nothing named, and traffic is pinned to one revision by name", service)
 	}
-	services, err := p.clients.Run()
+	clients, err := p.stood(ctx)
 	if err != nil {
 		return err
 	}
-	_, _, err = p.route(ctx, services, p.servicePath(service), service,
+	services, err := clients.Run()
+	if err != nil {
+		return err
+	}
+	_, _, err = p.route(ctx, services, clients.servicePath(service), service,
 		"pin the traffic of "+service+" to "+revision, named(revision))
 	return err
 }
@@ -343,7 +343,11 @@ func (p *Provider) await(ctx context.Context, services *run.Service, call func(.
 }
 
 func (p *Provider) tearDown(ctx context.Context, service string, report providerkit.Reporter) error {
-	services, err := p.clients.Run()
+	clients, err := p.stood(ctx)
+	if err != nil {
+		return err
+	}
+	services, err := clients.Run()
 	if err != nil {
 		return err
 	}
@@ -351,7 +355,7 @@ func (p *Provider) tearDown(ctx context.Context, service string, report provider
 		report.Say("Taking " + service + " down")
 	}
 	err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-		return services.Projects.Locations.Services.Delete(p.servicePath(service)).Context(ctx).Do(call...)
+		return services.Projects.Locations.Services.Delete(clients.servicePath(service)).Context(ctx).Do(call...)
 	})
 	if absent(err) {
 		return nil
