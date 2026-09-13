@@ -284,6 +284,15 @@
       }
     },
     {
+      "id": "project:shop/shared:production/aws_kms_key:VarsKey",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_kms_key",
+      "name": "VarsKey",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
       "id": "project:shop/environment:prod/aws_rds_cluster:main",
       "scope": "project:shop/environment:prod",
       "vendor": "aws",
@@ -310,7 +319,11 @@
       "region": "us-east-1",
       "properties": {
         "engine": "aurora-postgresql",
-        "instance_class": "db.serverless"
+        "instance_class": "db.serverless",
+        "serverlessv2_scaling_configuration": {
+          "max_capacity": 2,
+          "min_capacity": 0
+        }
       }
     },
     {
@@ -460,6 +473,15 @@
       "properties": {
         "durable_objects": []
       }
+    },
+    {
+      "id": "project:shop/environment:prod/app:web/aws_data_transfer:web",
+      "scope": "project:shop/environment:prod/app:web",
+      "vendor": "aws",
+      "type": "aws_data_transfer",
+      "name": "web",
+      "region": "us-east-1",
+      "properties": {}
     }
   ]
 }

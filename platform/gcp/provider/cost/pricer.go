@@ -8,7 +8,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/costkit"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
-	edgecost "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy/cost"
 )
 
 //go:embed rates.json
@@ -18,16 +17,18 @@ var card = sync.OnceValues(func() (*costkit.Card, error) { return costkit.Load(r
 
 const (
 	usageRequests        = "monthly_requests"
-	usageRequestDuration = "request_duration_ms"
+	usageRequestDuration = "average_request_duration_ms"
+	usageInstanceHours   = "instance_hrs"
 	usageStorage         = "storage_gb"
 	usageClassA          = "monthly_class_a_operations"
 	usageClassB          = "monthly_class_b_operations"
 	usageReads           = "monthly_document_reads"
 	usageWrites          = "monthly_document_writes"
 	usageAccess          = "monthly_access_operations"
-	usageDataProcessed   = "monthly_data_processed_gb"
+	usageKeyOperations   = "monthly_key_operations"
+	usageDataProcessed   = "monthly_ingress_data_processed_gb"
 	usageDataOut         = "monthly_data_transfer_to_internet_gb"
-	usageVersions        = "active_versions"
+	usageVersions        = "active_secret_versions"
 
 	ingressEverywhere = "INGRESS_TRAFFIC_ALL"
 	mebibytesPerGiB   = 1024
@@ -35,20 +36,19 @@ const (
 )
 
 var (
-	requestsBand    = costkit.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
-	durationBand    = costkit.Band{Light: 100, Moderate: 200, Heavy: 500}
-	storageBand     = costkit.Band{Light: 1, Moderate: 10, Heavy: 100}
-	classABand      = costkit.Band{Light: 1_000, Moderate: 10_000, Heavy: 100_000}
-	classBBand      = costkit.Band{Light: 10_000, Moderate: 100_000, Heavy: 1_000_000}
-	readsBand       = costkit.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
-	writesBand      = costkit.Band{Light: 10_000, Moderate: 100_000, Heavy: 1_000_000}
-	recordsBand     = costkit.Band{Light: 0.1, Moderate: 1, Heavy: 10}
-	accessBand      = costkit.Band{Light: 1_000, Moderate: 10_000, Heavy: 100_000}
-	egressBand      = costkit.Band{Light: 1, Moderate: 10, Heavy: 100}
-	imagesBand      = costkit.Band{Light: 1, Moderate: 5, Heavy: 50}
-	versionsBand    = costkit.Band{Light: 1, Moderate: 1, Heavy: 3}
-	secondsPerMonth = costkit.MonthlyHours.Mul(decimal.NewFromInt(secondsPerHour))
-	thousand        = decimal.NewFromInt(1000)
+	requestsBand = costkit.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
+	durationBand = costkit.Band{Light: 100, Moderate: 200, Heavy: 500}
+	storageBand  = costkit.Band{Light: 1, Moderate: 10, Heavy: 100}
+	classABand   = costkit.Band{Light: 1_000, Moderate: 10_000, Heavy: 100_000}
+	classBBand   = costkit.Band{Light: 10_000, Moderate: 100_000, Heavy: 1_000_000}
+	readsBand    = costkit.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
+	writesBand   = costkit.Band{Light: 10_000, Moderate: 100_000, Heavy: 1_000_000}
+	recordsBand  = costkit.Band{Light: 0.1, Moderate: 1, Heavy: 10}
+	accessBand   = costkit.Band{Light: 1_000, Moderate: 10_000, Heavy: 100_000}
+	egressBand   = costkit.Band{Light: 1, Moderate: 10, Heavy: 100}
+	imagesBand   = costkit.Band{Light: 1, Moderate: 5, Heavy: 50}
+	versionsBand = costkit.Band{Light: 1, Moderate: 1, Heavy: 3}
+	thousand     = decimal.NewFromInt(1000)
 )
 
 var table = costkit.Table{
@@ -70,22 +70,22 @@ var table = costkit.Table{
 	"google_compute_region_network_endpoint_group":     free,
 }
 
-func Price(req *costv1.PriceRequest) (*costv1.Estimate, error) {
+func Price(req *costv1.PriceRequest, edges ...costkit.EdgePricer) (*costv1.Estimate, error) {
 	held, err := card()
 	if err != nil {
 		return nil, err
 	}
-	edge, err := edgecost.Card()
+	merged, pricing, err := costkit.Priced(held, table, edges...)
 	if err != nil {
 		return nil, err
 	}
-	estimate, err := costkit.Estimate(costkit.Merge(held, edge), costkit.Tables(table, edgecost.Table), req)
+	estimate, err := costkit.Estimate(merged, pricing, req)
 	if err != nil {
 		return nil, err
 	}
 	estimate.Notes = append(estimate.Notes,
-		"list prices for europe-west1 and global SKUs; a resource in another region is left unpriced",
-		"the free tier Cloud Run and Cloud Storage apply as a billing discount is not applied; a free first tier the catalog publishes is",
+		"list prices for the regions the card names and for global SKUs; a resource elsewhere is left unpriced unless a note above says otherwise",
+		"the free tier Cloud Run and Cloud Storage apply as a billing discount is not applied; a free first tier the catalog publishes is spent once per account across every resource sharing it",
 		"the forwarding rule is priced as the project's first five, which share one hourly charge",
 	)
 	return estimate, nil
@@ -95,10 +95,10 @@ func free(r *costkit.Subject) { r.Free() }
 
 func cloudRunService(r *costkit.Subject) {
 	cpu := r.Number("template.containers.0.resources.limits.cpu")
-	memoryGiB := mebibytes(r.String("template.containers.0.resources.limits.memory")).Div(decimal.NewFromInt(mebibytesPerGiB))
+	memoryGiB := quantityMiB(r.String("template.containers.0.resources.limits.memory")).Div(decimal.NewFromInt(mebibytesPerGiB))
 	if !r.Bool("template.containers.0.resources.cpu_idle") {
-		instances := r.Number("template.scaling.min_instance_count")
-		seconds := instances.Mul(secondsPerMonth)
+		warm, _ := r.Number("template.scaling.min_instance_count").Mul(costkit.MonthlyHours).Float64()
+		seconds := r.Usage(usageInstanceHours, costkit.Band{Light: warm, Moderate: warm, Heavy: warm}).Mul(decimal.NewFromInt(secondsPerHour))
 		r.Add(costkit.Component{Name: "CPU, always allocated", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-always", Quantity: seconds.Mul(cpu)})
 		r.Add(costkit.Component{Name: "Memory, always allocated", Unit: "GiB-seconds", Rate: "gcp/run/memory-always", Quantity: seconds.Mul(memoryGiB)})
 	} else {
@@ -114,7 +114,7 @@ func cloudRunService(r *costkit.Subject) {
 	}
 }
 
-func mebibytes(limit string) decimal.Decimal {
+func quantityMiB(limit string) decimal.Decimal {
 	if len(limit) > 2 && limit[len(limit)-2:] == "Mi" {
 		if parsed, err := decimal.NewFromString(limit[:len(limit)-2]); err == nil {
 			return parsed
@@ -142,7 +142,7 @@ func storageBucket(r *costkit.Subject) {
 
 func cryptoKey(r *costkit.Subject) {
 	r.Add(costkit.Component{Name: "Active key version", Unit: "version-months", Rate: "gcp/kms/key-version", Quantity: decimal.NewFromInt(1)})
-	r.Add(costkit.Component{Name: "Cryptographic operations", Unit: "operations", Rate: "gcp/kms/operations", Quantity: r.Usage(usageAccess, accessBand), UsageBased: true})
+	r.Add(costkit.Component{Name: "Cryptographic operations", Unit: "operations", Rate: "gcp/kms/operations", Quantity: r.Usage(usageKeyOperations, accessBand), UsageBased: true})
 }
 
 func artifactRepository(r *costkit.Subject) {

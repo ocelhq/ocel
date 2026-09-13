@@ -270,6 +270,15 @@
       "properties": {}
     },
     {
+      "id": "project:shop/shared:preview/aws_kms_key:VarsKey",
+      "scope": "project:shop/shared:preview",
+      "vendor": "aws",
+      "type": "aws_kms_key",
+      "name": "VarsKey",
+      "region": "us-east-1",
+      "properties": {}
+    },
+    {
       "id": "project:shop/environment:pr-42/aws_rds_cluster:main",
       "scope": "project:shop/environment:pr-42",
       "vendor": "aws",
@@ -296,7 +305,11 @@
       "region": "us-east-1",
       "properties": {
         "engine": "aurora-postgresql",
-        "instance_class": "db.serverless"
+        "instance_class": "db.serverless",
+        "serverlessv2_scaling_configuration": {
+          "max_capacity": 2,
+          "min_capacity": 0
+        }
       }
     },
     {
@@ -472,22 +485,22 @@
       }
     },
     {
-      "id": "project:shop/environment:pr-42/aws_cloudfront_distribution:shop",
-      "scope": "project:shop/environment:pr-42",
+      "id": "project:shop/shared:preview/aws_cloudfront_distribution:preview-wildcard",
+      "scope": "project:shop/shared:preview",
       "vendor": "aws",
       "type": "aws_cloudfront_distribution",
-      "name": "shop",
+      "name": "preview-wildcard",
       "region": "us-east-1",
       "properties": {
         "price_class": "PriceClass_All"
       }
     },
     {
-      "id": "project:shop/shared:preview/aws_cloudfront_distribution:preview-wildcard",
-      "scope": "project:shop/shared:preview",
+      "id": "project:shop/environment:pr-42/aws_cloudfront_distribution:shop",
+      "scope": "project:shop/environment:pr-42",
       "vendor": "aws",
       "type": "aws_cloudfront_distribution",
-      "name": "preview-wildcard",
+      "name": "shop",
       "region": "us-east-1",
       "properties": {
         "price_class": "PriceClass_All"
