@@ -23,6 +23,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Profile int32
+
+const (
+	Profile_PROFILE_UNSPECIFIED Profile = 0
+	Profile_PROFILE_LIGHT       Profile = 1
+	Profile_PROFILE_MODERATE    Profile = 2
+	Profile_PROFILE_HEAVY       Profile = 3
+)
+
+// Enum value maps for Profile.
+var (
+	Profile_name = map[int32]string{
+		0: "PROFILE_UNSPECIFIED",
+		1: "PROFILE_LIGHT",
+		2: "PROFILE_MODERATE",
+		3: "PROFILE_HEAVY",
+	}
+	Profile_value = map[string]int32{
+		"PROFILE_UNSPECIFIED": 0,
+		"PROFILE_LIGHT":       1,
+		"PROFILE_MODERATE":    2,
+		"PROFILE_HEAVY":       3,
+	}
+)
+
+func (x Profile) Enum() *Profile {
+	p := new(Profile)
+	*p = x
+	return p
+}
+
+func (x Profile) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Profile) Descriptor() protoreflect.EnumDescriptor {
+	return file_provider_cost_v1_cost_proto_enumTypes[0].Descriptor()
+}
+
+func (Profile) Type() protoreflect.EnumType {
+	return &file_provider_cost_v1_cost_proto_enumTypes[0]
+}
+
+func (x Profile) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Profile.Descriptor instead.
+func (Profile) EnumDescriptor() ([]byte, []int) {
+	return file_provider_cost_v1_cost_proto_rawDescGZIP(), []int{0}
+}
+
 type ResourceEstimate_Status int32
 
 const (
@@ -62,11 +114,11 @@ func (x ResourceEstimate_Status) String() string {
 }
 
 func (ResourceEstimate_Status) Descriptor() protoreflect.EnumDescriptor {
-	return file_provider_cost_v1_cost_proto_enumTypes[0].Descriptor()
+	return file_provider_cost_v1_cost_proto_enumTypes[1].Descriptor()
 }
 
 func (ResourceEstimate_Status) Type() protoreflect.EnumType {
-	return &file_provider_cost_v1_cost_proto_enumTypes[0]
+	return &file_provider_cost_v1_cost_proto_enumTypes[1]
 }
 
 func (x ResourceEstimate_Status) Number() protoreflect.EnumNumber {
@@ -368,7 +420,7 @@ func (x *PriceRequest) GetUsage() *Usage {
 
 type Usage struct {
 	state         protoimpl.MessageState      `protogen:"open.v1"`
-	Profile       string                      `protobuf:"bytes,1,opt,name=profile,proto3" json:"profile,omitempty"`
+	Profile       Profile                     `protobuf:"varint,1,opt,name=profile,proto3,enum=provider.cost.v1.Profile" json:"profile,omitempty"`
 	Resources     map[string]*structpb.Struct `protobuf:"bytes,2,rep,name=resources,proto3" json:"resources,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -404,11 +456,11 @@ func (*Usage) Descriptor() ([]byte, []int) {
 	return file_provider_cost_v1_cost_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *Usage) GetProfile() string {
+func (x *Usage) GetProfile() Profile {
 	if x != nil {
 		return x.Profile
 	}
-	return ""
+	return Profile_PROFILE_UNSPECIFIED
 }
 
 func (x *Usage) GetResources() map[string]*structpb.Struct {
@@ -422,7 +474,7 @@ type Estimate struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Currency      string                 `protobuf:"bytes,1,opt,name=currency,proto3" json:"currency,omitempty"`
 	RatesVersion  string                 `protobuf:"bytes,2,opt,name=rates_version,json=ratesVersion,proto3" json:"rates_version,omitempty"`
-	Profile       string                 `protobuf:"bytes,3,opt,name=profile,proto3" json:"profile,omitempty"`
+	Profile       Profile                `protobuf:"varint,3,opt,name=profile,proto3,enum=provider.cost.v1.Profile" json:"profile,omitempty"`
 	Resources     []*ResourceEstimate    `protobuf:"bytes,4,rep,name=resources,proto3" json:"resources,omitempty"`
 	Scopes        []*ScopeTotal          `protobuf:"bytes,5,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	Coverage      *Coverage              `protobuf:"bytes,6,opt,name=coverage,proto3" json:"coverage,omitempty"`
@@ -477,11 +529,11 @@ func (x *Estimate) GetRatesVersion() string {
 	return ""
 }
 
-func (x *Estimate) GetProfile() string {
+func (x *Estimate) GetProfile() Profile {
 	if x != nil {
 		return x.Profile
 	}
-	return ""
+	return Profile_PROFILE_UNSPECIFIED
 }
 
 func (x *Estimate) GetResources() []*ResourceEstimate {
@@ -893,17 +945,17 @@ const file_provider_cost_v1_cost_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x82\x01\n" +
 	"\fPriceRequest\x12C\n" +
 	"\tresources\x18\x01 \x01(\v2\x1d.provider.cost.v1.ResourceSetB\x06\xbaH\x03\xc8\x01\x01R\tresources\x12-\n" +
-	"\x05usage\x18\x02 \x01(\v2\x17.provider.cost.v1.UsageR\x05usage\"\xdf\x01\n" +
-	"\x05Usage\x129\n" +
-	"\aprofile\x18\x01 \x01(\tB\x1f\xbaH\x1cr\x1aR\x00R\x05lightR\bmoderateR\x05heavyR\aprofile\x12D\n" +
+	"\x05usage\x18\x02 \x01(\v2\x17.provider.cost.v1.UsageR\x05usage\"\xe3\x01\n" +
+	"\x05Usage\x12=\n" +
+	"\aprofile\x18\x01 \x01(\x0e2\x19.provider.cost.v1.ProfileB\b\xbaH\x05\x82\x01\x02\x10\x01R\aprofile\x12D\n" +
 	"\tresources\x18\x02 \x03(\v2&.provider.cost.v1.Usage.ResourcesEntryR\tresources\x1aU\n" +
 	"\x0eResourcesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
-	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01\"\xf5\x02\n" +
+	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01\"\x90\x03\n" +
 	"\bEstimate\x12\x1a\n" +
 	"\bcurrency\x18\x01 \x01(\tR\bcurrency\x12#\n" +
-	"\rrates_version\x18\x02 \x01(\tR\fratesVersion\x12\x18\n" +
-	"\aprofile\x18\x03 \x01(\tR\aprofile\x12@\n" +
+	"\rrates_version\x18\x02 \x01(\tR\fratesVersion\x123\n" +
+	"\aprofile\x18\x03 \x01(\x0e2\x19.provider.cost.v1.ProfileR\aprofile\x12@\n" +
 	"\tresources\x18\x04 \x03(\v2\".provider.cost.v1.ResourceEstimateR\tresources\x124\n" +
 	"\x06scopes\x18\x05 \x03(\v2\x1c.provider.cost.v1.ScopeTotalR\x06scopes\x126\n" +
 	"\bcoverage\x18\x06 \x01(\v2\x1a.provider.cost.v1.CoverageR\bcoverage\x12\x14\n" +
@@ -954,7 +1006,12 @@ const file_provider_cost_v1_cost_proto_rawDesc = "" +
 	"\x0fsupported_types\x18\x06 \x03(\tR\x0esupportedTypes\x1aC\n" +
 	"\x15UnsupportedTypesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\rR\x05value:\x028\x012R\n" +
+	"\x05value\x18\x02 \x01(\rR\x05value:\x028\x01*^\n" +
+	"\aProfile\x12\x17\n" +
+	"\x13PROFILE_UNSPECIFIED\x10\x00\x12\x11\n" +
+	"\rPROFILE_LIGHT\x10\x01\x12\x14\n" +
+	"\x10PROFILE_MODERATE\x10\x02\x12\x11\n" +
+	"\rPROFILE_HEAVY\x10\x032R\n" +
 	"\vCostService\x12C\n" +
 	"\x05Price\x12\x1e.provider.cost.v1.PriceRequest\x1a\x1a.provider.cost.v1.EstimateB:Z8github.com/ocelhq/ocel/pkg/proto/provider/cost/v1;costv1b\x06proto3"
 
@@ -970,47 +1027,50 @@ func file_provider_cost_v1_cost_proto_rawDescGZIP() []byte {
 	return file_provider_cost_v1_cost_proto_rawDescData
 }
 
-var file_provider_cost_v1_cost_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_provider_cost_v1_cost_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_provider_cost_v1_cost_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_provider_cost_v1_cost_proto_goTypes = []any{
-	(ResourceEstimate_Status)(0), // 0: provider.cost.v1.ResourceEstimate.Status
-	(*ResourceSet)(nil),          // 1: provider.cost.v1.ResourceSet
-	(*Scope)(nil),                // 2: provider.cost.v1.Scope
-	(*Resource)(nil),             // 3: provider.cost.v1.Resource
-	(*PriceRequest)(nil),         // 4: provider.cost.v1.PriceRequest
-	(*Usage)(nil),                // 5: provider.cost.v1.Usage
-	(*Estimate)(nil),             // 6: provider.cost.v1.Estimate
-	(*ResourceEstimate)(nil),     // 7: provider.cost.v1.ResourceEstimate
-	(*CostComponent)(nil),        // 8: provider.cost.v1.CostComponent
-	(*ScopeTotal)(nil),           // 9: provider.cost.v1.ScopeTotal
-	(*Coverage)(nil),             // 10: provider.cost.v1.Coverage
-	nil,                          // 11: provider.cost.v1.Resource.TagsEntry
-	nil,                          // 12: provider.cost.v1.Usage.ResourcesEntry
-	nil,                          // 13: provider.cost.v1.Coverage.UnsupportedTypesEntry
-	(*structpb.Struct)(nil),      // 14: google.protobuf.Struct
+	(Profile)(0),                 // 0: provider.cost.v1.Profile
+	(ResourceEstimate_Status)(0), // 1: provider.cost.v1.ResourceEstimate.Status
+	(*ResourceSet)(nil),          // 2: provider.cost.v1.ResourceSet
+	(*Scope)(nil),                // 3: provider.cost.v1.Scope
+	(*Resource)(nil),             // 4: provider.cost.v1.Resource
+	(*PriceRequest)(nil),         // 5: provider.cost.v1.PriceRequest
+	(*Usage)(nil),                // 6: provider.cost.v1.Usage
+	(*Estimate)(nil),             // 7: provider.cost.v1.Estimate
+	(*ResourceEstimate)(nil),     // 8: provider.cost.v1.ResourceEstimate
+	(*CostComponent)(nil),        // 9: provider.cost.v1.CostComponent
+	(*ScopeTotal)(nil),           // 10: provider.cost.v1.ScopeTotal
+	(*Coverage)(nil),             // 11: provider.cost.v1.Coverage
+	nil,                          // 12: provider.cost.v1.Resource.TagsEntry
+	nil,                          // 13: provider.cost.v1.Usage.ResourcesEntry
+	nil,                          // 14: provider.cost.v1.Coverage.UnsupportedTypesEntry
+	(*structpb.Struct)(nil),      // 15: google.protobuf.Struct
 }
 var file_provider_cost_v1_cost_proto_depIdxs = []int32{
-	2,  // 0: provider.cost.v1.ResourceSet.scopes:type_name -> provider.cost.v1.Scope
-	3,  // 1: provider.cost.v1.ResourceSet.resources:type_name -> provider.cost.v1.Resource
-	14, // 2: provider.cost.v1.Resource.properties:type_name -> google.protobuf.Struct
-	11, // 3: provider.cost.v1.Resource.tags:type_name -> provider.cost.v1.Resource.TagsEntry
-	1,  // 4: provider.cost.v1.PriceRequest.resources:type_name -> provider.cost.v1.ResourceSet
-	5,  // 5: provider.cost.v1.PriceRequest.usage:type_name -> provider.cost.v1.Usage
-	12, // 6: provider.cost.v1.Usage.resources:type_name -> provider.cost.v1.Usage.ResourcesEntry
-	7,  // 7: provider.cost.v1.Estimate.resources:type_name -> provider.cost.v1.ResourceEstimate
-	9,  // 8: provider.cost.v1.Estimate.scopes:type_name -> provider.cost.v1.ScopeTotal
-	10, // 9: provider.cost.v1.Estimate.coverage:type_name -> provider.cost.v1.Coverage
-	0,  // 10: provider.cost.v1.ResourceEstimate.status:type_name -> provider.cost.v1.ResourceEstimate.Status
-	8,  // 11: provider.cost.v1.ResourceEstimate.components:type_name -> provider.cost.v1.CostComponent
-	13, // 12: provider.cost.v1.Coverage.unsupported_types:type_name -> provider.cost.v1.Coverage.UnsupportedTypesEntry
-	14, // 13: provider.cost.v1.Usage.ResourcesEntry.value:type_name -> google.protobuf.Struct
-	4,  // 14: provider.cost.v1.CostService.Price:input_type -> provider.cost.v1.PriceRequest
-	6,  // 15: provider.cost.v1.CostService.Price:output_type -> provider.cost.v1.Estimate
-	15, // [15:16] is the sub-list for method output_type
-	14, // [14:15] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	3,  // 0: provider.cost.v1.ResourceSet.scopes:type_name -> provider.cost.v1.Scope
+	4,  // 1: provider.cost.v1.ResourceSet.resources:type_name -> provider.cost.v1.Resource
+	15, // 2: provider.cost.v1.Resource.properties:type_name -> google.protobuf.Struct
+	12, // 3: provider.cost.v1.Resource.tags:type_name -> provider.cost.v1.Resource.TagsEntry
+	2,  // 4: provider.cost.v1.PriceRequest.resources:type_name -> provider.cost.v1.ResourceSet
+	6,  // 5: provider.cost.v1.PriceRequest.usage:type_name -> provider.cost.v1.Usage
+	0,  // 6: provider.cost.v1.Usage.profile:type_name -> provider.cost.v1.Profile
+	13, // 7: provider.cost.v1.Usage.resources:type_name -> provider.cost.v1.Usage.ResourcesEntry
+	0,  // 8: provider.cost.v1.Estimate.profile:type_name -> provider.cost.v1.Profile
+	8,  // 9: provider.cost.v1.Estimate.resources:type_name -> provider.cost.v1.ResourceEstimate
+	10, // 10: provider.cost.v1.Estimate.scopes:type_name -> provider.cost.v1.ScopeTotal
+	11, // 11: provider.cost.v1.Estimate.coverage:type_name -> provider.cost.v1.Coverage
+	1,  // 12: provider.cost.v1.ResourceEstimate.status:type_name -> provider.cost.v1.ResourceEstimate.Status
+	9,  // 13: provider.cost.v1.ResourceEstimate.components:type_name -> provider.cost.v1.CostComponent
+	14, // 14: provider.cost.v1.Coverage.unsupported_types:type_name -> provider.cost.v1.Coverage.UnsupportedTypesEntry
+	15, // 15: provider.cost.v1.Usage.ResourcesEntry.value:type_name -> google.protobuf.Struct
+	5,  // 16: provider.cost.v1.CostService.Price:input_type -> provider.cost.v1.PriceRequest
+	7,  // 17: provider.cost.v1.CostService.Price:output_type -> provider.cost.v1.Estimate
+	17, // [17:18] is the sub-list for method output_type
+	16, // [16:17] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_provider_cost_v1_cost_proto_init() }
@@ -1023,7 +1083,7 @@ func file_provider_cost_v1_cost_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_provider_cost_v1_cost_proto_rawDesc), len(file_provider_cost_v1_cost_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
