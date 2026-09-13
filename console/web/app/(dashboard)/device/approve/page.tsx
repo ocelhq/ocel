@@ -2,6 +2,8 @@
 
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { AuthError, AuthPanel } from "@/components/auth-panel";
+import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 
 function formatForDisplay(code: string) {
@@ -73,62 +75,41 @@ function DeviceApprovalForm() {
   const isBusy = status === "approving" || status === "denying";
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <div className="flex w-full max-w-sm flex-col gap-6 rounded-2xl border border-black/[.08] bg-white p-8 dark:border-white/[.145] dark:bg-zinc-950">
-        <div className="flex flex-col gap-2 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
-            Confirm device sign-in
-          </h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Approve this sign-in for your Ocel account.
-          </p>
-        </div>
-
-        <div className="rounded-lg border border-black/[.08] bg-zinc-50 py-3 text-center font-mono text-lg uppercase tracking-widest text-black dark:border-white/[.145] dark:bg-zinc-900 dark:text-zinc-50">
-          {formatForDisplay(userCode)}
-        </div>
-
-        <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
-          A CLI device is requesting access to your Ocel account. If you didn&apos;t initiate this,
-          deny it.
-        </p>
-
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={handleDeny}
-            disabled={isBusy}
-            className="flex h-11 w-full items-center justify-center rounded-full border border-black/[.08] px-5 text-sm font-medium text-black transition-colors hover:bg-black/[.03] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[.145] dark:text-zinc-50 dark:hover:bg-white/[.06]"
-          >
-            {status === "denying" ? "Denying…" : "Deny"}
-          </button>
-          <button
-            type="button"
-            onClick={handleApprove}
-            disabled={isBusy}
-            className="flex h-11 w-full items-center justify-center rounded-full bg-foreground px-5 text-sm font-medium text-background transition-colors hover:bg-[#383838] disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-[#ccc]"
-          >
-            {status === "approving" ? "Approving…" : "Approve"}
-          </button>
-        </div>
-
-        {error && <p className="text-center text-sm text-red-600 dark:text-red-400">{error}</p>}
+    <AuthPanel
+      title="Confirm device sign-in"
+      description="Approve this sign-in for your Ocel account."
+    >
+      <div className="border border-border bg-muted py-4 text-center font-mono text-2xl tracking-[0.3em] text-foreground uppercase">
+        {formatForDisplay(userCode)}
       </div>
-    </div>
+
+      <p className="text-sm text-muted-foreground">
+        A CLI device is requesting access to your Ocel account. If you didn&apos;t initiate this,
+        deny it.
+      </p>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleDeny}
+          disabled={isBusy}
+          className="h-10"
+        >
+          {status === "denying" ? "Denying…" : "Deny"}
+        </Button>
+        <Button type="button" onClick={handleApprove} disabled={isBusy} className="h-10">
+          {status === "approving" ? "Approving…" : "Approve"}
+        </Button>
+      </div>
+
+      {error && <AuthError>{error}</AuthError>}
+    </AuthPanel>
   );
 }
 
 function StatusCard({ title, message }: { title: string; message: string }) {
-  return (
-    <div className="flex flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <div className="flex w-full max-w-sm flex-col gap-2 rounded-2xl border border-black/[.08] bg-white p-8 text-center dark:border-white/[.145] dark:bg-zinc-950">
-        <h1 className="text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
-          {title}
-        </h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">{message}</p>
-      </div>
-    </div>
-  );
+  return <AuthPanel title={title} description={message} />;
 }
 
 export default function DeviceApprovalPage() {
