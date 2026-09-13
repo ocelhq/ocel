@@ -51,8 +51,10 @@ require (
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
 	github.com/ocelhq/ocel/pkg/channel v0.0.0 // indirect
+	github.com/ocelhq/ocel/pkg/costkit v0.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
@@ -88,3 +90,5 @@ replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/clo
 replace github.com/ocelhq/ocel/pkg/configdoc => ../../../pkg/configdoc
 
 replace github.com/ocelhq/ocel/pkg/constants => ../../../pkg/constants
+
+replace github.com/ocelhq/ocel/pkg/costkit => ../../../pkg/costkit
