@@ -212,3 +212,18 @@ func TestTheStackFallsOutOfTheURNsWhenTheCallerDoesNotNameIt(t *testing.T) {
 		t.Errorf("root scope name = %q, want the stack the urns were written under", got)
 	}
 }
+
+func TestAListHoldingAnUnknownIsUnknownWholeRatherThanShortByOne(t *testing.T) {
+	set, err := pulumi.Merge(fixture(t, "sst_state.json"), fixture(t, "sst_diff.json"), pulumi.Options{Source: pulumi.SourceSST, Name: "victor"})
+	if err != nil {
+		t.Fatalf("Merge() = %v", err)
+	}
+
+	endpoint := resource(t, set, "urn:pulumi:victor::with-sst::aws:ec2/vpcEndpoint:VpcEndpoint::Secrets")
+	if len(endpoint.GetUnknown()) != 1 || endpoint.GetUnknown()[0] != "subnet_ids" {
+		t.Errorf("unknown = %v, want the list itself named rather than the index of an element", endpoint.GetUnknown())
+	}
+	if _, present := endpoint.GetProperties().AsMap()["subnet_ids"]; present {
+		t.Errorf("properties = %v, want no list a caller could count", endpoint.GetProperties().AsMap())
+	}
+}

@@ -107,3 +107,34 @@ func TestAnSSTStagePricesEndToEnd(t *testing.T) {
 		t.Errorf("monthly fixed = %q, want the stage's standing charges", estimate.GetMonthlyFixed())
 	}
 }
+
+func TestAnEndpointWhoseSubnetsAreUnknownIsNotCountedAsOneZone(t *testing.T) {
+	set := sstStage(t)
+	_, pricer := served(t, pricing.Options{})
+
+	estimate, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: costv1.Profile_PROFILE_MODERATE}})
+	if err != nil {
+		t.Fatalf("Price() = %v", err)
+	}
+
+	var endpoint *costv1.ResourceEstimate
+	for _, held := range estimate.GetResources() {
+		if held.GetResource() == "urn:pulumi:victor::with-sst::aws:ec2/vpcEndpoint:VpcEndpoint::Secrets" {
+			endpoint = held
+		}
+	}
+	if endpoint == nil {
+		t.Fatalf("the endpoint whose subnets are unknown was not estimated at all")
+	}
+	for _, component := range endpoint.GetComponents() {
+		if component.GetUnit() != "hours" {
+			continue
+		}
+		if !slices.Contains(component.GetDependsOnUnknown(), "subnet_ids") {
+			t.Errorf("%s = %v, want the zones it cannot count named as unknown", component.GetName(), component)
+		}
+		if component.GetMonthlyQuantity() != "" || component.GetMonthlyCost() != "" {
+			t.Errorf("%s = %v, want no quantity guessed from a list it never saw", component.GetName(), component)
+		}
+	}
+}

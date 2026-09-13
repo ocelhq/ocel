@@ -40,11 +40,13 @@ func convert(value any, path string, unknown *[]string) (any, bool) {
 		}
 		return out, true
 	case []any:
+		mark := len(*unknown)
 		out := make([]any, 0, len(held))
 		for i, nested := range held {
 			carried, keep := convert(nested, join(path, strconv.Itoa(i)), unknown)
 			if !keep {
-				carried = nil
+				*unknown = append((*unknown)[:mark], path)
+				return nil, false
 			}
 			out = append(out, carried)
 		}

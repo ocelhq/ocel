@@ -194,6 +194,21 @@
       "properties": {
         "force_destroy": true
       }
+    },
+    {
+      "id": "urn:pulumi:victor::with-sst::aws:ec2/vpcEndpoint:VpcEndpoint::Secrets",
+      "scope": "stage:victor",
+      "vendor": "aws",
+      "type": "aws_vpc_endpoint",
+      "name": "Secrets",
+      "region": "us-east-1",
+      "properties": {
+        "service_name": "com.amazonaws.us-east-1.secretsmanager",
+        "vpc_endpoint_type": "Interface"
+      },
+      "unknown": [
+        "subnet_ids"
+      ]
     }
   ]
 }

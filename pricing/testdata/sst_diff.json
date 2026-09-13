@@ -69,5 +69,25 @@
       },
       "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
     }
+  },
+  {
+    "op": "create",
+    "urn": "urn:pulumi:victor::with-sst::aws:ec2/vpcEndpoint:VpcEndpoint::Secrets",
+    "type": "aws:ec2/vpcEndpoint:VpcEndpoint",
+    "new": {
+      "urn": "urn:pulumi:victor::with-sst::aws:ec2/vpcEndpoint:VpcEndpoint::Secrets",
+      "type": "aws:ec2/vpcEndpoint:VpcEndpoint",
+      "custom": true,
+      "parent": "urn:pulumi:victor::with-sst::pulumi:pulumi:Stack::with-sst-victor",
+      "inputs": {
+        "vpcEndpointType": "Interface",
+        "serviceName": "com.amazonaws.us-east-1.secretsmanager",
+        "subnetIds": [
+          "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+          "04da6b54-80e4-46f7-96ec-b56ff0331ba9"
+        ]
+      },
+      "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+    }
   }
 ]
