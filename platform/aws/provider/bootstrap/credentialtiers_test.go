@@ -346,8 +346,8 @@ func TestDeployTierOwnsTheLogGroupsItCreates(t *testing.T) {
 	}
 }
 
-func TestDeployTierListsLogGroupsOnTheOnlyResourceAWSAccepts(t *testing.T) {
-	for tier, document := range map[string]string{"deploy": mustRender(t, DeployCredentialPermissions)} {
+func TestEveryTierListsLogGroupsOnTheOnlyResourceAWSAccepts(t *testing.T) {
+	for tier, document := range bothTiers(t) {
 		grants := grantsOf(t, document)
 		if !grants[grant{action: "logs:DescribeLogGroups", resource: unscopedResource, condition: conditionJSON(t, nil)}] {
 			t.Errorf("the %s tier does not grant logs:DescribeLogGroups on %q, the only resource IAM evaluates it against, so CloudFormation cannot read back a log group it manages", tier, unscopedResource)
@@ -491,24 +491,37 @@ func mustRender(t *testing.T, render func(Namespace) (string, error)) string {
 }
 
 func TestBootstrapTierOwnsOnlyTheLogGroupsItsStacksDeclare(t *testing.T) {
-	grants := grantsOf(t, mustRender(t, BootstrapCredentialPermissions))
+	bootstrapDoc, deployDoc := renderedTiers(t)
+	bootstrapGrants, deployGrants := grantsOf(t, bootstrapDoc), grantsOf(t, deployDoc)
 	scope := "arn:aws:logs:*:*:log-group:/aws/lambda/" + defaultNamespace.CoreStackName() + "*"
 	unconditional := conditionJSON(t, nil)
-	for _, action := range []string{
-		"logs:CreateLogGroup",
-		"logs:DeleteLogGroup",
-		"logs:DescribeLogGroups",
-		"logs:ListTagsForResource",
-		"logs:PutRetentionPolicy",
-		"logs:TagResource",
-		"logs:UntagResource",
-	} {
-		if !grants[grant{action: action, resource: scope, condition: unconditional}] {
-			t.Errorf("the bootstrap tier does not grant %s on %s, so a bootstrap stack cannot create, bound or reclaim the log group its function writes to", action, scope)
+	want := map[string]string{
+		"logs:CreateLogGroup":      unconditional,
+		"logs:DeleteLogGroup":      unconditional,
+		"logs:ListTagsForResource": unconditional,
+		"logs:PutRetentionPolicy":  unconditional,
+		"logs:TagResource":         unconditional,
+		"logs:UntagResource":       unconditional,
+	}
+	if got := logsGrantsOn(bootstrapGrants, scope); !maps.Equal(got, want) {
+		t.Errorf("the bootstrap tier grants %v on %s, want exactly %v, so a bootstrap stack either cannot create, bound and reclaim its functions' log groups or reaches beyond them", got, scope, want)
+	}
+	for _, resource := range []string{appLogGroupARN, functionLogGroupARN} {
+		if got, deploy := logsGrantsOn(bootstrapGrants, resource), logsGrantsOn(deployGrants, resource); !maps.Equal(got, deploy) {
+			t.Errorf("the bootstrap tier grants %v on %s, want the deploy tier's %v, so bootstrapping widens what a deploy may do to a log group", got, resource, deploy)
 		}
 	}
-	for g := range grants {
-		if strings.HasPrefix(g.action, "logs:") && g.resource != scope && g.resource != unscopedResource && g.resource != appLogGroupARN && g.resource != functionLogGroupARN {
+	for g := range bootstrapGrants {
+		if !strings.HasPrefix(g.action, "logs:") {
+			continue
+		}
+		switch g.resource {
+		case scope, appLogGroupARN, functionLogGroupARN:
+		case unscopedResource:
+			if g.action != "logs:DescribeLogGroups" {
+				t.Errorf("the bootstrap tier grants %s on %q, which reaches every log group in the account", g.action, g.resource)
+			}
+		default:
 			t.Errorf("the bootstrap tier grants %s on %s, beyond the log groups a bootstrap or a deploy owns", g.action, g.resource)
 		}
 	}
