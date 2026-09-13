@@ -71,9 +71,7 @@ type Reference struct {
 }
 
 type DanglingReferenceError struct {
-	Type   resourcesv1.ResourceType
-	Name   string
-	Source string
+	Reference
 }
 
 func (e *DanglingReferenceError) Error() string {
@@ -263,7 +261,7 @@ func Build(slug string, domains map[string][]string, apps []App, compute string,
 
 	for _, r := range references {
 		if _, declared := seen[identity{r.Type, r.Name}]; !declared {
-			return nil, &DanglingReferenceError{Type: r.Type, Name: r.Name, Source: r.Source}
+			return nil, &DanglingReferenceError{r}
 		}
 	}
 

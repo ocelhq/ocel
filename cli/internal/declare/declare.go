@@ -34,6 +34,9 @@ func ParseReference(req *resourcesv1.ReferenceRequest) (Reference, error) {
 	if id.GetName() == "" {
 		return Reference{}, fmt.Errorf("a reference to a %s names no resource", id.GetType())
 	}
+	if req.GetSource() == "" {
+		return Reference{}, fmt.Errorf("the reference to the %s %q names no source file, so a deploy could not say where it was written", id.GetType(), id.GetName())
+	}
 	return Reference{Type: id.GetType(), Name: id.GetName(), Source: req.GetSource()}, nil
 }
 

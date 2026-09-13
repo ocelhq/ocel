@@ -1,6 +1,7 @@
 package declare
 
 import (
+	"strings"
 	"testing"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -107,6 +108,37 @@ func TestParse(t *testing.T) {
 		}
 		if res.Postgres != nil {
 			t.Fatalf("Postgres = %+v, want nil", res.Postgres)
+		}
+	})
+}
+
+func TestParseReference(t *testing.T) {
+	t.Parallel()
+
+	t.Run("carries the identity and the source", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := ParseReference(&resourcesv1.ReferenceRequest{
+			Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads"},
+			Source:   "/project/refs.ts:4",
+		})
+		if err != nil {
+			t.Fatalf("ParseReference: %v", err)
+		}
+		want := Reference{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Source: "/project/refs.ts:4"}
+		if got != want {
+			t.Errorf("ParseReference = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("a reference that names no source is refused, since nothing could say where it dangles", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := ParseReference(&resourcesv1.ReferenceRequest{
+			Resource: &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"},
+		})
+		if err == nil || !strings.Contains(err.Error(), `"main"`) {
+			t.Fatalf("ParseReference err = %v, want a refusal naming the reference", err)
 		}
 	})
 }

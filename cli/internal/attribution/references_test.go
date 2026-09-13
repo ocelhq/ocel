@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -34,7 +35,7 @@ func polyglotApps() []App {
 func TestAReferenceGrantsAResourceDeclaredInAnotherLanguage(t *testing.T) {
 	root := polyglotProject(t)
 	declarations := []Declaration{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Source: filepath.Join(root, "shared", "db.ts") + ":1"}}
-	references := []Reference{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Source: filepath.Join(root, "refs", "db.go") + ":3"}}
+	references := []declare.Reference{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Source: filepath.Join(root, "refs", "db.go") + ":3"}}
 
 	t.Run("an app reaching the reference is granted what the declaration provisions", func(t *testing.T) {
 		usages, err := Compute(t.Context(), root, polyglotApps(), declarations, references)
@@ -61,7 +62,7 @@ func TestAReferenceGrantsAResourceDeclaredInAnotherLanguage(t *testing.T) {
 	})
 
 	t.Run("a reference to another identity grants nothing of this one", func(t *testing.T) {
-		other := []Reference{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "main", Source: references[0].Source}}
+		other := []declare.Reference{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "main", Source: references[0].Source}}
 
 		usages, err := Compute(t.Context(), root, polyglotApps(), declarations, other)
 		if err != nil {
@@ -75,7 +76,7 @@ func TestAReferenceGrantsAResourceDeclaredInAnotherLanguage(t *testing.T) {
 	})
 
 	t.Run("a reference that names no project file fails closed", func(t *testing.T) {
-		stray := []Reference{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Source: filepath.Join(t.TempDir(), "db.go") + ":3"}}
+		stray := []declare.Reference{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Source: filepath.Join(t.TempDir(), "db.go") + ":3"}}
 
 		_, err := Compute(t.Context(), root, polyglotApps(), declarations, stray)
 

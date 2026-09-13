@@ -43,7 +43,6 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	if err != nil {
 		return nil, captured.annotate(err)
 	}
-	resources := collected.Resources
 	warnings, err := envgate.Lint(gate.Definitions(), envwire.Apps(cfg), cfg.Path)
 	if err != nil {
 		return nil, err
@@ -104,7 +103,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	}
 
 	if len(functions) == 0 && len(images) == 0 {
-		if len(resources) == 0 && len(collected.References) == 0 {
+		if len(collected.Resources) == 0 && len(collected.References) == 0 {
 			return nil, nil
 		}
 		ui.Diagnostic("no functions to deploy; deploying infrastructure only")
@@ -114,12 +113,12 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	if err != nil {
 		return nil, err
 	}
-	usages, err := attribution.Compute(ctx, cfg.Dir, attributionApps, toAttributionDeclarations(resources), toAttributionReferences(collected.References))
+	usages, err := attribution.Compute(ctx, cfg.Dir, attributionApps, toAttributionDeclarations(collected.Resources), collected.References)
 	if err != nil {
 		return nil, err
 	}
 
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages, compute, images), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.References(cfg.Dir, collected.References), manifestwire.Bindings(cfg.Bindings), functions, variablesByApp(variables, functions))
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages, compute, images), compute, manifestwire.Declarations(cfg.Dir, collected.Resources), manifestwire.References(cfg.Dir, collected.References), manifestwire.Bindings(cfg.Bindings), functions, variablesByApp(variables, functions))
 	if err != nil {
 		return nil, err
 	}
@@ -429,12 +428,4 @@ func toAttributionDeclarations(resources []declare.Resource) []attribution.Decla
 		decls[i] = attribution.Declaration{Type: r.Type, Name: r.Name, Source: r.Source}
 	}
 	return decls
-}
-
-func toAttributionReferences(references []declare.Reference) []attribution.Reference {
-	out := make([]attribution.Reference, len(references))
-	for i, r := range references {
-		out[i] = attribution.Reference{Type: r.Type, Name: r.Name, Source: r.Source}
-	}
-	return out
 }

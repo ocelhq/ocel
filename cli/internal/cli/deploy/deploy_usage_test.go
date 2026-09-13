@@ -226,7 +226,7 @@ func TestDeployGrantsAResourceThroughAReference(t *testing.T) {
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, functions)
 		root, sockPath := clitest.SetUpDeployFixture(t)
-		writeReferencingMonorepo(t, root, "main")
+		writeReferencingMonorepo(t, root, `reference("RESOURCE_TYPE_POSTGRES", "main")`)
 
 		var stdout, stderr bytes.Buffer
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
@@ -253,7 +253,7 @@ func TestDeployGrantsAResourceThroughAReference(t *testing.T) {
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, functions)
 		root, _ := clitest.SetUpDeployFixture(t)
-		writeReferencingMonorepo(t, root, "ghost")
+		writeReferencingMonorepo(t, root, `reference("RESOURCE_TYPE_POSTGRES", "ghost")`)
 
 		var stdout, stderr bytes.Buffer
 		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
@@ -267,9 +267,58 @@ func TestDeployGrantsAResourceThroughAReference(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("an app reaching only a bucket reference is delivered the declared bucket", func(t *testing.T) {
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, functions)
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		writeReferencingMonorepo(t, root, `{ ...reference("RESOURCE_TYPE_BUCKET", "uploads"), uploaders: { avatar: {} } }`)
+
+		var stdout, stderr bytes.Buffer
+		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		out := stdout.String()
+		for _, want := range []string{
+			"DELIVER app=web resources=bucket--uploads",
+			"USAGE app=web resource=bucket--uploads files=apps/web/src/server.ts",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want %q", out, want)
+			}
+		}
+
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("a dangling reference outside the project in a project declaring nothing still names where it was written", func(t *testing.T) {
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, functions)
+		root, _ := clitest.SetUpDeployFixture(t)
+		writeReferencingMonorepo(t, root, `reference("RESOURCE_TYPE_POSTGRES", "ghost", "/elsewhere/refs.ts:4")`)
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), `
+export * from "../shared/refs.js";
+`)
+
+		var stdout, stderr bytes.Buffer
+		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		if err == nil {
+			t.Fatalf("runDeploy err = nil, want the dangling reference to refuse the deploy; stdout=%s", stdout.String())
+		}
+		combined := stdout.String() + stderr.String() + err.Error()
+		for _, want := range []string{`"ghost"`, "/elsewhere/refs.ts:4"} {
+			if !strings.Contains(combined, want) {
+				t.Errorf("output = %q, want it to name %s", combined, want)
+			}
+		}
+	})
 }
 
-func writeReferencingMonorepo(t *testing.T, root, referenced string) {
+func writeReferencingMonorepo(t *testing.T, root, shared string) {
 	t.Helper()
 
 	writeSharedResourceMonorepo(t, root)
@@ -287,25 +336,25 @@ function site(): string {
   return at ? at[1].replace(/^file:\/\//, "") + ":" + at[2] : "";
 }
 
-function referencePostgres(name: string) {
+function reference(type: string, name: string, source = site()) {
   globalThis.__ocelRegister ??= [];
   globalThis.__ocelRegister.push(
     fetch(new URL("/app.resources.v1.ResourceService/Reference", process.env.`+constants.DevServerEnvName+`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ resource: { type: "RESOURCE_TYPE_POSTGRES", name }, source: site() }),
+      body: JSON.stringify({ resource: { type, name }, source }),
     }),
   );
   return { name };
 }
 
-export const sharedDb = referencePostgres("`+referenced+`");
+export const shared = `+shared+`;
 `)
 	clitest.WriteFile(t, filepath.Join(root, "apps", "web", "src", "server.ts"), `
-import { sharedDb } from "../../../shared/refs.js";
+import { shared } from "../../../shared/refs.js";
 
 export function handler() {
-  return sharedDb.name;
+  return shared.name;
 }
 `)
 }
