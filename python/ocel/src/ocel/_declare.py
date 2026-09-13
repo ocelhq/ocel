@@ -1,7 +1,7 @@
 import os
 
 from ocel.gen.app.resources.v1.resources_connect import ResourceServiceClientSync
-from ocel.gen.app.resources.v1.resources_pb import DeclareRequest
+from ocel.gen.app.resources.v1.resources_pb import DeclareRequest, ReferenceRequest
 from ocel.gen.app.resources.v1.variables_pb import (
     DeclareEnvRequest,
     DeclareEnvResponse,
@@ -28,6 +28,17 @@ def declare(request: DeclareRequest) -> None:
             client.declare(request)
     except Exception as error:
         raise _failed(request, error) from None
+
+
+def reference(request: ReferenceRequest) -> None:
+    try:
+        with _client() as client:
+            client.reference(request)
+    except Exception as error:
+        kind = request.resource.type.name.lower()
+        raise RuntimeError(
+            f"ocel: reference {kind} '{request.resource.name}': {_said(error)}"
+        ) from None
 
 
 def declare_env(request: DeclareEnvRequest) -> DeclareEnvResponse:

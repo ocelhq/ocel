@@ -10,7 +10,7 @@ from ocel.env import (
     group,
     var,
 )
-from ocel.postgres import Postgres, postgres
+from ocel.postgres import Postgres, postgres, postgres_ref
 
 __all__ = [
     "Env",
@@ -24,5 +24,6 @@ __all__ = [
     "deployment_url",
     "group",
     "postgres",
+    "postgres_ref",
     "var",
 ]

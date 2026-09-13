@@ -5,10 +5,11 @@ from urllib.parse import quote
 from protobuf import Oneof
 
 from ocel._binding import binding, unprovisioned
-from ocel._declare import declare, discovering
+from ocel._declare import declare, discovering, reference
 from ocel.gen.app.resources.v1.resources_pb import (
     DeclareRequest,
     PostgresConfig,
+    ReferenceRequest,
     ResourceIdentifier,
     ResourceType,
 )
@@ -75,6 +76,25 @@ def postgres(name: str, *, version: str | None = None) -> Postgres:
         DeclareRequest(
             resource=ResourceIdentifier(type=ResourceType.POSTGRES, name=name),
             config=Oneof(_KIND, PostgresConfig(version=version or _DEFAULT_VERSION)),
+            source=f"{caller.filename}:{caller.lineno}",
+        )
+    )
+    return _Unprovisioned(name)
+
+
+def postgres_ref(name: str) -> Postgres:
+    """Reference the postgres database named ``name``, declared once elsewhere in the project
+    in any language, and return the same handle :func:`postgres` does. It never declares.
+    Call it from a file under the project's discovery folder and import that file from the
+    app: during discovery the call records that the file uses the database, so the deploy
+    grants it to every app that imports the file, and at runtime it reads the binding
+    delivered for that name."""
+    if not discovering():
+        return Postgres(name)
+    caller = inspect.stack(0)[1]
+    reference(
+        ReferenceRequest(
+            resource=ResourceIdentifier(type=ResourceType.POSTGRES, name=name),
             source=f"{caller.filename}:{caller.lineno}",
         )
     )

@@ -5,7 +5,12 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 import ocel.env
-from ocel.gen.app.resources.v1.resources_pb import DeclareRequest, DeclareResponse
+from ocel.gen.app.resources.v1.resources_pb import (
+    DeclareRequest,
+    DeclareResponse,
+    ReferenceRequest,
+    ReferenceResponse,
+)
 from ocel.gen.app.resources.v1.variables_pb import (
     DeclareEnvRequest,
     DeclareEnvResponse,
@@ -14,11 +19,13 @@ from ocel.gen.app.resources.v1.variables_pb import (
 )
 
 DECLARE = "/app.resources.v1.ResourceService/Declare"
+REFERENCE = "/app.resources.v1.ResourceService/Reference"
 DECLARE_ENV = "/app.resources.v1.ResourceService/DeclareEnv"
 REPORT_ENV_PROBLEMS = "/app.resources.v1.ResourceService/ReportEnvProblems"
 
 _REQUESTS = {
     DECLARE: DeclareRequest,
+    REFERENCE: ReferenceRequest,
     DECLARE_ENV: DeclareEnvRequest,
     REPORT_ENV_PROBLEMS: ReportEnvProblemsRequest,
 }
@@ -53,6 +60,8 @@ class Collector:
             return DeclareEnvResponse(cells=list(self.cells))
         if path == REPORT_ENV_PROBLEMS:
             return ReportEnvProblemsResponse()
+        if path == REFERENCE:
+            return ReferenceResponse()
         return DeclareResponse()
 
     def _handler(self):
