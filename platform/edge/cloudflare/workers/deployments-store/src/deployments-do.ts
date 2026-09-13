@@ -2,7 +2,13 @@ import { DurableObject } from "cloudflare:workers";
 
 import { matchesSecret } from "@platform/cf-auth";
 import type { Env } from "./env";
-import type { DeploymentRecord, HistoryEntry, Identity, Promotion, PruneResult } from "./store";
+import type {
+  DeploymentRecord,
+  HistoryEntry,
+  Initialization,
+  Promotion,
+  PruneResult,
+} from "./store";
 import * as store from "./store";
 
 export class DeploymentsStore extends DurableObject<Env> {
@@ -11,7 +17,7 @@ export class DeploymentsStore extends DurableObject<Env> {
     store.ensureSchema(ctx.storage);
   }
 
-  async initialize(ownerToken: string, secret: string, force: boolean): Promise<Identity> {
+  async initialize(ownerToken: string, secret: string, force: boolean): Promise<Initialization> {
     return store.initialize(this.ctx.storage, ownerToken, secret, force);
   }
 

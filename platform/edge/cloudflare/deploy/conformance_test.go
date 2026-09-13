@@ -11,7 +11,7 @@ func TestCloudflareEdgeConformance(t *testing.T) {
 	edgeconformance.Run(t, edgeconformance.Suite{
 		New: func(t *testing.T) (edge.Edge, edge.StackSpec) {
 			t.Setenv(envAccountID, "acct")
-			store := fakeStoreServer(t, "s3cr3t")
+			store := fakeStoreServer(t, "")
 			return previewZoneMock().provider(t), previewSpec(store.URL, "v1")
 		},
 		Hostname: "shop.app.com",

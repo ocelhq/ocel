@@ -47,9 +47,14 @@ export default class extends WorkerEntrypoint<Env> {
       if (!body?.ownerToken || !body.secret) {
         return new Response("Bad Request", { status: 400 });
       }
-      return Response.json(
-        await store.initialize(body.ownerToken, body.secret, body.force ?? false),
-      );
+      const outcome = await store.initialize(body.ownerToken, body.secret, body.force ?? false);
+      if (outcome === "held") {
+        return new Response(
+          `project ${slug} already holds an identity; initialize with force to replace it`,
+          { status: 409 },
+        );
+      }
+      return new Response(null, { status: 204 });
     }
 
     const token = bearer(request);

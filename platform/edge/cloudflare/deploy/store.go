@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -87,19 +88,18 @@ func (s *stack) Prune(ctx context.Context, keepN int, pointer string) (edge.Prun
 	return result, nil
 }
 
+var errStoreIdentityHeld = errors.New("the deployments store already holds an identity for this project that this deploy's state does not carry, and the store never hands one out: another deploy of this project initialized it first (re-run once that deploy has written its state), or the state was lost, in which case re-bootstrap this class's edge to reset the store")
+
 func (p *provider) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred string, present storeIdentity) (storeIdentity, error) {
 	body := map[string]any{"ownerToken": present.ownerToken, "secret": present.secret, "force": false}
-	var out struct {
-		OwnerToken string `json:"ownerToken"`
-		Secret     string `json:"secret"`
+	res, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", body, nil)
+	if res != nil && res.StatusCode == http.StatusConflict {
+		return storeIdentity{}, fmt.Errorf("%w: %w", errStoreIdentityHeld, err)
 	}
-	if _, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", body, &out); err != nil {
+	if err != nil {
 		return storeIdentity{}, err
 	}
-	if out.Secret == "" || out.OwnerToken == "" {
-		return storeIdentity{}, fmt.Errorf("deployments store reported no identity for %q", slug)
-	}
-	return storeIdentity{secret: out.Secret, ownerToken: out.OwnerToken}, nil
+	return present, nil
 }
 
 func (s *stack) SchemaVersion(ctx context.Context) (int, error) {
