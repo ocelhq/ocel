@@ -6,6 +6,7 @@ use (
 	./pkg/configdoc
 	./pkg/connectorkit
 	./pkg/constants
+	./pkg/costkit
 	./pkg/naming
 	./pkg/proto
 	./pkg/providerkit
