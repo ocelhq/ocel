@@ -110,7 +110,7 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 	}
 	for _, target := range []string{host.ProxyContainer, address} {
 		peered := vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+target+":"+adminPort+"/config/")
-		if strings.Contains(peered, "200") {
+		if code := strings.TrimSpace(peered); len(code) >= 3 && code[len(code)-3:] == "200" {
 			t.Errorf("a container on the shared network reached the admin endpoint at %s:%s and got %q: every app this box runs would hold arbitrary config replacement of its own edge",
 				target, adminPort, strings.TrimSpace(peered))
 		}
