@@ -162,6 +162,8 @@ func TestAPlatformPackageReachedAtTwoVersionsFailsTheBuild(t *testing.T) {
 	files["node_modules/wrapper-dep/node_modules/plat-dep/package.json"] = `{"name":"plat-dep","version":"0.9.0","main":"index.js",` +
 		`"optionalDependencies":{"@plat-dep/darwin-arm64":"0.9.0"}}`
 	files["node_modules/wrapper-dep/node_modules/plat-dep/index.js"] = "module.exports = require('@plat-dep/darwin-arm64');\n"
+	files["node_modules/wrapper-dep/node_modules/@plat-dep/darwin-arm64/package.json"] = `{"name":"@plat-dep/darwin-arm64","version":"0.9.0","os":["darwin"],"cpu":["arm64"],"main":"index.js"}`
+	files["node_modules/wrapper-dep/node_modules/@plat-dep/darwin-arm64/index.js"] = "module.exports = 'older host build';\n"
 	l := newLayout(t, files)
 
 	err := Bundle(context.Background(), l.target("server.js"))
@@ -342,4 +344,27 @@ func must(data []byte, err error) []byte {
 		panic(err)
 	}
 	return data
+}
+
+func TestAPlatformPackageKeepsItsOwnDotfilesAndLeavesNpmsBookkeepingBehind(t *testing.T) {
+	files := stagedPlatDep()
+	files["node_modules/plat-dep/index.js"] = "module.exports = require('./.data.json').answer;\n"
+	files["node_modules/plat-dep/.data.json"] = `{"answer":"target build"}`
+	files["node_modules/@plat-dep/linux-x64/package.json"] = `{"name":"@plat-dep/linux-x64","version":"1.2.3","os":["linux"],"cpu":["x64"]}`
+	files["node_modules/.package-lock.json"] = `{}`
+	files["node_modules/.bin/plat"] = "#!/bin/sh\n"
+	installFakeNpm(t, stagedInstall(t, files))
+	l := newLayout(t, platformSplitApp())
+
+	if err := Bundle(context.Background(), l.target("server.js")); err != nil {
+		t.Fatalf("Bundle: %v", err)
+	}
+	for _, left := range []string{".package-lock.json", ".bin"} {
+		if _, err := os.Stat(filepath.Join(l.funcDir, nodeModulesDirName, left)); err == nil {
+			t.Errorf("the function carries npm's %s", left)
+		}
+	}
+	if got := runNode(t, l.funcDir); !strings.Contains(got, "target build") {
+		t.Errorf("bundle printed %q, want plat-dep to load the dotfile it ships", got)
+	}
 }

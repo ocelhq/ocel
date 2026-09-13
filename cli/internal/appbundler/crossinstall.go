@@ -193,16 +193,7 @@ func installedGraph(root string, pkg manifest, path []string) map[string]any {
 	return pinned
 }
 
-func sortedKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for key := range m {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
-	return keys
-}
-
-func (p *platformPackages) installInto(ctx context.Context, app, source, funcDir string, log func(string)) error {
+func (p *platformPackages) installInto(ctx context.Context, app, source, funcDir string) error {
 	p.mu.Lock()
 	reached := p.wanted
 	p.mu.Unlock()
@@ -210,7 +201,7 @@ func (p *platformPackages) installInto(ctx context.Context, app, source, funcDir
 		return nil
 	}
 	wanted := map[string]string{}
-	for _, name := range sortedKeys(reached) {
+	for _, name := range slices.Sorted(maps.Keys(reached)) {
 		versions := reached[name]
 		if len(versions) > 1 {
 			slices.Sort(versions)
@@ -219,10 +210,10 @@ func (p *platformPackages) installInto(ctx context.Context, app, source, funcDir
 		}
 		wanted[name] = versions[0]
 	}
-	names := strings.Join(sortedKeys(wanted), ", ")
+	names := strings.Join(slices.Sorted(maps.Keys(wanted)), ", ")
 	cpu, known := providerkit.NodePackageCPU(p.arch)
 	if !known {
-		return fmt.Errorf("app %q depends on %s, which ship one package per platform, and declares architecture %q, which nothing runs it on", app, names, p.arch)
+		return fmt.Errorf("app %q depends on %s, which ship one package per platform, and declares architecture %q, which has no npm cpu", app, names, p.arch)
 	}
 	if _, err := exec.LookPath(npmCommand); err != nil {
 		return fmt.Errorf("app %q depends on %s, which ship one package per platform, and no %s is on PATH to install them for %s/%s: %w",
@@ -250,17 +241,29 @@ func (p *platformPackages) installInto(ctx context.Context, app, source, funcDir
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("install %s for app %q on %s/%s (%w):\n%s", names, app, providerkit.NodePackageOS, cpu, err, said.String())
 	}
-	log(said.String())
 	for _, name := range slices.Sorted(maps.Keys(wanted)) {
 		if !installedForTarget(filepath.Join(staging, nodeModulesDirName), name, cpu) {
 			return fmt.Errorf("npm installed %s for app %q without a package built for %s/%s/%s, so the function would fail at its first require of it; npm reported:\n%s",
 				name, app, providerkit.NodePackageOS, cpu, providerkit.NodePackageLibc, said.String())
 		}
 	}
-	return copyTree(filepath.Join(staging, nodeModulesDirName), filepath.Join(funcDir, nodeModulesDirName), func(name string) bool {
-		return strings.HasPrefix(name, ".")
-	})
+	staged := filepath.Join(staging, nodeModulesDirName)
+	entries, err := os.ReadDir(staged)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if slices.Contains(npmBookkeeping, entry.Name()) {
+			continue
+		}
+		if err := copyTree(filepath.Join(staged, entry.Name()), filepath.Join(funcDir, nodeModulesDirName, entry.Name()), func(string) bool { return false }); err != nil {
+			return err
+		}
+	}
+	return nil
 }
+
+var npmBookkeeping = []string{".bin", ".package-lock.json"}
 
 func installedForTarget(nodeModules, name, cpu string) bool {
 	root := filepath.Join(nodeModules, filepath.FromSlash(name))
