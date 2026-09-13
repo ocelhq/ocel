@@ -17,14 +17,23 @@ type Card struct {
 }
 
 type Rate struct {
-	ID       string            `json:"id"`
-	Region   string            `json:"region,omitempty"`
-	Unit     string            `json:"unit"`
-	Tiers    []Tier            `json:"tiers"`
-	Source   string            `json:"source"`
-	Verified string            `json:"verified"`
-	Query    map[string]string `json:"query,omitempty"`
+	ID        string            `json:"id"`
+	Region    string            `json:"region,omitempty"`
+	Unit      string            `json:"unit"`
+	Tiers     []Tier            `json:"tiers"`
+	Allowance Allowance         `json:"allowance,omitempty"`
+	Note      string            `json:"note,omitempty"`
+	Source    string            `json:"source"`
+	Verified  string            `json:"verified"`
+	Query     map[string]string `json:"query,omitempty"`
 }
+
+type Allowance string
+
+const (
+	AllowanceAccount  Allowance = "account"
+	AllowanceResource Allowance = "resource"
+)
 
 type Tier struct {
 	Start decimal.Decimal `json:"start"`
@@ -72,20 +81,52 @@ func (r Rate) check() error {
 	if !sort.SliceIsSorted(r.Tiers, func(i, j int) bool { return r.Tiers[i].Start.LessThan(r.Tiers[j].Start) }) {
 		return fmt.Errorf("rate %s: tiers are not in ascending order", r.ID)
 	}
+	switch r.Allowance {
+	case "":
+		if r.allows() {
+			return fmt.Errorf("rate %s folds a free allowance into its first tier and does not say whether the account or each resource gets it", r.ID)
+		}
+	case AllowanceAccount, AllowanceResource:
+		if !r.allows() {
+			return fmt.Errorf("rate %s scopes an allowance and its first tier is not free", r.ID)
+		}
+	default:
+		return fmt.Errorf("rate %s: an allowance is %q or %q, not %q", r.ID, AllowanceAccount, AllowanceResource, r.Allowance)
+	}
 	return nil
 }
 
-func (c *Card) Lookup(id, region string) (Rate, bool) {
+func (r Rate) allows() bool {
+	return len(r.Tiers) > 1 && r.Tiers[0].Price.IsZero()
+}
+
+func (c *Card) Lookup(id, region string) (rate Rate, found, fellBack bool) {
 	if i, ok := c.index[rateKey{id, region}]; ok {
-		return c.Rates[i], true
+		return c.Rates[i], true, false
 	}
 	if i, ok := c.index[rateKey{id, ""}]; ok {
-		return c.Rates[i], true
+		return c.Rates[i], true, region != ""
 	}
-	return Rate{}, false
+	return Rate{}, false, false
 }
 
 func (r Rate) Cost(quantity decimal.Decimal) (cost, marginal decimal.Decimal) {
+	return r.Between(decimal.Zero, quantity)
+}
+
+func (r Rate) Between(from, to decimal.Decimal) (cost, marginal decimal.Decimal) {
+	cost = r.cumulative(to).Sub(r.cumulative(from))
+	marginal = r.Tiers[0].Price
+	for _, tier := range r.Tiers {
+		if tier.Start.LessThan(to) {
+			marginal = tier.Price
+		}
+	}
+	return cost, marginal
+}
+
+func (r Rate) cumulative(quantity decimal.Decimal) decimal.Decimal {
+	var cost decimal.Decimal
 	for i, tier := range r.Tiers {
 		if quantity.LessThanOrEqual(tier.Start) {
 			break
@@ -95,12 +136,8 @@ func (r Rate) Cost(quantity decimal.Decimal) (cost, marginal decimal.Decimal) {
 			upper = r.Tiers[i+1].Start
 		}
 		cost = cost.Add(upper.Sub(tier.Start).Mul(tier.Price))
-		marginal = tier.Price
 	}
-	if quantity.IsZero() {
-		marginal = r.Tiers[0].Price
-	}
-	return cost, marginal
+	return cost
 }
 
 func Merge(primary *Card, others ...*Card) *Card {

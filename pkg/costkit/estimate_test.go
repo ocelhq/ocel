@@ -17,10 +17,16 @@ const card = `{
   "rates": [
     {"id": "widget/hours", "region": "", "unit": "hour", "tiers": [{"price": "0.10"}],
      "source": "https://example.test/pricing", "verified": "2026-09-01"},
-    {"id": "widget/requests", "region": "", "unit": "1M requests",
+    {"id": "widget/requests", "region": "", "unit": "1M requests", "allowance": "resource",
      "tiers": [{"price": "0"}, {"start": "1", "price": "0.20"}],
      "source": "https://example.test/pricing", "verified": "2026-09-01"},
     {"id": "widget/storage", "region": "eu-west-1", "unit": "GB-month", "tiers": [{"price": "0.05"}],
+     "source": "https://example.test/pricing", "verified": "2026-09-01"},
+    {"id": "widget/reads", "region": "", "unit": "reads", "allowance": "account",
+     "tiers": [{"price": "0"}, {"start": "100", "price": "0.01"}],
+     "source": "https://example.test/pricing", "verified": "2026-09-01"},
+    {"id": "gadget/hours", "region": "", "unit": "hour", "tiers": [{"price": "1"}],
+     "note": "gadgets outside eu-west-1 are priced at the eu-west-1 rate",
      "source": "https://example.test/pricing", "verified": "2026-09-01"}
   ]
 }`
@@ -35,6 +41,21 @@ var widgets = costkit.Table{
 	},
 	"test_gadget": func(r *costkit.Subject) {
 		r.Add(costkit.Component{Name: "Size", Unit: "hour", Rate: "widget/hours", Quantity: r.Number("size").Mul(costkit.MonthlyHours)})
+	},
+	"test_reader": func(r *costkit.Subject) {
+		r.Add(costkit.Component{Name: "Reads", Unit: "reads", Rate: "widget/reads", UsageBased: true,
+			Quantity: r.Usage("monthly_reads", costkit.Band{Light: 60, Moderate: 60, Heavy: 600})})
+	},
+	"test_tagged": func(r *costkit.Subject) {
+		rate := "widget/hours"
+		if tags := r.List("tags"); len(tags) > 0 && tags[0] == "premium" {
+			rate = "gadget/hours"
+		}
+		r.Add(costkit.Component{Name: "Standing", Unit: "hour", Rate: rate, Quantity: costkit.MonthlyHours})
+	},
+	"test_nested": func(r *costkit.Subject) {
+		r.Add(costkit.Component{Name: "Storage", Unit: "GB-month", Rate: "widget/storage", UsageBased: true,
+			Quantity: r.Usage("standard.storage_gb", costkit.Band{Light: 1, Moderate: 10, Heavy: 100})})
 	},
 	"test_trinket": func(r *costkit.Subject) { r.Free() },
 }
@@ -86,7 +107,7 @@ func byID(est *costv1.Estimate, id string) *costv1.ResourceEstimate {
 func TestAModerateMonthPricesFixedAndUsageApart(t *testing.T) {
 	est := estimate(t, &costv1.PriceRequest{Resources: set()})
 
-	if est.GetProfile() != "moderate" || est.GetCurrency() != "USD" || est.GetRatesVersion() != "2026-09-01" {
+	if est.GetProfile() != costv1.Profile_PROFILE_MODERATE || est.GetCurrency() != "USD" || est.GetRatesVersion() != "2026-09-01" {
 		t.Fatalf("header = %s %s %s", est.GetProfile(), est.GetCurrency(), est.GetRatesVersion())
 	}
 	widget := byID(est, "w")
@@ -143,7 +164,7 @@ func TestCoverageCountsWhatWasNotPriced(t *testing.T) {
 func TestAProfileAndAUsageFileChangeOnlyUsage(t *testing.T) {
 	override, _ := structpb.NewStruct(map[string]any{"storage_gb": 200})
 	est := estimate(t, &costv1.PriceRequest{Resources: set(), Usage: &costv1.Usage{
-		Profile:   "heavy",
+		Profile:   costv1.Profile_PROFILE_HEAVY,
 		Resources: map[string]*structpb.Struct{"w": override},
 	}})
 
@@ -237,5 +258,89 @@ func TestMergedCardsAndTablesPriceEachVendorsOwn(t *testing.T) {
 	}
 	if byID(est, "w").GetMonthlyFixed() != "73.00" {
 		t.Errorf("widget = %s, want the primary card's 0.10 rate to win over the other card's 99", byID(est, "w").GetMonthlyFixed())
+	}
+}
+
+func TestAnAccountAllowanceIsSpentOnceAcrossTheResourcesSharingIt(t *testing.T) {
+	s := set()
+	s.Resources = []*costv1.Resource{
+		resource("r1", "p/e", "test_reader", "eu-west-1", map[string]any{}),
+		resource("r2", "p/e", "test_reader", "eu-west-1", map[string]any{}),
+		resource("r3", "p/e", "test_reader", "eu-west-1", map[string]any{}),
+	}
+	est := estimate(t, &costv1.PriceRequest{Resources: s})
+
+	if byID(est, "r1").GetMonthlyUsage() != "0.00" || byID(est, "r2").GetMonthlyUsage() != "0.20" || byID(est, "r3").GetMonthlyUsage() != "0.60" {
+		t.Errorf("readers = %s, %s, %s; want the 100 free reads spent by the first two, then 0.01 a read",
+			byID(est, "r1").GetMonthlyUsage(), byID(est, "r2").GetMonthlyUsage(), byID(est, "r3").GetMonthlyUsage())
+	}
+	if est.GetMonthlyUsage() != "0.80" {
+		t.Errorf("total = %s, want 0.80 (180 reads of 80 past one shared allowance)", est.GetMonthlyUsage())
+	}
+}
+
+func TestACardRefusesAFreeFirstTierWithoutAnAllowanceScope(t *testing.T) {
+	_, err := costkit.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","tiers":[{"price":"0"},{"start":"5","price":"1"}],"source":"s","verified":"v"}]}`))
+	if err == nil || !strings.Contains(err.Error(), "allowance") {
+		t.Fatalf("Load() error = %v, want a refusal asking whose allowance it is", err)
+	}
+	_, err = costkit.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","allowance":"account","tiers":[{"price":"1"}],"source":"s","verified":"v"}]}`))
+	if err == nil {
+		t.Fatal("Load() accepted an allowance on a rate whose first tier is not free")
+	}
+}
+
+func TestAnUnknownListIsNeverReadAsEmpty(t *testing.T) {
+	s := set()
+	s.Resources = []*costv1.Resource{
+		resource("known", "p/e", "test_tagged", "eu-west-1", map[string]any{"tags": []any{"premium"}}),
+		resource("blurred", "p/e", "test_tagged", "eu-west-1", map[string]any{}, "tags"),
+	}
+	est := estimate(t, &costv1.PriceRequest{Resources: s})
+
+	if byID(est, "known").GetMonthlyFixed() != "730.00" {
+		t.Errorf("premium = %s, want 730.00 at the premium rate", byID(est, "known").GetMonthlyFixed())
+	}
+	blurred := byID(est, "blurred").GetComponents()[0]
+	if strings.Join(blurred.GetDependsOnUnknown(), ",") != "tags" || blurred.GetMonthlyCost() != "" {
+		t.Errorf("component over an unknown list = %v, want it left unpriced and naming tags", blurred)
+	}
+}
+
+func TestARegionFallbackCarriesItsNoteOnce(t *testing.T) {
+	s := set()
+	s.Resources = []*costv1.Resource{
+		resource("a", "p/e", "test_tagged", "us-east-1", map[string]any{"tags": []any{"premium"}}),
+		resource("b", "p/e", "test_tagged", "us-east-1", map[string]any{"tags": []any{"premium"}}),
+		resource("c", "p/e", "test_tagged", "", map[string]any{"tags": []any{"premium"}}),
+	}
+	est := estimate(t, &costv1.PriceRequest{Resources: s})
+
+	if strings.Join(est.GetNotes(), "|") != "gadgets outside eu-west-1 are priced at the eu-west-1 rate" {
+		t.Errorf("notes = %v, want the fallback's note once", est.GetNotes())
+	}
+	if byID(est, "a").GetMonthlyFixed() != "730.00" {
+		t.Errorf("fallback = %s, want the region-less rate", byID(est, "a").GetMonthlyFixed())
+	}
+}
+
+func TestAUsageFileReachesANestedKey(t *testing.T) {
+	override, _ := structpb.NewStruct(map[string]any{"standard": map[string]any{"storage_gb": 40}})
+	s := set()
+	s.Resources = []*costv1.Resource{resource("n", "p/e", "test_nested", "eu-west-1", map[string]any{})}
+	est := estimate(t, &costv1.PriceRequest{Resources: s, Usage: &costv1.Usage{Resources: map[string]*structpb.Struct{"n": override}}})
+
+	storage := byID(est, "n").GetComponents()[0]
+	if storage.GetMonthlyQuantity() != "40" || storage.GetAssumption() != "standard.storage_gb from usage file" {
+		t.Errorf("nested override = %v", storage)
+	}
+}
+
+func TestATreeReportsAPropertyItCannotCarry(t *testing.T) {
+	tree := &costkit.Tree{}
+	scope := tree.Scope("", costkit.ScopeProject, "shop")
+	tree.Add(scope, "test", "test_widget", "w", "eu-west-1", map[string]any{"bad": make(chan int)})
+	if _, err := tree.Set("ocel"); err == nil || !strings.Contains(err.Error(), "test_widget:w") {
+		t.Fatalf("Set() error = %v, want one naming the resource", err)
 	}
 }

@@ -15,19 +15,23 @@ import (
 
 var MonthlyHours = decimal.NewFromInt(730)
 
-const (
-	ProfileLight    = "light"
-	ProfileModerate = "moderate"
-	ProfileHeavy    = "heavy"
-)
+const DefaultProfile = costv1.Profile_PROFILE_MODERATE
+
+func Profiles() []costv1.Profile {
+	return []costv1.Profile{costv1.Profile_PROFILE_LIGHT, costv1.Profile_PROFILE_MODERATE, costv1.Profile_PROFILE_HEAVY}
+}
+
+func ProfileName(profile costv1.Profile) string {
+	return strings.ToLower(strings.TrimPrefix(profile.String(), "PROFILE_"))
+}
 
 type Band struct{ Light, Moderate, Heavy float64 }
 
-func (b Band) at(profile string) decimal.Decimal {
+func (b Band) at(profile costv1.Profile) decimal.Decimal {
 	switch profile {
-	case ProfileLight:
+	case costv1.Profile_PROFILE_LIGHT:
 		return decimal.NewFromFloat(b.Light)
-	case ProfileHeavy:
+	case costv1.Profile_PROFILE_HEAVY:
 		return decimal.NewFromFloat(b.Heavy)
 	default:
 		return decimal.NewFromFloat(b.Moderate)
@@ -51,11 +55,11 @@ type Subject struct {
 	Resource *costv1.Resource
 	Region   string
 
-	profile   string
+	profile   costv1.Profile
 	overrides map[string]any
 	unknown   []string
-	usageKey  string
-	usageFrom string
+	usageKeys []string
+	fromFile  []string
 	free      bool
 	built     []built
 }
@@ -68,26 +72,25 @@ type built struct {
 func (s *Subject) Free() { s.free = true }
 
 func (s *Subject) Add(c Component) {
-	if c.Assumption == "" && s.usageKey != "" {
-		if s.usageFrom == "file" {
-			c.Assumption = s.usageKey + " from usage file"
+	if c.Assumption == "" && len(s.usageKeys) > 0 {
+		if len(s.fromFile) > 0 {
+			c.Assumption = strings.Join(s.fromFile, ", ") + " from usage file"
 		} else {
-			c.Assumption = fmt.Sprintf("%s profile: %s %s", s.profile, c.Quantity, c.Unit)
+			c.Assumption = fmt.Sprintf("%s profile: %s %s", ProfileName(s.profile), c.Quantity, c.Unit)
 		}
 	}
-	s.built = append(s.built, built{Component: c, unknown: s.unknown})
-	s.unknown, s.usageKey, s.usageFrom = nil, "", ""
+	s.built = append(s.built, built{Component: c, unknown: slices.Clone(s.unknown)})
+	s.usageKeys, s.fromFile = nil, nil
 }
 
 func (s *Subject) Usage(key string, band Band) decimal.Decimal {
-	s.usageKey = key
-	if raw, ok := s.overrides[key]; ok {
+	s.usageKeys = append(s.usageKeys, key)
+	if raw, ok := walk(s.overrides, key); ok {
 		if number, ok := raw.(float64); ok {
-			s.usageFrom = "file"
+			s.fromFile = append(s.fromFile, key)
 			return decimal.NewFromFloat(number)
 		}
 	}
-	s.usageFrom = "profile"
 	return band.at(s.profile)
 }
 
@@ -100,7 +103,11 @@ func (s *Subject) value(path string) (any, bool) {
 		s.unknown = append(s.unknown, path)
 		return nil, false
 	}
-	var current any = s.Resource.GetProperties().AsMap()
+	return walk(s.Resource.GetProperties().AsMap(), path)
+}
+
+func walk(root map[string]any, path string) (any, bool) {
+	var current any = root
 	for _, segment := range strings.Split(path, ".") {
 		switch held := current.(type) {
 		case map[string]any:
@@ -155,6 +162,15 @@ func (s *Subject) Bool(path string) bool {
 	return b
 }
 
+func (s *Subject) List(path string) []any {
+	raw, ok := s.value(path)
+	if !ok {
+		return nil
+	}
+	list, _ := raw.([]any)
+	return list
+}
+
 func (s *Subject) Has(path string) bool {
 	_, ok := s.value(path)
 	return ok
@@ -166,8 +182,8 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 		return nil, fmt.Errorf("nothing to price")
 	}
 	profile := req.GetUsage().GetProfile()
-	if profile == "" {
-		profile = ProfileModerate
+	if profile == costv1.Profile_PROFILE_UNSPECIFIED {
+		profile = DefaultProfile
 	}
 	est := &costv1.Estimate{
 		Currency:     card.Currency,
@@ -179,6 +195,7 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 	fixed := map[string]decimal.Decimal{}
 	usage := map[string]decimal.Decimal{}
 	var totalFixed, totalUsage decimal.Decimal
+	account := &ledger{card: card, spent: map[rateKey]decimal.Decimal{}}
 	for _, resource := range set.GetResources() {
 		pricing, known := table[resource.GetType()]
 		if !known {
@@ -197,7 +214,7 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 			overrides: overridesFor(req.GetUsage(), resource.GetId()),
 		}
 		pricing(subject)
-		priced := price(card, subject)
+		priced := account.price(subject)
 		est.Resources = append(est.Resources, priced.estimate)
 		switch priced.estimate.Status {
 		case costv1.ResourceEstimate_STATUS_FREE:
@@ -216,6 +233,7 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 	est.MonthlyFixed = money(totalFixed)
 	est.MonthlyUsage = money(totalUsage)
 	est.Scopes = rollUp(set.GetScopes(), fixed, usage)
+	est.Notes = account.notes
 	return est, nil
 }
 
@@ -231,7 +249,29 @@ type pricedResource struct {
 	fixed, usage decimal.Decimal
 }
 
-func price(card *Card, subject *Subject) pricedResource {
+type ledger struct {
+	card  *Card
+	spent map[rateKey]decimal.Decimal
+	notes []string
+}
+
+func (l *ledger) charge(rate Rate, quantity decimal.Decimal) (cost, marginal decimal.Decimal) {
+	if rate.Allowance != AllowanceAccount {
+		return rate.Cost(quantity)
+	}
+	key := rateKey{rate.ID, rate.Region}
+	from := l.spent[key]
+	l.spent[key] = from.Add(quantity)
+	return rate.Between(from, from.Add(quantity))
+}
+
+func (l *ledger) note(text string) {
+	if text != "" && !slices.Contains(l.notes, text) {
+		l.notes = append(l.notes, text)
+	}
+}
+
+func (l *ledger) price(subject *Subject) pricedResource {
 	out := pricedResource{estimate: &costv1.ResourceEstimate{Resource: subject.Resource.GetId()}}
 	if subject.free || len(subject.built) == 0 {
 		out.estimate.Status = costv1.ResourceEstimate_STATUS_FREE
@@ -252,12 +292,15 @@ func price(card *Card, subject *Subject) pricedResource {
 			continue
 		}
 		component.MonthlyQuantity = b.Quantity.String()
-		rate, found := card.Lookup(b.Rate, subject.Region)
+		rate, found, fellBack := l.card.Lookup(b.Rate, subject.Region)
 		if !found {
 			component.PriceNotFound = true
 			continue
 		}
-		cost, marginal := rate.Cost(b.Quantity)
+		if fellBack {
+			l.note(rate.Note)
+		}
+		cost, marginal := l.charge(rate, b.Quantity)
 		cost = cost.Round(moneyPlaces)
 		component.UnitPrice = marginal.String()
 		component.MonthlyCost = money(cost)
@@ -306,12 +349,8 @@ const moneyPlaces = 2
 
 func money(amount decimal.Decimal) string { return amount.StringFixed(moneyPlaces) }
 
-func Struct(values map[string]any) *structpb.Struct {
-	s, err := structpb.NewStruct(values)
-	if err != nil {
-		panic(err)
-	}
-	return s
+func Struct(values map[string]any) (*structpb.Struct, error) {
+	return structpb.NewStruct(values)
 }
 
 func Tables(tables ...Table) Table {
