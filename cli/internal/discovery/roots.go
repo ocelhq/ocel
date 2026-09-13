@@ -153,6 +153,7 @@ var runtimeLanguages = map[string]Language{
 	providerkit.RuntimeNext:   JS,
 	providerkit.RuntimeGo:     Go,
 	providerkit.RuntimePython: Python,
+	providerkit.RuntimeRust:   Rust,
 }
 
 func LanguageOf(runtime, dir string) Language {

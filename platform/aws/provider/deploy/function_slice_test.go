@@ -232,6 +232,30 @@ func TestACommandFunctionKeepsItsOwnEntryInTheEnvironment(t *testing.T) {
 	}
 }
 
+func TestARustFunctionBootsItsOwnBinaryOnTheProvidedRuntime(t *testing.T) {
+	t.Parallel()
+
+	args, err := translateFunctionSpec(providerkit.RuntimeRust, providerkit.FunctionSpec{
+		Runtime: providerkit.Runtime{Name: providerkit.RuntimeRust, Arch: providerkit.ArchARM64},
+		Handler: "web",
+	})
+	if err != nil {
+		t.Fatalf("translateFunctionSpec: %v", err)
+	}
+	if args.Runtime != "provided.al2023" {
+		t.Errorf("runtime = %q, want provided.al2023: a rust binary needs no managed language runtime", args.Runtime)
+	}
+	if args.Arch != providerkit.ArchARM64 {
+		t.Errorf("arch = %q, want %q", args.Arch, providerkit.ArchARM64)
+	}
+	if got := lambdaHandler(args); got != "bootstrap" {
+		t.Errorf("handler = %q, want bootstrap", got)
+	}
+	if env := functionEnv(nil, args, nil, nil); env["OCEL_HANDLER"] != "/var/task/web" {
+		t.Errorf("OCEL_HANDLER = %q, want the app's own binary", env["OCEL_HANDLER"])
+	}
+}
+
 func TestEveryFunctionBootsTheRuntimeWhateverRuntimeItServes(t *testing.T) {
 	t.Parallel()
 

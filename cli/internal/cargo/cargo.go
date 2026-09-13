@@ -41,6 +41,7 @@ type Workspace struct {
 	Packages []Package `json:"packages"`
 	Members  []string  `json:"workspace_members"`
 	Root     string    `json:"workspace_root"`
+	Target   string    `json:"target_directory"`
 	Resolve  *Resolve  `json:"resolve"`
 }
 
