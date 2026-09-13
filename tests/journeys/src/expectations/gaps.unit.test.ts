@@ -175,6 +175,7 @@ describe("the gap list", () => {
       "deploy/go-api-gateway/web": [],
       "deploy/node-api-gateway/web": [],
       "deploy/python-api-gateway/web": [],
+      "deploy/rust-api-gateway/web": [],
       "sdk/node-api-gateway/web": [884],
       "sdk/with-pulumi-api-gateway/web": [856],
       "sdk/with-sst-api-gateway/web": [857],
@@ -271,6 +272,7 @@ describe("the gap list", () => {
       "deploy/node-api-gateway",
       "deploy/go-api-gateway",
       "deploy/python-api-gateway",
+      "deploy/rust-api-gateway",
       "deploy/next-cloudflare",
       "deploy/workspace-cloudflare",
       "sdk/with-transforms-api-gateway",
@@ -279,6 +281,7 @@ describe("the gap list", () => {
       "deploy/node-api-gateway",
       "deploy/go-api-gateway",
       "deploy/python-api-gateway",
+      "deploy/rust-api-gateway",
     ]);
     assert.deepEqual(alive("dev"), [
       "deploy/node",
