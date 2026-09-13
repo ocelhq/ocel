@@ -42,14 +42,35 @@ func platformSplitApp() tree {
 	}
 }
 
-const linuxInstall = "mkdir -p node_modules/plat-dep\n" +
-	"printf '%s' \"module.exports = 'target build';\" > node_modules/plat-dep/index.js\n" +
-	"printf '%s' '{\"name\":\"plat-dep\",\"main\":\"index.js\"}' > node_modules/plat-dep/package.json\n"
+const skippedOptional = "npm warn skipping optional dependency for another platform"
+
+func stagedInstall(t *testing.T, files tree) string {
+	t.Helper()
+	staged := t.TempDir()
+	writeTree(t, staged, files)
+	return fmt.Sprintf("cp -R %q/. .\necho '%s'\n", staged, skippedOptional)
+}
+
+func stagedPlatDep() tree {
+	return tree{
+		"node_modules/plat-dep/package.json": `{"name":"plat-dep","version":"1.2.3","main":"index.js",` +
+			`"optionalDependencies":{"@plat-dep/darwin-arm64":"1.2.3","@plat-dep/linux-x64":"1.2.3","@plat-dep/linux-arm64":"1.2.3"}}`,
+		"node_modules/plat-dep/index.js": "module.exports = 'target build';\n",
+	}
+}
+
+func linuxInstall(t *testing.T, cpu, libc string) string {
+	t.Helper()
+	files := stagedPlatDep()
+	files["node_modules/@plat-dep/linux-"+cpu+"/package.json"] = fmt.Sprintf(
+		`{"name":"@plat-dep/linux-%[1]s","version":"1.2.3","os":["linux"],"cpu":["%[1]s"],"libc":["%[2]s"]}`, cpu, libc)
+	return stagedInstall(t, files)
+}
 
 func TestAPackageShippingOnePackagePerPlatformIsInstalledForTheDeclaredArchitecture(t *testing.T) {
 	for arch, cpu := range map[string]string{providerkit.ArchX8664: "x64", providerkit.ArchARM64: "arm64"} {
 		t.Run(arch, func(t *testing.T) {
-			npm := installFakeNpm(t, linuxInstall)
+			npm := installFakeNpm(t, linuxInstall(t, cpu, "glibc"))
 			l := newLayout(t, platformSplitApp())
 			target := l.target("server.js")
 			target.Runtime.Arch = arch
@@ -132,7 +153,7 @@ func TestAPlatformPackageWithNoNpmToInstallItFailsTheBuild(t *testing.T) {
 }
 
 func TestAPlatformPackageReachedAtTwoVersionsFailsTheBuild(t *testing.T) {
-	npm := installFakeNpm(t, linuxInstall)
+	npm := installFakeNpm(t, linuxInstall(t, "x64", "glibc"))
 	files := platformSplitApp()
 	files["server.js"] = "import answer from 'plat-dep';\nimport older from 'wrapper-dep';\nconsole.log(answer, older);\n"
 	files["node_modules/wrapper-dep/package.json"] = `{"name":"wrapper-dep","version":"1.0.0","main":"index.js"}`
@@ -157,7 +178,7 @@ func TestAPlatformPackageReachedAtTwoVersionsFailsTheBuild(t *testing.T) {
 }
 
 func TestAPlatformPackageInstallStopsWhenTheBuildIsCancelled(t *testing.T) {
-	npm := installFakeNpm(t, linuxInstall)
+	npm := installFakeNpm(t, linuxInstall(t, "x64", "glibc"))
 	l := newLayout(t, platformSplitApp())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -167,5 +188,49 @@ func TestAPlatformPackageInstallStopsWhenTheBuildIsCancelled(t *testing.T) {
 	}
 	if _, err := os.Stat(npm.argv); err == nil {
 		t.Error("npm ran for a build that was already cancelled")
+	}
+}
+
+func TestAPlatformPackageInstallThatBringsNoVariantForTheTargetFailsTheBuild(t *testing.T) {
+	for name, install := range map[string]func(t *testing.T) string{
+		"no variant":            func(t *testing.T) string { return stagedInstall(t, stagedPlatDep()) },
+		"a musl variant":        func(t *testing.T) string { return linuxInstall(t, "x64", "musl") },
+		"another cpu's variant": func(t *testing.T) string { return linuxInstall(t, "arm64", "glibc") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			installFakeNpm(t, install(t))
+			l := newLayout(t, platformSplitApp())
+
+			err := Bundle(context.Background(), l.target("server.js"))
+			if err == nil {
+				t.Fatal("Bundle succeeded, want a refusal rather than a function that fails its first require")
+			}
+			for _, want := range []string{"plat-dep", "linux/x64", skippedOptional} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to name %q", err, want)
+				}
+			}
+		})
+	}
+}
+
+func TestAPackageWhoseOnlyPlatformVariantIsForAnotherOSInstallsWithoutOne(t *testing.T) {
+	installFakeNpm(t, stagedInstall(t, tree{
+		"node_modules/watch-dep/package.json": `{"name":"watch-dep","version":"3.0.0","main":"index.js","optionalDependencies":{"fsevents":"2.3.3"}}`,
+		"node_modules/watch-dep/index.js":     "module.exports = 'target build';\n",
+	}))
+	l := newLayout(t, tree{
+		"package.json":                        appPkg,
+		"server.js":                           "import watch from 'watch-dep';\nconsole.log(watch);\n",
+		"node_modules/watch-dep/package.json": `{"name":"watch-dep","version":"3.0.0","main":"index.js","optionalDependencies":{"fsevents":"2.3.3"}}`,
+		"node_modules/watch-dep/index.js":     "module.exports = 'host build';\n",
+		"node_modules/fsevents/package.json":  `{"name":"fsevents","version":"2.3.3","os":["darwin"]}`,
+	})
+
+	if err := Bundle(context.Background(), l.target("server.js")); err != nil {
+		t.Fatalf("Bundle: %v", err)
+	}
+	if got := runNode(t, l.funcDir); !strings.Contains(got, "target build") {
+		t.Errorf("bundle printed %q, want the package installed for the target to answer", got)
 	}
 }

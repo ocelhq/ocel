@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -26,6 +28,7 @@ type manifest struct {
 	OptionalDependencies map[string]string `json:"optionalDependencies"`
 	OS                   []string          `json:"os"`
 	CPU                  []string          `json:"cpu"`
+	Libc                 []string          `json:"libc"`
 }
 
 type platformPackages struct {
@@ -160,9 +163,52 @@ func (p *platformPackages) installInto(ctx context.Context, app, funcDir string,
 		return fmt.Errorf("install %s for app %q on %s/%s (%w):\n%s", names, app, providerkit.NodePackageOS, cpu, err, said.String())
 	}
 	log(said.String())
+	for _, name := range slices.Sorted(maps.Keys(wanted)) {
+		if !installedForTarget(filepath.Join(staging, nodeModulesDirName), name, cpu) {
+			return fmt.Errorf("npm installed %s for app %q without a package built for %s/%s/%s, so the function would fail at its first require of it; npm reported:\n%s",
+				name, app, providerkit.NodePackageOS, cpu, providerkit.NodePackageLibc, said.String())
+		}
+	}
 	return copyTree(filepath.Join(staging, nodeModulesDirName), filepath.Join(funcDir, nodeModulesDirName), func(name string) bool {
 		return strings.HasPrefix(name, ".")
 	})
+}
+
+func installedForTarget(nodeModules, name, cpu string) bool {
+	root := filepath.Join(nodeModules, filepath.FromSlash(name))
+	pkg, err := readManifest(root)
+	if err != nil {
+		return false
+	}
+	expected := false
+	for dep := range pkg.OptionalDependencies {
+		expected = expected || namesVariantFor(dep, cpu)
+		for _, dir := range []string{filepath.Join(root, nodeModulesDirName), nodeModules} {
+			variant, err := readManifest(filepath.Join(dir, filepath.FromSlash(dep)))
+			if err == nil && variant.platformVariant() && variant.runsOn(cpu) {
+				return true
+			}
+		}
+	}
+	return !expected
+}
+
+func namesVariantFor(dep, cpu string) bool {
+	return regexp.MustCompile(`(?:^|[/-])` + providerkit.NodePackageOS + `-` + regexp.QuoteMeta(cpu) + `(?:-|$)`).MatchString(dep)
+}
+
+func (m manifest) runsOn(cpu string) bool {
+	return allows(m.OS, providerkit.NodePackageOS) && allows(m.CPU, cpu) && allows(m.Libc, providerkit.NodePackageLibc)
+}
+
+func allows(declared []string, value string) bool {
+	if len(declared) == 0 || slices.Contains(declared, value) {
+		return true
+	}
+	if slices.Contains(declared, "!"+value) {
+		return false
+	}
+	return !slices.ContainsFunc(declared, func(entry string) bool { return !strings.HasPrefix(entry, "!") })
 }
 
 func npmInstallArgs(cpu string) []string {
