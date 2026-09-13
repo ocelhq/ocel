@@ -1,6 +1,8 @@
 package costkit_test
 
 import (
+	"errors"
+	"math"
 	"strings"
 	"testing"
 
@@ -333,6 +335,63 @@ func TestAUsageFileReachesANestedKey(t *testing.T) {
 	storage := byID(est, "n").GetComponents()[0]
 	if storage.GetMonthlyQuantity() != "40" || storage.GetAssumption() != "standard.storage_gb from usage file" {
 		t.Errorf("nested override = %v", storage)
+	}
+}
+
+func TestAUsageFileValueThatIsNotAFiniteNonNegativeNumberIsRefused(t *testing.T) {
+	for name, value := range map[string]any{
+		"quoted":   "200",
+		"null":     nil,
+		"negative": -1,
+		"nan":      math.NaN(),
+		"infinite": math.Inf(1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			override, err := structpb.NewStruct(map[string]any{"storage_gb": value})
+			if err != nil {
+				t.Fatal(err)
+			}
+			loaded, _ := costkit.Load([]byte(card))
+			_, err = costkit.Estimate(loaded, widgets, &costv1.PriceRequest{Resources: set(), Usage: &costv1.Usage{
+				Resources: map[string]*structpb.Struct{"w": override},
+			}})
+			var usage *costkit.UsageError
+			if !errors.As(err, &usage) || !strings.Contains(err.Error(), "w") || !strings.Contains(err.Error(), "storage_gb") {
+				t.Fatalf("Estimate() error = %v, want a usage refusal naming resource w and key storage_gb", err)
+			}
+		})
+	}
+}
+
+func TestAUsageFileKeyThePricerNeverReadsIsRefused(t *testing.T) {
+	for name, tc := range map[string]struct {
+		resource string
+		override map[string]any
+		key      string
+	}{
+		"misspelled":        {"w", map[string]any{"storage_gbs": 200}, "storage_gbs"},
+		"misspelled nested": {"n", map[string]any{"standard": map[string]any{"storage_gbs": 40}}, "standard.storage_gbs"},
+		"flattened nested":  {"n", map[string]any{"standard": 40}, "standard"},
+		"read by no branch": {"g", map[string]any{"monthly_requests": 1}, "monthly_requests"},
+		"unsupported":       {"x", map[string]any{"monthly_requests": 1}, "x"},
+		"no such resource":  {"nope", map[string]any{"monthly_requests": 1}, "nope"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			override, err := structpb.NewStruct(tc.override)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := set()
+			s.Resources = append(s.Resources, resource("n", "p/e", "test_nested", "eu-west-1", map[string]any{}))
+			loaded, _ := costkit.Load([]byte(card))
+			_, err = costkit.Estimate(loaded, widgets, &costv1.PriceRequest{Resources: s, Usage: &costv1.Usage{
+				Resources: map[string]*structpb.Struct{tc.resource: override},
+			}})
+			var usage *costkit.UsageError
+			if !errors.As(err, &usage) || !strings.Contains(err.Error(), tc.resource) || !strings.Contains(err.Error(), tc.key) {
+				t.Fatalf("Estimate() error = %v, want a usage refusal naming resource %s and key %s", err, tc.resource, tc.key)
+			}
+		})
 	}
 }
 

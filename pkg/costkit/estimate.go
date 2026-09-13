@@ -1,8 +1,10 @@
 package costkit
 
 import (
+	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -60,6 +62,8 @@ type Subject struct {
 	unknown   []string
 	usageKeys []string
 	fromFile  []string
+	read      []string
+	faults    []*UsageError
 	free      bool
 	built     []built
 }
@@ -85,13 +89,74 @@ func (s *Subject) Add(c Component) {
 
 func (s *Subject) Usage(key string, band Band) decimal.Decimal {
 	s.usageKeys = append(s.usageKeys, key)
-	if raw, ok := walk(s.overrides, key); ok {
-		if number, ok := raw.(float64); ok {
-			s.fromFile = append(s.fromFile, key)
-			return decimal.NewFromFloat(number)
+	s.read = append(s.read, key)
+	raw, ok := walk(s.overrides, key)
+	if !ok {
+		return band.at(s.profile)
+	}
+	number, ok := raw.(float64)
+	if !ok || math.IsNaN(number) || math.IsInf(number, 0) || number < 0 {
+		s.faults = append(s.faults, &UsageError{
+			Resource: s.Resource.GetId(), Key: key,
+			Reason: fmt.Sprintf("which is %#v, not a finite non-negative number", raw),
+		})
+		return band.at(s.profile)
+	}
+	s.fromFile = append(s.fromFile, key)
+	return decimal.NewFromFloat(number)
+}
+
+type UsageError struct {
+	Resource string
+	Key      string
+	Reason   string
+}
+
+func (e *UsageError) Error() string {
+	if e.Key == "" {
+		return fmt.Sprintf("the usage names %s, %s", e.Resource, e.Reason)
+	}
+	return fmt.Sprintf("the usage for %s sets %s, %s", e.Resource, e.Key, e.Reason)
+}
+
+func unpriced(usage *costv1.Usage, priced map[string]bool) error {
+	var faults []error
+	for _, id := range slices.Sorted(maps.Keys(usage.GetResources())) {
+		if !priced[id] {
+			faults = append(faults, &UsageError{Resource: id, Reason: "which is no resource this scan prices"})
 		}
 	}
-	return band.at(s.profile)
+	return errors.Join(faults...)
+}
+
+func (s *Subject) faulted() error {
+	faults := make([]error, 0, len(s.faults))
+	for _, fault := range s.faults {
+		faults = append(faults, fault)
+	}
+	for _, key := range leaves(s.overrides, "") {
+		if !slices.Contains(s.read, key) {
+			faults = append(faults, &UsageError{
+				Resource: s.Resource.GetId(), Key: key,
+				Reason: fmt.Sprintf("which pricing a %s never reads", s.Resource.GetType()),
+			})
+		}
+	}
+	return errors.Join(faults...)
+}
+
+func leaves(root map[string]any, prefix string) []string {
+	var out []string
+	for key, value := range root {
+		path := prefix + key
+		if nested, ok := value.(map[string]any); ok && len(nested) > 0 {
+			out = append(out, leaves(nested, path+".")...)
+			continue
+		}
+		out = append(out, path)
+	}
+	slices.Sort(out)
+	return out
 }
 
 func (s *Subject) Unknown(path string) bool {
@@ -196,6 +261,7 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 	usage := map[string]decimal.Decimal{}
 	var totalFixed, totalUsage decimal.Decimal
 	account := &ledger{card: card, spent: map[rateKey]decimal.Decimal{}}
+	priced := map[string]bool{}
 	for _, resource := range set.GetResources() {
 		pricing, known := table[resource.GetType()]
 		if !known {
@@ -214,9 +280,13 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 			overrides: overridesFor(req.GetUsage(), resource.GetId()),
 		}
 		pricing(subject)
-		priced := account.price(subject)
-		est.Resources = append(est.Resources, priced.estimate)
-		switch priced.estimate.Status {
+		if err := subject.faulted(); err != nil {
+			return nil, err
+		}
+		priced[resource.GetId()] = true
+		held := account.price(subject)
+		est.Resources = append(est.Resources, held.estimate)
+		switch held.estimate.Status {
 		case costv1.ResourceEstimate_STATUS_FREE:
 			est.Coverage.Free++
 		case costv1.ResourceEstimate_STATUS_NO_PRICE:
@@ -224,10 +294,13 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 		default:
 			est.Coverage.Supported++
 		}
-		fixed[resource.GetScope()] = fixed[resource.GetScope()].Add(priced.fixed)
-		usage[resource.GetScope()] = usage[resource.GetScope()].Add(priced.usage)
-		totalFixed = totalFixed.Add(priced.fixed)
-		totalUsage = totalUsage.Add(priced.usage)
+		fixed[resource.GetScope()] = fixed[resource.GetScope()].Add(held.fixed)
+		usage[resource.GetScope()] = usage[resource.GetScope()].Add(held.usage)
+		totalFixed = totalFixed.Add(held.fixed)
+		totalUsage = totalUsage.Add(held.usage)
+	}
+	if err := unpriced(req.GetUsage(), priced); err != nil {
+		return nil, err
 	}
 	est.Coverage.SupportedTypes = slices.Sorted(maps.Keys(supported))
 	est.MonthlyFixed = money(totalFixed)
