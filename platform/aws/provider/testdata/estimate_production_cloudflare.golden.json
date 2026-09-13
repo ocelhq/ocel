@@ -77,7 +77,7 @@
         }
       ],
       "monthlyFixed": "0.00",
-      "monthlyUsage": "0.08"
+      "monthlyUsage": "0.07"
     },
     {
       "resource": "project:shop/shared:production/aws_s3_bucket:ArtifactBucket",
@@ -191,7 +191,7 @@
         }
       ],
       "monthlyFixed": "0.00",
-      "monthlyUsage": "0.08"
+      "monthlyUsage": "0.07"
     },
     {
       "resource": "project:shop/shared:production/aws_lambda_layer_version:RuntimeLayerX8664",
@@ -978,22 +978,22 @@
     {
       "scope": "project:shop",
       "monthlyFixed": "5.40",
-      "monthlyUsage": "110.02"
+      "monthlyUsage": "110.04"
     },
     {
       "scope": "project:shop/shared:production",
       "monthlyFixed": "5.00",
-      "monthlyUsage": "12.59"
+      "monthlyUsage": "12.60"
     },
     {
       "scope": "project:shop/environment:prod",
       "monthlyFixed": "0.40",
-      "monthlyUsage": "97.42"
+      "monthlyUsage": "97.44"
     },
     {
       "scope": "project:shop/environment:prod/app:web",
       "monthlyFixed": "0.00",
-      "monthlyUsage": "5.32"
+      "monthlyUsage": "5.33"
     }
   ],
   "coverage": {
@@ -1022,5 +1022,5 @@
     "CloudFront is priced at its United States rates whichever price class the distribution carries"
   ],
   "monthlyFixed": "5.40",
-  "monthlyUsage": "110.02"
+  "monthlyUsage": "110.04"
 }

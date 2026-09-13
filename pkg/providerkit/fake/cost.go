@@ -5,6 +5,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/ocelhq/ocel/pkg/costkit"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -64,4 +65,42 @@ func (p *Provider) shaped(scope, typ, name string) *costv1.Resource {
 		Region:     p.options.Region,
 		Properties: properties,
 	}
+}
+
+const rates = `{
+  "version": "2026-01-01",
+  "currency": "USD",
+  "rates": [
+    {"id": "fake/requests", "unit": "requests", "tiers": [{"start": "0", "price": "0.000001"}], "source": "https://fake.example/pricing", "verified": "2026-01-01"},
+    {"id": "fake/container-hours", "unit": "hours", "tiers": [{"start": "0", "price": "0.01"}], "source": "https://fake.example/pricing", "verified": "2026-01-01"},
+    {"id": "fake/postgres-hours", "unit": "hours", "tiers": [{"start": "0", "price": "0.02"}], "source": "https://fake.example/pricing", "verified": "2026-01-01"},
+    {"id": "fake/storage", "unit": "GB-month", "tiers": [{"start": "0", "price": "0.01"}], "source": "https://fake.example/pricing", "verified": "2026-01-01"}
+  ]
+}`
+
+var requestsBand = costkit.Band{Light: 100_000, Moderate: 1_000_000, Heavy: 10_000_000}
+
+var storageBand = costkit.Band{Light: 1, Moderate: 10, Heavy: 100}
+
+var table = costkit.Table{
+	TypeFunction: func(r *costkit.Subject) {
+		r.Add(costkit.Component{Name: "Requests", Unit: "requests", Rate: "fake/requests", Quantity: r.Usage("monthly_requests", requestsBand), UsageBased: true})
+	},
+	TypeContainer: func(r *costkit.Subject) {
+		r.Add(costkit.Component{Name: "Container", Unit: "hours", Rate: "fake/container-hours", Quantity: costkit.MonthlyHours})
+	},
+	TypePostgres: func(r *costkit.Subject) {
+		r.Add(costkit.Component{Name: "Database", Unit: "hours", Rate: "fake/postgres-hours", Quantity: costkit.MonthlyHours})
+	},
+	TypeBucket: func(r *costkit.Subject) {
+		r.Add(costkit.Component{Name: "Storage", Unit: "GB-month", Rate: "fake/storage", Quantity: r.Usage("storage_gb", storageBand), UsageBased: true})
+	},
+}
+
+func (p *Provider) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
+	card, err := costkit.Load([]byte(rates))
+	if err != nil {
+		return nil, err
+	}
+	return costkit.Estimate(card, table, req)
 }

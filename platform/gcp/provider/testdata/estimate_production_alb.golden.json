@@ -274,6 +274,7 @@
           "unitPrice": "0.0000025",
           "monthlyCost": "0.25",
           "usageBased": true,
+          "assumption": "moderate profile: 100000 GiB-seconds",
           "rateRef": "gcp/run/memory-active"
         }
       ],
