@@ -234,3 +234,22 @@ func TestAPackageWhoseOnlyPlatformVariantIsForAnotherOSInstallsWithoutOne(t *tes
 		t.Errorf("bundle printed %q, want the package installed for the target to answer", got)
 	}
 }
+
+func TestAPlatformPackageWhoseHostVariantWasNeverInstalledIsStillInstalledForTheTarget(t *testing.T) {
+	npm := installFakeNpm(t, linuxInstall(t, "x64", "glibc"))
+	files := platformSplitApp()
+	delete(files, "node_modules/@plat-dep/darwin-arm64/package.json")
+	delete(files, "node_modules/@plat-dep/darwin-arm64/index.js")
+	files["node_modules/plat-dep/index.js"] = "module.exports = 'host build';\n"
+	l := newLayout(t, files)
+
+	if err := Bundle(context.Background(), l.target("server.js")); err != nil {
+		t.Fatalf("Bundle: %v", err)
+	}
+	if _, err := os.Stat(npm.argv); err != nil {
+		t.Error("npm never ran: a host that installed with --omit=optional, or has no published variant, ships plat-dep with no binary")
+	}
+	if got := runNode(t, l.funcDir); !strings.Contains(got, "target build") {
+		t.Errorf("bundle printed %q, want the package installed for the target to answer", got)
+	}
+}
