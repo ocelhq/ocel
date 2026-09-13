@@ -97,7 +97,8 @@
               "node",
               "next",
               "go",
-              "python"
+              "python",
+              "rust"
             ],
             "type": "string"
           },

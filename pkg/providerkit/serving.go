@@ -19,9 +19,13 @@ const (
 	RuntimeGo   = "go"
 
 	RuntimePython = "python"
+
+	RuntimeRust = "rust"
 )
 
-func Runtimes() []string { return []string{RuntimeNode, RuntimeNext, RuntimeGo, RuntimePython} }
+func Runtimes() []string {
+	return []string{RuntimeNode, RuntimeNext, RuntimeGo, RuntimePython, RuntimeRust}
+}
 
 func KnownRuntime(name string) bool { return slices.Contains(Runtimes(), name) }
 
@@ -58,6 +62,16 @@ func NodePackageCPU(declared string) (string, bool) {
 		return "x64", true
 	case ArchARM64:
 		return "arm64", true
+	}
+	return "", false
+}
+
+func RustTarget(declared string) (string, bool) {
+	switch Architecture(declared) {
+	case ArchX8664:
+		return "x86_64-unknown-linux-musl", true
+	case ArchARM64:
+		return "aarch64-unknown-linux-musl", true
 	}
 	return "", false
 }
