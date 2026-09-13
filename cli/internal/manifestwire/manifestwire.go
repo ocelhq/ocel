@@ -29,6 +29,18 @@ func Declarations(configDir string, resources []declare.Resource) []manifestbuil
 	return decls
 }
 
+func References(configDir string, references []declare.Reference) []manifestbuilder.Reference {
+	out := make([]manifestbuilder.Reference, len(references))
+	for i, r := range references {
+		var source string
+		if site, ok := attribution.DeclaringSite(configDir, r.Source); ok {
+			source = site.String()
+		}
+		out[i] = manifestbuilder.Reference{Type: r.Type, Name: r.Name, Source: source}
+	}
+	return out
+}
+
 func Bindings(bindings []projectconfig.Binding) []manifestbuilder.Binding {
 	out := make([]manifestbuilder.Binding, 0, len(bindings))
 	for _, b := range bindings {

@@ -211,7 +211,7 @@ func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Con
 	} else if err != nil {
 		return nil, nil, err
 	}
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, scannedApps(cfg), string(providerkit.ComputeServerless), manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.Bindings), functions, nil)
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, scannedApps(cfg), string(providerkit.ComputeServerless), manifestwire.Declarations(cfg.Dir, resources), manifestwire.References(cfg.Dir, collected.References), manifestwire.Bindings(cfg.Bindings), functions, nil)
 	if err != nil {
 		return nil, nil, err
 	}

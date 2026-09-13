@@ -64,6 +64,25 @@ func (e *DanglingUsageError) Error() string {
 	)
 }
 
+type Reference struct {
+	Type   resourcesv1.ResourceType
+	Name   string
+	Source string
+}
+
+type DanglingReferenceError struct {
+	Type   resourcesv1.ResourceType
+	Name   string
+	Source string
+}
+
+func (e *DanglingReferenceError) Error() string {
+	return fmt.Sprintf(
+		"manifestbuilder: %s references the %s %q, which nothing in this project declares — declare it once, in any language, or drop the reference",
+		sourceOrUnknown(e.Source), naming.ResourceTypeName(e.Type), e.Name,
+	)
+}
+
 type Variable struct {
 	Key              string
 	Class            resourcesv1.VariableClass
@@ -185,7 +204,7 @@ func (e *BindingTypeError) Error() string {
 	)
 }
 
-func Build(slug string, domains map[string][]string, apps []App, compute string, declarations []Declaration, bindings []Binding, functions []Function, variables map[string][]Variable) (*contractv1.Manifest, error) {
+func Build(slug string, domains map[string][]string, apps []App, compute string, declarations []Declaration, references []Reference, bindings []Binding, functions []Function, variables map[string][]Variable) (*contractv1.Manifest, error) {
 	if compute == "" {
 		return nil, fmt.Errorf("manifestbuilder: project %q was built with no compute resolved — every app on the wire has to name the compute it runs on, and the manifest is built after preflight so that a provider's own answer is what fills it", slug)
 	}
@@ -241,6 +260,12 @@ func Build(slug string, domains map[string][]string, apps []App, compute string,
 	slices.SortFunc(resources, func(a, b *contractv1.ManifestResource) int {
 		return strings.Compare(a.LogicalName, b.LogicalName)
 	})
+
+	for _, r := range references {
+		if _, declared := seen[identity{r.Type, r.Name}]; !declared {
+			return nil, &DanglingReferenceError{Type: r.Type, Name: r.Name, Source: r.Source}
+		}
+	}
 
 	if err := bindBindings(resources, bindings); err != nil {
 		return nil, err

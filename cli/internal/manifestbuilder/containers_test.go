@@ -26,7 +26,7 @@ func TestAContainerAppIsCarriedAsASiblingJoinedToItByName(t *testing.T) {
 	manifest, err := Build("proj-1", nil, []App{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
 		{Name: "web", Compute: "serverless"},
-	}, "serverless", nil, nil, nil, nil)
+	}, "serverless", nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestAContainerCarriesTheHealthPathTheAppAsksFor(t *testing.T) {
 
 	manifest, err := Build("proj-1", nil, []App{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest, HealthCheckPath: "/healthz"},
-	}, "container", nil, nil, nil, nil)
+	}, "container", nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestAContainerThatAsksForNoHealthPathIsCarriedWithTheDefaultOne(t *testing.
 
 	manifest, err := Build("proj-1", nil, []App{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
-	}, "container", nil, nil, nil, nil)
+	}, "container", nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestAContainerThatAsksForNoHealthPathIsCarriedWithTheDefaultOne(t *testing.
 func TestAnAppOnlyTheBuildNamesCannotLandOnContainerCompute(t *testing.T) {
 	t.Parallel()
 
-	_, err := Build("proj-1", nil, nil, "container", nil, nil, []Function{
+	_, err := Build("proj-1", nil, nil, "container", nil, nil, nil, []Function{
 		{App: "api", Route: "index", Runtime: Runtime{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/api/functions/index"},
 	}, nil)
 	if err == nil {
@@ -89,7 +89,7 @@ func TestAnAppOnlyTheBuildNamesCannotLandOnContainerCompute(t *testing.T) {
 func TestAContainerAppWithNoImageRefusesTheManifest(t *testing.T) {
 	t.Parallel()
 
-	_, err := Build("proj-1", nil, []App{{Name: "api", Compute: "container"}}, "container", nil, nil, nil, nil)
+	_, err := Build("proj-1", nil, []App{{Name: "api", Compute: "container"}}, "container", nil, nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("Build() carried a container app with no image, so a provider would be handed an app it has nothing to run")
 	}
@@ -102,7 +102,7 @@ func TestAnImageCarriesADigestAndNeverATag(t *testing.T) {
 	t.Parallel()
 
 	for _, ref := range []string{"ocel/api:latest", "ocel/api", "ocel/api@sha256:short"} {
-		_, err := Build("proj-1", nil, []App{{Name: "api", Compute: "container", Image: ref}}, "container", nil, nil, nil, nil)
+		_, err := Build("proj-1", nil, []App{{Name: "api", Compute: "container", Image: ref}}, "container", nil, nil, nil, nil, nil)
 		if err == nil {
 			t.Errorf("Build() carried %q as an image identity, want only a digest-pinned ref, since a tag is repointable and a release is not", ref)
 		}
@@ -112,7 +112,7 @@ func TestAnImageCarriesADigestAndNeverATag(t *testing.T) {
 func TestAServerlessAppIsCarriedAsNoContainerAtAll(t *testing.T) {
 	t.Parallel()
 
-	manifest, err := Build("proj-1", nil, []App{{Name: "web"}}, "serverless", nil, nil, []Function{
+	manifest, err := Build("proj-1", nil, []App{{Name: "web"}}, "serverless", nil, nil, nil, []Function{
 		{App: "web", Route: "index", Runtime: Runtime{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/web/functions/index"},
 	}, nil)
 	if err != nil {
@@ -128,7 +128,7 @@ func TestACallerThatPacksAContainerAppIsRefusedByTheBuilder(t *testing.T) {
 
 	_, err := Build("proj-1", nil, []App{
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
-	}, "container", nil, nil, []Function{
+	}, "container", nil, nil, nil, []Function{
 		{App: "api", Route: "index", Runtime: Runtime{Name: "node"}, Handler: "index.handler", ArtifactPath: "apps/api/functions/index"},
 	}, nil)
 	if err == nil {
@@ -145,7 +145,7 @@ func TestContainersAreOrderedByTheAppTheyServe(t *testing.T) {
 	manifest, err := Build("proj-1", nil, []App{
 		{Name: "web", Compute: "container", Image: "ocel/web@" + fakeDigest},
 		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest},
-	}, "container", nil, nil, nil, nil)
+	}, "container", nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

@@ -36,7 +36,7 @@ func TestPythonReachGrantsAResourceTheAppsEntryImports(t *testing.T) {
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestPythonReachGrantsNothingFromAModuleNoEntryImports(t *testing.T) {
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "unused", "__init__.py") + ":1",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestPythonReachRefusesAnImportOnlyRunningTheAppWouldResolve(t *testing.T) {
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
-	}})
+	}}, nil)
 	var unresolved *UnresolvedImportError
 	if !errors.As(err, &unresolved) {
 		t.Fatalf("Compute err = %v, want an *UnresolvedImportError", err)
@@ -91,7 +91,7 @@ func TestPythonReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":3",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestPythonReachSearchesTheDiscoveryPathsTheProjectConfigures(t *testing.T) 
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "decls", "__init__.py") + ":1",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestPythonReachFollowsAnImportModuleCallThatWritesTheModuleOut(t *testing.T
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestPythonReachReadsNoEntryFromTheAppsTestFiles(t *testing.T) {
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestPythonReachReportsASyntaxErrorWithoutTheLineItIsOn(t *testing.T) {
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "__init__.py") + ":1",
-	}})
+	}}, nil)
 	if err == nil {
 		t.Fatal("Compute succeeded on a file python cannot parse, want an error")
 	}

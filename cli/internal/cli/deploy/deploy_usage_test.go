@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/pkg/constants"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -212,6 +213,101 @@ export default {
 			}
 		}
 	})
+}
+
+func TestDeployGrantsAResourceThroughAReference(t *testing.T) {
+	functions := []manifestbuilder.Function{
+		{Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		{Route: "web", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/web", App: "web"},
+	}
+
+	t.Run("an app reaching only the reference is delivered the declared resource", func(t *testing.T) {
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, functions)
+		root, sockPath := clitest.SetUpDeployFixture(t)
+		writeReferencingMonorepo(t, root, "main")
+
+		var stdout, stderr bytes.Buffer
+		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		if err != nil {
+			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+		}
+
+		out := stdout.String()
+		for _, want := range []string{
+			"DELIVER app=api resources=bucket--uploads,db--main",
+			"DELIVER app=web resources=db--main",
+			"USAGE app=web resource=db--main files=apps/web/src/server.ts",
+		} {
+			if !strings.Contains(out, want) {
+				t.Errorf("stdout = %q, want %q", out, want)
+			}
+		}
+
+		clitest.WaitForNoStaleSocket(t, sockPath)
+	})
+
+	t.Run("a reference nothing declares refuses the deploy at the reference", func(t *testing.T) {
+		deps := clitest.NewDeps()
+		clitest.SetLoggedIn(&deps)
+		clitest.StubBuild(&deps, functions)
+		root, _ := clitest.SetUpDeployFixture(t)
+		writeReferencingMonorepo(t, root, "ghost")
+
+		var stdout, stderr bytes.Buffer
+		err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+		if err == nil {
+			t.Fatalf("runDeploy err = nil, want the dangling reference to refuse the deploy; stdout=%s", stdout.String())
+		}
+		combined := stdout.String() + stderr.String() + err.Error()
+		for _, want := range []string{`"ghost"`, "shared/refs.ts:"} {
+			if !strings.Contains(combined, want) {
+				t.Errorf("output = %q, want it to name %s", combined, want)
+			}
+		}
+	})
+}
+
+func writeReferencingMonorepo(t *testing.T, root, referenced string) {
+	t.Helper()
+
+	writeSharedResourceMonorepo(t, root)
+	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), `
+export * from "../shared/index.js";
+export * from "../shared/refs.js";
+`)
+	clitest.WriteFile(t, filepath.Join(root, "shared", "refs.ts"), `
+declare global {
+  var __ocelRegister: Promise<unknown>[];
+}
+
+function site(): string {
+  const at = /\(?((?:\/|file:)[^()]+?):(\d+):\d+\)?$/.exec(((new Error().stack ?? "").split("\n")[3] ?? "").trim());
+  return at ? at[1].replace(/^file:\/\//, "") + ":" + at[2] : "";
+}
+
+function referencePostgres(name: string) {
+  globalThis.__ocelRegister ??= [];
+  globalThis.__ocelRegister.push(
+    fetch(new URL("/app.resources.v1.ResourceService/Reference", process.env.`+constants.DevServerEnvName+`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resource: { type: "RESOURCE_TYPE_POSTGRES", name }, source: site() }),
+    }),
+  );
+  return { name };
+}
+
+export const sharedDb = referencePostgres("`+referenced+`");
+`)
+	clitest.WriteFile(t, filepath.Join(root, "apps", "web", "src", "server.ts"), `
+import { sharedDb } from "../../../shared/refs.js";
+
+export function handler() {
+  return sharedDb.name;
+}
+`)
 }
 
 func writeSharedResourceMonorepo(t *testing.T, root string) {

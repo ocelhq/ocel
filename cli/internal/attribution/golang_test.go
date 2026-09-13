@@ -41,7 +41,7 @@ func TestGoReachGrantsAResourceTheAppsMainImports(t *testing.T) {
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "declarations.go") + ":1",
 	}}
 
-	usages, err := Compute(t.Context(), root, apps, declarations)
+	usages, err := Compute(t.Context(), root, apps, declarations, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestGoReachGrantsNothingFromAPackageNoMainImports(t *testing.T) {
 		Source: filepath.Join(root, "unused", "unused.go") + ":1",
 	}}
 
-	usages, err := Compute(t.Context(), root, apps, declarations)
+	usages, err := Compute(t.Context(), root, apps, declarations, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestGoReachReportsWhatGoListSaid(t *testing.T) {
 		Source: filepath.Join(root, "server", "main.go") + ":1",
 	}}
 
-	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, declarations)
+	_, err := Compute(t.Context(), root, []App{{Name: "web", Path: "server", Language: discovery.Go}}, declarations, nil)
 	if err == nil {
 		t.Fatal("Compute succeeded on a module that does not build, want error")
 	}
@@ -101,7 +101,7 @@ func TestGoReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, constants.DefaultDiscoveryDirName, "infra.go") + ":5",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestGoReachStopsAtTheModuleTheAppLivesIn(t *testing.T) {
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "shared", constants.DefaultDiscoveryDirName, "declarations.go") + ":1",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
