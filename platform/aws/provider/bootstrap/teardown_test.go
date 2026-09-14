@@ -396,26 +396,17 @@ func TestTeardownReclaimsTheClassOriginSecret(t *testing.T) {
 	}
 }
 
-func TestTeardownLeavesThePassphraseEvenWithNoSibling(t *testing.T) {
+func TestTeardownDropsThePassphraseWithNoSibling(t *testing.T) {
 	t.Parallel()
 
 	apis, _, ssmc, _ := teardownFakes(t)
 
-	var logged []string
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, func(msg string) { logged = append(logged, msg) }); err != nil {
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	if _, held := ssmc.params[passphraseParam]; !held {
-		t.Error("the passphrase is the only copy every Pulumi stack this account held was encrypted under, and the bootstrap credential may not delete it; it must stay")
-	}
-	if !slices.ContainsFunc(logged, func(msg string) bool {
-		return strings.Contains(msg, passphraseParam) && strings.Contains(msg, "delete-parameter")
-	}) {
-		t.Errorf("teardown logged %q, want it to name the passphrase parameter and how to remove it by hand", logged)
-	}
-	for _, name := range []string{originSecretParam, cloudflareNames(ClassProduction).credentialsParam} {
+	for _, name := range []string{passphraseParam, originSecretParam, cloudflareNames(ClassProduction).credentialsParam} {
 		if _, held := ssmc.params[name]; held {
-			t.Errorf("%s survived the teardown; only the passphrase stays", name)
+			t.Errorf("%s survived the teardown; nothing else is bootstrapped, so nothing is encrypted under the passphrase and a secret nobody rotates must not outlive what it sealed", name)
 		}
 	}
 }

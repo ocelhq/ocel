@@ -146,8 +146,8 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 		t.Errorf("the parameters group's rows = %+v, want the access key the edge signs with", params.Changes)
 	}
 	passphrase := changeNamed(params, passphraseParam)
-	if passphrase == nil || passphrase.Action != providerkit.ActionKeep {
-		t.Errorf("the passphrase row = %+v, want it kept and the plan saying why: no Ocel credential may delete it", passphrase)
+	if passphrase == nil || passphrase.Action != providerkit.ActionDelete || passphrase.Reason == "" {
+		t.Errorf("the passphrase row = %+v, want it deleted when no sibling bootstrap holds it, with the reason the typed confirmation names", passphrase)
 	}
 
 	front := groupNamed(plan, string(cloudflareKind)+"/edge")

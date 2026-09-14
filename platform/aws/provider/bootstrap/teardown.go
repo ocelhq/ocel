@@ -213,7 +213,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 	if shared {
 		report(log, fmt.Sprintf("the %s bootstrap still stands and its Pulumi state is encrypted under the shared passphrase in %s; it stays", siblingName(class), ns.PassphraseParamName()))
 	} else {
-		report(log, fmt.Sprintf("%s stays: it is the only copy of the passphrase every Pulumi stack this account ever held was encrypted under, and no Ocel credential may delete it. Once nothing encrypted under it remains, remove it with `aws ssm delete-parameter --name %s`", ns.PassphraseParamName(), ns.PassphraseParamName()))
+		params = append(params, ns.PassphraseParamName())
 	}
 	for _, name := range params {
 		if err := deleteParam(ctx, apis.SSM, name); err != nil {

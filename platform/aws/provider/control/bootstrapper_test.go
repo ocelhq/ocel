@@ -335,13 +335,11 @@ func TestRemoveTearsTheEdgeDownForTheClassThenTheAWSBootstrap(t *testing.T) {
 	for _, name := range []string{
 		edgeParam(t, bootstrap.ClassProduction, "/credentials"),
 		edgeParam(t, bootstrap.ClassProduction, "/values"),
+		passphraseParam,
 	} {
 		if _, still := b.SSM.(*teardownSSM).params[name]; still {
 			t.Errorf("parameter %s survived the teardown", name)
 		}
-	}
-	if _, still := b.SSM.(*teardownSSM).params[passphraseParam]; !still {
-		t.Errorf("parameter %s went with the teardown; it is the only copy of what every Pulumi stack was encrypted under and no Ocel credential may delete it", passphraseParam)
 	}
 }
 

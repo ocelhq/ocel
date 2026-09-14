@@ -31,7 +31,7 @@ const (
 	keyStale        = "the access key it records is older than 90 days and is rotated"
 	severedByRemove = "removing %s takes what the %s edge was reached through with it"
 
-	passphraseStranded = "the only copy of the passphrase every Pulumi stack in this account was encrypted under; no Ocel credential may delete it, so it stays until removed by hand"
+	passphraseStranded = "the only copy of the passphrase every Pulumi stack in this account was encrypted under; no bootstrap is left to need it"
 	passphraseShared   = "the %s bootstrap still stands and its Pulumi state is encrypted under it"
 )
 
@@ -163,7 +163,7 @@ func plannedPassphraseRemoval(held bool, ns Namespace, class string, shared bool
 		return providerkit.Change{
 			Kind:   kindParameter,
 			Name:   ns.PassphraseParamName(),
-			Action: providerkit.ActionKeep,
+			Action: providerkit.ActionDelete,
 			Reason: passphraseStranded,
 		}, nil
 	}

@@ -587,20 +587,27 @@ func TestTheBootstrapTierTouchesOnlyEventSourceMappingsOfItsOwnFunctions(t *test
 	}
 }
 
-func TestNoTierCanDeleteThePulumiPassphrase(t *testing.T) {
+func TestOnlyTheBootstrapTierDeletesThePulumiPassphraseAndOnlyByItsExactPath(t *testing.T) {
 	r := defaultNamespace.ScopedARNs()
+	if _, path, _ := strings.Cut(r.passphraseParam, ":parameter"); strings.ContainsAny(path, "*?") {
+		t.Fatalf("the passphrase ARN %q names a parameter pattern, and the one delete grant on it must name the path exactly", r.passphraseParam)
+	}
 	for tier, document := range bothTiers(t) {
 		for g := range grantsOf(t, document) {
-			if !strings.HasPrefix(g.action, "ssm:Delete") {
+			if !strings.HasPrefix(g.action, "ssm:Delete") || !iamResourceMatches(g.resource, r.passphraseParam) {
 				continue
 			}
-			if iamResourceMatches(g.resource, r.passphraseParam) {
-				t.Errorf("the %s tier grants %s on %s, which reaches %s: deleting the only copy of the passphrase strands every Pulumi stack in the account", tier, g.action, g.resource, r.passphraseParam)
+			if tier != "bootstrap" {
+				t.Errorf("the %s tier grants %s on %s, which reaches %s: only the credential that can already destroy every Pulumi state in the account may take what encrypts it", tier, g.action, g.resource, r.passphraseParam)
+				continue
+			}
+			if g.action != "ssm:DeleteParameter" || g.resource != r.passphraseParam || g.condition != conditionJSON(t, nil) {
+				t.Errorf("the bootstrap tier grants %s on %s under %s, want ssm:DeleteParameter on exactly %s: a wider grant reaches the passphrase by accident from a tree it was meant to prune", g.action, g.resource, g.condition, r.passphraseParam)
 			}
 		}
 	}
 	bootstrapGrants := grantsOf(t, mustRender(t, BootstrapCredentialPermissions))
-	for _, resource := range []string{r.edgeParam, r.originParam, r.stackRecord} {
+	for _, resource := range []string{r.edgeParam, r.originParam, r.stackRecord, r.passphraseParam} {
 		if !bootstrapGrants[grant{action: "ssm:DeleteParameter", resource: resource, condition: conditionJSON(t, nil)}] {
 			t.Errorf("the bootstrap tier cannot delete %s, which a teardown reclaims", resource)
 		}
