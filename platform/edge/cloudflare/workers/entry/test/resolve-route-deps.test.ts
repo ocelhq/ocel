@@ -52,6 +52,39 @@ const assetStore: RouteDeps["assetStore"] = {
 };
 
 describe("resolveRouteDeps", () => {
+  it("refuses a record whose edge bundle lies outside the deployment's own prefix", async () => {
+    const record = makeRecord({
+      edgeWorkers: {
+        bundleKey: "prod/other/web/build-1/edge/bundle.json",
+        id: "e1",
+        compatDate: "2026-03-10",
+      },
+    });
+
+    await expect(
+      resolveRouteDeps(
+        { binding: bindingReturning("deploy-1", record), slug: "p1", app: "web" },
+        { assetStore },
+      ),
+    ).rejects.toThrow(/outside its own prefix/);
+  });
+
+  it("accepts a record whose edge bundle sits under the deployment's own prefix", async () => {
+    const record = makeRecord({
+      edgeWorkers: {
+        bundleKey: "prod/p1/web/build-1/edge/bundle.json",
+        id: "e1",
+        compatDate: "2026-03-10",
+      },
+    });
+
+    const deps = await resolveRouteDeps(
+      { binding: bindingReturning("deploy-1", record), slug: "p1", app: "web" },
+      { assetStore },
+    );
+    expect(deps).not.toBeInstanceOf(Response);
+  });
+
   it("wires the resolved Deployment's manifest and functionUrls into RouteDeps", async () => {
     const record = makeRecord();
     const deps = await resolveRouteDeps(
