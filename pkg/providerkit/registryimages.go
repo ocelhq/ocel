@@ -100,6 +100,9 @@ func (r registryImages) look(ctx context.Context, client *http.Client, endpoint,
 }
 
 func answersFor(resp *http.Response, digest string) bool {
+	if digest == "" {
+		return true
+	}
 	answered := resp.Header.Get("Docker-Content-Digest")
 	return answered == "" || answered == digest
 }
