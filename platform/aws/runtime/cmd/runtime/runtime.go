@@ -18,7 +18,7 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	vars "github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 	"github.com/ocelhq/ocel/platform/aws/runtime/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -38,6 +38,9 @@ func main() {
 	values, err := live.Resolve(ctx, taskRoot())
 	if err != nil {
 		fatalInit(fmt.Sprintf("failed to read this deployment's live variables: %v", err))
+	}
+	if err := values.Project(liveDir()); err != nil {
+		fatalInit(fmt.Sprintf("failed to hand this deployment's live variables to the app: %v", err))
 	}
 	var resolved liveValues = values
 	prefetch := resolved.Prefetch(ctx)

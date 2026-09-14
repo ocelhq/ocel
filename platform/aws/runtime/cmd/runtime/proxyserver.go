@@ -15,8 +15,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bucket"
 	"github.com/ocelhq/ocel/platform/aws/runtime/proxy"
 )

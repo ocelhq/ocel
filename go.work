@@ -11,6 +11,7 @@ use (
 	./pkg/proto
 	./pkg/providerkit
 	./pkg/providerkit/pulumi
+	./pkg/runtimekit
 	./pkg/target
 	./platform/aws/connector
 	./platform/aws/provider

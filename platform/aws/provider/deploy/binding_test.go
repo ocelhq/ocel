@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	rtlive "github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
 
 func provisionedBindings() []*bindingsv1.Binding {
@@ -28,7 +28,7 @@ func provisionedBindings() []*bindingsv1.Binding {
 
 func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 	t.Parallel()
-	bindings := []live.Binding{
+	bindings := []rtlive.Binding{
 		{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES},
 		{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET},
 	}
@@ -37,7 +37,7 @@ func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 		t.Fatalf("publishedRecords: %v", err)
 	}
 
-	if err := live.Conform(bindings, published); err != nil {
+	if err := rtlive.Conform(bindings, published); err != nil {
 		t.Fatalf("what this deploy publishes drifts from what it tells the app to expect: %v", err)
 	}
 	for _, l := range bindings {
@@ -51,7 +51,7 @@ func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 	}
 }
 
-func publishedRecords(t *testing.T, bindings []live.Binding) (map[string]string, error) {
+func publishedRecords(t *testing.T, bindings []rtlive.Binding) (map[string]string, error) {
 	t.Helper()
 	records := provisionedBindings()
 	keys := make(map[string]string, len(bindings))

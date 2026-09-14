@@ -12,6 +12,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	rtlive "github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
@@ -86,9 +87,9 @@ func TestRenderAppBundle(t *testing.T) {
 		if manifest.Slug != "shop" || manifest.Table != valuesTable || manifest.KeyARN != productionVarsKeyARN || manifest.Class != varsClass {
 			t.Errorf("manifest = %+v, want the bootstrap's own store", manifest)
 		}
-		want := []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
+		want := []rtlive.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
 		got := slices.Clone(manifest.Keys)
-		slices.SortFunc(got, func(a, b live.Key) int { return strings.Compare(a.Key, b.Key) })
+		slices.SortFunc(got, func(a, b rtlive.Key) int { return strings.Compare(a.Key, b.Key) })
 		if !slices.Equal(got, want) {
 			t.Errorf("manifest keys = %+v, want %+v", got, want)
 		}
