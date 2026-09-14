@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
-const ContainerRuntimePath = "/ocel/runtime"
+const ContainerRuntimePath = "/ocel/bin/runtime"
 
 const runtimeTagHexLen = 12
 

@@ -1,8 +1,10 @@
 package providerkit_test
 
 import (
+	"archive/tar"
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -254,5 +256,166 @@ func TestANodeFunctionIsRefusedWhereTheProviderCarriesNoRuntime(t *testing.T) {
 		if !strings.Contains(result.GetError(), want) {
 			t.Errorf("the refusal reads %q and never names %q", result.GetError(), want)
 		}
+	}
+}
+
+type wrappingImaging struct {
+	imaging
+	runtime []byte
+}
+
+func (w wrappingImaging) ContainerRuntime(ctx context.Context, arch string) ([]byte, error) {
+	return w.Provider.WrappingContainers(w.runtime).ContainerRuntime(ctx, arch)
+}
+
+func wrappingImagingServed(t *testing.T, runtime []byte) (contractv1connect.ProviderServiceClient, *fake.Provider) {
+	t.Helper()
+	base := fake.NewProvider(fake.Options{})
+	served := servedBy(t, wrappingImaging{imaging{Provider: base}, runtime})
+	standsBootstrapped(t, served)
+	return served, base
+}
+
+func regularFiles(t *testing.T, image v1.Image) []string {
+	t.Helper()
+	layers, err := image.Layers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, layer := range layers {
+		body, err := layer.Uncompressed()
+		if err != nil {
+			t.Fatal(err)
+		}
+		reader := tar.NewReader(body)
+		for {
+			header, err := reader.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if header.Typeflag == tar.TypeReg {
+				names = append(names, header.Name)
+			}
+		}
+		body.Close()
+	}
+	slices.Sort(names)
+	return names
+}
+
+func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderCarriesOne(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	served, provider := wrappingImagingServed(t, containerRuntimeBytes)
+
+	result, _ := deploy(t, served, imagingDeployRequest())
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	pushed := provider.Registry().Pushed()
+	if len(pushed) != 1 || pushed[0].Built == nil {
+		t.Fatalf("the deploy pushed %v, want the one wrapped image the app's function runs", pushed)
+	}
+	config := configOf(t, pushed[0].Built)
+	if !slices.Equal(config.Entrypoint, []string{providerkit.ContainerRuntimePath}) {
+		t.Errorf("the function's image enters at %v, want the runtime: it is what reads the function's secrets live", config.Entrypoint)
+	}
+	if !slices.Equal(config.Cmd, []string{"node", providerkit.NodeRuntimePath}) {
+		t.Errorf("the runtime runs %v, want the node runtime the function is served through", config.Cmd)
+	}
+	files := regularFiles(t, pushed[0].Built)
+	for _, want := range []string{
+		strings.TrimPrefix(providerkit.NodeRuntimePath, "/"),
+		strings.TrimPrefix(providerkit.ContainerRuntimePath, "/"),
+	} {
+		if !slices.Contains(files, want) {
+			t.Errorf("the image holds %v and nothing at /%s", files, want)
+		}
+	}
+	if slices.Contains(files, strings.TrimPrefix(providerkit.NodeRuntimeRoot, "/")) {
+		t.Errorf("the image holds a file at %s, where the node runtime's directory stands, and a file over a directory cannot be loaded", providerkit.NodeRuntimeRoot)
+	}
+	if asked := provider.WrappedFor(); !slices.Equal(asked, []string{"amd64"}) {
+		t.Errorf("the provider was asked for a runtime built for %v, want the architecture the function is built for", asked)
+	}
+	digest, err := pushed[0].Built.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	plans := provider.Releaser().Plans()
+	if spec := plans[len(plans)-1].App.Functions[0]; !strings.HasSuffix(spec.Image, "@"+digest.String()) {
+		t.Errorf("the function spec runs %q, want it pinned to the wrapped image's digest %s", spec.Image, digest)
+	}
+}
+
+func TestAWrappedFunctionsCoordinateChangesWithTheRuntimeItIsWrappedIn(t *testing.T) {
+	targets := map[string]string{}
+	for _, runtime := range []string{"one runtime", "another runtime"} {
+		stagedProject(t, "web", "admin")
+		served, base := wrappingImagingServed(t, []byte(runtime))
+
+		result, _ := deploy(t, served, imagingDeployRequest())
+		if result == nil || !result.GetSuccess() {
+			t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+		}
+		pushed := base.Registry().Pushed()
+		if len(pushed) != 1 {
+			t.Fatalf("the deploy pushed %v, want one image", pushed)
+		}
+		targets[runtime] = pushed[0].Target
+	}
+	if targets["one runtime"] == targets["another runtime"] {
+		t.Errorf("one function wrapped in two runtimes is pushed under %q both times, so a rebuilt runtime would be read as already pushed and never reach the registry", targets["one runtime"])
+	}
+}
+
+func TestAWrappedFunctionIsHandedItsPlainAndSensitiveValuesAndNoSecretOrRecord(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	served, base := wrappingImagingServed(t, containerRuntimeBytes)
+
+	req := imagingDeployRequest()
+	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
+	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, "API_TOKEN", "sensitive-token")
+	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, "DATABASE_URL", "")
+	sealValue(t, base, "DATABASE_URL", "postgres://sealed")
+
+	result, _ := deploy(t, served, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	plans := base.Releaser().Plans()
+	delivered := plans[len(plans)-1].App.Values.Delivered
+	for key, want := range map[string]string{"REGION": "eu-west-1", "API_TOKEN": "sensitive-token"} {
+		if delivered[key] != want {
+			t.Errorf("the function is handed %s=%q, want %q: the runtime reads a declared value off the environment it boots in", key, delivered[key], want)
+		}
+	}
+	if got, held := delivered["DATABASE_URL"]; held {
+		t.Errorf("the function is handed DATABASE_URL=%q, want the runtime inside its image to open the secret: a plaintext in the revision is readable by anyone who may describe the service", got)
+	}
+	if got, held := delivered[providerkit.ResourceEnvName(providerkit.BindingPostgres, "orders")]; held {
+		t.Errorf("the function is handed the record %q, want the runtime inside its image to read it", got)
+	}
+}
+
+func TestAnUnsetSecretIsRefusedByThePlanOfAWrappedFunction(t *testing.T) {
+	stagedProject(t, "web", "admin")
+	served, _ := wrappingImagingServed(t, containerRuntimeBytes)
+
+	req := declaring(imagingDeployRequest(), resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, "DATABASE_URL", "")
+	message, events := refusedPlanOn(t, served, req)
+
+	for _, want := range []string{"web", "DATABASE_URL", "ocel env set"} {
+		if !strings.Contains(message, want) {
+			t.Errorf("the refusal reads %q and never names %q: the runtime refuses to start on an unset secret, so the plan refuses it first", message, want)
+		}
+	}
+	if entered(t, events, "web") {
+		t.Error("the deploy was already standing web up when the unset secret was refused")
 	}
 }
