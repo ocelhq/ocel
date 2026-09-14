@@ -24,6 +24,36 @@ const (
 	nameShort  = 12
 )
 
+const (
+	logDriver   = "local"
+	logMaxSize  = "20m"
+	logMaxFiles = "5"
+	LogCeiling  = 20 * 5 << 20
+)
+
+const (
+	pidsLimit       = "4096"
+	noNewPrivileges = "no-new-privileges"
+)
+
+var appCapabilities = []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL", "NET_BIND_SERVICE", "SETGID", "SETUID", "SETPCAP"}
+
+func logging() []string {
+	return []string{"--log-driver", logDriver, "--log-opt", "max-size=" + logMaxSize, "--log-opt", "max-file=" + logMaxFiles}
+}
+
+func confined(capabilities []string, fileCapabilities bool) []string {
+	argv := []string{"--pids-limit", pidsLimit}
+	if !fileCapabilities {
+		argv = append(argv, "--security-opt", noNewPrivileges)
+	}
+	argv = append(argv, "--cap-drop", "ALL")
+	for _, capability := range capabilities {
+		argv = append(argv, "--cap-add", capability)
+	}
+	return argv
+}
+
 var stateFields = []struct{ label, selector string }{
 	{"Status", ".State.Status"},
 	{"ExitCode", ".State.ExitCode"},
@@ -65,6 +95,8 @@ func containerRun(spec Container, held handoff) []string {
 		"--label", LabelRef + "=" + spec.Image,
 		"--label", LabelEnv + "=" + held.digest,
 	}
+	argv = append(argv, logging()...)
+	argv = append(argv, confined(appCapabilities, false)...)
 	if held.path != "" {
 		argv = append(argv, "--env-file", held.path)
 	}

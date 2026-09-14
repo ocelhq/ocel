@@ -67,8 +67,8 @@ func TestAMeasurementUnderTheFloorIsStillHeldToTheFloor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("readHeadroom() = %v", err)
 	}
-	if room.Needs() != FirstDeployFloor {
-		t.Errorf("Needs() = %d, want the floor %d: what a box already holds is no bound on the image this deploy has not built yet, and a 300 byte measurement would authorise a deploy onto a disk with nothing on it",
+	if room.Needs() != FirstDeployFloor+LogCeiling {
+		t.Errorf("Needs() = %d, want the floor %d and the log ceiling: what a box already holds is no bound on the image this deploy has not built yet, and a 300 byte measurement would authorise a deploy onto a disk with nothing on it",
 			room.Needs(), FirstDeployFloor)
 	}
 	said := arithmetic(room)
@@ -93,8 +93,8 @@ func TestAFirstDeployIsProtectedByAConstantThatSaysItIsAGuess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("readHeadroom() = %v", err)
 	}
-	if room.Needs() != FirstDeployFloor {
-		t.Fatalf("Needs() = %d, want the floor %d: with nothing held there is no size to extrapolate", room.Needs(), FirstDeployFloor)
+	if room.Needs() != FirstDeployFloor+LogCeiling {
+		t.Fatalf("Needs() = %d, want the floor %d and the log ceiling: with nothing held there is no size to extrapolate", room.Needs(), FirstDeployFloor)
 	}
 	said := arithmetic(room)
 	if !strings.Contains(said, "guessed constant") {

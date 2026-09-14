@@ -57,7 +57,7 @@ func (r Held) Needs() int64 { return max(FirstDeployFloor, r.Measured()) }
 func (h Headroom) Needs() int64 {
 	var wanted int64
 	for _, held := range h.Repos {
-		wanted += held.Needs()
+		wanted += held.Needs() + LogCeiling
 	}
 	return wanted
 }
@@ -179,7 +179,7 @@ func arithmetic(room Headroom) string {
 			"%s, and the plan a preflight is handed carries no size for the image it names, so %s is a guessed constant rather than a measurement",
 			measured(repository, held), sized(FirstDeployFloor)))
 	}
-	return strings.Join(written, "; ")
+	return strings.Join(written, "; ") + fmt.Sprintf("; plus %s of log each incoming container may keep before the engine rotates it away", sized(LogCeiling))
 }
 
 func measured(repository string, held Held) string {
