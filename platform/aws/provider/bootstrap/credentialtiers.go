@@ -814,8 +814,12 @@ func bootstrapProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Resources: []string{r.bootstrapQueue},
 		},
 		{
-			Actions:   []string{"ssm:AddTagsToResource", "ssm:DeleteParameter", "ssm:DeleteParameters", "ssm:PutParameter"},
+			Actions:   []string{"ssm:AddTagsToResource", "ssm:PutParameter"},
 			Resources: []string{r.anyParam},
+		},
+		{
+			Actions:   []string{"ssm:DeleteParameter", "ssm:DeleteParameters"},
+			Resources: []string{r.edgeParam, r.originParam, r.stackRecord},
 		},
 		{
 			Actions:   []string{"ssm:GetParametersByPath"},
