@@ -165,6 +165,18 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
+signs:
+  - id: checksums
+    cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - --yes
+      - "--bundle=${signature}"
+      - "${artifact}"
+    artifacts: checksum
+    output: true
+
 snapshot:
   version_template: "{{ .Version }}-snapshot-{{ .ShortCommit }}"
 
