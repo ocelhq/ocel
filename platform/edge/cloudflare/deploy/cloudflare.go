@@ -17,6 +17,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/accounts"
@@ -86,6 +87,7 @@ func (p *provider) Facts() edge.Facts {
 		RunsCode:            true,
 		ServesUnbound:       true,
 		SignsOriginForwards: true,
+		CachesRecords:       true,
 		CredentialScope:     os.Getenv(envAccountID),
 	}
 }
@@ -94,8 +96,10 @@ func (p *provider) Supported() []edge.Need {
 	return edge.AllNeeds()
 }
 
+const recordTTL = 5 * time.Second
+
 func (p *provider) FlipBound() edge.FlipBound {
-	return edge.FlipBound{}
+	return edge.FlipBound{Typical: recordTTL}
 }
 
 func (p *provider) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
