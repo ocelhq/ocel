@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -173,10 +174,30 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPr
 	if err := refuseContainersBehindFunctionEdge(pre); err != nil {
 		return err
 	}
+	if err := p.nagStaleEdgeKey(ctx, pre); err != nil {
+		return err
+	}
 	if err := p.publishRuntimeLayers(ctx, pre); err != nil {
 		return err
 	}
 	return p.releases.Preflight(ctx, pre)
+}
+
+func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre providerkit.DeployPreflight) error {
+	if pre.Edge == "" || pre.Report == nil {
+		return nil
+	}
+	params, err := p.classParams(ctx, pre.Plan.Class, pre.Edge)
+	if err != nil {
+		return err
+	}
+	if params.EdgeCredentialsErr != nil {
+		return nil
+	}
+	if notice := bootstrap.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), string(pre.Plan.Class)); notice != "" {
+		pre.Report.Detail(notice)
+	}
+	return nil
 }
 
 func (p *Provider) publishRuntimeLayers(ctx context.Context, pre providerkit.DeployPreflight) error {

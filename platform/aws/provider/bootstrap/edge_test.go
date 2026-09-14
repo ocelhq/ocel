@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -72,9 +73,21 @@ func (f *fakeSSM) DeleteParameter(_ context.Context, in *ssm.DeleteParameterInpu
 }
 
 type fakeIAM struct {
-	created []string
-	keys    []string
-	deleted []string
+	created  []string
+	keys     []string
+	deleted  []string
+	minted   map[string]time.Time
+	lastUsed map[string]time.Time
+}
+
+var mintedAt = time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)
+
+func (f *fakeIAM) GetAccessKeyLastUsed(_ context.Context, in *iam.GetAccessKeyLastUsedInput, _ ...func(*iam.Options)) (*iam.GetAccessKeyLastUsedOutput, error) {
+	out := &iam.GetAccessKeyLastUsedOutput{AccessKeyLastUsed: &iamtypes.AccessKeyLastUsed{}}
+	if at, ok := f.lastUsed[aws.ToString(in.AccessKeyId)]; ok {
+		out.AccessKeyLastUsed.LastUsedDate = aws.Time(at)
+	}
+	return out, nil
 }
 
 func (f *fakeIAM) DeleteAccessKey(_ context.Context, in *iam.DeleteAccessKeyInput, _ ...func(*iam.Options)) (*iam.DeleteAccessKeyOutput, error) {
@@ -89,7 +102,11 @@ func (f *fakeIAM) DeleteAccessKey(_ context.Context, in *iam.DeleteAccessKeyInpu
 func (f *fakeIAM) ListAccessKeys(_ context.Context, in *iam.ListAccessKeysInput, _ ...func(*iam.Options)) (*iam.ListAccessKeysOutput, error) {
 	meta := make([]iamtypes.AccessKeyMetadata, 0, len(f.keys))
 	for _, id := range f.keys {
-		meta = append(meta, iamtypes.AccessKeyMetadata{UserName: in.UserName, AccessKeyId: aws.String(id)})
+		key := iamtypes.AccessKeyMetadata{UserName: in.UserName, AccessKeyId: aws.String(id)}
+		if at, ok := f.minted[id]; ok {
+			key.CreateDate = aws.Time(at)
+		}
+		meta = append(meta, key)
 	}
 	return &iam.ListAccessKeysOutput{AccessKeyMetadata: meta}, nil
 }
@@ -112,12 +129,12 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		ssmc := newFakeSSM()
 		iamc := &fakeIAM{}
 
-		created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare)
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, mintedAt)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
-		if !created {
-			t.Error("expected created=true on first mint")
+		if !outcome.minted {
+			t.Error("expected a mint on first run")
 		}
 		if len(iamc.created) != 1 || iamc.created[0] != edgeUserName {
 			t.Errorf("CreateAccessKey users = %v, want [%s]", iamc.created, edgeUserName)
@@ -134,6 +151,9 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		if creds.AccessKeyID != "AKIAEDGE" || creds.SecretAccessKey != "secret-edge" {
 			t.Errorf("stored creds = %+v, want the minted key", creds)
 		}
+		if !creds.CreatedAt.Equal(mintedAt) {
+			t.Errorf("stored CreatedAt = %v, want the mint time %v, which is what a deploy ages the key by", creds.CreatedAt, mintedAt)
+		}
 	})
 
 	t.Run("reuses a recorded key the user still has", func(t *testing.T) {
@@ -141,12 +161,12 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		ssmc.params[cloudflareNames(ClassProduction).credentialsParam] = `{"accessKeyId":"AKOLD","secretAccessKey":"old"}`
 		iamc := &fakeIAM{keys: []string{"AKOLD"}}
 
-		created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare)
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, mintedAt)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
-		if created {
-			t.Error("expected created=false when the recorded key is still live")
+		if outcome.minted {
+			t.Error("expected no mint when the recorded key is still live")
 		}
 		if len(iamc.created) != 0 {
 			t.Errorf("minted a key despite a live recorded one: %v", iamc.created)
@@ -161,12 +181,12 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		ssmc.params[cloudflareNames(ClassProduction).credentialsParam] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
 		iamc := &fakeIAM{}
 
-		created, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare)
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, mintedAt)
 		if err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
-		if !created {
-			t.Error("expected created=true: a CloudFormation replacement of the user takes its key, and the parameter outlives it")
+		if !outcome.minted {
+			t.Error("expected a mint: a CloudFormation replacement of the user takes its key, and the parameter outlives it")
 		}
 		var creds EdgeCredentials
 		if err := json.Unmarshal([]byte(ssmc.params[cloudflareNames(ClassProduction).credentialsParam]), &creds); err != nil {
@@ -182,7 +202,7 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		ssmc.params[cloudflareNames(ClassProduction).credentialsParam] = `{"accessKeyId":"AKGONE","secretAccessKey":"gone"}`
 		iamc := &fakeIAM{keys: []string{"AK1", "AK2"}}
 
-		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare)
+		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, mintedAt)
 		if err == nil {
 			t.Fatal("expected an error when the user is already at the 2-key cap")
 		}
@@ -195,7 +215,7 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		ssmc := newFakeSSM()
 		iamc := &fakeIAM{keys: []string{"AK1", "AK2"}}
 
-		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare)
+		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, mintedAt)
 		if err == nil {
 			t.Fatal("expected an error when the user is already at the 2-key cap")
 		}
@@ -211,7 +231,7 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 		ssmc := newFakeSSM()
 		iamc := &fakeIAM{}
 
-		if _, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassPreview, KindCloudflare); err != nil {
+		if _, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassPreview, KindCloudflare, mintedAt); err != nil {
 			t.Fatalf("ensureEdgeCredentials: %v", err)
 		}
 		if len(iamc.created) != 1 || iamc.created[0] != previewEdgeUser {
@@ -221,6 +241,186 @@ func TestEnsureEdgeCredentials(t *testing.T) {
 			t.Errorf("preview credentials were not written to %s", cloudflareNames(ClassPreview).credentialsParam)
 		}
 	})
+}
+
+func recordedCreds(t *testing.T, ssmc *fakeSSM) EdgeCredentials {
+	t.Helper()
+	var creds EdgeCredentials
+	if err := json.Unmarshal([]byte(ssmc.params[cloudflareNames(ClassProduction).credentialsParam]), &creds); err != nil {
+		t.Fatalf("stored value is not EdgeCredentials JSON: %v", err)
+	}
+	return creds
+}
+
+func TestEdgeCredentialRotation(t *testing.T) {
+	stale := mintedAt.Add(EdgeKeyMaxAge)
+	fresh := mintedAt.Add(EdgeKeyMaxAge - time.Hour)
+	recorded := func(ssmc *fakeSSM, id string, at time.Time) {
+		payload, _ := json.Marshal(EdgeCredentials{AccessKeyID: id, SecretAccessKey: "s", CreatedAt: at})
+		ssmc.params[cloudflareNames(ClassProduction).credentialsParam] = string(payload)
+	}
+
+	t.Run("a key younger than the maximum age is kept", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKOLD", mintedAt)
+		iamc := &fakeIAM{keys: []string{"AKOLD"}}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, fresh)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if outcome != (edgeKeyOutcome{}) {
+			t.Errorf("outcome = %+v, want nothing minted, rotated or retired", outcome)
+		}
+		if len(iamc.created) != 0 || len(iamc.deleted) != 0 || ssmc.puts != 0 {
+			t.Errorf("created %v, deleted %v, puts %d; want the account untouched", iamc.created, iamc.deleted, ssmc.puts)
+		}
+	})
+
+	t.Run("a key at the maximum age is rotated: a fresh key is minted and recorded, the old one stays for the workers still holding it", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKOLD", mintedAt)
+		iamc := &fakeIAM{keys: []string{"AKOLD"}}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, stale)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if !outcome.rotated || !outcome.minted || outcome.retired != "" {
+			t.Errorf("outcome = %+v, want a rotation that retires nothing yet", outcome)
+		}
+		if creds := recordedCreds(t, ssmc); creds.AccessKeyID != "AKIAEDGE" || !creds.CreatedAt.Equal(stale) {
+			t.Errorf("recorded = %+v, want the fresh key stamped with the rotation time", creds)
+		}
+		if len(iamc.deleted) != 0 {
+			t.Errorf("deleted %v, want the old key left for every worker still signing with it", iamc.deleted)
+		}
+		if !slices.Equal(iamc.keys, []string{"AKOLD", "AKIAEDGE"}) {
+			t.Errorf("keys = %v, want both generations live", iamc.keys)
+		}
+	})
+
+	t.Run("the age falls back to what IAM recorded when the parameter carries none", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		ssmc.params[cloudflareNames(ClassProduction).credentialsParam] = `{"accessKeyId":"AKOLD","secretAccessKey":"s"}`
+		iamc := &fakeIAM{keys: []string{"AKOLD"}, minted: map[string]time.Time{"AKOLD": mintedAt}}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, stale)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if !outcome.rotated {
+			t.Errorf("outcome = %+v, want a rotation from IAM's own CreateDate", outcome)
+		}
+	})
+
+	t.Run("the next bootstrap retires the superseded key once nothing has signed with it for a day", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKNEW", stale)
+		iamc := &fakeIAM{
+			keys:     []string{"AKOLD", "AKNEW"},
+			lastUsed: map[string]time.Time{"AKOLD": stale.Add(2 * time.Hour)},
+		}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, stale.Add(48*time.Hour))
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if outcome.retired != "AKOLD" || outcome.minted {
+			t.Errorf("outcome = %+v, want the idle old key retired and nothing minted", outcome)
+		}
+		if !slices.Equal(iamc.deleted, []string{"AKOLD"}) || !slices.Equal(iamc.keys, []string{"AKNEW"}) {
+			t.Errorf("deleted %v, keys %v; want only AKOLD gone", iamc.deleted, iamc.keys)
+		}
+	})
+
+	t.Run("a superseded key a worker signed with today is left standing", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKNEW", stale)
+		now := stale.Add(48 * time.Hour)
+		iamc := &fakeIAM{
+			keys:     []string{"AKOLD", "AKNEW"},
+			lastUsed: map[string]time.Time{"AKOLD": now.Add(-time.Hour)},
+		}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, now)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if outcome.retired != "" || len(iamc.deleted) != 0 {
+			t.Errorf("outcome = %+v, deleted %v; want a key still in use kept until every worker has moved off it", outcome, iamc.deleted)
+		}
+	})
+
+	t.Run("a never-used superseded key is retired at once", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKNEW", stale)
+		iamc := &fakeIAM{keys: []string{"AKOLD", "AKNEW"}}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, stale.Add(time.Hour))
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if outcome.retired != "AKOLD" {
+			t.Errorf("outcome = %+v, want the never-used key retired", outcome)
+		}
+	})
+
+	t.Run("a rotation with no room refuses and names the key still in use", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKNEW", mintedAt)
+		now := mintedAt.Add(EdgeKeyMaxAge)
+		iamc := &fakeIAM{
+			keys:     []string{"AKOLD", "AKNEW"},
+			lastUsed: map[string]time.Time{"AKOLD": now.Add(-time.Minute)},
+		}
+
+		_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, now)
+		if err == nil {
+			t.Fatal("ensureEdgeCredentials err = nil, want a refusal: two keys stand and both are in use")
+		}
+		if !strings.Contains(err.Error(), "AKNEW") {
+			t.Errorf("err = %v, want it to name the key every project must move onto", err)
+		}
+		if len(iamc.created) != 0 || len(iamc.deleted) != 0 {
+			t.Errorf("created %v, deleted %v; want the account untouched by a refused rotation", iamc.created, iamc.deleted)
+		}
+	})
+
+	t.Run("a rotation whose predecessor went idle retires it and rotates in one run", func(t *testing.T) {
+		ssmc := newFakeSSM()
+		recorded(ssmc, "AKNEW", mintedAt)
+		now := mintedAt.Add(EdgeKeyMaxAge)
+		iamc := &fakeIAM{keys: []string{"AKOLD", "AKNEW"}}
+
+		outcome, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, now)
+		if err != nil {
+			t.Fatalf("ensureEdgeCredentials: %v", err)
+		}
+		if outcome.retired != "AKOLD" || !outcome.rotated {
+			t.Errorf("outcome = %+v, want AKOLD retired and AKNEW succeeded", outcome)
+		}
+		if !slices.Equal(iamc.keys, []string{"AKNEW", "AKIAEDGE"}) {
+			t.Errorf("keys = %v, want the two newest generations", iamc.keys)
+		}
+	})
+}
+
+func TestStaleEdgeKeyNotice(t *testing.T) {
+	creds := EdgeCredentials{AccessKeyID: "AKOLD", CreatedAt: mintedAt}
+
+	if notice := StaleEdgeKeyNotice(creds, mintedAt.Add(EdgeKeyMaxAge-time.Second), ClassProduction); notice != "" {
+		t.Errorf("notice = %q, want none for a key within its age", notice)
+	}
+	notice := StaleEdgeKeyNotice(creds, mintedAt.Add(EdgeKeyMaxAge+24*time.Hour), ClassProduction)
+	for _, want := range []string{"AKOLD", "91 days", "ocel bootstrap"} {
+		if !strings.Contains(notice, want) {
+			t.Errorf("notice = %q, want it to carry %q", notice, want)
+		}
+	}
+	if notice := StaleEdgeKeyNotice(EdgeCredentials{AccessKeyID: "AKOLD"}, mintedAt.Add(10*EdgeKeyMaxAge), ClassProduction); notice != "" {
+		t.Errorf("notice = %q, want none when the mint time is unknown", notice)
+	}
 }
 
 func TestReadEdgeCredentials(t *testing.T) {
@@ -238,7 +438,7 @@ func TestReadEdgeCredentials(t *testing.T) {
 
 func TestEdgeCredentials(t *testing.T) {
 	t.Run("unknown class", func(t *testing.T) {
-		if _, err := ensureEdgeCredentials(context.Background(), &fakeIAM{}, newFakeSSM(), defaultNamespace, "nonsense", KindCloudflare); err == nil {
+		if _, err := ensureEdgeCredentials(context.Background(), &fakeIAM{}, newFakeSSM(), defaultNamespace, "nonsense", KindCloudflare, mintedAt); err == nil {
 			t.Error("expected an error for an unknown class")
 		}
 	})

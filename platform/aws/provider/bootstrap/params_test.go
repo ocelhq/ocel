@@ -2,8 +2,10 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -29,7 +31,7 @@ func standingParams(t *testing.T) (*fakeSSM, *fakeIAM) {
 	if _, err := ensurePassphrase(ctx, ssmc, defaultNamespace); err != nil {
 		t.Fatalf("ensurePassphrase: %v", err)
 	}
-	if _, err := ensureEdgeCredentials(ctx, iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare); err != nil {
+	if _, err := ensureEdgeCredentials(ctx, iamc, ssmc, defaultNamespace, ClassProduction, KindCloudflare, time.Now()); err != nil {
 		t.Fatalf("ensureEdgeCredentials: %v", err)
 	}
 	if err := adoptCacheStore(ctx, ssmc, defaultNamespace, ClassProduction, KindCloudflare, offeredStore()); err != nil {
@@ -195,6 +197,24 @@ func TestPlanParametersShowsWhatSeveringTheEdgeTakesWithIt(t *testing.T) {
 	}
 	if len(got) != len(names.edgeParams())+3 {
 		t.Errorf("plan rows = %+v, want the core parameters, the access key and the edge parameters", group.Changes)
+	}
+}
+
+func TestPlanParametersRotatesAKeyPastItsAge(t *testing.T) {
+	ssmc, iamc := standingParams(t)
+	payload, _ := json.Marshal(EdgeCredentials{AccessKeyID: "AKIAEDGE", SecretAccessKey: "s", CreatedAt: time.Now().Add(-EdgeKeyMaxAge - time.Hour)})
+	ssmc.params[cloudflareNames(ClassProduction).credentialsParam] = string(payload)
+
+	group := plannedParams(t, ssmc, iamc, fronting())
+
+	names := cloudflareNames(ClassProduction)
+	for _, change := range group.Changes {
+		if change.Name != names.credentialsParam && change.Name != names.user {
+			continue
+		}
+		if change.Action != providerkit.ActionUpdate || change.Reason != keyStale {
+			t.Errorf("%s = %q (%q), want an update that says the key is rotated for its age", change.Name, change.Action, change.Reason)
+		}
 	}
 }
 
