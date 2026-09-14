@@ -43,12 +43,11 @@ var testServer = Server{URL: "http://127.0.0.1:1234", Token: testToken}
 
 func serving(t *testing.T, handler http.Handler) Server {
 	t.Helper()
-	var address string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		channel.LoopbackGuard(address, testToken, handler).ServeHTTP(w, r)
-	}))
+	server := httptest.NewUnstartedServer(nil)
+	address := server.Listener.Addr().String()
+	server.Config.Handler = channel.LoopbackGuard(address, testToken, handler)
+	server.Start()
 	t.Cleanup(server.Close)
-	address = server.Listener.Addr().String()
 	return Server{URL: server.URL, Token: testToken}
 }
 
