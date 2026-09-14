@@ -8,10 +8,15 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
+
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 const (
@@ -20,7 +25,24 @@ const (
 	transferTag        = "sha256-1111111111111111111111111111111111111111111111111111111111111111"
 )
 
-func transferCoordinate() string { return transferRepository + ":" + transferTag }
+func transferBase() string { return transferRepository + ":" + transferTag }
+
+func transferRuntime(t *testing.T, daemon providerkit.DockerHost, client *http.Client) []byte {
+	t.Helper()
+	arch, err := daemon.Architecture(context.Background(), client, transferBase())
+	if err != nil {
+		t.Fatalf("read the architecture the daemon at %s imported %s as: %v", daemon.Address, transferBase(), err)
+	}
+	runtime, err := host.ContainerRuntime(arch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return runtime
+}
+
+func transferCoordinate(runtime []byte) string {
+	return transferRepository + ":" + providerkit.RuntimeTag(transferDigest, runtime)
+}
 
 func rootfs(t *testing.T) []byte {
 	t.Helper()
@@ -85,7 +107,7 @@ func imported(t *testing.T) (providerkit.DockerHost, *http.Client) {
 	t.Helper()
 	daemon, client := localDaemon(t)
 
-	query := url.Values{"fromSrc": {"-"}, "repo": {transferRepository}, "tag": {transferTag}}
+	query := url.Values{"fromSrc": {"-"}, "repo": {transferRepository}, "tag": {transferTag}, "changes": {`CMD ["/ocel-live-transfer"]`}}
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
 		"http://docker/images/create?"+query.Encode(), bytes.NewReader(rootfs(t)))
 	if err != nil {
@@ -99,7 +121,7 @@ func imported(t *testing.T) (providerkit.DockerHost, *http.Client) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("the daemon at %s answered %q importing %s", daemon.Address, resp.Status, transferCoordinate())
+		t.Fatalf("the daemon at %s answered %q importing %s", daemon.Address, resp.Status, transferBase())
 	}
 	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
 		t.Fatal(err)
@@ -110,7 +132,7 @@ func imported(t *testing.T) (providerkit.DockerHost, *http.Client) {
 
 func forget(client *http.Client) {
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete,
-		"http://docker/images/"+transferCoordinate()+"?force=1", nil)
+		"http://docker/images/"+transferBase()+"?force=1", nil)
 	if err != nil {
 		return
 	}
@@ -121,13 +143,48 @@ func forget(client *http.Client) {
 	_ = resp.Body.Close()
 }
 
-func transferPush() providerkit.ImagePush {
+func transferPush(daemon providerkit.DockerHost, client *http.Client, runtime []byte) providerkit.ImagePush {
 	return providerkit.ImagePush{
 		App:    "live-transfer",
 		Source: transferRepository + "@" + transferDigest,
-		Target: transferCoordinate(),
+		Target: transferCoordinate(runtime),
 		Digest: transferDigest,
+		Wrap: func(ctx context.Context) (v1.Image, func(), error) {
+			return wrappedAsADeployDoes(ctx, daemon, client, runtime)
+		},
 	}
+}
+
+func wrappedAsADeployDoes(ctx context.Context, daemon providerkit.DockerHost, client *http.Client, runtime []byte) (v1.Image, func(), error) {
+	stream, err := daemon.Export(ctx, client, transferBase())
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = stream.Close() }()
+	saved, err := os.CreateTemp("", "ocel-live-transfer-")
+	if err != nil {
+		return nil, nil, err
+	}
+	discard := func() { _ = os.Remove(saved.Name()) }
+	if _, err := io.Copy(saved, stream); err != nil {
+		discard()
+		return nil, nil, err
+	}
+	if err := saved.Close(); err != nil {
+		discard()
+		return nil, nil, err
+	}
+	base, err := tarball.ImageFromPath(saved.Name(), nil)
+	if err != nil {
+		discard()
+		return nil, nil, err
+	}
+	wrapped, err := providerkit.WrapContainer(base, runtime)
+	if err != nil {
+		discard()
+		return nil, nil, err
+	}
+	return wrapped, discard, nil
 }
 
 func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *testing.T) {
@@ -136,7 +193,8 @@ func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *tes
 	daemon, client := imported(t)
 	keepsImagesInContainerd(t, daemon, client)
 
-	coordinate := transferCoordinate()
+	runtime := transferRuntime(t, daemon, client)
+	coordinate := transferCoordinate(runtime)
 	vm.ssh(t, "sudo docker image rm -f "+coordinate+" >/dev/null 2>&1 || true")
 	t.Cleanup(func() { vm.ssh(t, "sudo docker image rm -f "+coordinate+" >/dev/null 2>&1 || true") })
 
@@ -145,7 +203,7 @@ func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *tes
 	if err != nil {
 		t.Fatalf("DirectImages() = %v", err)
 	}
-	push := transferPush()
+	push := transferPush(daemon, client, runtime)
 
 	held, err := store.Has(ctx, push)
 	if err != nil {
@@ -176,7 +234,8 @@ func TestLiveARedeployOfAnUnchangedAppCarriesTheImageNoSecondTime(t *testing.T) 
 	daemon, client := imported(t)
 	keepsImagesInContainerd(t, daemon, client)
 
-	coordinate := transferCoordinate()
+	runtime := transferRuntime(t, daemon, client)
+	coordinate := transferCoordinate(runtime)
 	vm.ssh(t, "sudo docker image rm -f "+coordinate+" >/dev/null 2>&1 || true")
 	t.Cleanup(func() { vm.ssh(t, "sudo docker image rm -f "+coordinate+" >/dev/null 2>&1 || true") })
 
@@ -185,7 +244,7 @@ func TestLiveARedeployOfAnUnchangedAppCarriesTheImageNoSecondTime(t *testing.T) 
 	if err != nil {
 		t.Fatalf("DirectImages() = %v", err)
 	}
-	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{transferPush()}}
+	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{transferPush(daemon, client, runtime)}}
 	if err := plan.Ship(ctx, nil); err != nil {
 		t.Fatalf("Ship() = %v", err)
 	}

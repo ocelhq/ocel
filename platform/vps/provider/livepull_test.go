@@ -151,7 +151,7 @@ func liveDigest(t *testing.T, target providerkit.RegistryTarget, coordinate stri
 	t.Helper()
 	seed := providerkit.ImagePush{
 		App:    pullRepository,
-		Source: transferCoordinate(),
+		Source: transferBase(),
 		Target: coordinate,
 		Digest: transferDigest,
 	}
@@ -192,7 +192,7 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 	digest := liveDigest(t, target, coordinate)
 	push := providerkit.ImagePush{
 		App:    pullRepository,
-		Source: transferCoordinate(),
+		Source: transferBase(),
 		Target: coordinate,
 		Digest: digest,
 	}
