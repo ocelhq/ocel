@@ -44,6 +44,7 @@ for goarch in amd64 arm64; do
   build_lambda ./cmd/runtime "$layer/bootstrap" "$goarch"
   cp -R "$root/platform/aws/runtime/dist/." "$layer/ocel/"
   pack "$layer" "$dist/runtime-layer-$goarch.zip"
+  build_lambda ./cmd/container "$dist/container-runtime-$goarch" "$goarch"
 done
 
 mkdir -p "$stage/upload-completer"

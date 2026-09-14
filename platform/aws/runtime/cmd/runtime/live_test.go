@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -14,7 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
-	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	vars "github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
 
 type sink struct {
@@ -45,6 +47,10 @@ func (s *sink) messages(t *testing.T) []map[string]string {
 	}
 	return out
 }
+
+type resolvedFetcher map[string]string
+
+func (f resolvedFetcher) FetchLive(context.Context) (map[string]string, error) { return f, nil }
 
 type stubValues struct {
 	env      []string
@@ -204,6 +210,31 @@ func TestChildEnv(t *testing.T) {
 		bare := childEnv(bakedEnv, nil, nil)
 		if len(bare) != 1 {
 			t.Errorf("childEnv for a function with no live values = %q, want only the class delivered in the environment", bare)
+		}
+	})
+
+	t.Run("names the directory the live values were projected into", func(t *testing.T) {
+		root := filepath.Join(t.TempDir(), "live")
+		l := vars.New(resolvedFetcher{"DB_PASSWORD": "hunter2"}, []string{"DB_PASSWORD"}, nil, nil)
+		if err := l.Join(l.Prefetch(t.Context())); err != nil {
+			t.Fatalf("prefetch: %v", err)
+		}
+		if err := l.Project(root); err != nil {
+			t.Fatalf("Project: %v", err)
+		}
+
+		got := childEnv(nil, l, nil)
+		if !slices.Contains(got, constants.LiveDirEnvName+"="+root) {
+			t.Fatalf("childEnv = %q, missing %s=%s, so a go or python child is handed no way to read a secret at all", got, constants.LiveDirEnvName, root)
+		}
+		value, err := os.ReadFile(filepath.Join(root, "DB_PASSWORD"))
+		if err != nil || string(value) != "hunter2" {
+			t.Errorf("the child reads %q (%v) at the directory it was named, want the resolved value", value, err)
+		}
+		for _, entry := range got {
+			if strings.Contains(entry, "hunter2") {
+				t.Errorf("childEnv = %q, which puts a live plaintext in the child's environment", entry)
+			}
 		}
 	})
 

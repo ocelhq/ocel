@@ -45,3 +45,7 @@ func taskRoot() string {
 	}
 	return "/var/task"
 }
+
+func liveDir() string {
+	return filepath.Join(os.TempDir(), "ocel-live")
+}

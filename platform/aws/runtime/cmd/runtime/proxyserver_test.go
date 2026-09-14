@@ -15,7 +15,7 @@ import (
 	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
 
 func proxyEnvValue(t *testing.T, env []string, key string) string {

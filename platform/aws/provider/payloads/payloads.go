@@ -27,6 +27,10 @@ var (
 		"amd64": load("runtime-layer-amd64.zip"),
 		"arm64": load("runtime-layer-arm64.zip"),
 	}
+	containerRuntimes = map[string]Payload{
+		"amd64": load("container-runtime-amd64"),
+		"arm64": load("container-runtime-arm64"),
+	}
 	uploadCompleter = load("upload-completer.zip")
 	imageOptimizer  = load("image-optimizer.zip")
 	revalidator     = load("revalidator.zip")
@@ -40,6 +44,14 @@ func RuntimeLayer(arch string) (Payload, error) {
 		return Payload{}, fmt.Errorf("this provider carries no runtime built for %q", arch)
 	}
 	return runtimeLayers[goarch], nil
+}
+
+func ContainerRuntime(arch string) (Payload, error) {
+	held, builds := containerRuntimes[arch]
+	if !builds {
+		return Payload{}, fmt.Errorf("this provider carries no container runtime built for %q", arch)
+	}
+	return held, nil
 }
 
 func UploadCompleter() Payload { return uploadCompleter }
