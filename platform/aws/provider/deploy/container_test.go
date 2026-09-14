@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -267,18 +269,42 @@ func TestAContainerStackDecodesIntoTheContainerItStoodUp(t *testing.T) {
 }
 
 type fakeRules struct {
+	mu    sync.Mutex
 	taken []string
+	held  []elbv2types.Rule
 }
 
-func (f fakeRules) DescribeRules(_ context.Context, in *elbv2.DescribeRulesInput, _ ...func(*elbv2.Options)) (*elbv2.DescribeRulesOutput, error) {
+func (f *fakeRules) DescribeRules(_ context.Context, in *elbv2.DescribeRulesInput, _ ...func(*elbv2.Options)) (*elbv2.DescribeRulesOutput, error) {
 	if aws.ToString(in.ListenerArn) != fixtureListener {
 		return nil, errors.New("asked about a listener that is not the front's")
 	}
-	out := &elbv2.DescribeRulesOutput{}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := &elbv2.DescribeRulesOutput{Rules: slices.Clone(f.held)}
 	for _, priority := range f.taken {
 		out.Rules = append(out.Rules, elbv2types.Rule{Priority: aws.String(priority)})
 	}
 	return out, nil
+}
+
+func (f *fakeRules) claim(priority int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.taken = append(f.taken, strconv.Itoa(priority))
+}
+
+func ruleRouting(priority int, physical string) elbv2types.Rule {
+	return elbv2types.Rule{
+		Priority: aws.String(strconv.Itoa(priority)),
+		Conditions: []elbv2types.RuleCondition{
+			{Field: aws.String("http-header"), HttpHeaderConfig: &elbv2types.HttpHeaderConditionConfig{
+				HttpHeaderName: aws.String(edge.OriginSecretHeader), Values: []string{"secret"},
+			}},
+			{Field: aws.String("http-header"), HttpHeaderConfig: &elbv2types.HttpHeaderConditionConfig{
+				HttpHeaderName: aws.String(edge.OriginContainerHeader), Values: []string{physical},
+			}},
+		},
+	}
 }
 
 func TestARuleStepsPastThePrioritiesTheFrontAlreadyHolds(t *testing.T) {
@@ -286,7 +312,7 @@ func TestARuleStepsPastThePrioritiesTheFrontAlreadyHolds(t *testing.T) {
 
 	hashed := rulePriority("shop-prod-web-container-r3f8a1c90", nil)
 	cfg, plan := plannedContainerStack(t)
-	cfg.Rules = fakeRules{taken: []string{strconv.Itoa(hashed), strconv.Itoa(hashed + 1), "default"}}
+	cfg.Rules = &fakeRules{taken: []string{strconv.Itoa(hashed), strconv.Itoa(hashed + 1), "default"}}
 	release := releasing(t, cfg)
 	work, err := release.containerWork(plan, fixtureSubstrate())
 	if err != nil {
