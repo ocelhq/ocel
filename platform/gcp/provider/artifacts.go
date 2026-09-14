@@ -119,10 +119,13 @@ func (a artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, pr
 			errs = append(errs, err)
 		}
 	}
+	if err := errors.Join(errs...); err != nil {
+		return err
+	}
 	if report != nil {
 		report.Detail("removed " + prefix)
 	}
-	return errors.Join(errs...)
+	return nil
 }
 
 func sweep(ctx context.Context, bucket *storage.BucketHandle, prefix string) error {

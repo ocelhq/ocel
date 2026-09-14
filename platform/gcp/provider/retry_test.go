@@ -28,7 +28,7 @@ func TestOnlyTheAnswersThatMeanTryAgainAreTriedAgain(t *testing.T) {
 		{name: "unavailable", err: answered(503), again: true},
 		{name: "gateway timeout", err: answered(504), again: true},
 		{name: "not implemented", err: answered(501)},
-		{name: "internal", err: answered(500)},
+		{name: "internal", err: answered(500), again: true},
 		{name: "forbidden", err: answered(403)},
 		{name: "malformed credentials", err: errors.New("could not parse the credentials")},
 		{name: "nothing at all", err: nil},

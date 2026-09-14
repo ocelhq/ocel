@@ -111,6 +111,29 @@ func TestAProjectNeitherNamedNorAmbientIsRefusedNamingWhereItIsReadWhenTheCloudI
 	}
 }
 
+func TestAGcloudThatFailsIsNamedInTheRefusalRatherThanReadAsNamingNothing(t *testing.T) {
+	withoutAnAmbientProject(t)
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "gcloud"),
+		[]byte("#!/bin/sh\necho 'ERROR: (gcloud.config.get-value) the active account is not set' >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+
+	p, err := gcp.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"region": "europe-west1"}})
+	if err != nil {
+		t.Fatalf("New() = %v, want a provider: nothing has reached the cloud yet", err)
+	}
+	var refusal providerkit.Refusal
+	_, err = p.Credentials().Whoami(context.Background())
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Whoami() with a failing gcloud = %v, want an %s refusal", err, providerkit.CodeInvalid)
+	}
+	if !strings.Contains(refusal.Message, "the active account is not set") {
+		t.Errorf("Whoami() refused with %q, want gcloud's own failure in it: a gcloud that fails is not a gcloud that names nothing", refusal.Message)
+	}
+}
+
 func withApplicationDefaultCredentials(t *testing.T, project string) {
 	t.Helper()
 
