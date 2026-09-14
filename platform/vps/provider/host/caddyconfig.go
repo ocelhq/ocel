@@ -759,6 +759,10 @@ func validClaim(claim HostClaim) error {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"a hostname claim on this box names host %q, surface %q and pointer %q, and %s answers which of a surface's routes claims a host out of all three: a box runs many pointers of one app at once and a claim naming none of them belongs to all of them",
 			claim.Hostname, claim.Owner, claim.Pointer, ProxyConfig)
+	case strings.Contains(claim.Hostname, "*"):
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"a hostname claim on this box names %q, and a claim is one hostname the proxy orders one certificate for: a wildcard is a subject no http-01 challenge can answer and a match every hostname pointed at this machine would fall under, so the one wildcard a box serves is the preview base it installs a catch-all for",
+			claim.Hostname)
 	case strings.Contains(claim.Owner, claimSeparator) || strings.Contains(claim.Hostname, claimSeparator) ||
 		strings.Contains(claim.Pointer, claimSeparator) || strings.Contains(claim.App, claimSeparator):
 		return providerkit.Refuse(providerkit.CodeInvalid,
