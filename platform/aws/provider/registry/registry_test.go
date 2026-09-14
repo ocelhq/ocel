@@ -29,6 +29,9 @@ func (f *fakeECR) CreateRepository(_ context.Context, in *ecr.CreateRepositoryIn
 	if in.ImageTagMutability != ecrtypes.ImageTagMutabilityImmutable {
 		return nil, errors.New("a release pins a digest under its tag, so the tag must never repoint")
 	}
+	if in.ImageScanningConfiguration == nil || !in.ImageScanningConfiguration.ScanOnPush {
+		return nil, errors.New("a repository made without scan-on-push ships every image unexamined")
+	}
 	f.created = append(f.created, name)
 	return &ecr.CreateRepositoryOutput{}, nil
 }
