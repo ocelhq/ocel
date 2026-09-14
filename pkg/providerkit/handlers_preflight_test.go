@@ -370,3 +370,45 @@ func TestPreflightLeavesTheEdgeScopeEmptyWhenNoEdgeVerifiesCredentials(t *testin
 		t.Errorf("Preflight() reported %v, want an edge that verifies nothing to be no problem", resp.GetCredentialProblems())
 	}
 }
+
+type wrappingProvider struct {
+	*fake.Provider
+}
+
+func (wrappingProvider) ContainerRuntime(context.Context, string) ([]byte, error) {
+	return []byte("runtime"), nil
+}
+
+func TestPreflightNamesTheComputesADeployHandsValuesToOnce(t *testing.T) {
+	t.Parallel()
+
+	client, _ := contractServed(t, "1.2.3")
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if !slices.Equal(resp.GetBakedComputes(), []string{string(providerkit.ComputeContainer)}) {
+		t.Errorf("Preflight() baked computes = %v, want the container compute alone: this provider wraps no container in a runtime that re-reads a value, and bakes nothing into a function image it does not build",
+			resp.GetBakedComputes())
+	}
+}
+
+func TestPreflightNamesNoBakedContainerWhenTheProviderWrapsOne(t *testing.T) {
+	t.Parallel()
+
+	client := servedProvider(t, "1.2.3", wrappingProvider{fake.NewProvider(fake.Options{Region: "nowhere"})})
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if len(resp.GetBakedComputes()) != 0 {
+		t.Errorf("Preflight() baked computes = %v, want none: a container this provider wraps in a runtime reads its values live",
+			resp.GetBakedComputes())
+	}
+}
