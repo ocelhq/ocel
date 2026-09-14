@@ -100,8 +100,9 @@ export async function resolveDeployment(deps: DeploymentsDeps): Promise<Deployme
     case "ambiguous-app":
       return { kind: "not-found" };
     case "unchanged":
-      lruSet(cache, key, { ...cached!, at: now }, RECORD_CACHE_MAX);
-      return { kind: "found", record: cached!.record };
+      if (!cached) return { kind: "unavailable" };
+      lruSet(cache, key, { ...cached, at: now }, RECORD_CACHE_MAX);
+      return { kind: "found", record: cached.record };
     case "record":
       lruSet(
         cache,
