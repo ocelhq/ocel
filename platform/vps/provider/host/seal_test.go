@@ -1,6 +1,7 @@
 package host
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -31,11 +33,14 @@ func sealDir(t *testing.T) string {
 func sealHelperAt(t *testing.T, root, stdin string, args ...string) (string, int) {
 	t.Helper()
 	script := filepath.Join(t.TempDir(), "seal")
-	if err := os.WriteFile(script, sealScript, 0o755); err != nil {
+	rooted := bytes.Replace(sealScript, []byte(`SEAL_ROOT = "/etc/ocel"`), []byte("SEAL_ROOT = "+strconv.Quote(root)), 1)
+	if bytes.Equal(rooted, sealScript) {
+		t.Fatal("the seal helper no longer names /etc/ocel as one constant, so this bench cannot point it at a scratch root")
+	}
+	if err := os.WriteFile(script, rooted, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command("python3", append([]string{script, sealClass}, args...)...)
-	cmd.Env = append(os.Environ(), "OCEL_SEAL_ROOT="+root)
 	cmd.Stdin = strings.NewReader(stdin)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -591,4 +596,12 @@ func decoded(t *testing.T, rendered string) string {
 		t.Fatalf("the helper answered %q, which nothing sealed", rendered)
 	}
 	return string(raw)
+}
+
+func TestTheSealHelperReadsItsRootFromNoEnvironmentVariable(t *testing.T) {
+	t.Parallel()
+
+	if bytes.Contains(sealScript, []byte("environ")) {
+		t.Error("the seal helper reads its environment, and a root-run helper whose key path an environment variable picks is a key path the caller picks")
+	}
 }
