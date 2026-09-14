@@ -31,6 +31,7 @@ jobs:
             platform/aws/provider/go.sum
             platform/gcp/provider/go.sum
             platform/vps/provider/go.sum
+            platform/vps/runtime/go.sum
             pkg/proto/go.sum
             sdk/go.sum
 
