@@ -73,7 +73,11 @@ func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.Con
 		return described, nil
 	}
 	described.Hostname = hostOf(standing.Uri)
-	described.Installed = &providerkit.ConnectorRelease{Version: connectorVersionOf(standing), Compute: connectorCompute}
+	described.Installed = &providerkit.ConnectorRelease{
+		Version:   connectorVersionOf(standing),
+		PublicKey: connectorPublicKeyOf(standing),
+		Compute:   connectorCompute,
+	}
 	return described, nil
 }
 
@@ -106,6 +110,17 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 	if err := p.standConnectorAccount(ctx, report); err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}
+	publicKey, err := p.connectorKey(ctx, report)
+	if err != nil {
+		return providerkit.ConnectorAddress{}, err
+	}
+	if err := p.bindConnectorKeySecret(ctx, true); err != nil {
+		return providerkit.ConnectorAddress{}, err
+	}
+	config, err := keyPathed(install.Config, connectorKeyPath)
+	if err != nil {
+		return providerkit.ConnectorAddress{}, err
+	}
 
 	released, err := p.stand(ctx, serving{
 		service: names.Connector(),
@@ -117,12 +132,14 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 		timeout: connectorTimeout,
 		ingress: ingressEverywhere,
 		most:    connectorInstances,
+		mounts:  []secretMount{connectorKeyMount(names.ConnectorKeySecret())},
 		env: map[string]string{
 			providerkit.NamespaceEnvVar:       string(names.Namespace()),
 			ports.ProjectEnvVar:               names.project,
 			ports.RegionEnvVar:                p.options.Region,
 			connectorVersionEnv:               install.Version,
-			providerkit.ConnectorConfigEnvVar: string(install.Config),
+			connectorPublicKeyEnv:             publicKey,
+			providerkit.ConnectorConfigEnvVar: string(config),
 		},
 	}, report)
 	if err != nil {
@@ -132,7 +149,7 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 		return providerkit.ConnectorAddress{}, providerkit.Refuse(providerkit.CodeNotReady,
 			"%s stands and published no url, so the console has nothing to dial", names.Connector())
 	}
-	return providerkit.ConnectorAddress{URL: released.url, Compute: compute}, nil
+	return providerkit.ConnectorAddress{URL: released.url, PublicKey: publicKey, Compute: compute}, nil
 }
 
 func (p *Provider) RemoveConnector(ctx context.Context, report providerkit.Reporter) error {
@@ -143,6 +160,7 @@ func (p *Provider) RemoveConnector(ctx context.Context, report providerkit.Repor
 	return everyStep(
 		func() error { return p.tearDown(ctx, names.Connector(), report) },
 		func() error { return p.forgetConnectorGrants(ctx, report) },
+		func() error { return p.takeConnectorKey(ctx, report) },
 		func() error { return p.takeConnectorAccount(ctx, report) },
 		func() error { return p.takeConnectorImages(ctx, report) },
 	)
@@ -442,19 +460,9 @@ func boundMember(bindings []*cloudresourcemanager.Binding, role, member string,
 		if binding.Role != role || !sameCondition(binding.Condition, condition) {
 			continue
 		}
-		at := slices.Index(binding.Members, member)
-		switch {
-		case granting && at >= 0:
-			return bindings, false
-		case granting:
-			binding.Members = append(binding.Members, member)
-			return bindings, true
-		case at < 0:
-			return bindings, false
-		default:
-			binding.Members = slices.Delete(binding.Members, at, at+1)
-			return bindings, true
-		}
+		members, changed := boundMembers(binding.Members, member, granting)
+		binding.Members = members
+		return bindings, changed
 	}
 	if !granting {
 		return bindings, false
@@ -471,24 +479,28 @@ func boundKeyMember(bindings []*iampb.Binding, role, member string, granting boo
 		if binding.GetRole() != role {
 			continue
 		}
-		at := slices.Index(binding.GetMembers(), member)
-		switch {
-		case granting && at >= 0:
-			return bindings, false
-		case granting:
-			binding.Members = append(binding.GetMembers(), member)
-			return bindings, true
-		case at < 0:
-			return bindings, false
-		default:
-			binding.Members = slices.Delete(binding.GetMembers(), at, at+1)
-			return bindings, true
-		}
+		members, changed := boundMembers(binding.GetMembers(), member, granting)
+		binding.Members = members
+		return bindings, changed
 	}
 	if !granting {
 		return bindings, false
 	}
 	return append(bindings, &iampb.Binding{Role: role, Members: []string{member}}), true
+}
+
+func boundMembers(members []string, member string, granting bool) ([]string, bool) {
+	at := slices.Index(members, member)
+	switch {
+	case granting && at >= 0:
+		return members, false
+	case granting:
+		return append(members, member), true
+	case at < 0:
+		return members, false
+	default:
+		return slices.Delete(members, at, at+1), true
+	}
 }
 
 func (p *Provider) takeConnectorAccount(ctx context.Context, report providerkit.Reporter) error {

@@ -1,6 +1,10 @@
 package gcp
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -8,6 +12,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"google.golang.org/api/cloudresourcemanager/v1"
+	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -230,5 +235,115 @@ func TestRemovingTheConnectorAttemptsEveryStepAndReportsEveryFailure(t *testing.
 	}
 	if err := everyStep(func() error { return nil }, func() error { return nil }); err != nil {
 		t.Errorf("a removal every step of which passed reported %v", err)
+	}
+}
+
+func TestTheConnectorServiceMountsItsKeyOutOfSecretManager(t *testing.T) {
+	t.Parallel()
+
+	held, err := serviceOf(serving{
+		service: "ocel-connector",
+		image:   "example.com/ocel-connector:sha256-abc",
+		compute: providerkit.ComputeServerless,
+		mounts:  []secretMount{connectorKeyMount("ocel-connector-key")},
+	})
+	if err != nil {
+		t.Fatalf("serviceOf: %v", err)
+	}
+	if len(held.Template.Volumes) != 1 || held.Template.Volumes[0].Secret == nil {
+		t.Fatalf("the connector revision carries volumes %+v, want the one Secret Manager fills", held.Template.Volumes)
+	}
+	volume := held.Template.Volumes[0]
+	if volume.Secret.Secret != "ocel-connector-key" {
+		t.Errorf("the key volume reads secret %q, want the connector's own", volume.Secret.Secret)
+	}
+	if len(volume.Secret.Items) != 1 || volume.Secret.Items[0].Path != connectorKeyFile || volume.Secret.Items[0].Version != "latest" {
+		t.Errorf("the key volume exposes %+v, want the latest version as the file the config names", volume.Secret.Items)
+	}
+	mounts := held.Template.Containers[0].VolumeMounts
+	if len(mounts) != 1 || mounts[0].Name != volume.Name || mounts[0].MountPath != connectorKeyDir {
+		t.Errorf("the container mounts %+v, want the key volume at %s", mounts, connectorKeyDir)
+	}
+	if !strings.HasPrefix(connectorKeyPath, connectorKeyDir+"/") {
+		t.Errorf("the config names %s while the volume is mounted at %s", connectorKeyPath, connectorKeyDir)
+	}
+}
+
+func TestTheKeyMintedIntoSecretManagerNamesThePublicKeyTheConsoleVerifiesWith(t *testing.T) {
+	t.Parallel()
+
+	seed := make([]byte, ed25519.SeedSize)
+	if _, err := rand.Read(seed); err != nil {
+		t.Fatal(err)
+	}
+	public, err := publicKeyOf(keyPayload(seed))
+	if err != nil {
+		t.Fatalf("publicKeyOf: %v", err)
+	}
+	want := base64.StdEncoding.EncodeToString(ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey))
+	if public != want {
+		t.Errorf("the install registers %s, and the connector reading the same file signs as %s", public, want)
+	}
+	if _, err := publicKeyOf([]byte("not a key\n")); err == nil {
+		t.Error("a payload that is no key named a public key")
+	}
+	if _, err := publicKeyOf(keyPayload(seed[:16])); err == nil {
+		t.Error("a short seed named a public key")
+	}
+}
+
+func TestTheConnectorsPublicKeyIsReadOffTheServiceItRunsAs(t *testing.T) {
+	t.Parallel()
+
+	held := &run.GoogleCloudRunV2Service{Template: &run.GoogleCloudRunV2RevisionTemplate{
+		Containers: []*run.GoogleCloudRunV2Container{{Env: []*run.GoogleCloudRunV2EnvVar{
+			{Name: connectorVersionEnv, Value: "0.9.9"},
+			{Name: connectorPublicKeyEnv, Value: "cHVibGlj"},
+		}}},
+	}}
+	if got := connectorPublicKeyOf(held); got != "cHVibGlj" {
+		t.Errorf("connectorPublicKeyOf = %q, want the key the install stamped on the service", got)
+	}
+	if got := connectorPublicKeyOf(&run.GoogleCloudRunV2Service{}); got != "" {
+		t.Errorf("connectorPublicKeyOf on a bare service = %q", got)
+	}
+}
+
+func TestTheConnectorConfigNamesWhereItsKeyIsMounted(t *testing.T) {
+	t.Parallel()
+
+	written, err := keyPathed([]byte(`{"console":"https://console.example.com","connectorId":"conn-1"}`), connectorKeyPath)
+	if err != nil {
+		t.Fatalf("keyPathed: %v", err)
+	}
+	var read map[string]any
+	if err := json.Unmarshal(written, &read); err != nil {
+		t.Fatal(err)
+	}
+	if read["keyPath"] != connectorKeyPath || read["console"] != "https://console.example.com" || read["connectorId"] != "conn-1" {
+		t.Errorf("the config carried is %v, want keyPath added and the rest kept", read)
+	}
+	if _, err := keyPathed([]byte(`[]`), connectorKeyPath); err == nil {
+		t.Error("a config that is no object was carried")
+	}
+}
+
+func TestASecretGrantIsAddedOnceAndTakenAwayOnce(t *testing.T) {
+	t.Parallel()
+
+	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
+	bindings, changed := boundSecretMember(nil, connectorKeyRole, member, true)
+	if !changed || len(bindings) != 1 || !slices.Contains(bindings[0].Members, member) {
+		t.Fatalf("granting on an empty policy = %+v, %v", bindings, changed)
+	}
+	if _, again := boundSecretMember(bindings, connectorKeyRole, member, true); again {
+		t.Error("granting twice rewrote the policy")
+	}
+	bindings, changed = boundSecretMember(bindings, connectorKeyRole, member, false)
+	if !changed || slices.Contains(bindings[0].Members, member) {
+		t.Errorf("revoking left %+v", bindings)
+	}
+	if _, again := boundSecretMember(bindings, connectorKeyRole, member, false); again {
+		t.Error("revoking twice rewrote the policy")
 	}
 }
