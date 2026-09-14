@@ -281,7 +281,15 @@ func seconds(window time.Duration) string {
 	return strconv.Itoa(int(window.Round(time.Second).Seconds()))
 }
 
+const unwindWindow = 60 * time.Second
+
+func sparing(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), unwindWindow)
+}
+
 func (h *Host) stranded(ctx context.Context, rel Release, held proxyDocument, why error) error {
+	ctx, stop := sparing(ctx)
+	defer stop()
 	rolled := ProxyConfig + " was put back as it was"
 	switch {
 	case moved(why):
@@ -345,6 +353,8 @@ func (a aftermath) String() string {
 }
 
 func (h *Host) unwind(ctx context.Context, rel Release, previous, expected, elevation string) aftermath {
+	ctx, stop := sparing(ctx)
+	defer stop()
 	after := aftermath{live: "the previous release is still the live upstream"}
 	if err := h.restore(ctx, previous, expected, elevation); err != nil {
 		after.live = "which release is the live upstream is no longer known here"
