@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
@@ -22,6 +23,8 @@ const (
 	SubstrateSlug = "ocel-containers"
 
 	substrateConsumers = "consumers"
+	substrateLease     = "lease"
+	leaseAttempts      = 5
 
 	ecsTasksPrincipal          = "ecs-tasks.amazonaws.com"
 	ecsTaskExecutionPolicyARN  = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
@@ -84,6 +87,35 @@ func consumersRecord(class providerkit.Class) ports.RecordName {
 
 func consumerRecord(ref providerkit.StackRef) ports.RecordName {
 	return append(consumersRecord(ref.Class), ref.Project, ref.Name.String())
+}
+
+func leaseRecord(class providerkit.Class) ports.RecordName {
+	return append(providerkit.StacksRecord(class, SubstrateSlug), substrateLease)
+}
+
+type lease struct {
+	Destroying bool `json:"destroying,omitempty"`
+}
+
+func leaseOf(record ports.Record) (lease, error) {
+	var held lease
+	if len(record.Bytes) == 0 {
+		return held, nil
+	}
+	if err := json.Unmarshal(record.Bytes, &held); err != nil {
+		return lease{}, fmt.Errorf("read the container substrate lease %s: %w", record.Name, err)
+	}
+	return held, nil
+}
+
+func writeLease(ctx context.Context, records providerkit.RecordStore, record ports.Record, held lease) error {
+	encoded, err := json.Marshal(held)
+	if err != nil {
+		return fmt.Errorf("encode the container substrate lease: %w", err)
+	}
+	record.Bytes = encoded
+	_, err = records.Write(ctx, record)
+	return err
 }
 
 func (r *Releaser) substrateFor(ctx context.Context, class providerkit.Class) (*release, error) {
@@ -160,15 +192,40 @@ func (r *Releaser) claimSubstrate(ctx context.Context, ref providerkit.StackRef)
 	if err != nil {
 		return err
 	}
-	record, err := ports.Held(ctx, owner.cfg.Records, consumerRecord(ref))
-	if err != nil {
-		return err
+	records := owner.cfg.Records
+	for range leaseAttempts {
+		held, err := ports.Held(ctx, records, leaseRecord(ref.Class))
+		if err != nil {
+			return err
+		}
+		state, err := leaseOf(held)
+		if err != nil {
+			return err
+		}
+		if state.Destroying {
+			return errors.Join(
+				providerkit.Refuse(providerkit.CodeBusy,
+					"the container substrate for the %s class is being taken down by another deploy whose last container app just left; re-run this deploy once it has gone and it will stand a fresh one up", ref.Class),
+				ports.Forget(ctx, records, consumerRecord(ref)))
+		}
+		record, err := ports.Held(ctx, records, consumerRecord(ref))
+		if err != nil {
+			return err
+		}
+		record.Bytes = []byte("{}")
+		if _, err := records.Write(ctx, record); err != nil && !errors.Is(err, ports.ErrStale) {
+			return fmt.Errorf("record %s as a consumer of the container substrate: %w", ref.Name, err)
+		}
+		err = writeLease(ctx, records, held, state)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, ports.ErrStale) {
+			return fmt.Errorf("hold the container substrate for %s: %w", ref.Name, err)
+		}
 	}
-	record.Bytes = []byte("{}")
-	if _, err := owner.cfg.Records.Write(ctx, record); err != nil {
-		return fmt.Errorf("record %s as a consumer of the container substrate: %w", ref.Name, err)
-	}
-	return nil
+	return providerkit.Refuse(providerkit.CodeBusy,
+		"the container substrate for the %s class changed hands %d times while %s was claiming it; re-run this deploy", ref.Class, leaseAttempts, ref.Name)
 }
 
 func (r *Releaser) releaseSubstrate(ctx context.Context, records providerkit.RecordStore, ref providerkit.StackRef, report providerkit.Reporter) error {
@@ -184,6 +241,14 @@ func (r *Releaser) releaseSubstrate(ctx context.Context, records providerkit.Rec
 	if len(held.Bytes) == 0 {
 		return nil
 	}
+	leased, err := ports.Held(ctx, records, leaseRecord(ref.Class))
+	if err != nil {
+		return err
+	}
+	state, err := leaseOf(leased)
+	if err != nil {
+		return err
+	}
 	if err := ports.Forget(ctx, records, consumerRecord(ref)); err != nil {
 		return err
 	}
@@ -198,6 +263,13 @@ func (r *Releaser) releaseSubstrate(ctx context.Context, records providerkit.Rec
 	if len(remaining) > 0 {
 		return nil
 	}
+	state.Destroying = true
+	if err := writeLease(ctx, records, leased, state); err != nil {
+		if errors.Is(err, ports.ErrStale) {
+			return nil
+		}
+		return fmt.Errorf("mark the container substrate for the %s class as going down: %w", ref.Class, err)
+	}
 	if report != nil {
 		report.Say("Taking down the shared container substrate for the " + string(ref.Class) + " class: the last container app in it is gone")
 	}
@@ -205,7 +277,10 @@ func (r *Releaser) releaseSubstrate(ctx context.Context, records providerkit.Rec
 	if err := owner.adapter.Destroy(ctx, substrate, report); err != nil {
 		return fmt.Errorf("take down the container substrate for the %s class: %w", ref.Class, err)
 	}
-	return providerkit.ForgetStack(ctx, records, ref.Class, SubstrateSlug, substrate.Name)
+	if err := providerkit.ForgetStack(ctx, records, ref.Class, SubstrateSlug, substrate.Name); err != nil {
+		return err
+	}
+	return ports.Forget(ctx, records, leaseRecord(ref.Class))
 }
 
 func (w *substrateWork) run(ctx *pulumi.Context) error {
