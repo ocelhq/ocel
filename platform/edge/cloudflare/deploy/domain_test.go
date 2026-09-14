@@ -46,6 +46,41 @@ func TestBindDomain(t *testing.T) {
 		}
 	})
 
+	t.Run("a host another project's worker already routes is refused, and left where it stands", func(t *testing.T) {
+		m := zoneMock()
+		m.existingRoutes = []map[string]any{
+			{"id": "theirs", "pattern": "shop.app.com/*", "script": "ocel-other-prod"},
+		}
+		s := domainStack(t, m)
+
+		err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"})
+		if err == nil {
+			t.Fatal("BindDomain err = nil, want a refusal: the route belongs to another project")
+		}
+		if !strings.Contains(err.Error(), "ocel-other-prod") {
+			t.Errorf("BindDomain err = %q, want it to name the worker holding the route", err)
+		}
+		if len(m.repointedRoutes) != 0 || len(m.createdRoutes) != 0 {
+			t.Errorf("repointed = %v, created = %v, want the other project's route untouched", m.repointedRoutes, m.createdRoutes)
+		}
+		if got := s.State().Bound; len(got) != 0 {
+			t.Errorf("bound domains = %v, want none recorded for a refused binding", got)
+		}
+	})
+
+	t.Run("a host an older worker of this project routes is repointed", func(t *testing.T) {
+		m := zoneMock()
+		m.existingRoutes = []map[string]any{
+			{"id": "mine", "pattern": "shop.app.com/*", "script": "ocel-acme-web--prod-root"},
+		}
+		s := domainStack(t, m)
+
+		if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"}); err != nil {
+			t.Fatalf("BindDomain: %v", err)
+		}
+		assertSet(t, "repointed routes", m.repointedRoutes, []string{"mine"})
+	})
+
 	t.Run("a host deeper than Universal SSL with no certificate pack is refused", func(t *testing.T) {
 		m := zoneMock()
 		s := domainStack(t, m)
@@ -153,7 +188,7 @@ func TestBindDomain(t *testing.T) {
 		p := m.provider(t)
 
 		state := testState(store.URL, "s3cr3t")
-		for _, name := range []string{"ocel-preview--web", "ocel-preview--api"} {
+		for _, name := range []string{"ocel-acme-web--preview--web", "ocel-acme-web--preview--api"} {
 			spec := previewSpec(store.URL, "v2")
 			spec.Program.Name = name
 			opened, err := p.Reconcile(t.Context(), spec, state)
@@ -167,7 +202,7 @@ func TestBindDomain(t *testing.T) {
 		if err == nil {
 			t.Fatal("BindDomain err = nil, want a refusal: nothing says which app's worker should answer")
 		}
-		for _, name := range []string{"ocel-preview--web", "ocel-preview--api"} {
+		for _, name := range []string{"ocel-acme-web--preview--web", "ocel-acme-web--preview--api"} {
 			if !strings.Contains(err.Error(), name) {
 				t.Errorf("BindDomain err = %q, want it to name %q", err, name)
 			}

@@ -180,6 +180,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		prune:          spec.PruneRoutes,
 		pruneStem:      program.PruneWorkerStem,
 		requiredRecord: program.RequiredRecord,
+		owns:           projectOwnsScript(slug),
 	}, spec.Warn); err != nil {
 		return nil, err
 	}

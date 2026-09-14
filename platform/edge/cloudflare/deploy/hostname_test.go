@@ -438,6 +438,10 @@ func stemPlan(stem string, desired ...string) routePlan {
 	return routePlan{desired: desired, prune: true, pruneStem: stem}
 }
 
+func ownedPlan(slug string, desired ...string) routePlan {
+	return routePlan{desired: desired, owns: projectOwnsScript(slug)}
+}
+
 func requiredRecordPlan(record string, desired ...string) routePlan {
 	return routePlan{desired: desired, requiredRecord: record}
 }
@@ -628,6 +632,45 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			plan:          stemPlan("ocel-shop-preview", "*.preview.app.com"),
 			createdRoutes: []string{"*.preview.app.com/*"},
 			warnings:      []string{"Advanced Certificate"},
+		},
+		{
+			name: "a route another project's worker holds is refused, not repointed",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "theirs", "pattern": "shop.app.com/*", "script": "ocel-other-prod"},
+				},
+			},
+			script:  "ocel-shop-prod",
+			plan:    ownedPlan("shop", "shop.app.com"),
+			wantErr: []string{"ocel-other-prod", "shop.app.com/*"},
+		},
+		{
+			name: "a route an older worker of the same project holds is repointed",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "mine", "pattern": "shop.app.com/*", "script": "ocel-shop--prod--root"},
+				},
+			},
+			script:          "ocel--shop--prod--web",
+			plan:            ownedPlan("shop", "shop.app.com"),
+			repointedRoutes: []string{"mine"},
+		},
+		{
+			name: "a lookalike slug is not the same project",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "lookalike", "pattern": "shop.app.com/*", "script": "ocel-shopfoo-prod"},
+				},
+			},
+			script:  "ocel-shop-prod",
+			plan:    ownedPlan("shop", "shop.app.com"),
+			wantErr: []string{"ocel-shopfoo-prod"},
 		},
 		{
 			name: "a stem never prunes a hostname the plan still wants",
