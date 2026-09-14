@@ -33,6 +33,8 @@ var bootstrapPermissions = []string{
 	"cloudkms.cryptoKeyVersions.create",
 	"cloudkms.cryptoKeyVersions.get",
 	"cloudkms.cryptoKeyVersions.destroy",
+	"cloudkms.cryptoKeys.getIamPolicy",
+	"cloudkms.cryptoKeys.setIamPolicy",
 	"secretmanager.secrets.create",
 	"secretmanager.secrets.get",
 	"secretmanager.secrets.delete",
@@ -48,6 +50,8 @@ var bootstrapPermissions = []string{
 	"iam.serviceAccounts.delete",
 	"iam.serviceAccounts.getIamPolicy",
 	"iam.serviceAccounts.setIamPolicy",
+	"resourcemanager.projects.getIamPolicy",
+	"resourcemanager.projects.setIamPolicy",
 }
 
 var bootstrapRoles = []string{
@@ -57,6 +61,7 @@ var bootstrapRoles = []string{
 	"roles/secretmanager.admin",
 	"roles/artifactregistry.admin",
 	"roles/iam.serviceAccountAdmin",
+	"roles/resourcemanager.projectIamAdmin",
 }
 
 var deployRoles = []string{

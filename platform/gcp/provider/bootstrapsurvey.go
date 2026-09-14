@@ -78,7 +78,7 @@ func (b bootstrapper) survey(ctx context.Context, class providerkit.Class) (surv
 		mending:  map[string]string{},
 	}
 	for _, item := range bootstrapItems(read.Names, class, read.Emulated) {
-		stands, err := b.stands(ctx, item)
+		stands, err := b.stands(ctx, class, item)
 		if err != nil {
 			return survey{}, err
 		}
@@ -167,7 +167,7 @@ type standing struct {
 	mends string
 }
 
-func (b bootstrapper) stands(ctx context.Context, held item) (standing, error) {
+func (b bootstrapper) stands(ctx context.Context, class providerkit.Class, held item) (standing, error) {
 	switch held.Kind {
 	case KindDatabase:
 		return b.databaseStands(ctx)
@@ -182,7 +182,7 @@ func (b bootstrapper) stands(ctx context.Context, held item) (standing, error) {
 	case KindRepository:
 		return b.repositoryStands(ctx, held.Name)
 	case KindServiceAccount:
-		return b.accountStands(ctx, held.Name)
+		return b.accountStands(ctx, class, held.Name)
 	}
 	return standing{}, providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing surveys a %s", held.Kind)
 }
@@ -355,7 +355,7 @@ func pruned(policies map[string]artifactregistry.CleanupPolicy) bool {
 		policy.Condition.TagState == untaggedImages && policy.Condition.OlderThan == untaggedLifetime
 }
 
-func (b bootstrapper) accountStands(ctx context.Context, name string) (standing, error) {
+func (b bootstrapper) accountStands(ctx context.Context, class providerkit.Class, name string) (standing, error) {
 	service, err := b.clients.Accounts()
 	if err != nil {
 		return standing{}, err
@@ -377,6 +377,13 @@ func (b bootstrapper) accountStands(ctx context.Context, name string) (standing,
 	}
 	if !granted(policy, memberOf(member)) {
 		return standing{held: true, mends: reasonUngranted}, nil
+	}
+	reads, err := b.readsHeld(ctx, class)
+	if err != nil {
+		return standing{}, err
+	}
+	if !reads {
+		return standing{held: true, mends: reasonUnread}, nil
 	}
 	return standing{held: true}, nil
 }

@@ -536,7 +536,10 @@ func (b bootstrapper) makeAccount(ctx context.Context, read survey, name string)
 	if err != nil && !taken(err) {
 		return fmt.Errorf("create the %s service account: %w", name, err)
 	}
-	return b.grantRunAs(ctx, name)
+	if err := b.grantRunAs(ctx, name); err != nil {
+		return err
+	}
+	return b.grantReads(ctx, read.Class)
 }
 
 func (b bootstrapper) grantRunAs(ctx context.Context, name string) error {
@@ -573,7 +576,10 @@ func (b bootstrapper) grantRunAs(ctx context.Context, name string) error {
 	return fmt.Errorf("let %s deploy apps that run as the %s service account: %w", member, name, refused)
 }
 
-func (b bootstrapper) takeAccount(ctx context.Context, name string) error {
+func (b bootstrapper) takeAccount(ctx context.Context, class providerkit.Class, name string) error {
+	if err := b.forgetReads(ctx, class); err != nil {
+		return err
+	}
 	service, err := b.clients.Accounts()
 	if err != nil {
 		return err
@@ -901,7 +907,7 @@ func (b bootstrapper) take(ctx context.Context, read survey, held item) error {
 	case KindRepository:
 		return b.takeRepository(ctx, held.Name)
 	case KindServiceAccount:
-		return b.takeAccount(ctx, held.Name)
+		return b.takeAccount(ctx, read.Class, held.Name)
 	default:
 		return providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing takes down a %s", held.Kind)
 	}
