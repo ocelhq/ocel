@@ -33,21 +33,21 @@ const (
 
 	appBucketARN      = "arn:aws:s3:::" + appScopePrefix + "*"
 	appFunctionARN    = "arn:aws:lambda:*:*:function:*"
-	appLayerARN       = "arn:aws:lambda:*:*:layer:*"
 	appRoleARN        = "arn:aws:iam::*:role/*"
 	appSecretARN      = "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
 	appClusterARN     = "arn:aws:rds:*:*:cluster:" + appScopePrefix + "*"
 	appInstanceARN    = "arn:aws:rds:*:*:db:" + appScopePrefix + "*"
 	appSubnetGroupARN = "arn:aws:rds:*:*:subgrp:" + appScopePrefix + "*"
 
+	appSecurityGroupARN  = "arn:aws:ec2:*:*:security-group/*"
+	appVPCARN            = "arn:aws:ec2:*:*:vpc/*"
+	appRepositoryARN     = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"
+	appLogGroupARN       = "arn:aws:logs:*:*:log-group:/ocel/*"
+	functionLogGroupARN  = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
+	appTargetGroupARN    = "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
+	appTaskDefinitionARN = "arn:aws:ecs:*:*:task-definition/*:*"
+
 	managedSecretClusterTagKey = "aws:rds:primaryDBClusterArn"
-	appSecurityGroupARN        = "arn:aws:ec2:*:*:security-group/*"
-	appVPCARN                  = "arn:aws:ec2:*:*:vpc/*"
-	appRepositoryARN           = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"
-	appLogGroupARN             = "arn:aws:logs:*:*:log-group:/ocel/*"
-	functionLogGroupARN        = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
-	appTargetGroupARN          = "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
-	appTaskDefinitionARN       = "arn:aws:ecs:*:*:task-definition/*:*"
 
 	substrateClusterARN  = "arn:aws:ecs:*:*:cluster/ocel-*"
 	substrateServiceARN  = "arn:aws:ecs:*:*:service/ocel-*/*"
@@ -63,27 +63,29 @@ const (
 )
 
 type ScopedARNs struct {
-	bootstrapBucket    string
-	bootstrapObject    string
-	BootstrapTable     string
-	BootstrapTablePart string
-	BootstrapStack     string
-	bootstrapChangeSet string
-	runtimeStack       string
-	runtimeChangeSet   string
-	bootstrapRole      string
-	bootstrapFunction  string
-	bootstrapLogGroup  string
-	bootstrapQueue     string
-	edgeUser           string
-	appBoundary        string
-	varsAlias          string
-	passphraseParam    string
-	edgeParam          string
-	originParam        string
-	stackRecordTree    string
-	stackRecord        string
-	anyParam           string
+	bootstrapBucket     string
+	bootstrapObject     string
+	BootstrapTable      string
+	BootstrapTablePart  string
+	BootstrapStack      string
+	bootstrapChangeSet  string
+	runtimeStack        string
+	runtimeChangeSet    string
+	runtimeLayer        string
+	runtimeLayerVersion string
+	bootstrapRole       string
+	bootstrapFunction   string
+	bootstrapLogGroup   string
+	bootstrapQueue      string
+	edgeUser            string
+	appBoundary         string
+	varsAlias           string
+	passphraseParam     string
+	edgeParam           string
+	originParam         string
+	stackRecordTree     string
+	stackRecord         string
+	anyParam            string
 }
 
 func (n Namespace) ScopedARNs() ScopedARNs {
@@ -95,6 +97,7 @@ func (n Namespace) ScopedARNs() ScopedARNs {
 		bootstrapChangeSet: "arn:aws:cloudformation:*:*:changeSet/" + string(n) + "-*/*",
 		runtimeStack:       "arn:aws:cloudformation:*:*:stack/" + core + "-runtime*/*",
 		runtimeChangeSet:   "arn:aws:cloudformation:*:*:changeSet/" + core + "-runtime*/*",
+		runtimeLayer:       "arn:aws:lambda:*:*:layer:" + string(n) + "-runtime*",
 		bootstrapRole:      "arn:aws:iam::*:role/" + core + "*",
 		bootstrapFunction:  "arn:aws:lambda:*:*:function:" + core + "*",
 		bootstrapLogGroup:  "arn:aws:logs:*:*:log-group:/aws/lambda/" + core + "*",
@@ -109,6 +112,7 @@ func (n Namespace) ScopedARNs() ScopedARNs {
 		anyParam:           parameterARNPrefix + n.paramRoot() + "/*",
 	}
 	a.bootstrapObject = a.bootstrapBucket + "/*"
+	a.runtimeLayerVersion = a.runtimeLayer + ":*"
 	a.BootstrapTablePart = a.BootstrapTable + "/*"
 	a.stackRecord = a.stackRecordTree + "/*"
 	return a
@@ -303,15 +307,6 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			},
 			Resources: []string{appFunctionARN},
 			Condition: taggedByOcel(),
-		},
-		{
-			Actions: []string{
-				"lambda:DeleteLayerVersion",
-				"lambda:GetLayerVersion",
-				"lambda:ListLayerVersions",
-				"lambda:PublishLayerVersion",
-			},
-			Resources: []string{appLayerARN},
 		},
 		{
 			Actions:   []string{"iam:CreateRole"},
@@ -593,6 +588,15 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 
 func runtimeProvisioning(r ScopedARNs) []GrantStatement {
 	return []GrantStatement{
+		{
+			Actions: []string{
+				"lambda:DeleteLayerVersion",
+				"lambda:GetLayerVersion",
+				"lambda:ListLayerVersions",
+				"lambda:PublishLayerVersion",
+			},
+			Resources: []string{r.runtimeLayer, r.runtimeLayerVersion},
+		},
 		{
 			Actions: []string{
 				"cloudformation:CreateChangeSet",

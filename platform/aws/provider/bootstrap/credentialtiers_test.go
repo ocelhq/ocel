@@ -47,8 +47,6 @@ var actionsNoTagScopes = []string{
 
 var actionsAWSGivesNoScopingKey = []string{
 	"ecs:DeregisterTaskDefinition",
-	"lambda:DeleteLayerVersion",
-	"lambda:PublishLayerVersion",
 }
 
 var bootstrapOnlyActions = []string{
@@ -622,6 +620,26 @@ func TestEveryTierMayGrantLambdaTheVarsKeyAndNoOther(t *testing.T) {
 		for g := range grants {
 			if g.action == "kms:CreateGrant" && g.condition != want {
 				t.Errorf("the %s tier grants kms:CreateGrant under %s, which lets the credential hand any principal a key it never made", tier, g.condition)
+			}
+		}
+	}
+}
+
+func TestEveryTierPublishesAndReclaimsOnlyTheRuntimeLayers(t *testing.T) {
+	r := defaultNamespace.ScopedARNs()
+	for tier, document := range bothTiers(t) {
+		grants := grantsOf(t, document)
+		for _, action := range []string{"lambda:PublishLayerVersion", "lambda:DeleteLayerVersion", "lambda:GetLayerVersion"} {
+			if !grants[grant{action: action, resource: r.runtimeLayerVersion, condition: conditionJSON(t, nil)}] {
+				t.Errorf("the %s tier does not grant %s on %s, so the runtime stack cannot publish or reclaim a layer version", tier, action, r.runtimeLayerVersion)
+			}
+		}
+		for g := range grants {
+			if !strings.Contains(g.action, "LayerVersion") {
+				continue
+			}
+			if g.resource != r.runtimeLayer && g.resource != r.runtimeLayerVersion {
+				t.Errorf("the %s tier grants %s on %s, which reaches layers Ocel never published", tier, g.action, g.resource)
 			}
 		}
 	}
