@@ -5,6 +5,7 @@ go 1.27.0
 require (
 	connectrpc.com/connect v1.20.0
 	github.com/jackc/pgx/v5 v5.11.0
+	github.com/ocelhq/ocel/pkg/channel v0.0.0
 	github.com/ocelhq/ocel/pkg/constants v0.0.0
 	github.com/ocelhq/ocel/pkg/proto v0.0.0-00010101000000-000000000000
 	google.golang.org/protobuf v1.36.12
@@ -22,3 +23,5 @@ require (
 replace github.com/ocelhq/ocel/pkg/proto => ../pkg/proto
 
 replace github.com/ocelhq/ocel/pkg/constants => ../pkg/constants
+
+replace github.com/ocelhq/ocel/pkg/channel => ../pkg/channel

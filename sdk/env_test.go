@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 	ocel "github.com/ocelhq/ocel/sdk"
 )
@@ -26,6 +27,10 @@ type cell struct {
 func variablesServer(t *testing.T, cells []cell, seen *[]map[string]any) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !channel.VerifyAuthHeader(r.Header.Get("Authorization"), collectorToken) {
+			http.Error(w, "this request carries no valid session token", http.StatusForbidden)
+			return
+		}
 		raw, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Errorf("read body: %v", err)
@@ -53,6 +58,7 @@ func discover(t *testing.T, cells []cell) *[]map[string]any {
 	srv := variablesServer(t, cells, &seen)
 	t.Setenv(constants.PhaseEnvName, "discovery")
 	t.Setenv(constants.DevServerEnvName, srv.URL)
+	t.Setenv(constants.DevServerTokenEnvName, collectorToken)
 	return &seen
 }
 
