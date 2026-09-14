@@ -61,6 +61,8 @@ terminal, and trusting that what they see is exactly what the CLI last reported.
 **Ships today** (the repo is the source of truth):
 
 - Sign-in with GitHub, organization creation and switching, device approval.
+- Organization settings: rename and re-slug, leave, delete. Members: invite by link (no
+  email is sent), change roles, remove, accept an invitation at `/invite/<id>`.
 - Project registry: name, slug, description, detected frameworks.
 - Dev env values and per-user dev resource resolution for `ocel dev`.
 - Blob presigning for uploads.
@@ -74,7 +76,6 @@ overview that renders the latest one as a service map.
 
 - Connectors: an API server in the customer's account the console calls to pull
   variable values, logs, and spend. Same model as CLI-to-provider.
-- Members management.
 - Monitoring and spend backed by real data.
 
 **Undecided:** whether the console ever gains a mutating action beyond account and
