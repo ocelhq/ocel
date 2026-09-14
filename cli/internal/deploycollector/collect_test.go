@@ -3,9 +3,11 @@ package deploycollector
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -51,7 +53,7 @@ function declareResource(body: unknown) {
   globalThis.__ocelRegister.push(
     fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
       body: JSON.stringify(body),
     }),
   );
@@ -101,6 +103,78 @@ export {};
 	})
 }
 
+func TestACallToTheCollectorThatIsNotTheChildsIsRefused(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX-style fixture entrypoint")
+	}
+
+	root := t.TempDir()
+	statuses := filepath.Join(t.TempDir(), "statuses.json")
+	t.Setenv("OCEL_TEST_STATUS_FILE", statuses)
+	writeFile(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), `
+declare global {
+  var __ocelRegister: Promise<unknown>[];
+}
+globalThis.__ocelRegister ??= [];
+
+const body = JSON.stringify({
+  resource: { type: "RESOURCE_TYPE_POSTGRES", name: "main" },
+  postgres: { version: "17" },
+});
+
+const declare = (headers: Record<string, string>) =>
+  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body,
+  });
+
+globalThis.__ocelRegister.push(
+  (async () => {
+    const token = "Bearer " + process.env.`+constants.DevServerTokenEnvName+`;
+    const statuses = [
+      (await declare({})).status,
+      (await declare({ Authorization: "Bearer guessed" })).status,
+      (await declare({ Authorization: token, Origin: "http://evil.example" })).status,
+      (await declare({ Authorization: token })).status,
+    ];
+    await (await import("node:fs/promises")).writeFile(
+      process.env.OCEL_TEST_STATUS_FILE!,
+      JSON.stringify(statuses),
+    );
+  })(),
+);
+export {};
+`)
+
+	cfg := &projectconfig.Config{
+		Slug:      "test-app",
+		Dir:       root,
+		Discovery: projectconfig.Discovery{Paths: []string{constants.DefaultDiscoveryDirName}},
+	}
+
+	var stdout, stderr bytes.Buffer
+	resources, err := PrepareAndCollect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
+	}
+
+	raw, err := os.ReadFile(statuses)
+	if err != nil {
+		t.Fatalf("read the statuses the child recorded: %v", err)
+	}
+	var got []int
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal %q: %v", raw, err)
+	}
+	if want := []int{403, 403, 403, 200}; !slices.Equal(got, want) {
+		t.Errorf("statuses = %v, want %v: only the child holding the token, from the collector's own origin, may declare", got, want)
+	}
+	if len(resources) != 1 {
+		t.Fatalf("Collect() returned %d resources, want only the one declare that carried the token: %+v", len(resources), resources)
+	}
+}
+
 func TestCollectRunsTheBundlePrepareAlreadyBuilt(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX-style fixture entrypoint")
@@ -121,7 +195,7 @@ func TestCollectRunsTheBundlePrepareAlreadyBuilt(t *testing.T) {
 	writeFile(t, filepath.Join(root, constants.ProjectStateDirName, "entry.mjs"), `
 await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
   method: "POST",
-  headers: { "Content-Type": "application/json" },
+  headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
   body: JSON.stringify({
     resource: { type: "RESOURCE_TYPE_POSTGRES", name: "prepared-once" },
     postgres: { version: "17" },

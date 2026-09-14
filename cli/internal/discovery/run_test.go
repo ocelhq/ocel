@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -36,13 +37,26 @@ func prepare(t *testing.T, root string) Prepared {
 	return prepared
 }
 
-func okServer(t *testing.T) string {
+const testToken = "opensesame"
+
+var testServer = Server{URL: "http://127.0.0.1:1234", Token: testToken}
+
+func serving(t *testing.T, handler http.Handler) Server {
 	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
+	var address string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		channel.LoopbackGuard(address, testToken, handler).ServeHTTP(w, r)
 	}))
 	t.Cleanup(server.Close)
-	return server.URL
+	address = server.Listener.Addr().String()
+	return Server{URL: server.URL, Token: testToken}
+}
+
+func okServer(t *testing.T) Server {
+	t.Helper()
+	return serving(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
 }
 
 func TestRunReportsTheActualErrorFromAThrowingDeclareFile(t *testing.T) {
@@ -135,20 +149,19 @@ func readTraceFile(t *testing.T, run *runtrace.Run) string {
 func TestRunDeclaresAgainstTheCollectorAndSyncsOnceAfterTheChildExits(t *testing.T) {
 	var mu sync.Mutex
 	var order []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := serving(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		order = append(order, r.URL.Path)
 		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}))
-	t.Cleanup(server.Close)
 
 	root, prepared := jsFixture(t, `declare global { var __ocelRegister: Promise<unknown>[]; }
 globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
   fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
     body: JSON.stringify({ resource: { type: "RESOURCE_TYPE_POSTGRES", name: "main" }, postgres: { version: "17" }, source: "`+constants.DefaultDiscoveryDirName+`/main.ts:1" }),
   }),
 );
@@ -156,7 +169,7 @@ export {};
 `)
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), root, prepared, server.URL, &stdout, &stderr); err != nil {
+	if err := Run(context.Background(), root, prepared, server, &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 

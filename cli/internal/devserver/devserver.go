@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
+	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -46,6 +47,7 @@ type Server struct {
 	token         string
 	projectID     string
 	devServerAddr string
+	sessionToken  string
 	blob          blobv1connect.BucketServiceHandler
 	detector      *blob.Detector
 	uploads       *devblob.Store
@@ -68,6 +70,7 @@ func New(apiURL, token, projectID, devServerAddr string) *Server {
 		token:           token,
 		projectID:       projectID,
 		devServerAddr:   devServerAddr,
+		sessionToken:    channel.NewSessionToken(),
 		blob:            blob.NewProxy(apiURL, token, projectID),
 		detector:        blob.NewDetector(apiURL, token, projectID),
 		syncCh:          make(chan SyncResult, 1),
@@ -85,6 +88,7 @@ func NewLocal(devServerAddr, blobDir string) *Server {
 	s := &Server{
 		registry:      resourceregistry.New(),
 		devServerAddr: devServerAddr,
+		sessionToken:  channel.NewSessionToken(),
 		uploads:       devblob.New(blobDir, devServerAddr),
 		syncCh:        make(chan SyncResult, 1),
 		config:        newConfigCache(),
@@ -199,17 +203,23 @@ func (s *Server) ResetManifest() {
 	s.env.forgetDeclarations()
 }
 
+func (s *Server) SessionToken() string { return s.sessionToken }
+
+func (s *Server) guard(next http.Handler) http.Handler {
+	return channel.LoopbackGuard(strings.TrimPrefix(s.devServerAddr, "http://"), s.sessionToken, next)
+}
+
 func (s *Server) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
 	interceptors := connect.WithInterceptors(validate.NewInterceptor())
 	resourcePath, resourceHandler := resourcesv1connect.NewResourceServiceHandler(s, interceptors)
-	mux.Handle(resourcePath, resourceHandler)
+	mux.Handle(resourcePath, s.guard(resourceHandler))
 	blobPath, blobHandler := blobv1connect.NewBucketServiceHandler(s.blob, interceptors)
 	mux.Handle(blobPath, blobHandler)
 	if s.uploads != nil {
 		s.uploads.Routes(mux)
 	}
-	mux.HandleFunc("/sync", s.handleSync)
+	mux.Handle("/sync", s.guard(http.HandlerFunc(s.handleSync)))
 	mux.HandleFunc("/env", s.handleEnv)
 	return mux
 }
@@ -349,7 +359,7 @@ func (s *Server) Discover(ctx context.Context, cfg *projectconfig.Config, stdout
 		return err
 	}
 
-	return discovery.Run(ctx, cfg.Dir, prepared, s.devServerAddr, stdout, stderr)
+	return discovery.Run(ctx, cfg.Dir, prepared, discovery.Server{URL: s.devServerAddr, Token: s.sessionToken}, stdout, stderr)
 }
 
 func (s *Server) ClientKeys() ([]clientenv.Key, error) {

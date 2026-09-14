@@ -12,11 +12,25 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/nodeprotocol"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
+	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
+type Server struct {
+	URL   string
+	Token string
+}
+
+func (s Server) Env() []string {
+	return []string{
+		constants.PhaseEnvName + "=discovery",
+		constants.DevServerEnvName + "=" + s.URL,
+		constants.DevServerTokenEnvName + "=" + s.Token,
+	}
+}
+
 type Launcher interface {
-	Command(ctx context.Context, configDir string, root Root, serverURL string) (*exec.Cmd, error)
+	Command(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error)
 }
 
 var launchers = map[Language]Launcher{Go: goLauncher{}, Python: pythonLauncher{}, Rust: rustLauncher{}}
@@ -36,8 +50,8 @@ func Prepare(configDir string, roots []Root) (Prepared, error) {
 
 func (p Prepared) Entry() string { return p.entry }
 
-func Run(ctx context.Context, configDir string, prepared Prepared, serverURL string, stdout, stderr io.Writer) error {
-	commands, err := commandsFor(ctx, configDir, prepared.Roots, prepared.entry, serverURL)
+func Run(ctx context.Context, configDir string, prepared Prepared, server Server, stdout, stderr io.Writer) error {
+	commands, err := commandsFor(ctx, configDir, prepared.Roots, prepared.entry, server)
 	if err != nil {
 		return err
 	}
@@ -48,13 +62,13 @@ func Run(ctx context.Context, configDir string, prepared Prepared, serverURL str
 			return err
 		}
 	}
-	return postSync(ctx, serverURL)
+	return postSync(ctx, server)
 }
 
-func commandsFor(ctx context.Context, configDir string, roots []Root, entry, serverURL string) ([]*exec.Cmd, error) {
+func commandsFor(ctx context.Context, configDir string, roots []Root, entry string, server Server) ([]*exec.Cmd, error) {
 	var commands []*exec.Cmd
 	if entry != "" {
-		commands = append(commands, nodeCommand(ctx, entry, serverURL))
+		commands = append(commands, nodeCommand(ctx, entry, server))
 	}
 
 	for _, root := range roots {
@@ -65,7 +79,7 @@ func commandsFor(ctx context.Context, configDir string, roots []Root, entry, ser
 		if !ok {
 			return nil, fmt.Errorf("discovery: %s is a %s folder, and this build of ocel discovers only %s folders", root.Dir, root.Language, discoverable())
 		}
-		cmd, err := launcher.Command(ctx, configDir, root, serverURL)
+		cmd, err := launcher.Command(ctx, configDir, root, server)
 		if err != nil {
 			return nil, err
 		}
@@ -115,9 +129,9 @@ func BundleRoots(configDir string, roots []Root) (string, error) {
 	return entry, nil
 }
 
-func nodeCommand(ctx context.Context, entry, serverURL string) *exec.Cmd {
+func nodeCommand(ctx context.Context, entry string, server Server) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "node", "--enable-source-maps", entry)
-	cmd.Env = append(os.Environ(), constants.PhaseEnvName+"=discovery", constants.DevServerEnvName+"="+serverURL)
+	cmd.Env = append(os.Environ(), server.Env()...)
 	return cmd
 }
 
@@ -168,11 +182,12 @@ func runOne(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Writer) error 
 	return nil
 }
 
-func postSync(ctx context.Context, serverURL string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(serverURL, "/")+"/sync", nil)
+func postSync(ctx context.Context, server Server) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(server.URL, "/")+"/sync", nil)
 	if err != nil {
 		return fmt.Errorf("discovery: sync failed: %w", err)
 	}
+	req.Header.Set("Authorization", channel.FormatAuthHeader(server.Token))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("discovery: sync failed: %w", err)

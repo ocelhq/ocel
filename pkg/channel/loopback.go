@@ -3,16 +3,13 @@ package channel
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"fmt"
 	"net/http"
 )
 
-func NewSessionToken() (string, error) {
+func NewSessionToken() string {
 	token := make([]byte, 32)
-	if _, err := rand.Read(token); err != nil {
-		return "", fmt.Errorf("channel: generate a session token: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(token), nil
+	rand.Read(token)
+	return base64.RawURLEncoding.EncodeToString(token)
 }
 
 func LoopbackGuard(address, token string, next http.Handler) http.Handler {

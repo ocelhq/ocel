@@ -72,7 +72,7 @@ globalThis.__ocelRegister.push(
 
     const res = await fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.%s), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
       body: JSON.stringify(%s),
     });
     if (!res.ok) throw new Error("DeclareEnv failed: " + res.status + " " + (await res.text()));

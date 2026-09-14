@@ -10,10 +10,7 @@ import (
 func TestASessionTokenIsThirtyTwoRandomBytes(t *testing.T) {
 	t.Parallel()
 
-	first, err := NewSessionToken()
-	if err != nil {
-		t.Fatalf("NewSessionToken() error = %v", err)
-	}
+	first := NewSessionToken()
 	raw, err := base64.RawURLEncoding.DecodeString(first)
 	if err != nil {
 		t.Fatalf("decode %q: %v", first, err)
@@ -22,11 +19,7 @@ func TestASessionTokenIsThirtyTwoRandomBytes(t *testing.T) {
 		t.Errorf("token decoded to %d bytes, want 32", len(raw))
 	}
 
-	second, err := NewSessionToken()
-	if err != nil {
-		t.Fatalf("NewSessionToken() error = %v", err)
-	}
-	if second == first {
+	if second := NewSessionToken(); second == first {
 		t.Error("two session tokens are the same")
 	}
 }

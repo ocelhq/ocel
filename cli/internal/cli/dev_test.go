@@ -875,7 +875,7 @@ globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
   fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.%s), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
     body: JSON.stringify({
       resource: { type: "RESOURCE_TYPE_POSTGRES", name: %q },
       postgres: { version: "17" },

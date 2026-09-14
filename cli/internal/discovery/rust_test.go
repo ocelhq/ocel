@@ -36,7 +36,7 @@ func TestTheRustLauncherRunsTheCratesBinaryFromTheWorkspaceRoot(t *testing.T) {
 	configDir := rustFixture(t, rustBinManifest)
 	root := Root{Dir: configDir, Language: Rust}
 
-	cmd, err := launchers[Rust].Command(context.Background(), configDir, root, "http://127.0.0.1:1234")
+	cmd, err := launchers[Rust].Command(context.Background(), configDir, root, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestTheRustLauncherRunsTheCratesBinaryFromTheWorkspaceRoot(t *testing.T) {
 	if !slices.Equal(cmd.Args[1:], want) || filepath.Base(cmd.Args[0]) != "cargo" {
 		t.Errorf("Args = %q, want cargo %q", cmd.Args, want)
 	}
-	for _, env := range []string{constants.PhaseEnvName + "=discovery", constants.DevServerEnvName + "=http://127.0.0.1:1234", "OCEL_SOURCE_ROOT=" + configDir} {
+	for _, env := range []string{constants.PhaseEnvName + "=discovery", constants.DevServerEnvName + "=http://127.0.0.1:1234", constants.DevServerTokenEnvName + "=opensesame", "OCEL_SOURCE_ROOT=" + configDir} {
 		if !slices.Contains(cmd.Env, env) {
 			t.Errorf("Env lacks %q", env)
 		}
@@ -63,7 +63,7 @@ func TestTheRustLauncherRunsTheAppCrateAndNotTheProjectAroundIt(t *testing.T) {
 	write(t, filepath.Join(crate, "Cargo.toml"), rustBinManifest)
 	write(t, filepath.Join(crate, "src", "main.rs"), "fn main() {}\n")
 
-	cmd, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: crate, Language: Rust}, "http://127.0.0.1:1234")
+	cmd, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: crate, Language: Rust}, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestTheRustLauncherRefusesADirThatIsNoCrate(t *testing.T) {
 	root := filepath.Join(configDir, "server")
 	write(t, filepath.Join(root, "src", "main.rs"), "fn main() {}\n")
 
-	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: root, Language: Rust}, "http://127.0.0.1:1234")
+	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: root, Language: Rust}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded on a dir with no Cargo.toml, want an error")
 	}
@@ -93,7 +93,7 @@ func TestTheRustLauncherRefusesACrateThatBuildsNoBinary(t *testing.T) {
 	write(t, filepath.Join(configDir, "Cargo.toml"), rustBinManifest)
 	write(t, filepath.Join(configDir, "src", "lib.rs"), "")
 
-	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: configDir, Language: Rust}, "http://127.0.0.1:1234")
+	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: configDir, Language: Rust}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded on a crate with no binary, want an error")
 	}
@@ -109,7 +109,7 @@ func TestTheRustLauncherRefusesACrateThatBuildsSeveralBinaries(t *testing.T) {
 	write(t, filepath.Join(configDir, "src", "main.rs"), "fn main() {}\n")
 	write(t, filepath.Join(configDir, "src", "worker.rs"), "fn main() {}\n")
 
-	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: configDir, Language: Rust}, "http://127.0.0.1:1234")
+	_, err := launchers[Rust].Command(context.Background(), configDir, Root{Dir: configDir, Language: Rust}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded on a crate with two binaries, want an error")
 	}
@@ -131,7 +131,7 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 		t.Fatalf("roots = %+v, want the app crate of the project", roots)
 	}
 
-	collected, url := declareCollector(t)
+	collected, server := declareCollector(t)
 
 	prepared, err := Prepare(configDir, roots)
 	if err != nil {
@@ -139,7 +139,7 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), configDir, prepared, url, &stdout, &stderr); err != nil {
+	if err := Run(context.Background(), configDir, prepared, server, &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
 	}
 
@@ -188,7 +188,7 @@ func TestRunDeclaresWhatASharedRustCrateDeclares(t *testing.T) {
 		t.Fatalf("roots = %+v, want the two app crates %+v", roots, want)
 	}
 
-	collected, url := declareCollector(t)
+	collected, server := declareCollector(t)
 
 	prepared, err := Prepare(configDir, roots)
 	if err != nil {
@@ -196,7 +196,7 @@ func TestRunDeclaresWhatASharedRustCrateDeclares(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), configDir, prepared, url, &stdout, &stderr); err != nil {
+	if err := Run(context.Background(), configDir, prepared, server, &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
 	}
 
