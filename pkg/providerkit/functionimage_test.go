@@ -337,8 +337,9 @@ func TestFunctionImageCarriesAnOverlayAlongsideTheRuntimeItBootsFrom(t *testing.
 func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageHolds(t *testing.T) {
 	t.Parallel()
 
+	landed := providerkit.ContainerRuntimePath
 	for _, root := range []string{providerkit.FunctionImageRoot, providerkit.NodeRuntimeRoot} {
-		if providerkit.ContainerRuntimePath == root || strings.HasPrefix(providerkit.ContainerRuntimePath, root+"/") {
+		if landed == root || strings.HasPrefix(landed, root+"/") {
 			t.Errorf("the container runtime lands at %s, inside %s: a node function's image holds a directory there, and a file appended over a directory cannot be loaded", providerkit.ContainerRuntimePath, root)
 		}
 	}
