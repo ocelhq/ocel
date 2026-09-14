@@ -25,7 +25,7 @@ func standingParams(t *testing.T) (*fakeSSM, *fakeIAM) {
 
 	ctx := context.Background()
 	ssmc, iamc := newFakeSSM(), &fakeIAM{}
-	if _, err := ensureOriginSecret(ctx, ssmc, defaultNamespace, ClassProduction); err != nil {
+	if _, err := ensureOriginSecret(ctx, ssmc, defaultNamespace, ClassProduction, time.Now()); err != nil {
 		t.Fatalf("ensureOriginSecret: %v", err)
 	}
 	if _, err := ensurePassphrase(ctx, ssmc, defaultNamespace); err != nil {

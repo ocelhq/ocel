@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -49,17 +50,15 @@ type EdgeAdoption struct {
 func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, class string, adoptions []EdgeAdoption, req Request) (providerkit.ChangeGroup, error) {
 	group := providerkit.ChangeGroup{Kind: providerkit.ParameterGroupKind, Name: ParamGroupName}
 
-	origin, err := ns.OriginSecretParamFor(class)
+	origin, err := planOriginSecret(ctx, apis.SSM, ns, class, time.Now())
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
-	for _, name := range []string{origin, ns.PassphraseParamName()} {
-		change, err := paramPresence(ctx, apis.SSM, name)
-		if err != nil {
-			return providerkit.ChangeGroup{}, err
-		}
-		group.Changes = append(group.Changes, change)
+	passphrase, err := paramPresence(ctx, apis.SSM, ns.PassphraseParamName())
+	if err != nil {
+		return providerkit.ChangeGroup{}, err
 	}
+	group.Changes = append(group.Changes, origin, passphrase)
 
 	var adopted []providerkit.Change
 	for _, edging := range adoptions {

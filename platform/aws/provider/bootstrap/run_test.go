@@ -666,6 +666,26 @@ func assertMintedSecrets(t *testing.T, ssmc *fakeSSM, names ...string) {
 	}
 }
 
+func assertMintedOriginSecret(t *testing.T, ssmc *fakeSSM, name string) {
+	t.Helper()
+	value, ok := ssmc.params[name]
+	if !ok {
+		t.Errorf("bootstrap left %s empty; every deploy that reads it refuses", name)
+		return
+	}
+	held, err := OriginSecretOf(value)
+	if err != nil {
+		t.Errorf("%s = %q, want the origin secret record: %v", name, value, err)
+		return
+	}
+	if _, err := hex.DecodeString(held.Current); err != nil || len(held.Current) != 64 {
+		t.Errorf("%s holds %q, want 32 random bytes", name, held.Current)
+	}
+	if held.CreatedAt.IsZero() {
+		t.Errorf("%s records no mint time, so nothing can age it into a rotation", name)
+	}
+}
+
 func apisOf(stacks *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore) APIs {
 	return apisFronting(stacks, ssmc, iamc, store, standingEdge())
 }
@@ -809,7 +829,8 @@ func TestRun(t *testing.T) {
 		if err := Run(context.Background(), apisOf(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore()), defaultNamespace, ClassProduction, everything(), nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		assertMintedSecrets(t, ssmc, originSecretParam, cloudflareNames(ClassProduction).isrWriterSeedParam)
+		assertMintedSecrets(t, ssmc, cloudflareNames(ClassProduction).isrWriterSeedParam)
+		assertMintedOriginSecret(t, ssmc, originSecretParam)
 	})
 
 	t.Run("bootstraps the edge for its own class", func(t *testing.T) {
@@ -1067,7 +1088,8 @@ func TestRunPreview(t *testing.T) {
 		if err := Run(context.Background(), apisOf(newFakeCFN(), ssmc, &fakeIAM{}, preloadedStore()), defaultNamespace, ClassPreview, everything(), nil, nil); err != nil {
 			t.Fatalf("RunPreview: %v", err)
 		}
-		assertMintedSecrets(t, ssmc, previewOriginSecret, cloudflareNames(ClassPreview).isrWriterSeedParam)
+		assertMintedSecrets(t, ssmc, cloudflareNames(ClassPreview).isrWriterSeedParam)
+		assertMintedOriginSecret(t, ssmc, previewOriginSecret)
 		for _, name := range []string{originSecretParam, cloudflareNames(ClassProduction).isrWriterSeedParam} {
 			if _, ok := ssmc.params[name]; ok {
 				t.Errorf("a preview bootstrap wrote %s, want the production secrets left alone", name)

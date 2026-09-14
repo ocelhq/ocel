@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -330,7 +331,7 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 	if err != nil {
 		return route{}, err
 	}
-	published := route{Stack: s.plan().name, Release: identity, Secret: secret}
+	published := route{Stack: s.plan().name, Release: identity, Secret: secret.Presented(record.CreatedAt)}
 	if record.Origin != "" {
 		published.Origin = originHost(record.Origin)
 		published.Protocol = originProtocol(record.Origin)
@@ -349,22 +350,22 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 	return published, nil
 }
 
-func (s *stack) originSecret(ctx context.Context, c Clients) (string, error) {
+func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSecret, error) {
 	command := providerkit.BootstrapCommand(s.class())
 	name, err := c.Namespace.OriginSecretParamFor(string(s.class()))
 	if err != nil {
-		return "", err
+		return bootstrap.OriginSecret{}, err
 	}
 	out, err := c.SSM.GetParameter(ctx, &ssm.GetParameterInput{
 		Name:           aws.String(name),
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
-		return "", fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s is unreadable. Re-run `%s` against this account to mint it: %w", name, command, err)
+		return bootstrap.OriginSecret{}, fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s is unreadable. Re-run `%s` against this account to mint it: %w", name, command, err)
 	}
-	secret := aws.ToString(out.Parameter.Value)
-	if secret == "" {
-		return "", fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s holds nothing. Re-run `%s` against this account to mint it", name, command)
+	secret, err := bootstrap.OriginSecretOf(aws.ToString(out.Parameter.Value))
+	if err != nil {
+		return bootstrap.OriginSecret{}, fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s holds something else. Re-run `%s` against this account to mint it: %w", name, command, err)
 	}
 	return secret, nil
 }

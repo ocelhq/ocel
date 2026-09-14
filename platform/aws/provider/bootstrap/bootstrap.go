@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -388,8 +389,20 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	}
 
 	progressf("Ensuring the secret the origin's own front authenticates with (SSM SecureString)")
-	if _, err := ensureOriginSecret(ctx, apis.SSM, target.ns, target.class); err != nil {
+	secret, err := ensureOriginSecret(ctx, apis.SSM, target.ns, target.class, time.Now())
+	if err != nil {
 		return err
+	}
+	if secret.retired {
+		logf("retired the origin secret a rotation replaced; a release not re-deployed since no longer answers its front")
+	}
+	switch {
+	case secret.rotated:
+		logf(fmt.Sprintf("rotated the origin secret: it was older than %d days; re-deploy each project in the class so its releases accept the new one, and the old one is retired by the next bootstrap after %d days", int(OriginSecretMaxAge.Hours()/24), int(OriginSecretGrace.Hours()/24)))
+	case secret.minted:
+		logf("minted a new origin secret")
+	default:
+		logf("reused the existing origin secret")
 	}
 
 	progressf(target.stackStep)

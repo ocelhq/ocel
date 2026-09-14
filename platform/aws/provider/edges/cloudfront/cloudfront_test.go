@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
@@ -393,6 +394,39 @@ func TestPromote(t *testing.T) {
 		}
 		if published.Secret != fakeSecret {
 			t.Errorf("the route carries no secret, so the origin cannot tell the edge from a stranger")
+		}
+	})
+
+	t.Run("a release deployed before a rotation is presented the secret it was deployed with, and one deployed after it the current one", func(t *testing.T) {
+		t.Parallel()
+
+		w := newWorld()
+		rotatedAt := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+		w.ssm.secret = bootstrap.OriginSecret{Current: fakeSecret, CreatedAt: rotatedAt, Previous: "3f7a9c1e5b2d84600f1a2b3c4d5e6f70-old", RotatedAt: rotatedAt}
+		stack := reconciled(t, w)
+		bound(t, stack)
+		record := staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+		record.CreatedAt = rotatedAt.Unix() - 1
+		if err := stack.Ledger().PutStaged(context.Background(), record); err != nil {
+			t.Fatalf("PutStaged: %v", err)
+		}
+
+		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
+			t.Fatalf("Promote: %v", err)
+		}
+		if published := routeOn(t, w, stack, boundHost); published.Secret != w.ssm.secret.Previous {
+			t.Errorf("the route presents %q, want the secret the release was deployed with: it accepts nothing minted after it", published.Secret)
+		}
+
+		record.CreatedAt = rotatedAt.Unix()
+		if err := stack.Ledger().PutStaged(context.Background(), record); err != nil {
+			t.Fatalf("PutStaged: %v", err)
+		}
+		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
+			t.Fatalf("Promote: %v", err)
+		}
+		if published := routeOn(t, w, stack, boundHost); published.Secret != fakeSecret {
+			t.Errorf("the route presents %q, want the current secret a release deployed after the rotation accepts", published.Secret)
 		}
 	})
 
