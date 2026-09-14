@@ -2,6 +2,7 @@ package vps_test
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -94,6 +95,11 @@ func (vm machine) proves(t *testing.T, path string) {
 	}
 }
 
+func aPort(said string) bool {
+	port, err := strconv.Atoi(said)
+	return err == nil && port > 0 && port < 65536
+}
+
 func (vm machine) reads(t *testing.T, container, name string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.beside(t, container, "curl -sS -m 10 'http://127.0.0.1:"+providerkit.InjectedPortText+"/env?name="+name+"'"))
@@ -119,8 +125,8 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	if got := vm.reads(t, physical, "RELEASE"); got != "handed-by-the-deploy" {
 		t.Errorf("the app reads RELEASE as %q: the image sets it in its own `ENV` line, and what the deploy hands a container outranks an image's defaults, deliberately", got)
 	}
-	if got := vm.reads(t, physical, "PORT"); got != providerkit.InjectedPortText {
-		t.Errorf("the app reads PORT as %q, and the port the provider injects outranks anything an env file names", got)
+	if got := vm.reads(t, physical, "PORT"); got == providerkit.InjectedPortText || !aPort(got) {
+		t.Errorf("the app reads PORT as %q: the runtime answers on %s and fronts the app on a loopback port of its own choosing, which outranks anything an env file names", got, providerkit.InjectedPortText)
 	}
 
 	path := host.EnvFile(providerkit.ClassProduction, physical)
