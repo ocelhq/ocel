@@ -106,9 +106,9 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 	mux.HandleFunc("GET /{slug}/history", authed(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(under(r.URL.Query().Get("pointer")))
 	}))
-	mux.HandleFunc("GET /{slug}/schema-version", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /{slug}/schema-version", authed(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]int{"schemaVersion": edge.StoreSchemaVersion})
-	})
+	}))
 	mux.HandleFunc("POST /{slug}/remove-pointer", authed(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Pointer string `json:"pointer"`

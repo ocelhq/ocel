@@ -106,7 +106,7 @@ func (s *stack) SchemaVersion(ctx context.Context) (int, error) {
 	var out struct {
 		SchemaVersion int `json:"schemaVersion"`
 	}
-	res, err := s.p.storeRequestTo(ctx, s.state.Endpoint, s.state.Slug, "", http.MethodGet, "/schema-version", nil, &out)
+	res, err := s.p.storeRequest(ctx, s.state, http.MethodGet, "/schema-version", nil, &out)
 	if err != nil {
 		if unauthorized(res) {
 			return 0, edge.ErrStoreSchemaUnreadable
