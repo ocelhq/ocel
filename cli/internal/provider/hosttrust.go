@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -104,6 +105,14 @@ func writable(store string) (string, error) {
 }
 
 func record(store, line string) error {
+	held, err := os.ReadFile(store)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if holds(string(held), line) {
+		return nil
+	}
+
 	if err := os.MkdirAll(filepath.Dir(store), 0o700); err != nil {
 		return err
 	}
@@ -113,15 +122,30 @@ func record(store, line string) error {
 	}
 	defer file.Close()
 
-	info, err := file.Stat()
-	if err != nil {
-		return err
-	}
-	if info.Size() > 0 {
+	if len(held) > 0 && !strings.HasSuffix(string(held), "\n") {
 		line = "\n" + line
 	}
 	if _, err := file.WriteString(line); err != nil {
 		return err
 	}
 	return file.Sync()
+}
+
+func holds(content, line string) bool {
+	want := strings.Fields(line)
+	if len(want) != 3 {
+		return false
+	}
+	for _, held := range strings.Split(content, "\n") {
+		fields := strings.Fields(held)
+		if len(fields) != 3 || fields[1] != want[1] || fields[2] != want[2] {
+			continue
+		}
+		for _, named := range strings.Split(fields[0], ",") {
+			if named == want[0] {
+				return true
+			}
+		}
+	}
+	return false
 }
