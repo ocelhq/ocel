@@ -98,6 +98,7 @@ export type ResolveBase = Omit<
     loader: WorkerLoader;
     store: EdgeObjectStore;
     cacheEntrypoint?: (opts: { props: CacheEntrypointProps }) => EdgeCacheStub;
+    envelopeKey?: string;
   };
 };
 
@@ -203,6 +204,7 @@ function routedDeps(
             {
               env: record.env,
               envelope: record.envelope,
+              envelopeKey: edgeRuntime.envelopeKey,
               valueFingerprint: record.valueFingerprint,
             },
           )
@@ -322,6 +324,7 @@ export default {
                 loader: env.LOADER,
                 store,
                 cacheEntrypoint: ctx.exports.CacheEntrypoint,
+                envelopeKey: env.OCEL_ENVELOPE_KEY,
               }
             : undefined,
       },

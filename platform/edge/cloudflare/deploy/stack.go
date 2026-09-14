@@ -103,6 +103,11 @@ const genericDomainAppsBinding = "OCEL_DOMAIN_APPS"
 
 type private struct {
 	EntryWorkers []string `json:"entryWorkers,omitempty"`
+	EnvelopeKey  string   `json:"envelopeKey,omitempty"`
+}
+
+func (own private) wrapsEnvelopes() bool {
+	return own.EnvelopeKey != "" && len(own.EntryWorkers) > 0
 }
 
 type stack struct {
@@ -140,7 +145,20 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	slug := spec.Slug
 	endpoint := program.StoreEndpoint
 
-	generic, err := genericWorker(spec, slug)
+	var held private
+	if err := prior.Adapter.Into(&held); err != nil {
+		return nil, err
+	}
+	envelopeKey := held.EnvelopeKey
+	if !spec.PruneOnly && envelopeKey == "" {
+		minted, err := mintEnvelopeKey()
+		if err != nil {
+			return nil, err
+		}
+		envelopeKey = minted
+	}
+
+	generic, err := genericWorker(spec, slug, envelopeKey)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +172,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		return nil, err
 	}
 	opened := func(state edge.StackState) (edge.EdgeStack, error) {
-		var own private
+		own := private{EnvelopeKey: envelopeKey}
 		if !spec.PruneOnly {
 			own.EntryWorkers = p.recordEntryWorker(slug, program.Name)
 		}
@@ -487,12 +505,15 @@ func withSecret(worker edge.Worker, name, value string) edge.Worker {
 	return worker
 }
 
-func genericWorker(spec edge.StackSpec, slug string) (edge.Worker, error) {
+func genericWorker(spec edge.StackSpec, slug, envelopeKey string) (edge.Worker, error) {
 	worker := withVar(
 		withService(spec.Program.Worker, genericStoreBinding, spec.Program.StoreScriptName),
 		genericSlugBinding,
 		slug,
 	)
+	if envelopeKey != "" {
+		worker = withSecret(worker, envelopeKeyBinding, envelopeKey)
+	}
 	if spec.Program.ISRWriterScriptName != "" {
 		worker = withService(worker, genericISRWriterBinding, spec.Program.ISRWriterScriptName)
 	}

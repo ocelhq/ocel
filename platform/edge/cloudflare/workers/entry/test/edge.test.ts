@@ -1687,6 +1687,73 @@ describe("the variables a deployment declares", () => {
     expect((await workerEnv(edge)).OCEL_VAR_TOKEN).toBe("t0ken");
   });
 
+  const WRAPPING_KEY = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+
+  async function wrap(envelopeKey: string, envelope: string): Promise<string> {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      bytesOf(envelopeKey),
+      { name: "AES-GCM" },
+      false,
+      ["encrypt"],
+    );
+    const nonce = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
+    const wrapped = new Uint8Array(
+      await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, bytesOf(envelope)),
+    );
+    const framed = new Uint8Array(nonce.length + wrapped.length);
+    framed.set(nonce);
+    framed.set(wrapped, nonce.length);
+    return btoa(String.fromCharCode(...framed));
+  }
+
+  it("unwraps the envelope with the worker's own key before unsealing", async () => {
+    const sealed = bytesOf(GO_SEALED);
+    const { edge } = varsInvoker({
+      variables: { envelope: await wrap(WRAPPING_KEY, GO_ENVELOPE), envelopeKey: WRAPPING_KEY },
+      sealed,
+    });
+
+    const values = await workerEnv(edge);
+    expect(values.OCEL_VAR_STRIPE_API_KEY).toBe("sk-live-abc");
+    expect(values.OCEL_VAR_WEBHOOK_SECRET).toBe("whsec-xyz");
+  });
+
+  it("unwraps what the origin's stack wrapped in Go", async () => {
+    const GO_WRAPPING_KEY = "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=";
+    const GO_WRAPPED =
+      "UE2Q24dOC8dGzwjPRGx8m2WTic1ZsjF5ExTE/LLYg+aA7BMnZbTrTCQswobxFS0ot4qk4AKLEnMQZFfS";
+    const { edge } = varsInvoker({
+      variables: { envelope: GO_WRAPPED, envelopeKey: GO_WRAPPING_KEY },
+      sealed: bytesOf(GO_SEALED),
+    });
+
+    expect((await workerEnv(edge)).OCEL_VAR_STRIPE_API_KEY).toBe("sk-live-abc");
+  });
+
+  it("refuses an envelope wrapped for another worker", async () => {
+    const other = "//////////////////////////////////////////8=";
+    const { edge } = varsInvoker({
+      variables: { envelope: await wrap(other, GO_ENVELOPE), envelopeKey: WRAPPING_KEY },
+      sealed: bytesOf(GO_SEALED),
+    });
+
+    await expect(edge("e", new Request("https://x/"))).rejects.toThrow(
+      "ocel: the envelope was not wrapped for this worker",
+    );
+  });
+
+  it("refuses a bare envelope once it holds a key, rather than trusting the record", async () => {
+    const { edge } = varsInvoker({
+      variables: { envelope: GO_ENVELOPE, envelopeKey: WRAPPING_KEY },
+      sealed: bytesOf(GO_SEALED),
+    });
+
+    await expect(edge("e", new Request("https://x/"))).rejects.toThrow(
+      "ocel: the envelope was not wrapped for this worker",
+    );
+  });
+
   it("names a non-JSON payload without quoting what it decrypted", async () => {
     const plaintext = "sk-live-abc is not JSON";
     const sealed = await seal(GO_ENVELOPE, plaintext);
