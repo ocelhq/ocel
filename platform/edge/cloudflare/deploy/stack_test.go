@@ -220,7 +220,11 @@ func pruneOnlySpec(endpoint, version string) edge.StackSpec {
 
 func specStampFor(t *testing.T, spec edge.StackSpec) string {
 	t.Helper()
-	stamp, err := specStamp(spec, genericWorker(spec, spec.Slug))
+	generic, err := genericWorker(spec, spec.Slug)
+	if err != nil {
+		t.Fatalf("genericWorker: %v", err)
+	}
+	stamp, err := specStamp(spec, generic)
 	if err != nil {
 		t.Fatalf("specStamp: %v", err)
 	}
@@ -813,7 +817,10 @@ func TestWorkerDecoration(t *testing.T) {
 			ISRWriterScriptName: "ocel-isr-writer",
 		}}
 
-		worker := genericWorker(spec, "acme-web")
+		worker, err := genericWorker(spec, "acme-web")
+		if err != nil {
+			t.Fatalf("genericWorker: %v", err)
+		}
 
 		if worker.Services[genericStoreBinding] != "ocel-deployments-store" {
 			t.Errorf("Services[%s] = %q", genericStoreBinding, worker.Services[genericStoreBinding])
@@ -831,7 +838,10 @@ func TestWorkerDecoration(t *testing.T) {
 
 		spec := edge.StackSpec{Program: &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-deployments-store"}}
 
-		worker := genericWorker(spec, "acme-web")
+		worker, err := genericWorker(spec, "acme-web")
+		if err != nil {
+			t.Fatalf("genericWorker: %v", err)
+		}
 
 		if _, bound := worker.Services[genericISRWriterBinding]; bound {
 			t.Errorf("Services = %v, want no %s binding", worker.Services, genericISRWriterBinding)
@@ -850,7 +860,10 @@ func TestGenericWorkerCarriesTheHostnamesEachAppAnswersFor(t *testing.T) {
 			DomainApps: map[string]string{"shop.example": "web", "admin.shop.example": "admin"},
 		}
 
-		worker := genericWorker(spec, "acme-web")
+		worker, err := genericWorker(spec, "acme-web")
+		if err != nil {
+			t.Fatalf("genericWorker: %v", err)
+		}
 
 		want := `{"admin.shop.example":"admin","shop.example":"web"}`
 		if worker.Vars[genericDomainAppsBinding] != want {
@@ -863,7 +876,10 @@ func TestGenericWorkerCarriesTheHostnamesEachAppAnswersFor(t *testing.T) {
 
 		spec := edge.StackSpec{Program: &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-deployments-store"}}
 
-		worker := genericWorker(spec, "acme-web")
+		worker, err := genericWorker(spec, "acme-web")
+		if err != nil {
+			t.Fatalf("genericWorker: %v", err)
+		}
 
 		if _, bound := worker.Vars[genericDomainAppsBinding]; bound {
 			t.Errorf("Vars = %v, want no %s: the entry falls back to the pointer", worker.Vars, genericDomainAppsBinding)

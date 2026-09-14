@@ -132,7 +132,10 @@ func (p *provider) requireTLSCover(ctx context.Context, zoneID, zoneName, hostna
 func (p *provider) certificatePackCovers(ctx context.Context, zoneID, hostname string) (bool, error) {
 	packs := p.client.SSL.CertificatePacks.ListAutoPaging(ctx, ssl.CertificatePackListParams{ZoneID: cf.F(zoneID)})
 	for packs.Next() {
-		hosts := activeCertificatePackHosts(packs.Current())
+		hosts, err := activeCertificatePackHosts(packs.Current())
+		if err != nil {
+			return false, fmt.Errorf("read a certificate pack in zone %s: %w", zoneID, err)
+		}
 		if slices.ContainsFunc(hosts, func(covered string) bool { return certificateCovers(covered, hostname) }) {
 			return true, nil
 		}
@@ -143,22 +146,22 @@ func (p *provider) certificatePackCovers(ctx context.Context, zoneID, hostname s
 	return false, nil
 }
 
-func activeCertificatePackHosts(pack ssl.CertificatePackListResponse) []string {
+func activeCertificatePackHosts(pack ssl.CertificatePackListResponse) ([]string, error) {
 	raw, err := json.Marshal(pack)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	var decoded struct {
 		Hosts  []string `json:"hosts"`
 		Status string   `json:"status"`
 	}
 	if err := json.Unmarshal(raw, &decoded); err != nil {
-		return nil
+		return nil, err
 	}
 	if decoded.Status != string(ssl.StatusActive) {
-		return nil
+		return nil, nil
 	}
-	return decoded.Hosts
+	return decoded.Hosts, nil
 }
 
 func certificateCovers(covered, hostname string) bool {
