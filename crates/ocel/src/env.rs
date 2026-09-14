@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 const DELIVERED_PREFIX: &str = "OCEL_VAR_";
 const APP_FOLDER_ENV: &str = "OCEL_APP_FOLDER";
+const LIVE_DIR_ENV: &str = "OCEL_LIVE_DIR";
 const URL_KEY: &str = "OCEL_URL";
 
 #[doc(hidden)]
@@ -210,6 +211,15 @@ fn delivered(key: &str) -> Option<String> {
     std::env::var(format!("{DELIVERED_PREFIX}{key}"))
         .or_else(|_| std::env::var(key))
         .ok()
+        .or_else(|| live_file(key))
+}
+
+fn live_file(key: &str) -> Option<String> {
+    let directory = std::env::var(LIVE_DIR_ENV).ok()?;
+    if directory.is_empty() {
+        return None;
+    }
+    std::fs::read_to_string(std::path::Path::new(&directory).join(key)).ok()
 }
 
 fn unset(key: &str) -> Error {

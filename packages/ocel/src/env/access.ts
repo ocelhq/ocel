@@ -25,6 +25,13 @@ export interface Access {
 
 export const FIXED = -1;
 
+/**
+ * The generation of a value nothing marks the freshness of, which is read
+ * again on every access. It is `NaN`, so it equals no generation — its own
+ * included — and `Math.max` carries it over a group holding such a member.
+ */
+export const UNCACHED = Number.NaN;
+
 export function envAccessor<TDefinitions extends EnvDefinitions>(
   definitions: TDefinitions,
   access: Access,

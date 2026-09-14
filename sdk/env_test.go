@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -620,6 +621,78 @@ func TestASecretResolvesOnEveryRead(t *testing.T) {
 	t.Setenv("OCEL_VAR_SIGNING_KEY", "rotated")
 	if v := got.Key.Value(); v != "rotated" {
 		t.Errorf("Value() after rotation = %q, want %q", v, "rotated")
+	}
+}
+
+func TestEnvReadsAValueFromTheLiveDirectoryWhenNoVariableCarriesIt(t *testing.T) {
+	t.Setenv(constants.LiveDirEnvName, liveDir(t, map[string]string{"FILE_ONLY": "from the file\n"}))
+
+	got := ocel.Env[struct {
+		Key string `ocel:"FILE_ONLY"`
+	}]()
+	if got.Key != "from the file\n" {
+		t.Errorf("Key = %q, want the file's bytes verbatim", got.Key)
+	}
+}
+
+func TestEnvPrefersADeliveredVariableOverTheLiveDirectoryFileOfTheSameKey(t *testing.T) {
+	dir := liveDir(t, map[string]string{"FILE_SHADOWED": "from the file", "FILE_BARE": "from the file"})
+	t.Setenv(constants.LiveDirEnvName, dir)
+	t.Setenv("OCEL_VAR_FILE_SHADOWED", "baked")
+	t.Setenv("FILE_BARE", "bare")
+
+	got := ocel.Env[struct {
+		Shadowed string `ocel:"FILE_SHADOWED"`
+		Bare     string `ocel:"FILE_BARE"`
+	}]()
+	if got.Shadowed != "baked" || got.Bare != "bare" {
+		t.Errorf("Env() = %+v", got)
+	}
+}
+
+func TestEnvTakesAKeyTheLiveDirectoryHoldsNoFileForAsUnset(t *testing.T) {
+	t.Setenv(constants.LiveDirEnvName, liveDir(t, nil))
+
+	err := valueError(t, func() {
+		ocel.Env[struct {
+			Key string `ocel:"FILE_MISSING"`
+		}]()
+	})
+	if err.Key != "FILE_MISSING" || !strings.Contains(err.Error(), "has no value") {
+		t.Errorf("error = %q", err)
+	}
+}
+
+func TestASecretReadsTheRotatedLiveDirectoryFileOnTheNextCall(t *testing.T) {
+	dir := liveDir(t, map[string]string{"ROTATING_KEY": "first"})
+	t.Setenv(constants.LiveDirEnvName, dir)
+
+	got := ocel.Env[struct {
+		Key ocel.Secret `ocel:"ROTATING_KEY"`
+	}]()
+	if v := got.Key.Value(); v != "first" {
+		t.Fatalf("Value() = %q, want %q", v, "first")
+	}
+
+	write(t, filepath.Join(dir, "ROTATING_KEY"), "rotated")
+	if v := got.Key.Value(); v != "rotated" {
+		t.Errorf("Value() after rotation = %q, want %q", v, "rotated")
+	}
+}
+
+func liveDir(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for key, value := range files {
+		write(t, filepath.Join(dir, key), value)
+	}
+	return dir
+}
+
+func write(t *testing.T, path, value string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(value), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -33,6 +33,7 @@ __all__ = [
 
 DELIVERED_PREFIX = "OCEL_VAR_"
 APP_FOLDER_ENV = "OCEL_APP_FOLDER"
+LIVE_DIR_ENV = "OCEL_LIVE_DIR"
 RESERVED_PREFIX = "OCEL_"
 URL_KEY = "OCEL_URL"
 
@@ -881,7 +882,21 @@ def _delivered(key: str) -> str | None:
     delivered = os.environ.get(DELIVERED_PREFIX + key)
     if delivered is not None:
         return delivered
-    return os.environ.get(key)
+    plain = os.environ.get(key)
+    if plain is not None:
+        return plain
+    return _live_file(key)
+
+
+def _live_file(key: str) -> str | None:
+    directory = os.environ.get(LIVE_DIR_ENV)
+    if not directory:
+        return None
+    try:
+        with open(os.path.join(directory, key), "rb") as handle:
+            return handle.read().decode()
+    except (OSError, ValueError):
+        return None
 
 
 def _unset(key: str) -> EnvValueError:
