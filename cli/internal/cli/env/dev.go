@@ -131,6 +131,9 @@ func runEnvGetDev(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts 
 			return err
 		}
 		if opts.reveal {
+			if err := consentToReveal(definitions, key, opts, stderr); err != nil {
+				return err
+			}
 			fmt.Fprintln(stdout, held.Value)
 			return nil
 		}

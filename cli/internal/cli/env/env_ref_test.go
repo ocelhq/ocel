@@ -52,12 +52,12 @@ func TestRunEnvRef(t *testing.T) {
 			t.Errorf("ref stdout = %q, want it to name the cell the value is read from", out)
 		}
 
-		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true})); got != "sk_live_first" {
+		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true})); got != "sk_live_first" {
 			t.Errorf("revealed value = %q, want the owner's", got)
 		}
 
 		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_rotated")
-		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true})); got != "sk_live_rotated" {
+		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true})); got != "sk_live_rotated" {
 			t.Errorf("revealed value after an edit at the source = %q, want %q with nothing re-run here", got, "sk_live_rotated")
 		}
 	})
@@ -86,7 +86,7 @@ func TestRunEnvRef(t *testing.T) {
 		}
 
 		var out, errs bytes.Buffer
-		err := runEnvGet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &out, &errs)
+		err := runEnvGet(context.Background(), clitest.NewDeps(), root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true}, &out, &errs)
 		if err == nil {
 			t.Fatal("runEnvGet through a reference to nothing err = nil, want a failure")
 		}
@@ -95,7 +95,7 @@ func TestRunEnvRef(t *testing.T) {
 		}
 
 		ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")
-		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true})); got != "sk_live_secret" {
+		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true})); got != "sk_live_secret" {
 			t.Errorf("value once the source was set = %q, want it read through with no second write", got)
 		}
 	})
@@ -169,7 +169,7 @@ func TestEnvReferences(t *testing.T) {
 		if !strings.Contains(err.Error(), "platform/STRIPE_API_KEY") {
 			t.Errorf("refusal = %q, want it to name where the value is edited", err)
 		}
-		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true})); got != "sk_live_secret" {
+		if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true, yes: true})); got != "sk_live_secret" {
 			t.Errorf("value after the refused edit = %q, want it untouched", got)
 		}
 	})

@@ -39,6 +39,7 @@ type envOptions struct {
 	folder      string
 	environment string
 	reveal      bool
+	yes         bool
 }
 
 func (o envOptions) checkDev() error {
@@ -306,6 +307,9 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 		}
 
 		if opts.reveal {
+			if err := consentToReveal(definitions, key, opts, stderr); err != nil {
+				return err
+			}
 			fmt.Fprintln(stdout, resp.GetValue())
 			return nil
 		}
@@ -319,6 +323,27 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 		fmt.Fprintln(stdout, "Pass --reveal to print the value.")
 		return nil
 	})
+}
+
+func classOf(definitions []*resourcesv1.VariableDefinition, key string) resourcesv1.VariableClass {
+	for _, definition := range definitions {
+		if definition.GetKey() == key {
+			return definition.GetClass()
+		}
+	}
+	return resourcesv1.VariableClass_VARIABLE_CLASS_UNSPECIFIED
+}
+
+func consentToReveal(definitions []*resourcesv1.VariableDefinition, key string, opts envOptions, stderr io.Writer) error {
+	if classOf(definitions, key) != resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
+		return nil
+	}
+	if !opts.yes {
+		return fmt.Errorf("%s is declared a secret, and --reveal alone will not print one: the plaintext would land in this terminal's scrollback and in whatever shell history, CI log or screen recording is watching. Pass --yes as well to print it anyway",
+			describeCell(key, opts))
+	}
+	fmt.Fprintf(stderr, "%s is a secret and its plaintext is now on stdout, in this terminal's scrollback, and in anything capturing either.\n", describeCell(key, opts))
+	return nil
 }
 
 func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
