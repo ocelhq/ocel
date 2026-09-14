@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
 const Vendor providerkit.Vendor = "gcp"
@@ -144,6 +145,10 @@ func (p *Provider) Releases() providerkit.Releaser {
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return artifacts{p: p} }
 
+func (p *Provider) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
+	return payloads.ContainerRuntime(arch)
+}
+
 func (p *Provider) Records() providerkit.RecordStore { return records{p: p} }
 
 func (p *Provider) Sealer() providerkit.Sealer { return sealer{p: p} }
@@ -173,4 +178,7 @@ func (p *Provider) Edges() providerkit.EdgeRegistry {
 
 func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
 
-var _ providerkit.Provider = (*Provider)(nil)
+var (
+	_ providerkit.Provider          = (*Provider)(nil)
+	_ providerkit.ContainerRuntimer = (*Provider)(nil)
+)

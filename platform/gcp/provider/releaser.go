@@ -7,9 +7,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	"github.com/ocelhq/ocel/pkg/runtimekit/front"
+	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
+	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
 func serviceFor(names Names, plan providerkit.StackPlan, app *providerkit.AppPlan, function string) (string, error) {
@@ -117,7 +121,11 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	if err != nil {
 		return nil, err
 	}
-	values, err := carried(app.App, app.Values.Delivered, nil)
+	own, err := p.containerEnv(names, plan)
+	if err != nil {
+		return nil, err
+	}
+	values, err := carried(app.App, app.Values.Delivered, own)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +158,62 @@ func (p *Provider) RemoveContainers(ctx context.Context, _ providerkit.StackRef,
 		}
 	}
 	return nil
+}
+
+func (p *Provider) containerEnv(names Names, plan providerkit.StackPlan) (map[string]string, error) {
+	app := plan.App
+	env := map[string]string{front.HealthPathVar: app.HealthCheckPath}
+	manifest, err := live.Render(live.Manifest{
+		Project:     names.project,
+		Region:      p.options.Region,
+		Namespace:   string(names.namespace),
+		Slug:        plan.Ref.Project,
+		Class:       string(plan.Ref.Class),
+		Environment: liveEnvironment(plan.Ref),
+		Endpoint:    p.endpoint,
+		Keys:        liveKeys(app.Values),
+		Bindings:    liveBindings(app.Values),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("pin %s's live values: %w", app.App, err)
+	}
+	if len(manifest) > 0 {
+		env[live.EnvVar] = string(manifest)
+	}
+	return env, nil
+}
+
+func liveEnvironment(ref providerkit.StackRef) string {
+	if ref.Class == providerkit.ClassProduction {
+		return ""
+	}
+	return ref.Name.Env
+}
+
+func liveKeys(held providerkit.AppValues) []rt.Key {
+	keys := make([]rt.Key, 0, len(held.Secrets))
+	for _, secret := range held.Secrets {
+		keys = append(keys, rt.Key{Key: secret.Key, Folder: secret.Folder})
+	}
+	return keys
+}
+
+func liveBindings(held providerkit.AppValues) []rt.Binding {
+	bindings := make([]rt.Binding, 0, len(held.Bindings))
+	for _, binding := range held.Bindings {
+		kind := providerkit.WireBindingType(binding.Type)
+		resource := binding.Resource
+		if resource == "" {
+			resource = binding.Name
+		}
+		bindings = append(bindings, rt.Binding{
+			Name:    binding.Name,
+			Key:     naming.ResourceEnvName(kind, resource),
+			Type:    kind,
+			Granted: binding.Version,
+		})
+	}
+	return bindings
 }
 
 func carried(what string, delivered, own map[string]string) (map[string]string, error) {
