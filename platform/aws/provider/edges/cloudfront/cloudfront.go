@@ -238,8 +238,44 @@ func (p *provider) Bootstrap(_ context.Context, class edge.Class) (edge.Bootstra
 	return edge.BootstrapOutput{Trust: edge.TrustInternal}, nil
 }
 
-func (p *provider) Teardown(_ context.Context, class edge.Class) error {
-	return knownClass(class)
+func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
+	if err := knownClass(class); err != nil {
+		return err
+	}
+	c, err := p.clientsFor(ctx)
+	if err != nil {
+		return err
+	}
+	summaries, err := listDistributions(ctx, c)
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(summaries))
+	for _, summary := range summaries {
+		names = append(names, summary.comment)
+	}
+	slices.Sort(names)
+	standing := projectsNamed(names, class)
+	if len(standing) == 0 {
+		return nil
+	}
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"the %q edge still fronts %d project(s) of class %s with a distribution of their own: %s. Run `%s` in each of them first, then take this bootstrap down",
+		Kind, len(standing), class, strings.Join(standing, ", "), "ocel destroy "+string(class))
+}
+
+func projectsNamed(names []string, class edge.Class) []string {
+	var standing []string
+	for _, name := range names {
+		fields := strings.Split(name, naming.FieldSeparator)
+		if len(fields) != 3 || fields[0] != namespace || fields[2] != string(class) {
+			continue
+		}
+		if !slices.Contains(standing, fields[1]) {
+			standing = append(standing, fields[1])
+		}
+	}
+	return standing
 }
 
 func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
