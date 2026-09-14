@@ -48,13 +48,13 @@ func estimateOfType(t *testing.T, est *costv1.Estimate, set *costv1.ResourceSet,
 func TestPriceOfAProductionDeployBehindTheLoadBalancer(t *testing.T) {
 	client, pricer := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 		Edge:        &contractv1.EdgeSelection{Kind: string(alb.Kind)},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
@@ -91,19 +91,19 @@ func TestPriceOfAProductionDeployBehindTheLoadBalancer(t *testing.T) {
 		}
 	}
 	if cov := est.GetCoverage(); cov.GetUnsupported() != 0 || cov.GetNoPrice() != 0 {
-		t.Errorf("coverage = %v, want everything the shape lists priced or free", cov)
+		t.Errorf("coverage = %v, want everything the inventory lists priced or free", cov)
 	}
 }
 
 func TestPriceOfADirectDeployBillsEgressOnTheService(t *testing.T) {
 	client, pricer := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: costv1.Profile_PROFILE_HEAVY}})
 	if err != nil {

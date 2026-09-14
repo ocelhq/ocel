@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,35 +16,10 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/ocelhq/ocel/pkg/costkit"
+	"github.com/ocelhq/ocel/platform/aws/provider/cost/offer"
 )
 
-const (
-	host         = "https://pricing.us-east-1.amazonaws.com"
-	onDemandTerm = "JRTCKXETXF"
-	queryService = "service"
-	queryIndex   = "index"
-	querySource  = "static"
-	globalIndex  = "global"
-)
-
-type offer struct {
-	Version  string `json:"version"`
-	Products map[string]struct {
-		SKU        string            `json:"sku"`
-		Attributes map[string]string `json:"attributes"`
-	} `json:"products"`
-	Terms struct {
-		OnDemand map[string]map[string]struct {
-			OfferTermCode   string `json:"offerTermCode"`
-			PriceDimensions map[string]struct {
-				BeginRange   string            `json:"beginRange"`
-				EndRange     string            `json:"endRange"`
-				Unit         string            `json:"unit"`
-				PricePerUnit map[string]string `json:"pricePerUnit"`
-			} `json:"priceDimensions"`
-		} `json:"OnDemand"`
-	} `json:"terms"`
-}
+type group struct{ service, region string }
 
 func main() {
 	card := flag.String("card", "platform/aws/provider/cost/rates.json", "the rate card to refresh in place")
@@ -64,31 +40,38 @@ func run(path, cache string) error {
 	if err := json.Unmarshal(raw, &card); err != nil {
 		return err
 	}
-	offers := map[string]*offer{}
-	today := time.Now().UTC().Format(time.DateOnly)
+	groups := map[group][]*costkit.Rate{}
 	for i := range card.Rates {
 		rate := &card.Rates[i]
-		if rate.Query == nil || rate.Query[querySource] != "" {
+		if rate.Query == nil || rate.Query[costkit.QuerySource] != "" {
 			continue
 		}
 		region := rate.Region
-		if rate.Query[queryIndex] == globalIndex {
+		if rate.Query[costkit.QueryIndex] == costkit.Global {
 			region = ""
 		}
-		held, err := load(offers, cache, rate.Query[queryService], region)
+		held := group{rate.Query[costkit.QueryService], region}
+		groups[held] = append(groups[held], rate)
+	}
+	order := make([]group, 0, len(groups))
+	for held := range groups {
+		order = append(order, held)
+	}
+	sort.Slice(order, func(i, j int) bool {
+		if order[i].service != order[j].service {
+			return order[i].service < order[j].service
+		}
+		return order[i].region < order[j].region
+	})
+	today := time.Now().UTC().Format(time.DateOnly)
+	for _, held := range order {
+		file, err := ensure(cache, held.service, held.region)
 		if err != nil {
-			return fmt.Errorf("%s: %w", rate.ID, err)
+			return err
 		}
-		tiers, unit, source, err := held.tiers(rate.Query, rate.Query[queryService], region)
-		if err != nil {
-			return fmt.Errorf("%s: %w", rate.ID, err)
+		if err := resolve(file, groups[held], held, today); err != nil {
+			return err
 		}
-		if rate.Unit != unit {
-			fmt.Fprintf(os.Stderr, "%s: the offer bills in %q, the card says %q\n", rate.ID, unit, rate.Unit)
-		}
-		rate.Tiers = tiers
-		rate.Source = source
-		rate.Verified = today
 	}
 	card.Version = today
 	out, err := json.MarshalIndent(card, "", "  ")
@@ -98,84 +81,107 @@ func run(path, cache string) error {
 	return os.WriteFile(path, append(out, '\n'), 0o644)
 }
 
-func load(offers map[string]*offer, cache, service, region string) (*offer, error) {
-	key := service + "/" + region
-	if held, ok := offers[key]; ok {
-		return held, nil
+func ensure(cache, service, region string) (string, error) {
+	file := filepath.Join(cache, service+"-"+costkit.OrGlobal(region)+".json")
+	if _, err := os.Stat(file); err == nil {
+		return file, nil
 	}
-	path := "/offers/v1.0/aws/" + service + "/current/index.json"
-	if region != "" {
-		path = "/offers/v1.0/aws/" + service + "/current/" + region + "/index.json"
+	if err := os.MkdirAll(cache, 0o755); err != nil {
+		return "", err
 	}
-	file := filepath.Join(cache, service+"-"+orGlobal(region)+".json")
-	raw, err := os.ReadFile(file)
+	req, err := http.NewRequest(http.MethodGet, offer.Host+offer.Path(service, region), nil)
 	if err != nil {
-		req, err := http.NewRequest(http.MethodGet, host+path, nil)
+		return "", err
+	}
+	part := file + ".part"
+	out, err := os.Create(part)
+	if err != nil {
+		return "", err
+	}
+	err = costkit.Stream(context.Background(), req, func(body io.Reader) error {
+		_, err := io.Copy(out, body)
+		return err
+	})
+	if closing := out.Close(); err == nil {
+		err = closing
+	}
+	if err != nil {
+		_ = os.Remove(part)
+		return "", err
+	}
+	return file, os.Rename(part, file)
+}
+
+func resolve(file string, rates []*costkit.Rate, held group, today string) error {
+	source, err := os.Open(file)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+
+	matched := make([][]string, len(rates))
+	wanted := map[string][]int{}
+	priced := map[string][]offer.Price{}
+	version, err := offer.ReadOnDemand(source, offer.Sink{
+		Product: func(product offer.Product) error {
+			for i, rate := range rates {
+				if matches(product.Attributes, rate.Query, held.region) {
+					matched[i] = append(matched[i], product.SKU)
+					wanted[product.SKU] = append(wanted[product.SKU], i)
+				}
+			}
+			return nil
+		},
+		Price: func(price offer.Price) error {
+			if _, want := wanted[price.SKU]; want {
+				priced[price.SKU] = append(priced[price.SKU], price)
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("%s: %w", file, err)
+	}
+	for i, rate := range rates {
+		slices.Sort(matched[i])
+		if len(matched[i]) != 1 {
+			return fmt.Errorf("%s: query %v matches %d products: %v", rate.ID, rate.Query, len(matched[i]), matched[i])
+		}
+		sku := matched[i][0]
+		tiers, unit, err := tiersOf(sku, priced[sku])
 		if err != nil {
-			return nil, err
+			return fmt.Errorf("%s: %w", rate.ID, err)
 		}
-		if raw, err = costkit.Fetch(context.Background(), req); err != nil {
-			return nil, err
+		if rate.Unit != unit {
+			fmt.Fprintf(os.Stderr, "%s: the offer bills in %q, the card says %q\n", rate.ID, unit, rate.Unit)
 		}
-		if err := os.MkdirAll(cache, 0o755); err != nil {
-			return nil, err
-		}
-		if err := os.WriteFile(file, raw, 0o644); err != nil {
-			return nil, err
-		}
+		rate.Tiers = tiers
+		rate.Source = offer.Source(held.service, version, held.region) + "#" + sku
+		rate.Verified = today
 	}
-	held := &offer{}
-	if err := json.Unmarshal(raw, held); err != nil {
-		return nil, fmt.Errorf("decode %s: %w", path, err)
-	}
-	offers[key] = held
-	return held, nil
+	return nil
 }
 
-func orGlobal(region string) string {
-	if region == "" {
-		return globalIndex
-	}
-	return region
-}
-
-func (o *offer) tiers(query map[string]string, service, region string) ([]costkit.Tier, string, string, error) {
-	var matched []string
-	for sku, product := range o.Products {
-		if matches(product.Attributes, query, region) {
-			matched = append(matched, sku)
-		}
-	}
-	slices.Sort(matched)
-	if len(matched) != 1 {
-		return nil, "", "", fmt.Errorf("query %v matches %d products: %v", query, len(matched), matched)
-	}
-	sku := matched[0]
+func tiersOf(sku string, prices []offer.Price) ([]costkit.Tier, string, error) {
 	var tiers []costkit.Tier
 	unit := ""
-	for _, term := range o.Terms.OnDemand[sku] {
-		if term.OfferTermCode != onDemandTerm {
-			continue
+	for _, price := range prices {
+		start, err := decimal.NewFromString(price.BeginRange)
+		if err != nil {
+			return nil, "", fmt.Errorf("sku %s: beginRange %q: %w", sku, price.BeginRange, err)
 		}
-		for _, dimension := range term.PriceDimensions {
-			start, err := decimal.NewFromString(dimension.BeginRange)
-			if err != nil {
-				return nil, "", "", fmt.Errorf("sku %s: beginRange %q: %w", sku, dimension.BeginRange, err)
-			}
-			price, err := decimal.NewFromString(dimension.PricePerUnit["USD"])
-			if err != nil {
-				return nil, "", "", fmt.Errorf("sku %s: price %q: %w", sku, dimension.PricePerUnit["USD"], err)
-			}
-			tiers = append(tiers, costkit.Tier{Start: start, Price: price})
-			unit = dimension.Unit
+		amount, err := decimal.NewFromString(price.USD)
+		if err != nil {
+			return nil, "", fmt.Errorf("sku %s: price %q: %w", sku, price.USD, err)
 		}
+		tiers = append(tiers, costkit.Tier{Start: start, Price: amount})
+		unit = price.Unit
 	}
 	if len(tiers) == 0 {
-		return nil, "", "", fmt.Errorf("sku %s carries no on-demand term", sku)
+		return nil, "", fmt.Errorf("sku %s carries no on-demand term", sku)
 	}
 	sort.Slice(tiers, func(i, j int) bool { return tiers[i].Start.LessThan(tiers[j].Start) })
-	source := host + "/offers/v1.0/aws/" + service + "/" + o.Version + "/" + orGlobal(region) + "/index.json#" + sku
-	return tiers, unit, source, nil
+	return tiers, unit, nil
 }
 
 func matches(attributes, query map[string]string, region string) bool {
@@ -183,7 +189,7 @@ func matches(attributes, query map[string]string, region string) bool {
 		return false
 	}
 	for key, want := range query {
-		if key == queryService || key == queryIndex {
+		if key == costkit.QueryService || key == costkit.QueryIndex {
 			continue
 		}
 		if attributes[key] != want {

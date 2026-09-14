@@ -69,7 +69,7 @@ func RunCost(t *testing.T, provider contractv1connect.ProviderServiceClient, pri
 	t.Helper()
 	ctx := context.Background()
 
-	set, err := provider.Shape(ctx, &contractv1.ShapeRequest{
+	set, err := provider.Inventory(ctx, &contractv1.InventoryRequest{
 		Manifest:    CostManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
@@ -77,18 +77,25 @@ func RunCost(t *testing.T, provider contractv1connect.ProviderServiceClient, pri
 		t.Skip("this provider describes no resources to price, and says so")
 	}
 	if err != nil {
-		t.Fatalf("Shape() error = %v, want the resources a deploy would create", err)
+		t.Fatalf("Inventory() error = %v, want the resources a deploy would create", err)
 	}
 
-	t.Run("the shape is a tree every resource hangs on", func(t *testing.T) {
-		shapeHoldsTogether(t, set, vendor)
+	t.Run("the inventory is a tree every resource hangs on", func(t *testing.T) {
+		inventoryHoldsTogether(t, set, vendor)
 	})
+
+	RunPricing(t, pricer, set)
+}
+
+func RunPricing(t *testing.T, pricer costv1connect.CostServiceClient, set *costv1.ResourceSet) {
+	t.Helper()
+	ctx := context.Background()
 
 	estimates := map[costv1.Profile]*costv1.Estimate{}
 	for _, profile := range costkit.Profiles() {
 		est, err := pricer.Price(ctx, &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: profile}})
 		if connect.CodeOf(err) == connect.CodeUnimplemented {
-			t.Fatal("this provider shapes a deploy and prices nothing, so a scan would list resources with no number beside them")
+			t.Fatal("this provider inventories a deploy and prices nothing, so a scan would list resources with no number beside them")
 		}
 		if err != nil {
 			t.Fatalf("Price(%s) error = %v", profile, err)
@@ -96,7 +103,7 @@ func RunCost(t *testing.T, provider contractv1connect.ProviderServiceClient, pri
 		estimates[profile] = est
 	}
 
-	t.Run("every shaped resource is priced or declared free", func(t *testing.T) {
+	t.Run("every inventoried resource is priced or declared free", func(t *testing.T) {
 		estimateHoldsTogether(t, set, estimates[costkit.DefaultProfile])
 	})
 	t.Run("a heavier profile never costs less", func(t *testing.T) {
@@ -107,7 +114,7 @@ func RunCost(t *testing.T, provider contractv1connect.ProviderServiceClient, pri
 	})
 }
 
-func shapeHoldsTogether(t *testing.T, set *costv1.ResourceSet, vendor string) {
+func inventoryHoldsTogether(t *testing.T, set *costv1.ResourceSet, vendor string) {
 	t.Helper()
 	if set.GetSource() != providerkit.CostSource {
 		t.Errorf("source = %q, want %q", set.GetSource(), providerkit.CostSource)
@@ -151,7 +158,7 @@ func shapeHoldsTogether(t *testing.T, set *costv1.ResourceSet, vendor string) {
 		}
 	}
 	if len(set.GetResources()) == 0 {
-		t.Error("the shape lists no resources for a deploy with two apps and two declared resources")
+		t.Error("the inventory lists no resources for a deploy with two apps and two declared resources")
 	}
 }
 
@@ -161,19 +168,19 @@ func estimateHoldsTogether(t *testing.T, set *costv1.ResourceSet, est *costv1.Es
 		t.Errorf("estimate header = %s %q %s", est.GetCurrency(), est.GetRatesVersion(), est.GetProfile())
 	}
 	if len(est.GetResources()) != len(set.GetResources()) {
-		t.Fatalf("estimate holds %d resources, the shape %d", len(est.GetResources()), len(set.GetResources()))
+		t.Fatalf("estimate holds %d resources, the inventory %d", len(est.GetResources()), len(set.GetResources()))
 	}
 	cov := est.GetCoverage()
 	if total := cov.GetSupported() + cov.GetFree() + cov.GetUnsupported() + cov.GetNoPrice(); int(total) != len(set.GetResources()) {
-		t.Errorf("coverage counts %d, the shape lists %d", total, len(set.GetResources()))
+		t.Errorf("coverage counts %d, the inventory lists %d", total, len(set.GetResources()))
 	}
 	if cov.GetUnsupported() != 0 {
-		t.Errorf("the pricer does not recognise %v, which its own shape listed", cov.GetUnsupportedTypes())
+		t.Errorf("the pricer does not recognise %v, which its own inventory listed", cov.GetUnsupportedTypes())
 	}
 	var fixed, usage decimal.Decimal
 	for i, r := range est.GetResources() {
 		if r.GetResource() != set.GetResources()[i].GetId() {
-			t.Errorf("estimate %d is for %s, the shape's is %s", i, r.GetResource(), set.GetResources()[i].GetId())
+			t.Errorf("estimate %d is for %s, the inventory's is %s", i, r.GetResource(), set.GetResources()[i].GetId())
 		}
 		switch r.GetStatus() {
 		case costv1.ResourceEstimate_STATUS_PRICED:
@@ -249,7 +256,7 @@ func unknownIsNeverZero(t *testing.T, pricer costv1connect.CostServiceClient, se
 	}
 	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: blurred})
 	if err != nil {
-		t.Fatalf("Price() of a shape with every property unknown = %v", err)
+		t.Fatalf("Price() of an inventory with every property unknown = %v", err)
 	}
 	for i, r := range est.GetResources() {
 		for _, c := range r.GetComponents() {

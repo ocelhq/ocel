@@ -10,13 +10,13 @@ const (
 	endpointType = "REGIONAL"
 )
 
-var _ costkit.EdgeShaper = (*provider)(nil)
+var _ costkit.EdgeInventorier = (*provider)(nil)
 
-func (p *provider) ShapeCost(site costkit.EdgeSite) (costkit.EdgeShape, error) {
-	return costkit.EdgeShape{
+func (p *provider) CostInventory(site costkit.EdgeSite) (costkit.EdgeInventory, error) {
+	return costkit.EdgeInventory{
 		Vendor: costVendor,
 		Region: site.Region,
-		Environment: []costkit.Shaped{{
+		Environment: []costkit.Item{{
 			Name: site.Slug, Type: tfRestAPI,
 			Properties: map[string]any{"endpoint_configuration": map[string]any{"types": []any{endpointType}}},
 		}},

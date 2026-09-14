@@ -43,12 +43,12 @@ func estimateNamed(t *testing.T, est *costv1.Estimate, resource string) *costv1.
 func TestPriceOfAProductionDeployBehindCloudFront(t *testing.T) {
 	client, pricer := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
@@ -82,7 +82,7 @@ func TestPriceOfAProductionDeployBehindCloudFront(t *testing.T) {
 		t.Errorf("vars table storage = %v, want the account's 25 GB allowance to cover 1 GB", got)
 	}
 	if cov := est.GetCoverage(); cov.GetUnsupported() != 0 || cov.GetNoPrice() != 0 {
-		t.Errorf("coverage = %v, want everything the shape lists priced or free", cov)
+		t.Errorf("coverage = %v, want everything the inventory lists priced or free", cov)
 	}
 	if est.GetMonthlyFixed() == "" || est.GetMonthlyUsage() == "" {
 		t.Errorf("totals = %q + %q", est.GetMonthlyFixed(), est.GetMonthlyUsage())
@@ -112,15 +112,15 @@ func TestPriceBehindCloudflareCarriesTheEdgesOwnBill(t *testing.T) {
 	manifest := shopManifest()
 	manifest.Apps = manifest.Apps[:1]
 	manifest.Containers = nil
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    manifest,
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 		Edge:        &contractv1.EdgeSelection{Kind: string(cloudflare.Kind)},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	golden(t, "shape_production_cloudflare", set)
+	golden(t, "inventory_production_cloudflare", set)
 	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
 		t.Fatalf("Price() = %v", err)

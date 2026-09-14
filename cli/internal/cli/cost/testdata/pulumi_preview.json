@@ -1,0 +1,25 @@
+{
+  "config": {"fake:region": "fake-region"},
+  "steps": [
+    {
+      "op": "same",
+      "urn": "urn:pulumi:dev::shop::pulumi:pulumi:Stack::shop-dev",
+      "newState": {"urn": "urn:pulumi:dev::shop::pulumi:pulumi:Stack::shop-dev", "type": "pulumi:pulumi:Stack", "custom": false}
+    },
+    {
+      "op": "create",
+      "urn": "urn:pulumi:dev::shop::my:mod:Api::api",
+      "newState": {"urn": "urn:pulumi:dev::shop::my:mod:Api::api", "type": "my:mod:Api", "custom": false, "parent": "urn:pulumi:dev::shop::pulumi:pulumi:Stack::shop-dev"}
+    },
+    {
+      "op": "create",
+      "urn": "urn:pulumi:dev::shop::my:mod:Api$fake:index/function:Function::handler",
+      "newState": {"urn": "urn:pulumi:dev::shop::my:mod:Api$fake:index/function:Function::handler", "type": "fake:index/function:Function", "custom": true, "parent": "urn:pulumi:dev::shop::my:mod:Api::api", "inputs": {"memorySize": 512}}
+    },
+    {
+      "op": "create",
+      "urn": "urn:pulumi:dev::shop::fake:index/postgres:Postgres::main",
+      "newState": {"urn": "urn:pulumi:dev::shop::fake:index/postgres:Postgres::main", "type": "fake:index/postgres:Postgres", "custom": true, "parent": "urn:pulumi:dev::shop::pulumi:pulumi:Stack::shop-dev", "inputs": {}}
+    }
+  ]
+}

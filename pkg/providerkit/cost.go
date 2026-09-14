@@ -11,7 +11,7 @@ import (
 
 const CostSource = "ocel"
 
-type ShapeRequest struct {
+type InventoryRequest struct {
 	Plan       DeployPlan
 	Edge       edge.Kind
 	Features   []string
@@ -20,8 +20,8 @@ type ShapeRequest struct {
 	Transforms []string
 }
 
-type Shaper interface {
-	Shape(ctx context.Context, req ShapeRequest) (*costv1.ResourceSet, error)
+type Inventorier interface {
+	Inventory(ctx context.Context, req InventoryRequest) (*costv1.ResourceSet, error)
 }
 
 type Pricer interface {

@@ -1,0 +1,84 @@
+{
+  "skus": [
+    {
+      "skuId": "AAAA-BBBB-CCCC",
+      "description": "Cloud Firestore Read Ops",
+      "serviceRegions": [
+        "europe-west1"
+      ],
+      "category": {
+        "serviceDisplayName": "Firestore",
+        "resourceFamily": "ApplicationServices",
+        "resourceGroup": "Ops",
+        "usageType": "OnDemand"
+      },
+      "pricingInfo": [
+        {
+          "pricingExpression": {
+            "usageUnit": "reads",
+            "tieredRates": [
+              {
+                "startUsageAmount": 0,
+                "unitPrice": {
+                  "units": "0",
+                  "nanos": 700
+                }
+              },
+              {
+                "startUsageAmount": 50000,
+                "unitPrice": {
+                  "units": "0",
+                  "nanos": 500
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "skuId": "DDDD-EEEE-FFFF",
+      "description": "Cloud Firestore Storage",
+      "serviceRegions": [
+        "europe-west1"
+      ],
+      "category": {
+        "serviceDisplayName": "Firestore",
+        "resourceFamily": "Storage",
+        "resourceGroup": "SSD",
+        "usageType": "OnDemand"
+      },
+      "pricingInfo": [
+        {
+          "pricingExpression": {
+            "usageUnit": "GiBy.mo",
+            "tieredRates": [
+              {
+                "startUsageAmount": 0,
+                "unitPrice": {
+                  "units": "0",
+                  "nanos": 180000000
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "skuId": "GGGG-HHHH-IIII",
+      "description": "Cloud Firestore Nightly Backup",
+      "serviceRegions": [
+        "europe-west1"
+      ],
+      "category": {
+        "serviceDisplayName": "Firestore",
+        "resourceFamily": "Storage",
+        "resourceGroup": "Backup",
+        "usageType": "OnDemand"
+      },
+      "pricingInfo": []
+    }
+  ],
+  "nextPageToken": ""
+}

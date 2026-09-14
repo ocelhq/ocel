@@ -120,6 +120,7 @@ func newDeps() cmddeps.Deps {
 		CurrentGitBranch:    gitBranch,
 		DiscoverPRNumber:    prNumberFromEnv,
 		RunPackageManager:   runPackageManagerCommand,
+		RunTool:             runTool,
 		HostTrust:           provider.Trust{Ask: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr},
 		StdinIsTerminal:     prompt.Interactive,
 		ConfigPath:          explicitConfigPath,
@@ -170,6 +171,13 @@ func runPackageManagerCommand(ctx context.Context, dir string, argv []string, ou
 	cmd.Stdout = output
 	cmd.Stderr = output
 	return cmd.Run()
+}
+
+func runTool(ctx context.Context, dir string, argv []string, stderr io.Writer) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir = dir
+	cmd.Stderr = stderr
+	return cmd.Output()
 }
 
 func presentation(w io.Writer) runui.Presentation {

@@ -2,12 +2,16 @@ package clitest
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 
 	"github.com/ocelhq/ocel/pkg/costkit"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -53,7 +57,7 @@ var costTable = costkit.Table{
 	},
 }
 
-func (s *deployFakeProviderServer) Shape(_ context.Context, req *contractv1.ShapeRequest) (*costv1.ResourceSet, error) {
+func (s *deployFakeProviderServer) Inventory(_ context.Context, req *contractv1.InventoryRequest) (*costv1.ResourceSet, error) {
 	manifest := req.GetManifest()
 	env := providerkit.ProductionEnv
 	if req.GetEnvironment().GetTier() == environmentv1.Tier_TIER_PREVIEW {
@@ -63,7 +67,7 @@ func (s *deployFakeProviderServer) Shape(_ context.Context, req *contractv1.Shap
 	project := tree.Scope("", costkit.ScopeProject, manifest.GetSlug())
 	environment := tree.Scope(project, costkit.ScopeEnvironment, env)
 	for _, held := range manifest.GetResources() {
-		if typ, shaped := costTypes[held.GetResource().GetType()]; shaped && held.GetBinding() == "" {
+		if typ, priced := costTypes[held.GetResource().GetType()]; priced && held.GetBinding() == "" {
 			tree.Add(environment, costVendor, typ, held.GetLogicalName(), costRegion, map[string]any{"name": held.GetLogicalName()})
 		}
 	}
@@ -89,9 +93,30 @@ func (s *deployFakeProviderServer) Shape(_ context.Context, req *contractv1.Shap
 }
 
 func (s *deployFakeProviderServer) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
+	return price(req)
+}
+
+func price(req *costv1.PriceRequest) (*costv1.Estimate, error) {
 	card, err := costkit.Load([]byte(costRates))
 	if err != nil {
 		return nil, err
 	}
 	return costkit.Estimate(card, costTable, req)
+}
+
+type costServer struct {
+	costv1connect.UnimplementedCostServiceHandler
+}
+
+func (costServer) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
+	return price(req)
+}
+
+func ServeCostService(t *testing.T) string {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.Handle(costv1connect.NewCostServiceHandler(costServer{}))
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	return server.URL
 }

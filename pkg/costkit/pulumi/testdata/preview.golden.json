@@ -1,0 +1,84 @@
+{
+  "source": "pulumi",
+  "scopes": [
+    {
+      "id": "stack:dev",
+      "kind": "stack",
+      "name": "dev"
+    },
+    {
+      "id": "stack:dev/component:api",
+      "parent": "stack:dev",
+      "kind": "component",
+      "name": "api"
+    }
+  ],
+  "resources": [
+    {
+      "id": "urn:pulumi:dev::shop::my:mod:Api$aws:lambda/function:Function::handler",
+      "scope": "stack:dev/component:api",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "handler",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "ephemeral_storage": {
+          "size": 512
+        },
+        "memory_size": 512,
+        "runtime": "nodejs22.x",
+        "tags": {
+          "app": "shop"
+        }
+      },
+      "tags": {
+        "app": "shop"
+      }
+    },
+    {
+      "id": "urn:pulumi:dev::shop::aws:s3/bucket:Bucket::assets",
+      "scope": "stack:dev",
+      "vendor": "aws",
+      "type": "aws_s3_bucket",
+      "name": "assets",
+      "region": "eu-west-1",
+      "properties": {
+        "bucket": "shop-assets",
+        "force_destroy": true
+      }
+    },
+    {
+      "id": "urn:pulumi:dev::shop::aws:ec2/natGateway:NatGateway::nat",
+      "scope": "stack:dev",
+      "vendor": "aws",
+      "type": "aws_nat_gateway",
+      "name": "nat",
+      "region": "us-east-1",
+      "properties": {
+        "tags": {
+          "app": "shop"
+        }
+      },
+      "unknown": [
+        "allocation_id",
+        "subnet_id"
+      ],
+      "tags": {
+        "app": "shop"
+      }
+    },
+    {
+      "id": "urn:pulumi:dev::shop::random:index/randomPet:RandomPet::pet",
+      "scope": "stack:dev",
+      "vendor": "random",
+      "type": "random_pet",
+      "name": "pet",
+      "properties": {
+        "length": 2
+      }
+    }
+  ]
+}

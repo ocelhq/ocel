@@ -65,21 +65,33 @@ func profileNames() []string {
 }
 
 type Options struct {
-	Env     string
-	Profile string
-	Usage   string
+	Env        string
+	Profile    string
+	Usage      string
+	Source     string
+	From       string
+	Stack      string
+	Stage      string
+	PricingURL string
 }
 
 func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdout, stderr io.Writer) error {
-	env, err := environmentOf(opts.Env)
-	if err != nil {
-		return err
-	}
 	profile, err := profileOf(opts.Profile)
 	if err != nil {
 		return err
 	}
 	overrides, err := usageFile(opts.Usage)
+	if err != nil {
+		return err
+	}
+	source, err := sourceIn(cwd, opts.Source)
+	if err != nil {
+		return err
+	}
+	if source != sourceOcel {
+		return runForeign(ctx, deps, cwd, opts, source, profile, overrides, stdout, stderr)
+	}
+	env, err := environmentOf(opts.Env)
 	if err != nil {
 		return err
 	}
@@ -97,7 +109,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 		if err != nil {
 			return err
 		}
-		set, err := client.Shape(ctx, &contractv1.ShapeRequest{
+		set, err := client.Inventory(ctx, &contractv1.InventoryRequest{
 			Manifest:    manifest,
 			Environment: env,
 			Edge:        edgewire.Selection(cfg),

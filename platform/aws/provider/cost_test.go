@@ -98,17 +98,17 @@ func typeCounts(set *costv1.ResourceSet) map[string]int {
 	return counts
 }
 
-func TestShapeDescribesAProductionDeployBehindCloudFront(t *testing.T) {
+func TestTheInventoryDescribesAProductionDeployBehindCloudFront(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	golden(t, "shape_production_cloudfront", set)
+	golden(t, "inventory_production_cloudfront", set)
 
 	counts := typeCounts(set)
 	if counts["aws_cloudfront_distribution"] != 1 || counts["aws_lb"] != 1 || counts["aws_rds_cluster"] != 1 || counts["aws_kms_key"] != 1 || counts["aws_data_transfer"] != 0 {
@@ -124,17 +124,17 @@ func TestShapeDescribesAProductionDeployBehindCloudFront(t *testing.T) {
 	}
 }
 
-func TestShapeOfAPreviewCarriesItsOwnClassAndWildcard(t *testing.T) {
+func TestTheInventoryOfAPreviewCarriesItsOwnClassAndWildcard(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	golden(t, "shape_preview_cloudfront", set)
+	golden(t, "inventory_preview_cloudfront", set)
 
 	if typeCounts(set)["aws_cloudfront_distribution"] != 2 {
 		t.Errorf("a preview class fronts every preview through one wildcard distribution beside the project's own")
@@ -148,21 +148,21 @@ func TestShapeOfAPreviewCarriesItsOwnClassAndWildcard(t *testing.T) {
 	}
 }
 
-func TestShapeBehindAPIGatewayStandsUpARestAPIPerDeploy(t *testing.T) {
+func TestTheInventoryBehindAPIGatewayStandsUpARestAPIPerDeploy(t *testing.T) {
 	client, _ := costServed(t)
 
 	manifest := shopManifest()
 	manifest.Apps = manifest.Apps[:1]
 	manifest.Containers = nil
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    manifest,
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 		Edge:        &contractv1.EdgeSelection{Kind: string(apigateway.Kind)},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	golden(t, "shape_production_apigateway", set)
+	golden(t, "inventory_production_apigateway", set)
 
 	counts := typeCounts(set)
 	if counts["aws_api_gateway_rest_api"] != 2 || counts["aws_cloudfront_distribution"] != 0 || counts["aws_lb"] != 0 || counts["aws_data_transfer"] != 1 {
@@ -170,7 +170,7 @@ func TestShapeBehindAPIGatewayStandsUpARestAPIPerDeploy(t *testing.T) {
 	}
 }
 
-func TestShapeWithABroughtVarsKeyStandsUpNoKey(t *testing.T) {
+func TestTheInventoryWithABroughtVarsKeyStandsUpNoKey(t *testing.T) {
 	p := provider.NewProvider(provider.Options{Region: "us-east-1", VarsKey: "arn:aws:kms:us-east-1:1:key/k"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
 	spec := providerkit.Spec{
 		Version: "test",
@@ -183,12 +183,12 @@ func TestShapeWithABroughtVarsKeyStandsUpNoKey(t *testing.T) {
 		t.Fatalf("Configure() error = %v", err)
 	}
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
 	if typeCounts(set)["aws_kms_key"] != 0 {
 		t.Errorf("counts = %v, want no KMS key when the account brought one", typeCounts(set))

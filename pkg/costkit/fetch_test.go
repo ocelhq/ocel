@@ -2,6 +2,9 @@ package costkit_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -92,5 +95,58 @@ func TestFetchDoesNotRetryAClientError(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "secret") {
 		t.Errorf("error echoes the query: %v", err)
+	}
+}
+
+func TestStreamHandsTheBodyOverWithoutHoldingIt(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		if calls == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Write([]byte(`{"version":"1"}`))
+	}))
+	defer server.Close()
+	var waited []time.Duration
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/offers/index.json", nil)
+
+	var seen string
+	err := fetcher(server.Client(), &waited).Stream(context.Background(), req, func(body io.Reader) error {
+		var held struct {
+			Version string `json:"version"`
+		}
+		if err := json.NewDecoder(body).Decode(&held); err != nil {
+			return err
+		}
+		seen = held.Version
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Stream() = %v", err)
+	}
+	if seen != "1" || calls != 2 {
+		t.Errorf("the reader saw version %q after %d calls", seen, calls)
+	}
+}
+
+func TestStreamDoesNotRetryWhatTheReaderRefused(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.Write([]byte("body"))
+	}))
+	defer server.Close()
+	var waited []time.Duration
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/offers/index.json", nil)
+	refused := errors.New("the third product makes no sense")
+
+	err := fetcher(server.Client(), &waited).Stream(context.Background(), req, func(io.Reader) error { return refused })
+	if !errors.Is(err, refused) {
+		t.Fatalf("Stream() = %v, want the reader's own refusal", err)
+	}
+	if calls != 1 {
+		t.Errorf("calls = %d, want the request sent once: a half-read body cannot be replayed", calls)
 	}
 }

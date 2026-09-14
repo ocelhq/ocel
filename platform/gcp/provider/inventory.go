@@ -33,7 +33,7 @@ var itemTypes = map[Kind]string{
 	KindSecret:         tfSecretManagerSecret,
 }
 
-func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
+func (p *Provider) Inventory(_ context.Context, req providerkit.InventoryRequest) (*costv1.ResourceSet, error) {
 	names, err := p.named()
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*cost
 	for _, item := range bootstrapItems(names, req.Plan.Class, false) {
 		typ, priced := itemTypes[item.Kind]
 		if !priced {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid, "bootstrap item %s has no shape", item.ID())
+			return nil, providerkit.Refuse(providerkit.CodeInvalid, "bootstrap item %s has no inventory type", item.ID())
 		}
 		tree.Add(shared, string(Vendor), typ, item.Name, region, itemProperties(item, region))
 	}
@@ -61,12 +61,12 @@ func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*cost
 	for _, app := range req.Plan.Apps {
 		site.Apps = append(site.Apps, costkit.EdgeApp{Name: app.App, Hostnames: providerkit.ProductionHostnames(app)})
 	}
-	shape, err := costkit.ShapeEdge(front, site)
+	inventory, err := costkit.InventoryEdge(front, site)
 	if err != nil {
 		return nil, err
 	}
-	tree.AddShaped(shared, shape.Vendor, shape.Region, shape.Shared)
-	tree.AddShaped(environment, shape.Vendor, shape.Region, shape.Environment)
+	tree.AddItems(shared, inventory.Vendor, inventory.Region, inventory.Shared)
+	tree.AddItems(environment, inventory.Vendor, inventory.Region, inventory.Environment)
 
 	for _, app := range req.Plan.Apps {
 		scope := tree.Scope(environment, costkit.ScopeApp, app.App)
@@ -89,7 +89,7 @@ func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*cost
 				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(providerkit.ComputeServerless, ingress))
 			}
 		}
-		tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
+		tree.AddItems(scope, inventory.Vendor, inventory.Region, inventory.Apps[app.App])
 	}
 	return tree.Set(providerkit.CostSource)
 }

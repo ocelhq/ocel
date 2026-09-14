@@ -187,12 +187,12 @@ func TestAScanReadsNoCredentialsAndRunsNoGcloud(t *testing.T) {
 	withGcloudNaming(t, "gcloud-config-prod")
 
 	client, pricer := configured(t, providerkit.Options{"project": "acme-prod", "region": "europe-west1"})
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v, want the shape with no credentials and no gcloud consulted", err)
+		t.Fatalf("Inventory() = %v, want the inventory with no credentials and no gcloud consulted", err)
 	}
 	for _, r := range set.GetResources() {
 		if strings.Contains(r.GetName(), "gcloud-config-prod") {
@@ -204,16 +204,16 @@ func TestAScanReadsNoCredentialsAndRunsNoGcloud(t *testing.T) {
 	}
 
 	client, pricer = configured(t, providerkit.Options{"region": "europe-west1"})
-	_, err = client.Shape(context.Background(), &contractv1.ShapeRequest{
+	_, err = client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("Shape() with no project named = %v, want InvalidArgument: a scan runs no gcloud to find one", err)
+		t.Fatalf("Inventory() with no project named = %v, want InvalidArgument: a scan runs no gcloud to find one", err)
 	}
 	for _, named := range []string{"project", "GOOGLE_CLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT"} {
 		if !strings.Contains(err.Error(), named) {
-			t.Errorf("Shape() refused with %q, want it to name %s among the places a scan reads a project from", err, named)
+			t.Errorf("Inventory() refused with %q, want it to name %s among the places a scan reads a project from", err, named)
 		}
 	}
 	if _, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set}); err != nil {

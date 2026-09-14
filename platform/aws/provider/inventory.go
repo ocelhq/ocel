@@ -14,13 +14,13 @@ import (
 
 const tfDataTransfer = "aws_data_transfer"
 
-func (p *Provider) Shape(ctx context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
+func (p *Provider) Inventory(ctx context.Context, req providerkit.InventoryRequest) (*costv1.ResourceSet, error) {
 	tree := &costkit.Tree{}
 	project := tree.Scope("", costkit.ScopeProject, req.Plan.Slug)
 	shared := tree.Scope(project, costkit.ScopeShared, string(req.Plan.Class))
 	environment := tree.Scope(project, costkit.ScopeEnvironment, req.Plan.Env)
 
-	var options []bootstrap.ShapeOption
+	var options []bootstrap.InventoryOption
 	if p.options.VarsKey != "" {
 		options = append(options, bootstrap.WithVarsKey(p.options.VarsKey))
 	}
@@ -28,13 +28,13 @@ func (p *Provider) Shape(ctx context.Context, req providerkit.ShapeRequest) (*co
 	if !slices.Contains(features, bootstrap.FeatureVarsKey) {
 		features = append(slices.Clone(features), bootstrap.FeatureVarsKey)
 	}
-	standing, err := bootstrap.Shape(p.namespace, string(req.Plan.Class), features, options...)
+	standing, err := bootstrap.Inventory(p.namespace, string(req.Plan.Class), features, options...)
 	if err != nil {
 		return nil, err
 	}
-	tree.AddShaped(shared, string(Vendor), p.aws.Region, standing)
+	tree.AddItems(shared, string(Vendor), p.aws.Region, standing)
 
-	if err := deploy.Shape(ctx, p.transformPass(projectRoot()), p.aws.Region, req, tree, deploy.ShapeScopes{
+	if err := deploy.Inventory(ctx, p.transformPass(projectRoot()), p.aws.Region, req, tree, deploy.InventoryScopes{
 		Environment: environment,
 		Shared:      shared,
 	}); err != nil {
@@ -49,12 +49,12 @@ func (p *Provider) Shape(ctx context.Context, req providerkit.ShapeRequest) (*co
 	for _, app := range req.Plan.Apps {
 		site.Apps = append(site.Apps, costkit.EdgeApp{Name: app.App, Hostnames: providerkit.ProductionHostnames(app)})
 	}
-	shape, err := costkit.ShapeEdge(front, site)
+	inventory, err := costkit.InventoryEdge(front, site)
 	if err != nil {
 		return nil, err
 	}
-	tree.AddEdge(costkit.EdgeScopes{Shared: shared, Environment: environment}, shape)
-	if !shape.BillsEgress {
+	tree.AddEdge(costkit.EdgeScopes{Shared: shared, Environment: environment}, inventory)
+	if !inventory.BillsEgress {
 		for _, app := range req.Plan.Apps {
 			tree.Add(tree.Scope(environment, costkit.ScopeApp, app.App), string(Vendor), tfDataTransfer, app.App, p.aws.Region, map[string]any{})
 		}

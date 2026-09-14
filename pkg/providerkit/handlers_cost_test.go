@@ -36,21 +36,21 @@ func costServed(t *testing.T, provider providerkit.Provider) (contractv1connect.
 	return client, costv1connect.NewCostServiceClient(server.Client(), server.URL)
 }
 
-func shapeRequest() *contractv1.ShapeRequest {
+func inventoryRequest() *contractv1.InventoryRequest {
 	req := twoAppRequest()
-	return &contractv1.ShapeRequest{
+	return &contractv1.InventoryRequest{
 		Manifest:    req.GetManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 		Edge:        req.GetEdge(),
 	}
 }
 
-func TestAProviderThatPricesNothingSaysSoOnShapeAndPrice(t *testing.T) {
+func TestAProviderThatPricesNothingSaysSoOnInventoryAndPrice(t *testing.T) {
 	client, pricer := costServed(t, uncosted{fake.NewProvider(fake.Options{Region: "nowhere"})})
 
-	_, err := client.Shape(context.Background(), shapeRequest())
+	_, err := client.Inventory(context.Background(), inventoryRequest())
 	if connect.CodeOf(err) != connect.CodeUnimplemented {
-		t.Fatalf("Shape() error = %v, want Unimplemented", err)
+		t.Fatalf("Inventory() error = %v, want Unimplemented", err)
 	}
 	_, err = pricer.Price(context.Background(), &costv1.PriceRequest{Resources: &costv1.ResourceSet{Source: "ocel"}})
 	if connect.CodeOf(err) != connect.CodeUnimplemented {
@@ -58,12 +58,12 @@ func TestAProviderThatPricesNothingSaysSoOnShapeAndPrice(t *testing.T) {
 	}
 }
 
-func TestShapeHandsTheProviderTheDeployItWouldMake(t *testing.T) {
+func TestInventoryHandsTheProviderTheDeployItWouldMake(t *testing.T) {
 	client, _ := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
 
-	set, err := client.Shape(context.Background(), shapeRequest())
+	set, err := client.Inventory(context.Background(), inventoryRequest())
 	if err != nil {
-		t.Fatalf("Shape() error = %v", err)
+		t.Fatalf("Inventory() error = %v", err)
 	}
 	if set.GetSource() != "ocel" {
 		t.Errorf("source = %q, want ocel", set.GetSource())
@@ -85,9 +85,9 @@ func TestShapeHandsTheProviderTheDeployItWouldMake(t *testing.T) {
 func TestPriceRefusesAUsageFileTheProviderCannotRead(t *testing.T) {
 	client, pricer := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
 
-	set, err := client.Shape(context.Background(), shapeRequest())
+	set, err := client.Inventory(context.Background(), inventoryRequest())
 	if err != nil {
-		t.Fatalf("Shape() error = %v", err)
+		t.Fatalf("Inventory() error = %v", err)
 	}
 	override, _ := structpb.NewStruct(map[string]any{"monthly_requets": 5})
 	_, err = pricer.Price(context.Background(), &costv1.PriceRequest{

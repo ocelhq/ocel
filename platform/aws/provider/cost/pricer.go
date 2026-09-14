@@ -10,10 +10,18 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 )
 
+const Vendor = "aws"
+
 //go:embed rates.json
 var rates []byte
 
-var card = sync.OnceValues(func() (*costkit.Card, error) { return costkit.Load(rates) })
+var Card = sync.OnceValues(func() (*costkit.Card, error) { return costkit.Load(rates) })
+
+var Notes = []string{
+	"list prices for us-east-1; a resource in another region is left unpriced",
+	"an always-free allowance the price list folds into a first tier is spent once per account across every resource sharing it; allowances the price list leaves out, such as Lambda's, are not applied",
+	"CloudFront is priced at its United States rates whichever price class the distribution carries",
+}
 
 const (
 	usageRequests          = "monthly_requests"
@@ -36,6 +44,10 @@ const (
 	usageHTTPSRequests     = "monthly_https_requests.us"
 	usageInvocations       = "monthly_invocations"
 	usageOutboundInternet  = "monthly_outbound_internet_gb"
+
+	endpointGateway = "Gateway"
+	endpointType    = "vpc_endpoint_type"
+	endpointSubnets = "subnet_ids"
 
 	lambdaGB        = 1024
 	fargateCPUUnits = 1024
@@ -67,12 +79,14 @@ var (
 	tableStoreBand = costkit.Band{Light: 0.1, Moderate: 1, Heavy: 10}
 	apiCallsBand   = costkit.Band{Light: 1_000, Moderate: 10_000, Heavy: 100_000}
 	imagesBand     = costkit.Band{Light: 1, Moderate: 5, Heavy: 50}
+	natBand        = costkit.Band{Light: 10, Moderate: 100, Heavy: 1_000}
+	endpointBand   = costkit.Band{Light: 1, Moderate: 10, Heavy: 100}
 
 	thousand        = decimal.NewFromInt(1000)
 	secondsPerMonth = costkit.MonthlyHours.Mul(decimal.NewFromInt(secondsPerHour))
 )
 
-var table = costkit.Table{
+var Table = costkit.Table{
 	"aws_lambda_function":             lambdaFunction,
 	"aws_lambda_function_url":         free,
 	"aws_lambda_layer_version":        free,
@@ -95,14 +109,22 @@ var table = costkit.Table{
 	"aws_api_gateway_rest_api":        restAPI,
 	"aws_ecr_repository":              registry,
 	"aws_data_transfer":               dataTransfer,
+	"aws_vpc":                         free,
+	"aws_subnet":                      free,
+	"aws_security_group":              free,
+	"aws_route_table":                 free,
+	"aws_internet_gateway":            free,
+	"aws_nat_gateway":                 natGateway,
+	"aws_eip":                         elasticIP,
+	"aws_vpc_endpoint":                vpcEndpoint,
 }
 
 func Price(req *costv1.PriceRequest, edges ...costkit.EdgePricer) (*costv1.Estimate, error) {
-	held, err := card()
+	held, err := Card()
 	if err != nil {
 		return nil, err
 	}
-	merged, pricing, err := costkit.Priced(held, table, edges...)
+	merged, pricing, err := costkit.Priced(held, Table, edges...)
 	if err != nil {
 		return nil, err
 	}
@@ -110,11 +132,7 @@ func Price(req *costv1.PriceRequest, edges ...costkit.EdgePricer) (*costv1.Estim
 	if err != nil {
 		return nil, err
 	}
-	estimate.Notes = append(estimate.Notes,
-		"list prices for us-east-1; a resource in another region is left unpriced",
-		"an always-free allowance the price list folds into a first tier is spent once per account across every resource sharing it; allowances the price list leaves out, such as Lambda's, are not applied",
-		"CloudFront is priced at its United States rates whichever price class the distribution carries",
-	)
+	estimate.Notes = append(estimate.Notes, Notes...)
 	return estimate, nil
 }
 
@@ -234,6 +252,28 @@ func restAPI(r *costkit.Subject) {
 
 func registry(r *costkit.Subject) {
 	r.Add(costkit.Component{Name: "Storage", Unit: "GB-month", Rate: "aws/ecr/storage", Quantity: r.Usage(usageStorage, imagesBand), UsageBased: true})
+}
+
+func natGateway(r *costkit.Subject) {
+	r.Add(costkit.Component{Name: "NAT gateway", Unit: "hours", Rate: "aws/vpc/nat-gateway-hours", Quantity: costkit.MonthlyHours})
+	r.Add(costkit.Component{Name: "Data processed", Unit: "GB", Rate: "aws/vpc/nat-gateway-data", Quantity: r.Usage(usageProcessedBytes, natBand), UsageBased: true})
+}
+
+func elasticIP(r *costkit.Subject) {
+	r.Add(costkit.Component{Name: "Public IPv4 address", Unit: "hours", Rate: "aws/vpc/public-ipv4", Quantity: costkit.MonthlyHours})
+}
+
+func vpcEndpoint(r *costkit.Subject) {
+	if r.String(endpointType) == endpointGateway {
+		r.Free()
+		return
+	}
+	zones := decimal.NewFromInt(int64(len(r.List(endpointSubnets))))
+	if zones.IsZero() {
+		zones = decimal.NewFromInt(1)
+	}
+	r.Add(costkit.Component{Name: "Interface endpoint", Unit: "hours", Rate: "aws/vpc/endpoint-hours", Quantity: zones.Mul(costkit.MonthlyHours), Needs: []string{endpointType, endpointSubnets}})
+	r.Add(costkit.Component{Name: "Data processed", Unit: "GB", Rate: "aws/vpc/endpoint-data", Quantity: r.Usage(usageProcessedBytes, endpointBand), UsageBased: true})
 }
 
 func dataTransfer(r *costkit.Subject) {

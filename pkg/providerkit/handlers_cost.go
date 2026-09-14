@@ -12,13 +12,13 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 )
 
-func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*costv1.ResourceSet, error) {
+func (h *handlers) Inventory(ctx context.Context, req *contractv1.InventoryRequest) (*costv1.ResourceSet, error) {
 	provider, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
-	shaper, shapes := provider.(Shaper)
-	if !shapes {
+	inventorier, takes := provider.(Inventorier)
+	if !takes {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("this provider does not describe the resources a deploy would create"))
 	}
 	plan, err := buildDeployPlan(&contractv1.DeployRequest{
@@ -37,12 +37,12 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	set, err := shaper.Shape(ctx, ShapeRequest{
+	set, err := inventorier.Inventory(ctx, InventoryRequest{
 		Plan:       plan,
 		Edge:       gate.Edge,
 		Features:   features,
 		Resources:  resources,
-		Functions:  shapedFunctions(provider, req.GetManifest()),
+		Functions:  inventoryFunctions(provider, req.GetManifest()),
 		Transforms: h.session.transforms(),
 	})
 	if err != nil {
@@ -64,7 +64,7 @@ func unshipped(manifest *contractv1.Manifest) *contractv1.Manifest {
 	return manifest
 }
 
-func shapedFunctions(provider Provider, manifest *contractv1.Manifest) map[string][]FunctionSpec {
+func inventoryFunctions(provider Provider, manifest *contractv1.Manifest) map[string][]FunctionSpec {
 	url := true
 	if addressed, says := provider.(ServesFunctionURLs); says {
 		url = addressed.ServesFunctionURLs()

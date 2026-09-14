@@ -6,30 +6,30 @@ import (
 )
 
 const (
-	costVendor        = "gcp"
-	previewBaseShaped = "preview"
+	costVendor      = "gcp"
+	previewBaseItem = "preview"
 )
 
-var _ costkit.EdgeShaper = (*Edge)(nil)
+var _ costkit.EdgeInventorier = (*Edge)(nil)
 
-func (e *Edge) ShapeCost(site costkit.EdgeSite) (costkit.EdgeShape, error) {
+func (e *Edge) CostInventory(site costkit.EdgeSite) (costkit.EdgeInventory, error) {
 	previewBase := ""
 	if site.Class == edge.ClassPreview {
-		previewBase = previewBaseShaped
+		previewBase = previewBaseItem
 	}
-	shape := costkit.EdgeShape{
+	inventory := costkit.EdgeInventory{
 		Vendor:      costVendor,
 		Region:      site.Region,
 		BillsEgress: true,
-		Shared:      ShapeFront(site.Class, previewBase),
-		Apps:        make(map[string][]costkit.Shaped, len(site.Apps)),
+		Shared:      InventoryFront(site.Class, previewBase),
+		Apps:        make(map[string][]costkit.Item, len(site.Apps)),
 	}
 	for _, app := range site.Apps {
-		if hosts := ShapeHosts(site.Slug, site.Class, app.Hostnames); len(hosts) > 0 {
-			shape.Apps[app.Name] = hosts
+		if hosts := InventoryHosts(site.Slug, site.Class, app.Hostnames); len(hosts) > 0 {
+			inventory.Apps[app.Name] = hosts
 		}
 	}
-	return shape, nil
+	return inventory, nil
 }
 
 const (
@@ -43,9 +43,9 @@ const (
 	tfNetworkEndpointGroup = "google_compute_region_network_endpoint_group"
 )
 
-func ShapeFront(class edge.Class, previewBaseDomain string) []costkit.Shaped {
+func InventoryFront(class edge.Class, previewBaseDomain string) []costkit.Item {
 	held := frontNames(class)
-	shaped := []costkit.Shaped{
+	items := []costkit.Item{
 		{Name: held.Address, Type: tfGlobalAddress, Properties: map[string]any{"address_type": "EXTERNAL"}},
 		{Name: held.NotFound, Type: tfBackendService, Properties: backendProperties(false)},
 		{Name: held.CertificateMap, Type: tfCertificateMap, Properties: map[string]any{}},
@@ -58,25 +58,25 @@ func ShapeFront(class edge.Class, previewBaseDomain string) []costkit.Shaped {
 		}},
 	}
 	if previewBaseDomain != "" {
-		shaped = append(shaped,
-			costkit.Shaped{Name: previewEntryName(previewBaseDomain), Type: tfCertificateMapEntry, Properties: map[string]any{}},
-			costkit.Shaped{Name: previewNEGName(previewBaseDomain), Type: tfNetworkEndpointGroup, Properties: map[string]any{"network_endpoint_type": serverlessNEG}},
-			costkit.Shaped{Name: previewBackendName(previewBaseDomain), Type: tfBackendService, Properties: backendProperties(true)},
+		items = append(items,
+			costkit.Item{Name: previewEntryName(previewBaseDomain), Type: tfCertificateMapEntry, Properties: map[string]any{}},
+			costkit.Item{Name: previewNEGName(previewBaseDomain), Type: tfNetworkEndpointGroup, Properties: map[string]any{"network_endpoint_type": serverlessNEG}},
+			costkit.Item{Name: previewBackendName(previewBaseDomain), Type: tfBackendService, Properties: backendProperties(true)},
 		)
 	}
-	return shaped
+	return items
 }
 
-func ShapeHosts(slug string, class edge.Class, hostnames []string) []costkit.Shaped {
-	var shaped []costkit.Shaped
+func InventoryHosts(slug string, class edge.Class, hostnames []string) []costkit.Item {
+	var items []costkit.Item
 	for _, hostname := range hostnames {
-		shaped = append(shaped,
-			costkit.Shaped{Name: entryName(slug, class, hostname), Type: tfCertificateMapEntry, Properties: map[string]any{}},
-			costkit.Shaped{Name: negName(slug, class, hostname), Type: tfNetworkEndpointGroup, Properties: map[string]any{"network_endpoint_type": serverlessNEG}},
-			costkit.Shaped{Name: backendName(slug, class, hostname), Type: tfBackendService, Properties: backendProperties(true)},
+		items = append(items,
+			costkit.Item{Name: entryName(slug, class, hostname), Type: tfCertificateMapEntry, Properties: map[string]any{}},
+			costkit.Item{Name: negName(slug, class, hostname), Type: tfNetworkEndpointGroup, Properties: map[string]any{"network_endpoint_type": serverlessNEG}},
+			costkit.Item{Name: backendName(slug, class, hostname), Type: tfBackendService, Properties: backendProperties(true)},
 		)
 	}
-	return shaped
+	return items
 }
 
 func backendProperties(cdn bool) map[string]any {

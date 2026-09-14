@@ -1,0 +1,93 @@
+[
+  {
+    "op": "update",
+    "urn": "urn:pulumi:victor::with-sst::sst:aws:Function$aws:lambda/function:Function::Api Function",
+    "type": "aws:lambda/function:Function",
+    "new": {
+      "urn": "urn:pulumi:victor::with-sst::sst:aws:Function$aws:lambda/function:Function::Api Function",
+      "type": "aws:lambda/function:Function",
+      "custom": true,
+      "parent": "urn:pulumi:victor::with-sst::sst:aws:Function::Api",
+      "inputs": {
+        "memorySize": 2048,
+        "architectures": [
+          "arm64"
+        ],
+        "runtime": "nodejs22.x",
+        "timeout": 20
+      },
+      "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+    },
+    "old": {
+      "urn": "urn:pulumi:victor::with-sst::sst:aws:Function$aws:lambda/function:Function::Api Function",
+      "type": "aws:lambda/function:Function",
+      "custom": true,
+      "parent": "urn:pulumi:victor::with-sst::sst:aws:Function::Api",
+      "inputs": {
+        "memorySize": 1024
+      },
+      "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+    }
+  },
+  {
+    "op": "create",
+    "urn": "urn:pulumi:victor::with-sst::sst:aws:Bucket::Uploads",
+    "type": "sst:aws:Bucket",
+    "new": {
+      "urn": "urn:pulumi:victor::with-sst::sst:aws:Bucket::Uploads",
+      "type": "sst:aws:Bucket",
+      "custom": false,
+      "parent": "urn:pulumi:victor::with-sst::pulumi:pulumi:Stack::with-sst-victor"
+    }
+  },
+  {
+    "op": "create",
+    "urn": "urn:pulumi:victor::with-sst::sst:aws:Bucket$aws:s3/bucket:Bucket::Uploads Bucket",
+    "type": "aws:s3/bucket:Bucket",
+    "new": {
+      "urn": "urn:pulumi:victor::with-sst::sst:aws:Bucket$aws:s3/bucket:Bucket::Uploads Bucket",
+      "type": "aws:s3/bucket:Bucket",
+      "custom": true,
+      "parent": "urn:pulumi:victor::with-sst::sst:aws:Bucket::Uploads",
+      "inputs": {
+        "forceDestroy": true
+      },
+      "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+    }
+  },
+  {
+    "op": "delete",
+    "urn": "urn:pulumi:victor::with-sst::aws:ec2/vpcEndpoint:VpcEndpoint::S3",
+    "type": "aws:ec2/vpcEndpoint:VpcEndpoint",
+    "old": {
+      "urn": "urn:pulumi:victor::with-sst::aws:ec2/vpcEndpoint:VpcEndpoint::S3",
+      "type": "aws:ec2/vpcEndpoint:VpcEndpoint",
+      "custom": true,
+      "parent": "urn:pulumi:victor::with-sst::pulumi:pulumi:Stack::with-sst-victor",
+      "inputs": {
+        "vpcEndpointType": "Gateway"
+      },
+      "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+    }
+  },
+  {
+    "op": "create",
+    "urn": "urn:pulumi:victor::with-sst::aws:ec2/vpcEndpoint:VpcEndpoint::Secrets",
+    "type": "aws:ec2/vpcEndpoint:VpcEndpoint",
+    "new": {
+      "urn": "urn:pulumi:victor::with-sst::aws:ec2/vpcEndpoint:VpcEndpoint::Secrets",
+      "type": "aws:ec2/vpcEndpoint:VpcEndpoint",
+      "custom": true,
+      "parent": "urn:pulumi:victor::with-sst::pulumi:pulumi:Stack::with-sst-victor",
+      "inputs": {
+        "vpcEndpointType": "Interface",
+        "serviceName": "com.amazonaws.us-east-1.secretsmanager",
+        "subnetIds": [
+          "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+          "04da6b54-80e4-46f7-96ec-b56ff0331ba9"
+        ]
+      },
+      "provider": "urn:pulumi:victor::with-sst::pulumi:providers:aws::default_7_0_0::a1b2c3d4-0000-4000-8000-000000000001"
+    }
+  }
+]

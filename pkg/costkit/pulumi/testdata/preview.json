@@ -1,0 +1,106 @@
+{
+  "config": {
+    "aws:region": "us-east-1"
+  },
+  "steps": [
+    {
+      "op": "same",
+      "urn": "urn:pulumi:dev::shop::pulumi:pulumi:Stack::shop-dev",
+      "newState": {
+        "urn": "urn:pulumi:dev::shop::pulumi:pulumi:Stack::shop-dev",
+        "type": "pulumi:pulumi:Stack",
+        "custom": false
+      }
+    },
+    {
+      "op": "same",
+      "urn": "urn:pulumi:dev::shop::pulumi:providers:aws::eu",
+      "newState": {
+        "urn": "urn:pulumi:dev::shop::pulumi:providers:aws::eu",
+        "type": "pulumi:providers:aws",
+        "custom": true,
+        "id": "4f2c",
+        "inputs": {"region": "eu-west-1"}
+      }
+    },
+    {
+      "op": "create",
+      "urn": "urn:pulumi:dev::shop::my:mod:Api::api",
+      "newState": {
+        "urn": "urn:pulumi:dev::shop::my:mod:Api::api",
+        "type": "my:mod:Api",
+        "custom": false,
+        "parent": "urn:pulumi:dev::shop::pulumi:pulumi:Stack::shop-dev"
+      }
+    },
+    {
+      "op": "create",
+      "urn": "urn:pulumi:dev::shop::my:mod:Api$aws:lambda/function:Function::handler",
+      "newState": {
+        "urn": "urn:pulumi:dev::shop::my:mod:Api$aws:lambda/function:Function::handler",
+        "type": "aws:lambda/function:Function",
+        "custom": true,
+        "parent": "urn:pulumi:dev::shop::my:mod:Api::api",
+        "inputs": {
+          "memorySize": 512,
+          "architectures": ["arm64"],
+          "runtime": "nodejs22.x",
+          "ephemeralStorage": {"size": 512},
+          "tags": {"app": "shop"}
+        }
+      }
+    },
+    {
+      "op": "create",
+      "urn": "urn:pulumi:dev::shop::aws:s3/bucket:Bucket::assets",
+      "newState": {
+        "urn": "urn:pulumi:dev::shop::aws:s3/bucket:Bucket::assets",
+        "type": "aws:s3/bucket:Bucket",
+        "custom": true,
+        "parent": "urn:pulumi:dev::shop::pulumi:pulumi:Stack::shop-dev",
+        "provider": "urn:pulumi:dev::shop::pulumi:providers:aws::eu::4f2c",
+        "inputs": {"bucket": "shop-assets", "forceDestroy": true}
+      }
+    },
+    {
+      "op": "create",
+      "urn": "urn:pulumi:dev::shop::aws:ec2/natGateway:NatGateway::nat",
+      "newState": {
+        "urn": "urn:pulumi:dev::shop::aws:ec2/natGateway:NatGateway::nat",
+        "type": "aws:ec2/natGateway:NatGateway",
+        "custom": true,
+        "parent": "urn:pulumi:dev::shop::pulumi:pulumi:Stack::shop-dev",
+        "inputs": {
+          "subnetId": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+          "allocationId": {
+            "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+            "plaintext": "\"eipalloc-1234\""
+          },
+          "tags": {"app": "shop"}
+        }
+      }
+    },
+    {
+      "op": "delete",
+      "urn": "urn:pulumi:dev::shop::aws:sqs/queue:Queue::retired",
+      "oldState": {
+        "urn": "urn:pulumi:dev::shop::aws:sqs/queue:Queue::retired",
+        "type": "aws:sqs/queue:Queue",
+        "custom": true,
+        "parent": "urn:pulumi:dev::shop::pulumi:pulumi:Stack::shop-dev",
+        "inputs": {"fifoQueue": false}
+      }
+    },
+    {
+      "op": "create",
+      "urn": "urn:pulumi:dev::shop::random:index/randomPet:RandomPet::pet",
+      "newState": {
+        "urn": "urn:pulumi:dev::shop::random:index/randomPet:RandomPet::pet",
+        "type": "random:index/randomPet:RandomPet",
+        "custom": true,
+        "parent": "urn:pulumi:dev::shop::pulumi:pulumi:Stack::shop-dev",
+        "inputs": {"length": 2}
+      }
+    }
+  ]
+}

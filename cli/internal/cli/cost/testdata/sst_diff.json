@@ -1,0 +1,14 @@
+[
+  {
+    "op": "create",
+    "urn": "urn:pulumi:victor::shop::fake:index/postgres:Postgres::Orders",
+    "type": "fake:index/postgres:Postgres",
+    "new": {"urn": "urn:pulumi:victor::shop::fake:index/postgres:Postgres::Orders", "type": "fake:index/postgres:Postgres", "custom": true, "parent": "urn:pulumi:victor::shop::pulumi:pulumi:Stack::shop-victor", "inputs": {}}
+  },
+  {
+    "op": "delete",
+    "urn": "urn:pulumi:victor::shop::fake:index/bucket:Bucket::Uploads",
+    "type": "fake:index/bucket:Bucket",
+    "old": {"urn": "urn:pulumi:victor::shop::fake:index/bucket:Bucket::Uploads", "type": "fake:index/bucket:Bucket", "custom": true, "parent": "urn:pulumi:victor::shop::pulumi:pulumi:Stack::shop-victor", "inputs": {}}
+  }
+]

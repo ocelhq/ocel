@@ -97,17 +97,17 @@ func typeCounts(set *costv1.ResourceSet) map[string]int {
 	return counts
 }
 
-func TestShapeDescribesAProductionDeployServedDirect(t *testing.T) {
+func TestTheInventoryDescribesAProductionDeployServedDirect(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	golden(t, "shape_production_direct", set)
+	golden(t, "inventory_production_direct", set)
 
 	counts := typeCounts(set)
 	if counts["google_cloud_run_v2_service"] != 2 || counts["google_storage_bucket"] != 2 || counts["google_compute_global_forwarding_rule"] != 0 {
@@ -128,18 +128,18 @@ func TestShapeDescribesAProductionDeployServedDirect(t *testing.T) {
 	}
 }
 
-func TestShapeBehindTheLoadBalancerFrontsEveryHostname(t *testing.T) {
+func TestTheInventoryBehindTheLoadBalancerFrontsEveryHostname(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 		Edge:        &contractv1.EdgeSelection{Kind: string(alb.Kind)},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	golden(t, "shape_production_alb", set)
+	golden(t, "inventory_production_alb", set)
 
 	counts := typeCounts(set)
 	if counts["google_compute_global_forwarding_rule"] != 1 || counts["google_compute_backend_service"] != 2 || counts["google_compute_region_network_endpoint_group"] != 1 {
@@ -147,18 +147,18 @@ func TestShapeBehindTheLoadBalancerFrontsEveryHostname(t *testing.T) {
 	}
 }
 
-func TestShapeOfAPreviewBehindTheLoadBalancerCarriesTheWildcard(t *testing.T) {
+func TestTheInventoryOfAPreviewBehindTheLoadBalancerCarriesTheWildcard(t *testing.T) {
 	client, _ := costServed(t)
 
-	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+	set, err := client.Inventory(context.Background(), &contractv1.InventoryRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-42"},
 		Edge:        &contractv1.EdgeSelection{Kind: string(alb.Kind)},
 	})
 	if err != nil {
-		t.Fatalf("Shape() = %v", err)
+		t.Fatalf("Inventory() = %v", err)
 	}
-	golden(t, "shape_preview_alb", set)
+	golden(t, "inventory_preview_alb", set)
 
 	counts := typeCounts(set)
 	if counts["google_compute_region_network_endpoint_group"] != 2 {

@@ -66,6 +66,11 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 - **`ui/theme/`** — the tokens and register dials every surface renders in, `www`
   included, and the `DESIGN.md` that governs them. No React; depends on nothing.
 - **`console/`** — Ocel's hosted control plane. Never call it a cloud.
+- **`pricing/`** — the hosted pricer: `CostService.Price` served over every vendor's rules,
+  with a postgres rate store fed by the vendors' bulk price lists and the embedded cards as
+  the offline fallback. Stateless beyond the store, holds no customer data, runs as one
+  container. May import `pkg/` and each vendor's `cost` package, and nothing else under a
+  vendor.
 - **`platform/<vendor>/`** — code targeting someone else's infrastructure. Each vendor
   holds its provisioning/deploy Go **and** the JS that runs on it. A second origin cloud
   lands here as a sibling. No import crosses from one vendor into another.
@@ -98,6 +103,8 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 - **`tests/`** — the suites that drive the real binary — the journeys, the dev-server
   suite and the Next compatibility harness — and under `tests/fixtures/<concern>/` the
   apps they drive. A fixture directory exercises one concern and nothing else.
+- **`infra/`** — the repo's own ocel project: the resource and variable declarations the
+  CLI discovers by default when it deploys ocelhq itself. Product code never reads it.
 - **`docs/agents/`** — configuration the agent skills read. Not product documentation;
   nothing that explains the code belongs here.
 - **`.github/`** — CI. **`.changeset/`** — the release mechanism; the workflow runs the

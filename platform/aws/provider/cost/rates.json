@@ -452,7 +452,6 @@
       "id": "aws/dynamodb/storage",
       "region": "us-east-1",
       "unit": "GB-Mo",
-      "allowance": "account",
       "tiers": [
         {
           "start": "0",
@@ -463,6 +462,7 @@
           "price": "0.25"
         }
       ],
+      "allowance": "account",
       "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/20260911124422/us-east-1/index.json#F3E2EDSYC6ZNW7XP",
       "verified": "2026-09-13",
       "query": {
@@ -612,7 +612,6 @@
     {
       "id": "aws/cloudfront/functions",
       "unit": "Invocations",
-      "allowance": "account",
       "tiers": [
         {
           "start": "0",
@@ -623,6 +622,7 @@
           "price": "0.0000001"
         }
       ],
+      "allowance": "account",
       "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/20260911124415/global/index.json#QAZUUEJG8GARJCET",
       "verified": "2026-09-13",
       "query": {
@@ -677,6 +677,108 @@
       "query": {
         "service": "AmazonECR",
         "usagetype": "TimedStorage-ByteHrs"
+      }
+    },
+    {
+      "id": "aws/vpc/nat-gateway-hours",
+      "region": "us-east-1",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.045"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20260910195514/us-east-1/index.json#M2YSHUBETB3JX4M4",
+      "verified": "2026-09-13",
+      "query": {
+        "group": "NGW:NatGateway",
+        "operation": "NatGateway",
+        "service": "AmazonEC2",
+        "usagetype": "NatGateway-Hours"
+      }
+    },
+    {
+      "id": "aws/vpc/nat-gateway-data",
+      "region": "us-east-1",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.045"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20260910195514/us-east-1/index.json#59S5R83GFPUAGVR5",
+      "verified": "2026-09-13",
+      "query": {
+        "group": "NGW:NatGateway",
+        "operation": "NatGateway",
+        "service": "AmazonEC2",
+        "usagetype": "NatGateway-Bytes"
+      }
+    },
+    {
+      "id": "aws/vpc/public-ipv4",
+      "region": "us-east-1",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.005"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260911124513/us-east-1/index.json#4GQUNXTFWVSGPUZK",
+      "verified": "2026-09-13",
+      "query": {
+        "group": "VPCPublicIPv4Address",
+        "groupDescription": "Hourly charge for In-use Public IPv4 Addresses",
+        "service": "AmazonVPC"
+      }
+    },
+    {
+      "id": "aws/vpc/endpoint-hours",
+      "region": "us-east-1",
+      "unit": "Hrs",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.01"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260911124513/us-east-1/index.json#EN2N5TATXE673A3B",
+      "verified": "2026-09-13",
+      "query": {
+        "endpointType": "PrivateLink",
+        "group": "VPCE:VpcEndpoint",
+        "groupDescription": "Hourly charge for VPC Endpoints",
+        "service": "AmazonVPC"
+      }
+    },
+    {
+      "id": "aws/vpc/endpoint-data",
+      "region": "us-east-1",
+      "unit": "GB",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0.01"
+        },
+        {
+          "start": "1048576",
+          "price": "0.006"
+        },
+        {
+          "start": "5242880",
+          "price": "0.004"
+        }
+      ],
+      "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonVPC/20260911124513/us-east-1/index.json#DQYYEZBCWSW5XS2R",
+      "verified": "2026-09-13",
+      "query": {
+        "endpointType": "PrivateLink",
+        "group": "VPCE:VpcEndpoint",
+        "groupDescription": "Charge for per GB data processed by VPC Endpoints",
+        "service": "AmazonVPC"
       }
     }
   ]
