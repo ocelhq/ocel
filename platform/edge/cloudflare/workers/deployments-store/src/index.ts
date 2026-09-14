@@ -31,10 +31,6 @@ export default class extends WorkerEntrypoint<Env> {
     const sub = `/${segments.slice(1).join("/")}`;
     const store = stub(this.env, slug);
 
-    if (request.method === "GET" && sub === "/schema-version") {
-      return Response.json({ schemaVersion: SCHEMA_VERSION });
-    }
-
     if (request.method === "POST" && sub === "/initialize") {
       if (!(await authorized(request, this.env.BOOTSTRAP_SECRET))) {
         return new Response("Unauthorized", { status: 401 });
@@ -60,6 +56,10 @@ export default class extends WorkerEntrypoint<Env> {
     const token = bearer(request);
     if (token === null || !(await store.authorized(token))) {
       return new Response("Unauthorized", { status: 401 });
+    }
+
+    if (request.method === "GET" && sub === "/schema-version") {
+      return Response.json({ schemaVersion: SCHEMA_VERSION });
     }
 
     if (request.method === "PUT" && sub === "/staged") {

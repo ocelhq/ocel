@@ -53,10 +53,17 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
 }
 
 describe("schema version", () => {
-  it("reports the schema the store speaks, without a credential", async () => {
-    const res = await SELF.fetch(req(`/${SLUG}/schema-version`));
+  it("reports the schema the store speaks to the project that holds the instance", async () => {
+    await initialize();
+    const res = await SELF.fetch(authedReq("/schema-version"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ schemaVersion: SCHEMA_VERSION });
+  });
+
+  it("tells nothing to a caller without the project secret", async () => {
+    await initialize();
+    expect((await SELF.fetch(req(`/${SLUG}/schema-version`))).status).toBe(401);
+    expect((await SELF.fetch(bearerReq(`/${SLUG}/schema-version`, BOOTSTRAP))).status).toBe(401);
   });
 });
 
