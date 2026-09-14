@@ -27,10 +27,10 @@ type boundaryTemplate struct {
 	} `yaml:"Resources"`
 }
 
-func boundaryStatements(t *testing.T, class string) []boundaryStatement {
+func boundaryStatements(t *testing.T, class, broughtKey string) []boundaryStatement {
 	t.Helper()
 	var tmpl boundaryTemplate
-	if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, class)), &tmpl); err != nil {
+	if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, class, broughtKey)), &tmpl); err != nil {
 		t.Fatalf("template is not valid YAML: %v", err)
 	}
 	boundary, ok := tmpl.Resources["AppBoundary"]
@@ -49,7 +49,7 @@ func boundaryStatements(t *testing.T, class string) []boundaryStatement {
 func TestTheAppBoundaryFencesKeysSecretsAndParametersToWhatAnAppOfItsClassOwns(t *testing.T) {
 	for _, class := range []string{ClassProduction, ClassPreview} {
 		t.Run(class, func(t *testing.T) {
-			for _, st := range boundaryStatements(t, class) {
+			for _, st := range boundaryStatements(t, class, "") {
 				if st.Effect != "Allow" {
 					t.Errorf("statement Effect = %q, want Allow", st.Effect)
 				}
@@ -62,6 +62,9 @@ func TestTheAppBoundaryFencesKeysSecretsAndParametersToWhatAnAppOfItsClassOwns(t
 						aliases, _ := st.Condition["ForAnyValue:StringEquals"].(map[string]any)
 						if got, want := aliases["kms:ResourceAliases"], defaultNamespace.varsKeyAliasFor(class); got != want {
 							t.Errorf("%s is admitted under %v, want it pinned to %s alone: a %s role must not open what the other class sealed", action, st.Condition, want, class)
+						}
+						if st.Resource != "*" {
+							t.Errorf("%s is admitted on %q; the alias Ocel put on the key it made is the fence, and no key ARN is known before that stack stands", action, st.Resource)
 						}
 					case "secretsmanager":
 						if st.Resource != appSecretARN {
@@ -78,11 +81,33 @@ func TestTheAppBoundaryFencesKeysSecretsAndParametersToWhatAnAppOfItsClassOwns(t
 	}
 }
 
+func TestTheAppBoundaryAdmitsABroughtKeyByItsARNAndPutsNoAliasOnIt(t *testing.T) {
+	for _, class := range []string{ClassProduction, ClassPreview} {
+		t.Run(class, func(t *testing.T) {
+			var keyed []boundaryStatement
+			for _, st := range boundaryStatements(t, class, broughtKeyARN) {
+				if slices.ContainsFunc(yamlStrings(st.Action), func(action string) bool { return strings.HasPrefix(action, "kms:") }) {
+					keyed = append(keyed, st)
+				}
+			}
+			if len(keyed) != 1 {
+				t.Fatalf("the boundary admits kms in %d statements, want exactly one naming the brought key", len(keyed))
+			}
+			if keyed[0].Resource != broughtKeyARN {
+				t.Errorf("kms is admitted on %q, want the key this account brought and nothing wider: Ocel can put no alias on a key whose policy it does not write", keyed[0].Resource)
+			}
+			if _, aliased := keyed[0].Condition["ForAnyValue:StringEquals"]; aliased || len(keyed[0].Condition) != 0 {
+				t.Errorf("the brought key is admitted under %v, want it fenced by ARN alone", keyed[0].Condition)
+			}
+		})
+	}
+}
+
 func TestTheAppBoundaryStillAdmitsWhatADeployGrantsARole(t *testing.T) {
 	for _, class := range []string{ClassProduction, ClassPreview} {
 		t.Run(class, func(t *testing.T) {
 			var admitted []string
-			for _, st := range boundaryStatements(t, class) {
+			for _, st := range boundaryStatements(t, class, "") {
 				admitted = append(admitted, yamlStrings(st.Action)...)
 			}
 			for _, action := range []string{

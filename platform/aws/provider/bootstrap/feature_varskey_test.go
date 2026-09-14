@@ -67,18 +67,10 @@ func TestVarsKeyBrought(t *testing.T) {
 		stack := varsKeyFeature.template(featureInputs{ns: defaultNamespace, class: ClassProduction, varsKey: broughtKeyARN})
 		tmpl := parseVarsTemplate(t, stack.body)
 
-		if _, ok := tmpl.Resources["VarsKey"]; ok {
-			t.Error("the stack declares VarsKey over a key it was handed; ocel owns nothing it did not make")
-		}
-		alias, ok := tmpl.Resources["VarsKeyAlias"]
-		if !ok {
-			t.Fatal("the stack puts no alias on the brought key, and the app boundary admits a key by this class's alias alone")
-		}
-		if got, want := alias.Properties.AliasName, defaultNamespace.varsKeyAliasFor(ClassProduction); got != want {
-			t.Errorf("AliasName = %q, want %q", got, want)
-		}
-		if got := alias.Properties.TargetKeyId; got != broughtKeyARN {
-			t.Errorf("TargetKeyId = %q, want the key the account brought", got)
+		for name, resource := range tmpl.Resources {
+			if name == "VarsKey" || name == "VarsKeyAlias" || strings.HasPrefix(resource.Type, "AWS::KMS::") {
+				t.Errorf("the stack declares %s (%s) over a key it was handed; creating an alias on it needs kms:CreateAlias from the key's own policy, which ocel never writes", name, resource.Type)
+			}
 		}
 		out, ok := tmpl.Outputs[outputVarsKeyARN]
 		if !ok {

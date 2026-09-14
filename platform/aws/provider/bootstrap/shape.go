@@ -48,7 +48,7 @@ func Shape(ns Namespace, class string, features []string, options ...ShapeOption
 	for _, name := range features {
 		in.alongside[name] = true
 	}
-	bodies := []string{coreStackTemplate(ns, class), runtimeLayerTemplate(ns, class, shapedLayerPlacements())}
+	bodies := []string{coreStackTemplate(ns, class, coreVarsKey(in.alongside, in.varsKey)), runtimeLayerTemplate(ns, class, shapedLayerPlacements())}
 	for _, name := range features {
 		f, known := featureNamed(name)
 		if !known {

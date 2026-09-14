@@ -181,7 +181,7 @@ func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testin
 func TestTheCoreCarriesNothingACloudFrontFrontNeeds(t *testing.T) {
 	for _, class := range []string{ClassProduction, ClassPreview} {
 		t.Run(class, func(t *testing.T) {
-			body := coreStackTemplate(defaultNamespace, class)
+			body := coreStackTemplate(defaultNamespace, class, "")
 			for _, resource := range templateResources(body) {
 				if strings.HasPrefix(resource.kind, "AWS::CloudFront::") {
 					t.Errorf("the core holds %s (%s); an edge stands in a feature stack of its own", resource.id, resource.kind)

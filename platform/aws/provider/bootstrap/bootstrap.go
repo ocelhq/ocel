@@ -185,7 +185,7 @@ func readBootstrap(ctx context.Context, api cfn.Describer, ns Namespace, class s
 		Present:   true,
 		Schema:    coreStamp.Schema,
 		Digest:    coreStamp.Digest,
-		Intended:  cfn.TemplateDigest(target.core()),
+		Intended:  cfn.TemplateDigest(target.core(broughtVarsKey(d.Outputs))),
 		WrittenBy: coreStamp.WrittenBy,
 	})
 	for _, f := range featureRegistry {
@@ -318,7 +318,7 @@ type spec struct {
 	stackStep string
 }
 
-func (s spec) core() string { return coreStackTemplate(s.ns, s.class) }
+func (s spec) core(broughtKey string) string { return coreStackTemplate(s.ns, s.class, broughtKey) }
 
 func productionBootstrap(ns Namespace) spec {
 	return spec{
@@ -405,10 +405,15 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 		logf("reused the existing origin secret")
 	}
 
+	alongside := FeatureSet{}
+	for _, name := range requested {
+		alongside[name] = true
+	}
+
 	progressf(target.stackStep)
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 	review := AdmitReplacements(target.ns, req.AcceptReplacements, logf)
-	coreBody := target.core()
+	coreBody := target.core(coreVarsKey(alongside, req.VarsKey))
 	coreTags := stampTags(target.ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
 	if err := cfn.Upsert(ctx, apis.CFN, target.ns, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
@@ -442,11 +447,6 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 
 	if err := dropFeatures(ctx, apis.CFN, steps, req.Remove, progressf, logf); err != nil {
 		return err
-	}
-
-	alongside := FeatureSet{}
-	for _, name := range requested {
-		alongside[name] = true
 	}
 
 	for _, level := range levels {
@@ -662,7 +662,14 @@ func generatePassphrase() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-func coreStackTemplate(ns Namespace, class string) string {
+func coreVarsKey(alongside FeatureSet, brought string) string {
+	if alongside.Has(FeatureVarsKey) {
+		return brought
+	}
+	return ""
+}
+
+func coreStackTemplate(ns Namespace, class, broughtKey string) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: %q
 Resources:
@@ -674,7 +681,7 @@ Resources:
     Description: "Class this bootstrap is stamped with, checked before an action runs so a preview deploy cannot reach production."
     Value: '%s'
 `, coreStackDescription(class),
-		stateBucketResource(class), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(class), appBoundaryResource(ns, class),
+		stateBucketResource(class), stateTableResource(), artifactBucketResource(), assetBucketResource(), assetBucketPolicyResource(), varsResources(class), appBoundaryResource(ns, class, broughtKey),
 		outputStateBucket, class, scopeOf(class),
 		stateTableOutputs(), artifactBucketOutput(), assetBucketOutputs(), varsOutputs(), appBoundaryOutput(), outputInfraClass, class)
 }

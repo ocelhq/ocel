@@ -108,7 +108,23 @@ func yamlActions(actions []string) string {
 	return out.String()
 }
 
-func appBoundaryResource(ns Namespace, class string) string {
+func appBoundaryKeyStatement(ns Namespace, class, broughtKey string) string {
+	if broughtKey != "" {
+		return fmt.Sprintf(`          - Effect: Allow
+            Action:
+%s            Resource: %q
+`, yamlActions(appBoundaryKeyActions()), broughtKey)
+	}
+	return fmt.Sprintf(`          - Effect: Allow
+            Action:
+%s            Resource: '*'
+            Condition:
+              ForAnyValue:StringEquals:
+                kms:ResourceAliases: %s
+`, yamlActions(appBoundaryKeyActions()), ns.varsKeyAliasFor(class))
+}
+
+func appBoundaryResource(ns Namespace, class, broughtKey string) string {
 	return fmt.Sprintf(`  AppBoundary:
     Type: AWS::IAM::ManagedPolicy
     Metadata:
@@ -122,13 +138,7 @@ func appBoundaryResource(ns Namespace, class string) string {
           - Effect: Allow
             Action:
 %s            Resource: '*'
-          - Effect: Allow
-            Action:
-%s            Resource: '*'
-            Condition:
-              ForAnyValue:StringEquals:
-                kms:ResourceAliases: %s
-          - Effect: Allow
+%s          - Effect: Allow
             Action:
 %s            Resource: '%s'
             Condition:
@@ -146,7 +156,7 @@ func appBoundaryResource(ns Namespace, class string) string {
             Resource: 'arn:aws:ecr:*:*:repository/%s/*'
 `, ns.AppBoundaryNameFor(class), class,
 		yamlActions(appBoundaryActions()),
-		yamlActions(appBoundaryKeyActions()), ns.varsKeyAliasFor(class),
+		appBoundaryKeyStatement(ns, class, broughtKey),
 		yamlActions(appBoundarySecretActions()), appSecretARN, managedSecretClusterTagKey, appClusterARN,
 		registry.Namespace)
 }

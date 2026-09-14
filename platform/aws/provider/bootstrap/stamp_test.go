@@ -15,8 +15,8 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("same bytes same digest", func(t *testing.T) {
 		t.Parallel()
 
-		body := coreStackTemplate(defaultNamespace, ClassProduction)
-		if cfn.TemplateDigest(body) != cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction)) {
+		body := coreStackTemplate(defaultNamespace, ClassProduction, "")
+		if cfn.TemplateDigest(body) != cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction, "")) {
 			t.Fatal("rendering the same template twice must produce the same digest")
 		}
 	})
@@ -24,7 +24,7 @@ func TestTemplateDigest(t *testing.T) {
 	t.Run("different bytes different digest", func(t *testing.T) {
 		t.Parallel()
 
-		if cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction)) == cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassPreview)) {
+		if cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction, "")) == cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassPreview, "")) {
 			t.Fatal("two different template bodies must not share a digest")
 		}
 	})

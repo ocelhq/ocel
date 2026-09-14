@@ -160,7 +160,7 @@ func noteStranded(group providerkit.ChangeGroup) providerkit.ChangeGroup {
 
 func renderGroup(target spec, feature string, in featureInputs) (featureStack, bool) {
 	if feature == "" {
-		return featureStack{body: target.core()}, true
+		return featureStack{body: target.core(coreVarsKey(in.alongside, in.varsKey))}, true
 	}
 	f, ok := featureNamed(feature)
 	if !ok {

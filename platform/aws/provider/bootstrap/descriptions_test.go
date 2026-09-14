@@ -54,8 +54,8 @@ func propertyDescriptionLimit(resourceType string) int {
 
 func everyRenderedTemplate() map[string]string {
 	rendered := map[string]string{
-		"core/" + ClassProduction: coreStackTemplate(defaultNamespace, ClassProduction),
-		"core/" + ClassPreview:    coreStackTemplate(defaultNamespace, ClassPreview),
+		"core/" + ClassProduction: coreStackTemplate(defaultNamespace, ClassProduction, ""),
+		"core/" + ClassPreview:    coreStackTemplate(defaultNamespace, ClassPreview, ""),
 	}
 	for _, name := range featureNames() {
 		for _, class := range []string{ClassProduction, ClassPreview} {

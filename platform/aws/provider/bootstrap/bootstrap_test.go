@@ -97,7 +97,7 @@ type parsedTemplate struct {
 
 func parseTemplate(t *testing.T) parsedTemplate {
 	t.Helper()
-	return parseTemplateStr(t, coreStackTemplate(defaultNamespace, ClassProduction))
+	return parseTemplateStr(t, coreStackTemplate(defaultNamespace, ClassProduction, ""))
 }
 
 func parseTemplateStr(t *testing.T, template string) parsedTemplate {
@@ -115,8 +115,8 @@ func TestStackTemplate(t *testing.T) {
 			name     string
 			template string
 		}{
-			{"production", coreStackTemplate(defaultNamespace, ClassProduction)},
-			{"preview", coreStackTemplate(defaultNamespace, ClassPreview)},
+			{"production", coreStackTemplate(defaultNamespace, ClassProduction, "")},
+			{"preview", coreStackTemplate(defaultNamespace, ClassPreview, "")},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				tmpl := parseTemplateStr(t, tc.template)
@@ -199,8 +199,8 @@ func TestStateBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", coreStackTemplate(defaultNamespace, ClassProduction)},
-		{"preview", coreStackTemplate(defaultNamespace, ClassPreview)},
+		{"production", coreStackTemplate(defaultNamespace, ClassProduction, "")},
+		{"preview", coreStackTemplate(defaultNamespace, ClassPreview, "")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -256,8 +256,8 @@ func TestArtifactBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", coreStackTemplate(defaultNamespace, ClassProduction)},
-		{"preview", coreStackTemplate(defaultNamespace, ClassPreview)},
+		{"production", coreStackTemplate(defaultNamespace, ClassProduction, "")},
+		{"preview", coreStackTemplate(defaultNamespace, ClassPreview, "")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -302,8 +302,8 @@ func TestAssetBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", coreStackTemplate(defaultNamespace, ClassProduction)},
-		{"preview", coreStackTemplate(defaultNamespace, ClassPreview)},
+		{"production", coreStackTemplate(defaultNamespace, ClassProduction, "")},
+		{"preview", coreStackTemplate(defaultNamespace, ClassPreview, "")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -407,7 +407,7 @@ func TestCheckDeployed(t *testing.T) {
 					Present:   true,
 					Schema:    3,
 					Digest:    "written-digest",
-					Intended:  cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction)),
+					Intended:  cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction, "")),
 					WrittenBy: "1.4.0",
 				},
 				{Name: coreStackName + "-" + FeatureISR, Feature: FeatureISR},
@@ -500,7 +500,7 @@ func TestCheckDeployed(t *testing.T) {
 
 	t.Run("a stack written from this build reads as current", func(t *testing.T) {
 		api := stubDescriber{coreStackName: outputs(map[string]string{outputInfraClass: ClassProduction}).
-			stamped(Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction))})}
+			stamped(Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction, ""))})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {
@@ -515,7 +515,7 @@ func TestCheckDeployed(t *testing.T) {
 func TestPreviewStackTemplate(t *testing.T) {
 	t.Run("stamps preview class", func(t *testing.T) {
 		var tmpl parsedTemplate
-		if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, ClassPreview)), &tmpl); err != nil {
+		if err := yaml.Unmarshal([]byte(coreStackTemplate(defaultNamespace, ClassPreview, "")), &tmpl); err != nil {
 			t.Fatalf("preview template is not valid YAML: %v", err)
 		}
 		if got := tmpl.Outputs[outputInfraClass].Value; got != ClassPreview {
@@ -599,8 +599,8 @@ func TestAssetBucketGrantsCloudFrontRead(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", coreStackTemplate(defaultNamespace, ClassProduction)},
-		{"preview", coreStackTemplate(defaultNamespace, ClassPreview)},
+		{"production", coreStackTemplate(defaultNamespace, ClassProduction, "")},
+		{"preview", coreStackTemplate(defaultNamespace, ClassPreview, "")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)

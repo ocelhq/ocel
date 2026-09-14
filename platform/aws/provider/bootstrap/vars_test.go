@@ -82,8 +82,8 @@ func varsBootstraps() []struct {
 		class    string
 		template string
 	}{
-		{"production", ClassProduction, coreStackTemplate(defaultNamespace, ClassProduction)},
-		{"preview", ClassPreview, coreStackTemplate(defaultNamespace, ClassPreview)},
+		{"production", ClassProduction, coreStackTemplate(defaultNamespace, ClassProduction, "")},
+		{"preview", ClassPreview, coreStackTemplate(defaultNamespace, ClassPreview, "")},
 	}
 }
 

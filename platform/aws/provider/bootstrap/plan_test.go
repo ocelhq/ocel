@@ -366,11 +366,8 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	}
 	group := groupNamed(t, groups, defaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction))
 	for _, change := range group.Changes {
-		if change.Name == "VarsKey" {
-			t.Errorf("the removal plan takes %s from a stack that owns no key, and a destroy must not claim to take a key this account brought", change.Name)
+		if change.Name == "VarsKey" || change.Name == "VarsKeyAlias" {
+			t.Errorf("the removal plan takes %s from a stack that owns no key, and a destroy must not claim to take a key or an alias this account brought", change.Name)
 		}
-	}
-	if alias := changeNamed(t, group, "VarsKeyAlias"); alias.Action != providerkit.ActionDelete {
-		t.Errorf("VarsKeyAlias = %+v, want the alias Ocel put on the brought key taken with the stack; the key itself stays", alias)
 	}
 }
