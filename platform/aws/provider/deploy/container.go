@@ -13,6 +13,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
 	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lb"
@@ -154,7 +155,7 @@ func rulePriority(physical string, taken map[int]bool) int {
 	return 0
 }
 
-func takenPriorities(ctx context.Context, rules RuleDescriber, listener string) (map[int]bool, error) {
+func takenPriorities(ctx context.Context, rules RuleDescriber, listener, physical string) (map[int]bool, error) {
 	taken := map[int]bool{}
 	if rules == nil {
 		return taken, nil
@@ -166,6 +167,9 @@ func takenPriorities(ctx context.Context, rules RuleDescriber, listener string) 
 			return nil, fmt.Errorf("read the rules already on the container front: %w", err)
 		}
 		for _, rule := range page.Rules {
+			if routesContainer(rule, physical) {
+				continue
+			}
 			if priority, err := strconv.Atoi(aws.ToString(rule.Priority)); err == nil {
 				taken[priority] = true
 			}
@@ -176,8 +180,21 @@ func takenPriorities(ctx context.Context, rules RuleDescriber, listener string) 
 	}
 }
 
+func routesContainer(rule elbv2types.Rule, physical string) bool {
+	for _, condition := range rule.Conditions {
+		header := condition.HttpHeaderConfig
+		if header == nil || !strings.EqualFold(aws.ToString(header.HttpHeaderName), edge.OriginContainerHeader) {
+			continue
+		}
+		if slices.Contains(header.Values, physical) {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *release) placeRule(ctx context.Context, work *containerWork) error {
-	taken, err := takenPriorities(ctx, r.cfg.Rules, work.substrate.Listener)
+	taken, err := takenPriorities(ctx, r.cfg.Rules, work.substrate.Listener, work.physical())
 	if err != nil {
 		return err
 	}
@@ -186,6 +203,15 @@ func (r *release) placeRule(ctx context.Context, work *containerWork) error {
 			"the container front for the %s class holds a rule at every priority a listener allows, so %s has no slot: prune the releases behind it", r.cfg.Class, work.app)
 	}
 	return nil
+}
+
+const (
+	priorityInUseCode = "PriorityInUse"
+	rulePlacements    = 3
+)
+
+func priorityTaken(err error) bool {
+	return err != nil && strings.Contains(err.Error(), priorityInUseCode)
 }
 
 func containerEnv(app string, values providerkit.AppValues) (map[string]string, error) {
@@ -394,15 +420,32 @@ func (r *release) provisionContainer(ctx context.Context, plan providerkit.Stack
 		return providerkit.StackResult{}, err
 	}
 	work.substrate = held
-	if err := r.placeRule(ctx, work); err != nil {
-		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, report))
-	}
-	plan.Options = work
-	result, err := r.adapter.Run(ctx, plan, report)
+	result, err := r.runContainer(ctx, plan, work, report)
 	if err != nil {
 		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, report))
 	}
 	return result, nil
+}
+
+func (r *release) runContainer(ctx context.Context, plan providerkit.StackPlan, work *containerWork, report providerkit.Reporter) (providerkit.StackResult, error) {
+	var err error
+	for attempt := range rulePlacements {
+		if err = r.placeRule(ctx, work); err != nil {
+			return providerkit.StackResult{}, err
+		}
+		plan.Options = work
+		var result providerkit.StackResult
+		if result, err = r.adapter.Run(ctx, plan, report); err == nil {
+			return result, nil
+		}
+		if !priorityTaken(err) {
+			return providerkit.StackResult{}, err
+		}
+		if report != nil {
+			report.Detail(fmt.Sprintf("Another deploy claimed listener rule priority %d while %s was placing its own (attempt %d of %d); picking another", work.priority, work.app, attempt+1, rulePlacements))
+		}
+	}
+	return providerkit.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.app, rulePlacements, err)
 }
 
 func (r *release) abandonContainer(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
