@@ -1,0 +1,63 @@
+package host
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
+)
+
+func TestWhatAnInterruptedDeployLeftIsSweptBeforeAValueIsWritten(t *testing.T) {
+	t.Parallel()
+
+	spec := valued()
+	stand := standingWith(t, spec)
+	swept := stand.at(sweepCommand())
+	wrote := stand.at("install -m 0600 /dev/stdin " + quoted(EnvFile(spec.Class, spec.Name)))
+	if swept < 0 || wrote < 0 || swept > wrote {
+		t.Fatalf("the sweep ran at %d and the env file was written at %d: a sweep after the write is a sweep of nothing, and a SIGKILL between the write and the forget leaves plaintext nothing but the next deploy's sweep takes", swept, wrote)
+	}
+	command := sweepCommand()
+	for what, wanted := range map[string]string{
+		"the root it sweeps under":               "find " + quoted(stateRoot),
+		"the env files a deploy hands over":      quoted("*" + envFileSuffix),
+		"the registry configs a pull writes":     quoted(registryPrefix + "*"),
+		"an age that spares a deploy in flight":  "-mmin +" + orphanMinutes,
+		"a depth that never reaches the records": "-maxdepth 2",
+	} {
+		if !strings.Contains(command, wanted) {
+			t.Errorf("the sweep runs %q, which names no %s (%s)", command, what, wanted)
+		}
+	}
+	if !strings.HasPrefix(EnvFile(providerkit.ClassProduction, "x"), stateRoot+"/") || strings.Count(strings.TrimPrefix(EnvFile(providerkit.ClassProduction, "x"), stateRoot+"/"), "/") != 1 {
+		t.Errorf("the env file stands at %s, which is not the depth the sweep reads", EnvFile(providerkit.ClassProduction, "x"))
+	}
+}
+
+func TestARegistryLoginIsWrittenWhereTheSweepReadsAndSweptBeforeThePull(t *testing.T) {
+	t.Parallel()
+
+	command, err := pull(providerkit.RegistryTarget{Server: "ghcr.io", Username: "ada", Password: "hunter2"}, "ghcr.io/shop/web:one", "sha256:0000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(command, "mktemp -d "+quoted(stateRoot+"/"+registryPrefix+"XXXXXX")) {
+		t.Errorf("the pull writes its login with %q, and a config under /tmp is one a killed session leaves for nothing to sweep", command)
+	}
+	stand := machine(nil)
+	stand.answer = func(said string) (session.Result, bool) {
+		if strings.Contains(said, "docker image ls -q") {
+			return session.Result{Stdout: "abc\n"}, true
+		}
+		return session.Result{}, false
+	}
+	if _, err := stand.host().PullImage(context.Background(), providerkit.RegistryTarget{Server: "ghcr.io"}, "ghcr.io/shop/web:one", "sha256:0000"); err != nil {
+		t.Fatalf("PullImage() = %v", err)
+	}
+	swept, pulled := stand.at(sweepCommand()), stand.at("docker pull")
+	if swept < 0 || pulled < 0 || swept > pulled {
+		t.Errorf("the sweep ran at %d and the pull at %d, so a login a killed pull left is swept by nothing until the next deploy stands a container up", swept, pulled)
+	}
+}

@@ -176,6 +176,9 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 		"docker rm --force "+quoted(spec.Name)+" >/dev/null 2>&1 || true", nil, elevation); err != nil {
 		return err
 	}
+	if err := h.sweep(ctx, elevation); err != nil {
+		return err
+	}
 	defer func() { err = errors.Join(err, h.forget(ctx, held)) }()
 	if err := h.hand(ctx, held, spec); err != nil {
 		return err

@@ -17,7 +17,21 @@ const (
 	envFileSuffix = ".env"
 	envDigestLen  = 12
 	forgetWindow  = 30 * time.Second
+	orphanMinutes = "10"
 )
+
+const registryPrefix = "registry."
+
+func sweepCommand() string {
+	return "find " + quoted(stateRoot) + " -mindepth 1 -maxdepth 2 " +
+		`\( -type f -name ` + quoted("*"+envFileSuffix) + " -o -type d -name " + quoted(registryPrefix+"*") + ` \)` +
+		" -mmin +" + orphanMinutes + " -prune -exec rm -rf {} + 2>/dev/null || true"
+}
+
+func (h *Host) sweep(ctx context.Context, elevation string) error {
+	_, err := h.ran(ctx, "sweep what an interrupted deploy left under "+stateRoot, sweepCommand(), nil, elevation)
+	return err
+}
 
 func EnvFile(class providerkit.Class, container string) string {
 	return StateDir(class) + "/" + container + envFileSuffix
