@@ -64,6 +64,8 @@ const FakeKnownSlugsEnvVar = "OCEL_TEST_FAKE_KNOWN_SLUGS"
 
 const FakeComputesEnvVar = "OCEL_TEST_FAKE_COMPUTES"
 
+const FakeBakedComputesEnvVar = "OCEL_TEST_FAKE_BAKED_COMPUTES"
+
 const FakePublishedBindingsEnvVar = "OCEL_TEST_FAKE_PUBLISHED_BINDINGS"
 
 const FakePreflightJournalEnvVar = "OCEL_TEST_FAKE_PREFLIGHT_JOURNAL"
@@ -790,6 +792,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 	journalPreflight(req)
 	resp := &contractv1.PreflightResponse{
 		Computes:              fakeComputes(),
+		BakedComputes:         fakeBakedComputes(),
 		InfraTier:             parseInfraTier(os.Getenv(FakeInfraTierEnvVar)),
 		InfrastructurePresent: os.Getenv(FakeInfraPresentEnvVar) != "0",
 		Identity: &contractv1.Identity{
@@ -1484,15 +1487,33 @@ func productionHostnames(domains []*contractv1.TierDomains) []string {
 }
 
 func fakeComputes() []string {
-	named := strings.Split(os.Getenv(FakeComputesEnvVar), ",")
+	computes := namedComputes(os.Getenv(FakeComputesEnvVar))
+	if len(computes) == 0 {
+		return []string{"serverless"}
+	}
+	return computes
+}
+
+func fakeBakedComputes() []string {
+	named, set := os.LookupEnv(FakeBakedComputesEnvVar)
+	if set {
+		return namedComputes(named)
+	}
+	var baked []string
+	for _, compute := range fakeComputes() {
+		if compute == "container" {
+			baked = append(baked, compute)
+		}
+	}
+	return baked
+}
+
+func namedComputes(named string) []string {
 	var computes []string
-	for _, compute := range named {
+	for _, compute := range strings.Split(named, ",") {
 		if compute = strings.TrimSpace(compute); compute != "" {
 			computes = append(computes, compute)
 		}
-	}
-	if len(computes) == 0 {
-		return []string{"serverless"}
 	}
 	return computes
 }

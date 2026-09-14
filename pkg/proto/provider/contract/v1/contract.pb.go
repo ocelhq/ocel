@@ -3096,6 +3096,7 @@ type PreflightResponse struct {
 	Bootstrap             *BootstrapStatus       `protobuf:"bytes,8,opt,name=bootstrap,proto3" json:"bootstrap,omitempty"`
 	Computes              []string               `protobuf:"bytes,9,rep,name=computes,proto3" json:"computes,omitempty"`
 	Standing              []*StandingCheck       `protobuf:"bytes,10,rep,name=standing,proto3" json:"standing,omitempty"`
+	BakedComputes         []string               `protobuf:"bytes,11,rep,name=baked_computes,json=bakedComputes,proto3" json:"baked_computes,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -3196,6 +3197,13 @@ func (x *PreflightResponse) GetComputes() []string {
 func (x *PreflightResponse) GetStanding() []*StandingCheck {
 	if x != nil {
 		return x.Standing
+	}
+	return nil
+}
+
+func (x *PreflightResponse) GetBakedComputes() []string {
+	if x != nil {
+		return x.BakedComputes
 	}
 	return nil
 }
@@ -4870,7 +4878,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x1a\n" +
 	"\bruntimes\x18\x06 \x03(\tR\bruntimes\x12\x1a\n" +
 	"\bstanding\x18\a \x01(\bR\bstanding\x12)\n" +
-	"\x10standing_domains\x18\b \x03(\tR\x0fstandingDomains\"\xf9\x04\n" +
+	"\x10standing_domains\x18\b \x03(\tR\x0fstandingDomains\"\xa0\x05\n" +
 	"\x11PreflightResponse\x12:\n" +
 	"\n" +
 	"infra_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\tinfraTier\x125\n" +
@@ -4884,7 +4892,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\tbootstrap\x18\b \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\x12\x1a\n" +
 	"\bcomputes\x18\t \x03(\tR\bcomputes\x12?\n" +
 	"\bstanding\x18\n" +
-	" \x03(\v2#.provider.contract.v1.StandingCheckR\bstanding\"\xab\x01\n" +
+	" \x03(\v2#.provider.contract.v1.StandingCheckR\bstanding\x12%\n" +
+	"\x0ebaked_computes\x18\v \x03(\tR\rbakedComputes\"\xab\x01\n" +
 	"\x1bResolveImageRegistryRequest\x12Q\n" +
 	"\frepositories\x18\x01 \x03(\tB-\xbaH*\x92\x01'\b\x01\"#r!\x18\xff\x012\x1c^[a-z0-9]+([._-][a-z0-9]+)*$R\frepositories\x129\n" +
 	"\x04tier\x18\x02 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\x04tier\"\x91\x01\n" +

@@ -52,19 +52,19 @@ func ResolveComputes(cfg *projectconfig.Config, computes []string, provider stri
 	return fallback, nil
 }
 
-func RunsAContainer(cfg *projectconfig.Config, computes []string) bool {
+func BakesValues(cfg *projectconfig.Config, computes, baked []string) bool {
 	fallback := ""
 	if len(computes) > 0 {
 		fallback = computes[0]
 	}
 	if len(cfg.Apps) == 0 {
-		return fallback == string(providerkit.ComputeContainer)
+		return slices.Contains(baked, fallback)
 	}
 	return slices.ContainsFunc(cfg.Apps, func(app projectconfig.App) bool {
 		if app.Compute == "" {
-			return fallback == string(providerkit.ComputeContainer)
+			return slices.Contains(baked, fallback)
 		}
-		return app.Compute == string(providerkit.ComputeContainer)
+		return slices.Contains(baked, app.Compute)
 	})
 }
 

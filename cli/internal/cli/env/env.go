@@ -210,9 +210,9 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 		if err := printGroupProgress(ctx, vars, cfg.Slug, definitions, groups, opts, pairs, stdout); err != nil {
 			return err
 		}
-		if preflight.RunsAContainer(cfg, standing.GetComputes()) {
+		if preflight.BakesValues(cfg, standing.GetComputes(), standing.GetBakedComputes()) {
 			fmt.Fprintln(stdout,
-				"This project runs on container compute, which carries nothing of ocel's to re-read a value: the container serving now keeps the value its deploy handed it, and this one lands on the next deploy. Run `ocel deploy`.")
+				"This project's apps run on a compute that is handed its values once, at deploy: the app serving now keeps what its deploy handed it, and this value lands on the next deploy. Run `ocel deploy`.")
 		}
 		return nil
 	})
@@ -377,9 +377,9 @@ func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envO
 		if err := printGroupProgress(ctx, vars, cfg.Slug, definitions, groups, opts, []envSetPair{{key: key}}, stdout); err != nil {
 			return err
 		}
-		if preflight.RunsAContainer(cfg, standing.GetComputes()) {
+		if preflight.BakesValues(cfg, standing.GetComputes(), standing.GetBakedComputes()) {
 			fmt.Fprintln(stdout,
-				"This project runs on container compute, which carries nothing of ocel's to re-read a value: the container serving now still holds what its deploy handed it, and it goes on serving that until the next deploy. Run `ocel deploy` to stop serving it.")
+				"This project's apps run on a compute that is handed its values once, at deploy: the app serving now still holds what its deploy handed it, and it goes on serving that until the next deploy. Run `ocel deploy` to stop serving it.")
 		}
 		return nil
 	})
