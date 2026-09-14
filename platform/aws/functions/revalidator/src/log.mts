@@ -21,7 +21,7 @@ export type Outcome =
   | { event: "RevalidateOk" }
   | { event: "RevalidateExpectMiss"; expected: string; got: string | null }
   | { event: "RevalidateSkipped"; reason: "group-stopped" }
-  | { event: "RevalidateFailed"; reason: FailureReason; status?: number };
+  | { event: "RevalidateFailed"; reason: FailureReason; status?: number; cause?: string };
 
 export function context(messageId: string, message: RevalidationMessage | null): LogContext {
   if (message === null) return { messageId };

@@ -238,3 +238,24 @@ it("never emits the bypass token, on the success path or any failure path", asyn
   expect(lines.join("\n")).not.toContain(bypassToken);
   expect(lines.join("\n")).not.toContain(host);
 });
+
+it("says what threw when the handler itself fails, with the message's header values redacted", async () => {
+  const { deps } = bootstrap();
+  const broken: HandlerDeps = {
+    ...deps,
+    origins: {
+      get() {
+        throw new Error(`memo exploded holding ${bypassToken}`);
+      },
+    } as unknown as HandlerDeps["origins"],
+  };
+
+  const response = await handle(broken, { Records: [record("m-1", "group-a")] });
+
+  expect(failures(response)).toEqual(["m-1"]);
+  const logged = JSON.parse(lines[0] ?? "{}") as { reason: string; cause?: string };
+  expect(logged.reason).toBe("handler-error");
+  expect(logged.cause).toContain("memo exploded");
+  expect(logged.cause).toContain("[redacted]");
+  expect(lines.join("\n")).not.toContain(bypassToken);
+});

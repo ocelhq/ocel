@@ -99,9 +99,17 @@ async function read(deps: OriginDeps, isrPrefix: string): Promise<RouteUrls> {
 function routeUrls(deps: OriginDeps, isrPrefix: string): Promise<RouteUrls> {
   const memo = deps.origins.get(isrPrefix);
   if (memo !== undefined) return memo;
-  const pending = read(deps, isrPrefix);
+  const pending = read(deps, isrPrefix).then(
+    (record) => {
+      if (!record.ok) deps.origins.delete(isrPrefix);
+      return record;
+    },
+    (cause: unknown) => {
+      deps.origins.delete(isrPrefix);
+      throw cause;
+    },
+  );
   deps.origins.set(isrPrefix, pending);
-  void pending.catch(() => {});
   return pending;
 }
 
