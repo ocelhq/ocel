@@ -122,15 +122,20 @@ func (l *UploadCompleter) handleRecord(ctx context.Context, rec S3EventRecord) e
 		return nil
 	}
 
-	transitioned, err := l.store.markSucceeded(ctx, sessionID, idx)
-	if err != nil {
-		return err
-	}
-	if !transitioned {
+	file := sess.Files[idx]
+	switch {
+	case file.State == statePending:
+		if _, err := l.store.markSucceeded(ctx, sessionID, idx); err != nil {
+			return err
+		}
+	case file.State != stateSucceeded || file.Notified:
 		return nil
 	}
 
-	return l.postCallback(ctx, sess, sess.Files[idx])
+	if err := l.postCallback(ctx, sess, file); err != nil {
+		return err
+	}
+	return l.store.markNotified(ctx, sessionID, idx)
 }
 
 func (l *UploadCompleter) sessionIDForObject(ctx context.Context, bucket, key string) (string, error) {

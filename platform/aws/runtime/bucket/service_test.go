@@ -67,6 +67,13 @@ func (f *fakeDDB) UpdateItem(_ context.Context, in *dynamodb.UpdateItemInput, _ 
 		return nil, &ddbtypes.ConditionalCheckFailedException{}
 	}
 	fileM := files.Value[idx].(*ddbtypes.AttributeValueMemberM).Value
+	if strings.Contains(aws.ToString(in.UpdateExpression), ".notified") {
+		if avString(fileM["state"]) != string(stateSucceeded) {
+			return nil, &ddbtypes.ConditionalCheckFailedException{}
+		}
+		fileM["notified"] = &ddbtypes.AttributeValueMemberBOOL{Value: true}
+		return &dynamodb.UpdateItemOutput{}, nil
+	}
 	if avString(fileM["state"]) != string(statePending) {
 		return nil, &ddbtypes.ConditionalCheckFailedException{}
 	}
