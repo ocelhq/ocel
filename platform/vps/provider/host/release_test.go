@@ -497,7 +497,7 @@ func TestASteadyStateWriteBesideANeighboursDrainKeepsThatDrainDeclared(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	stood := &flipped{bench: machine(nil), held: configFor(t, flipTo)}
+	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
 	proxied := servesProxy(stood.bench, &stood.held)
 	writes := 0
 	stood.answer = func(command string) (session.Result, bool) {
@@ -505,7 +505,7 @@ func TestASteadyStateWriteBesideANeighboursDrainKeepsThatDrainDeclared(t *testin
 		case writesProxy(command):
 			stood.mu.Lock()
 			writes++
-			collided := writes == 2
+			collided := writes == 1
 			if collided {
 				stood.held = string(neighbourDraining)
 			}
