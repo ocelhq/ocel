@@ -20,6 +20,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/runtimekit/front"
+	"github.com/ocelhq/ocel/platform/aws/provider/transform"
+	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -49,6 +52,11 @@ func plannedContainerStack(t *testing.T) (Config, providerkit.StackPlan) {
 		Region:         "us-east-1",
 		AppBoundaryARN: "arn:aws:iam::123456789012:policy/ocel-app-boundary",
 		OriginSecret:   fixtureSecret,
+		Slug:           "shop",
+		Class:          providerkit.ClassProduction,
+		VarsTable:      "ocel-vars",
+		VarsTableARN:   "arn:aws:dynamodb:us-east-1:123456789012:table/ocel-vars",
+		VarsKeyARN:     "arn:aws:kms:us-east-1:123456789012:key/abcd",
 	}
 	stack := naming.AppStack("prod", "web", fixedRelease(t))
 	plan := providerkit.StackPlan{
@@ -63,12 +71,35 @@ func plannedContainerStack(t *testing.T) (Config, providerkit.StackPlan) {
 			Image:           containerImage,
 			HealthCheckPath: "/healthz",
 			Values: providerkit.AppValues{
-				Delivered: map[string]string{"GREETING": "hello", "DATABASE_URL": "postgres://db"},
+				Plain:     map[string]string{"GREETING": "hello"},
+				Sensitive: map[string]string{"API_TOKEN": "sensitive-token"},
 				Phase:     "production",
 			},
 		},
 	}
 	return cfg, plan
+}
+
+func declaringASecret(plan providerkit.StackPlan) providerkit.StackPlan {
+	plan.App.Values.Secrets = []providerkit.SecretRef{{Key: "DATABASE_URL"}}
+	return plan
+}
+
+func definitionEnvOf(t *testing.T, rec *inputRecorder) map[string]string {
+	t.Helper()
+	task := recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")
+	if !task["containerDefinitions"].IsSecret() {
+		t.Fatal("containerDefinitions is not a secret, so every delivered value would sit in the state checkpoint in the clear")
+	}
+	var definitions []containerDefinition
+	if err := json.Unmarshal([]byte(task["containerDefinitions"].SecretValue().Element.StringValue()), &definitions); err != nil || len(definitions) != 1 {
+		t.Fatalf("containerDefinitions = %v, want one container: %v", task["containerDefinitions"], err)
+	}
+	env := map[string]string{}
+	for _, pair := range definitions[0].Environment {
+		env[pair.Name] = pair.Value
+	}
+	return env
 }
 
 func TestAServerlessAppThatPushesAnImageIsRefused(t *testing.T) {
@@ -89,14 +120,26 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	if work.env["GREETING"] != "hello" || work.env["DATABASE_URL"] != "postgres://db" || work.env[constants.PhaseEnvName] != "production" {
-		t.Errorf("env = %v, want every delivered value and the phase: a container reads its values off the environment alone", work.env)
+	if work.env["GREETING"] != "hello" || work.env["API_TOKEN"] != "sensitive-token" || work.env[constants.PhaseEnvName] != "production" {
+		t.Errorf("env = %v, want the plain and sensitive values and the phase: those are handed to the runtime once, in the task definition", work.env)
 	}
 	if work.env[containerPortEnv] != containerPort {
 		t.Errorf("%s = %q, want %s, the port the target group probes", containerPortEnv, work.env[containerPortEnv], containerPort)
 	}
+	if work.env[edge.OriginSecretVar] != fixtureSecret {
+		t.Errorf("%s = %q, want the class's origin secret: the runtime in the container guards with it the way the node runtime does on Lambda", edge.OriginSecretVar, work.env[edge.OriginSecretVar])
+	}
+	if _, pinned := work.env[vars.EnvVar]; pinned {
+		t.Errorf("env carries %s for an app that declares no secret and no binding, so the runtime would open a store it has nothing to read from", vars.EnvVar)
+	}
+	if work.readsLive() {
+		t.Error("an app with nothing live is granted a read on the variable table")
+	}
+	if got := work.definitionEnv()[front.HealthPathVar]; got != "/healthz" {
+		t.Errorf("%s = %q, want the manifest's probe path, which the runtime answers without the origin secret", front.HealthPathVar, got)
+	}
 
-	_, err = containerEnv("web", providerkit.AppValues{Delivered: map[string]string{containerPortEnv: "3000"}})
+	_, err = containerEnv("web", providerkit.AppValues{Plain: map[string]string{containerPortEnv: "3000"}}, fixtureSecret, nil)
 	if err == nil || !strings.Contains(err.Error(), containerPortEnv) {
 		t.Errorf("containerEnv with %s = %v, want it refused by name: the load balancer would probe a port nothing listens on", containerPortEnv, err)
 	}
@@ -149,9 +192,6 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 	if task["taskRoleArn"].StringValue() == "" {
 		t.Error("an app granted a binding runs without a task role, so the grant reaches nothing")
 	}
-	if !task["containerDefinitions"].IsSecret() {
-		t.Fatal("containerDefinitions is not a secret, so every delivered value would sit in the state checkpoint in the clear")
-	}
 	var definitions []containerDefinition
 	if err := json.Unmarshal([]byte(task["containerDefinitions"].SecretValue().Element.StringValue()), &definitions); err != nil || len(definitions) != 1 {
 		t.Fatalf("containerDefinitions = %v, want one container: %v", task["containerDefinitions"], err)
@@ -160,10 +200,7 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 	if held.Image != containerImage || held.Name != containerName || held.PortMappings[0].ContainerPort != containerPortNumber {
 		t.Errorf("container = %+v, want the pushed image listening on %d", held, containerPortNumber)
 	}
-	env := map[string]string{}
-	for _, pair := range held.Environment {
-		env[pair.Name] = pair.Value
-	}
+	env := definitionEnvOf(t, rec)
 	if env["GREETING"] != "hello" || env[containerPortEnv] != containerPort {
 		t.Errorf("environment = %v, want the delivered values and the port", env)
 	}
@@ -335,4 +372,96 @@ func recordedOf(t *testing.T, rec *inputRecorder, typeToken string) resource.Pro
 	}
 	t.Fatalf("the program declared no %s among %d resources", typeToken, len(rec.recorded))
 	return nil
+}
+
+func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanThePlaintext(t *testing.T) {
+	t.Parallel()
+
+	cfg, plan := plannedContainerStack(t)
+	plan = declaringASecret(plan)
+	release := releasing(t, cfg)
+	work, err := release.containerWork(plan, fixtureSubstrate())
+	if err != nil {
+		t.Fatalf("containerWork() = %v", err)
+	}
+	manifest, err := vars.Parse([]byte(work.env[vars.EnvVar]))
+	if err != nil {
+		t.Fatalf("%s = %q, which the runtime cannot read: %v", vars.EnvVar, work.env[vars.EnvVar], err)
+	}
+	if len(manifest.Keys) != 1 || manifest.Keys[0].Key != "DATABASE_URL" || manifest.Table != cfg.VarsTable || manifest.KeyARN != cfg.VarsKeyARN || manifest.Slug != "shop" {
+		t.Errorf("manifest = %+v, want the secret pinned by name with the table and key the runtime reads it through", manifest)
+	}
+	for name, value := range work.definitionEnv() {
+		if strings.Contains(value, "postgres://") || name == "DATABASE_URL" {
+			t.Errorf("the task definition carries %s=%q: a secret's plaintext is readable by anyone who can describe the task definition, so the runtime reads it live instead", name, value)
+		}
+	}
+	if !work.readsLive() {
+		t.Fatal("an app declaring a secret is granted no read on the variable table, so the runtime cannot resolve it")
+	}
+
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", plan.Ref.Name.String(), rec)); err != nil {
+		t.Fatalf("run the container program: %v", err)
+	}
+	if recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")["taskRoleArn"].StringValue() == "" {
+		t.Error("the task runs without a role, so the runtime has nothing to read the store with")
+	}
+	var policies []string
+	for key, inputs := range rec.recorded {
+		if strings.HasPrefix(key, "aws:iam/rolePolicy:RolePolicy::") {
+			policies = append(policies, inputs["policy"].StringValue())
+		}
+	}
+	if len(policies) != 1 {
+		t.Fatalf("the task role carries %d policies, want the one vars read policy Lambda's execution role gets", len(policies))
+	}
+	own, _ := valuePartition("shop", string(providerkit.ClassProduction))
+	for _, want := range []string{"kms:Decrypt", cfg.VarsKeyARN, "dynamodb:Query", cfg.VarsTableARN, own} {
+		if !strings.Contains(policies[0], want) {
+			t.Errorf("policy = %s, want it to carry %q: the read is fenced to this project's partition and the class key", policies[0], want)
+		}
+	}
+}
+
+func TestATransformTagsAContainersResourcesAndAPatchNothingCarriesIsRefused(t *testing.T) {
+	t.Parallel()
+
+	cfg, plan := plannedContainerStack(t)
+	evaluator := &fakeEvaluator{tags: map[string]string{"team": "shop"}}
+	cfg.Transform = evaluator
+	release := releasing(t, cfg)
+	work, err := release.containerWork(plan, fixtureSubstrate())
+	if err != nil {
+		t.Fatalf("containerWork() = %v", err)
+	}
+	if work.transformed, err = transformStackPlan(context.Background(), cfg.Transform, plan); err != nil {
+		t.Fatalf("transformStackPlan() = %v", err)
+	}
+	if len(evaluator.seen.Resources) != 1 || evaluator.seen.Resources[0].Type != transformTypeContainer || evaluator.seen.Resources[0].App != "web" {
+		t.Fatalf("the transform was shown %+v, want the container as the one resource of app web", evaluator.seen.Resources)
+	}
+	if err := release.placeRule(context.Background(), work); err != nil {
+		t.Fatalf("placeRule() = %v", err)
+	}
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", plan.Ref.Name.String(), rec)); err != nil {
+		t.Fatalf("run the container program: %v", err)
+	}
+	for _, token := range []string{"aws:ecs/service:Service", "aws:ecs/taskDefinition:TaskDefinition", "aws:lb/targetGroup:TargetGroup"} {
+		if got := recordedOf(t, rec, token)["tags"].ObjectValue()["team"]; got.StringValue() != "shop" {
+			t.Errorf("%s tags carry team=%v, want the transform's tag: a transform reaching a container app was silently dropped before", token, got)
+		}
+	}
+
+	evaluator.out = []transform.Patches{{"role": {"description": "patched"}}}
+	if work.transformed, err = transformStackPlan(context.Background(), cfg.Transform, plan); err != nil {
+		t.Fatalf("transformStackPlan() = %v", err)
+	}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", plan.Ref.Name.String(), &inputRecorder{})); err != nil {
+		t.Fatalf("run the container program: %v", err)
+	}
+	if err := work.transformed.refuseUnclaimed(); err == nil || !strings.Contains(err.Error(), "role") {
+		t.Errorf("refuseUnclaimed() = %v, want the patch on a role this app never minted refused by name rather than dropped", err)
+	}
 }

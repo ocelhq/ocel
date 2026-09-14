@@ -20,8 +20,11 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/runtimekit/front"
+	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -56,20 +59,24 @@ type RuleDescriber interface {
 }
 
 type containerWork struct {
-	priority   int
-	app        string
-	image      string
-	healthPath string
-	env        map[string]string
-	tags       map[string]string
-	boundary   string
-	region     string
-	secret     string
-	policies   []bindingPolicy
-	service    naming.Coordinate
-	role       naming.Coordinate
-	substrate  substrate
+	priority    int
+	app         string
+	image       string
+	healthPath  string
+	env         map[string]string
+	tags        map[string]string
+	boundary    string
+	region      string
+	secret      string
+	policies    []bindingPolicy
+	values      executionRole
+	transformed *transformPatches
+	service     naming.Coordinate
+	role        naming.Coordinate
+	substrate   substrate
 }
+
+func (w *containerWork) readsLive() bool { return w.values.ValuesTableARN != "" }
 
 type containerDefinition struct {
 	Name         string            `json:"name"`
@@ -114,9 +121,20 @@ func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, er
 	if err != nil {
 		return nil, err
 	}
-	env, err := containerEnv(app.App, app.Values)
+	bundle, err := r.sealApp(plan.Ref.Project, app.App, liveOnly(app.Values))
 	if err != nil {
 		return nil, err
+	}
+	env, err := containerEnv(app.App, app.Values, r.cfg.OriginSecret, bundle.Live)
+	if err != nil {
+		return nil, err
+	}
+	values := executionRole{App: app.App, VarsKeyARN: r.cfg.VarsKeyARN}
+	if bundle.hasLive() {
+		values.ValuesTableARN = r.cfg.VarsTableARN
+		values.VarsReferenced = bundle.Referenced
+		values.Slug = r.cfg.Slug
+		values.VarsClass = string(r.cfg.Class)
 	}
 	return &containerWork{
 		app:        app.App,
@@ -128,9 +146,15 @@ func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, er
 		region:     r.cfg.Region,
 		secret:     r.cfg.OriginSecret,
 		policies:   policies,
+		values:     values,
 		service:    serviceCoordinate(project, stack),
 		role:       roleCoordinate(project, stack),
 	}, nil
+}
+
+func liveOnly(held providerkit.AppValues) providerkit.AppValues {
+	held.Sensitive = nil
+	return held
 }
 
 func (r *release) containerWork(plan providerkit.StackPlan, held substrate) (*containerWork, error) {
@@ -214,9 +238,13 @@ func priorityTaken(err error) bool {
 	return err != nil && strings.Contains(err.Error(), priorityInUseCode)
 }
 
-func containerEnv(app string, values providerkit.AppValues) (map[string]string, error) {
-	env := make(map[string]string, len(values.Delivered)+2)
-	maps.Copy(env, values.Delivered)
+func containerEnv(app string, values providerkit.AppValues, originSecret string, manifest []byte) (map[string]string, error) {
+	env := make(map[string]string, len(values.Plain)+len(values.Sensitive)+6)
+	maps.Copy(env, values.Plain)
+	maps.Copy(env, values.Sensitive)
+	if values.Folder != "" {
+		env[constants.AppFolderEnvName] = values.Folder
+	}
 	maps.Copy(env, values.Injected())
 	if _, set := env[containerPortEnv]; set {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
@@ -224,7 +252,18 @@ func containerEnv(app string, values providerkit.AppValues) (map[string]string, 
 			app, containerPortEnv, containerPort, containerPortEnv)
 	}
 	env[containerPortEnv] = containerPort
+	env[edge.OriginSecretVar] = originSecret
+	if len(manifest) > 0 {
+		env[vars.EnvVar] = string(manifest)
+	}
 	return env, nil
+}
+
+func (w *containerWork) definitionEnv() map[string]string {
+	env := make(map[string]string, len(w.env)+1)
+	maps.Copy(env, w.env)
+	env[front.HealthPathVar] = w.healthPath
+	return env
 }
 
 func serviceCoordinate(project string, stack naming.StackName) naming.Coordinate {
@@ -243,9 +282,10 @@ func (w *containerWork) physical() string {
 }
 
 func (w *containerWork) definition() (string, error) {
-	pairs := make([]environmentPair, 0, len(w.env))
-	for _, key := range slices.Sorted(maps.Keys(w.env)) {
-		pairs = append(pairs, environmentPair{Name: key, Value: w.env[key]})
+	env := w.definitionEnv()
+	pairs := make([]environmentPair, 0, len(env))
+	for _, key := range slices.Sorted(maps.Keys(env)) {
+		pairs = append(pairs, environmentPair{Name: key, Value: env[key]})
 	}
 	encoded, err := json.Marshal([]containerDefinition{{
 		Name:         containerName,
@@ -270,11 +310,15 @@ func (w *containerWork) definition() (string, error) {
 
 func (w *containerWork) run(ctx *pulumi.Context) error {
 	physical := w.physical()
-	tags := resourceTags(naming.KindService, "", w.tags)
+	tags := resourceTags(naming.KindService, "", w.taggedWith(w.transformed.tagsFor(transformTypeContainer, w.app)))
+
+	if err := w.transformed.install(ctx); err != nil {
+		return err
+	}
 
 	var taskRole pulumi.StringPtrInput
 	var before []pulumi.Resource
-	if len(w.policies) > 0 {
+	if len(w.policies) > 0 || w.readsLive() {
 		role, granted, err := w.taskRole(ctx)
 		if err != nil {
 			return err
@@ -381,13 +425,23 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 	return nil
 }
 
+func (w *containerWork) taggedWith(extra map[string]string) map[string]string {
+	if len(extra) == 0 {
+		return w.tags
+	}
+	tags := make(map[string]string, len(w.tags)+len(extra))
+	maps.Copy(tags, w.tags)
+	maps.Copy(tags, extra)
+	return tags
+}
+
 func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resource, error) {
 	role, err := iam.NewRole(ctx, naming.ResourceID(naming.KindRole, roleLocalName), &iam.RoleArgs{
 		NamePrefix:          pulumi.String(rolePrefix(w.role)),
 		Description:         describe(w.role, "task role for this app's container"),
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
 		PermissionsBoundary: permissionsBoundary(w.boundary),
-		Tags:                resourceTags(naming.KindRole, "", w.tags),
+		Tags:                resourceTags(naming.KindRole, "", w.taggedWith(w.transformed.tagsFor(transformTypeContainer, w.app))),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -397,6 +451,20 @@ func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resou
 		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "binding", binding.Binding), &iam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(binding.Policy),
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		granted = append(granted, policy)
+	}
+	if w.readsLive() {
+		rendered, err := varsReadPolicy(w.values)
+		if err != nil {
+			return nil, nil, err
+		}
+		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "vars", "read"), &iam.RolePolicyArgs{
+			Role:   role.Name,
+			Policy: pulumi.String(rendered),
 		})
 		if err != nil {
 			return nil, nil, err
@@ -415,6 +483,9 @@ func (r *release) provisionContainer(ctx context.Context, plan providerkit.Stack
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
+	if work.transformed, err = transformStackPlan(ctx, r.cfg.Transform, plan); err != nil {
+		return providerkit.StackResult{}, err
+	}
 	held, err := r.ensureSubstrate(ctx, plan.Ref, report)
 	if err != nil {
 		return providerkit.StackResult{}, err
@@ -422,6 +493,9 @@ func (r *release) provisionContainer(ctx context.Context, plan providerkit.Stack
 	work.substrate = held
 	result, err := r.runContainer(ctx, plan, work, report)
 	if err != nil {
+		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, report))
+	}
+	if err := work.transformed.refuseUnclaimed(); err != nil {
 		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, report))
 	}
 	return result, nil
@@ -482,11 +556,21 @@ func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan,
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
+	if work.transformed, err = transformStackPlan(ctx, r.cfg.Transform, plan); err != nil {
+		return providerkit.Plan{}, err
+	}
 	if err := r.placeRule(ctx, work); err != nil {
 		return providerkit.Plan{}, err
 	}
 	plan.Options = work
-	return r.adapter.Preview(ctx, plan, report)
+	previewed, err := r.adapter.Preview(ctx, plan, report)
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	if err := work.transformed.refuseUnclaimed(); err != nil {
+		return providerkit.Plan{}, err
+	}
+	return previewed, nil
 }
 
 func (r *release) decodeContainer(work *containerWork, outputs auto.OutputMap) (providerkit.StackResult, error) {

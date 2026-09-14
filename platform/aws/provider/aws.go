@@ -32,6 +32,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
@@ -102,6 +103,14 @@ func (p *Provider) Computes() []providerkit.Compute {
 
 func (p *Provider) ImageRegistry(ctx context.Context, _ providerkit.Class, _ []string) (providerkit.RegistryTarget, error) {
 	return registry.Resolve(ctx, ecr.NewFromConfig(p.aws))
+}
+
+func (p *Provider) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
+	held, err := payloads.ContainerRuntime(arch)
+	if err != nil {
+		return nil, err
+	}
+	return held.Bytes, nil
 }
 
 func (p *Provider) Images(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
@@ -562,17 +571,18 @@ func (s settling) Remove(ctx context.Context, class providerkit.Class, report pr
 }
 
 var (
-	_ providerkit.Provider       = (*Provider)(nil)
-	_ providerkit.Warmer         = (*Provider)(nil)
-	_ providerkit.CodeEmbedder   = (*Provider)(nil)
-	_ providerkit.StackInspector = (*Provider)(nil)
-	_ providerkit.Certifier      = (*Provider)(nil)
-	_ providerkit.ImageRegistry  = (*Provider)(nil)
-	_ providerkit.ImagePusher    = (*Provider)(nil)
-	_ providerkit.Bootstrapper   = settling{}
-	_ awsports.Tables            = (*Provider)(nil)
-	_ awsports.Keys              = (*Provider)(nil)
-	_ awsports.Stores            = (*Provider)(nil)
+	_ providerkit.Provider          = (*Provider)(nil)
+	_ providerkit.Warmer            = (*Provider)(nil)
+	_ providerkit.CodeEmbedder      = (*Provider)(nil)
+	_ providerkit.StackInspector    = (*Provider)(nil)
+	_ providerkit.Certifier         = (*Provider)(nil)
+	_ providerkit.ImageRegistry     = (*Provider)(nil)
+	_ providerkit.ContainerRuntimer = (*Provider)(nil)
+	_ providerkit.ImagePusher       = (*Provider)(nil)
+	_ providerkit.Bootstrapper      = settling{}
+	_ awsports.Tables               = (*Provider)(nil)
+	_ awsports.Keys                 = (*Provider)(nil)
+	_ awsports.Stores               = (*Provider)(nil)
 )
 
 const s3Scheme = "s3"
