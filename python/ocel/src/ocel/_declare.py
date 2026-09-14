@@ -11,6 +11,7 @@ from ocel.gen.app.resources.v1.variables_pb import (
 DISCOVERY_PHASE = "discovery"
 _PHASE_ENV = "OCEL_PHASE"
 _DEV_SERVER_ENV = "OCEL_DEV_SERVER"
+_DEV_SERVER_TOKEN_ENV = "OCEL_DEV_SERVER_TOKEN"
 
 
 def discovering() -> bool:
@@ -22,10 +23,14 @@ def _client() -> ResourceServiceClientSync:
     return ResourceServiceClientSync(address, send_compression=None)
 
 
+def _headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {os.environ.get(_DEV_SERVER_TOKEN_ENV, '')}"}
+
+
 def declare(request: DeclareRequest) -> None:
     try:
         with _client() as client:
-            client.declare(request)
+            client.declare(request, headers=_headers())
     except Exception as error:
         raise _failed(request, error) from None
 
@@ -33,7 +38,7 @@ def declare(request: DeclareRequest) -> None:
 def declare_env(request: DeclareEnvRequest) -> DeclareEnvResponse:
     try:
         with _client() as client:
-            return client.declare_env(request)
+            return client.declare_env(request, headers=_headers())
     except Exception as error:
         raise _env_failed(error) from None
 
@@ -41,7 +46,7 @@ def declare_env(request: DeclareEnvRequest) -> DeclareEnvResponse:
 def report_env_problems(request: ReportEnvProblemsRequest) -> None:
     try:
         with _client() as client:
-            client.report_env_problems(request)
+            client.report_env_problems(request, headers=_headers())
     except Exception as error:
         raise _env_failed(error) from None
 
