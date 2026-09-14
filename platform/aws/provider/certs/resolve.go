@@ -45,13 +45,19 @@ func (i Issuer) Pinned(ctx context.Context, hostname, arn string) (Certificate, 
 	return cert, nil
 }
 
-const certificatePages = 20
+const certificatePages = 25
 
 const certificatesPerPage = 100
 
 func (i Issuer) Existing(ctx context.Context, hostnames []string) (Certificate, error) {
 	var token *string
-	for page := 0; page < certificatePages; page++ {
+	for page := 0; ; page++ {
+		if page == certificatePages {
+			return Certificate{}, fmt.Errorf(
+				"looked through %d issued certificates in %s without finding one covering %s, and stopped rather than read on and mint a duplicate of one further down: "+
+					"pin the certificate to use for %s in `certificates`, or prune the certificates this account no longer needs",
+				certificatePages*certificatesPerPage, i.Region, strings.Join(hostnames, ", "), hostnames[0])
+		}
 		out, err := i.API.ListCertificates(ctx, &acm.ListCertificatesInput{
 			CertificateStatuses: []acmtypes.CertificateStatus{acmtypes.CertificateStatusIssued},
 			MaxItems:            aws.Int32(certificatesPerPage),
