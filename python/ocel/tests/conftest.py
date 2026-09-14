@@ -5,7 +5,12 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 import ocel.env
-from ocel.gen.app.resources.v1.resources_pb import DeclareRequest, DeclareResponse
+from ocel.gen.app.resources.v1.resources_pb import (
+    DeclareRequest,
+    DeclareResponse,
+    ReferenceRequest,
+    ReferenceResponse,
+)
 from ocel.gen.app.resources.v1.variables_pb import (
     DeclareEnvRequest,
     DeclareEnvResponse,
@@ -14,11 +19,13 @@ from ocel.gen.app.resources.v1.variables_pb import (
 )
 
 DECLARE = "/app.resources.v1.ResourceService/Declare"
+REFERENCE = "/app.resources.v1.ResourceService/Reference"
 DECLARE_ENV = "/app.resources.v1.ResourceService/DeclareEnv"
 REPORT_ENV_PROBLEMS = "/app.resources.v1.ResourceService/ReportEnvProblems"
 
 _REQUESTS = {
     DECLARE: DeclareRequest,
+    REFERENCE: ReferenceRequest,
     DECLARE_ENV: DeclareEnvRequest,
     REPORT_ENV_PROBLEMS: ReportEnvProblemsRequest,
 }
@@ -26,7 +33,7 @@ _REQUESTS = {
 
 class Collector:
     def __init__(self):
-        self.declares = []
+        self.requests = []
         self.cells = []
         self.server = HTTPServer(("127.0.0.1", 0), self._handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -38,7 +45,7 @@ class Collector:
         return f"http://{host}:{port}"
 
     def bodies(self, path):
-        return [body for seen, _, body in self.declares if seen == path]
+        return [body for seen, _, body in self.requests if seen == path]
 
     def declared_env(self):
         declared = self.bodies(DECLARE_ENV)
@@ -53,6 +60,8 @@ class Collector:
             return DeclareEnvResponse(cells=list(self.cells))
         if path == REPORT_ENV_PROBLEMS:
             return ReportEnvProblemsResponse()
+        if path == REFERENCE:
+            return ReferenceResponse()
         return DeclareResponse()
 
     def _handler(self):
@@ -64,7 +73,7 @@ class Collector:
                 if self.headers.get("Content-Encoding") == "gzip":
                     body = gzip.decompress(body)
                 kind = self.headers.get("Content-Type", "")
-                collector.declares.append(
+                collector.requests.append(
                     (
                         self.path,
                         self.headers.get("Connect-Protocol-Version"),

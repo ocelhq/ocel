@@ -104,7 +104,7 @@ It sees what resources your app declares, sends that to the CLI, which provision
 
 Building software is making trade-offs. Going with code execution for declarations avoids building an AST parser for each language we support (which comes with its own set of problems, believe me!). Running only the discovery folders avoids the other half of the trade: your server, migrations and startup hooks never run at deploy time.
 
-That leaves two constraints.
+That leaves three constraints.
 
 ### Define, don't read
 
@@ -128,6 +128,31 @@ console.log(db.connectionString);
 
 ### An app binds what it imports
 
-On deploy, each app is granted a resource only if that app imports the file declaring it. Ocel follows the app's import graph to decide this, so a resource declared in a discovery folder that no app imports is provisioned but bound to nothing. Reaching it at runtime fails with a missing binding error.
+On deploy, each app is granted a resource only if that app imports the file declaring it, or a file referencing it. Ocel follows the app's import graph to decide this, so a resource declared in a discovery folder that no app imports is provisioned but bound to nothing. Reaching it at runtime fails with a missing binding error.
 
 The same walk needs to resolve every import statically. An app that reaches a project file through a dynamic `import()` or `require()` with a computed path refuses to deploy rather than guess which resources it uses.
+
+### Share a resource across languages
+
+An import graph never crosses languages, so a Go service cannot import a database declared in TypeScript. Declare the resource once, in any language, and reach it from every other language through a reference: a call that names the same resource, hands back the same handle and reads the same binding, but never declares. Put the reference in a discovery folder of the app's own language and import it from the app.
+
+```ts title="resources/index.ts"
+import { postgres } from "ocel/postgres";
+
+export const db = postgres("main");
+```
+
+```go title="resources/refs.go"
+var DB = sdk.PostgresRef("main")
+```
+
+The reference in each language:
+
+| Language | Declaration | Reference |
+| --- | --- | --- |
+| TypeScript | `postgres("main")`, `bucket("uploads", { uploaders })` | `postgres.ref("main")`, `bucket.ref("uploads", { uploaders })` |
+| Go | `sdk.Postgres("main")` | `sdk.PostgresRef("main")` |
+| Python | `postgres("main")` | `postgres_ref("main")` |
+| Rust | `#[ocel(name = "main")]` | `#[ocel(name = "main", reference)]` |
+
+A reference carries no configuration, because the one declaration owns it. Declaring the same resource twice is still an error, in one language or across two. A reference to a resource nothing declares refuses the deploy, naming the file and line of the reference.

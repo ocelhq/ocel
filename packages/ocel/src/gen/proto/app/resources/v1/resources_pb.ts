@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file app/resources/v1/resources.proto.
  */
 export const file_app_resources_v1_resources: GenFile = /*@__PURE__*/
-  fileDesc("CiBhcHAvcmVzb3VyY2VzL3YxL3Jlc291cmNlcy5wcm90bxIQYXBwLnJlc291cmNlcy52MSJQChJSZXNvdXJjZUlkZW50aWZpZXISLAoEdHlwZRgBIAEoDjIeLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VUeXBlEgwKBG5hbWUYAiABKAkiEQoPRGVjbGFyZVJlc3BvbnNlIsoBCg5EZWNsYXJlUmVxdWVzdBI2CghyZXNvdXJjZRgBIAEoCzIkLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VJZGVudGlmaWVyEjQKCHBvc3RncmVzGAIgASgLMiAuYXBwLnJlc291cmNlcy52MS5Qb3N0Z3Jlc0NvbmZpZ0gAEjAKBmJ1Y2tldBgDIAEoCzIeLmFwcC5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSAASDgoGc291cmNlGAQgASgJQggKBmNvbmZpZyIhCg5Qb3N0Z3Jlc0NvbmZpZxIPCgd2ZXJzaW9uGAEgASgJIicKDEJ1Y2tldENvbmZpZxIXCg9hbGxvd2VkX29yaWdpbnMYASADKAkqgAEKDFJlc291cmNlVHlwZRIdChlSRVNPVVJDRV9UWVBFX1VOU1BFQ0lGSUVEEAASGgoWUkVTT1VSQ0VfVFlQRV9QT1NUR1JFUxABEhgKFFJFU09VUkNFX1RZUEVfQlVDS0VUEAISGwoXUkVTT1VSQ0VfVFlQRV9DT05UQUlORVIQAzKoAgoPUmVzb3VyY2VTZXJ2aWNlEk4KB0RlY2xhcmUSIC5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVSZXF1ZXN0GiEuYXBwLnJlc291cmNlcy52MS5EZWNsYXJlUmVzcG9uc2USVwoKRGVjbGFyZUVudhIjLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZUVudlJlcXVlc3QaJC5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVFbnZSZXNwb25zZRJsChFSZXBvcnRFbnZQcm9ibGVtcxIqLmFwcC5yZXNvdXJjZXMudjEuUmVwb3J0RW52UHJvYmxlbXNSZXF1ZXN0GisuYXBwLnJlc291cmNlcy52MS5SZXBvcnRFbnZQcm9ibGVtc1Jlc3BvbnNlQj9aPWdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2FwcC9yZXNvdXJjZXMvdjE7cmVzb3VyY2VzdjFiBnByb3RvMw", [file_app_resources_v1_variables]);
+  fileDesc("CiBhcHAvcmVzb3VyY2VzL3YxL3Jlc291cmNlcy5wcm90bxIQYXBwLnJlc291cmNlcy52MSJQChJSZXNvdXJjZUlkZW50aWZpZXISLAoEdHlwZRgBIAEoDjIeLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VUeXBlEgwKBG5hbWUYAiABKAkiEQoPRGVjbGFyZVJlc3BvbnNlIsoBCg5EZWNsYXJlUmVxdWVzdBI2CghyZXNvdXJjZRgBIAEoCzIkLmFwcC5yZXNvdXJjZXMudjEuUmVzb3VyY2VJZGVudGlmaWVyEjQKCHBvc3RncmVzGAIgASgLMiAuYXBwLnJlc291cmNlcy52MS5Qb3N0Z3Jlc0NvbmZpZ0gAEjAKBmJ1Y2tldBgDIAEoCzIeLmFwcC5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSAASDgoGc291cmNlGAQgASgJQggKBmNvbmZpZyJaChBSZWZlcmVuY2VSZXF1ZXN0EjYKCHJlc291cmNlGAEgASgLMiQuYXBwLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISDgoGc291cmNlGAIgASgJIhMKEVJlZmVyZW5jZVJlc3BvbnNlIiEKDlBvc3RncmVzQ29uZmlnEg8KB3ZlcnNpb24YASABKAkiJwoMQnVja2V0Q29uZmlnEhcKD2FsbG93ZWRfb3JpZ2lucxgBIAMoCSqAAQoMUmVzb3VyY2VUeXBlEh0KGVJFU09VUkNFX1RZUEVfVU5TUEVDSUZJRUQQABIaChZSRVNPVVJDRV9UWVBFX1BPU1RHUkVTEAESGAoUUkVTT1VSQ0VfVFlQRV9CVUNLRVQQAhIbChdSRVNPVVJDRV9UWVBFX0NPTlRBSU5FUhADMv4CCg9SZXNvdXJjZVNlcnZpY2USTgoHRGVjbGFyZRIgLmFwcC5yZXNvdXJjZXMudjEuRGVjbGFyZVJlcXVlc3QaIS5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVSZXNwb25zZRJUCglSZWZlcmVuY2USIi5hcHAucmVzb3VyY2VzLnYxLlJlZmVyZW5jZVJlcXVlc3QaIy5hcHAucmVzb3VyY2VzLnYxLlJlZmVyZW5jZVJlc3BvbnNlElcKCkRlY2xhcmVFbnYSIy5hcHAucmVzb3VyY2VzLnYxLkRlY2xhcmVFbnZSZXF1ZXN0GiQuYXBwLnJlc291cmNlcy52MS5EZWNsYXJlRW52UmVzcG9uc2USbAoRUmVwb3J0RW52UHJvYmxlbXMSKi5hcHAucmVzb3VyY2VzLnYxLlJlcG9ydEVudlByb2JsZW1zUmVxdWVzdBorLmFwcC5yZXNvdXJjZXMudjEuUmVwb3J0RW52UHJvYmxlbXNSZXNwb25zZUI/Wj1naXRodWIuY29tL29jZWxocS9vY2VsL3BrZy9wcm90by9hcHAvcmVzb3VyY2VzL3YxO3Jlc291cmNlc3YxYgZwcm90bzM", [file_app_resources_v1_variables]);
 
 /**
  * @generated from message app.resources.v1.ResourceIdentifier
@@ -89,6 +89,41 @@ export const DeclareRequestSchema: GenMessage<DeclareRequest> = /*@__PURE__*/
   messageDesc(file_app_resources_v1_resources, 2);
 
 /**
+ * @generated from message app.resources.v1.ReferenceRequest
+ */
+export type ReferenceRequest = Message<"app.resources.v1.ReferenceRequest"> & {
+  /**
+   * @generated from field: app.resources.v1.ResourceIdentifier resource = 1;
+   */
+  resource?: ResourceIdentifier | undefined;
+
+  /**
+   * @generated from field: string source = 2;
+   */
+  source: string;
+};
+
+/**
+ * Describes the message app.resources.v1.ReferenceRequest.
+ * Use `create(ReferenceRequestSchema)` to create a new message.
+ */
+export const ReferenceRequestSchema: GenMessage<ReferenceRequest> = /*@__PURE__*/
+  messageDesc(file_app_resources_v1_resources, 3);
+
+/**
+ * @generated from message app.resources.v1.ReferenceResponse
+ */
+export type ReferenceResponse = Message<"app.resources.v1.ReferenceResponse"> & {
+};
+
+/**
+ * Describes the message app.resources.v1.ReferenceResponse.
+ * Use `create(ReferenceResponseSchema)` to create a new message.
+ */
+export const ReferenceResponseSchema: GenMessage<ReferenceResponse> = /*@__PURE__*/
+  messageDesc(file_app_resources_v1_resources, 4);
+
+/**
  * @generated from message app.resources.v1.PostgresConfig
  */
 export type PostgresConfig = Message<"app.resources.v1.PostgresConfig"> & {
@@ -103,7 +138,7 @@ export type PostgresConfig = Message<"app.resources.v1.PostgresConfig"> & {
  * Use `create(PostgresConfigSchema)` to create a new message.
  */
 export const PostgresConfigSchema: GenMessage<PostgresConfig> = /*@__PURE__*/
-  messageDesc(file_app_resources_v1_resources, 3);
+  messageDesc(file_app_resources_v1_resources, 5);
 
 /**
  * @generated from message app.resources.v1.BucketConfig
@@ -120,7 +155,7 @@ export type BucketConfig = Message<"app.resources.v1.BucketConfig"> & {
  * Use `create(BucketConfigSchema)` to create a new message.
  */
 export const BucketConfigSchema: GenMessage<BucketConfig> = /*@__PURE__*/
-  messageDesc(file_app_resources_v1_resources, 4);
+  messageDesc(file_app_resources_v1_resources, 6);
 
 /**
  * @generated from enum app.resources.v1.ResourceType
@@ -164,6 +199,14 @@ export const ResourceService: GenService<{
     methodKind: "unary";
     input: typeof DeclareRequestSchema;
     output: typeof DeclareResponseSchema;
+  },
+  /**
+   * @generated from rpc app.resources.v1.ResourceService.Reference
+   */
+  reference: {
+    methodKind: "unary";
+    input: typeof ReferenceRequestSchema;
+    output: typeof ReferenceResponseSchema;
   },
   /**
    * @generated from rpc app.resources.v1.ResourceService.DeclareEnv

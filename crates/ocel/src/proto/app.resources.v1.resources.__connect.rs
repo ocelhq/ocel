@@ -6,6 +6,14 @@ pub type OwnedDeclareRequestView = ::buffa::view::OwnedView<
 pub type OwnedDeclareResponseView = ::buffa::view::OwnedView<
     crate::proto::app::resources::v1::__buffa::view::DeclareResponseView<'static>,
 >;
+///Shorthand for `OwnedView<ReferenceRequestView<'static>>`.
+pub type OwnedReferenceRequestView = ::buffa::view::OwnedView<
+    crate::proto::app::resources::v1::__buffa::view::ReferenceRequestView<'static>,
+>;
+///Shorthand for `OwnedView<ReferenceResponseView<'static>>`.
+pub type OwnedReferenceResponseView = ::buffa::view::OwnedView<
+    crate::proto::app::resources::v1::__buffa::view::ReferenceResponseView<'static>,
+>;
 ///Shorthand for `OwnedView<DeclareEnvRequestView<'static>>`.
 pub type OwnedDeclareEnvRequestView = ::buffa::view::OwnedView<
     crate::proto::app::resources::v1::__buffa::view::DeclareEnvRequestView<'static>,
@@ -38,6 +46,40 @@ for crate::proto::app::resources::v1::__buffa::view::DeclareResponseView<'_> {
 impl ::connectrpc::Encodable<crate::proto::app::resources::v1::DeclareResponse>
 for ::buffa::view::OwnedView<
     crate::proto::app::resources::v1::__buffa::view::DeclareResponseView<'static>,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::resources::v1::ReferenceResponse>
+for crate::proto::app::resources::v1::__buffa::view::ReferenceResponseView<'_> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::resources::v1::ReferenceResponse>
+for ::buffa::view::OwnedView<
+    crate::proto::app::resources::v1::__buffa::view::ReferenceResponseView<'static>,
 > {
     fn encode(
         &self,
@@ -138,6 +180,12 @@ pub const RESOURCE_SERVICE_DECLARE_SPEC: ::connectrpc::Spec = ::connectrpc::Spec
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
+/// Static [`Spec`](::connectrpc::Spec) for the `Reference` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const RESOURCE_SERVICE_REFERENCE_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/app.resources.v1.ResourceService/Reference",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
 /// Static [`Spec`](::connectrpc::Spec) for the `DeclareEnv` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const RESOURCE_SERVICE_DECLARE_ENV_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
         "/app.resources.v1.ResourceService/DeclareEnv",
@@ -221,6 +269,29 @@ pub trait ResourceService: Send + Sync + 'static {
         Output = ::connectrpc::ServiceResult<
             impl ::connectrpc::Encodable<
                 crate::proto::app::resources::v1::DeclareResponse,
+            > + Send + use<'a, Self>,
+        >,
+    > + Send;
+    /// Handle the Reference RPC.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn reference<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::app::resources::v1::ReferenceRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                crate::proto::app::resources::v1::ReferenceResponse,
             > + Send + use<'a, Self>,
         >,
     > + Send;
@@ -331,6 +402,35 @@ impl<S: ResourceService> ResourceServiceExt for S {
                 },
             )
             .with_spec(RESOURCE_SERVICE_DECLARE_SPEC)
+            .route_view(
+                RESOURCE_SERVICE_SERVICE_NAME,
+                "Reference",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::app::resources::v1::__buffa::view::ReferenceRequestView<
+                                'static,
+                            >,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::app::resources::v1::ReferenceRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.reference(ctx, sreq)
+                                .await?
+                                .encode::<
+                                    crate::proto::app::resources::v1::ReferenceResponse,
+                                >(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(RESOURCE_SERVICE_REFERENCE_SPEC)
             .route_view(
                 RESOURCE_SERVICE_SERVICE_NAME,
                 "DeclareEnv",
@@ -449,6 +549,12 @@ impl<T: ResourceService> ::connectrpc::Dispatcher for ResourceServiceServer<T> {
                         .with_spec(RESOURCE_SERVICE_DECLARE_SPEC),
                 )
             }
+            "Reference" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
+                        .with_spec(RESOURCE_SERVICE_REFERENCE_SPEC),
+                )
+            }
             "DeclareEnv" => {
                 Some(
                     ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
@@ -495,6 +601,28 @@ impl<T: ResourceService> ::connectrpc::Dispatcher for ResourceServiceServer<T> {
                         .await?
                         .encode::<
                             crate::proto::app::resources::v1::DeclareResponse,
+                        >(format)
+                })
+            }
+            "Reference" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::app::resources::v1::ReferenceRequest,
+                    >(request.encoded()?, format)?;
+                    let req: crate::proto::app::resources::v1::__buffa::view::ReferenceRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::app::resources::v1::ReferenceRequest,
+                    >::from_parts(&req, &body);
+                    svc.reference(ctx, req)
+                        .await?
+                        .encode::<
+                            crate::proto::app::resources::v1::ReferenceResponse,
                         >(format)
                 })
             }
@@ -706,6 +834,51 @@ where
                 &self.transport,
                 &self.config,
                 RESOURCE_SERVICE_DECLARE_SPEC
+                    .with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the Reference RPC. Sends a request to /app.resources.v1.ResourceService/Reference.
+    pub async fn reference(
+        &self,
+        request: crate::proto::app::resources::v1::ReferenceRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::resources::v1::__buffa::view::ReferenceResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.reference_with_options(
+                request,
+                ::connectrpc::client::CallOptions::default(),
+            )
+            .await
+    }
+    /// Call the Reference RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn reference_with_options(
+        &self,
+        request: crate::proto::app::resources::v1::ReferenceRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::resources::v1::__buffa::view::ReferenceResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                RESOURCE_SERVICE_REFERENCE_SPEC
                     .with_origin(::connectrpc::SpecOrigin::Client),
                 request,
                 options,

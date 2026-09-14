@@ -3,6 +3,7 @@ package deploycollector
 import (
 	"context"
 	"net/http"
+	"slices"
 	"sync"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
@@ -14,8 +15,9 @@ import (
 type Collector struct {
 	*envgate.Gate
 
-	mu        sync.Mutex
-	resources []declare.Resource
+	mu         sync.Mutex
+	resources  []declare.Resource
+	references []declare.Reference
 }
 
 func New(gate *envgate.Gate) *Collector {
@@ -35,12 +37,26 @@ func (c *Collector) Declare(_ context.Context, req *resourcesv1.DeclareRequest) 
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
-func (c *Collector) Snapshot() []declare.Resource {
+func (c *Collector) Reference(_ context.Context, req *resourcesv1.ReferenceRequest) (*resourcesv1.ReferenceResponse, error) {
+	ref, err := declare.ParseReference(req)
+	if err != nil {
+		return nil, err
+	}
+
+	c.mu.Lock()
+	c.references = append(c.references, ref)
+	c.mu.Unlock()
+
+	return &resourcesv1.ReferenceResponse{}, nil
+}
+
+func (c *Collector) Snapshot() declare.Collected {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]declare.Resource, len(c.resources))
-	copy(out, c.resources)
-	return out
+	return declare.Collected{
+		Resources:  slices.Clone(c.resources),
+		References: slices.Clone(c.references),
+	}
 }
 
 func (c *Collector) Mux() *http.ServeMux {

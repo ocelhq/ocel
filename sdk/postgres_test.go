@@ -77,6 +77,53 @@ func TestPostgresDeclaresDuringDiscovery(t *testing.T) {
 	}
 }
 
+func TestPostgresRefReferencesDuringDiscoveryWithoutDeclaring(t *testing.T) {
+	var seen []map[string]any
+	srv := collector(t, &seen)
+	t.Setenv(constants.PhaseEnvName, "discovery")
+	t.Setenv(constants.DevServerEnvName, srv.URL)
+
+	_, file, line, _ := runtime.Caller(0)
+	db := ocel.PostgresRef("main")
+
+	if got := db.Name(); got != "main" {
+		t.Errorf("Name() = %q, want %q", got, "main")
+	}
+	if len(seen) != 1 {
+		t.Fatalf("requests = %d, want 1", len(seen))
+	}
+	got := seen[0]
+	if got["__path"] != "/app.resources.v1.ResourceService/Reference" {
+		t.Errorf("path = %v, want a reference and never a declaration", got["__path"])
+	}
+	resource, _ := got["resource"].(map[string]any)
+	if resource["type"] != "RESOURCE_TYPE_POSTGRES" || resource["name"] != "main" {
+		t.Errorf("resource = %v", resource)
+	}
+	if _, carried := got["postgres"]; carried {
+		t.Errorf("reference = %v, want no config: the declaration owns it", got)
+	}
+	if want := fmt.Sprintf("%s:%d", file, line+1); got["source"] != want {
+		t.Errorf("source = %v, want %q", got["source"], want)
+	}
+}
+
+func TestAPostgresRefReadsTheBindingTheDeclarationReads(t *testing.T) {
+	t.Setenv("OCEL_RESOURCE_POSTGRES_main", `{"name":"main","postgres":{"host":"h","port":5432,"database":"d","username":"u","password":"p"}}`)
+
+	declared, err := ocel.Postgres("main").ConnectionString()
+	if err != nil {
+		t.Fatalf("Postgres ConnectionString() error = %v", err)
+	}
+	referenced, err := ocel.PostgresRef("main").ConnectionString()
+	if err != nil {
+		t.Fatalf("PostgresRef ConnectionString() error = %v", err)
+	}
+	if referenced != "postgres://u:p@h:5432/d" || referenced != declared {
+		t.Errorf("PostgresRef ConnectionString() = %q, want %q like the declaration", referenced, declared)
+	}
+}
+
 func TestVersionOverridesTheDeclaredVersion(t *testing.T) {
 	var seen []map[string]any
 	srv := collector(t, &seen)

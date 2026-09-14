@@ -32,6 +32,14 @@ func declare(req *resourcesv1.DeclareRequest) error {
 	return err
 }
 
+func reference(typ resourcesv1.ResourceType, name, source string) error {
+	_, err := resources().Reference(context.Background(), &resourcesv1.ReferenceRequest{
+		Resource: &resourcesv1.ResourceIdentifier{Type: typ, Name: name},
+		Source:   source,
+	})
+	return err
+}
+
 func declareVariables(req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
 	return resources().DeclareEnv(context.Background(), req)
 }

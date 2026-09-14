@@ -5,12 +5,14 @@ import { BindingType } from "../src/gen/proto/common/bindings/v1/bindings_pb.js"
 import { siteOfThisFile } from "./fixtures/callsite/postgres/index.js";
 
 const declareMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
+const referenceMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
 vi.mock("../src/utils/rpc", () => ({
-  rpc: { resource: { declare: declareMock } },
+  rpc: { resource: { declare: declareMock, reference: referenceMock } },
 }));
 
 const { Postgres } = await import("../src/postgres/pg.js");
+const { postgres } = await import("../src/postgres/index.js");
 
 describe("declarationSite", () => {
   it("names a user file whose path looks like one of the SDK's own modules", () => {
@@ -24,6 +26,18 @@ describe("declarationSite", () => {
     new Postgres("main");
 
     expect(declareMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resource: { name: "main", type: BindingType.POSTGRES },
+        source: `${fileURLToPath(import.meta.url)}:${Number(line) + 1}`,
+      }),
+    );
+  });
+
+  it("names the caller of a reference rather than the SDK module that referenced for it", () => {
+    const line = new Error().stack?.split("\n")[1]?.match(/:(\d+):\d+\)?$/)?.[1];
+    postgres.ref("main");
+
+    expect(referenceMock).toHaveBeenCalledWith(
       expect.objectContaining({
         resource: { name: "main", type: BindingType.POSTGRES },
         source: `${fileURLToPath(import.meta.url)}:${Number(line) + 1}`,

@@ -3,15 +3,15 @@ import os
 
 import pytest
 
-from ocel import UnprovisionedResourceError, postgres
+from ocel import UnprovisionedResourceError, postgres, postgres_ref
 from ocel.gen.app.resources.v1.resources_pb import ResourceType
 
 
 def test_a_declared_database_reaches_the_dev_server_with_the_file_that_declared_it(collector):
     postgres("main")
 
-    assert len(collector.declares) == 1
-    path, protocol, declared = collector.declares[0]
+    assert len(collector.requests) == 1
+    path, protocol, declared = collector.requests[0]
     assert path == "/app.resources.v1.ResourceService/Declare"
     assert protocol == "1"
     assert declared.resource.type is ResourceType.POSTGRES
@@ -21,6 +21,59 @@ def test_a_declared_database_reaches_the_dev_server_with_the_file_that_declared_
     file, _, line = declared.source.rpartition(":")
     assert os.path.basename(file) == "test_postgres.py"
     assert int(line) > 0
+
+
+def test_a_referenced_database_reaches_the_dev_server_as_a_reference_and_never_a_declaration(
+    collector,
+):
+    db = postgres_ref("main")
+
+    assert db.name == "main"
+    assert len(collector.requests) == 1
+    path, protocol, referenced = collector.requests[0]
+    assert path == "/app.resources.v1.ResourceService/Reference"
+    assert protocol == "1"
+    assert referenced.resource.type is ResourceType.POSTGRES
+    assert referenced.resource.name == "main"
+    file, _, line = referenced.source.rpartition(":")
+    assert os.path.basename(file) == "test_postgres.py"
+    assert int(line) > 0
+
+
+def test_a_referenced_database_reached_during_discovery_says_it_is_not_provisioned_yet(collector):
+    with pytest.raises(UnprovisionedResourceError):
+        _ = postgres_ref("main").connection_string
+
+
+def test_a_referenced_database_reads_the_binding_its_declaration_reads(monkeypatch):
+    monkeypatch.delenv("OCEL_PHASE", raising=False)
+    monkeypatch.setenv(
+        "OCEL_RESOURCE_POSTGRES_main",
+        json.dumps(
+            {
+                "name": "main",
+                "postgres": {
+                    "host": "h",
+                    "port": 5432,
+                    "database": "d",
+                    "username": "u",
+                    "password": "p",
+                },
+            }
+        ),
+    )
+
+    assert postgres_ref("main").connection_string == "postgres://u:p@h:5432/d"
+    assert postgres_ref("main").connection_string == postgres("main").connection_string
+
+
+def test_a_reference_the_server_refuses_says_what_it_said(monkeypatch):
+    monkeypatch.setenv("OCEL_PHASE", "discovery")
+    monkeypatch.setenv("OCEL_DEV_SERVER", "http://127.0.0.1:1")
+
+    with pytest.raises(RuntimeError) as raised:
+        postgres_ref("main")
+    assert str(raised.value).startswith("ocel: reference postgres 'main': ")
 
 
 def test_a_database_reached_during_discovery_says_it_is_not_provisioned_yet(collector):
@@ -38,7 +91,7 @@ def test_a_database_reached_during_discovery_says_it_is_not_provisioned_yet(coll
 def test_a_declared_version_replaces_the_one_ocel_picks(collector):
     postgres("main", version="16")
 
-    assert collector.declares[0][2].config.value.version == "16"
+    assert collector.requests[0][2].config.value.version == "16"
 
 
 def test_a_declaration_the_server_refuses_says_what_it_said(monkeypatch):

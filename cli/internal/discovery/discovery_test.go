@@ -170,6 +170,10 @@ func (c *collector) Declare(_ context.Context, req *resourcesv1.DeclareRequest) 
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
+func (c *collector) Reference(_ context.Context, _ *resourcesv1.ReferenceRequest) (*resourcesv1.ReferenceResponse, error) {
+	return &resourcesv1.ReferenceResponse{}, nil
+}
+
 func (c *collector) DeclareEnv(_ context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

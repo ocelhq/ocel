@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ResourceType } from "../gen/proto/app/resources/v1/resources_pb.js";
+
+const declareMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
+const referenceMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
 vi.mock("../utils/rpc", () => ({
-  rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
+  rpc: { resource: { declare: declareMock, reference: referenceMock } },
 }));
 
 const { postgres, connectionStringFor, UnprovisionedResourceError } = await import("./index.js");
@@ -73,5 +77,50 @@ describe("postgres()", () => {
     expect(decodeURIComponent(url.password)).toBe("p/w");
     expect(url.pathname).toBe("/d");
     expect(url.port).toBe("5432");
+  });
+});
+
+describe("postgres.ref()", () => {
+  beforeEach(() => {
+    declareMock.mockClear();
+    referenceMock.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("references the database during discovery and never declares it", () => {
+    vi.stubEnv("OCEL_PHASE", "discovery");
+
+    postgres.ref("orders");
+
+    expect(referenceMock).toHaveBeenCalledWith(
+      expect.objectContaining({ resource: { name: "orders", type: ResourceType.POSTGRES } }),
+    );
+    expect(declareMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses every read during discovery, as the declaration does", () => {
+    vi.stubEnv("OCEL_PHASE", "discovery");
+
+    expect(() => postgres.ref("orders").query).toThrow(UnprovisionedResourceError);
+  });
+
+  it("builds its pool from the binding the declaration reads", () => {
+    vi.stubEnv("OCEL_PHASE", "");
+    vi.stubEnv(
+      "OCEL_RESOURCE_POSTGRES_orders",
+      JSON.stringify({
+        name: "orders",
+        postgres: { host: "h", port: 5432, database: "d", username: "u", password: "p" },
+      }),
+    );
+
+    const referenced = postgres.ref("orders");
+
+    expect(referenced.options).toMatchObject({ host: "h", port: 5432, database: "d", user: "u" });
+    expect(referenced.connectionString).toBe(postgres("orders").connectionString);
+    expect(referenceMock).not.toHaveBeenCalled();
   });
 });

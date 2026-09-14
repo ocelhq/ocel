@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -53,14 +54,23 @@ type identity struct {
 }
 
 type UnresolvedDeclarationError struct {
-	Type   resourcesv1.ResourceType
-	Name   string
-	Source string
+	Declaration
 }
 
 func (e *UnresolvedDeclarationError) Error() string {
 	return fmt.Sprintf(
 		"attribution: cannot tell which project file declares %s %q, so no app can be granted it: the declaration names %q, which is not a project file",
+		e.Type, e.Name, e.Source,
+	)
+}
+
+type UnresolvedReferenceError struct {
+	declare.Reference
+}
+
+func (e *UnresolvedReferenceError) Error() string {
+	return fmt.Sprintf(
+		"attribution: cannot tell which project file references %s %q, so no app can be granted it through that reference: the reference names %q, which is not a project file",
 		e.Type, e.Name, e.Source,
 	)
 }
@@ -95,7 +105,7 @@ func listed(items []string) string {
 	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
 
-func Compute(ctx context.Context, root string, apps []App, declarations []Declaration) ([]Usage, error) {
+func Compute(ctx context.Context, root string, apps []App, declarations []Declaration, references []declare.Reference) ([]Usage, error) {
 	if len(declarations) == 0 {
 		return nil, nil
 	}
@@ -123,13 +133,16 @@ func Compute(ctx context.Context, root string, apps []App, declarations []Declar
 		return nil, nil
 	}
 
-	declaringFiles := make(map[string][]Declaration, len(declarations))
+	holdingFiles := make(holdings, len(declarations)+len(references))
 	for _, d := range declarations {
-		site, ok := DeclaringSite(root, d.Source)
-		if !ok {
-			return nil, &UnresolvedDeclarationError{Type: d.Type, Name: d.Name, Source: d.Source}
+		if err := holdingFiles.hold(root, identity{d.Type, d.Name}, d.Source, &UnresolvedDeclarationError{d}); err != nil {
+			return nil, err
 		}
-		declaringFiles[site.File] = append(declaringFiles[site.File], d)
+	}
+	for _, r := range references {
+		if err := holdingFiles.hold(root, identity{r.Type, r.Name}, r.Source, &UnresolvedReferenceError{r}); err != nil {
+			return nil, err
+		}
 	}
 
 	var usages []Usage
@@ -138,15 +151,14 @@ func Compute(ctx context.Context, root string, apps []App, declarations []Declar
 
 		byResource := map[identity]*Usage{}
 		for _, entry := range slices.Sorted(maps.Keys(entries)) {
-			for file, declared := range declaringFiles {
+			for file, held := range holdingFiles {
 				if !entries[entry](file) {
 					continue
 				}
-				for _, d := range declared {
-					key := identity{d.Type, d.Name}
+				for _, key := range held {
 					u, ok := byResource[key]
 					if !ok {
-						u = &Usage{App: app.Name, Type: d.Type, Name: d.Name}
+						u = &Usage{App: app.Name, Type: key.typ, Name: key.name}
 						byResource[key] = u
 					}
 					if !slices.Contains(u.Files, entry) {
@@ -172,6 +184,17 @@ func Compute(ctx context.Context, root string, apps []App, declarations []Declar
 		return strings.Compare(a.Name, b.Name)
 	})
 	return usages, nil
+}
+
+type holdings map[string][]identity
+
+func (h holdings) hold(root string, id identity, source string, unresolved error) error {
+	site, ok := DeclaringSite(root, source)
+	if !ok {
+		return unresolved
+	}
+	h[site.File] = append(h[site.File], id)
+	return nil
 }
 
 type Site struct {

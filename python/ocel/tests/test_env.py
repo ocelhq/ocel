@@ -737,7 +737,7 @@ def test_an_instance_taken_during_discovery_reads_the_environment_it_stands_in(c
 
 
 def declare_env_bodies(collector):
-    return [body for path, _, body in collector.declares if path.endswith("/DeclareEnv")]
+    return [body for path, _, body in collector.requests if path.endswith("/DeclareEnv")]
 
 
 def test_an_optional_group_nothing_is_delivered_for_reads_as_none(monkeypatch):

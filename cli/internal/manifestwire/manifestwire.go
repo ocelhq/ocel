@@ -14,19 +14,30 @@ func Runtime(runtime projectconfig.Runtime) manifestbuilder.Runtime {
 func Declarations(configDir string, resources []declare.Resource) []manifestbuilder.Declaration {
 	decls := make([]manifestbuilder.Declaration, len(resources))
 	for i, r := range resources {
-		var source string
-		if site, ok := attribution.DeclaringSite(configDir, r.Source); ok {
-			source = site.String()
-		}
 		decls[i] = manifestbuilder.Declaration{
 			Type:     r.Type,
 			Name:     r.Name,
 			Postgres: r.Postgres,
 			Bucket:   r.Bucket,
-			Source:   source,
+			Source:   writtenAt(configDir, r.Source),
 		}
 	}
 	return decls
+}
+
+func References(configDir string, references []declare.Reference) []manifestbuilder.Reference {
+	out := make([]manifestbuilder.Reference, len(references))
+	for i, r := range references {
+		out[i] = manifestbuilder.Reference{Type: r.Type, Name: r.Name, Source: writtenAt(configDir, r.Source)}
+	}
+	return out
+}
+
+func writtenAt(configDir, source string) string {
+	if site, ok := attribution.DeclaringSite(configDir, source); ok {
+		return site.String()
+	}
+	return source
 }
 
 func Bindings(bindings []projectconfig.Binding) []manifestbuilder.Binding {

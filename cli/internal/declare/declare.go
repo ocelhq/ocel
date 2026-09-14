@@ -15,6 +15,31 @@ type Resource struct {
 	Source   string
 }
 
+type Reference struct {
+	Type   resourcesv1.ResourceType
+	Name   string
+	Source string
+}
+
+type Collected struct {
+	Resources  []Resource
+	References []Reference
+}
+
+func ParseReference(req *resourcesv1.ReferenceRequest) (Reference, error) {
+	id := req.GetResource()
+	if _, ok := naming.BindableAs(id.GetType()); !ok {
+		return Reference{}, fmt.Errorf("unsupported resource type: %s", id.GetType())
+	}
+	if id.GetName() == "" {
+		return Reference{}, fmt.Errorf("a reference to a %s names no resource", id.GetType())
+	}
+	if req.GetSource() == "" {
+		return Reference{}, fmt.Errorf("the reference to the %s %q names no source file, so a deploy could not say where it was written", id.GetType(), id.GetName())
+	}
+	return Reference{Type: id.GetType(), Name: id.GetName(), Source: req.GetSource()}, nil
+}
+
 func Parse(req *resourcesv1.DeclareRequest) (Resource, error) {
 	id := req.GetResource()
 	if _, ok := naming.BindableAs(id.GetType()); !ok {

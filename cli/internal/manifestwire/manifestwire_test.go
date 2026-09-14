@@ -58,4 +58,16 @@ func TestDeclarations(t *testing.T) {
 			t.Errorf("Source = %q, want %q", decls[0].Source, "shared/db.ts:3")
 		}
 	})
+	t.Run("keeps a source outside the project as it was written rather than dropping it", func(t *testing.T) {
+		t.Parallel()
+
+		elsewhere := filepath.Join(t.TempDir(), "db.ts") + ":3"
+		resources := []declare.Resource{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Source: elsewhere}}
+
+		decls := Declarations(t.TempDir(), resources)
+
+		if decls[0].Source != elsewhere {
+			t.Errorf("Source = %q, want %q", decls[0].Source, elsewhere)
+		}
+	})
 }

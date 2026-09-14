@@ -65,6 +65,17 @@ pub enum Error {
         said: String,
     },
 
+    /// Discovery could not tell the CLI about a reference to a resource declared elsewhere.
+    #[error("ocel: reference {kind} '{name}': {said}")]
+    Reference {
+        /// The kind of resource being referenced.
+        kind: String,
+        /// The name it is referenced by.
+        name: String,
+        /// What the dev server said.
+        said: String,
+    },
+
     /// Discovery could not tell the CLI about the variables a struct declares.
     #[error("ocel: declare env: {said}")]
     DeclareEnv {

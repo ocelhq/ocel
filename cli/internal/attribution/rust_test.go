@@ -39,7 +39,7 @@ func rustUsages(t *testing.T, root, source string) []Usage {
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: source + ":1",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestRustReachGrantsTheFixtureResourceToItsApp(t *testing.T) {
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "src", "main.rs") + ":4",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestRustReachGrantsASharedCrateResourceToEveryAppThatLinksIt(t *testing.T) 
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "crates", "infra", "src", "lib.rs") + ":4",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestRustReachGrantsNothingFromASiblingCrateUnderTheConfigDir(t *testing.T) 
 		Type:   resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 		Name:   "main",
 		Source: filepath.Join(root, "apps", "web", "src", "main.rs") + ":1",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("Compute: %v", err)
 	}
