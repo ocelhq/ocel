@@ -14,6 +14,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
@@ -104,11 +105,16 @@ func resourceCoordinate(project, env, logicalName string, kind naming.Kind) nami
 	return naming.Coordinate{Project: project, Env: env, App: naming.InfraApp, Kind: kind, Name: name}
 }
 
+func appPhysicalPrefix(at naming.Coordinate, max int) string {
+	scope := awsports.AppScope + naming.WordSeparator
+	return scope + at.PhysicalPrefix(max-len(scope))
+}
+
 func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args bucketArgs, stateTableName, boundaryARN string, sessions sessionScope, completerCode payloads.Placement) error {
 	at := resourceCoordinate(project, env, logicalName, naming.KindBucket)
 
 	bucket, err := s3.NewBucketV2(ctx, naming.ResourceID(at.Kind, at.Name), &s3.BucketV2Args{
-		BucketPrefix: pulumi.String(at.PhysicalPrefix(maxS3BucketPrefixLen)),
+		BucketPrefix: pulumi.String(appPhysicalPrefix(at, maxS3BucketPrefixLen)),
 		ForceDestroy: pulumi.Bool(args.ForceDestroy),
 		Tags:         resourceTags(at.Kind, "", args.Tags),
 	})

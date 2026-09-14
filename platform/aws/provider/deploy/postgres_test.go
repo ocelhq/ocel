@@ -116,13 +116,13 @@ func TestRDSIdentifierPrefix(t *testing.T) {
 
 	at := resourceCoordinate("shop", "prod", "db--main", naming.KindDatabase)
 
-	t.Run("carries project, env, resource and role", func(t *testing.T) {
+	t.Run("carries the app scope, project, env, resource and role", func(t *testing.T) {
 		t.Parallel()
 
 		cases := map[string]string{
-			"":         "shop-prod-main-",
-			"instance": "shop-prod-main-instance-",
-			"subnets":  "shop-prod-main-subnets-",
+			"":         "ocel-app-shop-prod-main-",
+			"instance": "ocel-app-shop-prod-main-instance-",
+			"subnets":  "ocel-app-shop-prod-main-subnets-",
 		}
 		for role, want := range cases {
 			if got := rdsIdentifierPrefix(at, role); got != want {

@@ -28,7 +28,6 @@ type grant struct {
 
 var scopingConditionKeys = []string{
 	"aws:RequestTag/ocel:",
-	"aws:ResourceAccount",
 	"aws:ResourceTag/ocel:",
 	"ec2:CreateAction",
 	"iam:PassedToService",
@@ -546,6 +545,46 @@ func TestBootstrapTierOwnsOnlyTheLogGroupsItsStacksDeclare(t *testing.T) {
 			}
 		default:
 			t.Errorf("the bootstrap tier grants %s on %s, beyond the log groups a bootstrap or a deploy owns", g.action, g.resource)
+		}
+	}
+}
+
+func TestEveryTierReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppScope(t *testing.T) {
+	bootstrapARNs := defaultNamespace.ScopedARNs()
+	for tier, document := range bothTiers(t) {
+		for g := range grantsOf(t, document) {
+			switch {
+			case strings.HasPrefix(g.action, "s3:"):
+				if g.resource == bootstrapARNs.bootstrapBucket || g.resource == bootstrapARNs.bootstrapObject {
+					continue
+				}
+				if !strings.HasPrefix(g.resource, "arn:aws:s3:::"+appScopePrefix) {
+					t.Errorf("the %s tier grants %s on %s, a bucket name a deploy never creates: S3 evaluates no Ocel tag on a bucket, so the name prefix is the only scope", tier, g.action, g.resource)
+				}
+			case strings.HasPrefix(g.action, "rds:") && !readOnly(g.action):
+				for _, kind := range []string{"cluster:", "db:", "subgrp:"} {
+					if strings.Contains(g.resource, ":"+kind) && !strings.Contains(g.resource, ":"+kind+appScopePrefix) {
+						t.Errorf("the %s tier grants %s on %s, an identifier a deploy never mints", tier, g.action, g.resource)
+					}
+				}
+			case strings.HasPrefix(g.action, "secretsmanager:"):
+				if g.condition != conditionJSON(t, managedByAnAppCluster()) {
+					t.Errorf("the %s tier grants %s on %s under %s, want the secret pinned to a cluster in the app scope through the tag RDS stamps on it, or the credential reads every Aurora master password in the account", tier, g.action, g.resource, g.condition)
+				}
+			}
+		}
+	}
+}
+
+func TestTheBootstrapTierTouchesOnlyEventSourceMappingsOfItsOwnFunctions(t *testing.T) {
+	r := defaultNamespace.ScopedARNs()
+	want := conditionJSON(t, map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction}})
+	for g := range grantsOf(t, mustRender(t, BootstrapCredentialPermissions)) {
+		if !strings.HasSuffix(g.action, "EventSourceMapping") {
+			continue
+		}
+		if g.condition != want {
+			t.Errorf("the bootstrap tier grants %s on %s under %s, want it pinned to the bootstrap's own functions through lambda:FunctionArn", g.action, g.resource, g.condition)
 		}
 	}
 }
