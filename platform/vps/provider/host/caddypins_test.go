@@ -118,7 +118,7 @@ func TestAPinIsReadOffTheBoxOnceRatherThanOnEveryReshape(t *testing.T) {
 	serves := stood.answer
 	reads := 0
 	stood.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted(PinCertificate(at))) {
+		if strings.HasPrefix(command, "cat "+quoted(PinCertificate(at))) {
 			reads++
 			return session.Result{Stdout: string(covering)}, true
 		}
