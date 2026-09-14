@@ -43,7 +43,9 @@ const (
 )
 
 const (
-	WaitTimeout       = 10 * time.Minute
+	CreateWaitTimeout = 20 * time.Minute
+	UpdateWaitTimeout = 20 * time.Minute
+	DeleteWaitTimeout = 30 * time.Minute
 	stackWaitMinDelay = 5 * time.Second
 	stackWaitMaxDelay = 20 * time.Second
 )
@@ -198,7 +200,7 @@ func Update(ctx context.Context, cfn API, namer ChangeSetNamer, stackName, templ
 	executed = true
 
 	w := cloudformation.NewStackUpdateCompleteWaiter(cfn, UpdateCadence)
-	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, WaitTimeout); err != nil {
+	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, UpdateWaitTimeout); err != nil {
 		return fmt.Errorf("wait for %s update: %w", stackName, err)
 	}
 	return nil
@@ -225,7 +227,7 @@ func Restamp(ctx context.Context, cfn API, stackName string, params []cfntypes.P
 		return fmt.Errorf("restamp %s: %w", stackName, err)
 	}
 	w := cloudformation.NewStackUpdateCompleteWaiter(cfn, UpdateCadence)
-	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, WaitTimeout); err != nil {
+	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, UpdateWaitTimeout); err != nil {
 		return fmt.Errorf("wait for the %s restamp: %w", stackName, err)
 	}
 	return nil
@@ -372,7 +374,7 @@ func createOnce(ctx context.Context, cfn API, stackName, template string, params
 		return fmt.Errorf("create %s stack: %w", stackName, err)
 	}
 	w := cloudformation.NewStackCreateCompleteWaiter(cfn, CreateCadence)
-	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, WaitTimeout); err != nil {
+	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, CreateWaitTimeout); err != nil {
 		return fmt.Errorf("wait for %s create: %w", stackName, err)
 	}
 	return nil
@@ -417,7 +419,7 @@ func Delete(ctx context.Context, cfn TeardownAPI, stackName string) error {
 		return fmt.Errorf("delete %s stack: %w", stackName, err)
 	}
 	w := cloudformation.NewStackDeleteCompleteWaiter(cfn, DeleteCadence)
-	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, WaitTimeout); err != nil {
+	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, DeleteWaitTimeout); err != nil {
 		return fmt.Errorf("wait for %s delete: %w", stackName, err)
 	}
 	return nil
