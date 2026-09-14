@@ -5,11 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"maps"
 	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/runtimekit/front"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -136,9 +139,23 @@ type Container struct {
 	Image   string
 	Class   providerkit.Class
 
-	Env      map[string]string
-	Resolved bool
-	Declared []string
+	Env        map[string]string
+	HealthPath string
+	Manifest   []byte
+	Resolved   bool
+	Declared   []string
+}
+
+func (c Container) delivered() map[string]string {
+	env := make(map[string]string, len(c.Env)+2)
+	maps.Copy(env, c.Env)
+	if c.HealthPath != "" {
+		env[front.HealthPathVar] = c.HealthPath
+	}
+	if len(c.Manifest) > 0 {
+		env[live.EnvVar] = string(c.Manifest)
+	}
+	return env
 }
 
 func ContainerName(stack, app, deployment, image string) string {
@@ -165,6 +182,9 @@ func containerRun(spec Container, held handoff) []string {
 	argv = append(argv, confined(appCapabilities, false)...)
 	if held.path != "" {
 		argv = append(argv, "--env-file", held.path)
+	}
+	if len(spec.Manifest) > 0 {
+		argv = append(argv, "--mount", "type=bind,src="+LiveSocketDir+",dst="+LiveSocketDir+",readonly")
 	}
 	return append(argv, "--env", providerkit.InjectedPortName+"="+providerkit.InjectedPortText, spec.Image)
 }
@@ -214,12 +234,12 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 	if err != nil {
 		return err
 	}
-	held, err := handing(spec)
-	if err != nil {
-		return err
-	}
 	said := h.said(ctx, servingCommand(spec.Name), elevation)
 	if spec.Resolved {
+		held, err := handing(spec)
+		if err != nil {
+			return err
+		}
 		if stillServing(said, spec.Image, held.digest) {
 			return nil
 		}
@@ -232,24 +252,30 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 				restartCommand(said, spec.Name), nil, elevation)
 			return err
 		}
-		declared := spec.Declared
-		if len(declared) == 0 {
-			handed, known, err := h.handed(ctx, spec)
-			if err != nil {
-				return err
-			}
-			if !known {
-				return providerkit.Refuse(providerkit.CodeNotReady,
-					"%s no longer stands on this box, and this box holds no note of what its deploy handed it: a container is handed the values its own deploy resolved, bindings included, and a promotion carries none of them, so putting one back here could serve %s with an empty environment. Run `ocel deploy` to stand it up with its values",
-					spec.Name, spec.App)
-			}
-			declared = handed
+		note, known, err := h.handed(ctx, spec)
+		if err != nil {
+			return err
 		}
-		if len(declared) > 0 {
+		switch {
+		case known && len(note.Handed) > 0:
 			return providerkit.Refuse(providerkit.CodeNotReady,
-				"%s no longer stands on this box, and %s declares %s: a container is handed the values its own deploy resolved, and a promotion carries none of them, so putting one back here would serve %s with an empty environment. Run `ocel deploy` to stand it up with its values",
-				spec.Name, spec.App, strings.Join(declared, ", "), spec.App)
+				"%s no longer stands on this box, and its deploy handed it %s: a container is handed the values its own deploy resolved, and a promotion carries none of them, so putting one back here would serve %s without them. Run `ocel deploy` to stand it up with its values",
+				spec.Name, strings.Join(note.Handed, ", "), spec.App)
+		case known:
+			spec.Manifest = note.Live
+		case len(spec.Declared) > 0:
+			return providerkit.Refuse(providerkit.CodeNotReady,
+				"%s no longer stands on this box, and %s declares %s: this box holds no note of what its deploy handed it and which of those it reads live, so putting one back here could serve %s with an empty environment. Run `ocel deploy` to stand it up with its values",
+				spec.Name, spec.App, strings.Join(spec.Declared, ", "), spec.App)
+		default:
+			return providerkit.Refuse(providerkit.CodeNotReady,
+				"%s no longer stands on this box, and this box holds no note of what its deploy handed it: a container is handed the values its own deploy resolved, bindings included, and a promotion carries none of them, so putting one back here could serve %s with an empty environment. Run `ocel deploy` to stand it up with its values",
+				spec.Name, spec.App)
 		}
+	}
+	held, err := handing(spec)
+	if err != nil {
+		return err
 	}
 	if _, err := h.ran(ctx, "clear the name "+spec.Name,
 		"docker rm --force "+quoted(spec.Name)+" >/dev/null 2>&1 || true", nil, elevation); err != nil {

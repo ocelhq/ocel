@@ -1,14 +1,21 @@
 package vps_test
 
 import (
+	"archive/tar"
 	"context"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/google/go-containerregistry/pkg/registry"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/empty"
+	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -264,5 +271,84 @@ func TestTheTransferNamesTheMachineRatherThanTheCoordinate(t *testing.T) {
 	}
 	if got := named.ImageDestination(); got != "box.invalid" {
 		t.Errorf("ImageDestination() = %q, want the machine the image lands on", got)
+	}
+}
+
+func wrapped(t *testing.T) v1.Image {
+	t.Helper()
+	base, err := mutate.Config(empty.Image, v1.Config{Cmd: []string{"/app"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := providerkit.WrapContainer(base, []byte("#!/bin/sh\nexec \"$@\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return built
+}
+
+func TestAWrappedImageIsWrittenAsATarballAndLoadedIntoTheMachinesDaemonWithoutReadingTheLocalOne(t *testing.T) {
+	reads := daemonHolding(t, "tar-bytes")
+	machine := &box{}
+	store := standing(t, machine)
+
+	push := aPush()
+	push.Digest = ""
+	push.Built = wrapped(t)
+	if err := store.Push(context.Background(), push, nil); err != nil {
+		t.Fatalf("Push() of a wrapped image = %v", err)
+	}
+	if *reads != 0 {
+		t.Errorf("the local daemon was read %d times for an image providerkit already wrapped in memory: what the daemon holds is the unwrapped base", *reads)
+	}
+	if commands := strings.Join(machine.commands(), "\n"); !strings.Contains(commands, "docker load") {
+		t.Errorf("the machine ran %q, want the wrapped image loaded into its own daemon", commands)
+	}
+	var fed string
+	for at, command := range machine.commands() {
+		if strings.Contains(command, "docker load") {
+			fed = machine.carried()[at]
+		}
+	}
+	archive := tar.NewReader(strings.NewReader(fed))
+	var names []string
+	for {
+		header, err := archive.Next()
+		if err != nil {
+			break
+		}
+		names = append(names, header.Name)
+	}
+	if !slices.Contains(names, "manifest.json") {
+		t.Errorf("the machine was fed an archive holding %v, and `docker load` reads a manifest.json out of it", names)
+	}
+}
+
+func TestAWrappedImagePulledOntoTheMachineIsPinnedToTheDigestOfWhatWasPushed(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	served := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(served.Close)
+	server := strings.TrimPrefix(served.URL, "http://")
+	store, err := p.Images(context.Background(), providerkit.RegistryTarget{Server: server})
+	if err != nil {
+		t.Fatal(err)
+	}
+	built := wrapped(t)
+	digest, err := built.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	push := providerkit.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", Target: server + "/shop/web:sha256-abc-ocel-0123", Built: built}
+	if err := store.Push(context.Background(), push, nil); err != nil {
+		t.Fatalf("Push() = %v", err)
+	}
+	if commands := strings.Join(machine.commands(), "\n"); !strings.Contains(commands, "docker pull "+quote(server+"/shop/web@"+digest.String())) {
+		t.Errorf("the machine ran:\n%s\nwant a pull pinned to the digest of the wrapped image, which is what the registry now holds", commands)
 	}
 }
