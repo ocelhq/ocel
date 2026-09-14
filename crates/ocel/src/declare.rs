@@ -12,6 +12,7 @@ use crate::Error;
 
 const PHASE_ENV: &str = "OCEL_PHASE";
 const DEV_SERVER_ENV: &str = "OCEL_DEV_SERVER";
+const DEV_SERVER_TOKEN_ENV: &str = "OCEL_DEV_SERVER_TOKEN";
 const SOURCE_ROOT_ENV: &str = "OCEL_SOURCE_ROOT";
 const DISCOVERY_PHASE: &str = "discovery";
 
@@ -231,9 +232,11 @@ async fn post_all(declared: &Declared) -> Result<(), Error> {
     let Ok(base) = server.trim_end_matches('/').parse() else {
         return Err(Error::DevServer { server });
     };
+    let token = std::env::var(DEV_SERVER_TOKEN_ENV).unwrap_or_default();
     let client = ResourceServiceClient::new(
         connectrpc::client::HttpClient::plaintext(),
-        connectrpc::client::ClientConfig::new(base),
+        connectrpc::client::ClientConfig::new(base)
+            .with_default_header("authorization", format!("Bearer {token}")),
     );
     for resource in &declared.resources {
         client

@@ -63,6 +63,7 @@ fn under_discovery(app: impl FnOnce()) -> Received {
     let (url, requests) = collector(1);
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", &url);
+    std::env::set_var("OCEL_DEV_SERVER_TOKEN", collector::TOKEN);
 
     app();
 
