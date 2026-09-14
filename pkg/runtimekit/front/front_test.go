@@ -1,6 +1,8 @@
 package front
 
 import (
+	"bufio"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 const healthPath = "/_ocel/health"
@@ -222,6 +225,46 @@ func TestHandler(t *testing.T) {
 			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadGateway)
 		}
 	})
+}
+
+func TestAStreamTheAppFlushesReachesTheClientEventByEvent(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	up := &upstream{}
+	up.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher := w.(http.Flusher)
+		fmt.Fprint(w, "data: first\n\n")
+		flusher.Flush()
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(up.server.Close)
+	front := serveFront(t, up, nil, nil)
+
+	resp := ask(t, front, http.MethodGet, "/sse", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	arrived := make(chan string, 1)
+	go func() {
+		line, err := bufio.NewReader(resp.Body).ReadString('\n')
+		if err != nil {
+			line = err.Error()
+		}
+		arrived <- line
+	}()
+	select {
+	case line := <-arrived:
+		if line != "data: first\n" {
+			t.Errorf("the client read %q, want the event the app flushed", line)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the event the app flushed never reached the client while the stream stayed open, so the front buffers what a streaming app hands it")
+	}
 }
 
 func TestGuardFromEnv(t *testing.T) {
