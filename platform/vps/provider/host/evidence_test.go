@@ -69,7 +69,7 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 func inspectRosters() map[string][]string {
 	return map[string][]string{
 		"docker inspect":         {"containerProbe", "containerRising", "servingCommand", "stateCommand"},
-		"docker network inspect": {"command", "networkCommand", "networkProbe"},
+		"docker network inspect": {"command", "networkCommand", "networkForgetting", "networkProbe", "networkStanding"},
 		"docker image inspect":   {"imageHeld"},
 	}
 }
@@ -106,22 +106,39 @@ func TestEveryInspectThisPackageRunsIsOneOfTheFlavoursThoseRostersCover(t *testi
 func TestNoNetworkInspectCanNameAContainerToInspectInstead(t *testing.T) {
 	t.Parallel()
 
-	networking := map[string]string{
-		"what a bootstrap creates the proxy network with": networkCommand(),
-		"what a bootstrap probes the proxy network with":  networkProbe(),
-		"what a destroy removes the proxy network with":   removal{kind: KindNetwork, path: ProxyNetwork}.command(),
+	project := AppNetwork(valued().Class, valued().Project)
+	networking := map[string]struct{ command, network string }{
+		"what a bootstrap creates the proxy network with":     {networkCommand(), ProxyNetwork},
+		"what a bootstrap probes the proxy network with":      {networkProbe(), ProxyNetwork},
+		"what a destroy removes the proxy network with":       {removal{kind: KindNetwork, path: ProxyNetwork}.command(), ProxyNetwork},
+		"what a deploy puts a project's network up with":      {networkStanding(valued()), project},
+		"what a teardown takes a project's network down with": {networkForgetting(valued().Class, valued().Project), project},
 	}
 	if len(networking) != len(inspectRosters()["docker network inspect"]) {
 		t.Fatalf("this bench reads %d network inspects and the package renders %d, so what it does not read is held to nothing",
 			len(networking), len(inspectRosters()["docker network inspect"]))
 	}
-	for what, command := range networking {
-		if !strings.Contains(command, "docker network inspect "+quoted(ProxyNetwork)) {
-			t.Fatalf("%s runs %q, which inspects no network by name, so this guard is reading a command that does nothing", what, command)
+	for what, held := range networking {
+		inspects := 0
+		for line := range strings.Lines(held.command) {
+			for _, ask := range strings.Split(line, "docker network inspect ")[1:] {
+				inspects++
+				ask, _, _ = strings.Cut(ask, "|")
+				if !strings.Contains(ask, quoted(held.network)) {
+					t.Errorf("%s runs %q, which inspects something other than %s by name", what, strings.TrimSpace(line), held.network)
+				}
+				if strings.Contains(ask, "--type container") || strings.Contains(ask, ProxyContainer) {
+					t.Errorf("%s runs %q and inspects a container: a network inspect is exempt from naming its fields because a network carries no value a container was handed, and one that reaches a container is not",
+						what, strings.TrimSpace(line))
+				}
+				if format, formatted := strings.CutPrefix(ask, "--format "); formatted && !strings.HasPrefix(format, quoted(membersFormat)) {
+					t.Errorf("%s runs %q with a format other than the container names on the network, and a network inspect that prints more prints what those containers hold",
+						what, strings.TrimSpace(line))
+				}
+			}
 		}
-		if strings.Contains(command, "--type container") || strings.Contains(command, ProxyContainer) {
-			t.Errorf("%s runs %q and names a container: a network inspect is exempt from naming its fields because a network carries no value a container was handed, and one that reaches a container is not",
-				what, command)
+		if inspects == 0 {
+			t.Fatalf("%s runs %q, which inspects no network at all, so this guard is reading a command that does nothing", what, held.command)
 		}
 	}
 }

@@ -431,7 +431,7 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 	keys := []byte(aKey + "\n")
 	held := digests(Items(production, keys, ArchAMD64))
 
-	alone := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}})
+	alone := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{})
 	key := removalOf(alone, SealKeyPath(production))
 	if key.path == "" {
 		t.Fatalf("destroy leaves %s behind, and a key nothing takes is every sealed value still openable", SealKeyPath(production))
@@ -449,7 +449,7 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 	}
 
 	beside := digests(Items(preview, keys, ArchAMD64))
-	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside})
+	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside}, appsStanding{})
 	if removalOf(shared, SealHelper).path != "" {
 		t.Errorf("destroying one class takes %s, which a standing sibling still seals through", SealHelper)
 	}

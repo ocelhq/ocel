@@ -17,7 +17,72 @@ const (
 	LabelProject = "ocel.project"
 	LabelRef     = "ocel.ref"
 	LabelEnv     = "ocel.env"
+	LabelClass   = "ocel.class"
 )
+
+const (
+	appNetworkPrefix = "ocel-"
+	poolExhausted    = "address pool"
+	membersFormat    = `{{range .Containers}}{{.Name}}{{"\n"}}{{end}}`
+)
+
+func AppNetwork(class providerkit.Class, project string) string {
+	return appNetworkPrefix + string(class) + "-" + naming.Sanitize(project)
+}
+
+func networkLabels(class providerkit.Class, project string) []string {
+	return []string{
+		"--label", LabelClass + "=" + string(class),
+		"--label", LabelProject + "=" + naming.Sanitize(project),
+	}
+}
+
+func networkStanding(spec Container) string {
+	network := quoted(AppNetwork(spec.Class, spec.Project))
+	create := "docker network create " + words(networkLabels(spec.Class, spec.Project)) + " " + network
+	return "set -e\n" +
+		"if ! docker network inspect " + network + " >/dev/null 2>&1; then\n" +
+		"if ! said=$(" + create + " 2>&1 >/dev/null) && ! docker network inspect " + network + " >/dev/null 2>&1; then\n" +
+		"printf '%s\\n' \"$said\" >&2\n" +
+		"exit 1\n" +
+		"fi\n" +
+		"fi\n" +
+		"if ! docker network connect " + network + " " + quoted(ProxyContainer) + " >/dev/null 2>&1 && " +
+		"! docker network inspect --format " + quoted(membersFormat) + " " + network + " | grep -qx " + quoted(ProxyContainer) + "; then\n" +
+		"printf '%s\\n' " + quoted(ProxyContainer+" is not attached to "+AppNetwork(spec.Class, spec.Project)+" and could not be: the proxy is the one path to an app on this box, and a container it cannot reach is one nothing routes to") + " >&2\n" +
+		"exit 1\n" +
+		"fi"
+}
+
+func networkForgetting(class providerkit.Class, project string) string {
+	network := quoted(AppNetwork(class, project))
+	return "if docker network inspect " + network + " >/dev/null 2>&1; then\n" +
+		"if docker network inspect --format " + quoted(membersFormat) + " " + network +
+		" | grep -qvx " + quoted(ProxyContainer) + "; then printf '%s\\n' " + quoted(networkHeld) + "; exit 0; fi\n" +
+		"docker network disconnect --force " + network + " " + quoted(ProxyContainer) + " >/dev/null 2>&1 || true\n" +
+		"docker network rm " + network + " >/dev/null\n" +
+		"fi"
+}
+
+func (h *Host) join(ctx context.Context, spec Container, elevation string) error {
+	_, said, err := h.spoke(ctx, "put "+spec.App+" on "+AppNetwork(spec.Class, spec.Project), networkStanding(spec), nil, elevation)
+	if err != nil && strings.Contains(said, poolExhausted) {
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"%s has no subnet left for %s, and every project on this box runs on a network of its own so that the proxy is the one thing that reaches it: %s\n"+
+				"The engine's stock pools allow about thirty networks. Give it more in /etc/docker/daemon.json, as `\"default-address-pools\": [{\"base\": \"10.200.0.0/16\", \"size\": 24}]`, restart it, and run this again",
+			h.named(), AppNetwork(spec.Class, spec.Project), said)
+	}
+	return err
+}
+
+func (h *Host) ForgetNetwork(ctx context.Context, class providerkit.Class, project string) error {
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = h.ran(ctx, "take "+AppNetwork(class, project)+" down", networkForgetting(class, project), nil, elevation)
+	return err
+}
 
 const (
 	appRestart = "unless-stopped"
@@ -89,7 +154,8 @@ func containerRun(spec Container, held handoff) []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", spec.Name,
 		"--restart", appRestart,
-		"--network", ProxyNetwork,
+		"--network", AppNetwork(spec.Class, spec.Project),
+		"--label", LabelClass + "=" + string(spec.Class),
 		"--label", LabelProject + "=" + naming.Sanitize(spec.Project),
 		"--label", LabelApp + "=" + spec.App,
 		"--label", LabelRef + "=" + spec.Image,
@@ -177,6 +243,9 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 		return err
 	}
 	if err := h.sweep(ctx, elevation); err != nil {
+		return err
+	}
+	if err := h.join(ctx, spec, elevation); err != nil {
 		return err
 	}
 	defer func() { err = errors.Join(err, h.forget(ctx, held)) }()

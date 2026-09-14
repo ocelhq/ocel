@@ -219,7 +219,7 @@ func TestTheStockAdminPortBoundInsideTheProxyFails(t *testing.T) {
 	if !strings.Contains(check.Finding, "0.0.0.0:"+host.AdminPort) {
 		t.Errorf("finding = %q, want the bind named", check.Finding)
 	}
-	if !strings.Contains(check.Finding, host.ProxyNetwork) {
+	if !strings.Contains(check.Finding, "shares a network with the proxy") {
 		t.Errorf("finding = %q, want what the exposure reaches named: every container on the shared network", check.Finding)
 	}
 }

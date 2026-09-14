@@ -233,7 +233,7 @@ func TestTheProxyIsRestartedUnlessSomebodyStopsItAndSitsOnTheOneSharedNetwork(t 
 		}
 	}
 	facts := string(containerItem().Content)
-	for _, fact := range []string{"restart=" + proxyRestart, "networks=" + ProxyNetwork + " ", "state=running"} {
+	for _, fact := range []string{"restart=" + proxyRestart, "network=" + networkJoined, "state=running"} {
 		if !strings.Contains(facts, fact) {
 			t.Errorf("the proxy is surveyed without %q, so a host that lost it would never be told:\n%s", fact, facts)
 		}
@@ -583,13 +583,13 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))}
 	proxied := []string{ProxyContainer, ProxyData, ProxyNetwork, proxyRoot, ProxyHelper, ProxyConfig}
 
-	for _, taken := range removing(standing, beside) {
+	for _, taken := range removing(standing, beside, appsStanding{}) {
 		if slices.Contains(proxied, taken.path) && taken.action == providerkit.ActionDelete {
 			t.Errorf("destroying one class takes %s, and the sibling class still standing on this host deploys through it", taken.path)
 		}
 	}
 
-	last := removing(standing, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}})
+	last := removing(standing, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{})
 	for _, path := range proxied {
 		gone := removalOf(last, path)
 		if gone.action != providerkit.ActionDelete {
@@ -1097,7 +1097,7 @@ func orderings(count int) [][]int {
 func TestEveryFactTheProbeReadsIsOneTheItemStates(t *testing.T) {
 	t.Parallel()
 
-	for _, key := range []string{"image=", "restart=", "networks=", "bind=", "ports=", "baseline=", "state="} {
+	for _, key := range []string{"image=", "restart=", "network=", "bind=", "ports=", "baseline=", "state="} {
 		if !strings.Contains(ProxyFactTemplate, key) {
 			t.Errorf("the probe reads no %q off the box, and the item states one", key)
 		}

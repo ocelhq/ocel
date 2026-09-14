@@ -2,6 +2,7 @@ package vps_test
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -66,8 +67,8 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 	if policy := vm.inspects(t, "container", host.ProxyContainer, "{{.HostConfig.RestartPolicy.Name}}"); policy != "unless-stopped" {
 		t.Errorf("the proxy is restarted %q, want unless-stopped: a reboot must not be what takes the box's edge down", policy)
 	}
-	if networks := vm.inspects(t, "container", host.ProxyContainer, "{{range $n, $v := .NetworkSettings.Networks}}{{$n}} {{end}}"); networks != host.ProxyNetwork {
-		t.Errorf("the proxy sits on %q, want the one network %q every deploy target resolves across", networks, host.ProxyNetwork)
+	if networks := vm.inspects(t, "container", host.ProxyContainer, "{{range $n, $v := .NetworkSettings.Networks}}{{$n}} {{end}}"); !slices.Contains(strings.Fields(networks), host.ProxyNetwork) {
+		t.Errorf("the proxy sits on %q, want %q among them: every project's own network is joined at its first deploy", networks, host.ProxyNetwork)
 	}
 	if mode := strings.TrimSpace(vm.ssh(t, "sudo stat -c '%a %U' "+quote(host.ProxyData))); mode != "700 root" {
 		t.Errorf("%s stands as %q, want 700 root: it holds every private key on this box and the acme account key that issues for all of them", host.ProxyData, mode)

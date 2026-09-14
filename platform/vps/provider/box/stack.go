@@ -285,6 +285,9 @@ func (s *stack) Destroy(ctx context.Context) error {
 	if err := s.e.machine.UnrouteSurface(ctx, s.surface()); err != nil {
 		errs = append(errs, err)
 	}
+	if err := s.e.machine.ForgetNetwork(ctx, s.state.Class, s.state.Slug); err != nil {
+		errs = append(errs, err)
+	}
 	if err := s.ledger().Destroy(ctx); err != nil {
 		errs = append(errs, err)
 	}
