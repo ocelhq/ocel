@@ -117,6 +117,8 @@ func (n Names) ConnectorAccountEmail() string {
 	return n.Connector() + "@" + n.project + accountDomain
 }
 
+func (n Names) ConnectorKeySecret() string { return n.Connector() + "-key" }
+
 func (n Names) connectorFits() error {
 	if held := len(n.Connector()); held > maxAccountID {
 		return providerkit.Refuse(providerkit.CodeInvalid,

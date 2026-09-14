@@ -44,6 +44,30 @@ type serving struct {
 	most    int
 	timeout time.Duration
 	ingress string
+	mounts  []secretMount
+}
+
+type secretMount struct {
+	name   string
+	secret string
+	dir    string
+	file   string
+}
+
+func volumesOf(mounts []secretMount) ([]*run.GoogleCloudRunV2Volume, []*run.GoogleCloudRunV2VolumeMount) {
+	volumes := make([]*run.GoogleCloudRunV2Volume, 0, len(mounts))
+	mounted := make([]*run.GoogleCloudRunV2VolumeMount, 0, len(mounts))
+	for _, mount := range mounts {
+		volumes = append(volumes, &run.GoogleCloudRunV2Volume{
+			Name: mount.name,
+			Secret: &run.GoogleCloudRunV2SecretVolumeSource{
+				Secret: mount.secret,
+				Items:  []*run.GoogleCloudRunV2VersionToPath{{Version: "latest", Path: mount.file}},
+			},
+		})
+		mounted = append(mounted, &run.GoogleCloudRunV2VolumeMount{Name: mount.name, MountPath: mount.dir})
+	}
+	return volumes, mounted
 }
 
 const (
@@ -90,10 +114,13 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 			HttpGet: &run.GoogleCloudRunV2HTTPGetAction{Path: s.health, Port: providerkit.InjectedPort},
 		}
 	}
+	volumes, mounted := volumesOf(s.mounts)
+	container.VolumeMounts = mounted
 	template := &run.GoogleCloudRunV2RevisionTemplate{
 		Containers:     []*run.GoogleCloudRunV2Container{container},
 		Scaling:        scaling,
 		ServiceAccount: s.account,
+		Volumes:        volumes,
 	}
 	if s.timeout > 0 {
 		if s.timeout > maxRequestTimeout {
