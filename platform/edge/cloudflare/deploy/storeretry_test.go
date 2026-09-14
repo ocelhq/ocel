@@ -2,6 +2,7 @@ package cloudflare
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -13,6 +14,9 @@ func TestStoreRetryable(t *testing.T) {
 	t.Run("a request that never reached the store retries", func(t *testing.T) {
 		t.Parallel()
 
+		if storeRetryable(nil, fmt.Errorf("%w: bad url", errStoreRequestUnbuildable)) {
+			t.Error("storeRetryable(request that could not be built) = true, want false: rebuilding the same request can never succeed")
+		}
 		if !storeRetryable(nil, errors.New("connection refused")) {
 			t.Error("a request that never reached the store must retry")
 		}

@@ -2,6 +2,7 @@ package cloudflare
 
 import (
 	"context"
+	"errors"
 	"math"
 	"math/rand"
 	"net/http"
@@ -17,7 +18,7 @@ const (
 
 func storeRetryable(res *http.Response, err error) bool {
 	if res == nil {
-		return err != nil
+		return err != nil && !errors.Is(err, errStoreRequestUnbuildable)
 	}
 	return res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= http.StatusInternalServerError
 }
