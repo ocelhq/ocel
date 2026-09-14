@@ -13,6 +13,7 @@ require (
 	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit/pulumi v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/pkg/runtimekit v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/pulumi/pulumi-gcp/sdk/v9 v9.36.1
@@ -228,3 +229,5 @@ replace github.com/ocelhq/ocel/pkg/configdoc => ../../../pkg/configdoc
 replace github.com/ocelhq/ocel/pkg/costkit => ../../../pkg/costkit
 
 replace github.com/ocelhq/ocel/pkg/connectorkit => ../../../pkg/connectorkit
+
+replace github.com/ocelhq/ocel/pkg/runtimekit => ../../../pkg/runtimekit
