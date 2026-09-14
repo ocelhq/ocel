@@ -42,7 +42,7 @@ func CredentialsFor(cfg aws.Config, ns bootstrap.Namespace) Credentials {
 func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 	out, err := c.STS.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return providerkit.Identity{}, providerkit.Refuse(providerkit.CodeDenied, "%s", credentialHint)
+		return providerkit.Identity{}, providerkit.Refuse(providerkit.CodeDenied, "%s: %v", credentialHint, err)
 	}
 	arn := aws.ToString(out.Arn)
 	return providerkit.Identity{
