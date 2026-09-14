@@ -15,3 +15,7 @@ const AppFolderEnvName = "OCEL_APP_FOLDER"
 const AppURLEnvName = "OCEL_URL"
 
 const RuntimeAddressEnvName = "OCEL_RUNTIME_ADDRESS"
+
+const LiveKeysEnvName = "OCEL_LIVE_KEYS"
+
+const LiveDirEnvName = "OCEL_LIVE_DIR"

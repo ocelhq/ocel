@@ -631,6 +631,62 @@ def test_a_secret_resolves_on_every_read(monkeypatch):
     assert key.value == "rotated"
 
 
+def test_a_value_only_the_live_directory_holds_is_read_from_its_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("FILE_ONLY", raising=False)
+    monkeypatch.delenv("OCEL_VAR_FILE_ONLY", raising=False)
+    (tmp_path / "FILE_ONLY").write_bytes(b"from the file\n")
+    monkeypatch.setenv("OCEL_LIVE_DIR", str(tmp_path))
+
+    class Env(ocel.Env):
+        file_only: str
+
+    assert Env().file_only == "from the file\n"
+
+
+def test_a_delivered_variable_wins_over_the_live_directory_file_of_the_same_key(
+    monkeypatch, tmp_path
+):
+    (tmp_path / "FILE_SHADOWED").write_text("from the file")
+    (tmp_path / "FILE_BARE").write_text("from the file")
+    monkeypatch.setenv("OCEL_LIVE_DIR", str(tmp_path))
+    monkeypatch.setenv("OCEL_VAR_FILE_SHADOWED", "baked")
+    monkeypatch.setenv("FILE_BARE", "bare")
+
+    class Env(ocel.Env):
+        file_shadowed: str
+        file_bare: str
+
+    env = Env()
+    assert (env.file_shadowed, env.file_bare) == ("baked", "bare")
+
+
+def test_a_key_the_live_directory_holds_no_file_for_is_unset(monkeypatch, tmp_path):
+    monkeypatch.delenv("FILE_MISSING", raising=False)
+    monkeypatch.setenv("OCEL_LIVE_DIR", str(tmp_path))
+
+    class Env(ocel.Env):
+        file_missing: str
+
+    with pytest.raises(ocel.EnvValueError) as raised:
+        _ = Env().file_missing
+    assert raised.value.key == "FILE_MISSING"
+
+
+def test_a_secret_reads_the_rotated_live_directory_file_on_the_next_read(monkeypatch, tmp_path):
+    monkeypatch.delenv("ROTATING_KEY", raising=False)
+    monkeypatch.delenv("OCEL_VAR_ROTATING_KEY", raising=False)
+    (tmp_path / "ROTATING_KEY").write_text("first")
+    monkeypatch.setenv("OCEL_LIVE_DIR", str(tmp_path))
+
+    class Env(ocel.Env):
+        rotating_key: ocel.Secret
+
+    key = Env().rotating_key
+    assert key.value == "first"
+    (tmp_path / "ROTATING_KEY").write_text("rotated")
+    assert key.value == "rotated"
+
+
 def test_a_secret_whose_value_vanished_fails_the_read_rather_than_read_empty(monkeypatch):
     monkeypatch.setenv("SIGNING_KEY", "first")
 

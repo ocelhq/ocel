@@ -4,6 +4,7 @@ import (
 	"encoding"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"runtime"
@@ -651,7 +652,22 @@ func readDelivered(key string) (string, bool) {
 	if value, ok := os.LookupEnv(deliveredPrefix + key); ok {
 		return value, true
 	}
-	return os.LookupEnv(key)
+	if value, ok := os.LookupEnv(key); ok {
+		return value, true
+	}
+	return readLiveFile(key)
+}
+
+func readLiveFile(key string) (string, bool) {
+	dir := os.Getenv(constants.LiveDirEnvName)
+	if dir == "" {
+		return "", false
+	}
+	value, err := os.ReadFile(filepath.Join(dir, key))
+	if err != nil {
+		return "", false
+	}
+	return string(value), true
 }
 
 var (
