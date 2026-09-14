@@ -75,6 +75,11 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		if err := clientenv.Generate(cfg.Dir, clients); err != nil {
 			return nil, err
 		}
+		if !ui.Dry() {
+			if err := clientenv.PointImports(cfg.Dir, clients); err != nil {
+				return nil, err
+			}
+		}
 		if err := deps.BuildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
 			return nil, err
 		}

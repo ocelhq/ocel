@@ -3,9 +3,14 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -18,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
+	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 func dryDeps(t *testing.T) cmddeps.Deps {
@@ -237,5 +243,112 @@ func TestADryRunRefusesWhenTheBootstrapLacksWhatTheProjectNeeds(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "now?") {
 		t.Errorf("stdout = %q, want a dry run never to offer to bootstrap: it changes nothing", stdout.String())
+	}
+}
+
+func projectFiles(t *testing.T, root string) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	state := filepath.Join(root, constants.ProjectStateDirName)
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if path == state {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(data)
+		files[rel] = hex.EncodeToString(sum[:])
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", root, err)
+	}
+	return files
+}
+
+func changedFiles(before, after map[string]string) []string {
+	var changed []string
+	for path, digest := range after {
+		switch was, held := before[path]; {
+		case !held:
+			changed = append(changed, path+" was written")
+		case was != digest:
+			changed = append(changed, path+" was rewritten")
+		}
+	}
+	for path := range before {
+		if _, held := after[path]; !held {
+			changed = append(changed, path+" was removed")
+		}
+	}
+	slices.Sort(changed)
+	return changed
+}
+
+func writeAppTSConfig(t *testing.T, root, app string) string {
+	t.Helper()
+	path := filepath.Join(root, "apps", app, "tsconfig.json")
+	clitest.WriteFile(t, path, "{\n  \"compilerOptions\": { \"strict\": true }\n}\n")
+	return path
+}
+
+func TestADryDeployLeavesEveryFileTheProjectOwnsAsItFoundIt(t *testing.T) {
+	deps := dryDeps(t)
+	root, _ := clitest.SetUpDeployFixture(t)
+	addAppToFixtureConfig(t, root)
+	writeServeDescriptor(t, root, "api", "bld_api_1")
+	writeAppTSConfig(t, root, "api")
+
+	before := projectFiles(t, root)
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), deps, root, deployOptions{dry: true}, &stdout, &stderr, strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Run without --dry to apply.") {
+		t.Fatalf("stdout = %q, want the plan a dry run exists to draw", stdout.String())
+	}
+
+	if changed := changedFiles(before, projectFiles(t, root)); len(changed) > 0 {
+		t.Errorf("a dry deploy changed the project's own files: %s", strings.Join(changed, ", "))
+	}
+}
+
+func TestADeployPointsEachAppsImportsAtItsClientAccessor(t *testing.T) {
+	deps := dryDeps(t)
+	root, _ := clitest.SetUpDeployFixture(t)
+	addAppToFixtureConfig(t, root)
+	writeServeDescriptor(t, root, "api", "bld_api_1")
+	tsconfig := writeAppTSConfig(t, root, "api")
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	if _, err := os.Stat(filepath.Join(root, constants.ProjectStateDirName, "apps", "api", "env-client.ts")); err != nil {
+		t.Fatalf("no client accessor was generated: %v", err)
+	}
+	mapping := `"ocel/env/client": ["../../` + constants.ProjectStateDirName + `/apps/api/env-client.ts"]`
+	data, err := os.ReadFile(tsconfig)
+	if err != nil {
+		t.Fatalf("read %s: %v", tsconfig, err)
+	}
+	if !strings.Contains(string(data), mapping) {
+		t.Errorf("tsconfig.json = %s, want it to state %s", data, mapping)
 	}
 }

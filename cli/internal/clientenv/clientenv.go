@@ -58,7 +58,20 @@ func GenerateKeys(projectDir string, app App, keys []Key) error {
 	if err := os.WriteFile(path, []byte(accessor(filepath.Dir(path), keys)), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
-	return mapSpecifier(app.Dir, path)
+	return nil
+}
+
+func PointImports(projectDir string, apps []App) error {
+	for _, app := range apps {
+		if err := PointAppImports(projectDir, app); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func PointAppImports(projectDir string, app App) error {
+	return mapSpecifier(app.Dir, accessorPath(projectDir, app.Name, app.Dir))
 }
 
 func accessorPath(projectDir, appName, appDir string) string {
