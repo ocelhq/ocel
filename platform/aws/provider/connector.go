@@ -6,6 +6,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/target"
@@ -21,6 +22,7 @@ func (p *Provider) connectorAPIs() awsconnector.APIs {
 		CFN:     cloudformation.NewFromConfig(p.aws),
 		Buckets: s3.NewFromConfig(p.aws),
 		Objects: s3.NewFromConfig(p.aws),
+		SSM:     ssm.NewFromConfig(p.aws),
 	}
 }
 
@@ -43,7 +45,11 @@ func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.Con
 		Arch:        awsconnector.Arch,
 	}
 	if standing.Present {
-		described.Installed = &providerkit.ConnectorRelease{Version: standing.Version, Compute: connectorCompute}
+		described.Installed = &providerkit.ConnectorRelease{
+			Version:   standing.Version,
+			PublicKey: standing.PublicKey,
+			Compute:   connectorCompute,
+		}
 	}
 	return described, nil
 }
@@ -54,7 +60,7 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}
-	at, err := awsconnector.Install(ctx, p.connectorAPIs(), p.namespace, awsconnector.Release{
+	standing, err := awsconnector.Install(ctx, p.connectorAPIs(), p.namespace, awsconnector.Release{
 		Binary:  install.Binary,
 		Version: install.Version,
 		Config:  install.Config,
@@ -62,7 +68,7 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}
-	return providerkit.ConnectorAddress{URL: at, Compute: compute}, nil
+	return providerkit.ConnectorAddress{URL: standing.URL, PublicKey: standing.PublicKey, Compute: compute}, nil
 }
 
 func (p *Provider) RemoveConnector(ctx context.Context, report providerkit.Reporter) error {
