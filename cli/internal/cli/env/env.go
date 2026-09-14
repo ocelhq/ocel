@@ -2,6 +2,7 @@ package env
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -144,6 +146,22 @@ func envCoordinate(slug, key string, opts envOptions) *envvarsv1.Coordinate {
 	return &envvarsv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
 }
 
+func envAddress(key string, opts envOptions) envgate.Address {
+	return envgate.Address{Cell: envgate.Cell{Key: key, Folder: opts.folder}, Environment: opts.environment}
+}
+
+func envValues(runner *provider.Runner, slug string, opts envOptions) envwire.Values {
+	return envwire.Values{Runner: runner, Slug: slug, Tier: envTier(opts)}
+}
+
+func staleCell(err error, key string, opts envOptions) error {
+	if !errors.Is(err, varsui.ErrStaleValue) {
+		return err
+	}
+	return fmt.Errorf("%s moved between this command reading it and writing it, so nothing was written — somebody else edited it at the same time. Read it again with `ocel env get %s` and run this command again",
+		describeCell(key, opts), key)
+}
+
 func runEnvSet(ctx context.Context, deps cmddeps.Deps, cwd, key, value string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
 	return runEnvSetPairs(ctx, deps, cwd, []envSetPair{{key: key, value: value}}, opts, stdin, stdout, stderr)
 }
@@ -175,16 +193,18 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 		if err != nil {
 			return err
 		}
+		held := envValues(runner, cfg.Slug, opts)
 		for _, pair := range pairs {
-			resp, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
-				Tier:       envTier(opts),
-				Coordinate: envCoordinate(cfg.Slug, pair.key, opts),
-				Value:      pair.value,
-			})
+			at := envAddress(pair.key, opts)
+			seen, err := held.Version(ctx, at)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, opts), resp.GetMetadata().GetVersion())
+			metadata, err := held.Write(ctx, at, pair.value, &seen)
+			if err != nil {
+				return staleCell(err, pair.key, opts)
+			}
+			fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, opts), metadata.GetVersion())
 		}
 		if err := printGroupProgress(ctx, vars, cfg.Slug, definitions, groups, opts, pairs, stdout); err != nil {
 			return err
@@ -310,14 +330,17 @@ func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envO
 		if err != nil {
 			return err
 		}
-		resp, err := vars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{
-			Tier:       envTier(opts),
-			Coordinate: envCoordinate(cfg.Slug, key, opts),
-		})
+		held := envValues(runner, cfg.Slug, opts)
+		at := envAddress(key, opts)
+		seen, err := held.Version(ctx, at)
 		if err != nil {
 			return err
 		}
-		if !resp.GetDeleted() {
+		deleted, err := held.Remove(ctx, at, &seen)
+		if err != nil {
+			return staleCell(err, key, opts)
+		}
+		if !deleted {
 			fmt.Fprintf(stdout, "No value was set for %s.\n", describeCell(key, opts))
 			return nil
 		}
