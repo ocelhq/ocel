@@ -14,6 +14,7 @@ import (
 	"google.golang.org/api/cloudresourcemanager/v1"
 	run "google.golang.org/api/run/v2"
 
+	"github.com/ocelhq/ocel/pkg/connectorkit"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -325,6 +326,62 @@ func TestTheConnectorConfigNamesWhereItsKeyIsMounted(t *testing.T) {
 	}
 	if _, err := keyPathed([]byte(`[]`), connectorKeyPath); err == nil {
 		t.Error("a config that is no object was carried")
+	}
+}
+
+func TestTheConnectorHoldsOnlyTheKeyRolesItsGrantsCallFor(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		grants []string
+		roles  []string
+	}{
+		"read alone":           {grants: []string{connectorkit.CapabilityEnvVarsRead}},
+		"read and write":       {grants: []string{connectorkit.CapabilityEnvVarsRead, connectorkit.CapabilityEnvVarsWrite}, roles: []string{connectorSealingRole}},
+		"read and reveal":      {grants: []string{connectorkit.CapabilityEnvVarsRead, connectorkit.CapabilityEnvVarsReveal}, roles: []string{connectorOpeningRole}},
+		"every grant there is": {grants: []string{connectorkit.CapabilityEnvVarsRead, connectorkit.CapabilityEnvVarsWrite, connectorkit.CapabilityEnvVarsReveal}, roles: []string{connectorSealingRole, connectorOpeningRole}},
+		"no grant at all":      {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := keyRolesFor(tc.grants); !slices.Equal(got, tc.roles) {
+				t.Errorf("keyRolesFor(%v) = %v, want %v: a read never opens a sealed value, a write seals one, a reveal opens one",
+					tc.grants, got, tc.roles)
+			}
+		})
+	}
+}
+
+func TestAReinstallWithFewerGrantsTakesTheKeyRoleItNoLongerCallsForAway(t *testing.T) {
+	t.Parallel()
+
+	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
+	bindings, changed := boundKeyRoles(nil, member, []string{connectorSealingRole, connectorOpeningRole})
+	if !changed || len(bindings) != 2 {
+		t.Fatalf("granting both on an empty policy = %+v, %v", bindings, changed)
+	}
+	bindings, changed = boundKeyRoles(bindings, member, []string{connectorSealingRole})
+	if !changed {
+		t.Fatal("dropping the reveal grant changed nothing on the key")
+	}
+	for _, binding := range bindings {
+		held := slices.Contains(binding.GetMembers(), member)
+		if binding.GetRole() == connectorOpeningRole && held {
+			t.Errorf("the connector still holds %s after the reveal grant went, and a role nothing calls for is one more than the minimum", connectorOpeningRole)
+		}
+		if binding.GetRole() == connectorSealingRole && !held {
+			t.Errorf("the connector lost %s while its write grant stands", connectorSealingRole)
+		}
+	}
+	if _, again := boundKeyRoles(bindings, member, []string{connectorSealingRole}); again {
+		t.Error("holding the same roles again rewrote the policy, so every install would churn the key's IAM")
+	}
+	bindings, _ = boundKeyRoles(bindings, member, nil)
+	for _, binding := range bindings {
+		if slices.Contains(binding.GetMembers(), member) {
+			t.Errorf("removal left the connector holding %s", binding.GetRole())
+		}
 	}
 }
 
