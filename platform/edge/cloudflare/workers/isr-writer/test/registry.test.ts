@@ -15,18 +15,38 @@ describe("registry", () => {
 
   it("stores and reads back one deploy's secret hash", async () => {
     const hash = "a".repeat(64);
-    await withStorage("prod/p/web/B1", (store) => registry.initialize(store, hash));
+    await withStorage("prod/p/web/B1", (store) => registry.initialize(store, hash, false));
     expect(await withStorage("prod/p/web/B1", registry.secretHash)).toBe(hash);
   });
 
-  it("replaces the hash on re-initialize rather than accumulating rows", async () => {
-    await withStorage("prod/p/web/B2", (store) => registry.initialize(store, "b".repeat(64)));
-    await withStorage("prod/p/web/B2", (store) => registry.initialize(store, "c".repeat(64)));
-    expect(await withStorage("prod/p/web/B2", registry.secretHash)).toBe("c".repeat(64));
+  it("holds the hash it carries against a different one, unless forced", async () => {
+    const first = "b".repeat(64);
+    const second = "c".repeat(64);
+    await withStorage("prod/p/web/B2", (store) => registry.initialize(store, first, false));
+    expect(
+      await withStorage("prod/p/web/B2", (store) => registry.initialize(store, second, false)),
+    ).toBe("held");
+    expect(await withStorage("prod/p/web/B2", registry.secretHash)).toBe(first);
+
+    expect(
+      await withStorage("prod/p/web/B2", (store) => registry.initialize(store, second, true)),
+    ).toBe("adopted");
+    expect(await withStorage("prod/p/web/B2", registry.secretHash)).toBe(second);
+  });
+
+  it("adopts the same hash again without a row to spare", async () => {
+    const hash = "e".repeat(64);
+    await withStorage("prod/p/web/B5", (store) => registry.initialize(store, hash, false));
+    expect(
+      await withStorage("prod/p/web/B5", (store) => registry.initialize(store, hash, false)),
+    ).toBe("adopted");
+    expect(await withStorage("prod/p/web/B5", registry.secretHash)).toBe(hash);
   });
 
   it("keeps deploys isolated from one another", async () => {
-    await withStorage("prod/p/web/B3", (store) => registry.initialize(store, "d".repeat(64)));
+    await withStorage("prod/p/web/B3", (store) =>
+      registry.initialize(store, "d".repeat(64), false),
+    );
     expect(await withStorage("prod/p/web/B4", registry.secretHash)).toBeUndefined();
   });
 });

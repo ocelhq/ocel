@@ -34,11 +34,11 @@ function freshPrefix() {
   return `prod/acme/web/r0000000${nextBuild++}/isr`;
 }
 
-async function initialize(prefix: string, secret: string, token = BOOTSTRAP) {
+async function initialize(prefix: string, secret: string, token = BOOTSTRAP, force?: boolean) {
   return SELF.fetch(
     bearerReq(`/${prefix}/initialize`, token, {
       method: "POST",
-      body: JSON.stringify({ secretHash: await sha256Hex(secret) }),
+      body: JSON.stringify({ secretHash: await sha256Hex(secret), ...(force ? { force } : {}) }),
     }),
   );
 }
@@ -56,6 +56,33 @@ describe("initialize", () => {
   it("seeds a deploy's secret hash", async () => {
     const prefix = freshPrefix();
     expect((await initialize(prefix, "write-secret")).status).toBe(204);
+  });
+
+  it("re-seeds the same secret idempotently and keeps serving it", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+    expect((await initialize(prefix, "write-secret")).status).toBe(204);
+    expect((await writeEntryReq(prefix, "blog/post", "write-secret")).status).toBe(204);
+  });
+
+  it("refuses to re-key a live deploy, so its writer keeps its secret", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+
+    const res = await initialize(prefix, "other-secret");
+    expect(res.status).toBe(409);
+    expect(await res.text()).not.toContain(await sha256Hex("write-secret"));
+    expect((await writeEntryReq(prefix, "blog/post", "write-secret")).status).toBe(204);
+    expect((await writeEntryReq(prefix, "blog/post", "other-secret")).status).toBe(401);
+  });
+
+  it("re-keys a live deploy when forced", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+
+    expect((await initialize(prefix, "other-secret", BOOTSTRAP, true)).status).toBe(204);
+    expect((await writeEntryReq(prefix, "blog/post", "other-secret")).status).toBe(204);
+    expect((await writeEntryReq(prefix, "blog/post", "write-secret")).status).toBe(401);
   });
 
   it("rejects one signed with the wrong bootstrap credential", async () => {
@@ -284,7 +311,7 @@ describe("routing", () => {
 async function seedBehindTheWorker(prefix: string, secret: string) {
   const stub = env.ISR_WRITER_DO.get(env.ISR_WRITER_DO.idFromName(prefix));
   const hash = await sha256Hex(secret);
-  await runInDurableObject(stub, (_instance, ctx) => registry.initialize(ctx.storage, hash));
+  await runInDurableObject(stub, (_instance, ctx) => registry.initialize(ctx.storage, hash, true));
 }
 
 describe("concurrent registry reads", () => {
