@@ -113,7 +113,7 @@ func TestAProxyWithNothingToSayCertifiesAsItAlwaysDid(t *testing.T) {
 	}
 }
 
-func TestABoxWhoseEngineCannotBeReachedRefusesTheCertificateRatherThanReadingSilenceAsConsent(t *testing.T) {
+func TestABoxWhoseEngineCannotBeReachedSaysSoInTheEnginesOwnWordsAndStillMintsTheHandle(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -123,14 +123,19 @@ func TestABoxWhoseEngineCannotBeReachedRefusesTheCertificateRatherThanReadingSil
 		}
 		return session.Result{}, false
 	}
-	_, err := certifying(machine).Certificate(context.Background(), providerkit.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Report: edge.DiscardReporter(),
+	spoken := &saying{Reporter: edge.DiscardReporter()}
+	cert, err := certifying(machine).Certificate(context.Background(), providerkit.CertificateRequest{
+		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Report: spoken,
 	})
-	if err == nil {
-		t.Fatal("Certificate() minted a handle over an engine that answered nothing: the ceiling read never happened, and a proxy that cannot be asked is not a proxy with nothing to say")
+	if err != nil {
+		t.Fatalf("Certificate() = %v: the handle names what the proxy renews and asks the box for nothing, and the conformance suite mints it against a box that answers nothing at all", err)
 	}
-	if !strings.Contains(err.Error(), "Cannot connect to the Docker daemon") {
-		t.Errorf("Certificate() = %v, want the engine's own words for why it could not be reached", err)
+	if !cert.Held() {
+		t.Errorf("Certificate() = %+v, want the handle the proxy obtains and renews under", cert)
+	}
+	said := strings.Join(spoken.said, "\n")
+	if !strings.Contains(said, "Cannot connect to the Docker daemon") {
+		t.Errorf("a box whose engine answered nothing said %q: the read that never happened is reported without the engine's own words, and the two silences read as one", said)
 	}
 }
 
