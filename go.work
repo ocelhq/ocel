@@ -23,6 +23,7 @@ use (
 	./platform/gcp/runtime
 	./platform/vps/connector
 	./platform/vps/provider
+	./platform/vps/runtime
 	./sdk
 	./tests/fixtures/deploy/go/server
 	./tests/fixtures/sdk/go
