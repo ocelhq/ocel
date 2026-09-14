@@ -1,4 +1,5 @@
 import { TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { labelType } from "@/lib/type";
 
 export type RunProject = { slug: string; name: string };
 
@@ -21,7 +22,7 @@ export function RunsHead({ withProject }: { withProject: boolean }) {
         {runColumns(withProject).map((column) => (
           <TableHead
             key={column.key}
-            className={`h-9 px-5 text-xs font-medium text-muted-foreground first:pl-5 last:pr-5 ${column.className}`}
+            className={`h-9 px-5 first:pl-5 last:pr-5 ${labelType} ${column.className}`}
           >
             {column.label}
           </TableHead>

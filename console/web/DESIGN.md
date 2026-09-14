@@ -62,7 +62,7 @@ typography:
     lineHeight: 1.4
     letterSpacing: "normal"
   label:
-    fontFamily: "IBM Plex Mono, ui-monospace, monospace"
+    fontFamily: "IBM Plex Sans, system-ui, sans-serif"
     fontSize: "0.6875rem"
     fontWeight: 500
     lineHeight: 1
@@ -213,7 +213,7 @@ true, and it mutates nothing.
 - Paper and hairlines only. Electric appears on focus rings, the active nav item, a changed value and a drop target, nowhere else.
 - Zero radius, enforced by `--radius: 0rem` and explicit square variants on every primitive.
 - Depth by hairline and one tonal step to Fog. Floating layers take a zero-blur 3px offset. No glow, no blur.
-- Mono uppercase Label type names every section, column, chip and stamp.
+- Uppercase sans Label type names every section, column, chip and stamp.
 - Canvases may carry a faint dot ground; no other surface carries any ground.
 - Every view of infrastructure carries its "as at" stamp in Label type.
 
@@ -280,14 +280,15 @@ Grotesk back everywhere, point `heading` and `body` at the same loader.
 - **Subject** (600, 0.875rem): a tile's name, a details-panel heading, and the name of a related app or resource in a list.
 - **Body** (400, 0.875rem / 1.25rem): the document default, set on `<body>`. Descriptions, menu items, nav labels.
 - **Detail** (400, 0.75rem): panel field rows, table cells, explanatory sentences inside a panel section.
-- **Label** (500 mono, 0.6875rem, 0.14em, uppercase): section headings in the details panel, table headers, chips, key pills, ghost captions, the tile's count line, and the provenance stamp. Set in Body colour.
-- **Path** (400 mono, 0.75rem): urls, binding names, variable keys, folders, error text and the files in a usage caption. Keeps its own case and natural tracking.
-- **Command** (500 mono, 0.8125rem): the environment switcher and the command pane's `$` line. A control that reads as something you could type.
+- **Label** (500 sans, 0.6875rem, 0.14em, uppercase): section headings in the details panel and forms, table headers, chips, key pills, ghost captions, the tile's count line, and the provenance stamp. Set in Body colour, from the one token in `lib/type.ts`.
+- **Path** (400 mono, 0.75rem): urls, promotion and run ids, shas, error text and log lines — values a reader proofreads or pastes. Keeps its own case and natural tracking. Slugs, binding names, keys and environment names are sans.
+- **Command** (500 mono, 0.8125rem): the command pane's `$` line. Something you could type.
 
 ### Named Rules
-**The Caption Rule.** Anything that names rather than says is Label type: mono, uppercase,
-0.14em, Body colour. The carve-out is a literal string — a path, url, key, binding name or
-command — which is Path or Command type and keeps its case exactly as the CLI reported it.
+**The Caption Rule.** Anything that names rather than says is Label type: sans, uppercase,
+0.14em, Body colour. The carve-out is a literal string a reader proofreads or pastes — a
+url, id, sha or command — which is Path or Command type and keeps its case exactly as the
+CLI reported it.
 
 **The Contrast Floor Rule.** Label type is set in Body colour (`{colors.body}`), not Steel.
 Steel measures 3.45:1 at 11px, under the floor for text that size; Steel stays a line
@@ -457,9 +458,9 @@ border, Body icon; hover steps the border to Steel and the icon to Ink.
 - **Never** a letter, an emoji, or a coloured square standing in for a brand that has a mark.
 
 ### Navigation
-- **Sidebar:** Fog ground, hairline header and footer at 56px and matching the column header, Body-coloured items with a Phosphor icon that fills and turns Electric when active. The project scope shows the slug in mono as its group label, with an "All projects" escape above it. Icons wiggle once on hover. Resizable by a drag handle; state persists in a cookie.
+- **Sidebar:** Fog ground, hairline header and footer at 56px and matching the column header, Body-coloured items with a Phosphor icon that fills and turns Electric when active. The project scope shows the slug in Ink as its group label, with an "All projects" escape above it. Icons wiggle once on hover. Resizable by a drag handle; state persists in a cookie.
 - **Header:** 56px, hairline underline, sidebar trigger plus project switcher. Nothing else.
-- **Switchers:** environment in Command type, project and organization as comboboxes with a mono search field; both square, both hairline-bordered.
+- **Switchers:** environment as a sans medium dropdown, project and organization as comboboxes; all square, all hairline-bordered.
 
 ### Inputs / Fields
 - **Style:** hairline border, transparent fill, square, 32px tall, 10px side padding.
@@ -479,7 +480,6 @@ the same dot ground the map will use. The loading state is the drawing before th
 - **Do** reserve mono for the two jobs where a reader does character-by-character work: **a value being proofread or pasted** (the value field, and a revealed value) and **a command to type** (the command pane, an inline `ocel …`). At 13px in Plex Sans `I` and `l` are identical bare stems; in Plex Mono they are not, and that discrimination is the whole reason the font is here.
 - **Don't** set an identifier in mono merely because it is one. SCREAMING_SNAKE_CASE already says "literal" and costs nothing to render; a leading `/` says path; a chip says name; `tabular-nums` says digits. Keys, paths, group names, environment names and versions are sans. Mono as a badge of technicality is a costume.
 - **Do** draw from one scale: 11px sans label (500), 12px sans meta, 13px sans key (500) and path (400), 13px mono value, 14px sans body, 14px sans subject (600). Title sizes (18/22/34) are a separate register and do not mix into it.
-- **Scope, as of this commit:** `ui/vars` (the variables table, in both the console and `ocel env ui`) and the variables page's own stamp follow the rule above. The rest of the console — the deployments table, overview tiles, run detail, the switchers — still sets the label register in mono from `app/(dashboard)/label.ts`. That is a known inconsistency held deliberately to keep the blast radius small; the register is forked in three places and wants collapsing into one token before the family changes console-wide.
 - **Do** size an icon from the text beside it — 14px inline with 11–14px text, 16px for a standalone control or mark, 24px for the figure in an overlay or empty state.
 - **Do** make the tonal step carry meaning: app tiles Paper, resource tiles Fog.
 - **Do** step a border rather than lift a surface: hairline at rest, Steel on hover, Ink when selected.

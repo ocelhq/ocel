@@ -3,6 +3,7 @@ import { type Environment, withEnvironment } from "@/lib/environment";
 type ProjectPage = {
   section: string;
   label: string;
+  heading?: string;
   empty: string;
   command?: string;
   aggregate?: string;
@@ -26,27 +27,33 @@ export const projectPages: ProjectPage[] = [
   {
     section: "resources",
     label: "Resources",
+    heading: "Declared in your app code",
     empty:
-      "Resources are declared in your app code. List what this project binds from the terminal.",
+      "The overview draws what the last deploy landed. For every binding and grant, ask the terminal.",
     command: "ocel bindings ls",
   },
   {
     section: "domains",
     label: "Domains",
-    empty:
-      "Hostnames are served from your own cloud. Check each one's DNS and certificate from the terminal.",
+    heading: "Served from your own cloud",
+    empty: "Check each hostname's DNS and certificate from the terminal.",
     command: "ocel domain ls",
   },
   {
     section: "monitoring",
     label: "Monitoring",
-    empty: "Monitoring isn't in the console yet.",
+    heading: "Not in the console yet",
+    empty:
+      "Monitoring is planned. Until it lands, logs and metrics stay where your provider keeps them.",
   },
   {
     section: "spend",
     label: "Cloud spend",
-    empty: "What this project costs in your own cloud account, not what Ocel charges.",
-    aggregate: "What your projects cost in your own cloud account, not what Ocel charges.",
+    heading: "Not in the console yet",
+    empty:
+      "Spend is planned: what this project costs in your own cloud account, not what Ocel charges.",
+    aggregate:
+      "Spend is planned: what your projects cost in your own cloud account, not what Ocel charges.",
   },
 ];
 

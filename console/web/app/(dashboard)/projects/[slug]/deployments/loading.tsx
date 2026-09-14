@@ -13,7 +13,6 @@ export function RunsSkeleton({ withProject }: { withProject: boolean }) {
         <Frame withProject={withProject}>
           <TableBody>
             {Array.from({ length: 8 }, (_, row) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: static placeholder rows
               <TableRow key={row} className="hover:bg-transparent">
                 {columns.map((column) => (
                   <TableCell key={column.key} className="h-14 px-5 first:pl-5 last:pr-5">

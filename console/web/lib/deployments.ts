@@ -166,3 +166,25 @@ export async function findRun(projectId: string, id: string): Promise<RunLoad> {
     return { error: true };
   }
 }
+
+export type LatestRun = Pick<Deployment, "projectId" | "kind" | "outcome" | "deployedAt">;
+
+export async function latestRuns(projectIds: string[]): Promise<Map<string, LatestRun>> {
+  if (projectIds.length === 0) {
+    return new Map();
+  }
+  const rows = await db
+    .selectDistinctOn([deployment.projectId], {
+      projectId: deployment.projectId,
+      kind: deployment.kind,
+      outcome: deployment.outcome,
+      deployedAt: deployment.deployedAt,
+    })
+    .from(deployment)
+    .where(
+      and(inArray(deployment.projectId, projectIds), eq(deployment.environmentClass, "production")),
+    )
+    .orderBy(deployment.projectId, desc(deployment.deployedAt));
+
+  return new Map(rows.map((row) => [row.projectId, row]));
+}

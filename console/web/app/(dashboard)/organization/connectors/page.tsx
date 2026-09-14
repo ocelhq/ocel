@@ -2,9 +2,10 @@ import { type Liveness, liveness } from "@console/api";
 import { capabilities } from "@console/connectors";
 import { requireOrganization } from "@/lib/access";
 import { connectorsOf, dial } from "@/lib/connectors";
+import { labelType } from "@/lib/type";
 import { CommandPane } from "../../command-pane";
 import { ProviderMark } from "../../marks";
-import { PageNotice, PageShell } from "../../page-shell";
+import { noticeBody, PageNotice, PageShell } from "../../page-shell";
 import { Stamp } from "../../stamp";
 
 const tones: Record<Liveness, string> = {
@@ -27,9 +28,8 @@ export default async function OrganizationConnectorsPage() {
   if (rows.length === 0) {
     return (
       <PageShell title="Connectors">
-        <PageNotice>
-          <h2 className="text-base font-semibold">Nothing connected yet</h2>
-          <p className="max-w-prose text-sm text-muted-foreground">
+        <PageNotice heading="Nothing connected yet">
+          <p className={noticeBody}>
             A connector is a small server you run in your own account. The console asks it for the
             things it must never store itself — variable values today, logs and spend later. Ocel
             never deploys or provisions from the browser.
@@ -65,11 +65,11 @@ export default async function OrganizationConnectorsPage() {
                 <ProviderMark provider={row.vendor} size={18} />
               </span>
               <div className="flex min-w-56 flex-1 flex-col gap-1">
-                <p className="font-mono text-[13px]">{row.target}</p>
+                <p className="font-medium">{row.target}</p>
                 <p className="font-mono text-xs break-all text-muted-foreground">
                   {row.url ?? "no address published"}
                 </p>
-                <p className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+                <p className={labelType}>
                   {row.compute ?? "compute unset"} · {row.reach}
                 </p>
               </div>
@@ -78,7 +78,7 @@ export default async function OrganizationConnectorsPage() {
                   <span aria-hidden className={`size-2 shrink-0 ${tones[live]}`} />
                   {says[live]}
                 </p>
-                <p className="font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+                <p className={labelType}>
                   {row.lastSeenAt ? (
                     <>
                       seen <Stamp at={row.lastSeenAt.toISOString()} now={now} />
@@ -90,10 +90,7 @@ export default async function OrganizationConnectorsPage() {
               </div>
               <ul className="flex min-w-52 flex-wrap gap-1">
                 {(reached?.done ? reached.result : row.capabilities).map((held) => (
-                  <li
-                    key={held}
-                    className="border border-border px-1.5 py-0.5 font-mono text-[11px] tracking-[0.14em] text-muted-foreground uppercase"
-                  >
+                  <li key={held} className={`border border-border px-1.5 py-0.5 ${labelType}`}>
                     {held}
                   </li>
                 ))}
@@ -102,9 +99,8 @@ export default async function OrganizationConnectorsPage() {
           );
         })}
       </div>
-      <PageNotice>
-        <h2 className="text-base font-semibold">Adding another</h2>
-        <p className="max-w-prose text-sm text-muted-foreground">
+      <PageNotice heading="Adding another">
+        <p className={noticeBody}>
           One connector per bootstrapped target. It runs under that target’s own credentials, and
           the console can ask it only for the day-2 things — never a deploy.
         </p>

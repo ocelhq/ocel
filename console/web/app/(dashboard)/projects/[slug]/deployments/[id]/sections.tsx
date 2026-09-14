@@ -15,9 +15,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { spanOf } from "@/lib/runs";
+import { labelType } from "@/lib/type";
 import { cn } from "@/lib/utils";
 import { CommandPane } from "../../../../command-pane";
-import { labelType } from "../../../../label";
 import { AppMark, ProviderMark, ResourceMark } from "../../../../marks";
 import { StatusDot } from "../cells";
 
@@ -131,7 +131,7 @@ export function ResourceList({
             </span>
             <span className="text-sm font-semibold">{resource.name}</span>
             <span className="text-xs text-muted-foreground">
-              {resource.type} · <span className="font-mono">{resource.binding.name}</span>
+              {resource.type} · {resource.binding.name}
             </span>
             <span className="ml-auto text-xs text-muted-foreground">
               {apps.length === 0 ? "Read by nothing" : `Read by ${apps.join(", ")}`}
@@ -158,7 +158,6 @@ export function BuildLog({ stages }: { stages: DeploymentStage[] }) {
             {stage.status === "skipped" ? " · skipped" : ""}
           </span>
           {stage.log.map((line, at) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: log lines are positional
             <span key={at} className="block text-terminal-ink">
               {line}
             </span>
@@ -183,7 +182,7 @@ function Head({ labels }: { labels: string[] }) {
     <TableHeader>
       <TableRow className="hover:bg-transparent">
         {labels.map((label) => (
-          <TableHead key={label} className="h-9 px-4 text-xs font-medium text-muted-foreground">
+          <TableHead key={label} className={`h-9 px-4 ${labelType}`}>
             {label}
           </TableHead>
         ))}

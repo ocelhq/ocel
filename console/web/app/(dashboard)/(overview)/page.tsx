@@ -4,10 +4,11 @@ import { ArrowUpRightIcon } from "@phosphor-icons/react/dist/ssr";
 import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { requireOrganization } from "@/lib/access";
+import { latestRuns } from "@/lib/deployments";
 import { FrameworkStack } from "../framework-stack";
 import { EmptyProjects } from "./empty";
 import { ProjectGrid, ProjectGridCell, ProjectsShell } from "./shell";
-import { placeholderStatus, StatusLine } from "./status";
+import { StatusLine } from "./status";
 
 const createdFormat = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
@@ -27,6 +28,8 @@ export default async function OverviewPage() {
     .from(project)
     .where(eq(project.organizationId, session.activeOrganizationId))
     .orderBy(desc(project.createdAt));
+  const runs = await latestRuns(projects.map((item) => item.id));
+  const now = new Date().toISOString();
 
   return (
     <ProjectsShell>
@@ -34,7 +37,7 @@ export default async function OverviewPage() {
         <EmptyProjects />
       ) : (
         <ProjectGrid>
-          {projects.map((item, index) => (
+          {projects.map((item) => (
             <ProjectGridCell
               key={item.id}
               className="relative hover:z-10 hover:border-dim focus-within:z-10"
@@ -52,9 +55,9 @@ export default async function OverviewPage() {
                 </div>
                 <div className="flex min-w-0 flex-col gap-2">
                   <h2 className="truncate text-lg/6 font-semibold tracking-tight">{item.name}</h2>
-                  <StatusLine status={placeholderStatus(index)} />
+                  <StatusLine run={runs.get(item.id)} now={now} />
                   <p className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                    <span className="truncate font-mono">{item.slug}</span>
+                    <span className="truncate">{item.slug}</span>
                     <span aria-hidden className="text-faint">
                       /
                     </span>
