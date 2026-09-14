@@ -12,6 +12,7 @@ NONCE_BYTES = 12
 TAG_BYTES = 16
 
 COORDINATE = ("project", "class", "env", "folder", "binding", "name")
+SEAL_ROOT = "/etc/ocel"
 
 
 def abort(said):
@@ -151,7 +152,7 @@ def main(argv):
     held, verb, rest = argv[0], argv[1], list(argv[2:])
     if not re.fullmatch("[a-z0-9-]+", held):
         abort("%s is no class this host seals anything to" % held)
-    path = os.path.join(os.environ.get("OCEL_SEAL_ROOT", "/etc/ocel"), held, "seal.key")
+    path = os.path.join(SEAL_ROOT, held, "seal.key")
 
     if verb == "init":
         if rest:
