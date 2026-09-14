@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -437,6 +438,7 @@ func (r *Runner) Close() {
 
 		if network == "unix" && address != "" {
 			_ = os.Remove(address)
+			_ = os.Remove(filepath.Dir(address))
 		}
 	})
 }

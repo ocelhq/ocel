@@ -26,7 +26,12 @@ import (
 func spawnFake(t *testing.T, ctx context.Context, mode string, cfg Config) (*Runner, string) {
 	t.Helper()
 
-	sockPath := filepath.Join(t.TempDir(), "provider.sock")
+	sockDir, err := os.MkdirTemp("", "ocel-provider-*")
+	if err != nil {
+		t.Fatalf("reserve the socket directory: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	sockPath := filepath.Join(sockDir, "provider.sock")
 	cfg.BinaryPath = os.Args[0]
 	cfg.Env = append([]string{
 		fakeProviderEnvVar + "=1",
@@ -597,6 +602,23 @@ func TestClose(t *testing.T) {
 		r.Close()
 		r.Close()
 		assertProcessGone(t, r)
+	})
+
+	t.Run("the directory the provider reserved for its socket is removed too", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		r, sockPath := spawnFake(t, ctx, "success", Config{})
+		if err := r.Ready(ctx); err != nil {
+			t.Fatalf("Ready() error = %v, want nil", err)
+		}
+
+		r.Close()
+		assertNoStaleSocket(t, sockPath)
+
+		if _, err := os.Stat(filepath.Dir(sockPath)); !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("socket directory %s survives Close() (stat err = %v), want one temp directory per run reclaimed", filepath.Dir(sockPath), err)
+		}
 	})
 }
 
