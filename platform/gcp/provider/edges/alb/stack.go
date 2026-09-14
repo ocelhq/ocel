@@ -137,14 +137,21 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 		Service:     service,
 		Backend:     backendName(s.state.Slug, s.state.Class, binding.Hostname),
 	}
-	if err := s.raise(ctx, hosts); err != nil {
+	claimed, err := s.claim(ctx, binding.Hostname)
+	if err != nil {
 		return err
+	}
+	release := func() error {
+		if !claimed {
+			return nil
+		}
+		return s.disown(ctx, binding.Hostname)
+	}
+	if err := s.raise(ctx, hosts); err != nil {
+		return errors.Join(err, release())
 	}
 	if err := s.reach(ctx, hosts[binding.Hostname], binding.Hostname); err != nil {
-		return errors.Join(err, s.raise(ctx, s.held.Hosts))
-	}
-	if err := s.claim(ctx, binding.Hostname); err != nil {
-		return err
+		return errors.Join(err, s.raise(ctx, s.held.Hosts), release())
 	}
 	s.held.Hosts = hosts
 	s.keep()
@@ -220,21 +227,55 @@ func (s *stack) serving(ctx context.Context, app string) (string, error) {
 	return record.Physical, nil
 }
 
-func (s *stack) claim(ctx context.Context, hostname string) error {
+func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	name := s.e.claim(s.state.Class, hostname)
 	record, err := providerkit.Held(ctx, s.e.deps.Records, name)
 	if err != nil {
-		return fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
+		return false, fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
-	encoded, err := json.Marshal(claim{Owner: Surface(s.state.Slug, s.state.Class)})
+	owner := Surface(s.state.Slug, s.state.Class)
+	if len(record.Bytes) > 0 {
+		var held claim
+		if err := json.Unmarshal(record.Bytes, &held); err != nil {
+			return false, fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, Kind, err)
+		}
+		if held.Owner == owner {
+			return false, nil
+		}
+		return false, claimedBy(hostname, held.Owner)
+	}
+	encoded, err := json.Marshal(claim{Owner: owner})
 	if err != nil {
-		return fmt.Errorf("encode what serves %s on the %s edge: %w", hostname, Kind, err)
+		return false, fmt.Errorf("encode what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
 	record.Bytes = encoded
-	if _, err := s.e.deps.Records.Write(ctx, record); err != nil {
-		return fmt.Errorf("record what serves %s on the %s edge: %w", hostname, Kind, err)
+	_, err = s.e.deps.Records.Write(ctx, record)
+	if errors.Is(err, providerkit.ErrStale) {
+		return false, s.claimedMeanwhile(ctx, hostname, name)
 	}
-	return nil
+	if err != nil {
+		return false, fmt.Errorf("record what serves %s on the %s edge: %w", hostname, Kind, err)
+	}
+	return true, nil
+}
+
+func (s *stack) claimedMeanwhile(ctx context.Context, hostname string, name providerkit.RecordName) error {
+	record, err := providerkit.Held(ctx, s.e.deps.Records, name)
+	if err != nil || len(record.Bytes) == 0 {
+		return providerkit.Refuse(providerkit.CodeBusy,
+			"%s was claimed on the %s edge while this bind was claiming it: bind it again once the other run has finished", hostname, Kind)
+	}
+	var held claim
+	if err := json.Unmarshal(record.Bytes, &held); err != nil {
+		return fmt.Errorf("decode what serves %s on the %s edge: %w", hostname, Kind, err)
+	}
+	return claimedBy(hostname, held.Owner)
+}
+
+func claimedBy(hostname, owner string) error {
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"%s is served by %s on the %s edge, and one hostname is routed to one project: release it there with `ocel domain remove` first",
+		hostname, owner, Kind)
 }
 
 func (s *stack) disown(ctx context.Context, hostname string) error {
