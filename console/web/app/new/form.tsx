@@ -7,6 +7,7 @@ import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
+import { labelType } from "@/lib/type";
 
 type Membership = { id: string; name: string; slug: string };
 
@@ -16,8 +17,6 @@ function slugify(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
-
-const labelClass = "font-mono text-[11px] font-medium tracking-[0.14em] text-dim uppercase";
 
 export function NewOrganizationForm({
   destination,
@@ -88,7 +87,7 @@ export function NewOrganizationForm({
 
       {memberships.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className={labelClass}>Your organizations</span>
+          <span className={labelType}>Your organizations</span>
           <ul className="border-t border-l border-border">
             {memberships.map((membership) => (
               <li key={membership.id} className="border-r border-b border-border">
@@ -100,7 +99,7 @@ export function NewOrganizationForm({
                 >
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate font-medium">{membership.name}</span>
-                    <span className="truncate font-mono text-xs text-muted-foreground">
+                    <span className="truncate text-xs text-muted-foreground">
                       {membership.slug}
                     </span>
                   </span>
@@ -113,9 +112,9 @@ export function NewOrganizationForm({
       )}
 
       <form onSubmit={create} className="flex flex-col gap-5" noValidate>
-        {memberships.length > 0 && <span className={labelClass}>Or create a new one</span>}
+        {memberships.length > 0 && <span className={labelType}>Or create a new one</span>}
         <label className="flex flex-col gap-2">
-          <span className={labelClass}>Name</span>
+          <span className={labelType}>Name</span>
           <Input
             name="name"
             value={name}
@@ -127,7 +126,7 @@ export function NewOrganizationForm({
           />
         </label>
         <label className="flex flex-col gap-2">
-          <span className={labelClass}>Slug</span>
+          <span className={labelType}>Slug</span>
           <Input
             name="slug"
             value={effectiveSlug}
@@ -136,7 +135,7 @@ export function NewOrganizationForm({
               setSlug(slugify(event.target.value));
             }}
             placeholder="acme"
-            className="h-9 font-mono"
+            className="h-9"
             aria-describedby="slug-hint"
           />
           <span id="slug-hint" className="text-xs text-muted-foreground">

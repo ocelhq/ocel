@@ -1,6 +1,7 @@
 import { db } from "@console/db";
 import { project } from "@console/db/schema";
 import {
+  ArrowLeftIcon,
   CaretRightIcon,
   GitBranchIcon,
   GitCommitIcon,
@@ -31,7 +32,7 @@ import {
   runStatus,
   shortId,
 } from "@/lib/runs";
-import { labelType } from "../../../../label";
+import { labelType } from "@/lib/type";
 import { EdgeMark, ProviderMark } from "../../../../marks";
 import { Stamp } from "../../../../stamp";
 import { Author, EnvironmentBadge, StatusDot, Trigger } from "../cells";
@@ -116,13 +117,14 @@ export default async function RunPage({
   const checks = checksOf(run.topology.apps).length;
 
   return (
-    <div className="flex flex-1 flex-col gap-6 px-5 pt-6 pb-12 md:px-8">
+    <div className="flex flex-1 flex-col gap-6 px-5 pt-8 pb-12 md:px-8">
       <header className="flex flex-col gap-4">
         <Link
           href={back}
-          className={`${labelType} w-fit underline-offset-4 outline-none hover:underline focus-visible:underline`}
+          className={`${labelType} inline-flex w-fit items-center gap-1.5 underline-offset-4 outline-none hover:underline focus-visible:underline`}
         >
-          ← Deployments
+          <ArrowLeftIcon aria-hidden className="size-3.5" />
+          Deployments
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
           <div className="flex flex-col gap-3">

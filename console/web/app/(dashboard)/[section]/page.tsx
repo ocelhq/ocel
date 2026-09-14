@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { environmentOf } from "@/lib/environment";
-import { PageNotice, PageShell } from "../page-shell";
+import { noticeBody, PageNotice, PageShell } from "../page-shell";
 import { ProjectPicker } from "../project-picker";
 import { projectPage } from "../sections";
 
@@ -19,8 +19,8 @@ export default async function PickProjectPage({
   if (page.aggregate) {
     return (
       <PageShell title={page.label}>
-        <PageNotice>
-          <p className="max-w-prose text-muted-foreground">{page.aggregate}</p>
+        <PageNotice heading={page.heading}>
+          <p className={noticeBody}>{page.aggregate}</p>
         </PageNotice>
       </PageShell>
     );

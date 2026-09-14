@@ -1,31 +1,11 @@
 import type { RefusalReason } from "@console/connectors";
-import type { ReactNode } from "react";
 import { CommandPane } from "../../../command-pane";
-import { PageNotice } from "../../../page-shell";
-
-function Notice({
-  heading,
-  children,
-  role,
-}: {
-  heading: string;
-  children: ReactNode;
-  role?: "alert";
-}) {
-  return (
-    <PageNotice>
-      <div className="flex flex-col items-start gap-4" role={role}>
-        <h2 className="text-base font-semibold">{heading}</h2>
-        {children}
-      </div>
-    </PageNotice>
-  );
-}
+import { PageNotice as Notice, noticeBody } from "../../../page-shell";
 
 export function NeverDeployed() {
   return (
     <Notice heading="No variables declared yet">
-      <p className="max-w-prose text-sm text-muted-foreground">
+      <p className={noticeBody}>
         Keys come from <code className="font-mono text-foreground">defineEnv</code> in your app
         code, and the console learns them when a deploy reports what it landed. Nothing has been
         reported for this project.
@@ -38,7 +18,7 @@ export function NeverDeployed() {
 export function NoConnector({ vendor }: { vendor: string | null }) {
   return (
     <Notice heading="Values live in your own cloud">
-      <p className="max-w-prose text-sm text-muted-foreground">
+      <p className={noticeBody}>
         The keys below are what your last deploy reported. The values themselves are stored in
         {vendor ? ` your ${vendor} account` : " your own cloud"} and the console never holds them,
         so reading one needs a connector running there.
@@ -83,7 +63,7 @@ export function Refused({ reason, message }: { reason: RefusalReason; message: s
   const held = refusals[reason];
   return (
     <Notice heading={held.heading} role="alert">
-      <p className="max-w-prose text-sm text-muted-foreground">{held.body}</p>
+      <p className={noticeBody}>{held.body}</p>
       <p className="max-w-prose font-mono text-xs break-words text-muted-foreground">{message}</p>
       {held.command && <CommandPane command={held.command} />}
     </Notice>
@@ -93,9 +73,7 @@ export function Refused({ reason, message }: { reason: RefusalReason; message: s
 export function LoadError() {
   return (
     <Notice heading="Variables didn’t load" role="alert">
-      <p className="max-w-prose text-sm text-muted-foreground">
-        Nothing in your cloud is affected. Try again in a moment.
-      </p>
+      <p className={noticeBody}>Nothing in your cloud is affected. Try again in a moment.</p>
     </Notice>
   );
 }

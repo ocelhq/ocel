@@ -21,7 +21,7 @@ export function EnvironmentSwitcher() {
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`Environment: ${environment}. Switch environment`}
-        className="flex h-8 shrink-0 items-center gap-1.5 px-2 font-mono text-[13px] font-medium outline-hidden transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring data-popup-open:bg-muted"
+        className="flex h-8 shrink-0 items-center gap-1.5 px-2 font-medium outline-hidden transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring data-popup-open:bg-muted"
       >
         {environment}
         <CaretUpDownIcon className="size-4 text-muted-foreground" />
@@ -41,11 +41,7 @@ export function EnvironmentSwitcher() {
           }}
         >
           {environments.map((item) => (
-            <DropdownMenuRadioItem
-              key={item}
-              value={item}
-              className="px-2.5 py-2 font-mono text-[13px]"
-            >
+            <DropdownMenuRadioItem key={item} value={item} className="px-2.5 py-2 text-sm">
               {item}
             </DropdownMenuRadioItem>
           ))}

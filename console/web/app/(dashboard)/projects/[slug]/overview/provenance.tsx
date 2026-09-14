@@ -7,8 +7,8 @@ import {
 } from "@phosphor-icons/react";
 import { useReactFlow } from "@xyflow/react";
 import { useEffect, useRef, useState } from "react";
+import { labelType } from "@/lib/type";
 import { EnvironmentSwitcher } from "../../../environment-switcher";
-import { labelType } from "../../../label";
 import { Stamp } from "../../../stamp";
 import { useFitOptions } from "./nodes";
 

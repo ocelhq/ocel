@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { listRuns } from "@/lib/deployments";
 import { runScopeOf } from "@/lib/environment";
 import { PageShell } from "../../../page-shell";
@@ -6,9 +7,6 @@ import type { RunProject } from "./columns";
 import { RunFilter } from "./filter";
 import { Frame, LoadError, NeverDeployed, NothingOlder } from "./states";
 import { RunRows } from "./table";
-
-const pager =
-  "border border-border px-3 py-1.5 text-xs font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/40";
 
 export type RunsQuery = { [key: string]: string | string[] | undefined };
 
@@ -61,17 +59,24 @@ export async function RunsPage({
         {!load.error && (before || load.more) && (
           <div className="flex items-center gap-2">
             {before && (
-              <Link href={href()} className={pager}>
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={<Link href={href()} />}
+              >
                 Newest
-              </Link>
+              </Button>
             )}
             {load.more && (
-              <Link
-                href={href(load.rows[load.rows.length - 1].deployedAt.getTime())}
-                className={pager}
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={<Link href={href(load.rows[load.rows.length - 1].deployedAt.getTime())} />}
               >
                 Older
-              </Link>
+              </Button>
             )}
           </div>
         )}

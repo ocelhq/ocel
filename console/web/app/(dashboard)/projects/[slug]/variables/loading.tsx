@@ -11,7 +11,6 @@ export default function VariablesLoading() {
           <Skeleton className="ml-auto h-8 w-56" />
         </div>
         {Array.from({ length: 7 }, (_, row) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: static placeholder rows
           <div key={row} className="flex h-14 items-center gap-4 border-b border-border px-4">
             <Skeleton className="size-4 shrink-0" />
             <Skeleton className="h-3.5 w-48" />

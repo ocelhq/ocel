@@ -1,14 +1,13 @@
 import type { ReactNode } from "react";
+import { shortId } from "@/lib/runs";
+import { labelType } from "@/lib/type";
 import { Stamp } from "../../../stamp";
-
-const termLabel =
-  "font-sans text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase";
 
 function Fact({ term, children }: { term: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <dt className={termLabel}>{term}</dt>
-      <dd className="font-sans text-[13px] text-foreground">{children}</dd>
+      <dt className={labelType}>{term}</dt>
+      <dd className="text-[13px] text-foreground">{children}</dd>
     </div>
   );
 }
@@ -33,7 +32,13 @@ export function Provenance({
       <Fact term="deployed">
         <Stamp at={deployedAt} now={now} />
       </Fact>
-      {promotion && <Fact term="promotion">{promotion}</Fact>}
+      {promotion && (
+        <Fact term="promotion">
+          <span className="font-mono" title={promotion}>
+            {shortId(promotion)}
+          </span>
+        </Fact>
+      )}
       {provider && (
         <Fact term="provider">
           {provider}

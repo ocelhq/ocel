@@ -5,7 +5,7 @@ import { ArrowSquareOutIcon, XIcon } from "@phosphor-icons/react";
 import { useEffect, useRef } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { labelType } from "../../../label";
+import { labelType } from "@/lib/type";
 import { AppMark, OutcomeDot, ProviderMark, ResourceMark } from "../../../marks";
 
 export type Selection = { kind: "app"; name: string } | { kind: "resource"; name: string };

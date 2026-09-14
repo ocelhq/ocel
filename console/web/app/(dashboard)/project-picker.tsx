@@ -36,7 +36,7 @@ export async function ProjectPicker({
           >
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="truncate font-medium">{item.name}</span>
-              <span className="truncate font-mono text-xs text-muted-foreground">{item.slug}</span>
+              <span className="truncate text-xs text-muted-foreground">{item.slug}</span>
             </span>
             <ArrowRightIcon
               aria-hidden

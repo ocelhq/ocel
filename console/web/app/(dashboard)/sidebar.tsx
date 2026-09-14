@@ -160,7 +160,7 @@ function ScopedNavigation() {
           </SidebarMenuItem>
         </SidebarMenu>
       )}
-      <SidebarGroupLabel className={slug ? "font-mono text-foreground" : undefined}>
+      <SidebarGroupLabel className={slug ? "text-foreground" : undefined}>
         <span className="truncate">{slug ?? "All projects"}</span>
       </SidebarGroupLabel>
       <SidebarGroupContent>

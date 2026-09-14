@@ -5,7 +5,7 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react";
 import { Handle, type Node, type NodeProps, Position } from "@xyflow/react";
 import { createContext, type ReactNode, useContext } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { labelType } from "../../../label";
+import { labelType } from "@/lib/type";
 import { AppMark, OutcomeDot, ProviderMark, ResourceMark } from "../../../marks";
 
 const SelectNode = createContext<(id: string) => void>(() => {});

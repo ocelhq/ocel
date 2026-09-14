@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { requireOrganization } from "@/lib/access";
 import { CommandPane } from "../../../command-pane";
-import { PageNotice, PageShell } from "../../../page-shell";
+import { noticeBody, PageNotice, PageShell } from "../../../page-shell";
 import { projectPage } from "../../../sections";
 
 export default async function ProjectSectionPage({
@@ -28,8 +28,8 @@ export default async function ProjectSectionPage({
 
   return (
     <PageShell title={page.label}>
-      <PageNotice>
-        <p className="max-w-prose text-muted-foreground">{page.empty}</p>
+      <PageNotice heading={page.heading}>
+        <p className={noticeBody}>{page.empty}</p>
         {page.command && <CommandPane command={page.command} />}
       </PageNotice>
     </PageShell>

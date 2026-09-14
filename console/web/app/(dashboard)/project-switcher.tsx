@@ -57,7 +57,7 @@ export function ProjectSwitcher({ projects }: { projects: ProjectOption[] | null
             <li ref={anchorRef} className="flex min-w-0 items-center gap-0.5">
               <Link
                 href={projectHref(active.slug, "", environment)}
-                className="truncate px-2 py-1 font-mono text-[13px] font-medium outline-hidden transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring"
+                className="truncate px-2 py-1 font-medium outline-hidden transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring"
               >
                 {active.slug}
               </Link>
@@ -68,7 +68,7 @@ export function ProjectSwitcher({ projects }: { projects: ProjectOption[] | null
                 <CaretUpDownIcon className="size-4" />
               </ComboboxTrigger>
             </li>
-            <li aria-hidden="true" className="shrink-0 font-mono text-[13px] text-dim select-none">
+            <li aria-hidden="true" className="shrink-0 text-dim select-none">
               /
             </li>
             <li className="flex shrink-0 items-center gap-0.5">
@@ -106,9 +106,7 @@ export function ProjectSwitcher({ projects }: { projects: ProjectOption[] | null
             <ComboboxItem key={item.slug} value={item} className="py-2.5 pl-3 text-sm leading-5">
               <span className="flex min-w-0 flex-col gap-0.5">
                 <span className="truncate">{item.name}</span>
-                <span className="truncate font-mono text-xs text-muted-foreground">
-                  {item.slug}
-                </span>
+                <span className="truncate text-xs text-muted-foreground">{item.slug}</span>
               </span>
             </ComboboxItem>
           )}

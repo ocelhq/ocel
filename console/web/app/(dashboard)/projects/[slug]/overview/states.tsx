@@ -1,8 +1,9 @@
 import type { DeploymentTopology } from "@console/db/schema";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Environment } from "@/lib/environment";
+import { labelType } from "@/lib/type";
 import { CommandPane } from "../../../command-pane";
-import { labelType } from "../../../label";
 import type { Failure, Provenance } from "./provenance";
 import { ProvenanceStrip } from "./provenance";
 import { ServiceMap } from "./service-map";
@@ -50,8 +51,8 @@ export function NeverDeployed({
   return (
     <div className={ground} style={dots}>
       <div className="absolute inset-0 grid place-items-center overflow-y-auto px-5 py-20">
-        <div className="flex flex-col items-center gap-8">
-          <div className="flex items-center gap-6">
+        <div className="flex w-full max-w-lg flex-col items-center gap-8">
+          <div className="hidden items-center gap-6 sm:flex">
             <GhostTile title="an app" caption="not deployed" />
             <svg aria-hidden viewBox="0 0 96 24" className="h-6 w-24 text-dim/60">
               <path
@@ -64,9 +65,9 @@ export function NeverDeployed({
             </svg>
             <GhostTile title="a resource" caption="not deployed" />
           </div>
-          <div className="flex max-w-lg flex-col items-start gap-5 border border-border bg-background px-5 py-8 md:px-10">
+          <div className="flex w-full flex-col items-start gap-5 border border-border bg-background px-5 py-8 md:px-8">
             <div className="flex flex-col gap-1">
-              <h1 className="text-lg font-semibold tracking-tight">
+              <h1 className="text-lg font-semibold tracking-tight text-balance">
                 Nothing deployed to {environment} yet
               </h1>
               <p className="text-muted-foreground">
@@ -112,20 +113,19 @@ export function LoadError({ href }: { href: string }) {
   return (
     <div className={ground} style={dots}>
       <div className="absolute inset-0 grid place-items-center px-5">
-        <div className="flex max-w-lg flex-col items-start gap-5 border border-border bg-background px-5 py-8 md:px-10">
+        <div className="flex w-full max-w-lg flex-col items-start gap-5 border border-border bg-background px-5 py-8 md:px-8">
           <div className="flex flex-col gap-1" role="alert">
-            <h1 className="text-lg font-semibold tracking-tight">Deployments didn&rsquo;t load</h1>
+            <h1 className="text-lg font-semibold tracking-tight text-balance">
+              Deployments didn&rsquo;t load
+            </h1>
             <p className="text-muted-foreground">
               The console couldn&rsquo;t load this project&rsquo;s deployments. Nothing in your
               cloud account is affected.
             </p>
           </div>
-          <a
-            href={href}
-            className="border border-border px-4 py-2.5 text-sm font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/40"
-          >
+          <Button variant="outline" nativeButton={false} render={<a href={href} />}>
             Try again
-          </a>
+          </Button>
         </div>
       </div>
     </div>
