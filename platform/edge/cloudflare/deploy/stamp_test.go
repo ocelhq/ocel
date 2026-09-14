@@ -90,7 +90,10 @@ func TestSpecStampCoversDeployedMetadata(t *testing.T) {
 
 	t.Run("turning observability off restamps the spec", func(t *testing.T) {
 		spec := edge.StackSpec{Slug: "acme-web", Version: "v2", Program: &edge.ProgramSpec{Name: "ocel-web"}}
-		generic := genericWorker(spec, spec.Slug)
+		generic, err := genericWorker(spec, spec.Slug)
+		if err != nil {
+			t.Fatalf("genericWorker: %v", err)
+		}
 
 		t.Setenv(envObservability, "on")
 		on, err := specStamp(spec, generic)

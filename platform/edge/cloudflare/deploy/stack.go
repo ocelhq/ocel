@@ -140,7 +140,10 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	slug := spec.Slug
 	endpoint := program.StoreEndpoint
 
-	generic := genericWorker(spec, slug)
+	generic, err := genericWorker(spec, slug)
+	if err != nil {
+		return nil, err
+	}
 	stamp, err := specStamp(spec, generic)
 	if err != nil {
 		return nil, err
@@ -484,7 +487,7 @@ func withSecret(worker edge.Worker, name, value string) edge.Worker {
 	return worker
 }
 
-func genericWorker(spec edge.StackSpec, slug string) edge.Worker {
+func genericWorker(spec edge.StackSpec, slug string) (edge.Worker, error) {
 	worker := withVar(
 		withService(spec.Program.Worker, genericStoreBinding, spec.Program.StoreScriptName),
 		genericSlugBinding,
@@ -494,11 +497,13 @@ func genericWorker(spec edge.StackSpec, slug string) edge.Worker {
 		worker = withService(worker, genericISRWriterBinding, spec.Program.ISRWriterScriptName)
 	}
 	if len(spec.DomainApps) > 0 {
-		if encoded, err := json.Marshal(spec.DomainApps); err == nil {
-			worker = withVar(worker, genericDomainAppsBinding, string(encoded))
+		encoded, err := json.Marshal(spec.DomainApps)
+		if err != nil {
+			return edge.Worker{}, fmt.Errorf("encode the apps each domain of %s serves: %w", slug, err)
 		}
+		worker = withVar(worker, genericDomainAppsBinding, string(encoded))
 	}
-	return bindCodeLoader(bindObjectStore(worker, spec.Values))
+	return bindCodeLoader(bindObjectStore(worker, spec.Values)), nil
 }
 
 func withService(worker edge.Worker, name, service string) edge.Worker {
