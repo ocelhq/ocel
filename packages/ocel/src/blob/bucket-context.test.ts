@@ -27,6 +27,7 @@ describe("resolveBucketContext", () => {
       bucket: { bucket: "org-project-store" },
     });
     process.env.OCEL_RUNTIME_ADDRESS = "http://localhost:7070";
+    process.env.OCEL_SESSION_TOKEN = "session-token";
 
     const ctx = resolveBucketContext(bucket("storage", { uploaders: {} }));
 
@@ -46,7 +47,7 @@ describe("resolveBucketContext", () => {
     const seen: (string | undefined)[] = [];
     const server = createServer((req, res) => {
       seen.push(req.headers.authorization);
-      res.statusCode = 500;
+      res.statusCode = req.headers.authorization === "Bearer session-token" ? 500 : 403;
       res.end();
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -78,6 +79,18 @@ describe("resolveBucketContext", () => {
 
     expect(() => resolveBucketContext(bucket("storage", { uploaders: {} }))).toThrow(
       /OCEL_RUNTIME_ADDRESS/,
+    );
+  });
+
+  it("throws naming the session token when the address arrived without it", () => {
+    process.env.OCEL_RESOURCE_BUCKET_storage = JSON.stringify({
+      name: "storage",
+      bucket: { bucket: "org-project-store" },
+    });
+    process.env.OCEL_RUNTIME_ADDRESS = "http://localhost:7070";
+
+    expect(() => resolveBucketContext(bucket("storage", { uploaders: {} }))).toThrow(
+      /OCEL_SESSION_TOKEN/,
     );
   });
 });

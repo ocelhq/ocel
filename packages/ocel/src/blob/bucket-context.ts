@@ -18,11 +18,10 @@ function authorized(token: string): Interceptor {
 
 export function resolveBucketContext(bucket: Bucket): BucketContext {
   const { bucket: storeBucket } = bucket.__config();
-  const token = getSessionToken();
   const transport = createConnectTransport({
     httpVersion: "1.1",
     baseUrl: getRuntimeAddress(),
-    interceptors: token ? [authorized(token)] : [],
+    interceptors: [authorized(getSessionToken())],
   });
   return { client: createBucketClient(transport), bucket: storeBucket };
 }
