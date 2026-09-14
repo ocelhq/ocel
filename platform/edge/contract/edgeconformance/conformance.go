@@ -3,7 +3,10 @@ package edgeconformance
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -11,9 +14,10 @@ import (
 )
 
 type Suite struct {
-	New      func(t *testing.T) (edge.Edge, edge.StackSpec)
-	Hostname string
-	Previews func(t *testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec)
+	New       func(t *testing.T) (edge.Edge, edge.StackSpec)
+	Hostname  string
+	Previews  func(t *testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec)
+	Bootstrap func(t *testing.T) (edge.Edge, edge.Class)
 }
 
 func promote(t *testing.T, stack edge.EdgeStack, promotion edge.Promotion, pointer string) {
@@ -410,6 +414,10 @@ func Run(t *testing.T, suite Suite) {
 
 	runPreviews(t, suite)
 
+	runProgrammable(t, suite)
+
+	runBootstrap(t, suite)
+
 	t.Run("destroying a stack takes the domains it bound with it", func(t *testing.T) {
 		ctx := context.Background()
 		e, stack := reconciledOn(t, suite)
@@ -566,6 +574,204 @@ func reconciledOn(t *testing.T, suite Suite) (edge.Edge, edge.EdgeStack) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	return e, stack
+}
+
+type resolver struct {
+	url    string
+	creds  edge.Credentials
+	signed bool
+}
+
+func (r resolver) FunctionURL(string) (string, error) { return r.url, nil }
+
+func (r resolver) EdgeCredentials() (edge.Credentials, bool) { return r.creds, r.signed }
+
+func appSource(t *testing.T) edge.WorkerSource {
+	t.Helper()
+
+	root := t.TempDir()
+	descriptor, err := json.Marshal(edge.ServeDescriptor{Runtime: "next", BuildID: "conformance", EdgeRouting: true, Entry: "/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{
+		edge.ServeDescriptorFile: string(descriptor),
+		edge.RoutingManifestFile: `{"buildId":"conformance"}`,
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bundle := filepath.Join(root, "index.js")
+	if err := os.WriteFile(bundle, []byte("export default {}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return edge.WorkerSource{ArtifactRoot: root, BundlePath: bundle, Entry: "/", Routes: []string{"/"}}
+}
+
+func runProgrammable(t *testing.T, suite Suite) {
+	t.Run("the programmable surface", func(t *testing.T) {
+		e, _ := suite.New(t)
+		programmable, ok := e.(edge.Programmable)
+		if !ok {
+			t.Skip("this edge runs no code, so it assembles and deploys nothing")
+		}
+		signed := resolver{
+			url:    "https://conformance.lambda-url.eu-west-1.on.aws/",
+			creds:  edge.Credentials{AccessKeyID: "AKIACONFORMANCE", SecretKey: "conformance-secret-half"},
+			signed: true,
+		}
+
+		t.Run("an edge that signs its origin forwards refuses an app it cannot sign for", func(t *testing.T) {
+			if !e.Facts().SignsOriginForwards {
+				t.Skip("this edge forwards to the origin unsigned")
+			}
+			unsigned := signed
+			unsigned.signed = false
+			if _, err := programmable.AssembleApp(appSource(t), unsigned); err == nil {
+				t.Error("AssembleApp with no edge credentials = nil error; the worker would reach the origin unsigned, and an edge that declares SignsOriginForwards must refuse rather than ship it")
+			}
+		})
+
+		t.Run("the secret half of a signing credential never lands in plain text", func(t *testing.T) {
+			if !e.Facts().SignsOriginForwards {
+				t.Skip("this edge forwards to the origin unsigned")
+			}
+			worker, err := programmable.AssembleApp(appSource(t), signed)
+			if err != nil {
+				t.Fatalf("AssembleApp: %v", err)
+			}
+			if !slices.Contains(slices.Collect(maps.Values(worker.Secrets)), signed.creds.SecretKey) {
+				t.Errorf("Secrets = %v, want the secret half of the signing credential among them", slices.Collect(maps.Keys(worker.Secrets)))
+			}
+			for name, value := range worker.Vars {
+				if value == signed.creds.SecretKey {
+					t.Errorf("Vars[%s] carries the secret half of the signing credential; a plain-text binding is readable back through the edge's API", name)
+				}
+			}
+		})
+
+		t.Run("an app is found once deployed and not before", func(t *testing.T) {
+			ctx := context.Background()
+			e, _ := suite.New(t)
+			programmable := e.(edge.Programmable)
+			const name = "ocel-conformance-prod-web"
+
+			found, err := programmable.FindApp(ctx, name)
+			if err != nil {
+				t.Fatalf("FindApp before deploying: %v", err)
+			}
+			if found {
+				t.Fatalf("FindApp(%q) = true before anything was deployed under it", name)
+			}
+
+			worker, err := programmable.AssembleApp(appSource(t), signed)
+			if err != nil {
+				t.Fatalf("AssembleApp: %v", err)
+			}
+			result, err := programmable.DeployApp(ctx, edge.AppDeployment{Name: name, Worker: worker})
+			if err != nil {
+				t.Fatalf("DeployApp: %v", err)
+			}
+			if result.URL == "" {
+				t.Error("DeployApp returned no URL; an app deployed with no domains is reachable somewhere the edge must name")
+			}
+			found, err = programmable.FindApp(ctx, name)
+			if err != nil {
+				t.Fatalf("FindApp after deploying: %v", err)
+			}
+			if !found {
+				t.Errorf("FindApp(%q) = false after DeployApp succeeded", name)
+			}
+		})
+	})
+}
+
+func offerKinds(offers []edge.Offer) []edge.OfferKind {
+	kinds := make([]edge.OfferKind, 0, len(offers))
+	for _, offer := range offers {
+		kinds = append(kinds, offer.Kind)
+	}
+	slices.Sort(kinds)
+	return kinds
+}
+
+func checkOffers(t *testing.T, what string, out edge.BootstrapOutput) {
+	t.Helper()
+
+	if out.Trust != edge.TrustExternal && out.Trust != edge.TrustInternal {
+		t.Errorf("%s: Trust = %q, want external or internal", what, out.Trust)
+	}
+	for i, offer := range out.Offers {
+		if offer.Kind == "" {
+			t.Errorf("%s: offer %d names no kind", what, i)
+		}
+		if len(offer.Values) == 0 {
+			t.Errorf("%s: offer %q carries no values; the origin has nothing to adopt", what, offer.Kind)
+		}
+		if slices.ContainsFunc(out.Offers[:i], func(prior edge.Offer) bool { return prior.Kind == offer.Kind }) {
+			t.Errorf("%s: offer %q is made twice", what, offer.Kind)
+		}
+	}
+}
+
+func runBootstrap(t *testing.T, suite Suite) {
+	t.Run("bootstrap and teardown round trip", func(t *testing.T) {
+		if suite.Bootstrap == nil {
+			t.Skip("this edge cannot be bootstrapped from the conformance suite alone")
+		}
+		ctx := context.Background()
+		e, class := suite.Bootstrap(t)
+
+		first, err := e.Bootstrap(ctx, class)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		checkOffers(t, "first Bootstrap", first)
+
+		second, err := e.Bootstrap(ctx, class)
+		if err != nil {
+			t.Fatalf("Bootstrap again: %v", err)
+		}
+		checkOffers(t, "second Bootstrap", second)
+		if !slices.Equal(offerKinds(second.Offers), offerKinds(first.Offers)) {
+			t.Errorf("second Bootstrap offered %v, want the %v the first did: a re-run converges on what stands", offerKinds(second.Offers), offerKinds(first.Offers))
+		}
+		if !maps.Equal(second.Values, first.Values) {
+			t.Errorf("second Bootstrap values = %v, want the %v the first published", second.Values, first.Values)
+		}
+
+		if adopter, ok := e.(edge.BootstrapAdopter); ok {
+			adoption, err := adopter.Adoption(ctx, class)
+			if err != nil {
+				t.Fatalf("Adoption: %v", err)
+			}
+			if !maps.Equal(adoption.Values, first.Values) {
+				t.Errorf("Adoption values = %v, want the %v Bootstrap published; an origin adopting a standing edge must land on the same coordinates", adoption.Values, first.Values)
+			}
+			offered := slices.Clone(adoption.Offers)
+			slices.Sort(offered)
+			if !slices.Equal(offered, offerKinds(first.Offers)) {
+				t.Errorf("Adoption offers %v, want the %v Bootstrap made", offered, offerKinds(first.Offers))
+			}
+		}
+
+		if err := e.Teardown(ctx, class); err != nil {
+			t.Fatalf("Teardown: %v", err)
+		}
+		if err := e.Teardown(ctx, class); err != nil {
+			t.Fatalf("Teardown again: %v", err)
+		}
+
+		again, err := e.Bootstrap(ctx, class)
+		if err != nil {
+			t.Fatalf("Bootstrap after Teardown: %v", err)
+		}
+		checkOffers(t, "Bootstrap after Teardown", again)
+		if !slices.Equal(offerKinds(again.Offers), offerKinds(first.Offers)) {
+			t.Errorf("Bootstrap after Teardown offered %v, want the %v a fresh account gets", offerKinds(again.Offers), offerKinds(first.Offers))
+		}
+	})
 }
 
 func runPreviews(t *testing.T, suite Suite) {

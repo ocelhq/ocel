@@ -121,7 +121,7 @@ type bootstrapState struct {
 }
 
 func (p *provider) readState(ctx context.Context, accountID string, class edge.Class) (bootstrapState, error) {
-	store, err := newCacheStore(p.client, p.namespace).read(ctx, accountID, class)
+	store, err := p.cacheStore().read(ctx, accountID, class)
 	if err != nil {
 		return bootstrapState{}, err
 	}

@@ -130,7 +130,10 @@ func (f *recordingEdge) DeployApp(_ context.Context, app edge.AppDeployment) (ed
 
 func (f *recordingEdge) FindApp(_ context.Context, name string) (bool, error) {
 	f.asked = append(f.asked, name)
-	return f.existing[name], nil
+	if f.existing[name] {
+		return true, nil
+	}
+	return slices.ContainsFunc(f.deployed, func(app edge.AppDeployment) bool { return app.Name == name }), nil
 }
 
 func (f *recordingEdge) CodeRuntime() (string, []string) { return f.compatDate, f.compatFlags }
