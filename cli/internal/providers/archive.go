@@ -37,7 +37,7 @@ func ParseChecksums(r io.Reader) (map[string]string, error) {
 }
 
 func unpack(archive, goos, into string) error {
-	if err := os.MkdirAll(into, 0o755); err != nil {
+	if err := os.MkdirAll(into, 0o700); err != nil {
 		return err
 	}
 	if goos == "windows" {
@@ -118,7 +118,7 @@ func member(into, name string) (string, error) {
 }
 
 func spill(path string, body io.Reader, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	if mode == 0 {

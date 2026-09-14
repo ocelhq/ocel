@@ -7,12 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -23,6 +26,10 @@ const TokenEnvVar = "GITHUB_TOKEN"
 const DefaultBaseURL = "https://github.com/ocelhq/ocel/releases/download"
 
 const ChecksumsAsset = "checksums.txt"
+
+const installedDigestFile = ".executable.sha256"
+
+var hexDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 const (
 	attempts       = 5
@@ -88,16 +95,57 @@ func (s *Store) Binary(ctx context.Context, kind Kind, name string, platform Pla
 		return path, nil
 	}
 
-	dir := filepath.Join(s.Dir, string(kind), name, s.Version, platform.Dir())
+	if digest == "" {
+		return "", fmt.Errorf("no lock pins the %s %s %s for %s", name, kind, s.Version, platform.Dir())
+	}
+	if !hexDigest.MatchString(digest) {
+		return "", fmt.Errorf("the lock pins %q for the %s %s %s for %s, which is not a sha256", digest, name, kind, s.Version, platform.Dir())
+	}
+
+	dir := filepath.Join(s.Dir, string(kind), name, s.Version, platform.Dir(), digest)
 	path := filepath.Join(dir, executable)
-	if _, err := os.Stat(path); err == nil {
+
+	if err := installed(dir, executable); err == nil {
 		return path, nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		if err := os.RemoveAll(dir); err != nil {
+			return "", fmt.Errorf("clear %s out of the provider cache: %w", dir, err)
+		}
 	}
 
 	if err := s.install(ctx, kind, name, platform, digest, dir, executable); err != nil {
 		return "", err
 	}
 	return path, nil
+}
+
+func installed(dir, executable string) error {
+	recorded, err := os.ReadFile(filepath.Join(dir, installedDigestFile))
+	if err != nil {
+		return err
+	}
+	got, err := hashFile(filepath.Join(dir, executable))
+	if err != nil {
+		return err
+	}
+	if want := strings.TrimSpace(string(recorded)); got != want {
+		return fmt.Errorf("the cached %s hashes to %s and its install recorded %s", executable, got, want)
+	}
+	return nil
+}
+
+func hashFile(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	sum := sha256.New()
+	if _, err := io.Copy(sum, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(sum.Sum(nil)), nil
 }
 
 func (s *Store) Checksums(ctx context.Context) (map[string]string, error) {
@@ -110,12 +158,8 @@ func (s *Store) Checksums(ctx context.Context) (map[string]string, error) {
 }
 
 func (s *Store) install(ctx context.Context, kind Kind, name string, platform Platform, digest, dir, executable string) error {
-	if digest == "" {
-		return fmt.Errorf("no lock pins the %s %s %s for %s", name, kind, s.Version, platform.Dir())
-	}
-
 	asset := AssetName(kind, name, s.Version, platform.GOOS, platform.GOARCH)
-	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
+	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return fmt.Errorf("make the provider cache at %s: %w", s.Dir, err)
 	}
 	staged, err := os.MkdirTemp(s.Dir, ".fetch-")
@@ -133,15 +177,27 @@ func (s *Store) install(ctx context.Context, kind Kind, name string, platform Pl
 	if err := unpack(archive, platform.GOOS, unpacked); err != nil {
 		return fmt.Errorf("unpack %s: %w", asset, err)
 	}
-	if _, err := os.Stat(filepath.Join(unpacked, executable)); err != nil {
+	sum, err := hashFile(filepath.Join(unpacked, executable))
+	if err != nil {
 		return fmt.Errorf("%s holds no %s", asset, executable)
 	}
+	record, err := os.OpenFile(filepath.Join(unpacked, installedDigestFile), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("record what %s unpacked to: %w", asset, err)
+	}
+	if _, err := io.WriteString(record, sum+"\n"); err != nil {
+		record.Close()
+		return fmt.Errorf("record what %s unpacked to: %w", asset, err)
+	}
+	if err := record.Close(); err != nil {
+		return fmt.Errorf("record what %s unpacked to: %w", asset, err)
+	}
 
-	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
 		return fmt.Errorf("make room in the provider cache: %w", err)
 	}
 	if err := os.Rename(unpacked, dir); err != nil {
-		if _, raced := os.Stat(filepath.Join(dir, executable)); raced == nil {
+		if raced := installed(dir, executable); raced == nil {
 			return nil
 		}
 		return fmt.Errorf("move %s into the provider cache: %w", asset, err)
