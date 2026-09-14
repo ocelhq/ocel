@@ -339,7 +339,7 @@ async function redeploy(cell: CellContext, greeting: string): Promise<Deployment
 async function rollback(cell: CellContext): Promise<Deployment> {
   const started = await standingFor(cell);
 
-  await driving(cell, started, "rollback")("rollback", ["rollback"]);
+  await driving(cell, started, "rollback")("rollback", ["rollback", "--yes"]);
   return deployment(cell, started);
 }
 
