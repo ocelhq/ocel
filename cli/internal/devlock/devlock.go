@@ -13,6 +13,13 @@ import (
 
 const dirName = "dev-locks"
 
+var ErrMalformed = errors.New("the dev lock holds no address and token pair")
+
+type Lease struct {
+	Addr  string
+	Token string
+}
+
 func Path(root string) (string, error) {
 	name, err := key(root)
 	if err != nil {
@@ -25,19 +32,23 @@ func Path(root string) (string, error) {
 	return filepath.Join(dir, name+".lock"), nil
 }
 
-func Read(root string) (string, error) {
+func Read(root string) (Lease, error) {
 	path, err := Path(root)
 	if err != nil {
-		return "", err
+		return Lease{}, err
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", err
+		return Lease{}, err
 	}
-	return strings.TrimSpace(string(data)), nil
+	addr, token, found := strings.Cut(strings.TrimSpace(string(data)), "\n")
+	if !found || addr == "" || token == "" {
+		return Lease{}, ErrMalformed
+	}
+	return Lease{Addr: addr, Token: token}, nil
 }
 
-func Create(root, addr string) error {
+func Create(root string, lease Lease) error {
 	path, err := Path(root)
 	if err != nil {
 		return err
@@ -46,7 +57,7 @@ func Create(root, addr string) error {
 	if err != nil {
 		return fmt.Errorf("create the dev lock: %w", err)
 	}
-	if _, err := f.WriteString(addr); err != nil {
+	if _, err := f.WriteString(lease.Addr + "\n" + lease.Token + "\n"); err != nil {
 		f.Close()
 		return fmt.Errorf("write the dev lock: %w", err)
 	}
