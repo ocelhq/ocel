@@ -131,7 +131,10 @@ func (p *Provider) Computes() []providerkit.Compute {
 	return []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer}
 }
 
-func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
+func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
+	if _, err := p.Edges().Open(kind); err != nil {
+		return nil, err
+	}
 	return bootstrapGate{p: p}, nil
 }
 
