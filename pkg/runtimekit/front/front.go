@@ -14,45 +14,62 @@ import (
 
 const OriginSecretHeader = edge.OriginSecretHeader
 
-const OriginSecretVar = edge.OriginSecretVar
+const (
+	OriginSecretVar         = edge.OriginSecretVar
+	OriginSecretPreviousVar = edge.OriginSecretPreviousVar
+)
 
 const HealthPathVar = "OCEL_HEALTH_PATH"
 
 type Guard struct {
-	expected [sha256.Size]byte
-	open     bool
+	expected [][sha256.Size]byte
 }
 
-func NewGuard(secret string) *Guard {
-	if secret == "" {
-		return &Guard{}
+func NewGuard(secrets ...string) *Guard {
+	guard := &Guard{}
+	for _, secret := range secrets {
+		if secret != "" {
+			guard.expected = append(guard.expected, sha256.Sum256([]byte(secret)))
+		}
 	}
-	return &Guard{expected: sha256.Sum256([]byte(secret)), open: true}
+	return guard
 }
 
 func GuardFromEnv(env []string) (*Guard, []string) {
 	kept := make([]string, 0, len(env))
-	var guard *Guard
+	var (
+		guard    *Guard
+		current  string
+		previous string
+	)
 	for _, entry := range env {
 		name, value, _ := strings.Cut(entry, "=")
-		if name == OriginSecretVar {
-			guard = NewGuard(value)
-			continue
+		switch name {
+		case OriginSecretVar:
+			current = value
+			guard = &Guard{}
+		case OriginSecretPreviousVar:
+			previous = value
+		default:
+			kept = append(kept, entry)
 		}
-		kept = append(kept, entry)
 	}
-	return guard, kept
+	if guard == nil {
+		return nil, kept
+	}
+	return NewGuard(current, previous), kept
 }
 
 func (g *Guard) Admits(r *http.Request) bool {
 	if g == nil {
 		return true
 	}
-	if !g.open {
-		return false
-	}
 	presented := sha256.Sum256([]byte(r.Header.Get(OriginSecretHeader)))
-	return subtle.ConstantTimeCompare(presented[:], g.expected[:]) == 1
+	matched := 0
+	for _, expected := range g.expected {
+		matched |= subtle.ConstantTimeCompare(presented[:], expected[:])
+	}
+	return matched == 1
 }
 
 type Options struct {
