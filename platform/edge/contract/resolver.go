@@ -26,11 +26,12 @@ const ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
 const RevalidateQueueURLVar = "OCEL_REVALIDATE_QUEUE_URL"
 
 const (
-	OriginSecretVar    = "OCEL_ORIGIN_SECRET"
-	OriginSignedVar    = "OCEL_ORIGIN_SIGNED"
-	OriginRouterVar    = "OCEL_ORIGIN_ROUTER"
-	CacheTagPurgeVar   = "OCEL_CACHE_TAG_PURGE"
-	OriginSecretHeader = "x-ocel-origin-secret"
+	OriginSecretVar         = "OCEL_ORIGIN_SECRET"
+	OriginSecretPreviousVar = "OCEL_ORIGIN_SECRET_PREVIOUS"
+	OriginSignedVar         = "OCEL_ORIGIN_SIGNED"
+	OriginRouterVar         = "OCEL_ORIGIN_ROUTER"
+	CacheTagPurgeVar        = "OCEL_CACHE_TAG_PURGE"
+	OriginSecretHeader      = "x-ocel-origin-secret"
 
 	OriginContainerHeader = "x-ocel-container"
 )

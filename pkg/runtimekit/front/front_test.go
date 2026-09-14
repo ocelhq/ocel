@@ -128,6 +128,37 @@ func TestHandler(t *testing.T) {
 		}
 	})
 
+	t.Run("a guard handed a predecessor admits either secret while the rotation runs", func(t *testing.T) {
+		up := serveUpstream(t)
+		front := serveFront(t, up, NewGuard("s3cr3t", "0ld"), nil)
+
+		for _, presented := range []string{"s3cr3t", "0ld"} {
+			if resp := ask(t, front, http.MethodGet, "/", presented); resp.StatusCode != http.StatusOK {
+				t.Errorf("status for %q = %d, want %d: a route written before the rotation still presents the old secret", presented, resp.StatusCode, http.StatusOK)
+			}
+		}
+		for _, presented := range []string{"", "s3cr3", "0l", "s3cr3t0ld"} {
+			if resp := ask(t, front, http.MethodGet, "/", presented); resp.StatusCode != http.StatusForbidden {
+				t.Errorf("status for %q = %d, want %d", presented, resp.StatusCode, http.StatusForbidden)
+			}
+		}
+		if up.seen != 2 {
+			t.Errorf("the app answered %d requests, want the two that presented a secret it holds", up.seen)
+		}
+	})
+
+	t.Run("an empty predecessor admits nothing extra", func(t *testing.T) {
+		up := serveUpstream(t)
+		front := serveFront(t, up, NewGuard("s3cr3t", ""), nil)
+
+		if resp := ask(t, front, http.MethodGet, "/", ""); resp.StatusCode != http.StatusForbidden {
+			t.Errorf("status = %d, want %d: a rotation that records no predecessor must not open the app to an empty header", resp.StatusCode, http.StatusForbidden)
+		}
+		if up.seen != 0 {
+			t.Error("an empty predecessor opened the app to anything that presented an empty header")
+		}
+	})
+
 	t.Run("the health path is answered without the secret the rest of the app needs", func(t *testing.T) {
 		up := serveUpstream(t)
 		front := serveFront(t, up, NewGuard("s3cr3t"), nil)
@@ -218,6 +249,36 @@ func TestGuardFromEnv(t *testing.T) {
 		}
 		if guard.Admits(httptest.NewRequest(http.MethodGet, "/", nil)) {
 			t.Error("the guard admits a request carrying nothing")
+		}
+	})
+
+	t.Run("takes the predecessor out of the environment too and admits it", func(t *testing.T) {
+		guard, kept := GuardFromEnv([]string{
+			OriginSecretPreviousVar + "=0ld",
+			OriginSecretVar + "=s3cr3t",
+			"PORT=8080",
+		})
+
+		if !slices.Equal(kept, []string{"PORT=8080"}) {
+			t.Errorf("the app's environment = %q, want both secrets taken out of it", kept)
+		}
+		for _, presented := range []string{"s3cr3t", "0ld"} {
+			admitted := httptest.NewRequest(http.MethodGet, "/", nil)
+			admitted.Header.Set(OriginSecretHeader, presented)
+			if !guard.Admits(admitted) {
+				t.Errorf("the guard turns away %q, one of the two secrets the rotation hands it", presented)
+			}
+		}
+	})
+
+	t.Run("a predecessor with no current secret guards nothing and reaches no app", func(t *testing.T) {
+		guard, kept := GuardFromEnv([]string{OriginSecretPreviousVar + "=0ld", "PORT=8080"})
+
+		if guard != nil {
+			t.Error("a predecessor alone built a guard; only the current secret says a deployment is fronted")
+		}
+		if !slices.Equal(kept, []string{"PORT=8080"}) {
+			t.Errorf("the app's environment = %q, want the stray predecessor dropped from it", kept)
 		}
 	})
 

@@ -168,6 +168,8 @@ export function invalidatesByCacheTag(env: NodeJS.ProcessEnv): boolean {
 
 const originSecretVar = "OCEL_ORIGIN_SECRET";
 
+const originSecretPreviousVar = "OCEL_ORIGIN_SECRET_PREVIOUS";
+
 const originSignedVar = "OCEL_ORIGIN_SIGNED";
 
 const originSecretHeader = "x-ocel-origin-secret";
@@ -186,11 +188,18 @@ function presentedSecret(headers: http.IncomingHttpHeaders): string {
 
 function originGuard(env: NodeJS.ProcessEnv): OriginGuard | undefined {
   const secret = env[originSecretVar];
+  const previous = env[originSecretPreviousVar];
   delete env[originSecretVar];
+  delete env[originSecretPreviousVar];
   if (!routerMode(env) || env[originSignedVar]) return undefined;
   if (!secret) return () => false;
-  const expected = digest(secret);
-  return (headers) => timingSafeEqual(digest(presentedSecret(headers)), expected);
+  const expected = [secret, previous].filter((held): held is string => Boolean(held)).map(digest);
+  return (headers) => {
+    const presented = digest(presentedSecret(headers));
+    let matched = 0;
+    for (const held of expected) matched |= timingSafeEqual(presented, held) ? 1 : 0;
+    return matched === 1;
+  };
 }
 
 interface Trust {
