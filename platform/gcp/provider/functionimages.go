@@ -36,6 +36,7 @@ func functionBases() map[string]base {
 		providerkit.RuntimeNode:   {ref: nodeImage, bins: []string{nodeBinDir}},
 		providerkit.RuntimeGo:     {ref: staticImage},
 		providerkit.RuntimePython: {ref: pythonImage},
+		providerkit.RuntimeRust:   {ref: staticImage},
 	}
 }
 

@@ -207,3 +207,15 @@ func TestRustReachRefusesAnAppThatBuildsSeveralBinaries(t *testing.T) {
 		t.Errorf("error = %q, want %q", err, want)
 	}
 }
+
+func TestRustReachGrantsAResourceWhenTheRootIsReachedThroughASymlink(t *testing.T) {
+	needsCargo(t)
+	link := filepath.Join(t.TempDir(), "project")
+	if err := os.Symlink(rustApp(t), link); err != nil {
+		t.Fatal(err)
+	}
+	usages := rustUsages(t, link, filepath.Join(link, "app", "src", "main.rs"))
+	if len(usages) != 1 || !slices.Equal(usages[0].Files, []string{"app/src/main.rs"}) {
+		t.Errorf("usages = %+v, want main granted to web from entry app/src/main.rs", usages)
+	}
+}

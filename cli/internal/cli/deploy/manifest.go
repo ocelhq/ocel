@@ -327,6 +327,7 @@ func workspaceMembers(inAnImage bool, appDir string) []string {
 var runtimeLanguages = map[string]discovery.Language{
 	providerkit.RuntimePython: discovery.Python,
 	providerkit.RuntimeGo:     discovery.Go,
+	providerkit.RuntimeRust:   discovery.Rust,
 	providerkit.RuntimeNode:   discovery.JS,
 	providerkit.RuntimeNext:   discovery.JS,
 }

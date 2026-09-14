@@ -4725,9 +4725,9 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\vTierDomains\x12;\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04tier\x12\x1c\n" +
-	"\thostnames\x18\x02 \x03(\tR\thostnames\"i\n" +
-	"\aRuntime\x121\n" +
-	"\x04name\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18R\x04nodeR\x04nextR\x02goR\x06pythonR\x04name\x12+\n" +
+	"\thostnames\x18\x02 \x03(\tR\thostnames\"o\n" +
+	"\aRuntime\x127\n" +
+	"\x04name\x18\x01 \x01(\tB#\xbaH r\x1eR\x04nodeR\x04nextR\x02goR\x06pythonR\x04rustR\x04name\x12+\n" +
 	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\xf0\x02\n" +
 	"\vManifestApp\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +

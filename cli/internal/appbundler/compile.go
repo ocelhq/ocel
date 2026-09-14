@@ -42,6 +42,8 @@ func Compile(ctx context.Context, c Compilation) error {
 		return c.compileGo(ctx)
 	case providerkit.RuntimePython:
 		return c.vendorPython(ctx)
+	case providerkit.RuntimeRust:
+		return c.compileRust(ctx)
 	}
 	return fmt.Errorf("app %q runs on runtime %q, which is not built from its own source tree", c.App, c.Runtime.Name)
 }
@@ -103,6 +105,9 @@ func (c Compilation) validate() error {
 	}
 	if c.Runtime.Name == providerkit.RuntimePython && c.Entrypoint != "" {
 		return fmt.Errorf("app %q runs on the python runtime and names entrypoint %q: a python app is served by the %s in its own directory, and both the artifact and the image are built from that, so an entrypoint here would name a file nothing boots", c.App, c.Entrypoint, pythonEntryFile)
+	}
+	if c.Runtime.Name == providerkit.RuntimeRust && c.Entrypoint != "" {
+		return fmt.Errorf("app %q runs on the rust runtime and names entrypoint %q: a rust app is compiled from the one binary the %s in its own directory builds, so an entrypoint here would name nothing that is built", c.App, c.Entrypoint, cargoManifestFile)
 	}
 	pkg := c.pkg()
 	info, err := os.Stat(pkg)

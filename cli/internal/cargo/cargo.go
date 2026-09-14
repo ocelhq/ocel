@@ -41,6 +41,7 @@ type Workspace struct {
 	Packages []Package `json:"packages"`
 	Members  []string  `json:"workspace_members"`
 	Root     string    `json:"workspace_root"`
+	Target   string    `json:"target_directory"`
 	Resolve  *Resolve  `json:"resolve"`
 }
 
@@ -58,6 +59,9 @@ func (p Package) Bins() []Target {
 }
 
 func (w Workspace) PackageAt(dir string) (Package, bool) {
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
 	for _, p := range w.Packages {
 		if p.Dir() == dir {
 			return p, true
