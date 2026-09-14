@@ -47,6 +47,10 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 		return nil, err
 	}
 	account := names.RuntimeAccountEmail(plan.Ref.Class)
+	own, err := p.runtimeEnv(names, plan)
+	if err != nil {
+		return nil, err
+	}
 	standing := make([]providerkit.Function, 0, len(app.Functions))
 	for _, spec := range app.Functions {
 		if err := runsX8664(spec.Runtime.Arch, "function "+spec.Name); err != nil {
@@ -62,6 +66,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 		}
 		values, err := carried(spec.Name, app.Values.Delivered, spec.Env)
 		if err != nil {
+			return nil, err
+		}
+		if values, err = carried(spec.Name, values, own); err != nil {
 			return nil, err
 		}
 		ran, err := p.stand(ctx, serving{
@@ -121,7 +128,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	if err != nil {
 		return nil, err
 	}
-	own, err := p.containerEnv(names, plan)
+	own, err := p.runtimeEnv(names, plan)
 	if err != nil {
 		return nil, err
 	}
@@ -160,9 +167,12 @@ func (p *Provider) RemoveContainers(ctx context.Context, _ providerkit.StackRef,
 	return nil
 }
 
-func (p *Provider) containerEnv(names Names, plan providerkit.StackPlan) (map[string]string, error) {
+func (p *Provider) runtimeEnv(names Names, plan providerkit.StackPlan) (map[string]string, error) {
 	app := plan.App
-	env := map[string]string{front.HealthPathVar: app.HealthCheckPath}
+	env := map[string]string{}
+	if app.HealthCheckPath != "" {
+		env[front.HealthPathVar] = app.HealthCheckPath
+	}
 	manifest, err := live.Render(live.Manifest{
 		Project:     names.project,
 		Region:      p.options.Region,
