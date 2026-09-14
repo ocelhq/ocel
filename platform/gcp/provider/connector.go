@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/iam/apiv1/iampb"
+	kms "cloud.google.com/go/kms/apiv1"
 	"cloud.google.com/go/kms/apiv1/kmspb"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
@@ -138,16 +140,20 @@ func (p *Provider) RemoveConnector(ctx context.Context, report providerkit.Repor
 	if err != nil {
 		return err
 	}
-	if err := p.tearDown(ctx, names.Connector(), report); err != nil {
-		return err
+	return everyStep(
+		func() error { return p.tearDown(ctx, names.Connector(), report) },
+		func() error { return p.forgetConnectorGrants(ctx, report) },
+		func() error { return p.takeConnectorAccount(ctx, report) },
+		func() error { return p.takeConnectorImages(ctx, report) },
+	)
+}
+
+func everyStep(steps ...func() error) error {
+	errs := make([]error, 0, len(steps))
+	for _, step := range steps {
+		errs = append(errs, step())
 	}
-	if err := p.forgetConnectorGrants(ctx, report); err != nil {
-		return err
-	}
-	if err := p.takeConnectorAccount(ctx, report); err != nil {
-		return err
-	}
-	return p.takeConnectorImages(ctx, report)
+	return errors.Join(errs...)
 }
 
 func (p *Provider) connectorService(ctx context.Context) (*run.GoogleCloudRunV2Service, error) {
@@ -303,10 +309,10 @@ func (p *Provider) standConnectorAccount(ctx context.Context, report providerkit
 }
 
 func (p *Provider) forgetConnectorGrants(ctx context.Context, report providerkit.Reporter) error {
-	if err := p.bindConnectorProject(ctx, false); err != nil {
-		return err
-	}
-	return p.bindConnectorKeys(ctx, false, report)
+	return everyStep(
+		func() error { return p.bindConnectorProject(ctx, false) },
+		func() error { return p.bindConnectorKeys(ctx, false, report) },
+	)
 }
 
 func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) error {
@@ -376,35 +382,56 @@ func (p *Provider) bindConnectorKeys(ctx context.Context, granting bool, report 
 		return err
 	}
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
+	var errs []error
 	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
-		key := keyPath(clients, string(class))
-		if _, err := dialled(ctx, func() (*kmspb.CryptoKey, error) {
-			return client.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: key})
-		}); err != nil {
-			if status.Code(err) == codes.NotFound {
-				continue
-			}
-			return fmt.Errorf("read the %s key the connector opens values under: %w", class, err)
+		err := p.bindConnectorKey(ctx, client, member, class, granting, report)
+		if err != nil && granting {
+			return err
 		}
-		policy, err := dialled(ctx, func() (*iampb.Policy, error) {
-			return client.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{Resource: key})
-		})
-		if err != nil {
-			return fmt.Errorf("read who may seal under the %s key: %w", class, err)
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
+func (p *Provider) bindConnectorKey(
+	ctx context.Context,
+	client *kms.KeyManagementClient,
+	member string,
+	class providerkit.Class,
+	granting bool,
+	report providerkit.Reporter,
+) error {
+	clients, err := p.stood(ctx)
+	if err != nil {
+		return err
+	}
+	key := keyPath(clients, string(class))
+	if _, err := dialled(ctx, func() (*kmspb.CryptoKey, error) {
+		return client.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: key})
+	}); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil
 		}
-		bindings, changed := boundKeyMember(policy.GetBindings(), connectorSealingRole, member, granting)
-		if !changed {
-			continue
-		}
-		policy.Bindings = bindings
-		if _, err := dialled(ctx, func() (*iampb.Policy, error) {
-			return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: key, Policy: policy})
-		}); err != nil {
-			return fmt.Errorf("let %s seal and open %s values: %w", member, class, err)
-		}
-		if report != nil && granting {
-			report.Say("The connector may seal and open " + string(class) + " values")
-		}
+		return fmt.Errorf("read the %s key the connector opens values under: %w", class, err)
+	}
+	policy, err := dialled(ctx, func() (*iampb.Policy, error) {
+		return client.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{Resource: key})
+	})
+	if err != nil {
+		return fmt.Errorf("read who may seal under the %s key: %w", class, err)
+	}
+	bindings, changed := boundKeyMember(policy.GetBindings(), connectorSealingRole, member, granting)
+	if !changed {
+		return nil
+	}
+	policy.Bindings = bindings
+	if _, err := dialled(ctx, func() (*iampb.Policy, error) {
+		return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: key, Policy: policy})
+	}); err != nil {
+		return fmt.Errorf("let %s seal and open %s values: %w", member, class, err)
+	}
+	if report != nil && granting {
+		report.Say("The connector may seal and open " + string(class) + " values")
 	}
 	return nil
 }
