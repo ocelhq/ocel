@@ -3,6 +3,7 @@ package vps_test
 import (
 	"archive/tar"
 	"context"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -201,31 +202,30 @@ func daemonHolding(t *testing.T, tar string) *int {
 	return &reads
 }
 
-func aPush() providerkit.ImagePush {
+func aPush(t *testing.T) providerkit.ImagePush {
+	t.Helper()
 	return providerkit.ImagePush{
 		App:    "web",
 		Source: "ocel/shop/web@sha256:abc",
 		Target: loadedCoordinate,
-		Digest: "sha256:abc",
+		Built:  wrapped(t),
 	}
 }
 
-func TestTheImageIsReadOutOfTheLocalDaemonAndPipedIntoTheMachinesOwn(t *testing.T) {
+func TestAnImageNothingWrappedIsRefusedRatherThanReadOutOfTheLocalDaemon(t *testing.T) {
 	reads := daemonHolding(t, "tar-bytes")
 	machine := &box{}
 	store := standing(t, machine)
 
-	if err := store.Push(context.Background(), aPush(), nil); err != nil {
-		t.Fatalf("Push() = %v", err)
+	push := aPush(t)
+	push.Built = nil
+	err := store.Push(context.Background(), push, nil)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Push() of an unwrapped image = %v, want a refusal: what the local daemon holds runs nothing in front of the app", err)
 	}
-	if *reads != 1 {
-		t.Errorf("the local daemon was read %d times for one image", *reads)
-	}
-	if carried := strings.Join(machine.carried(), "\n"); !strings.Contains(carried, "tar-bytes") {
-		t.Errorf("the machine was fed %q, want the tar the local daemon handed over", carried)
-	}
-	if commands := strings.Join(machine.commands(), "\n"); !strings.Contains(commands, "docker load") {
-		t.Errorf("the machine ran %q, want the stream loaded into its own daemon", commands)
+	if *reads != 0 || len(machine.commands()) != 0 {
+		t.Errorf("an unwrapped image was read %d times and the machine ran %v", *reads, machine.commands())
 	}
 }
 
@@ -234,7 +234,7 @@ func TestNothingIsInstalledOnTheMachineToReceiveAnImage(t *testing.T) {
 	machine := &box{}
 	store := standing(t, machine)
 
-	if err := store.Push(context.Background(), aPush(), nil); err != nil {
+	if err := store.Push(context.Background(), aPush(t), nil); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
 	for _, command := range machine.commands() {
@@ -251,7 +251,7 @@ func TestAnImageTheMachineHoldsIsAnsweredWithoutReadingTheLocalDaemon(t *testing
 	machine := &box{holds: true}
 	store := standing(t, machine)
 
-	held, err := store.Has(context.Background(), aPush())
+	held, err := store.Has(context.Background(), aPush(t))
 	if err != nil {
 		t.Fatalf("Has() = %v", err)
 	}
@@ -292,10 +292,7 @@ func TestAWrappedImageIsWrittenAsATarballAndLoadedIntoTheMachinesDaemonWithoutRe
 	machine := &box{}
 	store := standing(t, machine)
 
-	push := aPush()
-	push.Digest = ""
-	push.Built = wrapped(t)
-	if err := store.Push(context.Background(), push, nil); err != nil {
+	if err := store.Push(context.Background(), aPush(t), nil); err != nil {
 		t.Fatalf("Push() of a wrapped image = %v", err)
 	}
 	if *reads != 0 {
