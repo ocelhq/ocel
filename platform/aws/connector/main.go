@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -20,6 +21,7 @@ import (
 	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -70,7 +72,8 @@ func run(addr, region, config string) error {
 	held := &deployments{
 		namespace: bootstrap.Namespace(ns),
 		stacks:    cloudformation.NewFromConfig(cfg),
-		read:      map[kit.Class]bootstrap.Deployed{},
+		now:       time.Now,
+		read:      map[kit.Class]readDeployment{},
 	}
 
 	spec := connectorkit.Spec{
@@ -97,25 +100,36 @@ func run(addr, region, config string) error {
 	return nil
 }
 
+const deploymentsTTL = 5 * time.Minute
+
 type deployments struct {
 	namespace bootstrap.Namespace
-	stacks    *cloudformation.Client
+	stacks    cfn.Describer
+	now       func() time.Time
 
 	mu   sync.Mutex
-	read map[kit.Class]bootstrap.Deployed
+	read map[kit.Class]readDeployment
+}
+
+type readDeployment struct {
+	held bootstrap.Deployed
+	at   time.Time
 }
 
 func (d *deployments) resolve(ctx context.Context, class kit.Class) (bootstrap.Deployed, error) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
-	if held, known := d.read[class]; known {
-		return held, nil
+	memo, known := d.read[class]
+	d.mu.Unlock()
+	if known && d.now().Sub(memo.at) < deploymentsTTL {
+		return memo.held, nil
 	}
 	held, err := bootstrap.CheckDeployedFor(ctx, d.stacks, d.namespace, string(class))
 	if err != nil {
 		return bootstrap.Deployed{}, err
 	}
-	d.read[class] = held
+	d.mu.Lock()
+	d.read[class] = readDeployment{held: held, at: d.now()}
+	d.mu.Unlock()
 	return held, nil
 }
 
