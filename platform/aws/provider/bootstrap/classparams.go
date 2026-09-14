@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
@@ -65,7 +67,12 @@ func originSecretIn(found map[string]string, name string) (OriginSecret, error) 
 	if !ok {
 		return OriginSecret{}, nil
 	}
-	return OriginSecretOf(raw)
+	held, err := OriginSecretOf(raw)
+	if err != nil {
+		return OriginSecret{}, providerkit.Refuse(providerkit.CodeNotReady,
+			"%s holds something other than the origin secret bootstrap writes (%v): delete the parameter and re-run `ocel bootstrap` to mint a fresh one, then re-deploy every project in the class", name, err)
+	}
+	return held, nil
 }
 
 var errUnnamedEdge = errors.New("this call names no edge, so it reads none of the parameters an edge is reached through")

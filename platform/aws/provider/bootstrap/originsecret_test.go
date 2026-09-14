@@ -319,8 +319,8 @@ func TestBootstrapParamsCarryTheOriginSecret(t *testing.T) {
 	}
 
 	params[originSecretParam] = "origin-1"
-	if _, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare); err == nil {
-		t.Error("a parameter holding a bare value was read as a secret; want it refused so a deploy never bakes in something the front will not present")
+	if _, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare); err == nil || !strings.Contains(err.Error(), originSecretParam) || !strings.Contains(err.Error(), "ocel bootstrap") {
+		t.Errorf("ReadClassParams over a bare value = %v; want it refused naming the parameter and the bootstrap that replaces it, so a deploy never bakes in something the front will not present", err)
 	}
 
 	delete(params, originSecretParam)
