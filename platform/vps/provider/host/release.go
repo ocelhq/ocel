@@ -56,7 +56,7 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 	}
 	compose := func(standing ProxyState) ProxyState {
 		standing.Grace = rel.DrainTimeout
-		standing.Routes = Routing(standing.Routes, AppRoute{RouteKey: rel.RouteKey, Upstream: rel.Target})
+		standing.Routes = Routing(standing.Routes, AppRoute{RouteKey: rel.RouteKey, Upstream: rel.Target, Health: rel.HealthPath})
 		return standing
 	}
 	flip, err := h.composeProxy(ctx, rel.DrainTimeout, func(standing ProxyState, patient bool) (ProxyState, bool, error) {
