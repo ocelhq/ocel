@@ -15,7 +15,7 @@ const goEntryDir = constants.ProjectStateDirName + "/discovery"
 
 type goLauncher struct{}
 
-func (goLauncher) Command(ctx context.Context, configDir string, root Root, serverURL string) (*exec.Cmd, error) {
+func (goLauncher) Command(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error) {
 	moduleRoot, modulePath, err := goModule(configDir, root.Dir)
 	if err != nil {
 		return nil, err
@@ -40,7 +40,7 @@ func (goLauncher) Command(ctx context.Context, configDir string, root Root, serv
 
 	cmd := exec.CommandContext(ctx, "go", "run", "./"+goEntryDir)
 	cmd.Dir = moduleRoot
-	cmd.Env = append(os.Environ(), constants.PhaseEnvName+"=discovery", constants.DevServerEnvName+"="+serverURL)
+	cmd.Env = append(os.Environ(), server.Env()...)
 	return cmd, nil
 }
 

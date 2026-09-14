@@ -23,7 +23,7 @@ var pythonInterpreters = []string{".venv/bin/python", "venv/bin/python"}
 
 type pythonLauncher struct{}
 
-func (pythonLauncher) Command(ctx context.Context, configDir string, root Root, serverURL string) (*exec.Cmd, error) {
+func (pythonLauncher) Command(ctx context.Context, configDir string, root Root, server Server) (*exec.Cmd, error) {
 	runRoot, err := pythonRunRoot(configDir, root.Dir)
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func (pythonLauncher) Command(ctx context.Context, configDir string, root Root, 
 
 	cmd := exec.CommandContext(ctx, PythonInterpreter(runRoot), "./"+pythonEntryFile)
 	cmd.Dir = runRoot
-	cmd.Env = append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1", constants.PhaseEnvName+"=discovery", constants.DevServerEnvName+"="+serverURL)
+	cmd.Env = append(append(os.Environ(), "PYTHONDONTWRITEBYTECODE=1"), server.Env()...)
 	return cmd, nil
 }
 

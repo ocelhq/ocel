@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/pkg/channel"
 )
 
 type Prepared struct {
@@ -61,13 +62,13 @@ func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate,
 	if err != nil {
 		return nil, fmt.Errorf("start deploy collector: %w", err)
 	}
-	httpSrv := &http.Server{Handler: c.Mux()}
+	address, token := listener.Addr().String(), channel.NewSessionToken()
+	httpSrv := &http.Server{Handler: channel.LoopbackGuard(address, token, c.Mux())}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
 
-	collectorAddr := "http://" + listener.Addr().String()
-
-	if err := discovery.Run(ctx, cfg.Dir, prepared.discovery, collectorAddr, stdout, stderr); err != nil {
+	server := discovery.Server{URL: "http://" + address, Token: token}
+	if err := discovery.Run(ctx, cfg.Dir, prepared.discovery, server, stdout, stderr); err != nil {
 		return nil, err
 	}
 

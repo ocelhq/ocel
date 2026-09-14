@@ -99,17 +99,11 @@ func Serve(ctx context.Context, opts Options) (*Session, error) {
 		return nil, fmt.Errorf("open a loopback port for the variables UI: %w", err)
 	}
 
-	token, err := channel.NewSessionToken()
-	if err != nil {
-		listener.Close()
-		return nil, err
-	}
-
 	if opts.Absence <= 0 {
 		opts.Absence = DefaultAbsence
 	}
 	s := &Session{
-		Token:    token,
+		Token:    channel.NewSessionToken(),
 		opts:     opts,
 		listener: listener,
 		done:     make(chan struct{}),

@@ -148,6 +148,7 @@ NEXT_PUBLIC_SITE_URL=https://example.com
 AWS_PROFILE=dev
 LAMBDA_TASK_ROOT=/var/task
 ` + constants.DevServerEnvName + `=hijacked
+` + constants.DevServerTokenEnvName + `=hijacked
 database_url=lower
 DATABASE_URL=postgres://localhost/app
 `,
@@ -157,7 +158,7 @@ DATABASE_URL=postgres://localhost/app
 				"AWS_PROFILE":          "dev",
 				"LAMBDA_TASK_ROOT":     "/var/task",
 			},
-			absent:     []string{constants.DevServerEnvName, "database_url"},
+			absent:     []string{constants.DevServerEnvName, constants.DevServerTokenEnvName, "database_url"},
 			exhaustive: true,
 			note:       "a file Ocel does not own is read past, not refused; a declarable key is still read, and the rest is left to whatever else reads it",
 		},

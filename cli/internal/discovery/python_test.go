@@ -24,7 +24,7 @@ func TestThePythonLauncherDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	configDir := pythonFixture(t)
 	root := Root{Dir: filepath.Join(configDir, "declarations"), Language: Python}
 
-	cmd, err := launchers[Python].Command(context.Background(), configDir, root, "http://127.0.0.1:1234")
+	cmd, err := launchers[Python].Command(context.Background(), configDir, root, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestThePythonLauncherDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	if want := "./" + constants.ProjectStateDirName + "/discovery.py"; !slices.Contains(cmd.Args, want) {
 		t.Errorf("Args = %q, want them to run %q", cmd.Args, want)
 	}
-	for _, want := range []string{constants.PhaseEnvName + "=discovery", constants.DevServerEnvName + "=http://127.0.0.1:1234", "PYTHONDONTWRITEBYTECODE=1"} {
+	for _, want := range []string{constants.PhaseEnvName + "=discovery", constants.DevServerEnvName + "=http://127.0.0.1:1234", constants.DevServerTokenEnvName + "=opensesame", "PYTHONDONTWRITEBYTECODE=1"} {
 		if !slices.Contains(cmd.Env, want) {
 			t.Errorf("Env lacks %q", want)
 		}
@@ -56,7 +56,7 @@ func TestThePythonLauncherRunsFromTheNearestProjectFileAboveTheRoot(t *testing.T
 	write(t, filepath.Join(configDir, "server", "requirements.txt"), "")
 	write(t, filepath.Join(configDir, "server", "declarations", "__init__.py"), "")
 
-	cmd, err := launchers[Python].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "server", "declarations"), Language: Python}, "http://127.0.0.1:1234")
+	cmd, err := launchers[Python].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "server", "declarations"), Language: Python}, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestThePythonLauncherRefusesARootTooDeepToNameAPackage(t *testing.T) {
 	root := filepath.Join(configDir, "server", "declarations")
 	write(t, filepath.Join(root, "__init__.py"), "")
 
-	_, err := launchers[Python].Command(context.Background(), configDir, Root{Dir: root, Language: Python}, "http://127.0.0.1:1234")
+	_, err := launchers[Python].Command(context.Background(), configDir, Root{Dir: root, Language: Python}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded on a root nested under the project file, want error")
 	}
@@ -98,7 +98,7 @@ func TestRunDeclaresWhatThePythonFixtureDeclares(t *testing.T) {
 		t.Fatalf("roots = %+v, want the python infra folder of the project", roots)
 	}
 
-	collected, url := declareCollector(t)
+	collected, server := declareCollector(t)
 
 	prepared, err := Prepare(configDir, roots)
 	if err != nil {
@@ -108,7 +108,7 @@ func TestRunDeclaresWhatThePythonFixtureDeclares(t *testing.T) {
 	t.Setenv("PATH", pythonSDKEnvironment(t)+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), configDir, prepared, url, &stdout, &stderr); err != nil {
+	if err := Run(context.Background(), configDir, prepared, server, &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
 	}
 

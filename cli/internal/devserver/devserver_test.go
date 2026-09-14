@@ -13,9 +13,12 @@ import (
 	"testing"
 	"time"
 
+	connect "connectrpc.com/connect"
+
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
+	"github.com/ocelhq/ocel/pkg/channel"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -64,11 +67,27 @@ func newDevServer(apiURL string) *Server {
 	return s
 }
 
-var testClient = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+const testSessionToken = "opensesame"
+
+type authorizing struct{ base http.RoundTripper }
+
+func (a authorizing) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Authorization", channel.FormatAuthHeader(testSessionToken))
+	return a.base.RoundTrip(r)
+}
+
+var bareClient = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+
+var testClient = &http.Client{Transport: authorizing{&http.Transport{DisableKeepAlives: true}}}
 
 func serve(t *testing.T, s *Server) string {
 	t.Helper()
-	ts := httptest.NewServer(s.Mux())
+	ts := httptest.NewUnstartedServer(nil)
+	s.devServerAddr = "http://" + ts.Listener.Addr().String()
+	s.sessionToken = testSessionToken
+	ts.Config.Handler = s.Mux()
+	ts.Start()
 	t.Cleanup(ts.Close)
 	return ts.URL
 }
@@ -85,6 +104,32 @@ func declareResource(t *testing.T, url, name string, typ resourcesv1.ResourceTyp
 	}
 	if _, err := client.Declare(context.Background(), req); err != nil {
 		t.Fatalf("Declare %s: %v", name, err)
+	}
+}
+
+func TestACallToTheDevServerThatCarriesNoSessionTokenIsRefused(t *testing.T) {
+	t.Parallel()
+
+	url := serve(t, newDevServer("https://api.example.com"))
+
+	_, err := resourcesv1connect.NewResourceServiceClient(bareClient, url).Declare(
+		context.Background(),
+		&resourcesv1.DeclareRequest{
+			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+			Config:   &resourcesv1.DeclareRequest_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
+		},
+	)
+	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("Declare error = %v, want permission denied", err)
+	}
+
+	resp, err := bareClient.Post(url+"/sync", "application/octet-stream", nil)
+	if err != nil {
+		t.Fatalf("POST /sync: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("POST /sync status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}
 }
 
@@ -166,8 +211,8 @@ func TestSync(t *testing.T) {
 		defer resolveServer.Close()
 
 		s := newDevServer(resolveServer.URL)
-		s.devServerAddr = "http://dev.local:1234"
 		url := serve(t, s)
+		s.devServerAddr = "http://dev.local:1234"
 
 		declareResource(t, url, "main", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
 		declareResource(t, url, "storage", resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET)

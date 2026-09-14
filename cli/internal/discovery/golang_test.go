@@ -25,7 +25,7 @@ func TestTheGoLauncherDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	configDir := goFixture(t, "example.com/web")
 	root := Root{Dir: filepath.Join(configDir, "declarations"), Language: Go}
 
-	cmd, err := launchers[Go].Command(context.Background(), configDir, root, "http://127.0.0.1:1234")
+	cmd, err := launchers[Go].Command(context.Background(), configDir, root, testServer)
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestTheGoLauncherDerivesTheImportedPackageFromTheRoot(t *testing.T) {
 	if want := []string{"go", "run", "./" + constants.ProjectStateDirName + "/discovery"}; !slices.Equal(cmd.Args[1:], want[1:]) || filepath.Base(cmd.Args[0]) != "go" {
 		t.Errorf("Args = %q, want %q", cmd.Args, want)
 	}
-	for _, want := range []string{constants.PhaseEnvName + "=discovery", constants.DevServerEnvName + "=http://127.0.0.1:1234"} {
+	for _, want := range []string{constants.PhaseEnvName + "=discovery", constants.DevServerEnvName + "=http://127.0.0.1:1234", constants.DevServerTokenEnvName + "=opensesame"} {
 		if !slices.Contains(cmd.Env, want) {
 			t.Errorf("Env lacks %q", want)
 		}
@@ -56,7 +56,7 @@ func TestTheGoLauncherRefusesARootWithNoModuleAboveIt(t *testing.T) {
 	configDir := t.TempDir()
 	write(t, filepath.Join(configDir, "declarations", "declarations.go"), "package declarations\n")
 
-	_, err := launchers[Go].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "declarations"), Language: Go}, "http://127.0.0.1:1234")
+	_, err := launchers[Go].Command(context.Background(), configDir, Root{Dir: filepath.Join(configDir, "declarations"), Language: Go}, testServer)
 	if err == nil {
 		t.Fatal("Command succeeded with no go.mod above the root, want error")
 	}
@@ -95,7 +95,7 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 		t.Fatalf("roots = %+v, want the go infra folder of the project", roots)
 	}
 
-	collected, url := declareCollector(t)
+	collected, server := declareCollector(t)
 
 	prepared, err := Prepare(configDir, roots)
 	if err != nil {
@@ -103,7 +103,7 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	if err := Run(context.Background(), configDir, prepared, url, &stdout, &stderr); err != nil {
+	if err := Run(context.Background(), configDir, prepared, server, &stdout, &stderr); err != nil {
 		t.Fatalf("Run: %v; stderr=%s", err, stderr.String())
 	}
 
@@ -144,7 +144,7 @@ func TestRunReportsWhatAGoRootThatDoesNotCompileSaid(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	err = Run(context.Background(), configDir, prepared, "http://127.0.0.1:1", &stdout, &stderr)
+	err = Run(context.Background(), configDir, prepared, Server{URL: "http://127.0.0.1:1", Token: testToken}, &stdout, &stderr)
 	if err == nil {
 		t.Fatal("Run succeeded on a root that does not compile, want error")
 	}
