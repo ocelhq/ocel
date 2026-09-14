@@ -30,6 +30,7 @@ type Provider struct {
 
 	preflightRefusal error
 	preflighted      []providerkit.DeployPreflight
+	wrappedFor       []string
 
 	journal   *Journal
 	options   Options
@@ -278,6 +279,28 @@ func (d DeployPreflighter) PreflightDeploy(_ context.Context, pre providerkit.De
 	return d.preflight(pre)
 }
 
+type ContainerWrapper struct {
+	*Provider
+	runtime []byte
+}
+
+func (p *Provider) WrappingContainers(runtime []byte) ContainerWrapper {
+	return ContainerWrapper{Provider: p, runtime: runtime}
+}
+
+func (w ContainerWrapper) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.wrappedFor = append(w.wrappedFor, arch)
+	return w.runtime, nil
+}
+
+func (p *Provider) WrappedFor() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.wrappedFor)
+}
+
 type Warmer struct{ *Provider }
 
 func (Warmer) Warm(context.Context, []string, providerkit.Reporter) error { return nil }
@@ -352,6 +375,7 @@ var (
 	_ providerkit.Certifier         = (*Provider)(nil)
 	_ providerkit.EdgeProgrammer    = (*Provider)(nil)
 	_ providerkit.ImageRegistry     = Full{}
+	_ providerkit.ContainerRuntimer = ContainerWrapper{}
 	_ resources.Functions           = Full{}
 	_ resources.AppContainers       = Full{}
 )

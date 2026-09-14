@@ -2,6 +2,7 @@ package providerkit
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -86,6 +87,31 @@ func (d DockerHost) Export(ctx context.Context, client *http.Client, ref string)
 			d.Address, resp.Status, ref, said(resp.Body))
 	}
 	return resp.Body, nil
+}
+
+func (d DockerHost) Architecture(ctx context.Context, client *http.Client, ref string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/images/"+ref+"/json", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("inspect %s in the daemon at %s: %w", ref, d.Address, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("the daemon at %s answered %q inspecting %s: %s", d.Address, resp.Status, ref, said(resp.Body))
+	}
+	var inspected struct {
+		Architecture string `json:"Architecture"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&inspected); err != nil {
+		return "", fmt.Errorf("read what the daemon at %s said about %s: %w", d.Address, ref, err)
+	}
+	if inspected.Architecture == "" {
+		return "", fmt.Errorf("the daemon at %s names no architecture for %s", d.Address, ref)
+	}
+	return inspected.Architecture, nil
 }
 
 func (d DockerHost) Tag(ctx context.Context, client *http.Client, source, repository, tag string) error {

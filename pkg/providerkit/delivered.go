@@ -23,21 +23,34 @@ func ResourceEnvName(kind BindingType, resource string) string {
 	return naming.ResourceEnvName(WireBindingType(kind), resource)
 }
 
-func (r *deployRun) delivers(entry AppEntry) bool {
-	if entry.Compute() == ComputeContainer {
-		return true
+func (r *deployRun) bakes(compute Compute) bool {
+	return Bakes(r.provider, compute)
+}
+
+func Bakes(provider Provider, compute Compute) bool {
+	switch compute {
+	case ComputeContainer:
+		_, wraps := provider.(ContainerRuntimer)
+		return !wraps
+	case ComputeServerless:
+		_, images := provider.(FunctionImager)
+		return images
 	}
-	_, images := r.provider.(FunctionImager)
-	return images
+	return false
 }
 
 func (r *deployRun) deliver(ctx context.Context, entry AppEntry, held AppValues) (map[string]string, error) {
-	if !r.delivers(entry) {
+	compute := entry.Compute()
+	if compute != ComputeContainer && !r.bakes(compute) {
 		return nil, nil
 	}
 	delivered := make(map[string]string, len(held.Plain)+len(held.Sensitive)+len(held.Secrets)+len(held.Bindings))
 	maps.Copy(delivered, held.Plain)
 	maps.Copy(delivered, held.Sensitive)
+	if !r.bakes(compute) {
+		maps.Copy(delivered, held.Injected())
+		return delivered, nil
+	}
 
 	cells := make([]values.Cell, 0, len(held.Secrets))
 	for _, secret := range held.Secrets {
@@ -87,7 +100,7 @@ func (r *deployRun) refuseUnsetSecret(app, key string) error {
 func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 	var stored map[values.Cell]bool
 	for _, entry := range r.plan.Apps {
-		if !r.delivers(entry) {
+		if entry.Compute() != ComputeContainer && !r.bakes(entry.Compute()) {
 			continue
 		}
 		held, err := r.manifestValues(entry, nil)

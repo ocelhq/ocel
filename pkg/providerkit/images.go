@@ -20,6 +20,7 @@ type ImagePush struct {
 
 	Function bool
 	Built    v1.Image
+	Wrap     Wrapped
 }
 
 type ImageStore interface {
@@ -83,11 +84,26 @@ func (p ImagePlan) Ship(ctx context.Context, report Reporter) error {
 		if report != nil {
 			report.Say("Sending " + push.App + "'s image to " + where)
 		}
-		if err := p.Store.Push(ctx, push, report); err != nil {
+		if err := p.push(ctx, push, report); err != nil {
 			return fmt.Errorf("send %s's image to %s: %w", push.App, where, err)
 		}
 	}
 	return nil
+}
+
+func (p ImagePlan) push(ctx context.Context, push ImagePush, report Reporter) error {
+	if push.Wrap != nil {
+		if report != nil {
+			report.Detail("Wrapping the image in the ocel runtime")
+		}
+		built, done, err := push.Wrap(ctx)
+		if err != nil {
+			return err
+		}
+		defer done()
+		push.Built = built
+	}
+	return p.Store.Push(ctx, push, report)
 }
 
 func (p ImagePlan) Coordinate(app string) string {

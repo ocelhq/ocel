@@ -709,7 +709,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 				return err
 			}
 			defer discardStaged(staged)
-			images, err := r.imagePlan(entry, functions)
+			images, err := r.imagePlan(ctx, entry, functions)
 			if err != nil {
 				return err
 			}
@@ -1409,7 +1409,14 @@ func runs(images ImagePlan, entry AppEntry) string {
 	return entry.Image
 }
 
-func (r *deployRun) imagePlan(entry AppEntry, functions []ImagePush) (ImagePlan, error) {
+func (r *deployRun) containerPush(ctx context.Context, entry AppEntry) (ImagePush, error) {
+	if wrapper, wraps := r.provider.(ContainerRuntimer); wraps {
+		return r.wrappedPush(ctx, entry.App, entry.Image, wrapper)
+	}
+	return imagePush(entry.App, entry.Image, r.registry)
+}
+
+func (r *deployRun) imagePlan(ctx context.Context, entry AppEntry, functions []ImagePush) (ImagePlan, error) {
 	if len(functions) > 0 {
 		return ImagePlan{Store: r.images, Pushes: functions}, nil
 	}
@@ -1423,7 +1430,7 @@ func (r *deployRun) imagePlan(entry AppEntry, functions []ImagePush) (ImagePlan,
 				"    → name a `registry` in the project config, with `password` set to the name of the environment variable holding the token",
 			entry.App)
 	}
-	push, err := imagePush(entry.App, entry.Image, r.registry)
+	push, err := r.containerPush(ctx, entry)
 	if err != nil {
 		return ImagePlan{}, err
 	}
