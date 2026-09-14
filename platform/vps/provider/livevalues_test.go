@@ -96,7 +96,7 @@ func (vm machine) proves(t *testing.T, path string) {
 
 func (vm machine) reads(t *testing.T, container, name string) string {
 	t.Helper()
-	return strings.TrimSpace(vm.peers(t, "curl -sS -m 10 'http://"+container+":"+providerkit.InjectedPortText+"/env?name="+name+"'"))
+	return strings.TrimSpace(vm.beside(t, container, "curl -sS -m 10 'http://127.0.0.1:"+providerkit.InjectedPortText+"/env?name="+name+"'"))
 }
 
 func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftOnTheBox(t *testing.T) {

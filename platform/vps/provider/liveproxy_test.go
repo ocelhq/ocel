@@ -34,6 +34,12 @@ func (vm machine) peers(t *testing.T, command string) string {
 		" sh -c "+quote(command)+" 2>&1 || true")
 }
 
+func (vm machine) beside(t *testing.T, container, command string) string {
+	t.Helper()
+	return vm.ssh(t, "sudo docker run --rm --network "+quote("container:"+container)+" "+quote(host.ProxyImage)+
+		" sh -c "+quote(command)+" 2>&1 || true")
+}
+
 func quote(arg string) string { return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'" }
 
 func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *testing.T) {
