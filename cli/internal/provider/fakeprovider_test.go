@@ -173,7 +173,18 @@ func (s *fakeProviderServer) Configure(_ context.Context, req *contractv1.Config
 
 var fakeStageID = naming.PhaseID(naming.UnitEnvironment, naming.PhaseProvisioning)
 
+const fakeOversizedEventBytes = 1 << 16
+
 func (s *fakeProviderServer) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	if s.mode == "oversized-event" {
+		return stream.Send(&progressv1.OperationEvent{
+			Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{
+				StageId: fakeStageID,
+				Message: strings.Repeat("x", fakeOversizedEventBytes),
+			}},
+		})
+	}
+
 	if err := stream.Send(&progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Progress{Progress: &progressv1.ProgressEvent{StageId: fakeStageID, Message: "step 1"}},
 	}); err != nil {

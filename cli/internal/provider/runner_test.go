@@ -448,6 +448,29 @@ func TestDeploy(t *testing.T) {
 		}
 	})
 
+	t.Run("a provider message over the channel ceiling is refused rather than buffered whole", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		r, _ := spawnFake(t, ctx, "oversized-event", Config{MaxMessageBytes: fakeOversizedEventBytes / 4})
+
+		if err := r.Ready(ctx); err != nil {
+			t.Fatalf("Ready() error = %v, want nil", err)
+		}
+
+		var seen int
+		err := Stream(ctx, r, "Deploy", &contractv1.DeployRequest{
+			Manifest: &contractv1.Manifest{SchemaVersion: "provider.v1", Slug: "acme"},
+		}, contractv1connect.ProviderServiceClient.Deploy, func(ev *progressv1.OperationEvent) { seen++ })
+
+		if connect.CodeOf(err) != connect.CodeResourceExhausted {
+			t.Fatalf("Deploy() error = %v (code %v), want it refused with CodeResourceExhausted", err, connect.CodeOf(err))
+		}
+		if seen != 0 {
+			t.Errorf("the caller saw %d events, want an oversized message never handed on", seen)
+		}
+	})
+
 	t.Run("calling before a successful Ready refuses rather than panicking", func(t *testing.T) {
 		t.Parallel()
 
