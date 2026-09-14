@@ -27,6 +27,7 @@ const (
 	valuesDrifted   = "what the edge hands back differs from what stands"
 	keyGone         = "the access key it records is no longer on the user"
 	keyUnrecorded   = "it records no access key"
+	keyStale        = "the access key it records is older than 90 days and is rotated"
 	severedByRemove = "removing %s takes what the %s edge was reached through with it"
 
 	passphraseStranded = "the only copy of the passphrase every Pulumi stack in this account was encrypted under; no Ocel credential may delete it, so it stays until removed by hand"

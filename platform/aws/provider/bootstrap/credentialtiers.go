@@ -849,6 +849,7 @@ func edgePrincipal(r ScopedARNs) []GrantStatement {
 				"iam:DeleteAccessKey",
 				"iam:DeleteUser",
 				"iam:DeleteUserPolicy",
+				"iam:GetAccessKeyLastUsed",
 				"iam:GetUser",
 				"iam:GetUserPolicy",
 				"iam:ListAccessKeys",
