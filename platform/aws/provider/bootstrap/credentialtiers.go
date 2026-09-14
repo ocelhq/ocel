@@ -256,6 +256,14 @@ func bootstrapAccess(r ScopedARNs) []GrantStatement {
 			},
 		},
 		{
+			Actions:   []string{"kms:CreateGrant"},
+			Resources: []string{AnyKeyARN},
+			Condition: map[string]any{
+				"StringEquals": map[string]any{"aws:ResourceTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
+				"Bool":         map[string]any{"kms:GrantIsForAWSResource": "true"},
+			},
+		},
+		{
 			Actions:   []string{"cloudformation:DescribeStacks"},
 			Resources: []string{r.BootstrapStack},
 		},

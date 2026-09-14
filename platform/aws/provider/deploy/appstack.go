@@ -43,6 +43,7 @@ type appStackFunctions struct {
 	Guard     *originGuard
 	RoleArn   pulumi.StringInput
 	RoleName  pulumi.StringInput
+	KmsKeyARN string
 	Layers    map[string]string
 	Shipped   map[string]pulumi.Resource
 	Pushed    []pulumi.Resource
@@ -120,7 +121,7 @@ func (a appStackFunctions) declare(
 	args := a.Args(fn)
 	ref, err := registerFunction(ctx, logical, functionCoordinate(a.Project, a.Stack, logical),
 		fn.RouteID, args, a.Artifacts[logical], env, resolved, a.ISR, a.Bytecode, a.RoleArn,
-		pulumi.StringArray{pulumi.String(a.Layers[args.Arch])}, urlAuth,
+		pulumi.StringArray{pulumi.String(a.Layers[args.Arch])}, urlAuth, a.KmsKeyARN,
 		a.shippedTo(logical)...)
 	if err != nil {
 		return ref, fmt.Errorf("declare %s: %w", logical, err)

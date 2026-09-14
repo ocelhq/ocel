@@ -311,7 +311,7 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 		NamePrefix:          pulumi.String(substrateName(class, "exec") + naming.WordSeparator),
 		Description:         pulumi.String("Ocel: the role ECS pulls every container app's image and ships its logs with in the " + string(class) + " class"),
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
-		PermissionsBoundary: permissionsBoundary(w.boundary),
+		PermissionsBoundary: pulumi.String(w.boundary),
 		Tags:                tags,
 	})
 	if err != nil {

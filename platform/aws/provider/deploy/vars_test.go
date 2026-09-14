@@ -374,6 +374,22 @@ func TestRenderBakedBundle(t *testing.T) {
 		}
 	})
 
+	t.Run("an account with no vars key cannot carry a sensitive variable", func(t *testing.T) {
+		t.Parallel()
+
+		app := &contractv1.ManifestApp{
+			Name:      "web",
+			Variables: []*contractv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
+		}
+		keyless := liveConfig()
+		keyless.VarsKeyARN = ""
+
+		_, err := renderAppBundle(keyless, "shop", app, nil)
+		if err == nil || !strings.Contains(err.Error(), "vars-key") {
+			t.Fatalf("renderAppBundle without a key = %v, want a refusal: the data key would sit in the function environment under nothing but Lambda's account-wide key", err)
+		}
+	})
+
 	t.Run("every render gets a fresh data key", func(t *testing.T) {
 		t.Parallel()
 

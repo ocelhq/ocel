@@ -153,7 +153,7 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api"})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: testBoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -316,7 +316,7 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 			stack := testStack(t, "prod", "api")
 			coord := functionCoordinate("shop", stack, "fn--api--web")
 			program := func(pctx *pulumi.Context) error {
-				role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api"})
+				role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: testBoundaryARN})
 				if err != nil {
 					return err
 				}
@@ -405,7 +405,7 @@ func TestTheReleaseBootsThroughTheAccountsRuntimeAndPublishesNoneOfItsOwn(t *tes
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api"})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: testBoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -867,7 +867,7 @@ func TestFunctionLogGroup(t *testing.T) {
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
 		stack := testStack(t, "prod", "api")
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api"})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: testBoundaryARN})
 		if err != nil {
 			return err
 		}
@@ -877,7 +877,7 @@ func TestFunctionLogGroup(t *testing.T) {
 		}
 		_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", stack, "fn--api--users"),
 			"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"},
-			nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionURLAuthIAM)
+			nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionURLAuthIAM, "")
 		return err
 	}
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
@@ -903,5 +903,66 @@ func TestFunctionLogGroup(t *testing.T) {
 	logging := rec.object(t, "aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90", "loggingConfig")
 	if got := logging["logGroup"]; !got.IsString() || !strings.HasPrefix(got.StringValue(), want) {
 		t.Errorf("the function's loggingConfig.logGroup = %v, want the group the deploy owns under %q", got, want)
+	}
+}
+
+func TestAFunctionsEnvironmentIsSealedUnderTheClassVarsKey(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		key  string
+	}{
+		{"an account with a vars key seals every function's environment under it", productionVarsKeyARN},
+		{"an account without one leaves Lambda's own key in place", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := &inputRecorder{}
+			program := func(pctx *pulumi.Context) error {
+				stack := testStack(t, "prod", "api")
+				role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "api", Boundary: testBoundaryARN})
+				if err != nil {
+					return err
+				}
+				args, err := translateFunctionSpec("", providerkit.FunctionSpec{})
+				if err != nil {
+					return err
+				}
+				_, err = registerFunction(pctx, "fn--api--users", functionCoordinate("shop", stack, "fn--api--users"),
+					"/users", args, artifactRef{Bucket: "artifacts", Key: "fn.zip"},
+					nil, nil, nil, nil, role.Arn, pulumi.StringArray{pulumi.String(mockAccountARN("lambda", "layer:runtime:1"))}, functionURLAuthIAM, tc.key)
+				return err
+			}
+			if err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", rec)); err != nil {
+				t.Fatalf("run program: %v", err)
+			}
+
+			fn := rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90")
+			got, held := fn["kmsKeyArn"]
+			if tc.key == "" {
+				if held {
+					t.Errorf("kmsKeyArn = %v, want none where the account names no key", got)
+				}
+				return
+			}
+			if !held || !got.IsString() || got.StringValue() != tc.key {
+				t.Errorf("kmsKeyArn = %v, want %q: the data key in OCEL_VARS_ENVELOPE is otherwise readable by anyone in the account with lambda:GetFunctionConfiguration", got, tc.key)
+			}
+		})
+	}
+}
+
+func TestARoleWithNoBoundaryIsRefusedRatherThanMintedUncapped(t *testing.T) {
+	t.Parallel()
+
+	program := func(pctx *pulumi.Context) error {
+		_, err := newFunctionRole(pctx, roleCoordinate("shop", testStack(t, "prod", "api")), executionRole{App: "api"})
+		return err
+	}
+	err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--api", &inputRecorder{}))
+	if err == nil || !strings.Contains(err.Error(), "boundary") {
+		t.Fatalf("newFunctionRole with no boundary = %v, want a refusal naming the boundary", err)
 	}
 }

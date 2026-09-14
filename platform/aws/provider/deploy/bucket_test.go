@@ -412,3 +412,15 @@ func TestBucketUploadCompleterLogGroup(t *testing.T) {
 		t.Errorf("the upload completer's loggingConfig = %v, want it pointed at the group the deploy owns under %q", logging, want)
 	}
 }
+
+func TestABucketWithNoBoundaryIsRefusedRatherThanMintedUncapped(t *testing.T) {
+	t.Parallel()
+
+	program := func(ctx *pulumi.Context) error {
+		return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&providerkit.BucketSpec{}), "ocel-state", "", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+	}
+	err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--infra", &tagRecorder{}))
+	if err == nil || !strings.Contains(err.Error(), "boundary") {
+		t.Fatalf("registerBucket with no boundary = %v, want a refusal naming the boundary", err)
+	}
+}
