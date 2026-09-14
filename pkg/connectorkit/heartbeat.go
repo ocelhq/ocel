@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -48,6 +49,38 @@ type beat struct {
 type spoken struct {
 	unreached bool
 	status    int
+}
+
+func beatFor(spec Spec) (*beat, error) {
+	origin, err := originOf(spec.Console)
+	if err != nil {
+		return nil, err
+	}
+	return &beat{
+		origin:       origin,
+		connectorID:  spec.ConnectorID,
+		version:      spec.Version,
+		capabilities: spec.Grants,
+		identity:     spec.Identity,
+		keyPath:      spec.KeyPath,
+		configPath:   spec.ConfigPath,
+		client:       &http.Client{Timeout: 20 * time.Second},
+		every:        beatEvery,
+	}, nil
+}
+
+// Heartbeat sends the console one heartbeat and answers its status, for a
+// connector that is woken on a schedule rather than left running between
+// requests. Serve beats on its own; this is for the hosts that cannot.
+func Heartbeat(ctx context.Context, spec Spec) (int, error) {
+	if !spec.Identity.Held() {
+		return 0, errors.New("connectorkit: this connector holds no identity, so it has nothing to sign a heartbeat with")
+	}
+	beating, err := beatFor(spec)
+	if err != nil {
+		return 0, err
+	}
+	return beating.once(ctx)
 }
 
 func (b *beat) token() (string, error) {
