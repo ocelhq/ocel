@@ -28,10 +28,14 @@ func (r *deployRun) bakes(compute Compute) bool {
 }
 
 func Bakes(provider Provider, compute Compute) bool {
+	_, wraps := provider.(ContainerRuntimer)
+	return imaged(provider, compute) && !wraps
+}
+
+func imaged(provider Provider, compute Compute) bool {
 	switch compute {
 	case ComputeContainer:
-		_, wraps := provider.(ContainerRuntimer)
-		return !wraps
+		return true
 	case ComputeServerless:
 		_, images := provider.(FunctionImager)
 		return images
@@ -41,7 +45,7 @@ func Bakes(provider Provider, compute Compute) bool {
 
 func (r *deployRun) deliver(ctx context.Context, entry AppEntry, held AppValues) (map[string]string, error) {
 	compute := entry.Compute()
-	if compute != ComputeContainer && !r.bakes(compute) {
+	if !imaged(r.provider, compute) {
 		return nil, nil
 	}
 	delivered := make(map[string]string, len(held.Plain)+len(held.Sensitive)+len(held.Secrets)+len(held.Bindings))
@@ -100,7 +104,7 @@ func (r *deployRun) refuseUnsetSecret(app, key string) error {
 func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 	var stored map[values.Cell]bool
 	for _, entry := range r.plan.Apps {
-		if entry.Compute() != ComputeContainer && !r.bakes(entry.Compute()) {
+		if !imaged(r.provider, entry.Compute()) {
 			continue
 		}
 		held, err := r.manifestValues(entry, nil)

@@ -334,6 +334,39 @@ func TestFunctionImageCarriesAnOverlayAlongsideTheRuntimeItBootsFrom(t *testing.
 	}
 }
 
+func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageHolds(t *testing.T) {
+	t.Parallel()
+
+	for _, root := range []string{providerkit.FunctionImageRoot, providerkit.NodeRuntimeRoot} {
+		if providerkit.ContainerRuntimePath == root || strings.HasPrefix(providerkit.ContainerRuntimePath, root+"/") {
+			t.Errorf("the container runtime lands at %s, inside %s: a node function's image holds a directory there, and a file appended over a directory cannot be loaded", providerkit.ContainerRuntimePath, root)
+		}
+	}
+
+	dir := stagedFunc(t, map[string]string{
+		"index.mjs":   "export default () => {}",
+		"config.json": functionConfig(t, nil),
+	})
+	if _, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir,
+		map[string][]byte{providerkit.ContainerRuntimePath: []byte("theirs")}); err == nil {
+		t.Errorf("FunctionImage() carried an overlay at %s, want it refused: a function's overlay may not write over the runtime its image is later wrapped in", providerkit.ContainerRuntimePath)
+	}
+
+	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir,
+		map[string][]byte{providerkit.NodeRuntimePath: []byte("export const runtime = 1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapped, err := providerkit.WrapContainer(image, []byte("a runtime binary"))
+	if err != nil {
+		t.Fatalf("WrapContainer() = %v, want a node function's image wrapped like any container", err)
+	}
+	config := configOf(t, wrapped)
+	if !slices.Equal(config.Entrypoint, []string{providerkit.ContainerRuntimePath}) || !slices.Equal(config.Cmd, []string{"node", providerkit.NodeRuntimePath}) {
+		t.Errorf("the wrapped function enters at %v and runs %v, want the container runtime running the node one", config.Entrypoint, config.Cmd)
+	}
+}
+
 func tarBody(t *testing.T, layer v1.Layer, name string) []byte {
 	t.Helper()
 	body, err := layer.Uncompressed()

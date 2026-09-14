@@ -412,3 +412,43 @@ func TestPreflightNamesNoBakedContainerWhenTheProviderWrapsOne(t *testing.T) {
 			resp.GetBakedComputes())
 	}
 }
+
+func TestPreflightNamesNoBakedComputeWhenTheProviderWrapsTheFunctionImagesItBuilds(t *testing.T) {
+	t.Parallel()
+
+	client := servedProvider(t, "1.2.3", wrappingImaging{imaging{Provider: fake.NewProvider(fake.Options{Region: "nowhere"})}, containerRuntimeBytes})
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if len(resp.GetBakedComputes()) != 0 {
+		t.Errorf("Preflight() baked computes = %v, want none: a function image this provider wraps in its runtime reads its values live, as its containers do",
+			resp.GetBakedComputes())
+	}
+}
+
+func TestBakesIsTrueOnlyWhereAnImageRunsWithNoRuntimeOfOcelsInside(t *testing.T) {
+	t.Parallel()
+
+	base := fake.NewProvider(fake.Options{Region: "nowhere"})
+	for _, tc := range []struct {
+		provider              providerkit.Provider
+		what                  string
+		container, serverless bool
+	}{
+		{base, "a provider handed images it runs as they are", true, false},
+		{base.WrappingContainers(containerRuntimeBytes), "a provider that wraps the containers it is handed", false, false},
+		{imaging{Provider: base}, "a provider that builds function images", true, true},
+		{wrappingImaging{imaging{Provider: base}, containerRuntimeBytes}, "a provider that builds function images and wraps every image", false, false},
+	} {
+		if got := providerkit.Bakes(tc.provider, providerkit.ComputeContainer); got != tc.container {
+			t.Errorf("Bakes(%s, container) = %v, want %v", tc.what, got, tc.container)
+		}
+		if got := providerkit.Bakes(tc.provider, providerkit.ComputeServerless); got != tc.serverless {
+			t.Errorf("Bakes(%s, serverless) = %v, want %v", tc.what, got, tc.serverless)
+		}
+	}
+}
