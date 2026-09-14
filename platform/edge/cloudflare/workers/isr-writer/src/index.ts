@@ -102,11 +102,20 @@ export default class extends WorkerEntrypoint<Env> {
       if (!(await this.bootstrapAuthorized(request))) {
         return new Response("Unauthorized", { status: 401 });
       }
-      const body = await readJson<{ secretHash: string }>(request);
+      const body = await readJson<{ secretHash: string; force?: boolean }>(request);
       if (!isSecretHash(body?.secretHash)) {
         return new Response("Bad Request", { status: 400 });
       }
-      await deployStub(this.env, isrPrefix).initialize(body.secretHash);
+      const outcome = await deployStub(this.env, isrPrefix).initialize(
+        body.secretHash,
+        body.force === true,
+      );
+      if (outcome === "held") {
+        return new Response(
+          `deploy ${isrPrefix} already holds a different write secret; initialize with force to replace it`,
+          { status: 409 },
+        );
+      }
       await snapshotStub(this.env, isrPrefix).begin(isrPrefix);
       memoize(isrPrefix, body.secretHash, false);
       return new Response(null, { status: 204 });
