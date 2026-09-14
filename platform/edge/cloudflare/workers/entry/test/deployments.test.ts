@@ -96,6 +96,16 @@ describe("resolveDeployment", () => {
     expect(resolution).toEqual({ kind: "not-found" });
   });
 
+  it("reports unavailable when the store says unchanged but nothing is cached", async () => {
+    const binding: DeploymentsBinding = {
+      async pointerRecord() {
+        return { kind: "unchanged", identity: "deploy-1" };
+      },
+    };
+
+    expect(await resolveDeployment(deps(binding, { ms: 0 }))).toEqual({ kind: "unavailable" });
+  });
+
   it("serves the cached record within the TTL without calling the store", async () => {
     const binding = countingBinding({
       pointerIdentity: { "web/": "deploy-1" },
