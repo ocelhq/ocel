@@ -5,12 +5,11 @@ import (
 	"context"
 	_ "embed"
 	"encoding/base64"
-	"fmt"
 	"io"
-	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 //go:embed records.sh
@@ -40,7 +39,7 @@ func NewRecords(h *Host) *Records { return &Records{over: sshRecords{host: h}} }
 func RecordsOver(over RecordTransport) *Records { return &Records{over: over} }
 
 func (r *Records) tier(ctx context.Context, name providerkit.RecordName) (providerkit.Class, string, bool, error) {
-	class, encoded, err := located(name)
+	class, encoded, err := live.Located(name)
 	if err != nil {
 		return "", "", false, err
 	}
@@ -96,7 +95,7 @@ func (r *Records) WritePair(ctx context.Context, first, second providerkit.Recor
 	if err != nil {
 		return err
 	}
-	beside, two, err := located(second.Name)
+	beside, two, err := live.Located(second.Name)
 	if err != nil {
 		return err
 	}
@@ -166,7 +165,7 @@ func (r *Records) List(ctx context.Context, under providerkit.RecordName) ([]pro
 			return nil, providerkit.Refuse(providerkit.CodeDenied,
 				"the records helper listed a row ocel cannot read: %q", line)
 		}
-		name, err := decode(columns[0])
+		name, err := live.DecodeName(columns[0])
 		if err != nil {
 			return nil, err
 		}
@@ -238,86 +237,6 @@ func readRow(rendered string) (providerkit.Revision, []byte, error) {
 			"the record read back is stored as no record ocel wrote")
 	}
 	return providerkit.Revision(revision), bytes, nil
-}
-
-func located(name providerkit.RecordName) (providerkit.Class, string, error) {
-	class, named := providerkit.ClassOf(name)
-	if !named {
-		return "", "", providerkit.Refuse(providerkit.CodeInvalid,
-			"%s names no class, and this host keeps one record tree per class", name)
-	}
-	encoded, err := encode(name)
-	if err != nil {
-		return "", "", err
-	}
-	return class, encoded, nil
-}
-
-func encode(name providerkit.RecordName) (string, error) {
-	segments := make([]string, 0, len(name))
-	for _, segment := range name {
-		if segment == "" {
-			return "", providerkit.Refuse(providerkit.CodeInvalid,
-				"%s carries an empty segment, and no file on this host answers to it", name)
-		}
-		segments = append(segments, encodeSegment(segment))
-	}
-	return strings.Join(segments, "/"), nil
-}
-
-func encodeSegment(segment string) string {
-	var written strings.Builder
-	for i := 0; i < len(segment); i++ {
-		if plain(segment[i]) && (i != 0 || segment[i] != '.') {
-			written.WriteByte(segment[i])
-			continue
-		}
-		fmt.Fprintf(&written, "%%%02X", segment[i])
-	}
-	return written.String()
-}
-
-func plain(c byte) bool {
-	switch {
-	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
-		return true
-	default:
-		return c == '-' || c == '_' || c == '.'
-	}
-}
-
-func decode(encoded string) (providerkit.RecordName, error) {
-	var name providerkit.RecordName
-	for _, segment := range strings.Split(encoded, "/") {
-		decoded, err := decodeSegment(segment)
-		if err != nil {
-			return nil, err
-		}
-		name = append(name, decoded)
-	}
-	return name, nil
-}
-
-func decodeSegment(segment string) (string, error) {
-	var written strings.Builder
-	for i := 0; i < len(segment); i++ {
-		if segment[i] != '%' {
-			written.WriteByte(segment[i])
-			continue
-		}
-		if i+2 >= len(segment) {
-			return "", providerkit.Refuse(providerkit.CodeDenied,
-				"the records helper named %q, which is not a name ocel wrote", segment)
-		}
-		value, err := strconv.ParseUint(segment[i+1:i+3], 16, 8)
-		if err != nil {
-			return "", providerkit.Refuse(providerkit.CodeDenied,
-				"the records helper named %q, which is not a name ocel wrote", segment)
-		}
-		written.WriteByte(byte(value))
-		i += 2
-	}
-	return written.String(), nil
 }
 
 var _ providerkit.RecordStore = (*Records)(nil)

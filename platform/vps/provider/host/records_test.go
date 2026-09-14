@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -23,19 +24,19 @@ func TestARecordNameSurvivesTheNameAFileOnTheHostAnswersTo(t *testing.T) {
 		{"values", "shop", "production", "/apps/web", "DATABASE_URL"},
 		{"ledger", "production/shop", ".hidden", ".."},
 	} {
-		encoded, err := encode(name)
+		encoded, err := live.EncodeName(name)
 		if err != nil {
-			t.Fatalf("encode(%s) = %v", name, err)
+			t.Fatalf("EncodeName(%s) = %v", name, err)
 		}
 		if strings.Contains(encoded, "/.") {
-			t.Errorf("encode(%s) = %q, and a segment that starts a dot names something no record is", name, encoded)
+			t.Errorf("EncodeName(%s) = %q, and a segment that starts a dot names something no record is", name, encoded)
 		}
-		decoded, err := decode(encoded)
+		decoded, err := live.DecodeName(encoded)
 		if err != nil {
-			t.Fatalf("decode(%q) = %v", encoded, err)
+			t.Fatalf("DecodeName(%q) = %v", encoded, err)
 		}
 		if !reflect.DeepEqual(decoded, name) {
-			t.Errorf("decode(encode(%s)) = %s", name, decoded)
+			t.Errorf("live.DecodeName(live.EncodeName(%s)) = %s", name, decoded)
 		}
 	}
 }
@@ -43,8 +44,8 @@ func TestARecordNameSurvivesTheNameAFileOnTheHostAnswersTo(t *testing.T) {
 func TestARecordNameWithAnEmptySegmentIsRefused(t *testing.T) {
 	t.Parallel()
 
-	if _, err := encode(providerkit.RecordName{"conformance", "", "leaf"}); err == nil {
-		t.Fatal("encode() of a name with an empty segment succeeded, and no file on a host answers to it")
+	if _, err := live.EncodeName(providerkit.RecordName{"conformance", "", "leaf"}); err == nil {
+		t.Fatal("EncodeName() of a name with an empty segment succeeded, and no file on a host answers to it")
 	}
 }
 

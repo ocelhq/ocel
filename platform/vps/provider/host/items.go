@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -22,8 +23,8 @@ const (
 )
 
 const (
-	classRoot    = "/etc/ocel"
-	stateRoot    = "/var/lib/ocel"
+	classRoot    = live.ClassRoot
+	stateRoot    = live.StateRoot
 	releasesRoot = stateRoot + "/releases"
 	helperRoot   = "/usr/local/lib/ocel"
 
