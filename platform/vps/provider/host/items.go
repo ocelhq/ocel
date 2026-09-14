@@ -34,8 +34,8 @@ const (
 	stampFile   = "stamp.json"
 	sealKeyFile = "seal.key"
 
-	sudoersRoot = "/etc/sudoers.d"
-	sudoersSeal = sudoersRoot + "/ocel-seal"
+	sudoersRoot       = "/etc/sudoers.d"
+	sudoersSealPrefix = sudoersRoot + "/ocel-seal-"
 )
 
 const rootOwner = "root"
@@ -47,6 +47,8 @@ func ClassDir(class providerkit.Class) string { return classRoot + "/" + string(
 func StampPath(class providerkit.Class) string { return ClassDir(class) + "/" + stampFile }
 
 func SealKeyPath(class providerkit.Class) string { return ClassDir(class) + "/" + sealKeyFile }
+
+func sudoersSeal(class providerkit.Class) string { return sudoersSealPrefix + string(class) }
 
 func StateDir(class providerkit.Class) string { return stateRoot + "/" + string(class) }
 
@@ -80,7 +82,7 @@ func StorageItems(class providerkit.Class, keys []byte) []Item {
 		{Kind: KindFile, Name: releasesHelper, Mode: 0o755, Owner: rootOwner, Content: releasesScript, Note: "keeps the release window and sweeps the images no release names"},
 		{Kind: KindFile, Name: SealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript, Note: "seals and opens secret values"},
 		principal(),
-		{Kind: KindFile, Name: sudoersSeal, Mode: 0o440, Owner: rootOwner, Content: sealSudoers(), Note: "lets " + deployUser + " run the seal helper as root"},
+		{Kind: KindFile, Name: sudoersSeal(class), Mode: 0o440, Owner: rootOwner, Content: sealSudoers(class), Note: "lets " + deployUser + " seal and open " + string(class) + " values through the helper as root, and run nothing else through it"},
 		dir(stateRoot, 0o750, stateOwner, "deploy state root"),
 		dir(releasesRoot, 0o750, stateOwner, "the release window every class on this host keeps"),
 		dir(sshDir, 0o700, stateOwner, "the deploy account's ssh login"),

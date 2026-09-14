@@ -257,8 +257,11 @@ func TestTheDeployLoginIsWhitelistedOnTheHelperAndOnNothingBeside(t *testing.T) 
 		t.Errorf("%s is written %04o to %q, want 0440 to %s or sudo refuses to read it", fragment.Name, fragment.Mode, fragment.Owner, rootOwner)
 	}
 	written := strings.TrimSpace(string(fragment.Content))
-	if want := deployUser + " ALL=(root) NOPASSWD: " + SealHelper; written != want {
-		t.Errorf("the fragment reads %q, want %q: one helper, and no path beside it", written, want)
+	if want := deployUser + " ALL=(root) NOPASSWD: " + SealHelper + " production seal *, " + SealHelper + " production open *"; written != want {
+		t.Errorf("the fragment reads %q, want %q: one helper, the class it seals under, the two verbs a deploy uses and no path beside it", written, want)
+	}
+	if fragment.Name != sudoersSeal(providerkit.ClassProduction) || strings.ContainsAny(strings.TrimPrefix(fragment.Name, sudoersRoot+"/"), ".~") {
+		t.Errorf("the fragment stands at %q, want one file per class under %s whose name sudo will read: sudoers.d skips names carrying '.' or '~'", fragment.Name, sudoersRoot)
 	}
 	if at(items, principal().Name) > at(items, fragment.Name) {
 		t.Error("the sudoers line is written before the login it names exists")
@@ -439,7 +442,7 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 	if index(alone, key.path) > index(alone, ClassDir(production)) {
 		t.Error("the class directory is removed before the key it carries is named, so the confirmation names bytes that are already gone")
 	}
-	for _, singleton := range []string{SealHelper, sudoersSeal} {
+	for _, singleton := range []string{SealHelper, sudoersSeal(production)} {
 		if removalOf(alone, singleton).path == "" {
 			t.Errorf("destroying the last class leaves %s behind", singleton)
 		}
@@ -447,10 +450,14 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 
 	beside := digests(Items(preview, keys, ArchAMD64))
 	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside})
-	for _, singleton := range []string{SealHelper, sudoersSeal} {
-		if removalOf(shared, singleton).path != "" {
-			t.Errorf("destroying one class takes %s, which a standing sibling still seals through", singleton)
-		}
+	if removalOf(shared, SealHelper).path != "" {
+		t.Errorf("destroying one class takes %s, which a standing sibling still seals through", SealHelper)
+	}
+	if removalOf(shared, sudoersSeal(preview)).path != "" {
+		t.Errorf("destroying %s takes %s, the line the standing %s class seals through", production, sudoersSeal(preview), preview)
+	}
+	if removalOf(shared, sudoersSeal(production)).path == "" {
+		t.Errorf("destroying %s leaves %s behind, and a line that opens a class whose key is gone is a grant nothing revokes", production, sudoersSeal(production))
 	}
 	if removalOf(shared, SealKeyPath(production)).path == "" {
 		t.Error("destroying one class leaves its own key behind, and a class is what a key is scoped to")
@@ -517,7 +524,7 @@ func TestTheHelperIsRunInTheShapeTheSudoersLineWhitelists(t *testing.T) {
 
 	ran := "sudo -n " + words(argv)
 	if strings.Contains(ran, "sh -c") {
-		t.Fatalf("the deploy login runs %q, and the line in %s whitelists %s, not a shell", ran, sudoersSeal, SealHelper)
+		t.Fatalf("the deploy login runs %q, and the line in %s whitelists %s, not a shell", ran, sudoersSeal(providerkit.ClassProduction), SealHelper)
 	}
 	if want := "sudo -n " + quoted(SealHelper) + " "; !strings.HasPrefix(ran, want) {
 		t.Errorf("the deploy login runs %q, want it to begin %q: sudo matches the command it is handed, and nothing else runs", ran, want)

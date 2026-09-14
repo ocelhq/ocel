@@ -178,7 +178,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
 
 	singletons := []string{"/var/lib/ocel", "/usr/local/lib/ocel", "/usr/local/lib/ocel/seal", "/usr/local/lib/ocel/records",
-		host.ProxyHelper, host.ProxyConfig, "/etc/sudoers.d/ocel-seal", "/etc/ocel"}
+		host.ProxyHelper, host.ProxyConfig, "/etc/sudoers.d/ocel-seal-production", "/etc/ocel"}
 
 	first, err := bootstrapper.PlanRemoval(ctx, production)
 	if err != nil {
