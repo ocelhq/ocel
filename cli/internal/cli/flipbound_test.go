@@ -46,14 +46,14 @@ func TestFlipBoundOnTheRollbackPromotionLine(t *testing.T) {
 			t.Setenv(clitest.FakeFlipBoundEnvVar, tc.spec)
 
 			var stdout, stderr bytes.Buffer
-			if err := runRollback(context.Background(), deps, root, rollbackOptions{}, &stdout, &stderr); err != nil {
+			if err := runRollback(context.Background(), deps, root, rollbackOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 				t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 			}
 
 			out := stdout.String()
 			line := ""
 			for _, l := range strings.Split(out, "\n") {
-				if strings.HasPrefix(l, "Rolled back to promotion") {
+				if strings.Contains(l, "Rolled back to promotion") {
 					line = l
 				}
 			}
