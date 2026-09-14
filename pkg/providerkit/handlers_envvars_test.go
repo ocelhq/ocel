@@ -139,8 +139,8 @@ func TestVersionsAndDeleteAnswerAcrossTheWire(t *testing.T) {
 		Coordinate:      cell("KEY"),
 		ExpectedVersion: &stale,
 	})
-	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
-		t.Fatalf("DeleteValue() at a version that moved: code = %v, want %v", got, connect.CodeFailedPrecondition)
+	if got := connect.CodeOf(err); got != connect.CodeAborted {
+		t.Fatalf("DeleteValue() at a version that moved: code = %v, want %v — a caller that reads the code must tell a test-and-set conflict from a bootstrap that is not ready", got, connect.CodeAborted)
 	}
 
 	deleted, err := vars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{

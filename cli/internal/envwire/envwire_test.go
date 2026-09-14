@@ -13,14 +13,14 @@ import (
 
 func TestStaleOrBroken(t *testing.T) {
 	t.Run("a version conflict is a stale value", func(t *testing.T) {
-		conflict := connect.NewError(connect.CodeFailedPrecondition, errors.New("values: stale version"))
+		conflict := connect.NewError(connect.CodeAborted, errors.New("values: stale version"))
 		if err := staleOrBroken(conflict); !errors.Is(err, varsui.ErrStaleValue) {
 			t.Errorf("staleOrBroken = %v, want varsui.ErrStaleValue", err)
 		}
 	})
 
 	t.Run("a refusal keeps what it says", func(t *testing.T) {
-		refusal := providerkit.RefusalError(providerkit.Refuse(providerkit.CodeNotReady,
+		refusal := providerkit.RefusalError(providerkit.Refuse(providerkit.CodeBusy,
 			"the production bootstrap holds no key to seal a value under"))
 
 		err := staleOrBroken(refusal)
