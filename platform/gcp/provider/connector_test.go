@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -208,5 +209,26 @@ func TestAComputeThisProjectDoesNotRunTheConnectorOnIsRefusedHere(t *testing.T) 
 	}
 	if !strings.Contains(err.Error(), string(providerkit.ComputeContainer)) {
 		t.Errorf("err = %v, want it to name the compute it refused", err)
+	}
+}
+
+func TestRemovingTheConnectorAttemptsEveryStepAndReportsEveryFailure(t *testing.T) {
+	t.Parallel()
+
+	var ran []string
+	err := everyStep(
+		func() error { ran = append(ran, "service"); return errors.New("the service would not go") },
+		func() error { ran = append(ran, "grants"); return nil },
+		func() error { ran = append(ran, "account"); return errors.New("the account would not go") },
+		func() error { ran = append(ran, "images"); return nil },
+	)
+	if want := []string{"service", "grants", "account", "images"}; !slices.Equal(ran, want) {
+		t.Errorf("removal ran %v, want %v: a step that fails leaves the later ones standing if they are skipped", ran, want)
+	}
+	if err == nil || !strings.Contains(err.Error(), "the service would not go") || !strings.Contains(err.Error(), "the account would not go") {
+		t.Errorf("removal reported %v, want every failure named so the operator knows what still stands", err)
+	}
+	if err := everyStep(func() error { return nil }, func() error { return nil }); err != nil {
+		t.Errorf("a removal every step of which passed reported %v", err)
 	}
 }
