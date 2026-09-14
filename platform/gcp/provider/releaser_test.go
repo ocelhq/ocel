@@ -2,12 +2,14 @@ package gcp
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 func previewPlan(label string) providerkit.StackPlan {
@@ -65,6 +67,53 @@ func TestAPreviewFunctionIsNamedApartFromThePreviewItShipsIn(t *testing.T) {
 	}
 	if !strings.HasPrefix(functions[0].Physical, label) {
 		t.Errorf("the function is served by %q, want it under the preview's label %q so removing the preview names it", functions[0].Physical, label)
+	}
+}
+
+type heard struct {
+	providerkit.Reporter
+	said []string
+}
+
+func (h *heard) Say(message string) { h.said = append(h.said, message) }
+
+func (h *heard) Detail(string) {}
+
+func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *testing.T) {
+	server := &runServer{}
+	p := server.open(t)
+	report := &heard{}
+
+	if _, err := p.ProvisionContainers(context.Background(), previewPlan(""), report); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	if !slices.ContainsFunc(report.said, func(said string) bool { return strings.Contains(said, "is a preview and answers anyone") }) {
+		t.Errorf("the release said %q, want it to say the preview answers anyone with its url: Cloud Run has no invoker a browser could satisfy, so the reader has to know", report.said)
+	}
+
+	production := &heard{}
+	plan := previewPlan("")
+	plan.Ref.Class = providerkit.ClassProduction
+	plan.Ref.Name = naming.StackName{Env: providerkit.ProductionEnv, App: "web"}
+	if _, err := p.ProvisionContainers(context.Background(), plan, production); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	if slices.ContainsFunc(production.said, func(said string) bool { return strings.Contains(said, "is a preview") }) {
+		t.Errorf("a production release said %q, and production is meant to answer anyone", production.said)
+	}
+
+	shielded := &heard{}
+	front, err := p.Edges().Open(alb.Kind)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan = previewPlan(edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", ""))
+	plan.Edge = front
+	if _, err := p.ProvisionContainers(context.Background(), plan, shielded); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	if slices.ContainsFunc(shielded.said, func(said string) bool { return strings.Contains(said, "is a preview") }) {
+		t.Errorf("a preview behind the load balancer said %q, and its service takes traffic from the load balancer alone", shielded.said)
 	}
 }
 

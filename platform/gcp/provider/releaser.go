@@ -2,12 +2,14 @@ package gcp
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 )
 
 func serviceFor(names Names, plan providerkit.StackPlan, app *providerkit.AppPlan, function string) (string, error) {
@@ -15,6 +17,20 @@ func serviceFor(names Names, plan providerkit.StackPlan, app *providerkit.AppPla
 		return names.PreviewService(app.PreviewLabel, app.App, function)
 	}
 	return names.Service(plan.Ref.Project, plan.Ref.Name.Env, app.App, function)
+}
+
+const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: the %q edge shields nothing, " +
+	"and Cloud Run's invoker check would shut browsers out too. Front previews with an edge that shields the origin, or keep their urls to yourselves"
+
+func warnPreviewOpen(plan providerkit.StackPlan, service string, report providerkit.Reporter) {
+	if plan.Ref.Class != providerkit.ClassPreview || factsOf(plan.Edge).ShieldsOrigin {
+		return
+	}
+	kind := direct.Kind
+	if plan.Edge != nil {
+		kind = plan.Edge.Kind()
+	}
+	say(report, service+" "+fmt.Sprintf(previewOpenWarning, kind))
 }
 
 func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.Function, error) {
@@ -57,6 +73,9 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 		}, report)
 		if err != nil {
 			return nil, err
+		}
+		if spec.URL {
+			warnPreviewOpen(plan, service, report)
 		}
 		standing = append(standing, providerkit.Function{
 			Name: spec.Name, Physical: service, URL: ran.url, Revision: ran.revision,
@@ -115,6 +134,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	if err != nil {
 		return nil, err
 	}
+	warnPreviewOpen(plan, service, report)
 	return []providerkit.AppContainer{{
 		Name: app.App, Physical: service, URL: ran.url, Image: app.Image, Revision: ran.revision,
 	}}, nil
