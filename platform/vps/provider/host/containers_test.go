@@ -244,6 +244,10 @@ func TestAContainerReadingValuesLiveIsHandedTheBoxSocketReadOnlyAndItsManifestBy
 	if !strings.Contains(command, mount) {
 		t.Errorf("standing a live container up runs %q, which hands it no socket to read its values through (%s)", command, mount)
 	}
+	tmpfs := quoted("--tmpfs") + " " + quoted(LiveDir+":rw,noexec,nosuid,size=8m")
+	if !strings.Contains(command, tmpfs) {
+		t.Errorf("standing a live container up runs %q, which gives the runtime nowhere in memory to project the values into (%s): an image built from scratch has no /tmp, and the writable layer is the box's disk", command, tmpfs)
+	}
 	if strings.Contains(command, aManifest) {
 		t.Errorf("the command line carries the manifest, which every login reads out of `ps`; it travels in the env file")
 	}
@@ -260,8 +264,8 @@ func TestAContainerReadingValuesLiveIsHandedTheBoxSocketReadOnlyAndItsManifestBy
 	baked := spec
 	baked.Manifest = nil
 	stood := standingWith(t, baked)
-	if command := ranContainer(t, stood); strings.Contains(command, quoted("--mount")) {
-		t.Errorf("a container reading nothing live runs %q and is handed the socket anyway", command)
+	if command := ranContainer(t, stood); strings.Contains(command, quoted("--mount")) || strings.Contains(command, quoted("--tmpfs")) {
+		t.Errorf("a container reading nothing live runs %q and is handed the socket or the projection anyway", command)
 	}
 	if file := wrote(t, stood, EnvFile(baked.Class, baked.Name)); strings.Contains(file, "OCEL_LIVE_MANIFEST") {
 		t.Errorf("a container reading nothing live is handed %q, which names a manifest", file)

@@ -46,7 +46,7 @@ func (f *socketFetcher) FetchLive(ctx context.Context) (map[string]string, error
 	return answer.Values, nil
 }
 
-func FromManifest(raw []byte) (*Values, error) {
+func FromManifest(raw []byte, socket string) (*Values, error) {
 	manifest, err := vars.Parse(raw)
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func FromManifest(raw []byte) (*Values, error) {
 	if !manifest.Live() {
 		return nil, nil
 	}
-	return Over(manifest, vars.SocketPath), nil
+	return Over(manifest, socket), nil
 }
 
 func Over(manifest vars.Manifest, socket string) *Values {

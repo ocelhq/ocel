@@ -17,6 +17,8 @@ const (
 	ValuesPath = "/values"
 )
 
+const ProjectionDir = "/ocel/live"
+
 type Manifest struct {
 	Slug        string       `json:"slug"`
 	Class       string       `json:"class"`

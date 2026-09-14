@@ -26,7 +26,6 @@ import (
 const (
 	stopGrace       = 10 * time.Second
 	drainGrace      = 5 * time.Second
-	liveDirPattern  = "ocel-live-"
 	forwardedSignal = "ocel: forwarding %s to the app\n"
 )
 
@@ -60,7 +59,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	}
 	guard, env := front.GuardFromEnv(env)
 
-	values, err := resolve(ctx, manifest)
+	values, err := resolve(ctx, manifest, vars.SocketPath, vars.ProjectionDir)
 	if err != nil {
 		return fatal(err.Error())
 	}
@@ -140,11 +139,11 @@ func exitCode(exit child.Exit) int {
 	return exit.Code
 }
 
-func resolve(ctx context.Context, manifest string) (*rt.Values, error) {
+func resolve(ctx context.Context, manifest, socket, dir string) (*rt.Values, error) {
 	if manifest == "" {
 		return nil, nil
 	}
-	values, err := live.FromManifest([]byte(manifest))
+	values, err := live.FromManifest([]byte(manifest), socket)
 	if err != nil {
 		return nil, fmt.Errorf("read this deployment's live variables: %w", err)
 	}
@@ -157,10 +156,6 @@ func resolve(ctx context.Context, manifest string) (*rt.Values, error) {
 	if missing := values.Missing(); len(missing) > 0 {
 		return nil, fmt.Errorf("nothing is stored for %s, which this deployment declares as %s: set it with `ocel env set` and deploy again",
 			strings.Join(missing, ", "), plural(len(missing), "a secret", "secrets"))
-	}
-	dir, err := os.MkdirTemp("", liveDirPattern)
-	if err != nil {
-		return nil, fmt.Errorf("make a directory to hand the app its live variables through: %w", err)
 	}
 	if err := values.Project(dir); err != nil {
 		return nil, err
