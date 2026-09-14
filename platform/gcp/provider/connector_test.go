@@ -357,11 +357,11 @@ func TestAReinstallWithFewerGrantsTakesTheKeyRoleItNoLongerCallsForAway(t *testi
 	t.Parallel()
 
 	const member = "serviceAccount:ocel-connector@project.iam.gserviceaccount.com"
-	bindings, changed := boundKeyRoles(nil, member, []string{connectorSealingRole, connectorOpeningRole})
+	bindings, changed := boundKeyRoles(nil, member, connectorKeyRoles, []string{connectorSealingRole, connectorOpeningRole})
 	if !changed || len(bindings) != 2 {
 		t.Fatalf("granting both on an empty policy = %+v, %v", bindings, changed)
 	}
-	bindings, changed = boundKeyRoles(bindings, member, []string{connectorSealingRole})
+	bindings, changed = boundKeyRoles(bindings, member, connectorKeyRoles, []string{connectorSealingRole})
 	if !changed {
 		t.Fatal("dropping the reveal grant changed nothing on the key")
 	}
@@ -374,10 +374,10 @@ func TestAReinstallWithFewerGrantsTakesTheKeyRoleItNoLongerCallsForAway(t *testi
 			t.Errorf("the connector lost %s while its write grant stands", connectorSealingRole)
 		}
 	}
-	if _, again := boundKeyRoles(bindings, member, []string{connectorSealingRole}); again {
+	if _, again := boundKeyRoles(bindings, member, connectorKeyRoles, []string{connectorSealingRole}); again {
 		t.Error("holding the same roles again rewrote the policy, so every install would churn the key's IAM")
 	}
-	bindings, _ = boundKeyRoles(bindings, member, nil)
+	bindings, _ = boundKeyRoles(bindings, member, connectorKeyRoles, nil)
 	for _, binding := range bindings {
 		if slices.Contains(binding.GetMembers(), member) {
 			t.Errorf("removal left the connector holding %s", binding.GetRole())

@@ -12,18 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"cloud.google.com/go/iam/apiv1/iampb"
-	kms "cloud.google.com/go/kms/apiv1"
-	"cloud.google.com/go/kms/apiv1/kmspb"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
-	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iam/v1"
 	run "google.golang.org/api/run/v2"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -35,19 +29,16 @@ import (
 const (
 	ConnectorArch = "amd64"
 
-	connectorImageName    = "ocel-connector"
-	connectorImagePath    = "/connector"
-	connectorMemory       = 256
-	connectorInstances    = 1
-	connectorTimeout      = 30 * time.Second
-	connectorVersionEnv   = "OCEL_CONNECTOR_VERSION"
-	connectorRecordsRole  = "roles/datastore.user"
-	connectorSealingRole  = "roles/cloudkms.cryptoKeyEncrypter"
-	connectorOpeningRole  = "roles/cloudkms.cryptoKeyDecrypter"
-	connectorAccountNote  = "the identity the ocel connector answers the console as"
-	connectorBindAttempts = 4
-
-	conditionalPolicyVersion = 3
+	connectorImageName   = "ocel-connector"
+	connectorImagePath   = "/connector"
+	connectorMemory      = 256
+	connectorInstances   = 1
+	connectorTimeout     = 30 * time.Second
+	connectorVersionEnv  = "OCEL_CONNECTOR_VERSION"
+	connectorRecordsRole = "roles/datastore.user"
+	connectorSealingRole = "roles/cloudkms.cryptoKeyEncrypter"
+	connectorOpeningRole = "roles/cloudkms.cryptoKeyDecrypter"
+	connectorAccountNote = "the identity the ocel connector answers the console as"
 )
 
 var _ providerkit.ConnectorHost = (*Provider)(nil)
@@ -357,56 +348,11 @@ func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) erro
 	if err != nil {
 		return err
 	}
-	service, err := clients.Projects()
-	if err != nil {
-		return err
-	}
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
-	onlyThisDatabase := databaseCondition(clients.project, clients.Namespace())
-	var refused error
-	for attempt := range connectorBindAttempts {
-		if attempt > 0 && !waited(ctx, attempt) {
-			return ctx.Err()
-		}
-		policy, err := attempted(ctx, service.Projects.GetIamPolicy(clients.project,
-			&cloudresourcemanager.GetIamPolicyRequest{
-				Options: &cloudresourcemanager.GetPolicyOptions{RequestedPolicyVersion: conditionalPolicyVersion},
-			}).Context(ctx).Do)
-		if err != nil {
-			return fmt.Errorf("read who may read this project's records: %w", err)
-		}
-		bindings, changed := boundMember(policy.Bindings, connectorRecordsRole, member, onlyThisDatabase, granting)
-		if !changed {
-			return nil
-		}
-		policy.Bindings = bindings
-		policy.Version = conditionalPolicyVersion
-		_, refused = attempted(ctx, service.Projects.SetIamPolicy(clients.project,
-			&cloudresourcemanager.SetIamPolicyRequest{Policy: policy}).Context(ctx).Do)
-		if refused == nil {
-			return nil
-		}
-		if !taken(refused) {
-			break
-		}
+	if err := clients.bindProjectRole(ctx, member, connectorRecordsRole, databaseCondition(clients.project, clients.Namespace()), granting); err != nil {
+		return fmt.Errorf("let %s read and write the %s database's records: %w", member, ports.Database(clients.Namespace()), err)
 	}
-	return fmt.Errorf("let %s read and write the %s database's records: %w",
-		member, ports.Database(clients.Namespace()), refused)
-}
-
-func databaseCondition(project string, ns providerkit.Namespace) *cloudresourcemanager.Expr {
-	return &cloudresourcemanager.Expr{
-		Title: "ocel " + string(ns) + " database",
-		Expression: fmt.Sprintf("resource.name == %q",
-			fmt.Sprintf("projects/%s/databases/%s", project, ports.Database(ns))),
-	}
-}
-
-func sameCondition(held, want *cloudresourcemanager.Expr) bool {
-	if held == nil || want == nil {
-		return held == nil && want == nil
-	}
-	return held.Expression == want.Expression
+	return nil
 }
 
 func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, report providerkit.Reporter) error {
@@ -414,16 +360,15 @@ func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, repor
 	if err != nil {
 		return err
 	}
-	client, err := clients.KMS()
-	if err != nil {
-		return err
-	}
 	member := "serviceAccount:" + clients.ConnectorAccountEmail()
 	var errs []error
 	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
-		err := p.bindConnectorKey(ctx, client, member, class, wanted, report)
+		changed, err := clients.bindKeyRoles(ctx, class, member, connectorKeyRoles, wanted)
 		if err != nil && len(wanted) > 0 {
 			return err
+		}
+		if changed && report != nil && len(wanted) > 0 {
+			report.Say("The connector holds " + strings.Join(wanted, " and ") + " on the " + string(class) + " key")
 		}
 		errs = append(errs, err)
 	}
@@ -431,94 +376,6 @@ func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, repor
 }
 
 var connectorKeyRoles = []string{connectorSealingRole, connectorOpeningRole}
-
-func (p *Provider) bindConnectorKey(
-	ctx context.Context,
-	client *kms.KeyManagementClient,
-	member string,
-	class providerkit.Class,
-	wanted []string,
-	report providerkit.Reporter,
-) error {
-	clients, err := p.stood(ctx)
-	if err != nil {
-		return err
-	}
-	key := keyPath(clients, string(class))
-	if _, err := dialled(ctx, func() (*kmspb.CryptoKey, error) {
-		return client.GetCryptoKey(ctx, &kmspb.GetCryptoKeyRequest{Name: key})
-	}); err != nil {
-		if status.Code(err) == codes.NotFound {
-			return nil
-		}
-		return fmt.Errorf("read the %s key the connector opens values under: %w", class, err)
-	}
-	policy, err := dialled(ctx, func() (*iampb.Policy, error) {
-		return client.GetIamPolicy(ctx, &iampb.GetIamPolicyRequest{Resource: key})
-	})
-	if err != nil {
-		return fmt.Errorf("read who may seal under the %s key: %w", class, err)
-	}
-	bindings, changed := boundKeyRoles(policy.GetBindings(), member, wanted)
-	if !changed {
-		return nil
-	}
-	policy.Bindings = bindings
-	if _, err := dialled(ctx, func() (*iampb.Policy, error) {
-		return client.SetIamPolicy(ctx, &iampb.SetIamPolicyRequest{Resource: key, Policy: policy})
-	}); err != nil {
-		return fmt.Errorf("hold %s to %s on the %s key: %w", member, strings.Join(wanted, " and "), class, err)
-	}
-	if report != nil && len(wanted) > 0 {
-		report.Say("The connector holds " + strings.Join(wanted, " and ") + " on the " + string(class) + " key")
-	}
-	return nil
-}
-
-func boundKeyRoles(bindings []*iampb.Binding, member string, wanted []string) ([]*iampb.Binding, bool) {
-	changed := false
-	for _, role := range connectorKeyRoles {
-		var held bool
-		bindings, held = boundKeyMember(bindings, role, member, slices.Contains(wanted, role))
-		changed = changed || held
-	}
-	return bindings, changed
-}
-
-func boundMember(bindings []*cloudresourcemanager.Binding, role, member string,
-	condition *cloudresourcemanager.Expr, granting bool) ([]*cloudresourcemanager.Binding, bool) {
-	for _, binding := range bindings {
-		if binding.Role != role || !sameCondition(binding.Condition, condition) {
-			continue
-		}
-		members, changed := boundMembers(binding.Members, member, granting)
-		binding.Members = members
-		return bindings, changed
-	}
-	if !granting {
-		return bindings, false
-	}
-	return append(bindings, &cloudresourcemanager.Binding{
-		Role:      role,
-		Members:   []string{member},
-		Condition: condition,
-	}), true
-}
-
-func boundKeyMember(bindings []*iampb.Binding, role, member string, granting bool) ([]*iampb.Binding, bool) {
-	for _, binding := range bindings {
-		if binding.GetRole() != role {
-			continue
-		}
-		members, changed := boundMembers(binding.GetMembers(), member, granting)
-		binding.Members = members
-		return bindings, changed
-	}
-	if !granting {
-		return bindings, false
-	}
-	return append(bindings, &iampb.Binding{Role: role, Members: []string{member}}), true
-}
 
 func boundMembers(members []string, member string, granting bool) ([]string, bool) {
 	at := slices.Index(members, member)
