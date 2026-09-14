@@ -3,6 +3,7 @@ package apigateway
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -247,7 +249,38 @@ func (p *provider) Bootstrap(_ context.Context, class edge.Class) (edge.Bootstra
 }
 
 func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
-	return knownClass(class)
+	if err := knownClass(class); err != nil {
+		return err
+	}
+	c, err := p.clientsFor(ctx)
+	if err != nil {
+		return err
+	}
+	names, err := restAPIs(ctx, c)
+	if err != nil {
+		return err
+	}
+	standing := projectsNamed(slices.Sorted(maps.Values(names)), class)
+	if len(standing) == 0 {
+		return nil
+	}
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"the %q edge still fronts %d project(s) of class %s with a REST API of their own: %s. Run `%s` in each of them first, then take this bootstrap down",
+		Kind, len(standing), class, strings.Join(standing, ", "), "ocel destroy "+string(class))
+}
+
+func projectsNamed(names []string, class edge.Class) []string {
+	var standing []string
+	for _, name := range names {
+		fields := strings.Split(name, naming.FieldSeparator)
+		if len(fields) < 3 || fields[0] != apiNamespace || fields[2] != string(class) {
+			continue
+		}
+		if !slices.Contains(standing, fields[1]) {
+			standing = append(standing, fields[1])
+		}
+	}
+	return standing
 }
 
 func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
