@@ -2,6 +2,7 @@ package vps_test
 
 import (
 	"context"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -99,8 +100,14 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	if engine.Action != providerkit.ActionCreate {
 		t.Fatalf("Plan() over a machine with no engine shows %s as %q, want the install a user consents to", engineName, engine.Action)
 	}
-	if !strings.Contains(engine.Reason, "https://get.docker.com") {
-		t.Errorf("the engine is planned as %q, and the user consenting never learns what runs on their machine", engine.Reason)
+	for _, learned := range []*regexp.Regexp{
+		regexp.MustCompile(`https://raw\.githubusercontent\.com/docker/docker-install/[0-9a-f]{40}/install\.sh`),
+		regexp.MustCompile(`sha256 [0-9a-f]{64}`),
+		regexp.MustCompile(`engine [0-9]+\.[0-9]+\.[0-9]+`),
+	} {
+		if !learned.MatchString(engine.Reason) {
+			t.Errorf("the engine is planned as %q, which never names %s, and the user consenting never learns what runs on their machine", engine.Reason, learned)
+		}
 	}
 	if unit := planFor(group, unitName); unit.Action != providerkit.ActionCreate {
 		t.Errorf("Plan() shows %s as %q on a machine that has no engine at all", unitName, unit.Action)
