@@ -62,6 +62,8 @@ const (
 	proxyPulls  = 5
 )
 
+var proxyCapabilities = []string{"NET_BIND_SERVICE", "DAC_OVERRIDE", "DAC_READ_SEARCH"}
+
 const (
 	networkFact = "network=present"
 	networkHeld = "network=held"
@@ -247,6 +249,8 @@ func proxyRun() []string {
 		"--label", proxyLabel + "=" + contentSum(proxyBaseline),
 		"--env", "XDG_CONFIG_HOME=" + proxyDataMount + "/config",
 	}
+	argv = append(argv, logging()...)
+	argv = append(argv, confined(proxyCapabilities, true)...)
 	for _, port := range proxyServing() {
 		argv = append(argv, "--publish", port+":"+port)
 	}
