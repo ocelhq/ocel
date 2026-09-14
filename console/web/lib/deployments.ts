@@ -167,7 +167,10 @@ export async function findRun(projectId: string, id: string): Promise<RunLoad> {
   }
 }
 
-export type LatestRun = Pick<Deployment, "projectId" | "kind" | "outcome" | "deployedAt">;
+export type LatestRun = Pick<
+  Deployment,
+  "projectId" | "kind" | "outcome" | "deployedAt" | "providerName" | "providerRegion"
+>;
 
 export async function latestRuns(projectIds: string[]): Promise<Map<string, LatestRun>> {
   if (projectIds.length === 0) {
@@ -179,6 +182,8 @@ export async function latestRuns(projectIds: string[]): Promise<Map<string, Late
       kind: deployment.kind,
       outcome: deployment.outcome,
       deployedAt: deployment.deployedAt,
+      providerName: deployment.providerName,
+      providerRegion: deployment.providerRegion,
     })
     .from(deployment)
     .where(

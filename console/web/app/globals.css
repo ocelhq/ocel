@@ -9,7 +9,7 @@
 @source "../../../ui/vars/src";
 
 @theme inline {
-  --animate-wiggle: ocel-wiggle 450ms ease-out;
+  --animate-wiggle: ocel-wiggle 650ms ease-out;
 
   @keyframes ocel-wiggle {
     0%,

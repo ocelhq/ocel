@@ -4,8 +4,9 @@ import { ArrowUpRightIcon } from "@phosphor-icons/react/dist/ssr";
 import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
 import { requireOrganization } from "@/lib/access";
-import { latestRuns } from "@/lib/deployments";
+import { type LatestRun, latestRuns } from "@/lib/deployments";
 import { FrameworkStack } from "../framework-stack";
+import { ProviderMark } from "../marks";
 import { EmptyProjects } from "./empty";
 import { ProjectGrid, ProjectGridCell, ProjectsShell } from "./shell";
 import { StatusLine } from "./status";
@@ -14,6 +15,19 @@ const createdFormat = new Intl.DateTimeFormat("en", {
   dateStyle: "medium",
   timeZone: "UTC",
 });
+
+function Provider({ run }: { run: LatestRun | undefined }) {
+  if (!run) {
+    return null;
+  }
+  return (
+    <p className="flex shrink-0 items-center gap-1.5">
+      <ProviderMark provider={run.providerName} size={14} />
+      <span className="sr-only">{run.providerName}</span>
+      {run.providerRegion && <span className="tabular-nums">{run.providerRegion}</span>}
+    </p>
+  );
+}
 
 export default async function OverviewPage() {
   const session = await requireOrganization();
@@ -53,21 +67,26 @@ export default async function OverviewPage() {
                     className="size-4 text-dim transition-[color,translate] group-hover/card:translate-x-0.5 group-hover/card:-translate-y-0.5 group-hover/card:text-foreground"
                   />
                 </div>
-                <div className="flex min-w-0 flex-col gap-2">
-                  <h2 className="truncate text-lg/6 font-semibold tracking-tight">{item.name}</h2>
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <h2 className="truncate font-sans text-base/6 font-semibold tracking-normal">
+                    {item.name}
+                  </h2>
                   <StatusLine run={runs.get(item.id)} now={now} />
-                  <p className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                    <span className="truncate">{item.slug}</span>
-                    <span aria-hidden className="text-faint">
-                      /
-                    </span>
-                    <span className="shrink-0">
-                      Created{" "}
-                      <time dateTime={item.createdAt.toISOString()}>
-                        {createdFormat.format(item.createdAt)}
-                      </time>
-                    </span>
-                  </p>
+                  <div className="mt-0.5 flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <p className="flex min-w-0 items-center gap-2">
+                      <span className="truncate">{item.slug}</span>
+                      <span aria-hidden className="text-faint">
+                        /
+                      </span>
+                      <span className="shrink-0">
+                        Created{" "}
+                        <time dateTime={item.createdAt.toISOString()}>
+                          {createdFormat.format(item.createdAt)}
+                        </time>
+                      </span>
+                    </p>
+                    <Provider run={runs.get(item.id)} />
+                  </div>
                 </div>
               </Link>
             </ProjectGridCell>
