@@ -16,6 +16,7 @@ import {
   type CacheTarget,
   cacheKey,
   hasDraftCookie,
+  hostScope,
   refreshOutcome,
   SUPPRESS_SELF_REVALIDATION,
   serveCached,
@@ -122,7 +123,7 @@ async function prerender(ctx: PrerenderContext, deps: PrerenderTierDeps): Promis
     target.config.renderingMode,
     target.allowQuery,
   );
-  const refreshKey = `${deps.scope}:${routePath}`;
+  const refreshKey = `${hostScope(deps.scope, url.host)}:${routePath}`;
 
   const publicUrl = new URL(request.url);
   const revalidation: RevalidationRoute | undefined =

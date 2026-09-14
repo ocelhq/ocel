@@ -312,8 +312,30 @@ describe("cacheKey", () => {
       "STATIC",
       [],
     );
-    expect(a).toEqual({ cacheable: true, key: "https://cache.ocel/p1/web/d1/blog" });
+    expect(a).toEqual({ cacheable: true, key: "https://cache.ocel/app.example/p1/web/d1/blog" });
     expect(a).not.toEqual(b);
+  });
+
+  it("scopes the key by host so an alias never serves another host's render", () => {
+    const custom = cacheKey(
+      scope,
+      "/blog",
+      new URL("https://shop.example/blog"),
+      H(),
+      "STATIC",
+      [],
+    );
+    const alias = cacheKey(
+      scope,
+      "/blog",
+      new URL("https://shop.acct.workers.dev/blog"),
+      H(),
+      "STATIC",
+      [],
+    );
+    const upper = cacheKey(scope, "/blog", new URL("https://SHOP.example/blog"), H(), "STATIC", []);
+    expect(custom).not.toEqual(alias);
+    expect(upper).toEqual(custom);
   });
 
   it("scopes the key by app so two apps of one project never collide", () => {
@@ -348,7 +370,7 @@ describe("cacheKey", () => {
     const url = new URL("https://app.example/blog?page=2&ref=x");
     expect(cacheKey(scope, "/blog", url, H(), "STATIC", [])).toEqual({
       cacheable: true,
-      key: "https://cache.ocel/p1/web/d1/blog",
+      key: "https://cache.ocel/app.example/p1/web/d1/blog",
     });
   });
 
@@ -356,7 +378,7 @@ describe("cacheKey", () => {
     const url = new URL("https://app.example/blog?b=2&a=1");
     expect(cacheKey(scope, "/blog", url, H(), "STATIC", ["a", "b"])).toEqual({
       cacheable: true,
-      key: "https://cache.ocel/p1/web/d1/blog?a=1&b=2",
+      key: "https://cache.ocel/app.example/p1/web/d1/blog?a=1&b=2",
     });
   });
 
@@ -364,7 +386,7 @@ describe("cacheKey", () => {
     const url = new URL("https://app.example/blog?_rsc=abc123");
     expect(cacheKey(scope, "/blog", url, H(), "STATIC", undefined)).toEqual({
       cacheable: true,
-      key: "https://cache.ocel/p1/web/d1/blog",
+      key: "https://cache.ocel/app.example/p1/web/d1/blog",
     });
   });
 

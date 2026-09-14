@@ -105,6 +105,10 @@ export function deploymentScope(deps: DeploymentScope): string {
   return `${deps.slug}/${deps.app}/${deps.deploymentId}`;
 }
 
+export function hostScope(scope: string, host: string): string {
+  return `${encodeURIComponent(host.toLowerCase())}/${scope}`;
+}
+
 export function cacheKey(
   scope: string,
   pathname: string,
@@ -116,7 +120,7 @@ export function cacheKey(
   const variant = variantPath(pathname, headers, renderingMode);
   if (variant === null) return { cacheable: false };
 
-  const key = new URL(`https://cache.ocel/${scope}${variant}`);
+  const key = new URL(`https://cache.ocel/${hostScope(scope, url.host)}${variant}`);
   const names = (allowQuery ?? [...url.searchParams.keys()]).filter((name) => name !== "_rsc");
 
   for (const name of [...names].sort()) {
