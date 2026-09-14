@@ -10,7 +10,7 @@ import { functionUrlImageOrigin } from "@framework/next-router/image";
 import { type CacheDeps, deploymentScope } from "./cache";
 import { type DeploymentRecord, type DeploymentsDeps, resolveDeployment } from "./deployments";
 import { domainApp } from "./domains";
-import { createEdgeInvoker, type EdgeCacheStub, type EdgeObjectStore } from "./edge";
+import { createEdgeInvoker, type EdgeCacheStub, type EdgeObjectStore, ownBundleKey } from "./edge";
 import type { CacheEntrypointProps, Env } from "./env";
 import { coloImageCache } from "./image";
 import type { ImageStore } from "./image-store";
@@ -175,10 +175,16 @@ function routedDeps(
   if (!manifest) {
     throw new Error(`deployment ${record.deploymentId} carries no routing manifest to route with`);
   }
+  const app = deployments.app ?? record.app;
+  if (edgeWorkers && !ownBundleKey(edgeWorkers.bundleKey, deployments.slug, app)) {
+    throw new Error(
+      `deployment ${record.deploymentId} of ${deployments.slug}/${app} names an edge bundle outside its own prefix`,
+    );
+  }
   return {
     ...rest,
     slug: deployments.slug,
-    app: deployments.app ?? record.app,
+    app,
     deploymentId: record.deploymentId,
     edge:
       edgeRuntime && edgeWorkers

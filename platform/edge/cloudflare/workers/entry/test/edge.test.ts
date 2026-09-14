@@ -9,6 +9,7 @@ import {
   type EdgeInvoker,
   type EdgeObjectStore,
   type EdgeVariables,
+  ownBundleKey,
 } from "../src/edge";
 import { dispatchResult, type RouteDeps, serve } from "../src/index";
 import type { ObjectStoreReader } from "../src/tag-clock";
@@ -299,6 +300,22 @@ async function gated(
   );
   return { res, calls: calls() };
 }
+
+describe("ownBundleKey", () => {
+  it.each([
+    ["prod/p1/web/r1/edge/bundle.json", true],
+    ["preview/p1/web/r1/edge/bundle.json", true],
+    ["prod/p2/web/r1/edge/bundle.json", false],
+    ["prod/p1/admin/r1/edge/bundle.json", false],
+    ["prod/p1/web/r1/edge/sealed.bin", false],
+    ["prod/p1/web/r1/assets/bundle.json", false],
+    ["prod/p1/web/../../p2/web/r1/edge/bundle.json", false],
+    ["prod/p1/web/r1/edge/bundle.json/extra", false],
+    ["", false],
+  ])("%s is p1/web's own: %s", (key, own) => {
+    expect(ownBundleKey(key, "p1", "web")).toBe(own);
+  });
+});
 
 describe("middleware matchers", () => {
   it("does not invoke middleware for a path its matchers exclude", async () => {

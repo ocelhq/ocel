@@ -40,6 +40,22 @@ export interface EdgeVariables {
   valueFingerprint?: string;
 }
 
+const BUNDLE_FILE = "bundle.json";
+
+const BUNDLE_DIR = "edge";
+
+export function ownBundleKey(bundleKey: string, slug: string, app: string): boolean {
+  const segments = bundleKey.split("/");
+  return (
+    segments.length === 6 &&
+    segments.every((segment) => segment !== "" && segment !== "." && segment !== "..") &&
+    segments[1] === slug &&
+    segments[2] === app &&
+    segments[4] === BUNDLE_DIR &&
+    segments[5] === BUNDLE_FILE
+  );
+}
+
 import type { EdgeEntryKind, EdgeInvoker } from "@framework/next-router";
 
 export type { EdgeEntryKind, EdgeInvoker };
