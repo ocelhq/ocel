@@ -71,15 +71,22 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 
 func generateClientAccessors(cfg *projectconfig.Config, keys []clientenv.Key) error {
 	if len(cfg.Apps) == 0 {
-		return clientenv.GenerateKeys(cfg.Dir, clientenv.App{Dir: cfg.Dir}, keys)
+		return generateClientAccessor(cfg.Dir, clientenv.App{Dir: cfg.Dir}, keys)
 	}
 	for _, a := range cfg.Apps {
 		app := clientenv.App{Name: a.Name, Dir: filepath.Join(cfg.Dir, a.Path)}
-		if err := clientenv.GenerateKeys(cfg.Dir, app, keys); err != nil {
+		if err := generateClientAccessor(cfg.Dir, app, keys); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func generateClientAccessor(projectDir string, app clientenv.App, keys []clientenv.Key) error {
+	if err := clientenv.GenerateKeys(projectDir, app, keys); err != nil {
+		return err
+	}
+	return clientenv.PointAppImports(projectDir, app)
 }
 
 type noValues struct{}
