@@ -178,26 +178,33 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
 
 	singletons := []string{"/var/lib/ocel", "/usr/local/lib/ocel", "/usr/local/lib/ocel/seal", "/usr/local/lib/ocel/records",
-		host.ProxyHelper, host.ProxyConfig, "/etc/sudoers.d/ocel-seal-production", "/etc/ocel"}
+		host.ProxyHelper, host.ProxyConfig, "/etc/ocel"}
+	sealGrant := func(class providerkit.Class) string { return "/etc/sudoers.d/ocel-seal-" + string(class) }
 
 	first, err := bootstrapper.PlanRemoval(ctx, production)
 	if err != nil {
 		t.Fatalf("PlanRemoval(%s) = %v", production, err)
 	}
 	beside := onlyGroup(t, first)
-	for _, singleton := range append(slices.Clone(singletons), deployLogin) {
+	for _, singleton := range append(slices.Clone(singletons), deployLogin, sealGrant(preview)) {
 		if planned := planFor(beside, singleton); planned.Action == providerkit.ActionDelete {
 			t.Errorf("destroying %s plans %s as %q while %s still stands on this host", production, singleton, planned.Action, preview)
 		}
+	}
+	if planned := planFor(beside, sealGrant(production)); planned.Action != providerkit.ActionDelete {
+		t.Errorf("destroying %s plans %s as %q, and the grant that opens this class's values is this class's to revoke", production, sealGrant(production), planned.Action)
 	}
 
 	if err := bootstrapper.Remove(ctx, production, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", production, err)
 	}
-	for _, singleton := range singletons {
+	for _, singleton := range append(slices.Clone(singletons), sealGrant(preview)) {
 		if !vm.stands(t, singleton) {
 			t.Errorf("%s went with the %s class, and %s is a tenant of this machine that still deploys through it", singleton, production, preview)
 		}
+	}
+	if vm.stands(t, sealGrant(production)) {
+		t.Errorf("%s stands after the class it grants over was destroyed, and a grant over nothing is one nobody revokes", sealGrant(production))
 	}
 	if entry := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); entry == "" {
 		t.Errorf("%s went with the %s class, and the %s sibling deploys as it", deployLogin, production, preview)
@@ -229,7 +236,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 		t.Fatalf("PlanRemoval(%s) = %v", preview, err)
 	}
 	alone := onlyGroup(t, last)
-	for _, singleton := range append(slices.Clone(singletons), deployLogin) {
+	for _, singleton := range append(slices.Clone(singletons), deployLogin, sealGrant(preview)) {
 		if planned := planFor(alone, singleton); planned.Action != providerkit.ActionDelete {
 			t.Errorf("destroying the last class plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, planned.Action)
 		}
@@ -237,7 +244,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	if err := bootstrapper.Remove(ctx, preview, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", preview, err)
 	}
-	for _, singleton := range singletons {
+	for _, singleton := range append(slices.Clone(singletons), sealGrant(preview)) {
 		if vm.stands(t, singleton) {
 			t.Errorf("%s stands after the last class on this host was destroyed", singleton)
 		}
