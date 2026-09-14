@@ -23,6 +23,7 @@ fn a_group_nothing_references_declares_nothing() {
     let (url, requests) = holding(1, vec![cell("DATABASE_URL", "", "postgres://shop")]);
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", &url);
+    std::env::set_var("OCEL_DEV_SERVER_TOKEN", collector::TOKEN);
 
     assert!(
         ocel::discover().expect("discover"),

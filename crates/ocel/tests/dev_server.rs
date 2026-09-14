@@ -8,6 +8,7 @@ struct Infra {
 fn a_dev_server_that_is_not_a_url_is_reported_before_any_declaration_is_posted() {
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", "not a url");
+    std::env::set_var("OCEL_DEV_SERVER_TOKEN", "opensesame");
 
     let err = ocel::discover().expect_err("a dev server that is not a URL");
 

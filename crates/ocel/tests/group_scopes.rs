@@ -25,6 +25,7 @@ fn a_group_its_members_share_a_folder_declares_every_member() {
     let (url, requests) = holding(2, vec![cell("SHARED_BOTH", "/api", "b")]);
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", &url);
+    std::env::set_var("OCEL_DEV_SERVER_TOKEN", collector::TOKEN);
 
     assert!(
         ocel::discover().expect("discover"),

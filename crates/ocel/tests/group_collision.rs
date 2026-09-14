@@ -30,6 +30,7 @@ struct ApiGitHub {
 fn one_group_name_claimed_by_two_structs_names_both_the_files() {
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", "http://127.0.0.1:1");
+    std::env::set_var("OCEL_DEV_SERVER_TOKEN", "opensesame");
 
     let err = ocel::discover().expect_err("two structs claim the group 'github'");
 
