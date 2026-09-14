@@ -24,15 +24,18 @@ var varsKeyFeature = feature{
 func varsKeyTemplate(in featureInputs) featureStack {
 	if in.varsKey != "" {
 		return featureStack{body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - the record of the KMS key this account brought, which every encrypted variable of this class is sealed under. Ocel owns no key here."
+Description: "Ocel bootstrap feature (%s, %s) - the record of the KMS key this account brought, which every encrypted variable of this class is sealed under, and the alias naming it. Ocel owns no key here."
 Resources:
-  VarsKeyRecord:
-    Type: AWS::CloudFormation::WaitConditionHandle
+  VarsKeyAlias:
+    Type: AWS::KMS::Alias
     Metadata:
-      Description: "Placeholder for the %s class's brought variable key: the stack records the key ARN as an output and creates nothing."
+      Description: "The %s class's name for the key this account brought. The app boundary admits a key by this alias alone, so without it no app of the class could open a value sealed under the brought key."
+    Properties:
+      AliasName: %s
+      TargetKeyId: %q
 Outputs:
 %s`,
-			FeatureVarsKey, in.class, in.class, broughtVarsKeyOutput(in.varsKey))}
+			FeatureVarsKey, in.class, in.class, in.ns.varsKeyAliasFor(in.class), in.varsKey, broughtVarsKeyOutput(in.varsKey))}
 	}
 	return featureStack{
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'

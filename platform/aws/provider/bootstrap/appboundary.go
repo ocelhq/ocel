@@ -36,16 +36,10 @@ func appBoundaryActions() []string {
 		"ec2:DescribeNetworkInterfaces",
 		"ec2:UnassignPrivateIpAddresses",
 		"events:PutEvents",
-		"kms:Decrypt",
-		"kms:DescribeKey",
-		"kms:Encrypt",
-		"kms:GenerateDataKey",
-		"kms:GenerateDataKeyWithoutPlaintext",
-		"kms:ReEncryptFrom",
-		"kms:ReEncryptTo",
 		"lambda:GetFunctionConfiguration",
 		"lambda:InvokeAsync",
 		"lambda:InvokeFunction",
+		"lambda:InvokeFunctionUrl",
 		"logs:CreateLogGroup",
 		"logs:CreateLogStream",
 		"logs:DescribeLogGroups",
@@ -70,8 +64,6 @@ func appBoundaryActions() []string {
 		"s3:ListMultipartUploadParts",
 		"s3:PutObject",
 		"s3:PutObjectTagging",
-		"secretsmanager:DescribeSecret",
-		"secretsmanager:GetSecretValue",
 		"ses:SendEmail",
 		"ses:SendRawEmail",
 		"sns:Publish",
@@ -81,9 +73,6 @@ func appBoundaryActions() []string {
 		"sqs:GetQueueUrl",
 		"sqs:ReceiveMessage",
 		"sqs:SendMessage",
-		"ssm:GetParameter",
-		"ssm:GetParameters",
-		"ssm:GetParametersByPath",
 		"states:DescribeExecution",
 		"states:StartExecution",
 		"states:StartSyncExecution",
@@ -92,15 +81,38 @@ func appBoundaryActions() []string {
 	}
 }
 
-func appBoundaryResource(ns Namespace, class string) string {
-	var actions strings.Builder
-	for _, action := range appBoundaryActions() {
-		fmt.Fprintf(&actions, "              - %s\n", action)
+func appBoundaryKeyActions() []string {
+	return []string{
+		"kms:Decrypt",
+		"kms:DescribeKey",
+		"kms:Encrypt",
+		"kms:GenerateDataKey",
+		"kms:GenerateDataKeyWithoutPlaintext",
+		"kms:ReEncryptFrom",
+		"kms:ReEncryptTo",
 	}
+}
+
+func appBoundarySecretActions() []string {
+	return []string{
+		"secretsmanager:DescribeSecret",
+		"secretsmanager:GetSecretValue",
+	}
+}
+
+func yamlActions(actions []string) string {
+	var out strings.Builder
+	for _, action := range actions {
+		fmt.Fprintf(&out, "              - %s\n", action)
+	}
+	return out.String()
+}
+
+func appBoundaryResource(ns Namespace, class string) string {
 	return fmt.Sprintf(`  AppBoundary:
     Type: AWS::IAM::ManagedPolicy
     Metadata:
-      Description: "The ceiling every role Ocel creates for an app in this class is made under: a deploy may only mint and write policies onto roles carrying it, so the widest such role reaches these actions and no IAM, STS or account-level call."
+      Description: "The ceiling every app role of this class is made under: a deploy may only mint roles carrying it, so the widest such role reaches these actions, this class's variable key, the master secrets of clusters deploys create, and no IAM, STS or parameter call."
     Properties:
       ManagedPolicyName: %s
       Description: "Permissions boundary for the roles Ocel creates for apps in the %s class."
@@ -112,6 +124,18 @@ func appBoundaryResource(ns Namespace, class string) string {
 %s            Resource: '*'
           - Effect: Allow
             Action:
+%s            Resource: '*'
+            Condition:
+              ForAnyValue:StringEquals:
+                kms:ResourceAliases: %s
+          - Effect: Allow
+            Action:
+%s            Resource: '%s'
+            Condition:
+              StringLike:
+                'aws:ResourceTag/%s': '%s'
+          - Effect: Allow
+            Action:
               - ecr:GetAuthorizationToken
             Resource: '*'
           - Effect: Allow
@@ -120,7 +144,11 @@ func appBoundaryResource(ns Namespace, class string) string {
               - ecr:BatchGetImage
               - ecr:GetDownloadUrlForLayer
             Resource: 'arn:aws:ecr:*:*:repository/%s/*'
-`, ns.AppBoundaryNameFor(class), class, actions.String(), registry.Namespace)
+`, ns.AppBoundaryNameFor(class), class,
+		yamlActions(appBoundaryActions()),
+		yamlActions(appBoundaryKeyActions()), ns.varsKeyAliasFor(class),
+		yamlActions(appBoundarySecretActions()), appSecretARN, managedSecretClusterTagKey, appClusterARN,
+		registry.Namespace)
 }
 
 func appBoundaryOutput() string {
