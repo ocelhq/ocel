@@ -153,7 +153,7 @@ func reachVerdict(ctx context.Context, dial Reach, address string) providerkit.S
 		check.Verdict = providerkit.StandingFail
 		check.Finding = fmt.Sprintf("nothing answered a connection to %s from this machine, and the proxy renews every certificate on this box over http-01 on port %s with no ocel code anywhere near it: %v",
 			at, host.RenewalPort, err)
-		check.Fix = "open port " + host.RenewalPort + " to the internet in this machine's firewall and its provider's, and check the proxy is standing"
+		check.Fix = "open port " + host.RenewalPort + " in the firewall or security group your provider puts in front of this machine, and check the proxy is standing: the proxy publishes the port through docker, which writes its own iptables rules ahead of ufw and firewalld, so a firewall on the machine itself neither opens nor closes it"
 		return check
 	}
 	check.Verdict = providerkit.StandingPass
