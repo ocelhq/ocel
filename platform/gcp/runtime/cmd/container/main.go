@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -77,28 +76,10 @@ func run(ctx context.Context, command []string, environ []string) int {
 		return fatal(err.Error())
 	}
 
-	var ready atomic.Bool
 	listening := child.WatchListening("127.0.0.1:"+strconv.Itoa(internal), nil)
-	go func() {
-		if err := <-listening; err == nil {
-			ready.Store(true)
-		}
-	}()
-
-	ln, err := net.Listen("tcp", ":"+exposed)
-	if err != nil {
-		_ = proc.Stop(stopGrace)
-		return fatal(fmt.Sprintf("listen on port %s: %v", exposed, err))
-	}
 	upstream := &url.URL{Scheme: "http", Host: "127.0.0.1:" + strconv.Itoa(internal)}
-	server := &http.Server{Handler: front.Handler(front.Options{
-		Upstream:   upstream,
-		Guard:      guard,
-		HealthPath: healthPath,
-		Ready:      ready.Load,
-	})}
+	var server *http.Server
 	served := make(chan error, 1)
-	go func() { served <- server.Serve(ln) }()
 
 	keep, stopKeeping := context.WithCancel(ctx)
 	defer stopKeeping()
@@ -115,6 +96,22 @@ func run(ctx context.Context, command []string, environ []string) int {
 			if err := proc.Signal(sig); err != nil {
 				fmt.Fprintf(os.Stderr, "ocel: could not forward %s: %v\n", sig, err)
 			}
+		case err := <-listening:
+			listening = nil
+			if err != nil {
+				continue
+			}
+			ln, err := net.Listen("tcp", ":"+exposed)
+			if err != nil {
+				_ = proc.Stop(stopGrace)
+				return fatal(fmt.Sprintf("listen on port %s: %v", exposed, err))
+			}
+			server = &http.Server{Handler: front.Handler(front.Options{
+				Upstream:   upstream,
+				Guard:      guard,
+				HealthPath: healthPath,
+			})}
+			go func() { served <- server.Serve(ln) }()
 		case err := <-served:
 			if !errors.Is(err, http.ErrServerClosed) {
 				fmt.Fprintf(os.Stderr, "ocel: the front stopped serving: %v\n", err)
@@ -125,9 +122,11 @@ func run(ctx context.Context, command []string, environ []string) int {
 			if exit.Err != nil {
 				fmt.Fprintf(os.Stderr, "ocel: the app exited: %v\n", exit.Err)
 			}
-			drain, cancel := context.WithTimeout(context.Background(), drainGrace)
-			_ = server.Shutdown(drain)
-			cancel()
+			if server != nil {
+				drain, cancel := context.WithTimeout(context.Background(), drainGrace)
+				_ = server.Shutdown(drain)
+				cancel()
+			}
 			return exitCode(exit)
 		}
 	}

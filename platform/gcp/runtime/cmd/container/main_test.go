@@ -20,6 +20,7 @@ import (
 const (
 	roleVar    = "OCEL_TEST_CONTAINER_ROLE"
 	healthPath = "/_ocel/health"
+	lingerFor  = 400 * time.Millisecond
 )
 
 type served struct {
@@ -38,6 +39,10 @@ func TestContainerHelper(t *testing.T) {
 		os.Exit(99)
 	}()
 
+	if role == "linger" {
+		time.Sleep(lingerFor)
+		os.Exit(0)
+	}
 	if strings.HasPrefix(role, "exit:") {
 		code, err := strconv.Atoi(strings.TrimPrefix(role, "exit:"))
 		if err != nil {
@@ -243,6 +248,27 @@ func TestRun(t *testing.T) {
 		}
 		if code := r.quit(t, secret); code != 0 {
 			t.Errorf("run = %d, want 0", code)
+		}
+	})
+
+	t.Run("the exposed port opens only once the app listens", func(t *testing.T) {
+		r := launch(t, "linger")
+
+		for {
+			select {
+			case code := <-r.code:
+				if code != 0 {
+					t.Errorf("run = %d, want 0: the app finished cleanly without ever listening", code)
+				}
+				return
+			default:
+			}
+			conn, err := net.DialTimeout("tcp", "127.0.0.1:"+r.port, 50*time.Millisecond)
+			if err == nil {
+				conn.Close()
+				t.Fatal("the exposed port answered while the app was not listening: Cloud Run sends requests as soon as the port is open and holds them until then, so a front that opens first turns a cold start's queued requests into refusals")
+			}
+			time.Sleep(10 * time.Millisecond)
 		}
 	})
 
