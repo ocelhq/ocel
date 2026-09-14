@@ -13,6 +13,11 @@ export async function raise(
   isrPrefix: string,
   records: Map<string, TagRecord>,
 ): Promise<void> {
+  if (!endpoint.startsWith("https://")) {
+    throw new Error(
+      `raise ${isrPrefix}: the ISR writer endpoint ${endpoint} is not https, and the write secret travels in the clear over anything else`,
+    );
+  }
   const response = await fetchImpl(`${endpoint}/${isrPrefix}/tags`, {
     method: "POST",
     headers: {
