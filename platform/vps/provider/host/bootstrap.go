@@ -467,6 +467,7 @@ func removing(read, sibling Reading) []removal {
 	beneath := []removal{
 		taking(KindDir, StateDir(read.Class), "every record ocel holds for this class on this host, and nothing writes them again"),
 		taking(KindSealKey, SealKeyPath(read.Class), "the key every value this class holds was sealed to, and no other machine ever held it: what it sealed, nothing opens again"),
+		taking(KindFile, sudoersSeal(read.Class), "the one sudoers line that lets the deploy login seal and open this class's values"),
 	}
 	stamp := []removal{taking(KindDir, ClassDir(read.Class),
 		"the stamp that says what this host carries, taken last so an interrupted destroy leaves a host that still says what it is")}
@@ -478,7 +479,6 @@ func removing(read, sibling Reading) []removal {
 			taking(KindDir, releasesRoot, "the window naming which images this host still owes a rollback to; the images themselves stay, because what this host runs stays when ocel goes"),
 			sharing(stateRoot, ""),
 			taking(KindUser, deployUser, "the login every deploy onto this host runs as"),
-			taking(KindFile, sudoersSeal, ""),
 			taking(KindFile, recordsHelper, ""),
 			taking(KindFile, releasesHelper, ""),
 			taking(KindFile, SealHelper, ""),
