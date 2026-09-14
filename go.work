@@ -20,6 +20,7 @@ use (
 	./platform/edge/contract
 	./platform/gcp/connector
 	./platform/gcp/provider
+	./platform/gcp/runtime
 	./platform/vps/connector
 	./platform/vps/provider
 	./sdk

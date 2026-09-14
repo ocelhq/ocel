@@ -3,7 +3,24 @@
   "extends": ["//"],
   "tasks": {
     "generate": {
-      "inputs": ["generate.sh", "package.json"]
+      "inputs": [
+        "generate.sh",
+        "package.json",
+        "$TURBO_ROOT$/go.work",
+        "$TURBO_ROOT$/pkg/**/*.go",
+        "$TURBO_ROOT$/pkg/**/go.mod",
+        "$TURBO_ROOT$/pkg/**/go.sum",
+        "$TURBO_ROOT$/platform/gcp/provider/**/*.go",
+        "$TURBO_ROOT$/platform/gcp/provider/go.mod",
+        "$TURBO_ROOT$/platform/gcp/provider/go.sum",
+        "$TURBO_ROOT$/platform/gcp/runtime/**/*.go",
+        "$TURBO_ROOT$/platform/gcp/runtime/go.mod",
+        "$TURBO_ROOT$/platform/gcp/runtime/go.sum",
+        "$TURBO_ROOT$/platform/edge/contract/**/*.go",
+        "$TURBO_ROOT$/platform/edge/contract/go.mod",
+        "$TURBO_ROOT$/platform/edge/contract/go.sum",
+        "!$TURBO_ROOT$/**/*_test.go"
+      ]
     }
   }
 }
