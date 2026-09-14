@@ -98,6 +98,28 @@ func TestAHeldHostnameIsAnsweredWithA404RatherThanTheEmptyBackendsGatewayError(t
 	}
 }
 
+func TestAHeldHostnameFollowsTheMapsDefaultWhenTheFrontIsRaisedAgain(t *testing.T) {
+	t.Parallel()
+
+	stale := &compute.UrlMap{
+		Name: classRoutes, Fingerprint: "0", DefaultService: "notfound-v2",
+		HostRules:    []*compute.HostRule{{Hosts: []string{"held.example.com"}, PathMatcher: matcherFor("held.example.com")}},
+		PathMatchers: []*compute.PathMatcher{{Name: matcherFor("held.example.com"), DefaultService: "notfound-v1", DefaultRouteAction: refusing()}},
+	}
+	p, server := routing(t, stale)
+	if err := p.Route(context.Background(), classRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
+		t.Fatalf("Route = %v", err)
+	}
+
+	held := server.standing()
+	for _, matcher := range held.PathMatchers {
+		if notFoundAbort(matcher.DefaultRouteAction) != nil && matcher.DefaultService != held.DefaultService {
+			t.Errorf("the held matcher still serves %q while the map defaults to %q: a backend the front no longer stands up makes the whole url map invalid",
+				matcher.DefaultService, held.DefaultService)
+		}
+	}
+}
+
 func notFoundAbort(action *compute.HttpRouteAction) *compute.HttpFaultAbort {
 	if action == nil || action.FaultInjectionPolicy == nil {
 		return nil

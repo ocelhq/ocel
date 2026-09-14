@@ -61,7 +61,8 @@ func (p *Provider) rewrite(ctx context.Context, urlMap, doing string, change fun
 		if err != nil {
 			return fmt.Errorf("read the url map %s: %w", urlMap, err)
 		}
-		if !change(clients, held) {
+		changed := change(clients, held)
+		if !refreshed(held) && !changed {
 			return nil
 		}
 		return p.settle(ctx, clients, engine, doing, func(call ...googleapi.CallOption) (*compute.Operation, error) {
@@ -73,6 +74,17 @@ func (p *Provider) rewrite(ctx context.Context, urlMap, doing string, change fun
 			}).Context(ctx).Do(call...)
 		})
 	})
+}
+
+func refreshed(held *compute.UrlMap) bool {
+	changed := false
+	for _, matcher := range held.PathMatchers {
+		if aborting(matcher.DefaultRouteAction) != 0 && matcher.DefaultService != held.DefaultService {
+			matcher.DefaultService = held.DefaultService
+			changed = true
+		}
+	}
+	return changed
 }
 
 func routed(held *compute.UrlMap, hostname, backend string) bool {
