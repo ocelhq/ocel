@@ -487,6 +487,70 @@ func TestKnownHostsStoreFallsBackToTheUsersOwnFile(t *testing.T) {
 	}
 }
 
+func recordedLines(t *testing.T, store string) []string {
+	t.Helper()
+
+	content, err := os.ReadFile(store)
+	if err != nil {
+		t.Fatalf("read known_hosts: %v", err)
+	}
+	return strings.Split(strings.TrimSpace(string(content)), "\n")
+}
+
+func TestTrustingTheSameHostKeyTwiceLeavesOneLine(t *testing.T) {
+	t.Parallel()
+
+	store := filepath.Join(t.TempDir(), "known_hosts")
+	for i := 0; i < 2; i++ {
+		if err := record(store, wantedLine()); err != nil {
+			t.Fatalf("record() error = %v", err)
+		}
+	}
+
+	if lines := recordedLines(t, store); len(lines) != 1 {
+		t.Errorf("known_hosts holds %d lines (%v), want the entry recorded once", len(lines), lines)
+	}
+}
+
+func TestAKeyAlreadyHeldUnderAListOfNamesIsNotRecordedAgain(t *testing.T) {
+	t.Parallel()
+
+	store := filepath.Join(t.TempDir(), "known_hosts")
+	existing := fmt.Sprintf("%s,[%s]:%d %s %s\n", fakeHostName, fakeHostAddress, fakeHostPort, fakeHostKeyType, fakeHostKey)
+	if err := os.WriteFile(store, []byte(existing), 0o600); err != nil {
+		t.Fatalf("seed known_hosts: %v", err)
+	}
+
+	if err := record(store, wantedLine()); err != nil {
+		t.Fatalf("record() error = %v", err)
+	}
+
+	content, err := os.ReadFile(store)
+	if err != nil {
+		t.Fatalf("read known_hosts: %v", err)
+	}
+	if string(content) != existing {
+		t.Errorf("known_hosts = %q, want the line OpenSSH already holds for that host left alone", content)
+	}
+}
+
+func TestADifferentKeyForTheSameHostIsStillRecorded(t *testing.T) {
+	t.Parallel()
+
+	store := filepath.Join(t.TempDir(), "known_hosts")
+	other := fmt.Sprintf("[%s]:%d %s %s\n", fakeHostAddress, fakeHostPort, fakeHostKeyType, fakeOtherHostKey)
+	if err := record(store, other); err != nil {
+		t.Fatalf("record() error = %v", err)
+	}
+	if err := record(store, wantedLine()); err != nil {
+		t.Fatalf("record() error = %v", err)
+	}
+
+	if lines := recordedLines(t, store); len(lines) != 2 {
+		t.Errorf("known_hosts holds %d lines (%v), want a second key for the same host kept alongside the first", len(lines), lines)
+	}
+}
+
 func TestRecordCreatesTheStoreForItsOwnerOnly(t *testing.T) {
 	t.Parallel()
 
