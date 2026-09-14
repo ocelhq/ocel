@@ -11,10 +11,15 @@ import (
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
-	assetOriginID = "assets"
+	assetOriginID     = "assets"
+	containerOriginID = "containers"
+
+	containerOriginReadTimeout      = 60
+	containerOriginKeepaliveTimeout = 5
 
 	maxDistributionNameLen = 128
 )
@@ -39,6 +44,58 @@ type distributionPlan struct {
 	cachePolicy   string
 	headersPolicy string
 	oac           string
+	front         awsports.ContainerFront
+}
+
+func (p distributionPlan) keeping(held *cftypes.DistributionConfig) distributionPlan {
+	if p.front.VPCOrigin == "" {
+		p.front = containerFrontOf(held)
+	}
+	return p
+}
+
+func containerFrontOf(config *cftypes.DistributionConfig) awsports.ContainerFront {
+	if config == nil || config.Origins == nil {
+		return awsports.ContainerFront{}
+	}
+	for _, origin := range config.Origins.Items {
+		if aws.ToString(origin.Id) != containerOriginID || origin.VpcOriginConfig == nil {
+			continue
+		}
+		return awsports.ContainerFront{VPCOrigin: aws.ToString(origin.VpcOriginConfig.VpcOriginId), Host: aws.ToString(origin.DomainName)}
+	}
+	return awsports.ContainerFront{}
+}
+
+func (p distributionPlan) origins() *cftypes.Origins {
+	origins := []cftypes.Origin{{
+		Id:                    aws.String(assetOriginID),
+		DomainName:            aws.String(p.assetOrigin),
+		OriginAccessControlId: aws.String(p.oac),
+		S3OriginConfig:        &cftypes.S3OriginConfig{OriginAccessIdentity: aws.String("")},
+		OriginPath:            aws.String(""),
+		CustomHeaders:         &cftypes.CustomHeaders{Quantity: ptr(int32(0))},
+		ConnectionAttempts:    ptr(int32(3)),
+		ConnectionTimeout:     ptr(int32(10)),
+		OriginShield:          &cftypes.OriginShield{Enabled: ptr(false)},
+	}}
+	if p.front.VPCOrigin != "" {
+		origins = append(origins, cftypes.Origin{
+			Id:         aws.String(containerOriginID),
+			DomainName: aws.String(p.front.Host),
+			VpcOriginConfig: &cftypes.VpcOriginConfig{
+				VpcOriginId:            aws.String(p.front.VPCOrigin),
+				OriginReadTimeout:      ptr(int32(containerOriginReadTimeout)),
+				OriginKeepaliveTimeout: ptr(int32(containerOriginKeepaliveTimeout)),
+			},
+			OriginPath:         aws.String(""),
+			CustomHeaders:      &cftypes.CustomHeaders{Quantity: ptr(int32(0))},
+			ConnectionAttempts: ptr(int32(3)),
+			ConnectionTimeout:  ptr(int32(10)),
+			OriginShield:       &cftypes.OriginShield{Enabled: ptr(false)},
+		})
+	}
+	return &cftypes.Origins{Quantity: ptr(int32(len(origins))), Items: origins}
 }
 
 type distributionSummary struct {
@@ -100,20 +157,7 @@ func (p distributionPlan) config(aliases []string, certificate string) *cftypes.
 		CacheBehaviors:       &cftypes.CacheBehaviors{Quantity: ptr(int32(0))},
 		OriginGroups:         &cftypes.OriginGroups{Quantity: ptr(int32(0))},
 		Aliases:              &cftypes.Aliases{Quantity: quantity(aliases), Items: aliases},
-		Origins: &cftypes.Origins{
-			Quantity: ptr(int32(1)),
-			Items: []cftypes.Origin{{
-				Id:                    aws.String(assetOriginID),
-				DomainName:            aws.String(p.assetOrigin),
-				OriginAccessControlId: aws.String(p.oac),
-				S3OriginConfig:        &cftypes.S3OriginConfig{OriginAccessIdentity: aws.String("")},
-				OriginPath:            aws.String(""),
-				CustomHeaders:         &cftypes.CustomHeaders{Quantity: ptr(int32(0))},
-				ConnectionAttempts:    ptr(int32(3)),
-				ConnectionTimeout:     ptr(int32(10)),
-				OriginShield:          &cftypes.OriginShield{Enabled: ptr(false)},
-			}},
-		},
+		Origins:              p.origins(),
 		DefaultCacheBehavior: &cftypes.DefaultCacheBehavior{
 			TargetOriginId:             aws.String(assetOriginID),
 			ViewerProtocolPolicy:       cftypes.ViewerProtocolPolicyRedirectToHttps,
@@ -326,7 +370,35 @@ func reshapeDistribution(ctx context.Context, c Clients, plan distributionPlan, 
 		return err
 	}
 	aliases, certificate := aliasesOf(held), certificateOf(held)
-	return putConfig(ctx, c, id, etag, completeFrom(plan.config(aliases, certificate), held))
+	return putConfig(ctx, c, id, etag, completeFrom(plan.keeping(held).config(aliases, certificate), held))
+}
+
+func (p *provider) declareContainerFront(ctx context.Context, c Clients, plan distributionPlan, kind, id string, front awsports.ContainerFront) error {
+	if err := plan.ready(); err != nil {
+		return err
+	}
+	held, etag, err := configOf(ctx, c, id)
+	if err != nil {
+		return err
+	}
+	if containerFrontOf(held) == front {
+		return nil
+	}
+	plan.front = front
+	if err := putConfig(ctx, c, id, etag, completeFrom(plan.config(aliasesOf(held), certificateOf(held)), held)); err != nil {
+		return fmt.Errorf("declare the container front as an origin of %s %s: %w", kind, id, err)
+	}
+	return p.settler().settled(ctx, kind, id, containerFrontRollingOut, distributionStatus(c, id))
+}
+
+func distributionStatus(c Clients, id string) func(context.Context) (string, error) {
+	return func(ctx context.Context) (string, error) {
+		out, err := c.CloudFront.GetDistribution(ctx, &cloudfront.GetDistributionInput{Id: aws.String(id)})
+		if err != nil {
+			return "", fmt.Errorf("read the rollout status of distribution %s: %w", id, err)
+		}
+		return aws.ToString(out.Distribution.Status), nil
+	}
 }
 
 func configOf(ctx context.Context, c Clients, id string) (*cftypes.DistributionConfig, string, error) {
@@ -378,7 +450,7 @@ func serveAlias(ctx context.Context, c Clients, plan distributionPlan, id, hostn
 		certificate = certificateOf(held)
 	}
 	aliases = append(aliases, hostname)
-	if err := putConfig(ctx, c, id, etag, completeFrom(plan.config(aliases, certificate), held)); err != nil {
+	if err := putConfig(ctx, c, id, etag, completeFrom(plan.keeping(held).config(aliases, certificate), held)); err != nil {
 		return aliasError(hostname, id, err)
 	}
 	return nil
@@ -402,7 +474,7 @@ func dropAlias(ctx context.Context, c Clients, plan distributionPlan, id, hostna
 	if len(aliases) == 0 {
 		certificate = ""
 	}
-	return putConfig(ctx, c, id, etag, completeFrom(plan.config(aliases, certificate), held))
+	return putConfig(ctx, c, id, etag, completeFrom(plan.keeping(held).config(aliases, certificate), held))
 }
 
 func (p *provider) deleteDistribution(ctx context.Context, c Clients, kind, id string) error {
@@ -422,13 +494,7 @@ func (p *provider) deleteDistribution(ctx context.Context, c Clients, kind, id s
 			return err
 		}
 	}
-	if err := p.settler().settled(ctx, kind, id, func(ctx context.Context) (string, error) {
-		out, err := c.CloudFront.GetDistribution(ctx, &cloudfront.GetDistributionInput{Id: aws.String(id)})
-		if err != nil {
-			return "", fmt.Errorf("read the rollout status of distribution %s: %w", id, err)
-		}
-		return aws.ToString(out.Distribution.Status), nil
-	}); err != nil {
+	if err := p.settler().settled(ctx, kind, id, disableRollingOut, distributionStatus(c, id)); err != nil {
 		return err
 	}
 	_, etag, err = configOf(ctx, c, id)

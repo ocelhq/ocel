@@ -15,8 +15,10 @@ class StoreUnreachable extends Error {}
 
 function cloudfront(entries, { failing = false } = {}) {
   const origins = [];
+  const selected = [];
   return {
     origins,
+    selected,
     kvs: () => ({
       get: async (key) => {
         if (failing) throw new StoreUnreachable("InternalServerException");
@@ -29,6 +31,7 @@ function cloudfront(entries, { failing = false } = {}) {
       },
     }),
     updateRequestOrigin: (origin) => origins.push(origin),
+    selectRequestOriginById: (id) => selected.push(id),
   };
 }
 
@@ -56,7 +59,7 @@ function request(uri, headers = {}, cookies = {}) {
 async function resolve(event, entries = { "shop.example.com": ROUTE }, options) {
   const cf = cloudfront(entries, options);
   const answered = await load(cf)(event);
-  return { answered, origins: cf.origins };
+  return { answered, origins: cf.origins, selected: cf.selected };
 }
 
 async function keyFor(testCase) {
@@ -144,28 +147,42 @@ describe("the resolver", () => {
     expect(origins[0].customHeaders["x-ocel-origin-secret"]).toBe(ROUTE.secret);
   });
 
-  it("reaches a container over plain http, naming the container the shared front should answer with", async () => {
-    const { origins } = await resolve(request("/blog", { "x-ocel-container": "forged" }), {
-      "shop.example.com": {
-        ...ROUTE,
-        origin: "ocel-containers-production-123.eu-west-1.elb.amazonaws.com",
-        protocol: "http",
-        container: "shop-prod-web-container-r3f8a1c90",
-        assets: "",
-        assetPrefix: "",
+  it("reaches a container through the distribution's VPC origin, naming the container the shared front should answer with", async () => {
+    const { answered, origins, selected } = await resolve(
+      request("/blog", { "x-ocel-container": "forged", "x-ocel-origin-secret": "forged" }),
+      {
+        "shop.example.com": {
+          ...ROUTE,
+          origin: "internal-ocel-containers-production-123.eu-west-1.elb.amazonaws.com",
+          container: "shop-prod-web-container-r3f8a1c90",
+          assets: "",
+          assetPrefix: "",
+        },
       },
-    });
+    );
 
-    expect(origins).toHaveLength(1);
-    expect(origins[0].customOriginConfig).toEqual({ port: 80, protocol: "http" });
-    expect(origins[0].customHeaders["x-ocel-container"]).toBe("shop-prod-web-container-r3f8a1c90");
-    expect(origins[0].customHeaders["x-ocel-origin-secret"]).toBe(ROUTE.secret);
+    expect(selected).toEqual(["containers"]);
+    expect(origins).toHaveLength(0);
+    expect(answered.headers["x-ocel-container"].value).toBe("shop-prod-web-container-r3f8a1c90");
+    expect(answered.headers["x-ocel-origin-secret"].value).toBe(ROUTE.secret);
   });
 
-  it("names no container on a serverless route", async () => {
-    const { origins } = await resolve(request("/blog"));
+  it("never rewrites the origin of a container route, since a VPC origin cannot be reached that way", async () => {
+    const { origins } = await resolve(request("/blog"), {
+      "shop.example.com": { ...ROUTE, container: "shop-prod-web-container-r3f8a1c90", assets: "" },
+    });
+    expect(origins).toHaveLength(0);
+  });
+
+  it("names no container on a serverless route and reaches it over https alone", async () => {
+    const { origins, selected } = await resolve(request("/blog"));
+    expect(selected).toHaveLength(0);
     expect(origins[0].customHeaders).not.toHaveProperty("x-ocel-container");
-    expect(origins[0].customOriginConfig.protocol).toBe("https");
+    expect(origins[0].customOriginConfig).toEqual({
+      port: 443,
+      protocol: "https",
+      sslProtocols: ["TLSv1.2"],
+    });
   });
 
   it("sends everything else to the release's entry function with the secret it demands", async () => {

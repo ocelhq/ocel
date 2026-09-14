@@ -267,15 +267,18 @@ func (s *stack) servedHostnames(pointer string) []string {
 	return s.state.Bound
 }
 
+func (s *stack) previewBase() string {
+	if base := s.state.GlobalPreview; base != "" {
+		return base
+	}
+	return s.own.PreviewBase
+}
+
 func (s *stack) previewSite() edge.PreviewSite {
 	if s.class() != edge.ClassPreview {
 		return edge.PreviewSite{}
 	}
-	base := s.state.GlobalPreview
-	if base == "" {
-		base = s.own.PreviewBase
-	}
-	return edge.SharedPreview(s.slug(), base)
+	return edge.SharedPreview(s.slug(), s.previewBase())
 }
 
 func (s *stack) onPreviewWildcard() bool {
@@ -333,8 +336,11 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 	}
 	published := route{Stack: s.plan().name, Release: identity, Secret: secret.Presented(record.CreatedAt)}
 	if record.Origin != "" {
-		published.Origin = originHost(record.Origin)
-		published.Protocol = originProtocol(record.Origin)
+		front, err := s.serveContainers(ctx, c, promotion, app, identity)
+		if err != nil {
+			return route{}, err
+		}
+		published.Origin = front.Host
 		published.Container = record.Physical
 		return published, nil
 	}
@@ -348,6 +354,40 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 	published.Assets = assetOriginDomain(s.own.AssetBucket, s.own.Region)
 	published.AssetPrefix = assetOriginPath(record.AssetPrefix)
 	return published, nil
+}
+
+func (s *stack) records(c Clients) awsports.Records {
+	return awsports.Records{Dynamo: c.Dynamo, Tables: awsports.Table(s.own.StateTable)}
+}
+
+func (s *stack) serveContainers(ctx context.Context, c Clients, promotion edge.Promotion, app, identity string) (awsports.ContainerFront, error) {
+	front, found, err := awsports.ReadContainerFront(ctx, s.records(c), s.class())
+	if err != nil {
+		return awsports.ContainerFront{}, err
+	}
+	if !found {
+		return awsports.ContainerFront{}, fmt.Errorf("promote %s: %s/%s runs as a container, but the %s class records no container front for the edge to reach it through; re-run the deploy that built it so the substrate records one", promotion.PromotionID, app, identity, s.class())
+	}
+	if s.onPreviewWildcard() {
+		base := s.previewBase()
+		plan, _, err := s.p.previewWildcardPlan(ctx, c, base)
+		if err != nil {
+			return awsports.ContainerFront{}, err
+		}
+		held, found, err := findDistribution(ctx, c, plan.name)
+		if err != nil {
+			return awsports.ContainerFront{}, err
+		}
+		if !found {
+			return awsports.ContainerFront{}, fmt.Errorf("promote %s: the %q edge serves previews from one wildcard distribution, and this account has none for %s; run `ocel domain use --preview %s` first", promotion.PromotionID, Kind, base, base)
+		}
+		return front, s.p.declareContainerFront(ctx, c, plan, kindWildcardDistribution, held.id, front)
+	}
+	held, err := s.ensureDistribution(ctx, c)
+	if err != nil {
+		return awsports.ContainerFront{}, err
+	}
+	return front, s.p.declareContainerFront(ctx, c, s.plan(), kindDistribution, held.id, front)
 }
 
 func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSecret, error) {

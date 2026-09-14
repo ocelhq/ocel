@@ -111,7 +111,7 @@ func convergeWildcard(ctx context.Context, c Clients, plan distributionPlan, id,
 	if carries && certificateOf(held) == certificate {
 		return nil
 	}
-	return putConfig(ctx, c, id, etag, plan.config([]string{wildcard}, certificate))
+	return putConfig(ctx, c, id, etag, plan.keeping(held).config([]string{wildcard}, certificate))
 }
 
 func (p *provider) previewWildcardPlan(ctx context.Context, c Clients, baseDomain string) (distributionPlan, bootstrap.Deployed, error) {

@@ -49,13 +49,15 @@ const (
 
 	managedSecretClusterTagKey = "aws:rds:primaryDBClusterArn"
 
-	substrateClusterARN  = "arn:aws:ecs:*:*:cluster/ocel-*"
-	substrateServiceARN  = "arn:aws:ecs:*:*:service/ocel-*/*"
-	substrateBalancerARN = "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/ocel-*/*"
-	substrateListenerARN = "arn:aws:elasticloadbalancing:*:*:listener/app/ocel-*/*/*"
-	substrateRuleARN     = "arn:aws:elasticloadbalancing:*:*:listener-rule/app/ocel-*/*/*/*"
-	ecsLinkedRoleARN     = "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/*"
-	elbLinkedRoleARN     = "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/*"
+	substrateClusterARN    = "arn:aws:ecs:*:*:cluster/ocel-*"
+	substrateServiceARN    = "arn:aws:ecs:*:*:service/ocel-*/*"
+	substrateBalancerARN   = "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/ocel-*/*"
+	substrateListenerARN   = "arn:aws:elasticloadbalancing:*:*:listener/app/ocel-*/*/*"
+	substrateRuleARN       = "arn:aws:elasticloadbalancing:*:*:listener-rule/app/ocel-*/*/*/*"
+	substrateVPCOriginARN  = "arn:aws:cloudfront::*:vpcorigin/*"
+	vpcOriginLinkedRoleARN = "arn:aws:iam::*:role/aws-service-role/vpcorigin.cloudfront.amazonaws.com/*"
+	ecsLinkedRoleARN       = "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/*"
+	elbLinkedRoleARN       = "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/*"
 
 	bootstrapEventSourceARN = "arn:aws:lambda:*:*:event-source-mapping:*"
 
@@ -362,6 +364,28 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Actions:   []string{"iam:CreateServiceLinkedRole"},
 			Resources: []string{elbLinkedRoleARN},
 			Condition: linkedRoleFor("elasticloadbalancing.amazonaws.com"),
+		},
+		{
+			Actions:   []string{"iam:CreateServiceLinkedRole"},
+			Resources: []string{vpcOriginLinkedRoleARN},
+			Condition: linkedRoleFor("vpcorigin.cloudfront.amazonaws.com"),
+		},
+		{
+			Actions:   []string{"cloudfront:CreateVpcOrigin"},
+			Resources: []string{substrateVPCOriginARN},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions: []string{
+				"cloudfront:DeleteVpcOrigin",
+				"cloudfront:GetVpcOrigin",
+				"cloudfront:ListTagsForResource",
+				"cloudfront:TagResource",
+				"cloudfront:UntagResource",
+				"cloudfront:UpdateVpcOrigin",
+			},
+			Resources: []string{substrateVPCOriginARN},
+			Condition: taggedByOcel(),
 		},
 		{
 			Actions:   []string{"ecr:GetAuthorizationToken"},

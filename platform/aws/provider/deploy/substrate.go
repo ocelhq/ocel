@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudfront"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
@@ -17,10 +18,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/ports"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 const (
-	SubstrateSlug = "ocel-containers"
+	SubstrateSlug = awsports.ContainersSlug
 
 	substrateConsumers = "consumers"
 	substrateLease     = "lease"
@@ -30,6 +32,10 @@ const (
 	ecsTaskExecutionPolicyARN  = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 	substrateLogRetentionDays  = 14
 	substrateListenerPort      = 80
+	substrateTLSPort           = 443
+	vpcOriginProtocolPolicy    = "http-only"
+	vpcOriginTLSFloor          = "TLSv1.2"
+	vpcOriginSettleTimeout     = "20m"
 	substrateDeniedStatus      = "404"
 	substrateDeniedContentType = "text/plain"
 	substrateDeniedBody        = "no release answers on this origin"
@@ -38,6 +44,7 @@ const (
 	outputKeySubnets       = "subnets"
 	outputKeyListener      = "listenerArn"
 	outputKeyOriginHost    = "originHost"
+	outputKeyVPCOrigin     = "vpcOrigin"
 	outputKeyTaskSecurity  = "taskSecurityGroup"
 	outputKeyCluster       = "cluster"
 	outputKeyExecutionRole = "executionRoleArn"
@@ -49,6 +56,7 @@ type substrate struct {
 	Subnets       []string
 	Listener      string
 	OriginHost    string
+	VPCOrigin     string
 	TaskSecurity  string
 	Cluster       string
 	ExecutionRole string
@@ -150,12 +158,15 @@ func (r *Releaser) ensureSubstrate(ctx context.Context, ref providerkit.StackRef
 	if err != nil {
 		return substrate{}, err
 	}
-	if present {
-		return held, r.claimSubstrate(ctx, ref)
-	}
 	owner, err := r.substrateFor(ctx, class)
 	if err != nil {
 		return substrate{}, err
+	}
+	if present {
+		if err := awsports.WriteContainerFront(ctx, owner.cfg.Records, class, held.front()); err != nil {
+			return substrate{}, err
+		}
+		return held, r.claimSubstrate(ctx, ref)
 	}
 	if report != nil {
 		report.Say("Standing up the shared container substrate for the " + string(class) + " class: one load balancer and one cluster every container app in it runs behind")
@@ -184,7 +195,14 @@ func (r *Releaser) ensureSubstrate(ctx context.Context, ref providerkit.StackRef
 	if err != nil {
 		return substrate{}, err
 	}
+	if err := awsports.WriteContainerFront(ctx, owner.cfg.Records, class, decoded.front()); err != nil {
+		return substrate{}, err
+	}
 	return decoded, r.claimSubstrate(ctx, ref)
+}
+
+func (s substrate) front() awsports.ContainerFront {
+	return awsports.ContainerFront{VPCOrigin: s.VPCOrigin, Host: s.OriginHost}
 }
 
 func (r *Releaser) claimSubstrate(ctx context.Context, ref providerkit.StackRef) error {
@@ -280,6 +298,9 @@ func (r *Releaser) releaseSubstrate(ctx context.Context, records providerkit.Rec
 	if err := providerkit.ForgetStack(ctx, records, ref.Class, SubstrateSlug, substrate.Name); err != nil {
 		return err
 	}
+	if err := ports.Forget(ctx, records, awsports.ContainerFrontRecord(ref.Class)); err != nil {
+		return err
+	}
 	return ports.Forget(ctx, records, leaseRecord(ref.Class))
 }
 
@@ -308,7 +329,7 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 
-	cloudfront, err := ec2.LookupManagedPrefixList(ctx, &ec2.LookupManagedPrefixListArgs{Name: pulumi.StringRef(cloudFrontOriginFacingPrefixList)})
+	edgeRanges, err := ec2.LookupManagedPrefixList(ctx, &ec2.LookupManagedPrefixListArgs{Name: pulumi.StringRef(cloudFrontOriginFacingPrefixList)})
 	if err != nil {
 		return fmt.Errorf("look up the addresses CloudFront reaches an origin from: %w", err)
 	}
@@ -320,8 +341,8 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 			Protocol:      pulumi.String("tcp"),
 			FromPort:      pulumi.Int(substrateListenerPort),
 			ToPort:        pulumi.Int(substrateListenerPort),
-			PrefixListIds: pulumi.StringArray{pulumi.String(cloudfront.Id)},
-			Description:   pulumi.String("Ocel: only the edge reaches the front, and every rule behind it demands the origin secret"),
+			PrefixListIds: pulumi.StringArray{pulumi.String(edgeRanges.Id)},
+			Description:   pulumi.String("Ocel: only CloudFront reaches the front, through the VPC origin, and every rule behind it demands the origin secret"),
 		}},
 		Egress: ec2.SecurityGroupEgressArray{&ec2.SecurityGroupEgressArgs{
 			Protocol: pulumi.String("-1"), FromPort: pulumi.Int(0), ToPort: pulumi.Int(0),
@@ -356,7 +377,7 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 	balancer, err := lb.NewLoadBalancer(ctx, naming.ResourceID(naming.KindService, "front"), &lb.LoadBalancerArgs{
 		Name:             pulumi.String(substrateName(class)),
 		LoadBalancerType: pulumi.String("application"),
-		Internal:         pulumi.Bool(false),
+		Internal:         pulumi.Bool(true),
 		SecurityGroups:   pulumi.StringArray{front.ID()},
 		Subnets:          pulumi.ToStringArray(subnets.Ids),
 		Tags:             tags,
@@ -378,6 +399,29 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 		}},
 		Tags: tags,
 	})
+	if err != nil {
+		return err
+	}
+
+	vpcOrigin, err := cloudfront.NewVpcOrigin(ctx, naming.ResourceID(naming.KindService, "front", "vpc-origin"), &cloudfront.VpcOriginArgs{
+		VpcOriginEndpointConfig: &cloudfront.VpcOriginVpcOriginEndpointConfigArgs{
+			Name:                 pulumi.String(substrateName(class)),
+			Arn:                  balancer.Arn,
+			HttpPort:             pulumi.Int(substrateListenerPort),
+			HttpsPort:            pulumi.Int(substrateTLSPort),
+			OriginProtocolPolicy: pulumi.String(vpcOriginProtocolPolicy),
+			OriginSslProtocols: &cloudfront.VpcOriginVpcOriginEndpointConfigOriginSslProtocolsArgs{
+				Items:    pulumi.StringArray{pulumi.String(vpcOriginTLSFloor)},
+				Quantity: pulumi.Int(1),
+			},
+		},
+		Timeouts: &cloudfront.VpcOriginTimeoutsArgs{
+			Create: pulumi.String(vpcOriginSettleTimeout),
+			Update: pulumi.String(vpcOriginSettleTimeout),
+			Delete: pulumi.String(vpcOriginSettleTimeout),
+		},
+		Tags: tags,
+	}, pulumi.DependsOn([]pulumi.Resource{listener}))
 	if err != nil {
 		return err
 	}
@@ -416,6 +460,7 @@ func (w *substrateWork) run(ctx *pulumi.Context) error {
 	ctx.Export(outputKeySubnets, pulumi.String(encoded))
 	ctx.Export(outputKeyListener, listener.Arn)
 	ctx.Export(outputKeyOriginHost, balancer.DnsName)
+	ctx.Export(outputKeyVPCOrigin, vpcOrigin.ID().ToStringOutput())
 	ctx.Export(outputKeyTaskSecurity, tasks.ID().ToStringOutput())
 	ctx.Export(outputKeyCluster, cluster.Arn)
 	ctx.Export(outputKeyExecutionRole, execution.Arn)
@@ -436,6 +481,7 @@ func decodeSubstrate(outputs auto.OutputMap) (substrate, error) {
 		outputKeyVPC:           &held.VPC,
 		outputKeyListener:      &held.Listener,
 		outputKeyOriginHost:    &held.OriginHost,
+		outputKeyVPCOrigin:     &held.VPCOrigin,
 		outputKeyTaskSecurity:  &held.TaskSecurity,
 		outputKeyCluster:       &held.Cluster,
 		outputKeyExecutionRole: &held.ExecutionRole,
