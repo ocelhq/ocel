@@ -167,12 +167,15 @@ func TestABucketThatDriftedOpenIsMended(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			stands := bucketStanding(tc.held)
+			stands := bucketStanding(tc.held, false)
 			if !stands.held {
 				t.Error("a bucket that stands reads as absent, and the bootstrap would try to create it again")
 			}
 			if mends := stands.mends != ""; mends != tc.mends {
 				t.Errorf("bucketStanding() mends %q, want mending=%t: what the survey does not report, the apply does not do", stands.mends, tc.mends)
+			}
+			if emulated := bucketStanding(tc.held, true); emulated.mends != "" {
+				t.Errorf("bucketStanding() under the emulator mends %q, and the emulator keeps no access configuration to mend", emulated.mends)
 			}
 		})
 	}

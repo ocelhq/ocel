@@ -226,11 +226,11 @@ func (b bootstrapper) bucketStands(ctx context.Context, name string) (standing, 
 		}
 		return standing{}, fmt.Errorf("read the %s bucket: %w", name, err)
 	}
-	return bucketStanding(attrs), nil
+	return bucketStanding(attrs, b.clients.emulated()), nil
 }
 
-func bucketStanding(attrs *storage.BucketAttrs) standing {
-	if !locked(attrs) {
+func bucketStanding(attrs *storage.BucketAttrs, emulated bool) standing {
+	if !emulated && !locked(attrs) {
 		return standing{held: true, mends: reasonUnlocked}
 	}
 	return standing{held: true}
