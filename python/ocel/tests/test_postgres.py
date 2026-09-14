@@ -23,6 +23,12 @@ def test_a_declared_database_reaches_the_dev_server_with_the_file_that_declared_
     assert int(line) > 0
 
 
+def test_a_declaration_carries_the_dev_server_token(collector):
+    postgres("main")
+
+    assert collector.authorizations == ["Bearer opensesame"]
+
+
 def test_a_database_reached_during_discovery_says_it_is_not_provisioned_yet(collector):
     db = postgres("main")
 
