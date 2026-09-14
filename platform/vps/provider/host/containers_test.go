@@ -110,7 +110,7 @@ func TestTakingAContainerDownStopsItBeforeItIsRemoved(t *testing.T) {
 	t.Parallel()
 
 	stand := machine(nil)
-	if err := stand.host().TakeDown(context.Background(), physical); err != nil {
+	if err := stand.host().TakeDown(context.Background(), providerkit.ClassProduction, physical); err != nil {
 		t.Fatalf("TakeDown() = %v", err)
 	}
 	joined := strings.Join(stand.commands(), "\n")
