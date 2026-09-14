@@ -189,6 +189,9 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err != nil {
 		return err
 	}
+	if err := b.write(ctx, served, LiveItems(standing.Arch), report); err != nil {
+		return err
+	}
 	if err := b.write(ctx, served, ProxyItems(standing.Arch), report); err != nil {
 		return err
 	}
@@ -438,6 +441,8 @@ func (r removal) command() string {
 	switch {
 	case r.kind == KindContainer:
 		return "docker rm --force " + quoted(r.path)
+	case r.kind == KindUnit:
+		return unitRemoval(r.path)
 	case r.kind == KindApps:
 		return "docker ps --all --quiet --filter " + quoted("label="+r.path) + " | xargs -r docker rm --force >/dev/null"
 	case r.kind == KindAppNetworks:
@@ -526,6 +531,7 @@ func removing(read, sibling Reading, apps appsStanding) []removal {
 	var above []removal
 	if last {
 		beneath = append(beneath, proxyRemovals()...)
+		beneath = append(beneath, liveRemovals()...)
 		beneath = append(beneath,
 			taking(KindDir, sshDir, "the deploy login's own key store, which nothing but ocel ever wrote"),
 			taking(KindDir, releasesRoot, "the window naming which images this host still owes a rollback to; the images themselves stay, because what this host runs stays when ocel goes"),

@@ -50,6 +50,14 @@ func grants(class providerkit.Class, arch string) []Grant {
 		})
 	}
 	grants = append(grants, sealing(items, class, held)...)
+	if agent := written(items, KindFile, LiveBinary); agent.Name != "" {
+		grants = append(grants, Grant{
+			Name: "no hand in " + LiveSocket,
+			Detail: "root's own agent at " + agent.Name + ", run by systemd under " + LiveService + " and never by " + held.name +
+				": every app container is handed " + LiveSocketDir + " read-only and asks it for the values its own deploy declared. The agent tells containers apart by the process that connects, never by anything the caller says, opens each value under the class key it alone reads, and answers nothing to a process outside a container this engine runs. " +
+				held.name + " neither runs it nor reads through it: a deploy hands a container the names of what it may read, and the values reach the container from the box",
+		})
+	}
 	for _, item := range items {
 		if item.Owner != held.name || item.Kind == KindUser {
 			continue
