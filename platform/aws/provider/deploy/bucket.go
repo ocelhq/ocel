@@ -112,6 +112,9 @@ func appPhysicalPrefix(at naming.Coordinate, max int) string {
 
 func registerBucket(ctx *pulumi.Context, project, env, logicalName string, args bucketArgs, stateTableName, boundaryARN string, sessions sessionScope, completerCode payloads.Placement) error {
 	at := resourceCoordinate(project, env, logicalName, naming.KindBucket)
+	if boundaryARN == "" {
+		return fmt.Errorf("bucket %s: this deploy resolved no app boundary, and its upload completer's role made without one is capped by nothing", at.Name)
+	}
 
 	bucket, err := s3.NewBucketV2(ctx, naming.ResourceID(at.Kind, at.Name), &s3.BucketV2Args{
 		BucketPrefix: pulumi.String(appPhysicalPrefix(at, maxS3BucketPrefixLen)),
@@ -250,7 +253,7 @@ func newServiceRole(ctx *pulumi.Context, name, description, servicePrincipal, bo
 	role, err := iam.NewRole(ctx, name, &iam.RoleArgs{
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(servicePrincipal)),
 		Description:         pulumi.String(description),
-		PermissionsBoundary: permissionsBoundary(boundaryARN),
+		PermissionsBoundary: pulumi.String(boundaryARN),
 		Tags:                resourceTags(naming.KindRole, "", tags),
 	})
 	if err != nil {
@@ -281,6 +284,10 @@ func newServiceRole(ctx *pulumi.Context, name, description, servicePrincipal, bo
 }
 
 func permissionsBoundary(arn string) pulumi.StringPtrInput {
+	return optionalARN(arn)
+}
+
+func optionalARN(arn string) pulumi.StringPtrInput {
 	if arn == "" {
 		return nil
 	}

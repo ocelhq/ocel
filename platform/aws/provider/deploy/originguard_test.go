@@ -51,7 +51,7 @@ func registerGuarded(t *testing.T, cfg Config, plan providerkit.StackPlan, funct
 
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: plan.App.App, Router: host})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: plan.App.App, Boundary: testBoundaryARN, Router: host})
 		if err != nil {
 			return err
 		}

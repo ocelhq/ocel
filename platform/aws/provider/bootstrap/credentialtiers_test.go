@@ -608,3 +608,21 @@ func TestNoTierCanDeleteThePulumiPassphrase(t *testing.T) {
 		}
 	}
 }
+
+func TestEveryTierMayGrantLambdaTheVarsKeyAndNoOther(t *testing.T) {
+	want := conditionJSON(t, map[string]any{
+		"StringEquals": map[string]any{"aws:ResourceTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
+		"Bool":         map[string]any{"kms:GrantIsForAWSResource": "true"},
+	})
+	for tier, document := range bothTiers(t) {
+		grants := grantsOf(t, document)
+		if !grants[grant{action: "kms:CreateGrant", resource: AnyKeyARN, condition: want}] {
+			t.Errorf("the %s tier does not grant kms:CreateGrant on a vars key for an AWS service, so Lambda cannot seal a function's environment under it", tier)
+		}
+		for g := range grants {
+			if g.action == "kms:CreateGrant" && g.condition != want {
+				t.Errorf("the %s tier grants kms:CreateGrant under %s, which lets the credential hand any principal a key it never made", tier, g.condition)
+			}
+		}
+	}
+}

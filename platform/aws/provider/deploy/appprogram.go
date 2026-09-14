@@ -160,6 +160,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformPatc
 			Bytecode:  bytecode,
 			Router:    router,
 			Guard:     guard,
+			KmsKeyARN: r.cfg.VarsKeyARN,
 			Layers:    layers,
 		},
 	}, nil
