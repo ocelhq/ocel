@@ -1,21 +1,44 @@
-import { listMemberships, requireOrganization } from "@/lib/access";
+import { db } from "@console/db";
+import { member, project } from "@console/db/schema";
+import { count, eq } from "drizzle-orm";
+import { notFound } from "next/navigation";
+import { requireOrganization } from "@/lib/access";
+import { organizationOf } from "@/lib/organization";
 import { PageShell } from "../../page-shell";
+import { GeneralForm } from "./form";
 
 export default async function OrganizationGeneralPage() {
   const session = await requireOrganization();
-  const organizations = await listMemberships(session.userId);
-  const active = organizations.find((item) => item.id === session.activeOrganizationId);
+  const [held, [members], [projects]] = await Promise.all([
+    organizationOf(session.userId, session.activeOrganizationId),
+    db
+      .select({ count: count() })
+      .from(member)
+      .where(eq(member.organizationId, session.activeOrganizationId)),
+    db
+      .select({ count: count() })
+      .from(project)
+      .where(eq(project.organizationId, session.activeOrganizationId)),
+  ]);
+  if (!held) {
+    notFound();
+  }
 
   return (
     <PageShell title="General">
-      {active && (
-        <dl className="grid max-w-2xl grid-cols-[auto_1fr] border border-border">
-          <dt className="border-b border-border px-5 py-4 text-muted-foreground">Name</dt>
-          <dd className="border-b border-border px-5 py-4 font-medium">{active.name}</dd>
-          <dt className="px-5 py-4 text-muted-foreground">Slug</dt>
-          <dd className="px-5 py-4 font-mono text-[13px]">{active.slug}</dd>
-        </dl>
-      )}
+      <GeneralForm
+        organization={{
+          id: held.id,
+          name: held.name,
+          slug: held.slug,
+          role: held.role,
+          administers: held.administers,
+        }}
+        members={members.count}
+        projects={projects.count}
+        createdAt={held.createdAt.toISOString()}
+        now={new Date().toISOString()}
+      />
     </PageShell>
   );
 }
