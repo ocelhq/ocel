@@ -43,7 +43,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	}}, nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, report providerkit.Reporter) error {
+func (p *Provider) RemoveContainers(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, report providerkit.Reporter) error {
 	for _, container := range containers {
 		if container.Physical == "" {
 			continue
@@ -51,7 +51,7 @@ func (p *Provider) RemoveContainers(ctx context.Context, _ providerkit.StackRef,
 		if report != nil {
 			report.Say("Taking " + container.Physical + " down")
 		}
-		if err := p.host.TakeDown(ctx, container.Physical); err != nil {
+		if err := p.host.TakeDown(ctx, ref.Class, container.Physical); err != nil {
 			return err
 		}
 	}

@@ -419,6 +419,7 @@ func TestAPromotionOfAnAppDeclaringNoValueStandsItBackUp(t *testing.T) {
 
 	stand := machine(nil)
 	imaging(stand, "false ")
+	noted(stand, "held\n")
 	if err := stand.host().StandUp(context.Background(), promoted()); err != nil {
 		t.Fatalf("StandUp() of an app that declares no value = %v, want a rollback of it to stand it back up", err)
 	}

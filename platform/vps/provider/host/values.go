@@ -37,6 +37,47 @@ func EnvFile(class providerkit.Class, container string) string {
 	return StateDir(class) + "/" + container + envFileSuffix
 }
 
+const (
+	handedDir     = "handed"
+	handedKnown   = "held"
+	handedUnknown = "unknown"
+)
+
+func HandedNote(class providerkit.Class, container string) string {
+	return StateDir(class) + "/" + handedDir + "/" + container
+}
+
+func handedNames(env map[string]string) []byte {
+	var written bytes.Buffer
+	for _, key := range slices.Sorted(maps.Keys(env)) {
+		written.WriteString(key + "\n")
+	}
+	return written.Bytes()
+}
+
+func (h *Host) note(ctx context.Context, spec Container) error {
+	_, err := h.ran(ctx, "note the names "+spec.App+" is handed",
+		"install -D -m 0600 /dev/stdin "+quoted(HandedNote(spec.Class, spec.Name)), bytes.NewReader(handedNames(spec.Env)), "")
+	return err
+}
+
+func handedCommand(class providerkit.Class, container string) string {
+	note := quoted(HandedNote(class, container))
+	return "if [ -f " + note + " ]; then echo " + handedKnown + "; cat " + note + "; else echo " + handedUnknown + "; fi"
+}
+
+func (h *Host) handed(ctx context.Context, spec Container) ([]string, bool, error) {
+	said, err := h.ran(ctx, "ask what "+spec.Name+" was handed", handedCommand(spec.Class, spec.Name), nil, "")
+	if err != nil {
+		return nil, false, err
+	}
+	verdict, rest, _ := strings.Cut(said, "\n")
+	if strings.TrimSpace(verdict) != handedKnown {
+		return nil, false, nil
+	}
+	return strings.Fields(rest), true, nil
+}
+
 func RenderEnvFile(env map[string]string) ([]byte, error) {
 	var written bytes.Buffer
 	for _, key := range slices.Sorted(maps.Keys(env)) {

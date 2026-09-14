@@ -232,10 +232,23 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 				restartCommand(said, spec.Name), nil, elevation)
 			return err
 		}
-		if len(spec.Declared) > 0 {
+		declared := spec.Declared
+		if len(declared) == 0 {
+			handed, known, err := h.handed(ctx, spec)
+			if err != nil {
+				return err
+			}
+			if !known {
+				return providerkit.Refuse(providerkit.CodeNotReady,
+					"%s no longer stands on this box, and this box holds no note of what its deploy handed it: a container is handed the values its own deploy resolved, bindings included, and a promotion carries none of them, so putting one back here could serve %s with an empty environment. Run `ocel deploy` to stand it up with its values",
+					spec.Name, spec.App)
+			}
+			declared = handed
+		}
+		if len(declared) > 0 {
 			return providerkit.Refuse(providerkit.CodeNotReady,
 				"%s no longer stands on this box, and %s declares %s: a container is handed the values its own deploy resolved, and a promotion carries none of them, so putting one back here would serve %s with an empty environment. Run `ocel deploy` to stand it up with its values",
-				spec.Name, spec.App, strings.Join(spec.Declared, ", "), spec.App)
+				spec.Name, spec.App, strings.Join(declared, ", "), spec.App)
 		}
 	}
 	if _, err := h.ran(ctx, "clear the name "+spec.Name,
@@ -252,12 +265,17 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 	if err := h.hand(ctx, held, spec); err != nil {
 		return err
 	}
+	if spec.Resolved {
+		if err := h.note(ctx, spec); err != nil {
+			return err
+		}
+	}
 	_, stood := h.ran(ctx, "stand "+spec.App+" up as "+spec.Name,
 		words(containerRun(spec, held))+" >/dev/null", nil, elevation)
 	return stood
 }
 
-func (h *Host) TakeDown(ctx context.Context, name string) error {
+func (h *Host) TakeDown(ctx context.Context, class providerkit.Class, name string) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err
@@ -265,6 +283,10 @@ func (h *Host) TakeDown(ctx context.Context, name string) error {
 	_, err = h.ran(ctx, "take down "+name,
 		"docker stop "+quoted(name)+" >/dev/null 2>&1 || true\n"+
 			"docker rm --force "+quoted(name)+" >/dev/null 2>&1 || true", nil, elevation)
+	if err != nil {
+		return err
+	}
+	_, err = h.ran(ctx, "forget what "+name+" was handed", "rm -f "+quoted(HandedNote(class, name)), nil, "")
 	return err
 }
 
