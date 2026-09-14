@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -126,6 +127,10 @@ func RunFakeProvider() int {
 	sockPath := os.Getenv(fakeProviderSockEnvVar)
 	if sockPath == "" {
 		fmt.Fprintln(os.Stderr, "fake provider: missing socket path")
+		return 1
+	}
+	if err := os.MkdirAll(filepath.Dir(sockPath), 0o700); err != nil {
+		fmt.Fprintln(os.Stderr, "fake provider: reserve socket dir:", err)
 		return 1
 	}
 	_ = os.Remove(sockPath)
