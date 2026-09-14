@@ -218,9 +218,9 @@ func pruneOnlySpec(endpoint, version string) edge.StackSpec {
 	return spec
 }
 
-func specStampFor(t *testing.T, spec edge.StackSpec) string {
+func specStampFor(t *testing.T, spec edge.StackSpec, state edge.StackState) string {
 	t.Helper()
-	generic, err := genericWorker(spec, spec.Slug)
+	generic, err := genericWorker(spec, spec.Slug, ownOf(t, state).EnvelopeKey)
 	if err != nil {
 		t.Fatalf("genericWorker: %v", err)
 	}
@@ -229,6 +229,23 @@ func specStampFor(t *testing.T, spec edge.StackSpec) string {
 		t.Fatalf("specStamp: %v", err)
 	}
 	return stamp
+}
+
+func ownOf(t *testing.T, state edge.StackState) private {
+	t.Helper()
+	var own private
+	if err := state.Adapter.Into(&own); err != nil {
+		t.Fatalf("read the state the edge keeps to itself: %v", err)
+	}
+	return own
+}
+
+const testEnvelopeKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+
+func keyedState(endpoint, secret string) edge.StackState {
+	state := testState(endpoint, secret)
+	state.Adapter = edge.Own(private{EnvelopeKey: testEnvelopeKey})
+	return state
 }
 
 func putStampSet(t *testing.T, p *provider, endpoint, secret string, set stampSet) {
@@ -269,19 +286,19 @@ func TestReconcile(t *testing.T) {
 		m := previewZoneMock()
 		p := m.provider(t)
 		spec := previewSpec(store.URL, "v2")
-		putStampSet(t, p, store.URL, "s3cr3t", stampSet{spec.Program.Name: specStampFor(t, spec)})
+		prior := keyedState(store.URL, "s3cr3t")
+		putStampSet(t, p, store.URL, "s3cr3t", stampSet{spec.Program.Name: specStampFor(t, spec, prior)})
 
-		prior := testState(store.URL, "s3cr3t")
 		state, err := reconcileState(t, p, spec, prior)
 		if err != nil {
 			t.Fatalf("Reconcile: %v", err)
 		}
 
-		if !prior.Equal(testState(store.URL, "s3cr3t")) {
+		if !prior.Equal(keyedState(store.URL, "s3cr3t")) {
 			t.Errorf("prior = %+v, want the caller's own state left untouched", prior)
 		}
 		want := testState(store.URL, "s3cr3t")
-		want.Adapter = edge.Own(private{EntryWorkers: []string{spec.Program.Name}})
+		want.Adapter = edge.Own(private{EntryWorkers: []string{spec.Program.Name}, EnvelopeKey: testEnvelopeKey})
 		if !state.Equal(want) {
 			t.Errorf("state = %+v, want prior plus the worker a domain binds to (%+v)", state, want)
 		}
@@ -342,7 +359,7 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
 		}
 		stamps := readStampSet(t, p, store.URL, state.Secret)
-		if want := specStampFor(t, spec); stamps[spec.Program.Name] != want {
+		if want := specStampFor(t, spec, state); stamps[spec.Program.Name] != want {
 			t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.Program.Name)
 		}
 	})
@@ -448,7 +465,7 @@ func TestReconcile(t *testing.T) {
 		}
 		stamps := readStampSet(t, p, store.URL, state.Secret)
 		for _, spec := range specs {
-			if want := specStampFor(t, spec); stamps[spec.Program.Name] != want {
+			if want := specStampFor(t, spec, state); stamps[spec.Program.Name] != want {
 				t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.Program.Name)
 			}
 		}
@@ -518,8 +535,11 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("state = %v, want the store instance's identity", state)
 		}
 		stamps := readStampSet(t, p, store.URL, state.Secret)
-		if want := specStampFor(t, spec); stamps[spec.Program.Name] != want {
+		if want := specStampFor(t, spec, state); stamps[spec.Program.Name] != want {
 			t.Errorf("version stamps = %v, want %q under %q", stamps, want, spec.Program.Name)
+		}
+		if own := ownOf(t, state); own.EnvelopeKey != "" {
+			t.Errorf("envelope key = %q, want none: a stack the shared entry serves holds no worker of its own to bind one to", own.EnvelopeKey)
 		}
 	})
 
@@ -530,6 +550,148 @@ func TestReconcile(t *testing.T) {
 
 		if _, err := reconcileState(t, previewZoneMock().provider(t), spec, testState(store.URL, "s3cr3t")); err == nil {
 			t.Fatal("Reconcile err = nil, want a refusal to prune the shared entry worker")
+		}
+	})
+}
+
+func TestReconcileEnvelopeKey(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+
+	t.Run("a first reconcile mints a key, binds it as a secret and keeps it out of plain text", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		spec := previewSpec(store.URL, "v2")
+
+		state, err := reconcileState(t, m.provider(t), spec, testState(store.URL, "s3cr3t"))
+		if err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+
+		own := ownOf(t, state)
+		if own.EnvelopeKey == "" {
+			t.Fatal("envelope key = none after a reconcile that put a worker of the project's own")
+		}
+		meta := uploadedMetadata(t, m, spec.Program.Name)
+		secrets := bindingsByType(meta, "secret_text")
+		if len(secrets) != 1 || secrets[0]["name"] != envelopeKeyBinding || secrets[0]["text"] != own.EnvelopeKey {
+			t.Errorf("secret_text bindings = %v, want %s carrying the key the state holds", secrets, envelopeKeyBinding)
+		}
+		for _, plain := range bindingsByType(meta, "plain_text") {
+			if plain["text"] == own.EnvelopeKey {
+				t.Errorf("plain_text binding %v carries the envelope key", plain)
+			}
+		}
+	})
+
+	t.Run("a second reconcile keeps the key it minted", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		p := m.provider(t)
+		spec := previewSpec(store.URL, "v2")
+
+		first, err := reconcileState(t, p, spec, testState(store.URL, "s3cr3t"))
+		if err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+		second, err := reconcileState(t, p, spec, first)
+		if err != nil {
+			t.Fatalf("second Reconcile: %v", err)
+		}
+
+		if ownOf(t, second).EnvelopeKey != ownOf(t, first).EnvelopeKey {
+			t.Errorf("envelope key changed across reconciles (%q then %q); every record already staged would be unreadable", ownOf(t, first).EnvelopeKey, ownOf(t, second).EnvelopeKey)
+		}
+		if len(m.putScripts) != 1 {
+			t.Errorf("uploaded scripts = %v, want the first reconcile's alone: a kept key keeps the stamp", m.putScripts)
+		}
+	})
+
+	t.Run("a stack handed to the shared entry carries no key and its records stay unwrapped", func(t *testing.T) {
+		store := fakeStoreServer(t, "s3cr3t")
+		m := previewZoneMock()
+		spec := pruneOnlySpec(store.URL, "v2")
+
+		state, err := reconcileState(t, m.provider(t), spec, keyedState(store.URL, "s3cr3t"))
+		if err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+		if own := ownOf(t, state); own.wrapsEnvelopes() {
+			t.Errorf("state = %+v, want a stack the shared entry serves to wrap nothing: that worker holds no project's key", own)
+		}
+	})
+}
+
+func TestPutStagedWrapsTheEnvelope(t *testing.T) {
+	t.Parallel()
+
+	const dataKey = "Hx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8="
+
+	capture := func(t *testing.T) (*httptest.Server, *edge.DeploymentRecord) {
+		t.Helper()
+		var got edge.DeploymentRecord
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		t.Cleanup(srv.Close)
+		return srv, &got
+	}
+
+	t.Run("a stack with a worker of its own stages a wrapped envelope only its worker can open", func(t *testing.T) {
+		t.Parallel()
+
+		srv, got := capture(t)
+		state := keyedState(srv.URL, "s3cr3t")
+		state.Adapter = edge.Own(private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey})
+
+		if err := stackOn(&provider{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1", Envelope: dataKey}); err != nil {
+			t.Fatalf("PutStaged: %v", err)
+		}
+
+		if got.Envelope == dataKey || got.Envelope == "" {
+			t.Fatalf("staged envelope = %q, want the data key wrapped, never bare", got.Envelope)
+		}
+		unwrapped, err := unwrapEnvelope(testEnvelopeKey, got.Envelope)
+		if err != nil {
+			t.Fatalf("unwrapEnvelope: %v", err)
+		}
+		if unwrapped != dataKey {
+			t.Errorf("unwrapped = %q, want the data key the origin sealed with", unwrapped)
+		}
+		if _, err := unwrapEnvelope("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", got.Envelope); err == nil {
+			t.Error("another key unwrapped the envelope")
+		}
+	})
+
+	t.Run("a stack the shared entry serves stages the envelope as the origin sealed it", func(t *testing.T) {
+		t.Parallel()
+
+		srv, got := capture(t)
+		state := keyedState(srv.URL, "s3cr3t")
+
+		if err := stackOn(&provider{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1", Envelope: dataKey}); err != nil {
+			t.Fatalf("PutStaged: %v", err)
+		}
+		if got.Envelope != dataKey {
+			t.Errorf("staged envelope = %q, want the bare data key: the shared entry holds no key to unwrap with", got.Envelope)
+		}
+	})
+
+	t.Run("a record with nothing sealed stages no envelope", func(t *testing.T) {
+		t.Parallel()
+
+		srv, got := capture(t)
+		state := keyedState(srv.URL, "s3cr3t")
+		state.Adapter = edge.Own(private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey})
+
+		if err := stackOn(&provider{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1"}); err != nil {
+			t.Fatalf("PutStaged: %v", err)
+		}
+		if got.Envelope != "" {
+			t.Errorf("staged envelope = %q, want none", got.Envelope)
 		}
 	})
 }
@@ -817,7 +979,7 @@ func TestWorkerDecoration(t *testing.T) {
 			ISRWriterScriptName: "ocel-isr-writer",
 		}}
 
-		worker, err := genericWorker(spec, "acme-web")
+		worker, err := genericWorker(spec, "acme-web", "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
 		}
@@ -838,7 +1000,7 @@ func TestWorkerDecoration(t *testing.T) {
 
 		spec := edge.StackSpec{Program: &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-deployments-store"}}
 
-		worker, err := genericWorker(spec, "acme-web")
+		worker, err := genericWorker(spec, "acme-web", "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
 		}
@@ -860,7 +1022,7 @@ func TestGenericWorkerCarriesTheHostnamesEachAppAnswersFor(t *testing.T) {
 			DomainApps: map[string]string{"shop.example": "web", "admin.shop.example": "admin"},
 		}
 
-		worker, err := genericWorker(spec, "acme-web")
+		worker, err := genericWorker(spec, "acme-web", "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
 		}
@@ -876,7 +1038,7 @@ func TestGenericWorkerCarriesTheHostnamesEachAppAnswersFor(t *testing.T) {
 
 		spec := edge.StackSpec{Program: &edge.ProgramSpec{Worker: testStoreWorker(), StoreScriptName: "ocel-deployments-store"}}
 
-		worker, err := genericWorker(spec, "acme-web")
+		worker, err := genericWorker(spec, "acme-web", "")
 		if err != nil {
 			t.Fatalf("genericWorker: %v", err)
 		}
@@ -898,7 +1060,7 @@ func TestGenericWorkerCarriesTheHostnamesEachAppAnswersFor(t *testing.T) {
 		moved := spec
 		moved.DomainApps = map[string]string{"shop.example": "admin"}
 
-		if specStampFor(t, spec) == specStampFor(t, moved) {
+		if specStampFor(t, spec, edge.StackState{}) == specStampFor(t, moved, edge.StackState{}) {
 			t.Error("the stamp holds still while the hostname moves app, so the entry worker is never re-uploaded")
 		}
 	})

@@ -44,6 +44,13 @@ func (p *provider) deleteScript(ctx context.Context, accountID, scriptName strin
 }
 
 func (s *stack) PutStaged(ctx context.Context, record edge.DeploymentRecord) error {
+	if record.Envelope != "" && s.own.wrapsEnvelopes() {
+		wrapped, err := wrapEnvelope(s.own.EnvelopeKey, record.Envelope)
+		if err != nil {
+			return fmt.Errorf("wrap %s's envelope for the worker that serves it: %w", record.App, err)
+		}
+		record.Envelope = wrapped
+	}
 	_, err := s.p.storeRequest(ctx, s.state, http.MethodPut, "/staged", record, nil)
 	return err
 }
