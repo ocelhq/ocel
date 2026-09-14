@@ -89,6 +89,38 @@ func TestAHostnameThatDoesNotResolveIsOwedRatherThanBroken(t *testing.T) {
 	}
 }
 
+func TestAHostnameThatResolvesOnlyToLoopbackIsOwedRatherThanPointedElsewhere(t *testing.T) {
+	t.Parallel()
+
+	answers := hereOnly()
+	answers["shop.localhost"] = []string{"::1", "127.0.0.1"}
+	check := vps.DNSVerdict(context.Background(), stubResolver(answers), "shop.localhost", boxAddress)
+
+	if check.Verdict != providerkit.StandingOwed {
+		t.Fatalf("verdict = %v (%q), want it owed: a loopback answer is the one every machine gives for itself, so it points nowhere else and no zone holds a record to correct", check.Verdict, check.Finding)
+	}
+	for _, want := range []string{"127.0.0.1", "::1", boxAddress, "owed"} {
+		if !strings.Contains(check.Finding, want) {
+			t.Errorf("finding = %q, want %q named", check.Finding, want)
+		}
+	}
+	if check.Fix == "" {
+		t.Error("a hostname whose record is owed carries no fix, and the fix is the whole point of saying so")
+	}
+}
+
+func TestAHostnameThatResolvesToLoopbackBesideAnotherMachineIsPointedElsewhere(t *testing.T) {
+	t.Parallel()
+
+	answers := hereOnly()
+	answers["shop.example.com"] = []string{"127.0.0.1", "198.51.100.7"}
+	check := vps.DNSVerdict(context.Background(), stubResolver(answers), "shop.example.com", boxAddress)
+
+	if check.Verdict != providerkit.StandingFail {
+		t.Fatalf("verdict = %v (%q), want a failure: a record that names another machine is wrong however many loopback answers stand beside it", check.Verdict, check.Finding)
+	}
+}
+
 func TestAResolverThatFellOverIsNotReadAsARecordNobodyWrote(t *testing.T) {
 	t.Parallel()
 

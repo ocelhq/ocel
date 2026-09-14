@@ -116,6 +116,12 @@ func dnsVerdict(ctx context.Context, look Lookup, hostname, address string, here
 		check.Verdict = providerkit.StandingPass
 		check.Finding = fmt.Sprintf("%s resolves to %s, which is this box", hostname, spell(found))
 		return check
+	case loopbackOnly(found):
+		check.Verdict = providerkit.StandingOwed
+		check.Finding = fmt.Sprintf("%s resolves to %s, which every machine answers for itself and nothing off this box can follow to %s; the record pointing it at %s is owed",
+			hostname, spell(found), address, address)
+		check.Fix = "add the record `ocel domain add` printed, then run this again — ocel writes no DNS"
+		return check
 	default:
 		check.Verdict = providerkit.StandingFail
 		check.Finding = fmt.Sprintf("%s resolves to %s, and this box is %s", hostname, spell(found), spell(here))
@@ -136,6 +142,10 @@ func pointsHere(found, here []netip.Addr) bool {
 		}
 	}
 	return false
+}
+
+func loopbackOnly(found []netip.Addr) bool {
+	return !slices.ContainsFunc(found, func(addr netip.Addr) bool { return !addr.Unmap().IsLoopback() })
 }
 
 func spell(addrs []netip.Addr) string {
