@@ -2,7 +2,7 @@
 
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
-import { SidebarIcon } from "@phosphor-icons/react";
+import { CaretLeftIcon, SidebarIcon } from "@phosphor-icons/react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 import * as React from "react";
@@ -119,6 +119,12 @@ function SidebarProvider({
 
   const state = open ? "expanded" : "collapsed";
 
+  const wrapperRef = React.useRef<HTMLDivElement>(null);
+  React.useLayoutEffect(() => {
+    wrapperRef.current?.style.setProperty("--sidebar-width", `${width}px`);
+    wrapperRef.current?.style.setProperty("--sidebar-opacity", "1");
+  }, [width, open]);
+
   const contextValue = React.useMemo<SidebarContextProps>(
     () => ({
       state,
@@ -137,10 +143,12 @@ function SidebarProvider({
   return (
     <SidebarContext.Provider value={contextValue}>
       <div
+        ref={wrapperRef}
         data-slot="sidebar-wrapper"
         style={
           {
             "--sidebar-width": `${width}px`,
+            "--sidebar-opacity": 1,
             "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
             ...style,
           } as React.CSSProperties
@@ -225,7 +233,7 @@ function Sidebar({
       <div
         data-slot="sidebar-gap"
         className={cn(
-          "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear group-data-[resizing]/sidebar-wrapper:transition-none",
+          "relative w-(--sidebar-width) bg-transparent transition-[width] duration-250 ease-[cubic-bezier(0.2,0,0,1)] group-data-[resizing]/sidebar-wrapper:transition-none",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180",
           variant === "floating" || variant === "inset"
@@ -237,7 +245,7 @@ function Sidebar({
         data-slot="sidebar-container"
         data-side={side}
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear group-data-[resizing]/sidebar-wrapper:transition-none data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
+          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) opacity-(--sidebar-opacity) transition-[left,right,width,opacity] duration-250 ease-[cubic-bezier(0.2,0,0,1)] group-data-[collapsible=offcanvas]:opacity-0 group-data-[resizing]/sidebar-wrapper:transition-none data-[side=left]:left-0 data-[side=left]:group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)] data-[side=right]:right-0 data-[side=right]:group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)] md:flex",
           variant === "floating" || variant === "inset"
             ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]"
             : "group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-r group-data-[side=right]:border-l",
@@ -304,20 +312,24 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
   );
 }
 
-function SidebarResizer({ className, ...props }: React.ComponentProps<"hr">) {
+function SidebarResizer({ className, ...props }: React.ComponentProps<"div">) {
   const { isMobile, state, width, setWidth, setOpen } = useSidebar();
   const drag = React.useRef<{
     wrapper: HTMLElement;
     side: string;
     edge: number;
+    origin: number;
     width: number;
+    visible: number;
+    moved: boolean;
+    grip: boolean;
   } | null>(null);
 
   if (isMobile || state === "collapsed") {
     return null;
   }
 
-  function release(event: React.PointerEvent<HTMLHRElement>, collapse: boolean) {
+  function release(event: React.PointerEvent<HTMLDivElement>, collapse: boolean) {
     const current = drag.current;
     if (!current) {
       return;
@@ -329,23 +341,24 @@ function SidebarResizer({ className, ...props }: React.ComponentProps<"hr">) {
     delete current.wrapper.dataset.resizing;
     document.body.style.removeProperty("cursor");
     document.body.style.removeProperty("user-select");
-    if (collapse) {
-      current.wrapper.style.setProperty("--sidebar-width", `${width}px`);
+    if (collapse || current.visible < SIDEBAR_COLLAPSE_AT || (current.grip && !current.moved)) {
       setOpen(false);
       return;
     }
+    current.wrapper.style.setProperty("--sidebar-opacity", "1");
     setWidth(current.width);
   }
 
   return (
-    <hr
+    <div
+      role="separator"
       aria-orientation="vertical"
       aria-label="Resize sidebar"
       aria-valuemin={SIDEBAR_WIDTH_MIN}
       aria-valuemax={SIDEBAR_WIDTH_MAX}
       aria-valuenow={width}
       tabIndex={0}
-      title="Drag to resize. Double-click to reset."
+      title="Drag to resize. Click the arrow to collapse. Double-click to reset."
       data-slot="sidebar-resizer"
       onPointerDown={(event) => {
         const container = event.currentTarget.closest<HTMLElement>(
@@ -359,7 +372,16 @@ function SidebarResizer({ className, ...props }: React.ComponentProps<"hr">) {
         event.currentTarget.setPointerCapture(event.pointerId);
         const rect = container.getBoundingClientRect();
         const side = container.dataset.side ?? "left";
-        drag.current = { wrapper, side, edge: side === "right" ? rect.right : rect.left, width };
+        drag.current = {
+          wrapper,
+          side,
+          edge: side === "right" ? rect.right : rect.left,
+          origin: event.clientX,
+          width,
+          visible: width,
+          moved: false,
+          grip: (event.target as Element).closest('[data-slot="sidebar-resizer-grip"]') !== null,
+        };
         wrapper.dataset.resizing = "true";
         document.body.style.cursor = "col-resize";
         document.body.style.userSelect = "none";
@@ -369,14 +391,30 @@ function SidebarResizer({ className, ...props }: React.ComponentProps<"hr">) {
         if (!current) {
           return;
         }
+        if (Math.abs(event.clientX - current.origin) > 3) {
+          current.moved = true;
+        }
         const raw =
           current.side === "right" ? current.edge - event.clientX : event.clientX - current.edge;
-        if (raw < SIDEBAR_COLLAPSE_AT) {
+        if (raw <= 0) {
           release(event, true);
           return;
         }
         current.width = sidebarWidth(raw);
-        current.wrapper.style.setProperty("--sidebar-width", `${current.width}px`);
+        current.visible = Math.min(raw, SIDEBAR_WIDTH_MAX);
+        current.wrapper.style.setProperty("--sidebar-width", `${current.visible}px`);
+        current.wrapper.style.setProperty(
+          "--sidebar-opacity",
+          String(
+            Math.min(
+              1,
+              Math.max(
+                0,
+                (current.visible - SIDEBAR_COLLAPSE_AT) / (SIDEBAR_WIDTH_MIN - SIDEBAR_COLLAPSE_AT),
+              ),
+            ),
+          ),
+        );
       }}
       onPointerUp={(event) => release(event, false)}
       onPointerCancel={(event) => release(event, false)}
@@ -397,16 +435,26 @@ function SidebarResizer({ className, ...props }: React.ComponentProps<"hr">) {
           } else {
             setWidth(width - step);
           }
+        } else if (event.key === "Enter") {
+          event.preventDefault();
+          setOpen(false);
         }
       }}
       className={cn(
-        "absolute inset-y-0 z-20 m-0 h-auto w-3 cursor-col-resize touch-none border-0 bg-transparent outline-none group-data-[side=left]:-right-1.5 group-data-[side=right]:-left-1.5",
-        "before:absolute before:inset-y-0 before:left-[5px] before:w-px before:bg-transparent before:transition-colors hover:before:bg-dim focus-visible:before:bg-ring group-data-[resizing]/sidebar-wrapper:before:bg-dim",
-        "after:absolute after:top-1/2 after:left-1 after:h-10 after:w-1 after:-translate-y-1/2 after:bg-foreground/70 after:opacity-0 after:transition-opacity hover:after:opacity-100 focus-visible:after:opacity-100 group-data-[resizing]/sidebar-wrapper:after:opacity-100",
+        "group/resizer absolute inset-y-0 z-20 w-3 cursor-col-resize touch-none outline-none group-data-[side=left]:-right-1.5 group-data-[side=right]:-left-1.5",
+        "before:absolute before:inset-y-0 before:left-[5px] before:w-px before:bg-transparent before:transition-colors before:duration-150 hover:before:bg-faint focus-visible:before:bg-ring/50 group-data-[resizing]/sidebar-wrapper:before:bg-dim",
         className,
       )}
       {...props}
-    />
+    >
+      <span
+        data-slot="sidebar-resizer-grip"
+        aria-hidden="true"
+        className="absolute top-1/2 left-1/2 grid h-7 w-4 -translate-x-1/2 -translate-y-1/2 place-items-center border border-border bg-background text-muted-foreground opacity-0 transition-[opacity,color,border-color] duration-150 group-hover/resizer:opacity-100 group-focus-visible/resizer:opacity-100 group-data-[resizing]/sidebar-wrapper:opacity-100 hover:border-dim hover:text-foreground group-data-[side=right]:rotate-180"
+      >
+        <CaretLeftIcon className="size-3" weight="bold" />
+      </span>
+    </div>
   );
 }
 
@@ -502,7 +550,7 @@ function SidebarGroupLabel({
     props: mergeProps<"div">(
       {
         className: cn(
-          "flex h-8 shrink-0 items-center rounded-none px-4 text-xs text-sidebar-foreground/70 ring-sidebar-ring outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
+          "flex h-8 shrink-0 items-center rounded-none px-4 text-xs text-muted-foreground ring-sidebar-ring outline-hidden transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
           className,
         ),
       },

@@ -6,19 +6,20 @@ import {
   ArrowUpRightIcon,
   BookOpenIcon,
   BracketsCurlyIcon,
-  BuildingsIcon,
   CaretUpDownIcon,
-  CoinsIcon,
-  DatabaseIcon,
+  CubeIcon,
   DotsThreeVerticalIcon,
   FoldersIcon,
+  GearSixIcon,
   GithubLogoIcon,
   GlobeIcon,
+  GraphIcon,
   MonitorIcon,
   MoonIcon,
   PlugsIcon,
   PlusIcon,
   PulseIcon,
+  ReceiptIcon,
   RocketLaunchIcon,
   SignOutIcon,
   SquaresFourIcon,
@@ -69,13 +70,13 @@ export type Viewer = { name: string; email: string; image: string | null };
 export type OrganizationSummary = { id: string; name: string; slug: string };
 
 const sectionIcons: Record<string, typeof SquaresFourIcon> = {
-  "": SquaresFourIcon,
+  "": GraphIcon,
   deployments: RocketLaunchIcon,
   variables: BracketsCurlyIcon,
-  resources: DatabaseIcon,
+  resources: CubeIcon,
   domains: GlobeIcon,
   monitoring: PulseIcon,
-  spend: CoinsIcon,
+  spend: ReceiptIcon,
 };
 
 const scopedNavigation = [{ label: "Overview", section: "" }, ...projectPages].map(
@@ -83,7 +84,7 @@ const scopedNavigation = [{ label: "Overview", section: "" }, ...projectPages].m
 );
 
 const organizationNavigation = [
-  { label: "General", href: "/organization/general", Icon: BuildingsIcon },
+  { label: "General", href: "/organization/general", Icon: GearSixIcon },
   { label: "Members", href: "/organization/members", Icon: UsersIcon },
   { label: "Connectors", href: "/organization/connectors", Icon: PlugsIcon },
 ];
@@ -160,7 +161,11 @@ function ScopedNavigation() {
           </SidebarMenuItem>
         </SidebarMenu>
       )}
-      <SidebarGroupLabel className={slug ? "text-foreground" : undefined}>
+      <SidebarGroupLabel
+        className={
+          slug ? "text-sm font-medium normal-case tracking-normal text-foreground" : undefined
+        }
+      >
         <span className="truncate">{slug ?? "All projects"}</span>
       </SidebarGroupLabel>
       <SidebarGroupContent>
@@ -186,7 +191,7 @@ function ScopedNavigation() {
 function OrganizationNavigation() {
   const pathname = usePathname();
   return (
-    <SidebarGroup className="mt-auto">
+    <SidebarGroup className="mt-3 border-t border-sidebar-border pt-3">
       <SidebarGroupLabel>Organization</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
