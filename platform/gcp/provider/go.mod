@@ -9,6 +9,7 @@ require (
 	cloud.google.com/go/storage v1.64.0
 	github.com/google/go-containerregistry v0.21.7
 	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
+	github.com/ocelhq/ocel/pkg/connectorkit v0.0.0
 	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit/pulumi v0.0.0-00010101000000-000000000000
@@ -225,3 +226,5 @@ replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/clo
 replace github.com/ocelhq/ocel/pkg/configdoc => ../../../pkg/configdoc
 
 replace github.com/ocelhq/ocel/pkg/costkit => ../../../pkg/costkit
+
+replace github.com/ocelhq/ocel/pkg/connectorkit => ../../../pkg/connectorkit
