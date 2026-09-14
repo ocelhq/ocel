@@ -404,6 +404,18 @@ func TestHashAsset(t *testing.T) {
 	})
 }
 
+func TestFlipBoundIsTheRecordCacheWindow(t *testing.T) {
+	t.Parallel()
+
+	p := &provider{}
+	if !p.Facts().CachesRecords {
+		t.Fatal("Facts().CachesRecords = false, but the entry worker serves a promotion from a cached record for RECORD_TTL_MS")
+	}
+	if got := p.FlipBound(); got.Typical != recordTTL || got.Published {
+		t.Errorf("FlipBound() = %+v, want the entry worker's record cache window %v, unpublished", got, recordTTL)
+	}
+}
+
 func TestProviderRequiresItsCredentials(t *testing.T) {
 	for _, tc := range []struct {
 		name      string

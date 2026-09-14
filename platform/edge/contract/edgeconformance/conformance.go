@@ -125,6 +125,9 @@ func Run(t *testing.T, suite Suite) {
 		if bound.Typical == 0 && bound.Published {
 			t.Error("FlipBound() publishes a bound it declares instant; Published is read only when Typical > 0")
 		}
+		if e.Facts().CachesRecords && bound.Typical == 0 {
+			t.Error("FlipBound().Typical = 0 on an edge whose Facts().CachesRecords is true; an edge that serves a promotion from a cached record keeps serving the old one until the cache lapses, and a caller waiting on the flip needs that bound")
+		}
 	})
 
 	t.Run("a reconciled stack reopens onto the same ledger", func(t *testing.T) {
