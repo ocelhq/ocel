@@ -96,10 +96,14 @@ func invokeRoleResource(ns Namespace, class edge.Class) string {
               - Effect: Allow
                 Action: lambda:InvokeFunction
                 Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*'
+                Condition:
+                  StringEquals:
+                    'aws:ResourceTag/ocel:component': 'function'
+                    'aws:ResourceTag/ocel:env-class': '%s'
               - Effect: Allow
                 Action: s3:GetObject
                 Resource: !Sub '${%s}/*'
-`, class, ns.EdgeInvokeRoleName(class), ns.PolicyName("edge-invoke"), paramAssetBucketARN)
+`, class, ns.EdgeInvokeRoleName(class), ns.PolicyName("edge-invoke"), class, paramAssetBucketARN)
 }
 
 func notFoundAPIResource(ns Namespace, class edge.Class) string {

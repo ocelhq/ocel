@@ -107,6 +107,7 @@ func edgeUserResource(ns Namespace, userName, class string, optimizer bool) stri
                 Condition:
                   StringEquals:
                     'aws:ResourceTag/ocel:component': 'function'
+                    'aws:ResourceTag/ocel:env-class': '%s'
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !Ref %s
@@ -120,7 +121,7 @@ func edgeUserResource(ns Namespace, userName, class string, optimizer bool) stri
                     kms:ViaService: !Sub 'sqs.${AWS::Region}.amazonaws.com'
 %s`, class, userName, ns.PolicyName("edge-cache"),
 		paramAssetBucketARN, paramAssetBucketARN,
-		paramStateTableARN, paramStateTableARN, StateTableIndexName,
+		paramStateTableARN, paramStateTableARN, StateTableIndexName, class,
 		paramRevalidateQueueARN, invoke)
 }
 

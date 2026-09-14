@@ -74,7 +74,7 @@ func revalidateQueueResources(ns Namespace, class string) string {
 		revalidateVisibilityTimeoutSeconds, revalidateRetentionSeconds, revalidateMaxReceiveCount)
 }
 
-func revalidatorResources(ns Namespace, code payloads.Placement) string {
+func revalidatorResources(ns Namespace, class string, code payloads.Placement) string {
 	return fmt.Sprintf(`  RevalidatorRole:
     Type: AWS::IAM::Role
     Properties:
@@ -116,6 +116,7 @@ func revalidatorResources(ns Namespace, code payloads.Placement) string {
                 Condition:
                   StringEquals:
                     'aws:ResourceTag/ocel:component': 'function'
+                    'aws:ResourceTag/ocel:env-class': '%s'
   Revalidator:
     Type: AWS::Lambda::Function
     Properties:
@@ -145,7 +146,7 @@ func revalidatorResources(ns Namespace, code payloads.Placement) string {
         - ReportBatchItemFailures
       ScalingConfig:
         MaximumConcurrency: %d
-`+lambdaLogGroupResource("Revalidator"), ns.PolicyName("revalidator"), revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
+`+lambdaLogGroupResource("Revalidator"), ns.PolicyName("revalidator"), class, revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
 		code.Bucket, code.Key,
 		revalidatorAssetBucketEnvVar,
 		revalidatorBatchSize, revalidatorMaxConcurrency)
