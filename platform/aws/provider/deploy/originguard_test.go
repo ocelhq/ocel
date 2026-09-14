@@ -20,6 +20,24 @@ const functionURLToken = "aws:lambda/functionUrl:FunctionUrl"
 
 const lambdaPermissionToken = "aws:lambda/permission:Permission"
 
+func TestAnEntryDeployedDuringARotationIsHandedTheSecretItReplacedToo(t *testing.T) {
+	t.Parallel()
+
+	rotating := &originGuard{Entry: "/", Secret: testOriginSecret, Previous: "0ld"}
+	env := rotating.entryEnv(map[string]string{edge.OriginSignedVar: "1"})
+	if env[edge.OriginSecretVar] != testOriginSecret || env[edge.OriginSecretPreviousVar] != "0ld" {
+		t.Errorf("entry env = %v, want both secrets: a route written before the rotation still presents the old one", env)
+	}
+	if _, signed := env[edge.OriginSignedVar]; signed {
+		t.Errorf("entry env = %v, still waved past the guard", env)
+	}
+
+	settled := &originGuard{Entry: "/", Secret: testOriginSecret}
+	if _, held := settled.entryEnv(nil)[edge.OriginSecretPreviousVar]; held {
+		t.Error("a class with no rotation underway hands the entry a predecessor")
+	}
+}
+
 func guardedConfig(t *testing.T, kind edge.Kind) Config {
 	t.Helper()
 	cfg := routedConfig(t, kind)

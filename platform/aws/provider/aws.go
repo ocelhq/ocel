@@ -186,6 +186,9 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPr
 	if err := p.nagStaleEdgeKey(ctx, pre); err != nil {
 		return err
 	}
+	if err := p.nagStaleOriginSecret(ctx, pre); err != nil {
+		return err
+	}
 	if err := p.publishRuntimeLayers(ctx, pre); err != nil {
 		return err
 	}
@@ -204,6 +207,20 @@ func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre providerkit.DeployPr
 		return nil
 	}
 	if notice := bootstrap.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), string(pre.Plan.Class)); notice != "" {
+		pre.Report.Detail(notice)
+	}
+	return nil
+}
+
+func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre providerkit.DeployPreflight) error {
+	if pre.Report == nil {
+		return nil
+	}
+	params, err := p.classParams(ctx, pre.Plan.Class, pre.Edge)
+	if err != nil {
+		return err
+	}
+	if notice := bootstrap.StaleOriginSecretNotice(params.OriginSecret, time.Now(), string(pre.Plan.Class)); notice != "" {
 		pre.Report.Detail(notice)
 	}
 	return nil
@@ -454,7 +471,8 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		ISRWriterScriptName:    params.ISRWriter.ScriptName,
 		ISRWriterSeed:          params.ISRWriterSeed,
 
-		OriginSecret: params.OriginSecret,
+		OriginSecret:         params.OriginSecret.Current,
+		PreviousOriginSecret: params.OriginSecret.Previous,
 
 		Transform: p.transformPass(root),
 	}

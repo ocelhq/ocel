@@ -50,7 +50,7 @@ func fullProductionParams() map[string]string {
 		names.deploymentsStoreParam: `{"endpoint":"https://store","scriptName":"store","bootstrapCred":"cred"}`,
 		names.isrWriterParam:        `{"endpoint":"https://isr","scriptName":"isr","bootstrapCred":"isr-cred"}`,
 		names.isrWriterSeedParam:    "seed-1",
-		names.originSecretParam:     "origin-1",
+		names.originSecretParam:     `{"current":"origin-1","createdAt":"2026-01-01T00:00:00Z"}`,
 	}
 }
 

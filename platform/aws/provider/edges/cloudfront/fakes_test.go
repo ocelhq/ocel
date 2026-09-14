@@ -154,17 +154,24 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 
 type fakeSSM struct {
 	absent bool
+	secret bootstrap.OriginSecret
 }
 
-func newFakeSSM() *fakeSSM { return &fakeSSM{} }
+func newFakeSSM() *fakeSSM {
+	return &fakeSSM{secret: bootstrap.OriginSecret{Current: fakeSecret, CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}}
+}
 
 func (f *fakeSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ ...func(*ssm.Options)) (*ssm.GetParameterOutput, error) {
 	if f.absent {
 		return nil, &ssmtypes.ParameterNotFound{Message: aws.String("no parameter " + aws.ToString(in.Name))}
 	}
+	raw, err := json.Marshal(f.secret)
+	if err != nil {
+		return nil, err
+	}
 	return &ssm.GetParameterOutput{Parameter: &ssmtypes.Parameter{
 		Name:  in.Name,
-		Value: aws.String(fakeSecret),
+		Value: aws.String(string(raw)),
 	}}, nil
 }
 

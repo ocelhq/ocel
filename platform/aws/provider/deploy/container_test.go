@@ -139,7 +139,7 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 		t.Errorf("%s = %q, want the manifest's probe path, which the runtime answers without the origin secret", front.HealthPathVar, got)
 	}
 
-	_, err = containerEnv("web", providerkit.AppValues{Plain: map[string]string{containerPortEnv: "3000"}}, fixtureSecret, nil)
+	_, err = containerEnv("web", providerkit.AppValues{Plain: map[string]string{containerPortEnv: "3000"}}, fixtureSecret, "", nil)
 	if err == nil || !strings.Contains(err.Error(), containerPortEnv) {
 		t.Errorf("containerEnv with %s = %v, want it refused by name: the load balancer would probe a port nothing listens on", containerPortEnv, err)
 	}
@@ -152,6 +152,51 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	plan.App.HealthCheckPath = "/healthz"
 	if _, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate()); err == nil {
 		t.Error("containerWork accepted a class with no origin secret, so the listener rule would admit every stranger")
+	}
+}
+
+func TestAContainerDeployedDuringARotationAcceptsBothSecretsAndItsRuleAdmitsEither(t *testing.T) {
+	t.Parallel()
+
+	cfg, plan := plannedContainerStack(t)
+	cfg.PreviousOriginSecret = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+	release := releasing(t, cfg)
+	work, err := release.containerWork(plan, fixtureSubstrate())
+	if err != nil {
+		t.Fatalf("containerWork() = %v", err)
+	}
+	if work.env[edge.OriginSecretVar] != fixtureSecret || work.env[edge.OriginSecretPreviousVar] != cfg.PreviousOriginSecret {
+		t.Errorf("env carries %q and %q, want the current secret and the one it replaced: a route written before the rotation still presents the old one", work.env[edge.OriginSecretVar], work.env[edge.OriginSecretPreviousVar])
+	}
+	if err := release.placeRule(context.Background(), work); err != nil {
+		t.Fatalf("placeRule() = %v", err)
+	}
+	rec := &inputRecorder{}
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", plan.Ref.Name.String(), rec)); err != nil {
+		t.Fatalf("run the container program: %v", err)
+	}
+	rule := recordedOf(t, rec, "aws:lb/listenerRule:ListenerRule")
+	for _, condition := range rule["conditions"].ArrayValue() {
+		header := condition.ObjectValue()["httpHeader"].ObjectValue()
+		if header["httpHeaderName"].StringValue() != edge.OriginSecretHeader {
+			continue
+		}
+		var admitted []string
+		for _, value := range header["values"].ArrayValue() {
+			admitted = append(admitted, value.StringValue())
+		}
+		if !slices.Equal(admitted, []string{fixtureSecret, cfg.PreviousOriginSecret}) {
+			t.Errorf("the rule admits %v, want the current secret and the one it replaced", admitted)
+		}
+	}
+
+	cfg.PreviousOriginSecret = ""
+	settled, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate())
+	if err != nil {
+		t.Fatalf("containerWork() = %v", err)
+	}
+	if _, held := settled.env[edge.OriginSecretPreviousVar]; held || len(settled.secrets) != 1 {
+		t.Errorf("a class with no rotation underway hands the container %v and env %v, want the current secret alone", settled.secrets, settled.env)
 	}
 }
 

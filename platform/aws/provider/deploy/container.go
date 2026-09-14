@@ -67,7 +67,7 @@ type containerWork struct {
 	tags        map[string]string
 	boundary    string
 	region      string
-	secret      string
+	secrets     []string
 	policies    []bindingPolicy
 	values      executionRole
 	transformed *transformPatches
@@ -129,7 +129,7 @@ func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, er
 	if err != nil {
 		return nil, err
 	}
-	env, err := containerEnv(app.App, app.Values, r.cfg.OriginSecret, bundle.Live)
+	env, err := containerEnv(app.App, app.Values, r.cfg.OriginSecret, r.cfg.PreviousOriginSecret, bundle.Live)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, er
 		tags:       plan.Tags,
 		boundary:   r.cfg.AppBoundaryARN,
 		region:     r.cfg.Region,
-		secret:     r.cfg.OriginSecret,
+		secrets:    presentedSecrets(r.cfg.OriginSecret, r.cfg.PreviousOriginSecret),
 		policies:   policies,
 		values:     values,
 		service:    serviceCoordinate(project, stack),
@@ -242,8 +242,15 @@ func priorityTaken(err error) bool {
 	return err != nil && strings.Contains(err.Error(), priorityInUseCode)
 }
 
-func containerEnv(app string, values providerkit.AppValues, originSecret string, manifest []byte) (map[string]string, error) {
-	env := make(map[string]string, len(values.Plain)+len(values.Sensitive)+6)
+func presentedSecrets(current, previous string) []string {
+	if previous == "" {
+		return []string{current}
+	}
+	return []string{current, previous}
+}
+
+func containerEnv(app string, values providerkit.AppValues, originSecret, previousSecret string, manifest []byte) (map[string]string, error) {
+	env := make(map[string]string, len(values.Plain)+len(values.Sensitive)+7)
 	maps.Copy(env, values.Plain)
 	maps.Copy(env, values.Sensitive)
 	if values.Folder != "" {
@@ -257,6 +264,9 @@ func containerEnv(app string, values providerkit.AppValues, originSecret string,
 	}
 	env[containerPortEnv] = containerPort
 	env[edge.OriginSecretVar] = originSecret
+	if previousSecret != "" {
+		env[edge.OriginSecretPreviousVar] = previousSecret
+	}
 	if len(manifest) > 0 {
 		env[vars.EnvVar] = string(manifest)
 	}
@@ -382,7 +392,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		Conditions: lb.ListenerRuleConditionArray{
 			&lb.ListenerRuleConditionArgs{HttpHeader: &lb.ListenerRuleConditionHttpHeaderArgs{
 				HttpHeaderName: pulumi.String(edge.OriginSecretHeader),
-				Values:         pulumi.StringArray{pulumi.String(w.secret)},
+				Values:         pulumi.ToStringArray(w.secrets),
 			}},
 			&lb.ListenerRuleConditionArgs{HttpHeader: &lb.ListenerRuleConditionHttpHeaderArgs{
 				HttpHeaderName: pulumi.String(edge.OriginContainerHeader),

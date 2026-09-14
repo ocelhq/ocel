@@ -245,7 +245,7 @@ func (r *release) originGuard(plan providerkit.StackPlan) (*originGuard, error) 
 			"the edge reaches %s over a Function URL no signature guards, and this bootstrap holds no secret for the entry function to demand of it; re-run `%s`",
 			plan.App.App, providerkit.BootstrapCommand(r.cfg.Class))
 	}
-	return &originGuard{Entry: guard.Entry, Secret: r.cfg.OriginSecret}, nil
+	return &originGuard{Entry: guard.Entry, Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret}, nil
 }
 
 func (r *release) isrCache(plan providerkit.StackPlan) *isrConfig {
