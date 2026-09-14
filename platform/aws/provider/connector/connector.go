@@ -21,12 +21,14 @@ import (
 const (
 	Arch = "arm64"
 
-	runtime    = "provided.al2023"
-	handler    = "bootstrap"
-	memory     = 256
-	timeout    = 30
-	codePrefix = "connector"
-	codeAbort  = 7
+	runtime = "provided.al2023"
+	handler = "bootstrap"
+	memory  = 256
+	timeout = 30
+
+	reservedConcurrency = 10
+	codePrefix          = "connector"
+	codeAbort           = 7
 
 	outputBucket  = "CodeBucketName"
 	outputURL     = "FunctionUrl"
@@ -299,11 +301,12 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, version string, 
 						edge.AWSRegionVar:                 map[string]any{"Ref": "AWS::Region"},
 						providerkit.ConnectorConfigEnvVar: string(config),
 					}},
-					"Handler":    handler,
-					"MemorySize": memory,
-					"Role":       map[string]any{"Fn::GetAtt": []string{"ConnectorRole", "Arn"}},
-					"Runtime":    runtime,
-					"Timeout":    timeout,
+					"Handler":                      handler,
+					"MemorySize":                   memory,
+					"ReservedConcurrentExecutions": reservedConcurrency,
+					"Role":                         map[string]any{"Fn::GetAtt": []string{"ConnectorRole", "Arn"}},
+					"Runtime":                      runtime,
+					"Timeout":                      timeout,
 				},
 			},
 			"ConnectorUrl": map[string]any{

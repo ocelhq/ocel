@@ -132,6 +132,10 @@ func TestTheTemplateCarriesTheCodeTheBucketStagesAndTheConfigItRuns(t *testing.T
 		t.Errorf("the function carries %v as its config, and a function has no filesystem to read one off", env["OCEL_CONNECTOR_CONFIG_JSON"])
 	}
 
+	if got, _ := function["ReservedConcurrentExecutions"].(float64); int(got) != reservedConcurrency || reservedConcurrency <= 0 {
+		t.Errorf("the function reserves %v concurrent executions, want %d: its url answers anyone, so without a ceiling a flood of unauthenticated calls bills the account and starves every other function of the regional concurrency", function["ReservedConcurrentExecutions"], reservedConcurrency)
+	}
+
 	url := read.Resources["ConnectorUrl"].Properties
 	if url["AuthType"] != "NONE" {
 		t.Errorf("the function url authenticates with %v, and the console's own token is what the connector checks", url["AuthType"])
