@@ -14,6 +14,9 @@ const (
 	settleJitter   = 0.05
 
 	deployedStatus = "Deployed"
+
+	disableRollingOut        = "CloudFront was still rolling the disable out to its edges, so nothing may be deleted yet"
+	containerFrontRollingOut = "CloudFront was still rolling the container origin out to its edges, so a route selecting it would fail there"
 )
 
 type Settler struct {
@@ -60,7 +63,7 @@ func (s Settler) hold(ctx context.Context) error {
 	return waitFor(ctx, s.interval())
 }
 
-func (s Settler) settled(ctx context.Context, kind, id string, status func(context.Context) (string, error)) error {
+func (s Settler) settled(ctx context.Context, kind, id, because string, status func(context.Context) (string, error)) error {
 	for attempt := 0; attempt < s.attempts(); attempt++ {
 		if attempt > 0 {
 			if err := s.hold(ctx); err != nil {
@@ -79,7 +82,7 @@ func (s Settler) settled(ctx context.Context, kind, id string, status func(conte
 		}
 	}
 	return &edge.OutstandingError{
-		Because: "CloudFront was still rolling the disable out to its edges, so nothing may be deleted yet",
+		Because: because,
 		Waited:  s.window(),
 		Items:   []edge.Outstanding{{Kind: kind, Name: id}},
 	}

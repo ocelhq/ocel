@@ -10,6 +10,7 @@ var CACHE_KEY_HEADER = 'x-ocel-cache-key';
 var FORWARDED_HOST_HEADER = 'x-forwarded-host';
 var ORIGIN_SECRET_HEADER = 'x-ocel-origin-secret';
 var CONTAINER_HEADER = 'x-ocel-container';
+var CONTAINER_ORIGIN_ID = 'containers';
 var CONTROL_PREFIX = 'x-middleware-';
 var CONTROL_HEADERS = ['x-ocel-entry', 'next-resume', ORIGIN_SECRET_HEADER, CONTAINER_HEADER];
 
@@ -132,16 +133,19 @@ async function handler(event) {
     return request;
   }
 
+  if (route.container) {
+    request.headers[ORIGIN_SECRET_HEADER] = { value: route.secret };
+    request.headers[CONTAINER_HEADER] = { value: route.container };
+    cf.selectRequestOriginById(CONTAINER_ORIGIN_ID);
+    return request;
+  }
+
   var originHeaders = {};
   originHeaders[ORIGIN_SECRET_HEADER] = route.secret;
-  if (route.container) originHeaders[CONTAINER_HEADER] = route.container;
-  var plain = route.protocol === 'http';
   cf.updateRequestOrigin({
     domainName: route.origin,
     originAccessControlConfig: { enabled: false },
-    customOriginConfig: plain
-      ? { port: 80, protocol: 'http' }
-      : { port: 443, protocol: 'https', sslProtocols: ['TLSv1.2'] },
+    customOriginConfig: { port: 443, protocol: 'https', sslProtocols: ['TLSv1.2'] },
     customHeaders: originHeaders,
   });
   return request;

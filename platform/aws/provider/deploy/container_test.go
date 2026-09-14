@@ -29,7 +29,8 @@ import (
 const (
 	containerImage  = "123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	fixtureSecret   = "5e884898da28047151d0e56f8dc6292773603d0d"
-	fixtureOrigin   = "ocel-containers-production-123.us-east-1.elb.amazonaws.com"
+	fixtureOrigin   = "internal-ocel-containers-production-123.us-east-1.elb.amazonaws.com"
+	fixtureFront    = "vo_2XyZ3abc4DEF5ghi"
 	fixtureListener = "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/ocel-containers-production/abc/def"
 )
 
@@ -39,6 +40,7 @@ func fixtureSubstrate() substrate {
 		Subnets:       []string{"subnet-a", "subnet-b"},
 		Listener:      fixtureListener,
 		OriginHost:    fixtureOrigin,
+		VPCOrigin:     fixtureFront,
 		TaskSecurity:  "sg-tasks",
 		Cluster:       "arn:aws:ecs:us-east-1:123456789012:cluster/ocel-containers-production",
 		ExecutionRole: "arn:aws:iam::123456789012:role/ocel-containers-production-exec-abc",
