@@ -465,3 +465,12 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingCarriesIsRefused(t *t
 		t.Errorf("refuseUnclaimed() = %v, want the patch on a role this app never minted refused by name rather than dropped", err)
 	}
 }
+
+func TestAContainerWhoseClassResolvedNoAppBoundaryIsRefusedBeforeARoleIsMinted(t *testing.T) {
+	cfg, plan := plannedContainerStack(t)
+	cfg.AppBoundaryARN = ""
+	_, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate())
+	if err == nil || !strings.Contains(err.Error(), "boundary") {
+		t.Fatalf("containerWork() with no boundary = %v, want a refusal naming the boundary", err)
+	}
+}

@@ -283,10 +283,6 @@ func newServiceRole(ctx *pulumi.Context, name, description, servicePrincipal, bo
 	return role, nil
 }
 
-func permissionsBoundary(arn string) pulumi.StringPtrInput {
-	return optionalARN(arn)
-}
-
 func optionalARN(arn string) pulumi.StringPtrInput {
 	if arn == "" {
 		return nil

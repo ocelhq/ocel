@@ -117,6 +117,10 @@ func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, er
 		return nil, providerkit.Refuse(providerkit.CodeNotReady,
 			"this class holds no origin secret, and a container answers only to an edge that presents one: re-run `%s`", providerkit.BootstrapCommand(plan.Ref.Class))
 	}
+	if r.cfg.AppBoundaryARN == "" {
+		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+			"this deploy resolved no app boundary for %s, and a task role made without one is capped by nothing: re-run `%s`", app.App, providerkit.BootstrapCommand(plan.Ref.Class))
+	}
 	policies, err := planBindingPolicies(app.Grants)
 	if err != nil {
 		return nil, err
@@ -440,7 +444,7 @@ func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resou
 		NamePrefix:          pulumi.String(rolePrefix(w.role)),
 		Description:         describe(w.role, "task role for this app's container"),
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
-		PermissionsBoundary: permissionsBoundary(w.boundary),
+		PermissionsBoundary: pulumi.String(w.boundary),
 		Tags:                resourceTags(naming.KindRole, "", w.taggedWith(w.transformed.tagsFor(transformTypeContainer, w.app))),
 	})
 	if err != nil {
