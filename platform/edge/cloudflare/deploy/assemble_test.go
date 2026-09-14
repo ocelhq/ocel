@@ -55,6 +55,14 @@ func assembleFor(t *testing.T) func(edge.WorkerSource, edge.Resolver) (edge.Work
 	return New("ocel").(edge.Programmable).AssembleApp
 }
 
+func signing(urls map[string]string) stubResolver {
+	return stubResolver{
+		urls:     urls,
+		creds:    edge.Credentials{AccessKeyID: "AKIAEDGE", SecretKey: "secret-edge"},
+		hasCreds: true,
+	}
+}
+
 func TestAssembleApp(t *testing.T) {
 	t.Parallel()
 
@@ -107,22 +115,18 @@ func TestAssembleApp(t *testing.T) {
 		}
 	})
 
-	t.Run("a bootstrap offering no credentials omits the signing bindings", func(t *testing.T) {
+	t.Run("a bootstrap offering no credentials is refused rather than shipped unsigned", func(t *testing.T) {
 		t.Parallel()
 
 		src := writeAppArtifacts(t)
 		src.Routes = []string{"/"}
-		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
-
-		w, err := assembleFor(t)(src, r)
-		if err != nil {
-			t.Fatalf("a bootstrap predating edge credentials must not fail the deploy: %v", err)
-		}
-		if w.Secrets != nil {
-			t.Errorf("Secrets = %v, want none", w.Secrets)
-		}
-		if len(w.Vars) != 0 {
-			t.Errorf("Vars = %v, want none without edge credentials", w.Vars)
+		for name, r := range map[string]stubResolver{
+			"none":       {urls: map[string]string{"/": "https://fn.lambda-url.aws/"}},
+			"empty half": {urls: map[string]string{"/": "https://fn.lambda-url.aws/"}, creds: edge.Credentials{AccessKeyID: "AKIAEDGE"}, hasCreds: true},
+		} {
+			if _, err := assembleFor(t)(src, r); err == nil {
+				t.Errorf("%s: AssembleApp err = nil, want a refusal: the worker would forward to the origin unsigned", name)
+			}
 		}
 	})
 
@@ -131,7 +135,7 @@ func TestAssembleApp(t *testing.T) {
 
 		src := writeAppArtifacts(t)
 		src.Routes = []string{"/"}
-		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+		r := signing(map[string]string{"/": "https://fn.lambda-url.aws/"})
 
 		w, err := assembleFor(t)(src, r)
 		if err != nil {
@@ -151,7 +155,7 @@ func TestAssembleApp(t *testing.T) {
 		src := writeAppArtifacts(t)
 		src.Routes = []string{"/orphan"}
 
-		if _, err := assembleFor(t)(src, stubResolver{urls: map[string]string{}}); err == nil {
+		if _, err := assembleFor(t)(src, signing(map[string]string{})); err == nil {
 			t.Fatal("expected an error for an unresolvable route")
 		}
 	})
@@ -161,7 +165,7 @@ func TestAssembleApp(t *testing.T) {
 
 		src := writeDescribedApp(t, "node", false)
 		src.Routes = []string{"/"}
-		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+		r := signing(map[string]string{"/": "https://fn.lambda-url.aws/"})
 
 		w, err := assembleFor(t)(src, r)
 		if err != nil {
@@ -181,10 +185,10 @@ func TestAssembleApp(t *testing.T) {
 		src := writeAppArtifacts(t)
 		src.Entry = "bundle-7"
 		src.Routes = []string{"bundle-7", "bundle-0"}
-		r := stubResolver{urls: map[string]string{
+		r := signing(map[string]string{
 			"bundle-0": "https://first.lambda-url.aws/",
 			"bundle-7": "https://entry.lambda-url.aws/",
-		}}
+		})
 
 		if _, err := assembleFor(t)(src, r); err != nil {
 			t.Fatalf("an entry named by the build must not have to match any convention: %v", err)
@@ -197,7 +201,7 @@ func TestAssembleApp(t *testing.T) {
 		src := writeAppArtifacts(t)
 		src.Entry = "bundle-7"
 		src.Routes = []string{"/"}
-		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+		r := signing(map[string]string{"/": "https://fn.lambda-url.aws/"})
 
 		if _, err := assembleFor(t)(src, r); err == nil {
 			t.Fatal("an entry no Function URL was realized for cannot be served")
@@ -210,7 +214,7 @@ func TestAssembleApp(t *testing.T) {
 		src := writeAppArtifacts(t)
 		src.Entry = ""
 		src.Routes = []string{"/api/documents"}
-		r := stubResolver{urls: map[string]string{"/api/documents": "https://fn.lambda-url.aws/"}}
+		r := signing(map[string]string{"/api/documents": "https://fn.lambda-url.aws/"})
 
 		if _, err := assembleFor(t)(src, r); err != nil {
 			t.Fatalf("an app no function serves at its root still routes through its manifest: %v", err)
@@ -223,7 +227,7 @@ func TestAssembleApp(t *testing.T) {
 		src := writeDescribedApp(t, "node", false)
 		src.Entry = ""
 		src.Routes = []string{"/"}
-		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+		r := signing(map[string]string{"/": "https://fn.lambda-url.aws/"})
 
 		if _, err := assembleFor(t)(src, r); err == nil {
 			t.Fatal("a front has no route to send traffic to when an unrouted build names no entry")
@@ -235,7 +239,7 @@ func TestAssembleApp(t *testing.T) {
 
 		src := writeDescribedApp(t, "next", true)
 		src.Routes = []string{"/"}
-		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+		r := signing(map[string]string{"/": "https://fn.lambda-url.aws/"})
 
 		if _, err := assembleFor(t)(src, r); err == nil {
 			t.Fatal("a build declaring edge routing without a routing manifest is corrupt and must not deploy")
@@ -251,7 +255,7 @@ func TestAssembleApp(t *testing.T) {
 			t.Fatal(err)
 		}
 		src := edge.WorkerSource{ArtifactRoot: root, BundlePath: bundle, Routes: []string{"/"}}
-		r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+		r := signing(map[string]string{"/": "https://fn.lambda-url.aws/"})
 
 		if _, err := assembleFor(t)(src, r); err == nil {
 			t.Fatal("an artifact with neither a routing manifest nor a descriptor must not deploy")

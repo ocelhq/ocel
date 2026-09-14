@@ -37,7 +37,10 @@ func (p *provider) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Wor
 	if err := validateEntry(src.Entry, routed, r); err != nil {
 		return edge.Worker{}, err
 	}
-	vars, secrets := signingBindings(r)
+	vars, secrets, err := signingBindings(r)
+	if err != nil {
+		return edge.Worker{}, err
+	}
 
 	return edge.Worker{
 		Main: edge.WorkerModule{
@@ -110,13 +113,13 @@ func validateRoutes(routes []string, r edge.Resolver) error {
 	return nil
 }
 
-func signingBindings(r edge.Resolver) (vars, secrets map[string]string) {
+func signingBindings(r edge.Resolver) (vars, secrets map[string]string, err error) {
 	creds, ok := r.EdgeCredentials()
-	if !ok {
-		return nil, nil
+	if !ok || creds.AccessKeyID == "" || creds.SecretKey == "" {
+		return nil, nil, errors.New("the Cloudflare edge signs every forward to the origin, and this bootstrap holds no edge credentials to sign with; re-run bootstrap so the origin mints them before deploying")
 	}
 	return map[string]string{edge.EdgeAccessKeyIDVar: creds.AccessKeyID},
-		map[string]string{edge.EdgeSecretKeyVar: creds.SecretKey}
+		map[string]string{edge.EdgeSecretKeyVar: creds.SecretKey}, nil
 }
 
 func collectStaticAssets(dir string) ([]edge.StaticAsset, error) {
