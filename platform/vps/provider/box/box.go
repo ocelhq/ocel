@@ -23,6 +23,7 @@ type Machine interface {
 	Address(ctx context.Context) (string, error)
 	HoldsImage(ctx context.Context, coordinate string) (bool, error)
 	StandUp(ctx context.Context, spec host.Container) error
+	ForgetNetwork(ctx context.Context, class providerkit.Class, project string) error
 	Promote(ctx context.Context, class providerkit.Class, project, app, coordinate string) error
 	ForgetCertificates(ctx context.Context, hostnames []string, report providerkit.Reporter) error
 	Serving(ctx context.Context, key host.RouteKey) (string, error)

@@ -60,7 +60,7 @@ func TestAReleaseStandsUpOneLabelledContainerOnTheOneNetworkTargetsResolveAcross
 	for what, wanted := range map[string]string{
 		"the name the drain attributes its in-flight count to": quoted("--name") + " " + quoted(physical),
 		"a reboot that does not take the app down":             quoted("--restart") + " " + quoted(appRestart),
-		"the network the proxy reaches it over":                quoted("--network") + " " + quoted(ProxyNetwork),
+		"the network the proxy reaches it over":                quoted("--network") + " " + quoted(AppNetwork(aContainer().Class, "shop")),
 		"the app label retention reads":                        quoted("--label") + " " + quoted(LabelApp+"=web"),
 		"the project label retention reads":                    quoted("--label") + " " + quoted(LabelProject+"=shop"),
 		"the ref label retention reads":                        quoted("--label") + " " + quoted(LabelRef+"="+appImage),

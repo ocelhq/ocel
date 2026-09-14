@@ -282,11 +282,11 @@ func TestEverySingletonIsNamedByThePlanThatTakesTheLastClassAndByNoOther(t *test
 	}
 
 	for _, singleton := range singletons {
-		if kept := removalOf(removing(standing, beside), singleton); kept.action == providerkit.ActionDelete {
+		if kept := removalOf(removing(standing, beside, appsStanding{}), singleton); kept.action == providerkit.ActionDelete {
 			t.Errorf("destroying one class takes %s, and the sibling class still standing on this host deploys through it", singleton)
 		}
 	}
-	last := removing(standing, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}})
+	last := removing(standing, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{})
 	for _, singleton := range singletons {
 		if gone := removalOf(last, singleton); gone.action != providerkit.ActionDelete {
 			t.Errorf("destroying the last class plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, gone.action)

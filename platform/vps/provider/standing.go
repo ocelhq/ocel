@@ -180,8 +180,8 @@ func (p *Provider) adminVerdict(ctx context.Context) providerkit.StandingCheck {
 	}
 	if bound := listeners.On(held, host.AdminPortNumber); len(bound) > 0 {
 		check.Verdict = providerkit.StandingFail
-		check.Finding = fmt.Sprintf("%s listens on %s inside %s, which is the stock unauthenticated admin api: every container on the %s network holds arbitrary replacement of this box's serving configuration",
-			strings.Join(listeners.Lines(bound), ", "), host.AdminPort, host.ProxyContainer, host.ProxyNetwork)
+		check.Finding = fmt.Sprintf("%s listens on %s inside %s, which is the stock unauthenticated admin api: every app container on this box shares a network with the proxy, so every one of them holds arbitrary replacement of this box's serving configuration",
+			strings.Join(listeners.Lines(bound), ", "), host.AdminPort, host.ProxyContainer)
 		check.Fix = "run `ocel bootstrap production` to put back the configuration that binds the admin endpoint to " + host.ProxyAdminSocket + " and nothing else"
 		return check
 	}

@@ -79,6 +79,11 @@ func (m *machine) StandUp(_ context.Context, spec host.Container) error {
 	return m.refuse("StandUp")
 }
 
+func (m *machine) ForgetNetwork(_ context.Context, class providerkit.Class, project string) error {
+	m.calls = append(m.calls, "forget network "+string(class)+"/"+project)
+	return m.refuse("ForgetNetwork")
+}
+
 func (m *machine) Promote(_ context.Context, _ providerkit.Class, project, app, coordinate string) error {
 	m.calls = append(m.calls, "head "+project+"/"+app+" at "+coordinate)
 	m.headed = append(m.headed, coordinate)

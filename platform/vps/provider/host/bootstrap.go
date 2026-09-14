@@ -438,6 +438,13 @@ func (r removal) command() string {
 	switch {
 	case r.kind == KindContainer:
 		return "docker rm --force " + quoted(r.path)
+	case r.kind == KindApps:
+		return "docker ps --all --quiet --filter " + quoted("label="+r.path) + " | xargs -r docker rm --force >/dev/null"
+	case r.kind == KindAppNetworks:
+		return "for net in $(docker network ls --quiet --filter " + quoted("label="+r.path) + "); do\n" +
+			"docker network disconnect --force \"$net\" " + quoted(ProxyContainer) + " >/dev/null 2>&1 || true\n" +
+			"docker network rm \"$net\" >/dev/null\n" +
+			"done"
 	case r.kind == KindNetwork:
 		return "if ! docker network rm " + quoted(r.path) + " >/dev/null 2>&1 && " +
 			"docker network inspect " + quoted(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + quoted(networkHeld) + "; fi"
@@ -457,18 +464,63 @@ func (b Bootstrapper) removals(ctx context.Context, class providerkit.Class) ([]
 	if err != nil {
 		return nil, err
 	}
-	return removing(read, sibling), nil
+	apps, err := b.host.appsStanding(ctx, class)
+	if err != nil {
+		return nil, err
+	}
+	return removing(read, sibling, apps), nil
 }
 
-func removing(read, sibling Reading) []removal {
+const (
+	KindApps        = "docker:app-containers"
+	KindAppNetworks = "docker:app-networks"
+)
+
+type appsStanding struct{ containers, networks bool }
+
+func classSelector(class providerkit.Class) string { return LabelClass + "=" + string(class) }
+
+func appsProbe(class providerkit.Class) string {
+	filter := quoted("label=" + classSelector(class))
+	return "if command -v " + quoted(dockerEngine) + " >/dev/null 2>&1; then\n" +
+		"if [ -n \"$(docker ps --all --quiet --filter " + filter + " 2>/dev/null)\" ]; then echo containers; fi\n" +
+		"if [ -n \"$(docker network ls --quiet --filter " + filter + " 2>/dev/null)\" ]; then echo networks; fi\n" +
+		"fi"
+}
+
+func (h *Host) appsStanding(ctx context.Context, class providerkit.Class) (appsStanding, error) {
+	said, err := h.run(ctx, "ask what "+string(class)+" still runs", appsProbe(class), nil)
+	if err != nil {
+		return appsStanding{}, err
+	}
+	return appsStanding{
+		containers: strings.Contains(said, "containers"),
+		networks:   strings.Contains(said, "networks"),
+	}, nil
+}
+
+func appsRemoving(class providerkit.Class, apps appsStanding) []removal {
+	var taken []removal
+	if apps.containers {
+		taken = append(taken, taking(KindApps, classSelector(class),
+			"every app container this class stood up, each holding the values its deploy handed it; nothing routes to them once the class is gone"))
+	}
+	if apps.networks {
+		taken = append(taken, taking(KindAppNetworks, classSelector(class),
+			"the network each of this class's projects ran on, which the proxy is detached from first"))
+	}
+	return taken
+}
+
+func removing(read, sibling Reading, apps appsStanding) []removal {
 	beside := sibling.Class
 	last := !sibling.standing(KindDir, ClassDir(beside)) && !sibling.standing(KindDir, StateDir(beside))
 
-	beneath := []removal{
+	beneath := append(appsRemoving(read.Class, apps),
 		taking(KindDir, StateDir(read.Class), "every record ocel holds for this class on this host, and nothing writes them again"),
 		taking(KindSealKey, SealKeyPath(read.Class), "the key every value this class holds was sealed to, and no other machine ever held it: what it sealed, nothing opens again"),
 		taking(KindFile, sudoersSeal(read.Class), "the one sudoers line that lets the deploy login seal and open this class's values"),
-	}
+	)
 	stamp := []removal{taking(KindDir, ClassDir(read.Class),
 		"the stamp that says what this host carries, taken last so an interrupted destroy leaves a host that still says what it is")}
 	var above []removal
@@ -491,7 +543,8 @@ func removing(read, sibling Reading) []removal {
 
 	standing := make([]removal, 0, len(ordered))
 	for _, candidate := range ordered {
-		if read.standing(candidate.kind, candidate.path) || sibling.standing(candidate.kind, candidate.path) {
+		if candidate.kind == KindApps || candidate.kind == KindAppNetworks ||
+			read.standing(candidate.kind, candidate.path) || sibling.standing(candidate.kind, candidate.path) {
 			standing = append(standing, candidate)
 		}
 	}

@@ -151,7 +151,7 @@ func TestThePrincipalGoesWithTheLastClassAndStandsWhileASiblingDoes(t *testing.T
 	keys := []byte(aKey + "\n")
 	held := digests(Items(production, keys, ArchAMD64))
 
-	alone := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}})
+	alone := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{})
 	taken := slices.IndexFunc(alone, func(r removal) bool { return r.kind == KindUser && r.path == deployUser })
 	if taken < 0 {
 		t.Fatal("destroying the last class leaves the deploy principal behind, and a login nothing uses is a login nobody revokes")
@@ -161,7 +161,7 @@ func TestThePrincipalGoesWithTheLastClassAndStandsWhileASiblingDoes(t *testing.T
 	}
 
 	beside := digests(Items(preview, keys, ArchAMD64))
-	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside})
+	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside}, appsStanding{})
 	for _, r := range shared {
 		if r.kind == KindUser {
 			t.Error("destroying one class takes the deploy principal a standing sibling still deploys as")
@@ -180,7 +180,7 @@ func TestNothingIsEverTakenAfterTheStampButTheRootAboveIt(t *testing.T) {
 		"the last class on the host": {Class: preview, Observed: map[string]string{}},
 		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))},
 	} {
-		taken := removing(standing, sibling)
+		taken := removing(standing, sibling, appsStanding{})
 		stamp := index(taken, ClassDir(production))
 		if stamp < 0 {
 			t.Fatalf("destroying %s never takes %s, and the stamp stands over a host that holds nothing", name, ClassDir(production))
@@ -204,7 +204,7 @@ func TestDestroyOfAHalfWrittenHostNamesWhatStandsAndNothingBeside(t *testing.T) 
 	}
 	taken := removing(
 		Reading{Arch: ArchAMD64, Class: production, Observed: half},
-		Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}},
+		Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{},
 	)
 	for _, r := range taken {
 		if _, stands := half[r.kind+" "+r.path]; !stands {
