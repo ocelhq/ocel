@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -51,6 +52,7 @@ type Store struct {
 	Token    string
 	HTTP     Doer
 	Sleep    func(time.Duration)
+	Verify   ChecksumVerifier
 }
 
 func DefaultDir() (string, error) {
@@ -75,6 +77,7 @@ func New(version string) (*Store, error) {
 		Token:    os.Getenv(TokenEnvVar),
 		HTTP:     &http.Client{Timeout: 10 * time.Minute},
 		Sleep:    time.Sleep,
+		Verify:   VerifyChecksums,
 	}, nil
 }
 
@@ -149,12 +152,37 @@ func hashFile(path string) (string, error) {
 }
 
 func (s *Store) Checksums(ctx context.Context) (map[string]string, error) {
-	body, err := s.get(ctx, ChecksumsAsset)
+	checksums, err := s.read(ctx, ChecksumsAsset)
+	if err != nil {
+		return nil, err
+	}
+	signature, err := s.read(ctx, SignatureAsset)
+	if err != nil {
+		return nil, fmt.Errorf("read the signature release %s publishes over %s: %w", s.Version, ChecksumsAsset, err)
+	}
+
+	verify := s.Verify
+	if verify == nil {
+		verify = VerifyChecksums
+	}
+	if err := verify(checksums, signature, SignerIdentity(s.Version)); err != nil {
+		return nil, err
+	}
+	return ParseChecksums(bytes.NewReader(checksums))
+}
+
+func (s *Store) read(ctx context.Context, asset string) ([]byte, error) {
+	body, err := s.get(ctx, asset)
 	if err != nil {
 		return nil, err
 	}
 	defer body.Close()
-	return ParseChecksums(body)
+
+	var held bytes.Buffer
+	if err := fill(&held, body); err != nil {
+		return nil, fmt.Errorf("download %s: %w", asset, err)
+	}
+	return held.Bytes(), nil
 }
 
 func (s *Store) install(ctx context.Context, kind Kind, name string, platform Platform, digest, dir, executable string) error {
