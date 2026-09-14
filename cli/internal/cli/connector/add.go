@@ -58,6 +58,10 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 		if err != nil {
 			return err
 		}
+		if len(binary) > provider.MaxMessageBytes {
+			return fmt.Errorf("the %s connector built for linux/%s is %d bytes, over the %d the provider channel carries in one message",
+				vendor, described.GetArch(), len(binary), provider.MaxMessageBytes)
+		}
 		config, err := json.Marshal(connectorkit.Config{
 			Console:        opts.apiURL,
 			ConnectorID:    held.ID,
