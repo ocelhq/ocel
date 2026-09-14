@@ -54,10 +54,12 @@ func keysIn(rendered string) []providerkit.HostKey {
 	return keys
 }
 
+const certAuthority = "@cert-authority"
+
 func markedIn(rendered string) bool {
 	scanner := bufio.NewScanner(strings.NewReader(rendered))
 	for scanner.Scan() {
-		if strings.HasPrefix(scanner.Text(), "@") {
+		if fields := strings.Fields(scanner.Text()); len(fields) > 0 && fields[0] == certAuthority {
 			return true
 		}
 	}
