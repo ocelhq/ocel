@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
@@ -28,21 +29,25 @@ const (
 
 	parameterARNPrefix = "arn:aws:ssm:*:*:parameter"
 
-	appBucketARN         = "arn:aws:s3:::*"
-	appFunctionARN       = "arn:aws:lambda:*:*:function:*"
-	appLayerARN          = "arn:aws:lambda:*:*:layer:*"
-	appRoleARN           = "arn:aws:iam::*:role/*"
-	appSecretARN         = "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
-	appClusterARN        = "arn:aws:rds:*:*:cluster:*"
-	appInstanceARN       = "arn:aws:rds:*:*:db:*"
-	appSubnetGroupARN    = "arn:aws:rds:*:*:subgrp:*"
-	appSecurityGroupARN  = "arn:aws:ec2:*:*:security-group/*"
-	appVPCARN            = "arn:aws:ec2:*:*:vpc/*"
-	appRepositoryARN     = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"
-	appLogGroupARN       = "arn:aws:logs:*:*:log-group:/ocel/*"
-	functionLogGroupARN  = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
-	appTargetGroupARN    = "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
-	appTaskDefinitionARN = "arn:aws:ecs:*:*:task-definition/*:*"
+	appScopePrefix = awsports.AppScope + "-"
+
+	appBucketARN      = "arn:aws:s3:::" + appScopePrefix + "*"
+	appFunctionARN    = "arn:aws:lambda:*:*:function:*"
+	appLayerARN       = "arn:aws:lambda:*:*:layer:*"
+	appRoleARN        = "arn:aws:iam::*:role/*"
+	appSecretARN      = "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
+	appClusterARN     = "arn:aws:rds:*:*:cluster:" + appScopePrefix + "*"
+	appInstanceARN    = "arn:aws:rds:*:*:db:" + appScopePrefix + "*"
+	appSubnetGroupARN = "arn:aws:rds:*:*:subgrp:" + appScopePrefix + "*"
+
+	managedSecretClusterTagKey = "aws:rds:primaryDBClusterArn"
+	appSecurityGroupARN        = "arn:aws:ec2:*:*:security-group/*"
+	appVPCARN                  = "arn:aws:ec2:*:*:vpc/*"
+	appRepositoryARN           = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"
+	appLogGroupARN             = "arn:aws:logs:*:*:log-group:/ocel/*"
+	functionLogGroupARN        = "arn:aws:logs:*:*:log-group:/aws/lambda/*"
+	appTargetGroupARN          = "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
+	appTaskDefinitionARN       = "arn:aws:ecs:*:*:task-definition/*:*"
 
 	substrateClusterARN  = "arn:aws:ecs:*:*:cluster/ocel-*"
 	substrateServiceARN  = "arn:aws:ecs:*:*:service/ocel-*/*"
@@ -125,6 +130,10 @@ func taggedOnCreate() map[string]any {
 
 func taggedByOcel() map[string]any {
 	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagPattern}}
+}
+
+func managedByAnAppCluster() map[string]any {
+	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + managedSecretClusterTagKey: appClusterARN}}
 }
 
 func withinAppBoundary(ns Namespace) map[string]any {
@@ -549,6 +558,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"},
 			Resources: []string{appSecretARN},
+			Condition: managedByAnAppCluster(),
 		},
 		{
 			Actions:   []string{"logs:CreateLogGroup"},
@@ -786,7 +796,9 @@ func bootstrapProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 				"lambda:UpdateEventSourceMapping",
 			},
 			Resources: []string{bootstrapEventSourceARN},
-			Condition: inCallerAccount(),
+			Condition: map[string]any{
+				"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction},
+			},
 		},
 		{
 			Actions: []string{
