@@ -61,6 +61,19 @@ type release struct {
 	requests atomic.Int32
 	statuses map[string][]int
 	auth     atomic.Value
+	unsigned atomic.Bool
+	altered  atomic.Bool
+}
+
+func countersigned(checksums, identity string) []byte {
+	return fmt.Appendf(nil, "%s signs %s", identity, digestOf([]byte(checksums)))
+}
+
+func countersigns(checksums, signature []byte, identity string) error {
+	if want := countersigned(string(checksums), identity); !bytes.Equal(signature, want) {
+		return fmt.Errorf("%s carries %q, want %q", SignatureAsset, signature, want)
+	}
+	return nil
 }
 
 func fakeRelease(t *testing.T, names ...string) *release {
@@ -94,8 +107,20 @@ func fakeRelease(t *testing.T, names ...string) *release {
 			w.WriteHeader(status)
 			return
 		}
-		if asset == "checksums.txt" {
-			_, _ = w.Write([]byte(checksums.String()))
+		if asset == ChecksumsAsset {
+			body := checksums.String()
+			if rel.altered.Load() {
+				body += digestOf([]byte("evil")) + "  ocel-provider-evil_" + testVersion + "_linux_amd64.tar.gz\n"
+			}
+			_, _ = w.Write([]byte(body))
+			return
+		}
+		if asset == SignatureAsset {
+			if rel.unsigned.Load() {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = w.Write(countersigned(checksums.String(), SignerIdentity(testVersion)))
 			return
 		}
 		body, held := rel.archives[asset]
@@ -119,6 +144,7 @@ func storeFor(t *testing.T, rel *release) *Store {
 		BaseURL:  rel.server.URL,
 		HTTP:     rel.server.Client(),
 		Sleep:    func(time.Duration) {},
+		Verify:   countersigns,
 	}
 }
 
@@ -430,6 +456,60 @@ func TestATokenIsSentAsABearerAgainstTheRateLimit(t *testing.T) {
 	}
 	if got := rel.auth.Load(); got != "Bearer gh-token" {
 		t.Fatalf("Authorization = %v, want a bearer token", got)
+	}
+}
+
+func TestChecksumsAReleaseSignsNothingOverArePinnedNowhere(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	rel.unsigned.Store(true)
+	store := storeFor(t, rel)
+
+	_, err := store.Checksums(context.Background())
+	if err == nil {
+		t.Fatal("Checksums() error = nil, want checksums with no signature beside them refused")
+	}
+	if !strings.Contains(err.Error(), SignatureAsset) {
+		t.Errorf("error %q does not name the signature it looked for", err.Error())
+	}
+}
+
+func TestChecksumsAlteredAfterTheReleaseSignedThemArePinnedNowhere(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	rel.altered.Store(true)
+	store := storeFor(t, rel)
+
+	sums, err := store.Checksums(context.Background())
+	if err == nil {
+		t.Fatal("Checksums() error = nil, want checksums the signature does not cover refused")
+	}
+	if sums != nil {
+		t.Fatalf("Checksums() = %v, want nothing to pin", sums)
+	}
+}
+
+func TestAReleaseSignedByAnotherWorkflowIsPinnedNowhere(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	store := storeFor(t, rel)
+	store.Verify = func(checksums, signature []byte, identity string) error {
+		return countersigns(checksums, signature, "https://github.com/elsewhere/.github/workflows/binaries.yml@refs/tags/v"+testVersion)
+	}
+
+	if _, err := store.Checksums(context.Background()); err == nil {
+		t.Fatal("Checksums() error = nil, want a signature made under another identity refused")
+	}
+}
+
+func TestTheIdentityAReleaseMustBeSignedUnderNamesTheTagBeingRun(t *testing.T) {
+	t.Parallel()
+
+	if got, want := SignerIdentity(testVersion), SignerWorkflow+"@refs/tags/v"+testVersion; got != want {
+		t.Fatalf("SignerIdentity(%q) = %q, want %q", testVersion, got, want)
 	}
 }
 

@@ -1,7 +1,9 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -30,11 +32,40 @@ func releaseServing(t *testing.T, names ...string) *httptest.Server {
 	fmt.Fprintf(&checksums, "%064x  ocel_%s_linux_amd64.tar.gz\n", 99, locatedVersion)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch filepath.Base(r.URL.Path) {
+		case providers.ChecksumsAsset:
+			_, _ = w.Write([]byte(checksums.String()))
+		case providers.SignatureAsset:
+			_, _ = w.Write(countersigned(checksums.String()))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func countersigned(checksums string) []byte {
+	sum := sha256.Sum256([]byte(checksums))
+	return fmt.Appendf(nil, "%s signs %x", providers.SignerIdentity(locatedVersion), sum)
+}
+
+func countersigns(checksums, signature []byte, identity string) error {
+	if want := countersigned(string(checksums)); !bytes.Equal(signature, want) || identity != providers.SignerIdentity(locatedVersion) {
+		return fmt.Errorf("%s carries %q, want %q signed as %s", providers.SignatureAsset, signature, want, identity)
+	}
+	return nil
+}
+
+func unsignedRelease(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if filepath.Base(r.URL.Path) != providers.ChecksumsAsset {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		_, _ = w.Write([]byte(checksums.String()))
+		fmt.Fprintf(w, "%064x  %s\n", 1, providers.AssetName(providers.KindProvider, "aws", locatedVersion, "linux", "amd64"))
 	}))
 	t.Cleanup(server.Close)
 	return server
@@ -49,6 +80,7 @@ func storeOn(t *testing.T, server *httptest.Server, goos, goarch string) *provid
 		BaseURL:  server.URL,
 		HTTP:     server.Client(),
 		Sleep:    func(time.Duration) {},
+		Verify:   countersigns,
 	}
 }
 
@@ -239,5 +271,40 @@ func TestAProvidersDirResolvesWithNothingOnPATH(t *testing.T) {
 	}
 	if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
 		t.Fatalf("%s was written for a run that fetched nothing", lockfile.Name)
+	}
+}
+
+func TestAReleaseThatSignsNoChecksumsPinsNothing(t *testing.T) {
+	t.Parallel()
+
+	store := storeOn(t, unsignedRelease(t), "linux", "amd64")
+	projectDir := t.TempDir()
+
+	_, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform)
+	if err == nil {
+		t.Fatal("locate() error = nil, want a release that signs no checksums refused")
+	}
+	if !strings.Contains(err.Error(), providers.SignatureAsset) {
+		t.Errorf("error %q does not name the signature it looked for", err.Error())
+	}
+	if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
+		t.Fatalf("%s was written from checksums nothing signed", lockfile.Name)
+	}
+}
+
+func TestChecksumsTheSignatureDoesNotCoverPinNothing(t *testing.T) {
+	t.Parallel()
+
+	store := storeOn(t, releaseServing(t, "aws"), "linux", "amd64")
+	store.Verify = func(checksums, signature []byte, identity string) error {
+		return countersigns(append(checksums, '\n'), signature, identity)
+	}
+	projectDir := t.TempDir()
+
+	if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform); err == nil {
+		t.Fatal("locate() error = nil, want checksums the signature does not cover refused")
+	}
+	if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
+		t.Fatalf("%s was written from checksums the signature does not cover", lockfile.Name)
 	}
 }
