@@ -173,6 +173,15 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		writeResult(w, map[string]any{"id": name})
 	})
 
+	mux.HandleFunc("GET /accounts/acct/workers/scripts/{name}/script-settings", func(w http.ResponseWriter, r *http.Request) {
+		settings, ok := m.scriptSettings[r.PathValue("name")]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		writeResult(w, settings)
+	})
+
 	mux.HandleFunc("GET /accounts/acct/workers/scripts/{name}/settings", func(w http.ResponseWriter, r *http.Request) {
 		settings, ok := m.scriptSettings[r.PathValue("name")]
 		if !ok {
@@ -317,7 +326,26 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		writeResult(w, m.existingTokens)
 	})
 
+	mux.HandleFunc("POST /user/tokens", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		id := fmt.Sprintf("token-new-%d", len(m.existingTokens)+1)
+		m.existingTokens = append(m.existingTokens, map[string]any{"id": id, "name": body["name"]})
+		writeResult(w, map[string]any{"id": id, "name": body["name"], "value": "token-value-" + id})
+	})
+
+	mux.HandleFunc("GET /user/tokens/verify", func(w http.ResponseWriter, _ *http.Request) {
+		writeResult(w, map[string]any{"id": "verified", "status": "active"})
+	})
+
+	mux.HandleFunc("GET /user/tokens/permission_groups", func(w http.ResponseWriter, r *http.Request) {
+		writeResult(w, []map[string]any{{"id": "group-r2-write", "name": r.URL.Query().Get("name")}})
+	})
+
 	mux.HandleFunc("DELETE /user/tokens/{id}", func(w http.ResponseWriter, r *http.Request) {
+		m.existingTokens = slices.DeleteFunc(m.existingTokens, func(token map[string]any) bool {
+			return token["id"] == r.PathValue("id")
+		})
 		m.deletedTokens = append(m.deletedTokens, r.PathValue("id"))
 		writeResult(w, map[string]any{"id": r.PathValue("id")})
 	})
