@@ -1,0 +1,273 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"maps"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"golang.org/x/sys/unix"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
+)
+
+const (
+	ProcRoot      = "/proc"
+	headerWindow  = 5 * time.Second
+	answerWindow  = 30 * time.Second
+	inspectWindow = 10 * time.Second
+	inspectLimit  = 4 << 20
+)
+
+var containerScope = regexp.MustCompile(`docker[-/]([0-9a-f]{64})(?:\.scope)?$`)
+
+type peerKey struct{}
+
+type peer struct {
+	pid int
+	err error
+}
+
+func PeerPID(conn net.Conn) (int, error) {
+	over, ok := conn.(*net.UnixConn)
+	if !ok {
+		return 0, fmt.Errorf("the connection came over %s, and a caller is known by its unix peer credentials alone", conn.RemoteAddr().Network())
+	}
+	raw, err := over.SyscallConn()
+	if err != nil {
+		return 0, err
+	}
+	var cred *unix.Ucred
+	var asked error
+	if err := raw.Control(func(fd uintptr) {
+		cred, asked = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
+	}); err != nil {
+		return 0, err
+	}
+	if asked != nil {
+		return 0, fmt.Errorf("read the caller's credentials: %w", asked)
+	}
+	return int(cred.Pid), nil
+}
+
+func ContainerID(cgroup string) (string, bool) {
+	for line := range strings.SplitSeq(cgroup, "\n") {
+		_, path, split := strings.Cut(line, "::")
+		if !split {
+			fields := strings.SplitN(line, ":", 3)
+			if len(fields) != 3 {
+				continue
+			}
+			path = fields[2]
+		}
+		if match := containerScope.FindStringSubmatch(strings.TrimSpace(path)); match != nil {
+			return match[1], true
+		}
+	}
+	return "", false
+}
+
+type Inspector interface {
+	Manifest(ctx context.Context, container string) (string, error)
+}
+
+type Resolver interface {
+	Resolve(ctx context.Context, manifest live.Manifest) (map[string]string, error)
+}
+
+type Server struct {
+	Proc    string
+	Inspect Inspector
+	Resolve Resolver
+}
+
+func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
+	server := &http.Server{
+		Handler:           s.Handler(),
+		ReadHeaderTimeout: headerWindow,
+		WriteTimeout:      answerWindow,
+		ConnContext: func(ctx context.Context, conn net.Conn) context.Context {
+			pid, err := PeerPID(conn)
+			return context.WithValue(ctx, peerKey{}, peer{pid: pid, err: err})
+		},
+	}
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		<-ctx.Done()
+		drain, cancel := context.WithTimeout(context.Background(), headerWindow)
+		defer cancel()
+		_ = server.Shutdown(drain)
+	}()
+	err := server.Serve(ln)
+	if errors.Is(err, http.ErrServerClosed) {
+		<-stopped
+		return nil
+	}
+	return err
+}
+
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc(http.MethodGet+" "+live.ValuesPath, s.answer)
+	return mux
+}
+
+func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
+	held, _ := r.Context().Value(peerKey{}).(peer)
+	if held.err != nil {
+		http.Error(w, "the caller could not be identified: "+held.err.Error(), http.StatusForbidden)
+		return
+	}
+	container, err := s.containerOf(held.pid)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+	inspecting, cancel := context.WithTimeout(r.Context(), inspectWindow)
+	defer cancel()
+	raw, err := s.Inspect.Manifest(inspecting, container)
+	if err != nil {
+		http.Error(w, "the box could not read what the caller's container was handed: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	if raw == "" {
+		http.Error(w, "the caller's container carries no live-value manifest", http.StatusNotFound)
+		return
+	}
+	manifest, err := live.Parse([]byte(raw))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	if !manifest.Live() {
+		http.Error(w, "the caller's container carries a manifest naming nothing live", http.StatusNotFound)
+		return
+	}
+	resolved, err := s.Resolve.Resolve(r.Context(), manifest)
+	if err != nil {
+		http.Error(w, "resolve the caller's values: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(live.Answer{Values: resolved})
+}
+
+func (s *Server) containerOf(pid int) (string, error) {
+	if pid <= 0 {
+		return "", errors.New("the caller presented no pid")
+	}
+	proc := s.Proc
+	if proc == "" {
+		proc = ProcRoot
+	}
+	cgroup, err := os.ReadFile(filepath.Join(proc, strconv.Itoa(pid), "cgroup"))
+	if err != nil {
+		return "", fmt.Errorf("the caller's cgroup could not be read: %w", err)
+	}
+	container, found := ContainerID(string(cgroup))
+	if !found {
+		return "", errors.New("the caller is not a process in a container this box's engine runs")
+	}
+	return container, nil
+}
+
+type Docker struct {
+	host      providerkit.DockerHost
+	transport *http.Transport
+}
+
+func NewDocker() (*Docker, error) {
+	host, err := providerkit.OpenDockerHost()
+	if err != nil {
+		return nil, err
+	}
+	return &Docker{host: host, transport: host.Transport()}, nil
+}
+
+func (d *Docker) Manifest(ctx context.Context, container string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+container+"/json", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := (&http.Client{Transport: d.transport}).Do(req)
+	if err != nil {
+		return "", fmt.Errorf("ask the daemon at %s about the container: %w", d.host.Address, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		said, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", fmt.Errorf("the daemon at %s answered %q about the container: %s", d.host.Address, resp.Status, strings.TrimSpace(string(said)))
+	}
+	var inspected struct {
+		Config struct {
+			Env []string `json:"Env"`
+		} `json:"Config"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, inspectLimit)).Decode(&inspected); err != nil {
+		return "", fmt.Errorf("read what the daemon says about the container: %w", err)
+	}
+	return ManifestIn(inspected.Config.Env), nil
+}
+
+func ManifestIn(env []string) string {
+	for _, entry := range env {
+		if value, named := strings.CutPrefix(entry, live.EnvVar+"="); named {
+			return value
+		}
+	}
+	return ""
+}
+
+type Store struct {
+	ClassRoot string
+	StateRoot string
+}
+
+func (s Store) Resolve(ctx context.Context, manifest live.Manifest) (map[string]string, error) {
+	reader := values.Reader{
+		Records:     live.Records{Root: s.StateRoot},
+		Sealer:      live.Sealer{Root: s.ClassRoot},
+		Scope:       values.Scope{Project: manifest.Slug, Class: providerkit.Class(manifest.Class)},
+		Environment: manifest.Environment,
+	}
+	cells := make([]values.Cell, 0, len(manifest.Keys))
+	for _, key := range manifest.Keys {
+		cells = append(cells, values.Cell{Folder: key.Folder, Key: key.Key})
+	}
+	resolved, err := reader.Values(ctx, cells)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(manifest.Bindings))
+	for _, binding := range manifest.Bindings {
+		names = append(names, binding.Name)
+	}
+	records, err := reader.Bindings(ctx, names)
+	if err != nil {
+		return nil, err
+	}
+	return merged(resolved, manifest.Bindings, records), nil
+}
+
+func merged(resolved map[string]string, bindings []rt.Binding, records []values.Published) map[string]string {
+	out := make(map[string]string, len(resolved)+len(records))
+	maps.Copy(out, resolved)
+	for i, record := range records {
+		out[bindings[i].Key] = string(record.Value)
+	}
+	return out
+}
