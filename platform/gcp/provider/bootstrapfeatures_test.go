@@ -65,6 +65,42 @@ func TestTheServicesTheLoadBalancerNeedsAreOnlyDemandedWhenItIsBeingStoodUp(t *t
 	}
 }
 
+func TestAnAlbBootstrapChecksTheComputeAndCertificateManagerPermissionsAndNamesTheRolesThatCoverThem(t *testing.T) {
+	t.Parallel()
+
+	fronted := permissionsFor([]string{albFeature})
+	for _, permission := range []string{
+		"compute.urlMaps.update", "compute.regionNetworkEndpointGroups.create", "certificatemanager.certmapentries.create",
+	} {
+		if !slices.Contains(fronted, permission) {
+			t.Errorf("an %q bootstrap checks %v, want %s among them: the front is raised with it, and a hostname is bound with it", alb.Kind, fronted, permission)
+		}
+	}
+	for _, permission := range bootstrapPermissions {
+		if !slices.Contains(fronted, permission) {
+			t.Errorf("an %q bootstrap no longer checks %s", alb.Kind, permission)
+		}
+	}
+	plain := permissionsFor(nil)
+	for _, permission := range plain {
+		if strings.HasPrefix(permission, "compute.") || strings.HasPrefix(permission, "certificatemanager.") {
+			t.Errorf("a bootstrap standing no load balancer up checks %s, and a credential would be refused for a service it never calls", permission)
+		}
+	}
+
+	roles := rolesCovering([]string{albFeature})
+	for _, role := range []string{"roles/compute.loadBalancerAdmin", "roles/certificatemanager.owner"} {
+		if !slices.Contains(roles, role) {
+			t.Errorf("the refusal for an %q bootstrap names %v, want %s among them so the reader knows what to grant", alb.Kind, roles, role)
+		}
+	}
+	if slices.ContainsFunc(rolesCovering(nil), func(role string) bool {
+		return strings.HasPrefix(role, "roles/compute.") || strings.HasPrefix(role, "roles/certificatemanager.")
+	}) {
+		t.Errorf("the refusal for a plain bootstrap names %v, and a role for a front nothing stands up is one more than the credential needs", rolesCovering(nil))
+	}
+}
+
 func TestThePlanNamesTheLoadBalancerGroupOnlyForTheEdgeThatStandsItUp(t *testing.T) {
 	t.Parallel()
 
