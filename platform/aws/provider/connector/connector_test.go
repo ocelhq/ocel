@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"slices"
 	"strings"
@@ -12,6 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -23,6 +27,141 @@ const defaultNamespace = bootstrap.Namespace(providerkit.DefaultNamespace)
 var sealingKeys = []string{
 	"arn:aws:kms:eu-west-1:111122223333:key/production-key",
 	"arn:aws:kms:eu-west-1:111122223333:key/preview-key",
+}
+
+const publicKey = "cHVibGljLWtleS1wdWJsaWMta2V5LXB1YmxpYy1rZXk="
+
+type keyStore struct {
+	put     []*ssm.PutParameterInput
+	deleted []string
+}
+
+func (k *keyStore) PutParameter(_ context.Context, in *ssm.PutParameterInput, _ ...func(*ssm.Options)) (*ssm.PutParameterOutput, error) {
+	k.put = append(k.put, in)
+	return &ssm.PutParameterOutput{}, nil
+}
+
+func (k *keyStore) DeleteParameter(_ context.Context, in *ssm.DeleteParameterInput, _ ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error) {
+	k.deleted = append(k.deleted, aws.ToString(in.Name))
+	return &ssm.DeleteParameterOutput{}, nil
+}
+
+func TestTheConnectorsKeyIsASecureStringOnlyTheFunctionReadsAndItsPublicHalfIsWhatTheConsoleGets(t *testing.T) {
+	t.Parallel()
+
+	store := &keyStore{}
+	public, err := mintKey(context.Background(), store, defaultNamespace)
+	if err != nil {
+		t.Fatalf("mintKey: %v", err)
+	}
+	if len(store.put) != 1 {
+		t.Fatalf("minting wrote %d parameters, want the one", len(store.put))
+	}
+	written := store.put[0]
+	if aws.ToString(written.Name) != KeyParameter(defaultNamespace) || written.Type != ssmtypes.ParameterTypeSecureString {
+		t.Errorf("the key was written as %s of type %s, want %s as a SecureString", aws.ToString(written.Name), written.Type, KeyParameter(defaultNamespace))
+	}
+	seed, err := base64.StdEncoding.DecodeString(aws.ToString(written.Value))
+	if err != nil || len(seed) != ed25519.SeedSize {
+		t.Fatalf("the parameter holds %q, want a base64 ed25519 seed", aws.ToString(written.Value))
+	}
+	if public != PublicKeyOf(seed) {
+		t.Errorf("the install registers %s while the seed it wrote signs as %s", public, PublicKeyOf(seed))
+	}
+
+	if err := takeKey(context.Background(), store, defaultNamespace); err != nil {
+		t.Fatalf("takeKey: %v", err)
+	}
+	if !slices.Equal(store.deleted, []string{KeyParameter(defaultNamespace)}) {
+		t.Errorf("removal deleted %v, want the key parameter and nothing else", store.deleted)
+	}
+}
+
+func TestTheFunctionReadsItsKeyParameterAndNothingElseInTheStore(t *testing.T) {
+	t.Parallel()
+
+	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
+	rendered, err := templateFor(defaultNamespace, at, Release{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{}`)}, sealingKeys)
+	if err != nil {
+		t.Fatalf("templateFor: %v", err)
+	}
+	var read struct {
+		Resources map[string]struct {
+			Type       string         `json:"Type"`
+			Properties map[string]any `json:"Properties"`
+		} `json:"Resources"`
+		Outputs map[string]struct {
+			Value any `json:"Value"`
+		} `json:"Outputs"`
+	}
+	if err := json.Unmarshal([]byte(rendered), &read); err != nil {
+		t.Fatal(err)
+	}
+	env, _ := read.Resources["ConnectorFunction"].Properties["Environment"].(map[string]any)["Variables"].(map[string]any)
+	if env[KeyParameterEnvVar] != KeyParameter(defaultNamespace) {
+		t.Errorf("the function is told its key is at %v, want %s", env[KeyParameterEnvVar], KeyParameter(defaultNamespace))
+	}
+	if read.Outputs[outputPublicKey].Value != publicKey {
+		t.Errorf("the stack publishes %v as the public key, want the one the install registered so Describe can hand it back", read.Outputs[outputPublicKey].Value)
+	}
+	for _, statement := range tier(defaultNamespace, sealingKeys) {
+		if !slices.Contains(statement.Actions, "ssm:GetParameter") {
+			continue
+		}
+		if want := []string{"arn:aws:ssm:*:*:parameter" + KeyParameter(defaultNamespace)}; !slices.Equal(statement.Resources, want) {
+			t.Errorf("the key grant reaches %v, want %v alone: the passphrase and the edge parameters sit under the same root", statement.Resources, want)
+		}
+	}
+	if strings.Contains(rendered, "ssm:GetParameters") || strings.Contains(rendered, "ssm:GetParametersByPath") {
+		t.Error("the connector may list parameters, and one of them is the passphrase every stack is encrypted under")
+	}
+}
+
+func TestTheConnectorIsWokenOnceAMinuteToBeat(t *testing.T) {
+	t.Parallel()
+
+	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
+	rendered, err := templateFor(defaultNamespace, at, Release{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{}`)}, sealingKeys)
+	if err != nil {
+		t.Fatalf("templateFor: %v", err)
+	}
+	var read struct {
+		Resources map[string]struct {
+			Type       string         `json:"Type"`
+			Properties map[string]any `json:"Properties"`
+		} `json:"Resources"`
+	}
+	if err := json.Unmarshal([]byte(rendered), &read); err != nil {
+		t.Fatal(err)
+	}
+	rule := read.Resources["ConnectorHeartbeat"]
+	if rule.Type != "AWS::Events::Rule" || rule.Properties["ScheduleExpression"] != heartbeatEvery {
+		t.Fatalf("the heartbeat is a %s on %v, want an events rule every minute: a function runs nothing between invocations", rule.Type, rule.Properties["ScheduleExpression"])
+	}
+	targets, _ := rule.Properties["Targets"].([]any)
+	if len(targets) != 1 {
+		t.Fatalf("the rule targets %v, want the function alone", targets)
+	}
+	var woken Wake
+	if err := json.Unmarshal([]byte(targets[0].(map[string]any)["Input"].(string)), &woken); err != nil || woken.Ocel != WakeHeartbeat {
+		t.Errorf("the rule wakes the function with %v, want the heartbeat wake the handler dispatches on", targets[0].(map[string]any)["Input"])
+	}
+	permission := read.Resources["ConnectorHeartbeatInvokes"]
+	if permission.Type != "AWS::Lambda::Permission" || permission.Properties["Principal"] != "events.amazonaws.com" {
+		t.Errorf("events may not invoke the function: %+v", permission)
+	}
+	if _, scoped := permission.Properties["SourceArn"]; !scoped {
+		t.Error("the events permission names no source rule, so any rule in the account could wake the connector")
+	}
+}
+
+func TestAnInstallNamingNoPublicKeyIsRefused(t *testing.T) {
+	t.Parallel()
+
+	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
+	if _, err := templateFor(defaultNamespace, at, Release{Version: "0.9.9", Config: []byte(`{}`)}, sealingKeys); err == nil {
+		t.Error("a template with no public key rendered, and the console refuses every heartbeat from a connector that published none")
+	}
 }
 
 func TestTheStackStandsApartFromEveryBootstrapStack(t *testing.T) {
@@ -88,8 +227,7 @@ func TestTheTemplateCarriesTheCodeTheBucketStagesAndTheConfigItRuns(t *testing.T
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
-	rendered, err := templateFor(defaultNamespace, at, "0.9.9",
-		[]byte(`{"console":"https://console.example.com"}`), sealingKeys)
+	rendered, err := templateFor(defaultNamespace, at, Release{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, sealingKeys)
 	if err != nil {
 		t.Fatalf("templateFor: %v", err)
 	}
@@ -149,8 +287,7 @@ func TestTheKeyGrantNamesTheKeysThisNamespaceSealedUnderAndNoOther(t *testing.T)
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
-	rendered, err := templateFor(defaultNamespace, at, "0.9.9",
-		[]byte(`{"console":"https://console.example.com"}`), sealingKeys)
+	rendered, err := templateFor(defaultNamespace, at, Release{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, sealingKeys)
 	if err != nil {
 		t.Fatalf("templateFor: %v", err)
 	}
@@ -200,8 +337,7 @@ func TestATemplateNamingNoKeyIsRefused(t *testing.T) {
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
-	if _, err := templateFor(defaultNamespace, at, "0.9.9",
-		[]byte(`{"console":"https://console.example.com"}`), nil); err == nil {
+	if _, err := templateFor(defaultNamespace, at, Release{Version: "0.9.9", PublicKey: publicKey, Config: []byte(`{"console":"https://console.example.com"}`)}, nil); err == nil {
 		t.Error("a template naming no key rendered, and an empty Resources list is a policy CloudFormation refuses or a grant that reaches nothing")
 	}
 }
