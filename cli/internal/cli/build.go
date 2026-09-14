@@ -65,7 +65,7 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 	defer run.Close()
 
 	urls := appurl.Production(cfg)
-	if err := deps.BuildApp(ctx, cfg, appurl.BuildEnv(urls), stderr); err != nil {
+	if err := deps.BuildApp(ctx, cfg, appurl.BuildEnv(cfg, urls), stderr); err != nil {
 		return err
 	}
 	if err := clientenv.Record(cfg.Dir, builtInClients(cfg, urls)); err != nil {
@@ -87,14 +87,15 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 
 func builtInClients(cfg *projectconfig.Config, urls map[string]string) []clientenv.App {
 	if len(cfg.Apps) == 0 {
-		return []clientenv.App{{Dir: cfg.Dir, Variables: appurl.Variables(urls[envwire.RootApp])}}
+		return []clientenv.App{{Dir: cfg.Dir, Runtime: envwire.RootRuntime, Variables: appurl.Variables(envwire.RootRuntime, urls[envwire.RootApp])}}
 	}
 	apps := make([]clientenv.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		apps = append(apps, clientenv.App{
 			Name:      a.Name,
 			Dir:       filepath.Join(cfg.Dir, a.Path),
-			Variables: appurl.Variables(urls[a.Name]),
+			Runtime:   a.Runtime.Name,
+			Variables: appurl.Variables(a.Runtime.Name, urls[a.Name]),
 		})
 	}
 	return apps

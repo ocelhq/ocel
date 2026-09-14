@@ -94,7 +94,7 @@ func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := refuseOwnedNames(entry.App, held); err != nil {
+		if err := refuseOwnedNames(entry.App, entry.Manifest.GetRuntime().GetName(), held); err != nil {
 			return err
 		}
 		if len(held.Secrets) == 0 {
@@ -129,9 +129,9 @@ func (r *deployRun) storedCells(ctx context.Context) (map[values.Cell]bool, erro
 	return stored, nil
 }
 
-func refuseOwnedNames(app string, held AppValues) error {
+func refuseOwnedNames(app, runtime string, held AppValues) error {
 	var injected, served, owned []string
-	for _, key := range declaredNames(held) {
+	for _, key := range declaredNames(runtime, held) {
 		switch {
 		case key == InjectedPortName:
 			injected = append(injected, key)
@@ -159,11 +159,11 @@ func refuseOwnedNames(app string, held AppValues) error {
 	return nil
 }
 
-func declaredNames(held AppValues) []string {
+func declaredNames(runtime string, held AppValues) []string {
 	names := make([]string, 0, len(held.Plain)+len(held.Sensitive)+len(held.Secrets))
 	for _, named := range []map[string]string{held.Plain, held.Sensitive} {
 		for key := range named {
-			if OcelWritten(key) {
+			if OcelWritten(runtime, key) {
 				continue
 			}
 			names = append(names, key)

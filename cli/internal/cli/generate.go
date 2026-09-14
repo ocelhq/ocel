@@ -57,29 +57,35 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 	if err != nil {
 		return err
 	}
-	if err := generateClientAccessors(cfg, keys); err != nil {
+	named, err := generateClientAccessors(cfg, keys)
+	if err != nil {
 		return err
 	}
 
 	noun := "variables"
-	if len(keys) == 1 {
+	if named == 1 {
 		noun = "variable"
 	}
-	fmt.Fprintf(stdout, "Generated the client accessor for %d client-accessible %s\n", len(keys), noun)
+	fmt.Fprintf(stdout, "Generated the client accessor for %d client-accessible %s\n", named, noun)
 	return nil
 }
 
-func generateClientAccessors(cfg *projectconfig.Config, keys []clientenv.Key) error {
-	if len(cfg.Apps) == 0 {
-		return clientenv.GenerateKeys(cfg.Dir, clientenv.App{Dir: cfg.Dir}, keys)
-	}
-	for _, a := range cfg.Apps {
-		app := clientenv.App{Name: a.Name, Dir: filepath.Join(cfg.Dir, a.Path)}
-		if err := clientenv.GenerateKeys(cfg.Dir, app, keys); err != nil {
-			return err
+func generateClientAccessors(cfg *projectconfig.Config, keys []clientenv.Key) (int, error) {
+	apps := []clientenv.App{{Dir: cfg.Dir, Runtime: envwire.RootRuntime}}
+	if len(cfg.Apps) > 0 {
+		apps = apps[:0]
+		for _, a := range cfg.Apps {
+			apps = append(apps, clientenv.App{Name: a.Name, Dir: filepath.Join(cfg.Dir, a.Path), Runtime: a.Runtime.Name})
 		}
 	}
-	return nil
+	named := 0
+	for _, app := range apps {
+		if err := clientenv.GenerateKeys(cfg.Dir, app, keys); err != nil {
+			return 0, err
+		}
+		named = max(named, len(clientenv.Offered(keys, app.Runtime)))
+	}
+	return named, nil
 }
 
 type noValues struct{}

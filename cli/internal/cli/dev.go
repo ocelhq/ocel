@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -196,10 +197,28 @@ func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.
 	}
 	reportUnreadableLines(stdout, file.Unreadable)
 	srv.UseValues(storeValues(projectEnv, file.Values), envwire.Scope(cfg, false, ""))
-	return discoverAndSync(ctx, srv, cfg, file.Values, run, stdout, stderr)
+	return discoverAndSync(ctx, srv, cfg, file.Values, envwire.DevScope(cfg), run, stdout, stderr)
 }
 
-func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, dotfile map[string]string, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
+func targetScope(cfg *projectconfig.Config, cwd string) envgate.Scope {
+	scope := envwire.DevScope(cfg)
+	target, deepest := -1, -1
+	for i, app := range cfg.Apps {
+		rel, err := filepath.Rel(filepath.Join(cfg.Dir, app.Path), cwd)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if depth := len(filepath.Clean(app.Path)); depth > deepest {
+			target, deepest = i, depth
+		}
+	}
+	if target >= 0 {
+		scope.Apps = []envgate.App{scope.Apps[target]}
+	}
+	return scope
+}
+
+func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, dotfile map[string]string, scope envgate.Scope, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
 	if err := srv.Discover(ctx, cfg, stdout, stderr); err != nil {
 		return nil, refusedSync(srv, err, dotfile, run)
 	}
@@ -217,7 +236,7 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 	if err != nil {
 		return nil, err
 	}
-	if err := generateClientAccessors(cfg, clientKeys); err != nil {
+	if _, err := generateClientAccessors(cfg, clientKeys); err != nil {
 		return nil, err
 	}
 
@@ -230,7 +249,7 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 	}
 
 	reportLiveValues(stdout, syncResult.LiveKeys, run)
-	return resolvedEnv(syncResult.Account.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, syncResult.DevServerAddress, appFolder), nil
+	return resolvedEnv(syncResult.Account.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, syncResult.DevServerAddress, appFolder, scope), nil
 }
 
 func refusedSync(srv *devserver.Server, err error, dotfile map[string]string, run invocation) error {
@@ -370,11 +389,11 @@ func waitExitError(err error) error {
 	return err
 }
 
-func mergeEnv(base []string, projectEnv, liveValues, dotfile map[string]string, resources []resolve.Resource, runtimeAddress, appFolder string) []string {
-	return applyEnv(base, resolvedEnv(projectEnv, liveValues, dotfile, resources, runtimeAddress, appFolder))
+func mergeEnv(base []string, projectEnv, liveValues, dotfile map[string]string, resources []resolve.Resource, runtimeAddress, appFolder string, scope envgate.Scope) []string {
+	return applyEnv(base, resolvedEnv(projectEnv, liveValues, dotfile, resources, runtimeAddress, appFolder, scope))
 }
 
-func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []resolve.Resource, runtimeAddress, appFolder string) map[string]string {
+func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []resolve.Resource, runtimeAddress, appFolder string, scope envgate.Scope) map[string]string {
 	merged := make(map[string]string, len(projectEnv)+len(liveValues)+len(dotfile)+1)
 	for k, v := range projectEnv {
 		merged[k] = v
@@ -395,7 +414,9 @@ func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []
 	}
 	merged[constants.AppFolderEnvName] = appFolder
 	merged[constants.AppURLEnvName] = localURL(merged[portEnv])
-	merged[providerkit.ClientURLEnvName] = merged[constants.AppURLEnvName]
+	if scope.OcelWrites(providerkit.ClientURLEnvName, nil) {
+		merged[providerkit.ClientURLEnvName] = merged[constants.AppURLEnvName]
+	}
 	return merged
 }
 

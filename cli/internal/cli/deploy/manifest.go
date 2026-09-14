@@ -58,7 +58,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	if err != nil {
 		return nil, err
 	}
-	appurl.Prepend(variables, urls)
+	appurl.Prepend(cfg, variables, urls)
 
 	configName := filepath.Base(cfg.Path)
 	if err := checkAppPaths(cfg, configName); err != nil {
@@ -118,7 +118,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, err
 	}
 
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages, compute, images), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.Bindings), functions, variablesByApp(variables, functions))
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.Bindings), functions, variablesByApp(variables, functions))
 	if err != nil {
 		return nil, err
 	}
@@ -212,18 +212,20 @@ func variablesByApp(variables map[string][]manifestbuilder.Variable, functions [
 type appPlan struct {
 	name      string
 	dir       string
+	runtime   string
 	variables []manifestbuilder.Variable
 }
 
 func appPlans(cfg *projectconfig.Config, variables map[string][]manifestbuilder.Variable) []appPlan {
 	if len(cfg.Apps) == 0 {
-		return []appPlan{{dir: cfg.Dir, variables: variables[envwire.RootApp]}}
+		return []appPlan{{dir: cfg.Dir, runtime: envwire.RootRuntime, variables: variables[envwire.RootApp]}}
 	}
 	plans := make([]appPlan, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		plans = append(plans, appPlan{
 			name:      a.Name,
 			dir:       filepath.Join(cfg.Dir, a.Path),
+			runtime:   a.Runtime.Name,
 			variables: variables[a.Name],
 		})
 	}
@@ -248,7 +250,7 @@ func buildEnv(plans []appPlan) map[string]map[string]string {
 func clientApps(plans []appPlan) []clientenv.App {
 	apps := make([]clientenv.App, 0, len(plans))
 	for _, plan := range plans {
-		apps = append(apps, clientenv.App{Name: plan.name, Dir: plan.dir, Variables: plan.variables})
+		apps = append(apps, clientenv.App{Name: plan.name, Dir: plan.dir, Runtime: plan.runtime, Variables: plan.variables})
 	}
 	return apps
 }
@@ -277,7 +279,7 @@ func servedByFunctions(functions []manifestbuilder.Function, cfg *projectconfig.
 	})
 }
 
-func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string, images map[string]string) []manifestbuilder.App {
+func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string, images map[string]string, functions []manifestbuilder.Function) []manifestbuilder.App {
 	byApp := make(map[string][]manifestbuilder.Usage, len(apps))
 	for _, u := range usages {
 		byApp[u.App] = append(byApp[u.App], manifestbuilder.Usage{Type: u.Type, Name: u.Name, Files: u.Files})
@@ -300,10 +302,19 @@ func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string
 	}
 	for _, name := range slices.Sorted(maps.Keys(byApp)) {
 		if !named[name] {
-			out = append(out, manifestbuilder.App{Name: name, Compute: compute, Usages: byApp[name]})
+			out = append(out, manifestbuilder.App{Name: name, Runtime: unnamedRuntime(name, functions), Compute: compute, Usages: byApp[name]})
 		}
 	}
 	return out
+}
+
+func unnamedRuntime(app string, functions []manifestbuilder.Function) manifestbuilder.Runtime {
+	for _, f := range functions {
+		if f.App == app && f.Runtime.Name != "" {
+			return f.Runtime
+		}
+	}
+	return manifestbuilder.Runtime{Name: envwire.RootRuntime}
 }
 
 func healthPathOf(app projectconfig.App) string {
