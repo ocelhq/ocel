@@ -108,6 +108,34 @@ func TestHeartbeatCarriesASelfSignedToken(t *testing.T) {
 	}
 }
 
+func TestOneHeartbeatIsSentForAHostThatIsWokenOnASchedule(t *testing.T) {
+	server, count, bodies := console(t, func(int) int { return http.StatusNoContent })
+
+	seed := make([]byte, ed25519.SeedSize)
+	identity, err := IdentityFromSeed(seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := Spec{
+		Config:   Config{Console: server.URL, ConnectorID: "conn-1", OrganizationID: "org-1", Grants: []string{CapabilityEnvVarsRead}},
+		Version:  "0.0.0-alpha",
+		Identity: identity,
+	}
+	status, err := Heartbeat(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Heartbeat: %v", err)
+	}
+	if status != http.StatusNoContent || count.Load() != 1 {
+		t.Fatalf("status = %d after %d beats, want one 204", status, count.Load())
+	}
+	if len(*bodies) != 1 || (*bodies)[0].Version != "0.0.0-alpha" {
+		t.Fatalf("the console read %+v, want the version and grants one beat carries", *bodies)
+	}
+	if _, err := Heartbeat(context.Background(), Spec{Config: spec.Config}); err == nil {
+		t.Fatal("a heartbeat with no identity was sent, and the console would refuse an unsigned one")
+	}
+}
+
 func TestHeartbeatWipesAfterA404ThatFollowsASuccess(t *testing.T) {
 	server, count, bodies := console(t, func(seen int) int {
 		if seen == 1 {

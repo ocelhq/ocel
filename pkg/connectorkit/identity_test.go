@@ -36,6 +36,33 @@ func TestLoadOrCreateIdentityKeepsTheKeyItWrote(t *testing.T) {
 	}
 }
 
+func TestAnIdentityReadOutOfASecretStoreIsTheOneAFileWouldHold(t *testing.T) {
+	at := filepath.Join(t.TempDir(), "key")
+	filed, err := LoadOrCreateIdentity(at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	written, err := os.ReadFile(at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed, err := base64.StdEncoding.DecodeString(string(written[:len(written)-1]))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stored, err := IdentityFromSeed(seed)
+	if err != nil {
+		t.Fatalf("IdentityFromSeed: %v", err)
+	}
+	if stored.PublicKey() != filed.PublicKey() {
+		t.Fatalf("the seed names %s, the file %s: a host keeping the seed in its secret store must register the key the file would", stored.PublicKey(), filed.PublicKey())
+	}
+	if _, err := IdentityFromSeed(seed[:ed25519.SeedSize-1]); err == nil {
+		t.Fatal("a short seed made an identity")
+	}
+}
+
 func TestPublicKeyIsThirtyTwoRawBytes(t *testing.T) {
 	held, err := LoadOrCreateIdentity(filepath.Join(t.TempDir(), "key"))
 	if err != nil {

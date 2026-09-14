@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	connect "connectrpc.com/connect"
 	"connectrpc.com/validate"
@@ -79,21 +78,11 @@ func Serve(spec Spec) error {
 
 	retired := make(chan struct{})
 	if spec.Identity.Held() {
-		origin, err := originOf(spec.Console)
+		beating, err := beatFor(spec)
 		if err != nil {
 			return err
 		}
-		go (&beat{
-			origin:       origin,
-			connectorID:  spec.ConnectorID,
-			version:      spec.Version,
-			capabilities: spec.Grants,
-			identity:     spec.Identity,
-			keyPath:      spec.KeyPath,
-			configPath:   spec.ConfigPath,
-			client:       &http.Client{Timeout: 20 * time.Second},
-			every:        beatEvery,
-		}).run(ctx, retired)
+		go beating.run(ctx, retired)
 	}
 
 	fmt.Printf("ocel connector %s: %s on %s %s\n", spec.Version, spec.Vendor, ln.Addr().Network(), ln.Addr())
