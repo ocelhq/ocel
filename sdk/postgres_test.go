@@ -11,13 +11,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 	ocel "github.com/ocelhq/ocel/sdk"
 )
 
+const collectorToken = "opensesame"
+
 func collector(t *testing.T, seen *[]map[string]any) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !channel.VerifyAuthHeader(r.Header.Get("Authorization"), collectorToken) {
+			http.Error(w, "this request carries no valid session token", http.StatusForbidden)
+			return
+		}
 		raw, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Errorf("read body: %v", err)
@@ -28,6 +35,7 @@ func collector(t *testing.T, seen *[]map[string]any) *httptest.Server {
 		}
 		body["__path"] = r.URL.Path
 		body["__contentType"] = r.Header.Get("Content-Type")
+		body["__authorization"] = r.Header.Get("Authorization")
 		*seen = append(*seen, body)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte("{}"))
@@ -36,11 +44,29 @@ func collector(t *testing.T, seen *[]map[string]any) *httptest.Server {
 	return srv
 }
 
+func TestADeclarationCarriesTheDevServerToken(t *testing.T) {
+	var seen []map[string]any
+	srv := collector(t, &seen)
+	t.Setenv(constants.PhaseEnvName, "discovery")
+	t.Setenv(constants.DevServerEnvName, srv.URL)
+	t.Setenv(constants.DevServerTokenEnvName, collectorToken)
+
+	ocel.Postgres("main")
+
+	if len(seen) != 1 {
+		t.Fatalf("declares = %d, want 1", len(seen))
+	}
+	if got := seen[0]["__authorization"]; got != channel.FormatAuthHeader(collectorToken) {
+		t.Errorf("Authorization = %v, want the dev server token", got)
+	}
+}
+
 func TestPostgresDeclaresDuringDiscovery(t *testing.T) {
 	var seen []map[string]any
 	srv := collector(t, &seen)
 	t.Setenv(constants.PhaseEnvName, "discovery")
 	t.Setenv(constants.DevServerEnvName, srv.URL)
+	t.Setenv(constants.DevServerTokenEnvName, collectorToken)
 
 	_, file, line, _ := runtime.Caller(0)
 	db := ocel.Postgres("main")
@@ -82,6 +108,7 @@ func TestVersionOverridesTheDeclaredVersion(t *testing.T) {
 	srv := collector(t, &seen)
 	t.Setenv(constants.PhaseEnvName, "discovery")
 	t.Setenv(constants.DevServerEnvName, srv.URL)
+	t.Setenv(constants.DevServerTokenEnvName, collectorToken)
 
 	ocel.Postgres("main", ocel.PostgresVersion("16"))
 
@@ -99,6 +126,7 @@ func TestAccessorsRefuseDuringDiscovery(t *testing.T) {
 	srv := collector(t, &seen)
 	t.Setenv(constants.PhaseEnvName, "discovery")
 	t.Setenv(constants.DevServerEnvName, srv.URL)
+	t.Setenv(constants.DevServerTokenEnvName, collectorToken)
 
 	db := ocel.Postgres("main")
 
