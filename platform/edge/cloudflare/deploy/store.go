@@ -15,6 +15,8 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+var errStoreRequestUnbuildable = errors.New("build deployments-store request")
+
 func unauthorized(res *http.Response) bool {
 	return res != nil && res.StatusCode == http.StatusUnauthorized
 }
@@ -176,7 +178,7 @@ func (p *provider) storeAttempt(ctx context.Context, endpoint, slug, secret, met
 	}
 	req, err := http.NewRequestWithContext(ctx, method, endpoint+"/"+slug+subpath, reader)
 	if err != nil {
-		return nil, fmt.Errorf("build deployments-store request: %w", err)
+		return nil, fmt.Errorf("%w: %w", errStoreRequestUnbuildable, err)
 	}
 	req.Header.Set("Authorization", "Bearer "+secret)
 	if encoded != nil {
