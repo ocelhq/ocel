@@ -1059,4 +1059,7 @@ func TestAPromotionCarriesTheNamesItsDeployResolvedSoTheBoxCanRefuseToServeNone(
 	if !slices.Equal(spec.Declared, []string{"API_TOKEN", "DATABASE_URL", "orders"}) {
 		t.Errorf("the promotion names %v of what the record says web was handed, and a box that is told none of them puts the app back with an empty environment rather than refusing", spec.Declared)
 	}
+	if spec.HealthPath != "/healthz" {
+		t.Errorf("the promotion carries the health path %q, want the record's: a container the box re-creates is handed the path its runtime lets probes through on", spec.HealthPath)
+	}
 }

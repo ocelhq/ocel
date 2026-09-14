@@ -9,6 +9,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -28,7 +29,12 @@ func liveStore(p *vps.Provider) values.Store {
 	return values.Store{Records: p.Records(), Sealer: p.Sealer()}
 }
 
-func resolving(t *testing.T, p *vps.Provider) map[string]string {
+type liveValues struct {
+	declared providerkit.AppValues
+	reads    map[string]string
+}
+
+func resolving(t *testing.T, p *vps.Provider) liveValues {
 	t.Helper()
 	ctx := context.Background()
 	store := liveStore(p)
@@ -50,29 +56,29 @@ func resolving(t *testing.T, p *vps.Provider) map[string]string {
 	}
 
 	reader := values.Reader{Records: p.Records(), Sealer: p.Sealer(), Scope: liveScope()}
-	opened, err := reader.Values(ctx, []values.Cell{{Key: "DATABASE_URL"}})
-	if err != nil {
-		t.Fatalf("opening a secret back through the helper = %v", err)
-	}
 	records, err := reader.Bindings(ctx, []string{"main"})
 	if err != nil {
 		t.Fatalf("resolving a binding back through the helper = %v", err)
 	}
-	if opened["DATABASE_URL"] != liveSecretValue {
-		t.Fatalf("the helper opened %q, and the deploy hands a container what it resolved", opened["DATABASE_URL"])
-	}
-	return map[string]string{
-		"REGION":       livePlainValue,
-		"API_TOKEN":    liveSensitiveValue,
-		"DATABASE_URL": opened["DATABASE_URL"],
-		providerkit.ResourceEnvName(providerkit.BindingPostgres, "main"): string(records[0].Value),
+	return liveValues{
+		declared: providerkit.AppValues{
+			Delivered: map[string]string{"REGION": livePlainValue, "API_TOKEN": liveSensitiveValue},
+			Secrets:   []providerkit.SecretRef{{Key: "DATABASE_URL"}},
+			Bindings:  []providerkit.Binding{{Name: "main", Type: providerkit.BindingPostgres}},
+		},
+		reads: map[string]string{
+			"REGION":       livePlainValue,
+			"API_TOKEN":    liveSensitiveValue,
+			"DATABASE_URL": liveSecretValue,
+			providerkit.ResourceEnvName(providerkit.BindingPostgres, "main"): string(records[0].Value),
+		},
 	}
 }
 
-func liveValuePlan(t *testing.T, tag string, delivered map[string]string) providerkit.StackPlan {
+func liveValuePlan(t *testing.T, tag string, declared providerkit.AppValues) providerkit.StackPlan {
 	t.Helper()
 	plan := livePlan(t, tag)
-	plan.App.Values = providerkit.AppValues{Delivered: delivered}
+	plan.App.Values = declared
 	return plan
 }
 
@@ -96,16 +102,16 @@ func (vm machine) reads(t *testing.T, container, name string) string {
 func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftOnTheBox(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
-	delivered := resolving(t, p)
-	delivered["RELEASE"] = "handed-by-the-deploy"
+	held := resolving(t, p)
+	held.declared.Delivered["RELEASE"] = "handed-by-the-deploy"
 	spoken := &said{}
-	standing, err := p.ProvisionContainers(context.Background(), liveValuePlan(t, "one", delivered), spoken)
+	standing, err := p.ProvisionContainers(context.Background(), liveValuePlan(t, "one", held.declared), spoken)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() with values = %v", err)
 	}
 	physical := standing[0].Physical
 
-	for name, want := range delivered {
+	for name, want := range held.reads {
 		if got := vm.reads(t, physical, name); got != want {
 			t.Errorf("the app reads %s as %q off its own environment, want %q", name, got, want)
 		}
@@ -127,23 +133,42 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	if output == "" {
 		t.Fatal("the deploy said nothing at all, so what it does not say proves nothing")
 	}
-	for name, value := range delivered {
+	for name, value := range held.reads {
 		if strings.Contains(output, value) {
 			t.Errorf("%s's value is in what this deploy said:\n%s", name, output)
 		}
 	}
 
-	held := vm.inspects(t, "container", physical, "{{json .Config.Env}}")
-	if !strings.Contains(held, liveSecretValue) {
-		t.Errorf("the container's configuration reads %q and does not carry the secret: an env file hides nothing from an inspect, and a test that says it does would be recording a promise ocel never made", held)
+	inspected := vm.inspects(t, "container", physical, "{{json .Config.Env}}")
+	for _, value := range []string{liveSecretValue, liveBindingPassword} {
+		if strings.Contains(inspected, value) {
+			t.Errorf("the container's configuration reads %q and carries a value the runtime reads live: anyone who may inspect the container would read it", inspected)
+		}
+	}
+	if !strings.Contains(inspected, liveSensitiveValue) {
+		t.Errorf("the container's configuration reads %q and does not carry the sensitive value the deploy baked in", inspected)
+	}
+
+	rotated := liveSecretValue + "-rotated"
+	if _, err := liveStore(p).Set(context.Background(), liveScope(), values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, rotated, nil); err != nil {
+		t.Fatalf("rotating the secret after the deploy = %v", err)
+	}
+	deadline := time.Now().Add(3 * rt.StalenessBound)
+	for {
+		if got := vm.reads(t, physical, "DATABASE_URL"); got == rotated {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the app still reads the old DATABASE_URL %s after the secret was rotated on the box, and a live value lands without a deploy", 3*rt.StalenessBound)
+		}
+		time.Sleep(5 * time.Second)
 	}
 }
 
 func TestLiveTheEnvFileStandsAtSixHundredForTheDeployLoginForAsLongAsItExists(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
-	delivered := resolving(t, p)
-	plan := liveValuePlan(t, "two", delivered)
+	plan := liveValuePlan(t, "two", resolving(t, p).declared)
 	physical := host.ContainerName(plan.Ref.Name.String(), plan.App.App, plan.App.Deployment, plan.App.Image)
 	path := host.EnvFile(providerkit.ClassProduction, physical)
 
@@ -180,8 +205,8 @@ func TestLiveTheEnvFileStandsAtSixHundredForTheDeployLoginForAsLongAsItExists(t 
 func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
-	delivered := resolving(t, p)
-	broken, err := p.ProvisionContainers(context.Background(), liveValuePlan(t, "crasher", delivered), nil)
+	held := resolving(t, p)
+	broken, err := p.ProvisionContainers(context.Background(), liveValuePlan(t, "crasher", held.declared), nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() of a crash-looping app = %v, want it stood up and refused at its gate", err)
 	}
@@ -198,7 +223,7 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 			t.Errorf("the evidence a failed release captured reads\n%s\nand never names %s", said, want)
 		}
 	}
-	for name, value := range delivered {
+	for name, value := range held.reads {
 		if strings.Contains(said, value) {
 			t.Errorf("%s's value is in the evidence a failed release captured:\n%s", name, said)
 		}
@@ -217,8 +242,8 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 func TestLiveAContainerThatCannotBeStoodUpTakesItsEnvFileWithIt(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
-	delivered := resolving(t, p)
-	plan := liveValuePlan(t, "one", delivered)
+	held := resolving(t, p)
+	plan := liveValuePlan(t, "one", held.declared)
 	plan.App.Image = fixtureRepo + ":no-such-tag"
 	physical := host.ContainerName(plan.Ref.Name.String(), plan.App.App, plan.App.Deployment, plan.App.Image)
 
@@ -232,7 +257,7 @@ func TestLiveAContainerThatCannotBeStoodUpTakesItsEnvFileWithIt(t *testing.T) {
 	if vm.stands(t, path) {
 		t.Errorf("%s survived a stand-up that never happened, and nothing after this deploy takes it back", path)
 	}
-	for name, value := range delivered {
+	for name, value := range held.reads {
 		if strings.Contains(err.Error(), value) {
 			t.Errorf("%s's value is in the refusal a failed stand-up returned: %s", name, err)
 		}

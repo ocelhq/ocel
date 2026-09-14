@@ -233,3 +233,56 @@ func TestAContainerNameIsDerivableAndDiffersBetweenReleases(t *testing.T) {
 		t.Errorf("a release carrying no deployment id names its container %q", unbuilt)
 	}
 }
+
+func TestAContainerReadingValuesLiveIsHandedTheBoxSocketReadOnlyAndItsManifestByFile(t *testing.T) {
+	t.Parallel()
+
+	spec := valued()
+	stand := standingWith(t, spec)
+	command := ranContainer(t, stand)
+	mount := quoted("--mount") + " " + quoted("type=bind,src="+LiveSocketDir+",dst="+LiveSocketDir+",readonly")
+	if !strings.Contains(command, mount) {
+		t.Errorf("standing a live container up runs %q, which hands it no socket to read its values through (%s)", command, mount)
+	}
+	if strings.Contains(command, aManifest) {
+		t.Errorf("the command line carries the manifest, which every login reads out of `ps`; it travels in the env file")
+	}
+	file := wrote(t, stand, EnvFile(spec.Class, spec.Name))
+	for _, want := range []string{"OCEL_LIVE_MANIFEST=" + aManifest, "OCEL_HEALTH_PATH=/healthz", "API_TOKEN=" + sensitiveValue, "REGION=eu-west-1"} {
+		if !strings.Contains(file, want) {
+			t.Errorf("the env file reads %q and never binds %s", file, want)
+		}
+	}
+	if strings.Contains(file, "DATABASE_URL=") || strings.Contains(file, "OCEL_RESOURCE_POSTGRES_main=") {
+		t.Errorf("the env file reads %q and carries a value the container reads live", file)
+	}
+
+	baked := spec
+	baked.Manifest = nil
+	stood := standingWith(t, baked)
+	if command := ranContainer(t, stood); strings.Contains(command, quoted("--mount")) {
+		t.Errorf("a container reading nothing live runs %q and is handed the socket anyway", command)
+	}
+	if file := wrote(t, stood, EnvFile(baked.Class, baked.Name)); strings.Contains(file, "OCEL_LIVE_MANIFEST") {
+		t.Errorf("a container reading nothing live is handed %q, which names a manifest", file)
+	}
+}
+
+func TestAChangedManifestReplacesTheContainerLikeAChangedValue(t *testing.T) {
+	t.Parallel()
+
+	spec := valued()
+	held, err := handing(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	moved := spec
+	moved.Manifest = []byte(`{"slug":"shop","class":"production","keys":[{"key":"DATABASE_URL"},{"key":"SESSION"}]}`)
+	other, err := handing(moved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other.digest == held.digest {
+		t.Error("a deploy that declares one more live key is labelled the same as the one before it, and the container standing under the old manifest would never read the new key")
+	}
+}

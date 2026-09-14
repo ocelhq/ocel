@@ -2,7 +2,12 @@ package vps
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
+
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -28,6 +33,9 @@ func (l loaded) Has(ctx context.Context, push providerkit.ImagePush) (bool, erro
 }
 
 func (l loaded) Push(ctx context.Context, push providerkit.ImagePush, report providerkit.Reporter) error {
+	if push.Built != nil {
+		return l.load(ctx, push, report)
+	}
 	daemon, err := providerkit.OpenDockerHost()
 	if err != nil {
 		return err
@@ -46,6 +54,24 @@ func (l loaded) Push(ctx context.Context, push providerkit.ImagePush, report pro
 	if gap := checked.Gap(); gap != nil {
 		return gap
 	}
+	if err != nil {
+		return err
+	}
+	if report != nil && said != "" {
+		report.Detail(said)
+	}
+	return nil
+}
+
+func (l loaded) load(ctx context.Context, push providerkit.ImagePush, report providerkit.Reporter) error {
+	ref, err := name.NewTag(push.Target, name.Insecure)
+	if err != nil {
+		return fmt.Errorf("%q names nowhere the box can hold an image: %w", push.Target, err)
+	}
+	stream, writer := io.Pipe()
+	go func() { writer.CloseWithError(tarball.Write(ref, push.Built, writer)) }()
+	said, err := l.host.LoadImage(ctx, push.Target, stream)
+	_ = stream.Close()
 	if err != nil {
 		return err
 	}
@@ -94,7 +120,15 @@ func (p pulled) Push(ctx context.Context, push providerkit.ImagePush, report pro
 			return err
 		}
 	}
-	said, err := p.host.PullImage(ctx, p.target, push.Target, push.Digest)
+	digest := push.Digest
+	if push.Built != nil {
+		built, err := push.Built.Digest()
+		if err != nil {
+			return fmt.Errorf("read the digest of %s's wrapped image: %w", push.App, err)
+		}
+		digest = built.String()
+	}
+	said, err := p.host.PullImage(ctx, p.target, push.Target, digest)
 	if err != nil {
 		return err
 	}

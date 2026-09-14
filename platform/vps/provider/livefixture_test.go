@@ -15,10 +15,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 const (
-	fixtureBase = "ocel-live-app:base"
+	fixtureBase = "ocel-live-app:base-ocel"
 	fixtureRepo = "ocel-live-app"
 )
 
@@ -30,7 +33,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -71,7 +76,20 @@ func main() {
 		_, _ = io.WriteString(w, release)
 	})
 	mux.HandleFunc("/env", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, os.Getenv(r.URL.Query().Get("name")))
+		name := r.URL.Query().Get("name")
+		for _, live := range strings.Split(os.Getenv("OCEL_LIVE_KEYS"), ",") {
+			if live != name {
+				continue
+			}
+			read, err := os.ReadFile(filepath.Join(os.Getenv("OCEL_LIVE_DIR"), name))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			_, _ = w.Write(read)
+			return
+		}
+		_, _ = io.WriteString(w, os.Getenv(name))
 	})
 	mux.HandleFunc("/inflight", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, strconv.FormatInt(inflight.Load(), 10))
@@ -180,13 +198,19 @@ func fixtureBinary(t *testing.T, arch string) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var raw bytes.Buffer
-	written := tar.NewWriter(&raw)
-	if err := written.WriteHeader(&tar.Header{Name: "app", Mode: 0o755, Size: int64(len(read))}); err != nil {
+	runtime, err := host.ContainerRuntime(arch)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := written.Write(read); err != nil {
-		t.Fatal(err)
+	var raw bytes.Buffer
+	written := tar.NewWriter(&raw)
+	for name, body := range map[string][]byte{"app": read, strings.TrimPrefix(providerkit.ContainerRuntimePath, "/"): runtime} {
+		if err := written.WriteHeader(&tar.Header{Name: name, Mode: 0o755, Size: int64(len(body))}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := written.Write(body); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := written.Close(); err != nil {
 		t.Fatal(err)
@@ -201,7 +225,7 @@ func fixtures(t *testing.T, vm machine) {
 		held[strings.TrimSpace(tagged)] = true
 	}
 	if !held[fixtureBase] {
-		vm.feeds(t, "sudo docker import --change 'ENTRYPOINT [\"/app\"]' - "+fixtureBase+" >/dev/null",
+		vm.feeds(t, "sudo docker import --change 'ENTRYPOINT [\""+providerkit.ContainerRuntimePath+"\", \"/app\"]' - "+fixtureBase+" >/dev/null",
 			fixtureBinary(t, vm.arch(t)))
 	}
 	for tag, envs := range map[string][]string{
