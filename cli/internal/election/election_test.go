@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"net"
+	"os"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/devlock"
@@ -42,12 +43,33 @@ func TestElect(t *testing.T) {
 		}
 	})
 
+	t.Run("a lockfile that carries no token is reclaimed and this process leads", func(t *testing.T) {
+		t.Parallel()
+
+		root := root(t)
+		path, err := devlock.Path(root)
+		if err != nil {
+			t.Fatalf("devlock.Path: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(liveAddr(t)+"\n"), 0o600); err != nil {
+			t.Fatalf("write a bare address: %v", err)
+		}
+
+		result := elect(t, root)
+		if result.Role != Leader {
+			t.Fatalf("Role = %v, want leader: a lock no follower can authenticate with is worth nothing", result.Role)
+		}
+		if _, err := devlock.Read(root); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("devlock.Read after reclaim err = %v, want a not-exist error", err)
+		}
+	})
+
 	t.Run("a lockfile whose address answers makes this process a follower", func(t *testing.T) {
 		t.Parallel()
 
 		root := root(t)
 		addr := liveAddr(t)
-		if err := devlock.Create(root, addr); err != nil {
+		if err := devlock.Create(root, devlock.Lease{Addr: addr, Token: "app-token"}); err != nil {
 			t.Fatalf("devlock.Create: %v", err)
 		}
 
@@ -55,8 +77,8 @@ func TestElect(t *testing.T) {
 		if result.Role != Follower {
 			t.Fatalf("Role = %v, want follower", result.Role)
 		}
-		if result.LeaderAddr != addr {
-			t.Fatalf("LeaderAddr = %q, want %q", result.LeaderAddr, addr)
+		if result.Leader.Addr != addr || result.Leader.Token != "app-token" {
+			t.Fatalf("Leader = %+v, want the lock's address %q and its token", result.Leader, addr)
 		}
 		if _, err := devlock.Read(root); err != nil {
 			t.Fatalf("devlock.Read after Elect: %v", err)
@@ -67,7 +89,7 @@ func TestElect(t *testing.T) {
 		t.Parallel()
 
 		root := root(t)
-		if err := devlock.Create(root, deadAddr(t)); err != nil {
+		if err := devlock.Create(root, devlock.Lease{Addr: deadAddr(t), Token: "app-token"}); err != nil {
 			t.Fatalf("devlock.Create: %v", err)
 		}
 
@@ -84,7 +106,7 @@ func TestElect(t *testing.T) {
 		t.Parallel()
 
 		elsewhere, here := root(t), root(t)
-		if err := devlock.Create(elsewhere, liveAddr(t)); err != nil {
+		if err := devlock.Create(elsewhere, devlock.Lease{Addr: liveAddr(t), Token: "app-token"}); err != nil {
 			t.Fatalf("devlock.Create: %v", err)
 		}
 
@@ -104,15 +126,16 @@ func TestResultClaim(t *testing.T) {
 		root := root(t)
 		result := elect(t, root)
 
-		if err := result.Claim("127.0.0.1:4242"); err != nil {
+		lease := devlock.Lease{Addr: "127.0.0.1:4242", Token: "app-token"}
+		if err := result.Claim(lease); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
 		got, err := devlock.Read(root)
 		if err != nil {
 			t.Fatalf("devlock.Read: %v", err)
 		}
-		if got != "127.0.0.1:4242" {
-			t.Fatalf("lockfile holds %q, want the claiming leader's address %q", got, "127.0.0.1:4242")
+		if got != lease {
+			t.Fatalf("lockfile holds %+v, want the claiming leader's lease %+v", got, lease)
 		}
 	})
 
@@ -125,10 +148,10 @@ func TestResultClaim(t *testing.T) {
 			t.Fatalf("roles = %v and %v, want both to be told they lead — that is the race Claim exists to settle", first.Role, second.Role)
 		}
 
-		if err := first.Claim("127.0.0.1:1"); err != nil {
+		if err := first.Claim(devlock.Lease{Addr: "127.0.0.1:1", Token: "first"}); err != nil {
 			t.Fatalf("first Claim: %v", err)
 		}
-		if err := second.Claim("127.0.0.1:2"); !errors.Is(err, ErrLost) {
+		if err := second.Claim(devlock.Lease{Addr: "127.0.0.1:2", Token: "second"}); !errors.Is(err, ErrLost) {
 			t.Fatalf("second Claim err = %v, want ErrLost", err)
 		}
 
@@ -136,8 +159,8 @@ func TestResultClaim(t *testing.T) {
 		if err != nil {
 			t.Fatalf("devlock.Read: %v", err)
 		}
-		if got != "127.0.0.1:1" {
-			t.Fatalf("lockfile holds %q, want the winner's address %q", got, "127.0.0.1:1")
+		if got.Addr != "127.0.0.1:1" {
+			t.Fatalf("lockfile holds %+v, want the winner's address %q", got, "127.0.0.1:1")
 		}
 	})
 
@@ -146,27 +169,27 @@ func TestResultClaim(t *testing.T) {
 
 		root := root(t)
 		addr := liveAddr(t)
-		if err := devlock.Create(root, addr); err != nil {
+		if err := devlock.Create(root, devlock.Lease{Addr: addr, Token: "app-token"}); err != nil {
 			t.Fatalf("devlock.Create: %v", err)
 		}
 
 		result := elect(t, root)
-		if err := result.Claim("127.0.0.1:9"); !errors.Is(err, ErrLost) {
+		if err := result.Claim(devlock.Lease{Addr: "127.0.0.1:9", Token: "usurper"}); !errors.Is(err, ErrLost) {
 			t.Fatalf("Claim from a follower err = %v, want ErrLost", err)
 		}
 		got, err := devlock.Read(root)
 		if err != nil {
 			t.Fatalf("devlock.Read: %v", err)
 		}
-		if got != addr {
-			t.Fatalf("lockfile holds %q, want the standing leader's address %q", got, addr)
+		if got.Addr != addr {
+			t.Fatalf("lockfile holds %+v, want the standing leader's address %q", got, addr)
 		}
 	})
 
 	t.Run("a zero result claims nothing", func(t *testing.T) {
 		t.Parallel()
 
-		if err := (Result{}).Claim("127.0.0.1:9"); !errors.Is(err, ErrLost) {
+		if err := (Result{}).Claim(devlock.Lease{Addr: "127.0.0.1:9", Token: "app-token"}); !errors.Is(err, ErrLost) {
 			t.Fatalf("Claim on a result no election produced err = %v, want ErrLost", err)
 		}
 	})
@@ -180,7 +203,7 @@ func TestResultRelease(t *testing.T) {
 
 		root := root(t)
 		result := elect(t, root)
-		if err := result.Claim(liveAddr(t)); err != nil {
+		if err := result.Claim(devlock.Lease{Addr: liveAddr(t), Token: "app-token"}); err != nil {
 			t.Fatalf("Claim: %v", err)
 		}
 		if err := result.Release(); err != nil {
@@ -196,7 +219,7 @@ func TestResultRelease(t *testing.T) {
 
 		root := root(t)
 		addr := liveAddr(t)
-		if err := devlock.Create(root, addr); err != nil {
+		if err := devlock.Create(root, devlock.Lease{Addr: addr, Token: "app-token"}); err != nil {
 			t.Fatalf("devlock.Create: %v", err)
 		}
 
@@ -208,8 +231,8 @@ func TestResultRelease(t *testing.T) {
 		if err != nil {
 			t.Fatalf("devlock.Read after a follower released: %v", err)
 		}
-		if got != addr {
-			t.Fatalf("lockfile holds %q, want the standing leader's address %q", got, addr)
+		if got.Addr != addr {
+			t.Fatalf("lockfile holds %+v, want the standing leader's address %q", got, addr)
 		}
 	})
 }

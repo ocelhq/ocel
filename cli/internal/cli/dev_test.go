@@ -50,7 +50,7 @@ func TestMergeEnv(t *testing.T) {
 			{Name: "main", Env: map[string]string{"SHARED": "resource", "OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := toMap(mergeEnv(base, projectEnv, nil, nil, resources, "", ""))
+		got := toMap(mergeEnv(base, projectEnv, nil, nil, resources, runtimeAccess{}, ""))
 
 		cases := map[string]string{
 			"PATH":                        "/bin",
@@ -70,7 +70,7 @@ func TestMergeEnv(t *testing.T) {
 
 		live := map[string]string{"WEBHOOK_SECRET": "whsec_live"}
 
-		got := mergeEnv([]string{"PATH=/usr/bin"}, map[string]string{"PROJECT_ONLY": "p"}, live, nil, nil, "", "")
+		got := mergeEnv([]string{"PATH=/usr/bin"}, map[string]string{"PROJECT_ONLY": "p"}, live, nil, nil, runtimeAccess{}, "")
 
 		for _, kv := range got {
 			if strings.HasPrefix(kv, "OCEL_LIVE_KEYS=") {
@@ -726,17 +726,17 @@ export default { slug: "test-app" };
 
 		projectID := "proj_" + t.Name()
 		const apiURL = "https://api.example.com"
-		srv := devserver.New(apiURL, "tok", projectID, "http://127.0.0.1:0")
-		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
-
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatalf("listen: %v", err)
 		}
+		srv := devserver.New(apiURL, "tok", projectID, "http://"+listener.Addr().String())
+		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
+
 		httpSrv := &http.Server{Handler: srv.Mux()}
 		go httpSrv.Serve(listener)
 
-		if err := devlock.Create(root, listener.Addr().String()); err != nil {
+		if err := devlock.Create(root, devlock.Lease{Addr: listener.Addr().String(), Token: srv.AppToken()}); err != nil {
 			t.Fatalf("devlock.Create: %v", err)
 		}
 

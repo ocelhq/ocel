@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/link"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
+	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
@@ -31,6 +32,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/watcher"
+	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -94,7 +96,7 @@ func runDev(ctx context.Context, deps cmddeps.Deps, local bool, cwd string, appA
 		}
 
 		if role.Role == election.Follower {
-			return runFollower(ctx, deps, role.LeaderAddr, appArgs, stdout, stderr, stdin)
+			return runFollower(ctx, deps, role.Leader, appArgs, stdout, stderr, stdin)
 		}
 
 		var consoleLink *devConsole
@@ -158,7 +160,7 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, l
 		<-detecting
 	}()
 
-	if err := result.Claim(addr); err != nil {
+	if err := result.Claim(devlock.Lease{Addr: addr, Token: srv.AppToken()}); err != nil {
 		return err
 	}
 	defer func() { _ = result.Release() }()
@@ -230,7 +232,7 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 	}
 
 	reportLiveValues(stdout, syncResult.LiveKeys, run)
-	return resolvedEnv(syncResult.Account.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, syncResult.DevServerAddress, appFolder), nil
+	return resolvedEnv(syncResult.Account.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, runtimeAccess{address: syncResult.DevServerAddress, token: syncResult.AppToken}, appFolder), nil
 }
 
 func refusedSync(srv *devserver.Server, err error, dotfile map[string]string, run invocation) error {
@@ -285,8 +287,8 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 	}})
 }
 
-func runFollower(ctx context.Context, deps cmddeps.Deps, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	stream, err := subscribeEnv(ctx, leaderAddr)
+func runFollower(ctx context.Context, deps cmddeps.Deps, leader devlock.Lease, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+	stream, err := subscribeEnv(ctx, leader)
 	if err != nil {
 		return fmt.Errorf("connect to leader: %w", err)
 	}
@@ -370,11 +372,16 @@ func waitExitError(err error) error {
 	return err
 }
 
-func mergeEnv(base []string, projectEnv, liveValues, dotfile map[string]string, resources []resolve.Resource, runtimeAddress, appFolder string) []string {
-	return applyEnv(base, resolvedEnv(projectEnv, liveValues, dotfile, resources, runtimeAddress, appFolder))
+type runtimeAccess struct {
+	address string
+	token   string
 }
 
-func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []resolve.Resource, runtimeAddress, appFolder string) map[string]string {
+func mergeEnv(base []string, projectEnv, liveValues, dotfile map[string]string, resources []resolve.Resource, runtime runtimeAccess, appFolder string) []string {
+	return applyEnv(base, resolvedEnv(projectEnv, liveValues, dotfile, resources, runtime, appFolder))
+}
+
+func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []resolve.Resource, runtime runtimeAccess, appFolder string) map[string]string {
 	merged := make(map[string]string, len(projectEnv)+len(liveValues)+len(dotfile)+1)
 	for k, v := range projectEnv {
 		merged[k] = v
@@ -390,8 +397,9 @@ func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []
 			merged[k] = v
 		}
 	}
-	if runtimeAddress != "" {
-		merged[constants.RuntimeAddressEnvName] = runtimeAddress
+	if runtime.address != "" {
+		merged[constants.RuntimeAddressEnvName] = runtime.address
+		merged[channel.SessionTokenEnvVar] = runtime.token
 	}
 	merged[constants.AppFolderEnvName] = appFolder
 	merged[constants.AppURLEnvName] = localURL(merged[portEnv])

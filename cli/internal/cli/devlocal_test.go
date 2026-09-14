@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -68,6 +69,9 @@ func TestRunDevLocal(t *testing.T) {
 		}
 		if _, ok := env[constants.RuntimeAddressEnvName]; !ok {
 			t.Error("the app was told no runtime address, so it can declare nothing")
+		}
+		if env[channel.SessionTokenEnvVar] == "" {
+			t.Errorf("the app was handed no %s, so the runtime address refuses everything it asks", channel.SessionTokenEnvVar)
 		}
 	})
 

@@ -16,7 +16,8 @@ func TestCreate(t *testing.T) {
 		t.Parallel()
 
 		root := uniqueRoot(t)
-		if err := Create(root, "127.0.0.1:54321"); err != nil {
+		lease := Lease{Addr: "127.0.0.1:54321", Token: "app-token"}
+		if err := Create(root, lease); err != nil {
 			t.Fatalf("Create: %v", err)
 		}
 
@@ -24,8 +25,8 @@ func TestCreate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Read: %v", err)
 		}
-		if got != "127.0.0.1:54321" {
-			t.Fatalf("Read = %q, want %q", got, "127.0.0.1:54321")
+		if got != lease {
+			t.Fatalf("Read = %+v, want %+v", got, lease)
 		}
 	})
 
@@ -33,11 +34,11 @@ func TestCreate(t *testing.T) {
 		t.Parallel()
 
 		root := uniqueRoot(t)
-		if err := Create(root, "127.0.0.1:1"); err != nil {
+		if err := Create(root, Lease{Addr: "127.0.0.1:1", Token: "first"}); err != nil {
 			t.Fatalf("first Create: %v", err)
 		}
 
-		if err := Create(root, "127.0.0.1:2"); !errors.Is(err, fs.ErrExist) {
+		if err := Create(root, Lease{Addr: "127.0.0.1:2", Token: "second"}); !errors.Is(err, fs.ErrExist) {
 			t.Fatalf("second Create err = %v, want an exist error", err)
 		}
 
@@ -45,8 +46,8 @@ func TestCreate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Read: %v", err)
 		}
-		if got != "127.0.0.1:1" {
-			t.Fatalf("Read = %q, want the first writer's address %q", got, "127.0.0.1:1")
+		if got.Addr != "127.0.0.1:1" || got.Token != "first" {
+			t.Fatalf("Read = %+v, want the first writer's lease", got)
 		}
 	})
 
@@ -54,7 +55,7 @@ func TestCreate(t *testing.T) {
 		t.Parallel()
 
 		root := uniqueRoot(t)
-		if err := Create(root, "127.0.0.1:1"); err != nil {
+		if err := Create(root, Lease{Addr: "127.0.0.1:1", Token: "app-token"}); err != nil {
 			t.Fatalf("Create: %v", err)
 		}
 
@@ -82,6 +83,23 @@ func TestRead(t *testing.T) {
 			t.Fatalf("Read err = %v, want a not-exist error", err)
 		}
 	})
+
+	t.Run("a dev lock that carries an address and no token is malformed", func(t *testing.T) {
+		t.Parallel()
+
+		root := uniqueRoot(t)
+		path, err := Path(root)
+		if err != nil {
+			t.Fatalf("Path: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("127.0.0.1:1\n"), 0o600); err != nil {
+			t.Fatalf("write a bare address: %v", err)
+		}
+
+		if _, err := Read(root); !errors.Is(err, ErrMalformed) {
+			t.Fatalf("Read err = %v, want ErrMalformed", err)
+		}
+	})
 }
 
 func TestRemove(t *testing.T) {
@@ -91,7 +109,7 @@ func TestRemove(t *testing.T) {
 		t.Parallel()
 
 		root := uniqueRoot(t)
-		if err := Create(root, "127.0.0.1:1"); err != nil {
+		if err := Create(root, Lease{Addr: "127.0.0.1:1", Token: "app-token"}); err != nil {
 			t.Fatalf("Create: %v", err)
 		}
 		if err := Remove(root); err != nil {
