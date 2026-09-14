@@ -343,6 +343,9 @@ func TestRevalidator(t *testing.T) {
 					if got := equals["aws:ResourceTag/ocel:component"]; got != "function" {
 						t.Errorf("invoke condition = %v, want 'aws:ResourceTag/ocel:component': 'function' — anything looser reaches the bucket listeners too", got)
 					}
+					if got := equals["aws:ResourceTag/ocel:env-class"]; got != tc.class {
+						t.Errorf("invoke condition = %v, want 'aws:ResourceTag/ocel:env-class': %q — the %s revalidator must not render through the other class's functions", got, tc.class, tc.class)
+					}
 					return
 				}
 				t.Fatal("the revalidator role cannot invoke the Function URLs it triggers")

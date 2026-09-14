@@ -35,8 +35,8 @@ func TestEdgeUser(t *testing.T) {
 		template string
 		userName string
 	}{
-		{"production", featureTemplate(FeatureCloudflareEdge, ClassProduction), edgeUserName},
-		{"preview", featureTemplate(FeatureCloudflareEdge, ClassPreview), previewEdgeUser},
+		{ClassProduction, featureTemplate(FeatureCloudflareEdge, ClassProduction), edgeUserName},
+		{ClassPreview, featureTemplate(FeatureCloudflareEdge, ClassPreview), previewEdgeUser},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var tmpl edgeUserTemplate
@@ -62,7 +62,7 @@ func TestEdgeUser(t *testing.T) {
 			}
 
 			stmts := user.Properties.Policies[0].PolicyDocument.Statement
-			var s3Read, s3Write, ddbTable, ddbIndex, sqsSend, invoke, invokeTagged bool
+			var s3Read, s3Write, ddbTable, ddbIndex, sqsSend, invoke, invokeTagged, invokeClassed bool
 			for _, st := range stmts {
 				if st.Resource == "${"+paramAssetBucketARN+"}/*" {
 					s3Read = hasAction(st.Action, "s3:GetObject")
@@ -88,6 +88,9 @@ func TestEdgeUser(t *testing.T) {
 						if equals["aws:ResourceTag/ocel:component"] == "function" {
 							invokeTagged = true
 						}
+						if equals["aws:ResourceTag/ocel:env-class"] == tc.name {
+							invokeClassed = true
+						}
 					}
 				}
 			}
@@ -111,6 +114,9 @@ func TestEdgeUser(t *testing.T) {
 			}
 			if !invokeTagged {
 				t.Error("lambda:Invoke* grant must be gated on ocel:component being function, so it reaches no listener or other Ocel-run function")
+			}
+			if !invokeClassed {
+				t.Errorf("lambda:Invoke* grant must be gated on ocel:env-class being %s, or the %s edge's key invokes the other class's functions too", tc.name, tc.name)
 			}
 		})
 	}
