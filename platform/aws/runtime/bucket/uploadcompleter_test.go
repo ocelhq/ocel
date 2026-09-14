@@ -184,6 +184,38 @@ func TestUploadCompleter(t *testing.T) {
 		}
 	})
 
+	t.Run("a callback the app refused is delivered on the retry", func(t *testing.T) {
+		t.Parallel()
+		ddb := newFakeDDB()
+		id, _ := seedPendingSession(t, ddb, testCallback)
+		doer := &recordingDoer{status: http.StatusBadGateway}
+
+		l := newUploadCompleter(ddb, &fakeTagger{tags: map[string]string{sessionTagKey: id}}, doer, []string{testOrigin})
+		evt := objectCreatedEvent(testBucket, testKey)
+		if err := l.Handle(context.Background(), evt); err == nil {
+			t.Fatal("first Handle = nil, want the refused callback surfaced so Lambda retries the event")
+		}
+		doer.status = http.StatusOK
+		if err := l.Handle(context.Background(), evt); err != nil {
+			t.Fatalf("retried Handle: %v", err)
+		}
+		if err := l.Handle(context.Background(), evt); err != nil {
+			t.Fatalf("third Handle: %v", err)
+		}
+
+		if len(doer.posts) != 2 {
+			t.Fatalf("callbacks fired = %d, want 2: the refused one and the retry that landed, then nothing more", len(doer.posts))
+		}
+		store := &sessionStore{client: ddb, table: "sessions", keyPrefix: testSessionKeyPrefix}
+		sess, err := store.get(context.Background(), id)
+		if err != nil {
+			t.Fatalf("get session: %v", err)
+		}
+		if sess.Files[0].State != stateSucceeded || !sess.Files[0].Notified {
+			t.Fatalf("file = %+v, want succeeded and notified", sess.Files[0])
+		}
+	})
+
 	t.Run("a callback target that is not allowlisted is never posted to", func(t *testing.T) {
 		t.Parallel()
 		ddb := newFakeDDB()
