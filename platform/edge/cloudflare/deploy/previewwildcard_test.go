@@ -184,6 +184,25 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 		assertSet(t, "detached custom domains", m.deletedCustomDomains, []string{"cd1"})
 	})
 
+	t.Run("the script stays while another wildcard still routes to it", func(t *testing.T) {
+		m := &cfMock{
+			zoneID:   "zone1",
+			zoneName: "app.com",
+			existingRoutes: []map[string]any{
+				{"id": "entry", "pattern": "*.preview.app.com/*", "script": previewEntryScript},
+				{"id": "sibling", "pattern": "*.staging.app.com/*", "script": previewEntryScript},
+			},
+		}
+
+		if err := m.provider(t).DestroyPreviewWildcard(t.Context(), "preview.app.com"); err != nil {
+			t.Fatalf("DestroyPreviewWildcard: %v", err)
+		}
+
+		assertSet(t, "deleted routes", m.deletedRoutes, []string{"entry"})
+		assertSet(t, "deleted scripts", m.deletedScripts, nil)
+		assertSet(t, "detached custom domains", m.deletedCustomDomains, nil)
+	})
+
 	t.Run("a wildcard another script holds is left standing", func(t *testing.T) {
 		m := &cfMock{
 			zoneID:   "zone1",
