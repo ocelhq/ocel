@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -27,9 +28,10 @@ const (
 	valuesDrifted   = "what the edge hands back differs from what stands"
 	keyGone         = "the access key it records is no longer on the user"
 	keyUnrecorded   = "it records no access key"
+	keyStale        = "the access key it records is older than 90 days and is rotated"
 	severedByRemove = "removing %s takes what the %s edge was reached through with it"
 
-	passphraseStranded = "the only copy of the passphrase every Pulumi stack in this account is encrypted under"
+	passphraseStranded = "the only copy of the passphrase every Pulumi stack in this account was encrypted under; no Ocel credential may delete it, so it stays until removed by hand"
 	passphraseShared   = "the %s bootstrap still stands and its Pulumi state is encrypted under it"
 )
 
@@ -48,17 +50,15 @@ type EdgeAdoption struct {
 func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, class string, adoptions []EdgeAdoption, req Request) (providerkit.ChangeGroup, error) {
 	group := providerkit.ChangeGroup{Kind: providerkit.ParameterGroupKind, Name: ParamGroupName}
 
-	origin, err := ns.OriginSecretParamFor(class)
+	origin, err := planOriginSecret(ctx, apis.SSM, ns, class, time.Now())
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
-	for _, name := range []string{origin, ns.PassphraseParamName()} {
-		change, err := paramPresence(ctx, apis.SSM, name)
-		if err != nil {
-			return providerkit.ChangeGroup{}, err
-		}
-		group.Changes = append(group.Changes, change)
+	passphrase, err := paramPresence(ctx, apis.SSM, ns.PassphraseParamName())
+	if err != nil {
+		return providerkit.ChangeGroup{}, err
 	}
+	group.Changes = append(group.Changes, origin, passphrase)
 
 	var adopted []providerkit.Change
 	for _, edging := range adoptions {
@@ -163,7 +163,7 @@ func plannedPassphraseRemoval(held bool, ns Namespace, class string, shared bool
 		return providerkit.Change{
 			Kind:   kindParameter,
 			Name:   ns.PassphraseParamName(),
-			Action: providerkit.ActionDelete,
+			Action: providerkit.ActionKeep,
 			Reason: passphraseStranded,
 		}, nil
 	}

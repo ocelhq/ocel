@@ -21,6 +21,7 @@ export interface Env {
   ISR_WRITER?: IsrWriterBinding;
   OCEL_EDGE_ACCESS_KEY_ID?: string;
   OCEL_EDGE_SECRET_KEY?: string;
+  OCEL_ENVELOPE_KEY?: string;
   OCEL_AWS_REGION?: string;
   OCEL_REVALIDATE_QUEUE_URL?: string;
   OCEL_STATE_TABLE?: string;

@@ -188,3 +188,42 @@ it("reads one record per isrPrefix, however many routes of it a batch carries", 
     recordUrl.replace(isrPrefix, "prod/proj/web/OTHER"),
   ]);
 });
+
+it("forgets a read that failed, so the next route of the prefix reads the record again", async () => {
+  let reads = 0;
+  const deps: OriginDeps = {
+    credentials,
+    bucket,
+    region,
+    origins: new Map(),
+    fetch: (async () => {
+      reads++;
+      if (reads === 1) throw new Error("connect ECONNREFUSED");
+      return new Response(originDocument(), { status: 200 });
+    }) as typeof fetch,
+  };
+
+  await expect(resolve(deps, message())).resolves.toEqual({
+    ok: false,
+    reason: "origin-unavailable",
+  });
+  const second = await resolve(deps, message());
+  expect(second.ok).toBe(true);
+  expect(reads).toBe(2);
+  expect(deps.origins.size).toBe(1);
+});
+
+it("forgets a read that threw before reaching the origin rather than memoising the rejection", async () => {
+  const { deps } = harness(record());
+  const broken: OriginDeps = {
+    ...deps,
+    credentials: { accessKeyId: "AKIAEXAMPLE" } as OriginDeps["credentials"],
+  };
+
+  await expect(resolve(broken, message())).rejects.toThrow();
+  expect(broken.origins.size).toBe(0);
+
+  const mended: OriginDeps = { ...deps, origins: broken.origins };
+  const resolution = await resolve(mended, message());
+  expect(resolution.ok).toBe(true);
+});

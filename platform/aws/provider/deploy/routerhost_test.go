@@ -37,6 +37,7 @@ func routedConfig(t *testing.T, kind edge.Kind) Config {
 		RuntimeLayers:     testRuntimeLayers(),
 		Slug:              "shop",
 		Edge:              fakeEdgeOf(kind),
+		AppBoundaryARN:    testBoundaryARN,
 	}
 }
 
@@ -154,7 +155,7 @@ func TestEntryFunctionCarriesTheEdgeKindAndItsSiblingURLs(t *testing.T) {
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Router: host})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Boundary: testBoundaryARN, Router: host})
 		if err != nil {
 			return err
 		}
@@ -311,7 +312,7 @@ func TestTheEntryRoleMayInvokeItsSiblingsAndTheOptimizer(t *testing.T) {
 	stack := testStack(t, "prod", "web")
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Router: host})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: "web", Boundary: testBoundaryARN, Router: host})
 		if err != nil {
 			return err
 		}

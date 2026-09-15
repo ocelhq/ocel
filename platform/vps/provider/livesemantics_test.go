@@ -198,7 +198,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 	}()
 
 	vm.purges(t)
-	vm.ssh(t, "sudo rm -f /etc/sudoers.d/ocel-seal")
+	vm.ssh(t, "sudo rm -f /etc/sudoers.d/ocel-seal-*")
 	vm.forgetsTheDeployLogin(t)
 	unattended := providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Unattended: true}
 	if err := bootstrapper.Apply(ctx, unattended, nil); err != nil {

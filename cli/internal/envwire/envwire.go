@@ -2,7 +2,6 @@ package envwire
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	connect "connectrpc.com/connect"
@@ -162,7 +161,7 @@ func (v Values) reveal(ctx context.Context, rows []envgate.Address) (*envvarsv1.
 		Cells: named,
 	})
 	if err != nil {
-		return nil, errors.New(err.Error())
+		return nil, err
 	}
 	return resp, nil
 }
@@ -185,35 +184,66 @@ func (v Values) coordinate(at envgate.Address) *envvarsv1.Coordinate {
 	return &envvarsv1.Coordinate{Slug: v.Slug, Folder: at.Cell.Folder, Key: at.Cell.Key, Environment: at.Environment}
 }
 
-func (v Values) Set(ctx context.Context, at envgate.Address, value string, expected *int64) error {
+func (v Values) Version(ctx context.Context, at envgate.Address) (int64, error) {
 	vars, err := v.Runner.Vars()
 	if err != nil {
-		return err
+		return 0, err
 	}
-	_, err = vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+	resp, err := vars.GetValue(ctx, &envvarsv1.GetValueRequest{
+		Tier:       v.Tier,
+		Coordinate: v.coordinate(at),
+	})
+	if err != nil {
+		return 0, err
+	}
+	return resp.GetMetadata().GetVersion(), nil
+}
+
+func (v Values) Write(ctx context.Context, at envgate.Address, value string, expected *int64) (*envvarsv1.ValueMetadata, error) {
+	vars, err := v.Runner.Vars()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
 		Tier:            v.Tier,
 		Coordinate:      v.coordinate(at),
 		Value:           value,
 		ExpectedVersion: expected,
 	})
-	return staleOrBroken(err)
+	if err != nil {
+		return nil, staleOrBroken(err)
+	}
+	return resp.GetMetadata(), nil
 }
 
-func (v Values) Delete(ctx context.Context, at envgate.Address, expected *int64) error {
+func (v Values) Remove(ctx context.Context, at envgate.Address, expected *int64) (bool, error) {
 	vars, err := v.Runner.Vars()
 	if err != nil {
-		return err
+		return false, err
 	}
-	_, err = vars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{
+	resp, err := vars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{
 		Tier:            v.Tier,
 		Coordinate:      v.coordinate(at),
 		ExpectedVersion: expected,
 	})
-	return staleOrBroken(err)
+	if err != nil {
+		return false, staleOrBroken(err)
+	}
+	return resp.GetDeleted(), nil
+}
+
+func (v Values) Set(ctx context.Context, at envgate.Address, value string, expected *int64) error {
+	_, err := v.Write(ctx, at, value, expected)
+	return err
+}
+
+func (v Values) Delete(ctx context.Context, at envgate.Address, expected *int64) error {
+	_, err := v.Remove(ctx, at, expected)
+	return err
 }
 
 func staleOrBroken(err error) error {
-	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+	if err == nil || connect.CodeOf(err) != connect.CodeAborted {
 		return err
 	}
 	if _, refused := providerkit.RefusedCode(err); refused {

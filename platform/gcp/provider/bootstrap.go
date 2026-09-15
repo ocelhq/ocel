@@ -35,6 +35,8 @@ const (
 	reasonUnpruned  = "it stands under cleanup policies this bootstrap did not name, and what prunes the images a deploy pushes would then be rules nothing here wrote"
 
 	reasonUnprotected = "it stands with delete protection off, and one call would take every record both classes hold with it"
+
+	reasonUnlocked = "it stands open to object ACLs or to allUsers, and what a deploy writes in it is reached by IAM alone"
 )
 
 const passphraseBytes = 32
@@ -296,6 +298,8 @@ func (b bootstrapper) mend(ctx context.Context, read survey, held item) error {
 		return b.protectDatabase(ctx)
 	case KindRepository:
 		return b.pruneRepository(ctx, held.Name)
+	case KindBucket:
+		return b.lockBucket(ctx, held.Name)
 	default:
 		return b.make(ctx, read, held)
 	}
@@ -381,9 +385,35 @@ func (b bootstrapper) makeBucket(ctx context.Context, read survey, held item) er
 	if err != nil {
 		return err
 	}
-	attrs := &storage.BucketAttrs{Location: read.Region, VersioningEnabled: held.Versioned}
-	if err := client.Bucket(held.Name).Create(ctx, read.Project, attrs); err != nil && !taken(err) {
+	if err := client.Bucket(held.Name).Create(ctx, read.Project, bucketAttrs(read.Region, held)); err != nil && !taken(err) {
 		return fmt.Errorf("create the %s bucket: %w", held.Name, err)
+	}
+	return nil
+}
+
+func bucketAttrs(region string, held item) *storage.BucketAttrs {
+	return &storage.BucketAttrs{
+		Location:                 region,
+		VersioningEnabled:        held.Versioned,
+		UniformBucketLevelAccess: storage.UniformBucketLevelAccess{Enabled: true},
+		PublicAccessPrevention:   storage.PublicAccessPreventionEnforced,
+	}
+}
+
+func locked(attrs *storage.BucketAttrs) bool {
+	return attrs.UniformBucketLevelAccess.Enabled && attrs.PublicAccessPrevention == storage.PublicAccessPreventionEnforced
+}
+
+func (b bootstrapper) lockBucket(ctx context.Context, name string) error {
+	client, err := b.clients.Storage()
+	if err != nil {
+		return err
+	}
+	if _, err := client.Bucket(name).Update(ctx, storage.BucketAttrsToUpdate{
+		UniformBucketLevelAccess: &storage.UniformBucketLevelAccess{Enabled: true},
+		PublicAccessPrevention:   storage.PublicAccessPreventionEnforced,
+	}); err != nil {
+		return fmt.Errorf("hold the %s bucket to IAM alone: %w", name, err)
 	}
 	return nil
 }
@@ -506,7 +536,10 @@ func (b bootstrapper) makeAccount(ctx context.Context, read survey, name string)
 	if err != nil && !taken(err) {
 		return fmt.Errorf("create the %s service account: %w", name, err)
 	}
-	return b.grantRunAs(ctx, name)
+	if err := b.grantRunAs(ctx, name); err != nil {
+		return err
+	}
+	return b.grantReads(ctx, read.Class)
 }
 
 func (b bootstrapper) grantRunAs(ctx context.Context, name string) error {
@@ -543,7 +576,10 @@ func (b bootstrapper) grantRunAs(ctx context.Context, name string) error {
 	return fmt.Errorf("let %s deploy apps that run as the %s service account: %w", member, name, refused)
 }
 
-func (b bootstrapper) takeAccount(ctx context.Context, name string) error {
+func (b bootstrapper) takeAccount(ctx context.Context, class providerkit.Class, name string) error {
+	if err := b.forgetReads(ctx, class); err != nil {
+		return err
+	}
 	service, err := b.clients.Accounts()
 	if err != nil {
 		return err
@@ -871,7 +907,7 @@ func (b bootstrapper) take(ctx context.Context, read survey, held item) error {
 	case KindRepository:
 		return b.takeRepository(ctx, held.Name)
 	case KindServiceAccount:
-		return b.takeAccount(ctx, held.Name)
+		return b.takeAccount(ctx, read.Class, held.Name)
 	default:
 		return providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing takes down a %s", held.Kind)
 	}
@@ -900,17 +936,37 @@ func (b bootstrapper) takeKey(ctx context.Context, name string) error {
 	if key == nil {
 		return nil
 	}
-	if !usable(key.GetPrimary()) {
-		return nil
+	versions := client.ListCryptoKeyVersions(ctx, &kmspb.ListCryptoKeyVersionsRequest{Parent: keyPath(b.clients, name)})
+	var held []*kmspb.CryptoKeyVersion
+	for {
+		version, err := versions.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("list the versions the %s key holds: %w", name, err)
+		}
+		held = append(held, version)
 	}
-	if _, err := dialled(ctx, func() (*kmspb.CryptoKeyVersion, error) {
-		return client.DestroyCryptoKeyVersion(ctx, &kmspb.DestroyCryptoKeyVersionRequest{
-			Name: key.GetPrimary().GetName(),
-		})
-	}); err != nil {
-		return fmt.Errorf("schedule the %s key's material for destruction: %w", name, err)
+	for _, version := range destroyable(held) {
+		if _, err := dialled(ctx, func() (*kmspb.CryptoKeyVersion, error) {
+			return client.DestroyCryptoKeyVersion(ctx, &kmspb.DestroyCryptoKeyVersionRequest{Name: version})
+		}); err != nil {
+			return fmt.Errorf("schedule the %s key's material for destruction: %w", name, err)
+		}
 	}
 	return nil
+}
+
+func destroyable(versions []*kmspb.CryptoKeyVersion) []string {
+	var named []string
+	for _, version := range versions {
+		switch version.GetState() {
+		case kmspb.CryptoKeyVersion_ENABLED, kmspb.CryptoKeyVersion_DISABLED:
+			named = append(named, version.GetName())
+		}
+	}
+	return named
 }
 
 func (b bootstrapper) takeDatabase(ctx context.Context, read survey) error {

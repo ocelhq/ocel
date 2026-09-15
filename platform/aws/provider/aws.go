@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -31,6 +32,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
@@ -103,6 +105,14 @@ func (p *Provider) ImageRegistry(ctx context.Context, _ providerkit.Class, _ []s
 	return registry.Resolve(ctx, ecr.NewFromConfig(p.aws))
 }
 
+func (p *Provider) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
+	held, err := payloads.ContainerRuntime(arch)
+	if err != nil {
+		return nil, err
+	}
+	return held.Bytes, nil
+}
+
 func (p *Provider) Images(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
 	if !registry.Owns(target) {
 		return providerkit.RegistryImages(target), nil
@@ -173,10 +183,47 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPr
 	if err := refuseContainersBehindFunctionEdge(pre); err != nil {
 		return err
 	}
+	if err := p.nagStaleEdgeKey(ctx, pre); err != nil {
+		return err
+	}
+	if err := p.nagStaleOriginSecret(ctx, pre); err != nil {
+		return err
+	}
 	if err := p.publishRuntimeLayers(ctx, pre); err != nil {
 		return err
 	}
 	return p.releases.Preflight(ctx, pre)
+}
+
+func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre providerkit.DeployPreflight) error {
+	if pre.Edge == "" || pre.Report == nil {
+		return nil
+	}
+	params, err := p.classParams(ctx, pre.Plan.Class, pre.Edge)
+	if err != nil {
+		return err
+	}
+	if params.EdgeCredentialsErr != nil {
+		return nil
+	}
+	if notice := bootstrap.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), string(pre.Plan.Class)); notice != "" {
+		pre.Report.Detail(notice)
+	}
+	return nil
+}
+
+func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre providerkit.DeployPreflight) error {
+	if pre.Report == nil {
+		return nil
+	}
+	params, err := p.classParams(ctx, pre.Plan.Class, pre.Edge)
+	if err != nil {
+		return err
+	}
+	if notice := bootstrap.StaleOriginSecretNotice(params.OriginSecret, time.Now(), string(pre.Plan.Class)); notice != "" {
+		pre.Report.Detail(notice)
+	}
+	return nil
 }
 
 func (p *Provider) publishRuntimeLayers(ctx context.Context, pre providerkit.DeployPreflight) error {
@@ -424,7 +471,8 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		ISRWriterScriptName:    params.ISRWriter.ScriptName,
 		ISRWriterSeed:          params.ISRWriterSeed,
 
-		OriginSecret: params.OriginSecret,
+		OriginSecret:         params.OriginSecret.Current,
+		PreviousOriginSecret: params.OriginSecret.Previous,
 
 		Transform: p.transformPass(root),
 	}
@@ -541,17 +589,18 @@ func (s settling) Remove(ctx context.Context, class providerkit.Class, report pr
 }
 
 var (
-	_ providerkit.Provider       = (*Provider)(nil)
-	_ providerkit.Warmer         = (*Provider)(nil)
-	_ providerkit.CodeEmbedder   = (*Provider)(nil)
-	_ providerkit.StackInspector = (*Provider)(nil)
-	_ providerkit.Certifier      = (*Provider)(nil)
-	_ providerkit.ImageRegistry  = (*Provider)(nil)
-	_ providerkit.ImagePusher    = (*Provider)(nil)
-	_ providerkit.Bootstrapper   = settling{}
-	_ awsports.Tables            = (*Provider)(nil)
-	_ awsports.Keys              = (*Provider)(nil)
-	_ awsports.Stores            = (*Provider)(nil)
+	_ providerkit.Provider          = (*Provider)(nil)
+	_ providerkit.Warmer            = (*Provider)(nil)
+	_ providerkit.CodeEmbedder      = (*Provider)(nil)
+	_ providerkit.StackInspector    = (*Provider)(nil)
+	_ providerkit.Certifier         = (*Provider)(nil)
+	_ providerkit.ImageRegistry     = (*Provider)(nil)
+	_ providerkit.ContainerRuntimer = (*Provider)(nil)
+	_ providerkit.ImagePusher       = (*Provider)(nil)
+	_ providerkit.Bootstrapper      = settling{}
+	_ awsports.Tables               = (*Provider)(nil)
+	_ awsports.Keys                 = (*Provider)(nil)
+	_ awsports.Stores               = (*Provider)(nil)
 )
 
 const s3Scheme = "s3"

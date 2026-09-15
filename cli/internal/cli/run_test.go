@@ -183,18 +183,18 @@ export default { slug: "test-app" };
 
 		projectID := testProjectID(t)
 		const apiURL = "https://api.example.com"
-		srv := devserver.New(apiURL, "tok", projectID, "http://127.0.0.1:0")
-		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
-
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatalf("listen: %v", err)
 		}
+		srv := devserver.New(apiURL, "tok", projectID, "http://"+listener.Addr().String())
+		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
+
 		httpSrv := &http.Server{Handler: srv.Mux()}
 		go httpSrv.Serve(listener)
 		defer httpSrv.Close()
 
-		if err := devlock.Create(root, listener.Addr().String()); err != nil {
+		if err := devlock.Create(root, devlock.Lease{Addr: listener.Addr().String(), Token: srv.AppToken()}); err != nil {
 			t.Fatalf("devlock.Write: %v", err)
 		}
 

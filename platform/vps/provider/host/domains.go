@@ -1,7 +1,6 @@
 package host
 
 import (
-	"bytes"
 	"context"
 	"slices"
 	"strings"
@@ -159,35 +158,22 @@ func (h *Host) reshape(ctx context.Context, change func(ProxyState) (ProxyState,
 	if err != nil {
 		return err
 	}
-	state, held, err := h.proxyState(ctx)
-	if err != nil {
-		return err
-	}
-	standing, err := RenderProxyConfig(state)
-	if err != nil {
-		return err
-	}
-	changed, err := change(state)
-	if err != nil {
-		return err
-	}
-	if changed.Pins, err = h.VerifiedPins(ctx); err != nil {
-		return err
-	}
-	next, err := RenderProxyConfig(changed)
-	if err != nil {
-		return err
-	}
-	if bytes.Equal(next, standing) {
-		return nil
-	}
-	written, err := h.writeProxyDocument(ctx, held.digest, string(next))
-	if err != nil {
+	shaped, err := h.composeProxy(ctx, 0, func(standing ProxyState, _ bool) (ProxyState, bool, error) {
+		changed, err := change(standing)
+		if err != nil {
+			return ProxyState{}, false, err
+		}
+		if changed.Pins, err = h.VerifiedPins(ctx); err != nil {
+			return ProxyState{}, false, err
+		}
+		return changed, true, nil
+	})
+	if err != nil || !shaped.changed {
 		return err
 	}
 	if _, err := h.ran(ctx, "load the hostnames this box claims onto the running proxy",
 		words(helperCommand("flip", ProxyConfigMount)), nil, elevation); err != nil {
-		return h.reverted(ctx, held.text, written, err)
+		return h.reverted(ctx, shaped.held.text, shaped.written, err)
 	}
 	return nil
 }

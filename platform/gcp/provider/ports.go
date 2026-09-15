@@ -24,7 +24,7 @@ type edges struct {
 	region    string
 }
 
-var supportedEdges = []edge.Kind{direct.Kind, alb.Kind, cloudflare.Kind}
+var supportedEdges = []edge.Kind{direct.Kind, alb.Kind}
 
 func (edges) Supported() []edge.Kind { return slices.Clone(supportedEdges) }
 
@@ -45,12 +45,16 @@ func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 			Region:  e.region,
 		}), nil
 	case cloudflare.Kind:
-		return cloudflare.New(string(e.namespace)), nil
+		return nil, providerkit.Refuse(providerkit.CodeInvalid,
+			"this provider cannot front deployments with the %q edge yet: that edge answers every request from a worker it runs, "+
+				"and nothing here builds the program that worker would run, so a bootstrap of it would stand resources no deploy could use.\n"+
+				"Front them with %s, which answers on the url Cloud Run gives each service, or with %s, which stands one load balancer up per bootstrap class at %s",
+			kind, direct.Kind, alb.Kind, alb.StandingCost)
 	}
 	return nil, providerkit.Refuse(providerkit.CodeInvalid,
 		"this provider cannot front deployments with the %q edge; it fronts them with %s, which answers on the url Cloud Run gives each service, "+
-			"with %s, which stands one load balancer up per bootstrap class at %s, and with %s, which is bought separately",
-		kind, direct.Kind, alb.Kind, alb.StandingCost, cloudflare.Kind)
+			"and with %s, which stands one load balancer up per bootstrap class at %s",
+		kind, direct.Kind, alb.Kind, alb.StandingCost)
 }
 
 type records struct{ p *Provider }

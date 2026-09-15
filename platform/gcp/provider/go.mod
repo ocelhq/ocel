@@ -9,9 +9,11 @@ require (
 	cloud.google.com/go/storage v1.64.0
 	github.com/google/go-containerregistry v0.21.7
 	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
+	github.com/ocelhq/ocel/pkg/connectorkit v0.0.0
 	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit/pulumi v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/pkg/runtimekit v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/pulumi/pulumi-gcp/sdk/v9 v9.36.1
@@ -192,7 +194,7 @@ require (
 	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/exp v0.0.0-20260824195058-e88cd73687aa // indirect
 	golang.org/x/mod v0.39.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/net v0.58.0
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
@@ -225,3 +227,7 @@ replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/clo
 replace github.com/ocelhq/ocel/pkg/configdoc => ../../../pkg/configdoc
 
 replace github.com/ocelhq/ocel/pkg/costkit => ../../../pkg/costkit
+
+replace github.com/ocelhq/ocel/pkg/connectorkit => ../../../pkg/connectorkit
+
+replace github.com/ocelhq/ocel/pkg/runtimekit => ../../../pkg/runtimekit

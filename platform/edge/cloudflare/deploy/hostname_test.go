@@ -173,6 +173,15 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		writeResult(w, map[string]any{"id": name})
 	})
 
+	mux.HandleFunc("GET /accounts/acct/workers/scripts/{name}/script-settings", func(w http.ResponseWriter, r *http.Request) {
+		settings, ok := m.scriptSettings[r.PathValue("name")]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		writeResult(w, settings)
+	})
+
 	mux.HandleFunc("GET /accounts/acct/workers/scripts/{name}/settings", func(w http.ResponseWriter, r *http.Request) {
 		settings, ok := m.scriptSettings[r.PathValue("name")]
 		if !ok {
@@ -317,7 +326,26 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		writeResult(w, m.existingTokens)
 	})
 
+	mux.HandleFunc("POST /user/tokens", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		id := fmt.Sprintf("token-new-%d", len(m.existingTokens)+1)
+		m.existingTokens = append(m.existingTokens, map[string]any{"id": id, "name": body["name"]})
+		writeResult(w, map[string]any{"id": id, "name": body["name"], "value": "token-value-" + id})
+	})
+
+	mux.HandleFunc("GET /user/tokens/verify", func(w http.ResponseWriter, _ *http.Request) {
+		writeResult(w, map[string]any{"id": "verified", "status": "active"})
+	})
+
+	mux.HandleFunc("GET /user/tokens/permission_groups", func(w http.ResponseWriter, r *http.Request) {
+		writeResult(w, []map[string]any{{"id": "group-r2-write", "name": r.URL.Query().Get("name")}})
+	})
+
 	mux.HandleFunc("DELETE /user/tokens/{id}", func(w http.ResponseWriter, r *http.Request) {
+		m.existingTokens = slices.DeleteFunc(m.existingTokens, func(token map[string]any) bool {
+			return token["id"] == r.PathValue("id")
+		})
 		m.deletedTokens = append(m.deletedTokens, r.PathValue("id"))
 		writeResult(w, map[string]any{"id": r.PathValue("id")})
 	})
@@ -436,6 +464,10 @@ func prunedPlan(desired ...string) routePlan {
 
 func stemPlan(stem string, desired ...string) routePlan {
 	return routePlan{desired: desired, prune: true, pruneStem: stem}
+}
+
+func ownedPlan(slug string, desired ...string) routePlan {
+	return routePlan{desired: desired, owns: projectOwnsScript(slug)}
 }
 
 func requiredRecordPlan(record string, desired ...string) routePlan {
@@ -628,6 +660,45 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			plan:          stemPlan("ocel-shop-preview", "*.preview.app.com"),
 			createdRoutes: []string{"*.preview.app.com/*"},
 			warnings:      []string{"Advanced Certificate"},
+		},
+		{
+			name: "a route another project's worker holds is refused, not repointed",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "theirs", "pattern": "shop.app.com/*", "script": "ocel-other-prod"},
+				},
+			},
+			script:  "ocel-shop-prod",
+			plan:    ownedPlan("shop", "shop.app.com"),
+			wantErr: []string{"ocel-other-prod", "shop.app.com/*"},
+		},
+		{
+			name: "a route an older worker of the same project holds is repointed",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "mine", "pattern": "shop.app.com/*", "script": "ocel-shop--prod--root"},
+				},
+			},
+			script:          "ocel--shop--prod--web",
+			plan:            ownedPlan("shop", "shop.app.com"),
+			repointedRoutes: []string{"mine"},
+		},
+		{
+			name: "a lookalike slug is not the same project",
+			mock: &cfMock{
+				zoneID:   "zone1",
+				zoneName: "app.com",
+				existingRoutes: []map[string]any{
+					{"id": "lookalike", "pattern": "shop.app.com/*", "script": "ocel-shopfoo-prod"},
+				},
+			},
+			script:  "ocel-shop-prod",
+			plan:    ownedPlan("shop", "shop.app.com"),
+			wantErr: []string{"ocel-shopfoo-prod"},
 		},
 		{
 			name: "a stem never prunes a hostname the plan still wants",

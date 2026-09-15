@@ -197,7 +197,16 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, runtime pro
 	if err != nil {
 		t.Fatalf("build the %s function's image: %v", runtime.Name, err)
 	}
-	return held(t, repository, image)
+	arch, _ := providerkit.GoArch(runtime.Arch)
+	binary, err := p.ContainerRuntime(ctx, arch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapped, err := providerkit.WrapContainer(image, binary)
+	if err != nil {
+		t.Fatalf("wrap the %s function's image in the runtime, as a deploy does: %v", runtime.Name, err)
+	}
+	return held(t, repository, wrapped)
 }
 
 func serverImage(t *testing.T, p *gcp.Provider, repository, mark string) string {

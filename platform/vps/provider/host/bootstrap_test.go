@@ -85,7 +85,7 @@ func TestHealRefusesEveryItemOutsideTheRecordTier(t *testing.T) {
 
 	class := providerkit.ClassProduction
 	for _, name := range []string{
-		ClassDir(class), SealKeyPath(class), SealHelper, sudoersSeal, deployUser, sshDir, authorizedKeys,
+		ClassDir(class), SealKeyPath(class), SealHelper, sudoersSeal(class), deployUser, sshDir, authorizedKeys,
 	} {
 		read := drifted(t, standingHost(), name)
 		refused := refusal(t, second(healable(read)), providerkit.CodeDenied)
@@ -172,7 +172,7 @@ func TestHealIsNotWedgedByWhatItsOwnLoginCannotSee(t *testing.T) {
 		unread = append(unread, item.ID())
 		delete(read.Observed, item.ID())
 	}
-	for _, hidden := range []string{KindFile + " " + sudoersSeal, KindFile + " " + ProxyHelper} {
+	for _, hidden := range []string{KindFile + " " + sudoersSeal(providerkit.ClassProduction), KindFile + " " + ProxyHelper} {
 		if !slices.Contains(unread, hidden) {
 			t.Fatalf("%s reads as one %s can hash, and a survey drawn by that login reports nothing for it: %v", hidden, deployUser, unread)
 		}

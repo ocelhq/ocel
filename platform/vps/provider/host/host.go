@@ -315,7 +315,14 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 	case KindNetwork:
 		rendered, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
 		return strings.TrimSpace(rendered) != networkHeld, err
-	case KindContainer:
+	case KindContainer, KindApps, KindAppNetworks:
+		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
+		return err == nil, err
+	case KindUnit:
+		if taken.path != LiveService && taken.path != LiveSocketUnit {
+			return false, providerkit.Refuse(providerkit.CodeInvalid,
+				"%s %s is not ocel's to take: what this host runs stays when ocel goes", taken.kind, taken.path)
+		}
 		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
 		return err == nil, err
 	case KindDir, KindFile, KindSealKey, KindProxyConfig:

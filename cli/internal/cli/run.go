@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/link"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
+	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
@@ -67,12 +68,12 @@ func runRun(ctx context.Context, deps cmddeps.Deps, local bool, cwd string, appA
 		return err
 	}
 
-	leaderAddr, found, err := runningDevServer(cfg.Dir)
+	leader, found, err := runningDevServer(cfg.Dir)
 	if err != nil {
 		return err
 	}
 	if found {
-		return runOnceAsFollower(ctx, deps, leaderAddr, appArgs, stdout, stderr, stdin)
+		return runOnceAsFollower(ctx, deps, leader, appArgs, stdout, stderr, stdin)
 	}
 
 	var consoleLink *devConsole
@@ -87,16 +88,16 @@ func runRun(ctx context.Context, deps cmddeps.Deps, local bool, cwd string, appA
 	return runStandalone(ctx, deps, consoleLink, cfg, appArgs, stdout, stderr, stdin)
 }
 
-func runningDevServer(root string) (string, bool, error) {
+func runningDevServer(root string) (devlock.Lease, bool, error) {
 	result, err := election.Elect(root)
 	if err != nil {
-		return "", false, fmt.Errorf("look for a running dev server: %w", err)
+		return devlock.Lease{}, false, fmt.Errorf("look for a running dev server: %w", err)
 	}
-	return result.LeaderAddr, result.Role == election.Follower, nil
+	return result.Leader, result.Role == election.Follower, nil
 }
 
-func runOnceAsFollower(ctx context.Context, deps cmddeps.Deps, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	stream, err := subscribeEnv(ctx, leaderAddr)
+func runOnceAsFollower(ctx context.Context, deps cmddeps.Deps, leader devlock.Lease, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+	stream, err := subscribeEnv(ctx, leader)
 	if err != nil {
 		return fmt.Errorf("connect to leader: %w", err)
 	}

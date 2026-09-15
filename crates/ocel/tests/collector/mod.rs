@@ -9,6 +9,8 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 
+pub const TOKEN: &str = "opensesame";
+
 pub const DECLARE: &str = "/app.resources.v1.ResourceService/Declare";
 pub const DECLARE_ENV: &str = "/app.resources.v1.ResourceService/DeclareEnv";
 pub const REPORT_ENV_PROBLEMS: &str = "/app.resources.v1.ResourceService/ReportEnvProblems";
@@ -16,6 +18,7 @@ pub const REPORT_ENV_PROBLEMS: &str = "/app.resources.v1.ResourceService/ReportE
 pub struct Received {
     pub path: String,
     pub protocol: Option<String>,
+    pub authorization: Option<String>,
     json: bool,
     body: Vec<u8>,
 }
@@ -72,6 +75,7 @@ fn serve(mut stream: TcpStream, cells: &[VariableCell]) -> Received {
     let mut length = 0usize;
     let mut content_type = String::new();
     let mut protocol = None;
+    let mut authorization = None;
     loop {
         let mut header = String::new();
         reader.read_line(&mut header).expect("header");
@@ -88,12 +92,28 @@ fn serve(mut stream: TcpStream, cells: &[VariableCell]) -> Received {
         if let Some(value) = lowered.strip_prefix("connect-protocol-version:") {
             protocol = Some(value.trim().to_string());
         }
+        if lowered.starts_with("authorization:") {
+            let (_, value) = header.split_once(':').expect("a header value");
+            authorization = Some(value.trim().to_string());
+        }
     }
 
     let mut body = vec![0u8; length];
     reader.read_exact(&mut body).expect("body");
 
     let json = content_type.ends_with("json");
+    if authorization.as_deref() != Some(&format!("Bearer {TOKEN}")) {
+        stream
+            .write_all(b"HTTP/1.1 403 Forbidden\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
+            .expect("refuse");
+        return Received {
+            path,
+            protocol,
+            authorization,
+            json,
+            body,
+        };
+    }
     let response = if path == DECLARE_ENV {
         encoded(json, cells)
     } else {
@@ -113,6 +133,7 @@ fn serve(mut stream: TcpStream, cells: &[VariableCell]) -> Received {
     Received {
         path,
         protocol,
+        authorization,
         json,
         body,
     }

@@ -51,10 +51,18 @@ func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string
 		return fmt.Errorf("%s is not set; it is required to destroy the shared preview entry worker", envAccountID)
 	}
 
-	var errs []error
-	if err := p.stripPreviewWildcardRoute(ctx, accountID, baseDomain); err != nil {
-		errs = append(errs, err)
+	snap := p.routeSnapshot()
+	if err := p.stripPreviewWildcardRoute(ctx, accountID, snap, baseDomain); err != nil {
+		return err
 	}
+	held, err := p.previewEntryStillRouted(ctx, accountID, snap)
+	if err != nil {
+		return err
+	}
+	if held {
+		return nil
+	}
+	var errs []error
 	if err := p.detachCustomDomains(ctx, accountID, previewEntryScript); err != nil {
 		errs = append(errs, err)
 	}
@@ -64,7 +72,24 @@ func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string
 	return errors.Join(errs...)
 }
 
-func (p *provider) stripPreviewWildcardRoute(ctx context.Context, accountID, baseDomain string) error {
+func (p *provider) previewEntryStillRouted(ctx context.Context, accountID string, snap *routeSnapshot) (bool, error) {
+	owned, err := p.accountZones(ctx, accountID)
+	if err != nil {
+		return false, err
+	}
+	for _, zone := range owned {
+		inZone, err := snap.inZone(ctx, zone.id)
+		if err != nil {
+			return false, err
+		}
+		if slices.ContainsFunc(inZone, func(route workers.RouteListResponse) bool { return route.Script == previewEntryScript }) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (p *provider) stripPreviewWildcardRoute(ctx context.Context, accountID string, snap *routeSnapshot, baseDomain string) error {
 	wildcard := edge.PreviewWildcard(baseDomain)
 	if wildcard == "" {
 		return nil
@@ -73,7 +98,6 @@ func (p *provider) stripPreviewWildcardRoute(ctx context.Context, accountID, bas
 	if err != nil {
 		return err
 	}
-	snap := p.routeSnapshot()
 	inZone, err := snap.inZone(ctx, zoneID)
 	if err != nil {
 		return err

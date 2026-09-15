@@ -25,6 +25,7 @@ type sessionFile struct {
 	Size     int64     `dynamodbav:"size"`
 	MimeType string    `dynamodbav:"mime_type"`
 	State    fileState `dynamodbav:"state"`
+	Notified bool      `dynamodbav:"notified"`
 	Error    string    `dynamodbav:"error,omitempty"`
 }
 
@@ -121,6 +122,24 @@ func (s *sessionStore) markSucceeded(ctx context.Context, sessionID string, idx 
 		return false, fmt.Errorf("transition session %s file %d: %w", sessionID, idx, err)
 	}
 	return true, nil
+}
+
+func (s *sessionStore) markNotified(ctx context.Context, sessionID string, idx int) error {
+	_, err := s.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                aws.String(s.table),
+		Key:                      s.key(sessionID),
+		UpdateExpression:         aws.String(fmt.Sprintf("SET files[%d].notified = :notified", idx)),
+		ConditionExpression:      aws.String(fmt.Sprintf("files[%d].#st = :succeeded", idx)),
+		ExpressionAttributeNames: map[string]string{"#st": "state"},
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
+			":notified":  &ddbtypes.AttributeValueMemberBOOL{Value: true},
+			":succeeded": &ddbtypes.AttributeValueMemberS{Value: string(stateSucceeded)},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("record the callback for session %s file %d: %w", sessionID, idx, err)
+	}
+	return nil
 }
 
 func aggregateState(files []sessionFile) fileState {

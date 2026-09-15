@@ -70,21 +70,25 @@ async function sendWebResponse(res: any, webRes: Response): Promise<void> {
   res.end(Buffer.from(await webRes.arrayBuffer()));
 }
 
-async function waitForDevServerAddr(child: ChildProcess): Promise<string> {
+async function waitForDevServer(child: ChildProcess): Promise<{ addr: string; token: string }> {
   return new Promise((resolve, reject) => {
     let buf = "";
     const onData = (d: Buffer) => {
       buf += d.toString();
-      const m = buf.match(/DEV_SERVER_ADDR=(\S+)/);
-      if (m) {
+      const addr = buf.match(/DEV_SERVER_ADDR=(\S+)/);
+      const token = buf.match(/DEV_SERVER_TOKEN=(\S+)/);
+      if (addr && token) {
         child.stdout?.off("data", onData);
-        resolve(m[1]);
+        resolve({ addr: addr[1], token: token[1] });
       }
     };
     child.stdout?.on("data", onData);
     child.stderr?.on("data", (d) => process.stderr.write(`[devserver] ${d}`));
     child.on("exit", (code) => reject(new Error(`devserver exited early (code ${code})`)));
-    setTimeout(() => reject(new Error("devserver never printed DEV_SERVER_ADDR")), 15_000);
+    setTimeout(
+      () => reject(new Error("devserver never printed DEV_SERVER_ADDR and DEV_SERVER_TOKEN")),
+      15_000,
+    );
   });
 }
 
@@ -171,9 +175,10 @@ describe("ocel/blob dev e2e (MinIO)", () => {
       devServer = spawn(devServerBin, ["-api", appBase, "-token", token, "-project", projectId], {
         stdio: ["pipe", "pipe", "pipe"],
       });
-      const devServerAddr = await waitForDevServerAddr(devServer);
+      const started = await waitForDevServer(devServer);
 
-      process.env.OCEL_RUNTIME_ADDRESS = devServerAddr;
+      process.env.OCEL_RUNTIME_ADDRESS = started.addr;
+      process.env.OCEL_SESSION_TOKEN = started.token;
       process.env.OCEL_RESOURCE_BUCKET_storage = JSON.stringify({
         name: "storage",
         bucket: { bucket: "storage" },

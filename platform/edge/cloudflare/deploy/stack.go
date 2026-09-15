@@ -103,6 +103,11 @@ const genericDomainAppsBinding = "OCEL_DOMAIN_APPS"
 
 type private struct {
 	EntryWorkers []string `json:"entryWorkers,omitempty"`
+	EnvelopeKey  string   `json:"envelopeKey,omitempty"`
+}
+
+func (own private) wrapsEnvelopes() bool {
+	return own.EnvelopeKey != "" && len(own.EntryWorkers) > 0
 }
 
 type stack struct {
@@ -140,7 +145,23 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	slug := spec.Slug
 	endpoint := program.StoreEndpoint
 
-	generic := genericWorker(spec, slug)
+	var held private
+	if err := prior.Adapter.Into(&held); err != nil {
+		return nil, err
+	}
+	envelopeKey := held.EnvelopeKey
+	if !spec.PruneOnly && envelopeKey == "" {
+		minted, err := mintEnvelopeKey()
+		if err != nil {
+			return nil, err
+		}
+		envelopeKey = minted
+	}
+
+	generic, err := genericWorker(spec, slug, envelopeKey)
+	if err != nil {
+		return nil, err
+	}
 	stamp, err := specStamp(spec, generic)
 	if err != nil {
 		return nil, err
@@ -151,7 +172,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		return nil, err
 	}
 	opened := func(state edge.StackState) (edge.EdgeStack, error) {
-		var own private
+		own := private{EnvelopeKey: envelopeKey}
 		if !spec.PruneOnly {
 			own.EntryWorkers = p.recordEntryWorker(slug, program.Name)
 		}
@@ -180,6 +201,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		prune:          spec.PruneRoutes,
 		pruneStem:      program.PruneWorkerStem,
 		requiredRecord: program.RequiredRecord,
+		owns:           projectOwnsScript(slug),
 	}, spec.Warn); err != nil {
 		return nil, err
 	}
@@ -483,21 +505,26 @@ func withSecret(worker edge.Worker, name, value string) edge.Worker {
 	return worker
 }
 
-func genericWorker(spec edge.StackSpec, slug string) edge.Worker {
+func genericWorker(spec edge.StackSpec, slug, envelopeKey string) (edge.Worker, error) {
 	worker := withVar(
 		withService(spec.Program.Worker, genericStoreBinding, spec.Program.StoreScriptName),
 		genericSlugBinding,
 		slug,
 	)
+	if envelopeKey != "" {
+		worker = withSecret(worker, envelopeKeyBinding, envelopeKey)
+	}
 	if spec.Program.ISRWriterScriptName != "" {
 		worker = withService(worker, genericISRWriterBinding, spec.Program.ISRWriterScriptName)
 	}
 	if len(spec.DomainApps) > 0 {
-		if encoded, err := json.Marshal(spec.DomainApps); err == nil {
-			worker = withVar(worker, genericDomainAppsBinding, string(encoded))
+		encoded, err := json.Marshal(spec.DomainApps)
+		if err != nil {
+			return edge.Worker{}, fmt.Errorf("encode the apps each domain of %s serves: %w", slug, err)
 		}
+		worker = withVar(worker, genericDomainAppsBinding, string(encoded))
 	}
-	return bindCodeLoader(bindObjectStore(worker, spec.Values))
+	return bindCodeLoader(bindObjectStore(worker, spec.Values)), nil
 }
 
 func withService(worker edge.Worker, name, service string) edge.Worker {

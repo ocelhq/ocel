@@ -68,7 +68,7 @@ describe("the resolved path is what keys the response", () => {
       expect(follow.headers.get("x-ocel-cache")).toBe("HIT");
       expect(await follow.text()).toBe("prerendered");
       expect(renders()).toBe(1);
-      expect(keys()).toEqual(["https://cache.ocel/p1/web/d1/p"]);
+      expect(keys()).toEqual(["https://cache.ocel/app.example/p1/web/d1/p"]);
     });
 
     it("gives both served forms one key under skipTrailingSlashRedirect", async () => {
@@ -83,7 +83,7 @@ describe("the resolved path is what keys the response", () => {
       expect(second.headers.get("x-ocel-cache")).toBe("HIT");
       expect(await second.text()).toBe("prerendered");
       expect(renders()).toBe(1);
-      expect(keys()).toEqual(["https://cache.ocel/p1/web/d1/p"]);
+      expect(keys()).toEqual(["https://cache.ocel/app.example/p1/web/d1/p"]);
     });
 
     it("gives two apps of one project a key each", async () => {
@@ -100,8 +100,8 @@ describe("the resolved path is what keys the response", () => {
       expect(web.manifest.buildId).toBe(admin.manifest.buildId);
       expect(renders()).toBe(2);
       expect(keys()).toEqual([
-        "https://cache.ocel/p1/web/d1/p",
-        "https://cache.ocel/p1/admin/d1/p",
+        "https://cache.ocel/app.example/p1/web/d1/p",
+        "https://cache.ocel/app.example/p1/admin/d1/p",
       ]);
     });
 
@@ -118,7 +118,10 @@ describe("the resolved path is what keys the response", () => {
       expect(first.app).toBe(second.app);
       expect(first.manifest.buildId).toBe(second.manifest.buildId);
       expect(renders()).toBe(2);
-      expect(keys()).toEqual(["https://cache.ocel/p1/web/d1/p", "https://cache.ocel/p1/web/d2/p"]);
+      expect(keys()).toEqual([
+        "https://cache.ocel/app.example/p1/web/d1/p",
+        "https://cache.ocel/app.example/p1/web/d2/p",
+      ]);
     });
   });
 });

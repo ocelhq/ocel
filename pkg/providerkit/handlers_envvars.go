@@ -376,7 +376,7 @@ func metadataProto(scope values.Scope, m values.Metadata) *envvarsv1.ValueMetada
 func valuesError(err error) error {
 	switch {
 	case errors.Is(err, values.ErrStaleVersion):
-		return connect.NewError(connect.CodeFailedPrecondition, err)
+		return connect.NewError(connect.CodeAborted, err)
 	case errors.Is(err, values.ErrDangling):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	case errors.Is(err, values.ErrWouldDeepen), errors.Is(err, values.ErrIsReference), errors.Is(err, values.ErrTooLarge):

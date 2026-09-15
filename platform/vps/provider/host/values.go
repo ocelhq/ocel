@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"maps"
 	"slices"
 	"strings"
@@ -17,10 +18,91 @@ const (
 	envFileSuffix = ".env"
 	envDigestLen  = 12
 	forgetWindow  = 30 * time.Second
+	orphanMinutes = "10"
 )
+
+const registryPrefix = "registry."
+
+func sweepCommand() string {
+	return "find " + quoted(stateRoot) + " -mindepth 1 -maxdepth 2 " +
+		`\( -type f -name ` + quoted("*"+envFileSuffix) + " -o -type d -name " + quoted(registryPrefix+"*") + ` \)` +
+		" -mmin +" + orphanMinutes + " -prune -exec rm -rf {} + 2>/dev/null || true"
+}
+
+func (h *Host) sweep(ctx context.Context, elevation string) error {
+	_, err := h.ran(ctx, "sweep what an interrupted deploy left under "+stateRoot, sweepCommand(), nil, elevation)
+	return err
+}
 
 func EnvFile(class providerkit.Class, container string) string {
 	return StateDir(class) + "/" + container + envFileSuffix
+}
+
+const (
+	handedDir     = "handed"
+	handedKnown   = "held"
+	handedUnknown = "unknown"
+)
+
+func HandedNote(class providerkit.Class, container string) string {
+	return StateDir(class) + "/" + handedDir + "/" + container
+}
+
+type Note struct {
+	Handed []string        `json:"handed"`
+	Live   json.RawMessage `json:"live,omitempty"`
+}
+
+func RenderNote(spec Container) ([]byte, error) {
+	note := Note{Handed: slices.Sorted(maps.Keys(spec.Env))}
+	if len(spec.Manifest) > 0 {
+		note.Live = json.RawMessage(spec.Manifest)
+	}
+	written, err := json.Marshal(note)
+	if err != nil {
+		return nil, err
+	}
+	return append(written, '\n'), nil
+}
+
+func ParseNote(raw []byte) (Note, error) {
+	var note Note
+	if err := json.Unmarshal(raw, &note); err != nil {
+		return Note{}, providerkit.Refuse(providerkit.CodeNotReady,
+			"the note of what a container was handed is not one ocel wrote: %v", err)
+	}
+	return note, nil
+}
+
+func (h *Host) note(ctx context.Context, spec Container) error {
+	rendered, err := RenderNote(spec)
+	if err != nil {
+		return err
+	}
+	_, err = h.ran(ctx, "note the names "+spec.App+" is handed",
+		"install -D -m 0600 /dev/stdin "+quoted(HandedNote(spec.Class, spec.Name)), bytes.NewReader(rendered), "")
+	return err
+}
+
+func handedCommand(class providerkit.Class, container string) string {
+	note := quoted(HandedNote(class, container))
+	return "if [ -f " + note + " ]; then echo " + handedKnown + "; cat " + note + "; else echo " + handedUnknown + "; fi"
+}
+
+func (h *Host) handed(ctx context.Context, spec Container) (Note, bool, error) {
+	said, err := h.ran(ctx, "ask what "+spec.Name+" was handed", handedCommand(spec.Class, spec.Name), nil, "")
+	if err != nil {
+		return Note{}, false, err
+	}
+	verdict, rest, _ := strings.Cut(said, "\n")
+	if strings.TrimSpace(verdict) != handedKnown {
+		return Note{}, false, nil
+	}
+	note, err := ParseNote([]byte(rest))
+	if err != nil {
+		return Note{}, false, err
+	}
+	return note, true, nil
 }
 
 func RenderEnvFile(env map[string]string) ([]byte, error) {
@@ -70,12 +152,13 @@ type handoff struct {
 }
 
 func handing(spec Container) (handoff, error) {
-	digest, err := envDigest(spec.Name, spec.Env)
+	env := spec.delivered()
+	digest, err := envDigest(spec.Name, env)
 	if err != nil {
 		return handoff{}, err
 	}
 	held := handoff{digest: digest}
-	if len(spec.Env) > 0 {
+	if len(env) > 0 {
 		held.path = EnvFile(spec.Class, spec.Name)
 	}
 	return held, nil
@@ -85,7 +168,7 @@ func (h *Host) hand(ctx context.Context, held handoff, spec Container) error {
 	if held.path == "" {
 		return nil
 	}
-	rendered, err := RenderEnvFile(spec.Env)
+	rendered, err := RenderEnvFile(spec.delivered())
 	if err != nil {
 		return err
 	}

@@ -31,6 +31,7 @@ type mockedEngine struct {
 	ran       []string
 	torndown  []string
 	previewed []providerkit.Change
+	upErr     func(stack string) error
 }
 
 type pushingAssetSets struct {
@@ -81,6 +82,11 @@ func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerki
 	monitor = pushingAssetSets{inner: monitor, pending: e.pending}
 	if err := sdk.RunErr(setup.Program, sdk.WithMocks("shop", setup.Stack, monitor)); err != nil {
 		return nil, err
+	}
+	if e.upErr != nil {
+		if err := e.upErr(setup.Stack); err != nil {
+			return nil, err
+		}
 	}
 	e.mu.Lock()
 	e.ran = append(e.ran, setup.Stack)

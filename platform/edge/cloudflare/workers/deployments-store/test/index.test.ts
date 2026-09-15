@@ -53,10 +53,17 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
 }
 
 describe("schema version", () => {
-  it("reports the schema the store speaks, without a credential", async () => {
-    const res = await SELF.fetch(req(`/${SLUG}/schema-version`));
+  it("reports the schema the store speaks to the project that holds the instance", async () => {
+    await initialize();
+    const res = await SELF.fetch(authedReq("/schema-version"));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ schemaVersion: SCHEMA_VERSION });
+  });
+
+  it("tells nothing to a caller without the project secret", async () => {
+    await initialize();
+    expect((await SELF.fetch(req(`/${SLUG}/schema-version`))).status).toBe(401);
+    expect((await SELF.fetch(bearerReq(`/${SLUG}/schema-version`, BOOTSTRAP))).status).toBe(401);
   });
 });
 
@@ -71,10 +78,10 @@ describe("initialize", () => {
     expect(res.status).toBe(401);
   });
 
-  it("seeds the instance and reports the identity it now carries", async () => {
+  it("seeds the instance and reports nothing but that it did", async () => {
     const res = await initialize();
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ownerToken: "owner-1", secret: SECRET });
+    expect(res.status).toBe(204);
+    expect(await res.text()).toBe("");
 
     const staged = await SELF.fetch(
       authedReq("/staged", { method: "PUT", body: JSON.stringify(makeRecord()) }),
@@ -82,7 +89,7 @@ describe("initialize", () => {
     expect(staged.status).toBe(204);
   });
 
-  it("returns the existing identity for an already-initialized instance", async () => {
+  it("refuses to re-seed an initialized instance and never discloses what it holds", async () => {
     await initialize();
     const res = await SELF.fetch(
       bearerReq(`/${SLUG}/initialize`, BOOTSTRAP, {
@@ -90,8 +97,10 @@ describe("initialize", () => {
         body: JSON.stringify({ ownerToken: "owner-2", secret: "other" }),
       }),
     );
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ownerToken: "owner-1", secret: SECRET });
+    expect(res.status).toBe(409);
+    const body = await res.text();
+    expect(body).not.toMatch(/owner-1/);
+    expect(body).not.toMatch(new RegExp(SECRET));
 
     expect(
       (
@@ -132,8 +141,18 @@ describe("initialize", () => {
         body: JSON.stringify({ ownerToken: "owner-2", secret: "other", force: true }),
       }),
     );
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ownerToken: "owner-2", secret: "other" });
+    expect(res.status).toBe(204);
+    expect(await res.text()).toBe("");
+    expect(
+      (
+        await SELF.fetch(
+          bearerReq(`/${SLUG}/staged`, "other", {
+            method: "PUT",
+            body: JSON.stringify(makeRecord()),
+          }),
+        )
+      ).status,
+    ).toBe(204);
   });
 });
 

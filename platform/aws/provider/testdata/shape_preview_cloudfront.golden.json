@@ -468,7 +468,7 @@
       "name": "ocel-containers",
       "region": "us-east-1",
       "properties": {
-        "internal": false,
+        "internal": true,
         "load_balancer_type": "application"
       }
     },

@@ -23,6 +23,7 @@ fn a_scoped_member_of_a_group_a_root_value_turned_on_is_owed() {
     let (url, requests) = holding(2, vec![cell("INHERITED_TOKEN", "", "t")]);
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", &url);
+    std::env::set_var("OCEL_DEV_SERVER_TOKEN", collector::TOKEN);
 
     assert!(
         ocel::discover().expect("discover"),

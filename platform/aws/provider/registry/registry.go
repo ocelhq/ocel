@@ -112,9 +112,10 @@ func repositoryOf(target providerkit.RegistryTarget, coordinate string) (string,
 
 func ensure(ctx context.Context, api ECRAPI, name string) error {
 	_, err := api.CreateRepository(ctx, &ecr.CreateRepositoryInput{
-		RepositoryName:     aws.String(name),
-		ImageTagMutability: ecrtypes.ImageTagMutabilityImmutable,
-		Tags:               []ecrtypes.Tag{{Key: aws.String(managedByTag), Value: aws.String(managedByOcel)}},
+		RepositoryName:             aws.String(name),
+		ImageTagMutability:         ecrtypes.ImageTagMutabilityImmutable,
+		ImageScanningConfiguration: &ecrtypes.ImageScanningConfiguration{ScanOnPush: true},
+		Tags:                       []ecrtypes.Tag{{Key: aws.String(managedByTag), Value: aws.String(managedByOcel)}},
 	})
 	var exists *ecrtypes.RepositoryAlreadyExistsException
 	if errors.As(err, &exists) {

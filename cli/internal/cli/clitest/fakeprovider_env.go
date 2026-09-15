@@ -20,6 +20,8 @@ const FakeVarsStoreEnvVar = "OCEL_TEST_FAKE_VARS_STORE"
 
 const FakeRevealFailureEnvVar = "OCEL_TEST_FAKE_REVEAL_FAILURE"
 
+const FakeRacingWriteEnvVar = "OCEL_TEST_FAKE_RACING_WRITE"
+
 type FakeCell struct {
 	Tier       environmentv1.Tier `json:"tier"`
 	Coordinate FakeCoordinate     `json:"coordinate"`
@@ -144,7 +146,7 @@ func checkExpectation(cell *FakeCell, expected *int64) error {
 	if expected == nil || *expected == cell.LiveVersion() {
 		return nil
 	}
-	return connect.NewError(connect.CodeFailedPrecondition,
+	return connect.NewError(connect.CodeAborted,
 		errors.New("vars: stale version"))
 }
 
@@ -299,6 +301,11 @@ func (s *deployFakeProviderServer) GetValue(ctx context.Context, req *envvarsv1.
 	resp := &envvarsv1.GetValueResponse{Found: true, Metadata: metadata}
 	if req.GetReveal() {
 		if resp.Value, err = store.Resolve(req.GetTier(), store[FakeCoordinateID(req.GetTier(), req.GetCoordinate())]); err != nil {
+			return nil, err
+		}
+	}
+	if os.Getenv(FakeRacingWriteEnvVar) == req.GetCoordinate().GetKey() && req.GetCoordinate().GetKey() != "" {
+		if err := store.Write(req.GetTier(), req.GetCoordinate(), FakeCellData{Value: "landed from another terminal"}); err != nil {
 			return nil, err
 		}
 	}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -203,36 +204,57 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	if err != nil {
 		return err
 	}
-	hostnames := s.servedHostnames(pointer)
-	if len(hostnames) > 0 {
-		published, err := s.routeFor(ctx, c, promotion)
-		if err != nil {
-			return err
-		}
-		puts := make(map[string]route, len(hostnames))
-		for _, hostname := range hostnames {
-			puts[hostname] = published
-		}
-		if err := s.routes(c).apply(ctx, puts, nil); err != nil {
-			return err
-		}
+	if err := s.publish(ctx, c, promotion, pointer); err != nil {
+		return err
 	}
 	if err := s.ledger(c).Promote(ctx, promotion, pointer, report); err != nil {
-		return errors.Join(err, s.unpublishUnrecorded(ctx, c, pointer))
+		return errors.Join(err, s.republish(ctx, c, pointer))
 	}
 	return nil
 }
 
-func (s *stack) unpublishUnrecorded(ctx context.Context, c Clients, pointer string) error {
-	host := s.previewHost(pointer)
-	if host == "" {
+func (s *stack) publish(ctx context.Context, c Clients, promotion edge.Promotion, pointer string) error {
+	hostnames := s.servedHostnames(pointer)
+	if len(hostnames) == 0 {
 		return nil
 	}
-	pointers, err := s.ledger(c).Pointers(ctx)
-	if err != nil || slices.Contains(pointers, pointerOr(pointer)) {
+	published, err := s.routeFor(ctx, c, promotion)
+	if err != nil {
 		return err
 	}
-	return s.routes(c).apply(ctx, nil, []string{host})
+	puts := make(map[string]route, len(hostnames))
+	for _, hostname := range hostnames {
+		puts[hostname] = published
+	}
+	return s.routes(c).apply(ctx, puts, nil)
+}
+
+func (s *stack) republish(ctx context.Context, c Clients, pointer string) error {
+	hostnames := s.servedHostnames(pointer)
+	if len(hostnames) == 0 {
+		return nil
+	}
+	active, found, err := s.activePromotion(ctx, c, pointer)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return s.routes(c).apply(ctx, nil, hostnames)
+	}
+	return s.publish(ctx, c, active, pointer)
+}
+
+func (s *stack) activePromotion(ctx context.Context, c Clients, pointer string) (edge.Promotion, bool, error) {
+	history, err := s.ledger(c).History(ctx, pointer)
+	if err != nil {
+		return edge.Promotion{}, false, err
+	}
+	for _, entry := range history {
+		if entry.Active {
+			return entry.Promotion, true, nil
+		}
+	}
+	return edge.Promotion{}, false, nil
 }
 
 func (s *stack) servedHostnames(pointer string) []string {
@@ -245,15 +267,18 @@ func (s *stack) servedHostnames(pointer string) []string {
 	return s.state.Bound
 }
 
+func (s *stack) previewBase() string {
+	if base := s.state.GlobalPreview; base != "" {
+		return base
+	}
+	return s.own.PreviewBase
+}
+
 func (s *stack) previewSite() edge.PreviewSite {
 	if s.class() != edge.ClassPreview {
 		return edge.PreviewSite{}
 	}
-	base := s.state.GlobalPreview
-	if base == "" {
-		base = s.own.PreviewBase
-	}
-	return edge.SharedPreview(s.slug(), base)
+	return edge.SharedPreview(s.slug(), s.previewBase())
 }
 
 func (s *stack) onPreviewWildcard() bool {
@@ -309,10 +334,13 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 	if err != nil {
 		return route{}, err
 	}
-	published := route{Stack: s.plan().name, Release: identity, Secret: secret}
+	published := route{Stack: s.plan().name, Release: identity, Secret: secret.Presented(record.CreatedAt)}
 	if record.Origin != "" {
-		published.Origin = originHost(record.Origin)
-		published.Protocol = originProtocol(record.Origin)
+		front, err := s.serveContainers(ctx, c, promotion, app, identity)
+		if err != nil {
+			return route{}, err
+		}
+		published.Origin = front.Host
 		published.Container = record.Physical
 		return published, nil
 	}
@@ -328,22 +356,56 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 	return published, nil
 }
 
-func (s *stack) originSecret(ctx context.Context, c Clients) (string, error) {
+func (s *stack) records(c Clients) awsports.Records {
+	return awsports.Records{Dynamo: c.Dynamo, Tables: awsports.Table(s.own.StateTable)}
+}
+
+func (s *stack) serveContainers(ctx context.Context, c Clients, promotion edge.Promotion, app, identity string) (awsports.ContainerFront, error) {
+	front, found, err := awsports.ReadContainerFront(ctx, s.records(c), s.class())
+	if err != nil {
+		return awsports.ContainerFront{}, err
+	}
+	if !found {
+		return awsports.ContainerFront{}, fmt.Errorf("promote %s: %s/%s runs as a container, but the %s class records no container front for the edge to reach it through; re-run the deploy that built it so the substrate records one", promotion.PromotionID, app, identity, s.class())
+	}
+	if s.onPreviewWildcard() {
+		base := s.previewBase()
+		plan, _, err := s.p.previewWildcardPlan(ctx, c, base)
+		if err != nil {
+			return awsports.ContainerFront{}, err
+		}
+		held, found, err := findDistribution(ctx, c, plan.name)
+		if err != nil {
+			return awsports.ContainerFront{}, err
+		}
+		if !found {
+			return awsports.ContainerFront{}, fmt.Errorf("promote %s: the %q edge serves previews from one wildcard distribution, and this account has none for %s; run `ocel domain use --preview %s` first", promotion.PromotionID, Kind, base, base)
+		}
+		return front, s.p.declareContainerFront(ctx, c, plan, kindWildcardDistribution, held.id, front)
+	}
+	held, err := s.ensureDistribution(ctx, c)
+	if err != nil {
+		return awsports.ContainerFront{}, err
+	}
+	return front, s.p.declareContainerFront(ctx, c, s.plan(), kindDistribution, held.id, front)
+}
+
+func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSecret, error) {
 	command := providerkit.BootstrapCommand(s.class())
 	name, err := c.Namespace.OriginSecretParamFor(string(s.class()))
 	if err != nil {
-		return "", err
+		return bootstrap.OriginSecret{}, err
 	}
 	out, err := c.SSM.GetParameter(ctx, &ssm.GetParameterInput{
 		Name:           aws.String(name),
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
-		return "", fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s is unreadable. Re-run `%s` against this account to mint it: %w", name, command, err)
+		return bootstrap.OriginSecret{}, fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s is unreadable. Re-run `%s` against this account to mint it: %w", name, command, err)
 	}
-	secret := aws.ToString(out.Parameter.Value)
-	if secret == "" {
-		return "", fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s holds nothing. Re-run `%s` against this account to mint it", name, command)
+	secret, err := bootstrap.OriginSecretOf(aws.ToString(out.Parameter.Value))
+	if err != nil {
+		return bootstrap.OriginSecret{}, fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s holds something else. Re-run `%s` against this account to mint it: %w", name, command, err)
 	}
 	return secret, nil
 }
@@ -412,9 +474,11 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return err
 	}
 	var errs []error
+	unbound := true
 	for _, hostname := range s.state.Bound {
 		if err := s.UnbindDomain(ctx, hostname); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
+			unbound = false
 		}
 	}
 	unrouted := s.unroutePreviews(ctx, c)
@@ -438,7 +502,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		}
 	}
 	s.own.Distribution, s.state.Front = "", ""
-	if unrouted == nil && gone && s.provisioned() {
+	if unbound && unrouted == nil && gone && s.provisioned() {
 		if err := s.ledger(c).Destroy(ctx); err != nil {
 			errs = append(errs, err)
 		}

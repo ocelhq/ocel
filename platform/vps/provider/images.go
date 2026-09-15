@@ -2,7 +2,11 @@ package vps
 
 import (
 	"context"
-	"net/http"
+	"fmt"
+	"io"
+
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -28,24 +32,22 @@ func (l loaded) Has(ctx context.Context, push providerkit.ImagePush) (bool, erro
 }
 
 func (l loaded) Push(ctx context.Context, push providerkit.ImagePush, report providerkit.Reporter) error {
-	daemon, err := providerkit.OpenDockerHost()
-	if err != nil {
-		return err
+	if push.Built == nil {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"%s's image is loaded straight onto the box, and this release carries no image wrapped in the runtime to load", push.App)
 	}
-	transport := daemon.Transport()
-	defer transport.CloseIdleConnections()
+	return l.load(ctx, push, report)
+}
 
-	stream, err := daemon.Export(ctx, &http.Client{Transport: transport}, push.Target)
+func (l loaded) load(ctx context.Context, push providerkit.ImagePush, report providerkit.Reporter) error {
+	ref, err := name.NewTag(push.Target, name.Insecure)
 	if err != nil {
-		return err
+		return fmt.Errorf("%q names nowhere the box can hold an image: %w", push.Target, err)
 	}
-	defer func() { _ = stream.Close() }()
-
-	checked := providerkit.CompleteArchive(stream, daemon.Address, push.Target)
-	said, err := l.host.LoadImage(ctx, push.Target, checked)
-	if gap := checked.Gap(); gap != nil {
-		return gap
-	}
+	stream, writer := io.Pipe()
+	go func() { writer.CloseWithError(tarball.Write(ref, push.Built, writer)) }()
+	said, err := l.host.LoadImage(ctx, push.Target, stream)
+	_ = stream.Close()
 	if err != nil {
 		return err
 	}
@@ -94,7 +96,15 @@ func (p pulled) Push(ctx context.Context, push providerkit.ImagePush, report pro
 			return err
 		}
 	}
-	said, err := p.host.PullImage(ctx, p.target, push.Target, push.Digest)
+	digest := push.Digest
+	if push.Built != nil {
+		built, err := push.Built.Digest()
+		if err != nil {
+			return fmt.Errorf("read the digest of %s's wrapped image: %w", push.App, err)
+		}
+		digest = built.String()
+	}
+	said, err := p.host.PullImage(ctx, p.target, push.Target, digest)
 	if err != nil {
 		return err
 	}

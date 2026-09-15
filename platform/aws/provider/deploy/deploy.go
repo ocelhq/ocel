@@ -79,7 +79,8 @@ type Config struct {
 	ISRWriterScriptName    string
 	ISRWriterSeed          string
 
-	OriginSecret string
+	OriginSecret         string
+	PreviousOriginSecret string
 
 	Edge edge.Edge
 

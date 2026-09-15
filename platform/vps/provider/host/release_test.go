@@ -497,7 +497,7 @@ func TestASteadyStateWriteBesideANeighboursDrainKeepsThatDrainDeclared(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	stood := &flipped{bench: machine(nil), held: configFor(t, flipTo)}
+	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
 	proxied := servesProxy(stood.bench, &stood.held)
 	writes := 0
 	stood.answer = func(command string) (session.Result, bool) {
@@ -505,7 +505,7 @@ func TestASteadyStateWriteBesideANeighboursDrainKeepsThatDrainDeclared(t *testin
 		case writesProxy(command):
 			stood.mu.Lock()
 			writes++
-			collided := writes == 2
+			collided := writes == 1
 			if collided {
 				stood.held = string(neighbourDraining)
 			}
@@ -883,5 +883,68 @@ func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T
 	}
 	if len(quiet.told) != 0 {
 		t.Errorf("a first deploy states a drain contract for a container it does not have: %v", quiet.told)
+	}
+}
+
+func interrupted(t *testing.T, at func(command string) bool, answer session.Result) (*flipped, context.Context) {
+	t.Helper()
+	stood := &flipped{bench: machine(nil), held: configFor(t, retired)}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	proxied := servesProxy(stood.bench, &stood.held)
+	stood.answer = func(command string) (session.Result, bool) {
+		if at(command) {
+			cancel()
+			return answer, true
+		}
+		return proxied(command)
+	}
+	return stood, ctx
+}
+
+func TestAReleaseInterruptedAtTheFlipStillPutsTheProxyBackAndRemovesWhatItStoodUp(t *testing.T) {
+	t.Parallel()
+
+	stood, ctx := interrupted(t, func(command string) bool { return strings.Contains(command, quoted("deploy")) },
+		session.Result{Code: 1, Stderr: "gate never answered"})
+	err := stood.host().Release(ctx, aRelease(), nil)
+	if err == nil {
+		t.Fatal("a release whose flip failed under a cancelled context released successfully")
+	}
+	state, readErr := ReadProxyState([]byte(stood.held))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if len(state.Routes) != 1 || state.Routes[0].Upstream != retired || state.Retiring != "" {
+		t.Errorf("%s was left as %+v after the interrupted release, want the previous release put back: the context that carried the interrupt is the one the unwind ran under, so the unwind never ran", ProxyConfig, state)
+	}
+	if stood.at("docker rm --force "+quoted(physical)) < 0 {
+		t.Errorf("the interrupted release left %s standing with nothing routing to it: %v", physical, stood.commands())
+	}
+	if !strings.Contains(err.Error(), "the previous release is still the live upstream") {
+		t.Errorf("the refusal reads %q and does not say the previous release is still live", err)
+	}
+}
+
+func TestAReleaseInterruptedAtItsFirstWriteStillPutsTheFileBackAndRemovesWhatItStoodUp(t *testing.T) {
+	t.Parallel()
+
+	writes := 0
+	stood, ctx := interrupted(t, func(command string) bool {
+		if !writesProxy(command) {
+			return false
+		}
+		writes++
+		return writes == 1
+	}, session.Result{Code: 1, Stderr: "no space left on device"})
+	err := stood.host().Release(ctx, aRelease(), nil)
+	if err == nil {
+		t.Fatal("a release whose flip configuration was never written released successfully")
+	}
+	if stood.at("docker rm --force "+quoted(physical)) < 0 {
+		t.Errorf("the interrupted release left %s standing with nothing routing to it: %v", physical, stood.commands())
+	}
+	if !strings.Contains(err.Error(), "was put back as it was") {
+		t.Errorf("the refusal reads %q, and the stranded write was never put back under the cancelled context", err)
 	}
 }

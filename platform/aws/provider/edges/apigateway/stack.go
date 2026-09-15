@@ -172,17 +172,77 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	if err != nil {
 		return err
 	}
+	if err := moveStage(ctx, c, id, promotion.PromotionID, patch); err != nil {
+		return err
+	}
+	if err := s.routePreview(ctx, c, pointer, id); err != nil {
+		return err
+	}
+	if err := s.ledger(c).Promote(ctx, promotion, pointer, report); err != nil {
+		return errors.Join(err, s.restage(ctx, c, pointer, id))
+	}
+	return nil
+}
+
+func moveStage(ctx context.Context, c Clients, id, promotionID string, patch []agtypes.PatchOperation) error {
 	if _, err := c.APIGateway.UpdateStage(ctx, &apigateway.UpdateStageInput{
 		RestApiId:       aws.String(id),
 		StageName:       aws.String(stageName),
 		PatchOperations: patch,
 	}); err != nil {
-		return fmt.Errorf("move the %s stage of REST API %s onto promotion %s: %w", stageName, id, promotion.PromotionID, err)
+		if promotionID == "" {
+			return fmt.Errorf("move the %s stage of REST API %s back off a promotion the ledger refused: %w", stageName, id, err)
+		}
+		return fmt.Errorf("move the %s stage of REST API %s onto promotion %s: %w", stageName, id, promotionID, err)
 	}
-	if err := s.routePreview(ctx, c, pointer, id); err != nil {
+	return nil
+}
+
+func (s *stack) restage(ctx context.Context, c Clients, pointer, id string) error {
+	active, found, err := s.activePromotion(ctx, c, pointer)
+	if err != nil {
 		return err
 	}
-	return s.ledger(c).Promote(ctx, promotion, pointer, report)
+	if !found {
+		if err := s.unroutePreview(ctx, c, pointer); err != nil {
+			return err
+		}
+		return moveStage(ctx, c, id, "", unsetPatch())
+	}
+	patch, err := s.stagePatch(ctx, c, active)
+	if err != nil {
+		return err
+	}
+	return moveStage(ctx, c, id, active.PromotionID, patch)
+}
+
+func (s *stack) activePromotion(ctx context.Context, c Clients, pointer string) (edge.Promotion, bool, error) {
+	history, err := s.ledger(c).History(ctx, pointer)
+	if err != nil {
+		return edge.Promotion{}, false, err
+	}
+	for _, entry := range history {
+		if entry.Active {
+			return entry.Promotion, true, nil
+		}
+	}
+	return edge.Promotion{}, false, nil
+}
+
+func unsetPatch() []agtypes.PatchOperation {
+	return variablePatch(unsetVariables())
+}
+
+func variablePatch(variables map[string]string) []agtypes.PatchOperation {
+	patch := make([]agtypes.PatchOperation, 0, len(variables))
+	for _, name := range slices.Sorted(maps.Keys(variables)) {
+		patch = append(patch, agtypes.PatchOperation{
+			Op:    agtypes.OpReplace,
+			Path:  aws.String("/variables/" + name),
+			Value: aws.String(variables[name]),
+		})
+	}
+	return patch
 }
 
 func (s *stack) stagePatch(ctx context.Context, c Clients, promotion edge.Promotion) ([]agtypes.PatchOperation, error) {
@@ -214,18 +274,10 @@ func (s *stack) stagePatch(ctx context.Context, c Clients, promotion edge.Promot
 	if assets == "" {
 		assets = unsetVariable
 	}
-	return []agtypes.PatchOperation{
-		{
-			Op:    agtypes.OpReplace,
-			Path:  aws.String("/variables/" + entryVariable),
-			Value: aws.String(record.EntryFunction),
-		},
-		{
-			Op:    agtypes.OpReplace,
-			Path:  aws.String("/variables/" + assetsVariable),
-			Value: aws.String(assets),
-		},
-	}, nil
+	return variablePatch(map[string]string{
+		entryVariable:  record.EntryFunction,
+		assetsVariable: assets,
+	}), nil
 }
 
 func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
@@ -418,9 +470,11 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return err
 	}
 	var errs []error
+	unbound := true
 	for _, hostname := range s.state.Bound {
 		if err := s.UnbindDomain(ctx, hostname); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before destroying the stack that serves it: %w", hostname, err))
+			unbound = false
 		}
 	}
 	ledger := s.ledger(c)
@@ -444,6 +498,9 @@ func (s *stack) Destroy(ctx context.Context) error {
 		return errors.Join(append(errs, drained)...)
 	}
 	s.own.API = ""
+	if !unbound {
+		return errors.Join(errs...)
+	}
 	if err := ledger.Destroy(ctx); err != nil {
 		errs = append(errs, err)
 	}

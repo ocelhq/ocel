@@ -85,4 +85,14 @@ export const getRuntimeAddress = () => {
   return address;
 };
 
-export const getSessionToken = () => process.env[SESSION_TOKEN];
+export const getSessionToken = () => {
+  const token = process.env[SESSION_TOKEN];
+
+  if (!token) {
+    throw new Error(
+      `${SESSION_TOKEN} is not defined, so the ocel runtime at ${RUNTIME_ADDRESS} would refuse every call. It is delivered beside ${RUNTIME_ADDRESS} by \`ocel dev\` and by the deployed runtime, never set by hand.`,
+    );
+  }
+
+  return token;
+};

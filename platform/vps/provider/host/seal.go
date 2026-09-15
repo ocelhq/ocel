@@ -33,8 +33,12 @@ func sealKey(class providerkit.Class) Item {
 	return Item{Kind: KindSealKey, Name: SealKeyPath(class), Mode: sealKeyMode, Owner: rootOwner, Class: class, Note: "the key values are sealed with"}
 }
 
-func sealSudoers() []byte {
-	return []byte(deployUser + " ALL=(root) NOPASSWD: " + SealHelper + "\n")
+func sealSudoers(class providerkit.Class) []byte {
+	allowed := make([]string, 0, 2)
+	for _, verb := range []string{"seal", "open"} {
+		allowed = append(allowed, SealHelper+" "+string(class)+" "+verb+" *")
+	}
+	return []byte(deployUser + " ALL=(root) NOPASSWD: " + strings.Join(allowed, ", ") + "\n")
 }
 
 func (i Item) mint() string {

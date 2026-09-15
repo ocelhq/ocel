@@ -11,6 +11,7 @@ use (
 	./pkg/proto
 	./pkg/providerkit
 	./pkg/providerkit/pulumi
+	./pkg/runtimekit
 	./pkg/target
 	./platform/aws/connector
 	./platform/aws/provider
@@ -19,8 +20,10 @@ use (
 	./platform/edge/contract
 	./platform/gcp/connector
 	./platform/gcp/provider
+	./platform/gcp/runtime
 	./platform/vps/connector
 	./platform/vps/provider
+	./platform/vps/runtime
 	./sdk
 	./tests/fixtures/deploy/go/server
 	./tests/fixtures/sdk/go

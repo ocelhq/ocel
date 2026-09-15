@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
@@ -19,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
 )
@@ -95,6 +97,36 @@ func bound(t *testing.T, stack edge.EdgeStack) {
 	}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
+}
+
+var fakeFront = awsports.ContainerFront{
+	VPCOrigin: "vo_2XyZ3abc4DEF5ghi",
+	Host:      "internal-ocel-containers-production-123.eu-west-1.elb.amazonaws.com",
+}
+
+func recordFront(t *testing.T, w *world, class edge.Class) {
+	t.Helper()
+	records := awsports.Records{Dynamo: w.dynamo, Tables: awsports.Table(fakeStateTable)}
+	if err := awsports.WriteContainerFront(context.Background(), records, class, fakeFront); err != nil {
+		t.Fatalf("WriteContainerFront: %v", err)
+	}
+}
+
+func stagedContainer(t *testing.T, stack edge.EdgeStack) edge.DeploymentRecord {
+	t.Helper()
+	record := edge.DeploymentRecord{
+		App:         "web",
+		Identity:    "d1.f1",
+		Image:       "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel/web:sha256-abc",
+		Physical:    "shop-prod-web-container-r3f8a1c90",
+		Origin:      "http://" + fakeFront.Host,
+		HealthPath:  "/",
+		AssetPrefix: fakeAssetPrefix,
+	}
+	if err := stack.Ledger().PutStaged(context.Background(), record); err != nil {
+		t.Fatalf("PutStaged: %v", err)
+	}
+	return record
 }
 
 func promotion() edge.Promotion {
@@ -358,32 +390,23 @@ func TestPromote(t *testing.T) {
 		}
 	})
 
-	t.Run("a container release is routed to its own origin with no asset bucket in front", func(t *testing.T) {
+	t.Run("a container release is routed through the class front, declared on the distribution as a VPC origin, with no asset bucket in front", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
 		stack := reconciled(t, w)
 		bound(t, stack)
-		record := edge.DeploymentRecord{
-			App:         "web",
-			Identity:    "d1.f1",
-			Image:       "123456789012.dkr.ecr.eu-west-1.amazonaws.com/ocel/web:sha256-abc",
-			Physical:    "shop-prod-web-container-r3f8a1c90",
-			Origin:      "http://ocel-containers-production-123.eu-west-1.elb.amazonaws.com",
-			HealthPath:  "/",
-			AssetPrefix: fakeAssetPrefix,
-		}
-		if err := stack.Ledger().PutStaged(context.Background(), record); err != nil {
-			t.Fatalf("PutStaged: %v", err)
-		}
+		stagedContainer(t, stack)
+		recordFront(t, w, edge.ClassProduction)
+		w.front.calls = nil
 
 		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 
 		published := routeOn(t, w, stack, boundHost)
-		if published.Origin != "ocel-containers-production-123.eu-west-1.elb.amazonaws.com" || published.Protocol != "http" {
-			t.Errorf("origin = %q over %q, want the front the container answers behind, reached over plain http", published.Origin, published.Protocol)
+		if published.Origin != fakeFront.Host {
+			t.Errorf("origin = %q, want the front the container answers behind", published.Origin)
 		}
 		if published.Container != "shop-prod-web-container-r3f8a1c90" {
 			t.Errorf("container = %q, want the service the front's rule names: every release shares one front", published.Container)
@@ -393,6 +416,89 @@ func TestPromote(t *testing.T) {
 		}
 		if published.Secret != fakeSecret {
 			t.Errorf("the route carries no secret, so the origin cannot tell the edge from a stranger")
+		}
+		held := w.front.named(productionDistributionName())
+		if got := containerFrontOf(held.config); got != fakeFront {
+			t.Errorf("the distribution declares %+v, want the class front as a VPC origin: the resolver can select it but never rewrite a request to it", got)
+		}
+		if w.front.count("UpdateDistribution") != 1 || w.front.count("GetDistribution") == 0 {
+			t.Errorf("CloudFront saw %v, want one update that declares the origin and a wait for it to roll out before the route goes live", w.front.calls)
+		}
+		steps := w.trail.taken()
+		if indexOf(t, steps, "UpdateDistribution "+held.id) > indexOf(t, steps, "kvs.UpdateKeys") {
+			t.Errorf("the route was written before the distribution declared the origin it selects (%v)", steps)
+		}
+
+		w.front.calls = nil
+		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
+			t.Fatalf("Promote (again): %v", err)
+		}
+		if made := w.front.mutations(); len(made) != 0 {
+			t.Errorf("a second container promote changed %v, want the declared origin left alone", made)
+		}
+
+		again, err := w.edge().Reconcile(context.Background(), testSpec(), stack.State())
+		if err != nil {
+			t.Fatalf("Reconcile: %v", err)
+		}
+		if got := containerFrontOf(w.front.named(productionDistributionName()).config); got != fakeFront {
+			t.Errorf("after a reconcile the distribution declares %+v, want the class front kept: dropping it breaks every container route on the hostname", got)
+		}
+		if err := again.BindDomain(context.Background(), edge.DomainBinding{Hostname: "www." + boundHost, Certificate: certificateARN}); err != nil {
+			t.Fatalf("BindDomain: %v", err)
+		}
+		if got := containerFrontOf(w.front.named(productionDistributionName()).config); got != fakeFront {
+			t.Errorf("after binding a domain the distribution declares %+v, want the class front kept", got)
+		}
+	})
+
+	t.Run("a container release whose class records no front is refused before the route is written", func(t *testing.T) {
+		t.Parallel()
+
+		w := newWorld()
+		stack := reconciled(t, w)
+		bound(t, stack)
+		stagedContainer(t, stack)
+
+		err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter())
+		if err == nil || !strings.Contains(err.Error(), "container front") {
+			t.Fatalf("Promote error = %v, want a refusal naming the missing front", err)
+		}
+		if _, ok := w.store.held(ownState(t, stack).KeyValueStore)[boundHost]; ok {
+			t.Error("a route was written to a front the distribution cannot reach")
+		}
+	})
+
+	t.Run("a release deployed before a rotation is presented the secret it was deployed with, and one deployed after it the current one", func(t *testing.T) {
+		t.Parallel()
+
+		w := newWorld()
+		rotatedAt := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+		w.ssm.secret = bootstrap.OriginSecret{Current: fakeSecret, CreatedAt: rotatedAt, Previous: "3f7a9c1e5b2d84600f1a2b3c4d5e6f70-old", RotatedAt: rotatedAt}
+		stack := reconciled(t, w)
+		bound(t, stack)
+		record := staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+		record.CreatedAt = rotatedAt.Unix() - 1
+		if err := stack.Ledger().PutStaged(context.Background(), record); err != nil {
+			t.Fatalf("PutStaged: %v", err)
+		}
+
+		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
+			t.Fatalf("Promote: %v", err)
+		}
+		if published := routeOn(t, w, stack, boundHost); published.Secret != w.ssm.secret.Previous {
+			t.Errorf("the route presents %q, want the secret the release was deployed with: it accepts nothing minted after it", published.Secret)
+		}
+
+		record.CreatedAt = rotatedAt.Unix()
+		if err := stack.Ledger().PutStaged(context.Background(), record); err != nil {
+			t.Fatalf("PutStaged: %v", err)
+		}
+		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
+			t.Fatalf("Promote: %v", err)
+		}
+		if published := routeOn(t, w, stack, boundHost); published.Secret != fakeSecret {
+			t.Errorf("the route presents %q, want the current secret a release deployed after the rotation accepts", published.Secret)
 		}
 	})
 

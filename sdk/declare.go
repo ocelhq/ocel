@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"connectrpc.com/connect"
+	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
@@ -24,8 +25,16 @@ func resources() resourcesv1connect.ResourceServiceClient {
 		http.DefaultClient,
 		os.Getenv(constants.DevServerEnvName),
 		connect.WithProtoJSON(),
+		connect.WithInterceptors(authorizing),
 	)
 }
+
+var authorizing = connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		req.Header().Set("Authorization", channel.FormatAuthHeader(os.Getenv(constants.DevServerTokenEnvName)))
+		return next(ctx, req)
+	}
+})
 
 func declare(req *resourcesv1.DeclareRequest) error {
 	_, err := resources().Declare(context.Background(), req)

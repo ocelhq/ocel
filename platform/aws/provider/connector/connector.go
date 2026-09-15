@@ -4,12 +4,18 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -21,19 +27,34 @@ import (
 const (
 	Arch = "arm64"
 
-	runtime    = "provided.al2023"
-	handler    = "bootstrap"
-	memory     = 256
-	timeout    = 30
-	codePrefix = "connector"
-	codeAbort  = 7
+	runtime = "provided.al2023"
+	handler = "bootstrap"
+	memory  = 256
+	timeout = 30
 
-	outputBucket  = "CodeBucketName"
-	outputURL     = "FunctionUrl"
-	outputVersion = "ConnectorVersion"
+	reservedConcurrency = 10
+	codePrefix          = "connector"
+	codeAbort           = 7
+
+	outputBucket    = "CodeBucketName"
+	outputURL       = "FunctionUrl"
+	outputVersion   = "ConnectorVersion"
+	outputPublicKey = "ConnectorPublicKey"
+
+	KeyParameterEnvVar = "OCEL_CONNECTOR_KEY_PARAMETER"
+
+	heartbeatEvery = "rate(1 minute)"
 )
 
 func StackName(ns bootstrap.Namespace) string { return string(ns) + "-connector" }
+
+func KeyParameter(ns bootstrap.Namespace) string { return "/" + string(ns) + "/connector/key" }
+
+type Wake struct {
+	Ocel string `json:"ocel"`
+}
+
+const WakeHeartbeat = "heartbeat"
 
 func reviewing(ns bootstrap.Namespace, progress func(string)) cfn.ChangeReview {
 	return bootstrap.AdmitReplacements(ns, false, progress)
@@ -43,18 +64,56 @@ type APIs struct {
 	CFN     cfn.API
 	Buckets cfn.BucketEmptierAPI
 	Objects payloads.ObjectStore
+	SSM     KeyStore
+}
+
+type KeyStore interface {
+	PutParameter(ctx context.Context, in *ssm.PutParameterInput, optFns ...func(*ssm.Options)) (*ssm.PutParameterOutput, error)
+	DeleteParameter(ctx context.Context, in *ssm.DeleteParameterInput, optFns ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error)
+}
+
+func mintKey(ctx context.Context, store KeyStore, ns bootstrap.Namespace) (string, error) {
+	seed := make([]byte, ed25519.SeedSize)
+	if _, err := rand.Read(seed); err != nil {
+		return "", fmt.Errorf("mint the connector's key: %w", err)
+	}
+	if _, err := store.PutParameter(ctx, &ssm.PutParameterInput{
+		Name:        aws.String(KeyParameter(ns)),
+		Description: aws.String("Ocel: the key the connector signs its heartbeats to the console with. The function reads it at start; nothing else does."),
+		Value:       aws.String(base64.StdEncoding.EncodeToString(seed)),
+		Type:        ssmtypes.ParameterTypeSecureString,
+		Overwrite:   aws.Bool(true),
+	}); err != nil {
+		return "", fmt.Errorf("write the connector's key into %s: %w", KeyParameter(ns), err)
+	}
+	return PublicKeyOf(seed), nil
+}
+
+func PublicKeyOf(seed []byte) string {
+	return base64.StdEncoding.EncodeToString(ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey))
+}
+
+func takeKey(ctx context.Context, store KeyStore, ns bootstrap.Namespace) error {
+	_, err := store.DeleteParameter(ctx, &ssm.DeleteParameterInput{Name: aws.String(KeyParameter(ns))})
+	var gone *ssmtypes.ParameterNotFound
+	if err != nil && !errors.As(err, &gone) {
+		return fmt.Errorf("delete the connector's key %s: %w", KeyParameter(ns), err)
+	}
+	return nil
 }
 
 type Standing struct {
-	Present bool
-	Version string
-	URL     string
+	Present   bool
+	Version   string
+	URL       string
+	PublicKey string
 }
 
 type Release struct {
-	Binary  []byte
-	Version string
-	Config  []byte
+	Binary    []byte
+	Version   string
+	Config    []byte
+	PublicKey string
 }
 
 func Read(ctx context.Context, api cfn.Describer, ns bootstrap.Namespace) (Standing, error) {
@@ -67,9 +126,10 @@ func Read(ctx context.Context, api cfn.Describer, ns bootstrap.Namespace) (Stand
 	}
 	outputs := cfn.OutputsOf(stack)
 	return Standing{
-		Present: outputs[outputURL] != "",
-		Version: outputs[outputVersion],
-		URL:     outputs[outputURL],
+		Present:   outputs[outputURL] != "",
+		Version:   outputs[outputVersion],
+		URL:       outputs[outputURL],
+		PublicKey: outputs[outputPublicKey],
 	}, nil
 }
 
@@ -96,46 +156,51 @@ func varsKeys(ctx context.Context, api cfn.Describer, ns bootstrap.Namespace) ([
 }
 
 func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Release,
-	writer providerkit.Writer, progress func(string)) (string, error) {
+	writer providerkit.Writer, progress func(string)) (Standing, error) {
 	keys, err := varsKeys(ctx, apis.CFN, ns)
 	if err != nil {
-		return "", err
+		return Standing{}, err
 	}
 
 	bucket, err := codeBucket(ctx, apis, ns, writer, progress)
 	if err != nil {
-		return "", err
+		return Standing{}, err
 	}
 
 	archived, err := zipped(release.Binary)
 	if err != nil {
-		return "", err
+		return Standing{}, err
 	}
 	at, err := payloads.Place(ctx, apis.Objects, bucket, codePrefix, "connector", archived)
 	if err != nil {
-		return "", err
+		return Standing{}, err
 	}
 	say(progress, "connector "+release.Version+" staged at "+at.Key)
 
-	template, err := templateFor(ns, at, release.Version, release.Config, keys)
+	if release.PublicKey, err = mintKey(ctx, apis.SSM, ns); err != nil {
+		return Standing{}, err
+	}
+	say(progress, "the connector's key is at "+KeyParameter(ns))
+
+	template, err := templateFor(ns, at, release, keys)
 	if err != nil {
-		return "", err
+		return Standing{}, err
 	}
 	if err := cfn.Upsert(ctx, apis.CFN, ns, StackName(ns), template, nil,
 		[]cfntypes.Capability{cfntypes.CapabilityCapabilityIam}, tagsFor(ns, template, writer),
 		reviewing(ns, progress)); err != nil {
-		return "", err
+		return Standing{}, err
 	}
 
 	standing, err := Read(ctx, apis.CFN, ns)
 	if err != nil {
-		return "", err
+		return Standing{}, err
 	}
 	if standing.URL == "" {
-		return "", providerkit.Refuse(providerkit.CodeNotReady,
+		return Standing{}, providerkit.Refuse(providerkit.CodeNotReady,
 			"%s stands and published no function url, so the console has nothing to dial", StackName(ns))
 	}
-	return standing.URL, nil
+	return standing, nil
 }
 
 func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress func(string)) error {
@@ -157,6 +222,10 @@ func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress fun
 		return err
 	}
 	say(progress, "deleted "+StackName(ns))
+	if err := takeKey(ctx, apis.SSM, ns); err != nil {
+		return err
+	}
+	say(progress, "deleted "+KeyParameter(ns))
 	return nil
 }
 
@@ -250,15 +319,22 @@ func codeTemplate() string {
 	return string(rendered)
 }
 
-func templateFor(ns bootstrap.Namespace, at payloads.Placement, version string, config []byte,
-	keys []string) (string, error) {
-	if len(config) == 0 {
+func templateFor(ns bootstrap.Namespace, at payloads.Placement, release Release, keys []string) (string, error) {
+	if len(release.Config) == 0 {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
 			"this install carries no connector config, so nothing would name the console the function trusts")
 	}
 	if len(keys) == 0 {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
 			"this install names no key variables are sealed under, so the connector would reach every key in the account")
+	}
+	if release.PublicKey == "" {
+		return "", providerkit.Refuse(providerkit.CodeInvalid,
+			"this install names no public key for the connector, and the console verifies every heartbeat against one")
+	}
+	wake, err := json.Marshal(Wake{Ocel: WakeHeartbeat})
+	if err != nil {
+		return "", err
 	}
 	rendered, err := json.MarshalIndent(map[string]any{
 		"AWSTemplateFormatVersion": "2010-09-09",
@@ -297,13 +373,15 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, version string, 
 					"Environment": map[string]any{"Variables": map[string]any{
 						providerkit.NamespaceEnvVar:       string(ns),
 						edge.AWSRegionVar:                 map[string]any{"Ref": "AWS::Region"},
-						providerkit.ConnectorConfigEnvVar: string(config),
+						providerkit.ConnectorConfigEnvVar: string(release.Config),
+						KeyParameterEnvVar:                KeyParameter(ns),
 					}},
-					"Handler":    handler,
-					"MemorySize": memory,
-					"Role":       map[string]any{"Fn::GetAtt": []string{"ConnectorRole", "Arn"}},
-					"Runtime":    runtime,
-					"Timeout":    timeout,
+					"Handler":                      handler,
+					"MemorySize":                   memory,
+					"ReservedConcurrentExecutions": reservedConcurrency,
+					"Role":                         map[string]any{"Fn::GetAtt": []string{"ConnectorRole", "Arn"}},
+					"Runtime":                      runtime,
+					"Timeout":                      timeout,
 				},
 			},
 			"ConnectorUrl": map[string]any{
@@ -325,6 +403,30 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, version string, 
 					"Principal":           "*",
 				},
 			},
+			"ConnectorHeartbeat": map[string]any{
+				"Type": "AWS::Events::Rule",
+				"Metadata": map[string]any{
+					"Description": "Wakes the connector once a minute to send the console a signed heartbeat: a function runs nothing between invocations, so the beat has to be one.",
+				},
+				"Properties": map[string]any{
+					"ScheduleExpression": heartbeatEvery,
+					"State":              "ENABLED",
+					"Targets": []map[string]any{{
+						"Id":    "connector",
+						"Arn":   map[string]any{"Fn::GetAtt": []string{"ConnectorFunction", "Arn"}},
+						"Input": string(wake),
+					}},
+				},
+			},
+			"ConnectorHeartbeatInvokes": map[string]any{
+				"Type": "AWS::Lambda::Permission",
+				"Properties": map[string]any{
+					"Action":       "lambda:InvokeFunction",
+					"FunctionName": map[string]any{"Fn::GetAtt": []string{"ConnectorFunction", "Arn"}},
+					"Principal":    "events.amazonaws.com",
+					"SourceArn":    map[string]any{"Fn::GetAtt": []string{"ConnectorHeartbeat", "Arn"}},
+				},
+			},
 		},
 		"Outputs": map[string]any{
 			outputBucket: map[string]any{
@@ -337,7 +439,11 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, version string, 
 			},
 			outputVersion: map[string]any{
 				"Description": "The connector release this stack carries.",
-				"Value":       version,
+				"Value":       release.Version,
+			},
+			outputPublicKey: map[string]any{
+				"Description": "The public half of the key the connector signs its heartbeats with. The private half is the SecureString parameter the function reads.",
+				"Value":       release.PublicKey,
 			},
 		},
 	}, "", "  ")
@@ -401,6 +507,10 @@ func tier(ns bootstrap.Namespace, keys []string) []bootstrap.GrantStatement {
 			Condition: map[string]any{
 				"StringEquals": map[string]any{"aws:ResourceTag/" + bootstrap.VarsKeyComponentTagKey: bootstrap.VarsKeyComponentTagValue},
 			},
+		},
+		{
+			Actions:   []string{"ssm:GetParameter"},
+			Resources: []string{"arn:aws:ssm:*:*:parameter" + KeyParameter(ns)},
 		},
 		{
 			Actions:   []string{"cloudformation:DescribeStacks"},

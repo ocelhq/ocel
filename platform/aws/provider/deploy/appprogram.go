@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	live "github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -160,6 +160,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformPatc
 			Bytecode:  bytecode,
 			Router:    router,
 			Guard:     guard,
+			KmsKeyARN: r.cfg.VarsKeyARN,
 			Layers:    layers,
 		},
 	}, nil
@@ -244,7 +245,7 @@ func (r *release) originGuard(plan providerkit.StackPlan) (*originGuard, error) 
 			"the edge reaches %s over a Function URL no signature guards, and this bootstrap holds no secret for the entry function to demand of it; re-run `%s`",
 			plan.App.App, providerkit.BootstrapCommand(r.cfg.Class))
 	}
-	return &originGuard{Entry: guard.Entry, Secret: r.cfg.OriginSecret}, nil
+	return &originGuard{Entry: guard.Entry, Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret}, nil
 }
 
 func (r *release) isrCache(plan providerkit.StackPlan) *isrConfig {

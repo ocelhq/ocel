@@ -158,8 +158,9 @@ type fakeGateway struct {
 	stageErr    error
 	resourceErr error
 
-	deleteErr     error
-	deleteRefused int
+	deleteErr       error
+	deleteRefused   int
+	deleteDomainErr error
 
 	beforeRule func(*fakeGateway, int32)
 }
@@ -758,6 +759,9 @@ func (f *fakeGateway) DeleteDomainName(_ context.Context, in *apigateway.DeleteD
 	defer f.mu.Unlock()
 	name := aws.ToString(in.DomainName)
 	f.record("DeleteDomainName " + name)
+	if f.deleteDomainErr != nil {
+		return nil, f.deleteDomainErr
+	}
 	if _, ok := f.domains[name]; !ok {
 		return nil, &agtypes.NotFoundException{Message: aws.String("no domain " + name)}
 	}
@@ -825,7 +829,8 @@ type fakeDynamo struct {
 	calls    []string
 	pageSize int
 
-	putErr error
+	putErr    error
+	beforePut func(key string, items map[string]map[string]ddbtypes.AttributeValue)
 }
 
 func newFakeDynamo() *fakeDynamo {
@@ -854,6 +859,9 @@ func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...
 		return nil, f.putErr
 	}
 	key := dynamoKey(in.Item)
+	if f.beforePut != nil {
+		f.beforePut(key, f.items)
+	}
 	held, err := conditionHolds(in, f.items[key])
 	if err != nil {
 		return nil, err

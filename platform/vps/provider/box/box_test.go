@@ -79,6 +79,11 @@ func (m *machine) StandUp(_ context.Context, spec host.Container) error {
 	return m.refuse("StandUp")
 }
 
+func (m *machine) ForgetNetwork(_ context.Context, class providerkit.Class, project string) error {
+	m.calls = append(m.calls, "forget network "+string(class)+"/"+project)
+	return m.refuse("ForgetNetwork")
+}
+
 func (m *machine) Promote(_ context.Context, _ providerkit.Class, project, app, coordinate string) error {
 	m.calls = append(m.calls, "head "+project+"/"+app+" at "+coordinate)
 	m.headed = append(m.headed, coordinate)
@@ -1053,5 +1058,8 @@ func TestAPromotionCarriesTheNamesItsDeployResolvedSoTheBoxCanRefuseToServeNone(
 	}
 	if !slices.Equal(spec.Declared, []string{"API_TOKEN", "DATABASE_URL", "orders"}) {
 		t.Errorf("the promotion names %v of what the record says web was handed, and a box that is told none of them puts the app back with an empty environment rather than refusing", spec.Declared)
+	}
+	if spec.HealthPath != "/healthz" {
+		t.Errorf("the promotion carries the health path %q, want the record's: a container the box re-creates is handed the path its runtime lets probes through on", spec.HealthPath)
 	}
 }

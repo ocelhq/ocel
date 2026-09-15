@@ -96,7 +96,7 @@ func proxyStanding(t *testing.T) standingProxy {
 	}
 	stood := standingProxy{name: name, network: network, dir: dir, pins: pins, helper: helper, here: func(written string) string {
 		return strings.NewReplacer(ProxyPins, pins, proxyRoot, dir, ProxyHelper, helper,
-			quoted(ProxyContainer), quoted(name), quoted(ProxyNetwork), quoted(network)).Replace(written)
+			quoted(ProxyContainer), quoted(name), quoted(ProxyNetwork), quoted(network), `"`+ProxyNetwork+`"`, `"`+network+`"`).Replace(written)
 	}}
 
 	if out, err := exec.Command(dockerEngine, "network", "create", network).CombinedOutput(); err != nil {
@@ -139,13 +139,13 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 
 	stated := containerItem()
 	stated.Name = stood.name
-	stated.Content = []byte(strings.Replace(string(proxyFactsOver([]string{
+	stated.Content = proxyFactsOver([]string{
 		dir + ":" + proxyConfigDir + ":ro",
 		helper + ":" + ProxyHelperMount + ":ro",
 		stood.pins + ":" + proxyPinsMount + ":ro",
 		filepath.Join(dir, "data") + ":" + proxyDataMount,
 		ConnectorRun + ":" + ConnectorRun + ":ro",
-	})), "networks="+ProxyNetwork+" ", "networks="+stood.network+" ", 1))
+	})
 	if observed[stated.ID()] != stated.Digest() {
 		box, _ := exec.Command(dockerEngine, "inspect", "--type", "container", "--format", ProxyFactTemplate, stood.name).Output()
 		t.Errorf("a real engine reports the proxy as something other than the item ocel writes it from, so every re-run plans an update over a proxy that stands:\n%s",

@@ -9,21 +9,20 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-const (
-	secretValue    = "postgres://app:hunter2@db.internal/orders"
-	sensitiveValue = "sk-live-0123456789"
-)
+const sensitiveValue = "sk-live-0123456789"
+
+const aManifest = `{"slug":"shop","class":"production","keys":[{"key":"DATABASE_URL"}],"bindings":[{"name":"main","key":"OCEL_RESOURCE_POSTGRES_main","type":"BINDING_TYPE_POSTGRES"}]}`
 
 func valued() Container {
 	spec := aContainer()
 	spec.Class = providerkit.ClassProduction
 	spec.Resolved = true
 	spec.Env = map[string]string{
-		"DATABASE_URL":                secretValue,
-		"API_TOKEN":                   sensitiveValue,
-		"REGION":                      "eu-west-1",
-		"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"password":"hunter2"}}`,
+		"API_TOKEN": sensitiveValue,
+		"REGION":    "eu-west-1",
 	}
+	spec.HealthPath = "/healthz"
+	spec.Manifest = []byte(aManifest)
 	return spec
 }
 
@@ -357,7 +356,7 @@ func TestADeployThatResolvedNoValueReplacesAContainerHoldingTheOnesItDropped(t *
 		t.Fatal(err)
 	}
 	emptied := stood
-	emptied.Env = nil
+	emptied.Env, emptied.Manifest = nil, nil
 
 	stand := machine(nil)
 	imaging(stand, "running "+appImage+" "+held.digest)
@@ -366,10 +365,10 @@ func TestADeployThatResolvedNoValueReplacesAContainerHoldingTheOnesItDropped(t *
 	}
 	joined := strings.Join(stand.commands(), "\n")
 	if !strings.Contains(joined, quoted("run")+" "+quoted("--detach")) {
-		t.Fatalf("a deploy that resolved no value at all kept the container standing with the values the deploy before it handed over, so removing the last value an app declares never reaches what serves it and DATABASE_URL goes on being served for the life of the release:\n%s", joined)
+		t.Fatalf("a deploy that resolved no value at all kept the container standing with the values the deploy before it handed over, so removing the last value an app declares never reaches what serves it and API_TOKEN goes on being served for the life of the release:\n%s", joined)
 	}
-	if strings.Contains(joined, "--env-file") {
-		t.Errorf("a deploy that resolved no value handed the container an env file:\n%s", joined)
+	if file := wrote(t, stand, EnvFile(emptied.Class, emptied.Name)); file != "OCEL_HEALTH_PATH=/healthz\n" {
+		t.Errorf("a deploy that resolved no value handed the container %q, want the health path alone", file)
 	}
 }
 
@@ -419,6 +418,7 @@ func TestAPromotionOfAnAppDeclaringNoValueStandsItBackUp(t *testing.T) {
 
 	stand := machine(nil)
 	imaging(stand, "false ")
+	noted(stand, "held\n"+`{"handed":[]}`+"\n")
 	if err := stand.host().StandUp(context.Background(), promoted()); err != nil {
 		t.Fatalf("StandUp() of an app that declares no value = %v, want a rollback of it to stand it back up", err)
 	}

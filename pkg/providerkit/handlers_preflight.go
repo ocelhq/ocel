@@ -22,8 +22,9 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	}
 
 	resp := &contractv1.PreflightResponse{
-		Identity: &contractv1.Identity{},
-		Computes: ComputeNames(provider.Computes()),
+		Identity:      &contractv1.Identity{},
+		Computes:      ComputeNames(provider.Computes()),
+		BakedComputes: bakedComputes(provider),
 	}
 
 	identity, err := provider.Credentials().Whoami(ctx)
@@ -80,6 +81,16 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		resp.InfraTier, resp.InfrastructurePresent = tierOf(sibling.Class), true
 	}
 	return resp, nil
+}
+
+func bakedComputes(provider Provider) []string {
+	var baked []string
+	for _, compute := range provider.Computes() {
+		if Bakes(provider, compute) {
+			baked = append(baked, string(compute))
+		}
+	}
+	return baked
 }
 
 func (h *handlers) edgeIdentity(

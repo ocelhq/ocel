@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
@@ -589,6 +592,113 @@ describe("reading a live value", () => {
     );
   });
 });
+
+describe("reading from the live directory", () => {
+  beforeEach(() => {
+    vi.stubEnv("OCEL_PHASE", "");
+  });
+
+  it("reads the file the runtime wrote, bytes and all, when the environment carries nothing", () => {
+    vi.stubEnv("OCEL_LIVE_DIR", liveDir({ FILE_ONLY: "from the file\n" }));
+
+    const env = defineEnv({ FILE_ONLY: { class: "secret" } });
+
+    expect(env.FILE_ONLY).toBe("from the file\n");
+  });
+
+  it("prefers a delivered variable over the live directory file of the same key", () => {
+    vi.stubEnv(
+      "OCEL_LIVE_DIR",
+      liveDir({ FILE_SHADOWED: "from the file", FILE_BARE: "from the file" }),
+    );
+    vi.stubEnv("OCEL_VAR_FILE_SHADOWED", "baked");
+    vi.stubEnv("FILE_BARE", "bare");
+
+    const env = defineEnv({
+      FILE_SHADOWED: { class: "sensitive" },
+      FILE_BARE: { class: "plain" },
+    });
+
+    expect(env.FILE_SHADOWED).toBe("baked");
+    expect(env.FILE_BARE).toBe("bare");
+  });
+
+  it("prefers a pushed live value over the live directory file of the same key", () => {
+    push(1, { FILE_PUSHED: "pushed" });
+    vi.stubEnv("OCEL_LIVE_DIR", liveDir({ FILE_PUSHED: "from the file" }));
+
+    const env = defineEnv({ FILE_PUSHED: { class: "secret" } });
+
+    expect(env.FILE_PUSHED).toBe("pushed");
+  });
+
+  it("takes a key the live directory holds no file for as unset", () => {
+    vi.stubEnv("OCEL_LIVE_DIR", liveDir({}));
+
+    const env = defineEnv({ FILE_MISSING: { class: "secret" } });
+
+    expect(() => env.FILE_MISSING).toThrow(EnvValueError);
+  });
+
+  it("re-reads the file on every read, so a rotation after deploy reaches the next one", () => {
+    const dir = liveDir({ FILE_ROTATED: "first" });
+    vi.stubEnv("OCEL_LIVE_DIR", dir);
+    const env = defineEnv({ FILE_ROTATED: { class: "secret" } });
+    expect(env.FILE_ROTATED).toBe("first");
+
+    writeFileSync(join(dir, "FILE_ROTATED"), "rotated");
+
+    expect(env.FILE_ROTATED).toBe("rotated");
+  });
+
+  it("re-reads a group holding a live member the file delivers", () => {
+    const dir = liveDir({ FILE_GROUPED: "first" });
+    vi.stubEnv("OCEL_LIVE_DIR", dir);
+    vi.stubEnv("FILE_GROUPED_ID", "an id");
+    const env = defineEnv({
+      vault: group({
+        FILE_GROUPED: { class: "secret" },
+        FILE_GROUPED_ID: { class: "plain" },
+      }),
+    });
+    expect(env.vault.FILE_GROUPED).toBe("first");
+
+    writeFileSync(join(dir, "FILE_GROUPED"), "rotated");
+
+    expect(env.vault.FILE_GROUPED).toBe("rotated");
+  });
+
+  it("reads a value of any other class once, since nothing rotates underneath it", () => {
+    let parses = 0;
+    const counting = z.string().transform((value) => {
+      parses += 1;
+      return value;
+    });
+    const dir = liveDir({ FILE_FIXED: "first" });
+    vi.stubEnv("OCEL_LIVE_DIR", dir);
+    const env = defineEnv({ FILE_FIXED: { class: "sensitive", schema: counting } });
+    expect(env.FILE_FIXED).toBe("first");
+
+    writeFileSync(join(dir, "FILE_FIXED"), "rotated");
+
+    expect(env.FILE_FIXED).toBe("first");
+    expect(parses).toBe(1);
+  });
+
+  it("reads no file at all when no live directory is set", () => {
+    vi.stubEnv("OCEL_LIVE_DIR", "");
+
+    const env = defineEnv({ FILE_NO_DIR: { class: "secret" } });
+
+    expect(() => env.FILE_NO_DIR).toThrow(EnvValueError);
+  });
+});
+
+function liveDir(files: Record<string, string>): string {
+  const dir = mkdtempSync(join(tmpdir(), "ocel-live-"));
+  for (const [key, value] of Object.entries(files)) writeFileSync(join(dir, key), value);
+  return dir;
+}
 
 describe("a live value is checked against its schema at init", () => {
   beforeEach(() => {

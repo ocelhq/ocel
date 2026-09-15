@@ -91,6 +91,7 @@ func done(ctx context.Context, call func() error) error {
 
 var retryableAnswers = []int{
 	http.StatusTooManyRequests,
+	http.StatusInternalServerError,
 	http.StatusBadGateway,
 	http.StatusServiceUnavailable,
 	http.StatusGatewayTimeout,

@@ -70,15 +70,17 @@ jobs:
               platform/aws/runtime/go.sum
               cli/go.sum
           - name: gcp
-            dirs: platform/gcp/provider
-            packages: ./platform/gcp/provider/...
+            dirs: platform/gcp/provider platform/gcp/runtime
+            packages: ./platform/gcp/provider/... ./platform/gcp/runtime/...
             sums: |
               platform/gcp/provider/go.sum
+              platform/gcp/runtime/go.sum
           - name: providerkit
-            dirs: platform/vps/provider pkg/providerkit pkg/providerkit/pulumi pkg/costkit platform/edge/cloudflare/deploy platform/edge/contract
-            packages: ./platform/vps/provider/... ./pkg/providerkit/... ./pkg/providerkit/pulumi/... ./pkg/costkit/... ./platform/edge/cloudflare/deploy/... ./platform/edge/contract/...
+            dirs: platform/vps/provider platform/vps/runtime pkg/providerkit pkg/providerkit/pulumi pkg/costkit platform/edge/cloudflare/deploy platform/edge/contract
+            packages: ./platform/vps/provider/... ./platform/vps/runtime/... ./pkg/providerkit/... ./pkg/providerkit/pulumi/... ./pkg/costkit/... ./platform/edge/cloudflare/deploy/... ./platform/edge/contract/...
             sums: |
               platform/vps/provider/go.sum
+              platform/vps/runtime/go.sum
               pkg/providerkit/go.sum
               pkg/costkit/go.sum
               pkg/providerkit/pulumi/go.sum

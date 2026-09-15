@@ -44,6 +44,7 @@ func main() {
 	})
 
 	fmt.Printf("DEV_SERVER_ADDR=%s\n", devServerAddr)
+	fmt.Printf("DEV_SERVER_TOKEN=%s\n", srv.AppToken())
 
 	go func() {
 		_, _ = io.Copy(io.Discard, os.Stdin)

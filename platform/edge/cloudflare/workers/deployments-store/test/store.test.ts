@@ -596,38 +596,29 @@ describe("version stamp", () => {
 describe("initialize / authorized", () => {
   it("seeds ownership and authenticates against the stored secret", async () => {
     const store = storeStub();
-    expect(await store.authorized("s3cret")).toBe(false); // not seeded yet
+    expect(await store.authorized("s3cret")).toBe(false);
 
-    expect(await store.initialize("owner-1", "s3cret", false)).toEqual({
-      ownerToken: "owner-1",
-      secret: "s3cret",
-    });
+    expect(await store.initialize("owner-1", "s3cret", false)).toBe("adopted");
 
     expect(await store.authorized("s3cret")).toBe(true);
     expect(await store.authorized("wrong")).toBe(false);
   });
 
-  it("returns the existing identity instead of re-seeding", async () => {
+  it("holds the standing identity instead of re-seeding, and hands nothing back", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "s3cret", false);
 
-    expect(await store.initialize("owner-2", "other", false)).toEqual({
-      ownerToken: "owner-1",
-      secret: "s3cret",
-    });
+    expect(await store.initialize("owner-2", "other", false)).toBe("held");
 
     expect(await store.authorized("s3cret")).toBe(true);
     expect(await store.authorized("other")).toBe(false);
   });
 
-  it("converges a matching owner token onto the stored secret too", async () => {
+  it("holds against a matching owner token too", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "old", false);
 
-    expect(await store.initialize("owner-1", "new", false)).toEqual({
-      ownerToken: "owner-1",
-      secret: "old",
-    });
+    expect(await store.initialize("owner-1", "new", false)).toBe("held");
 
     expect(await store.authorized("old")).toBe(true);
     expect(await store.authorized("new")).toBe(false);
@@ -637,10 +628,7 @@ describe("initialize / authorized", () => {
     const store = storeStub();
     await store.initialize("owner-1", "s3cret", false);
 
-    expect(await store.initialize("owner-2", "other", true)).toEqual({
-      ownerToken: "owner-2",
-      secret: "other",
-    });
+    expect(await store.initialize("owner-2", "other", true)).toBe("adopted");
 
     expect(await store.authorized("other")).toBe(true);
     expect(await store.authorized("s3cret")).toBe(false);

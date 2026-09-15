@@ -393,6 +393,47 @@ func TestPreviewPromoteWritesTheHostnameKey(t *testing.T) {
 		}
 	})
 
+	t.Run("a container preview declares the class front on the wildcard distribution, then routes to it", func(t *testing.T) {
+		w := newWorld()
+		_, stack := previewing(t, w)
+		stagedContainer(t, stack)
+		recordFront(t, w, edge.ClassPreview)
+		w.front.calls = nil
+
+		if err := stack.Promote(context.Background(), edge.Promotion{
+			PromotionID: "preview-" + previewPointer,
+			Ts:          1,
+			Builds:      map[string]string{"web": "d1.f1"},
+		}, previewPointer, edge.DiscardReporter()); err != nil {
+			t.Fatalf("Promote(%s): %v", previewPointer, err)
+		}
+
+		published, ok := previewRoutes(t, w)[previewHostname()]
+		if !ok {
+			t.Fatalf("routes hold no entry under %q", previewHostname())
+		}
+		if published.Origin != fakeFront.Host || published.Container != "shop-prod-web-container-r3f8a1c90" {
+			t.Errorf("route = %+v, want the class front and the container the rule names", published)
+		}
+		wildcard := w.front.named(previewWildcardName(previewBase))
+		if wildcard == nil {
+			t.Fatal("no wildcard distribution stands")
+		}
+		if got := containerFrontOf(wildcard.config); got != fakeFront {
+			t.Errorf("the wildcard distribution declares %+v, want the preview class front as a VPC origin", got)
+		}
+		if w.front.count("CreateDistribution") != 0 {
+			t.Errorf("a container preview created a distribution of its own: %v", w.front.calls)
+		}
+
+		if _, err := w.edge().ReconcilePreviewWildcard(context.Background(), previewWildcardSpec()); err != nil {
+			t.Fatalf("ReconcilePreviewWildcard: %v", err)
+		}
+		if got := containerFrontOf(w.front.named(previewWildcardName(previewBase)).config); got != fakeFront {
+			t.Errorf("after a reconcile the wildcard distribution declares %+v, want the class front kept", got)
+		}
+	})
+
 	t.Run("the write is conditional on the version it read", func(t *testing.T) {
 		w := newWorld()
 		_, stack := previewing(t, w)

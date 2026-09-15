@@ -688,7 +688,7 @@ func TestTeardownLeavesTheCoreStacksResourcesToCloudFormation(t *testing.T) {
 			if err := e.Teardown(ctx, class); err != nil {
 				t.Fatalf("Teardown: %v", err)
 			}
-			if got := w.gateway.calls; len(got) != 0 {
+			if got := w.gateway.mutations(); len(got) != 0 {
 				t.Errorf("teardown called %v, want nothing; the role and the 404 responder go down with the core stack", got)
 			}
 		})

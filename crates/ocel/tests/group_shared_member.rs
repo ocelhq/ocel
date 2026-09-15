@@ -23,6 +23,7 @@ struct GitHub {
 fn a_member_two_groups_both_claim_names_both_the_groups() {
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", "http://127.0.0.1:1");
+    std::env::set_var("OCEL_DEV_SERVER_TOKEN", "opensesame");
 
     let err = ocel::discover().expect_err("two groups claim GITHUB_CLIENT_ID");
 

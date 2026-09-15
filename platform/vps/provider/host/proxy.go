@@ -62,9 +62,13 @@ const (
 	proxyPulls  = 5
 )
 
+var proxyCapabilities = []string{"NET_BIND_SERVICE", "DAC_OVERRIDE", "DAC_READ_SEARCH"}
+
 const (
-	networkFact = "network=present"
-	networkHeld = "network=held"
+	networkFact   = "network=present"
+	networkHeld   = "network=held"
+	networkJoined = "joined"
+	networkLeft   = "left"
 )
 
 //go:generate pnpm --dir ../../../.. exec turbo run generate --filter=@platform/vps-host
@@ -77,7 +81,7 @@ var proxyHelpers embed.FS
 
 const ProxyFactTemplate = `image={{.Config.Image}}
 restart={{.HostConfig.RestartPolicy.Name}}
-networks={{range $n, $v := .NetworkSettings.Networks}}{{$n}} {{end}}
+network={{if index .NetworkSettings.Networks "` + ProxyNetwork + `"}}` + networkJoined + `{{else}}` + networkLeft + `{{end}}
 {{range .HostConfig.Binds}}bind={{.}}
 {{end}}ports={{json .HostConfig.PortBindings}}
 baseline={{index .Config.Labels "` + proxyLabel + `"}}
@@ -190,7 +194,7 @@ func proxyFactsOver(binds []string) []byte {
 	stated := []string{
 		"image=" + ProxyImage,
 		"restart=" + proxyRestart,
-		"networks=" + ProxyNetwork + " ",
+		"network=" + networkJoined,
 		"ports=" + marshalled(proxyPorts()),
 		"baseline=" + contentSum(proxyBaseline),
 		"state=running",
@@ -247,6 +251,8 @@ func proxyRun() []string {
 		"--label", proxyLabel + "=" + contentSum(proxyBaseline),
 		"--env", "XDG_CONFIG_HOME=" + proxyDataMount + "/config",
 	}
+	argv = append(argv, logging()...)
+	argv = append(argv, confined(proxyCapabilities, true)...)
 	for _, port := range proxyServing() {
 		argv = append(argv, "--publish", port+":"+port)
 	}
@@ -263,7 +269,14 @@ func containerWriting(attempts int, files []string) string {
 		imageHeld(proxyPulls) +
 		"docker rm --force " + quoted(ProxyContainer) + " >/dev/null 2>&1 || true\n" +
 		words(argv) + " >/dev/null\n" +
+		proxyRejoining() +
 		containerRising(attempts)
+}
+
+func proxyRejoining() string {
+	return "for net in $(docker network ls --quiet --filter " + quoted("label="+LabelClass) + "); do\n" +
+		"docker network connect \"$net\" " + quoted(ProxyContainer) + " >/dev/null\n" +
+		"done\n"
 }
 
 func imageHeld(attempts int) string {

@@ -492,6 +492,8 @@ message PreflightResponse {
   repeated string computes = 9;
 
   repeated StandingCheck standing = 10;
+
+  repeated string baked_computes = 11;
 }
 
 message ResolveImageRegistryRequest {

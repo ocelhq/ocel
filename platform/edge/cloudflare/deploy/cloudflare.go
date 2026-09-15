@@ -17,10 +17,12 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/accounts"
 	"github.com/cloudflare/cloudflare-go/v4/option"
+	"github.com/cloudflare/cloudflare-go/v4/r2"
 	"github.com/cloudflare/cloudflare-go/v4/shared"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 
@@ -56,6 +58,7 @@ type provider struct {
 	client    *cf.Client
 	store     *http.Client
 	namespace string
+	objects   func(endpoint string, creds r2.TemporaryCredentialNewResponse) objectAPI
 
 	zoneMu    sync.Mutex
 	zonesSeen map[string][]zoneRef
@@ -81,11 +84,20 @@ const clientMaxRetries = 5
 
 func (p *provider) Kind() edge.Kind { return Kind }
 
+func (p *provider) cacheStore() cacheStore {
+	store := newCacheStore(p.client, p.namespace)
+	if p.objects != nil {
+		store.objects = p.objects
+	}
+	return store
+}
+
 func (p *provider) Facts() edge.Facts {
 	return edge.Facts{
 		RunsCode:            true,
 		ServesUnbound:       true,
 		SignsOriginForwards: true,
+		CachesRecords:       true,
 		CredentialScope:     os.Getenv(envAccountID),
 	}
 }
@@ -94,8 +106,10 @@ func (p *provider) Supported() []edge.Need {
 	return edge.AllNeeds()
 }
 
+const recordTTL = 5 * time.Second
+
 func (p *provider) FlipBound() edge.FlipBound {
-	return edge.FlipBound{}
+	return edge.FlipBound{Typical: recordTTL}
 }
 
 func (p *provider) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
@@ -185,7 +199,7 @@ func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.Bootst
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
-	out, err := newCacheStore(p.client, p.namespace).bootstrap(ctx, accountID, state.store)
+	out, err := p.cacheStore().bootstrap(ctx, accountID, state.store)
 	if err != nil {
 		return out, err
 	}
@@ -218,7 +232,7 @@ func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
 			errs = append(errs, fmt.Errorf("delete worker %q: %w", name, err))
 		}
 	}
-	if err := newCacheStore(p.client, p.namespace).teardown(ctx, accountID, class); err != nil {
+	if err := p.cacheStore().teardown(ctx, accountID, class); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)

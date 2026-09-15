@@ -203,3 +203,18 @@ func TestKnownHostsLinesAreReadPastTheirCommentsAndMarkers(t *testing.T) {
 		t.Error("markedIn() missed the @cert-authority line")
 	}
 }
+
+func TestARevokedEntryIsNoDelegationAndAnUnknownKeyBesideItIsStillUnknown(t *testing.T) {
+	t.Parallel()
+
+	key := generated(t, "ed25519")
+	rendered := "@revoked web-1 " + key.Type + " " + key.Key + "\n"
+	if markedIn(rendered) {
+		t.Fatal("markedIn() read @revoked as a delegation to a certificate authority, and a host whose old key was revoked would anchor on whatever key it offers next")
+	}
+	offered := generated(t, "ed25519")
+	_, trust := classify(destination(), []providerkit.HostKey{offered}, known{delegated: markedIn(rendered)})
+	if trust == nil || trust.Reason != providerkit.UnknownHostKey {
+		t.Errorf("classify() = %+v over a known_hosts holding only a revoked key, want the unknown-host-key refusal", trust)
+	}
+}

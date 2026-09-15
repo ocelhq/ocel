@@ -28,7 +28,6 @@ type grant struct {
 
 var scopingConditionKeys = []string{
 	"aws:RequestTag/ocel:",
-	"aws:ResourceAccount",
 	"aws:ResourceTag/ocel:",
 	"ec2:CreateAction",
 	"iam:PassedToService",
@@ -48,8 +47,6 @@ var actionsNoTagScopes = []string{
 
 var actionsAWSGivesNoScopingKey = []string{
 	"ecs:DeregisterTaskDefinition",
-	"lambda:DeleteLayerVersion",
-	"lambda:PublishLayerVersion",
 }
 
 var bootstrapOnlyActions = []string{
@@ -546,6 +543,104 @@ func TestBootstrapTierOwnsOnlyTheLogGroupsItsStacksDeclare(t *testing.T) {
 			}
 		default:
 			t.Errorf("the bootstrap tier grants %s on %s, beyond the log groups a bootstrap or a deploy owns", g.action, g.resource)
+		}
+	}
+}
+
+func TestEveryTierReachesOnlyTheBucketsAndClustersDeploysNameUnderTheAppScope(t *testing.T) {
+	bootstrapARNs := defaultNamespace.ScopedARNs()
+	for tier, document := range bothTiers(t) {
+		for g := range grantsOf(t, document) {
+			switch {
+			case strings.HasPrefix(g.action, "s3:"):
+				if g.resource == bootstrapARNs.bootstrapBucket || g.resource == bootstrapARNs.bootstrapObject {
+					continue
+				}
+				if !strings.HasPrefix(g.resource, "arn:aws:s3:::"+appScopePrefix) {
+					t.Errorf("the %s tier grants %s on %s, a bucket name a deploy never creates: S3 evaluates no Ocel tag on a bucket, so the name prefix is the only scope", tier, g.action, g.resource)
+				}
+			case strings.HasPrefix(g.action, "rds:") && !readOnly(g.action):
+				for _, kind := range []string{"cluster:", "db:", "subgrp:"} {
+					if strings.Contains(g.resource, ":"+kind) && !strings.Contains(g.resource, ":"+kind+appScopePrefix) {
+						t.Errorf("the %s tier grants %s on %s, an identifier a deploy never mints", tier, g.action, g.resource)
+					}
+				}
+			case strings.HasPrefix(g.action, "secretsmanager:"):
+				if g.condition != conditionJSON(t, managedByAnAppCluster()) {
+					t.Errorf("the %s tier grants %s on %s under %s, want the secret pinned to a cluster in the app scope through the tag RDS stamps on it, or the credential reads every Aurora master password in the account", tier, g.action, g.resource, g.condition)
+				}
+			}
+		}
+	}
+}
+
+func TestTheBootstrapTierTouchesOnlyEventSourceMappingsOfItsOwnFunctions(t *testing.T) {
+	r := defaultNamespace.ScopedARNs()
+	want := conditionJSON(t, map[string]any{"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction}})
+	for g := range grantsOf(t, mustRender(t, BootstrapCredentialPermissions)) {
+		if !strings.HasSuffix(g.action, "EventSourceMapping") {
+			continue
+		}
+		if g.condition != want {
+			t.Errorf("the bootstrap tier grants %s on %s under %s, want it pinned to the bootstrap's own functions through lambda:FunctionArn", g.action, g.resource, g.condition)
+		}
+	}
+}
+
+func TestNoTierCanDeleteThePulumiPassphrase(t *testing.T) {
+	r := defaultNamespace.ScopedARNs()
+	for tier, document := range bothTiers(t) {
+		for g := range grantsOf(t, document) {
+			if !strings.HasPrefix(g.action, "ssm:Delete") {
+				continue
+			}
+			if iamResourceMatches(g.resource, r.passphraseParam) {
+				t.Errorf("the %s tier grants %s on %s, which reaches %s: deleting the only copy of the passphrase strands every Pulumi stack in the account", tier, g.action, g.resource, r.passphraseParam)
+			}
+		}
+	}
+	bootstrapGrants := grantsOf(t, mustRender(t, BootstrapCredentialPermissions))
+	for _, resource := range []string{r.edgeParam, r.originParam, r.stackRecord} {
+		if !bootstrapGrants[grant{action: "ssm:DeleteParameter", resource: resource, condition: conditionJSON(t, nil)}] {
+			t.Errorf("the bootstrap tier cannot delete %s, which a teardown reclaims", resource)
+		}
+	}
+}
+
+func TestEveryTierMayGrantLambdaTheVarsKeyAndNoOther(t *testing.T) {
+	want := conditionJSON(t, map[string]any{
+		"StringEquals": map[string]any{"aws:ResourceTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
+		"Bool":         map[string]any{"kms:GrantIsForAWSResource": "true"},
+	})
+	for tier, document := range bothTiers(t) {
+		grants := grantsOf(t, document)
+		if !grants[grant{action: "kms:CreateGrant", resource: AnyKeyARN, condition: want}] {
+			t.Errorf("the %s tier does not grant kms:CreateGrant on a vars key for an AWS service, so Lambda cannot seal a function's environment under it", tier)
+		}
+		for g := range grants {
+			if g.action == "kms:CreateGrant" && g.condition != want {
+				t.Errorf("the %s tier grants kms:CreateGrant under %s, which lets the credential hand any principal a key it never made", tier, g.condition)
+			}
+		}
+	}
+}
+
+func TestEveryTierPublishesAndReclaimsOnlyTheRuntimeLayers(t *testing.T) {
+	r := defaultNamespace.ScopedARNs()
+	for tier, document := range bothTiers(t) {
+		grants := grantsOf(t, document)
+		for _, action := range []string{"lambda:PublishLayerVersion", "lambda:DeleteLayerVersion", "lambda:GetLayerVersion"} {
+			if !grants[grant{action: action, resource: r.runtimeLayerVersion, condition: conditionJSON(t, nil)}] {
+				t.Errorf("the %s tier does not grant %s on %s, so the runtime stack cannot publish or reclaim a layer version", tier, action, r.runtimeLayerVersion)
+			}
+		}
+		for g := range grants {
+			if !strings.Contains(g.action, "LayerVersion") {
+				continue
+			}
+			if g.resource != r.runtimeLayer && g.resource != r.runtimeLayerVersion {
+				t.Errorf("the %s tier grants %s on %s, which reaches layers Ocel never published", tier, g.action, g.resource)
+			}
 		}
 	}
 }

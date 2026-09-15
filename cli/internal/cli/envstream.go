@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/ocelhq/ocel/cli/internal/devlock"
+	"github.com/ocelhq/ocel/pkg/channel"
 )
 
 type envStream struct {
@@ -14,12 +17,13 @@ type envStream struct {
 	reader *bufio.Reader
 }
 
-func subscribeEnv(ctx context.Context, leaderAddr string) (*envStream, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+leaderAddr+"/env", nil)
+func subscribeEnv(ctx context.Context, leader devlock.Lease) (*envStream, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+leader.Addr+"/env", nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Authorization", channel.FormatAuthHeader(leader.Token))
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

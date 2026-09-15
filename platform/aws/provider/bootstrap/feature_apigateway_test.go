@@ -178,3 +178,36 @@ func containsString(haystack []string, want string) bool {
 	}
 	return false
 }
+
+func TestTheAPIGatewayInvokeRoleReachesOnlyItsOwnClassOfAppFunctions(t *testing.T) {
+	for _, class := range []string{ClassProduction, ClassPreview} {
+		t.Run(class, func(t *testing.T) {
+			stack, _ := apiGatewayEdgeStack(t, class)
+			var tmpl edgeUserTemplate
+			if err := yaml.Unmarshal([]byte(stack.body), &tmpl); err != nil {
+				t.Fatalf("template is not valid YAML: %v", err)
+			}
+			role, ok := tmpl.Resources["EdgeInvokeRole"]
+			if !ok {
+				t.Fatal("template stands up no invoke role")
+			}
+			if len(role.Properties.Policies) != 1 {
+				t.Fatalf("want exactly one inline policy, got %d", len(role.Properties.Policies))
+			}
+			for _, st := range role.Properties.Policies[0].PolicyDocument.Statement {
+				if !hasAction(st.Action, "lambda:InvokeFunction") {
+					continue
+				}
+				equals, _ := st.Condition["StringEquals"].(map[string]any)
+				if equals["aws:ResourceTag/ocel:component"] != "function" {
+					t.Errorf("invoke condition = %v, want it gated on ocel:component being function, so API Gateway reaches no listener or other Ocel-run function", st.Condition)
+				}
+				if equals["aws:ResourceTag/ocel:env-class"] != class {
+					t.Errorf("invoke condition = %v, want it gated on ocel:env-class being %s, or a %s REST API fronts the other class's functions too", st.Condition, class, class)
+				}
+				return
+			}
+			t.Fatal("the invoke role cannot invoke an entry function")
+		})
+	}
+}

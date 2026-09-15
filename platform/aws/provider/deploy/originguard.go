@@ -7,8 +7,9 @@ import (
 )
 
 type originGuard struct {
-	Entry  string
-	Secret string
+	Entry    string
+	Secret   string
+	Previous string
 }
 
 func (f *originGuard) hosts(fn appFunction) bool {
@@ -23,6 +24,9 @@ func (f *originGuard) entryEnv(base map[string]string) map[string]string {
 	maps.Copy(env, base)
 	delete(env, edge.OriginSignedVar)
 	env[edge.OriginSecretVar] = f.Secret
+	if f.Previous != "" {
+		env[edge.OriginSecretPreviousVar] = f.Previous
+	}
 	return env
 }
 

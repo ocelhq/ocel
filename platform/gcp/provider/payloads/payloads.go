@@ -10,9 +10,21 @@ import (
 //go:embed dist
 var embedded embed.FS
 
-var nodeRuntime = load("dist/serve.mjs")
+const ContainerArch = "amd64"
+
+var (
+	nodeRuntime      = load("dist/serve.mjs")
+	containerRuntime = load("dist/container-runtime-" + ContainerArch)
+)
 
 func NodeRuntime() []byte { return nodeRuntime }
+
+func ContainerRuntime(arch string) ([]byte, error) {
+	if arch != ContainerArch {
+		return nil, fmt.Errorf("this provider carries no container runtime built for %q: Cloud Run runs %s alone", arch, ContainerArch)
+	}
+	return containerRuntime, nil
+}
 
 func load(name string) []byte {
 	body, err := embedded.ReadFile(name)

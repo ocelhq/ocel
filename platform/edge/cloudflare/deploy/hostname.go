@@ -22,6 +22,26 @@ type routePlan struct {
 	prune          bool
 	pruneStem      string
 	requiredRecord string
+	owns           func(script string) bool
+}
+
+func (plan routePlan) ownsRoute(scriptName, held string) bool {
+	if held == scriptName || edge.NameUnderStem(plan.pruneStem, held) {
+		return true
+	}
+	return plan.owns != nil && plan.owns(held)
+}
+
+func projectOwnsScript(slug string) func(script string) bool {
+	return func(script string) bool {
+		if slug == "" || script == "" {
+			return false
+		}
+		project := workerNamespace + wordSeparator + slug
+		return script == project ||
+			strings.HasPrefix(script, project+wordSeparator) ||
+			strings.HasPrefix(script, workerNamespace+fieldSeparator+slug+fieldSeparator)
+	}
 }
 
 func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan routePlan, warn func(string)) error {
@@ -51,7 +71,7 @@ func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan ro
 		if !coveredByUniversalSSL(host, zoneName) {
 			warn(fmt.Sprintf("%s is more than one label below %s, which the zone's Universal SSL certificate does not cover — TLS will fail there until you add a Cloudflare Advanced Certificate for it", host, zoneName))
 		}
-		if err := p.ensureRoute(ctx, routes, zoneID, routePattern(host), up.scriptName); err != nil {
+		if err := p.ensureRoute(ctx, routes, zoneID, routePattern(host), up.scriptName, plan); err != nil {
 			return err
 		}
 	}
@@ -161,7 +181,7 @@ func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, er
 	return "", nil
 }
 
-func (p *provider) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneID, pattern, scriptName string) error {
+func (p *provider) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneID, pattern, scriptName string, plan routePlan) error {
 	inZone, err := snap.inZone(ctx, zoneID)
 	if err != nil {
 		return err
@@ -172,6 +192,9 @@ func (p *provider) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneID,
 		}
 		if route.Script == scriptName {
 			return nil
+		}
+		if !plan.ownsRoute(scriptName, route.Script) {
+			return fmt.Errorf("worker route %q is held by %q, which this project does not own, so it is left where it stands; release it from the project that holds it first", pattern, route.Script)
 		}
 		if _, err := p.client.Workers.Routes.Update(ctx, route.ID, workers.RouteUpdateParams{
 			ZoneID:  cf.F(zoneID),

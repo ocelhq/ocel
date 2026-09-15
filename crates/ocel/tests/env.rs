@@ -238,6 +238,95 @@ fn a_value_no_sdk_reads_as_a_bool_is_refused_with_the_forms_that_are_read() {
     }
 }
 
+#[derive(ocel::Env, Debug)]
+struct FromFile {
+    file_only: String,
+}
+
+#[derive(ocel::Env, Debug)]
+struct Shadowed {
+    file_shadowed: String,
+    file_bare: String,
+}
+
+#[derive(ocel::Env, Debug)]
+struct Rotating {
+    rotating_key: ocel::Secret,
+}
+
+fn live_dir(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("ocel-live-{name}"));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("the directory is made");
+    for (key, value) in files {
+        std::fs::write(dir.join(key), value).expect("the file is written");
+    }
+    dir
+}
+
+#[test]
+fn a_value_only_the_live_directory_holds_is_read_from_its_file() {
+    let _env = env();
+    clear(&["FILE_ONLY"]);
+    let dir = live_dir("only", &[("FILE_ONLY", "from the file\n")]);
+    std::env::set_var("OCEL_LIVE_DIR", &dir);
+
+    let loaded = FromFile::load().expect("the struct loads");
+
+    assert_eq!(loaded.file_only, "from the file\n");
+    std::env::remove_var("OCEL_LIVE_DIR");
+}
+
+#[test]
+fn a_delivered_value_is_read_before_the_live_directory_file() {
+    let _env = env();
+    clear(&["FILE_SHADOWED", "FILE_BARE"]);
+    let dir = live_dir(
+        "shadowed",
+        &[
+            ("FILE_SHADOWED", "from the file"),
+            ("FILE_BARE", "from the file"),
+        ],
+    );
+    std::env::set_var("OCEL_LIVE_DIR", &dir);
+    std::env::set_var("OCEL_VAR_FILE_SHADOWED", "delivered");
+    std::env::set_var("FILE_BARE", "plain");
+
+    let loaded = Shadowed::load().expect("the struct loads");
+
+    assert_eq!(loaded.file_shadowed, "delivered");
+    assert_eq!(loaded.file_bare, "plain");
+    std::env::remove_var("OCEL_LIVE_DIR");
+}
+
+#[test]
+fn a_key_the_live_directory_holds_no_file_for_has_no_value() {
+    let _env = env();
+    clear(&["FILE_ONLY"]);
+    let dir = live_dir("empty", &[]);
+    std::env::set_var("OCEL_LIVE_DIR", &dir);
+
+    let err = FromFile::load().expect_err("no file carries the value");
+
+    assert!(matches!(err, ocel::Error::Unset { .. }));
+    std::env::remove_var("OCEL_LIVE_DIR");
+}
+
+#[test]
+fn a_secret_reads_the_rotated_live_directory_file_on_the_next_read() {
+    let _env = env();
+    clear(&["ROTATING_KEY"]);
+    let dir = live_dir("rotating", &[("ROTATING_KEY", "first")]);
+    std::env::set_var("OCEL_LIVE_DIR", &dir);
+
+    let loaded = Rotating::load().expect("the struct loads");
+    assert_eq!(loaded.rotating_key.value().expect("a value"), "first");
+
+    std::fs::write(dir.join("ROTATING_KEY"), "rotated").expect("the file is written");
+    assert_eq!(loaded.rotating_key.value().expect("a value"), "rotated");
+    std::env::remove_var("OCEL_LIVE_DIR");
+}
+
 #[test]
 fn the_deployment_url_is_read_from_what_ocel_delivered() {
     let _env = env();

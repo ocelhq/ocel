@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
@@ -77,10 +78,32 @@ func TestAnEdgeThisProviderCannotFrontWithIsRefusedWithThePriceOfTheOneThatCan(t
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 		t.Fatalf("Open(firebase) = %v, want an %s refusal", err, providerkit.CodeInvalid)
 	}
-	for _, said := range []string{string(alb.Kind), "$18", "cloudflare"} {
+	for _, said := range []string{string(alb.Kind), "$18"} {
 		if !strings.Contains(refusal.Message, said) {
 			t.Errorf("the refusal reads %q, want it to name %q so the reader knows what to name instead and what it costs", refusal.Message, said)
 		}
+	}
+}
+
+func TestNamingTheCloudflareEdgeIsRefusedWhenTheBootstrapIsOpenedAndSaysWhy(t *testing.T) {
+	t.Parallel()
+
+	p := standing(t)
+	if slices.Contains(p.Edges().Supported(), cloudflare.Kind) {
+		t.Errorf("Supported() = %v, and an edge this provider builds no program for is one every deploy through it is refused on", p.Edges().Supported())
+	}
+	var refusal providerkit.Refusal
+	_, err := p.Bootstrap(cloudflare.Kind)
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("Bootstrap(%q) = %v, want an %s refusal before a token is spent standing anything up", cloudflare.Kind, err, providerkit.CodeInvalid)
+	}
+	for _, said := range []string{"program", string(direct.Kind), string(alb.Kind)} {
+		if !strings.Contains(refusal.Message, said) {
+			t.Errorf("the refusal reads %q, want it to say %q: the reader learns why it is refused and what to name instead", refusal.Message, said)
+		}
+	}
+	if _, err := p.Edges().Open(cloudflare.Kind); !errors.As(err, &refusal) {
+		t.Errorf("Open(%q) = %v, want the same refusal on the deploy path", cloudflare.Kind, err)
 	}
 }
 

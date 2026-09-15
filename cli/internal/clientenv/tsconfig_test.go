@@ -15,7 +15,11 @@ import (
 
 func generate(t *testing.T, dir string) error {
 	t.Helper()
-	return Generate(dir, []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
+	apps := []App{{Dir: dir, Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}}
+	if err := Generate(dir, apps); err != nil {
+		return err
+	}
+	return PointImports(dir, apps)
 }
 
 func mapped(t *testing.T, path string) []string {

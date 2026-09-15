@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -107,6 +108,7 @@ func edgeUserResource(ns Namespace, userName, class string, optimizer bool) stri
                 Condition:
                   StringEquals:
                     'aws:ResourceTag/ocel:component': 'function'
+                    'aws:ResourceTag/ocel:env-class': '%s'
               - Effect: Allow
                 Action: sqs:SendMessage
                 Resource: !Ref %s
@@ -120,7 +122,7 @@ func edgeUserResource(ns Namespace, userName, class string, optimizer bool) stri
                     kms:ViaService: !Sub 'sqs.${AWS::Region}.amazonaws.com'
 %s`, class, userName, ns.PolicyName("edge-cache"),
 		paramAssetBucketARN, paramAssetBucketARN,
-		paramStateTableARN, paramStateTableARN, StateTableIndexName,
+		paramStateTableARN, paramStateTableARN, StateTableIndexName, class,
 		paramRevalidateQueueARN, invoke)
 }
 
@@ -129,13 +131,19 @@ func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, c
 	if err != nil {
 		return nil, err
 	}
-	recorded, held, err := recordedEdgeKeyID(ctx, apis.SSM, names.credentialsParam)
+	recorded, held, err := recordedEdgeKey(ctx, apis.SSM, names.credentialsParam)
 	if err != nil {
 		return nil, err
 	}
-	standing, err := edgeKeyStanding(ctx, apis.IAM, names.user, recorded)
+	standing, err := edgeKeyStanding(ctx, apis.IAM, names.user, recorded.AccessKeyID)
 	if err != nil {
 		return nil, err
+	}
+	if standing && recorded.Stale(time.Now()) {
+		return []providerkit.Change{
+			{Kind: kindParameter, Name: names.credentialsParam, Action: providerkit.ActionUpdate, Reason: keyStale},
+			{Kind: kindAccessKey, Name: names.user, Action: providerkit.ActionUpdate, Reason: keyStale},
+		}, nil
 	}
 	if standing {
 		return []providerkit.Change{
@@ -146,7 +154,7 @@ func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, c
 	credentials := providerkit.Change{Kind: kindParameter, Name: names.credentialsParam, Action: providerkit.ActionCreate}
 	if held {
 		credentials.Action, credentials.Reason = providerkit.ActionUpdate, keyGone
-		if recorded == "" {
+		if recorded.AccessKeyID == "" {
 			credentials.Reason = keyUnrecorded
 		}
 	}
@@ -208,13 +216,19 @@ func severCloudflareEdge(ctx context.Context, d stepDeps) error {
 
 func mintEdgeCredentials(ctx context.Context, d stepDeps) error {
 	d.progress("Ensuring edge reader credentials (SSM SecureString)")
-	created, err := ensureEdgeCredentials(ctx, d.iam, d.ssm, d.ns, d.class, KindCloudflare)
+	outcome, err := ensureEdgeCredentials(ctx, d.iam, d.ssm, d.ns, d.class, KindCloudflare, time.Now())
 	if err != nil {
 		return err
 	}
-	if created {
+	if outcome.retired != "" {
+		d.log(fmt.Sprintf("retired the superseded edge reader access key %s, idle since every worker moved off it", outcome.retired))
+	}
+	switch {
+	case outcome.rotated:
+		d.log(fmt.Sprintf("rotated the edge reader access key: it was older than %d days; re-deploy each project so its worker signs with the new one, and the old key is retired by the next bootstrap once idle", int(EdgeKeyMaxAge.Hours()/24)))
+	case outcome.minted:
 		d.log("minted a new edge reader access key")
-	} else {
+	default:
 		d.log("reused the existing edge reader access key")
 	}
 	return nil

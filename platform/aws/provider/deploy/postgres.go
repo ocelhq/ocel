@@ -74,7 +74,7 @@ func rdsIdentifierPrefix(at naming.Coordinate, role string) string {
 	ident := at
 	ident.Project = naming.SanitizeAlpha(at.Project)
 	ident.Name = naming.Join(naming.WordSeparator, at.Name, role)
-	return ident.PhysicalPrefix(maxRDSIdentifierPrefixLen)
+	return appPhysicalPrefix(ident, maxRDSIdentifierPrefixLen)
 }
 
 func registerPostgres(ctx *pulumi.Context, project, env, logicalName string, args postgresArgs, vpcID, vpcCIDR string, subnetIDs []string) error {

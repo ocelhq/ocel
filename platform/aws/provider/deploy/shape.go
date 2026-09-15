@@ -152,7 +152,7 @@ func (s shaper) container(scope string, app providerkit.AppEntry) {
 
 func (s shaper) substrate(scope string, class providerkit.Class) {
 	s.plain(scope, tfECSCluster, SubstrateSlug, map[string]any{})
-	s.plain(scope, tfLoadBalancer, SubstrateSlug, map[string]any{"load_balancer_type": "application", "internal": false})
+	s.plain(scope, tfLoadBalancer, SubstrateSlug, map[string]any{"load_balancer_type": "application", "internal": true})
 	s.plain(scope, tfLogGroup, SubstrateSlug, map[string]any{"retention_in_days": substrateLogRetentionDays, "name": "/ocel/containers/" + string(class)})
 }
 

@@ -113,7 +113,7 @@ func TestAProxyWithNothingToSayCertifiesAsItAlwaysDid(t *testing.T) {
 	}
 }
 
-func TestABoxWhoseEngineCannotBeReachedIsNotReadAsABoxWithNothingToSay(t *testing.T) {
+func TestABoxWhoseEngineCannotBeReachedSaysSoInTheEnginesOwnWordsAndStillMintsTheHandle(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -124,13 +124,18 @@ func TestABoxWhoseEngineCannotBeReachedIsNotReadAsABoxWithNothingToSay(t *testin
 		return session.Result{}, false
 	}
 	spoken := &saying{Reporter: edge.DiscardReporter()}
-	if _, err := certifying(machine).Certificate(context.Background(), providerkit.CertificateRequest{
+	cert, err := certifying(machine).Certificate(context.Background(), providerkit.CertificateRequest{
 		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Report: spoken,
-	}); err != nil {
-		t.Fatalf("Certificate() = %v: minting the handle the proxy renews under asks the box for nothing, and the ceiling read is best effort beside it", err)
+	})
+	if err != nil {
+		t.Fatalf("Certificate() = %v: the handle names what the proxy renews and asks the box for nothing, and the conformance suite mints it against a box that answers nothing at all", err)
 	}
-	if !strings.Contains(strings.Join(spoken.said, "\n"), "did not answer") {
-		t.Errorf("a box whose engine answered nothing said %v, and a read that never happened is reported as a proxy with nothing to say: the two are the same silence and only one of them means the CA is not refusing", spoken.said)
+	if !cert.Held() {
+		t.Errorf("Certificate() = %+v, want the handle the proxy obtains and renews under", cert)
+	}
+	said := strings.Join(spoken.said, "\n")
+	if !strings.Contains(said, "Cannot connect to the Docker daemon") {
+		t.Errorf("a box whose engine answered nothing said %q: the read that never happened is reported without the engine's own words, and the two silences read as one", said)
 	}
 }
 

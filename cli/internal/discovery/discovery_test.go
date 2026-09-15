@@ -3,7 +3,6 @@ package discovery
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -193,14 +192,12 @@ func (c *collector) declaredVariables() []*resourcesv1.VariableDefinition {
 	return c.variables
 }
 
-func declareCollector(t *testing.T) (*collector, string) {
+func declareCollector(t *testing.T) (*collector, Server) {
 	t.Helper()
 	c := &collector{}
 	path, handler := resourcesv1connect.NewResourceServiceHandler(c)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	mux.HandleFunc("/sync", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	server := httptest.NewServer(mux)
-	t.Cleanup(server.Close)
-	return c, server.URL
+	return c, serving(t, mux)
 }

@@ -50,6 +50,14 @@ func grants(class providerkit.Class, arch string) []Grant {
 		})
 	}
 	grants = append(grants, sealing(items, class, held)...)
+	if agent := written(items, KindFile, LiveBinary); agent.Name != "" {
+		grants = append(grants, Grant{
+			Name: "no hand in " + LiveSocket,
+			Detail: "root's own agent at " + agent.Name + ", run by systemd under " + LiveService + " and never by " + held.name +
+				": every app container is handed " + LiveSocketDir + " read-only and asks it for the values its own deploy declared. The agent tells containers apart by the process that connects, never by anything the caller says, opens each value under the class key it alone reads, and answers nothing to a process outside a container this engine runs. " +
+				held.name + " neither runs it nor reads through it: a deploy hands a container the names of what it may read, and the values reach the container from the box",
+		})
+	}
 	for _, item := range items {
 		if item.Owner != held.name || item.Kind == KindUser {
 			continue
@@ -63,7 +71,7 @@ func grants(class providerkit.Class, arch string) []Grant {
 }
 
 func sealing(items []Item, class providerkit.Class, held login) []Grant {
-	fragment := written(items, KindFile, sudoersSeal)
+	fragment := written(items, KindFile, sudoersSeal(class))
 	key := written(items, KindSealKey, SealKeyPath(class))
 	if fragment.Name == "" || key.Name == "" {
 		return nil
@@ -72,7 +80,7 @@ func sealing(items []Item, class providerkit.Class, held login) []Grant {
 		Name: "runs " + SealHelper + " as root, through one line in " + fragment.Name,
 		Detail: "the line is\n\n      " + strings.TrimSpace(string(fragment.Content)) +
 			"\n\n    and it is the whole of what sudo will let " + held.name +
-			" do. The helper seals and opens a value at a coordinate it is given; it never prints the key, and no other command on this host runs under sudo for " + held.name,
+			" do. The helper seals and opens a value at a coordinate it is given under the " + string(class) + " key alone: sudo matches the class and the verb ahead of the wildcard, so the line mints no key and reaches no other class. It never prints the key, and no other command on this host runs under sudo for " + held.name,
 	}, {
 		Name: "no read of " + key.Name,
 		Detail: fmt.Sprintf("root's own at %04o, minted from this machine's own randomness and never off it: %s can ask the helper to seal and to open, and cannot read the %s key either does it with. A key is minted once per class and ocel rotates it for nobody — what it sealed, it alone opens, and `ocel destroy` takes it with the class",

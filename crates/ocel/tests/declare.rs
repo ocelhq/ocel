@@ -49,6 +49,7 @@ fn discovery_posts_every_declaration_and_reports_the_problems_it_finds() {
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_SOURCE_ROOT", workspace);
     std::env::set_var("OCEL_DEV_SERVER", &url);
+    std::env::set_var("OCEL_DEV_SERVER_TOKEN", collector::TOKEN);
 
     assert!(
         ocel::discover().expect("discover"),
@@ -63,6 +64,12 @@ fn discovery_posts_every_declaration_and_reports_the_problems_it_finds() {
             .iter()
             .all(|one| one.protocol.as_deref() == Some("1")),
         "a request went out without the connect protocol version"
+    );
+    assert!(
+        received
+            .iter()
+            .all(|one| one.authorization.as_deref() == Some("Bearer opensesame")),
+        "a request went out without the dev server token"
     );
 
     let declares: Vec<_> = received

@@ -141,7 +141,7 @@ globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
   fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
     body: JSON.stringify({
       resource: { type: "RESOURCE_TYPE_POSTGRES", name: "main" },
       postgres: { version: "17" },
@@ -257,7 +257,7 @@ function register(body: Record<string, unknown>) {
   globalThis.__ocelRegister.push(
     fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
       body: JSON.stringify(body),
     }),
   );

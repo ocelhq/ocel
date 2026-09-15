@@ -34,6 +34,26 @@ async function once(deps: HandlerDeps, record: SqsRecord): Promise<Outcome> {
   return outcome;
 }
 
+function describe(cause: unknown, body: string): string {
+  const text = cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause);
+  return secretsIn(body).reduce((said, secret) => said.replaceAll(secret, "[redacted]"), text);
+}
+
+function secretsIn(body: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return [];
+  }
+  if (typeof parsed !== "object" || parsed === null) return [];
+  const { headers } = parsed as { headers?: unknown };
+  if (typeof headers !== "object" || headers === null) return [];
+  return Object.values(headers).filter(
+    (value): value is string => typeof value === "string" && value !== "",
+  );
+}
+
 export async function handle(
   deps: HandlerDeps,
   event: { Records?: SqsRecord[] },
@@ -55,8 +75,12 @@ export async function handle(
     let outcome: Outcome;
     try {
       outcome = await once(deps, record);
-    } catch {
-      outcome = { event: "RevalidateFailed", reason: "handler-error" };
+    } catch (cause) {
+      outcome = {
+        event: "RevalidateFailed",
+        reason: "handler-error",
+        cause: describe(cause, record.body),
+      };
       report(context(record.messageId, null), outcome);
     }
 

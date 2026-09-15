@@ -23,7 +23,7 @@ func TestSettler(t *testing.T) {
 		}
 		polls := 0
 
-		if err := s.settled(context.Background(), kindDistribution, "E1", func(context.Context) (string, error) {
+		if err := s.settled(context.Background(), kindDistribution, "E1", disableRollingOut, func(context.Context) (string, error) {
 			polls++
 			if polls < 3 {
 				return "InProgress", nil
@@ -51,7 +51,7 @@ func TestSettler(t *testing.T) {
 			Jitter:   func() float64 { return 0.5 },
 		}
 
-		err := s.settled(context.Background(), kindDistribution, "E1", func(context.Context) (string, error) {
+		err := s.settled(context.Background(), kindDistribution, "E1", disableRollingOut, func(context.Context) (string, error) {
 			return "InProgress", nil
 		})
 
@@ -75,7 +75,7 @@ func TestSettler(t *testing.T) {
 			Jitter:   func() float64 { return 0.5 },
 		}
 
-		err := s.settled(context.Background(), kindDistribution, "E1", func(context.Context) (string, error) {
+		err := s.settled(context.Background(), kindDistribution, "E1", disableRollingOut, func(context.Context) (string, error) {
 			return "InProgress", nil
 		})
 
@@ -95,7 +95,7 @@ func TestSettler(t *testing.T) {
 		}
 		polls := 0
 
-		if err := s.settled(context.Background(), kindDistribution, "E1", func(context.Context) (string, error) {
+		if err := s.settled(context.Background(), kindDistribution, "E1", disableRollingOut, func(context.Context) (string, error) {
 			polls++
 			if polls < 4 {
 				return "", throttlingError()

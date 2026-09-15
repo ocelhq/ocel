@@ -238,7 +238,7 @@ func TestDestroyKeepsTheEngineWhicheverClassIsTheLastOne(t *testing.T) {
 		"the last class on the host": {Class: preview, Observed: map[string]string{}},
 		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))},
 	} {
-		taken := removing(standing, sibling)
+		taken := removing(standing, sibling, appsStanding{})
 		kept := removalOf(taken, dockerEngine)
 		if kept.action != providerkit.ActionKeep {
 			t.Errorf("destroying %s plans %s as %q, want it kept: removing ocel never removes the workloads a host runs",
@@ -263,7 +263,7 @@ func TestAHostCarryingNothingButTheEngineHasNothingToDestroy(t *testing.T) {
 
 	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
 	engine := digests(EngineItems())
-	taken := removing(Reading{Arch: ArchAMD64, Class: production, Observed: engine}, Reading{Arch: ArchAMD64, Class: preview, Observed: engine})
+	taken := removing(Reading{Arch: ArchAMD64, Class: production, Observed: engine}, Reading{Arch: ArchAMD64, Class: preview, Observed: engine}, appsStanding{})
 	if len(taken) != 0 {
 		t.Errorf("a machine carrying nothing but docker plans %d removals, want a destroy with nothing to say", len(taken))
 	}

@@ -3,7 +3,6 @@ package devserver
 import (
 	"context"
 	"errors"
-	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -37,9 +36,7 @@ func serveValues(t *testing.T, values map[string]string, scope envgate.Scope) (*
 	if values != nil {
 		s.UseValues(values, scope)
 	}
-	ts := httptest.NewServer(s.Mux())
-	t.Cleanup(ts.Close)
-	return s, ts.URL
+	return s, serve(t, s)
 }
 
 func TestDeclareEnv(t *testing.T) {

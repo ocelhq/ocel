@@ -1,6 +1,6 @@
 import { callSiteFile } from "../utils/callsite.js";
 import { defer } from "../utils/defer.js";
-import { type Env, envAccessor, FIXED } from "./access.js";
+import { type Env, envAccessor, FIXED, UNCACHED } from "./access.js";
 import { declareEnv } from "./declare.js";
 import {
   type EnvDefinitions,
@@ -10,6 +10,7 @@ import {
   validateDefinitions,
 } from "./definition.js";
 import { EnvValueError } from "./errors.js";
+import { readLiveFile } from "./file.js";
 import { liveGeneration, NO_GENERATION, readLive } from "./live.js";
 import { sourceOf } from "./schema.js";
 import { assertInScope, inScope } from "./scope.js";
@@ -51,7 +52,9 @@ function delivered(key: string, definition: VariableDefinition): boolean {
 }
 
 function generationOf(definition: VariableDefinition): number {
-  return isLive(definition) ? liveGeneration() : FIXED;
+  if (!isLive(definition)) return FIXED;
+  const generation = liveGeneration();
+  return generation === NO_GENERATION ? UNCACHED : generation;
 }
 
 function validateLiveValues(definitions: FlatDefinitions, env: Env<EnvDefinitions>): void {
@@ -82,5 +85,5 @@ function read(key: string, definition: VariableDefinition): string | undefined {
     const pushed = readLive(key);
     if (pushed !== undefined) return pushed;
   }
-  return readDelivered(key);
+  return readDelivered(key) ?? readLiveFile(key);
 }

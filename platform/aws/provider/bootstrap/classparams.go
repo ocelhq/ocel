@@ -31,7 +31,7 @@ type ClassParams struct {
 	DeploymentsStore DeploymentsStore
 	ISRWriter        ISRWriter
 	ISRWriterSeed    string
-	OriginSecret     string
+	OriginSecret     OriginSecret
 }
 
 func ReadCoreParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class string) (ClassParams, error) {
@@ -48,12 +48,24 @@ func ReadCoreParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class st
 	if !ok {
 		return ClassParams{}, fmt.Errorf("read passphrase parameter: %s not found", passphraseParam)
 	}
+	secret, err := originSecretIn(found, origin)
+	if err != nil {
+		return ClassParams{}, err
+	}
 	return ClassParams{
 		Passphrase:         passphrase,
-		OriginSecret:       found[origin],
+		OriginSecret:       secret,
 		EdgeCredentialsErr: errUnnamedEdge,
 		EdgeValuesErr:      errUnnamedEdge,
 	}, nil
+}
+
+func originSecretIn(found map[string]string, name string) (OriginSecret, error) {
+	raw, ok := found[name]
+	if !ok {
+		return OriginSecret{}, nil
+	}
+	return OriginSecretOf(raw)
 }
 
 var errUnnamedEdge = errors.New("this call names no edge, so it reads none of the parameters an edge is reached through")
@@ -120,7 +132,9 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class s
 		}
 	}
 	p.ISRWriterSeed = found[names.isrWriterSeedParam]
-	p.OriginSecret = found[names.originSecretParam]
+	if p.OriginSecret, err = originSecretIn(found, names.originSecretParam); err != nil {
+		return ClassParams{}, err
+	}
 	return p, nil
 }
 

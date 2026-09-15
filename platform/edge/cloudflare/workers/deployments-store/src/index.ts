@@ -31,10 +31,6 @@ export default class extends WorkerEntrypoint<Env> {
     const sub = `/${segments.slice(1).join("/")}`;
     const store = stub(this.env, slug);
 
-    if (request.method === "GET" && sub === "/schema-version") {
-      return Response.json({ schemaVersion: SCHEMA_VERSION });
-    }
-
     if (request.method === "POST" && sub === "/initialize") {
       if (!(await authorized(request, this.env.BOOTSTRAP_SECRET))) {
         return new Response("Unauthorized", { status: 401 });
@@ -47,14 +43,23 @@ export default class extends WorkerEntrypoint<Env> {
       if (!body?.ownerToken || !body.secret) {
         return new Response("Bad Request", { status: 400 });
       }
-      return Response.json(
-        await store.initialize(body.ownerToken, body.secret, body.force ?? false),
-      );
+      const outcome = await store.initialize(body.ownerToken, body.secret, body.force ?? false);
+      if (outcome === "held") {
+        return new Response(
+          `project ${slug} already holds an identity; initialize with force to replace it`,
+          { status: 409 },
+        );
+      }
+      return new Response(null, { status: 204 });
     }
 
     const token = bearer(request);
     if (token === null || !(await store.authorized(token))) {
       return new Response("Unauthorized", { status: 401 });
+    }
+
+    if (request.method === "GET" && sub === "/schema-version") {
+      return Response.json({ schemaVersion: SCHEMA_VERSION });
     }
 
     if (request.method === "PUT" && sub === "/staged") {

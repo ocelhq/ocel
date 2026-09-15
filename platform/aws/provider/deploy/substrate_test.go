@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -23,6 +24,7 @@ func substrateOutputs() auto.OutputMap {
 		outputKeySubnets:       auto.OutputValue{Value: string(subnets)},
 		outputKeyListener:      auto.OutputValue{Value: held.Listener},
 		outputKeyOriginHost:    auto.OutputValue{Value: held.OriginHost},
+		outputKeyVPCOrigin:     auto.OutputValue{Value: held.VPCOrigin},
 		outputKeyTaskSecurity:  auto.OutputValue{Value: held.TaskSecurity},
 		outputKeyCluster:       auto.OutputValue{Value: held.Cluster},
 		outputKeyExecutionRole: auto.OutputValue{Value: held.ExecutionRole},
@@ -45,8 +47,16 @@ func TestTheSubstrateProgramStandsUpOneFrontOneClusterAndOneExecutionRole(t *tes
 		t.Errorf("default action = %v, want a fixed %s: a request that names no release reaches nothing", action, substrateDeniedStatus)
 	}
 	balancer := recordedOf(t, rec, "aws:lb/loadBalancer:LoadBalancer")
-	if balancer["name"].StringValue() != "ocel-containers-production" || balancer["internal"].BoolValue() {
-		t.Errorf("load balancer = %v, want an internet-facing front named for the class", balancer)
+	if balancer["name"].StringValue() != "ocel-containers-production" || !balancer["internal"].BoolValue() {
+		t.Errorf("load balancer = %v, want an internal front named for the class: nothing on the internet has a route to it", balancer)
+	}
+	vpcOrigin := recordedOf(t, rec, "aws:cloudfront/vpcOrigin:VpcOrigin")
+	endpoint := vpcOrigin["vpcOriginEndpointConfig"].ObjectValue()
+	if endpoint["arn"].StringValue() == "" || endpoint["name"].StringValue() != "ocel-containers-production" {
+		t.Errorf("vpc origin = %v, want it to name the class front by its ARN: the edge reaches the front through it and nothing else", endpoint)
+	}
+	if endpoint["originProtocolPolicy"].StringValue() != vpcOriginProtocolPolicy || endpoint["httpPort"].NumberValue() != substrateListenerPort {
+		t.Errorf("vpc origin = %v, want CloudFront to reach the listener on %d over its private path", endpoint, substrateListenerPort)
 	}
 	role := recordedOf(t, rec, "aws:iam/role:Role")
 	if !strings.Contains(role["assumeRolePolicy"].StringValue(), ecsTasksPrincipal) {
@@ -83,7 +93,7 @@ func TestDecodeSubstrateReadsEveryOutputAndRefusesAnEmptyOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodeSubstrate() = %v", err)
 	}
-	if decoded.OriginHost != fixtureOrigin || len(decoded.Subnets) != 2 || decoded.Listener != fixtureListener {
+	if decoded.OriginHost != fixtureOrigin || decoded.VPCOrigin != fixtureFront || len(decoded.Subnets) != 2 || decoded.Listener != fixtureListener {
 		t.Errorf("decoded = %+v, want every output the program exported", decoded)
 	}
 	partial := substrateOutputs()
@@ -118,6 +128,13 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 	if len(ran) != 2 || ran[0] != substrateRef(providerkit.ClassProduction).Name.String() || ran[1] != shop.Ref.Name.String() {
 		t.Fatalf("the first container deploy ran %v, want the substrate stack before the app stack", ran)
 	}
+	front, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, providerkit.ClassProduction)
+	if err != nil || !recorded {
+		t.Fatalf("the front is recorded %v (%v), want the edge able to read which VPC origin reaches the class's containers", recorded, err)
+	}
+	if front != (awsports.ContainerFront{VPCOrigin: fixtureFront, Host: fixtureOrigin}) {
+		t.Errorf("front = %+v, want the substrate's VPC origin and host", front)
+	}
 
 	blog := plan
 	blog.Ref = providerkit.StackRef{Project: "blog", Class: providerkit.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
@@ -143,6 +160,9 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 	}
 	if _, present, err := providerkit.ReadStack(ctx, cfg.Records, providerkit.ClassProduction, SubstrateSlug, substrateRef(providerkit.ClassProduction).Name); err != nil || present {
 		t.Errorf("the substrate is still recorded (present %v, err %v) after its last consumer left", present, err)
+	}
+	if _, recorded, err := awsports.ReadContainerFront(ctx, cfg.Records, providerkit.ClassProduction); err != nil || recorded {
+		t.Errorf("the front is still recorded (%v, err %v) after the substrate went; a later promote would declare an origin that no longer exists", recorded, err)
 	}
 }
 

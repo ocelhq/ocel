@@ -93,6 +93,7 @@ reconcile)
 	[ $# -eq 1 ] || usage
 	repository=$1
 	coordinate "$repository"
+	hold
 
 	: >"$scratch".desired
 	if [ -d "$root/$project/$app" ]; then

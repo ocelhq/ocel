@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 
 const SECRET = "9f8e7d6c5b4a39281706f5e4d3c2b1a0";
+const PREVIOUS = "0a1b2c3d4e5f60718293a4b5c6d7e8f9";
 
 type Msg = { type: string; payload: any };
 
@@ -101,6 +102,7 @@ beforeAll(async () => {
 afterEach(() => {
   delete process.env.OCEL_ORIGIN_ROUTER;
   delete process.env.OCEL_ORIGIN_SECRET;
+  delete process.env.OCEL_ORIGIN_SECRET_PREVIOUS;
   delete process.env.OCEL_ORIGIN_SIGNED;
   seen = undefined;
 });
@@ -149,6 +151,29 @@ describe.each(Object.keys(doors))("%s", (door) => {
 
     expect(await reach(port, { "x-ocel-origin-secret": SECRET })).toBe(200);
     expect(seen?.["x-ocel-origin-secret"]).toBeUndefined();
+  });
+
+  test("while a rotation runs, the secret it replaced is served too, and neither reaches the app", async () => {
+    process.env.OCEL_ORIGIN_ROUTER = "1";
+    process.env.OCEL_ORIGIN_SECRET = SECRET;
+    process.env.OCEL_ORIGIN_SECRET_PREVIOUS = PREVIOUS;
+    const port = await start(door, echo);
+
+    expect(await reach(port, { "x-ocel-origin-secret": SECRET })).toBe(200);
+    expect(await reach(port, { "x-ocel-origin-secret": PREVIOUS })).toBe(200);
+    expect(await reach(port, { "x-ocel-origin-secret": `${PREVIOUS}0` })).toBe(403);
+    expect(await reach(port, {})).toBe(403);
+    expect(seen?.["x-ocel-origin-secret"]).toBeUndefined();
+    expect(process.env.OCEL_ORIGIN_SECRET_PREVIOUS).toBeUndefined();
+  });
+
+  test("a predecessor with no current secret opens nothing", async () => {
+    process.env.OCEL_ORIGIN_ROUTER = "1";
+    process.env.OCEL_ORIGIN_SECRET_PREVIOUS = PREVIOUS;
+    const port = await start(door, echo);
+
+    expect(await reach(port, { "x-ocel-origin-secret": PREVIOUS })).toBe(403);
+    expect(seen).toBeUndefined();
   });
 
   test("the secret leaves the environment the app can read", async () => {

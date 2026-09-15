@@ -82,6 +82,10 @@ func (r *deployRun) imageFunction(
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
 	}
+	image, err = r.wrapFunction(ctx, name, runtime, image)
+	if err != nil {
+		return ImagePush{}, err
+	}
 	digest, err := image.Digest()
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
@@ -96,6 +100,32 @@ func (r *deployRun) imageFunction(
 		Function: true,
 		Built:    image,
 	}, nil
+}
+
+func (r *deployRun) wrapFunction(ctx context.Context, name string, runtime Runtime, image v1.Image) (v1.Image, error) {
+	wrapper, wraps := r.provider.(ContainerRuntimer)
+	if !wraps {
+		return image, nil
+	}
+	arch, known := GoArch(runtime.Arch)
+	if !known {
+		return nil, Refuse(CodeInvalid,
+			"%s is built for %s, and this provider carries a container runtime for %s and %s alone",
+			name, runtime.Arch, ArchX8664, ArchARM64)
+	}
+	body, err := wrapper.ContainerRuntime(ctx, arch)
+	if err != nil {
+		return nil, fmt.Errorf("read the runtime %s's function boots through: %w", name, err)
+	}
+	if len(body) == 0 {
+		return nil, Refuse(CodeNotReady,
+			"this provider carries no container runtime built for %s, and %s is built for it", arch, name)
+	}
+	wrapped, err := WrapContainer(image, body)
+	if err != nil {
+		return nil, fmt.Errorf("wrap %s's image in the runtime: %w", name, err)
+	}
+	return wrapped, nil
 }
 
 func runtimeOverlay(

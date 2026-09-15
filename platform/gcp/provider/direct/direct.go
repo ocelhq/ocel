@@ -75,7 +75,7 @@ func (e *Edge) DestroyPreviewWildcard(context.Context, string) error { return ni
 func unbindable(what string) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
 		"the %q edge answers on the url Cloud Run gives each service and claims no hostname of its own, so %s cannot be bound to it: "+
-			"name the %q edge, which stands one load balancer up per bootstrap class at %s, or the cloudflare edge, which is bought separately",
+			"name the %q edge, which stands one load balancer up per bootstrap class at %s",
 		Kind, what, alb.Kind, alb.StandingCost)
 }
 

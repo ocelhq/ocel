@@ -33,6 +33,7 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 			constants.ProjectStateDirName:     true,
 			constants.PhaseEnvName:            true,
 			constants.DevServerEnvName:        true,
+			constants.DevServerTokenEnvName:   true,
 			constants.AppFolderEnvName:        true,
 			constants.AppURLEnvName:           true,
 			constants.RuntimeAddressEnvName:   true,
@@ -40,6 +41,7 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		"pkg/constants/constants_test.go": {
 			constants.PhaseEnvName:          true,
 			constants.DevServerEnvName:      true,
+			constants.DevServerTokenEnvName: true,
 			constants.AppFolderEnvName:      true,
 			constants.AppURLEnvName:         true,
 			constants.RuntimeAddressEnvName: true,
@@ -69,6 +71,7 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		regexp.MustCompile(`(?:^|[/\\"'])` + regexp.QuoteMeta(constants.ProjectStateDirName) + `(?:$|[/\\"'])`),
 		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + constants.PhaseEnvName + `(?:$|[^A-Z0-9_])`),
 		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + constants.DevServerEnvName + `(?:$|[^A-Z0-9_])`),
+		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + constants.DevServerTokenEnvName + `(?:$|[^A-Z0-9_])`),
 		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + constants.AppFolderEnvName + `(?:$|[^A-Z0-9_])`),
 		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + constants.AppURLEnvName + `(?:$|[^A-Z0-9_])`),
 		regexp.MustCompile(`(?:^|[^A-Z0-9_])` + constants.RuntimeAddressEnvName + `(?:$|[^A-Z0-9_])`),

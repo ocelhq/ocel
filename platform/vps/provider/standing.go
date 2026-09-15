@@ -153,7 +153,7 @@ func reachVerdict(ctx context.Context, dial Reach, address string) providerkit.S
 		check.Verdict = providerkit.StandingFail
 		check.Finding = fmt.Sprintf("nothing answered a connection to %s from this machine, and the proxy renews every certificate on this box over http-01 on port %s with no ocel code anywhere near it: %v",
 			at, host.RenewalPort, err)
-		check.Fix = "open port " + host.RenewalPort + " to the internet in this machine's firewall and its provider's, and check the proxy is standing"
+		check.Fix = "open port " + host.RenewalPort + " in the firewall or security group your provider puts in front of this machine, and check the proxy is standing: the proxy publishes the port through docker, which writes its own iptables rules ahead of ufw and firewalld, so a firewall on the machine itself neither opens nor closes it"
 		return check
 	}
 	check.Verdict = providerkit.StandingPass
@@ -180,8 +180,8 @@ func (p *Provider) adminVerdict(ctx context.Context) providerkit.StandingCheck {
 	}
 	if bound := listeners.On(held, host.AdminPortNumber); len(bound) > 0 {
 		check.Verdict = providerkit.StandingFail
-		check.Finding = fmt.Sprintf("%s listens on %s inside %s, which is the stock unauthenticated admin api: every container on the %s network holds arbitrary replacement of this box's serving configuration",
-			strings.Join(listeners.Lines(bound), ", "), host.AdminPort, host.ProxyContainer, host.ProxyNetwork)
+		check.Finding = fmt.Sprintf("%s listens on %s inside %s, which is the stock unauthenticated admin api: every app container on this box shares a network with the proxy, so every one of them holds arbitrary replacement of this box's serving configuration",
+			strings.Join(listeners.Lines(bound), ", "), host.AdminPort, host.ProxyContainer)
 		check.Fix = "run `ocel bootstrap production` to put back the configuration that binds the admin endpoint to " + host.ProxyAdminSocket + " and nothing else"
 		return check
 	}

@@ -2,6 +2,7 @@ package env
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
+	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -37,6 +39,7 @@ type envOptions struct {
 	folder      string
 	environment string
 	reveal      bool
+	yes         bool
 }
 
 func (o envOptions) checkDev() error {
@@ -144,6 +147,22 @@ func envCoordinate(slug, key string, opts envOptions) *envvarsv1.Coordinate {
 	return &envvarsv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
 }
 
+func envAddress(key string, opts envOptions) envgate.Address {
+	return envgate.Address{Cell: envgate.Cell{Key: key, Folder: opts.folder}, Environment: opts.environment}
+}
+
+func envValues(runner *provider.Runner, slug string, opts envOptions) envwire.Values {
+	return envwire.Values{Runner: runner, Slug: slug, Tier: envTier(opts)}
+}
+
+func staleCell(err error, key string, opts envOptions) error {
+	if !errors.Is(err, varsui.ErrStaleValue) {
+		return err
+	}
+	return fmt.Errorf("%s moved between this command reading it and writing it, so nothing was written — somebody else edited it at the same time. Read it again with `ocel env get %s` and run this command again",
+		describeCell(key, opts), key)
+}
+
 func runEnvSet(ctx context.Context, deps cmddeps.Deps, cwd, key, value string, opts envOptions, stdin io.Reader, stdout, stderr io.Writer) error {
 	return runEnvSetPairs(ctx, deps, cwd, []envSetPair{{key: key, value: value}}, opts, stdin, stdout, stderr)
 }
@@ -175,23 +194,25 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 		if err != nil {
 			return err
 		}
+		held := envValues(runner, cfg.Slug, opts)
 		for _, pair := range pairs {
-			resp, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
-				Tier:       envTier(opts),
-				Coordinate: envCoordinate(cfg.Slug, pair.key, opts),
-				Value:      pair.value,
-			})
+			at := envAddress(pair.key, opts)
+			seen, err := held.Version(ctx, at)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, opts), resp.GetMetadata().GetVersion())
+			metadata, err := held.Write(ctx, at, pair.value, &seen)
+			if err != nil {
+				return staleCell(err, pair.key, opts)
+			}
+			fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(pair.key, opts), metadata.GetVersion())
 		}
 		if err := printGroupProgress(ctx, vars, cfg.Slug, definitions, groups, opts, pairs, stdout); err != nil {
 			return err
 		}
-		if preflight.RunsAContainer(cfg, standing.GetComputes()) {
+		if preflight.BakesValues(cfg, standing.GetComputes(), standing.GetBakedComputes()) {
 			fmt.Fprintln(stdout,
-				"This project runs on container compute, which carries nothing of ocel's to re-read a value: the container serving now keeps the value its deploy handed it, and this one lands on the next deploy. Run `ocel deploy`.")
+				"This project's apps run on a compute that is handed its values once, at deploy: the app serving now keeps what its deploy handed it, and this value lands on the next deploy. Run `ocel deploy`.")
 		}
 		return nil
 	})
@@ -286,6 +307,9 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 		}
 
 		if opts.reveal {
+			if err := consentToReveal(definitions, key, opts, stderr); err != nil {
+				return err
+			}
 			fmt.Fprintln(stdout, resp.GetValue())
 			return nil
 		}
@@ -301,6 +325,27 @@ func runEnvGet(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 	})
 }
 
+func classOf(definitions []*resourcesv1.VariableDefinition, key string) resourcesv1.VariableClass {
+	for _, definition := range definitions {
+		if definition.GetKey() == key {
+			return definition.GetClass()
+		}
+	}
+	return resourcesv1.VariableClass_VARIABLE_CLASS_UNSPECIFIED
+}
+
+func consentToReveal(definitions []*resourcesv1.VariableDefinition, key string, opts envOptions, stderr io.Writer) error {
+	if classOf(definitions, key) != resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
+		return nil
+	}
+	if !opts.yes {
+		return fmt.Errorf("%s is declared a secret, and --reveal alone will not print one: the plaintext would land in this terminal's scrollback and in whatever shell history, CI log or screen recording is watching. Pass --yes as well to print it anyway",
+			describeCell(key, opts))
+	}
+	fmt.Fprintf(stderr, "%s is a secret and its plaintext is now on stdout, in this terminal's scrollback, and in anything capturing either.\n", describeCell(key, opts))
+	return nil
+}
+
 func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
 	if opts.dev {
 		return runEnvRmDev(ctx, deps, cwd, key, opts, stdout, stderr)
@@ -310,14 +355,17 @@ func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envO
 		if err != nil {
 			return err
 		}
-		resp, err := vars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{
-			Tier:       envTier(opts),
-			Coordinate: envCoordinate(cfg.Slug, key, opts),
-		})
+		held := envValues(runner, cfg.Slug, opts)
+		at := envAddress(key, opts)
+		seen, err := held.Version(ctx, at)
 		if err != nil {
 			return err
 		}
-		if !resp.GetDeleted() {
+		deleted, err := held.Remove(ctx, at, &seen)
+		if err != nil {
+			return staleCell(err, key, opts)
+		}
+		if !deleted {
 			fmt.Fprintf(stdout, "No value was set for %s.\n", describeCell(key, opts))
 			return nil
 		}
@@ -329,9 +377,9 @@ func runEnvRm(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts envO
 		if err := printGroupProgress(ctx, vars, cfg.Slug, definitions, groups, opts, []envSetPair{{key: key}}, stdout); err != nil {
 			return err
 		}
-		if preflight.RunsAContainer(cfg, standing.GetComputes()) {
+		if preflight.BakesValues(cfg, standing.GetComputes(), standing.GetBakedComputes()) {
 			fmt.Fprintln(stdout,
-				"This project runs on container compute, which carries nothing of ocel's to re-read a value: the container serving now still holds what its deploy handed it, and it goes on serving that until the next deploy. Run `ocel deploy` to stop serving it.")
+				"This project's apps run on a compute that is handed its values once, at deploy: the app serving now still holds what its deploy handed it, and it goes on serving that until the next deploy. Run `ocel deploy` to stop serving it.")
 		}
 		return nil
 	})

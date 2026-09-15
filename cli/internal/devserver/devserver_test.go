@@ -13,9 +13,14 @@ import (
 	"testing"
 	"time"
 
+	connect "connectrpc.com/connect"
+
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
+	"github.com/ocelhq/ocel/pkg/channel"
+	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -64,11 +69,35 @@ func newDevServer(apiURL string) *Server {
 	return s
 }
 
-var testClient = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+const testSessionToken = "opensesame"
+
+const testAppToken = "openforme"
+
+type authorizing struct {
+	token string
+	base  http.RoundTripper
+}
+
+func (a authorizing) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Authorization", channel.FormatAuthHeader(a.token))
+	return a.base.RoundTrip(r)
+}
+
+var bareClient = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+
+var testClient = &http.Client{Transport: authorizing{testSessionToken, &http.Transport{DisableKeepAlives: true}}}
+
+var appClient = &http.Client{Transport: authorizing{testAppToken, &http.Transport{DisableKeepAlives: true}}}
 
 func serve(t *testing.T, s *Server) string {
 	t.Helper()
-	ts := httptest.NewServer(s.Mux())
+	ts := httptest.NewUnstartedServer(nil)
+	s.devServerAddr = "http://" + ts.Listener.Addr().String()
+	s.sessionToken = testSessionToken
+	s.appToken = testAppToken
+	ts.Config.Handler = s.Mux()
+	ts.Start()
 	t.Cleanup(ts.Close)
 	return ts.URL
 }
@@ -85,6 +114,134 @@ func declareResource(t *testing.T, url, name string, typ resourcesv1.ResourceTyp
 	}
 	if _, err := client.Declare(context.Background(), req); err != nil {
 		t.Fatalf("Declare %s: %v", name, err)
+	}
+}
+
+func TestACallToTheDevServerThatCarriesNoSessionTokenIsRefused(t *testing.T) {
+	t.Parallel()
+
+	url := serve(t, newDevServer("https://api.example.com"))
+
+	_, err := resourcesv1connect.NewResourceServiceClient(bareClient, url).Declare(
+		context.Background(),
+		&resourcesv1.DeclareRequest{
+			Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+			Config:   &resourcesv1.DeclareRequest_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
+		},
+	)
+	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("Declare error = %v, want permission denied", err)
+	}
+
+	resp, err := bareClient.Post(url+"/sync", "application/octet-stream", nil)
+	if err != nil {
+		t.Fatalf("POST /sync: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("POST /sync status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
+func TestAnAppRouteAnswersOnlyTheAppTokenTheChildWasHanded(t *testing.T) {
+	t.Parallel()
+
+	s := newDevServer("https://api.example.com")
+	s.PushEnv(map[string]string{"SECRET": "hunter2"})
+	url := serve(t, s)
+
+	for name, client := range map[string]*http.Client{
+		"no token":            bareClient,
+		"the discovery token": testClient,
+	} {
+		t.Run(name+" is refused", func(t *testing.T) {
+			t.Parallel()
+
+			resp, err := client.Get(url + "/env")
+			if err != nil {
+				t.Fatalf("GET /env: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusForbidden {
+				t.Errorf("GET /env status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+			}
+
+			_, err = blobv1connect.NewBucketServiceClient(client, url).GetUploadStatus(
+				context.Background(),
+				&blobv1.GetUploadStatusRequest{SessionId: "sess_1"},
+			)
+			if connect.CodeOf(err) != connect.CodePermissionDenied {
+				t.Errorf("GetUploadStatus error = %v, want permission denied", err)
+			}
+		})
+	}
+
+	t.Run("the app token is refused by the discovery routes", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := resourcesv1connect.NewResourceServiceClient(appClient, url).Declare(
+			context.Background(),
+			&resourcesv1.DeclareRequest{
+				Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+				Config:   &resourcesv1.DeclareRequest_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
+			},
+		)
+		if connect.CodeOf(err) != connect.CodePermissionDenied {
+			t.Errorf("Declare error = %v, want permission denied", err)
+		}
+
+		resp, err := appClient.Post(url+"/sync", "application/octet-stream", nil)
+		if err != nil {
+			t.Fatalf("POST /sync: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("POST /sync status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+		}
+	})
+
+	t.Run("a request naming another host is refused even with the app token", func(t *testing.T) {
+		t.Parallel()
+
+		req, err := http.NewRequest(http.MethodGet, url+"/env", nil)
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Host = "dev.example.com"
+		resp, err := appClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET /env: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("GET /env status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+		}
+	})
+
+	t.Run("the app token opens the env stream", func(t *testing.T) {
+		t.Parallel()
+
+		if got := readEnvEvent(t, openEnvStream(t, url))["SECRET"]; got != "hunter2" {
+			t.Fatalf("env SECRET = %q, want %q", got, "hunter2")
+		}
+	})
+}
+
+func TestTheSyncResultCarriesTheTokenTheAppReachesTheDevServerWith(t *testing.T) {
+	t.Parallel()
+
+	s := newDevServer("https://api.example.com")
+	url := serve(t, s)
+
+	if status := postSync(t, url); status != http.StatusOK {
+		t.Fatalf("POST /sync status = %d, want %d", status, http.StatusOK)
+	}
+	result := <-s.Sync()
+	if result.AppToken != testAppToken {
+		t.Fatalf("AppToken = %q, want the token the app routes answer to", result.AppToken)
+	}
+	if result.AppToken == s.SessionToken() {
+		t.Fatal("the app token is the discovery token, so an app that leaks its environment also hands out the discovery routes")
 	}
 }
 
@@ -166,8 +323,8 @@ func TestSync(t *testing.T) {
 		defer resolveServer.Close()
 
 		s := newDevServer(resolveServer.URL)
-		s.devServerAddr = "http://dev.local:1234"
 		url := serve(t, s)
+		s.devServerAddr = "http://dev.local:1234"
 
 		declareResource(t, url, "main", resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
 		declareResource(t, url, "storage", resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET)
@@ -469,7 +626,7 @@ func openEnvStream(t *testing.T, url string) *bufio.Reader {
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}
-	resp, err := testClient.Do(req)
+	resp, err := appClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET /env: %v", err)
 	}

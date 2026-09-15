@@ -52,6 +52,7 @@ require (
 	github.com/moby/moby/client v0.4.1 // indirect
 	github.com/ocelhq/ocel/pkg/channel v0.0.0 // indirect
 	github.com/ocelhq/ocel/pkg/costkit v0.0.0 // indirect
+	github.com/ocelhq/ocel/pkg/runtimekit v0.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
@@ -92,3 +93,5 @@ replace github.com/ocelhq/ocel/pkg/configdoc => ../../../pkg/configdoc
 replace github.com/ocelhq/ocel/pkg/constants => ../../../pkg/constants
 
 replace github.com/ocelhq/ocel/pkg/costkit => ../../../pkg/costkit
+
+replace github.com/ocelhq/ocel/pkg/runtimekit => ../../../pkg/runtimekit

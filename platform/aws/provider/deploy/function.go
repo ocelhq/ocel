@@ -347,12 +347,15 @@ func rolePrefix(coord naming.Coordinate) string {
 }
 
 func newFunctionRole(ctx *pulumi.Context, coord naming.Coordinate, r executionRole) (*iam.Role, error) {
+	if r.Boundary == "" {
+		return nil, fmt.Errorf("mint the execution role for %s: this deploy resolved no app boundary, and a role made without one is capped by nothing", r.App)
+	}
 	id := naming.ResourceID(naming.KindRole, roleLocalName)
 	role, err := iam.NewRole(ctx, id, &iam.RoleArgs{
 		NamePrefix:          pulumi.String(rolePrefix(coord)),
 		Description:         describe(coord, "execution role for this app's functions"),
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(lambdaServicePrincipal)),
-		PermissionsBoundary: permissionsBoundary(r.Boundary),
+		PermissionsBoundary: pulumi.String(r.Boundary),
 		Tags:                resourceTags(coord.Kind, "", r.Tags),
 	})
 	if err != nil {
@@ -471,7 +474,7 @@ func lambdaLogging(group *cloudwatch.LogGroup) lambda.FunctionLoggingConfigPtrIn
 	}
 }
 
-func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput, layers pulumi.StringArrayInput, urlAuth string, opts ...pulumi.ResourceOption) (functionRef, error) {
+func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coordinate, route string, args functionArgs, artifact artifactRef, base map[string]string, resolved map[string]pulumi.StringInput, isr *isrConfig, bytecode *bytecodeConfig, roleArn pulumi.StringInput, layers pulumi.StringArrayInput, urlAuth, kmsKeyARN string, opts ...pulumi.ResourceOption) (functionRef, error) {
 	var none functionRef
 
 	env := pulumi.StringMap{}
@@ -504,6 +507,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, coord naming.Coor
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: env,
 		},
+		KmsKeyArn:     optionalARN(kmsKeyARN),
 		LoggingConfig: lambdaLogging(logs),
 
 		Tags: resourceTags(coord.Kind, route, args.Tags),

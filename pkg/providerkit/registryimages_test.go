@@ -158,6 +158,21 @@ func TestAManifestTheRegistryAnswersForUnderAnotherDigestIsNotThisImage(t *testi
 	}
 }
 
+func TestAWrappedPushIsHeldByItsTagAloneSinceItsDigestIsOnlyKnownAfterTheWrap(t *testing.T) {
+	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Docker-Content-Digest", "sha256:whateverthewrapproduced")
+	})
+	push.Digest = ""
+
+	held, err := store.Has(context.Background(), push)
+	if err != nil {
+		t.Fatalf("Has() = %v", err)
+	}
+	if !held {
+		t.Error("Has() read a standing wrapped tag as missing, so every deploy of an unchanged image would wrap and push it again")
+	}
+}
+
 func TestARealmOnAnotherHostIsNotHandedTheRegistryPassword(t *testing.T) {
 	var harvested string
 	thief := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

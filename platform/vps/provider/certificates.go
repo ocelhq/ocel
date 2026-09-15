@@ -2,6 +2,7 @@ package vps
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -17,13 +18,14 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 		if strings.HasPrefix(req.Hostname, "*.") {
 			return providerkit.Certificate{}, nil
 		}
-		read, trouble := p.host.CertificateTrouble(ctx, req.Hostname)
-		if trouble != nil {
-			return providerkit.Certificate{}, trouble
-		}
-		if !read && req.Report != nil {
-			req.Report.Say("this box's engine did not answer, so whether its proxy is already refused by the CA for " +
-				req.Hostname + " was not read: an order the ceiling refuses surfaces on the next deploy rather than here")
+		if err := p.host.CertificateTrouble(ctx, req.Hostname); err != nil {
+			if refused(err) {
+				return providerkit.Certificate{}, err
+			}
+			if req.Report != nil {
+				req.Report.Say("whether this box's proxy is already refused by the CA for " + req.Hostname +
+					" was not read, so an order the ceiling refuses surfaces on the next deploy rather than here: " + err.Error())
+			}
 		}
 		return providerkit.Certificate{ID: certs.ProxyHandle(req.Hostname)}, nil
 	}
@@ -35,6 +37,11 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 		return providerkit.Certificate{}, err
 	}
 	return providerkit.Certificate{ID: certs.PinHandle(path)}, nil
+}
+
+func refused(err error) bool {
+	var refusal providerkit.Refusal
+	return errors.As(err, &refusal) && refusal.Code == providerkit.CodeBusy
 }
 
 func (p *Provider) InspectCertificate(ctx context.Context, _ edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {

@@ -55,6 +55,7 @@ type Facts struct {
 	ShieldsOrigin         bool
 	InvalidatesByCacheTag bool
 	RoutesPreviewsByLabel bool
+	CachesRecords         bool
 	CredentialScope       string
 }
 

@@ -37,7 +37,24 @@ const VARIABLE_PREFIX = "OCEL_VAR_";
 export interface EdgeVariables {
   env?: Record<string, string>;
   envelope?: string;
+  envelopeKey?: string;
   valueFingerprint?: string;
+}
+
+const BUNDLE_FILE = "bundle.json";
+
+const BUNDLE_DIR = "edge";
+
+export function ownBundleKey(bundleKey: string, slug: string, app: string): boolean {
+  const segments = bundleKey.split("/");
+  return (
+    segments.length === 6 &&
+    segments.every((segment) => segment !== "" && segment !== "." && segment !== "..") &&
+    segments[1] === slug &&
+    segments[2] === app &&
+    segments[4] === BUNDLE_DIR &&
+    segments[5] === BUNDLE_FILE
+  );
 }
 
 import type { EdgeEntryKind, EdgeInvoker } from "@framework/next-router";
@@ -98,7 +115,14 @@ export function createEdgeInvoker(
       env: {
         ...(bundle.env ?? {}),
         ...(variables?.env ?? {}),
-        ...(envelope && sealed ? prefixed(await unseal(envelope, await sealed.arrayBuffer())) : {}),
+        ...(envelope && sealed
+          ? prefixed(
+              await unseal(
+                await dataKey(envelope, variables?.envelopeKey),
+                await sealed.arrayBuffer(),
+              ),
+            )
+          : {}),
         ...(cache && { OCEL_CACHE_RPC: cache.rpc, OCEL_CACHE_SCOPE: cache.scope }),
       },
     };
@@ -123,20 +147,35 @@ function siblingKey(key: string, name: string): string {
   return key.slice(0, key.lastIndexOf("/") + 1) + name;
 }
 
-async function unseal(envelope: string, sealed: ArrayBuffer): Promise<Record<string, string>> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    base64Bytes(envelope),
-    { name: "AES-GCM" },
-    false,
-    ["decrypt"],
-  );
-  const bytes = new Uint8Array(sealed);
-  const payload = await crypto.subtle.decrypt(
+async function aesKey(base64: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey("raw", base64Bytes(base64), { name: "AES-GCM" }, false, [
+    "decrypt",
+  ]);
+}
+
+async function openFramed(key: CryptoKey, framed: ArrayBuffer): Promise<ArrayBuffer> {
+  const bytes = new Uint8Array(framed);
+  return crypto.subtle.decrypt(
     { name: "AES-GCM", iv: bytes.subarray(0, NONCE_BYTES) },
     key,
     bytes.subarray(NONCE_BYTES),
   );
+}
+
+async function dataKey(envelope: string, envelopeKey: string | undefined): Promise<ArrayBuffer> {
+  if (envelopeKey === undefined) return base64Bytes(envelope);
+  try {
+    return await openFramed(await aesKey(envelopeKey), base64Bytes(envelope));
+  } catch {
+    throw new Error("ocel: the envelope was not wrapped for this worker");
+  }
+}
+
+async function unseal(dataKey: ArrayBuffer, sealed: ArrayBuffer): Promise<Record<string, string>> {
+  const key = await crypto.subtle.importKey("raw", dataKey, { name: "AES-GCM" }, false, [
+    "decrypt",
+  ]);
+  const payload = await openFramed(key, sealed);
   try {
     return JSON.parse(new TextDecoder().decode(payload)) as Record<string, string>;
   } catch {

@@ -381,30 +381,24 @@ function remainingRecordKeys(store: SqlStore): string[] {
     .map((r) => recordKey(r.app, r.identity));
 }
 
-export interface Identity {
-  ownerToken: string;
-  secret: string;
-}
+export type Initialization = "adopted" | "held";
 
 export function initialize(
   store: SqlStore,
   ownerToken: string,
   secret: string,
   force: boolean,
-): Identity {
+): Initialization {
   return store.transactionSync(() => {
-    const existing = storedIdentity(store);
-    if (existing && !force) return existing;
+    if (identityHeld(store) && !force) return "held";
     setMeta(store, OWNER_KEY, ownerToken);
     setMeta(store, SECRET_KEY, secret);
-    return { ownerToken, secret };
+    return "adopted";
   });
 }
 
-function storedIdentity(store: SqlStore): Identity | undefined {
-  const ownerToken = getMeta(store, OWNER_KEY);
-  const secret = getMeta(store, SECRET_KEY);
-  return ownerToken !== undefined && secret !== undefined ? { ownerToken, secret } : undefined;
+function identityHeld(store: SqlStore): boolean {
+  return getMeta(store, OWNER_KEY) !== undefined && getMeta(store, SECRET_KEY) !== undefined;
 }
 
 export function storedSecret(store: SqlStore): string | undefined {

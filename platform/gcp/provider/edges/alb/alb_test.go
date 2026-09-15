@@ -79,6 +79,90 @@ func TestBindingAHostnameRaisesTheProjectsStackAndRoutesItThroughTheClassUrlMap(
 	}
 }
 
+func TestTwoProjectsClaimingOneHostnameAtOnceLeaveItWithExactlyOne(t *testing.T) {
+	t.Parallel()
+
+	front, w := fronting(t)
+	ctx := context.Background()
+	stacks := map[string]edge.EdgeStack{}
+	for _, slug := range []string{"shop", "store"} {
+		stack, err := front.Reconcile(ctx, edge.StackSpec{Slug: slug, Class: providerkit.ClassProduction}, edge.StackState{})
+		if err != nil {
+			t.Fatalf("Reconcile(%s) = %v", slug, err)
+		}
+		stacks[slug] = stack
+	}
+
+	outcomes := make(chan error, len(stacks))
+	for _, stack := range stacks {
+		go func() {
+			outcomes <- stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"})
+		}()
+	}
+	var refused []error
+	for range stacks {
+		if err := <-outcomes; err != nil {
+			refused = append(refused, err)
+		}
+	}
+	if len(refused) != 1 {
+		t.Fatalf("binding shop.example.com from two projects at once refused %d of them, want exactly one: %v", len(refused), refused)
+	}
+	var refusal providerkit.Refusal
+	if !errors.As(refused[0], &refusal) {
+		t.Errorf("the losing bind failed with %v, want a refusal that says who serves the hostname", refused[0])
+	}
+
+	owner, err := front.DomainOwner(ctx, "shop.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for slug, stack := range stacks {
+		bound := slices.Contains(stack.State().Bound, "shop.example.com")
+		if owns := owner == Surface(slug, providerkit.ClassProduction); owns != bound {
+			t.Errorf("%s reads as bound=%t while the claim names %q: what the ledger says and what the url map routes must be one project", slug, bound, owner)
+		}
+	}
+	if _, routed := w.hosts("ocel-alb-production-routes")["shop.example.com"]; !routed {
+		t.Error("the url map holds no rule for shop.example.com after the winning bind")
+	}
+}
+
+func TestAHostnameAnotherProjectServesIsRefusedRatherThanTakenOver(t *testing.T) {
+	t.Parallel()
+
+	front, w := fronting(t)
+	ctx := context.Background()
+	shop, err := front.Reconcile(ctx, edge.StackSpec{Slug: "shop", Class: providerkit.ClassProduction}, edge.StackState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := shop.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
+		t.Fatalf("BindDomain(shop) = %v", err)
+	}
+	store, err := front.Reconcile(ctx, edge.StackSpec{Slug: "store", Class: providerkit.ClassProduction}, edge.StackState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := w.hosts("ocel-alb-production-routes")
+	raised := len(w.raised())
+
+	err = store.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"})
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, Surface("shop", providerkit.ClassProduction)) {
+		t.Fatalf("BindDomain(store) = %v, want a refusal naming the project that serves the hostname", err)
+	}
+	if after := w.hosts("ocel-alb-production-routes"); !maps.Equal(before, after) {
+		t.Errorf("the refused bind rewrote the url map from %v to %v, and a refusal that rerouted is a takeover", before, after)
+	}
+	if len(w.raised()) != raised {
+		t.Errorf("the refused bind raised %v, and a stack for a hostname another project serves is one nothing routes to", w.raised()[raised:])
+	}
+	if owner, _ := front.DomainOwner(ctx, "shop.example.com"); owner != Surface("shop", providerkit.ClassProduction) {
+		t.Errorf("the refused bind left the claim naming %q", owner)
+	}
+}
+
 func TestUnbindingTheLastHostnameTakesTheProjectsStackDownRatherThanLeavingItStanding(t *testing.T) {
 	t.Parallel()
 

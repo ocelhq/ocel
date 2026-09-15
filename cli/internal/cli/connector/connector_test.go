@@ -19,6 +19,8 @@ import (
 	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -198,6 +200,35 @@ func TestAddGrantsRevealOnlyWhenItIsAskedFor(t *testing.T) {
 	grants, _ := config["grants"].([]any)
 	if len(grants) != 2 || grants[0] != "envvars.read" || grants[1] != "envvars.reveal" {
 		t.Errorf("grants = %v, want read and reveal and no write", grants)
+	}
+}
+
+func TestAConnectorOverTheChannelCeilingIsRefusedBeforeItIsSent(t *testing.T) {
+	root := clitest.SetUpConnectorFixture(t, fingerprint, hostname)
+	srv := newConsoleServer(t)
+	linked(t, root, srv.URL)
+
+	held := clitest.InstallConnector(t, "vps", providers.Platform{GOOS: "linux", GOARCH: "amd64"}, []byte(clitest.FakeConnectorBinary))
+	if err := os.Truncate(held, provider.MaxMessageBytes+1); err != nil {
+		t.Fatalf("grow the connector past the ceiling: %v", err)
+	}
+
+	deps := clitest.NewDeps()
+	clitest.SetLoggedIn(&deps)
+
+	err := runAdd(context.Background(), deps, resolved(t, root), read(t, root, srv.URL),
+		opened(t, srv), &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("runAdd err = nil, want a connector over the ceiling refused")
+	}
+	said := err.Error()
+	for _, want := range []string{"vps connector", "over the"} {
+		if !strings.Contains(said, want) {
+			t.Errorf("runAdd err = %q, want it to contain %q", said, want)
+		}
+	}
+	if _, statErr := os.Stat(os.Getenv(clitest.FakeConnectorLogEnvVar)); !errors.Is(statErr, os.ErrNotExist) {
+		t.Errorf("the connector was installed anyway (stat err = %v), want nothing sent over the channel", statErr)
 	}
 }
 

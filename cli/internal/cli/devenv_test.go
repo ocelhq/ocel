@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
+	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -53,7 +54,7 @@ globalThis.__ocelRegister ??= [];
 globalThis.__ocelRegister.push(
   fetch(new URL("/app.resources.v1.ResourceService/DeclareEnv", process.env.%s), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+` },
     body: JSON.stringify({ definitions: [%s] }),
   }),
 );
@@ -75,7 +76,7 @@ func TestResolvedEnv(t *testing.T) {
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := toMap(mergeEnv(base, projectEnv, live, dotfile, resources, "", ""))
+		got := toMap(mergeEnv(base, projectEnv, live, dotfile, resources, runtimeAccess{}, ""))
 
 		cases := map[string]string{
 			"PATH":                        "/bin",
@@ -100,7 +101,7 @@ func TestResolvedEnv(t *testing.T) {
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := resolvedEnv(projectEnv, live, nil, resources, "", "")
+		got := resolvedEnv(projectEnv, live, nil, resources, runtimeAccess{}, "")
 
 		cases := map[string]string{
 			"PROJECT_ONLY":                "p",
@@ -115,15 +116,31 @@ func TestResolvedEnv(t *testing.T) {
 		}
 	})
 
+	t.Run("the runtime address travels with the token its routes answer to, and neither alone", func(t *testing.T) {
+		t.Parallel()
+
+		reached := resolvedEnv(nil, nil, nil, nil, runtimeAccess{address: "http://127.0.0.1:4242", token: "app-token"}, "")
+		if reached[constants.RuntimeAddressEnvName] != "http://127.0.0.1:4242" || reached[channel.SessionTokenEnvVar] != "app-token" {
+			t.Errorf("env = %v, want %s and %s stated together", reached, constants.RuntimeAddressEnvName, channel.SessionTokenEnvVar)
+		}
+
+		unreached := resolvedEnv(nil, nil, nil, nil, runtimeAccess{}, "")
+		for _, name := range []string{constants.RuntimeAddressEnvName, channel.SessionTokenEnvVar} {
+			if _, ok := unreached[name]; ok {
+				t.Errorf("%s stated for an app with no runtime to reach", name)
+			}
+		}
+	})
+
 	t.Run("the app folder is always stated", func(t *testing.T) {
 		t.Parallel()
 
-		bound := resolvedEnv(nil, nil, nil, nil, "", "/web")
+		bound := resolvedEnv(nil, nil, nil, nil, runtimeAccess{}, "/web")
 		if bound[constants.AppFolderEnvName] != "/web" {
 			t.Errorf("%s = %q, want %q", constants.AppFolderEnvName, bound[constants.AppFolderEnvName], "/web")
 		}
 
-		unbound := resolvedEnv(nil, nil, nil, nil, "", "")
+		unbound := resolvedEnv(nil, nil, nil, nil, runtimeAccess{}, "")
 		folder, ok := unbound[constants.AppFolderEnvName]
 		if !ok {
 			t.Fatalf("resolvedEnv = %v, want %s written even for an unbound app", unbound, constants.AppFolderEnvName)
@@ -132,7 +149,7 @@ func TestResolvedEnv(t *testing.T) {
 			t.Errorf("%s = %q, want the project root spelled as the empty string", constants.AppFolderEnvName, folder)
 		}
 
-		stale := toMap(mergeEnv([]string{constants.AppFolderEnvName + "=/stale"}, nil, nil, nil, nil, "", ""))
+		stale := toMap(mergeEnv([]string{constants.AppFolderEnvName + "=/stale"}, nil, nil, nil, nil, runtimeAccess{}, ""))
 		if stale[constants.AppFolderEnvName] != "" {
 			t.Errorf("%s = %q, want the shell's stale binding overwritten", constants.AppFolderEnvName, stale[constants.AppFolderEnvName])
 		}
@@ -142,7 +159,7 @@ func TestResolvedEnv(t *testing.T) {
 			map[string]string{constants.AppFolderEnvName: "/from-live"},
 			map[string]string{constants.AppFolderEnvName: "/from-dotfile"},
 			[]resolve.Resource{{Name: "main", Env: map[string]string{constants.AppFolderEnvName: "/from-resource"}}},
-			"",
+			runtimeAccess{},
 			"/web",
 		)
 		if contested[constants.AppFolderEnvName] != "/web" {
@@ -1015,7 +1032,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 	t.Run("localhost on the default port where nothing names one", func(t *testing.T) {
 		t.Setenv("PORT", "")
 
-		got := resolvedEnv(nil, nil, nil, nil, "", "")
+		got := resolvedEnv(nil, nil, nil, nil, runtimeAccess{}, "")
 		for _, key := range []string{constants.AppURLEnvName, providerkit.ClientURLEnvName} {
 			if want := "http://localhost:3000"; got[key] != want {
 				t.Errorf("%s = %q, want %q — dev never leaves it unset, so an app may read it without a fallback", key, got[key], want)
@@ -1026,7 +1043,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 	t.Run("the port the project names", func(t *testing.T) {
 		t.Setenv("PORT", "")
 
-		got := resolvedEnv(nil, nil, map[string]string{"PORT": "4321"}, nil, "", "")
+		got := resolvedEnv(nil, nil, map[string]string{"PORT": "4321"}, nil, runtimeAccess{}, "")
 		if want := "http://localhost:4321"; got[constants.AppURLEnvName] != want {
 			t.Errorf("%s = %q, want %q", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
 		}
@@ -1035,7 +1052,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 	t.Run("the port the shell exports", func(t *testing.T) {
 		t.Setenv("PORT", "8080")
 
-		got := resolvedEnv(nil, nil, nil, nil, "", "")
+		got := resolvedEnv(nil, nil, nil, nil, runtimeAccess{}, "")
 		if want := "http://localhost:8080"; got[constants.AppURLEnvName] != want {
 			t.Errorf("%s = %q, want %q — the app is spawned with the shell's environment under it", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
 		}

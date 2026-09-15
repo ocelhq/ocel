@@ -13,14 +13,18 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
 	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lb"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/runtimekit/front"
+	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -55,20 +59,24 @@ type RuleDescriber interface {
 }
 
 type containerWork struct {
-	priority   int
-	app        string
-	image      string
-	healthPath string
-	env        map[string]string
-	tags       map[string]string
-	boundary   string
-	region     string
-	secret     string
-	policies   []bindingPolicy
-	service    naming.Coordinate
-	role       naming.Coordinate
-	substrate  substrate
+	priority    int
+	app         string
+	image       string
+	healthPath  string
+	env         map[string]string
+	tags        map[string]string
+	boundary    string
+	region      string
+	secrets     []string
+	policies    []bindingPolicy
+	values      executionRole
+	transformed *transformPatches
+	service     naming.Coordinate
+	role        naming.Coordinate
+	substrate   substrate
 }
+
+func (w *containerWork) readsLive() bool { return w.values.ValuesTableARN != "" }
 
 type containerDefinition struct {
 	Name         string            `json:"name"`
@@ -109,13 +117,28 @@ func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, er
 		return nil, providerkit.Refuse(providerkit.CodeNotReady,
 			"this class holds no origin secret, and a container answers only to an edge that presents one: re-run `%s`", providerkit.BootstrapCommand(plan.Ref.Class))
 	}
+	if r.cfg.AppBoundaryARN == "" {
+		return nil, providerkit.Refuse(providerkit.CodeNotReady,
+			"this deploy resolved no app boundary for %s, and a task role made without one is capped by nothing: re-run `%s`", app.App, providerkit.BootstrapCommand(plan.Ref.Class))
+	}
 	policies, err := planBindingPolicies(app.Grants)
 	if err != nil {
 		return nil, err
 	}
-	env, err := containerEnv(app.App, app.Values)
+	bundle, err := r.sealApp(plan.Ref.Project, app.App, liveOnly(app.Values))
 	if err != nil {
 		return nil, err
+	}
+	env, err := containerEnv(app.App, app.Values, r.cfg.OriginSecret, r.cfg.PreviousOriginSecret, bundle.Live)
+	if err != nil {
+		return nil, err
+	}
+	values := executionRole{App: app.App, VarsKeyARN: r.cfg.VarsKeyARN}
+	if bundle.hasLive() {
+		values.ValuesTableARN = r.cfg.VarsTableARN
+		values.VarsReferenced = bundle.Referenced
+		values.Slug = r.cfg.Slug
+		values.VarsClass = string(r.cfg.Class)
 	}
 	return &containerWork{
 		app:        app.App,
@@ -125,11 +148,17 @@ func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, er
 		tags:       plan.Tags,
 		boundary:   r.cfg.AppBoundaryARN,
 		region:     r.cfg.Region,
-		secret:     r.cfg.OriginSecret,
+		secrets:    presentedSecrets(r.cfg.OriginSecret, r.cfg.PreviousOriginSecret),
 		policies:   policies,
+		values:     values,
 		service:    serviceCoordinate(project, stack),
 		role:       roleCoordinate(project, stack),
 	}, nil
+}
+
+func liveOnly(held providerkit.AppValues) providerkit.AppValues {
+	held.Sensitive = nil
+	return held
 }
 
 func (r *release) containerWork(plan providerkit.StackPlan, held substrate) (*containerWork, error) {
@@ -154,7 +183,7 @@ func rulePriority(physical string, taken map[int]bool) int {
 	return 0
 }
 
-func takenPriorities(ctx context.Context, rules RuleDescriber, listener string) (map[int]bool, error) {
+func takenPriorities(ctx context.Context, rules RuleDescriber, listener, physical string) (map[int]bool, error) {
 	taken := map[int]bool{}
 	if rules == nil {
 		return taken, nil
@@ -166,6 +195,9 @@ func takenPriorities(ctx context.Context, rules RuleDescriber, listener string) 
 			return nil, fmt.Errorf("read the rules already on the container front: %w", err)
 		}
 		for _, rule := range page.Rules {
+			if routesContainer(rule, physical) {
+				continue
+			}
 			if priority, err := strconv.Atoi(aws.ToString(rule.Priority)); err == nil {
 				taken[priority] = true
 			}
@@ -176,8 +208,21 @@ func takenPriorities(ctx context.Context, rules RuleDescriber, listener string) 
 	}
 }
 
+func routesContainer(rule elbv2types.Rule, physical string) bool {
+	for _, condition := range rule.Conditions {
+		header := condition.HttpHeaderConfig
+		if header == nil || !strings.EqualFold(aws.ToString(header.HttpHeaderName), edge.OriginContainerHeader) {
+			continue
+		}
+		if slices.Contains(header.Values, physical) {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *release) placeRule(ctx context.Context, work *containerWork) error {
-	taken, err := takenPriorities(ctx, r.cfg.Rules, work.substrate.Listener)
+	taken, err := takenPriorities(ctx, r.cfg.Rules, work.substrate.Listener, work.physical())
 	if err != nil {
 		return err
 	}
@@ -188,9 +233,29 @@ func (r *release) placeRule(ctx context.Context, work *containerWork) error {
 	return nil
 }
 
-func containerEnv(app string, values providerkit.AppValues) (map[string]string, error) {
-	env := make(map[string]string, len(values.Delivered)+2)
-	maps.Copy(env, values.Delivered)
+const (
+	priorityInUseCode = "PriorityInUse"
+	rulePlacements    = 3
+)
+
+func priorityTaken(err error) bool {
+	return err != nil && strings.Contains(err.Error(), priorityInUseCode)
+}
+
+func presentedSecrets(current, previous string) []string {
+	if previous == "" {
+		return []string{current}
+	}
+	return []string{current, previous}
+}
+
+func containerEnv(app string, values providerkit.AppValues, originSecret, previousSecret string, manifest []byte) (map[string]string, error) {
+	env := make(map[string]string, len(values.Plain)+len(values.Sensitive)+7)
+	maps.Copy(env, values.Plain)
+	maps.Copy(env, values.Sensitive)
+	if values.Folder != "" {
+		env[constants.AppFolderEnvName] = values.Folder
+	}
 	maps.Copy(env, values.Injected())
 	if _, set := env[containerPortEnv]; set {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
@@ -198,7 +263,21 @@ func containerEnv(app string, values providerkit.AppValues) (map[string]string, 
 			app, containerPortEnv, containerPort, containerPortEnv)
 	}
 	env[containerPortEnv] = containerPort
+	env[edge.OriginSecretVar] = originSecret
+	if previousSecret != "" {
+		env[edge.OriginSecretPreviousVar] = previousSecret
+	}
+	if len(manifest) > 0 {
+		env[vars.EnvVar] = string(manifest)
+	}
 	return env, nil
+}
+
+func (w *containerWork) definitionEnv() map[string]string {
+	env := make(map[string]string, len(w.env)+1)
+	maps.Copy(env, w.env)
+	env[front.HealthPathVar] = w.healthPath
+	return env
 }
 
 func serviceCoordinate(project string, stack naming.StackName) naming.Coordinate {
@@ -217,9 +296,10 @@ func (w *containerWork) physical() string {
 }
 
 func (w *containerWork) definition() (string, error) {
-	pairs := make([]environmentPair, 0, len(w.env))
-	for _, key := range slices.Sorted(maps.Keys(w.env)) {
-		pairs = append(pairs, environmentPair{Name: key, Value: w.env[key]})
+	env := w.definitionEnv()
+	pairs := make([]environmentPair, 0, len(env))
+	for _, key := range slices.Sorted(maps.Keys(env)) {
+		pairs = append(pairs, environmentPair{Name: key, Value: env[key]})
 	}
 	encoded, err := json.Marshal([]containerDefinition{{
 		Name:         containerName,
@@ -244,11 +324,15 @@ func (w *containerWork) definition() (string, error) {
 
 func (w *containerWork) run(ctx *pulumi.Context) error {
 	physical := w.physical()
-	tags := resourceTags(naming.KindService, "", w.tags)
+	tags := resourceTags(naming.KindService, "", w.taggedWith(w.transformed.tagsFor(transformTypeContainer, w.app)))
+
+	if err := w.transformed.install(ctx); err != nil {
+		return err
+	}
 
 	var taskRole pulumi.StringPtrInput
 	var before []pulumi.Resource
-	if len(w.policies) > 0 {
+	if len(w.policies) > 0 || w.readsLive() {
 		role, granted, err := w.taskRole(ctx)
 		if err != nil {
 			return err
@@ -308,7 +392,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		Conditions: lb.ListenerRuleConditionArray{
 			&lb.ListenerRuleConditionArgs{HttpHeader: &lb.ListenerRuleConditionHttpHeaderArgs{
 				HttpHeaderName: pulumi.String(edge.OriginSecretHeader),
-				Values:         pulumi.StringArray{pulumi.String(w.secret)},
+				Values:         pulumi.ToStringArray(w.secrets),
 			}},
 			&lb.ListenerRuleConditionArgs{HttpHeader: &lb.ListenerRuleConditionHttpHeaderArgs{
 				HttpHeaderName: pulumi.String(edge.OriginContainerHeader),
@@ -355,13 +439,23 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 	return nil
 }
 
+func (w *containerWork) taggedWith(extra map[string]string) map[string]string {
+	if len(extra) == 0 {
+		return w.tags
+	}
+	tags := make(map[string]string, len(w.tags)+len(extra))
+	maps.Copy(tags, w.tags)
+	maps.Copy(tags, extra)
+	return tags
+}
+
 func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resource, error) {
 	role, err := iam.NewRole(ctx, naming.ResourceID(naming.KindRole, roleLocalName), &iam.RoleArgs{
 		NamePrefix:          pulumi.String(rolePrefix(w.role)),
 		Description:         describe(w.role, "task role for this app's container"),
 		AssumeRolePolicy:    pulumi.String(assumeRolePolicy(ecsTasksPrincipal)),
-		PermissionsBoundary: permissionsBoundary(w.boundary),
-		Tags:                resourceTags(naming.KindRole, "", w.tags),
+		PermissionsBoundary: pulumi.String(w.boundary),
+		Tags:                resourceTags(naming.KindRole, "", w.taggedWith(w.transformed.tagsFor(transformTypeContainer, w.app))),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -371,6 +465,20 @@ func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resou
 		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "binding", binding.Binding), &iam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(binding.Policy),
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		granted = append(granted, policy)
+	}
+	if w.readsLive() {
+		rendered, err := varsReadPolicy(w.values)
+		if err != nil {
+			return nil, nil, err
+		}
+		policy, err := iam.NewRolePolicy(ctx, naming.ResourceID(naming.KindRole, roleLocalName, "policy", "vars", "read"), &iam.RolePolicyArgs{
+			Role:   role.Name,
+			Policy: pulumi.String(rendered),
 		})
 		if err != nil {
 			return nil, nil, err
@@ -389,20 +497,43 @@ func (r *release) provisionContainer(ctx context.Context, plan providerkit.Stack
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
+	if work.transformed, err = transformStackPlan(ctx, r.cfg.Transform, plan); err != nil {
+		return providerkit.StackResult{}, err
+	}
 	held, err := r.ensureSubstrate(ctx, plan.Ref, report)
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
 	work.substrate = held
-	if err := r.placeRule(ctx, work); err != nil {
-		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, report))
-	}
-	plan.Options = work
-	result, err := r.adapter.Run(ctx, plan, report)
+	result, err := r.runContainer(ctx, plan, work, report)
 	if err != nil {
 		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, report))
 	}
+	if err := work.transformed.refuseUnclaimed(); err != nil {
+		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, report))
+	}
 	return result, nil
+}
+
+func (r *release) runContainer(ctx context.Context, plan providerkit.StackPlan, work *containerWork, report providerkit.Reporter) (providerkit.StackResult, error) {
+	var err error
+	for attempt := range rulePlacements {
+		if err = r.placeRule(ctx, work); err != nil {
+			return providerkit.StackResult{}, err
+		}
+		plan.Options = work
+		var result providerkit.StackResult
+		if result, err = r.adapter.Run(ctx, plan, report); err == nil {
+			return result, nil
+		}
+		if !priorityTaken(err) {
+			return providerkit.StackResult{}, err
+		}
+		if report != nil {
+			report.Detail(fmt.Sprintf("Another deploy claimed listener rule priority %d while %s was placing its own (attempt %d of %d); picking another", work.priority, work.app, attempt+1, rulePlacements))
+		}
+	}
+	return providerkit.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.app, rulePlacements, err)
 }
 
 func (r *release) abandonContainer(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
@@ -439,11 +570,21 @@ func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan,
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
+	if work.transformed, err = transformStackPlan(ctx, r.cfg.Transform, plan); err != nil {
+		return providerkit.Plan{}, err
+	}
 	if err := r.placeRule(ctx, work); err != nil {
 		return providerkit.Plan{}, err
 	}
 	plan.Options = work
-	return r.adapter.Preview(ctx, plan, report)
+	previewed, err := r.adapter.Preview(ctx, plan, report)
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
+	if err := work.transformed.refuseUnclaimed(); err != nil {
+		return providerkit.Plan{}, err
+	}
+	return previewed, nil
 }
 
 func (r *release) decodeContainer(work *containerWork, outputs auto.OutputMap) (providerkit.StackResult, error) {

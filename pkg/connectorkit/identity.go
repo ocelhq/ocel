@@ -47,6 +47,15 @@ func LoadOrCreateIdentity(path string) (Identity, error) {
 	return Identity{private: ed25519.NewKeyFromSeed(seed)}, nil
 }
 
+// IdentityFromSeed holds the identity an ed25519 seed names, for a connector
+// that reads its key out of a secret store rather than off a disk of its own.
+func IdentityFromSeed(seed []byte) (Identity, error) {
+	if len(seed) != ed25519.SeedSize {
+		return Identity{}, fmt.Errorf("connector key holds %d bytes, not %d", len(seed), ed25519.SeedSize)
+	}
+	return Identity{private: ed25519.NewKeyFromSeed(seed)}, nil
+}
+
 func (i Identity) Held() bool {
 	return i.private != nil
 }

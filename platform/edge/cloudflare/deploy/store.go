@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
+
+var errStoreRequestUnbuildable = errors.New("build deployments-store request")
 
 func unauthorized(res *http.Response) bool {
 	return res != nil && res.StatusCode == http.StatusUnauthorized
@@ -41,6 +44,13 @@ func (p *provider) deleteScript(ctx context.Context, accountID, scriptName strin
 }
 
 func (s *stack) PutStaged(ctx context.Context, record edge.DeploymentRecord) error {
+	if record.Envelope != "" && s.own.wrapsEnvelopes() {
+		wrapped, err := wrapEnvelope(s.own.EnvelopeKey, record.Envelope)
+		if err != nil {
+			return fmt.Errorf("wrap %s's envelope for the worker that serves it: %w", record.App, err)
+		}
+		record.Envelope = wrapped
+	}
 	_, err := s.p.storeRequest(ctx, s.state, http.MethodPut, "/staged", record, nil)
 	return err
 }
@@ -87,26 +97,25 @@ func (s *stack) Prune(ctx context.Context, keepN int, pointer string) (edge.Prun
 	return result, nil
 }
 
+var errStoreIdentityHeld = errors.New("the deployments store already holds an identity for this project that this deploy's state does not carry, and the store never hands one out: another deploy of this project initialized it first (re-run once that deploy has written its state), or the state was lost, in which case re-bootstrap this class's edge to reset the store")
+
 func (p *provider) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred string, present storeIdentity) (storeIdentity, error) {
 	body := map[string]any{"ownerToken": present.ownerToken, "secret": present.secret, "force": false}
-	var out struct {
-		OwnerToken string `json:"ownerToken"`
-		Secret     string `json:"secret"`
+	res, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", body, nil)
+	if res != nil && res.StatusCode == http.StatusConflict {
+		return storeIdentity{}, fmt.Errorf("%w: %w", errStoreIdentityHeld, err)
 	}
-	if _, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", body, &out); err != nil {
+	if err != nil {
 		return storeIdentity{}, err
 	}
-	if out.Secret == "" || out.OwnerToken == "" {
-		return storeIdentity{}, fmt.Errorf("deployments store reported no identity for %q", slug)
-	}
-	return storeIdentity{secret: out.Secret, ownerToken: out.OwnerToken}, nil
+	return present, nil
 }
 
 func (s *stack) SchemaVersion(ctx context.Context) (int, error) {
 	var out struct {
 		SchemaVersion int `json:"schemaVersion"`
 	}
-	res, err := s.p.storeRequestTo(ctx, s.state.Endpoint, s.state.Slug, "", http.MethodGet, "/schema-version", nil, &out)
+	res, err := s.p.storeRequest(ctx, s.state, http.MethodGet, "/schema-version", nil, &out)
 	if err != nil {
 		if unauthorized(res) {
 			return 0, edge.ErrStoreSchemaUnreadable
@@ -176,7 +185,7 @@ func (p *provider) storeAttempt(ctx context.Context, endpoint, slug, secret, met
 	}
 	req, err := http.NewRequestWithContext(ctx, method, endpoint+"/"+slug+subpath, reader)
 	if err != nil {
-		return nil, fmt.Errorf("build deployments-store request: %w", err)
+		return nil, fmt.Errorf("%w: %w", errStoreRequestUnbuildable, err)
 	}
 	req.Header.Set("Authorization", "Bearer "+secret)
 	if encoded != nil {

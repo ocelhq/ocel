@@ -15,9 +15,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	live "github.com/ocelhq/ocel/pkg/runtimekit/live"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -91,7 +92,7 @@ func (b appBundle) overlay() map[string][]byte {
 		files[baked.FilePath] = b.Ciphertext
 	}
 	if len(b.Live) > 0 {
-		files[live.FilePath] = b.Live
+		files[vars.FilePath] = b.Live
 	}
 	if len(files) == 0 {
 		return nil
@@ -102,7 +103,7 @@ func (b appBundle) overlay() map[string][]byte {
 func (b appBundle) hasLive() bool { return len(b.Live) > 0 }
 
 func sealAppBundle(cfg Config, slug, app string, sensitive map[string]string, keys []live.Key, bindings []live.Binding) (appBundle, error) {
-	manifest, err := live.Render(live.Manifest{
+	manifest, err := vars.Render(vars.Manifest{
 		Slug:        slug,
 		Table:       cfg.VarsTable,
 		KeyARN:      cfg.VarsKeyARN,
@@ -118,6 +119,9 @@ func sealAppBundle(cfg Config, slug, app string, sensitive map[string]string, ke
 	referenced := referencedOwners(cfg, slug, keys)
 	if len(sensitive) == 0 {
 		return appBundle{Live: manifest, Referenced: referenced}, nil
+	}
+	if cfg.VarsKeyARN == "" {
+		return appBundle{}, fmt.Errorf("app %s declares sensitive variables, and this account names no key to encrypt their data key under in the function's environment; bootstrap the vars-key feature first", app)
 	}
 
 	key := make([]byte, baked.KeyBytes)

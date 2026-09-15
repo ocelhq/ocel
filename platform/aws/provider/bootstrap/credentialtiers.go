@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
@@ -28,14 +29,16 @@ const (
 
 	parameterARNPrefix = "arn:aws:ssm:*:*:parameter"
 
-	appBucketARN         = "arn:aws:s3:::*"
-	appFunctionARN       = "arn:aws:lambda:*:*:function:*"
-	appLayerARN          = "arn:aws:lambda:*:*:layer:*"
-	appRoleARN           = "arn:aws:iam::*:role/*"
-	appSecretARN         = "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
-	appClusterARN        = "arn:aws:rds:*:*:cluster:*"
-	appInstanceARN       = "arn:aws:rds:*:*:db:*"
-	appSubnetGroupARN    = "arn:aws:rds:*:*:subgrp:*"
+	appScopePrefix = awsports.AppScope + "-"
+
+	appBucketARN      = "arn:aws:s3:::" + appScopePrefix + "*"
+	appFunctionARN    = "arn:aws:lambda:*:*:function:*"
+	appRoleARN        = "arn:aws:iam::*:role/*"
+	appSecretARN      = "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
+	appClusterARN     = "arn:aws:rds:*:*:cluster:" + appScopePrefix + "*"
+	appInstanceARN    = "arn:aws:rds:*:*:db:" + appScopePrefix + "*"
+	appSubnetGroupARN = "arn:aws:rds:*:*:subgrp:" + appScopePrefix + "*"
+
 	appSecurityGroupARN  = "arn:aws:ec2:*:*:security-group/*"
 	appVPCARN            = "arn:aws:ec2:*:*:vpc/*"
 	appRepositoryARN     = "arn:aws:ecr:*:*:repository/" + registry.Namespace + "/*"
@@ -44,13 +47,17 @@ const (
 	appTargetGroupARN    = "arn:aws:elasticloadbalancing:*:*:targetgroup/*/*"
 	appTaskDefinitionARN = "arn:aws:ecs:*:*:task-definition/*:*"
 
-	substrateClusterARN  = "arn:aws:ecs:*:*:cluster/ocel-*"
-	substrateServiceARN  = "arn:aws:ecs:*:*:service/ocel-*/*"
-	substrateBalancerARN = "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/ocel-*/*"
-	substrateListenerARN = "arn:aws:elasticloadbalancing:*:*:listener/app/ocel-*/*/*"
-	substrateRuleARN     = "arn:aws:elasticloadbalancing:*:*:listener-rule/app/ocel-*/*/*/*"
-	ecsLinkedRoleARN     = "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/*"
-	elbLinkedRoleARN     = "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/*"
+	managedSecretClusterTagKey = "aws:rds:primaryDBClusterArn"
+
+	substrateClusterARN    = "arn:aws:ecs:*:*:cluster/ocel-*"
+	substrateServiceARN    = "arn:aws:ecs:*:*:service/ocel-*/*"
+	substrateBalancerARN   = "arn:aws:elasticloadbalancing:*:*:loadbalancer/app/ocel-*/*"
+	substrateListenerARN   = "arn:aws:elasticloadbalancing:*:*:listener/app/ocel-*/*/*"
+	substrateRuleARN       = "arn:aws:elasticloadbalancing:*:*:listener-rule/app/ocel-*/*/*/*"
+	substrateVPCOriginARN  = "arn:aws:cloudfront::*:vpcorigin/*"
+	vpcOriginLinkedRoleARN = "arn:aws:iam::*:role/aws-service-role/vpcorigin.cloudfront.amazonaws.com/*"
+	ecsLinkedRoleARN       = "arn:aws:iam::*:role/aws-service-role/ecs.amazonaws.com/*"
+	elbLinkedRoleARN       = "arn:aws:iam::*:role/aws-service-role/elasticloadbalancing.amazonaws.com/*"
 
 	bootstrapEventSourceARN = "arn:aws:lambda:*:*:event-source-mapping:*"
 
@@ -58,27 +65,29 @@ const (
 )
 
 type ScopedARNs struct {
-	bootstrapBucket    string
-	bootstrapObject    string
-	BootstrapTable     string
-	BootstrapTablePart string
-	BootstrapStack     string
-	bootstrapChangeSet string
-	runtimeStack       string
-	runtimeChangeSet   string
-	bootstrapRole      string
-	bootstrapFunction  string
-	bootstrapLogGroup  string
-	bootstrapQueue     string
-	edgeUser           string
-	appBoundary        string
-	varsAlias          string
-	passphraseParam    string
-	edgeParam          string
-	originParam        string
-	stackRecordTree    string
-	stackRecord        string
-	anyParam           string
+	bootstrapBucket     string
+	bootstrapObject     string
+	BootstrapTable      string
+	BootstrapTablePart  string
+	BootstrapStack      string
+	bootstrapChangeSet  string
+	runtimeStack        string
+	runtimeChangeSet    string
+	runtimeLayer        string
+	runtimeLayerVersion string
+	bootstrapRole       string
+	bootstrapFunction   string
+	bootstrapLogGroup   string
+	bootstrapQueue      string
+	edgeUser            string
+	appBoundary         string
+	varsAlias           string
+	passphraseParam     string
+	edgeParam           string
+	originParam         string
+	stackRecordTree     string
+	stackRecord         string
+	anyParam            string
 }
 
 func (n Namespace) ScopedARNs() ScopedARNs {
@@ -90,6 +99,7 @@ func (n Namespace) ScopedARNs() ScopedARNs {
 		bootstrapChangeSet: "arn:aws:cloudformation:*:*:changeSet/" + string(n) + "-*/*",
 		runtimeStack:       "arn:aws:cloudformation:*:*:stack/" + core + "-runtime*/*",
 		runtimeChangeSet:   "arn:aws:cloudformation:*:*:changeSet/" + core + "-runtime*/*",
+		runtimeLayer:       "arn:aws:lambda:*:*:layer:" + string(n) + "-runtime*",
 		bootstrapRole:      "arn:aws:iam::*:role/" + core + "*",
 		bootstrapFunction:  "arn:aws:lambda:*:*:function:" + core + "*",
 		bootstrapLogGroup:  "arn:aws:logs:*:*:log-group:/aws/lambda/" + core + "*",
@@ -104,6 +114,7 @@ func (n Namespace) ScopedARNs() ScopedARNs {
 		anyParam:           parameterARNPrefix + n.paramRoot() + "/*",
 	}
 	a.bootstrapObject = a.bootstrapBucket + "/*"
+	a.runtimeLayerVersion = a.runtimeLayer + ":*"
 	a.BootstrapTablePart = a.BootstrapTable + "/*"
 	a.stackRecord = a.stackRecordTree + "/*"
 	return a
@@ -125,6 +136,10 @@ func taggedOnCreate() map[string]any {
 
 func taggedByOcel() map[string]any {
 	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + managedByTagKey: managedByTagPattern}}
+}
+
+func managedByAnAppCluster() map[string]any {
+	return map[string]any{"StringLike": map[string]any{"aws:ResourceTag/" + managedSecretClusterTagKey: appClusterARN}}
 }
 
 func withinAppBoundary(ns Namespace) map[string]any {
@@ -247,6 +262,14 @@ func bootstrapAccess(r ScopedARNs) []GrantStatement {
 			},
 		},
 		{
+			Actions:   []string{"kms:CreateGrant"},
+			Resources: []string{AnyKeyARN},
+			Condition: map[string]any{
+				"StringEquals": map[string]any{"aws:ResourceTag/" + VarsKeyComponentTagKey: VarsKeyComponentTagValue},
+				"Bool":         map[string]any{"kms:GrantIsForAWSResource": "true"},
+			},
+		},
+		{
 			Actions:   []string{"cloudformation:DescribeStacks"},
 			Resources: []string{r.BootstrapStack},
 		},
@@ -286,15 +309,6 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			},
 			Resources: []string{appFunctionARN},
 			Condition: taggedByOcel(),
-		},
-		{
-			Actions: []string{
-				"lambda:DeleteLayerVersion",
-				"lambda:GetLayerVersion",
-				"lambda:ListLayerVersions",
-				"lambda:PublishLayerVersion",
-			},
-			Resources: []string{appLayerARN},
 		},
 		{
 			Actions:   []string{"iam:CreateRole"},
@@ -350,6 +364,28 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Actions:   []string{"iam:CreateServiceLinkedRole"},
 			Resources: []string{elbLinkedRoleARN},
 			Condition: linkedRoleFor("elasticloadbalancing.amazonaws.com"),
+		},
+		{
+			Actions:   []string{"iam:CreateServiceLinkedRole"},
+			Resources: []string{vpcOriginLinkedRoleARN},
+			Condition: linkedRoleFor("vpcorigin.cloudfront.amazonaws.com"),
+		},
+		{
+			Actions:   []string{"cloudfront:CreateVpcOrigin"},
+			Resources: []string{substrateVPCOriginARN},
+			Condition: taggedOnCreate(),
+		},
+		{
+			Actions: []string{
+				"cloudfront:DeleteVpcOrigin",
+				"cloudfront:GetVpcOrigin",
+				"cloudfront:ListTagsForResource",
+				"cloudfront:TagResource",
+				"cloudfront:UntagResource",
+				"cloudfront:UpdateVpcOrigin",
+			},
+			Resources: []string{substrateVPCOriginARN},
+			Condition: taggedByOcel(),
 		},
 		{
 			Actions:   []string{"ecr:GetAuthorizationToken"},
@@ -549,6 +585,7 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 		{
 			Actions:   []string{"secretsmanager:DescribeSecret", "secretsmanager:GetSecretValue"},
 			Resources: []string{appSecretARN},
+			Condition: managedByAnAppCluster(),
 		},
 		{
 			Actions:   []string{"logs:CreateLogGroup"},
@@ -575,6 +612,15 @@ func appProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 
 func runtimeProvisioning(r ScopedARNs) []GrantStatement {
 	return []GrantStatement{
+		{
+			Actions: []string{
+				"lambda:DeleteLayerVersion",
+				"lambda:GetLayerVersion",
+				"lambda:ListLayerVersions",
+				"lambda:PublishLayerVersion",
+			},
+			Resources: []string{r.runtimeLayer, r.runtimeLayerVersion},
+		},
 		{
 			Actions: []string{
 				"cloudformation:CreateChangeSet",
@@ -786,7 +832,9 @@ func bootstrapProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 				"lambda:UpdateEventSourceMapping",
 			},
 			Resources: []string{bootstrapEventSourceARN},
-			Condition: inCallerAccount(),
+			Condition: map[string]any{
+				"ArnLike": map[string]any{"lambda:FunctionArn": r.bootstrapFunction},
+			},
 		},
 		{
 			Actions: []string{
@@ -802,8 +850,12 @@ func bootstrapProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Resources: []string{r.bootstrapQueue},
 		},
 		{
-			Actions:   []string{"ssm:AddTagsToResource", "ssm:DeleteParameter", "ssm:DeleteParameters", "ssm:PutParameter"},
+			Actions:   []string{"ssm:AddTagsToResource", "ssm:PutParameter"},
 			Resources: []string{r.anyParam},
+		},
+		{
+			Actions:   []string{"ssm:DeleteParameter", "ssm:DeleteParameters"},
+			Resources: []string{r.edgeParam, r.originParam, r.stackRecord},
 		},
 		{
 			Actions:   []string{"ssm:GetParametersByPath"},
@@ -821,6 +873,7 @@ func edgePrincipal(r ScopedARNs) []GrantStatement {
 				"iam:DeleteAccessKey",
 				"iam:DeleteUser",
 				"iam:DeleteUserPolicy",
+				"iam:GetAccessKeyLastUsed",
 				"iam:GetUser",
 				"iam:GetUserPolicy",
 				"iam:ListAccessKeys",

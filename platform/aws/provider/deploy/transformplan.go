@@ -25,7 +25,13 @@ func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan
 	}
 	var candidates []transformCandidate
 
-	if app := plan.App; app != nil {
+	if app := plan.App; app != nil && app.Compute == providerkit.ComputeContainer {
+		req.Resources = append(req.Resources, transform.Resource{Type: transformTypeContainer, Name: app.App, App: app.App})
+		candidates = append(candidates, transformCandidate{
+			key:   resourceKey{Type: transformTypeContainer, Name: app.App},
+			names: containerResourceNames(),
+		})
+	} else if app != nil {
 		for _, spec := range app.Functions {
 			req.Resources = append(req.Resources, transform.Resource{
 				Type: transformTypeFunction, Name: spec.Name, App: app.App,

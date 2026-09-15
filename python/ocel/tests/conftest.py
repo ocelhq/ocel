@@ -24,9 +24,13 @@ _REQUESTS = {
 }
 
 
+TOKEN = "opensesame"
+
+
 class Collector:
     def __init__(self):
         self.declares = []
+        self.authorizations = []
         self.cells = []
         self.server = HTTPServer(("127.0.0.1", 0), self._handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -61,6 +65,13 @@ class Collector:
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
                 body = self.rfile.read(int(self.headers["Content-Length"]))
+                authorization = self.headers.get("Authorization")
+                collector.authorizations.append(authorization)
+                if authorization != f"Bearer {TOKEN}":
+                    self.send_response(403)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
                 if self.headers.get("Content-Encoding") == "gzip":
                     body = gzip.decompress(body)
                 kind = self.headers.get("Content-Type", "")
@@ -103,6 +114,7 @@ def collector(monkeypatch):
     c = Collector()
     monkeypatch.setenv("OCEL_PHASE", "discovery")
     monkeypatch.setenv("OCEL_DEV_SERVER", c.url)
+    monkeypatch.setenv("OCEL_DEV_SERVER_TOKEN", TOKEN)
     yield c
     c.close()
 

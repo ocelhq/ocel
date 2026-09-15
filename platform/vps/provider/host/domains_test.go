@@ -864,18 +864,20 @@ func TestAConfigComposedOntoAFileAnotherDeployHasSinceRewrittenIsRefusedRatherTh
 
 	stood := claimingBox(t, routed())
 	moved := mustRender(t, twoProjects())
-	stood.after = func(b *bench, command string) {
-		if !readsProxy(command) {
-			return
+	proxied := servesProxy(stood.bench, &stood.held)
+	stood.answer = func(command string) (session.Result, bool) {
+		if !writesProxy(command) {
+			return proxied(command)
 		}
 		stood.mu.Lock()
 		stood.held = string(moved)
 		stood.mu.Unlock()
+		return session.Result{Code: proxyMoved, Stderr: digested(string(moved))}, true
 	}
 
 	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil {
-		t.Fatal("a claim composed onto a configuration another deploy had already replaced was written anyway")
+		t.Fatal("a claim composed onto a configuration another deploy kept replacing was written anyway")
 	}
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
@@ -886,5 +888,19 @@ func TestAConfigComposedOntoAFileAnotherDeployHasSinceRewrittenIsRefusedRatherTh
 	}
 	if slices.ContainsFunc(stood.commands(), func(command string) bool { return strings.Contains(command, quoted("flip")) }) {
 		t.Errorf("a write that was refused still posted a configuration to the running proxy: %v", stood.commands())
+	}
+}
+
+func TestAWildcardIsRefusedAsAnOrdinaryClaim(t *testing.T) {
+	t.Parallel()
+
+	stood := claimingBox(t, routed())
+	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: "*.preview.acme.com", Owner: surface, Pointer: pointed}})
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
+		t.Fatalf("ClaimHosts() of a wildcard = %v, want a refusal: a claim is a hostname the proxy orders one certificate for over http-01, and a wildcard is a match every hostname pointed at this box falls under", err)
+	}
+	if stood.at(quoted("flip")) >= 0 || strings.Contains(stood.held, "*.preview") {
+		t.Errorf("a refused wildcard claim still reached the proxy: %v", stood.commands())
 	}
 }

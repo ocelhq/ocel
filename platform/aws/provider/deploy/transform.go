@@ -34,6 +34,10 @@ const (
 	tokenRDSSubnetGroup    = "aws:rds/subnetGroup:SubnetGroup"
 	tokenRDSCluster        = "aws:rds/cluster:Cluster"
 	tokenRDSClusterMember  = "aws:rds/clusterInstance:ClusterInstance"
+	tokenECSTaskDefinition = "aws:ecs/taskDefinition:TaskDefinition"
+	tokenECSService        = "aws:ecs/service:Service"
+	tokenLBTargetGroup     = "aws:lb/targetGroup:TargetGroup"
+	tokenLBListenerRule    = "aws:lb/listenerRule:ListenerRule"
 )
 
 type resourceKey struct {
@@ -260,9 +264,10 @@ func namedCount(value any) int {
 }
 
 const (
-	transformTypeFunction = "function"
-	transformTypeBucket   = "bucket"
-	transformTypePostgres = "postgres"
+	transformTypeFunction  = "function"
+	transformTypeContainer = "container"
+	transformTypeBucket    = "bucket"
+	transformTypePostgres  = "postgres"
 )
 
 func functionResourceNames(project string, stack naming.StackName, logicalName string) map[string]resourceRef {
@@ -273,6 +278,16 @@ func functionResourceNames(project string, stack naming.StackName, logicalName s
 		"urlPermission": {Token: tokenLambdaPermission, Name: naming.ResourceID(naming.KindFunction, coord.Name, "url", "invoke")},
 		"logGroup":      {Token: tokenLogGroup, Name: naming.ResourceID(naming.KindFunction, coord.Name, "logs")},
 		"role":          {Token: tokenIAMRole, Name: naming.ResourceID(naming.KindRole, roleLocalName)},
+	}
+}
+
+func containerResourceNames() map[string]resourceRef {
+	return map[string]resourceRef{
+		"task":        {Token: tokenECSTaskDefinition, Name: naming.ResourceID(naming.KindService, containerLocalName, "task")},
+		"service":     {Token: tokenECSService, Name: naming.ResourceID(naming.KindService, containerLocalName)},
+		"targetGroup": {Token: tokenLBTargetGroup, Name: naming.ResourceID(naming.KindService, containerLocalName, "targets")},
+		"rule":        {Token: tokenLBListenerRule, Name: naming.ResourceID(naming.KindService, containerLocalName, "rule")},
+		"role":        {Token: tokenIAMRole, Name: naming.ResourceID(naming.KindRole, roleLocalName)},
 	}
 }
 

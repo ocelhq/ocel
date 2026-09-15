@@ -58,6 +58,7 @@ fn a_group_reaches_the_dev_server_once_and_owes_only_what_it_is_switched_on_for(
     );
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", &url);
+    std::env::set_var("OCEL_DEV_SERVER_TOKEN", collector::TOKEN);
 
     assert!(
         ocel::discover().expect("discover"),

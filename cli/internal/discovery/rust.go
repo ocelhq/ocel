@@ -10,14 +10,13 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/ocelhq/ocel/cli/internal/cargo"
-	"github.com/ocelhq/ocel/pkg/constants"
 )
 
 const ocelCrate = "ocel"
 
 type rustLauncher struct{}
 
-func (rustLauncher) Command(ctx context.Context, _ string, root Root, serverURL string) (*exec.Cmd, error) {
+func (rustLauncher) Command(ctx context.Context, _ string, root Root, server Server) (*exec.Cmd, error) {
 	workspace, err := cargo.Metadata(ctx, root.Dir, "--no-deps")
 	if err != nil {
 		return nil, fmt.Errorf("discovery: %w", err)
@@ -36,7 +35,7 @@ func (rustLauncher) Command(ctx context.Context, _ string, root Root, serverURL 
 
 	cmd := exec.CommandContext(ctx, "cargo", "run", "--quiet", "--manifest-path", crate.ManifestPath, "--bin", bins[0].Name)
 	cmd.Dir = workspace.Root
-	cmd.Env = append(os.Environ(), constants.PhaseEnvName+"=discovery", constants.DevServerEnvName+"="+serverURL, "OCEL_SOURCE_ROOT="+workspace.Root)
+	cmd.Env = append(append(os.Environ(), server.Env()...), "OCEL_SOURCE_ROOT="+workspace.Root)
 	return cmd, nil
 }
 

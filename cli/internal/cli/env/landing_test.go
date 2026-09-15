@@ -9,25 +9,38 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func TestSettingAValueForAContainerAppSaysWhenItLands(t *testing.T) {
+func TestSettingAValueForAnAppOnABakingComputeSaysWhenItLands(t *testing.T) {
 	root := setUpEnvFixture(t)
 	t.Setenv(clitest.FakeComputesEnvVar, "container")
+	t.Setenv(clitest.FakeBakedComputesEnvVar, "container")
 
 	said := envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
 	for _, want := range []string{"next deploy", "ocel deploy"} {
 		if !strings.Contains(said, want) {
-			t.Errorf("`ocel env set` against a container app said\n%s\nwhich never says %q: a container carries nothing of ocel's to refresh a value, so the value it holds is the one its last deploy handed it", said, want)
+			t.Errorf("`ocel env set` against an app the provider bakes values into said\n%s\nwhich never says %q: that app was handed its values once, at deploy, so the value it holds is the one its last deploy handed it", said, want)
 		}
 	}
 }
 
-func TestSettingAValueForAServerlessAppPromisesNoDeploy(t *testing.T) {
+func TestSettingAValueForAnAppOnALiveComputePromisesNoDeploy(t *testing.T) {
 	root := setUpEnvFixture(t)
 	t.Setenv(clitest.FakeComputesEnvVar, "serverless")
+	t.Setenv(clitest.FakeBakedComputesEnvVar, "")
 
 	said := envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
 	if strings.Contains(said, "next deploy") {
-		t.Errorf("`ocel env set` against a serverless app said\n%s\nand a live value there is picked up without one", said)
+		t.Errorf("`ocel env set` against an app on a compute the provider bakes nothing into said\n%s\nand a live value there is picked up without one", said)
+	}
+}
+
+func TestSettingAValueForAContainerAppTheProviderReadsLivePromisesNoDeploy(t *testing.T) {
+	root := setUpEnvFixture(t)
+	t.Setenv(clitest.FakeComputesEnvVar, "container")
+	t.Setenv(clitest.FakeBakedComputesEnvVar, "")
+
+	said := envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
+	if strings.Contains(said, "next deploy") {
+		t.Errorf("`ocel env set` against a container app said\n%s\nand this provider names no compute it bakes values into, so the running container reads this one without a deploy", said)
 	}
 }
 
@@ -40,29 +53,43 @@ func envRm(t *testing.T, root, key string, opts envOptions) string {
 	return stdout.String()
 }
 
-func TestRemovingAValueForAContainerAppSaysWhatGoesOnBeingServed(t *testing.T) {
+func TestRemovingAValueForAnAppOnABakingComputeSaysWhatGoesOnBeingServed(t *testing.T) {
 	root := setUpEnvFixture(t)
 	t.Setenv(clitest.FakeComputesEnvVar, "container")
+	t.Setenv(clitest.FakeBakedComputesEnvVar, "container")
 	envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
 
 	said := envRm(t, root, "API_TOKEN", envOptions{})
 	if !strings.Contains(said, "Removed") {
-		t.Fatalf("`ocel env rm` said\n%s\nand never removed the value, so what it says about the container proves nothing", said)
+		t.Fatalf("`ocel env rm` said\n%s\nand never removed the value, so what it says about the app proves nothing", said)
 	}
 	for _, want := range []string{"next deploy", "ocel deploy"} {
 		if !strings.Contains(said, want) {
-			t.Errorf("`ocel env rm` against a container app said\n%s\nwhich never says %q: the container serving now was handed the value at deploy time and goes on serving it until the next one, so a removal that says nothing reads as a revocation that took effect", said, want)
+			t.Errorf("`ocel env rm` against an app the provider bakes values into said\n%s\nwhich never says %q: the app serving now was handed the value at deploy time and goes on serving it until the next one, so a removal that says nothing reads as a revocation that took effect", said, want)
 		}
 	}
 }
 
-func TestRemovingAValueForAServerlessAppPromisesNoDeploy(t *testing.T) {
+func TestRemovingAValueForAnAppOnALiveComputePromisesNoDeploy(t *testing.T) {
 	root := setUpEnvFixture(t)
 	t.Setenv(clitest.FakeComputesEnvVar, "serverless")
+	t.Setenv(clitest.FakeBakedComputesEnvVar, "")
 	envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
 
 	said := envRm(t, root, "API_TOKEN", envOptions{})
 	if strings.Contains(said, "next deploy") {
-		t.Errorf("`ocel env rm` against a serverless app said\n%s\nand a removed value stops being read there without one", said)
+		t.Errorf("`ocel env rm` against an app on a compute the provider bakes nothing into said\n%s\nand a removed value stops being read there without one", said)
+	}
+}
+
+func TestRemovingAValueForAContainerAppTheProviderReadsLivePromisesNoDeploy(t *testing.T) {
+	root := setUpEnvFixture(t)
+	t.Setenv(clitest.FakeComputesEnvVar, "container")
+	t.Setenv(clitest.FakeBakedComputesEnvVar, "")
+	envSet(t, root, "API_TOKEN", "sk-live", envOptions{})
+
+	said := envRm(t, root, "API_TOKEN", envOptions{})
+	if strings.Contains(said, "next deploy") {
+		t.Errorf("`ocel env rm` against a container app said\n%s\nand this provider names no compute it bakes values into, so the running container stops reading this one without a deploy", said)
 	}
 }

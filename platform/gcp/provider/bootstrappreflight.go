@@ -10,6 +10,7 @@ import (
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 const enabledService = "ENABLED"
@@ -32,6 +33,8 @@ var bootstrapPermissions = []string{
 	"cloudkms.cryptoKeyVersions.create",
 	"cloudkms.cryptoKeyVersions.get",
 	"cloudkms.cryptoKeyVersions.destroy",
+	"cloudkms.cryptoKeys.getIamPolicy",
+	"cloudkms.cryptoKeys.setIamPolicy",
 	"secretmanager.secrets.create",
 	"secretmanager.secrets.get",
 	"secretmanager.secrets.delete",
@@ -47,6 +50,8 @@ var bootstrapPermissions = []string{
 	"iam.serviceAccounts.delete",
 	"iam.serviceAccounts.getIamPolicy",
 	"iam.serviceAccounts.setIamPolicy",
+	"resourcemanager.projects.getIamPolicy",
+	"resourcemanager.projects.setIamPolicy",
 }
 
 var bootstrapRoles = []string{
@@ -56,6 +61,7 @@ var bootstrapRoles = []string{
 	"roles/secretmanager.admin",
 	"roles/artifactregistry.admin",
 	"roles/iam.serviceAccountAdmin",
+	"roles/resourcemanager.projectIamAdmin",
 }
 
 var deployRoles = []string{
@@ -85,10 +91,24 @@ func (b bootstrapper) preflight(ctx context.Context, read survey, features []str
 	if err := b.servicesOn(ctx, features); err != nil {
 		return err
 	}
-	if err := b.permitted(ctx); err != nil {
+	if err := b.permitted(ctx, features); err != nil {
 		return err
 	}
 	return b.regionServed(ctx, read)
+}
+
+func permissionsFor(features []string) []string {
+	if !slices.Contains(features, albFeature) {
+		return slices.Clone(bootstrapPermissions)
+	}
+	return slices.Concat(bootstrapPermissions, alb.Permissions)
+}
+
+func rolesCovering(features []string) []string {
+	if !slices.Contains(features, albFeature) {
+		return slices.Clone(bootstrapRoles)
+	}
+	return slices.Concat(bootstrapRoles, alb.Roles())
 }
 
 func (b bootstrapper) servicesOn(ctx context.Context, features []string) error {
@@ -116,18 +136,19 @@ func (b bootstrapper) servicesOn(ctx context.Context, features []string) error {
 		b.clients.project, strings.Join(off, ", "), strings.Join(off, " "), b.clients.project)
 }
 
-func (b bootstrapper) permitted(ctx context.Context) error {
+func (b bootstrapper) permitted(ctx context.Context, features []string) error {
 	service, err := b.clients.Projects()
 	if err != nil {
 		return err
 	}
+	needed := permissionsFor(features)
 	granted, err := attempted(ctx, service.Projects.TestIamPermissions(b.clients.project,
-		&cloudresourcemanager.TestIamPermissionsRequest{Permissions: bootstrapPermissions}).Context(ctx).Do)
+		&cloudresourcemanager.TestIamPermissionsRequest{Permissions: needed}).Context(ctx).Do)
 	if err != nil {
 		return fmt.Errorf("ask project %s what this credential may do in it: %w", b.clients.project, err)
 	}
 	var missing []string
-	for _, permission := range bootstrapPermissions {
+	for _, permission := range needed {
 		if !slices.Contains(granted.Permissions, permission) {
 			missing = append(missing, permission)
 		}
@@ -138,7 +159,7 @@ func (b bootstrapper) permitted(ctx context.Context) error {
 	return providerkit.Refuse(providerkit.CodeDenied,
 		"this credential may not do what a bootstrap of project %s does: it lacks %s.\n"+
 			"Granting %s covers every one of them, but the permissions are what is checked",
-		b.clients.project, strings.Join(missing, ", "), strings.Join(bootstrapRoles, ", "))
+		b.clients.project, strings.Join(missing, ", "), strings.Join(rolesCovering(features), ", "))
 }
 
 func (b bootstrapper) regionServed(ctx context.Context, read survey) error {

@@ -2,16 +2,22 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
+	"time"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 
@@ -20,6 +26,8 @@ import (
 	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	awsconnector "github.com/ocelhq/ocel/platform/aws/provider/connector"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -33,15 +41,16 @@ func main() {
 	addr := flag.String("addr", "127.0.0.1:7777", "address to serve on")
 	region := flag.String("region", os.Getenv(edge.AWSRegionVar), "AWS region the target is bootstrapped in")
 	config := flag.String("config", os.Getenv("OCEL_CONNECTOR_CONFIG"), "path to the connector config naming the console, this connector and its grants")
+	keyParameter := flag.String("key-parameter", os.Getenv(awsconnector.KeyParameterEnvVar), "name of the SecureString parameter holding the key this connector signs heartbeats with")
 	flag.Parse()
 
-	if err := run(*addr, *region, *config); err != nil {
+	if err := run(*addr, *region, *config, *keyParameter); err != nil {
 		fmt.Fprintln(os.Stderr, "ocel connector:", err)
 		os.Exit(1)
 	}
 }
 
-func run(addr, region, config string) error {
+func run(addr, region, config, keyParameter string) error {
 	ctx := context.Background()
 
 	trust, err := connectorkit.Configured(config)
@@ -70,7 +79,8 @@ func run(addr, region, config string) error {
 	held := &deployments{
 		namespace: bootstrap.Namespace(ns),
 		stacks:    cloudformation.NewFromConfig(cfg),
-		read:      map[kit.Class]bootstrap.Deployed{},
+		now:       time.Now,
+		read:      map[kit.Class]readDeployment{},
 	}
 
 	spec := connectorkit.Spec{
@@ -84,6 +94,11 @@ func run(addr, region, config string) error {
 			Sealer:  awsports.Sealer{KMS: kms.NewFromConfig(cfg), Keys: held},
 		},
 	}
+	if keyParameter != "" {
+		if spec.Identity, err = keyed(ctx, ssm.NewFromConfig(cfg), keyParameter); err != nil {
+			return err
+		}
+	}
 
 	if os.Getenv(runtimeAPIEnvVar) == "" {
 		return connectorkit.Serve(spec)
@@ -93,29 +108,87 @@ func run(addr, region, config string) error {
 	if err != nil {
 		return err
 	}
-	lambda.StartWithOptions(httpadapter.NewV2(mux).ProxyWithContext, lambda.WithContext(ctx))
+	lambda.StartWithOptions(invoked(spec, httpadapter.NewV2(mux)), lambda.WithContext(ctx))
 	return nil
+}
+
+const deploymentsTTL = 5 * time.Minute
+
+type keyReader interface {
+	GetParameter(ctx context.Context, in *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
+}
+
+func keyed(ctx context.Context, store keyReader, name string) (connectorkit.Identity, error) {
+	held, err := store.GetParameter(ctx, &ssm.GetParameterInput{Name: aws.String(name), WithDecryption: aws.Bool(true)})
+	if err != nil {
+		return connectorkit.Identity{}, fmt.Errorf("read the connector's key from %s: %w", name, err)
+	}
+	return identityOf(aws.ToString(held.Parameter.Value))
+}
+
+func identityOf(value string) (connectorkit.Identity, error) {
+	seed, err := base64.StdEncoding.DecodeString(strings.TrimSpace(value))
+	if err != nil {
+		return connectorkit.Identity{}, fmt.Errorf("the connector's key is not base64: %w", err)
+	}
+	return connectorkit.IdentityFromSeed(seed)
+}
+
+type proxy interface {
+	ProxyWithContext(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error)
+}
+
+func invoked(spec connectorkit.Spec, serve proxy) func(context.Context, json.RawMessage) (any, error) {
+	return func(ctx context.Context, raw json.RawMessage) (any, error) {
+		if woken(raw) {
+			status, err := connectorkit.Heartbeat(ctx, spec)
+			if err != nil {
+				return nil, err
+			}
+			fmt.Printf("connector %s: heartbeat answered %d\n", spec.ConnectorID, status)
+			return nil, nil
+		}
+		var req events.APIGatewayV2HTTPRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			return nil, fmt.Errorf("read the invocation: %w", err)
+		}
+		return serve.ProxyWithContext(ctx, req)
+	}
+}
+
+func woken(raw []byte) bool {
+	var wake awsconnector.Wake
+	return json.Unmarshal(raw, &wake) == nil && wake.Ocel == awsconnector.WakeHeartbeat
 }
 
 type deployments struct {
 	namespace bootstrap.Namespace
-	stacks    *cloudformation.Client
+	stacks    cfn.Describer
+	now       func() time.Time
 
 	mu   sync.Mutex
-	read map[kit.Class]bootstrap.Deployed
+	read map[kit.Class]readDeployment
+}
+
+type readDeployment struct {
+	held bootstrap.Deployed
+	at   time.Time
 }
 
 func (d *deployments) resolve(ctx context.Context, class kit.Class) (bootstrap.Deployed, error) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
-	if held, known := d.read[class]; known {
-		return held, nil
+	memo, known := d.read[class]
+	d.mu.Unlock()
+	if known && d.now().Sub(memo.at) < deploymentsTTL {
+		return memo.held, nil
 	}
 	held, err := bootstrap.CheckDeployedFor(ctx, d.stacks, d.namespace, string(class))
 	if err != nil {
 		return bootstrap.Deployed{}, err
 	}
-	d.read[class] = held
+	d.mu.Lock()
+	d.read[class] = readDeployment{held: held, at: d.now()}
+	d.mu.Unlock()
 	return held, nil
 }
 

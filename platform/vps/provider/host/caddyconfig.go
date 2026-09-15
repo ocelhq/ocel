@@ -71,7 +71,14 @@ func (k RouteKey) identity() string {
 type AppRoute struct {
 	RouteKey
 	Upstream string
+	Health   string
 }
+
+const (
+	healthInterval = 10 * time.Second
+	healthTimeout  = 5 * time.Second
+	healthExpects  = 2
+)
 
 type HostClaim struct {
 	Hostname string
@@ -269,6 +276,7 @@ func hostnamesOf(hostnames ...string) *[]string {
 type caddyForward struct {
 	Handler         string              `json:"handler"`
 	Upstreams       []caddyDial         `json:"upstreams,omitempty"`
+	HealthChecks    *caddyHealthChecks  `json:"health_checks,omitempty"`
 	Status          int                 `json:"status_code,omitempty"`
 	Headers         map[string][]string `json:"headers,omitempty"`
 	Response        *caddyHeaderOps     `json:"response,omitempty"`
@@ -281,6 +289,26 @@ type caddyHeaderOps struct {
 
 type caddyDial struct {
 	Dial string `json:"dial"`
+}
+
+type caddyHealthChecks struct {
+	Active caddyActiveHealth `json:"active"`
+}
+
+type caddyActiveHealth struct {
+	URI          string `json:"uri"`
+	Interval     string `json:"interval"`
+	Timeout      string `json:"timeout"`
+	ExpectStatus int    `json:"expect_status"`
+}
+
+func checking(health string) *caddyHealthChecks {
+	if health == "" {
+		return nil
+	}
+	return &caddyHealthChecks{Active: caddyActiveHealth{
+		URI: health, Interval: spelled(healthInterval), Timeout: spelled(healthTimeout), ExpectStatus: healthExpects,
+	}}
 }
 
 func namingTheEdge() caddyForward {
@@ -350,8 +378,9 @@ func connectorHostOf(route caddyRoute) string {
 	return route.Match[0].hosts()[0]
 }
 
-func matching(identity string, hostnames []string, upstream string) caddyRoute {
-	route := forwarding(identity, upstream)
+func matching(app AppRoute, hostnames []string) caddyRoute {
+	route := forwarding(app.identity(), app.Upstream)
+	route.Handle[1].HealthChecks = checking(app.Health)
 	route.Match = []caddyMatch{{Host: hostnamesOf(hostnames...)}}
 	return route
 }
@@ -413,7 +442,7 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 			}
 			answering[hostname] = route
 		}
-		routes = append(routes, matching(route.identity(), hostnames, route.Upstream))
+		routes = append(routes, matching(route, hostnames))
 	}
 	entry, err := previewRoutes(state.PreviewBase)
 	if err != nil {
@@ -623,9 +652,12 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 		if len(draining.Routes) != 1 || draining.Routes[0].Identity != drainIdentity {
 			return ProxyState{}, unwritten("server", proxyDrainServer)
 		}
-		retiring, err := forwardedBy(draining.Routes[0])
+		retiring, health, err := forwardedBy(draining.Routes[0])
 		if err != nil {
 			return ProxyState{}, err
+		}
+		if health != "" {
+			return ProxyState{}, unwritten("route", drainIdentity)
 		}
 		state.Retiring = retiring
 	}
@@ -666,13 +698,14 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 		if !keyed || len(fields) != 3 {
 			return ProxyState{}, unwritten("route", route.Identity)
 		}
-		upstream, err := forwardedBy(route)
+		upstream, health, err := forwardedBy(route)
 		if err != nil {
 			return ProxyState{}, err
 		}
 		state.Routes = append(state.Routes, AppRoute{
 			RouteKey: RouteKey{Owner: fields[0], Pointer: fields[1], App: fields[2]},
 			Upstream: upstream,
+			Health:   health,
 		})
 	}
 	base, err := previewBaseRead(read, entry)
@@ -683,23 +716,30 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 	return state, nil
 }
 
-func forwardedBy(route caddyRoute) (string, error) {
+func forwardedBy(route caddyRoute) (string, string, error) {
 	if len(route.Handle) != 2 {
-		return "", misshapen(route.Identity, fmt.Sprintf("%d handlers", len(route.Handle)))
+		return "", "", misshapen(route.Identity, fmt.Sprintf("%d handlers", len(route.Handle)))
 	}
 	naming, forwards := route.Handle[0], route.Handle[1]
 	edged := naming.Response != nil && maps.EqualFunc(naming.Response.Set, map[string][]string{EdgeHeader: {EdgeName}}, slices.Equal)
 	switch {
 	case naming.Handler != edgeHandler || !edged || len(naming.Upstreams) > 0 || naming.Status != 0 || len(naming.Headers) > 0:
-		return "", misshapen(route.Identity, fmt.Sprintf("a leading %q handler that does not set %s to %q and nothing else", naming.Handler, EdgeHeader, EdgeName))
+		return "", "", misshapen(route.Identity, fmt.Sprintf("a leading %q handler that does not set %s to %q and nothing else", naming.Handler, EdgeHeader, EdgeName))
 	case forwards.Handler != forwardHandler || forwards.Status != 0 || len(forwards.Headers) > 0 || forwards.Response != nil:
-		return "", misshapen(route.Identity, fmt.Sprintf("a terminal %q handler", forwards.Handler))
+		return "", "", misshapen(route.Identity, fmt.Sprintf("a terminal %q handler", forwards.Handler))
 	case len(forwards.Upstreams) != 1:
-		return "", misshapen(route.Identity, fmt.Sprintf("%d upstreams", len(forwards.Upstreams)))
+		return "", "", misshapen(route.Identity, fmt.Sprintf("%d upstreams", len(forwards.Upstreams)))
 	case forwards.Upstreams[0].Dial == "":
-		return "", misshapen(route.Identity, "an upstream naming nothing to dial")
+		return "", "", misshapen(route.Identity, "an upstream naming nothing to dial")
 	}
-	return forwards.Upstreams[0].Dial, nil
+	health := ""
+	if forwards.HealthChecks != nil {
+		health = forwards.HealthChecks.Active.URI
+		if health == "" || !routeEqual(caddyRoute{Handle: []caddyForward{{HealthChecks: forwards.HealthChecks}}}, caddyRoute{Handle: []caddyForward{{HealthChecks: checking(health)}}}) {
+			return "", "", misshapen(route.Identity, "an active health check other than the one a release writes on the app's health path")
+		}
+	}
+	return forwards.Upstreams[0].Dial, health, nil
 }
 
 func misshapen(named, found string) error {
@@ -740,6 +780,10 @@ func validRoute(route AppRoute) error {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"the route %s names no upstream to forward to", route.identity())
 	}
+	if route.Health != "" && !strings.HasPrefix(route.Health, "/") {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"the route %s checks health on %q, and the proxy probes a path from / on the upstream it forwards to", route.identity(), route.Health)
+	}
 	return nil
 }
 
@@ -759,6 +803,10 @@ func validClaim(claim HostClaim) error {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"a hostname claim on this box names host %q, surface %q and pointer %q, and %s answers which of a surface's routes claims a host out of all three: a box runs many pointers of one app at once and a claim naming none of them belongs to all of them",
 			claim.Hostname, claim.Owner, claim.Pointer, ProxyConfig)
+	case strings.Contains(claim.Hostname, "*"):
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"a hostname claim on this box names %q, and a claim is one hostname the proxy orders one certificate for: a wildcard is a subject no http-01 challenge can answer and a match every hostname pointed at this machine would fall under, so the one wildcard a box serves is the preview base it installs a catch-all for",
+			claim.Hostname)
 	case strings.Contains(claim.Owner, claimSeparator) || strings.Contains(claim.Hostname, claimSeparator) ||
 		strings.Contains(claim.Pointer, claimSeparator) || strings.Contains(claim.App, claimSeparator):
 		return providerkit.Refuse(providerkit.CodeInvalid,

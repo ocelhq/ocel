@@ -12,8 +12,8 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	rtlive "github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
 const (
@@ -91,15 +91,15 @@ func variable(key, value string, class resourcesv1.VariableClass) *contractv1.Ma
 	return &contractv1.ManifestVariable{Key: key, Class: class, Value: value}
 }
 
-func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, bindings []live.Binding) (appBundle, error) {
+func renderAppBundle(cfg Config, slug string, app *contractv1.ManifestApp, bindings []rtlive.Binding) (appBundle, error) {
 	sensitive := map[string]string{}
-	var keys []live.Key
+	var keys []rtlive.Key
 	for _, v := range app.GetVariables() {
 		switch v.GetClass() {
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
 			sensitive[v.GetKey()] = v.GetValue()
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:
-			keys = append(keys, live.Key{Key: v.GetKey(), Folder: v.GetFolder()})
+			keys = append(keys, rtlive.Key{Key: v.GetKey(), Folder: v.GetFolder()})
 		}
 	}
 	return sealAppBundle(cfg, slug, app.GetName(), sensitive, keys, bindings)
@@ -371,6 +371,22 @@ func TestRenderBakedBundle(t *testing.T) {
 		}
 		if len(values) != 1 {
 			t.Errorf("bundle = %v, want the encrypted-baked variable alone", values)
+		}
+	})
+
+	t.Run("an account with no vars key cannot carry a sensitive variable", func(t *testing.T) {
+		t.Parallel()
+
+		app := &contractv1.ManifestApp{
+			Name:      "web",
+			Variables: []*contractv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
+		}
+		keyless := liveConfig()
+		keyless.VarsKeyARN = ""
+
+		_, err := renderAppBundle(keyless, "shop", app, nil)
+		if err == nil || !strings.Contains(err.Error(), "vars-key") {
+			t.Fatalf("renderAppBundle without a key = %v, want a refusal: the data key would sit in the function environment under nothing but Lambda's account-wide key", err)
 		}
 	})
 

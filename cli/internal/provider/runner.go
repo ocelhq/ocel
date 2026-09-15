@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -35,17 +36,20 @@ const DefaultGracePeriod = 2 * time.Second
 
 const DefaultReapTimeout = 2 * time.Second
 
+const MaxMessageBytes = 128 << 20
+
 type Config struct {
-	BinaryPath     string
-	Args           []string
-	Env            []string
-	ProviderConfig *contractv1.ProviderConfig
-	ProviderName   string
-	Stdout         io.Writer
-	Stderr         io.Writer
-	ReadyTimeout   time.Duration
-	GracePeriod    time.Duration
-	ReapTimeout    time.Duration
+	BinaryPath      string
+	Args            []string
+	Env             []string
+	ProviderConfig  *contractv1.ProviderConfig
+	ProviderName    string
+	Stdout          io.Writer
+	Stderr          io.Writer
+	ReadyTimeout    time.Duration
+	GracePeriod     time.Duration
+	ReapTimeout     time.Duration
+	MaxMessageBytes int
 }
 
 type EarlyExitError struct {
@@ -100,15 +104,16 @@ func (e *OperationFailedError) Error() string {
 }
 
 type Runner struct {
-	cmd            *exec.Cmd
-	identity       *channel.Identity
-	providerConfig *contractv1.ProviderConfig
-	providerName   string
-	stdout         io.Writer
-	stderr         io.Writer
-	readyTimeout   time.Duration
-	gracePeriod    time.Duration
-	reapTimeout    time.Duration
+	cmd             *exec.Cmd
+	identity        *channel.Identity
+	providerConfig  *contractv1.ProviderConfig
+	providerName    string
+	stdout          io.Writer
+	stderr          io.Writer
+	readyTimeout    time.Duration
+	gracePeriod     time.Duration
+	reapTimeout     time.Duration
+	maxMessageBytes int
 
 	readyCh chan channel.Readiness
 	scanErr chan error
@@ -165,18 +170,19 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	}
 
 	r := &Runner{
-		cmd:            cmd,
-		identity:       identity,
-		providerConfig: cfg.ProviderConfig,
-		providerName:   cfg.ProviderName,
-		stdout:         cfg.Stdout,
-		stderr:         cfg.Stderr,
-		readyTimeout:   resolveReadyTimeout(cfg.ReadyTimeout),
-		gracePeriod:    resolveDuration(cfg.GracePeriod, DefaultGracePeriod),
-		reapTimeout:    resolveDuration(cfg.ReapTimeout, DefaultReapTimeout),
-		readyCh:        make(chan channel.Readiness, 1),
-		scanErr:        make(chan error, 1),
-		done:           make(chan struct{}),
+		cmd:             cmd,
+		identity:        identity,
+		providerConfig:  cfg.ProviderConfig,
+		providerName:    cfg.ProviderName,
+		stdout:          cfg.Stdout,
+		stderr:          cfg.Stderr,
+		readyTimeout:    resolveReadyTimeout(cfg.ReadyTimeout),
+		gracePeriod:     resolveDuration(cfg.GracePeriod, DefaultGracePeriod),
+		reapTimeout:     resolveDuration(cfg.ReapTimeout, DefaultReapTimeout),
+		maxMessageBytes: resolveBytes(cfg.MaxMessageBytes, MaxMessageBytes),
+		readyCh:         make(chan channel.Readiness, 1),
+		scanErr:         make(chan error, 1),
+		done:            make(chan struct{}),
 	}
 
 	registerLive(r)
@@ -217,6 +223,13 @@ func resolveReadyTimeout(override time.Duration) time.Duration {
 }
 
 func resolveDuration(override, def time.Duration) time.Duration {
+	if override > 0 {
+		return override
+	}
+	return def
+}
+
+func resolveBytes(override, def int) int {
 	if override > 0 {
 		return override
 	}
@@ -297,7 +310,10 @@ func (r *Runner) dial(ready channel.Readiness) error {
 	}
 	httpClient := channel.HTTPClient(network, address, config)
 
-	opts := connect.WithInterceptors(traceParentInterceptor{}, validate.NewInterceptor())
+	opts := connect.WithClientOptions(
+		connect.WithInterceptors(traceParentInterceptor{}, validate.NewInterceptor()),
+		connect.WithReadMaxBytes(r.maxMessageBytes),
+	)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -361,6 +377,9 @@ func Stream[Req any](
 
 func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[progressv1.OperationEvent], callErr error, onEvent func(*progressv1.OperationEvent)) error {
 	if callErr != nil {
+		if cancelled(callErr) {
+			return fmt.Errorf("provider: %s was cancelled: %w", rpc, callErr)
+		}
 		return fmt.Errorf("provider: call %s: %w", rpc, callErr)
 	}
 	defer stream.Close()
@@ -379,12 +398,19 @@ func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[p
 	}
 
 	if err := stream.Err(); err != nil {
+		if cancelled(err) {
+			return fmt.Errorf("provider: %s was cancelled: %w", rpc, err)
+		}
 		if connect.CodeOf(err) == connect.CodeInvalidArgument {
 			return fmt.Errorf("provider: call %s: %w", rpc, err)
 		}
 		return fmt.Errorf("provider: provider connection lost: %w", err)
 	}
 	return fmt.Errorf("provider: provider closed the %s stream without a result", rpc)
+}
+
+func cancelled(err error) bool {
+	return errors.Is(err, context.Canceled) || connect.CodeOf(err) == connect.CodeCanceled
 }
 
 var (
@@ -427,6 +453,7 @@ func (r *Runner) Close() {
 
 		if network == "unix" && address != "" {
 			_ = os.Remove(address)
+			_ = os.Remove(filepath.Dir(address))
 		}
 	})
 }

@@ -1,7 +1,10 @@
 package gcp
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -28,10 +31,19 @@ func namedProject(named string) string {
 }
 
 func ambientProject(ctx context.Context) (string, error) {
-	for _, ambient := range []func(context.Context) string{credentialProject, gcloudProject} {
-		if project := strings.TrimSpace(ambient(ctx)); project != "" {
-			return project, nil
-		}
+	if project := strings.TrimSpace(credentialProject(ctx)); project != "" {
+		return project, nil
+	}
+	project, err := gcloudProject(ctx)
+	if project != "" {
+		return project, nil
+	}
+	if err != nil {
+		return "", providerkit.Refuse(providerkit.CodeInvalid,
+			"option %q names no Google Cloud project and nothing around this run names one either: "+
+				"not the application default credentials, not %s, not %s, and gcloud could not say what its config holds: %s.\n"+
+				"Name it in the options, or run `gcloud config set project <id>`",
+			"project", projectVariable, cloudSDKVariable, err)
 	}
 	return "", providerkit.Refuse(providerkit.CodeInvalid,
 		"option %q names no Google Cloud project and nothing around this run names one either: "+
@@ -55,14 +67,21 @@ func credentialProject(ctx context.Context) string {
 	return found.ProjectID
 }
 
-func gcloudProject(ctx context.Context) string {
+func gcloudProject(ctx context.Context) (string, error) {
+	if _, err := exec.LookPath("gcloud"); err != nil {
+		return "", nil
+	}
 	said, err := exec.CommandContext(ctx, "gcloud", "config", "get-value", "project").Output()
 	if err != nil {
-		return ""
+		var exited *exec.ExitError
+		if errors.As(err, &exited) && len(bytes.TrimSpace(exited.Stderr)) > 0 {
+			return "", fmt.Errorf("`gcloud config get-value project` failed: %s", bytes.TrimSpace(exited.Stderr))
+		}
+		return "", fmt.Errorf("`gcloud config get-value project` failed: %w", err)
 	}
 	project := strings.TrimSpace(string(said))
 	if project == unsetProject {
-		return ""
+		return "", nil
 	}
-	return project
+	return project, nil
 }

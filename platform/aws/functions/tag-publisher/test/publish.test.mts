@@ -122,6 +122,13 @@ describe("publishAll", () => {
     expect(stored(s3).records.cart).toEqual({ stale: undefined, expired: 500 });
   });
 
+  it("refuses to send the write secret to a writer that is not https", async () => {
+    const p = { ...publisher(seeded(), ok), endpoint: "http://writer.example" };
+
+    expect(await publishAll(p, raises({ cart: { expired: 5 } }), 1)).toEqual(["1"]);
+    expect(ok).not.toHaveBeenCalled();
+  });
+
   it("reports the records back when the writer will not take the raise", async () => {
     const exhausted = vi.fn(async () => new Response(null, { status: 429 }));
 

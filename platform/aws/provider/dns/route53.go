@@ -124,17 +124,25 @@ func (w *route53Writer) ZoneOf(ctx context.Context, hostname string) (edge.Zone,
 }
 
 func (w *route53Writer) zoneFor(ctx context.Context, hostname string) (edge.Zone, error) {
-	owned, err := w.hostedZones(ctx)
+	owned, err := w.hostedZones(ctx, false)
 	if err != nil {
 		return edge.Zone{}, err
 	}
-	return edge.SelectZone(owned, strings.TrimPrefix(hostname, "*."), w.named)
+	name := strings.TrimPrefix(hostname, "*.")
+	zone, err := edge.SelectZone(owned, name, w.named)
+	if err == nil {
+		return zone, nil
+	}
+	if owned, err = w.hostedZones(ctx, true); err != nil {
+		return edge.Zone{}, err
+	}
+	return edge.SelectZone(owned, name, w.named)
 }
 
-func (w *route53Writer) hostedZones(ctx context.Context) ([]edge.Zone, error) {
+func (w *route53Writer) hostedZones(ctx context.Context, again bool) ([]edge.Zone, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.seen != nil {
+	if w.seen != nil && !again {
 		return w.seen, nil
 	}
 	owned := []edge.Zone{}

@@ -396,16 +396,27 @@ func TestTeardownReclaimsTheClassOriginSecret(t *testing.T) {
 	}
 }
 
-func TestTeardownDropsThePassphraseWithNoSibling(t *testing.T) {
+func TestTeardownLeavesThePassphraseEvenWithNoSibling(t *testing.T) {
 	t.Parallel()
 
 	apis, _, ssmc, _ := teardownFakes(t)
 
-	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+	var logged []string
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, func(msg string) { logged = append(logged, msg) }); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	if _, held := ssmc.params[passphraseParam]; held {
-		t.Error("nothing else is bootstrapped, so the passphrase must go with the bootstrap")
+	if _, held := ssmc.params[passphraseParam]; !held {
+		t.Error("the passphrase is the only copy every Pulumi stack this account held was encrypted under, and the bootstrap credential may not delete it; it must stay")
+	}
+	if !slices.ContainsFunc(logged, func(msg string) bool {
+		return strings.Contains(msg, passphraseParam) && strings.Contains(msg, "delete-parameter")
+	}) {
+		t.Errorf("teardown logged %q, want it to name the passphrase parameter and how to remove it by hand", logged)
+	}
+	for _, name := range []string{originSecretParam, cloudflareNames(ClassProduction).credentialsParam} {
+		if _, held := ssmc.params[name]; held {
+			t.Errorf("%s survived the teardown; only the passphrase stays", name)
+		}
 	}
 }
 
@@ -484,5 +495,55 @@ func TestTeardownRemovesAWedgedFeatureStack(t *testing.T) {
 	want := []string{defaultNamespace.FeatureStackName(FeatureISR, ClassProduction), coreStackName}
 	if !slices.Equal(stacks.deleted, want) {
 		t.Errorf("deleted %v, want %v: a stack that rolled back still has to go", stacks.deleted, want)
+	}
+}
+
+func TestTeardownWalksEverythingBesideACoreStackThatRolledBack(t *testing.T) {
+	t.Parallel()
+
+	feature := defaultNamespace.FeatureStackName(FeatureISR, ClassProduction)
+	runtime := defaultNamespace.runtimeStackName(ClassProduction)
+	stacks := &teardownCFN{stacks: map[string]teardownStack{
+		coreStackName: {status: cfntypes.StackStatusRollbackComplete},
+		feature:       {},
+		runtime:       {},
+	}}
+	held := &teardownIAM{keys: map[string][]string{edgeUserName: {"AKIAOLD"}}}
+	apis := TeardownAPIs{
+		CFN:     stacks,
+		SSM:     newFakeSSM(),
+		IAM:     held,
+		Buckets: &teardownS3{pages: map[string][]objectPage{}},
+	}
+
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+	want := []string{feature, runtime, coreStackName}
+	if !slices.Equal(stacks.deleted, want) {
+		t.Errorf("deleted %v, want %v: a core that never finished creating names nothing, and everything beside it still has to go", stacks.deleted, want)
+	}
+	if !slices.Equal(held.deleted, []string{"AKIAOLD"}) {
+		t.Errorf("access keys deleted = %v, want the edge reader's key gone", held.deleted)
+	}
+}
+
+func TestTeardownWalksEverythingBesideACoreStackThatIsGone(t *testing.T) {
+	t.Parallel()
+
+	feature := defaultNamespace.FeatureStackName(FeatureISR, ClassProduction)
+	stacks := &teardownCFN{stacks: map[string]teardownStack{feature: {}}}
+	apis := TeardownAPIs{
+		CFN:     stacks,
+		SSM:     newFakeSSM(),
+		IAM:     &teardownIAM{keys: map[string][]string{}},
+		Buckets: &teardownS3{pages: map[string][]objectPage{}},
+	}
+
+	if err := Teardown(context.Background(), apis, defaultNamespace, ClassProduction, nil, nil); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+	if want := []string{feature}; !slices.Equal(stacks.deleted, want) {
+		t.Errorf("deleted %v, want %v: a feature stack outliving its core still has to go, and no core delete is attempted", stacks.deleted, want)
 	}
 }

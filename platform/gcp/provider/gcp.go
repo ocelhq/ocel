@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
 const Vendor providerkit.Vendor = "gcp"
@@ -131,7 +132,10 @@ func (p *Provider) Computes() []providerkit.Compute {
 	return []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer}
 }
 
-func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
+func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
+	if _, err := p.Edges().Open(kind); err != nil {
+		return nil, err
+	}
 	return bootstrapGate{p: p}, nil
 }
 
@@ -140,6 +144,10 @@ func (p *Provider) Releases() providerkit.Releaser {
 }
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return artifacts{p: p} }
+
+func (p *Provider) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
+	return payloads.ContainerRuntime(arch)
+}
 
 func (p *Provider) Records() providerkit.RecordStore { return records{p: p} }
 
@@ -170,4 +178,7 @@ func (p *Provider) Edges() providerkit.EdgeRegistry {
 
 func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
 
-var _ providerkit.Provider = (*Provider)(nil)
+var (
+	_ providerkit.Provider          = (*Provider)(nil)
+	_ providerkit.ContainerRuntimer = (*Provider)(nil)
+)

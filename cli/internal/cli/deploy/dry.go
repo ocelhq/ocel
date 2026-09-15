@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
-const dryFlagUsage = "Print every change this would make to your account and stop, changing nothing"
+const dryFlagUsage = "Build, then print every change this would make to your account and stop without applying any of it"
 
 func showDeployPlan(ctx context.Context, runner *provider.Runner, ui *runui.Session, req *contractv1.DeployRequest, headline string) error {
 	var plan *planv1.ChangePlan

@@ -10,7 +10,13 @@ const (
 const (
 	dockerEngine = "docker"
 	dockerUnit   = "docker.service"
-	dockerSource = "https://get.docker.com"
+)
+
+const (
+	dockerVersion      = "29.8.0"
+	dockerScriptCommit = "2b32480025b223ebfddae9a3a8bef09027680f53"
+	dockerScriptSum    = "fefa50ccd50efb42f438b506fc3a88574118f314aaf2a7cd5b6e1ffb1bffcf26"
+	dockerSource       = "https://raw.githubusercontent.com/docker/docker-install/" + dockerScriptCommit + "/install.sh"
 )
 
 const (
@@ -30,7 +36,7 @@ func engineItem() Item {
 		Owner:   rootOwner,
 		Content: []byte(engineFact),
 		Slow:    true,
-		Note:    "runs the install script at " + dockerSource + " as root",
+		Note:    "runs docker's install script as root, fetched from " + dockerSource + " and refused unless it hashes to sha256 " + dockerScriptSum + "; the script installs engine " + dockerVersion + " from download.docker.com's signed package repository",
 	}
 }
 
@@ -62,7 +68,11 @@ if command -v curl >/dev/null 2>&1; then curl -fsSL --retry 5 --retry-delay 2 ` 
 elif command -v wget >/dev/null 2>&1; then wget -qO "$script" ` + dockerSource + `
 else echo 'neither curl nor wget stands on this host, so ocel cannot fetch ` + dockerSource + `' >&2; exit 1
 fi
-sh "$script"`
+if ! printf '%s  %s\n' ` + dockerScriptSum + ` "$script" | sha256sum -c - >/dev/null 2>&1; then
+echo '` + dockerSource + ` does not hash to ` + dockerScriptSum + `, which is the install script ocel pinned, so nothing of it runs' >&2
+exit 1
+fi
+VERSION=` + dockerVersion + ` sh "$script"`
 }
 
 func unitCommand(i Item) string {

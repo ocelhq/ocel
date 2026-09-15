@@ -125,7 +125,7 @@ func (s *stack) serve(ctx context.Context, held standing, report edge.Reporter) 
 	}
 	if err := s.e.machine.StandUp(ctx, host.Container{
 		Name: record.Physical, Project: s.state.Slug, App: held.app, Image: record.Image, Class: s.state.Class,
-		Declared: declaredBy(record),
+		HealthPath: record.HealthPath, Declared: declaredBy(record),
 	}); err != nil {
 		return err
 	}
@@ -283,6 +283,9 @@ func (s *stack) Destroy(ctx context.Context) error {
 		}
 	}
 	if err := s.e.machine.UnrouteSurface(ctx, s.surface()); err != nil {
+		errs = append(errs, err)
+	}
+	if err := s.e.machine.ForgetNetwork(ctx, s.state.Class, s.state.Slug); err != nil {
 		errs = append(errs, err)
 	}
 	if err := s.ledger().Destroy(ctx); err != nil {
