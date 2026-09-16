@@ -19,7 +19,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
-const ContainerRuntimePath = "/ocel/bin/runtime"
+const (
+	ContainerRuntimePath = "/ocel/bin/runtime"
+	ContainerLivePath    = "/ocel/live"
+)
 
 const runtimeTagHexLen = 12
 
@@ -71,6 +74,13 @@ func runtimeLayer(runtime []byte) ([]byte, error) {
 		return nil, err
 	}
 	if err := tarBody(archive, ContainerRuntimePath, runtime, 0o755); err != nil {
+		return nil, err
+	}
+	if err := archive.WriteHeader(&tar.Header{
+		Typeflag: tar.TypeDir,
+		Name:     strings.TrimPrefix(ContainerLivePath, "/") + "/",
+		Mode:     0o1777,
+	}); err != nil {
 		return nil, err
 	}
 	if err := archive.Close(); err != nil {

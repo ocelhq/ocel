@@ -115,6 +115,25 @@ func TestWrapContainerCarriesTheRuntimeExecutableAtThePathItBootsFrom(t *testing
 	}
 }
 
+func TestWrapContainerCarriesALiveDirectoryAnyImageUserCanProjectInto(t *testing.T) {
+	t.Parallel()
+
+	base := baseContainer(t, v1.Config{Cmd: []string{"node", "server.js"}, User: "1000"})
+	wrapped, err := providerkit.WrapContainer(base, []byte("a runtime"))
+	if err != nil {
+		t.Fatalf("WrapContainer() = %v", err)
+	}
+
+	name := strings.TrimPrefix(providerkit.ContainerLivePath, "/") + "/"
+	header, _ := tarEntry(t, lastLayer(t, wrapped), name)
+	if header.Typeflag != tar.TypeDir {
+		t.Fatalf("the layer holds %s as type %q, want a directory the runtime projects live values into", providerkit.ContainerLivePath, header.Typeflag)
+	}
+	if header.Mode != 0o1777 {
+		t.Errorf("the layer holds %s at mode %o, want 1777: an image that runs as its own user, or from scratch with no /tmp, still needs somewhere the runtime can write", providerkit.ContainerLivePath, header.Mode)
+	}
+}
+
 func TestWrapContainerRefusesAnImageThereIsNothingToRunInFrontOf(t *testing.T) {
 	t.Parallel()
 

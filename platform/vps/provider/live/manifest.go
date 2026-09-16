@@ -17,7 +17,7 @@ const (
 	ValuesPath = "/values"
 )
 
-const ProjectionDir = "/ocel/live"
+const ProjectionDir = providerkit.ContainerLivePath
 
 type Manifest struct {
 	Slug        string       `json:"slug"`
