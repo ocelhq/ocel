@@ -1182,7 +1182,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 		t.Fatalf("this box holds containers %v and images %v after two deploys, and a rollback that provisions nothing can only be read against both releases standing", standingBefore, imagesBefore)
 	}
 	previous := run.promotionOf(t, retiredRef)
-	rolled := run.deploying(t, "rollback")
+	rolled := run.deploying(t, "rollback", "--yes")
 	if !strings.Contains(rolled, "Rolled back to promotion "+previous) {
 		t.Errorf("`ocel rollback` said %q and never named %s, the promotion that carries %s, so a flip to any other release reads the same:\n%s",
 			firstLineOf(rolled, "Rolled back to promotion"), previous, retiredRef, rolled)
