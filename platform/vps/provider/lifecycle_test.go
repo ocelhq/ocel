@@ -867,7 +867,7 @@ func digestIn(reference string) string {
 	if at < 0 || len(reference) < at+7+64 {
 		return ""
 	}
-	return reference[at+7:]
+	return reference[at+7 : at+7+64]
 }
 
 func firstLineOf(rendered, fragment string) string {
