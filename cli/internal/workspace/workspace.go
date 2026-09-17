@@ -19,6 +19,7 @@ const (
 	goModuleName       = "go.mod"
 	pythonRequirements = "requirements.txt"
 	pythonProjectName  = "pyproject.toml"
+	rustManifestName   = "Cargo.toml"
 	pnpmWorkspaceFile  = "pnpm-workspace.yaml"
 	gitEntry           = ".git"
 	vendorDir          = "node_modules"
@@ -39,6 +40,7 @@ type Location struct {
 	Node         bool
 	Go           bool
 	Python       bool
+	Rust         bool
 	Manager      Manager
 	App          App
 	BuildCommand string
@@ -116,6 +118,7 @@ func locatedAt(dir, root string) (Location, error) {
 		Node:    regular(filepath.Join(dir, manifestName)),
 		Go:      regular(filepath.Join(dir, goModuleName)),
 		Python:  pythonProject(dir),
+		Rust:    rustCrate(dir),
 		App:     describe(dir, app),
 		Manager: detect(root),
 	}
@@ -170,7 +173,13 @@ func (l Location) Members() []string {
 }
 
 func standsAlone(dir string) bool {
-	return regular(filepath.Join(dir, goModuleName)) || pythonProject(dir)
+	return regular(filepath.Join(dir, goModuleName)) || pythonProject(dir) || rustCrate(dir)
+}
+
+func rustCrate(dir string) bool {
+	return regular(filepath.Join(dir, rustManifestName)) &&
+		!regular(filepath.Join(dir, manifestName)) &&
+		!pythonProject(dir)
 }
 
 func pythonProject(dir string) bool {
