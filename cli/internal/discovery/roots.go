@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 type Language string
@@ -147,13 +148,42 @@ func HoldsJS(cfg *projectconfig.Config) (bool, error) {
 	return slices.ContainsFunc(roots, func(root Root) bool { return root.Language == JS }), nil
 }
 
+var runtimeLanguages = map[string]Language{
+	providerkit.RuntimeNode:   JS,
+	providerkit.RuntimeNext:   JS,
+	providerkit.RuntimeGo:     Go,
+	providerkit.RuntimePython: Python,
+}
+
+func LanguageOf(runtime, dir string) Language {
+	if language, ok := runtimeLanguages[runtime]; ok {
+		return language
+	}
+	return LanguageOfApp(dir)
+}
+
+func ClientBundle(runtime, dir string) bool {
+	if runtime != "" {
+		return providerkit.RuntimeBundlesClient(runtime)
+	}
+	language, manifested := languageOfManifest(dir)
+	return manifested && language == JS
+}
+
 func LanguageOfApp(dir string) Language {
-	for _, m := range manifestLanguages {
-		if _, err := os.Stat(filepath.Join(dir, m.file)); err == nil {
-			return m.language
-		}
+	if language, manifested := languageOfManifest(dir); manifested {
+		return language
 	}
 	return JS
+}
+
+func languageOfManifest(dir string) (Language, bool) {
+	for _, m := range manifestLanguages {
+		if _, err := os.Stat(filepath.Join(dir, m.file)); err == nil {
+			return m.language, true
+		}
+	}
+	return "", false
 }
 
 func languageOf(dir string) (Language, error) {

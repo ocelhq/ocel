@@ -7,6 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func rootDirs(t *testing.T, roots []Root, base string) []string {
@@ -347,4 +348,31 @@ func TestLanguageOfApp(t *testing.T) {
 			t.Errorf("LanguageOfApp = %q, want %q", got, JS)
 		}
 	})
+}
+
+func TestClientBundle(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		runtime  string
+		manifest string
+		want     bool
+	}{
+		{name: "a next app", runtime: providerkit.RuntimeNext, want: true},
+		{name: "a node app", runtime: providerkit.RuntimeNode, want: true},
+		{name: "a go app", runtime: providerkit.RuntimeGo, manifest: "go.mod"},
+		{name: "a container app holding a package.json", manifest: "package.json", want: true},
+		{name: "a container app holding a go.mod", manifest: "go.mod"},
+		{name: "a container app naming no language at all", manifest: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tc.manifest != "" {
+				write(t, filepath.Join(dir, tc.manifest), "")
+			}
+
+			if got := ClientBundle(tc.runtime, dir); got != tc.want {
+				t.Errorf("ClientBundle = %v, want %v: %s is written for an app whose bundle reads it", got, tc.want, providerkit.ClientURLEnvName)
+			}
+		})
+	}
 }

@@ -417,18 +417,21 @@ func TestABindingThisDeployProvisionsIsDeliveredAsItsRecordRatherThanAsNothing(t
 	}
 }
 
-func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheAppsRuntime(t *testing.T) {
-	for runtime, want := range map[string][]string{
-		providerkit.RuntimeNext: {"REGION"},
-		providerkit.RuntimeGo:   {providerkit.ClientURLEnvName, "REGION"},
+func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
+	for name, tc := range map[string]struct {
+		clientBundle bool
+		want         []string
+	}{
+		"an app whose bundle reads the client url": {clientBundle: true, want: []string{"REGION"}},
+		"an app whose bundle never reads it":       {want: []string{providerkit.ClientURLEnvName, "REGION"}},
 	} {
-		t.Run(runtime, func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
 			builtProject(t)
 			client, provider := deployServed(t)
 			held := staging(t, provider)
 
 			req := namingARegistry(containerDeployRequest("/healthz"))
-			req.Manifest.Apps[0].Runtime = &contractv1.Runtime{Name: runtime}
+			req.Manifest.Apps[0].ClientBundle = tc.clientBundle
 			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, constants.AppURLEnvName, "https://shop.example")
 			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, providerkit.ClientURLEnvName, "https://shop.example")
 			declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
@@ -446,8 +449,8 @@ func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheAppsRuntime(t *testing.
 			for _, variable := range staged[0].Variables {
 				named = append(named, variable.Key)
 			}
-			if !slices.Equal(named, want) {
-				t.Errorf("a %s app's staged record names %v, want %v: ocel writes %s only for an app whose bundle reads it, so on any other it is the app's own value", runtime, named, want, providerkit.ClientURLEnvName)
+			if !slices.Equal(named, tc.want) {
+				t.Errorf("%s: the staged record names %v, want %v: ocel writes %s only for an app whose bundle reads it, so on any other it is the app's own value", name, named, tc.want, providerkit.ClientURLEnvName)
 			}
 		})
 	}

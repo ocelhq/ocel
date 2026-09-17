@@ -43,7 +43,7 @@ func byApp(cfg *projectconfig.Config, project []string, declared func(projectcon
 	return urls
 }
 
-func Variables(runtime, url string) []manifestbuilder.Variable {
+func Variables(clientBundle bool, url string) []manifestbuilder.Variable {
 	if url == "" {
 		return nil
 	}
@@ -52,35 +52,35 @@ func Variables(runtime, url string) []manifestbuilder.Variable {
 		{Key: constants.AppURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url},
 		{Key: providerkit.ClientURLEnvName, Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: url, ClientAccessible: true},
 	} {
-		if providerkit.OcelWritten(runtime, v.Key) {
+		if providerkit.OcelWritten(clientBundle, v.Key) {
 			written = append(written, v)
 		}
 	}
 	return written
 }
 
-func runtimes(cfg *projectconfig.Config) map[string]string {
+func clientBundles(cfg *projectconfig.Config) map[string]bool {
 	apps := envwire.Apps(cfg)
-	byName := make(map[string]string, len(apps))
+	byName := make(map[string]bool, len(apps))
 	for _, a := range apps {
-		byName[a.Name] = a.Runtime
+		byName[a.Name] = a.ClientBundle
 	}
 	return byName
 }
 
 func Prepend(cfg *projectconfig.Config, byApp map[string][]manifestbuilder.Variable, byURL map[string]string) {
-	runtime := runtimes(cfg)
+	bundles := clientBundles(cfg)
 	for app, variables := range byApp {
-		byApp[app] = append(Variables(runtime[app], byURL[app]), variables...)
+		byApp[app] = append(Variables(bundles[app], byURL[app]), variables...)
 	}
 }
 
 func BuildEnv(cfg *projectconfig.Config, byURL map[string]string) map[string]map[string]string {
-	runtime := runtimes(cfg)
+	bundles := clientBundles(cfg)
 	byApp := make(map[string]map[string]string, len(byURL))
 	for app, url := range byURL {
 		env := make(map[string]string, 2)
-		for _, v := range Variables(runtime[app], url) {
+		for _, v := range Variables(bundles[app], url) {
 			env[v.Key] = v.Value
 		}
 		byApp[BuildKey(app)] = env

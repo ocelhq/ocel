@@ -412,18 +412,18 @@ func TestDeclareEnv(t *testing.T) {
 	t.Run("refuses the deployment url only where ocel writes it for an app in scope", func(t *testing.T) {
 		t.Parallel()
 		for _, tc := range []struct {
-			runtime string
-			key     string
-			refused bool
+			name         string
+			clientBundle bool
+			key          string
+			refused      bool
 		}{
-			{runtime: providerkit.RuntimeGo, key: constants.AppURLEnvName, refused: true},
-			{runtime: providerkit.RuntimeNext, key: providerkit.ClientURLEnvName, refused: true},
-			{runtime: providerkit.RuntimeNode, key: providerkit.ClientURLEnvName, refused: true},
-			{runtime: providerkit.RuntimeGo, key: providerkit.ClientURLEnvName, refused: false},
+			{name: "an app with no client bundle", key: constants.AppURLEnvName, refused: true},
+			{name: "an app whose bundle reads it", clientBundle: true, key: providerkit.ClientURLEnvName, refused: true},
+			{name: "an app whose bundle never reads it", key: providerkit.ClientURLEnvName, refused: false},
 		} {
-			t.Run(tc.key+" for a "+tc.runtime+" app", func(t *testing.T) {
+			t.Run(tc.key+" for "+tc.name, func(t *testing.T) {
 				t.Parallel()
-				g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api", Runtime: tc.runtime}}})
+				g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api", ClientBundle: tc.clientBundle}}})
 
 				_, err := g.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
 					Definitions: []*resourcesv1.VariableDefinition{def(tc.key, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
@@ -438,8 +438,8 @@ func TestDeclareEnv(t *testing.T) {
 	t.Run("refuses the browser's deployment url only where the declaration reaches an app whose bundle reads it", func(t *testing.T) {
 		t.Parallel()
 		mixed := envgate.Scope{Apps: []envgate.App{
-			{Name: "web", Folder: "/web", Runtime: providerkit.RuntimeNext},
-			{Name: "api", Folder: "/api", Runtime: providerkit.RuntimeGo},
+			{Name: "web", Folder: "/web", ClientBundle: true},
+			{Name: "api", Folder: "/api"},
 		}}
 		for _, tc := range []struct {
 			name    string

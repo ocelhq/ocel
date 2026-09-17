@@ -126,12 +126,16 @@ const (
 	ClientURLEnvName = "NEXT_PUBLIC_OCEL_URL"
 )
 
-func OcelWritten(runtime, key string) bool {
+func RuntimeBundlesClient(runtime string) bool {
+	return runtime == RuntimeNode || runtime == RuntimeNext
+}
+
+func OcelWritten(clientBundle bool, key string) bool {
 	switch key {
 	case constants.AppURLEnvName:
 		return true
 	case ClientURLEnvName:
-		return runtime == RuntimeNode || runtime == RuntimeNext
+		return clientBundle
 	}
 	return false
 }
