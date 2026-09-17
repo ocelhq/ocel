@@ -367,6 +367,23 @@ func TestAnAppCarryingAPythonProjectFileIsPlannedAsPythonWhateverElseSitsBesideI
 	}
 }
 
+const polyglotCrateApp = "testdata/polyglotworkspace/apps/crate"
+
+func TestAnAppCarryingACargoManifestIsPlannedAsRustRatherThanLeftToRailpacksOwnDetection(t *testing.T) {
+	plan := planned(t, polyglotCrateApp)
+
+	build := strings.Join(plan.step(t, "build"), "\n")
+	if !strings.Contains(build, "cargo build") {
+		t.Errorf("the build step runs:\n%s\nwant a cargo build — the app is a crate, and the node workspace it sits inside installs nothing it reads", build)
+	}
+	if strings.Contains(plan.Deploy.StartCommand, "pnpm") {
+		t.Errorf("the plan starts the app with %q, and no package manager starts a compiled binary", plan.Deploy.StartCommand)
+	}
+	if want := "./bin/crate-app"; plan.Deploy.StartCommand != want {
+		t.Errorf("the plan starts the app with %q, want %q — the image execs the one binary the crate builds", plan.Deploy.StartCommand, want)
+	}
+}
+
 const polyglotStrayScriptApp = "testdata/polyglotworkspace/apps/stray"
 
 func TestANodeAppShippingAScriptBesideItselfIsStillPlannedAsNode(t *testing.T) {

@@ -27,6 +27,7 @@ const (
 	nodeProvider   = "node"
 	goProvider     = "golang"
 	pythonProvider = "python"
+	rustProvider   = "rust"
 	providerKey    = "provider"
 )
 
@@ -84,6 +85,8 @@ func providerFor(loc workspace.Location) string {
 		return pythonProvider
 	case loc.Node:
 		return nodeProvider
+	case loc.Rust:
+		return rustProvider
 	default:
 		return ""
 	}

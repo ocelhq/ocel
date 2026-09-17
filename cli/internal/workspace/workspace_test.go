@@ -332,6 +332,51 @@ func TestWhatMakesAnAppAPythonProjectIsTheFileThatDeclaresItOne(t *testing.T) {
 	}
 }
 
+func TestACargoManifestMakesAnAppRustOnlyWhereNoNodeOrPythonProjectClaimsTheDirectory(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		declares map[string]string
+		rust     bool
+	}{
+		{
+			name:     "a crate on its own is rust",
+			declares: map[string]string{"apps/svc/Cargo.toml": "[package]\nname = \"svc\"\n", "apps/svc/src/main.rs": "fn main() {}\n"},
+			rust:     true,
+		},
+		{
+			name:     "a crate beside a package.json builds that app's native addon",
+			declares: map[string]string{"apps/svc/Cargo.toml": "[package]\nname = \"svc\"\n", "apps/svc/package.json": `{"name":"@acme/svc"}`},
+		},
+		{
+			name:     "a crate beside a pyproject.toml builds that app's extension module",
+			declares: map[string]string{"apps/svc/Cargo.toml": "[package]\nname = \"svc\"\n", "apps/svc/pyproject.toml": "[project]\nname = \"svc\"\n"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, dir, map[string]string{
+				"pnpm-workspace.yaml": "packages:\n  - apps/*\n",
+				"pnpm-lock.yaml":      "lockfileVersion: '9.0'\n",
+				"package.json":        `{"name":"root"}`,
+			})
+			write(t, dir, tt.declares)
+			app := filepath.Join(dir, "apps", "svc")
+
+			loc := located(t, app)
+
+			if loc.Rust != tt.rust {
+				t.Errorf("Rust = %v, want %v — a Cargo.toml makes an app rust only where nothing else declares the directory an app of its own", loc.Rust, tt.rust)
+			}
+			if tt.rust && loc.Root != app {
+				t.Errorf("Root = %s, want %s — a crate roots its own build, and no node workspace installs it", loc.Root, app)
+			}
+			if tt.rust && loc.InWorkspace() {
+				t.Error("InWorkspace() = true, and a crate is a member of no node workspace")
+			}
+		})
+	}
+}
+
 func TestAnAppInNoWorkspaceHasNoMembersToTellApartFromTheRegistry(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, map[string]string{
