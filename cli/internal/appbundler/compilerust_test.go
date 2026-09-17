@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -95,6 +96,110 @@ func TestCompileWritesAStaticRustBinaryForTheArchitectureItWasAsked(t *testing.T
 				if program.Type == elf.PT_INTERP {
 					t.Errorf("the binary asks for a dynamic loader, and a function's host carries no libc the app was linked against")
 				}
+			}
+		})
+	}
+}
+
+const cCrateBuildScript = `use std::env;
+use std::process::Command;
+
+fn main() {
+    let target = env::var("TARGET").unwrap();
+    let out = env::var("OUT_DIR").unwrap();
+    let cc = env::var(format!("CC_{}", target.replace('-', "_"))).unwrap();
+    let mut said = cc.split_whitespace();
+    let mut compile = Command::new(said.next().unwrap());
+    compile.args(said);
+    assert!(compile
+        .args(["-c", "answer.c", "-o", &format!("{out}/answer.o")])
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("ar")
+        .args(["rcs", &format!("{out}/libanswer.a"), &format!("{out}/answer.o")])
+        .status()
+        .unwrap()
+        .success());
+    println!("cargo:rustc-link-search=native={out}");
+    println!("cargo:rustc-link-lib=static=answer");
+    println!("cargo:rerun-if-changed=answer.c");
+}
+`
+
+const cCrateAnswer = "42"
+
+func muslCompilerFor(t *testing.T, target string) string {
+	t.Helper()
+	if named := strings.Replace(target, "-unknown-", "-", 1) + "-gcc"; lookedUp(named) {
+		return named
+	}
+	if lookedUp("zig") {
+		return "zig cc -target " + strings.Replace(target, "-unknown-", "-", 1)
+	}
+	t.Skipf("no musl C compiler for %s: put a %s-gcc or zig on PATH", target, strings.Replace(target, "-unknown-", "-", 1))
+	return ""
+}
+
+func lookedUp(named string) bool {
+	_, err := exec.LookPath(named)
+	return err == nil
+}
+
+func cCrate(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	writeTree(t, dir, map[string]string{
+		"Cargo.toml":  rustCrateManifest,
+		"build.rs":    cCrateBuildScript,
+		"answer.c":    "int ocel_answer(void) { return " + cCrateAnswer + "; }\n",
+		"src/main.rs": "extern \"C\" {\n    fn ocel_answer() -> i32;\n}\n\nfn main() {\n    print!(\"{}\", unsafe { ocel_answer() });\n}\n",
+	})
+	return dir
+}
+
+func TestCompileLinksTheCACrateBuildsForTheTargetIntoTheStaticBinary(t *testing.T) {
+	for _, arch := range []struct {
+		named   string
+		machine elf.Machine
+		goarch  string
+	}{
+		{providerkit.ArchX8664, elf.EM_X86_64, "amd64"},
+		{providerkit.ArchARM64, elf.EM_AARCH64, "arm64"},
+	} {
+		t.Run(arch.named, func(t *testing.T) {
+			needsRustTarget(t, arch.named)
+			target, _ := providerkit.RustTarget(arch.named)
+			t.Setenv("CC_"+strings.ReplaceAll(target, "-", "_"), muslCompilerFor(t, target))
+
+			_, funcDir, err := compileRust(t, cCrate(t), arch.named)
+			if err != nil {
+				t.Fatalf("compile: %v — a crate that compiles C is built with the toolchain the docs name, and ocel links what it produces", err)
+			}
+
+			binary := filepath.Join(funcDir, "web")
+			read, err := elf.Open(binary)
+			if err != nil {
+				t.Fatalf("the binary is no linux executable: %v", err)
+			}
+			defer read.Close()
+			if read.Machine != arch.machine {
+				t.Errorf("the binary is built for %v, want %v", read.Machine, arch.machine)
+			}
+			for _, program := range read.Progs {
+				if program.Type == elf.PT_INTERP {
+					t.Errorf("the binary asks for a dynamic loader: the C it links is static musl, and a function's host carries no libc")
+				}
+			}
+			if runtime.GOARCH != arch.goarch {
+				return
+			}
+			said, err := exec.Command(binary).Output()
+			if err != nil {
+				t.Fatalf("run the binary: %v", err)
+			}
+			if string(said) != cCrateAnswer {
+				t.Errorf("the binary said %q, want %q — the C the crate compiled runs in the artifact that is deployed", said, cCrateAnswer)
 			}
 		})
 	}

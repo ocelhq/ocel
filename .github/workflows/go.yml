@@ -150,6 +150,12 @@ jobs:
         if: matrix.group.name == 'cli'
         run: rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
 
+      - name: The musl C cross compiler the rust compile suite links a C dependency with
+        if: matrix.group.name == 'cli'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
       - name: The ocel package the cli e2e deploys against
         if: matrix.group.name == 'cli'
         run: pnpm turbo run build --filter=ocel
