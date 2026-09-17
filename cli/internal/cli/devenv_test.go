@@ -1030,7 +1030,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 }
 
 func TestDevGivesEveryAppItsURL(t *testing.T) {
-	node := envgate.Scope{Apps: []envgate.App{{Name: "web", Runtime: providerkit.RuntimeNext}}}
+	node := envgate.Scope{Apps: []envgate.App{{Name: "web", ClientBundle: true}}}
 
 	t.Run("localhost on the default port where nothing names one", func(t *testing.T) {
 		t.Setenv("PORT", "")
@@ -1047,7 +1047,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "")
 		dotfile := map[string]string{providerkit.ClientURLEnvName: "https://mine.example"}
 
-		got := resolvedEnv(nil, nil, dotfile, nil, runtimeAccess{}, "", envgate.Scope{Apps: []envgate.App{{Name: "api", Runtime: providerkit.RuntimeGo}}})
+		got := resolvedEnv(nil, nil, dotfile, nil, runtimeAccess{}, "", envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 		if want := "http://localhost:3000"; got[constants.AppURLEnvName] != want {
 			t.Errorf("%s = %q, want %q for every app", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
 		}
@@ -1082,7 +1082,11 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeNext}},
 		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeGo}},
 		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Runtime: projectconfig.Runtime{Name: providerkit.RuntimePython}},
+		{Name: "store", Path: filepath.Join("apps", "store"), Folder: "/store", Compute: string(providerkit.ComputeContainer)},
+		{Name: "worker", Path: filepath.Join("apps", "worker"), Folder: "/worker", Compute: string(providerkit.ComputeContainer)},
 	}}
+	writeApp(t, filepath.Join(root, "apps", "store", "package.json"), "{}")
+	writeApp(t, filepath.Join(root, "apps", "worker", "go.mod"), "module example.com/worker")
 
 	for _, tc := range []struct {
 		name    string
@@ -1092,6 +1096,8 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 		{name: "inside the go app", cwd: filepath.Join(root, "apps", "api", "cmd"), written: false},
 		{name: "inside an app whose path only shares a prefix with the next app's", cwd: filepath.Join(root, "apps", "web-hooks"), written: false},
 		{name: "inside the next app", cwd: filepath.Join(root, "apps", "web"), written: true},
+		{name: "inside a container app whose directory holds a package.json", cwd: filepath.Join(root, "apps", "store"), written: true},
+		{name: "inside a container app whose directory holds a go.mod", cwd: filepath.Join(root, "apps", "worker"), written: false},
 		{name: "at the project root, where no one app is the target", cwd: root, written: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1110,4 +1116,14 @@ func readTestFile(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return string(data)
+}
+
+func writeApp(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
 }

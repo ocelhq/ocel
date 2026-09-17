@@ -3,9 +3,11 @@ package envwire
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
@@ -85,11 +87,15 @@ func DevScope(cfg *projectconfig.Config) envgate.Scope {
 
 func Apps(cfg *projectconfig.Config) []envgate.App {
 	if len(cfg.Apps) == 0 {
-		return []envgate.App{{Name: RootApp, Runtime: RootRuntime}}
+		return []envgate.App{{Name: RootApp, ClientBundle: discovery.ClientBundle(RootRuntime, cfg.Dir)}}
 	}
 	apps := make([]envgate.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
-		apps = append(apps, envgate.App{Name: a.Name, Folder: a.Folder, Runtime: a.Runtime.Name})
+		apps = append(apps, envgate.App{
+			Name:         a.Name,
+			Folder:       a.Folder,
+			ClientBundle: discovery.ClientBundle(a.Runtime.Name, filepath.Join(cfg.Dir, a.Path)),
+		})
 	}
 	return apps
 }

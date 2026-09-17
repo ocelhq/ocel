@@ -1003,10 +1003,10 @@ func (r *deployRun) warm(ctx context.Context, functions []Function, report Repor
 	return warmer.Warm(ctx, targets, report)
 }
 
-func declaredVariables(runtime string, held AppValues) []edge.VariableRecord {
+func declaredVariables(clientBundle bool, held AppValues) []edge.VariableRecord {
 	names := make([]string, 0, len(held.Plain)+len(held.Sensitive)+len(held.Secrets))
 	for _, key := range slices.Sorted(maps.Keys(held.Plain)) {
-		if !OcelWritten(runtime, key) {
+		if !OcelWritten(clientBundle, key) {
 			names = append(names, key)
 		}
 	}
@@ -1066,7 +1066,7 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFact
 		IsrWriteSecret:   result.ISRWriteSecret,
 		CreatedAt:        time.Now().Unix(),
 		ValueFingerprint: entry.Build.Fingerprint(),
-		Variables:        declaredVariables(entry.Manifest.GetRuntime().GetName(), values),
+		Variables:        declaredVariables(entry.Manifest.GetClientBundle(), values),
 		Needs:            r.needs[entry.App].Needs,
 		SupportInEffect:  r.needs[entry.App].InEffect,
 		Waived:           r.needs[entry.App].Waived,

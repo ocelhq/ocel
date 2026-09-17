@@ -10,6 +10,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const ContractVersion = "provider.v1"
@@ -37,6 +38,7 @@ type Runtime struct {
 type App struct {
 	Name            string
 	Runtime         Runtime
+	ClientBundle    bool
 	Compute         string
 	Domains         map[string][]string
 	Folder          string
@@ -420,12 +422,13 @@ func buildApps(apps []App, compute string, functions []Function, variables map[s
 			return nil, err
 		}
 		manifestApps = append(manifestApps, &contractv1.ManifestApp{
-			Name:      a.Name,
-			Runtime:   runtimeProto(runtime),
-			Compute:   appCompute,
-			Domains:   appDomains,
-			Variables: manifestVariables(variables[a.Name]),
-			Folder:    a.Folder,
+			Name:         a.Name,
+			Runtime:      runtimeProto(runtime),
+			Compute:      appCompute,
+			Domains:      appDomains,
+			Variables:    manifestVariables(variables[a.Name]),
+			Folder:       a.Folder,
+			ClientBundle: a.ClientBundle,
 		})
 	}
 
@@ -435,10 +438,11 @@ func buildApps(apps []App, compute string, functions []Function, variables map[s
 		}
 		configured[f.App] = true
 		manifestApps = append(manifestApps, &contractv1.ManifestApp{
-			Name:      f.App,
-			Runtime:   runtimeProto(runtimeByApp[f.App]),
-			Compute:   compute,
-			Variables: manifestVariables(variables[f.App]),
+			Name:         f.App,
+			Runtime:      runtimeProto(runtimeByApp[f.App]),
+			Compute:      compute,
+			Variables:    manifestVariables(variables[f.App]),
+			ClientBundle: providerkit.RuntimeBundlesClient(runtimeByApp[f.App].Name),
 		})
 	}
 

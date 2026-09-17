@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -71,11 +72,12 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 }
 
 func generateClientAccessors(cfg *projectconfig.Config, keys []clientenv.Key) (int, error) {
-	apps := []clientenv.App{{Dir: cfg.Dir, Runtime: envwire.RootRuntime}}
+	apps := []clientenv.App{{Dir: cfg.Dir, ClientBundle: discovery.ClientBundle(envwire.RootRuntime, cfg.Dir)}}
 	if len(cfg.Apps) > 0 {
 		apps = apps[:0]
 		for _, a := range cfg.Apps {
-			apps = append(apps, clientenv.App{Name: a.Name, Dir: filepath.Join(cfg.Dir, a.Path), Runtime: a.Runtime.Name})
+			dir := filepath.Join(cfg.Dir, a.Path)
+			apps = append(apps, clientenv.App{Name: a.Name, Dir: dir, ClientBundle: discovery.ClientBundle(a.Runtime.Name, dir)})
 		}
 	}
 	named := 0
@@ -83,7 +85,7 @@ func generateClientAccessors(cfg *projectconfig.Config, keys []clientenv.Key) (i
 		if err := generateClientAccessor(cfg.Dir, app, keys); err != nil {
 			return 0, err
 		}
-		named = max(named, len(clientenv.Offered(keys, app.Runtime)))
+		named = max(named, len(clientenv.Offered(keys, app.ClientBundle)))
 	}
 	return named, nil
 }

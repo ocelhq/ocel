@@ -218,6 +218,8 @@ message ManifestApp {
   string deployment_id = 6;
 
   string compute = 7 [(buf.validate.field).string = {in: ["serverless", "container"]}];
+
+  bool client_bundle = 8;
 }
 
 message ManifestVariable {

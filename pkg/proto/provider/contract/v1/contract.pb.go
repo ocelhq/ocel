@@ -1310,6 +1310,7 @@ type ManifestApp struct {
 	Folder        string                 `protobuf:"bytes,5,opt,name=folder,proto3" json:"folder,omitempty"`
 	DeploymentId  string                 `protobuf:"bytes,6,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
 	Compute       string                 `protobuf:"bytes,7,opt,name=compute,proto3" json:"compute,omitempty"`
+	ClientBundle  bool                   `protobuf:"varint,8,opt,name=client_bundle,json=clientBundle,proto3" json:"client_bundle,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1391,6 +1392,13 @@ func (x *ManifestApp) GetCompute() string {
 		return x.Compute
 	}
 	return ""
+}
+
+func (x *ManifestApp) GetClientBundle() bool {
+	if x != nil {
+		return x.ClientBundle
+	}
+	return false
 }
 
 type ManifestVariable struct {
@@ -4736,7 +4744,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\thostnames\x18\x02 \x03(\tR\thostnames\"i\n" +
 	"\aRuntime\x121\n" +
 	"\x04name\x18\x01 \x01(\tB\x1d\xbaH\x1ar\x18R\x04nodeR\x04nextR\x02goR\x06pythonR\x04name\x12+\n" +
-	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\xf0\x02\n" +
+	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\x95\x03\n" +
 	"\vManifestApp\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
 	"\aruntime\x18\x02 \x01(\v2\x1d.provider.contract.v1.RuntimeR\aruntime\x12;\n" +
@@ -4745,7 +4753,8 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x06folder\x18\x05 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12#\n" +
 	"\rdeployment_id\x18\x06 \x01(\tR\fdeploymentId\x126\n" +
 	"\acompute\x18\a \x01(\tB\x1c\xbaH\x19r\x17R\n" +
-	"serverlessR\tcontainerR\acompute\"\x8d\x02\n" +
+	"serverlessR\tcontainerR\acompute\x12#\n" +
+	"\rclient_bundle\x18\b \x01(\bR\fclientBundle\"\x8d\x02\n" +
 	"\x10ManifestVariable\x12+\n" +
 	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12?\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1f.app.resources.v1.VariableClassB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05class\x12\x19\n" +

@@ -123,7 +123,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, err
 	}
 
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.Bindings), functions, variablesByApp(variables, functions))
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Dir, cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.Bindings), functions, variablesByApp(variables, functions))
 	if err != nil {
 		return nil, err
 	}
@@ -215,23 +215,24 @@ func variablesByApp(variables map[string][]manifestbuilder.Variable, functions [
 }
 
 type appPlan struct {
-	name      string
-	dir       string
-	runtime   string
-	variables []manifestbuilder.Variable
+	name         string
+	dir          string
+	clientBundle bool
+	variables    []manifestbuilder.Variable
 }
 
 func appPlans(cfg *projectconfig.Config, variables map[string][]manifestbuilder.Variable) []appPlan {
 	if len(cfg.Apps) == 0 {
-		return []appPlan{{dir: cfg.Dir, runtime: envwire.RootRuntime, variables: variables[envwire.RootApp]}}
+		return []appPlan{{dir: cfg.Dir, clientBundle: discovery.ClientBundle(envwire.RootRuntime, cfg.Dir), variables: variables[envwire.RootApp]}}
 	}
 	plans := make([]appPlan, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
+		dir := filepath.Join(cfg.Dir, a.Path)
 		plans = append(plans, appPlan{
-			name:      a.Name,
-			dir:       filepath.Join(cfg.Dir, a.Path),
-			runtime:   a.Runtime.Name,
-			variables: variables[a.Name],
+			name:         a.Name,
+			dir:          dir,
+			clientBundle: discovery.ClientBundle(a.Runtime.Name, dir),
+			variables:    variables[a.Name],
 		})
 	}
 	return plans
@@ -255,7 +256,7 @@ func buildEnv(plans []appPlan) map[string]map[string]string {
 func clientApps(plans []appPlan) []clientenv.App {
 	apps := make([]clientenv.App, 0, len(plans))
 	for _, plan := range plans {
-		apps = append(apps, clientenv.App{Name: plan.name, Dir: plan.dir, Runtime: plan.runtime, Variables: plan.variables})
+		apps = append(apps, clientenv.App{Name: plan.name, Dir: plan.dir, ClientBundle: plan.clientBundle, Variables: plan.variables})
 	}
 	return apps
 }
@@ -284,7 +285,7 @@ func servedByFunctions(functions []manifestbuilder.Function, cfg *projectconfig.
 	})
 }
 
-func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string, images map[string]string, functions []manifestbuilder.Function) []manifestbuilder.App {
+func toApps(projectDir string, apps []projectconfig.App, usages []attribution.Usage, compute string, images map[string]string, functions []manifestbuilder.Function) []manifestbuilder.App {
 	byApp := make(map[string][]manifestbuilder.Usage, len(apps))
 	for _, u := range usages {
 		byApp[u.App] = append(byApp[u.App], manifestbuilder.Usage{Type: u.Type, Name: u.Name, Files: u.Files})
@@ -297,6 +298,7 @@ func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string
 		out = append(out, manifestbuilder.App{
 			Name:            a.Name,
 			Runtime:         manifestwire.Runtime(a.Runtime),
+			ClientBundle:    discovery.ClientBundle(a.Runtime.Name, filepath.Join(projectDir, a.Path)),
 			Compute:         a.Compute,
 			Domains:         a.Domains,
 			Folder:          a.Folder,
@@ -307,7 +309,14 @@ func toApps(apps []projectconfig.App, usages []attribution.Usage, compute string
 	}
 	for _, name := range slices.Sorted(maps.Keys(byApp)) {
 		if !named[name] {
-			out = append(out, manifestbuilder.App{Name: name, Runtime: unnamedRuntime(name, functions), Compute: compute, Usages: byApp[name]})
+			runtime := unnamedRuntime(name, functions)
+			out = append(out, manifestbuilder.App{
+				Name:         name,
+				Runtime:      runtime,
+				ClientBundle: providerkit.RuntimeBundlesClient(runtime.Name),
+				Compute:      compute,
+				Usages:       byApp[name],
+			})
 		}
 	}
 	return out
@@ -338,20 +347,6 @@ func workspaceMembers(inAnImage bool, appDir string) []string {
 		return nil
 	}
 	return located.Members()
-}
-
-var runtimeLanguages = map[string]discovery.Language{
-	providerkit.RuntimePython: discovery.Python,
-	providerkit.RuntimeGo:     discovery.Go,
-	providerkit.RuntimeNode:   discovery.JS,
-	providerkit.RuntimeNext:   discovery.JS,
-}
-
-func appLanguage(runtime projectconfig.Runtime, appDir string) discovery.Language {
-	if language, ok := runtimeLanguages[runtime.Name]; ok {
-		return language
-	}
-	return discovery.LanguageOfApp(appDir)
 }
 
 func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Function, compute, configName string) ([]attribution.App, error) {
@@ -393,7 +388,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 		out = append(out, attribution.App{
 			Name:      a.Name,
 			Path:      a.Path,
-			Language:  appLanguage(a.Runtime, appDir),
+			Language:  discovery.LanguageOf(a.Runtime.Name, appDir),
 			Roots:     roots,
 			Container: inAnImage,
 			Members:   workspaceMembers(inAnImage, appDir),

@@ -127,7 +127,7 @@ export const CLIENT_URL_KEY = "NEXT_PUBLIC_OCEL_URL";
 
 const RESERVED_KEYS: ReadonlyMap<string, string> = new Map([
   [URL_KEY, "every app"],
-  [CLIENT_URL_KEY, "every Node and Next.js app"],
+  [CLIENT_URL_KEY, "every JavaScript app"],
 ]);
 
 const KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;

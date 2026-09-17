@@ -78,7 +78,7 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		if err := Generate(dir, []App{{Dir: dir, Runtime: "next", Variables: []manifestbuilder.Variable{clientVar("NEXT_PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, ClientBundle: true, Variables: []manifestbuilder.Variable{clientVar("NEXT_PUBLIC_SITE_URL", "https://example.com")}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -110,7 +110,7 @@ func TestGenerate(t *testing.T) {
 		site := clientVar("NEXT_PUBLIC_SITE_URL", "https://example.com")
 		site.Source, site.SchemaSource = envModule, schemaModule
 
-		if err := Generate(dir, []App{{Dir: dir, Runtime: "next", Variables: []manifestbuilder.Variable{site, port}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, ClientBundle: true, Variables: []manifestbuilder.Variable{site, port}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -347,7 +347,7 @@ func TestGenerate(t *testing.T) {
 
 		dir := appDir(t)
 
-		if err := Generate(dir, []App{{Dir: dir, Runtime: "node", Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
+		if err := Generate(dir, []App{{Dir: dir, ClientBundle: true, Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
 			t.Fatalf("Generate: %v", err)
 		}
 
@@ -363,18 +363,17 @@ func TestGenerate(t *testing.T) {
 	t.Run("offers the built-in deployment url only to an app ocel writes it for", func(t *testing.T) {
 		t.Parallel()
 		for name, tc := range map[string]struct {
-			runtime string
-			offered bool
+			clientBundle bool
+			offered      bool
 		}{
-			"a next app":                      {runtime: "next", offered: true},
-			"a node app":                      {runtime: "node", offered: true},
-			"a container app with no runtime": {runtime: "", offered: false},
+			"an app whose bundle reads it":       {clientBundle: true, offered: true},
+			"an app whose bundle never reads it": {clientBundle: false, offered: false},
 		} {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 				dir := appDir(t)
 
-				if err := Generate(dir, []App{{Dir: dir, Runtime: tc.runtime}}); err != nil {
+				if err := Generate(dir, []App{{Dir: dir, ClientBundle: tc.clientBundle}}); err != nil {
 					t.Fatalf("Generate: %v", err)
 				}
 

@@ -263,7 +263,7 @@ func TestToApps(t *testing.T) {
 	t.Run("carries the folder binding into the manifest", func(t *testing.T) {
 		t.Parallel()
 
-		got := toApps([]projectconfig.App{
+		got := toApps(t.TempDir(), []projectconfig.App{
 			{Name: "admin", Folder: "/admin"},
 			{Name: "web"},
 		}, nil, "serverless", nil, nil)
@@ -280,7 +280,7 @@ func TestToApps(t *testing.T) {
 	t.Run("hands each app only the usage edges attributed to it", func(t *testing.T) {
 		t.Parallel()
 
-		got := toApps([]projectconfig.App{{Name: "admin"}, {Name: "web"}}, []attribution.Usage{
+		got := toApps(t.TempDir(), []projectconfig.App{{Name: "admin"}, {Name: "web"}}, []attribution.Usage{
 			{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main", Files: []string{"apps/web/src/server.ts"}},
 			{App: "admin", Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", Files: []string{"apps/admin/src/upload.ts"}},
 		}, "serverless", nil, nil)

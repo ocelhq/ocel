@@ -2,6 +2,8 @@ package deploy
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -20,7 +22,7 @@ func TestAnAppOnlyItsUsagesNameCarriesTheRuntimeItsURLIsWrittenFor(t *testing.T)
 
 	t.Run("the node builder's runtime where no function names one", func(t *testing.T) {
 		t.Parallel()
-		got := toApps(nil, usages, "container", nil, nil)
+		got := toApps(t.TempDir(), nil, usages, "container", nil, nil)
 		if len(got) != 1 || got[0].Runtime.Name != providerkit.RuntimeNode {
 			t.Errorf("toApps() = %+v, want web on %q: the CLI writes %s for this project's unnamed app, so the provider must read the same runtime or record ocel's copy as declared", got, providerkit.RuntimeNode, providerkit.ClientURLEnvName)
 		}
@@ -29,7 +31,7 @@ func TestAnAppOnlyItsUsagesNameCarriesTheRuntimeItsURLIsWrittenFor(t *testing.T)
 	t.Run("the runtime its own functions name", func(t *testing.T) {
 		t.Parallel()
 		functions := []manifestbuilder.Function{{App: "web", Runtime: manifestbuilder.Runtime{Name: providerkit.RuntimeNext}}}
-		got := toApps(nil, usages, "serverless", nil, functions)
+		got := toApps(t.TempDir(), nil, usages, "serverless", nil, functions)
 		if len(got) != 1 || got[0].Runtime.Name != providerkit.RuntimeNext {
 			t.Errorf("toApps() = %+v, want web on %q: a next app keeps the runtime that serves its cache", got, providerkit.RuntimeNext)
 		}
@@ -80,7 +82,7 @@ func TestTheManifestCarriesEveryAppsCompute(t *testing.T) {
 func TestAnAppOnlyItsUsagesNameTakesTheProvidersDefaultCompute(t *testing.T) {
 	t.Parallel()
 
-	got := toApps(nil, []attribution.Usage{
+	got := toApps(t.TempDir(), nil, []attribution.Usage{
 		{App: "web", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "main"},
 	}, "container", nil, nil)
 
@@ -120,5 +122,40 @@ func TestAContainerAppThatNamesNoRuntimeStillReachesTheProvider(t *testing.T) {
 	}
 	if got := computeOf(t, manifest, "api"); got != "container" {
 		t.Errorf("manifest app %q compute = %q, want %q", "api", got, "container")
+	}
+}
+
+func TestTheManifestCarriesWhichAppsBundleReadsTheClientURL(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		app      projectconfig.App
+		manifest string
+		want     bool
+	}{
+		{name: "a next app", app: projectconfig.App{Name: "web", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeNext}}, want: true},
+		{name: "a go app", app: projectconfig.App{Name: "api", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeGo}}, manifest: "go.mod"},
+		{name: "a container app holding a package.json", app: projectconfig.App{Name: "store", Compute: string(providerkit.ComputeContainer)}, manifest: "package.json", want: true},
+		{name: "a container app holding a go.mod", app: projectconfig.App{Name: "worker", Compute: string(providerkit.ComputeContainer)}, manifest: "go.mod"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			tc.app.Path = tc.app.Name
+			dir := filepath.Join(root, tc.app.Path)
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatalf("create %s: %v", dir, err)
+			}
+			if tc.manifest != "" {
+				if err := os.WriteFile(filepath.Join(dir, tc.manifest), nil, 0o644); err != nil {
+					t.Fatalf("write %s: %v", tc.manifest, err)
+				}
+			}
+
+			got := toApps(root, []projectconfig.App{tc.app}, nil, "serverless", nil, nil)
+			if len(got) != 1 || got[0].ClientBundle != tc.want {
+				t.Errorf("toApps() = %+v, want ClientBundle %v: the provider reads it off the manifest, and a container app carries no runtime to read instead", got, tc.want)
+			}
+		})
 	}
 }

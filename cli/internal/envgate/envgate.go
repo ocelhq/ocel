@@ -53,9 +53,9 @@ type Values interface {
 }
 
 type App struct {
-	Name    string
-	Folder  string
-	Runtime string
+	Name         string
+	Folder       string
+	ClientBundle bool
 }
 
 type Scope struct {
@@ -68,7 +68,7 @@ type Scope struct {
 func (s Scope) OcelWrites(key string, folders []string) bool {
 	return slices.ContainsFunc(s.Apps, func(app App) bool {
 		reached := len(folders) == 0 || slices.Contains(folders, app.Folder)
-		return reached && providerkit.OcelWritten(app.Runtime, key)
+		return reached && providerkit.OcelWritten(app.ClientBundle, key)
 	})
 }
 

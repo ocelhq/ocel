@@ -27,10 +27,10 @@ var configFiles = []string{"tsconfig.json", "jsconfig.json"}
 var recordPath = filepath.Join(constants.ProjectStateDirName, "output", "client-digests.json")
 
 type App struct {
-	Name      string
-	Dir       string
-	Runtime   string
-	Variables []manifestbuilder.Variable
+	Name         string
+	Dir          string
+	ClientBundle bool
+	Variables    []manifestbuilder.Variable
 }
 
 type Key struct {
@@ -52,7 +52,7 @@ func Generate(projectDir string, apps []App) error {
 }
 
 func GenerateKeys(projectDir string, app App, keys []Key) error {
-	keys = Offered(keys, app.Runtime)
+	keys = Offered(keys, app.ClientBundle)
 	path := accessorPath(projectDir, app.Name, app.Dir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
@@ -287,9 +287,9 @@ func sourceOrUnknown(source string) string {
 	return source
 }
 
-func Offered(keys []Key, runtime string) []Key {
+func Offered(keys []Key, clientBundle bool) []Key {
 	keys = slices.Clone(keys)
-	if providerkit.OcelWritten(runtime, providerkit.ClientURLEnvName) {
+	if providerkit.OcelWritten(clientBundle, providerkit.ClientURLEnvName) {
 		keys = append(keys, Key{Name: providerkit.ClientURLEnvName})
 	}
 	slices.SortFunc(keys, func(a, b Key) int { return strings.Compare(a.Name, b.Name) })
