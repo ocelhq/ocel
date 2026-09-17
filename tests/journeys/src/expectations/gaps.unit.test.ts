@@ -296,6 +296,7 @@ describe("the gap list", () => {
       "deploy/node",
       "deploy/go",
       "deploy/python",
+      "deploy/rust",
       "deploy/next",
       "deploy/workspace",
     ]);
