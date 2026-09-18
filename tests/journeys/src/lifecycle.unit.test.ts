@@ -1,9 +1,17 @@
 import { describe, expect, it } from "bun:test";
 import type { Check } from "./checks/context";
-import { phasesDriven, stepsPlanned, type TestRef } from "./lifecycle";
+import {
+  type CellRun,
+  phasesDriven,
+  phasesOf,
+  stepsOf,
+  stepsPlanned,
+  type TestRef,
+} from "./lifecycle";
 import { fixture } from "./matrix/types";
 import { defaults } from "./matrix/variants";
-import type { Deployment } from "./targets/types";
+import { ExternalStack } from "./targets/aws/stacks/bindings";
+import type { CellContext, Deployment } from "./targets/types";
 
 const ping: Check = { title: "ping", run: async () => undefined };
 const living = fixture("lifecycle/next", {
@@ -72,5 +80,67 @@ describe("a test a gap names", () => {
     type Accepts<T, U> = [U] extends [T] ? true : false;
     const inline: Accepts<TestRef, { titles: string[] }> = false;
     expect(inline).toBe(false);
+  });
+});
+
+describe("a cell with an external stack", () => {
+  const calls: string[] = [];
+  const said = (what: string) => async () => {
+    calls.push(what);
+  };
+
+  class RecordingStack extends ExternalStack {
+    override readonly checks = {
+      afterPublish: [{ title: "records", run: said("check records") }],
+      whileServing: [{ title: "routes", run: said("check routes") }],
+      afterOcelDestroy: [{ title: "survives", run: said("check survives") }],
+      afterStackDestroy: [{ title: "empties", run: said("check empties") }],
+    };
+    override refuse = said("ocel refuses");
+    deploy = said("never through the stack itself");
+    destroy = said("never through the stack itself");
+    sweep = said("never through the stack itself");
+  }
+
+  const stacked = fixture("sdk/with-sst", {
+    apps: ["web"],
+    checks: [{ title: "ping", run: said("check ping") }],
+    stack: new RecordingStack(),
+    on: { aws: [defaults] },
+  });
+  const run: CellRun = {
+    cell: {} as CellContext,
+    deployStack: said("stack deploys"),
+    deploy: said("ocel deploys"),
+    redeploy: said("ocel redeploys"),
+    rollback: said("ocel rolls back"),
+    destroy: said("ocel destroys"),
+    destroyStack: said("stack destroys"),
+    live: () => ({}) as ReturnType<CellRun["live"]>,
+  };
+
+  it("deploys the stack before ocel, and destroys it only before the checks that follow it", async () => {
+    calls.length = 0;
+    const cellOf = { name: stacked.name, fixture: stacked, variant: defaults };
+    for (const step of stepsOf(cellOf, phasesOf(stacked, false))) {
+      await step.run(run);
+    }
+    expect(calls).toEqual([
+      "ocel refuses",
+      "stack deploys",
+      "check records",
+      "stack deploys",
+      "ocel deploys",
+      "ocel deploys",
+      "check ping",
+      "stack deploys",
+      "check routes",
+      "ocel destroys",
+      "stack deploys",
+      "check survives",
+      "stack deploys",
+      "stack destroys",
+      "check empties",
+    ]);
   });
 });

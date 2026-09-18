@@ -390,7 +390,7 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: The node bundles the fixtures and the ladders import
+      - name: The node bundles the fixtures and the external stacks import
         run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
 
       - name: The musl targets a rust fixture compiles for
@@ -924,7 +924,7 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: The node bundles the fixtures and the ladders import
+      - name: The node bundles the fixtures and the external stacks import
         run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
 
       - name: Setup Go

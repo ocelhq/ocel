@@ -1,7 +1,7 @@
 import type { Compute } from "ocel/config";
-import type { Check, CheckContext } from "../checks/context";
+import type { Check } from "../checks/context";
 import type { TestRef } from "../lifecycle";
-import type { CellContext } from "../targets/types";
+import type { ExternalStack } from "../targets/aws/stacks/bindings";
 
 export type { Compute };
 
@@ -64,22 +64,6 @@ export function variant(name: string, shape: Omit<Variant, "name">): Variant {
   return { name, ...shape };
 }
 
-export type LadderPoint = "publish" | "consume" | "outlive" | "prune";
-
-export type LadderCheck = {
-  title: string;
-  at: LadderPoint;
-  run: (cell: CellContext, live?: CheckContext) => Promise<void>;
-};
-
-export type Ladder = {
-  refuse?: (cell: CellContext) => Promise<void>;
-  beforeUp?: (cell: CellContext) => Promise<void>;
-  afterDestroy?: (cell: CellContext) => Promise<void>;
-  checks?: LadderCheck[];
-  sweep?: (runId: string) => Promise<void>;
-};
-
 export type Sample = { group: string; lead?: true };
 
 export function sampleGroupOf(fixture: Pick<Fixture, "concern" | "sample">): string | undefined {
@@ -92,7 +76,7 @@ export type Fixture = {
   apps: string[];
   redeploys?: true;
   checks: Check[];
-  ladder?: Ladder;
+  stack?: ExternalStack;
   on: Partial<Record<TargetName, Variant[]>>;
   sample?: Sample;
 };

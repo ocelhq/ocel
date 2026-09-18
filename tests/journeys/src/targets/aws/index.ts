@@ -534,9 +534,9 @@ async function sweep(runId: string): Promise<void> {
   );
 
   for (const fixture of fixtures) {
-    const sweepLadder = fixture.ladder?.sweep;
-    if (sweepLadder) {
-      await despite(complaints, `${fixture.name} ladder sweep`, () => sweepLadder(runId));
+    const stack = fixture.stack;
+    if (stack) {
+      await despite(complaints, `${fixture.name} stack sweep`, () => stack.sweep(runId));
     }
   }
 

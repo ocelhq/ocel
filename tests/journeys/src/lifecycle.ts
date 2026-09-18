@@ -1,15 +1,16 @@
 import type { Check, CheckContext } from "./checks/context";
-import type { Cell, Fixture, LadderCheck, LadderPoint, Phase } from "./matrix/types";
+import type { Cell, Fixture, Phase } from "./matrix/types";
+import type { StackPoint } from "./targets/aws/stacks/bindings";
 import { type CellContext, hasReleaseCycle, type ReleaseCycle, type Target } from "./targets/types";
 
 export type CellRun = {
   cell: CellContext;
-  beforeUp: () => Promise<void>;
+  deployStack: () => Promise<void>;
   deploy: () => Promise<void>;
   redeploy: () => Promise<void>;
   rollback: () => Promise<void>;
   destroy: () => Promise<void>;
-  afterDestroy: () => Promise<void>;
+  destroyStack: () => Promise<void>;
   live: (app: string, phase: Phase) => CheckContext;
 };
 
@@ -24,7 +25,14 @@ export const DEPLOY = "deploy";
 const REDEPLOY = "redeploy";
 const ROLLBACK = "rollback";
 const DESTROY = "destroy";
-const REFUSE = "refuse";
+const REFUSE = "ocel refuses before the stack publishes";
+
+const STACK_POINT_TITLES: Record<StackPoint, string> = {
+  afterPublish: "after publish",
+  whileServing: "while serving",
+  afterOcelDestroy: "after ocel destroy",
+  afterStackDestroy: "after stack destroy",
+};
 
 export type CheckedPhase = "verify" | "redeploy" | "rollback";
 
@@ -34,8 +42,8 @@ function checkTitle(phase: CheckedPhase, title: string): string {
   return phase === "verify" ? title : `${phase} · ${title}`;
 }
 
-function ladderTitle(at: LadderPoint, title: string): string {
-  return `${at} · ${title}`;
+function stackCheckTitle(point: StackPoint, title: string): string {
+  return `${STACK_POINT_TITLES[point]} · ${title}`;
 }
 
 declare const built: unique symbol;
@@ -69,9 +77,8 @@ export function phasesOf(fixture: Fixture, keep: boolean): Phase[] {
 }
 
 export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
-  const { apps, checks, ladder } = cell.fixture;
-  const at = (point: LadderPoint): LadderCheck[] =>
-    (ladder?.checks ?? []).filter((one) => one.at === point);
+  const { apps, checks, stack } = cell.fixture;
+  const at = (point: StackPoint) => stack?.checks[point] ?? [];
   const perApp = (make: (app: string) => Step[]): Step[] => apps.flatMap(make);
   const has = (phase: Phase) => phases.includes(phase);
 
@@ -85,12 +92,12 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
         await one.run(run.live(app, phase));
       },
     })),
-    ...at("consume").map((one) => ({
+    ...at("whileServing").map((one) => ({
       app,
-      title: checkTitle(phase, ladderTitle("consume", one.title)),
+      title: checkTitle(phase, stackCheckTitle("whileServing", one.title)),
       phase,
       run: async (run: CellRun) => {
-        await run.beforeUp();
+        await run.deployStack();
         await one.run(run.cell, run.live(app, phase));
       },
     })),
@@ -104,15 +111,14 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
         ]
       : [];
 
-  const refuse = ladder?.refuse;
   return [
     ...perApp((app) => [
-      ...(refuse ? [{ app, title: REFUSE, run: (run: CellRun) => refuse(run.cell) }] : []),
-      ...at("publish").map((one) => ({
+      ...(stack ? [{ app, title: REFUSE, run: (run: CellRun) => stack.refuse(run.cell) }] : []),
+      ...at("afterPublish").map((one) => ({
         app,
-        title: ladderTitle("publish", one.title),
+        title: stackCheckTitle("afterPublish", one.title),
         run: async (run: CellRun) => {
-          await run.beforeUp().catch(() => undefined);
+          await run.deployStack().catch(() => undefined);
           await one.run(run.cell);
         },
       })),
@@ -124,7 +130,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
             title: DEPLOY,
             phase: "deploy" as const,
             run: async (run: CellRun) => {
-              await run.beforeUp();
+              await run.deployStack();
               await run.deploy();
             },
           },
@@ -139,20 +145,20 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
         ])
       : []),
     ...perApp((app) => [
-      ...at("outlive").map((one) => ({
+      ...at("afterOcelDestroy").map((one) => ({
         app,
-        title: ladderTitle("outlive", one.title),
+        title: stackCheckTitle("afterOcelDestroy", one.title),
         run: async (run: CellRun) => {
-          await run.beforeUp();
+          await run.deployStack();
           await one.run(run.cell);
         },
       })),
-      ...at("prune").map((one) => ({
+      ...at("afterStackDestroy").map((one) => ({
         app,
-        title: ladderTitle("prune", one.title),
+        title: stackCheckTitle("afterStackDestroy", one.title),
         run: async (run: CellRun) => {
-          await run.beforeUp();
-          await run.afterDestroy();
+          await run.deployStack();
+          await run.destroyStack();
           await one.run(run.cell);
         },
       })),

@@ -18,7 +18,7 @@ const overlapping: TimelineInput = {
     { cell: "with-sst", phase: "destroy", title: "destroy", ...at(70, 110) },
     { cell: "next-hello", phase: "deploy", title: "deploy", ...at(0, 30) },
     { cell: "next-hello", phase: "verify", title: "health", ...at(30, 5) },
-    { cell: "next-hello", title: "publish · a bucket", ...at(35, 5) },
+    { cell: "next-hello", title: "after publish · a bucket", ...at(35, 5) },
     { cell: "next-hello", phase: "destroy", title: "destroy", ...at(40, 20) },
   ],
   modules: [
@@ -40,10 +40,10 @@ describe("phaseOf", () => {
     );
   });
 
-  it("folds a ladder phase into other", () => {
-    expect(phaseOf({ cell: "a", title: "publish · a bucket", startTime: 0, duration: 1 })).toBe(
-      "other",
-    );
+  it("folds an external stack check into other", () => {
+    expect(
+      phaseOf({ cell: "a", title: "after publish · a bucket", startTime: 0, duration: 1 }),
+    ).toBe("other");
   });
 });
 

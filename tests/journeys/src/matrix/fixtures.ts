@@ -12,8 +12,8 @@ import {
   todoAndDocumentChecks,
   vendoredDependencyChecks,
 } from "../checks";
-import { pulumiLadder } from "../targets/aws/ladder-pulumi";
-import { sstLadder } from "../targets/aws/ladder-sst";
+import { PulumiStack } from "../targets/aws/stacks/pulumi";
+import { SstStack } from "../targets/aws/stacks/sst";
 import { type Fixture, fixture } from "./types";
 import { apiGateway, cloudflare, container, defaults } from "./variants";
 
@@ -159,14 +159,14 @@ export const sdk = {
     apps: ["web"],
     redeploys: true,
     checks: BINDING_CHECKS,
-    ladder: sstLadder,
+    stack: new SstStack(),
     on: { aws: [container, apiGateway] },
   }),
   withPulumi: fixture("sdk/with-pulumi", {
     apps: ["web"],
     redeploys: true,
     checks: BINDING_CHECKS,
-    ladder: pulumiLadder,
+    stack: new PulumiStack(),
     on: { aws: [container, apiGateway] },
   }),
 };
