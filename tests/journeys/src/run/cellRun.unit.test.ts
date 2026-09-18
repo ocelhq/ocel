@@ -157,7 +157,24 @@ describe("a cell run", () => {
     await expect(run.deploy()).rejects.toThrow(/the bootstrap failed/);
     await expect(run.deployStack()).rejects.toThrow(/the bootstrap failed/);
     await expect(run.refuse()).rejects.toThrow(/the bootstrap failed/);
+    const published = { title: "records", run: async () => void called.push("check records") };
+    await expect(run.checkStack(published)).rejects.toThrow(/the bootstrap failed/);
     expect(called).toEqual([]);
+  });
+
+  it("checks a stack against the cell, and what it serves once deployed", async () => {
+    const seen: string[] = [];
+    const run = runOf([]);
+    const check = {
+      title: "routes",
+      run: async (cell: { slug: string }, serving?: { app: string }) => {
+        seen.push(`${cell.slug} ${serving?.app ?? "unserved"}`);
+      },
+    };
+    await run.checkStack(check);
+    await run.deploy();
+    await run.checkStack(check, run.verifying("web", "verify"));
+    expect(seen).toEqual(["j-1-sdk-with-sst unserved", "j-1-sdk-with-sst web"]);
   });
 
   it("touches nothing when the process could not be prepared", async () => {

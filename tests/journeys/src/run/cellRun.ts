@@ -10,6 +10,7 @@ import { projectSlug } from "../identity";
 import type { Cell, Fixture, Phase, Variant } from "../matrix/types";
 import { fixtureDir } from "../paths";
 import { namespaceOfSlug } from "../targets/aws/namespace";
+import type { StackCheck } from "../targets/aws/stacks/bindings";
 import { type Deployment, hasReleaseCycle, type Target } from "../targets/types";
 
 export type CellUnderTest = Pick<
@@ -65,6 +66,11 @@ export class CellRun {
   async refuse(): Promise<void> {
     this.ready();
     await this.fixture.stack?.refuse(this);
+  }
+
+  async checkStack(check: StackCheck, serving?: CheckContext): Promise<void> {
+    this.ready();
+    await check.run(this, serving);
   }
 
   deployStack(): Promise<void> {

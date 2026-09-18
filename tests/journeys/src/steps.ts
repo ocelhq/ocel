@@ -91,7 +91,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
       phase,
       run: async (run: CellRun) => {
         await run.deployStack();
-        await one.run(run, run.verifying(app, phase));
+        await run.checkStack(one, run.verifying(app, phase));
       },
     })),
   ];
@@ -112,7 +112,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
         title: stackCheckTitle("afterPublish", one.title),
         run: async (run: CellRun) => {
           await run.deployStack().catch(() => undefined);
-          await one.run(run);
+          await run.checkStack(one);
         },
       })),
     ]),
@@ -143,7 +143,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
         title: stackCheckTitle("afterOcelDestroy", one.title),
         run: async (run: CellRun) => {
           await run.deployStack();
-          await one.run(run);
+          await run.checkStack(one);
         },
       })),
       ...at("afterStackDestroy").map((one) => ({
@@ -152,7 +152,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
         run: async (run: CellRun) => {
           await run.deployStack();
           await run.destroyStack();
-          await one.run(run);
+          await run.checkStack(one);
         },
       })),
     ]),
