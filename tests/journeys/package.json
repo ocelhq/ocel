@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "cell": "bun src/run/cell.ts",
-    "test": "bun test src",
+    "test": "bun test ./src",
     "journey": "bun src/run/journey.ts",
     "journey:aws": "OCEL_TARGET=aws bun src/run/journey.ts",
     "journey:vps": "OCEL_TARGET=vps bun src/run/journey.ts",
