@@ -61,6 +61,15 @@ describe("the coverage a run asks for", () => {
     );
   });
 
+  it("refuses full and covering, which every-cell and sampled replaced", () => {
+    expect(() => filterFrom({ OCEL_JOURNEY_COVERAGE: "full" })).toThrow(
+      /OCEL_JOURNEY_COVERAGE is full, and a journey runs every-cell or sampled/,
+    );
+    expect(() => filterFrom({ OCEL_JOURNEY_COVERAGE: "covering" })).toThrow(
+      /OCEL_JOURNEY_COVERAGE is covering, and a journey runs every-cell or sampled/,
+    );
+  });
+
   it("draws with the seed and the touched fixtures it is handed, and without one when no seed is", () => {
     expect(filterFrom({ OCEL_JOURNEY_TOUCHED: "sdk/node" }).draw).toBeUndefined();
     expect(
