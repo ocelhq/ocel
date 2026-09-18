@@ -4,11 +4,24 @@ import { check, stepRef } from "./lifecycle";
 import { type Fixture, fixture, type Gap, type Lane, variant } from "./matrix/types";
 import { defaults } from "./matrix/variants";
 import { type Ask, EVERYTHING, type Plan, plan } from "./plan";
+import { ExternalStack } from "./targets/aws/stacks/bindings";
 
 const edge = variant("edge", { offeredOn: ["aws"], config: {} });
 const box = variant("box", { offeredOn: ["aws", "gcp"], config: {} });
 
 const ping: Check = { title: "ping", run: async () => undefined };
+
+class ProbeStack extends ExternalStack {
+  override readonly checks = {
+    afterPublish: [{ title: "records", run: async () => undefined }],
+    whileServing: [{ title: "routes", run: async () => undefined }],
+    afterOcelDestroy: [{ title: "survives", run: async () => undefined }],
+    afterStackDestroy: [{ title: "empties", run: async () => undefined }],
+  };
+  async deploy() {}
+  async destroy() {}
+  async sweep() {}
+}
 const pong: Check = { title: "pong", run: async () => undefined };
 
 function one(name: string, over: Partial<Omit<Fixture, "name" | "concern">> = {}): Fixture {
@@ -118,34 +131,23 @@ describe("the steps a cell walks through", () => {
     ]);
   });
 
-  it("fits a ladder's own checks around the lifecycle at the points it names", () => {
-    const ladder = one("sdk/with-sst", {
-      redeploys: true,
-      ladder: {
-        refuse: async () => undefined,
-        checks: [
-          { title: "records", at: "publish", run: async () => undefined },
-          { title: "routes", at: "consume", run: async () => undefined },
-          { title: "survives", at: "outlive", run: async () => undefined },
-          { title: "empties", at: "prune", run: async () => undefined },
-        ],
-      },
-    });
-    expect(titlesOf(planOf([ladder]), "sdk/with-sst")).toEqual([
-      "refuse",
-      "publish · records",
+  it("fits an external stack's checks around the lifecycle at the points it names", () => {
+    const stacked = one("sdk/with-sst", { redeploys: true, stack: new ProbeStack() });
+    expect(titlesOf(planOf([stacked]), "sdk/with-sst")).toEqual([
+      "ocel refuses before the stack publishes",
+      "after publish · records",
       "deploy",
       "ping",
-      "consume · routes",
+      "while serving · routes",
       "redeploy",
       "redeploy · ping",
-      "redeploy · consume · routes",
+      "redeploy · while serving · routes",
       "rollback",
       "rollback · ping",
-      "rollback · consume · routes",
+      "rollback · while serving · routes",
       "destroy",
-      "outlive · survives",
-      "prune · empties",
+      "after ocel destroy · survives",
+      "after stack destroy · empties",
     ]);
   });
 });

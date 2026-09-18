@@ -1,6 +1,6 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
-import { harnessStagesIn } from "./ladder-sst";
+import { harnessStagesIn } from "./sst";
 
 describe("harnessStagesIn", () => {
   it("names every harness stage the SST home records, whoever ran it", () => {

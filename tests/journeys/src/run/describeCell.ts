@@ -54,7 +54,7 @@ export function describeCell(planFile: string, name: string) {
   const write = ledgerFor(runId, target.name, name);
   const say = live(name);
   const timeout = target.legTimeoutMs;
-  const ladder = fixture.ladder;
+  const stack = fixture.stack;
 
   let deployment: Deployment | undefined;
   let greeting = INITIAL_GREETING;
@@ -72,12 +72,12 @@ export function describeCell(planFile: string, name: string) {
     deployment = await target.deploy(cell);
   });
   const tearDown = once(() => target.destroy(cell));
-  const beforeUp = once(async () => {
-    await ladder?.beforeUp?.(cell);
+  const deployStack = once(async () => {
+    await stack?.deploy(cell);
   });
-  const afterDestroy = once(async () => {
+  const destroyStack = once(async () => {
     if (!planned.keep) {
-      await ladder?.afterDestroy?.(cell);
+      await stack?.destroy(cell);
     }
   });
   const redeployed = once(async () => {
@@ -93,7 +93,7 @@ export function describeCell(planFile: string, name: string) {
 
   const run: CellRun = {
     cell,
-    beforeUp,
+    deployStack,
     deploy: bringUp,
     redeploy: async () => {
       await bringUp();
@@ -110,7 +110,7 @@ export function describeCell(planFile: string, name: string) {
         `${slug} still exists on ${target.name} after destroy`,
       );
     },
-    afterDestroy,
+    destroyStack,
     live: (app: string, phase: Phase) => {
       assert.ok(deployment, "a check ran before the cell was deployed");
       return {

@@ -1,13 +1,13 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
-import type { Ladder } from "../../matrix/types";
-import { workTree } from "../../ocel";
-import { fixtureDir, laneDir, treeDir } from "../../paths";
-import { copyTree } from "../../tree";
-import { ladderChecks, recordPlacement, refuse } from "./ladder";
-import { place } from "./place";
-import { spawnBin } from "./run";
+import { workTree } from "../../../ocel";
+import { fixtureDir, laneDir, treeDir } from "../../../paths";
+import { copyTree } from "../../../tree";
+import type { CellContext } from "../../types";
+import { place } from "../place";
+import { spawnBin } from "../run";
+import { ExternalStack } from "./bindings";
 
 const EMULATED_SERVICES = [
   "cloudformation",
@@ -65,10 +65,8 @@ async function configureStack(dir: string, stack: string, env: NodeJS.ProcessEnv
   }
 }
 
-export const pulumiLadder: Ladder = {
-  refuse,
-
-  async beforeUp(cell) {
+export class PulumiStack extends ExternalStack {
+  async deploy(cell: CellContext): Promise<void> {
     const dir = await workTree(cell, "aws");
     const stack = `j-${cell.runId}`;
     const env = await pulumiEnv(cell.runId);
@@ -79,39 +77,37 @@ export const pulumiLadder: Ladder = {
       string,
       unknown
     >;
-    recordPlacement(cell.slug, {
+    this.recordPlacement(cell.slug, {
       subnetIds: (outputs.networkSubnetIds as string[] | undefined) ?? [],
       securityGroupIds: (outputs.networkSecurityGroupIds as string[] | undefined) ?? [],
     });
-  },
+  }
 
-  async afterDestroy(cell) {
+  async destroy(cell: CellContext): Promise<void> {
     const dir = await workTree(cell, "aws");
     const stack = `j-${cell.runId}`;
     const env = await pulumiEnv(cell.runId);
     await pulumi(dir, ["stack", "select", stack], env);
     await pulumi(dir, ["destroy", "--yes"], env);
     await pulumi(dir, ["stack", "rm", "--yes"], env);
-  },
-  checks: ladderChecks,
-  sweep: pulumiSweep,
-};
+  }
 
-export async function pulumiSweep(runId: string): Promise<void> {
-  const dir = await copyTree(
-    fixtureDir("sdk/with-pulumi"),
-    treeDir(runId, "aws", "ladder-sweep-with-pulumi"),
-  );
-  try {
-    const stack = `j-${runId}`;
-    const env = await pulumiEnv(runId);
-    if (!(await stackExists(dir, stack, env))) {
-      return;
+  async sweep(runId: string): Promise<void> {
+    const dir = await copyTree(
+      fixtureDir("sdk/with-pulumi"),
+      treeDir(runId, "aws", "stack-sweep-with-pulumi"),
+    );
+    try {
+      const stack = `j-${runId}`;
+      const env = await pulumiEnv(runId);
+      if (!(await stackExists(dir, stack, env))) {
+        return;
+      }
+      await pulumi(dir, ["stack", "select", stack], env);
+      await pulumi(dir, ["destroy", "--yes"], env);
+      await pulumi(dir, ["stack", "rm", "--yes"], env);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
     }
-    await pulumi(dir, ["stack", "select", stack], env);
-    await pulumi(dir, ["destroy", "--yes"], env);
-    await pulumi(dir, ["stack", "rm", "--yes"], env);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
   }
 }
