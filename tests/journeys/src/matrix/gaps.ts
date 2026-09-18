@@ -5,7 +5,7 @@ import {
   nextCacheChecks,
   nextDataCacheChecks,
 } from "../checks";
-import { check, step } from "../lifecycle";
+import { check, stepRef } from "../lifecycle";
 import { deploy, lifecycle, sdk } from "./fixtures";
 import { BASE, type Gap } from "./types";
 import { apiGateway, cloudflare, container } from "./variants";
@@ -37,7 +37,7 @@ export const gaps: Gap[] = [
         on: ["vps", "vps.incus"],
         fixtures: [lifecycle.next, sdk.node, sdk.next, sdk.workspace],
         variants: [BASE],
-        tests: [step.up],
+        tests: [stepRef.up],
         skip: true,
       },
     ],
@@ -59,14 +59,16 @@ export const gaps: Gap[] = [
     id: "sst-util-global",
     reason: "@ocel/sst reads $util off globalThis, which SST 3.19 does not set",
     issue: 857,
-    affects: [{ on: ["aws", "aws.floci"], fixtures: [sdk.withSst], tests: [step.up], skip: true }],
+    affects: [
+      { on: ["aws", "aws.floci"], fixtures: [sdk.withSst], tests: [stepRef.up], skip: true },
+    ],
   },
   {
     id: "pulumi-provider-serialisation",
     reason: "@ocel/pulumi's dynamic provider cannot be serialised, so pulumi up fails at preview",
     issue: 856,
     affects: [
-      { on: ["aws", "aws.floci"], fixtures: [sdk.withPulumi], tests: [step.up], skip: true },
+      { on: ["aws", "aws.floci"], fixtures: [sdk.withPulumi], tests: [stepRef.up], skip: true },
     ],
   },
   {
@@ -74,7 +76,7 @@ export const gaps: Gap[] = [
     reason:
       "the aws journey migrates through ocel run, which needs a console binding the lane never has",
     issue: 911,
-    affects: [{ on: ["aws"], fixtures: [sdk.node], tests: [step.up], skip: true }],
+    affects: [{ on: ["aws"], fixtures: [sdk.node], tests: [stepRef.up], skip: true }],
   },
   {
     id: "build-needs-postgres",
@@ -84,7 +86,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws"],
         fixtures: [lifecycle.next, ...SDK_NEXT_BEARING],
-        tests: [step.up],
+        tests: [stepRef.up],
         skip: true,
       },
     ],
@@ -98,10 +100,10 @@ export const gaps: Gap[] = [
         on: ["aws"],
         fixtures: DEPLOY_NEXT_BEARING,
         variants: [BASE],
-        tests: [step.up],
+        tests: [stepRef.up],
         skip: true,
       },
-      { on: ["aws"], variants: [container], tests: [step.up], skip: true },
+      { on: ["aws"], variants: [container], tests: [stepRef.up], skip: true },
     ],
   },
   {
@@ -156,7 +158,7 @@ export const gaps: Gap[] = [
         on: ["aws.floci"],
         fixtures: [sdk.node, sdk.withTransforms],
         variants: [apiGateway],
-        tests: [step.up],
+        tests: [stepRef.up],
         skip: true,
       },
     ],
@@ -166,7 +168,7 @@ export const gaps: Gap[] = [
     reason:
       "the aws provider runs a container on Fargate behind a load balancer floci has no data plane for",
     issue: 995,
-    affects: [{ on: ["aws.floci"], variants: [container], tests: [step.up], skip: true }],
+    affects: [{ on: ["aws.floci"], variants: [container], tests: [stepRef.up], skip: true }],
   },
   {
     id: "next-on-cloud-run",
@@ -177,7 +179,7 @@ export const gaps: Gap[] = [
       {
         on: ["gcp", "gcp.floci"],
         fixtures: DEPLOY_NEXT_BEARING,
-        tests: [step.up],
+        tests: [stepRef.up],
         skip: true,
       },
     ],
@@ -191,7 +193,7 @@ export const gaps: Gap[] = [
         on: ["aws.floci"],
         fixtures: EVERY_NEXT_BEARING,
         variants: [BASE],
-        tests: [step.up],
+        tests: [stepRef.up],
         skip: true,
       },
     ],
@@ -205,7 +207,7 @@ export const gaps: Gap[] = [
         on: ["aws.floci"],
         fixtures: EVERY_NEXT_BEARING,
         variants: [cloudflare],
-        tests: [step.up],
+        tests: [stepRef.up],
         skip: true,
       },
     ],
