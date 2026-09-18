@@ -145,7 +145,7 @@ export function awsStore(
 
   return {
     async callerAccount() {
-      return cli(["sts", "get-caller-identity", "--query", "JourneyReport", "--output", "text"]);
+      return cli(["sts", "get-caller-identity", "--query", "Account", "--output", "text"]);
     },
 
     async deployedSlugs() {

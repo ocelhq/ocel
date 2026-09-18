@@ -46,6 +46,22 @@ function outputsAsked(calls: string[][]): string[] {
   return [...new Set(calls.filter(describeStacks).map(outputAsked))];
 }
 
+describe("callerAccount", () => {
+  it("names the account the credentials resolve to", async () => {
+    const identity: Record<string, string> = {
+      UserId: "AROAEXAMPLE:journey",
+      Account: "111122223333",
+      Arn: "arn:aws:sts::111122223333:assumed-role/journey/journey",
+    };
+    const { cli } = cliOver((args) => {
+      assert.deepEqual(args.slice(0, 2), ["sts", "get-caller-identity"]);
+      const field = args[args.indexOf("--query") + 1] ?? "";
+      return identity[field] ?? "None";
+    });
+    assert.equal(await awsStore(undefined, cli).callerAccount(), "111122223333");
+  });
+});
+
 describe("deployedSlugs", () => {
   it("refuses to report an empty account when the bootstrap stack could not be read", async () => {
     const { cli } = cliOver(() => {
