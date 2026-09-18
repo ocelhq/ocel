@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { bindingChecks } from "../../../checks";
-import type { CheckContext } from "../../../checks/context";
 import { journeyConfigIn } from "../../../config";
 import { ocel, spawnOcel, workTree } from "../../../ocel";
 import { progress } from "../../../progress";
 import type { CellUnderTest } from "../../../run/cellRun";
+import type { ExternalStack, StackChecks } from "../../../stacks";
 import { awsBindingStore, awsStore, type Cli, cliAt, said } from "../store";
-import { emulatorEndpoint } from "../world";
+import type { AwsWorld } from "../world";
 
 const BINDING_NAME = "orders";
 const CUSTOM_BINDING_NAME = "network";
@@ -21,25 +21,8 @@ const VPC_ACCESS_POLICY_ARN =
 
 export type PublishedPlacement = { subnetIds: string[]; securityGroupIds: string[] };
 
-export type StackPoint = "afterPublish" | "whileServing" | "afterOcelDestroy" | "afterStackDestroy";
-
-export type StackCheck = {
-  title: string;
-  run: (cell: CellUnderTest, serving?: CheckContext) => Promise<void>;
-};
-
-export type StackChecks = Record<StackPoint, StackCheck[]>;
-
-function cli(): Cli {
-  return cliAt(emulatorEndpoint(process.env));
-}
-
-async function bindingStore() {
-  return awsBindingStore(emulatorEndpoint(process.env));
-}
-
-async function taggedFunctionArns(slug: string): Promise<string[]> {
-  const raw = await cli()([
+async function taggedFunctionArns(cli: Cli, slug: string): Promise<string[]> {
+  const raw = await cli([
     "resourcegroupstaggingapi",
     "get-resources",
     "--resource-type-filters",
@@ -61,8 +44,11 @@ type FunctionConfiguration = {
   VpcConfig?: { SubnetIds?: string[]; SecurityGroupIds?: string[] };
 };
 
-async function functionConfiguration(functionArn: string): Promise<FunctionConfiguration> {
-  const raw = await cli()([
+async function functionConfiguration(
+  cli: Cli,
+  functionArn: string,
+): Promise<FunctionConfiguration> {
+  const raw = await cli([
     "lambda",
     "get-function-configuration",
     "--function-name",
@@ -77,8 +63,8 @@ type PolicyDocument = {
   Statement: Array<{ Effect?: string; Action?: string | string[]; Resource?: string | string[] }>;
 };
 
-async function attachedManagedPolicyArns(roleName: string): Promise<string[]> {
-  const raw = await cli()([
+async function attachedManagedPolicyArns(cli: Cli, roleName: string): Promise<string[]> {
+  const raw = await cli([
     "iam",
     "list-attached-role-policies",
     "--role-name",
@@ -93,12 +79,13 @@ async function attachedManagedPolicyArns(roleName: string): Promise<string[]> {
 }
 
 async function inlinePolicyDocument(
+  cli: Cli,
   roleName: string,
   policyName: string,
 ): Promise<PolicyDocument | undefined> {
   let raw: string;
   try {
-    raw = await cli()([
+    raw = await cli([
       "iam",
       "get-role-policy",
       "--role-name",
@@ -145,7 +132,9 @@ function roleNameOf(roleArn: string | undefined): string {
   return name;
 }
 
-export abstract class ExternalStack {
+export abstract class AwsStack implements ExternalStack {
+  constructor(protected readonly world: Pick<AwsWorld, "endpoint">) {}
+
   private readonly placements = new Map<string, PublishedPlacement>();
   private readonly owners = new Map<string, Set<string>>();
 
@@ -180,7 +169,7 @@ export abstract class ExternalStack {
         title:
           "each record is stamped with the publisher's URN and holds nothing beside the sealed value",
         run: async (cell) => {
-          const records = await (await bindingStore()).records(cell.slug);
+          const records = await (await this.bindingStore()).records(cell.slug);
           for (const name of BINDING_NAMES) {
             const record = records.find((row) => row.name === name);
             assert.ok(record, `no record named ${name} is published`);
@@ -201,7 +190,7 @@ export abstract class ExternalStack {
       {
         title: "the value row beside each record carries ciphertext",
         run: async (cell) => {
-          const values = await (await bindingStore()).values(cell.slug);
+          const values = await (await this.bindingStore()).values(cell.slug);
           for (const name of BINDING_NAMES) {
             const value = values.find((row) => row.name === name);
             assert.ok(value, `no value row is published for ${name}`);
@@ -213,7 +202,7 @@ export abstract class ExternalStack {
         title:
           "grants are scoped to the named resource: orders carries rds-db:connect, network carries none",
         run: async (cell) => {
-          const records = await (await bindingStore()).records(cell.slug);
+          const records = await (await this.bindingStore()).records(cell.slug);
           const orders = records.find((row) => row.name === BINDING_NAME);
           assert.ok(orders, `no record named ${BINDING_NAME} is published`);
           assert.ok(
@@ -239,11 +228,11 @@ export abstract class ExternalStack {
       {
         title: "the publisher's index owns exactly its one binding",
         run: async (cell) => {
-          const records = await (await bindingStore()).records(cell.slug);
+          const records = await (await this.bindingStore()).records(cell.slug);
           for (const name of BINDING_NAMES) {
             const record = records.find((row) => row.name === name);
             assert.ok(record, `no record named ${name} is published`);
-            const owned = await (await bindingStore()).ownerIndex(cell.slug, record!.owner);
+            const owned = await (await this.bindingStore()).ownerIndex(cell.slug, record!.owner);
             assert.deepEqual(
               owned,
               [name],
@@ -257,7 +246,7 @@ export abstract class ExternalStack {
       {
         title: "ownership is unchanged and ocel's own index claims neither name",
         run: async (cell) => {
-          const records = await (await bindingStore()).records(cell.slug);
+          const records = await (await this.bindingStore()).records(cell.slug);
           for (const name of BINDING_NAMES) {
             const record = records.find((row) => row.name === name);
             assert.ok(record, `no record named ${name} is published`);
@@ -267,7 +256,7 @@ export abstract class ExternalStack {
               `${name} is now owned by ${record!.owner}, not the publisher`,
             );
           }
-          const ocelIndex = await (await bindingStore()).ownerIndex(cell.slug, "OCEL");
+          const ocelIndex = await (await this.bindingStore()).ownerIndex(cell.slug, "OCEL");
           for (const name of BINDING_NAMES) {
             assert.ok(
               !(ocelIndex ?? []).includes(name),
@@ -288,10 +277,10 @@ export abstract class ExternalStack {
             const res = await serving!.fetch(`${serving!.baseUrl}/api/binding`);
             return { body: (await res.json()) as { host: string; database: string } };
           })();
-          const arns = await taggedFunctionArns(cell.slug);
+          const arns = await taggedFunctionArns(await this.cli(), cell.slug);
           assert.ok(arns.length > 0, `${cell.slug} carries no tagged function`);
           for (const arn of arns) {
-            const configuration = await functionConfiguration(arn);
+            const configuration = await functionConfiguration(await this.cli(), arn);
             const variables = configuration.Environment?.Variables ?? {};
             const key = `OCEL_RESOURCE_POSTGRES_${BINDING_NAME}`;
             assert.ok(key in variables, `${arn} carries no ${key}`);
@@ -313,14 +302,14 @@ export abstract class ExternalStack {
           "a VPC config equal to the published ids, and execution roles with the VPC policy and the published grants",
         run: async (cell) => {
           const placement = this.placementFor(cell.slug);
-          const records = await (await bindingStore()).records(cell.slug);
+          const records = await (await this.bindingStore()).records(cell.slug);
           const orders = records.find((row) => row.name === BINDING_NAME);
           assert.ok(orders, `no record named ${BINDING_NAME} is published`);
           const grant = orders!.grants.find((row) => row.actions.includes("rds-db:connect"));
           assert.ok(grant, `${BINDING_NAME} carries no rds-db:connect grant`);
 
-          for (const arn of await taggedFunctionArns(cell.slug)) {
-            const configuration = await functionConfiguration(arn);
+          for (const arn of await taggedFunctionArns(await this.cli(), cell.slug)) {
+            const configuration = await functionConfiguration(await this.cli(), arn);
             assert.deepEqual(
               [...(configuration.VpcConfig?.SubnetIds ?? [])].sort(),
               [...placement.subnetIds].sort(),
@@ -333,13 +322,14 @@ export abstract class ExternalStack {
             );
 
             const roleName = roleNameOf(configuration.Role);
-            const managed = await attachedManagedPolicyArns(roleName);
+            const managed = await attachedManagedPolicyArns(await this.cli(), roleName);
             assert.ok(
               managed.includes(VPC_ACCESS_POLICY_ARN),
               `${roleName} carries ${JSON.stringify(managed)}, none of which is ${VPC_ACCESS_POLICY_ARN}`,
             );
             for (const resource of grant!.resources) {
               const document = await inlinePolicyDocument(
+                await this.cli(),
                 roleName,
                 `policy-binding-${BINDING_NAME}`,
               );
@@ -368,7 +358,7 @@ export abstract class ExternalStack {
       {
         title: "the record survives ocel destroy",
         run: async (cell) => {
-          const records = await (await bindingStore()).records(cell.slug);
+          const records = await (await this.bindingStore()).records(cell.slug);
           for (const name of BINDING_NAMES) {
             assert.ok(
               records.some((row) => row.name === name),
@@ -382,14 +372,14 @@ export abstract class ExternalStack {
       {
         title: "both partitions are empty once the publisher is removed",
         run: async (cell) => {
-          const records = await (await bindingStore()).records(cell.slug);
+          const records = await (await this.bindingStore()).records(cell.slug);
           assert.deepEqual(
             records,
             [],
             `the bindings partition still carries ${JSON.stringify(records.map((row) => row.name))}`,
           );
           for (const owner of this.ownersOf(cell.slug)) {
-            const owned = await (await bindingStore()).ownerIndex(cell.slug, owner);
+            const owned = await (await this.bindingStore()).ownerIndex(cell.slug, owner);
             assert.equal(
               owned,
               undefined,
@@ -429,12 +419,12 @@ export abstract class ExternalStack {
       "ocel deploy exited 0 with nothing published; a binding is resolved before anything is provisioned",
     );
     assert.equal(
-      await awsStore(emulatorEndpoint(process.env)).exists(cell.slug),
+      await awsStore(await this.world.endpoint()).exists(cell.slug),
       false,
       `${cell.slug} has a project before anything published a binding`,
     );
     assert.deepEqual(
-      await taggedFunctionArns(cell.slug),
+      await taggedFunctionArns(await this.cli(), cell.slug),
       [],
       `${cell.slug} carries a tagged function before anything published a binding`,
     );
@@ -450,6 +440,14 @@ export abstract class ExternalStack {
       output.includes(NOTHING_AT_ALL),
       `the refusal does not confirm nothing at all is published yet: ${output}`,
     );
+  }
+
+  private async cli(): Promise<Cli> {
+    return cliAt(await this.world.endpoint());
+  }
+
+  private async bindingStore() {
+    return awsBindingStore(await this.world.endpoint());
   }
 
   protected recordPlacement(slug: string, placement: PublishedPlacement): void {

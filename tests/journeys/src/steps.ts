@@ -1,7 +1,7 @@
 import type { Check } from "./checks/context";
 import type { Cell, Fixture, Phase } from "./matrix/types";
 import type { CellRun } from "./run/cellRun";
-import type { StackPoint } from "./targets/aws/stacks/bindings";
+import type { StackPoint } from "./stacks";
 import { hasReleaseCycle, type ReleaseCycle, type Target } from "./targets/types";
 
 export type Step = {

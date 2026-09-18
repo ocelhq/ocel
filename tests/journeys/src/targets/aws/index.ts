@@ -14,7 +14,7 @@ import { AwsDispatch } from "./dispatch";
 import { ocelEnvIn } from "./namespace";
 import { awaitServing } from "./serving";
 import { AwsSweeper } from "./sweeper";
-import { AwsWorld } from "./world";
+import { awsWorld } from "./world";
 
 const FUNCTION_URL_BODY_BYTES = 4_500_000;
 
@@ -37,7 +37,7 @@ export class AwsTarget implements Target, ReleaseCycle {
   readonly maxRequestBodyBytes = FUNCTION_URL_BODY_BYTES;
   readonly stepTimeoutMs = process.env.AWS_ENDPOINT_URL ? 600_000 : 1_800_000;
 
-  private readonly world = new AwsWorld();
+  private readonly world = awsWorld;
   private readonly bootstrap = new AwsBootstrap(this.world);
   private readonly dispatch = new AwsDispatch(this.world);
   readonly sweeper = new AwsSweeper(this.world);

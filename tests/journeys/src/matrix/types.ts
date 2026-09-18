@@ -1,7 +1,7 @@
 import type { Compute } from "ocel/config";
 import type { Check } from "../checks/context";
+import type { ExternalStack } from "../stacks";
 import type { TestSelector } from "../steps";
-import type { ExternalStack } from "../targets/aws/stacks/bindings";
 
 export type { Compute };
 

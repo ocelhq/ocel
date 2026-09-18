@@ -3,16 +3,16 @@ import type { Check } from "./checks/context";
 import { type Fixture, fixture, type Gap, type Lane, variant } from "./matrix/types";
 import { defaults } from "./matrix/variants";
 import { NO_FILTER, type Plan, plan, type RunFilter } from "./plan";
+import type { ExternalStack } from "./stacks";
 import { check, step } from "./steps";
-import { ExternalStack } from "./targets/aws/stacks/bindings";
 
 const edge = variant("edge", { offeredOn: ["aws"], config: {} });
 const box = variant("box", { offeredOn: ["aws", "gcp"], config: {} });
 
 const ping: Check = { title: "ping", run: async () => undefined };
 
-class ProbeStack extends ExternalStack {
-  override readonly checks = {
+class ProbeStack implements ExternalStack {
+  readonly checks = {
     afterPublish: [{ title: "records", run: async () => undefined }],
     whileServing: [{ title: "routes", run: async () => undefined }],
     afterOcelDestroy: [{ title: "survives", run: async () => undefined }],
@@ -20,6 +20,7 @@ class ProbeStack extends ExternalStack {
   };
   async deploy() {}
   async destroy() {}
+  async refuse() {}
   async sweep() {}
 }
 const pong: Check = { title: "pong", run: async () => undefined };
