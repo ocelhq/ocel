@@ -38,19 +38,25 @@ function ladderTitle(at: LadderPoint, title: string): string {
   return `${at} · ${title}`;
 }
 
-export type TestRef = { titles: string[] };
+declare const built: unique symbol;
 
-export const step = {
-  up: { titles: [UP] },
-  redeploy: { titles: [REDEPLOY] },
-  rollback: { titles: [ROLLBACK] },
-  destroy: { titles: [DESTROY] },
-  refuse: { titles: [REFUSE] },
-} satisfies Record<string, TestRef>;
+export type TestRef = { readonly titles: string[]; readonly [built]: true };
+
+function testRef(titles: string[]): TestRef {
+  return { titles } as TestRef;
+}
+
+export const stepRef = {
+  up: testRef([UP]),
+  redeploy: testRef([REDEPLOY]),
+  rollback: testRef([ROLLBACK]),
+  destroy: testRef([DESTROY]),
+  refuse: testRef([REFUSE]),
+};
 
 export function check(checks: Check | Check[], legs: CheckLeg[] = CHECK_LEGS): TestRef {
   const listed = Array.isArray(checks) ? checks : [checks];
-  return { titles: listed.flatMap((one) => legs.map((leg) => checkTitle(leg, one.title))) };
+  return testRef(listed.flatMap((one) => legs.map((leg) => checkTitle(leg, one.title))));
 }
 
 export function stepsOf(cell: Cell, legs: Leg[]): Step[] {

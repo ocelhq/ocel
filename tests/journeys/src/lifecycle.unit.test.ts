@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { Check } from "./contract";
-import { legsDriven, stepsPlanned } from "./lifecycle";
+import { legsDriven, stepsPlanned, type TestRef } from "./lifecycle";
 import { fixture, LIVES, SERVES } from "./matrix/types";
 import type { Deployment } from "./targets/types";
 
@@ -65,5 +65,13 @@ describe("the legs a target drives", () => {
     expect(() => legsDriven({ name: "vps", redeploy: replaced }, LIVES)).toThrow(
       /vps walks rollback without a method for it/,
     );
+  });
+});
+
+describe("a test a gap names", () => {
+  it("is built by the lifecycle, never spelled inline", () => {
+    type Accepts<T, U> = [U] extends [T] ? true : false;
+    const inline: Accepts<TestRef, { titles: string[] }> = false;
+    expect(inline).toBe(false);
   });
 });
