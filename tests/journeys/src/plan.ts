@@ -9,8 +9,10 @@ import {
   type Gap,
   type Lane,
   type Leg,
+  sampleGroupOf,
   type TargetName,
   targetOfLane,
+  variantNameOf,
 } from "./matrix/types";
 import { type Coverage, type Draw, sample } from "./sample";
 
@@ -74,10 +76,6 @@ export function testsOf(planned: Pick<Plan, "cells">): PlannedTest[] {
   );
 }
 
-export function variantNameOf(cell: Pick<Cell, "variant">): string {
-  return cell.variant?.name ?? BASE;
-}
-
 export function fixturesOn(fixtures: Fixture[], target: TargetName): Fixture[] {
   return fixtures.filter((one) => one.on[target] !== undefined);
 }
@@ -132,16 +130,14 @@ function hitsFor(block: Affected, tests: LaneTest[], said: string): LaneTest[] {
       (variants === undefined || variants.includes(test.variant)) &&
       titles.has(test.title),
   );
-  for (const name of fixtures ?? []) {
-    if (!hits.some((hit) => hit.fixture === name)) {
-      throw new Error(`${said} lists ${name}, which plans none of the tests named`);
+  const reached = (names: string[] | undefined, of: (hit: LaneTest) => string) => {
+    const dead = names?.find((name) => !hits.some((hit) => of(hit) === name));
+    if (dead !== undefined) {
+      throw new Error(`${said} lists ${dead}, which plans none of the tests named`);
     }
-  }
-  for (const name of variants ?? []) {
-    if (!hits.some((hit) => hit.variant === name)) {
-      throw new Error(`${said} lists ${name}, which plans none of the tests named`);
-    }
-  }
+  };
+  reached(fixtures, (hit) => hit.fixture);
+  reached(variants, (hit) => hit.variant);
   if (hits.length === 0) {
     throw new Error(`${said} lists nothing that is planned`);
   }
@@ -224,8 +220,8 @@ function checkMatrix(fixtures: Fixture[]) {
         );
       }
     }
-    if (one.sample?.lead) {
-      const group = `${one.concern}/${one.sample.group}`;
+    const group = sampleGroupOf(one);
+    if (group !== undefined && one.sample?.lead) {
       leads.set(group, [...(leads.get(group) ?? []), one.name]);
     }
   }

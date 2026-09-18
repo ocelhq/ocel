@@ -12,10 +12,10 @@ import {
 import { type Fetch, INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import { appHostname, currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
-import type { Cell, Fixture, Lane, Leg } from "../../matrix/types";
+import { type Cell, type Fixture, type Lane, type Leg, variantNameOf } from "../../matrix/types";
 import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
-import { cellsOn, fixturesOn, variantNameOf } from "../../plan";
+import { cellsOn, fixturesOn } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
 import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";

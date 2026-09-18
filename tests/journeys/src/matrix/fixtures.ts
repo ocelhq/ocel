@@ -33,7 +33,6 @@ const LADDER = [...healthChecks, ...staticChecks, ...bindingChecks];
 
 export const deploy = {
   node: fixture("deploy/node", {
-    runtime: "node",
     apps: ["web"],
     legs: SERVES,
     checks: SERVED,
@@ -47,7 +46,6 @@ export const deploy = {
     sample: { group: "node-http" },
   }),
   go: fixture("deploy/go", {
-    runtime: "go",
     apps: ["web"],
     legs: SERVES,
     checks: RUNTIME_NEUTRAL,
@@ -58,7 +56,6 @@ export const deploy = {
     },
   }),
   python: fixture("deploy/python", {
-    runtime: "python",
     apps: ["web"],
     legs: SERVES,
     checks: [...RUNTIME_NEUTRAL, ...vendoredChecks],
@@ -69,7 +66,6 @@ export const deploy = {
     },
   }),
   rust: fixture("deploy/rust", {
-    runtime: "rust",
     apps: ["web"],
     legs: SERVES,
     checks: RUNTIME_NEUTRAL,
@@ -80,7 +76,6 @@ export const deploy = {
     },
   }),
   next: fixture("deploy/next", {
-    runtime: "next",
     apps: ["web"],
     legs: SERVES,
     checks: [...SERVED, ...NEXT_SERVED],
@@ -109,7 +104,6 @@ export const deploy = {
 
 export const lifecycle = {
   next: fixture("lifecycle/next", {
-    runtime: "next",
     apps: ["web"],
     legs: LIVES,
     checks: [...STORED, ...NEXT_SERVED, ...NEXT_STORED],
@@ -122,7 +116,6 @@ export const lifecycle = {
 
 export const sdk = {
   node: fixture("sdk/node", {
-    runtime: "node",
     apps: ["web"],
     legs: SERVES,
     checks: STORED,
@@ -135,7 +128,6 @@ export const sdk = {
     sample: { group: "node-http" },
   }),
   next: fixture("sdk/next", {
-    runtime: "next",
     apps: ["web"],
     legs: SERVES,
     checks: [...STORED, ...NEXT_SERVED, ...NEXT_STORED],
@@ -159,14 +151,12 @@ export const sdk = {
     sample: { group: "node-http", lead: true },
   }),
   withTransforms: fixture("sdk/with-transforms", {
-    runtime: "node",
     apps: ["web"],
     legs: LIVES,
     checks: LADDER,
     on: { aws: { variants: [container, apiGateway] } },
   }),
   withSst: fixture("sdk/with-sst", {
-    runtime: "node",
     apps: ["web"],
     legs: LIVES,
     checks: LADDER,
@@ -174,7 +164,6 @@ export const sdk = {
     on: { aws: { variants: [container, apiGateway] } },
   }),
   withPulumi: fixture("sdk/with-pulumi", {
-    runtime: "node",
     apps: ["web"],
     legs: LIVES,
     checks: LADDER,

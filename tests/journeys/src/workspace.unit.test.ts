@@ -5,7 +5,7 @@ import { appCommand, appHomes, migrateCommand, stateComplaint } from "./workspac
 const workspace = sdk.workspace;
 const composite = sdk.node;
 
-describe("a multi-app row", () => {
+describe("a multi-app fixture", () => {
   it("reaches each app under apps/, and a single app where the config sits", () => {
     expect(appCommand(workspace, "express")).toEqual([
       "pnpm",
