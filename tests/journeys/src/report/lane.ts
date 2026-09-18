@@ -5,7 +5,7 @@ import { type Ask, cellKey, type Listed, type Plan, plan } from "../plan";
 import { askFrom } from "../run/ask";
 import { targetNamed } from "../targets";
 
-const USAGE = "pnpm plan --lane <lane>";
+const USAGE = "pnpm --filter @ocel-tests/journeys plan --lane <lane>";
 
 function said(listed: Listed[]): string {
   return listed

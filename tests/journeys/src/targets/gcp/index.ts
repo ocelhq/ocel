@@ -7,10 +7,10 @@ import { GCP_BASE, journeyConfigIn, type Overlay, writeJourneyConfig } from "../
 import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../../contract";
 import { currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
-import type { Cell, Lane, Leg } from "../../matrix/types";
+import { type Cell, type Lane, type Leg, variantNameOf } from "../../matrix/types";
 import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
-import { cellsOn, fixturesOn, variantNameOf } from "../../plan";
+import { cellsOn, fixturesOn } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
 import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";

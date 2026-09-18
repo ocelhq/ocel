@@ -45,8 +45,6 @@ export type Concern = "deploy" | "lifecycle" | "sdk";
 
 export const CONCERNS: Concern[] = ["deploy", "lifecycle", "sdk"];
 
-export type Runtime = "node" | "next" | "go" | "python" | "rust";
-
 export type Edge = "cloudfront" | "api-gateway" | "cloudflare";
 
 export type Leg = "up" | "contract" | "redeploy" | "rollback" | "destroy";
@@ -90,10 +88,13 @@ export type Ladder = {
 
 export type Sample = { group: string; lead?: true };
 
+export function sampleGroupOf(fixture: Pick<Fixture, "concern" | "sample">): string | undefined {
+  return fixture.sample === undefined ? undefined : `${fixture.concern}/${fixture.sample.group}`;
+}
+
 export type Fixture = {
   name: string;
   concern: Concern;
-  runtime?: Runtime;
   apps: string[];
   legs: Leg[];
   checks: Check[];
@@ -111,6 +112,10 @@ export function fixture(name: string, shape: Omit<Fixture, "name" | "concern">):
 }
 
 export type Cell = { name: string; fixture: Fixture; variant?: Variant };
+
+export function variantNameOf(cell: Pick<Cell, "variant">): string {
+  return cell.variant?.name ?? BASE;
+}
 
 export type Affected = {
   on: Lane[];

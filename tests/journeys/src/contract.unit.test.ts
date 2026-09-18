@@ -24,7 +24,7 @@ function context(asked: string, answered: string): ContractContext {
 
 const health = healthChecks[0];
 
-describe("the health row", () => {
+describe("the health check", () => {
   it("passes when the hostname answers with the app it was asked for", async () => {
     expect(health).toBeDefined();
     await expect(health?.run(context("node", "node"))).resolves.toBeUndefined();

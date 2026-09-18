@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { BASE, type Cell, type Fixture } from "./matrix/types";
+import { BASE, type Cell, type Fixture, sampleGroupOf, variantNameOf } from "./matrix/types";
 
 export type Draw = { seed: string; touched: string[] };
 
@@ -11,14 +11,6 @@ export type CellsFor = (fixture: Fixture) => Cell[];
 
 function rotation(seed: string, group: string): number {
   return createHash("sha256").update(`${seed}:${group}`).digest().readUInt32BE(0);
-}
-
-function groupOf(fixture: Fixture): string | undefined {
-  return fixture.sample === undefined ? undefined : `${fixture.concern}/${fixture.sample.group}`;
-}
-
-function variantOf(cell: Cell): string {
-  return cell.variant?.name ?? BASE;
 }
 
 function coverGroup(
@@ -39,7 +31,7 @@ function coverGroup(
     chosen.set(fixture.name, held);
   };
   const cellOf = (fixture: Fixture, variant: string) =>
-    cellsFor(fixture).find((cell) => variantOf(cell) === variant);
+    cellsFor(fixture).find((cell) => variantNameOf(cell) === variant);
 
   const free: Fixture[] = [];
   for (const member of members) {
@@ -60,7 +52,7 @@ function coverGroup(
   const variants: string[] = [];
   for (const member of free) {
     for (const cell of cellsFor(member)) {
-      const variant = variantOf(cell);
+      const variant = variantNameOf(cell);
       if (variant !== BASE && !variants.includes(variant)) {
         variants.push(variant);
       }
@@ -93,7 +85,7 @@ export function sample(
   const out = new Map<string, Cell[]>();
   const groups = new Map<string, Fixture[]>();
   for (const one of fixtures) {
-    const group = groupOf(one);
+    const group = sampleGroupOf(one);
     if (group === undefined) {
       out.set(one.name, cellsFor(one));
       continue;
