@@ -417,13 +417,13 @@ describe("a gap that reaches nothing", () => {
     ).not.toThrow();
   });
 
-  it("refuses two gaps of one id, and a gap that affects nothing", () => {
+  it("refuses two gaps of one id, and a gap that applies nowhere", () => {
     expect(() =>
       planOf([node], {
         gaps: [gap("one", [{ on: ["aws"], fails: [step.deploy] }]), gap("one", [])],
       }),
     ).toThrow(/the gap one is listed twice/);
-    expect(() => planOf([node], { gaps: [gap("one", [])] })).toThrow(/the gap one affects nothing/);
+    expect(() => planOf([node], { gaps: [gap("one", [])] })).toThrow(/the gap one applies nowhere/);
   });
 });
 

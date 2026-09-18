@@ -229,7 +229,7 @@ function checkGaps(gaps: Gap[]) {
     }
     seen.add(gap.id);
     if (gap.where.length === 0) {
-      throw new Error(`the gap ${gap.id} affects nothing`);
+      throw new Error(`the gap ${gap.id} applies nowhere`);
     }
   }
 }
