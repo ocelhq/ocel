@@ -6,8 +6,9 @@ import { appHostname } from "../../identity";
 import type { Lane, Phase } from "../../matrix/types";
 import { configTree, runOcel, treeRoot, workTree } from "../../ocel";
 import type { PrepareFailures } from "../../prepare";
+import type { CellUnderTest } from "../../run/cellRun";
 import { migrateCommand } from "../../workspace";
-import type { CellContext, Deployment, ReleaseCycle, Target } from "../types";
+import type { Deployment, ReleaseCycle, Target } from "../types";
 import { AwsBootstrap } from "./bootstrap";
 import { AwsDispatch } from "./dispatch";
 import { ocelEnvIn } from "./namespace";
@@ -20,7 +21,7 @@ const FUNCTION_URL_BODY_BYTES = 4_500_000;
 const SERVING_TIMEOUT_MS = 900_000;
 const SERVING_INTERVAL_MS = 5_000;
 
-async function cellTree(cell: CellContext): Promise<string> {
+async function cellTree(cell: CellUnderTest): Promise<string> {
   const dir = configTree(cell, "aws");
   try {
     await access(dir);
@@ -53,7 +54,7 @@ export class AwsTarget implements Target, ReleaseCycle {
     await this.world.settle();
   }
 
-  async deploy(cell: CellContext): Promise<Deployment> {
+  async deploy(cell: CellUnderTest): Promise<Deployment> {
     const dir = await cellTree(cell);
     const env = ocelEnvIn(dir, await this.bootstrap.namespaceOf(cell));
 
@@ -104,7 +105,7 @@ export class AwsTarget implements Target, ReleaseCycle {
     return deployed;
   }
 
-  async redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
+  async redeploy(cell: CellUnderTest, greeting: string): Promise<Deployment> {
     const dir = await cellTree(cell);
     const env = ocelEnvIn(dir, await this.bootstrap.namespaceOf(cell));
     if (setsEnv(cell.fixture.checks)) {
@@ -123,7 +124,7 @@ export class AwsTarget implements Target, ReleaseCycle {
     return deployed;
   }
 
-  async rollback(cell: CellContext): Promise<Deployment> {
+  async rollback(cell: CellUnderTest): Promise<Deployment> {
     const dir = await cellTree(cell);
     const env = ocelEnvIn(dir, await this.bootstrap.namespaceOf(cell));
     await runOcel(cell, dir, "rollback", "rollback", ["rollback"], env);
@@ -132,7 +133,7 @@ export class AwsTarget implements Target, ReleaseCycle {
     return deployed;
   }
 
-  async destroy(cell: CellContext): Promise<void> {
+  async destroy(cell: CellUnderTest): Promise<void> {
     const namespace = await this.bootstrap.namespaceOf(cell);
     const hosts = this.hostnames(cell);
     const unbound: string[] = [];
@@ -159,7 +160,7 @@ export class AwsTarget implements Target, ReleaseCycle {
     }
   }
 
-  private hostnames(cell: CellContext): Map<string, string> {
+  private hostnames(cell: CellUnderTest): Map<string, string> {
     const zone = this.world.zone();
     return new Map(
       cell.fixture.apps.map((app) => {
@@ -172,7 +173,7 @@ export class AwsTarget implements Target, ReleaseCycle {
     );
   }
 
-  private async deployment(cell: CellContext): Promise<Deployment> {
+  private async deployment(cell: CellUnderTest): Promise<Deployment> {
     const dispatch = await this.dispatch.fetch();
     const hosts = this.hostnames(cell);
     return {
@@ -187,7 +188,7 @@ export class AwsTarget implements Target, ReleaseCycle {
     };
   }
 
-  private async awaitEdge(cell: CellContext, phase: Phase, deployed: Deployment): Promise<void> {
+  private async awaitEdge(cell: CellUnderTest, phase: Phase, deployed: Deployment): Promise<void> {
     if (!(await this.world.real())) {
       return;
     }

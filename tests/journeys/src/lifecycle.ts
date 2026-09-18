@@ -1,18 +1,8 @@
-import type { Check, CheckContext } from "./checks/context";
+import type { Check } from "./checks/context";
 import type { Cell, Fixture, Phase } from "./matrix/types";
+import type { CellRun } from "./run/cellRun";
 import type { StackPoint } from "./targets/aws/stacks/bindings";
-import { type CellContext, hasReleaseCycle, type ReleaseCycle, type Target } from "./targets/types";
-
-export type CellRun = {
-  cell: CellContext;
-  deployStack: () => Promise<void>;
-  deploy: () => Promise<void>;
-  redeploy: () => Promise<void>;
-  rollback: () => Promise<void>;
-  destroy: () => Promise<void>;
-  destroyStack: () => Promise<void>;
-  live: (app: string, phase: Phase) => CheckContext;
-};
+import { hasReleaseCycle, type ReleaseCycle, type Target } from "./targets/types";
 
 export type Step = {
   app: string;
@@ -89,7 +79,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
       phase,
       run: async (run: CellRun) => {
         await run.deploy();
-        await one.run(run.live(app, phase));
+        await one.run(run.verifying(app, phase));
       },
     })),
     ...at("whileServing").map((one) => ({
@@ -98,7 +88,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
       phase,
       run: async (run: CellRun) => {
         await run.deployStack();
-        await one.run(run.cell, run.live(app, phase));
+        await one.run(run, run.verifying(app, phase));
       },
     })),
   ];
@@ -113,13 +103,13 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
 
   return [
     ...perApp((app) => [
-      ...(stack ? [{ app, title: REFUSE, run: (run: CellRun) => stack.refuse(run.cell) }] : []),
+      ...(stack ? [{ app, title: REFUSE, run: (run: CellRun) => run.refuse() }] : []),
       ...at("afterPublish").map((one) => ({
         app,
         title: stackCheckTitle("afterPublish", one.title),
         run: async (run: CellRun) => {
           await run.deployStack().catch(() => undefined);
-          await one.run(run.cell);
+          await one.run(run);
         },
       })),
     ]),
@@ -150,7 +140,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
         title: stackCheckTitle("afterOcelDestroy", one.title),
         run: async (run: CellRun) => {
           await run.deployStack();
-          await one.run(run.cell);
+          await one.run(run);
         },
       })),
       ...at("afterStackDestroy").map((one) => ({
@@ -159,7 +149,7 @@ export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
         run: async (run: CellRun) => {
           await run.deployStack();
           await run.destroyStack();
-          await one.run(run.cell);
+          await one.run(run);
         },
       })),
     ]),

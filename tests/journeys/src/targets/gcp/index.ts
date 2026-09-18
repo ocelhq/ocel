@@ -12,9 +12,10 @@ import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import { cellsOn, fixturesOn } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
+import type { CellUnderTest } from "../../run/cellRun";
 import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
-import type { CellContext, Deployment, ReleaseCycle, Sweeper, Target } from "../types";
+import type { Deployment, ReleaseCycle, Sweeper, Target } from "../types";
 import { fittedSlug, gcpSlug, namespaceOf, roomForSlug, serviceLead } from "./names";
 import {
   deleteService,
@@ -89,7 +90,7 @@ export function cellOfSlug(cells: Cell[], slug: string): Cell {
   return named;
 }
 
-async function cellTree(cell: CellContext): Promise<string> {
+async function cellTree(cell: CellUnderTest): Promise<string> {
   const dir = configTree(cell, "gcp");
   try {
     await access(dir);
@@ -167,7 +168,7 @@ export class GcpTarget implements Target, ReleaseCycle {
     await this.detectLane();
   }
 
-  async deploy(cell: CellContext): Promise<Deployment> {
+  async deploy(cell: CellUnderTest): Promise<Deployment> {
     const dir = await cellTree(cell);
     const env = childEnv(dir);
 
@@ -196,7 +197,7 @@ export class GcpTarget implements Target, ReleaseCycle {
     return this.deployment(cell, "deploy");
   }
 
-  async redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
+  async redeploy(cell: CellUnderTest, greeting: string): Promise<Deployment> {
     const dir = await cellTree(cell);
     const env = childEnv(dir);
     if (setsEnv(cell.fixture.checks)) {
@@ -213,13 +214,13 @@ export class GcpTarget implements Target, ReleaseCycle {
     return this.deployment(cell, "redeploy");
   }
 
-  async rollback(cell: CellContext): Promise<Deployment> {
+  async rollback(cell: CellUnderTest): Promise<Deployment> {
     const dir = await cellTree(cell);
     await runOcel(cell, dir, "rollback", "rollback", ["rollback"], childEnv(dir));
     return this.deployment(cell, "rollback");
   }
 
-  async destroy(cell: CellContext): Promise<void> {
+  async destroy(cell: CellUnderTest): Promise<void> {
     const dir = await cellTree(cell);
     try {
       await runOcel(
@@ -259,7 +260,7 @@ export class GcpTarget implements Target, ReleaseCycle {
     return listServices(await this.where());
   }
 
-  private async deployment(cell: CellContext, phase: Phase): Promise<Deployment> {
+  private async deployment(cell: CellUnderTest, phase: Phase): Promise<Deployment> {
     const found = await this.services();
     const leads = leadsFor(cell.slug, cell.fixture.apps);
     const urls = new Map(

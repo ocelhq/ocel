@@ -6,7 +6,6 @@ import { GcpTarget } from "./gcp";
 import type { Target } from "./types";
 import { VpsTarget } from "./vps";
 
-export type { CellContext, Deployment, ReleaseCycle, Sweeper, Target } from "./types";
 export { hasReleaseCycle } from "./types";
 
 const TARGETS: Record<TargetName, () => Target> = {

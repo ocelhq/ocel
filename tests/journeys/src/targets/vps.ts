@@ -18,9 +18,10 @@ import type { Lane, Phase } from "../matrix/types";
 import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
 import type { PrepareFailures } from "../prepare";
+import type { CellUnderTest } from "../run/cellRun";
 import { migrateCommand } from "../workspace";
 import { type Gateway, openGateway } from "./gateway";
-import type { CellContext, Deployment, ReleaseCycle, Sweeper, Target } from "./types";
+import type { Deployment, ReleaseCycle, Sweeper, Target } from "./types";
 
 const DEFAULT_ZONE = "localhost";
 const DEPLOY_LOGIN = "ocel-deploy";
@@ -183,7 +184,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     await this.detectLane();
   }
 
-  async deploy(cell: CellContext): Promise<Deployment> {
+  async deploy(cell: CellUnderTest): Promise<Deployment> {
     const session = await this.sessionFor(cell);
     const drive = this.driving(cell, session, "deploy");
 
@@ -199,7 +200,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     return this.deployment(cell, session);
   }
 
-  async redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
+  async redeploy(cell: CellUnderTest, greeting: string): Promise<Deployment> {
     const session = await this.sessionFor(cell);
     const drive = this.driving(cell, session, "redeploy");
 
@@ -210,14 +211,14 @@ export class VpsTarget implements Target, ReleaseCycle {
     return this.deployment(cell, session);
   }
 
-  async rollback(cell: CellContext): Promise<Deployment> {
+  async rollback(cell: CellUnderTest): Promise<Deployment> {
     const session = await this.sessionFor(cell);
 
     await this.driving(cell, session, "rollback")("rollback", ["rollback", "--yes"]);
     return this.deployment(cell, session);
   }
 
-  async destroy(cell: CellContext): Promise<void> {
+  async destroy(cell: CellUnderTest): Promise<void> {
     const session = this.sessions.get(cell.slug);
     if (!session) {
       return;
@@ -283,7 +284,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     return dir;
   }
 
-  private async trusted(cell: CellContext): Promise<string | undefined> {
+  private async trusted(cell: CellUnderTest): Promise<string | undefined> {
     if (!issuedByTheBox(this.zone())) {
       return undefined;
     }
@@ -307,7 +308,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     }
   }
 
-  private async bindDomains(cell: CellContext, session: BoxSession): Promise<void> {
+  private async bindDomains(cell: CellUnderTest, session: BoxSession): Promise<void> {
     const root = await this.trusted(cell);
     await runOcel(
       cell,
@@ -323,7 +324,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     );
   }
 
-  private hostnamesOf(cell: CellContext): Map<string, string> {
+  private hostnamesOf(cell: CellUnderTest): Map<string, string> {
     return new Map(
       cell.fixture.apps.map((app) => {
         const hostname = appHostname(app, cell.slug, this.zone());
@@ -335,7 +336,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     );
   }
 
-  private async deployment(cell: CellContext, session: BoxSession): Promise<Deployment> {
+  private async deployment(cell: CellUnderTest, session: BoxSession): Promise<Deployment> {
     const urls = new Map<string, string>();
     for (const [app, hostname] of this.hostnamesOf(cell)) {
       urls.set(app, await session.gateway.serving(hostname));
@@ -357,7 +358,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     };
   }
 
-  private async sessionFor(cell: CellContext): Promise<BoxSession> {
+  private async sessionFor(cell: CellUnderTest): Promise<BoxSession> {
     const already = this.sessions.get(cell.slug);
     if (already) {
       return already;
@@ -371,7 +372,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     return session;
   }
 
-  private driving(cell: CellContext, session: BoxSession, phase: Phase) {
+  private driving(cell: CellUnderTest, session: BoxSession, phase: Phase) {
     return (name: string, args: string[]) =>
       runOcel(
         cell,

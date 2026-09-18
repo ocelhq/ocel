@@ -3,7 +3,7 @@ import { shapeFor } from "../../config";
 import { projectSlug } from "../../identity";
 import { fixtures } from "../../matrix/fixtures";
 import { cellsOn, fixturesOn } from "../../plan";
-import type { CellContext } from "../types";
+import type { CellUnderTest } from "../../run/cellRun";
 import { cellOfSlug, sweepOverlay } from "./index";
 
 const cells = fixturesOn(fixtures, "gcp").flatMap((one) => cellsOn(one, "gcp"));
@@ -29,7 +29,7 @@ describe("sweepOverlay", () => {
     for (const cell of cells) {
       const slug = projectSlug(cell.name, "18746093211");
       const overlay = sweepOverlay(cell, slug, env);
-      expect(overlay).toEqual(shapeFor({ ...cell, slug } as CellContext, "gcp", env));
+      expect(overlay).toEqual(shapeFor({ ...cell, slug } as CellUnderTest, "gcp", env));
       expect(overlay.slug).not.toBe(slug);
     }
   });

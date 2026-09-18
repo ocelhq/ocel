@@ -3,8 +3,8 @@ import path from "node:path";
 import { HARNESS_PREFIX } from "../../../identity";
 import { workTree } from "../../../ocel";
 import { fixtureDir, treeDir } from "../../../paths";
+import type { CellUnderTest } from "../../../run/cellRun";
 import { copyTree } from "../../../tree";
-import type { CellContext } from "../../types";
 import { spawnBin } from "../run";
 import { type Cli, cliAt } from "../store";
 import { emulatorEndpoint } from "../world";
@@ -27,7 +27,7 @@ async function deployEnv(): Promise<NodeJS.ProcessEnv> {
 }
 
 export class SstStack extends ExternalStack {
-  async deploy(cell: CellContext): Promise<void> {
+  async deploy(cell: CellUnderTest): Promise<void> {
     const dir = await workTree(cell, "aws");
     const stage = `j-${cell.runId}`;
     const bin = path.join(dir, "node_modules", ".bin", "sst");
@@ -40,7 +40,7 @@ export class SstStack extends ExternalStack {
     });
   }
 
-  async destroy(cell: CellContext): Promise<void> {
+  async destroy(cell: CellUnderTest): Promise<void> {
     const dir = await workTree(cell, "aws");
     const stage = `j-${cell.runId}`;
     const bin = path.join(dir, "node_modules", ".bin", "sst");

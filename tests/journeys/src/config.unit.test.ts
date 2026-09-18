@@ -20,11 +20,11 @@ import { evidence } from "./evidence";
 import { deploy, sdk } from "./matrix/fixtures";
 import type { Fixture, Variant } from "./matrix/types";
 import { cloudflare, container, defaults } from "./matrix/variants";
-import type { CellContext } from "./targets/types";
+import type { CellUnderTest } from "./run/cellRun";
 
 const TS_BASE = "./ocel.config.ts";
 
-function cell(fixture: Fixture, variant: Variant = defaults): CellContext {
+function cell(fixture: Fixture, variant: Variant = defaults): CellUnderTest {
   return {
     fixture,
     name: fixture.name,

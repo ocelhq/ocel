@@ -5,7 +5,7 @@ import path from "node:path";
 import { deploy, sdk } from "./matrix/fixtures";
 import type { Fixture } from "./matrix/types";
 import { appDirs, configTree, treeRoot } from "./ocel";
-import type { CellContext } from "./targets/types";
+import type { CellUnderTest } from "./run/cellRun";
 import {
   nestedMembers,
   rootManifest,
@@ -110,7 +110,7 @@ describe("the packages a tree has to carry", () => {
   });
 });
 
-function cellFor(fixture: Fixture): CellContext {
+function cellFor(fixture: Fixture): CellUnderTest {
   const cell = {
     fixture,
     name: fixture.name,
@@ -119,7 +119,7 @@ function cellFor(fixture: Fixture): CellContext {
     runId: "run",
     evidence: {},
   };
-  return cell as unknown as CellContext;
+  return cell as unknown as CellUnderTest;
 }
 
 describe("where an app sits in the tree built for it", () => {

@@ -9,8 +9,9 @@ import type { Lane, TargetName } from "../matrix/types";
 import { treeRoot, workTree } from "../ocel";
 import { ocelBin } from "../paths";
 import type { PrepareFailures } from "../prepare";
+import type { CellUnderTest } from "../run/cellRun";
 import { appHomes, stateComplaint } from "../workspace";
-import type { CellContext, Deployment, Sweeper, Target } from "./types";
+import type { Deployment, Sweeper, Target } from "./types";
 
 const HEALTH_TIMEOUT_MS = 120_000;
 
@@ -91,20 +92,20 @@ export abstract class LocalDevTarget implements Target {
   protected abstract ocelEnv(dir: string): Promise<NodeJS.ProcessEnv>;
 
   protected abstract beforeServing(
-    cell: CellContext,
+    cell: CellUnderTest,
     dir: string,
     env: NodeJS.ProcessEnv,
   ): Promise<void>;
 
-  protected abstract serveArgs(cell: CellContext, app: string): string[];
+  protected abstract serveArgs(cell: CellUnderTest, app: string): string[];
 
-  protected abstract afterStopping(cell: CellContext): Promise<void>;
+  protected abstract afterStopping(cell: CellUnderTest): Promise<void>;
 
   async prepareLane(): Promise<PrepareFailures> {
     return {};
   }
 
-  async deploy(cell: CellContext): Promise<Deployment> {
+  async deploy(cell: CellUnderTest): Promise<Deployment> {
     const dir = await workTree(cell, this.name);
     const env = await this.ocelEnv(dir);
     await this.beforeServing(cell, dir, env);
@@ -137,7 +138,7 @@ export abstract class LocalDevTarget implements Target {
     };
   }
 
-  async destroy(cell: CellContext): Promise<void> {
+  async destroy(cell: CellUnderTest): Promise<void> {
     const served = this.served.get(cell.slug);
     if (served) {
       for (const one of served.apps) {
@@ -164,7 +165,7 @@ export abstract class LocalDevTarget implements Target {
   }
 
   private async serve(
-    cell: CellContext,
+    cell: CellUnderTest,
     dir: string,
     env: NodeJS.ProcessEnv,
     app: string,
@@ -195,7 +196,7 @@ export abstract class LocalDevTarget implements Target {
     return served;
   }
 
-  private async stateStaysHome(cell: CellContext, dir: string): Promise<void> {
+  private async stateStaysHome(cell: CellUnderTest, dir: string): Promise<void> {
     const holding: string[] = [];
     for (const candidate of [dir, ...appHomes(cell.fixture).map((home) => path.join(dir, home))]) {
       try {

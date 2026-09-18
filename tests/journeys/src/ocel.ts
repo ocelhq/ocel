@@ -5,7 +5,7 @@ import { shapeFor, writeJourneyConfig } from "./config";
 import { live, relay, type Say } from "./live";
 import type { Phase, TargetName } from "./matrix/types";
 import { fixtureMember, ocelBin, providersDir, treeDir } from "./paths";
-import type { CellContext } from "./targets/types";
+import type { CellUnderTest } from "./run/cellRun";
 import { plantWorkspace } from "./tree";
 
 export type Ran = { code: number | null; stdout: string; stderr: string };
@@ -19,19 +19,19 @@ export function maskArgs(args: string[]): string {
   return redact(shown.join(" "));
 }
 
-export function treeRoot(cell: CellContext, target: string): string {
+export function treeRoot(cell: CellUnderTest, target: string): string {
   return treeDir(cell.runId, target, cell.name);
 }
 
-export function configTree(cell: CellContext, target: string): string {
+export function configTree(cell: CellUnderTest, target: string): string {
   return path.join(treeRoot(cell, target), fixtureMember(cell.fixture.name));
 }
 
-export function appDirs(cell: CellContext): string[] {
+export function appDirs(cell: CellUnderTest): string[] {
   return [fixtureMember(cell.fixture.name)];
 }
 
-export async function workTree(cell: CellContext, target: TargetName): Promise<string> {
+export async function workTree(cell: CellUnderTest, target: TargetName): Promise<string> {
   await plantWorkspace(treeRoot(cell, target), `journey-${cell.name}`, appDirs(cell));
   const dir = configTree(cell, target);
   await writeJourneyConfig(dir, shapeFor(cell, target, process.env));
@@ -88,7 +88,7 @@ export async function ocel(
 }
 
 export async function runOcel(
-  cell: CellContext,
+  cell: CellUnderTest,
   dir: string,
   phase: Phase,
   name: string,
