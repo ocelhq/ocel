@@ -11,22 +11,25 @@ const RUN_ID = "unit-journey";
 function laneThatPrepares(prepared: string[]): Target {
   return {
     name: "dev",
-    concurrency: 1,
-    largeBodyBytes: 1,
-    legTimeoutMs: 1_000,
-    guard: async () => "dev",
-    prepare: async () => {
-      prepared.push("lane");
+    workers: 1,
+    maxRequestBodyBytes: 1,
+    stepTimeoutMs: 1_000,
+    sweeper: {
+      list: async () => [],
+      exists: async () => false,
+      sweepStale: async () => {},
+      sweepRun: async () => {},
     },
-    setup: async () => {},
+    detectLane: async () => "dev",
+    prepareLane: async () => {
+      prepared.push("lane");
+      return {};
+    },
+    prepareProcess: async () => {},
     deploy: async () => {
       throw new Error("no cell of this lane ever stands up");
     },
     destroy: async () => {},
-    list: async () => [],
-    stands: async () => false,
-    sweep: async () => {},
-    sweepOwn: async () => {},
   };
 }
 

@@ -1,37 +1,37 @@
 import type { TargetName } from "../matrix/types";
-import { awsTarget } from "./aws";
-import { devTarget } from "./dev";
-import { devLocalTarget } from "./devLocal";
-import { gcpTarget } from "./gcp";
+import { AwsTarget } from "./aws";
+import { DevTarget } from "./dev";
+import { DevLocalTarget } from "./devLocal";
+import { GcpTarget } from "./gcp";
 import type { Target } from "./types";
-import { vpsTarget } from "./vps";
+import { VpsTarget } from "./vps";
 
-export type { CellContext, Deployment, ReleaseCycle, Target } from "./types";
+export type { CellContext, Deployment, ReleaseCycle, Sweeper, Target } from "./types";
 export { hasReleaseCycle } from "./types";
 
-const targets: Partial<Record<TargetName, Target>> = {
-  aws: awsTarget,
-  dev: devTarget,
-  "dev-local": devLocalTarget,
-  gcp: gcpTarget,
-  vps: vpsTarget,
+const TARGETS: Record<TargetName, () => Target> = {
+  aws: () => new AwsTarget(),
+  dev: () => new DevTarget(),
+  "dev-local": () => new DevLocalTarget(),
+  gcp: () => new GcpTarget(),
+  vps: () => new VpsTarget(),
 };
 
 export function targetNamed(name: string): Target {
-  const target = targets[name as TargetName];
-  if (!target) {
-    const known = Object.keys(targets).join(", ");
+  const made = TARGETS[name as TargetName];
+  if (!made) {
+    const known = Object.keys(TARGETS).join(", ");
     throw new Error(`no journey target named ${name} (${known})`);
   }
-  return target;
+  return made();
 }
 
 export function laneWorkers(
-  target: Pick<Target, "concurrency">,
+  target: Pick<Target, "workers">,
   env: NodeJS.ProcessEnv = process.env,
 ): number {
   const asked = Number((env.OCEL_JOURNEY_WORKERS ?? "").trim());
-  return Number.isInteger(asked) && asked > 0 ? asked : target.concurrency;
+  return Number.isInteger(asked) && asked > 0 ? asked : target.workers;
 }
 
 export function selectedTarget(): Target {

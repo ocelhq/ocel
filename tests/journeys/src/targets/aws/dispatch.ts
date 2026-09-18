@@ -2,6 +2,7 @@ import dns from "node:dns";
 import net from "node:net";
 import { Agent, fetch as undiciFetch } from "undici/index.js";
 import type { Fetch } from "../../checks/context";
+import type { AwsWorld } from "./world";
 
 export type Address = { hostname: string; port: number };
 
@@ -159,4 +160,18 @@ export function authoritativeFetch(zone: string): Fetch {
   const dispatch = (input: Parameters<typeof undiciFetch>[0], init?: RequestInit) =>
     undiciFetch(input, { ...(init as Parameters<typeof undiciFetch>[1]), dispatcher });
   return dispatch as unknown as Fetch;
+}
+
+export class AwsDispatch {
+  private dispatching: Promise<Fetch> | undefined;
+
+  constructor(private readonly world: AwsWorld) {}
+
+  fetch(): Promise<Fetch> {
+    this.dispatching ??= (async () => {
+      const endpoint = await this.world.endpoint();
+      return endpoint ? emulatorFetch(endpoint) : authoritativeFetch(this.world.zone());
+    })();
+    return this.dispatching;
+  }
 }

@@ -17,7 +17,7 @@ export type CheckContext = {
   app: string;
   baseUrl: string;
   greeting: string;
-  largeBodyBytes: number;
+  maxRequestBodyBytes: number;
   phase: Phase;
   notes: Map<string, string>;
   fetch: Fetch;

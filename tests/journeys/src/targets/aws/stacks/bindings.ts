@@ -6,8 +6,8 @@ import { journeyConfigIn } from "../../../config";
 import { live } from "../../../live";
 import { ocel, spawnOcel, workTree } from "../../../ocel";
 import type { CellContext } from "../../types";
-import { place } from "../place";
 import { awsBindingStore, awsStore, type Cli, cliAt, said } from "../store";
+import { emulatorEndpoint } from "../world";
 
 const BINDING_NAME = "orders";
 const CUSTOM_BINDING_NAME = "network";
@@ -30,20 +30,16 @@ export type StackCheck = {
 
 export type StackChecks = Record<StackPoint, StackCheck[]>;
 
-async function endpoint(): Promise<string | undefined> {
-  return (await place()).endpoint;
-}
-
-async function cli(): Promise<Cli> {
-  return cliAt(await endpoint());
+function cli(): Cli {
+  return cliAt(emulatorEndpoint(process.env));
 }
 
 async function bindingStore() {
-  return awsBindingStore(await endpoint());
+  return awsBindingStore(emulatorEndpoint(process.env));
 }
 
 async function taggedFunctionArns(slug: string): Promise<string[]> {
-  const raw = await (await cli())([
+  const raw = await cli()([
     "resourcegroupstaggingapi",
     "get-resources",
     "--resource-type-filters",
@@ -66,7 +62,7 @@ type FunctionConfiguration = {
 };
 
 async function functionConfiguration(functionArn: string): Promise<FunctionConfiguration> {
-  const raw = await (await cli())([
+  const raw = await cli()([
     "lambda",
     "get-function-configuration",
     "--function-name",
@@ -82,7 +78,7 @@ type PolicyDocument = {
 };
 
 async function attachedManagedPolicyArns(roleName: string): Promise<string[]> {
-  const raw = await (await cli())([
+  const raw = await cli()([
     "iam",
     "list-attached-role-policies",
     "--role-name",
@@ -102,7 +98,7 @@ async function inlinePolicyDocument(
 ): Promise<PolicyDocument | undefined> {
   let raw: string;
   try {
-    raw = await (await cli())([
+    raw = await cli()([
       "iam",
       "get-role-policy",
       "--role-name",
@@ -433,7 +429,7 @@ export abstract class ExternalStack {
       "ocel deploy exited 0 with nothing published; a binding is resolved before anything is provisioned",
     );
     assert.equal(
-      await awsStore(await endpoint()).stands(cell.slug),
+      await awsStore(emulatorEndpoint(process.env)).stands(cell.slug),
       false,
       `${cell.slug} has a project before anything published a binding`,
     );

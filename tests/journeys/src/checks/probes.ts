@@ -122,7 +122,7 @@ export const httpProbeChecks: Check[] = [
   {
     title: "POST /api/probes/large round-trips a body the size the origin takes",
     run: async (ctx) => {
-      const body = randomBytes(ctx.largeBodyBytes);
+      const body = randomBytes(ctx.maxRequestBodyBytes);
       const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/large`, {
         method: "POST",
         headers: { "content-type": "application/octet-stream" },
@@ -131,7 +131,7 @@ export const httpProbeChecks: Check[] = [
       const text = await res.text();
       assert.equal(res.status, 200, describeResponse(res, text));
       const probe = JSON.parse(text) as { bytes: number; sha256: string };
-      assert.equal(probe.bytes, ctx.largeBodyBytes);
+      assert.equal(probe.bytes, ctx.maxRequestBodyBytes);
       assert.equal(probe.sha256, createHash("sha256").update(body).digest("hex"));
     },
   },

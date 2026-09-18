@@ -15,7 +15,7 @@ function context(asked: string, answered: string): CheckContext {
     app: asked,
     baseUrl: `https://${asked}-j-1-sdk-workspace.journey.test`,
     greeting: "journey-hello",
-    largeBodyBytes: 1024,
+    maxRequestBodyBytes: 1024,
     phase: "verify",
     notes: new Map(),
     fetch: answering(answered),

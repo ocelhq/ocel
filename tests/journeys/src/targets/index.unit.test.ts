@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { laneWorkers, targetNamed } from "./index";
+import { hasReleaseCycle, laneWorkers, targetNamed } from "./index";
 
-const target = { concurrency: 3 };
+const target = { workers: 3 };
 
 describe("laneWorkers", () => {
-  it("takes the target's concurrency when nothing overrides it", () => {
+  it("takes the target's workers when nothing overrides it", () => {
     expect(laneWorkers(target, {})).toBe(3);
   });
 
@@ -27,5 +27,20 @@ describe("targetNamed", () => {
     expect(() => targetNamed("azure")).toThrow(
       /no journey target named azure \(aws, dev, dev-local, gcp, vps\)/,
     );
+  });
+});
+
+describe("a target's release cycle", () => {
+  it("redeploys and rolls back on the targets that keep releases, and nowhere else", () => {
+    const cycled = ["aws", "dev", "dev-local", "gcp", "vps"].filter((name) =>
+      hasReleaseCycle(targetNamed(name)),
+    );
+    expect(cycled).toEqual(["aws", "gcp", "vps"]);
+  });
+});
+
+describe("a target's state", () => {
+  it("belongs to the one process that named it", () => {
+    expect(targetNamed("vps")).not.toBe(targetNamed("vps"));
   });
 });

@@ -1,31 +1,20 @@
-import { rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { HARNESS_ONLY_ENV, localPostgresUrl, postgresBinding } from "@ocel-tests/shared/env";
 import { SQL } from "bun";
 import { migrates, setsEnv } from "../checks";
-import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../checks/context";
+import { INITIAL_GREETING, SECRET_TOKEN } from "../checks/context";
 import { journeyConfigIn } from "../config";
 import { HARNESS_PREFIX, isStranded } from "../identity";
 import type { Lane } from "../matrix/types";
-import { runOcel, treeRoot, workTree } from "../ocel";
+import { runOcel } from "../ocel";
 import { appCommand, migrateCommand } from "../workspace";
-import {
-  baseUrls,
-  type Standing,
-  serve,
-  stateStaysHome,
-  stillServing,
-  stopStanding,
-} from "./devShared";
-import type { CellContext, Deployment, Target } from "./types";
-
-const TARGET = "dev-local";
+import { LocalDevTarget } from "./localDev";
+import type { CellContext, Sweeper } from "./types";
 
 const DOTFILE = ".env";
 
 const START_POSTGRES = "docker compose up -d ocel-cloud";
-
-const running = new Map<string, Standing>();
 
 const LONGEST_IDENTIFIER = 63;
 
@@ -94,69 +83,6 @@ async function writeDotfile(cell: CellContext, dir: string): Promise<void> {
   await cell.evidence.write("deploy", DOTFILE, `${lines.join("\n")}\n`);
 }
 
-function childEnv(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  for (const name of [...HARNESS_ONLY_ENV, "OCEL_ACCESS_TOKEN", "OCEL_CONSOLE_URL"]) {
-    delete env[name];
-  }
-  return env;
-}
-
-async function deploy(cell: CellContext): Promise<Deployment> {
-  const dir = await workTree(cell, TARGET);
-  const env = { ...childEnv(), OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)) };
-
-  await writeDotfile(cell, dir);
-  if (migrates(cell.fixture.checks)) {
-    await runOcel(
-      cell,
-      dir,
-      "deploy",
-      "migrate",
-      ["run", "--local", "--", ...migrateCommand()],
-      env,
-    );
-  }
-
-  const standing: Standing = { dir, apps: [] };
-  running.set(cell.slug, standing);
-  const urls = new Map<string, string>();
-  for (const app of cell.fixture.apps) {
-    const handle = await serve(cell, dir, env, app, [
-      "dev",
-      "--local",
-      "--",
-      ...appCommand(cell.fixture, app),
-    ]);
-    standing.apps.push(handle);
-    urls.set(app, `http://127.0.0.1:${handle.port}`);
-  }
-  await stateStaysHome(cell, dir);
-
-  await cell.evidence.write(
-    "deploy",
-    "deployment.json",
-    `${JSON.stringify({ slug: cell.slug, dir, apps: Object.fromEntries(urls) }, null, 2)}\n`,
-  );
-
-  return {
-    baseUrl: baseUrls(cell, urls, TARGET),
-    fetch: (...args) => fetch(...args),
-  };
-}
-
-async function destroy(cell: CellContext): Promise<void> {
-  const standing = running.get(cell.slug);
-  if (standing) {
-    await stopStanding(cell, standing);
-    await rm(treeRoot(cell, TARGET), { recursive: true, force: true });
-    running.delete(cell.slug);
-  }
-  if (migrates(cell.fixture.checks)) {
-    await dropDatabase(cell.slug);
-  }
-}
-
 async function journeyDatabases(): Promise<string[]> {
   return withAdmin(async (sql) => {
     const rows = (await sql`SELECT datname FROM pg_database`) as Array<{ datname: string }>;
@@ -164,29 +90,61 @@ async function journeyDatabases(): Promise<string[]> {
   });
 }
 
-async function sweep(runId: string): Promise<void> {
-  for (const slug of await journeyDatabases()) {
-    if (isStranded(slug, runId)) {
-      await dropDatabase(slug);
+export class DevLocalTarget extends LocalDevTarget {
+  readonly name = "dev-local";
+
+  readonly sweeper: Sweeper = {
+    list: () => this.stillServing(),
+    exists: async (slug) => (await this.stillServing()).includes(slug),
+    sweepStale: async (runId) => {
+      for (const slug of await journeyDatabases()) {
+        if (isStranded(slug, runId)) {
+          await dropDatabase(slug);
+        }
+      }
+    },
+    sweepRun: async () => {},
+  };
+
+  async detectLane(): Promise<Lane> {
+    return "dev-local";
+  }
+
+  async prepareProcess(): Promise<void> {}
+
+  protected async ocelEnv(dir: string): Promise<NodeJS.ProcessEnv> {
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    for (const name of [...HARNESS_ONLY_ENV, "OCEL_ACCESS_TOKEN", "OCEL_CONSOLE_URL"]) {
+      delete env[name];
+    }
+    return { ...env, OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)) };
+  }
+
+  protected async beforeServing(
+    cell: CellContext,
+    dir: string,
+    env: NodeJS.ProcessEnv,
+  ): Promise<void> {
+    await writeDotfile(cell, dir);
+    if (migrates(cell.fixture.checks)) {
+      await runOcel(
+        cell,
+        dir,
+        "deploy",
+        "migrate",
+        ["run", "--local", "--", ...migrateCommand()],
+        env,
+      );
+    }
+  }
+
+  protected serveArgs(cell: CellContext, app: string): string[] {
+    return ["dev", "--local", "--", ...appCommand(cell.fixture, app)];
+  }
+
+  protected async afterStopping(cell: CellContext): Promise<void> {
+    if (migrates(cell.fixture.checks)) {
+      await dropDatabase(cell.slug);
     }
   }
 }
-
-async function list(): Promise<string[]> {
-  return stillServing(running);
-}
-
-export const devLocalTarget: Target = {
-  name: TARGET,
-  concurrency: 4,
-  largeBodyBytes: UNCAPPED_BODY_BYTES,
-  legTimeoutMs: 180_000,
-  guard: async (): Promise<Lane> => TARGET,
-  setup: async () => {},
-  deploy,
-  destroy,
-  list,
-  stands: async (slug) => (await list()).includes(slug),
-  sweep,
-  sweepOwn: async () => {},
-};

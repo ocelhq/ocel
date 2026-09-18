@@ -4,7 +4,7 @@ import { deploy, fixtures as matrix } from "../../matrix/fixtures";
 import type { Cell } from "../../matrix/types";
 import { defaults } from "../../matrix/variants";
 import { cellsOn, fixturesOn } from "../../plan";
-import { cellsBySlugPart, despite, sweepPlan } from "./index";
+import { cellsBySlugPart, despite, sweepPlan } from "./sweeper";
 
 const fixture = deploy.node;
 

@@ -18,28 +18,30 @@ export type CellContext = {
   evidence: Evidence;
 };
 
-export type Target = {
-  name: TargetName;
-  concurrency: number;
-  largeBodyBytes: number;
-  legTimeoutMs: number;
-  guard: () => Promise<Lane>;
-  // biome-ignore lint/suspicious/noConfusingVoidType: a target with nothing to prepare resolves to nothing
-  prepare?: () => Promise<PrepareFailures | void>;
-  setup: () => Promise<void>;
-  deploy: (cell: CellContext) => Promise<Deployment>;
-  destroy: (cell: CellContext) => Promise<void>;
-  list: () => Promise<string[]>;
-  stands: (slug: string) => Promise<boolean>;
-  sweep: (runId: string) => Promise<void>;
-  sweepOwn: (runId: string) => Promise<void>;
-};
+export interface Sweeper {
+  list(): Promise<string[]>;
+  exists(slug: string): Promise<boolean>;
+  sweepStale(runId: string): Promise<void>;
+  sweepRun(runId: string): Promise<void>;
+}
 
-export type ReleaseCycle = {
-  redeploy: (cell: CellContext, greeting: string) => Promise<Deployment>;
-  rollback: (cell: CellContext, greeting: string) => Promise<Deployment>;
-};
+export interface Target {
+  readonly name: TargetName;
+  readonly workers: number;
+  readonly maxRequestBodyBytes: number;
+  readonly stepTimeoutMs: number;
+  readonly sweeper: Sweeper;
+  detectLane(): Promise<Lane>;
+  prepareLane(): Promise<PrepareFailures>;
+  prepareProcess(): Promise<void>;
+  deploy(cell: CellContext): Promise<Deployment>;
+  destroy(cell: CellContext): Promise<void>;
+}
 
+export interface ReleaseCycle {
+  redeploy(cell: CellContext, greeting: string): Promise<Deployment>;
+  rollback(cell: CellContext, greeting: string): Promise<Deployment>;
+}
 export function hasReleaseCycle<T extends object>(target: T): target is T & ReleaseCycle {
   const cycled = target as Partial<ReleaseCycle>;
   return typeof cycled.redeploy === "function" && typeof cycled.rollback === "function";
