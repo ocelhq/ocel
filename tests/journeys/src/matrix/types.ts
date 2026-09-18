@@ -1,6 +1,6 @@
 import type { Compute } from "ocel/config";
 import type { Check } from "../checks/context";
-import type { TestRef } from "../lifecycle";
+import type { TestSelector } from "../steps";
 import type { ExternalStack } from "../targets/aws/stacks/bindings";
 
 export type { Compute };
@@ -64,7 +64,7 @@ export function variant(name: string, shape: Omit<Variant, "name">): Variant {
   return { name, ...shape };
 }
 
-export type Sample = { group: string; lead?: true };
+export type Sample = { group: string; representative?: true };
 
 export function sampleGroupOf(fixture: Pick<Fixture, "concern" | "sample">): string | undefined {
   return fixture.sample === undefined ? undefined : `${fixture.concern}/${fixture.sample.group}`;
@@ -95,17 +95,17 @@ export function cellName(fixture: Pick<Fixture, "name">, variant: Variant): stri
   return variant.name === DEFAULT_VARIANT ? fixture.name : `${fixture.name}-${variant.name}`;
 }
 
-export type Affected = {
+export type GapScope = {
   on: Lane[];
   fixtures?: Fixture[];
   variants?: Variant[];
-  tests: TestRef[];
-  skip?: true;
+  fails: TestSelector[];
+  skipsCell?: true;
 };
 
 export type Gap = {
   id: string;
   reason: string;
   issue?: number;
-  affects: Affected[];
+  where: GapScope[];
 };

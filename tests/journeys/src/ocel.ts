@@ -1,10 +1,10 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { REDACTED, redact } from "./checks/context";
-import { shapeFor, writeJourneyConfig } from "./config";
-import { live, relay, type Say } from "./live";
+import { overlayFor, writeJourneyConfig } from "./config";
 import type { Phase, TargetName } from "./matrix/types";
 import { fixtureMember, ocelBin, providersDir, treeDir } from "./paths";
+import { type Log, progress, relay } from "./progress";
 import type { CellUnderTest } from "./run/cellRun";
 import { plantWorkspace } from "./tree";
 
@@ -34,7 +34,7 @@ export function appDirs(cell: CellUnderTest): string[] {
 export async function workTree(cell: CellUnderTest, target: TargetName): Promise<string> {
   await plantWorkspace(treeRoot(cell, target), `journey-${cell.name}`, appDirs(cell));
   const dir = configTree(cell, target);
-  await writeJourneyConfig(dir, shapeFor(cell, target, process.env));
+  await writeJourneyConfig(dir, overlayFor(cell, target, process.env));
   return dir;
 }
 
@@ -42,7 +42,7 @@ export async function spawnOcel(
   dir: string,
   args: string[],
   env: NodeJS.ProcessEnv,
-  say: Say = live("ocel |"),
+  log: Log = progress("ocel |"),
 ): Promise<Ran> {
   return new Promise<Ran>((resolve, reject) => {
     const child = spawn(ocelBin, args, {
@@ -51,18 +51,18 @@ export async function spawnOcel(
     });
     let stdout = "";
     let stderr = "";
-    say(`$ ocel ${maskArgs(args)}`);
+    log(`$ ocel ${maskArgs(args)}`);
     child.stdout.on("data", (chunk) => {
       stdout += String(chunk);
     });
     child.stderr.on("data", (chunk) => {
       stderr += String(chunk);
     });
-    relay(child.stdout, say);
-    relay(child.stderr, say);
+    relay(child.stdout, log);
+    relay(child.stderr, log);
     child.on("error", reject);
     child.on("close", (code) => {
-      say(`exited ${code}`);
+      log(`exited ${code}`);
       resolve({ code, stdout, stderr });
     });
   });
@@ -78,9 +78,9 @@ export async function ocel(
   dir: string,
   args: string[],
   env: NodeJS.ProcessEnv,
-  say?: Say,
+  log?: Log,
 ): Promise<Ran> {
-  const result = await spawnOcel(dir, args, env, say);
+  const result = await spawnOcel(dir, args, env, log);
   if (result.code !== 0) {
     throw exitedBadly(args, result);
   }
@@ -96,7 +96,7 @@ export async function runOcel(
   env: NodeJS.ProcessEnv,
 ): Promise<Ran> {
   const began = Date.now();
-  const result = await spawnOcel(dir, args, env, live(`${cell.name} ${phase}/${name} |`));
+  const result = await spawnOcel(dir, args, env, progress(`${cell.name} ${phase}/${name} |`));
   await cell.evidence.append(
     COMMAND_LOG,
     JSON.stringify({ phase, name, ms: Date.now() - began, code: result.code }),

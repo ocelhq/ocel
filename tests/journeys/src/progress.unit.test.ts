@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { REDACTED, SECRET_TOKEN } from "./checks/context";
-import { follow, LIVE_ENV, lines, live, relay } from "./live";
+import { follow, lines, PROGRESS_ENV, progress, relay } from "./progress";
 
 const dirs: string[] = [];
 
@@ -14,20 +14,20 @@ afterAll(async () => {
 });
 
 async function scratch(): Promise<string> {
-  const dir = await mkdtemp(path.join(tmpdir(), "journey-live-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "journey-progress-"));
   dirs.push(dir);
   return dir;
 }
 
-describe("live", () => {
+describe("progress", () => {
   it("appends a prefixed, redacted line to the file the lane named", async () => {
-    const file = path.join(await scratch(), "live.log");
-    const say = live("cell up/deploy", { [LIVE_ENV]: file });
-    say(`token ${SECRET_TOKEN} set`);
-    say("done");
+    const file = path.join(await scratch(), "progress.log");
+    const log = progress("cell deploy/deploy", { [PROGRESS_ENV]: file });
+    log(`token ${SECRET_TOKEN} set`);
+    log("done");
     assert.equal(
       await readFile(file, "utf8"),
-      `cell up/deploy token ${REDACTED} set\ncell up/deploy done\n`,
+      `cell deploy/deploy token ${REDACTED} set\ncell deploy/deploy done\n`,
     );
   });
 
@@ -54,13 +54,13 @@ describe("live", () => {
   });
 
   it("follows what workers append and drains the rest on stop", async () => {
-    const file = path.join(await scratch(), "live.log");
+    const file = path.join(await scratch(), "progress.log");
     const out: string[] = [];
     const stop = follow(file, (text) => out.push(String(text)), 10);
     await writeFile(file, "first\n", "utf8");
     await new Promise((resolve) => setTimeout(resolve, 40));
     assert.deepEqual(out, ["first\n"]);
-    live("late", { [LIVE_ENV]: file })("second");
+    progress("late", { [PROGRESS_ENV]: file })("second");
     stop();
     assert.equal(out.join(""), "first\nlate second\n");
   });

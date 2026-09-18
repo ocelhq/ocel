@@ -2,15 +2,15 @@ import { afterAll, beforeAll, describe, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { evidence } from "../evidence";
 import { currentRunIdentity } from "../identity";
-import { phasesDriven, stepsPlanned } from "../lifecycle";
-import { live } from "../live";
 import { fixtures } from "../matrix/fixtures";
 import { evidenceDir } from "../paths";
-import { cellKey, cellNamed, type Plan } from "../plan";
+import { cellApp, cellNamed, type Plan } from "../plan";
 import { readPrepareFailure } from "../prepare";
+import { progress } from "../progress";
+import { phasesDriven, stepsPlanned } from "../steps";
 import { targetNamed } from "../targets";
 import { CellRun } from "./cellRun";
-import { ledgerFor } from "./ledger";
+import { resultWriter } from "./results";
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -37,8 +37,8 @@ export function describeCell(planFile: string, name: string) {
     ...(prepareFailure === undefined ? {} : { prepareFailure }),
   });
 
-  const write = ledgerFor(runId, target.name, name);
-  const say = live(name);
+  const write = resultWriter(runId, target.name, name);
+  const log = progress(name);
   const timeout = target.stepTimeoutMs;
 
   describe(name, () => {
@@ -47,16 +47,16 @@ export function describeCell(planFile: string, name: string) {
     afterAll(() => run.finish(phases), { timeout });
 
     for (const step of steps) {
-      const key = cellKey(name, step.app);
+      const key = cellApp(name, step.app);
       describe(key, () => {
         it(
           step.title,
           async () => {
             const startTime = Date.now();
-            say(`▶ ${step.title}`);
+            log(`▶ ${step.title}`);
             try {
               await step.run(run);
-              say(`✓ ${step.title} (${((Date.now() - startTime) / 1000).toFixed(1)}s)`);
+              log(`✓ ${step.title} (${((Date.now() - startTime) / 1000).toFixed(1)}s)`);
               write({
                 cell: key,
                 title: step.title,
@@ -65,7 +65,7 @@ export function describeCell(planFile: string, name: string) {
                 duration: Date.now() - startTime,
               });
             } catch (error) {
-              say(`✗ ${step.title}: ${messageOf(error).split("\n")[0]}`);
+              log(`✗ ${step.title}: ${messageOf(error).split("\n")[0]}`);
               write({
                 cell: key,
                 title: step.title,

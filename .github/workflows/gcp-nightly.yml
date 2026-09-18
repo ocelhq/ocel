@@ -25,7 +25,7 @@ env:
   OCEL_GCP_LIVE_REGION: ${{ vars.GCP_LIVE_REGION || 'europe-west1' }}
   OCEL_TARGET: gcp
   OCEL_JOURNEY_CONCERN: deploy
-  OCEL_JOURNEY_COVERAGE: full
+  OCEL_JOURNEY_COVERAGE: every-cell
 
 jobs:
   live:

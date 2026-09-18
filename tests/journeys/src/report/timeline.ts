@@ -55,7 +55,7 @@ export function phaseOf(test: TimelineTest): string {
   return (TIMED_PHASES as readonly string[]).includes(prefix) ? prefix : OTHER_PHASE;
 }
 
-export function sweep(tests: TimelineTest[]): Segment[] {
+export function segmentsOf(tests: TimelineTest[]): Segment[] {
   const points = tests
     .filter((test) => test.duration > 0)
     .flatMap((test) => [
@@ -132,7 +132,7 @@ export function timelineOf(input: TimelineInput): Timeline {
   const cells = [...byCell.entries()]
     .map(([cell, tests]) => timingFor(cell, tests, input.runStart, moduleMs.get(cell) ?? 0))
     .sort((a, b) => b.file - a.file || a.cell.localeCompare(b.cell));
-  const segments = sweep(input.tests);
+  const segments = segmentsOf(input.tests);
   return {
     workers: input.workers,
     wall: seconds(wallMs),

@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { cellsDir, resultsFile } from "../paths";
 
-export type RecordedRow = {
+export type StepResult = {
   cell: string;
   title: string;
   outcome: "passed" | "failed";
@@ -12,13 +12,17 @@ export type RecordedRow = {
   duration: number;
 };
 
-export function ledgerFor(runId: string, target: string, cell: string): (row: RecordedRow) => void {
+export function resultWriter(
+  runId: string,
+  target: string,
+  cell: string,
+): (result: StepResult) => void {
   const file = resultsFile(runId, target, cell);
   mkdirSync(path.dirname(file), { recursive: true });
-  return (row) => appendFileSync(file, `${JSON.stringify(row)}\n`, "utf8");
+  return (result) => appendFileSync(file, `${JSON.stringify(result)}\n`, "utf8");
 }
 
-export async function readRows(runId: string, target: string): Promise<RecordedRow[]> {
+export async function readResults(runId: string, target: string): Promise<StepResult[]> {
   const dir = cellsDir(runId, target);
   let names: string[];
   try {
@@ -26,14 +30,14 @@ export async function readRows(runId: string, target: string): Promise<RecordedR
   } catch {
     return [];
   }
-  const rows: RecordedRow[] = [];
+  const results: StepResult[] = [];
   for (const name of names.filter((entry) => entry.endsWith(".jsonl")).sort()) {
     const read = await readFile(path.join(dir, name), "utf8");
     for (const line of read.split("\n")) {
       if (line.trim() !== "") {
-        rows.push(JSON.parse(line) as RecordedRow);
+        results.push(JSON.parse(line) as StepResult);
       }
     }
   }
-  return rows;
+  return results;
 }

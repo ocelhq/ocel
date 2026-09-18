@@ -2,19 +2,19 @@ import { appendFileSync, closeSync, fstatSync, openSync, readSync } from "node:f
 import type { Readable } from "node:stream";
 import { redact } from "./checks/context";
 
-export const LIVE_ENV = "OCEL_JOURNEY_LIVE";
+export const PROGRESS_ENV = "OCEL_JOURNEY_LIVE";
 
-export type Say = (line: string) => void;
+export type Log = (line: string) => void;
 
-export function live(prefix: string, env: NodeJS.ProcessEnv = process.env): Say {
-  const file = env[LIVE_ENV];
+export function progress(prefix: string, env: NodeJS.ProcessEnv = process.env): Log {
+  const file = env[PROGRESS_ENV];
   const sink = file
     ? (text: string) => appendFileSync(file, text, "utf8")
     : (text: string) => process.stderr.write(text);
   return (line) => sink(`${prefix} ${redact(line)}\n`);
 }
 
-export function lines(onLine: Say): { push(chunk: string | Buffer): void; end(): void } {
+export function lines(onLine: Log): { push(chunk: string | Buffer): void; end(): void } {
   let carry = "";
   return {
     push(chunk) {
@@ -34,11 +34,11 @@ export function lines(onLine: Say): { push(chunk: string | Buffer): void; end():
   };
 }
 
-export function relay(stream: Readable | null | undefined, say: Say): void {
+export function relay(stream: Readable | null | undefined, log: Log): void {
   if (!stream) {
     return;
   }
-  const split = lines(say);
+  const split = lines(log);
   stream.on("data", (chunk) => split.push(chunk));
   stream.on("end", () => split.end());
 }

@@ -4,11 +4,11 @@ import { createServer } from "node:net";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { redact, UNCAPPED_BODY_BYTES } from "../checks/context";
-import { live, relay } from "../live";
 import type { Lane, TargetName } from "../matrix/types";
 import { treeRoot, workTree } from "../ocel";
 import { ocelBin } from "../paths";
 import type { PrepareFailures } from "../prepare";
+import { progress, relay } from "../progress";
 import type { CellUnderTest } from "../run/cellRun";
 import { appHomes, stateComplaint } from "../workspace";
 import type { Deployment, Sweeper, Target } from "./types";
@@ -183,9 +183,9 @@ export abstract class LocalDevTarget implements Target {
     };
     child.stdout?.on("data", capture);
     child.stderr?.on("data", capture);
-    const say = live(`${cell.name} deploy/dev-${app} |`);
-    relay(child.stdout, say);
-    relay(child.stderr, say);
+    const log = progress(`${cell.name} deploy/dev-${app} |`);
+    relay(child.stdout, log);
+    relay(child.stderr, log);
 
     const served: ServedApp = { app, port, child, output: () => captured };
     try {

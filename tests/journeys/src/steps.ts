@@ -8,7 +8,7 @@ export type Step = {
   app: string;
   title: string;
   phase?: Phase;
-  run: (cell: CellRun) => Promise<void>;
+  run: (run: CellRun) => Promise<void>;
 };
 
 export const DEPLOY = "deploy";
@@ -38,23 +38,26 @@ function stackCheckTitle(point: StackPoint, title: string): string {
 
 declare const built: unique symbol;
 
-export type TestRef = { readonly titles: string[]; readonly [built]: true };
+export type TestSelector = { readonly titles: string[]; readonly [built]: true };
 
-function testRef(titles: string[]): TestRef {
-  return { titles } as TestRef;
+function selector(titles: string[]): TestSelector {
+  return { titles } as TestSelector;
 }
 
-export const stepRef = {
-  deploy: testRef([DEPLOY]),
-  redeploy: testRef([REDEPLOY]),
-  rollback: testRef([ROLLBACK]),
-  destroy: testRef([DESTROY]),
-  refuse: testRef([REFUSE]),
+export const step = {
+  deploy: selector([DEPLOY]),
+  redeploy: selector([REDEPLOY]),
+  rollback: selector([ROLLBACK]),
+  destroy: selector([DESTROY]),
+  refuse: selector([REFUSE]),
 };
 
-export function check(checks: Check | Check[], phases: CheckedPhase[] = CHECKED_PHASES): TestRef {
+export function check(
+  checks: Check | Check[],
+  phases: CheckedPhase[] = CHECKED_PHASES,
+): TestSelector {
   const listed = Array.isArray(checks) ? checks : [checks];
-  return testRef(listed.flatMap((one) => phases.map((phase) => checkTitle(phase, one.title))));
+  return selector(listed.flatMap((one) => phases.map((phase) => checkTitle(phase, one.title))));
 }
 
 export function phasesOf(fixture: Fixture, keep: boolean): Phase[] {

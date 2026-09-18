@@ -14,7 +14,7 @@ describe("summary table", () => {
       { cell: "node/web", title: "deploy", outcome: "passed" },
       { cell: "node/web", title: "GET /health | answers", outcome: "failed" },
     ],
-    expectations: { "node/web": { "GET /health | answers": [GAP] } },
+    expectedFailures: { "node/web": { "GET /health | answers": [GAP] } },
   });
   const table = summaryTable(report, {
     target: "dev",
@@ -40,7 +40,7 @@ describe("summary table", () => {
     const green = reconcile({
       planned: [{ cell: "node/web", title: "deploy", phase: "deploy" }],
       results: [{ cell: "node/web", title: "deploy", outcome: "passed" }],
-      expectations: {},
+      expectedFailures: {},
     });
     const said = summaryTable(green, {
       target: "dev",
@@ -64,7 +64,7 @@ describe("journey verdict", () => {
   const green = reconcile({
     planned: [{ cell: "node/web", title: "deploy", phase: "deploy" }],
     results: [{ cell: "node/web", title: "deploy", outcome: "passed" }],
-    expectations: {},
+    expectedFailures: {},
   });
 
   it("is zero when the account reconciles and nothing was thrown outside a test", () => {
@@ -77,11 +77,11 @@ describe("journey verdict", () => {
     expect(verdict.report).toBe("UNHANDLED — Error: the pool was closed");
   });
 
-  it("names the unreconciled rows alongside what threw", () => {
+  it("names the unreconciled tests alongside what threw", () => {
     const red = reconcile({
       planned: [{ cell: "node/web", title: "deploy", phase: "deploy" }],
       results: [{ cell: "node/web", title: "deploy", outcome: "failed" }],
-      expectations: {},
+      expectedFailures: {},
     });
     const verdict = journeyVerdict(red, ["Error: unhandled"]);
     expect(verdict.exitCode).toBe(1);

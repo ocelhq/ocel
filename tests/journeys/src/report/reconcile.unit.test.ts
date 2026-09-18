@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { DEPLOY } from "../lifecycle";
+import { DEPLOY } from "../steps";
 import { exitCodeFor, reconcile, type TestOutcome, type TestResult } from "./reconcile";
 
 const GAP = { id: "cloudfront-stub", reason: "the edge is not backed", issue: 852 };
@@ -20,9 +20,9 @@ function allRan(outcome: TestOutcome = "passed"): TestResult[] {
 
 describe("reconciliation", () => {
   it("is green when every planned test passed and nothing is listed", () => {
-    const report = reconcile({ planned, results: allRan(), expectations: {} });
+    const report = reconcile({ planned, results: allRan(), expectedFailures: {} });
     expect(report.failed).toBe(false);
-    expect(report.rows.every((row) => row.verdict === "ok")).toBe(true);
+    expect(report.tests.every((row) => row.verdict === "ok")).toBe(true);
   });
 
   it("stays green when a listed test fails", () => {
@@ -31,10 +31,10 @@ describe("reconciliation", () => {
     const report = reconcile({
       planned,
       results,
-      expectations: { "node/web": { "GET /health answers": [GAP] } },
+      expectedFailures: { "node/web": { "GET /health answers": [GAP] } },
     });
     expect(report.failed).toBe(false);
-    const row = report.rows.find((entry) => entry.title === "GET /health answers");
+    const row = report.tests.find((entry) => entry.title === "GET /health answers");
     expect(row).toMatchObject({ verdict: "expected-failure", listed: [GAP] });
   });
 
@@ -42,7 +42,7 @@ describe("reconciliation", () => {
     const report = reconcile({
       planned,
       results: allRan(),
-      expectations: { "node/web": { "GET /health answers": [GAP] } },
+      expectedFailures: { "node/web": { "GET /health answers": [GAP] } },
     });
     expect(report.failed).toBe(true);
     expect(report.failures.map((row) => row.verdict)).toContain("listed-and-passed");
@@ -51,7 +51,7 @@ describe("reconciliation", () => {
   it("fails when an unlisted test fails", () => {
     const results = allRan();
     results[1] = result("GET /health answers", "failed");
-    const report = reconcile({ planned, results, expectations: {} });
+    const report = reconcile({ planned, results, expectedFailures: {} });
     expect(report.failed).toBe(true);
     expect(report.failures.map((row) => row.verdict)).toContain("unexpected-failure");
   });
@@ -62,21 +62,21 @@ describe("reconciliation", () => {
     const report = reconcile({
       planned,
       results,
-      expectations: { "node/web": { "GET /health answers": [GAP] } },
+      expectedFailures: { "node/web": { "GET /health answers": [GAP] } },
     });
     expect(report.failed).toBe(true);
   });
 
   it("fails when a planned test never ran", () => {
     const results = allRan().filter((entry) => entry.title !== "GET /health answers");
-    const report = reconcile({ planned, results, expectations: {} });
+    const report = reconcile({ planned, results, expectedFailures: {} });
     expect(report.failed).toBe(true);
     expect(report.failures.map((row) => row.verdict)).toContain("never-ran");
   });
 
   it("fails on a result nothing planned", () => {
     const results = [...allRan(), result("a stray test", "passed")];
-    const report = reconcile({ planned, results, expectations: {} });
+    const report = reconcile({ planned, results, expectedFailures: {} });
     expect(report.failed).toBe(true);
     expect(report.failures.map((row) => row.verdict)).toContain("unplanned");
   });
@@ -85,35 +85,35 @@ describe("reconciliation", () => {
     const report = reconcile({
       planned,
       results: [result(DEPLOY, "failed")],
-      expectations: { "node/web": { [DEPLOY]: [GAP] } },
+      expectedFailures: { "node/web": { [DEPLOY]: [GAP] } },
     });
     expect(report.failed).toBe(false);
-    expect(report.rows.map((row) => row.verdict)).toEqual([
+    expect(report.tests.map((row) => row.verdict)).toEqual([
       "expected-failure",
       "blocked",
       "blocked",
     ]);
   });
 
-  it("blocks the rows that failed behind a listed deploy, whatever order they arrive in", () => {
+  it("blocks the tests that failed behind a listed deploy, whatever order they arrive in", () => {
     const results: TestResult[] = [
       result("GET /health answers", "failed"),
       result("destroy", "failed"),
       result(DEPLOY, "failed"),
     ];
-    const expectations = { "node/web": { [DEPLOY]: [GAP] } };
+    const expectedFailures = { "node/web": { [DEPLOY]: [GAP] } };
     for (const ordered of [results, [...results].reverse()]) {
-      const report = reconcile({ planned, results: ordered, expectations });
-      expect(report.rows.map((row) => row.verdict)).toEqual([
+      const report = reconcile({ planned, results: ordered, expectedFailures });
+      expect(report.tests.map((row) => row.verdict)).toEqual([
         "expected-failure",
         "blocked",
         "blocked",
       ]);
-      expect(exitCodeFor(report.rows.map((row) => row.verdict))).toBe(0);
+      expect(exitCodeFor(report.tests.map((row) => row.verdict))).toBe(0);
     }
   });
 
-  it("blocks the rows that failed behind an unlisted deploy, and fails on the deploy alone", () => {
+  it("blocks the tests that failed behind an unlisted deploy, and fails on the deploy alone", () => {
     const report = reconcile({
       planned,
       results: [
@@ -121,32 +121,32 @@ describe("reconciliation", () => {
         result("GET /health answers", "failed"),
         result("destroy", "failed"),
       ],
-      expectations: {},
+      expectedFailures: {},
     });
-    expect(report.rows.map((row) => row.verdict)).toEqual([
+    expect(report.tests.map((row) => row.verdict)).toEqual([
       "unexpected-failure",
       "blocked",
       "blocked",
     ]);
-    expect(exitCodeFor(report.rows.map((row) => row.verdict))).toBe(1);
+    expect(exitCodeFor(report.tests.map((row) => row.verdict))).toBe(1);
   });
 
   it.each(["skipped", "todo", "only"] as const)(
-    "fails on a %s row wherever it appears, including behind a listed deploy",
+    "fails on a %s test wherever it appears, including behind a listed deploy",
     (outcome) => {
       const cameUp = allRan();
       cameUp[1] = result("GET /health answers", outcome);
-      const clean = reconcile({ planned, results: cameUp, expectations: {} });
-      expect(clean.rows.map((row) => row.verdict)).toEqual(["ok", "disabled", "ok"]);
-      expect(exitCodeFor(clean.rows.map((row) => row.verdict))).toBe(1);
+      const clean = reconcile({ planned, results: cameUp, expectedFailures: {} });
+      expect(clean.tests.map((row) => row.verdict)).toEqual(["ok", "disabled", "ok"]);
+      expect(exitCodeFor(clean.tests.map((row) => row.verdict))).toBe(1);
 
       const blocked = reconcile({
         planned,
         results: [result(DEPLOY, "failed"), result("GET /health answers", outcome)],
-        expectations: { "node/web": { [DEPLOY]: [GAP] } },
+        expectedFailures: { "node/web": { [DEPLOY]: [GAP] } },
       });
       expect(blocked.failures.map((row) => row.verdict)).toEqual(["disabled"]);
-      expect(exitCodeFor(blocked.rows.map((row) => row.verdict))).toBe(1);
+      expect(exitCodeFor(blocked.tests.map((row) => row.verdict))).toBe(1);
     },
   );
 
@@ -154,7 +154,7 @@ describe("reconciliation", () => {
     const report = reconcile({
       planned,
       results: [result(DEPLOY, "failed")],
-      expectations: {},
+      expectedFailures: {},
     });
     expect(report.failed).toBe(true);
     expect(report.failures.map((row) => row.verdict)).toEqual([
@@ -185,7 +185,7 @@ describe("a multi-app cell", () => {
         ran("node", "GET /health answers", "passed"),
         ran("worker", "GET /health answers", "passed"),
       ],
-      expectations: {},
+      expectedFailures: {},
     });
     expect(report.failures).toHaveLength(1);
     expect(report.failures[0]).toMatchObject({
@@ -193,7 +193,7 @@ describe("a multi-app cell", () => {
       verdict: "unexpected-failure",
     });
     expect(
-      report.rows
+      report.tests
         .filter((row) => row.cell !== "workspace/next")
         .every((row) => row.verdict === "ok"),
     ).toBe(true);
@@ -208,11 +208,11 @@ describe("a multi-app cell", () => {
         ran("node", "GET /health answers", "passed"),
         ran("worker", "GET /health answers", "passed"),
       ],
-      expectations: { "workspace/next": { "GET /health answers": [GAP] } },
+      expectedFailures: { "workspace/next": { "GET /health answers": [GAP] } },
     });
     expect(report.failed).toBe(false);
     expect(
-      report.rows.find((row) => row.cell === "workspace/next" && row.listed.length > 0),
+      report.tests.find((row) => row.cell === "workspace/next" && row.listed.length > 0),
     ).toMatchObject({
       verdict: "expected-failure",
       listed: [GAP],

@@ -1,12 +1,11 @@
-import { phasesOf, stepsOf } from "./lifecycle";
 import {
-  type Affected,
   type Cell,
   CONCERNS,
   type Concern,
   cellName,
   type Fixture,
   type Gap,
+  type GapScope,
   type Lane,
   type Phase,
   sampleGroupOf,
@@ -14,8 +13,9 @@ import {
   targetOfLane,
 } from "./matrix/types";
 import { type Coverage, type Draw, sample } from "./sample";
+import { phasesOf, stepsOf } from "./steps";
 
-export type Ask = {
+export type RunFilter = {
   concerns: Concern[];
   fixtures: string[];
   variants: string[];
@@ -25,20 +25,20 @@ export type Ask = {
   keep: boolean;
 };
 
-export const EVERYTHING: Ask = {
+export const NO_FILTER: RunFilter = {
   concerns: CONCERNS,
   fixtures: [],
   variants: [],
-  coverage: "full",
+  coverage: "every-cell",
   runSkipped: false,
   keep: false,
 };
 
-export type Listed = Pick<Gap, "id" | "reason" | "issue">;
+export type GapRef = Pick<Gap, "id" | "reason" | "issue">;
 
-export type Expectations = Record<string, Record<string, Listed[]>>;
+export type ExpectedFailures = Record<string, Record<string, GapRef[]>>;
 
-export type Skipped = Record<string, Listed[]>;
+export type SkippedCells = Record<string, GapRef[]>;
 
 export type PlannedStep = { app: string; title: string; phase?: Phase };
 
@@ -55,20 +55,20 @@ export type Plan = {
   target: TargetName;
   keep: boolean;
   cells: PlannedCell[];
-  skipped: Skipped;
-  expectations: Expectations;
+  skipped: SkippedCells;
+  expectedFailures: ExpectedFailures;
 };
 
 export type PlannedTest = { cell: string; title: string; phase?: Phase };
 
-export function cellKey(cell: string, app: string): string {
+export function cellApp(cell: string, app: string): string {
   return `${cell}/${app}`;
 }
 
 export function testsOf(planned: Pick<Plan, "cells">): PlannedTest[] {
   return planned.cells.flatMap((cell) =>
     cell.steps.map((one) => ({
-      cell: cellKey(cell.name, one.app),
+      cell: cellApp(cell.name, one.app),
       title: one.title,
       ...(one.phase === undefined ? {} : { phase: one.phase }),
     })),
@@ -104,16 +104,16 @@ function longestFirst(cells: Cell[]): Cell[] {
 
 type LaneTest = { cell: string; app: string; fixture: string; variant: string; title: string };
 
-function listedOf(gap: Gap): Listed {
+function gapRefOf(gap: Gap): GapRef {
   return gap.issue === undefined
     ? { id: gap.id, reason: gap.reason }
     : { id: gap.id, reason: gap.reason, issue: gap.issue };
 }
 
-function hitsFor(block: Affected, tests: LaneTest[], said: string): LaneTest[] {
-  const titles = new Set(block.tests.flatMap((test) => test.titles));
-  const fixtures = block.fixtures?.map((one) => one.name);
-  const variants = block.variants?.map((one) => one.name);
+function hitsFor(scope: GapScope, tests: LaneTest[], said: string): LaneTest[] {
+  const titles = new Set(scope.fails.flatMap((test) => test.titles));
+  const fixtures = scope.fixtures?.map((one) => one.name);
+  const variants = scope.variants?.map((one) => one.name);
   const hits = tests.filter(
     (test) =>
       (fixtures === undefined || fixtures.includes(test.fixture)) &&
@@ -138,35 +138,35 @@ function resolveGaps(
   gaps: Gap[],
   lane: Lane,
   tests: LaneTest[],
-): { expectations: Expectations; skipped: Skipped } {
-  const expectations: Expectations = {};
-  const skipped: Skipped = {};
+): { expectedFailures: ExpectedFailures; skipped: SkippedCells } {
+  const expectedFailures: ExpectedFailures = {};
+  const skipped: SkippedCells = {};
   for (const gap of gaps) {
     const carried = new Set<string>();
     const skippedCells = new Set<string>();
-    for (const block of gap.affects) {
-      if (!block.on.includes(lane)) {
+    for (const scope of gap.where) {
+      if (!scope.on.includes(lane)) {
         continue;
       }
-      for (const hit of hitsFor(block, tests, `${gap.id} on ${lane}`)) {
-        if (block.skip) {
+      for (const hit of hitsFor(scope, tests, `${gap.id} on ${lane}`)) {
+        if (scope.skipsCell) {
           skippedCells.add(hit.cell);
         }
-        const key = cellKey(hit.cell, hit.app);
+        const key = cellApp(hit.cell, hit.app);
         const at = JSON.stringify([key, hit.title]);
         if (carried.has(at)) {
           continue;
         }
         carried.add(at);
-        const cell = (expectations[key] ??= {});
-        (cell[hit.title] ??= []).push(listedOf(gap));
+        const cell = (expectedFailures[key] ??= {});
+        (cell[hit.title] ??= []).push(gapRefOf(gap));
       }
     }
     for (const cell of skippedCells) {
-      (skipped[cell] ??= []).push(listedOf(gap));
+      (skipped[cell] ??= []).push(gapRefOf(gap));
     }
   }
-  return { expectations, skipped };
+  return { expectedFailures, skipped };
 }
 
 function named(fixtures: Fixture[], names: string[]): Fixture[] {
@@ -183,7 +183,7 @@ function named(fixtures: Fixture[], names: string[]): Fixture[] {
 
 function checkMatrix(fixtures: Fixture[]) {
   const seen = new Set<string>();
-  const leads = new Map<string, string[]>();
+  const representatives = new Map<string, string[]>();
   for (const one of fixtures) {
     if (seen.has(one.name)) {
       throw new Error(`${one.name} is listed twice`);
@@ -210,13 +210,13 @@ function checkMatrix(fixtures: Fixture[]) {
       }
     }
     const group = sampleGroupOf(one);
-    if (group !== undefined && one.sample?.lead) {
-      leads.set(group, [...(leads.get(group) ?? []), one.name]);
+    if (group !== undefined && one.sample?.representative) {
+      representatives.set(group, [...(representatives.get(group) ?? []), one.name]);
     }
   }
-  for (const [group, led] of leads) {
-    if (led.length > 1) {
-      throw new Error(`the ${group} group is led by ${led.join(" and ")}`);
+  for (const [group, named] of representatives) {
+    if (named.length > 1) {
+      throw new Error(`the ${group} group is represented by both ${named.join(" and ")}`);
     }
   }
 }
@@ -228,7 +228,7 @@ function checkGaps(gaps: Gap[]) {
       throw new Error(`the gap ${gap.id} is listed twice`);
     }
     seen.add(gap.id);
-    if (gap.affects.length === 0) {
+    if (gap.where.length === 0) {
       throw new Error(`the gap ${gap.id} affects nothing`);
     }
   }
@@ -260,12 +260,12 @@ export function plan(input: {
   gaps: Gap[];
   lane: Lane;
   releaseCycle: boolean;
-  ask: Ask;
+  filter: RunFilter;
 }): Plan {
-  const { fixtures, gaps, lane, releaseCycle, ask } = input;
+  const { fixtures, gaps, lane, releaseCycle, filter } = input;
   checkMatrix(fixtures);
   checkGaps(gaps);
-  checkVariantsAsked(fixtures, ask.variants);
+  checkVariantsAsked(fixtures, filter.variants);
   const target = targetOfLane(lane);
   const offered = fixturesOn(fixtures, target);
   checkReleaseCycle(offered, target, releaseCycle);
@@ -282,20 +282,20 @@ export function plan(input: {
     ),
   );
   const resolved = resolveGaps(gaps, lane, laneTests);
-  const skips = ask.runSkipped ? {} : resolved.skipped;
+  const skips = filter.runSkipped ? {} : resolved.skipped;
 
   const chosen = named(
-    offered.filter((one) => ask.concerns.includes(one.concern)),
-    ask.fixtures,
+    offered.filter((one) => filter.concerns.includes(one.concern)),
+    filter.fixtures,
   );
   const narrowed = (one: Fixture) =>
     cellsOn(one, target).filter(
-      (cell) => ask.variants.length === 0 || ask.variants.includes(cell.variant.name),
+      (cell) => filter.variants.length === 0 || filter.variants.includes(cell.variant.name),
     );
   const runnable = (one: Fixture) => narrowed(one).filter((cell) => skips[cell.name] === undefined);
-  const covered = sample(chosen, runnable, ask.coverage, ask.draw);
+  const covered = sample(chosen, runnable, filter.coverage, filter.draw);
 
-  const skipped: Skipped = {};
+  const skipped: SkippedCells = {};
   for (const cell of chosen.flatMap(narrowed)) {
     const listed = skips[cell.name];
     if (listed) {
@@ -305,7 +305,7 @@ export function plan(input: {
 
   const cells = longestFirst(chosen.flatMap((one) => covered.get(one.name) ?? [])).map(
     (cell): PlannedCell => {
-      const phases = phasesOf(cell.fixture, ask.keep);
+      const phases = phasesOf(cell.fixture, filter.keep);
       return {
         name: cell.name,
         fixture: cell.fixture.name,
@@ -318,13 +318,13 @@ export function plan(input: {
     },
   );
 
-  const expectations: Expectations = {};
+  const expectedFailures: ExpectedFailures = {};
   for (const test of testsOf({ cells })) {
-    const listed = resolved.expectations[test.cell]?.[test.title];
+    const listed = resolved.expectedFailures[test.cell]?.[test.title];
     if (listed) {
-      (expectations[test.cell] ??= {})[test.title] = listed;
+      (expectedFailures[test.cell] ??= {})[test.title] = listed;
     }
   }
 
-  return { lane, target, keep: ask.keep, cells, skipped, expectations };
+  return { lane, target, keep: filter.keep, cells, skipped, expectedFailures };
 }

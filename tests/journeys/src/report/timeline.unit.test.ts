@@ -34,7 +34,7 @@ describe("phaseOf", () => {
     ).toBe("redeploy");
   });
 
-  it("folds an unplanned row into the phase its title prefixes", () => {
+  it("folds an unplanned test into the phase its title prefixes", () => {
     expect(phaseOf({ cell: "a", title: "rollback · health", startTime: 0, duration: 1 })).toBe(
       "rollback",
     );
