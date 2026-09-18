@@ -3,7 +3,7 @@ import { access } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { redact } from "../contract";
+import { redact } from "../checks/context";
 import { live, relay } from "../live";
 import { ocelBin } from "../paths";
 import { appHomes, stateComplaint } from "../workspace";

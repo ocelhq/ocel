@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { healthChecks } from "./checks";
-import { type ContractContext, json } from "./contract";
+import { type CheckContext, json } from "./context";
+import { healthChecks } from "./health";
 
-function answering(app: string): ContractContext["fetch"] {
+function answering(app: string): CheckContext["fetch"] {
   return async () =>
     new Response(JSON.stringify({ ok: true, app }), {
       status: 200,
@@ -10,7 +10,7 @@ function answering(app: string): ContractContext["fetch"] {
     });
 }
 
-function context(asked: string, answered: string): ContractContext {
+function context(asked: string, answered: string): CheckContext {
   return {
     app: asked,
     baseUrl: `https://${asked}-j-1-sdk-workspace.journey.test`,
@@ -37,7 +37,7 @@ describe("the health check", () => {
 
 describe("json", () => {
   it("describes the response when the body is not JSON at all", async () => {
-    const ctx: ContractContext = {
+    const ctx: CheckContext = {
       ...context("node", "node"),
       fetch: async () =>
         new Response("<html>bad gateway</html>", {

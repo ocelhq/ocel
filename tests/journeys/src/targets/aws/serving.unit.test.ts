@@ -1,6 +1,6 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
-import type { Fetch } from "../../contract";
+import type { Fetch } from "../../checks/context";
 import { awaitServing } from "./serving";
 
 function clock(timeoutMs: number) {

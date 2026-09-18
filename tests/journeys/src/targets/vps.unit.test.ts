@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { REDACTED } from "../contract";
+import { REDACTED } from "../checks/context";
 import { boxLane, issuedByTheBox, recordFile, slugsOf, ssh } from "./vps";
 
 const IDENTITY = "/nonexistent/ocel-journey-identity";

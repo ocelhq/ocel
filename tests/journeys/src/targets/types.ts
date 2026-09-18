@@ -1,4 +1,4 @@
-import type { Fetch } from "../contract";
+import type { Fetch } from "../checks/context";
 import type { Evidence } from "../evidence";
 import type { Fixture, Lane, Leg, TargetName, Variant } from "../matrix/types";
 import type { PrepareFailures } from "../prepare";

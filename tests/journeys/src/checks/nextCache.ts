@@ -13,9 +13,9 @@ import {
   UNCACHED,
   variesOn,
 } from "../cacheHeaders";
-import type { Check, ContractContext } from "../contract";
 import { assetPath, marker, markerOrNone, stamp } from "../html";
 import { page, state, steady, until } from "../nextApp";
+import type { Check, CheckContext } from "./context";
 
 const ISR_SECONDS = 15;
 const PATH_SECONDS = 3600;
@@ -28,8 +28,6 @@ const LOCAL_IMAGE = "/ocel.png";
 const ALLOWED_WIDTH = 640;
 const ALLOWED_QUALITY = 75;
 const DEPLOYMENT_NOTE = "next-cache:deployment";
-
-export const PREFETCH_TITLE = "a prefetch answers byte-identically to the request that is not one";
 
 function tierIs(res: Response, allowed: Tier[], what: string) {
   const tier = tierOf(res);
@@ -44,16 +42,16 @@ function cacheControlIs(res: Response, expected: string, what: string) {
   );
 }
 
-async function cachedHalf(ctx: ContractContext, path: string, scope: string): Promise<string> {
+async function cachedHalf(ctx: CheckContext, path: string, scope: string): Promise<string> {
   return marker((await page(ctx, path)).html, `${scope}:cached`);
 }
 
-async function settled(ctx: ContractContext, path: string, scope: string): Promise<string> {
+async function settled(ctx: CheckContext, path: string, scope: string): Promise<string> {
   return steady(() => cachedHalf(ctx, path, scope), path, SETTLED_READS, SETTLE_ATTEMPTS);
 }
 
 async function movedOn(
-  ctx: ContractContext,
+  ctx: CheckContext,
   path: string,
   scope: string,
   from: string,
@@ -64,13 +62,13 @@ async function movedOn(
   });
 }
 
-async function revalidate(ctx: ContractContext, query: string): Promise<void> {
+async function revalidate(ctx: CheckContext, query: string): Promise<void> {
   const res = await ctx.fetch(`${ctx.baseUrl}/api/next/revalidate?${query}`, { method: "POST" });
   assert.equal(res.status, 200, `revalidating with ${query} answered ${res.status}`);
   await res.arrayBuffer();
 }
 
-function imageUrl(ctx: ContractContext, url: string, width: number, quality: number): string {
+function imageUrl(ctx: CheckContext, url: string, width: number, quality: number): string {
   return `${ctx.baseUrl}/_next/image?url=${encodeURIComponent(url)}&w=${width}&q=${quality}`;
 }
 
@@ -161,7 +159,7 @@ export const nextCacheChecks: Check[] = [
     },
   },
   {
-    title: PREFETCH_TITLE,
+    title: "a prefetch answers byte-identically to the request that is not one",
     run: async (ctx) => {
       const read = async (headers: Record<string, string>) => {
         const res = await ctx.fetch(`${ctx.baseUrl}/cache/static`, { headers });

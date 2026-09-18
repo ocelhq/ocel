@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { type Check, json } from "../contract";
+import { type Check, json } from "./context";
 
 export const healthChecks: Check[] = [
   {

@@ -5,8 +5,14 @@ import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
 import { migrates, setsEnv } from "../checks";
+import {
+  INITIAL_GREETING,
+  REDACTED,
+  redact,
+  SECRET_TOKEN,
+  UNCAPPED_BODY_BYTES,
+} from "../checks/context";
 import { journeyConfigIn, journeyZone } from "../config";
-import { INITIAL_GREETING, REDACTED, redact, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
 import { appHostname, HARNESS_PREFIX, isStranded } from "../identity";
 import type { Lane, Leg } from "../matrix/types";
 import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";

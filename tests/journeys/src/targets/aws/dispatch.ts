@@ -1,7 +1,7 @@
 import dns from "node:dns";
 import net from "node:net";
 import { Agent, fetch as undiciFetch } from "undici/index.js";
-import type { Fetch } from "../../contract";
+import type { Fetch } from "../../checks/context";
 
 export type Address = { hostname: string; port: number };
 

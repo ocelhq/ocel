@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import { type Check, describeResponse, json, LARGE_RESPONSE_BYTES, SLEEP_MS } from "../contract";
+import { type Check, describeResponse, json, LARGE_RESPONSE_BYTES, SLEEP_MS } from "./context";
 
 const EMPTY_BODY_TIMEOUT_MS = 15_000;
 
-export const STREAM_ROW = "GET /api/probes/stream streams its chunks in order to the sentinel";
-
-export const nativeChecks: Check[] = [
+export const nativeModuleChecks: Check[] = [
   {
     title: "GET /api/probes/native answers from a native sqlite build",
     run: async (ctx) => {
@@ -20,7 +18,7 @@ export const nativeChecks: Check[] = [
   },
 ];
 
-export const vendoredChecks: Check[] = [
+export const vendoredDependencyChecks: Check[] = [
   {
     title: "GET /api/probes/vendored answers from a dependency the build vendored",
     run: async (ctx) => {
@@ -60,9 +58,9 @@ export const emptyBodyCheck: Check = {
   },
 };
 
-export const probeChecks: Check[] = [
+export const httpProbeChecks: Check[] = [
   {
-    title: STREAM_ROW,
+    title: "GET /api/probes/stream streams its chunks in order to the sentinel",
     run: async (ctx) => {
       const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/stream`);
       assert.equal(res.status, 200);

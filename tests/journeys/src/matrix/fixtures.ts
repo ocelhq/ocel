@@ -2,40 +2,40 @@ import {
   bindingChecks,
   envChecks,
   healthChecks,
-  nativeChecks,
+  httpProbeChecks,
+  nativeModuleChecks,
   nextCacheChecks,
   nextDataCacheChecks,
   nextRoutingChecks,
   nextStateChecks,
-  probeChecks,
-  productChecks,
   staticChecks,
-  vendoredChecks,
+  todoAndDocumentChecks,
+  vendoredDependencyChecks,
 } from "../checks";
 import { pulumiLadder } from "../targets/aws/ladder-pulumi";
 import { sstLadder } from "../targets/aws/ladder-sst";
 import { type Fixture, fixture, LIVES, SERVES } from "./types";
 import { apiGateway, cloudflare, container } from "./variants";
 
-const RUNTIME_NEUTRAL = [...healthChecks, ...staticChecks, ...probeChecks];
-const SERVED = [...RUNTIME_NEUTRAL, ...nativeChecks];
-const STORED = [
+const RUNTIME_NEUTRAL_CHECKS = [...healthChecks, ...staticChecks, ...httpProbeChecks];
+const NODE_CHECKS = [...RUNTIME_NEUTRAL_CHECKS, ...nativeModuleChecks];
+const NODE_SDK_CHECKS = [
   ...healthChecks,
   ...staticChecks,
-  ...productChecks,
-  ...nativeChecks,
-  ...probeChecks,
+  ...todoAndDocumentChecks,
+  ...nativeModuleChecks,
+  ...httpProbeChecks,
   ...envChecks,
 ];
-const NEXT_SERVED = [...nextRoutingChecks, ...nextCacheChecks];
-const NEXT_STORED = [...nextStateChecks, ...nextDataCacheChecks];
-const LADDER = [...healthChecks, ...staticChecks, ...bindingChecks];
+const NEXT_ROUTING_AND_CACHE_CHECKS = [...nextRoutingChecks, ...nextCacheChecks];
+const NEXT_STATE_AND_DATA_CACHE_CHECKS = [...nextStateChecks, ...nextDataCacheChecks];
+const BINDING_CHECKS = [...healthChecks, ...staticChecks, ...bindingChecks];
 
 export const deploy = {
   node: fixture("deploy/node", {
     apps: ["web"],
     legs: SERVES,
-    checks: SERVED,
+    checks: NODE_CHECKS,
     on: {
       dev: { base: true },
       "dev-local": { base: true },
@@ -48,7 +48,7 @@ export const deploy = {
   go: fixture("deploy/go", {
     apps: ["web"],
     legs: SERVES,
-    checks: RUNTIME_NEUTRAL,
+    checks: RUNTIME_NEUTRAL_CHECKS,
     on: {
       aws: { variants: [container, apiGateway] },
       vps: { base: true },
@@ -58,7 +58,7 @@ export const deploy = {
   python: fixture("deploy/python", {
     apps: ["web"],
     legs: SERVES,
-    checks: [...RUNTIME_NEUTRAL, ...vendoredChecks],
+    checks: [...RUNTIME_NEUTRAL_CHECKS, ...vendoredDependencyChecks],
     on: {
       aws: { variants: [container, apiGateway] },
       vps: { base: true },
@@ -68,7 +68,7 @@ export const deploy = {
   rust: fixture("deploy/rust", {
     apps: ["web"],
     legs: SERVES,
-    checks: RUNTIME_NEUTRAL,
+    checks: RUNTIME_NEUTRAL_CHECKS,
     on: {
       aws: { variants: [container, apiGateway] },
       vps: { base: true },
@@ -78,7 +78,7 @@ export const deploy = {
   next: fixture("deploy/next", {
     apps: ["web"],
     legs: SERVES,
-    checks: [...SERVED, ...NEXT_SERVED],
+    checks: [...NODE_CHECKS, ...NEXT_ROUTING_AND_CACHE_CHECKS],
     on: {
       dev: { base: true },
       "dev-local": { base: true },
@@ -90,7 +90,7 @@ export const deploy = {
   workspace: fixture("deploy/workspace", {
     apps: ["next", "express"],
     legs: SERVES,
-    checks: SERVED,
+    checks: NODE_CHECKS,
     on: {
       dev: { base: true },
       "dev-local": { base: true },
@@ -106,7 +106,11 @@ export const lifecycle = {
   next: fixture("lifecycle/next", {
     apps: ["web"],
     legs: LIVES,
-    checks: [...STORED, ...NEXT_SERVED, ...NEXT_STORED],
+    checks: [
+      ...NODE_SDK_CHECKS,
+      ...NEXT_ROUTING_AND_CACHE_CHECKS,
+      ...NEXT_STATE_AND_DATA_CACHE_CHECKS,
+    ],
     on: {
       aws: { base: true, variants: [container, cloudflare] },
       vps: { base: true },
@@ -118,7 +122,7 @@ export const sdk = {
   node: fixture("sdk/node", {
     apps: ["web"],
     legs: SERVES,
-    checks: STORED,
+    checks: NODE_SDK_CHECKS,
     on: {
       dev: { base: true },
       "dev-local": { base: true },
@@ -130,7 +134,11 @@ export const sdk = {
   next: fixture("sdk/next", {
     apps: ["web"],
     legs: SERVES,
-    checks: [...STORED, ...NEXT_SERVED, ...NEXT_STORED],
+    checks: [
+      ...NODE_SDK_CHECKS,
+      ...NEXT_ROUTING_AND_CACHE_CHECKS,
+      ...NEXT_STATE_AND_DATA_CACHE_CHECKS,
+    ],
     on: {
       dev: { base: true },
       "dev-local": { base: true },
@@ -141,7 +149,7 @@ export const sdk = {
   workspace: fixture("sdk/workspace", {
     apps: ["next", "express"],
     legs: SERVES,
-    checks: STORED,
+    checks: NODE_SDK_CHECKS,
     on: {
       dev: { base: true },
       "dev-local": { base: true },
@@ -153,20 +161,20 @@ export const sdk = {
   withTransforms: fixture("sdk/with-transforms", {
     apps: ["web"],
     legs: LIVES,
-    checks: LADDER,
+    checks: BINDING_CHECKS,
     on: { aws: { variants: [container, apiGateway] } },
   }),
   withSst: fixture("sdk/with-sst", {
     apps: ["web"],
     legs: LIVES,
-    checks: LADDER,
+    checks: BINDING_CHECKS,
     ladder: sstLadder,
     on: { aws: { variants: [container, apiGateway] } },
   }),
   withPulumi: fixture("sdk/with-pulumi", {
     apps: ["web"],
     legs: LIVES,
-    checks: LADDER,
+    checks: BINDING_CHECKS,
     ladder: pulumiLadder,
     on: { aws: { variants: [container, apiGateway] } },
   }),
