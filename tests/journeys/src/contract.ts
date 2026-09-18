@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { Leg } from "./spec";
+import type { Leg } from "./matrix/types";
 
 export type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 

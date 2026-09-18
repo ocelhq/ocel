@@ -1,20 +1,20 @@
 import { describe, expect, it } from "bun:test";
 import { REDACTED } from "../contract";
-import { boxEnvironment, issuedByTheBox, recordFile, slugsOf, ssh } from "./vps";
+import { boxLane, issuedByTheBox, recordFile, slugsOf, ssh } from "./vps";
 
 const IDENTITY = "/nonexistent/ocel-journey-identity";
 
-describe("boxEnvironment", () => {
-  it("reads the incus marker as the emulator environment", () => {
-    expect(boxEnvironment("incus\n")).toBe("vps.incus");
+describe("boxLane", () => {
+  it("reads the incus marker as the emulator lane", () => {
+    expect(boxLane("incus\n")).toBe("vps.incus");
   });
 
   it("reads a box without the marker as a real one", () => {
-    expect(boxEnvironment("real\n")).toBe("vps");
+    expect(boxLane("real\n")).toBe("vps");
   });
 
   it("refuses an answer it cannot read rather than guessing a box is disposable", () => {
-    expect(() => boxEnvironment("")).toThrow(/whether it runs under incus/);
+    expect(() => boxLane("")).toThrow(/whether it runs under incus/);
   });
 });
 

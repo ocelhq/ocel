@@ -1,11 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { UP_TITLE } from "./plan";
+import { UP } from "../lifecycle";
 import { exitCodeFor, reconcile, type TestOutcome, type TestResult } from "./reconcile";
 
 const GAP = { id: "cloudfront-stub", reason: "the edge is not backed", issue: 852 };
 
 const planned = [
-  { cell: "node/web", title: UP_TITLE, leg: "up" as const },
+  { cell: "node/web", title: UP, leg: "up" as const },
   { cell: "node/web", title: "GET /health answers", leg: "contract" as const },
   { cell: "node/web", title: "destroy", leg: "destroy" as const },
 ];
@@ -84,8 +84,8 @@ describe("reconciliation", () => {
   it("blocks the rest of a cell whose listed up failed", () => {
     const report = reconcile({
       planned,
-      results: [result(UP_TITLE, "failed")],
-      expectations: { "node/web": { [UP_TITLE]: [GAP] } },
+      results: [result(UP, "failed")],
+      expectations: { "node/web": { [UP]: [GAP] } },
     });
     expect(report.failed).toBe(false);
     expect(report.rows.map((row) => row.verdict)).toEqual([
@@ -99,9 +99,9 @@ describe("reconciliation", () => {
     const results: TestResult[] = [
       result("GET /health answers", "failed"),
       result("destroy", "failed"),
-      result(UP_TITLE, "failed"),
+      result(UP, "failed"),
     ];
-    const expectations = { "node/web": { [UP_TITLE]: [GAP] } };
+    const expectations = { "node/web": { [UP]: [GAP] } };
     for (const ordered of [results, [...results].reverse()]) {
       const report = reconcile({ planned, results: ordered, expectations });
       expect(report.rows.map((row) => row.verdict)).toEqual([
@@ -117,7 +117,7 @@ describe("reconciliation", () => {
     const report = reconcile({
       planned,
       results: [
-        result(UP_TITLE, "failed"),
+        result(UP, "failed"),
         result("GET /health answers", "failed"),
         result("destroy", "failed"),
       ],
@@ -142,8 +142,8 @@ describe("reconciliation", () => {
 
       const blocked = reconcile({
         planned,
-        results: [result(UP_TITLE, "failed"), result("GET /health answers", outcome)],
-        expectations: { "node/web": { [UP_TITLE]: [GAP] } },
+        results: [result(UP, "failed"), result("GET /health answers", outcome)],
+        expectations: { "node/web": { [UP]: [GAP] } },
       });
       expect(blocked.failures.map((row) => row.verdict)).toEqual(["disabled"]);
       expect(exitCodeFor(blocked.rows.map((row) => row.verdict))).toBe(1);
@@ -153,7 +153,7 @@ describe("reconciliation", () => {
   it("fails a cell whose up failed unlisted", () => {
     const report = reconcile({
       planned,
-      results: [result(UP_TITLE, "failed")],
+      results: [result(UP, "failed")],
       expectations: {},
     });
     expect(report.failed).toBe(true);
@@ -168,7 +168,7 @@ describe("reconciliation", () => {
 describe("a multi-app cell", () => {
   const apps = ["next", "node", "worker"];
   const workspacePlan = apps.flatMap((app) => [
-    { cell: `workspace/${app}`, title: UP_TITLE, leg: "up" as const },
+    { cell: `workspace/${app}`, title: UP, leg: "up" as const },
     { cell: `workspace/${app}`, title: "GET /health answers", leg: "contract" as const },
   ]);
 
@@ -180,7 +180,7 @@ describe("a multi-app cell", () => {
     const report = reconcile({
       planned: workspacePlan,
       results: [
-        ...apps.map((app) => ran(app, UP_TITLE, "passed")),
+        ...apps.map((app) => ran(app, UP, "passed")),
         ran("next", "GET /health answers", "failed"),
         ran("node", "GET /health answers", "passed"),
         ran("worker", "GET /health answers", "passed"),
@@ -203,7 +203,7 @@ describe("a multi-app cell", () => {
     const report = reconcile({
       planned: workspacePlan,
       results: [
-        ...apps.map((app) => ran(app, UP_TITLE, "passed")),
+        ...apps.map((app) => ran(app, UP, "passed")),
         ran("next", "GET /health answers", "failed"),
         ran("node", "GET /health answers", "passed"),
         ran("worker", "GET /health answers", "passed"),

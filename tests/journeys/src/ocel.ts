@@ -3,8 +3,8 @@ import path from "node:path";
 import { shapeFor, writeJourneyConfig } from "./config";
 import { REDACTED, redact } from "./contract";
 import { live, relay, type Say } from "./live";
+import type { Leg, TargetName } from "./matrix/types";
 import { fixtureMember, ocelBin, providersDir, treeDir } from "./paths";
-import type { Leg, TargetName } from "./spec";
 import type { CellContext } from "./targets/types";
 import { plantWorkspace } from "./tree";
 
@@ -24,11 +24,11 @@ export function treeRoot(cell: CellContext, target: string): string {
 }
 
 export function configTree(cell: CellContext, target: string): string {
-  return path.join(treeRoot(cell, target), fixtureMember(cell.fixture.dir));
+  return path.join(treeRoot(cell, target), fixtureMember(cell.fixture.name));
 }
 
 export function appDirs(cell: CellContext): string[] {
-  return [fixtureMember(cell.fixture.dir)];
+  return [fixtureMember(cell.fixture.name)];
 }
 
 export async function workTree(cell: CellContext, target: TargetName): Promise<string> {

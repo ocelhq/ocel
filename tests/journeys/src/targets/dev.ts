@@ -4,8 +4,8 @@ import { applyConsoleEnvDefaults, consoleUrl, HARNESS_ONLY_ENV } from "@ocel-tes
 import { migrates, setsEnv } from "../checks";
 import { journeyConfigIn } from "../config";
 import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
-import type { ExpectationEnvironment } from "../expectations/types";
 import { isStranded } from "../identity";
+import type { Lane } from "../matrix/types";
 import { runOcel, treeRoot, workTree } from "../ocel";
 import { appCommand, migrateCommand } from "../workspace";
 import { baseUrls, type Standing, serve, stateStaysHome, stopStanding } from "./devShared";
@@ -21,7 +21,7 @@ const running = new Map<string, Standing>();
 
 let seeded: Promise<string> | undefined;
 
-async function guard(): Promise<ExpectationEnvironment> {
+async function guard(): Promise<Lane> {
   const url = `${consoleUrl()}/api/projects`;
   const because = (said: string) =>
     new Error(`${url} ${said}; the journey harness never starts it. Run: ${START_CONSOLE}`);
@@ -68,7 +68,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   const env = { ...childEnv(token), OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)) };
 
   await runOcel(cell, dir, "up", "console-link", ["link", "--create", cell.slug], env);
-  if (setsEnv(cell.fixture.rows)) {
+  if (setsEnv(cell.fixture.checks)) {
     await runOcel(
       cell,
       dir,
@@ -86,7 +86,7 @@ async function up(cell: CellContext): Promise<Deployment> {
       env,
     );
   }
-  if (migrates(cell.fixture.rows)) {
+  if (migrates(cell.fixture.checks)) {
     await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand()], env);
   }
 

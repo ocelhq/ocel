@@ -1,0 +1,109 @@
+import { createHash } from "node:crypto";
+import { BASE, type Cell, type Fixture } from "./matrix/types";
+
+export type Draw = { seed: string; touched: string[] };
+
+export type Coverage = "full" | "covering";
+
+export const COVERAGES: Coverage[] = ["full", "covering"];
+
+export type CellsFor = (fixture: Fixture) => Cell[];
+
+function rotation(seed: string, group: string): number {
+  return createHash("sha256").update(`${seed}:${group}`).digest().readUInt32BE(0);
+}
+
+function groupOf(fixture: Fixture): string | undefined {
+  return fixture.sample === undefined ? undefined : `${fixture.concern}/${fixture.sample.group}`;
+}
+
+function variantOf(cell: Cell): string {
+  return cell.variant?.name ?? BASE;
+}
+
+function coverGroup(
+  group: string,
+  members: Fixture[],
+  cellsFor: CellsFor,
+  draw: Draw,
+): Map<string, Cell[]> {
+  const chosen = new Map<string, Cell[]>();
+  const add = (fixture: Fixture, cell: Cell | undefined) => {
+    if (!cell) {
+      return;
+    }
+    const held = chosen.get(fixture.name) ?? [];
+    if (!held.some((one) => one.name === cell.name)) {
+      held.push(cell);
+    }
+    chosen.set(fixture.name, held);
+  };
+  const cellOf = (fixture: Fixture, variant: string) =>
+    cellsFor(fixture).find((cell) => variantOf(cell) === variant);
+
+  const free: Fixture[] = [];
+  for (const member of members) {
+    if (draw.touched.includes(member.name)) {
+      chosen.set(member.name, cellsFor(member));
+    } else {
+      free.push(member);
+    }
+  }
+  if (free.length === 0) {
+    return chosen;
+  }
+
+  const start = rotation(draw.seed, group);
+  const lead = free.find((member) => member.sample?.lead) ?? free[start % free.length];
+  add(lead, cellOf(lead, BASE));
+
+  const variants: string[] = [];
+  for (const member of free) {
+    for (const cell of cellsFor(member)) {
+      const variant = variantOf(cell);
+      if (variant !== BASE && !variants.includes(variant)) {
+        variants.push(variant);
+      }
+    }
+  }
+  for (const [index, variant] of variants.entries()) {
+    const able = free.filter((member) => cellOf(member, variant) !== undefined);
+    const taker = able[(start + index) % able.length];
+    add(taker, cellOf(taker, variant));
+  }
+
+  for (const member of free) {
+    if (!chosen.has(member.name)) {
+      add(member, cellOf(member, BASE));
+    }
+  }
+  return chosen;
+}
+
+export function sample(
+  fixtures: Fixture[],
+  cellsFor: CellsFor,
+  coverage: Coverage,
+  draw: Draw | undefined,
+): Map<string, Cell[]> {
+  if (coverage === "full") {
+    return new Map(fixtures.map((one) => [one.name, cellsFor(one)]));
+  }
+  const asked = draw ?? { seed: "", touched: [] };
+  const out = new Map<string, Cell[]>();
+  const groups = new Map<string, Fixture[]>();
+  for (const one of fixtures) {
+    const group = groupOf(one);
+    if (group === undefined) {
+      out.set(one.name, cellsFor(one));
+      continue;
+    }
+    groups.set(group, [...(groups.get(group) ?? []), one]);
+  }
+  for (const [group, members] of groups) {
+    for (const [name, cells] of coverGroup(group, members, cellsFor, asked)) {
+      out.set(name, cells);
+    }
+  }
+  return new Map(fixtures.map((one) => [one.name, out.get(one.name) ?? []]));
+}

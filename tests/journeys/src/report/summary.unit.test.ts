@@ -18,11 +18,11 @@ describe("summary table", () => {
   });
   const table = summaryTable(report, {
     target: "dev",
-    environment: "dev",
+    lane: "dev",
     runId: "local-ada",
   });
 
-  it("heads the table with the target, environment and run", () => {
+  it("heads the table with the target, lane and run", () => {
     expect(table.split("\n")[0]).toBe("## journey · dev · dev · run local-ada");
   });
 
@@ -44,7 +44,7 @@ describe("summary table", () => {
     });
     const said = summaryTable(green, {
       target: "dev",
-      environment: "dev",
+      lane: "dev",
       runId: "local-ada",
     });
     expect(said).not.toContain("| cell |");

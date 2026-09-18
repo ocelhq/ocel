@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
+import { SERVES } from "../matrix/types";
+import { outputRoot, prepareFile } from "../paths";
+import { EVERYTHING } from "../plan";
+import type { Target } from "../targets/types";
 import { runJourney } from "./journey";
-import { outputRoot, prepareFile } from "./paths";
-import { SERVES, specByName } from "./spec";
-import type { Target } from "./targets/types";
 
 const RUN_ID = "unit-journey";
 
@@ -34,7 +35,6 @@ function laneThatPrepares(prepared: string[]): Target {
 describe("a lane that selects no cell", () => {
   const held: [string, string | undefined][] = [
     ["GITHUB_RUN_ID", process.env.GITHUB_RUN_ID],
-    ["OCEL_JOURNEY_VARIANTS", process.env.OCEL_JOURNEY_VARIANTS],
     ["GITHUB_STEP_SUMMARY", process.env.GITHUB_STEP_SUMMARY],
   ];
 
@@ -51,11 +51,14 @@ describe("a lane that selects no cell", () => {
 
   it("bootstraps nothing and still reconciles clean", async () => {
     process.env.GITHUB_RUN_ID = RUN_ID;
-    process.env.OCEL_JOURNEY_VARIANTS = "container";
     delete process.env.GITHUB_STEP_SUMMARY;
     const prepared: string[] = [];
 
-    const exitCode = await runJourney(laneThatPrepares(prepared), [specByName("deploy", "node")]);
+    const exitCode = await runJourney(laneThatPrepares(prepared), {
+      ...EVERYTHING,
+      fixtures: ["deploy/node"],
+      variants: ["container"],
+    });
 
     expect(exitCode).toBe(0);
     expect(prepared).toEqual([]);

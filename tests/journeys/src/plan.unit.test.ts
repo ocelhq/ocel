@@ -1,256 +1,449 @@
 import { describe, expect, it } from "bun:test";
+import type { Check } from "./contract";
+import { check, step } from "./lifecycle";
 import {
-  ENV_ROW,
-  healthChecks,
-  nativeChecks,
-  probeChecks,
-  productChecks,
-  staticChecks,
-} from "./checks";
-import {
-  cellKey,
-  DESTROY_TITLE,
-  planTests,
-  REDEPLOY_TITLE,
-  REFUSE_TITLE,
-  ROLLBACK_TITLE,
-  UP_TITLE,
-} from "./plan";
-import {
-  type Cell,
-  cellsOf,
-  type FixtureSpec,
-  fixtureNameOf,
-  type LadderCheck,
+  BASE,
+  type Fixture,
+  fixture,
+  type Gap,
+  type Lane,
+  type Leg,
   LIVES,
   SERVES,
-  specByName,
-  type TargetName,
-} from "./spec";
+  variant,
+} from "./matrix/types";
+import { type Ask, EVERYTHING, type Plan, plan } from "./plan";
 
-function base(fixture: FixtureSpec): Cell {
-  return { name: fixtureNameOf(fixture), fixture };
+const edge = variant("edge", { offeredOn: ["aws"], config: {} });
+const box = variant("box", { offeredOn: ["aws", "gcp"], config: {} });
+
+const ping: Check = { title: "ping", run: async () => undefined };
+const pong: Check = { title: "pong", run: async () => undefined };
+
+function one(name: string, over: Partial<Omit<Fixture, "name" | "concern">> = {}): Fixture {
+  return fixture(name, {
+    apps: ["web"],
+    legs: SERVES,
+    checks: [ping],
+    on: { aws: { base: true } },
+    ...over,
+  });
 }
 
-describe("planning a workspace row", () => {
-  const workspace = specByName("sdk", "workspace");
-  const planned = planTests([base(workspace)], LIVES);
+type Input = { lane?: Lane; ask?: Partial<Ask>; gaps?: Gap[]; legs?: Leg[] };
 
-  it("plans the whole contract once per app", () => {
-    for (const app of workspace.apps) {
-      const titles = planned
-        .filter((entry) => entry.cell === `sdk/workspace/${app}` && entry.leg === "contract")
-        .map((entry) => entry.title);
-      expect(titles).toEqual(workspace.rows.map((row) => row.title));
-    }
+function planOf(fixtures: Fixture[], input: Input = {}): Plan {
+  return plan({
+    fixtures,
+    gaps: input.gaps ?? [],
+    lane: input.lane ?? "aws",
+    legs: input.legs ?? LIVES,
+    ask: { ...EVERYTHING, ...input.ask },
   });
+}
 
-  it("gives every app its own up and destroy, so one can be red while another is green", () => {
-    for (const app of workspace.apps) {
-      const titles = planned
-        .filter((entry) => entry.cell === `sdk/workspace/${app}`)
-        .map((entry) => entry.title);
-      expect(titles).toContain(UP_TITLE);
-      expect(titles).toContain(DESTROY_TITLE);
-    }
-  });
+const cellsOf = (planned: Plan) => planned.cells.map((cell) => cell.name);
 
-  it("names the apps the way the project config does", () => {
-    expect(workspace.apps).toEqual(["next", "express"]);
+describe("the cells a lane runs", () => {
+  it("runs the base cell and then each variant the fixture places on the lane's target", () => {
+    const placed = one("deploy/node", {
+      on: { aws: { base: true, variants: [edge, box] }, gcp: { variants: [box] } },
+    });
+    expect(cellsOf(planOf([placed]))).toEqual([
+      "deploy/node",
+      "deploy/node-edge",
+      "deploy/node-box",
+    ]);
+    expect(cellsOf(planOf([placed], { lane: "gcp.floci" }))).toEqual(["deploy/node-box"]);
+    expect(cellsOf(planOf([placed], { lane: "vps" }))).toEqual([]);
   });
 });
 
-describe("planning the two concerns of one runtime", () => {
-  const deploy = specByName("deploy", "node");
-  const sdk = specByName("sdk", "node");
-  const planned = planTests([base(deploy), base(sdk)], LIVES);
+const titlesOf = (planned: Plan, cell: string) =>
+  planned.cells
+    .find((one) => one.name === cell)
+    ?.steps.map((one) => (one.app === "web" ? one.title : `${one.app}: ${one.title}`));
 
-  it("gives each concern a cell of its own, so neither can shadow the other", () => {
-    expect(planned.some((entry) => entry.cell === "deploy/node/web")).toBe(true);
-    expect(planned.some((entry) => entry.cell === "sdk/node/web")).toBe(true);
-  });
-
-  it("plans the product rows for the sdk cell alone", () => {
-    const productTitles = productChecks.map((row) => row.title);
-    const titlesOf = (cell: string) =>
-      planned
-        .filter((entry) => entry.cell === cell && entry.leg === "contract")
-        .map((e) => e.title);
-    expect(titlesOf("deploy/node/web").some((title) => productTitles.includes(title))).toBe(false);
-    expect(titlesOf("sdk/node/web")).toEqual(expect.arrayContaining(productTitles));
-  });
-
-  it("asks the deploy cell for health, static and the probes, and nothing else", () => {
-    expect(deploy.rows).toEqual([
-      ...healthChecks,
-      ...staticChecks,
-      ...probeChecks,
-      ...nativeChecks,
+describe("the steps a cell walks through", () => {
+  it("brings a serving cell up, checks it, and destroys it", () => {
+    const serving = one("deploy/node", { checks: [ping, pong] });
+    expect(titlesOf(planOf([serving]), "deploy/node")).toEqual(["up", "ping", "pong", "destroy"]);
+    expect(planOf([serving]).cells[0]?.steps.map((one) => one.leg)).toEqual([
+      "up",
+      "contract",
+      "contract",
+      "destroy",
     ]);
   });
 
-  it("leaves the env row to the sdk cell, since defineEnv is what delivers it", () => {
-    expect(deploy.rows.map((row) => row.title)).not.toContain(ENV_ROW);
-    expect(sdk.rows.map((row) => row.title)).toContain(ENV_ROW);
+  it("replaces and rolls back a living cell, checking it again after each", () => {
+    const living = one("lifecycle/next", { legs: LIVES });
+    expect(titlesOf(planOf([living]), "lifecycle/next")).toEqual([
+      "up",
+      "ping",
+      "redeploy",
+      "redeploy · ping",
+      "rollback",
+      "rollback · ping",
+      "destroy",
+    ]);
   });
 
-  it("leaves redeploy and rollback out of both, since neither observes a replacement", () => {
-    for (const cell of ["deploy/node/web", "sdk/node/web"]) {
-      const titles = planned.filter((entry) => entry.cell === cell).map((entry) => entry.title);
-      expect(titles).not.toContain(REDEPLOY_TITLE);
-      expect(titles).not.toContain(ROLLBACK_TITLE);
-      expect(titles.some((title) => title.startsWith("redeploy · "))).toBe(false);
-      expect(titles.some((title) => title.startsWith("rollback · "))).toBe(false);
-    }
+  it("walks only the legs the lane's target can drive", () => {
+    const living = one("lifecycle/next", { legs: LIVES });
+    const planned = planOf([living], { legs: SERVES });
+    expect(titlesOf(planned, "lifecycle/next")).toEqual(["up", "ping", "destroy"]);
+    expect(planned.cells[0]?.legs).toEqual(SERVES);
+  });
+
+  it("leaves destroy out of a lane that keeps its cells standing", () => {
+    const planned = planOf([one("deploy/node")], { ask: { keep: true } });
+    expect(titlesOf(planned, "deploy/node")).toEqual(["up", "ping"]);
+    expect(planned.keep).toBe(true);
+  });
+
+  it("takes every app of a workspace through each step before the next", () => {
+    const workspace = one("deploy/workspace", { apps: ["web", "api"], checks: [ping, pong] });
+    expect(titlesOf(planOf([workspace]), "deploy/workspace")).toEqual([
+      "up",
+      "api: up",
+      "ping",
+      "pong",
+      "api: ping",
+      "api: pong",
+      "destroy",
+      "api: destroy",
+    ]);
+  });
+
+  it("fits a ladder's own checks around the lifecycle at the points it names", () => {
+    const ladder = one("sdk/with-sst", {
+      legs: LIVES,
+      ladder: {
+        refuse: async () => undefined,
+        checks: [
+          { title: "records", at: "publish", run: async () => undefined },
+          { title: "routes", at: "consume", run: async () => undefined },
+          { title: "survives", at: "outlive", run: async () => undefined },
+          { title: "empties", at: "prune", run: async () => undefined },
+        ],
+      },
+    });
+    expect(titlesOf(planOf([ladder]), "sdk/with-sst")).toEqual([
+      "refuse",
+      "publish · records",
+      "up",
+      "ping",
+      "consume · routes",
+      "redeploy",
+      "redeploy · ping",
+      "redeploy · consume · routes",
+      "rollback",
+      "rollback · ping",
+      "rollback · consume · routes",
+      "destroy",
+      "outlive · survives",
+      "prune · empties",
+    ]);
   });
 });
 
-describe("planning the legs a fixture asks for", () => {
-  const lifecycle = specByName("lifecycle", "next");
+describe("what a lane is asked to run", () => {
+  const node = one("deploy/node", { on: { aws: { base: true, variants: [edge, box] } } });
+  const sdk = one("sdk/node");
+  const living = one("lifecycle/next", { legs: LIVES });
 
-  it("runs redeploy and rollback with the contract after each, where the fixture lives", () => {
-    const cells = planTests([base(lifecycle)], LIVES).filter(
-      (entry) => entry.cell === "lifecycle/next/web",
+  it("runs only the concerns asked for", () => {
+    expect(cellsOf(planOf([node, sdk], { ask: { concerns: ["sdk"] } }))).toEqual(["sdk/node"]);
+  });
+
+  it("runs only the fixtures named, in matrix order, and refuses one the target does not run", () => {
+    const named = planOf([node, sdk], { ask: { fixtures: ["sdk/node", "deploy/node"] } });
+    expect(named.cells.map((cell) => cell.fixture)).toEqual([
+      "deploy/node",
+      "deploy/node",
+      "deploy/node",
+      "sdk/node",
+    ]);
+    expect(() => planOf([node, sdk], { ask: { fixtures: ["sdk/next"] } })).toThrow(
+      /this target runs no fixture named sdk\/next \(deploy\/node, sdk\/node\)/,
     );
-    const titles = cells.map((entry) => entry.title);
-    expect(titles).toContain(REDEPLOY_TITLE);
-    expect(titles).toContain(ROLLBACK_TITLE);
-    for (const leg of ["redeploy", "rollback"] as const) {
-      const rows = cells.filter((entry) => entry.leg === leg && entry.title.includes(" · "));
-      expect(rows.map((entry) => entry.title)).toEqual(
-        lifecycle.rows.map((row) => `${leg} · ${row.title}`),
-      );
-    }
   });
 
-  it("plans neither where the target cannot replace a release", () => {
-    const titles = planTests([base(lifecycle)], SERVES).map((entry) => entry.title);
-    expect(titles).not.toContain(REDEPLOY_TITLE);
-    expect(titles).not.toContain(ROLLBACK_TITLE);
-    expect(titles).toContain(UP_TITLE);
-    expect(titles).toContain(DESTROY_TITLE);
+  it("runs only the variants named, base among them", () => {
+    expect(cellsOf(planOf([node], { ask: { variants: ["base", "box"] } }))).toEqual([
+      "deploy/node",
+      "deploy/node-box",
+    ]);
+  });
+
+  it("refuses a variant no fixture lists, and runs nothing for one only another target runs", () => {
+    expect(() => planOf([node], { ask: { variants: ["fastly"] } })).toThrow(
+      /no fixture lists a variant named fastly \(base, edge, box\)/,
+    );
+    expect(cellsOf(planOf([node, sdk], { lane: "vps", ask: { variants: ["edge"] } }))).toEqual([]);
+  });
+
+  it("runs the cells that live longest first, and keeps matrix order among equals", () => {
+    expect(cellsOf(planOf([node, sdk, living]))).toEqual([
+      "lifecycle/next",
+      "deploy/node",
+      "deploy/node-edge",
+      "deploy/node-box",
+      "sdk/node",
+    ]);
+  });
+
+  it("samples a group under covering, and runs all of it under full", () => {
+    const grouped = [
+      one("deploy/a", { on: { aws: { base: true, variants: [edge] } }, sample: { group: "g" } }),
+      one("deploy/b", { on: { aws: { base: true, variants: [edge] } }, sample: { group: "g" } }),
+    ];
+    expect(cellsOf(planOf(grouped))).toHaveLength(4);
+    const covering = planOf(grouped, {
+      ask: { coverage: "covering", draw: { seed: "1", touched: [] } },
+    });
+    expect(cellsOf(covering).filter((name) => name.endsWith("-edge"))).toHaveLength(1);
+    expect(cellsOf(covering)).toHaveLength(3);
   });
 });
 
-function withHooks(rows: LadderCheck[], refuse: boolean): FixtureSpec {
-  return {
-    name: "with-sst",
-    concern: "sdk",
-    dir: "sdk/with-sst",
-    runtime: "node",
-    kind: "ladder",
-    rows: healthChecks,
-    apps: ["web"],
-    legs: LIVES,
-    targets: ["aws"],
-    hooks: {
-      ...(refuse ? { refuse: async () => undefined } : {}),
-      beforeUp: async () => undefined,
-      afterDestroy: async () => undefined,
-      rows,
-    },
-  };
+function gap(id: string, affects: Gap["affects"], issue?: number): Gap {
+  return issue === undefined
+    ? { id, reason: `reason for ${id}`, affects }
+    : { id, reason: `reason for ${id}`, issue, affects };
 }
 
-const publishRow: LadderCheck = {
-  title: "lists both records",
-  phase: "publish",
-  run: async () => undefined,
-};
-const consumeRow: LadderCheck = {
-  title: "both binding routes answer",
-  phase: "consume",
-  run: async () => undefined,
-};
-const outliveRow: LadderCheck = {
-  title: "the record survives",
-  phase: "outlive",
-  run: async () => undefined,
-};
-const pruneRow: LadderCheck = {
-  title: "both partitions are empty",
-  phase: "prune",
-  run: async () => undefined,
-};
+describe("the gaps a lane expects", () => {
+  const node = one("deploy/node", {
+    checks: [ping, pong],
+    on: { aws: { base: true, variants: [edge] }, vps: { base: true } },
+  });
+  const living = one("lifecycle/next", { legs: LIVES, on: { aws: { base: true } } });
+  const workspace = one("sdk/workspace", {
+    apps: ["web", "api"],
+    on: { aws: { base: true, variants: [edge] } },
+  });
+  const matrix = [node, living, workspace];
 
-describe("planTests", () => {
-  it("plans nothing extra for a fixture with no hooks", () => {
-    const composite: FixtureSpec = {
-      name: "node",
-      concern: "deploy",
-      dir: "deploy/node",
-      runtime: "node",
-      kind: "composite",
-      rows: healthChecks,
-      apps: ["web"],
-      legs: SERVES,
-    };
-    const planned = planTests([base(composite)], [...LIVES]);
-    expect(planned.some((row) => row.title === REFUSE_TITLE)).toBe(false);
-    expect(planned.some((row) => row.title.startsWith("publish"))).toBe(false);
+  it("lists a test under every gap that names it", () => {
+    const planned = planOf(matrix, {
+      gaps: [
+        gap("one", [{ on: ["aws"], fixtures: [node], tests: [step.up] }], 1),
+        gap("two", [{ on: ["aws"], fixtures: [node], tests: [step.up] }]),
+      ],
+    });
+    expect(planned.expectations["deploy/node/web"]?.up).toEqual([
+      { id: "one", reason: "reason for one", issue: 1 },
+      { id: "two", reason: "reason for two" },
+    ]);
   });
 
-  it("plans refuse once, before anything else, for a hooked ladder", () => {
-    const fixture = withHooks([publishRow], true);
-    const planned = planTests([base(fixture)], [...LIVES]);
-    const titles = planned
-      .filter((row) => row.cell === cellKey("sdk/with-sst", "web"))
-      .map((row) => row.title);
-    expect(titles.filter((title) => title === REFUSE_TITLE).length).toBe(1);
-    expect(titles.indexOf(REFUSE_TITLE)).toBeLessThan(
-      titles.indexOf("publish · lists both records"),
-    );
+  it("lists a test once under a gap whose blocks overlap", () => {
+    const planned = planOf(matrix, {
+      gaps: [
+        gap("one", [
+          { on: ["aws"], fixtures: [node], tests: [step.up] },
+          { on: ["aws"], tests: [step.up] },
+        ]),
+      ],
+    });
+    expect(planned.expectations["deploy/node/web"]?.up).toHaveLength(1);
+    expect(planned.expectations["sdk/workspace-edge/api"]?.up).toHaveLength(1);
   });
 
-  it("plans one publish, outlive and prune title but three consume titles", () => {
-    const fixture = withHooks([publishRow, consumeRow, outliveRow, pruneRow], true);
-    const planned = planTests([base(fixture)], [...LIVES]).map((row) => row.title);
-    expect(planned).toContain("publish · lists both records");
-    expect(planned).toContain("outlive · the record survives");
-    expect(planned).toContain("prune · both partitions are empty");
-    expect(planned).toContain("consume · both binding routes answer");
-    expect(planned).toContain("redeploy · consume · both binding routes answer");
-    expect(planned).toContain("rollback · consume · both binding routes answer");
-    expect(planned.filter((title) => title.includes("both binding routes answer")).length).toBe(3);
+  it("expands a check across the legs a cell checks it on", () => {
+    const planned = planOf(matrix, {
+      gaps: [gap("one", [{ on: ["aws"], tests: [check(ping)] }])],
+    });
+    expect(Object.keys(planned.expectations["lifecycle/next/web"] ?? {})).toEqual([
+      "ping",
+      "redeploy · ping",
+      "rollback · ping",
+    ]);
+    expect(Object.keys(planned.expectations["deploy/node/web"] ?? {})).toEqual(["ping"]);
   });
 
-  it("plans no refuse title when the fixture declares no refuse hook", () => {
-    const fixture = withHooks([publishRow], false);
-    const planned = planTests([base(fixture)], [...LIVES]);
-    expect(planned.some((row) => row.title === REFUSE_TITLE)).toBe(false);
-    expect(planned.some((row) => row.title === "publish · lists both records")).toBe(true);
+  it("expands a check across only the legs named", () => {
+    const planned = planOf(matrix, {
+      gaps: [gap("one", [{ on: ["aws"], tests: [check([ping, pong], ["rollback"])] }])],
+    });
+    expect(Object.keys(planned.expectations["lifecycle/next/web"] ?? {})).toEqual([
+      "rollback · ping",
+    ]);
+  });
+
+  it("reaches every variant of a fixture unless the block names some", () => {
+    const every = planOf(matrix, {
+      gaps: [gap("one", [{ on: ["aws"], fixtures: [node], tests: [step.up] }])],
+    });
+    expect(every.expectations["deploy/node-edge/web"]?.up).toBeDefined();
+    const base = planOf(matrix, {
+      gaps: [gap("one", [{ on: ["aws"], fixtures: [node], variants: [BASE], tests: [step.up] }])],
+    });
+    expect(base.expectations["deploy/node/web"]?.up).toBeDefined();
+    expect(base.expectations["deploy/node-edge/web"]).toBeUndefined();
+  });
+
+  it("reads a block only on the lanes it names", () => {
+    const gaps = [gap("one", [{ on: ["vps"], tests: [step.up] }])];
+    expect(planOf(matrix, { gaps }).expectations).toEqual({});
+    expect(planOf(matrix, { gaps, lane: "vps" }).expectations["deploy/node/web"]).toBeDefined();
+  });
+
+  it("expects only what the lane runs", () => {
+    const planned = planOf(matrix, {
+      gaps: [gap("one", [{ on: ["aws"], tests: [step.up] }])],
+      ask: { fixtures: ["deploy/node"] },
+    });
+    expect(Object.keys(planned.expectations)).toEqual(["deploy/node/web", "deploy/node-edge/web"]);
+  });
+
+  it("skips the whole cell a skipping block reaches, and names it under the gap", () => {
+    const planned = planOf(matrix, {
+      gaps: [
+        gap(
+          "one",
+          [{ on: ["aws"], fixtures: [workspace], variants: [edge], tests: [step.up], skip: true }],
+          9,
+        ),
+      ],
+    });
+    expect(cellsOf(planned)).not.toContain("sdk/workspace-edge");
+    expect(planned.skipped).toEqual({
+      "sdk/workspace-edge": [{ id: "one", reason: "reason for one", issue: 9 }],
+    });
+  });
+
+  it("names a skipped cell once however many blocks of one gap skip it", () => {
+    const planned = planOf(matrix, {
+      gaps: [
+        gap("one", [
+          { on: ["aws"], fixtures: [node], tests: [step.up], skip: true },
+          { on: ["aws"], variants: [BASE], tests: [step.up], skip: true },
+        ]),
+      ],
+    });
+    expect(planned.skipped["deploy/node"]).toHaveLength(1);
+  });
+
+  it("names only the skipped cells the lane was asked to run", () => {
+    const gaps = [gap("one", [{ on: ["aws"], fixtures: [node], tests: [step.up], skip: true }])];
+    expect(Object.keys(planOf(matrix, { gaps }).skipped)).toEqual([
+      "deploy/node",
+      "deploy/node-edge",
+    ]);
+    expect(planOf(matrix, { gaps, ask: { variants: [BASE] } }).skipped).toEqual({
+      "deploy/node": [{ id: "one", reason: "reason for one" }],
+    });
+  });
+
+  it("runs a skipped cell when the skips are lifted, still expecting it red", () => {
+    const planned = planOf(matrix, {
+      gaps: [gap("one", [{ on: ["aws"], fixtures: [node], tests: [step.up], skip: true }])],
+      ask: { runSkipped: true },
+    });
+    expect(cellsOf(planned)).toContain("deploy/node");
+    expect(planned.skipped).toEqual({});
+    expect(planned.expectations["deploy/node/web"]?.up).toBeDefined();
   });
 });
 
-describe("planning the cells a fixture runs on a target", () => {
-  const node = specByName("sdk", "node");
+describe("a gap that reaches nothing", () => {
+  const node = one("deploy/node", { on: { aws: { variants: [edge] }, vps: { base: true } } });
+  const living = one("lifecycle/next", { legs: LIVES });
 
-  function cellsOn(target: TargetName): string[] {
-    return [...new Set(planTests(cellsOf(node, target), ["up"]).map((row) => row.cell))];
-  }
-
-  it("plans one cell per variant, and no base cell where the fixture runs none", () => {
-    expect(cellsOn("aws")).toEqual(["sdk/node-container/web", "sdk/node-api-gateway/web"]);
-    expect(
-      planTests(cellsOf(specByName("sdk", "next"), "aws"), ["up"]).map((row) => row.cell),
-    ).toEqual(["sdk/next/web", "sdk/next-container/web", "sdk/next-cloudflare/web"]);
+  it("refuses a fixture that plans none of the tests named", () => {
+    expect(() =>
+      planOf([node, living], {
+        gaps: [gap("one", [{ on: ["aws"], fixtures: [node], tests: [step.redeploy] }])],
+      }),
+    ).toThrow(/one on aws lists deploy\/node, which plans none of the tests named/);
   });
 
-  it("plans only the variants a target runs", () => {
-    expect(cellsOn("vps")).toEqual(["sdk/node/web"]);
-    expect(cellsOn("dev")).toEqual(["sdk/node/web"]);
+  it("refuses a variant the lane does not run", () => {
+    expect(() =>
+      planOf([node, living], {
+        lane: "vps",
+        gaps: [gap("one", [{ on: ["vps"], variants: [edge], tests: [step.up] }])],
+      }),
+    ).toThrow(/one on vps lists edge, which plans none of the tests named/);
   });
 
-  it("carries the fixture, app and variant of every test it plans", () => {
-    const planned = planTests(cellsOf(specByName("sdk", "workspace"), "aws"), ["up"]);
-    expect(planned.find((row) => row.cell === "sdk/workspace-container/express")).toEqual({
-      cell: "sdk/workspace-container/express",
-      fixture: "sdk/workspace",
-      app: "express",
-      variant: "container",
-      title: UP_TITLE,
-      leg: "up",
-    });
-    expect(planned.find((row) => row.cell === "sdk/workspace/next")?.variant).toBe("base");
+  it("refuses a leg the target does not drive", () => {
+    expect(() =>
+      planOf([node, living], {
+        legs: SERVES,
+        gaps: [gap("one", [{ on: ["aws"], tests: [check(ping, ["rollback"])] }])],
+      }),
+    ).toThrow(/one on aws lists nothing that is planned/);
+  });
+
+  it("refuses a fixture the lane never runs, even when the lane is asked for less", () => {
+    expect(() =>
+      planOf([node, living], {
+        lane: "vps",
+        gaps: [gap("one", [{ on: ["vps"], fixtures: [living], tests: [step.up] }])],
+      }),
+    ).toThrow(/one on vps lists lifecycle\/next/);
+    expect(() =>
+      planOf([node, living], {
+        gaps: [gap("one", [{ on: ["aws"], fixtures: [node], tests: [step.up] }])],
+        ask: { fixtures: ["lifecycle/next"] },
+      }),
+    ).not.toThrow();
+  });
+
+  it("refuses two gaps of one id, and a gap that affects nothing", () => {
+    expect(() =>
+      planOf([node], {
+        gaps: [gap("one", [{ on: ["aws"], tests: [step.up] }]), gap("one", [])],
+      }),
+    ).toThrow(/the gap one is listed twice/);
+    expect(() => planOf([node], { gaps: [gap("one", [])] })).toThrow(/the gap one affects nothing/);
+  });
+});
+
+describe("a matrix that cannot be planned", () => {
+  it("refuses a fixture listed twice", () => {
+    expect(() => planOf([one("deploy/node"), one("deploy/node")])).toThrow(
+      /deploy\/node is listed twice/,
+    );
+  });
+
+  it("refuses a variant placed twice on one target", () => {
+    expect(() =>
+      planOf([one("deploy/node", { on: { aws: { variants: [edge, box, edge] } } })]),
+    ).toThrow(/deploy\/node places the edge variant twice on aws/);
+  });
+
+  it("refuses a variant the target does not offer", () => {
+    expect(() =>
+      planOf([one("deploy/node", { on: { vps: { base: true, variants: [edge] } } })], {
+        lane: "vps",
+      }),
+    ).toThrow(/deploy\/node asks vps for the edge variant, which only aws offers/);
+  });
+
+  it("refuses a placement that runs nothing, and a fixture placed nowhere", () => {
+    expect(() => planOf([one("deploy/node", { on: { aws: {} } })])).toThrow(
+      /deploy\/node runs nothing on aws/,
+    );
+    expect(() => planOf([one("deploy/node", { on: {} })])).toThrow(
+      /deploy\/node runs on no target/,
+    );
+  });
+
+  it("refuses a sample group led by two members", () => {
+    const led = (name: string) => one(name, { sample: { group: "g", lead: true } });
+    expect(() => planOf([led("deploy/a"), led("deploy/b")])).toThrow(
+      /the deploy\/g group is led by deploy\/a and deploy\/b/,
+    );
+    expect(() => planOf([led("deploy/a"), led("sdk/b")])).not.toThrow();
+  });
+
+  it("refuses a fixture path outside the concerns", () => {
+    expect(() => one("console/node")).toThrow(/console\/node is no fixture path/);
+    expect(() => one("deploy/node/web")).toThrow(/is no fixture path/);
   });
 });

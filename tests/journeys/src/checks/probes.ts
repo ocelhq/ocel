@@ -4,8 +4,6 @@ import { type Check, describeResponse, json, LARGE_RESPONSE_BYTES, SLEEP_MS } fr
 
 const EMPTY_BODY_TIMEOUT_MS = 15_000;
 
-export const EMPTY_BODY_ROW = "GET /api/probes/empty/:kind answers nothing at all, promptly";
-
 export const STREAM_ROW = "GET /api/probes/stream streams its chunks in order to the sentinel";
 
 export const nativeChecks: Check[] = [
@@ -35,6 +33,32 @@ export const vendoredChecks: Check[] = [
     },
   },
 ];
+
+export const emptyBodyCheck: Check = {
+  title: "GET /api/probes/empty/:kind answers nothing at all, promptly",
+  run: async (ctx) => {
+    for (const [kind, status] of [
+      ["ok", 200],
+      ["redirect", 302],
+    ] as const) {
+      const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/empty/${kind}`, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(EMPTY_BODY_TIMEOUT_MS),
+      });
+      const text = await res.text();
+      assert.equal(res.status, status, describeResponse(res, text));
+      assert.equal(text.length, 0, describeResponse(res, text));
+      assert.equal(
+        res.headers.get("x-ocel-empty-body"),
+        null,
+        `the sentinel marker reached the browser: ${describeResponse(res, text)}`,
+      );
+      if (kind === "redirect") {
+        assert.equal(res.headers.get("location"), "/api/probes/status/204");
+      }
+    }
+  },
+};
 
 export const probeChecks: Check[] = [
   {
@@ -67,31 +91,7 @@ export const probeChecks: Check[] = [
       }
     },
   },
-  {
-    title: EMPTY_BODY_ROW,
-    run: async (ctx) => {
-      for (const [kind, status] of [
-        ["ok", 200],
-        ["redirect", 302],
-      ] as const) {
-        const res = await ctx.fetch(`${ctx.baseUrl}/api/probes/empty/${kind}`, {
-          redirect: "manual",
-          signal: AbortSignal.timeout(EMPTY_BODY_TIMEOUT_MS),
-        });
-        const text = await res.text();
-        assert.equal(res.status, status, describeResponse(res, text));
-        assert.equal(text.length, 0, describeResponse(res, text));
-        assert.equal(
-          res.headers.get("x-ocel-empty-body"),
-          null,
-          `the sentinel marker reached the browser: ${describeResponse(res, text)}`,
-        );
-        if (kind === "redirect") {
-          assert.equal(res.headers.get("location"), "/api/probes/status/204");
-        }
-      }
-    },
-  },
+  emptyBodyCheck,
   {
     title: "ALL /api/probes/echo echoes method, path, query, header and body",
     run: async (ctx) => {

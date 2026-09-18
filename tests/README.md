@@ -13,13 +13,14 @@ provider packages alone. Both run from the provider workflows.
 
 ## Running one journey locally
 
-A cell is one fixture on one target, named in `journeys/src/spec.ts`. A fixture belongs to
-one concern: `deploy` asks whether a runtime runs on a target at all, and its apps under
-`fixtures/deploy/` declare no resources; `lifecycle` asks whether a release can be replaced
-and rolled back there, from `fixtures/lifecycle/`; `sdk` asks whether what an app declares
-is provisioned, bound and usable, from `fixtures/sdk/`. The harness starts nothing but the
-`ocel` binary; bring up what the target needs first. For `dev` that is postgres, the
-control-plane schema and the console:
+A cell is one fixture on one target. `journeys/src/matrix/fixtures.ts` names every fixture
+and the targets and variants it runs on. A fixture belongs to one concern: `deploy` asks
+whether a runtime runs on a target at all, and its apps under `fixtures/deploy/` declare no
+resources; `lifecycle` asks whether a release can be replaced and rolled back there, from
+`fixtures/lifecycle/`; `sdk` asks whether what an app declares is provisioned, bound and
+usable, from `fixtures/sdk/`. The harness starts nothing but the `ocel` binary; bring up
+what the target needs first. For `dev` that is postgres, the control-plane schema and the
+console:
 
 ```
 node scripts/snapshot.mjs
@@ -120,10 +121,10 @@ against the floci-gcp emulator on a pull request that touches it, and against th
 project once a night, in `GCP nightly`, which owns that project's namespace and takes it
 down again.
 
-Every known gap is one entry in `journeys/src/expectations/gaps.ts`: a slug, a reason,
-the issue that owns it when one does, and the environments, edges, cells and tests it
+Every known gap is one entry in `journeys/src/matrix/gaps.ts`: a slug, a reason,
+the issue that owns it when one does, and the lanes, variants, fixtures and tests it
 affects. A test can sit under several gaps and a gap under many tests; the run resolves the
-list for its own environment. A gap is un-listed in the pull request that fixes it. The
+list for its own lane. A gap is un-listed in the pull request that fixes it. The
 account is exact in both directions: a listed test that passes fails the run, an unlisted
 test that fails fails the run, and a skipped, `todo` or `only` test fails the run whatever
 the list says.

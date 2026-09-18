@@ -1,9 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { accountOf, plannedFrom, type Run, unhandledFrom } from "./account";
-import type { RecordedRow } from "./ledger";
-import type { PlannedTest } from "./plan";
-import { selectionFor } from "./selection";
-import { targetNamed } from "./targets";
+import type { PlannedTest } from "../plan";
+import type { RecordedRow } from "../run/ledger";
+import { accountOf, type Run, unhandledFrom } from "./account";
 
 function run(over: Partial<Run> = {}): Run {
   return { exitCode: 0, signal: null, ...over };
@@ -48,55 +46,20 @@ describe("the errors the suite leaves outside its recorded tests", () => {
   });
 });
 
-describe("what a lane plans from the environment its children read", () => {
-  it("plans only the fixtures the environment names", () => {
-    const aws = targetNamed("aws");
-    const planned = plannedFrom(
-      aws,
-      selectionFor(aws, "aws", {
-        OCEL_JOURNEY_FIXTURES: "deploy/node,sdk/next",
-        OCEL_JOURNEY_SKIPS: "run",
-      }),
-      false,
-    );
-    const fixtures = new Set(planned.map((entry) => entry.fixture));
-    expect([...fixtures].sort()).toEqual(["deploy/node", "sdk/next"]);
-  });
-
-  it("plans no destroy for a lane that keeps its cells standing", () => {
-    const aws = targetNamed("aws");
-    const selection = selectionFor(aws, "aws", {
-      OCEL_JOURNEY_FIXTURES: "deploy/node",
-      OCEL_JOURNEY_SKIPS: "run",
-    });
-    const legs = (keep: boolean) =>
-      new Set(plannedFrom(aws, selection, keep).map((entry) => entry.leg));
-    expect(legs(false)).toContain("destroy");
-    expect(legs(true)).not.toContain("destroy");
-    expect(legs(true)).toContain("up");
-  });
-});
-
 describe("the account a run settles from its rows", () => {
   const planned: PlannedTest[] = [
     {
       cell: "sdk/node/web",
-      fixture: "sdk/node",
-      app: "web",
-      variant: "base",
       title: "up",
       leg: "up",
     },
     {
       cell: "sdk/node/web",
-      fixture: "sdk/node",
-      app: "web",
-      variant: "base",
       title: "destroy",
       leg: "destroy",
     },
   ];
-  const meta = { target: "dev", environment: "dev", runId: "local-unit" };
+  const meta = { target: "dev", lane: "dev", runId: "local-unit" };
 
   it("reconciles the recorded rows and holds a crash as an unhandled error", () => {
     const account = accountOf({

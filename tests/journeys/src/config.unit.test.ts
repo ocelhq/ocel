@@ -17,19 +17,20 @@ import {
   writeJourneyConfig,
 } from "./config";
 import { evidence } from "./evidence";
-import { type Concern, specByName } from "./spec";
+import { deploy, sdk } from "./matrix/fixtures";
+import type { Fixture, Variant } from "./matrix/types";
+import { cloudflare, container } from "./matrix/variants";
 import type { CellContext } from "./targets/types";
-import { cloudflare, container, type Variant } from "./variants";
 
 const TS_BASE = "./ocel.config.ts";
 
-function cell(concern: Concern, name: string, variant?: Variant): CellContext {
+function cell(fixture: Fixture, variant?: Variant): CellContext {
   return {
-    fixture: specByName(concern, name),
-    name: `${concern}/${name}`,
+    fixture,
+    name: fixture.name,
     ...(variant === undefined ? {} : { variant }),
     dir: "/nowhere",
-    slug: `j-1-${concern}-${name}`,
+    slug: `j-1-${fixture.name.replace("/", "-")}`,
     runId: "1",
     evidence: evidence("/nowhere"),
   };
@@ -48,7 +49,7 @@ describe("journeyZone", () => {
 
 describe("sweepShapeFor", () => {
   it("destroys a cell through the edge its variant stood it up behind", () => {
-    expect(sweepShapeFor(cell("sdk", "workspace", cloudflare), "j-9-sdk-workspace", {})).toEqual({
+    expect(sweepShapeFor(cell(sdk.workspace, cloudflare), "j-9-sdk-workspace", {})).toEqual({
       base: AWS_BASE,
       slug: "j-9-sdk-workspace",
       edge: "cloudflare",
@@ -56,7 +57,7 @@ describe("sweepShapeFor", () => {
   });
 
   it("names no edge for a base cell", () => {
-    expect(sweepShapeFor(cell("deploy", "node"), "j-9-deploy-node", {})).toEqual({
+    expect(sweepShapeFor(cell(deploy.node), "j-9-deploy-node", {})).toEqual({
       base: AWS_BASE,
       slug: "j-9-deploy-node",
     });
@@ -64,7 +65,7 @@ describe("sweepShapeFor", () => {
 
   it("unbinds through the dns the cell was bound under", () => {
     expect(
-      sweepShapeFor(cell("deploy", "node"), "j-9-deploy-node", {
+      sweepShapeFor(cell(deploy.node), "j-9-deploy-node", {
         OCEL_JOURNEY_DNS: "cloudflare",
         OCEL_JOURNEY_ZONE: "j.example",
         OCEL_AWS_VARS_KEY: "arn:aws:kms:key/k",
@@ -80,7 +81,7 @@ describe("sweepShapeFor", () => {
 describe("shapeFor", () => {
   it("overlays the aws fixture with the variant's config, the dns and the hostnames", () => {
     expect(
-      shapeFor(cell("sdk", "workspace", cloudflare), "aws", {
+      shapeFor(cell(sdk.workspace, cloudflare), "aws", {
         OCEL_JOURNEY_ZONE: "j.example",
         OCEL_JOURNEY_DNS: "cloudflare",
       }),
@@ -97,7 +98,7 @@ describe("shapeFor", () => {
   });
 
   it("takes the compute a container variant names", () => {
-    expect(shapeFor(cell("deploy", "node", container), "aws", {})).toEqual({
+    expect(shapeFor(cell(deploy.node, container), "aws", {})).toEqual({
       base: AWS_BASE,
       slug: "j-1-deploy-node",
       compute: "container",
@@ -105,7 +106,7 @@ describe("shapeFor", () => {
   });
 
   it("leaves the fixture's config alone for a base cell, and dns alone off a real zone", () => {
-    expect(shapeFor(cell("deploy", "node"), "aws", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
+    expect(shapeFor(cell(deploy.node), "aws", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
       base: AWS_BASE,
       slug: "j-1-deploy-node",
       hostnames: { web: "web-j-1-deploy-node.j.example" },
@@ -114,7 +115,7 @@ describe("shapeFor", () => {
 
   it("seals an aws cell's vars under the key the account brought", () => {
     expect(
-      shapeFor(cell("deploy", "node"), "aws", { OCEL_AWS_VARS_KEY: " arn:aws:kms:key/k " }),
+      shapeFor(cell(deploy.node), "aws", { OCEL_AWS_VARS_KEY: " arn:aws:kms:key/k " }),
     ).toEqual({
       base: AWS_BASE,
       slug: "j-1-deploy-node",
@@ -123,9 +124,7 @@ describe("shapeFor", () => {
   });
 
   it("hangs a vps cell's hostnames under the box's zone, and takes no key", () => {
-    expect(
-      shapeFor(cell("deploy", "node"), "vps", { OCEL_AWS_VARS_KEY: "arn:aws:kms:key/k" }),
-    ).toEqual({
+    expect(shapeFor(cell(deploy.node), "vps", { OCEL_AWS_VARS_KEY: "arn:aws:kms:key/k" })).toEqual({
       base: VPS_BASE,
       slug: "j-1-deploy-node",
       hostnames: { web: "web-j-1-deploy-node.localhost" },
@@ -134,7 +133,7 @@ describe("shapeFor", () => {
 
   it("renames a dev cell and nothing else", () => {
     expect(
-      shapeFor(cell("deploy", "node"), "dev", {
+      shapeFor(cell(deploy.node), "dev", {
         OCEL_JOURNEY_ZONE: "j.example",
         OCEL_AWS_VARS_KEY: "arn:aws:kms:key/k",
       }),

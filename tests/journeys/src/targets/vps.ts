@@ -7,11 +7,10 @@ import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
 import { migrates, setsEnv } from "../checks";
 import { journeyConfigIn, journeyZone } from "../config";
 import { INITIAL_GREETING, REDACTED, redact, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
-import type { ExpectationEnvironment } from "../expectations/types";
 import { appHostname, HARNESS_PREFIX, isStranded } from "../identity";
+import type { Lane, Leg } from "../matrix/types";
 import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
-import type { Leg } from "../spec";
 import { migrateCommand } from "../workspace";
 import { type Gateway, openGateway } from "./gateway";
 import type { CellContext, Deployment, Target } from "./types";
@@ -44,7 +43,7 @@ let resolvedZone: string | undefined;
 
 const ran = promisify(execFile);
 
-export function boxEnvironment(said: string): ExpectationEnvironment {
+export function boxLane(said: string): Lane {
   const verdict = said.trim();
   if (verdict === "incus") {
     return "vps.incus";
@@ -140,7 +139,7 @@ export async function ssh(target: Box, login: string, command: string): Promise<
   }
 }
 
-async function guard(): Promise<ExpectationEnvironment> {
+async function guard(): Promise<Lane> {
   const target = box();
   let said: string;
   try {
@@ -151,7 +150,7 @@ async function guard(): Promise<ExpectationEnvironment> {
         `brings a box up. Run:\n  ${BRING_A_BOX_UP}\n\n${(error as Error).message}`,
     );
   }
-  return boxEnvironment(said);
+  return boxLane(said);
 }
 
 function boxEnv(login: string): NodeJS.ProcessEnv {
@@ -313,13 +312,13 @@ async function up(cell: CellContext): Promise<Deployment> {
   const started = await standingFor(cell);
   const drive = driving(cell, started, "up");
 
-  if (setsEnv(cell.fixture.rows)) {
+  if (setsEnv(cell.fixture.checks)) {
     await drive("env-greeting", ["env", "set", `GREETING=${INITIAL_GREETING}`]);
     await drive("env-secret", ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`]);
   }
   await drive("deploy", ["deploy", "--yes"]);
   await bindDomains(cell, started);
-  if (migrates(cell.fixture.rows)) {
+  if (migrates(cell.fixture.checks)) {
     await drive("migrate", ["run", "--", ...migrateCommand()]);
   }
   return deployment(cell, started);
@@ -329,7 +328,7 @@ async function redeploy(cell: CellContext, greeting: string): Promise<Deployment
   const started = await standingFor(cell);
   const drive = driving(cell, started, "redeploy");
 
-  if (setsEnv(cell.fixture.rows)) {
+  if (setsEnv(cell.fixture.checks)) {
     await drive("env-greeting", ["env", "set", `GREETING=${greeting}`]);
   }
   await drive("deploy", ["deploy", "--yes"]);
@@ -382,8 +381,8 @@ async function list(): Promise<string[]> {
 }
 
 async function sweep(runId: string): Promise<void> {
-  const environment = await guard();
-  if (environment !== "vps.incus") {
+  const lane = await guard();
+  if (lane !== "vps.incus") {
     throw new Error(
       "sweep destroys every project a harness run left on the box, and this box is not the disposable incus one: " +
         "reclaim a real box by naming what to destroy yourself",

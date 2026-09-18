@@ -1,4 +1,4 @@
-import type { ExpectationEnvironment } from "../../expectations/types";
+import type { Lane } from "../../matrix/types";
 
 export type World = "floci" | "real";
 
@@ -40,6 +40,6 @@ export async function detectWorld(env: NodeJS.ProcessEnv, probes: Probes): Promi
   return { world: "real" };
 }
 
-export function expectationEnvironmentFor(world: World): ExpectationEnvironment {
+export function laneOf(world: World): Lane {
   return world === "floci" ? "aws.floci" : "aws";
 }

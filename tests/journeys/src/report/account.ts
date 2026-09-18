@@ -1,17 +1,13 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { cellOf, type ExpectationEnvironment, expectationsFor } from "./expectations";
-import type { Expectations } from "./expectations/types";
-import { currentRunIdentity } from "./identity";
-import { type RecordedRow, readRows } from "./ledger";
-import { laneDir } from "./paths";
-import { type PlannedTest, planTests } from "./plan";
-import { readPrepared } from "./prepare";
+import { currentRunIdentity } from "../identity";
+import { laneDir } from "../paths";
+import { type Expectations, type Plan, type PlannedTest, testsOf } from "../plan";
+import { readPrepared } from "../prepare";
+import { type RecordedRow, readRows } from "../run/ledger";
+import type { Target } from "../targets/types";
 import { type Report, reconcile, type TestResult } from "./reconcile";
-import { keepsStanding, type Selection, selectionFor } from "./selection";
-import { legsKept } from "./spec";
 import { journeyVerdict, type SummaryMeta, summaryTable } from "./summary";
-import type { Target } from "./targets/types";
 import {
   type Timeline,
   type TimelineModule,
@@ -46,8 +42,8 @@ export type Account = Timed & {
   verdict: { exitCode: number; report: string };
 };
 
-export function plannedFrom(target: Target, selection: Selection, keep: boolean): PlannedTest[] {
-  return planTests(selection.cells, legsKept(target.legs, keep));
+function cellOf(key: string): string {
+  return key.split("/").slice(0, -1).join("/");
 }
 
 function key(cell: string, title: string): string {
@@ -149,8 +145,7 @@ async function writeTiming(
 
 export async function settleAccount(input: {
   target: Target;
-  environment: ExpectationEnvironment;
-  env: NodeJS.ProcessEnv;
+  plan: Plan;
   run: Run;
   runStart: number;
   runEnd: number;
@@ -160,8 +155,7 @@ export async function settleAccount(input: {
   const dir = laneDir(runId, input.target.name);
   await mkdir(dir, { recursive: true });
 
-  const selection = selectionFor(input.target, input.environment, input.env);
-  const planned = plannedFrom(input.target, selection, keepsStanding(input.env));
+  const planned = testsOf(input.plan);
   const prepared = readPrepared(runId, input.target.name);
   const shared: TimingInput = {
     rows: await readRows(runId, input.target.name),
@@ -181,12 +175,12 @@ export async function settleAccount(input: {
   const account = accountOf({
     ...shared,
     run: input.run,
-    expectations: expectationsFor(input.environment),
+    expectations: input.plan.expectations,
     meta: {
       target: input.target.name,
-      environment: input.environment,
+      lane: input.plan.lane,
       runId,
-      skipped: selection.skipped,
+      skipped: input.plan.skipped,
     },
   });
 
