@@ -1,4 +1,4 @@
-import type { ContractRow } from "../contract";
+import type { Check } from "../contract";
 import type { Leg } from "../spec";
 
 export type ExpectationEnvironment =
@@ -25,7 +25,7 @@ export const ENVIRONMENTS: ExpectationEnvironment[] = [
 export type TestPick =
   | string
   | { row: string; legs?: Leg[] }
-  | { rows: ContractRow[] | "every"; legs?: Leg[]; except?: string[] };
+  | { rows: Check[] | "every"; legs?: Leg[]; except?: string[] };
 
 export type Affected = {
   on: ExpectationEnvironment[];

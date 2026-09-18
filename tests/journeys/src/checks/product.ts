@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { AnyUploader, Bucket } from "ocel/blob";
 import { createUploadClient } from "ocel/blob/client";
-import { type ContractContext, type ContractRow, json } from "../contract";
+import { type Check, type ContractContext, json } from "../contract";
 
 export const UPLOAD_ROW = "the upload protocol stores a document and /api/documents lists it";
 
@@ -15,7 +15,7 @@ async function createTodo(ctx: ContractContext, title: string) {
   return body as { id: number; title: string; done: boolean };
 }
 
-export const productRows: ContractRow[] = [
+export const productChecks: Check[] = [
   {
     title: "POST /api/todos creates a todo and rejects a missing title",
     run: async (ctx) => {
@@ -127,6 +127,6 @@ export const productRows: ContractRow[] = [
   },
 ];
 
-export function migrates(rows: ContractRow[]): boolean {
-  return rows.some((row) => productRows.includes(row));
+export function migrates(checks: Check[]): boolean {
+  return checks.some((one) => productChecks.includes(one));
 }

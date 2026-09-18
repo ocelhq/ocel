@@ -1,7 +1,7 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
+import { EMPTY_BODY_ROW, nextCacheChecks } from "../checks";
 import { contractTitle, DESTROY_TITLE, planTests, UP_TITLE } from "../plan";
-import { EMPTY_BODY_ROW, nextCacheRows } from "../rows";
 import { cellsOf, specForTarget } from "../spec";
 import { gaps } from "./gaps";
 import {
@@ -230,13 +230,13 @@ describe("the gap list", () => {
       assert.deepEqual(issues(listed, "deploy/node/web", UPLOAD), [], environment);
       for (const cell of ["sdk/next/web", "deploy/next/web"]) {
         assert.deepEqual(
-          issues(listed, cell, nextCacheRows[0]?.title ?? ""),
+          issues(listed, cell, nextCacheChecks[0]?.title ?? ""),
           [898],
           `${cell} on ${environment}`,
         );
       }
       assert.deepEqual(
-        issues(listed, "sdk/workspace/next", nextCacheRows[0]?.title ?? ""),
+        issues(listed, "sdk/workspace/next", nextCacheChecks[0]?.title ?? ""),
         [],
         environment,
       );
@@ -255,11 +255,11 @@ describe("the gap list", () => {
       "sdk/workspace/next": [918],
     });
     for (const cell of ["sdk/next/web", "deploy/next/web"]) {
-      assert.deepEqual(issues(vps, cell, nextCacheRows[0]?.title ?? ""), [900], cell);
+      assert.deepEqual(issues(vps, cell, nextCacheChecks[0]?.title ?? ""), [900], cell);
     }
     for (const leg of CONTRACT_LEGS) {
       assert.deepEqual(
-        issues(vps, "lifecycle/next/web", contractTitle(leg, nextCacheRows[0]?.title ?? "")),
+        issues(vps, "lifecycle/next/web", contractTitle(leg, nextCacheChecks[0]?.title ?? "")),
         [900],
         leg,
       );

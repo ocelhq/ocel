@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { type ContractRow, json } from "../contract";
+import { type Check, json } from "../contract";
 
-export const healthRows: ContractRow[] = [
+export const healthChecks: Check[] = [
   {
     title: "GET /health answers with the app name",
     run: async (ctx) => {

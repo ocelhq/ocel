@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { type ContractRow, OCEL_SVG_BYTES } from "../contract";
+import { type Check, OCEL_SVG_BYTES } from "../contract";
 
-export const staticRows: ContractRow[] = [
+export const staticChecks: Check[] = [
   {
     title: "GET /ocel.svg serves the svg at its known length",
     run: async (ctx) => {

@@ -1,6 +1,7 @@
 import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
+import { migrates, setsEnv } from "../../checks";
 import {
   AWS_BASE,
   journeyConfigIn,
@@ -14,7 +15,6 @@ import { appHostname, currentRunIdentity, projectSlug, slugPart } from "../../id
 import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import type { PrepareFailures } from "../../prepare";
-import { migrates, setsEnv } from "../../rows";
 import {
   type Cell,
   cellsOf,

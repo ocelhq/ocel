@@ -1,5 +1,5 @@
+import { everyCheck } from "../checks";
 import { contractTitle, type PlannedTest, planTests } from "../plan";
-import { everyRow } from "../rows";
 import { cellsOf, type Leg, specForTarget, type TargetName } from "../spec";
 import { targetNamed } from "../targets";
 import { gaps } from "./gaps";
@@ -49,7 +49,7 @@ function titlesOf(pick: TestPick): string[] {
   if ("row" in pick) {
     return legs.map((leg) => contractTitle(leg, pick.row));
   }
-  const rows = pick.rows === "every" ? everyRow : pick.rows;
+  const rows = pick.rows === "every" ? everyCheck : pick.rows;
   const except = new Set(pick.except ?? []);
   return rows
     .filter((row) => !except.has(row.title))

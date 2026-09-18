@@ -2,12 +2,12 @@ import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { HARNESS_ONLY_ENV, localPostgresUrl, postgresBinding } from "@ocel-tests/shared/env";
 import { SQL } from "bun";
+import { migrates, setsEnv } from "../checks";
 import { journeyConfigIn } from "../config";
 import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { HARNESS_PREFIX, isStranded } from "../identity";
 import { runOcel, treeRoot, workTree } from "../ocel";
-import { migrates, setsEnv } from "../rows";
 import { appCommand, migrateCommand } from "../workspace";
 import {
   baseUrls,

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import {
+  ENV_ROW,
+  healthChecks,
+  nativeChecks,
+  probeChecks,
+  productChecks,
+  staticChecks,
+} from "./checks";
+import {
   cellKey,
   DESTROY_TITLE,
   planTests,
@@ -8,13 +16,12 @@ import {
   ROLLBACK_TITLE,
   UP_TITLE,
 } from "./plan";
-import { ENV_ROW, healthRows, nativeRows, probeRows, productRows, staticRows } from "./rows";
 import {
   type Cell,
   cellsOf,
   type FixtureSpec,
   fixtureNameOf,
-  type LadderRow,
+  type LadderCheck,
   LIVES,
   SERVES,
   specByName,
@@ -64,7 +71,7 @@ describe("planning the two concerns of one runtime", () => {
   });
 
   it("plans the product rows for the sdk cell alone", () => {
-    const productTitles = productRows.map((row) => row.title);
+    const productTitles = productChecks.map((row) => row.title);
     const titlesOf = (cell: string) =>
       planned
         .filter((entry) => entry.cell === cell && entry.leg === "contract")
@@ -74,7 +81,12 @@ describe("planning the two concerns of one runtime", () => {
   });
 
   it("asks the deploy cell for health, static and the probes, and nothing else", () => {
-    expect(deploy.rows).toEqual([...healthRows, ...staticRows, ...probeRows, ...nativeRows]);
+    expect(deploy.rows).toEqual([
+      ...healthChecks,
+      ...staticChecks,
+      ...probeChecks,
+      ...nativeChecks,
+    ]);
   });
 
   it("leaves the env row to the sdk cell, since defineEnv is what delivers it", () => {
@@ -120,14 +132,14 @@ describe("planning the legs a fixture asks for", () => {
   });
 });
 
-function withHooks(rows: LadderRow[], refuse: boolean): FixtureSpec {
+function withHooks(rows: LadderCheck[], refuse: boolean): FixtureSpec {
   return {
     name: "with-sst",
     concern: "sdk",
     dir: "sdk/with-sst",
     runtime: "node",
     kind: "ladder",
-    rows: healthRows,
+    rows: healthChecks,
     apps: ["web"],
     legs: LIVES,
     targets: ["aws"],
@@ -140,22 +152,22 @@ function withHooks(rows: LadderRow[], refuse: boolean): FixtureSpec {
   };
 }
 
-const publishRow: LadderRow = {
+const publishRow: LadderCheck = {
   title: "lists both records",
   phase: "publish",
   run: async () => undefined,
 };
-const consumeRow: LadderRow = {
+const consumeRow: LadderCheck = {
   title: "both binding routes answer",
   phase: "consume",
   run: async () => undefined,
 };
-const outliveRow: LadderRow = {
+const outliveRow: LadderCheck = {
   title: "the record survives",
   phase: "outlive",
   run: async () => undefined,
 };
-const pruneRow: LadderRow = {
+const pruneRow: LadderCheck = {
   title: "both partitions are empty",
   phase: "prune",
   run: async () => undefined,
@@ -169,7 +181,7 @@ describe("planTests", () => {
       dir: "deploy/node",
       runtime: "node",
       kind: "composite",
-      rows: healthRows,
+      rows: healthChecks,
       apps: ["web"],
       legs: SERVES,
     };

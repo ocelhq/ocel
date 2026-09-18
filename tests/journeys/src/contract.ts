@@ -23,7 +23,7 @@ export type ContractContext = {
   fetch: Fetch;
 };
 
-export type ContractRow = {
+export type Check = {
   title: string;
   run: (ctx: ContractContext) => Promise<void>;
 };

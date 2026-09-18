@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { bindingChecks } from "../../checks";
 import { journeyConfigIn } from "../../config";
 import { live } from "../../live";
 import { ocel, spawnOcel, workTree } from "../../ocel";
-import { bindingRows } from "../../rows";
-import type { LadderRow } from "../../spec";
+import type { LadderCheck } from "../../spec";
 import type { CellContext } from "../types";
 import { place } from "./place";
 import { awsBindingStore, awsStore, type Cli, cliAt, said } from "./store";
@@ -210,7 +210,7 @@ export async function refuse(cell: CellContext): Promise<void> {
   );
 }
 
-export const ladderRows: LadderRow[] = [
+export const ladderChecks: LadderCheck[] = [
   {
     title: "ocel bindings ls lists both records with their name, type, source and owner",
     phase: "publish",
@@ -411,7 +411,7 @@ export const ladderRows: LadderRow[] = [
     phase: "consume",
     run: async (_cell, live) => {
       assert.ok(live, "consume ran with no live deployment to reach the binding routes on");
-      for (const row of bindingRows) {
+      for (const row of bindingChecks) {
         await row.run(live!);
       }
     },
