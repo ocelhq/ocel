@@ -12,7 +12,7 @@ import {
 } from "../../config";
 import { appHostname, currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
-import { type Cell, type Fixture, type Lane, type Phase, variantNameOf } from "../../matrix/types";
+import type { Cell, Fixture, Lane, Phase } from "../../matrix/types";
 import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import { cellsOn, fixturesOn } from "../../plan";
@@ -240,7 +240,7 @@ async function deploy(cell: CellContext): Promise<Deployment> {
     `${JSON.stringify(
       {
         slug: cell.slug,
-        variant: variantNameOf(cell),
+        variant: cell.variant.name,
         apps: Object.fromEntries(cell.fixture.apps.map((app) => [app, deployed.baseUrl(app)])),
       },
       null,

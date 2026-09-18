@@ -67,14 +67,14 @@ export function shapeFor(cell: CellContext, target: TargetName, env: NodeJS.Proc
       return {
         base: AWS_BASE,
         slug: cell.slug,
-        ...cell.variant?.config,
+        ...cell.variant.config,
         ...dnsOf(env),
         ...(zone ? { hostnames: hostnamesOf(cell, zone) } : {}),
         ...(varsKey ? { varsKey } : {}),
       };
     }
     case "gcp":
-      return { base: GCP_BASE, slug: gcpSlug(cell, env), ...cell.variant?.config };
+      return { base: GCP_BASE, slug: gcpSlug(cell, env), ...cell.variant.config };
     case "vps":
       return { base: VPS_BASE, slug: cell.slug, hostnames: hostnamesOf(cell, journeyZone(env)) };
     case "dev":

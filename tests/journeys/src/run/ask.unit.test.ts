@@ -35,10 +35,10 @@ describe("the fixtures and variants a run narrows to", () => {
   it("takes comma-separated fixtures and space- or comma-separated variants", () => {
     const ask = askFrom({
       OCEL_JOURNEY_FIXTURES: " sdk/node,deploy/next ",
-      OCEL_JOURNEY_VARIANTS: "base cloudflare,container",
+      OCEL_JOURNEY_VARIANTS: "default cloudflare,container",
     });
     expect(ask.fixtures).toEqual(["sdk/node", "deploy/next"]);
-    expect(ask.variants).toEqual(["base", "cloudflare", "container"]);
+    expect(ask.variants).toEqual(["default", "cloudflare", "container"]);
   });
 });
 

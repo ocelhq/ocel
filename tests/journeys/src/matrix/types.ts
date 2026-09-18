@@ -7,6 +7,8 @@ export type { Compute };
 
 export type TargetName = "dev" | "dev-local" | "aws" | "vps" | "gcp";
 
+export const TARGETS: TargetName[] = ["dev", "dev-local", "aws", "vps", "gcp"];
+
 export type Lane =
   | "aws"
   | "aws.floci"
@@ -49,22 +51,18 @@ export type Edge = "cloudfront" | "api-gateway" | "cloudflare";
 
 export type Phase = "deploy" | "verify" | "redeploy" | "rollback" | "destroy";
 
-export const BASE = "base";
-
-export type Base = typeof BASE;
+export const DEFAULT_VARIANT = "default";
 
 export type ConfigDelta = { compute?: Compute; edge?: Edge };
 
 export type Variant = { name: string; offeredOn: TargetName[]; config: ConfigDelta };
 
 export function variant(name: string, shape: Omit<Variant, "name">): Variant {
-  if (name === BASE || !/^[a-z][a-z0-9-]*$/.test(name)) {
-    throw new Error(`${name} is no variant name: lowercase, dashes, and never ${BASE}`);
+  if (name === DEFAULT_VARIANT || !/^[a-z][a-z0-9-]*$/.test(name)) {
+    throw new Error(`${name} is no variant name: lowercase, dashes, and never ${DEFAULT_VARIANT}`);
   }
   return { name, ...shape };
 }
-
-export type Placement = { base?: true; variants?: Variant[] };
 
 export type LadderPoint = "publish" | "consume" | "outlive" | "prune";
 
@@ -95,7 +93,7 @@ export type Fixture = {
   redeploys?: true;
   checks: Check[];
   ladder?: Ladder;
-  on: Partial<Record<TargetName, Placement>>;
+  on: Partial<Record<TargetName, Variant[]>>;
   sample?: Sample;
 };
 
@@ -107,16 +105,16 @@ export function fixture(name: string, shape: Omit<Fixture, "name" | "concern">):
   return { name, concern: concern as Concern, ...shape };
 }
 
-export type Cell = { name: string; fixture: Fixture; variant?: Variant };
+export type Cell = { name: string; fixture: Fixture; variant: Variant };
 
-export function variantNameOf(cell: Pick<Cell, "variant">): string {
-  return cell.variant?.name ?? BASE;
+export function cellName(fixture: Pick<Fixture, "name">, variant: Variant): string {
+  return variant.name === DEFAULT_VARIANT ? fixture.name : `${fixture.name}-${variant.name}`;
 }
 
 export type Affected = {
   on: Lane[];
   fixtures?: Fixture[];
-  variants?: Array<Variant | Base>;
+  variants?: Variant[];
   tests: TestRef[];
   skip?: true;
 };

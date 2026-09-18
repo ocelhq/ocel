@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Check } from "./checks/context";
 import { phasesDriven, stepsPlanned, type TestRef } from "./lifecycle";
 import { fixture } from "./matrix/types";
+import { defaults } from "./matrix/variants";
 import type { Deployment } from "./targets/types";
 
 const ping: Check = { title: "ping", run: async () => undefined };
@@ -9,9 +10,9 @@ const living = fixture("lifecycle/next", {
   apps: ["web"],
   redeploys: true,
   checks: [ping],
-  on: { aws: { base: true } },
+  on: { aws: [defaults] },
 });
-const cell = { name: "lifecycle/next", fixture: living };
+const cell = { name: "lifecycle/next", fixture: living, variant: defaults };
 const serving = {
   phases: ["deploy" as const, "verify" as const, "destroy" as const],
   steps: [

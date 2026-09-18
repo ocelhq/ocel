@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import type { Check } from "./checks/context";
 import { check, stepRef } from "./lifecycle";
-import { BASE, type Fixture, fixture, type Gap, type Lane, variant } from "./matrix/types";
+import { type Fixture, fixture, type Gap, type Lane, variant } from "./matrix/types";
+import { defaults } from "./matrix/variants";
 import { type Ask, EVERYTHING, type Plan, plan } from "./plan";
 
 const edge = variant("edge", { offeredOn: ["aws"], config: {} });
@@ -14,7 +15,7 @@ function one(name: string, over: Partial<Omit<Fixture, "name" | "concern">> = {}
   return fixture(name, {
     apps: ["web"],
     checks: [ping],
-    on: { aws: { base: true } },
+    on: { aws: [defaults] },
     ...over,
   });
 }
@@ -34,9 +35,9 @@ function planOf(fixtures: Fixture[], input: Input = {}): Plan {
 const cellsOf = (planned: Plan) => planned.cells.map((cell) => cell.name);
 
 describe("the cells a lane runs", () => {
-  it("runs the base cell and then each variant the fixture places on the lane's target", () => {
+  it("runs each variant the fixture places on the lane's target, the default one unsuffixed", () => {
     const placed = one("deploy/node", {
-      on: { aws: { base: true, variants: [edge, box] }, gcp: { variants: [box] } },
+      on: { aws: [defaults, edge, box], gcp: [box] },
     });
     expect(cellsOf(planOf([placed]))).toEqual([
       "deploy/node",
@@ -93,7 +94,7 @@ describe("the steps a cell walks through", () => {
   });
 
   it("refuses a cell that redeploys only on the targets that cannot, not on the lane's", () => {
-    const living = one("lifecycle/next", { redeploys: true, on: { vps: { base: true } } });
+    const living = one("lifecycle/next", { redeploys: true, on: { vps: [defaults] } });
     expect(() => planOf([one("deploy/node"), living], { releaseCycle: false })).not.toThrow();
   });
 
@@ -150,7 +151,7 @@ describe("the steps a cell walks through", () => {
 });
 
 describe("what a lane is asked to run", () => {
-  const node = one("deploy/node", { on: { aws: { base: true, variants: [edge, box] } } });
+  const node = one("deploy/node", { on: { aws: [defaults, edge, box] } });
   const sdk = one("sdk/node");
   const living = one("lifecycle/next", { redeploys: true });
 
@@ -171,8 +172,8 @@ describe("what a lane is asked to run", () => {
     );
   });
 
-  it("runs only the variants named, base among them", () => {
-    expect(cellsOf(planOf([node], { ask: { variants: ["base", "box"] } }))).toEqual([
+  it("runs only the variants named, the default among them", () => {
+    expect(cellsOf(planOf([node], { ask: { variants: ["default", "box"] } }))).toEqual([
       "deploy/node",
       "deploy/node-box",
     ]);
@@ -180,7 +181,7 @@ describe("what a lane is asked to run", () => {
 
   it("refuses a variant no fixture lists, and runs nothing for one only another target runs", () => {
     expect(() => planOf([node], { ask: { variants: ["fastly"] } })).toThrow(
-      /no fixture lists a variant named fastly \(base, edge, box\)/,
+      /no fixture lists a variant named fastly \(default, edge, box\)/,
     );
     expect(cellsOf(planOf([node, sdk], { lane: "vps", ask: { variants: ["edge"] } }))).toEqual([]);
   });
@@ -197,8 +198,8 @@ describe("what a lane is asked to run", () => {
 
   it("samples a group under covering, and runs all of it under full", () => {
     const grouped = [
-      one("deploy/a", { on: { aws: { base: true, variants: [edge] } }, sample: { group: "g" } }),
-      one("deploy/b", { on: { aws: { base: true, variants: [edge] } }, sample: { group: "g" } }),
+      one("deploy/a", { on: { aws: [defaults, edge] }, sample: { group: "g" } }),
+      one("deploy/b", { on: { aws: [defaults, edge] }, sample: { group: "g" } }),
     ];
     expect(cellsOf(planOf(grouped))).toHaveLength(4);
     const covering = planOf(grouped, {
@@ -218,12 +219,12 @@ function gap(id: string, affects: Gap["affects"], issue?: number): Gap {
 describe("the gaps a lane expects", () => {
   const node = one("deploy/node", {
     checks: [ping, pong],
-    on: { aws: { base: true, variants: [edge] }, vps: { base: true } },
+    on: { aws: [defaults, edge], vps: [defaults] },
   });
-  const living = one("lifecycle/next", { redeploys: true, on: { aws: { base: true } } });
+  const living = one("lifecycle/next", { redeploys: true, on: { aws: [defaults] } });
   const workspace = one("sdk/workspace", {
     apps: ["web", "api"],
-    on: { aws: { base: true, variants: [edge] } },
+    on: { aws: [defaults, edge] },
   });
   const matrix = [node, living, workspace];
 
@@ -279,13 +280,15 @@ describe("the gaps a lane expects", () => {
       gaps: [gap("one", [{ on: ["aws"], fixtures: [node], tests: [stepRef.deploy] }])],
     });
     expect(every.expectations["deploy/node-edge/web"]?.deploy).toBeDefined();
-    const base = planOf(matrix, {
+    const unvaried = planOf(matrix, {
       gaps: [
-        gap("one", [{ on: ["aws"], fixtures: [node], variants: [BASE], tests: [stepRef.deploy] }]),
+        gap("one", [
+          { on: ["aws"], fixtures: [node], variants: [defaults], tests: [stepRef.deploy] },
+        ]),
       ],
     });
-    expect(base.expectations["deploy/node/web"]?.deploy).toBeDefined();
-    expect(base.expectations["deploy/node-edge/web"]).toBeUndefined();
+    expect(unvaried.expectations["deploy/node/web"]?.deploy).toBeDefined();
+    expect(unvaried.expectations["deploy/node-edge/web"]).toBeUndefined();
   });
 
   it("reads a block only on the lanes it names", () => {
@@ -331,7 +334,7 @@ describe("the gaps a lane expects", () => {
       gaps: [
         gap("one", [
           { on: ["aws"], fixtures: [node], tests: [stepRef.deploy], skip: true },
-          { on: ["aws"], variants: [BASE], tests: [stepRef.deploy], skip: true },
+          { on: ["aws"], variants: [defaults], tests: [stepRef.deploy], skip: true },
         ]),
       ],
     });
@@ -346,7 +349,7 @@ describe("the gaps a lane expects", () => {
       "deploy/node",
       "deploy/node-edge",
     ]);
-    expect(planOf(matrix, { gaps, ask: { variants: [BASE] } }).skipped).toEqual({
+    expect(planOf(matrix, { gaps, ask: { variants: ["default"] } }).skipped).toEqual({
       "deploy/node": [{ id: "one", reason: "reason for one" }],
     });
   });
@@ -363,7 +366,7 @@ describe("the gaps a lane expects", () => {
 });
 
 describe("a gap that reaches nothing", () => {
-  const node = one("deploy/node", { on: { aws: { variants: [edge] }, vps: { base: true } } });
+  const node = one("deploy/node", { on: { aws: [edge], vps: [defaults] } });
   const living = one("lifecycle/next", { redeploys: true });
 
   it("refuses a fixture that plans none of the tests named", () => {
@@ -424,21 +427,21 @@ describe("a matrix that cannot be planned", () => {
   });
 
   it("refuses a variant placed twice on one target", () => {
-    expect(() =>
-      planOf([one("deploy/node", { on: { aws: { variants: [edge, box, edge] } } })]),
-    ).toThrow(/deploy\/node places the edge variant twice on aws/);
+    expect(() => planOf([one("deploy/node", { on: { aws: [edge, box, edge] } })])).toThrow(
+      /deploy\/node places the edge variant twice on aws/,
+    );
   });
 
   it("refuses a variant the target does not offer", () => {
     expect(() =>
-      planOf([one("deploy/node", { on: { vps: { base: true, variants: [edge] } } })], {
+      planOf([one("deploy/node", { on: { vps: [defaults, edge] } })], {
         lane: "vps",
       }),
     ).toThrow(/deploy\/node asks vps for the edge variant, which only aws offers/);
   });
 
   it("refuses a placement that runs nothing, and a fixture placed nowhere", () => {
-    expect(() => planOf([one("deploy/node", { on: { aws: {} } })])).toThrow(
+    expect(() => planOf([one("deploy/node", { on: { aws: [] } })])).toThrow(
       /deploy\/node runs nothing on aws/,
     );
     expect(() => planOf([one("deploy/node", { on: {} })])).toThrow(
@@ -452,6 +455,12 @@ describe("a matrix that cannot be planned", () => {
       /the deploy\/g group is led by deploy\/a and deploy\/b/,
     );
     expect(() => planOf([led("deploy/a"), led("sdk/b")])).not.toThrow();
+  });
+
+  it("refuses a variant that calls itself the default", () => {
+    expect(() => variant("default", { offeredOn: ["aws"], config: {} })).toThrow(
+      /default is no variant name/,
+    );
   });
 
   it("refuses a fixture path outside the concerns", () => {

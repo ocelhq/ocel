@@ -1,10 +1,10 @@
 import { phasesOf, stepsOf } from "./lifecycle";
 import {
   type Affected,
-  BASE,
   type Cell,
   CONCERNS,
   type Concern,
+  cellName,
   type Fixture,
   type Gap,
   type Lane,
@@ -12,7 +12,6 @@ import {
   sampleGroupOf,
   type TargetName,
   targetOfLane,
-  variantNameOf,
 } from "./matrix/types";
 import { type Coverage, type Draw, sample } from "./sample";
 
@@ -81,18 +80,11 @@ export function fixturesOn(fixtures: Fixture[], target: TargetName): Fixture[] {
 }
 
 export function cellsOn(fixture: Fixture, target: TargetName): Cell[] {
-  const placed = fixture.on[target];
-  if (!placed) {
-    return [];
-  }
-  return [
-    ...(placed.base ? [{ name: fixture.name, fixture }] : []),
-    ...(placed.variants ?? []).map((variant) => ({
-      name: `${fixture.name}-${variant.name}`,
-      fixture,
-      variant,
-    })),
-  ];
+  return (fixture.on[target] ?? []).map((variant) => ({
+    name: cellName(fixture, variant),
+    fixture,
+    variant,
+  }));
 }
 
 export function cellNamed(fixtures: Fixture[], target: TargetName, name: string): Cell {
@@ -121,7 +113,7 @@ function listedOf(gap: Gap): Listed {
 function hitsFor(block: Affected, tests: LaneTest[], said: string): LaneTest[] {
   const titles = new Set(block.tests.flatMap((test) => test.titles));
   const fixtures = block.fixtures?.map((one) => one.name);
-  const variants = block.variants?.map((one) => (typeof one === "string" ? one : one.name));
+  const variants = block.variants?.map((one) => one.name);
   const hits = tests.filter(
     (test) =>
       (fixtures === undefined || fixtures.includes(test.fixture)) &&
@@ -201,9 +193,8 @@ function checkMatrix(fixtures: Fixture[]) {
     if (placements.length === 0) {
       throw new Error(`${one.name} runs on no target`);
     }
-    for (const [target, placed] of placements) {
-      const variants = placed?.variants ?? [];
-      if (!placed?.base && variants.length === 0) {
+    for (const [target, variants = []] of placements) {
+      if (variants.length === 0) {
         throw new Error(`${one.name} runs nothing on ${target}`);
       }
       const names = variants.map((variant) => variant.name);
@@ -253,12 +244,9 @@ function checkReleaseCycle(fixtures: Fixture[], target: TargetName, releaseCycle
 }
 
 function checkVariantsAsked(fixtures: Fixture[], asked: string[]) {
-  const known = new Set([
-    BASE,
-    ...fixtures.flatMap((one) =>
-      Object.values(one.on).flatMap((placed) => (placed?.variants ?? []).map((v) => v.name)),
-    ),
-  ]);
+  const known = new Set(
+    fixtures.flatMap((one) => Object.values(one.on).flatMap((placed) => placed.map((v) => v.name))),
+  );
   const unknown = asked.filter((name) => !known.has(name));
   if (unknown.length > 0) {
     throw new Error(
@@ -288,7 +276,7 @@ export function plan(input: {
         cell: cell.name,
         app: step.app,
         fixture: one.name,
-        variant: variantNameOf(cell),
+        variant: cell.variant.name,
         title: step.title,
       })),
     ),
@@ -302,7 +290,7 @@ export function plan(input: {
   );
   const narrowed = (one: Fixture) =>
     cellsOn(one, target).filter(
-      (cell) => ask.variants.length === 0 || ask.variants.includes(variantNameOf(cell)),
+      (cell) => ask.variants.length === 0 || ask.variants.includes(cell.variant.name),
     );
   const runnable = (one: Fixture) => narrowed(one).filter((cell) => skips[cell.name] === undefined);
   const covered = sample(chosen, runnable, ask.coverage, ask.draw);
@@ -321,7 +309,7 @@ export function plan(input: {
       return {
         name: cell.name,
         fixture: cell.fixture.name,
-        variant: variantNameOf(cell),
+        variant: cell.variant.name,
         phases,
         steps: stepsOf(cell, phases).map(({ app, title, phase }) =>
           phase === undefined ? { app, title } : { app, title, phase },

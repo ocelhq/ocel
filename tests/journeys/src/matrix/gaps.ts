@@ -7,8 +7,8 @@ import {
 } from "../checks";
 import { check, stepRef } from "../lifecycle";
 import { deploy, lifecycle, sdk } from "./fixtures";
-import { BASE, type Gap } from "./types";
-import { apiGateway, cloudflare, container } from "./variants";
+import type { Gap } from "./types";
+import { apiGateway, cloudflare, container, defaults } from "./variants";
 
 const DEPLOY_NEXT_BEARING = [deploy.next, deploy.workspace];
 const SDK_NEXT_BEARING = [sdk.next, sdk.workspace];
@@ -36,7 +36,7 @@ export const gaps: Gap[] = [
       {
         on: ["vps", "vps.incus"],
         fixtures: [lifecycle.next, sdk.node, sdk.next, sdk.workspace],
-        variants: [BASE],
+        variants: [defaults],
         tests: [stepRef.deploy],
         skip: true,
       },
@@ -50,7 +50,7 @@ export const gaps: Gap[] = [
       {
         on: ["vps", "vps.incus"],
         fixtures: [deploy.next, sdk.next, lifecycle.next],
-        variants: [BASE],
+        variants: [defaults],
         tests: [check(NEXT_CACHE)],
       },
     ],
@@ -99,7 +99,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws"],
         fixtures: DEPLOY_NEXT_BEARING,
-        variants: [BASE],
+        variants: [defaults],
         tests: [stepRef.deploy],
         skip: true,
       },
@@ -192,7 +192,7 @@ export const gaps: Gap[] = [
       {
         on: ["aws.floci"],
         fixtures: EVERY_NEXT_BEARING,
-        variants: [BASE],
+        variants: [defaults],
         tests: [stepRef.deploy],
         skip: true,
       },
