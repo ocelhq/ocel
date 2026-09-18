@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Check } from "./contract";
+import type { Check } from "./checks/context";
 import { check, stepRef } from "./lifecycle";
 import {
   BASE,

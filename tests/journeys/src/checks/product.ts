@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import type { AnyUploader, Bucket } from "ocel/blob";
 import { createUploadClient } from "ocel/blob/client";
-import { type Check, type ContractContext, json } from "../contract";
+import { type Check, type CheckContext, json } from "./context";
 
-export const UPLOAD_ROW = "the upload protocol stores a document and /api/documents lists it";
-
-async function createTodo(ctx: ContractContext, title: string) {
+async function createTodo(ctx: CheckContext, title: string) {
   const { res, body } = await json(ctx, "/api/todos", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -15,7 +13,7 @@ async function createTodo(ctx: ContractContext, title: string) {
   return body as { id: number; title: string; done: boolean };
 }
 
-export const productChecks: Check[] = [
+export const todoAndDocumentChecks: Check[] = [
   {
     title: "POST /api/todos creates a todo and rejects a missing title",
     run: async (ctx) => {
@@ -81,7 +79,7 @@ export const productChecks: Check[] = [
     },
   },
   {
-    title: UPLOAD_ROW,
+    title: "the upload protocol stores a document and /api/documents lists it",
     run: async (ctx) => {
       const client = createUploadClient<Bucket<Record<string, AnyUploader>>>({
         url: `${ctx.baseUrl}/api/upload`,
@@ -128,5 +126,5 @@ export const productChecks: Check[] = [
 ];
 
 export function migrates(checks: Check[]): boolean {
-  return checks.some((one) => productChecks.includes(one));
+  return checks.some((one) => todoAndDocumentChecks.includes(one));
 }

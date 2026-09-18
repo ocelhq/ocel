@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import type { Check, ContractContext } from "../contract";
 import { chunksOf, firstChunkWith, form, marker, stamp } from "../html";
 import { pageHtml, state, stateRow, text } from "../nextApp";
+import type { Check, CheckContext } from "./context";
 
 const AFTER_TIMEOUT_MS = 10_000;
 const METHODS_WITH_BODIES = ["POST", "PUT", "PATCH", "DELETE"] as const;
@@ -15,7 +15,7 @@ function locationPath(res: Response): string {
 }
 
 async function submit(
-  ctx: ContractContext,
+  ctx: CheckContext,
   path: string,
   values: Record<string, string>,
 ): Promise<Response> {

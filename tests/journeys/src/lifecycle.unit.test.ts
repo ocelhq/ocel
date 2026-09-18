@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import type { Check } from "./contract";
+import type { Check } from "./checks/context";
 import { legsDriven, stepsPlanned, type TestRef } from "./lifecycle";
 import { fixture, LIVES, SERVES } from "./matrix/types";
 import type { Deployment } from "./targets/types";

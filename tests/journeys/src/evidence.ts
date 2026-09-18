@@ -1,6 +1,6 @@
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { redact } from "./contract";
+import { redact } from "./checks/context";
 import type { Leg } from "./matrix/types";
 
 export type Evidence = {

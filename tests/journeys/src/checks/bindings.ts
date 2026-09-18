@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { type Check, json } from "../contract";
+import { type Check, json } from "./context";
 
 export const bindingCheck: Check = {
   title: "GET /api/binding answers with what it resolved and the greeting it deployed with",

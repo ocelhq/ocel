@@ -1,6 +1,6 @@
 import { appendFileSync, closeSync, fstatSync, openSync, readSync } from "node:fs";
 import type { Readable } from "node:stream";
-import { redact } from "./contract";
+import { redact } from "./checks/context";
 
 export const LIVE_ENV = "OCEL_JOURNEY_LIVE";
 

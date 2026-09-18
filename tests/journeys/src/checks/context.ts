@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { Leg } from "./matrix/types";
+import type { Leg } from "../matrix/types";
 
 export type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -13,7 +13,7 @@ export const LARGE_RESPONSE_BYTES = 5 * 1024 * 1024;
 export const UNCAPPED_BODY_BYTES = 5 * 1024 * 1024;
 export const SLEEP_MS = 25_000;
 
-export type ContractContext = {
+export type CheckContext = {
   app: string;
   baseUrl: string;
   greeting: string;
@@ -25,7 +25,7 @@ export type ContractContext = {
 
 export type Check = {
   title: string;
-  run: (ctx: ContractContext) => Promise<void>;
+  run: (ctx: CheckContext) => Promise<void>;
 };
 
 const PASSWORD_IN_URL = /(:\/\/[^\s/@:]+:)[^\s/@]+@/g;
@@ -64,7 +64,7 @@ export function describeResponse(res: Response, text: string): string {
   return `status ${res.status}\n${headers}\nbody: ${JSON.stringify(body)}`;
 }
 
-export async function json(ctx: ContractContext, path: string, init?: RequestInit) {
+export async function json(ctx: CheckContext, path: string, init?: RequestInit) {
   const res = await ctx.fetch(`${ctx.baseUrl}${path}`, init);
   const text = await res.text();
   return { res, text, body: parseBody(path, res, text) };

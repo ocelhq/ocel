@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { type Check, OCEL_SVG_BYTES } from "../contract";
+import { type Check, OCEL_SVG_BYTES } from "./context";
 
 export const staticChecks: Check[] = [
   {

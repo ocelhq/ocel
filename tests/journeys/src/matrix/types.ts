@@ -1,5 +1,5 @@
 import type { Compute } from "ocel/config";
-import type { Check, ContractContext } from "../contract";
+import type { Check, CheckContext } from "../checks/context";
 import type { TestRef } from "../lifecycle";
 import type { CellContext } from "../targets/types";
 
@@ -75,7 +75,7 @@ export type LadderPoint = "publish" | "consume" | "outlive" | "prune";
 export type LadderCheck = {
   title: string;
   at: LadderPoint;
-  run: (cell: CellContext, live?: ContractContext) => Promise<void>;
+  run: (cell: CellContext, live?: CheckContext) => Promise<void>;
 };
 
 export type Ladder = {

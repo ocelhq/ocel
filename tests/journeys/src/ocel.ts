@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { REDACTED, redact } from "./checks/context";
 import { shapeFor, writeJourneyConfig } from "./config";
-import { REDACTED, redact } from "./contract";
 import { live, relay, type Say } from "./live";
 import type { Leg, TargetName } from "./matrix/types";
 import { fixtureMember, ocelBin, providersDir, treeDir } from "./paths";

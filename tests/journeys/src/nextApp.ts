@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { ContractContext } from "./contract";
+import type { CheckContext } from "./checks/context";
 
 const POLL_MS = 1000;
 const STATE_POLL_MS = 250;
@@ -12,7 +12,7 @@ export type StateRow = {
 };
 
 export async function page(
-  ctx: ContractContext,
+  ctx: CheckContext,
   path: string,
   init?: RequestInit,
 ): Promise<{ res: Response; html: string }> {
@@ -21,16 +21,16 @@ export async function page(
   return { res, html: await res.text() };
 }
 
-export async function pageHtml(ctx: ContractContext, path: string): Promise<string> {
+export async function pageHtml(ctx: CheckContext, path: string): Promise<string> {
   return (await page(ctx, path)).html;
 }
 
-export async function text(ctx: ContractContext, path: string, init?: RequestInit) {
+export async function text(ctx: CheckContext, path: string, init?: RequestInit) {
   const res = await ctx.fetch(`${ctx.baseUrl}${path}`, init);
   return { res, body: await res.text() };
 }
 
-export async function state(ctx: ContractContext, keys: string[]): Promise<Map<string, StateRow>> {
+export async function state(ctx: CheckContext, keys: string[]): Promise<Map<string, StateRow>> {
   const asked = keys.map((key) => `key=${encodeURIComponent(key)}`).join("&");
   const res = await ctx.fetch(`${ctx.baseUrl}/api/next/state?${asked}`);
   assert.equal(res.status, 200, `the state readback answered ${res.status}`);
@@ -39,7 +39,7 @@ export async function state(ctx: ContractContext, keys: string[]): Promise<Map<s
 }
 
 export async function stateRow(
-  ctx: ContractContext,
+  ctx: CheckContext,
   key: string,
   timeoutMs: number,
 ): Promise<StateRow> {

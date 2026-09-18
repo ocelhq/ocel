@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { redact } from "../../contract";
+import { redact } from "../../checks/context";
 
 export type Ran = { code: number | null; stdout: string; stderr: string };
 

@@ -1,4 +1,4 @@
-import type { Check, ContractContext } from "./contract";
+import type { Check, CheckContext } from "./checks/context";
 import type { Cell, LadderCheck, LadderPoint, Leg } from "./matrix/types";
 import type { CellContext, Target } from "./targets/types";
 
@@ -10,7 +10,7 @@ export type CellRun = {
   rollback: () => Promise<void>;
   destroy: () => Promise<void>;
   afterDestroy: () => Promise<void>;
-  live: (app: string, leg: Leg) => ContractContext;
+  live: (app: string, leg: Leg) => CheckContext;
 };
 
 export type Step = {

@@ -1,4 +1,4 @@
-import type { Fetch } from "../../contract";
+import type { Fetch } from "../../checks/context";
 
 const EDGE_HEADER = "x-ocel-edge";
 const STABLE_EDGE_ANSWERS = 6;

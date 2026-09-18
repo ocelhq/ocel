@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
-import { type Check, json } from "../contract";
 import { bindingChecks } from "./bindings";
-
-export const ENV_ROW = "GET /api/probes/env reports the greeting and never the secret";
+import { type Check, json } from "./context";
 
 export const envChecks: Check[] = [
   {
-    title: ENV_ROW,
+    title: "GET /api/probes/env reports the greeting and never the secret",
     run: async (ctx) => {
       const { res, body } = await json(ctx, "/api/probes/env");
       assert.equal(res.status, 200);

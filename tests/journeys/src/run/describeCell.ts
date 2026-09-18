@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, it } from "bun:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { INITIAL_GREETING, REDEPLOY_GREETING, secretGuarded } from "../contract";
+import { INITIAL_GREETING, REDEPLOY_GREETING, secretGuarded } from "../checks/context";
 import { evidence } from "../evidence";
 import { currentRunIdentity, projectSlug } from "../identity";
 import { type CellRun, legsDriven, stepsPlanned } from "../lifecycle";

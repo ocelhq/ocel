@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-import { REDACTED, SECRET_TOKEN } from "./contract";
+import { REDACTED, SECRET_TOKEN } from "./checks/context";
 import { follow, LIVE_ENV, lines, live, relay } from "./live";
 
 const dirs: string[] = [];

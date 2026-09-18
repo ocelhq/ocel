@@ -2,6 +2,7 @@ import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { migrates, setsEnv } from "../../checks";
+import { type Fetch, INITIAL_GREETING, SECRET_TOKEN } from "../../checks/context";
 import {
   AWS_BASE,
   journeyConfigIn,
@@ -9,7 +10,6 @@ import {
   sweepShapeFor,
   writeJourneyConfig,
 } from "../../config";
-import { type Fetch, INITIAL_GREETING, SECRET_TOKEN } from "../../contract";
 import { appHostname, currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
 import { type Cell, type Fixture, type Lane, type Leg, variantNameOf } from "../../matrix/types";
