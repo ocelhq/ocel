@@ -34,7 +34,7 @@ on:
         default: "aws vps"
         type: string
       variants:
-        description: "Variants each lane enumerates, space separated, base among them. Empty runs every variant a fixture lists."
+        description: "Variants each lane enumerates, space separated, default among them. Empty runs every variant a fixture lists."
         default: ""
         type: string
       skips:

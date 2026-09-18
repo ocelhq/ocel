@@ -15,7 +15,7 @@ import {
 import { pulumiLadder } from "../targets/aws/ladder-pulumi";
 import { sstLadder } from "../targets/aws/ladder-sst";
 import { type Fixture, fixture } from "./types";
-import { apiGateway, cloudflare, container } from "./variants";
+import { apiGateway, cloudflare, container, defaults } from "./variants";
 
 const RUNTIME_NEUTRAL_CHECKS = [...healthChecks, ...staticChecks, ...httpProbeChecks];
 const NODE_CHECKS = [...RUNTIME_NEUTRAL_CHECKS, ...nativeModuleChecks];
@@ -36,11 +36,11 @@ export const deploy = {
     apps: ["web"],
     checks: NODE_CHECKS,
     on: {
-      dev: { base: true },
-      "dev-local": { base: true },
-      aws: { variants: [container, apiGateway] },
-      vps: { base: true },
-      gcp: { base: true, variants: [container] },
+      dev: [defaults],
+      "dev-local": [defaults],
+      aws: [container, apiGateway],
+      vps: [defaults],
+      gcp: [defaults, container],
     },
     sample: { group: "node-http" },
   }),
@@ -48,49 +48,49 @@ export const deploy = {
     apps: ["web"],
     checks: RUNTIME_NEUTRAL_CHECKS,
     on: {
-      aws: { variants: [container, apiGateway] },
-      vps: { base: true },
-      gcp: { base: true, variants: [container] },
+      aws: [container, apiGateway],
+      vps: [defaults],
+      gcp: [defaults, container],
     },
   }),
   python: fixture("deploy/python", {
     apps: ["web"],
     checks: [...RUNTIME_NEUTRAL_CHECKS, ...vendoredDependencyChecks],
     on: {
-      aws: { variants: [container, apiGateway] },
-      vps: { base: true },
-      gcp: { base: true, variants: [container] },
+      aws: [container, apiGateway],
+      vps: [defaults],
+      gcp: [defaults, container],
     },
   }),
   rust: fixture("deploy/rust", {
     apps: ["web"],
     checks: RUNTIME_NEUTRAL_CHECKS,
     on: {
-      aws: { variants: [container, apiGateway] },
-      vps: { base: true },
-      gcp: { base: true, variants: [container] },
+      aws: [container, apiGateway],
+      vps: [defaults],
+      gcp: [defaults, container],
     },
   }),
   next: fixture("deploy/next", {
     apps: ["web"],
     checks: [...NODE_CHECKS, ...NEXT_ROUTING_AND_CACHE_CHECKS],
     on: {
-      dev: { base: true },
-      "dev-local": { base: true },
-      aws: { base: true, variants: [container, cloudflare] },
-      vps: { base: true },
-      gcp: { base: true, variants: [container] },
+      dev: [defaults],
+      "dev-local": [defaults],
+      aws: [defaults, container, cloudflare],
+      vps: [defaults],
+      gcp: [defaults, container],
     },
   }),
   workspace: fixture("deploy/workspace", {
     apps: ["next", "express"],
     checks: NODE_CHECKS,
     on: {
-      dev: { base: true },
-      "dev-local": { base: true },
-      aws: { base: true, variants: [container, cloudflare] },
-      vps: { base: true },
-      gcp: { base: true, variants: [container] },
+      dev: [defaults],
+      "dev-local": [defaults],
+      aws: [defaults, container, cloudflare],
+      vps: [defaults],
+      gcp: [defaults, container],
     },
     sample: { group: "node-http", lead: true },
   }),
@@ -106,8 +106,8 @@ export const lifecycle = {
       ...NEXT_STATE_AND_DATA_CACHE_CHECKS,
     ],
     on: {
-      aws: { base: true, variants: [container, cloudflare] },
-      vps: { base: true },
+      aws: [defaults, container, cloudflare],
+      vps: [defaults],
     },
   }),
 };
@@ -117,10 +117,10 @@ export const sdk = {
     apps: ["web"],
     checks: NODE_SDK_CHECKS,
     on: {
-      dev: { base: true },
-      "dev-local": { base: true },
-      aws: { variants: [container, apiGateway] },
-      vps: { base: true },
+      dev: [defaults],
+      "dev-local": [defaults],
+      aws: [container, apiGateway],
+      vps: [defaults],
     },
     sample: { group: "node-http" },
   }),
@@ -132,20 +132,20 @@ export const sdk = {
       ...NEXT_STATE_AND_DATA_CACHE_CHECKS,
     ],
     on: {
-      dev: { base: true },
-      "dev-local": { base: true },
-      aws: { base: true, variants: [container, cloudflare] },
-      vps: { base: true },
+      dev: [defaults],
+      "dev-local": [defaults],
+      aws: [defaults, container, cloudflare],
+      vps: [defaults],
     },
   }),
   workspace: fixture("sdk/workspace", {
     apps: ["next", "express"],
     checks: NODE_SDK_CHECKS,
     on: {
-      dev: { base: true },
-      "dev-local": { base: true },
-      aws: { base: true, variants: [container, cloudflare] },
-      vps: { base: true },
+      dev: [defaults],
+      "dev-local": [defaults],
+      aws: [defaults, container, cloudflare],
+      vps: [defaults],
     },
     sample: { group: "node-http", lead: true },
   }),
@@ -153,21 +153,21 @@ export const sdk = {
     apps: ["web"],
     redeploys: true,
     checks: BINDING_CHECKS,
-    on: { aws: { variants: [container, apiGateway] } },
+    on: { aws: [container, apiGateway] },
   }),
   withSst: fixture("sdk/with-sst", {
     apps: ["web"],
     redeploys: true,
     checks: BINDING_CHECKS,
     ladder: sstLadder,
-    on: { aws: { variants: [container, apiGateway] } },
+    on: { aws: [container, apiGateway] },
   }),
   withPulumi: fixture("sdk/with-pulumi", {
     apps: ["web"],
     redeploys: true,
     checks: BINDING_CHECKS,
     ladder: pulumiLadder,
-    on: { aws: { variants: [container, apiGateway] } },
+    on: { aws: [container, apiGateway] },
   }),
 };
 

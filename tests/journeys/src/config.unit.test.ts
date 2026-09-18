@@ -19,16 +19,16 @@ import {
 import { evidence } from "./evidence";
 import { deploy, sdk } from "./matrix/fixtures";
 import type { Fixture, Variant } from "./matrix/types";
-import { cloudflare, container } from "./matrix/variants";
+import { cloudflare, container, defaults } from "./matrix/variants";
 import type { CellContext } from "./targets/types";
 
 const TS_BASE = "./ocel.config.ts";
 
-function cell(fixture: Fixture, variant?: Variant): CellContext {
+function cell(fixture: Fixture, variant: Variant = defaults): CellContext {
   return {
     fixture,
     name: fixture.name,
-    ...(variant === undefined ? {} : { variant }),
+    variant,
     dir: "/nowhere",
     slug: `j-1-${fixture.name.replace("/", "-")}`,
     runId: "1",
@@ -56,7 +56,7 @@ describe("sweepShapeFor", () => {
     });
   });
 
-  it("names no edge for a base cell", () => {
+  it("names no edge for a default cell", () => {
     expect(sweepShapeFor(cell(deploy.node), "j-9-deploy-node", {})).toEqual({
       base: AWS_BASE,
       slug: "j-9-deploy-node",
@@ -105,7 +105,7 @@ describe("shapeFor", () => {
     });
   });
 
-  it("leaves the fixture's config alone for a base cell, and dns alone off a real zone", () => {
+  it("leaves the fixture's config alone for a default cell, and dns alone off a real zone", () => {
     expect(shapeFor(cell(deploy.node), "aws", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
       base: AWS_BASE,
       slug: "j-1-deploy-node",

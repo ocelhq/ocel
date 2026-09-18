@@ -44,7 +44,7 @@ export function describeCell(planFile: string, name: string) {
   const cell: CellContext = {
     fixture,
     name,
-    ...(variant === undefined ? {} : { variant }),
+    variant,
     dir: fixtureDir(fixture.name),
     slug,
     runId,

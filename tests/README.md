@@ -47,7 +47,7 @@ scripts/floci.sh destroy ocel-journeys
 One emulator serves every edge. `OCEL_JOURNEY_CONCERN` narrows a run to the concerns it
 names, space or comma separated, and unset covers every one; `OCEL_JOURNEY_FIXTURES`
 narrows it further to fixtures named `<concern>/<name>`. `OCEL_JOURNEY_VARIANTS` narrows a
-run to the variants it names (`base` among them), `OCEL_JOURNEY_COVERAGE=full` runs every
+run to the variants it names (`default` among them), `OCEL_JOURNEY_COVERAGE=full` runs every
 cell rather than a covering subset, and `OCEL_JOURNEY_SKIPS=run` drives the cells the gap
 list marks dead at deploy, which a run otherwise leaves out.
 

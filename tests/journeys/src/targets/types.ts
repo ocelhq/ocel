@@ -11,7 +11,7 @@ export type Deployment = {
 export type CellContext = {
   fixture: Fixture;
   name: string;
-  variant?: Variant;
+  variant: Variant;
   dir: string;
   slug: string;
   runId: string;

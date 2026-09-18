@@ -7,7 +7,7 @@ import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../../check
 import { GCP_BASE, journeyConfigIn, type Overlay, writeJourneyConfig } from "../../config";
 import { currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
-import { type Cell, type Lane, type Phase, variantNameOf } from "../../matrix/types";
+import type { Cell, Lane, Phase } from "../../matrix/types";
 import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import { cellsOn, fixturesOn } from "../../plan";
@@ -140,7 +140,7 @@ async function deployment(cell: CellContext, phase: Phase): Promise<Deployment> 
     `${JSON.stringify(
       {
         slug: cell.slug,
-        variant: variantNameOf(cell),
+        variant: cell.variant.name,
         project: project(),
         region: region(),
         apps: Object.fromEntries(urls),
@@ -282,7 +282,7 @@ export function sweepOverlay(cell: Cell, slug: string, env: NodeJS.ProcessEnv): 
   return {
     base: GCP_BASE,
     slug: gcpSlug({ slug, fixture: cell.fixture }, env),
-    ...cell.variant?.config,
+    ...cell.variant.config,
   };
 }
 

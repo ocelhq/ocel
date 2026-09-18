@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { BASE, type Cell, type Fixture, sampleGroupOf, variantNameOf } from "./matrix/types";
+import { type Cell, DEFAULT_VARIANT, type Fixture, sampleGroupOf } from "./matrix/types";
 
 export type Draw = { seed: string; touched: string[] };
 
@@ -31,7 +31,7 @@ function coverGroup(
     chosen.set(fixture.name, held);
   };
   const cellOf = (fixture: Fixture, variant: string) =>
-    cellsFor(fixture).find((cell) => variantNameOf(cell) === variant);
+    cellsFor(fixture).find((cell) => cell.variant.name === variant);
 
   const free: Fixture[] = [];
   for (const member of members) {
@@ -47,13 +47,13 @@ function coverGroup(
 
   const start = rotation(draw.seed, group);
   const lead = free.find((member) => member.sample?.lead) ?? free[start % free.length];
-  add(lead, cellOf(lead, BASE));
+  add(lead, cellOf(lead, DEFAULT_VARIANT));
 
   const variants: string[] = [];
   for (const member of free) {
     for (const cell of cellsFor(member)) {
-      const variant = variantNameOf(cell);
-      if (variant !== BASE && !variants.includes(variant)) {
+      const variant = cell.variant.name;
+      if (variant !== DEFAULT_VARIANT && !variants.includes(variant)) {
         variants.push(variant);
       }
     }
@@ -66,7 +66,7 @@ function coverGroup(
 
   for (const member of free) {
     if (!chosen.has(member.name)) {
-      add(member, cellOf(member, BASE));
+      add(member, cellOf(member, DEFAULT_VARIANT));
     }
   }
   return chosen;

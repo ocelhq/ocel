@@ -2,13 +2,14 @@ import { describe, expect, it } from "bun:test";
 import { AWS_BASE } from "../../config";
 import { deploy, fixtures as matrix } from "../../matrix/fixtures";
 import type { Cell } from "../../matrix/types";
+import { defaults } from "../../matrix/variants";
 import { cellsOn, fixturesOn } from "../../plan";
 import { cellsBySlugPart, despite, sweepPlan } from "./index";
 
 const fixture = deploy.node;
 
 function named(name: string): Cell {
-  return { name, fixture };
+  return { name, fixture, variant: defaults };
 }
 
 describe("cellsBySlugPart", () => {
@@ -67,8 +68,7 @@ describe("sweepPlan", () => {
   });
 
   it("sweeps a slug naming a cell through that cell's own edge", () => {
-    const [part] =
-      [...byPart].find(([, cell]) => cell.variant?.config?.edge === "api-gateway") ?? [];
+    const [part] = [...byPart].find(([, cell]) => cell.variant.config.edge === "api-gateway") ?? [];
     if (!part) {
       throw new Error("no aws cell runs the api-gateway edge, so the sweep has no edge to keep");
     }

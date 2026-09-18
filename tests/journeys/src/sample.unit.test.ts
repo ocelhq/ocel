@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { type Cell, type Fixture, fixture, variant } from "./matrix/types";
+import { defaults } from "./matrix/variants";
 import { type CellsFor, type Draw, sample } from "./sample";
 
 const edge = variant("edge", { offeredOn: ["aws"], config: {} });
@@ -9,7 +10,7 @@ function member(name: string, lead?: true): Fixture {
   return fixture(name, {
     apps: ["web"],
     checks: [],
-    on: { aws: { base: true, variants: [edge, box] } },
+    on: { aws: [defaults, edge, box] },
     sample: lead ? { group: "http", lead } : { group: "http" },
   });
 }
@@ -20,14 +21,14 @@ const third = member("deploy/third");
 const loner = fixture("deploy/loner", {
   apps: ["web"],
   checks: [],
-  on: { aws: { base: true, variants: [edge] } },
+  on: { aws: [defaults, edge] },
 });
 const GROUP = [lead, other, third];
 const ALL = [...GROUP, loner];
 const SEEDS = ["1", "2", "3", "4", "5", "938"];
 
 const every: CellsFor = (one) => [
-  { name: one.name, fixture: one },
+  { name: one.name, fixture: one, variant: defaults },
   { name: `${one.name}-edge`, fixture: one, variant: edge },
   ...(one === loner ? [] : [{ name: `${one.name}-box`, fixture: one, variant: box }]),
 ];
@@ -39,7 +40,7 @@ function covered(fixtures: Fixture[], cellsFor: CellsFor, draw: Draw): Cell[] {
   return fixtures.flatMap((one) => chosen.get(one.name) ?? []);
 }
 
-const variantOf = (cell: Cell) => cell.variant?.name ?? "base";
+const variantOf = (cell: Cell) => cell.variant.name;
 
 describe("sampling the cells of a group", () => {
   it("runs every cell of every fixture under full coverage", () => {
@@ -57,14 +58,14 @@ describe("sampling the cells of a group", () => {
     }
   });
 
-  it("runs the base cell on the member the group leads with", () => {
+  it("runs the default cell on the member the group leads with", () => {
     for (const seed of SEEDS) {
       const chosen = sample(GROUP, every, "covering", seeded(seed));
       expect(chosen.get(lead.name)?.map((cell) => cell.name)).toContain(lead.name);
     }
   });
 
-  it("runs a base cell on every member that took no variant", () => {
+  it("runs a default cell on every member that took no variant", () => {
     for (const seed of SEEDS) {
       const chosen = sample(GROUP, every, "covering", seeded(seed));
       for (const one of GROUP) {
