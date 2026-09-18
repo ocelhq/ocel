@@ -1,7 +1,7 @@
+import { parseShard } from "../shard";
+import { targetNamed } from "../targets";
+import { askFrom, concernsNamed } from "./ask";
 import { runJourney } from "./journey";
-import { parseShard } from "./shard";
-import { type Concern, concernsAsked, specByName } from "./spec";
-import { targetNamed } from "./targets";
 
 const USAGE =
   "pnpm cell --concern <name> --fixture <name> --target <name> [--shard <index>/<total>]";
@@ -18,14 +18,6 @@ function flag(argv: string[], name: string): string | undefined {
   return value;
 }
 
-function oneConcern(asked: string): Concern {
-  const named = concernsAsked(asked);
-  if (named.length !== 1) {
-    throw new Error(`--concern names one concern, not ${named.join(" and ")}\n${USAGE}`);
-  }
-  return named[0];
-}
-
 async function main(argv: string[]): Promise<number> {
   const concernName = flag(argv, "concern");
   const fixtureName = flag(argv, "fixture");
@@ -35,13 +27,15 @@ async function main(argv: string[]): Promise<number> {
   }
   parseShard(flag(argv, "shard"));
 
-  const fixture = specByName(oneConcern(concernName), fixtureName);
-  const target = targetNamed(targetName);
-  if (fixture.targets && !fixture.targets.includes(target.name)) {
-    throw new Error(`the ${fixture.dir} fixture does not run on ${target.name}`);
+  const [concern, ...more] = concernsNamed(concernName);
+  if (!concern || more.length > 0) {
+    throw new Error(`--concern names one concern, not ${concernName}\n${USAGE}`);
   }
-
-  return runJourney(target, [fixture]);
+  return runJourney(targetNamed(targetName), {
+    ...askFrom(process.env),
+    concerns: [concern],
+    fixtures: [`${concern}/${fixtureName}`],
+  });
 }
 
 main(process.argv.slice(2)).then(

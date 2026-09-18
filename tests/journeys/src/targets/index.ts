@@ -1,4 +1,4 @@
-import type { TargetName } from "../spec";
+import type { TargetName } from "../matrix/types";
 import { awsTarget } from "./aws";
 import { devTarget } from "./dev";
 import { devLocalTarget } from "./devLocal";

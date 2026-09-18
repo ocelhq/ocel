@@ -43,7 +43,7 @@ describe("reclaimable", () => {
     assert.equal(reclaimable("jobs-deploy-node", CELLS), undefined);
   });
 
-  it("claims a harness slug whose cell left the spec table, naming no cell", () => {
+  it("claims a harness slug whose cell left the matrix, naming no cell", () => {
     assert.deepEqual(reclaimable("j-1874-nowhere", CELLS), {
       slug: "j-1874-nowhere",
       cell: undefined,
@@ -76,7 +76,7 @@ describe("sweepable", () => {
     );
   });
 
-  it("reclaims a prefixed slug whose cell left the spec table", () => {
+  it("reclaims a prefixed slug whose cell left the matrix", () => {
     assert.deepEqual(sweepable(["j-1874-gone"], [], CELLS), [
       { slug: "j-1874-gone", cell: undefined },
     ]);

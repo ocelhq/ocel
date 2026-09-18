@@ -1,11 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { shapeFor } from "../../config";
 import { projectSlug } from "../../identity";
-import { cellsOf, specForTarget } from "../../spec";
+import { fixtures } from "../../matrix/fixtures";
+import { cellsOn, fixturesOn } from "../../plan";
 import type { CellContext } from "../types";
 import { cellOfSlug, sweepOverlay } from "./index";
 
-const cells = specForTarget("gcp").flatMap((row) => cellsOf(row, "gcp"));
+const cells = fixturesOn(fixtures, "gcp").flatMap((one) => cellsOn(one, "gcp"));
 
 describe("cellOfSlug", () => {
   it("reads back the cell a slug was made for, so a sweep knows which apps it stands", () => {

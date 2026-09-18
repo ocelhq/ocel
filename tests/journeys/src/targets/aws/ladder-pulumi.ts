@@ -1,11 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
+import type { Ladder } from "../../matrix/types";
 import { workTree } from "../../ocel";
 import { fixtureDir, laneDir, treeDir } from "../../paths";
-import type { LadderHooks } from "../../spec";
 import { copyTree } from "../../tree";
-import { recordPlacement, refuse } from "./ladder";
+import { ladderChecks, recordPlacement, refuse } from "./ladder";
 import { place } from "./place";
 import { spawnBin } from "./run";
 
@@ -65,7 +65,7 @@ async function configureStack(dir: string, stack: string, env: NodeJS.ProcessEnv
   }
 }
 
-export const pulumiHooks: LadderHooks = {
+export const pulumiLadder: Ladder = {
   refuse,
 
   async beforeUp(cell) {
@@ -93,6 +93,8 @@ export const pulumiHooks: LadderHooks = {
     await pulumi(dir, ["destroy", "--yes"], env);
     await pulumi(dir, ["stack", "rm", "--yes"], env);
   },
+  checks: ladderChecks,
+  sweep: pulumiSweep,
 };
 
 export async function pulumiSweep(runId: string): Promise<void> {

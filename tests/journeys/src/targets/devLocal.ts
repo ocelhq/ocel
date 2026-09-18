@@ -5,8 +5,8 @@ import { SQL } from "bun";
 import { migrates, setsEnv } from "../checks";
 import { journeyConfigIn } from "../config";
 import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
-import type { ExpectationEnvironment } from "../expectations/types";
 import { HARNESS_PREFIX, isStranded } from "../identity";
+import type { Lane } from "../matrix/types";
 import { runOcel, treeRoot, workTree } from "../ocel";
 import { appCommand, migrateCommand } from "../workspace";
 import {
@@ -82,10 +82,10 @@ async function dropDatabase(slug: string): Promise<void> {
 
 async function writeDotfile(cell: CellContext, dir: string): Promise<void> {
   const lines: string[] = [];
-  if (setsEnv(cell.fixture.rows)) {
+  if (setsEnv(cell.fixture.checks)) {
     lines.push(`GREETING=${INITIAL_GREETING}`, `SECRET_TOKEN=${SECRET_TOKEN}`);
   }
-  if (migrates(cell.fixture.rows)) {
+  if (migrates(cell.fixture.checks)) {
     lines.push(
       `OCEL_RESOURCE_POSTGRES_main=${postgresBinding("main", await freshDatabase(cell.slug))}`,
     );
@@ -107,7 +107,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   const env = { ...childEnv(), OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)) };
 
   await writeDotfile(cell, dir);
-  if (migrates(cell.fixture.rows)) {
+  if (migrates(cell.fixture.checks)) {
     await runOcel(cell, dir, "up", "migrate", ["run", "--local", "--", ...migrateCommand()], env);
   }
 
@@ -145,7 +145,7 @@ async function destroy(cell: CellContext): Promise<void> {
     await rm(treeRoot(cell, TARGET), { recursive: true, force: true });
     running.delete(cell.slug);
   }
-  if (migrates(cell.fixture.rows)) {
+  if (migrates(cell.fixture.checks)) {
     await dropDatabase(cell.slug);
   }
 }
@@ -175,7 +175,7 @@ export const devLocalTarget: Target = {
   largeBodyBytes: UNCAPPED_BODY_BYTES,
   legTimeoutMs: 180_000,
   legs: ["up", "contract", "destroy"],
-  guard: async (): Promise<ExpectationEnvironment> => TARGET,
+  guard: async (): Promise<Lane> => TARGET,
   setup: async () => {},
   up,
   destroy,

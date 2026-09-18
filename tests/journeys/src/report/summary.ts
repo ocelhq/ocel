@@ -1,9 +1,9 @@
-import { issueUrl, type Listed, type Skipped } from "./expectations";
+import type { Listed, Skipped } from "../plan";
 import { exitCodeFor, type Report, type ReportRow, type Verdict } from "./reconcile";
 
 export type SummaryMeta = {
   target: string;
-  environment: string;
+  lane: string;
   runId: string;
   skipped?: Skipped;
 };
@@ -18,6 +18,10 @@ const MARKS: Record<Verdict, string> = {
   disabled: "DISABLED",
   unplanned: "UNPLANNED",
 };
+
+function issueUrl(issue: number): string {
+  return `https://github.com/ocelhq/ocel/issues/${issue}`;
+}
 
 function escapeCell(value: string): string {
   return value.replace(/\|/g, "\\|").replace(/\n/g, " ");
@@ -74,7 +78,7 @@ export function summaryTable(report: Report, meta: SummaryMeta): string {
   ].join(", ");
 
   return [
-    `## journey · ${meta.target} · ${meta.environment} · run ${meta.runId}`,
+    `## journey · ${meta.target} · ${meta.lane} · run ${meta.runId}`,
     "",
     tally,
     "",

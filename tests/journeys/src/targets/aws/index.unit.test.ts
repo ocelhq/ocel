@@ -1,9 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { AWS_BASE } from "../../config";
-import { type Cell, cellsOf, specByName, specForTarget } from "../../spec";
+import { deploy, fixtures as matrix } from "../../matrix/fixtures";
+import type { Cell } from "../../matrix/types";
+import { cellsOn, fixturesOn } from "../../plan";
 import { cellsBySlugPart, despite, sweepPlan } from "./index";
 
-const fixture = specByName("deploy", "node");
+const fixture = deploy.node;
 
 function named(name: string): Cell {
   return { name, fixture };
@@ -11,7 +13,7 @@ function named(name: string): Cell {
 
 describe("cellsBySlugPart", () => {
   it("keys every cell the aws lane runs, and loses none of them", () => {
-    const cells = specForTarget("aws").flatMap((row) => cellsOf(row, "aws"));
+    const cells = fixturesOn(matrix, "aws").flatMap((one) => cellsOn(one, "aws"));
 
     expect(cellsBySlugPart(cells).size).toBe(cells.length);
   });
@@ -45,8 +47,8 @@ describe("despite", () => {
 });
 
 describe("sweepPlan", () => {
-  const fixtures = specForTarget("aws");
-  const byPart = cellsBySlugPart(fixtures.flatMap((row) => cellsOf(row, "aws")));
+  const fixtures = fixturesOn(matrix, "aws");
+  const byPart = cellsBySlugPart(fixtures.flatMap((one) => cellsOn(one, "aws")));
 
   function planOne(slug: string, cell: string | undefined) {
     const { swept, complaints } = sweepPlan([{ slug, cell }], byPart, fixtures, {});
@@ -78,7 +80,7 @@ describe("sweepPlan", () => {
     });
   });
 
-  it("sweeps a slug whose cell left the spec table from the first aws fixture, edgeless", () => {
+  it("sweeps a slug whose cell left the matrix from the first aws fixture, edgeless", () => {
     const one = planOne("j-local-apigw3-hello-express", undefined);
 
     expect(one.fixture).toBe(fixtures[0]);

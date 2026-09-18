@@ -5,12 +5,13 @@ import { promisify } from "node:util";
 import { migrates, setsEnv } from "../../checks";
 import { GCP_BASE, journeyConfigIn, type Overlay, writeJourneyConfig } from "../../config";
 import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../../contract";
-import type { ExpectationEnvironment } from "../../expectations/types";
 import { currentRunIdentity, projectSlug, slugPart } from "../../identity";
+import { fixtures as matrix } from "../../matrix/fixtures";
+import type { Cell, Lane, Leg } from "../../matrix/types";
 import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
+import { cellsOn, fixturesOn, variantNameOf } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
-import { type Cell, cellsOf, type Leg, specForTarget, variantNameOf } from "../../spec";
 import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
 import type { CellContext, Deployment, Target } from "../types";
@@ -63,7 +64,7 @@ function region(): string {
   return process.env[REGION_ENV]?.trim() || DEFAULT_REGION;
 }
 
-async function guard(): Promise<ExpectationEnvironment> {
+async function guard(): Promise<Lane> {
   if (endpoint()) {
     return "gcp.floci";
   }
@@ -111,7 +112,7 @@ function leadsFor(slug: string, apps: string[]): string[] {
 }
 
 function gcpCells(): Cell[] {
-  return specForTarget("gcp").flatMap((fixture) => cellsOf(fixture, "gcp"));
+  return fixturesOn(matrix, "gcp").flatMap((fixture) => cellsOn(fixture, "gcp"));
 }
 
 export function cellOfSlug(cells: Cell[], slug: string): Cell {
@@ -171,18 +172,21 @@ async function cellTree(cell: CellContext): Promise<string> {
 }
 
 async function prepare(): Promise<PrepareFailures> {
-  const [first] = specForTarget("gcp");
+  const [first] = fixturesOn(matrix, "gcp");
   if (!first) {
-    throw new Error("no fixture in the spec table runs on gcp, so there is nothing to bootstrap");
+    throw new Error("no fixture in the matrix runs on gcp, so there is nothing to bootstrap");
   }
   const runId = currentRunIdentity();
-  const dir = await copyTree(fixtureDir(first.dir), treeDir(runId, "gcp", "bootstrap"));
+  const dir = await copyTree(fixtureDir(first.name), treeDir(runId, "gcp", "bootstrap"));
   try {
     const emulator = endpoint();
     if (emulator) {
       await switchOn(emulator, project());
     }
-    await writeJourneyConfig(dir, { base: GCP_BASE, slug: projectSlug(first.name, runId) });
+    await writeJourneyConfig(dir, {
+      base: GCP_BASE,
+      slug: projectSlug(path.posix.basename(first.name), runId),
+    });
     await ocel(dir, ["bootstrap", "production", "--yes"], childEnv(dir));
   } catch (error) {
     return { lane: error instanceof Error ? error.message : String(error) };
@@ -196,7 +200,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   const dir = await cellTree(cell);
   const env = childEnv(dir);
 
-  if (setsEnv(cell.fixture.rows)) {
+  if (setsEnv(cell.fixture.checks)) {
     await runOcel(
       cell,
       dir,
@@ -215,7 +219,7 @@ async function up(cell: CellContext): Promise<Deployment> {
     );
   }
   await runOcel(cell, dir, "up", "deploy", ["deploy", "--yes"], env);
-  if (migrates(cell.fixture.rows)) {
+  if (migrates(cell.fixture.checks)) {
     await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand()], env);
   }
   return deployment(cell, "up");
@@ -224,7 +228,7 @@ async function up(cell: CellContext): Promise<Deployment> {
 async function redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
   const dir = await cellTree(cell);
   const env = childEnv(dir);
-  if (setsEnv(cell.fixture.rows)) {
+  if (setsEnv(cell.fixture.checks)) {
     await runOcel(
       cell,
       dir,
@@ -287,7 +291,7 @@ async function sweepOwn(runId: string): Promise<void> {
   for (const slug of await list()) {
     const cell = cellOfSlug(gcpCells(), slug);
     const dir = await copyTree(
-      fixtureDir(cell.fixture.dir),
+      fixtureDir(cell.fixture.name),
       treeDir(runId, "gcp", `sweep-${slug}`),
     );
     try {

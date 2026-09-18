@@ -1,6 +1,6 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
-import { detectWorld, expectationEnvironmentFor, type Probes } from "./world";
+import { detectWorld, laneOf, type Probes } from "./world";
 
 function probes(overrides: Partial<Probes> = {}): Probes {
   return {
@@ -69,9 +69,9 @@ describe("detectWorld", () => {
   });
 });
 
-describe("expectationEnvironmentFor", () => {
+describe("laneOf", () => {
   it("chooses the file each world owns", () => {
-    assert.equal(expectationEnvironmentFor("floci"), "aws.floci");
-    assert.equal(expectationEnvironmentFor("real"), "aws");
+    assert.equal(laneOf("floci"), "aws.floci");
+    assert.equal(laneOf("real"), "aws");
   });
 });

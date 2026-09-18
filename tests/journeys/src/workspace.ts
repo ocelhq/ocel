@@ -1,19 +1,19 @@
 import path from "node:path";
-import type { FixtureSpec } from "./spec";
+import type { Fixture } from "./matrix/types";
 
-function nested(fixture: FixtureSpec): boolean {
+function nested(fixture: Fixture): boolean {
   return fixture.apps.length > 1;
 }
 
-export function appPath(fixture: FixtureSpec, app: string): string {
+export function appPath(fixture: Fixture, app: string): string {
   return nested(fixture) ? `apps/${app}` : ".";
 }
 
-export function appHomes(fixture: FixtureSpec): string[] {
+export function appHomes(fixture: Fixture): string[] {
   return nested(fixture) ? fixture.apps.map((app) => appPath(fixture, app)) : [];
 }
 
-export function appCommand(fixture: FixtureSpec, app: string): string[] {
+export function appCommand(fixture: Fixture, app: string): string[] {
   return ["pnpm", "--dir", appPath(fixture, app), "run", "dev"];
 }
 

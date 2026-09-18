@@ -1,8 +1,6 @@
-import type { Expectations, Listed } from "./expectations/types";
-import { type PlannedTest, UP_TITLE } from "./plan";
-import type { Leg } from "./spec";
-
-type Planned = Pick<PlannedTest, "cell" | "title" | "leg">;
+import { UP } from "../lifecycle";
+import type { Leg } from "../matrix/types";
+import type { Expectations, Listed, PlannedTest } from "../plan";
 
 export type TestOutcome = "passed" | "failed" | "skipped" | "todo" | "only";
 
@@ -84,26 +82,23 @@ function verdictFor(result: TestResult | undefined, gaps: number, blocking: Bloc
 }
 
 function blockingByCell(
-  planned: Planned[],
+  planned: PlannedTest[],
   byKey: Map<string, TestResult>,
   expectations: Expectations,
 ): Map<string, Blocking> {
   const blocking = new Map<string, Blocking>();
   for (const cell of new Set(planned.map((entry) => entry.cell))) {
-    const up = byKey.get(key(cell, UP_TITLE));
+    const up = byKey.get(key(cell, UP));
     if (up?.outcome !== "failed") {
       continue;
     }
-    blocking.set(
-      cell,
-      (expectations[cell]?.[UP_TITLE]?.length ?? 0) > 0 ? "up-listed" : "up-failed",
-    );
+    blocking.set(cell, (expectations[cell]?.[UP]?.length ?? 0) > 0 ? "up-listed" : "up-failed");
   }
   return blocking;
 }
 
 export function reconcile(input: {
-  planned: Planned[];
+  planned: PlannedTest[];
   results: TestResult[];
   expectations: Expectations;
 }): Report {
@@ -116,8 +111,7 @@ export function reconcile(input: {
     seen.add(id);
     const result = byKey.get(id);
     const listed = input.expectations[entry.cell]?.[entry.title] ?? [];
-    const downstream: Blocking =
-      entry.title === UP_TITLE ? "none" : (blocking.get(entry.cell) ?? "none");
+    const downstream: Blocking = entry.title === UP ? "none" : (blocking.get(entry.cell) ?? "none");
     return {
       cell: entry.cell,
       title: entry.title,

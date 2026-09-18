@@ -3,8 +3,8 @@ import path from "node:path";
 import { bindingChecks } from "../../checks";
 import { journeyConfigIn } from "../../config";
 import { live } from "../../live";
+import type { LadderCheck } from "../../matrix/types";
 import { ocel, spawnOcel, workTree } from "../../ocel";
-import type { LadderCheck } from "../../spec";
 import type { CellContext } from "../types";
 import { place } from "./place";
 import { awsBindingStore, awsStore, type Cli, cliAt, said } from "./store";
@@ -213,7 +213,7 @@ export async function refuse(cell: CellContext): Promise<void> {
 export const ladderChecks: LadderCheck[] = [
   {
     title: "ocel bindings ls lists both records with their name, type, source and owner",
-    phase: "publish",
+    at: "publish",
     run: async (cell) => {
       const dir = await workTree(cell, "aws");
       const env = {
@@ -240,7 +240,7 @@ export const ladderChecks: LadderCheck[] = [
   {
     title:
       "each record is stamped with the publisher's URN and holds nothing beside the sealed value",
-    phase: "publish",
+    at: "publish",
     run: async (cell) => {
       const records = await (await bindingStore()).records(cell.slug);
       for (const name of BINDING_NAMES) {
@@ -262,7 +262,7 @@ export const ladderChecks: LadderCheck[] = [
   },
   {
     title: "the value row beside each record carries ciphertext",
-    phase: "publish",
+    at: "publish",
     run: async (cell) => {
       const values = await (await bindingStore()).values(cell.slug);
       for (const name of BINDING_NAMES) {
@@ -275,7 +275,7 @@ export const ladderChecks: LadderCheck[] = [
   {
     title:
       "grants are scoped to the named resource: orders carries rds-db:connect, network carries none",
-    phase: "publish",
+    at: "publish",
     run: async (cell) => {
       const records = await (await bindingStore()).records(cell.slug);
       const orders = records.find((row) => row.name === BINDING_NAME);
@@ -300,7 +300,7 @@ export const ladderChecks: LadderCheck[] = [
   },
   {
     title: "the publisher's index owns exactly its one binding",
-    phase: "publish",
+    at: "publish",
     run: async (cell) => {
       const records = await (await bindingStore()).records(cell.slug);
       for (const name of BINDING_NAMES) {
@@ -317,7 +317,7 @@ export const ladderChecks: LadderCheck[] = [
   },
   {
     title: "ownership is unchanged and ocel's own index claims neither name",
-    phase: "consume",
+    at: "consume",
     run: async (cell) => {
       const records = await (await bindingStore()).records(cell.slug);
       for (const name of BINDING_NAMES) {
@@ -341,7 +341,7 @@ export const ladderChecks: LadderCheck[] = [
   {
     title:
       "every tagged function carries the postgres env key with no clear-text host, database or password",
-    phase: "consume",
+    at: "consume",
     run: async (cell, live) => {
       assert.ok(live, "consume ran with no live deployment to read the binding report from");
       const { body } = await (async () => {
@@ -368,7 +368,7 @@ export const ladderChecks: LadderCheck[] = [
   {
     title:
       "a VPC config equal to the published ids, and execution roles with the VPC policy and the published grants",
-    phase: "consume",
+    at: "consume",
     run: async (cell) => {
       const placement = placementFor(cell.slug);
       const records = await (await bindingStore()).records(cell.slug);
@@ -408,17 +408,17 @@ export const ladderChecks: LadderCheck[] = [
   },
   {
     title: "both binding routes answer",
-    phase: "consume",
+    at: "consume",
     run: async (_cell, live) => {
       assert.ok(live, "consume ran with no live deployment to reach the binding routes on");
-      for (const row of bindingChecks) {
-        await row.run(live!);
+      for (const check of bindingChecks) {
+        await check.run(live!);
       }
     },
   },
   {
     title: "the record survives ocel destroy",
-    phase: "outlive",
+    at: "outlive",
     run: async (cell) => {
       const records = await (await bindingStore()).records(cell.slug);
       for (const name of BINDING_NAMES) {
@@ -431,7 +431,7 @@ export const ladderChecks: LadderCheck[] = [
   },
   {
     title: "both partitions are empty once the publisher is removed",
-    phase: "prune",
+    at: "prune",
     run: async (cell) => {
       const records = await (await bindingStore()).records(cell.slug);
       assert.deepEqual(

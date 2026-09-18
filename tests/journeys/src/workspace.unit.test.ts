@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { specByName } from "./spec";
+import { sdk } from "./matrix/fixtures";
 import { appCommand, appHomes, migrateCommand, stateComplaint } from "./workspace";
 
-const workspace = specByName("sdk", "workspace");
-const composite = specByName("sdk", "node");
+const workspace = sdk.workspace;
+const composite = sdk.node;
 
 describe("a multi-app row", () => {
   it("reaches each app under apps/, and a single app where the config sits", () => {

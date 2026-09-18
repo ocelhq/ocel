@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { cellsDir, resultsFile } from "./paths";
+import { cellsDir, resultsFile } from "../paths";
 
 export type RecordedRow = {
   cell: string;

@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import stripJsonComments from "strip-json-comments";
 import { appHostname } from "./identity";
-import type { Cell, Compute, Edge, TargetName } from "./spec";
+import type { Cell, Compute, Edge, TargetName } from "./matrix/types";
 import { gcpSlug } from "./targets/gcp/names";
 import type { CellContext } from "./targets/types";
 

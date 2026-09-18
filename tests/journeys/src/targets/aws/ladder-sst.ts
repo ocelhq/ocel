@@ -1,11 +1,11 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { HARNESS_PREFIX } from "../../identity";
+import type { Ladder } from "../../matrix/types";
 import { workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
-import type { LadderHooks } from "../../spec";
 import { copyTree } from "../../tree";
-import { recordPlacement, refuse } from "./ladder";
+import { ladderChecks, recordPlacement, refuse } from "./ladder";
 import { place } from "./place";
 import { spawnBin } from "./run";
 import { type Cli, cliAt } from "./store";
@@ -26,7 +26,7 @@ async function deployEnv(): Promise<NodeJS.ProcessEnv> {
   return where.endpoint ? { ...process.env, AWS_ENDPOINT_URL: where.endpoint } : { ...process.env };
 }
 
-export const sstHooks: LadderHooks = {
+export const sstLadder: Ladder = {
   refuse,
 
   async beforeUp(cell) {
@@ -48,6 +48,8 @@ export const sstHooks: LadderHooks = {
     const bin = path.join(dir, "node_modules", ".bin", "sst");
     await spawnBin(bin, ["remove", "--stage", stage], dir, await deployEnv());
   },
+  checks: ladderChecks,
+  sweep: sstSweep,
 };
 
 function isStageNotFound(error: unknown): boolean {

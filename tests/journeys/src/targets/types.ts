@@ -1,9 +1,7 @@
 import type { Fetch } from "../contract";
 import type { Evidence } from "../evidence";
-import type { ExpectationEnvironment } from "../expectations/types";
+import type { Fixture, Lane, Leg, TargetName, Variant } from "../matrix/types";
 import type { PrepareFailures } from "../prepare";
-import type { FixtureSpec, Leg, TargetName } from "../spec";
-import type { Variant } from "../variants";
 
 export type Deployment = {
   baseUrl: (app: string) => string;
@@ -11,7 +9,7 @@ export type Deployment = {
 };
 
 export type CellContext = {
-  fixture: FixtureSpec;
+  fixture: Fixture;
   name: string;
   variant?: Variant;
   dir: string;
@@ -26,7 +24,7 @@ export type Target = {
   largeBodyBytes: number;
   legTimeoutMs: number;
   legs: Leg[];
-  guard: () => Promise<ExpectationEnvironment>;
+  guard: () => Promise<Lane>;
   // biome-ignore lint/suspicious/noConfusingVoidType: a target with nothing to prepare resolves to nothing
   prepare?: () => Promise<PrepareFailures | void>;
   setup: () => Promise<void>;

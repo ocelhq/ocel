@@ -73,3 +73,7 @@ export function cellFilesDir(runId: string, target: string): string {
 export function cellFile(runId: string, target: string, cell: string): string {
   return path.join(cellFilesDir(runId, target), `${fileNameOf(cell)}.journey.test.ts`);
 }
+
+export function planFile(runId: string, target: string): string {
+  return path.join(laneDir(runId, target), "plan.json");
+}
