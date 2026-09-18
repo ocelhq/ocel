@@ -1,6 +1,6 @@
 import type { Fetch } from "../checks/context";
 import type { Evidence } from "../evidence";
-import type { Fixture, Lane, Leg, TargetName, Variant } from "../matrix/types";
+import type { Fixture, Lane, TargetName, Variant } from "../matrix/types";
 import type { PrepareFailures } from "../prepare";
 
 export type Deployment = {
@@ -23,17 +23,24 @@ export type Target = {
   concurrency: number;
   largeBodyBytes: number;
   legTimeoutMs: number;
-  legs: Leg[];
   guard: () => Promise<Lane>;
   // biome-ignore lint/suspicious/noConfusingVoidType: a target with nothing to prepare resolves to nothing
   prepare?: () => Promise<PrepareFailures | void>;
   setup: () => Promise<void>;
-  up: (cell: CellContext) => Promise<Deployment>;
-  redeploy?: (cell: CellContext, greeting: string) => Promise<Deployment>;
-  rollback?: (cell: CellContext, greeting: string) => Promise<Deployment>;
+  deploy: (cell: CellContext) => Promise<Deployment>;
   destroy: (cell: CellContext) => Promise<void>;
   list: () => Promise<string[]>;
   stands: (slug: string) => Promise<boolean>;
   sweep: (runId: string) => Promise<void>;
   sweepOwn: (runId: string) => Promise<void>;
 };
+
+export type ReleaseCycle = {
+  redeploy: (cell: CellContext, greeting: string) => Promise<Deployment>;
+  rollback: (cell: CellContext, greeting: string) => Promise<Deployment>;
+};
+
+export function hasReleaseCycle<T extends object>(target: T): target is T & ReleaseCycle {
+  const cycled = target as Partial<ReleaseCycle>;
+  return typeof cycled.redeploy === "function" && typeof cycled.rollback === "function";
+}

@@ -1,4 +1,4 @@
-import { stepsOf } from "./lifecycle";
+import { phasesOf, stepsOf } from "./lifecycle";
 import {
   type Affected,
   BASE,
@@ -8,7 +8,7 @@ import {
   type Fixture,
   type Gap,
   type Lane,
-  type Leg,
+  type Phase,
   sampleGroupOf,
   type TargetName,
   targetOfLane,
@@ -41,13 +41,13 @@ export type Expectations = Record<string, Record<string, Listed[]>>;
 
 export type Skipped = Record<string, Listed[]>;
 
-export type PlannedStep = { app: string; title: string; leg?: Leg };
+export type PlannedStep = { app: string; title: string; phase?: Phase };
 
 export type PlannedCell = {
   name: string;
   fixture: string;
   variant: string;
-  legs: Leg[];
+  phases: Phase[];
   steps: PlannedStep[];
 };
 
@@ -60,7 +60,7 @@ export type Plan = {
   expectations: Expectations;
 };
 
-export type PlannedTest = { cell: string; title: string; leg?: Leg };
+export type PlannedTest = { cell: string; title: string; phase?: Phase };
 
 export function cellKey(cell: string, app: string): string {
   return `${cell}/${app}`;
@@ -71,7 +71,7 @@ export function testsOf(planned: Pick<Plan, "cells">): PlannedTest[] {
     cell.steps.map((one) => ({
       cell: cellKey(cell.name, one.app),
       title: one.title,
-      ...(one.leg === undefined ? {} : { leg: one.leg }),
+      ...(one.phase === undefined ? {} : { phase: one.phase }),
     })),
   );
 }
@@ -104,12 +104,10 @@ export function cellNamed(fixtures: Fixture[], target: TargetName, name: string)
   return found;
 }
 
-function legsOf(fixture: Fixture, able: Leg[], keep: boolean): Leg[] {
-  return fixture.legs.filter((leg) => able.includes(leg) && !(keep && leg === "destroy"));
-}
-
 function longestFirst(cells: Cell[]): Cell[] {
-  return [...cells].sort((a, b) => b.fixture.legs.length - a.fixture.legs.length);
+  return [...cells].sort(
+    (a, b) => phasesOf(b.fixture, false).length - phasesOf(a.fixture, false).length,
+  );
 }
 
 type LaneTest = { cell: string; app: string; fixture: string; variant: string; title: string };
@@ -245,6 +243,15 @@ function checkGaps(gaps: Gap[]) {
   }
 }
 
+function checkReleaseCycle(fixtures: Fixture[], target: TargetName, releaseCycle: boolean) {
+  const redeploying = fixtures.find((one) => one.redeploys);
+  if (redeploying && !releaseCycle) {
+    throw new Error(
+      `${redeploying.name} redeploys, and ${target} has no release cycle to redeploy it with`,
+    );
+  }
+}
+
 function checkVariantsAsked(fixtures: Fixture[], asked: string[]) {
   const known = new Set([
     BASE,
@@ -264,19 +271,20 @@ export function plan(input: {
   fixtures: Fixture[];
   gaps: Gap[];
   lane: Lane;
-  legs: Leg[];
+  releaseCycle: boolean;
   ask: Ask;
 }): Plan {
-  const { fixtures, gaps, lane, legs, ask } = input;
+  const { fixtures, gaps, lane, releaseCycle, ask } = input;
   checkMatrix(fixtures);
   checkGaps(gaps);
   checkVariantsAsked(fixtures, ask.variants);
   const target = targetOfLane(lane);
   const offered = fixturesOn(fixtures, target);
+  checkReleaseCycle(offered, target, releaseCycle);
 
   const laneTests: LaneTest[] = offered.flatMap((one) =>
     cellsOn(one, target).flatMap((cell) =>
-      stepsOf(cell, legsOf(one, legs, false)).map((step) => ({
+      stepsOf(cell, phasesOf(one, false)).map((step) => ({
         cell: cell.name,
         app: step.app,
         fixture: one.name,
@@ -309,14 +317,14 @@ export function plan(input: {
 
   const cells = longestFirst(chosen.flatMap((one) => covered.get(one.name) ?? [])).map(
     (cell): PlannedCell => {
-      const kept = legsOf(cell.fixture, legs, ask.keep);
+      const phases = phasesOf(cell.fixture, ask.keep);
       return {
         name: cell.name,
         fixture: cell.fixture.name,
         variant: variantNameOf(cell),
-        legs: kept,
-        steps: stepsOf(cell, kept).map(({ app, title, leg }) =>
-          leg === undefined ? { app, title } : { app, title, leg },
+        phases,
+        steps: stepsOf(cell, phases).map(({ app, title, phase }) =>
+          phase === undefined ? { app, title } : { app, title, phase },
         ),
       };
     },

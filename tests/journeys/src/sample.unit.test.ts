@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { type Cell, type Fixture, fixture, SERVES, variant } from "./matrix/types";
+import { type Cell, type Fixture, fixture, variant } from "./matrix/types";
 import { type CellsFor, type Draw, sample } from "./sample";
 
 const edge = variant("edge", { offeredOn: ["aws"], config: {} });
@@ -8,7 +8,6 @@ const box = variant("box", { offeredOn: ["aws"], config: {} });
 function member(name: string, lead?: true): Fixture {
   return fixture(name, {
     apps: ["web"],
-    legs: SERVES,
     checks: [],
     on: { aws: { base: true, variants: [edge, box] } },
     sample: lead ? { group: "http", lead } : { group: "http" },
@@ -20,7 +19,6 @@ const other = member("deploy/other");
 const third = member("deploy/third");
 const loner = fixture("deploy/loner", {
   apps: ["web"],
-  legs: SERVES,
   checks: [],
   on: { aws: { base: true, variants: [edge] } },
 });

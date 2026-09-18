@@ -17,7 +17,7 @@ import {
 import { type Ask, type Plan, plan } from "../plan";
 import type { PrepareFailures } from "../prepare";
 import { type Run, settleAccount } from "../report/account";
-import { laneWorkers, selectedTarget } from "../targets";
+import { hasReleaseCycle, laneWorkers, selectedTarget } from "../targets";
 import type { Target } from "../targets/types";
 import { askFrom } from "./ask";
 
@@ -89,7 +89,7 @@ export async function runJourney(target: Target, ask: Ask): Promise<number> {
   await rm(cellsDir(runId, target.name), { recursive: true, force: true });
 
   const lane = await target.guard();
-  const planned = plan({ fixtures, gaps, lane, legs: target.legs, ask });
+  const planned = plan({ fixtures, gaps, lane, releaseCycle: hasReleaseCycle(target), ask });
   sayWhatIsSkipped(target, planned);
   const files = await writeCellFiles(runId, target, planned);
   const workers = laneWorkers(target);

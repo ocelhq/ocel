@@ -3,7 +3,7 @@ import { gaps } from "../matrix/gaps";
 import { laneNamed, targetOfLane } from "../matrix/types";
 import { type Ask, cellKey, type Listed, type Plan, plan } from "../plan";
 import { askFrom } from "../run/ask";
-import { targetNamed } from "../targets";
+import { hasReleaseCycle, targetNamed } from "../targets";
 
 const USAGE = "pnpm --filter @ocel-tests/journeys plan --lane <lane>";
 
@@ -23,7 +23,7 @@ export function laneTable(planned: Plan, ask: Ask): string {
   for (const cell of planned.cells) {
     lines.push(
       "",
-      `${cell.name} · fixture ${cell.fixture} · variant ${cell.variant} · legs ${cell.legs.join(" ")}`,
+      `${cell.name} · fixture ${cell.fixture} · variant ${cell.variant} · phases ${cell.phases.join(" ")}`,
     );
     for (const step of cell.steps) {
       const listed = planned.expectations[cellKey(cell.name, step.app)]?.[step.title];
@@ -42,8 +42,8 @@ function main(argv: string[]) {
   }
   const lane = laneNamed(named);
   const ask = askFrom(process.env);
-  const legs = targetNamed(targetOfLane(lane)).legs;
-  process.stdout.write(laneTable(plan({ fixtures, gaps, lane, legs, ask }), ask));
+  const releaseCycle = hasReleaseCycle(targetNamed(targetOfLane(lane)));
+  process.stdout.write(laneTable(plan({ fixtures, gaps, lane, releaseCycle, ask }), ask));
 }
 
 try {

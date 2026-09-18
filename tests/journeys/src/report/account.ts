@@ -75,10 +75,12 @@ function modulesFrom(rows: RecordedRow[]): TimelineModule[] {
 }
 
 export function timelineFrom(input: TimingInput): Timed {
-  const legByKey = new Map(input.planned.map((entry) => [key(entry.cell, entry.title), entry.leg]));
+  const phaseByKey = new Map(
+    input.planned.map((entry) => [key(entry.cell, entry.title), entry.phase]),
+  );
   const tests: TimelineTest[] = input.rows.map((row) => ({
     cell: cellOf(row.cell),
-    leg: legByKey.get(key(row.cell, row.title)),
+    phase: phaseByKey.get(key(row.cell, row.title)),
     title: row.title,
     startTime: row.startTime,
     duration: row.duration,

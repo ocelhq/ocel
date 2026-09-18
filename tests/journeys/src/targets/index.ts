@@ -6,7 +6,8 @@ import { gcpTarget } from "./gcp";
 import type { Target } from "./types";
 import { vpsTarget } from "./vps";
 
-export type { CellContext, Deployment, Target } from "./types";
+export type { CellContext, Deployment, ReleaseCycle, Target } from "./types";
+export { hasReleaseCycle } from "./types";
 
 const targets: Partial<Record<TargetName, Target>> = {
   aws: awsTarget,

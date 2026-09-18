@@ -47,11 +47,7 @@ export const CONCERNS: Concern[] = ["deploy", "lifecycle", "sdk"];
 
 export type Edge = "cloudfront" | "api-gateway" | "cloudflare";
 
-export type Leg = "up" | "contract" | "redeploy" | "rollback" | "destroy";
-
-export const SERVES: Leg[] = ["up", "contract", "destroy"];
-
-export const LIVES: Leg[] = ["up", "contract", "redeploy", "rollback", "destroy"];
+export type Phase = "deploy" | "verify" | "redeploy" | "rollback" | "destroy";
 
 export const BASE = "base";
 
@@ -96,7 +92,7 @@ export type Fixture = {
   name: string;
   concern: Concern;
   apps: string[];
-  legs: Leg[];
+  redeploys?: true;
   checks: Check[];
   ladder?: Ladder;
   on: Partial<Record<TargetName, Placement>>;

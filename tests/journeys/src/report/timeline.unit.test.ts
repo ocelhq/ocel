@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { legOf, type TimelineInput, timelineOf, timingTable } from "./timeline";
+import { phaseOf, type TimelineInput, timelineOf, timingTable } from "./timeline";
 
 const START = 1_000_000;
 
@@ -13,13 +13,13 @@ const overlapping: TimelineInput = {
   workers: 2,
   prepareMs: 12_000,
   tests: [
-    { cell: "with-sst", leg: "up", title: "up", ...at(0, 60) },
-    { cell: "with-sst", leg: "contract", title: "health", ...at(60, 10) },
-    { cell: "with-sst", leg: "destroy", title: "destroy", ...at(70, 110) },
-    { cell: "next-hello", leg: "up", title: "up", ...at(0, 30) },
-    { cell: "next-hello", leg: "contract", title: "health", ...at(30, 5) },
+    { cell: "with-sst", phase: "deploy", title: "deploy", ...at(0, 60) },
+    { cell: "with-sst", phase: "verify", title: "health", ...at(60, 10) },
+    { cell: "with-sst", phase: "destroy", title: "destroy", ...at(70, 110) },
+    { cell: "next-hello", phase: "deploy", title: "deploy", ...at(0, 30) },
+    { cell: "next-hello", phase: "verify", title: "health", ...at(30, 5) },
     { cell: "next-hello", title: "publish · a bucket", ...at(35, 5) },
-    { cell: "next-hello", leg: "destroy", title: "destroy", ...at(40, 20) },
+    { cell: "next-hello", phase: "destroy", title: "destroy", ...at(40, 20) },
   ],
   modules: [
     { cell: "with-sst", duration: 180_000 },
@@ -27,21 +27,21 @@ const overlapping: TimelineInput = {
   ],
 };
 
-describe("legOf", () => {
-  it("takes the planned leg when the plan named one", () => {
-    expect(legOf({ cell: "a", leg: "redeploy", title: "health", startTime: 0, duration: 1 })).toBe(
-      "redeploy",
-    );
+describe("phaseOf", () => {
+  it("takes the planned phase when the plan named one", () => {
+    expect(
+      phaseOf({ cell: "a", phase: "redeploy", title: "health", startTime: 0, duration: 1 }),
+    ).toBe("redeploy");
   });
 
-  it("folds an unplanned row into the leg its title prefixes", () => {
-    expect(legOf({ cell: "a", title: "rollback · health", startTime: 0, duration: 1 })).toBe(
+  it("folds an unplanned row into the phase its title prefixes", () => {
+    expect(phaseOf({ cell: "a", title: "rollback · health", startTime: 0, duration: 1 })).toBe(
       "rollback",
     );
   });
 
   it("folds a ladder phase into other", () => {
-    expect(legOf({ cell: "a", title: "publish · a bucket", startTime: 0, duration: 1 })).toBe(
+    expect(phaseOf({ cell: "a", title: "publish · a bucket", startTime: 0, duration: 1 })).toBe(
       "other",
     );
   });
@@ -68,12 +68,12 @@ describe("timelineOf", () => {
     expect(timeline.prepare).toBe(12);
   });
 
-  it("orders the cells by file wall and folds every leg", () => {
+  it("orders the cells by file wall and folds every phase", () => {
     expect(timeline.cells.map((row) => row.cell)).toEqual(["with-sst", "next-hello"]);
     expect(timeline.cells[1]).toEqual({
       cell: "next-hello",
       start: 0,
-      legs: { up: 30, contract: 5, other: 5, destroy: 20 },
+      phases: { deploy: 30, verify: 5, other: 5, destroy: 20 },
       file: 60,
     });
   });
@@ -87,7 +87,7 @@ describe("timingTable", () => {
         "",
         "wall 200s · Σ files 240s · 2 workers · speed-up 1.2x · max overlap 2 · prepare 12s · tail: with-sst alone for 120s",
         "",
-        "| cell | start | up | contract | redeploy | rollback | destroy | other | file |",
+        "| cell | start | deploy | verify | redeploy | rollback | destroy | other | file |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         "| with-sst | 0 | 60 | 10 | 0 | 0 | 110 | 0 | 180 |",
         "| next-hello | 0 | 30 | 5 | 0 | 0 | 20 | 5 | 60 |",
@@ -103,8 +103,8 @@ describe("timingTable", () => {
         runEnd: START + 10_000,
         workers: 4,
         tests: [
-          { cell: "a", leg: "up", title: "up", ...at(0, 10) },
-          { cell: "b", leg: "up", title: "up", ...at(0, 10) },
+          { cell: "a", phase: "deploy", title: "deploy", ...at(0, 10) },
+          { cell: "b", phase: "deploy", title: "deploy", ...at(0, 10) },
         ],
         modules: [],
       }),

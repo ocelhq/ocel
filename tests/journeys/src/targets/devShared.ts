@@ -69,7 +69,7 @@ export async function serve(
   };
   child.stdout?.on("data", capture);
   child.stderr?.on("data", capture);
-  const say = live(`${cell.name} up/dev-${app} |`);
+  const say = live(`${cell.name} deploy/dev-${app} |`);
   relay(child.stdout, say);
   relay(child.stderr, say);
 
@@ -77,7 +77,7 @@ export async function serve(
   try {
     await waitForHealth(`http://127.0.0.1:${port}/health`, handle);
   } finally {
-    await cell.evidence.write("up", `dev-${app}.log`, captured);
+    await cell.evidence.write("deploy", `dev-${app}.log`, captured);
   }
   return handle;
 }

@@ -49,7 +49,7 @@ names, space or comma separated, and unset covers every one; `OCEL_JOURNEY_FIXTU
 narrows it further to fixtures named `<concern>/<name>`. `OCEL_JOURNEY_VARIANTS` narrows a
 run to the variants it names (`base` among them), `OCEL_JOURNEY_COVERAGE=full` runs every
 cell rather than a covering subset, and `OCEL_JOURNEY_SKIPS=run` drives the cells the gap
-list marks dead at up, which a run otherwise leaves out.
+list marks dead at deploy, which a run otherwise leaves out.
 
 `pnpm --filter @ocel-tests/journeys plan --lane <lane>` prints what a lane would run under
 the same variables — its cells, each cell's steps, the tests a gap expects red and the cells

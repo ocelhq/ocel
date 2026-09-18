@@ -176,9 +176,14 @@ export async function refuse(cell: CellContext): Promise<void> {
     ...process.env,
     OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)),
   };
-  const result = await spawnOcel(dir, ["deploy", "--yes"], env, live(`${cell.name} up/refuse |`));
-  await cell.evidence.write("up", "refuse.stdout", result.stdout);
-  await cell.evidence.write("up", "refuse.stderr", result.stderr);
+  const result = await spawnOcel(
+    dir,
+    ["deploy", "--yes"],
+    env,
+    live(`${cell.name} deploy/refuse |`),
+  );
+  await cell.evidence.write("deploy", "refuse.stdout", result.stdout);
+  await cell.evidence.write("deploy", "refuse.stderr", result.stderr);
   const output = `${result.stdout}\n${result.stderr}`;
 
   assert.notEqual(

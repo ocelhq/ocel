@@ -7,14 +7,14 @@ import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../../check
 import { GCP_BASE, journeyConfigIn, type Overlay, writeJourneyConfig } from "../../config";
 import { currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
-import { type Cell, type Lane, type Leg, variantNameOf } from "../../matrix/types";
+import { type Cell, type Lane, type Phase, variantNameOf } from "../../matrix/types";
 import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import { cellsOn, fixturesOn } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
 import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
-import type { CellContext, Deployment, Target } from "../types";
+import type { CellContext, Deployment, ReleaseCycle, Target } from "../types";
 import { fittedSlug, gcpSlug, namespaceOf, roomForSlug, serviceLead } from "./names";
 import {
   deleteService,
@@ -125,7 +125,7 @@ export function cellOfSlug(cells: Cell[], slug: string): Cell {
   return named;
 }
 
-async function deployment(cell: CellContext, leg: Leg): Promise<Deployment> {
+async function deployment(cell: CellContext, phase: Phase): Promise<Deployment> {
   const standing = await services();
   const leads = leadsFor(cell.slug, cell.fixture.apps);
   const urls = new Map(
@@ -135,7 +135,7 @@ async function deployment(cell: CellContext, leg: Leg): Promise<Deployment> {
     }),
   );
   await cell.evidence.write(
-    leg,
+    phase,
     "deployment.json",
     `${JSON.stringify(
       {
@@ -196,7 +196,7 @@ async function prepare(): Promise<PrepareFailures> {
   return {};
 }
 
-async function up(cell: CellContext): Promise<Deployment> {
+async function deploy(cell: CellContext): Promise<Deployment> {
   const dir = await cellTree(cell);
   const env = childEnv(dir);
 
@@ -204,7 +204,7 @@ async function up(cell: CellContext): Promise<Deployment> {
     await runOcel(
       cell,
       dir,
-      "up",
+      "deploy",
       "env-greeting",
       ["env", "set", `GREETING=${INITIAL_GREETING}`],
       env,
@@ -212,17 +212,17 @@ async function up(cell: CellContext): Promise<Deployment> {
     await runOcel(
       cell,
       dir,
-      "up",
+      "deploy",
       "env-secret",
       ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`],
       env,
     );
   }
-  await runOcel(cell, dir, "up", "deploy", ["deploy", "--yes"], env);
+  await runOcel(cell, dir, "deploy", "deploy", ["deploy", "--yes"], env);
   if (migrates(cell.fixture.checks)) {
-    await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand()], env);
+    await runOcel(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env);
   }
-  return deployment(cell, "up");
+  return deployment(cell, "deploy");
 }
 
 async function redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
@@ -338,18 +338,17 @@ async function sweep(runId: string): Promise<void> {
   }
 }
 
-export const gcpTarget: Target = {
+export const gcpTarget: Target & ReleaseCycle = {
   name: "gcp",
   concurrency: 2,
   largeBodyBytes: UNCAPPED_BODY_BYTES,
   legTimeoutMs: LEG_TIMEOUT_MS,
-  legs: ["up", "contract", "redeploy", "rollback", "destroy"],
   guard,
   prepare,
   setup: async () => {
     await guard();
   },
-  up,
+  deploy,
   redeploy,
   rollback,
   destroy,
