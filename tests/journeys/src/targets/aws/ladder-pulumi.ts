@@ -74,7 +74,7 @@ export const pulumiLadder: Ladder = {
     const env = await pulumiEnv(cell.runId);
     await configureStack(dir, stack, env);
     const stdout = await pulumi(dir, ["up", "--yes"], env);
-    await cell.evidence.write("up", "pulumi-up.stdout", stdout);
+    await cell.evidence.write("deploy", "pulumi-up.stdout", stdout);
     const outputs = JSON.parse(await pulumi(dir, ["stack", "output", "--json"], env)) as Record<
       string,
       unknown

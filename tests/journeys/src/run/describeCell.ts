@@ -4,14 +4,14 @@ import { readFileSync } from "node:fs";
 import { INITIAL_GREETING, REDEPLOY_GREETING, secretGuarded } from "../checks/context";
 import { evidence } from "../evidence";
 import { currentRunIdentity, projectSlug } from "../identity";
-import { type CellRun, legsDriven, stepsPlanned } from "../lifecycle";
+import { type CellRun, phasesDriven, stepsPlanned } from "../lifecycle";
 import { live } from "../live";
 import { fixtures } from "../matrix/fixtures";
-import type { Leg } from "../matrix/types";
+import type { Phase } from "../matrix/types";
 import { evidenceDir, fixtureDir } from "../paths";
 import { cellKey, cellNamed, type Plan } from "../plan";
 import { readPrepareFailure } from "../prepare";
-import { targetNamed } from "../targets";
+import { hasReleaseCycle, targetNamed } from "../targets";
 import { namespaceOfSlug } from "../targets/aws/namespace";
 import type { CellContext, Deployment } from "../targets/types";
 import { ledgerFor } from "./ledger";
@@ -35,7 +35,7 @@ export function describeCell(planFile: string, name: string) {
     throw new Error(`${planFile} plans no cell named ${name}`);
   }
   const target = targetNamed(planned.target);
-  const legs = legsDriven(target, plannedCell.legs);
+  const phases = phasesDriven(target, plannedCell.phases);
   const found = cellNamed(fixtures, target.name, name);
   const steps = stepsPlanned(found, plannedCell);
   const { fixture, variant } = found;
@@ -69,7 +69,7 @@ export function describeCell(planFile: string, name: string) {
     if (setupFailure) {
       throw setupFailure.error;
     }
-    deployment = await target.up(cell);
+    deployment = await target.deploy(cell);
   });
   const tearDown = once(() => target.destroy(cell));
   const beforeUp = once(async () => {
@@ -81,12 +81,12 @@ export function describeCell(planFile: string, name: string) {
     }
   });
   const redeployed = once(async () => {
-    assert.ok(target.redeploy);
+    assert.ok(hasReleaseCycle(target), `${target.name} has no release cycle to redeploy with`);
     deployment = await target.redeploy(cell, REDEPLOY_GREETING);
     greeting = REDEPLOY_GREETING;
   });
   const rolledBack = once(async () => {
-    assert.ok(target.rollback);
+    assert.ok(hasReleaseCycle(target), `${target.name} has no release cycle to roll back with`);
     deployment = await target.rollback(cell, INITIAL_GREETING);
     greeting = INITIAL_GREETING;
   });
@@ -94,7 +94,7 @@ export function describeCell(planFile: string, name: string) {
   const run: CellRun = {
     cell,
     beforeUp,
-    up: bringUp,
+    deploy: bringUp,
     redeploy: async () => {
       await bringUp();
       await redeployed();
@@ -111,14 +111,14 @@ export function describeCell(planFile: string, name: string) {
       );
     },
     afterDestroy,
-    live: (app: string, leg: Leg) => {
-      assert.ok(deployment, "the contract ran before the cell came up");
+    live: (app: string, phase: Phase) => {
+      assert.ok(deployment, "a check ran before the cell was deployed");
       return {
         app,
         baseUrl: deployment.baseUrl(app),
         greeting,
         largeBodyBytes: target.largeBodyBytes,
-        leg,
+        phase,
         notes,
         fetch: secretGuarded(deployment.fetch),
       };
@@ -141,7 +141,7 @@ export function describeCell(planFile: string, name: string) {
           await tearDown().catch(() => undefined);
           return;
         }
-        const [last] = legs.slice(-1);
+        const [last] = phases.slice(-1);
         if (last) {
           await cell.evidence
             .write(

@@ -12,14 +12,14 @@ import {
 } from "../../config";
 import { appHostname, currentRunIdentity, projectSlug, slugPart } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
-import { type Cell, type Fixture, type Lane, type Leg, variantNameOf } from "../../matrix/types";
+import { type Cell, type Fixture, type Lane, type Phase, variantNameOf } from "../../matrix/types";
 import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import { cellsOn, fixturesOn } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
 import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
-import type { CellContext, Deployment, Target } from "../types";
+import type { CellContext, Deployment, ReleaseCycle, Target } from "../types";
 import { authoritativeFetch, emulatorFetch } from "./dispatch";
 import { NAMESPACE_ENV, namespaceFor, namespaceOfSlug, strayNamespaces } from "./namespace";
 import { place } from "./place";
@@ -112,7 +112,7 @@ function deployment(cell: CellContext, dispatch: Fetch): Deployment {
   };
 }
 
-async function awaitEdge(cell: CellContext, leg: Leg, deployed: Deployment): Promise<void> {
+async function awaitEdge(cell: CellContext, phase: Phase, deployed: Deployment): Promise<void> {
   if ((await place()).world !== "real") {
     return;
   }
@@ -123,7 +123,7 @@ async function awaitEdge(cell: CellContext, leg: Leg, deployed: Deployment): Pro
     now: () => Date.now(),
     sleep: (ms) => pause(ms),
   });
-  await cell.evidence.write(leg, "serving.json", `${JSON.stringify(served, null, 2)}\n`);
+  await cell.evidence.write(phase, "serving.json", `${JSON.stringify(served, null, 2)}\n`);
 }
 
 async function awaitDefaultVpc(endpoint: string): Promise<void> {
@@ -197,19 +197,19 @@ async function cellTree(cell: CellContext): Promise<string> {
   }
 }
 
-async function up(cell: CellContext): Promise<Deployment> {
+async function deploy(cell: CellContext): Promise<Deployment> {
   const dir = await cellTree(cell);
   const env = await cellEnv(cell, dir);
 
   if (await ownNamespace(cell)) {
-    await runOcel(cell, dir, "up", "bootstrap", BOOTSTRAP_ARGS, env);
+    await runOcel(cell, dir, "deploy", "bootstrap", BOOTSTRAP_ARGS, env);
   }
 
   if (setsEnv(cell.fixture.checks)) {
     await runOcel(
       cell,
       dir,
-      "up",
+      "deploy",
       "env-greeting",
       ["env", "set", `GREETING=${INITIAL_GREETING}`],
       env,
@@ -217,25 +217,25 @@ async function up(cell: CellContext): Promise<Deployment> {
     await runOcel(
       cell,
       dir,
-      "up",
+      "deploy",
       "env-secret",
       ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`],
       env,
     );
   }
-  await runOcel(cell, dir, "up", "deploy", ["deploy", "--yes"], env);
-  await runOcel(cell, dir, "up", "domain-add", ["domain", "add"], env);
-  await runOcel(cell, dir, "up", "deploy-bound", ["deploy", "--yes"], env);
+  await runOcel(cell, dir, "deploy", "deploy", ["deploy", "--yes"], env);
+  await runOcel(cell, dir, "deploy", "domain-add", ["domain", "add"], env);
+  await runOcel(cell, dir, "deploy", "deploy-bound", ["deploy", "--yes"], env);
 
   const deployed = deployment(cell, await dispatcher());
-  await awaitEdge(cell, "up", deployed);
+  await awaitEdge(cell, "deploy", deployed);
 
   if (migrates(cell.fixture.checks)) {
-    await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand()], env);
+    await runOcel(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env);
   }
 
   await cell.evidence.write(
-    "up",
+    "deploy",
     "deployment.json",
     `${JSON.stringify(
       {
@@ -566,16 +566,15 @@ async function sweepOwn(runId: string): Promise<void> {
   await report(true, complaints);
 }
 
-export const awsTarget: Target = {
+export const awsTarget: Target & ReleaseCycle = {
   name: "aws",
   concurrency: 3,
   largeBodyBytes: FUNCTION_URL_BODY_BYTES,
   legTimeoutMs: LEG_TIMEOUT_MS,
-  legs: ["up", "contract", "redeploy", "rollback", "destroy"],
   guard,
   prepare,
   setup,
-  up,
+  deploy,
   redeploy,
   rollback,
   destroy,

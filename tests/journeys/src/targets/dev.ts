@@ -62,17 +62,17 @@ function childEnv(token: string): NodeJS.ProcessEnv {
   return env;
 }
 
-async function up(cell: CellContext): Promise<Deployment> {
+async function deploy(cell: CellContext): Promise<Deployment> {
   const token = await accessToken();
   const dir = await workTree(cell, "dev");
   const env = { ...childEnv(token), OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)) };
 
-  await runOcel(cell, dir, "up", "console-link", ["link", "--create", cell.slug], env);
+  await runOcel(cell, dir, "deploy", "console-link", ["link", "--create", cell.slug], env);
   if (setsEnv(cell.fixture.checks)) {
     await runOcel(
       cell,
       dir,
-      "up",
+      "deploy",
       "env-greeting",
       ["env", "set", `GREETING=${INITIAL_GREETING}`, "--dev"],
       env,
@@ -80,14 +80,14 @@ async function up(cell: CellContext): Promise<Deployment> {
     await runOcel(
       cell,
       dir,
-      "up",
+      "deploy",
       "env-secret",
       ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`, "--dev"],
       env,
     );
   }
   if (migrates(cell.fixture.checks)) {
-    await runOcel(cell, dir, "up", "migrate", ["run", "--", ...migrateCommand()], env);
+    await runOcel(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env);
   }
 
   const standing: Standing = { dir, apps: [] };
@@ -105,7 +105,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   await stateStaysHome(cell, dir);
 
   await cell.evidence.write(
-    "up",
+    "deploy",
     "deployment.json",
     `${JSON.stringify({ slug: cell.slug, dir, apps: Object.fromEntries(urls) }, null, 2)}\n`,
   );
@@ -178,13 +178,12 @@ export const devTarget: Target = {
   concurrency: 4,
   largeBodyBytes: UNCAPPED_BODY_BYTES,
   legTimeoutMs: 180_000,
-  legs: ["up", "contract", "destroy"],
   guard,
   setup: async () => {
     await guard();
     await accessToken();
   },
-  up,
+  deploy,
   destroy,
   list,
   stands: async (slug) => (await list()).includes(slug),

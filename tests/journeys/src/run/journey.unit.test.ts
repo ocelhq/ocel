@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
-import { SERVES } from "../matrix/types";
 import { outputRoot, prepareFile } from "../paths";
 import { EVERYTHING } from "../plan";
 import type { Target } from "../targets/types";
@@ -15,13 +14,12 @@ function laneThatPrepares(prepared: string[]): Target {
     concurrency: 1,
     largeBodyBytes: 1,
     legTimeoutMs: 1_000,
-    legs: SERVES,
     guard: async () => "dev",
     prepare: async () => {
       prepared.push("lane");
     },
     setup: async () => {},
-    up: async () => {
+    deploy: async () => {
       throw new Error("no cell of this lane ever stands up");
     },
     destroy: async () => {},

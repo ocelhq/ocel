@@ -34,7 +34,7 @@ export const sstLadder: Ladder = {
     const stage = `j-${cell.runId}`;
     const bin = path.join(dir, "node_modules", ".bin", "sst");
     const result = await spawnBin(bin, ["deploy", "--stage", stage], dir, await deployEnv());
-    await cell.evidence.write("up", "sst-deploy.stdout", result.stdout);
+    await cell.evidence.write("deploy", "sst-deploy.stdout", result.stdout);
     const outputs = parseSstOutputs(result.stdout);
     recordPlacement(cell.slug, {
       subnetIds: (outputs.subnetIds ?? "").split(",").filter(Boolean),

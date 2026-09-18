@@ -1,37 +1,37 @@
 import type { Check, CheckContext } from "./checks/context";
-import type { Cell, LadderCheck, LadderPoint, Leg } from "./matrix/types";
-import type { CellContext, Target } from "./targets/types";
+import type { Cell, Fixture, LadderCheck, LadderPoint, Phase } from "./matrix/types";
+import { type CellContext, hasReleaseCycle, type ReleaseCycle, type Target } from "./targets/types";
 
 export type CellRun = {
   cell: CellContext;
   beforeUp: () => Promise<void>;
-  up: () => Promise<void>;
+  deploy: () => Promise<void>;
   redeploy: () => Promise<void>;
   rollback: () => Promise<void>;
   destroy: () => Promise<void>;
   afterDestroy: () => Promise<void>;
-  live: (app: string, leg: Leg) => CheckContext;
+  live: (app: string, phase: Phase) => CheckContext;
 };
 
 export type Step = {
   app: string;
   title: string;
-  leg?: Leg;
+  phase?: Phase;
   run: (cell: CellRun) => Promise<void>;
 };
 
-export const UP = "up";
+export const DEPLOY = "deploy";
 const REDEPLOY = "redeploy";
 const ROLLBACK = "rollback";
 const DESTROY = "destroy";
 const REFUSE = "refuse";
 
-export type CheckLeg = "contract" | "redeploy" | "rollback";
+export type CheckedPhase = "verify" | "redeploy" | "rollback";
 
-const CHECK_LEGS: CheckLeg[] = ["contract", "redeploy", "rollback"];
+const CHECKED_PHASES: CheckedPhase[] = ["verify", "redeploy", "rollback"];
 
-function checkTitle(leg: Leg, title: string): string {
-  return leg === "contract" ? title : `${leg} · ${title}`;
+function checkTitle(phase: CheckedPhase, title: string): string {
+  return phase === "verify" ? title : `${phase} · ${title}`;
 }
 
 function ladderTitle(at: LadderPoint, title: string): string {
@@ -47,51 +47,60 @@ function testRef(titles: string[]): TestRef {
 }
 
 export const stepRef = {
-  up: testRef([UP]),
+  deploy: testRef([DEPLOY]),
   redeploy: testRef([REDEPLOY]),
   rollback: testRef([ROLLBACK]),
   destroy: testRef([DESTROY]),
   refuse: testRef([REFUSE]),
 };
 
-export function check(checks: Check | Check[], legs: CheckLeg[] = CHECK_LEGS): TestRef {
+export function check(checks: Check | Check[], phases: CheckedPhase[] = CHECKED_PHASES): TestRef {
   const listed = Array.isArray(checks) ? checks : [checks];
-  return testRef(listed.flatMap((one) => legs.map((leg) => checkTitle(leg, one.title))));
+  return testRef(listed.flatMap((one) => phases.map((phase) => checkTitle(phase, one.title))));
 }
 
-export function stepsOf(cell: Cell, legs: Leg[]): Step[] {
+export function phasesOf(fixture: Fixture, keep: boolean): Phase[] {
+  return [
+    "deploy",
+    "verify",
+    ...(fixture.redeploys ? (["redeploy", "rollback"] as const) : []),
+    ...(keep ? [] : (["destroy"] as const)),
+  ];
+}
+
+export function stepsOf(cell: Cell, phases: Phase[]): Step[] {
   const { apps, checks, ladder } = cell.fixture;
   const at = (point: LadderPoint): LadderCheck[] =>
     (ladder?.checks ?? []).filter((one) => one.at === point);
   const perApp = (make: (app: string) => Step[]): Step[] => apps.flatMap(make);
-  const has = (leg: Leg) => legs.includes(leg);
+  const has = (phase: Phase) => phases.includes(phase);
 
-  const verified = (app: string, leg: CheckLeg): Step[] => [
+  const verified = (app: string, phase: CheckedPhase): Step[] => [
     ...checks.map((one) => ({
       app,
-      title: checkTitle(leg, one.title),
-      leg,
+      title: checkTitle(phase, one.title),
+      phase,
       run: async (run: CellRun) => {
-        await run.up();
-        await one.run(run.live(app, leg));
+        await run.deploy();
+        await one.run(run.live(app, phase));
       },
     })),
     ...at("consume").map((one) => ({
       app,
-      title: checkTitle(leg, ladderTitle("consume", one.title)),
-      leg,
+      title: checkTitle(phase, ladderTitle("consume", one.title)),
+      phase,
       run: async (run: CellRun) => {
         await run.beforeUp();
-        await one.run(run.cell, run.live(app, leg));
+        await one.run(run.cell, run.live(app, phase));
       },
     })),
   ];
 
-  const replaced = (leg: "redeploy" | "rollback", title: string): Step[] =>
-    has(leg)
+  const replaced = (phase: "redeploy" | "rollback", title: string): Step[] =>
+    has(phase)
       ? [
-          ...perApp((app) => [{ app, title, leg, run: (run) => run[leg]() }]),
-          ...perApp((app) => verified(app, leg)),
+          ...perApp((app) => [{ app, title, phase, run: (run) => run[phase]() }]),
+          ...perApp((app) => verified(app, phase)),
         ]
       : [];
 
@@ -108,25 +117,25 @@ export function stepsOf(cell: Cell, legs: Leg[]): Step[] {
         },
       })),
     ]),
-    ...(has("up")
+    ...(has("deploy")
       ? perApp((app) => [
           {
             app,
-            title: UP,
-            leg: "up" as const,
+            title: DEPLOY,
+            phase: "deploy" as const,
             run: async (run: CellRun) => {
               await run.beforeUp();
-              await run.up();
+              await run.deploy();
             },
           },
         ])
       : []),
-    ...(has("contract") ? perApp((app) => verified(app, "contract")) : []),
+    ...(has("verify") ? perApp((app) => verified(app, "verify")) : []),
     ...replaced("redeploy", REDEPLOY),
     ...replaced("rollback", ROLLBACK),
     ...(has("destroy")
       ? perApp((app) => [
-          { app, title: DESTROY, leg: "destroy" as const, run: (run: CellRun) => run.destroy() },
+          { app, title: DESTROY, phase: "destroy" as const, run: (run: CellRun) => run.destroy() },
         ])
       : []),
     ...perApp((app) => [
@@ -151,19 +160,19 @@ export function stepsOf(cell: Cell, legs: Leg[]): Step[] {
   ];
 }
 
-type PlannedSteps = { legs: Leg[]; steps: Array<Pick<Step, "app" | "title" | "leg">> };
+type PlannedSteps = { phases: Phase[]; steps: Array<Pick<Step, "app" | "title" | "phase">> };
 
 function said(steps: PlannedSteps["steps"]): string {
   return steps.map((one) => `${one.app} · ${one.title}`).join(", ");
 }
 
 export function stepsPlanned(cell: Cell, planned: PlannedSteps): Step[] {
-  const steps = stepsOf(cell, planned.legs);
+  const steps = stepsOf(cell, planned.phases);
   const same =
     steps.length === planned.steps.length &&
     steps.every((one, index) => {
       const at = planned.steps[index];
-      return at?.app === one.app && at.title === one.title && at.leg === one.leg;
+      return at?.app === one.app && at.title === one.title && at.phase === one.phase;
     });
   if (!same) {
     throw new Error(`${cell.name} walks ${said(steps)}, not the planned ${said(planned.steps)}`);
@@ -171,15 +180,15 @@ export function stepsPlanned(cell: Cell, planned: PlannedSteps): Step[] {
   return steps;
 }
 
-export function legsDriven(
-  target: Pick<Target, "name" | "redeploy" | "rollback">,
-  legs: Leg[],
-): Leg[] {
-  const missing = (["redeploy", "rollback"] as const).filter(
-    (leg) => legs.includes(leg) && target[leg] === undefined,
-  );
-  if (missing.length > 0) {
-    throw new Error(`${target.name} walks ${missing.join(", ")} without a method for it`);
+export function phasesDriven(
+  target: Pick<Target, "name"> & Partial<ReleaseCycle>,
+  phases: Phase[],
+): Phase[] {
+  const cycled = phases.filter((phase) => phase === "redeploy" || phase === "rollback");
+  if (cycled.length > 0 && !hasReleaseCycle(target)) {
+    throw new Error(
+      `${target.name} walks ${cycled.join(", ")} with no release cycle to drive them`,
+    );
   }
-  return legs;
+  return phases;
 }

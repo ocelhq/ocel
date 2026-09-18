@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { Leg } from "../matrix/types";
+import type { Phase } from "../matrix/types";
 
 export type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -18,7 +18,7 @@ export type CheckContext = {
   baseUrl: string;
   greeting: string;
   largeBodyBytes: number;
-  leg: Leg;
+  phase: Phase;
   notes: Map<string, string>;
   fetch: Fetch;
 };

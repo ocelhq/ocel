@@ -3,7 +3,7 @@ import path from "node:path";
 import { REDACTED, redact } from "./checks/context";
 import { shapeFor, writeJourneyConfig } from "./config";
 import { live, relay, type Say } from "./live";
-import type { Leg, TargetName } from "./matrix/types";
+import type { Phase, TargetName } from "./matrix/types";
 import { fixtureMember, ocelBin, providersDir, treeDir } from "./paths";
 import type { CellContext } from "./targets/types";
 import { plantWorkspace } from "./tree";
@@ -90,19 +90,19 @@ export async function ocel(
 export async function runOcel(
   cell: CellContext,
   dir: string,
-  leg: Leg,
+  phase: Phase,
   name: string,
   args: string[],
   env: NodeJS.ProcessEnv,
 ): Promise<Ran> {
   const began = Date.now();
-  const result = await spawnOcel(dir, args, env, live(`${cell.name} ${leg}/${name} |`));
+  const result = await spawnOcel(dir, args, env, live(`${cell.name} ${phase}/${name} |`));
   await cell.evidence.append(
     COMMAND_LOG,
-    JSON.stringify({ leg, name, ms: Date.now() - began, code: result.code }),
+    JSON.stringify({ phase, name, ms: Date.now() - began, code: result.code }),
   );
-  await cell.evidence.write(leg, `${name}.stdout`, result.stdout);
-  await cell.evidence.write(leg, `${name}.stderr`, result.stderr);
+  await cell.evidence.write(phase, `${name}.stdout`, result.stdout);
+  await cell.evidence.write(phase, `${name}.stderr`, result.stderr);
   if (result.code !== 0) {
     throw exitedBadly(args, result);
   }

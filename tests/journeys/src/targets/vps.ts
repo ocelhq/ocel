@@ -14,12 +14,12 @@ import {
 } from "../checks/context";
 import { journeyConfigIn, journeyZone } from "../config";
 import { appHostname, HARNESS_PREFIX, isStranded } from "../identity";
-import type { Lane, Leg } from "../matrix/types";
+import type { Lane, Phase } from "../matrix/types";
 import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
 import { migrateCommand } from "../workspace";
 import { type Gateway, openGateway } from "./gateway";
-import type { CellContext, Deployment, Target } from "./types";
+import type { CellContext, Deployment, ReleaseCycle, Target } from "./types";
 
 const DEFAULT_ZONE = "localhost";
 const DEPLOY_LOGIN = "ocel-deploy";
@@ -224,8 +224,8 @@ async function trusted(cell: CellContext): Promise<string | undefined> {
   while (true) {
     const root = await ssh(target, target.user, `sudo cat ${PROXY_ROOT} 2>/dev/null || true`);
     if (root.includes("BEGIN CERTIFICATE")) {
-      await cell.evidence.write("up", "proxy-root.pem", root);
-      return path.join(cell.evidence.dir, "up", "proxy-root.pem");
+      await cell.evidence.write("deploy", "proxy-root.pem", root);
+      return path.join(cell.evidence.dir, "deploy", "proxy-root.pem");
     }
     if (Date.now() >= deadline) {
       throw new Error(
@@ -243,7 +243,7 @@ async function bindDomains(cell: CellContext, started: Standing): Promise<void> 
   await runOcel(
     cell,
     started.dir,
-    "up",
+    "deploy",
     "domain-add",
     ["--config", journeyConfigIn(started.dir), "domain", "add"],
     {
@@ -272,7 +272,7 @@ async function deployment(cell: CellContext, started: Standing): Promise<Deploym
     urls.set(app, await started.gateway.serving(hostname));
   }
   await cell.evidence.write(
-    "up",
+    "deploy",
     "deployment.json",
     `${JSON.stringify({ slug: cell.slug, zone: zone(), apps: Object.fromEntries(urls) }, null, 2)}\n`,
   );
@@ -302,21 +302,21 @@ async function standingFor(cell: CellContext): Promise<Standing> {
   return started;
 }
 
-function driving(cell: CellContext, started: Standing, leg: Leg) {
+function driving(cell: CellContext, started: Standing, phase: Phase) {
   return (name: string, args: string[]) =>
     runOcel(
       cell,
       started.dir,
-      leg,
+      phase,
       name,
       ["--config", journeyConfigIn(started.dir), ...args],
       started.env,
     );
 }
 
-async function up(cell: CellContext): Promise<Deployment> {
+async function deploy(cell: CellContext): Promise<Deployment> {
   const started = await standingFor(cell);
-  const drive = driving(cell, started, "up");
+  const drive = driving(cell, started, "deploy");
 
   if (setsEnv(cell.fixture.checks)) {
     await drive("env-greeting", ["env", "set", `GREETING=${INITIAL_GREETING}`]);
@@ -401,18 +401,17 @@ async function sweep(runId: string): Promise<void> {
   }
 }
 
-export const vpsTarget: Target = {
+export const vpsTarget: Target & ReleaseCycle = {
   name: "vps",
   concurrency: 2,
   largeBodyBytes: UNCAPPED_BODY_BYTES,
   legTimeoutMs: 600_000,
-  legs: ["up", "contract", "redeploy", "rollback", "destroy"],
   guard,
   prepare,
   setup: async () => {
     await guard();
   },
-  up,
+  deploy,
   redeploy,
   rollback,
   destroy,

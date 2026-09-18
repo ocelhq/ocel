@@ -7,11 +7,11 @@ const GAP = { id: "cloudfront-stub", reason: "the edge is not backed", issue: 85
 describe("summary table", () => {
   const report = reconcile({
     planned: [
-      { cell: "node/web", title: "up", leg: "up" },
-      { cell: "node/web", title: "GET /health | answers", leg: "contract" },
+      { cell: "node/web", title: "deploy", phase: "deploy" },
+      { cell: "node/web", title: "GET /health | answers", phase: "verify" },
     ],
     results: [
-      { cell: "node/web", title: "up", outcome: "passed" },
+      { cell: "node/web", title: "deploy", outcome: "passed" },
       { cell: "node/web", title: "GET /health | answers", outcome: "failed" },
     ],
     expectations: { "node/web": { "GET /health | answers": [GAP] } },
@@ -38,8 +38,8 @@ describe("summary table", () => {
 
   it("drops the table when everything was green", () => {
     const green = reconcile({
-      planned: [{ cell: "node/web", title: "up", leg: "up" }],
-      results: [{ cell: "node/web", title: "up", outcome: "passed" }],
+      planned: [{ cell: "node/web", title: "deploy", phase: "deploy" }],
+      results: [{ cell: "node/web", title: "deploy", outcome: "passed" }],
       expectations: {},
     });
     const said = summaryTable(green, {
@@ -62,8 +62,8 @@ describe("summary table", () => {
 
 describe("journey verdict", () => {
   const green = reconcile({
-    planned: [{ cell: "node/web", title: "up", leg: "up" }],
-    results: [{ cell: "node/web", title: "up", outcome: "passed" }],
+    planned: [{ cell: "node/web", title: "deploy", phase: "deploy" }],
+    results: [{ cell: "node/web", title: "deploy", outcome: "passed" }],
     expectations: {},
   });
 
@@ -79,8 +79,8 @@ describe("journey verdict", () => {
 
   it("names the unreconciled rows alongside what threw", () => {
     const red = reconcile({
-      planned: [{ cell: "node/web", title: "up", leg: "up" }],
-      results: [{ cell: "node/web", title: "up", outcome: "failed" }],
+      planned: [{ cell: "node/web", title: "deploy", phase: "deploy" }],
+      results: [{ cell: "node/web", title: "deploy", outcome: "failed" }],
       expectations: {},
     });
     const verdict = journeyVerdict(red, ["Error: unhandled"]);

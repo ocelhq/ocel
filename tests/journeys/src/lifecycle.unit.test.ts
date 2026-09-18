@@ -1,30 +1,30 @@
 import { describe, expect, it } from "bun:test";
 import type { Check } from "./checks/context";
-import { legsDriven, stepsPlanned, type TestRef } from "./lifecycle";
-import { fixture, LIVES, SERVES } from "./matrix/types";
+import { phasesDriven, stepsPlanned, type TestRef } from "./lifecycle";
+import { fixture } from "./matrix/types";
 import type { Deployment } from "./targets/types";
 
 const ping: Check = { title: "ping", run: async () => undefined };
 const living = fixture("lifecycle/next", {
   apps: ["web"],
-  legs: LIVES,
+  redeploys: true,
   checks: [ping],
   on: { aws: { base: true } },
 });
 const cell = { name: "lifecycle/next", fixture: living };
 const serving = {
-  legs: SERVES,
+  phases: ["deploy" as const, "verify" as const, "destroy" as const],
   steps: [
-    { app: "web", title: "up", leg: "up" as const },
-    { app: "web", title: "ping", leg: "contract" as const },
-    { app: "web", title: "destroy", leg: "destroy" as const },
+    { app: "web", title: "deploy", phase: "deploy" as const },
+    { app: "web", title: "ping", phase: "verify" as const },
+    { app: "web", title: "destroy", phase: "destroy" as const },
   ],
 };
 
 describe("the steps a cell process runs", () => {
   it("runs the steps the plan printed, in its order", () => {
     expect(stepsPlanned(cell, serving).map((step) => step.title)).toEqual([
-      "up",
+      "deploy",
       "ping",
       "destroy",
     ]);
@@ -32,38 +32,36 @@ describe("the steps a cell process runs", () => {
 
   it("refuses a plan whose steps the lifecycle no longer walks", () => {
     const drifted = {
-      legs: SERVES,
+      phases: serving.phases,
       steps: [
-        { app: "web", title: "up", leg: "up" as const },
-        { app: "web", title: "pong", leg: "contract" as const },
-        { app: "web", title: "destroy", leg: "destroy" as const },
+        { app: "web", title: "deploy", phase: "deploy" as const },
+        { app: "web", title: "pong", phase: "verify" as const },
+        { app: "web", title: "destroy", phase: "destroy" as const },
       ],
     };
     expect(() => stepsPlanned(cell, drifted)).toThrow(
-      /lifecycle\/next walks web · up, web · ping, web · destroy, not the planned web · up, web · pong, web · destroy/,
+      /lifecycle\/next walks web · deploy, web · ping, web · destroy, not the planned web · deploy, web · pong, web · destroy/,
     );
   });
 });
 
-describe("the legs a target drives", () => {
+describe("the phases a target drives", () => {
   const replaced = async (): Promise<Deployment> => ({
     baseUrl: () => "",
     fetch: async () => new Response(),
   });
+  const redeploying = ["deploy", "verify", "redeploy", "rollback", "destroy"] as const;
 
-  it("accepts legs the target has a method for", () => {
+  it("drives a redeploy and a rollback on a target with a release cycle", () => {
     expect(() =>
-      legsDriven({ name: "aws", redeploy: replaced, rollback: replaced }, LIVES),
+      phasesDriven({ name: "aws", redeploy: replaced, rollback: replaced }, [...redeploying]),
     ).not.toThrow();
-    expect(() => legsDriven({ name: "dev" }, SERVES)).not.toThrow();
+    expect(() => phasesDriven({ name: "dev" }, [...serving.phases])).not.toThrow();
   });
 
-  it("refuses a redeploy or rollback leg the target cannot drive", () => {
-    expect(() => legsDriven({ name: "dev" }, LIVES)).toThrow(
-      /dev walks redeploy, rollback without a method for it/,
-    );
-    expect(() => legsDriven({ name: "vps", redeploy: replaced }, LIVES)).toThrow(
-      /vps walks rollback without a method for it/,
+  it("refuses a redeploy or rollback on a target with no release cycle", () => {
+    expect(() => phasesDriven({ name: "dev" }, [...redeploying])).toThrow(
+      /dev walks redeploy, rollback with no release cycle to drive them/,
     );
   });
 });

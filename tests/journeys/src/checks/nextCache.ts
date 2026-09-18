@@ -152,8 +152,8 @@ export const nextCacheChecks: Check[] = [
       await rsc.arrayBuffer();
 
       const before = ctx.notes.get(DEPLOYMENT_NOTE);
-      if (ctx.leg === "redeploy" && before) {
-        assert.notEqual(id, before, "the redeploy served the deployment the first leg did");
+      if (ctx.phase === "redeploy" && before) {
+        assert.notEqual(id, before, "the redeploy served the deployment the first deploy did");
       }
       ctx.notes.set(DEPLOYMENT_NOTE, id);
     },

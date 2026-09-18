@@ -1,5 +1,5 @@
-import { UP } from "../lifecycle";
-import type { Leg } from "../matrix/types";
+import { DEPLOY } from "../lifecycle";
+import type { Phase } from "../matrix/types";
 import type { Expectations, Listed, PlannedTest } from "../plan";
 
 export type TestOutcome = "passed" | "failed" | "skipped" | "todo" | "only";
@@ -24,7 +24,7 @@ export type Verdict =
 export type ReportRow = {
   cell: string;
   title: string;
-  leg?: Leg;
+  phase?: Phase;
   verdict: Verdict;
   listed: Listed[];
   error?: string;
@@ -59,10 +59,10 @@ function key(cell: string, title: string): string {
   return JSON.stringify([cell, title]);
 }
 
-type Blocking = "none" | "up-failed" | "up-listed";
+type Blocking = "none" | "deploy-failed" | "deploy-listed";
 
 function verdictFor(result: TestResult | undefined, gaps: number, blocking: Blocking): Verdict {
-  const listed = blocking === "up-listed";
+  const listed = blocking === "deploy-listed";
   if (!result) {
     return listed ? "blocked" : "never-ran";
   }
@@ -88,11 +88,14 @@ function blockingByCell(
 ): Map<string, Blocking> {
   const blocking = new Map<string, Blocking>();
   for (const cell of new Set(planned.map((entry) => entry.cell))) {
-    const up = byKey.get(key(cell, UP));
-    if (up?.outcome !== "failed") {
+    const deployed = byKey.get(key(cell, DEPLOY));
+    if (deployed?.outcome !== "failed") {
       continue;
     }
-    blocking.set(cell, (expectations[cell]?.[UP]?.length ?? 0) > 0 ? "up-listed" : "up-failed");
+    blocking.set(
+      cell,
+      (expectations[cell]?.[DEPLOY]?.length ?? 0) > 0 ? "deploy-listed" : "deploy-failed",
+    );
   }
   return blocking;
 }
@@ -111,11 +114,12 @@ export function reconcile(input: {
     seen.add(id);
     const result = byKey.get(id);
     const listed = input.expectations[entry.cell]?.[entry.title] ?? [];
-    const downstream: Blocking = entry.title === UP ? "none" : (blocking.get(entry.cell) ?? "none");
+    const downstream: Blocking =
+      entry.title === DEPLOY ? "none" : (blocking.get(entry.cell) ?? "none");
     return {
       cell: entry.cell,
       title: entry.title,
-      leg: entry.leg,
+      phase: entry.phase,
       verdict: verdictFor(result, listed.length, downstream),
       listed,
       error: result?.error,

@@ -10,7 +10,7 @@ function run(over: Partial<Run> = {}): Run {
 function row(over: Partial<RecordedRow> = {}): RecordedRow {
   return {
     cell: "sdk/node/web",
-    title: "up",
+    title: "deploy",
     outcome: "passed",
     startTime: 1_000,
     duration: 500,
@@ -50,20 +50,20 @@ describe("the account a run settles from its rows", () => {
   const planned: PlannedTest[] = [
     {
       cell: "sdk/node/web",
-      title: "up",
-      leg: "up",
+      title: "deploy",
+      phase: "deploy",
     },
     {
       cell: "sdk/node/web",
       title: "destroy",
-      leg: "destroy",
+      phase: "destroy",
     },
   ];
   const meta = { target: "dev", lane: "dev", runId: "local-unit" };
 
   it("reconciles the recorded rows and holds a crash as an unhandled error", () => {
     const account = accountOf({
-      rows: [row({ title: "up" }), row({ title: "destroy", startTime: 1_600 })],
+      rows: [row({ title: "deploy" }), row({ title: "destroy", startTime: 1_600 })],
       run: run({ exitCode: null, signal: "SIGKILL" }),
       runStart: 0,
       runEnd: 4_000,
@@ -82,7 +82,7 @@ describe("the account a run settles from its rows", () => {
   it("holds a failing test as the failure, with nothing unhandled beside it", () => {
     const account = accountOf({
       rows: [
-        row({ title: "up", outcome: "failed", error: "the console never answered" }),
+        row({ title: "deploy", outcome: "failed", error: "the console never answered" }),
         row({ title: "destroy", startTime: 1_600 }),
       ],
       run: run({ exitCode: 1 }),
@@ -94,15 +94,15 @@ describe("the account a run settles from its rows", () => {
       meta,
     });
     expect(account.verdict.exitCode).toBe(1);
-    expect(account.verdict.report).toContain("NEW RED — sdk/node/web › up");
+    expect(account.verdict.report).toContain("NEW RED — sdk/node/web › deploy");
     expect(account.verdict.report).not.toContain("UNHANDLED");
   });
 
   it("spans each cell's rows for its own wall clock in the timeline", () => {
     const account = accountOf({
       rows: [
-        row({ title: "up", startTime: 1_000, duration: 3_000 }),
-        row({ cell: "sdk/node-container/web", title: "up", startTime: 2_000, duration: 9_000 }),
+        row({ title: "deploy", startTime: 1_000, duration: 3_000 }),
+        row({ cell: "sdk/node-container/web", title: "deploy", startTime: 2_000, duration: 9_000 }),
       ],
       run: run(),
       runStart: 0,

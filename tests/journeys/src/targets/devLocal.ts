@@ -91,7 +91,7 @@ async function writeDotfile(cell: CellContext, dir: string): Promise<void> {
     );
   }
   await writeFile(path.join(dir, DOTFILE), `${lines.join("\n")}\n`, "utf8");
-  await cell.evidence.write("up", DOTFILE, `${lines.join("\n")}\n`);
+  await cell.evidence.write("deploy", DOTFILE, `${lines.join("\n")}\n`);
 }
 
 function childEnv(): NodeJS.ProcessEnv {
@@ -102,13 +102,20 @@ function childEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-async function up(cell: CellContext): Promise<Deployment> {
+async function deploy(cell: CellContext): Promise<Deployment> {
   const dir = await workTree(cell, TARGET);
   const env = { ...childEnv(), OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)) };
 
   await writeDotfile(cell, dir);
   if (migrates(cell.fixture.checks)) {
-    await runOcel(cell, dir, "up", "migrate", ["run", "--local", "--", ...migrateCommand()], env);
+    await runOcel(
+      cell,
+      dir,
+      "deploy",
+      "migrate",
+      ["run", "--local", "--", ...migrateCommand()],
+      env,
+    );
   }
 
   const standing: Standing = { dir, apps: [] };
@@ -127,7 +134,7 @@ async function up(cell: CellContext): Promise<Deployment> {
   await stateStaysHome(cell, dir);
 
   await cell.evidence.write(
-    "up",
+    "deploy",
     "deployment.json",
     `${JSON.stringify({ slug: cell.slug, dir, apps: Object.fromEntries(urls) }, null, 2)}\n`,
   );
@@ -174,10 +181,9 @@ export const devLocalTarget: Target = {
   concurrency: 4,
   largeBodyBytes: UNCAPPED_BODY_BYTES,
   legTimeoutMs: 180_000,
-  legs: ["up", "contract", "destroy"],
   guard: async (): Promise<Lane> => TARGET,
   setup: async () => {},
-  up,
+  deploy,
   destroy,
   list,
   stands: async (slug) => (await list()).includes(slug),

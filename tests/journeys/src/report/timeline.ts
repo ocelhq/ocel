@@ -1,10 +1,10 @@
-export const TIMED_LEGS = ["up", "contract", "redeploy", "rollback", "destroy"] as const;
+export const TIMED_PHASES = ["deploy", "verify", "redeploy", "rollback", "destroy"] as const;
 
-export const OTHER_LEG = "other";
+export const OTHER_PHASE = "other";
 
 export type TimelineTest = {
   cell: string;
-  leg?: string;
+  phase?: string;
   title: string;
   startTime: number;
   duration: number;
@@ -24,7 +24,7 @@ export type TimelineInput = {
 export type CellTiming = {
   cell: string;
   start: number;
-  legs: Record<string, number>;
+  phases: Record<string, number>;
   file: number;
 };
 
@@ -47,12 +47,12 @@ function seconds(ms: number): number {
   return Math.round(ms / 1000);
 }
 
-export function legOf(test: TimelineTest): string {
-  if (test.leg) {
-    return test.leg;
+export function phaseOf(test: TimelineTest): string {
+  if (test.phase) {
+    return test.phase;
   }
   const prefix = test.title.split(" · ")[0];
-  return (TIMED_LEGS as readonly string[]).includes(prefix) ? prefix : OTHER_LEG;
+  return (TIMED_PHASES as readonly string[]).includes(prefix) ? prefix : OTHER_PHASE;
 }
 
 export function sweep(tests: TimelineTest[]): Segment[] {
@@ -111,12 +111,14 @@ function timingFor(
 ): CellTiming {
   const held: Record<string, number> = {};
   for (const test of tests) {
-    const leg = legOf(test);
-    held[leg] = (held[leg] ?? 0) + test.duration;
+    const phase = phaseOf(test);
+    held[phase] = (held[phase] ?? 0) + test.duration;
   }
-  const legs = Object.fromEntries(Object.entries(held).map(([leg, ms]) => [leg, seconds(ms)]));
+  const phases = Object.fromEntries(
+    Object.entries(held).map(([phase, ms]) => [phase, seconds(ms)]),
+  );
   const first = Math.min(...tests.map((test) => test.startTime));
-  return { cell, start: seconds(first - runStart), legs, file: seconds(file) };
+  return { cell, start: seconds(first - runStart), phases, file: seconds(file) };
 }
 
 export function timelineOf(input: TimelineInput): Timeline {
@@ -158,7 +160,7 @@ export function timingTable(timeline: Timeline, meta: TimingMeta): string {
       : "tail: none",
   ].join(" · ");
 
-  const columns = [...TIMED_LEGS, OTHER_LEG];
+  const columns = [...TIMED_PHASES, OTHER_PHASE];
   return [
     `### timing · ${meta.target} · run ${meta.runId}`,
     "",
@@ -168,7 +170,7 @@ export function timingTable(timeline: Timeline, meta: TimingMeta): string {
     `| --- | --- |${" --- |".repeat(columns.length)} --- |`,
     ...timeline.cells.map(
       (row) =>
-        `| ${row.cell} | ${row.start} | ${columns.map((leg) => row.legs[leg] ?? 0).join(" | ")} | ${row.file} |`,
+        `| ${row.cell} | ${row.start} | ${columns.map((phase) => row.phases[phase] ?? 0).join(" | ")} | ${row.file} |`,
     ),
     "",
   ].join("\n");
