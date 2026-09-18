@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { type ContractRow, json } from "../contract";
-import { bindingRows } from "./bindings";
+import { type Check, json } from "../contract";
+import { bindingChecks } from "./bindings";
 
 export const ENV_ROW = "GET /api/probes/env reports the greeting and never the secret";
 
-export const envRows: ContractRow[] = [
+export const envChecks: Check[] = [
   {
     title: ENV_ROW,
     run: async (ctx) => {
@@ -18,6 +18,6 @@ export const envRows: ContractRow[] = [
   },
 ];
 
-export function setsEnv(rows: ContractRow[]): boolean {
-  return rows.some((row) => envRows.includes(row) || bindingRows.includes(row));
+export function setsEnv(checks: Check[]): boolean {
+  return checks.some((one) => envChecks.includes(one) || bindingChecks.includes(one));
 }

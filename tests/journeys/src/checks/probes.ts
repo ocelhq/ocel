@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-import {
-  type ContractRow,
-  describeResponse,
-  json,
-  LARGE_RESPONSE_BYTES,
-  SLEEP_MS,
-} from "../contract";
+import { type Check, describeResponse, json, LARGE_RESPONSE_BYTES, SLEEP_MS } from "../contract";
 
 const EMPTY_BODY_TIMEOUT_MS = 15_000;
 
@@ -14,7 +8,7 @@ export const EMPTY_BODY_ROW = "GET /api/probes/empty/:kind answers nothing at al
 
 export const STREAM_ROW = "GET /api/probes/stream streams its chunks in order to the sentinel";
 
-export const nativeRows: ContractRow[] = [
+export const nativeChecks: Check[] = [
   {
     title: "GET /api/probes/native answers from a native sqlite build",
     run: async (ctx) => {
@@ -28,7 +22,7 @@ export const nativeRows: ContractRow[] = [
   },
 ];
 
-export const vendoredRows: ContractRow[] = [
+export const vendoredChecks: Check[] = [
   {
     title: "GET /api/probes/vendored answers from a dependency the build vendored",
     run: async (ctx) => {
@@ -42,7 +36,7 @@ export const vendoredRows: ContractRow[] = [
   },
 ];
 
-export const probeRows: ContractRow[] = [
+export const probeChecks: Check[] = [
   {
     title: STREAM_ROW,
     run: async (ctx) => {

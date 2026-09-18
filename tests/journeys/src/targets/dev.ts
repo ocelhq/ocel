@@ -1,12 +1,12 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import { applyConsoleEnvDefaults, consoleUrl, HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
+import { migrates, setsEnv } from "../checks";
 import { journeyConfigIn } from "../config";
 import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../contract";
 import type { ExpectationEnvironment } from "../expectations/types";
 import { isStranded } from "../identity";
 import { runOcel, treeRoot, workTree } from "../ocel";
-import { migrates, setsEnv } from "../rows";
 import { appCommand, migrateCommand } from "../workspace";
 import { baseUrls, type Standing, serve, stateStaysHome, stopStanding } from "./devShared";
 import type { CellContext, Deployment, Target } from "./types";

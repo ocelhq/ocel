@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import type { ContractContext, ContractRow } from "../contract";
+import type { Check, ContractContext } from "../contract";
 import { chunksOf, firstChunkWith, form, marker, stamp } from "../html";
 import { pageHtml, state, stateRow, text } from "../nextApp";
 
@@ -29,7 +29,7 @@ async function submit(
   return ctx.fetch(target.toString(), { method: "POST", body, redirect: "manual" });
 }
 
-export const nextRoutingRows: ContractRow[] = [
+export const nextRoutingChecks: Check[] = [
   {
     title: "the next handler answers every method with the body it was sent",
     run: async (ctx) => {
@@ -269,7 +269,7 @@ export const nextRoutingRows: ContractRow[] = [
   },
 ];
 
-export const nextStateRows: ContractRow[] = [
+export const nextStateChecks: Check[] = [
   {
     title: "a server action runs from a real form post",
     run: async (ctx) => {

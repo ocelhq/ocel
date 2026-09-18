@@ -1,20 +1,20 @@
 import type { Compute } from "ocel/config";
-import type { ContractContext, ContractRow } from "./contract";
 import {
-  bindingRows,
-  envRows,
-  healthRows,
-  nativeRows,
-  nextCacheRows,
-  nextDataCacheRows,
-  nextRoutingRows,
-  nextStateRows,
-  probeRows,
-  productRows,
-  staticRows,
-  vendoredRows,
-} from "./rows";
-import { ladderRows } from "./targets/aws/ladder";
+  bindingChecks,
+  envChecks,
+  healthChecks,
+  nativeChecks,
+  nextCacheChecks,
+  nextDataCacheChecks,
+  nextRoutingChecks,
+  nextStateChecks,
+  probeChecks,
+  productChecks,
+  staticChecks,
+  vendoredChecks,
+} from "./checks";
+import type { Check, ContractContext } from "./contract";
+import { ladderChecks } from "./targets/aws/ladder";
 import { pulumiHooks } from "./targets/aws/ladder-pulumi";
 import { sstHooks } from "./targets/aws/ladder-sst";
 import type { CellContext } from "./targets/types";
@@ -44,7 +44,7 @@ export const LIVES: Leg[] = ["up", "contract", "redeploy", "rollback", "destroy"
 
 export type LadderPhase = "publish" | "consume" | "outlive" | "prune";
 
-export type LadderRow = {
+export type LadderCheck = {
   title: string;
   phase: LadderPhase;
   run: (cell: CellContext, live?: ContractContext) => Promise<void>;
@@ -58,7 +58,7 @@ export type LadderHooks = {
   refuse?: (cell: CellContext) => Promise<void>;
   beforeUp?: (cell: CellContext) => Promise<void>;
   afterDestroy?: (cell: CellContext) => Promise<void>;
-  rows?: LadderRow[];
+  rows?: LadderCheck[];
 };
 
 export type FixtureSpec = {
@@ -68,7 +68,7 @@ export type FixtureSpec = {
   runtime?: Runtime;
   kind: Kind;
   group?: string;
-  rows: ContractRow[];
+  rows: Check[];
   apps: string[];
   legs: Leg[];
   targets?: TargetName[];
@@ -84,19 +84,19 @@ export const groups: Group[] = [
   { concern: "sdk", name: "node-http", preferred: "workspace" },
 ];
 
-const RUNTIME_NEUTRAL = [...healthRows, ...staticRows, ...probeRows];
-const SERVED = [...RUNTIME_NEUTRAL, ...nativeRows];
+const RUNTIME_NEUTRAL = [...healthChecks, ...staticChecks, ...probeChecks];
+const SERVED = [...RUNTIME_NEUTRAL, ...nativeChecks];
 const STORED = [
-  ...healthRows,
-  ...staticRows,
-  ...productRows,
-  ...nativeRows,
-  ...probeRows,
-  ...envRows,
+  ...healthChecks,
+  ...staticChecks,
+  ...productChecks,
+  ...nativeChecks,
+  ...probeChecks,
+  ...envChecks,
 ];
-const NEXT_SERVED = [...nextRoutingRows, ...nextCacheRows];
-const NEXT_STORED = [...nextStateRows, ...nextDataCacheRows];
-const LADDER = [...healthRows, ...staticRows, ...bindingRows];
+const NEXT_SERVED = [...nextRoutingChecks, ...nextCacheChecks];
+const NEXT_STORED = [...nextStateChecks, ...nextDataCacheChecks];
+const LADDER = [...healthChecks, ...staticChecks, ...bindingChecks];
 
 export const spec: FixtureSpec[] = [
   {
@@ -131,7 +131,7 @@ export const spec: FixtureSpec[] = [
     dir: "deploy/python",
     runtime: "python",
     kind: "composite",
-    rows: [...RUNTIME_NEUTRAL, ...vendoredRows],
+    rows: [...RUNTIME_NEUTRAL, ...vendoredChecks],
     apps: ["web"],
     legs: SERVES,
     targets: ["aws", "vps", "gcp"],
@@ -248,7 +248,7 @@ export const spec: FixtureSpec[] = [
     targets: ["aws"],
     base: [],
     variants: HTTP_VARIANTS,
-    hooks: { ...sstHooks, rows: ladderRows },
+    hooks: { ...sstHooks, rows: ladderChecks },
   },
   {
     name: "with-pulumi",
@@ -262,7 +262,7 @@ export const spec: FixtureSpec[] = [
     targets: ["aws"],
     base: [],
     variants: HTTP_VARIANTS,
-    hooks: { ...pulumiHooks, rows: ladderRows },
+    hooks: { ...pulumiHooks, rows: ladderChecks },
   },
 ];
 

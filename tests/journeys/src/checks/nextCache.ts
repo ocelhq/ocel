@@ -13,7 +13,7 @@ import {
   UNCACHED,
   variesOn,
 } from "../cacheHeaders";
-import type { ContractContext, ContractRow } from "../contract";
+import type { Check, ContractContext } from "../contract";
 import { assetPath, marker, markerOrNone, stamp } from "../html";
 import { page, state, steady, until } from "../nextApp";
 
@@ -74,7 +74,7 @@ function imageUrl(ctx: ContractContext, url: string, width: number, quality: num
   return `${ctx.baseUrl}/_next/image?url=${encodeURIComponent(url)}&w=${width}&q=${quality}`;
 }
 
-export const nextCacheRows: ContractRow[] = [
+export const nextCacheChecks: Check[] = [
   {
     title: "a static page is prerendered, frozen, and links assets immutable for a year",
     run: async (ctx) => {
@@ -224,7 +224,7 @@ export const nextCacheRows: ContractRow[] = [
   },
 ];
 
-export const nextDataCacheRows: ContractRow[] = [
+export const nextDataCacheChecks: Check[] = [
   {
     title: "a non-ASCII tag holds one upstream call and releases it when the tag is revalidated",
     run: async (ctx) => {

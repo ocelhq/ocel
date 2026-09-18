@@ -1,11 +1,11 @@
-import { UP_TITLE } from "../plan";
 import {
   BINDING_QUERY_ROW,
   BINDING_ROW,
   EMPTY_BODY_ROW,
-  nextCacheRows,
-  nextDataCacheRows,
-} from "../rows";
+  nextCacheChecks,
+  nextDataCacheChecks,
+} from "../checks";
+import { UP_TITLE } from "../plan";
 import type { Gap } from "./types";
 
 const SDK_NODE_HTTP = ["sdk/node/web"];
@@ -22,7 +22,7 @@ const BASE = ["base"];
 const GATEWAY = ["api-gateway"];
 const CONTAINER = ["container"];
 
-const EVERY_NEXT_CACHE_ROW = [...nextCacheRows, ...nextDataCacheRows];
+const EVERY_NEXT_CACHE_ROW = [...nextCacheChecks, ...nextDataCacheChecks];
 
 export const gaps: Gap[] = [
   {

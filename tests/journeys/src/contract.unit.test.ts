@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { healthChecks } from "./checks";
 import { type ContractContext, json } from "./contract";
-import { healthRows } from "./rows";
 
 function answering(app: string): ContractContext["fetch"] {
   return async () =>
@@ -22,7 +22,7 @@ function context(asked: string, answered: string): ContractContext {
   };
 }
 
-const health = healthRows[0];
+const health = healthChecks[0];
 
 describe("the health row", () => {
   it("passes when the hostname answers with the app it was asked for", async () => {

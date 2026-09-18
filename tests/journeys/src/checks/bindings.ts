@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { type ContractRow, json } from "../contract";
+import { type Check, json } from "../contract";
 
 export const BINDING_ROW =
   "GET /api/binding answers with what it resolved and the greeting it deployed with";
 export const BINDING_QUERY_ROW =
   "GET /api/binding/query answers ok after a select through the binding";
 
-export const bindingRows: ContractRow[] = [
+export const bindingChecks: Check[] = [
   {
     title: BINDING_ROW,
     run: async (ctx) => {

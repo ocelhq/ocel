@@ -1,7 +1,7 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
+import { productChecks, staticChecks } from "../checks";
 import { contractTitle, UP_TITLE } from "../plan";
-import { productRows, staticRows } from "../rows";
 import { resolve } from "./index";
 import type { ExpectationEnvironment, Gap } from "./types";
 
@@ -90,7 +90,7 @@ describe("resolve", () => {
             on: ["aws"],
             cells: ["sdk/node/web"],
             variants: ["container"],
-            tests: [{ rows: staticRows, legs: ["contract"], except: [SVG] }],
+            tests: [{ rows: staticChecks, legs: ["contract"], except: [SVG] }],
           },
         ]),
       ],
@@ -123,7 +123,7 @@ describe("resolve", () => {
 
   it("leaves a cell alone when its plan has none of the tests named and no cell was named", () => {
     const out = listed(
-      [gap("one", [{ on: ["aws"], tests: [{ rows: productRows, legs: ["contract"] }] }])],
+      [gap("one", [{ on: ["aws"], tests: [{ rows: productChecks, legs: ["contract"] }] }])],
       "aws",
     );
     assert.equal(out["deploy/node-api-gateway/web"], undefined);
@@ -139,7 +139,7 @@ describe("resolve", () => {
               {
                 on: ["aws"],
                 cells: ["deploy/node/web"],
-                tests: [{ rows: productRows }],
+                tests: [{ rows: productChecks }],
               },
             ]),
           ],

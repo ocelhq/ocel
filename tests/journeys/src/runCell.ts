@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, it } from "bun:test";
 import assert from "node:assert/strict";
-import { type ContractRow, INITIAL_GREETING, REDEPLOY_GREETING, secretGuarded } from "./contract";
+import { type Check, INITIAL_GREETING, REDEPLOY_GREETING, secretGuarded } from "./contract";
 import { evidence } from "./evidence";
 import { currentRunIdentity, projectSlug } from "./identity";
 import { ledgerFor } from "./ledger";
@@ -148,7 +148,7 @@ function describeSelected({ name, fixture, variant }: Cell) {
     };
   }
 
-  function contractLeg(leg: Leg, app: string, rowsForLeg: ContractRow[]) {
+  function contractLeg(leg: Leg, app: string, rowsForLeg: Check[]) {
     for (const row of rowsForLeg) {
       testIn(cellKey(name, app), contractTitle(leg, row.title), async () => {
         await bringUp();
