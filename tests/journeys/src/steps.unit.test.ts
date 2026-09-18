@@ -3,8 +3,8 @@ import type { Check } from "./checks/context";
 import { fixture } from "./matrix/types";
 import { defaults } from "./matrix/variants";
 import { CellRun } from "./run/cellRun";
+import type { ExternalStack } from "./stacks";
 import { phasesDriven, phasesOf, stepsOf, stepsPlanned, type TestSelector } from "./steps";
-import { ExternalStack } from "./targets/aws/stacks/bindings";
 import type { Deployment, Target } from "./targets/types";
 
 const ping: Check = { title: "ping", run: async () => undefined };
@@ -84,14 +84,14 @@ describe("a cell with an external stack", () => {
   };
   const deployed = (): Deployment => ({ baseUrl: () => "", fetch: async () => new Response() });
 
-  class RecordingStack extends ExternalStack {
-    override readonly checks = {
+  class RecordingStack implements ExternalStack {
+    readonly checks = {
       afterPublish: [{ title: "records", run: said("check records") }],
       whileServing: [{ title: "routes", run: said("check routes") }],
       afterOcelDestroy: [{ title: "survives", run: said("check survives") }],
       afterStackDestroy: [{ title: "empties", run: said("check empties") }],
     };
-    override async refuse() {
+    async refuse() {
       calls.push("ocel refuses");
     }
     async deploy() {

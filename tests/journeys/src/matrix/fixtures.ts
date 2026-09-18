@@ -14,6 +14,7 @@ import {
 } from "../checks";
 import { PulumiStack } from "../targets/aws/stacks/pulumi";
 import { SstStack } from "../targets/aws/stacks/sst";
+import { awsWorld } from "../targets/aws/world";
 import { type Fixture, fixture } from "./types";
 import { apiGateway, cloudflare, container, defaults } from "./variants";
 
@@ -159,14 +160,14 @@ export const sdk = {
     apps: ["web"],
     redeploys: true,
     checks: BINDING_CHECKS,
-    stack: new SstStack(),
+    stack: new SstStack(awsWorld),
     on: { aws: [container, apiGateway] },
   }),
   withPulumi: fixture("sdk/with-pulumi", {
     apps: ["web"],
     redeploys: true,
     checks: BINDING_CHECKS,
-    stack: new PulumiStack(),
+    stack: new PulumiStack(awsWorld),
     on: { aws: [container, apiGateway] },
   }),
 };

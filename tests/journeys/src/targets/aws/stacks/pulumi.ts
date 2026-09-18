@@ -6,8 +6,7 @@ import { fixtureDir, laneDir, treeDir } from "../../../paths";
 import type { CellUnderTest } from "../../../run/cellRun";
 import { copyTree } from "../../../tree";
 import { spawnBin } from "../run";
-import { emulatorEndpoint } from "../world";
-import { ExternalStack } from "./bindings";
+import { AwsStack } from "./bindings";
 
 const EMULATED_SERVICES = [
   "cloudformation",
@@ -42,7 +41,12 @@ async function stackExists(dir: string, stack: string, env: NodeJS.ProcessEnv): 
   return stacks.some((row) => row.name === stack);
 }
 
-async function configureStack(dir: string, stack: string, env: NodeJS.ProcessEnv): Promise<void> {
+async function configureStack(
+  dir: string,
+  stack: string,
+  env: NodeJS.ProcessEnv,
+  endpoint: string | undefined,
+): Promise<void> {
   await pulumi(dir, ["stack", "select", stack, "--create"], env);
   await pulumi(dir, ["config", "set", "aws:region", "us-east-1"], env);
   await pulumi(
@@ -50,7 +54,6 @@ async function configureStack(dir: string, stack: string, env: NodeJS.ProcessEnv
     ["config", "set", "--secret", "dbPassword", randomBytes(16).toString("hex")],
     env,
   );
-  const endpoint = emulatorEndpoint(process.env);
   if (!endpoint) {
     return;
   }
@@ -65,12 +68,12 @@ async function configureStack(dir: string, stack: string, env: NodeJS.ProcessEnv
   }
 }
 
-export class PulumiStack extends ExternalStack {
+export class PulumiStack extends AwsStack {
   async deploy(cell: CellUnderTest): Promise<void> {
     const dir = await workTree(cell, "aws");
     const stack = `j-${cell.runId}`;
     const env = await pulumiEnv(cell.runId);
-    await configureStack(dir, stack, env);
+    await configureStack(dir, stack, env, await this.world.endpoint());
     const stdout = await pulumi(dir, ["up", "--yes"], env);
     await cell.evidence.write("deploy", "pulumi-up.stdout", stdout);
     const outputs = JSON.parse(await pulumi(dir, ["stack", "output", "--json"], env)) as Record<

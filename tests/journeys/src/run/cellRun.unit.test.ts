@@ -3,7 +3,7 @@ import { INITIAL_GREETING, REDEPLOY_GREETING } from "../checks/context";
 import type { Evidence } from "../evidence";
 import { fixture } from "../matrix/types";
 import { defaults } from "../matrix/variants";
-import { ExternalStack } from "../targets/aws/stacks/bindings";
+import type { ExternalStack } from "../stacks";
 import type { Deployment, ReleaseCycle, Target } from "../targets/types";
 import { CellRun } from "./cellRun";
 
@@ -51,11 +51,17 @@ function targetFor(called: Called, standing = false): Target & ReleaseCycle {
   };
 }
 
-class RecordingStack extends ExternalStack {
-  constructor(private readonly called: Called) {
-    super();
-  }
-  override async refuse(): Promise<void> {
+class RecordingStack implements ExternalStack {
+  readonly checks = {
+    afterPublish: [],
+    whileServing: [],
+    afterOcelDestroy: [],
+    afterStackDestroy: [],
+  };
+
+  constructor(private readonly called: Called) {}
+
+  async refuse(): Promise<void> {
     this.called.push("refuse");
   }
   async deploy(): Promise<void> {

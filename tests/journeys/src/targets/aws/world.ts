@@ -116,3 +116,5 @@ export class AwsWorld {
     return named;
   }
 }
+
+export const awsWorld = new AwsWorld();
