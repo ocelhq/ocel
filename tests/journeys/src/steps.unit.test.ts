@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { Check } from "./checks/context";
-import { phasesDriven, phasesOf, stepsOf, stepsPlanned, type TestRef } from "./lifecycle";
 import { fixture } from "./matrix/types";
 import { defaults } from "./matrix/variants";
 import { CellRun } from "./run/cellRun";
+import { phasesDriven, phasesOf, stepsOf, stepsPlanned, type TestSelector } from "./steps";
 import { ExternalStack } from "./targets/aws/stacks/bindings";
 import type { Deployment, Target } from "./targets/types";
 
@@ -72,7 +72,7 @@ describe("the phases a target drives", () => {
 describe("a test a gap names", () => {
   it("is built by the lifecycle, never spelled inline", () => {
     type Accepts<T, U> = [U] extends [T] ? true : false;
-    const inline: Accepts<TestRef, { titles: string[] }> = false;
+    const inline: Accepts<TestSelector, { titles: string[] }> = false;
     expect(inline).toBe(false);
   });
 });

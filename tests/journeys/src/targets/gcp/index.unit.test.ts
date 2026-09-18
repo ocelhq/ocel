@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { shapeFor } from "../../config";
+import { overlayFor } from "../../config";
 import { projectSlug } from "../../identity";
 import { fixtures } from "../../matrix/fixtures";
 import { cellsOn, fixturesOn } from "../../plan";
 import type { CellUnderTest } from "../../run/cellRun";
-import { cellOfSlug, sweepOverlay } from "./index";
+import { cellOfSlug, gcpSweepOverlay } from "./index";
 
 const cells = fixturesOn(fixtures, "gcp").flatMap((one) => cellsOn(one, "gcp"));
 
@@ -22,14 +22,14 @@ describe("cellOfSlug", () => {
   });
 });
 
-describe("sweepOverlay", () => {
+describe("gcpSweepOverlay", () => {
   const env = { OCEL_NAMESPACE: "ocel-nightly" } as NodeJS.ProcessEnv;
 
   it("names the deploy the slug it was stood up under, not the one the run id spells", () => {
     for (const cell of cells) {
       const slug = projectSlug(cell.name, "18746093211");
-      const overlay = sweepOverlay(cell, slug, env);
-      expect(overlay).toEqual(shapeFor({ ...cell, slug } as CellUnderTest, "gcp", env));
+      const overlay = gcpSweepOverlay(cell, slug, env);
+      expect(overlay).toEqual(overlayFor({ ...cell, slug } as CellUnderTest, "gcp", env));
       expect(overlay.slug).not.toBe(slug);
     }
   });

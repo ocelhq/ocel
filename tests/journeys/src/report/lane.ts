@@ -1,21 +1,21 @@
 import { fixtures } from "../matrix/fixtures";
 import { gaps } from "../matrix/gaps";
 import { laneNamed, targetOfLane } from "../matrix/types";
-import { type Ask, cellKey, type Listed, type Plan, plan } from "../plan";
-import { askFrom } from "../run/ask";
+import { cellApp, type GapRef, type Plan, plan, type RunFilter } from "../plan";
+import { filterFrom } from "../run/filter";
 import { hasReleaseCycle, targetNamed } from "../targets";
 
 const USAGE = "pnpm --filter @ocel-tests/journeys plan --lane <lane>";
 
-function said(listed: Listed[]): string {
+function said(listed: GapRef[]): string {
   return listed
     .map((gap) => (gap.issue === undefined ? gap.id : `${gap.id} #${gap.issue}`))
     .join(", ");
 }
 
-export function laneTable(planned: Plan, ask: Ask): string {
+export function laneTable(planned: Plan, filter: RunFilter): string {
   const lines = [
-    `lane ${planned.lane} · target ${planned.target} · coverage ${ask.coverage} · ${planned.cells.length} cells`,
+    `lane ${planned.lane} · target ${planned.target} · coverage ${filter.coverage} · ${planned.cells.length} cells`,
   ];
   for (const [cell, listed] of Object.entries(planned.skipped)) {
     lines.push(`skipped ${cell} — ${said(listed)}`);
@@ -26,7 +26,7 @@ export function laneTable(planned: Plan, ask: Ask): string {
       `${cell.name} · fixture ${cell.fixture} · variant ${cell.variant} · phases ${cell.phases.join(" ")}`,
     );
     for (const step of cell.steps) {
-      const listed = planned.expectations[cellKey(cell.name, step.app)]?.[step.title];
+      const listed = planned.expectedFailures[cellApp(cell.name, step.app)]?.[step.title];
       const red = listed ? `  [red: ${said(listed)}]` : "";
       lines.push(`  ${step.app} · ${step.title}${red}`);
     }
@@ -41,9 +41,9 @@ function main(argv: string[]) {
     throw new Error(USAGE);
   }
   const lane = laneNamed(named);
-  const ask = askFrom(process.env);
+  const filter = filterFrom(process.env);
   const releaseCycle = hasReleaseCycle(targetNamed(targetOfLane(lane)));
-  process.stdout.write(laneTable(plan({ fixtures, gaps, lane, releaseCycle, ask }), ask));
+  process.stdout.write(laneTable(plan({ fixtures, gaps, lane, releaseCycle, filter }), filter));
 }
 
 try {

@@ -3,8 +3,8 @@ import path from "node:path";
 import { bindingChecks } from "../../../checks";
 import type { CheckContext } from "../../../checks/context";
 import { journeyConfigIn } from "../../../config";
-import { live } from "../../../live";
 import { ocel, spawnOcel, workTree } from "../../../ocel";
+import { progress } from "../../../progress";
 import type { CellUnderTest } from "../../../run/cellRun";
 import { awsBindingStore, awsStore, type Cli, cliAt, said } from "../store";
 import { emulatorEndpoint } from "../world";
@@ -417,7 +417,7 @@ export abstract class ExternalStack {
       dir,
       ["deploy", "--yes"],
       env,
-      live(`${cell.name} deploy/refuse |`),
+      progress(`${cell.name} deploy/refuse |`),
     );
     await cell.evidence.write("deploy", "refuse.stdout", result.stdout);
     await cell.evidence.write("deploy", "refuse.stderr", result.stderr);
@@ -429,7 +429,7 @@ export abstract class ExternalStack {
       "ocel deploy exited 0 with nothing published; a binding is resolved before anything is provisioned",
     );
     assert.equal(
-      await awsStore(emulatorEndpoint(process.env)).stands(cell.slug),
+      await awsStore(emulatorEndpoint(process.env)).exists(cell.slug),
       false,
       `${cell.slug} has a project before anything published a binding`,
     );

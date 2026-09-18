@@ -1,6 +1,6 @@
-import { DEPLOY } from "../lifecycle";
 import type { Phase } from "../matrix/types";
-import type { Expectations, Listed, PlannedTest } from "../plan";
+import type { ExpectedFailures, GapRef, PlannedTest } from "../plan";
+import { DEPLOY } from "../steps";
 
 export type TestOutcome = "passed" | "failed" | "skipped" | "todo" | "only";
 
@@ -21,18 +21,18 @@ export type Verdict =
   | "disabled"
   | "unplanned";
 
-export type ReportRow = {
+export type ReconciledTest = {
   cell: string;
   title: string;
   phase?: Phase;
   verdict: Verdict;
-  listed: Listed[];
+  listed: GapRef[];
   error?: string;
 };
 
 export type Report = {
-  rows: ReportRow[];
-  failures: ReportRow[];
+  tests: ReconciledTest[];
+  failures: ReconciledTest[];
   failed: boolean;
 };
 
@@ -84,7 +84,7 @@ function verdictFor(result: TestResult | undefined, gaps: number, blocking: Bloc
 function blockingByCell(
   planned: PlannedTest[],
   byKey: Map<string, TestResult>,
-  expectations: Expectations,
+  expectedFailures: ExpectedFailures,
 ): Map<string, Blocking> {
   const blocking = new Map<string, Blocking>();
   for (const cell of new Set(planned.map((entry) => entry.cell))) {
@@ -94,7 +94,7 @@ function blockingByCell(
     }
     blocking.set(
       cell,
-      (expectations[cell]?.[DEPLOY]?.length ?? 0) > 0 ? "deploy-listed" : "deploy-failed",
+      (expectedFailures[cell]?.[DEPLOY]?.length ?? 0) > 0 ? "deploy-listed" : "deploy-failed",
     );
   }
   return blocking;
@@ -103,17 +103,17 @@ function blockingByCell(
 export function reconcile(input: {
   planned: PlannedTest[];
   results: TestResult[];
-  expectations: Expectations;
+  expectedFailures: ExpectedFailures;
 }): Report {
   const byKey = new Map(input.results.map((result) => [key(result.cell, result.title), result]));
-  const blocking = blockingByCell(input.planned, byKey, input.expectations);
+  const blocking = blockingByCell(input.planned, byKey, input.expectedFailures);
   const seen = new Set<string>();
 
-  const rows: ReportRow[] = input.planned.map((entry) => {
+  const tests: ReconciledTest[] = input.planned.map((entry) => {
     const id = key(entry.cell, entry.title);
     seen.add(id);
     const result = byKey.get(id);
-    const listed = input.expectations[entry.cell]?.[entry.title] ?? [];
+    const listed = input.expectedFailures[entry.cell]?.[entry.title] ?? [];
     const downstream: Blocking =
       entry.title === DEPLOY ? "none" : (blocking.get(entry.cell) ?? "none");
     return {
@@ -128,7 +128,7 @@ export function reconcile(input: {
 
   for (const result of input.results) {
     if (!seen.has(key(result.cell, result.title))) {
-      rows.push({
+      tests.push({
         cell: result.cell,
         title: result.title,
         verdict: "unplanned",
@@ -138,6 +138,6 @@ export function reconcile(input: {
     }
   }
 
-  const failures = rows.filter((row) => FAILING_VERDICTS.has(row.verdict));
-  return { rows, failures, failed: failures.length > 0 };
+  const failures = tests.filter((test) => FAILING_VERDICTS.has(test.verdict));
+  return { tests, failures, failed: failures.length > 0 };
 }

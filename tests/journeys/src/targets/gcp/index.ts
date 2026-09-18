@@ -100,7 +100,7 @@ async function cellTree(cell: CellUnderTest): Promise<string> {
   }
 }
 
-export function sweepOverlay(cell: Cell, slug: string, env: NodeJS.ProcessEnv): Overlay {
+export function gcpSweepOverlay(cell: Cell, slug: string, env: NodeJS.ProcessEnv): Overlay {
   return {
     base: GCP_BASE,
     slug: gcpSlug({ slug, fixture: cell.fixture }, env),
@@ -314,7 +314,7 @@ export class GcpTarget implements Target, ReleaseCycle {
         treeDir(runId, "gcp", `sweep-${slug}`),
       );
       try {
-        await writeJourneyConfig(dir, sweepOverlay(cell, slug, process.env));
+        await writeJourneyConfig(dir, gcpSweepOverlay(cell, slug, process.env));
         await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir));
         process.stdout.write(`swept ${slug}\n`);
       } catch (error) {

@@ -3,9 +3,9 @@ import { type Cell, DEFAULT_VARIANT, type Fixture, sampleGroupOf } from "./matri
 
 export type Draw = { seed: string; touched: string[] };
 
-export type Coverage = "full" | "covering";
+export type Coverage = "every-cell" | "sampled";
 
-export const COVERAGES: Coverage[] = ["full", "covering"];
+export const COVERAGES: Coverage[] = ["every-cell", "sampled"];
 
 export type CellsFor = (fixture: Fixture) => Cell[];
 
@@ -13,7 +13,7 @@ function rotation(seed: string, group: string): number {
   return createHash("sha256").update(`${seed}:${group}`).digest().readUInt32BE(0);
 }
 
-function coverGroup(
+function sampleGroup(
   group: string,
   members: Fixture[],
   cellsFor: CellsFor,
@@ -46,8 +46,9 @@ function coverGroup(
   }
 
   const start = rotation(draw.seed, group);
-  const lead = free.find((member) => member.sample?.lead) ?? free[start % free.length];
-  add(lead, cellOf(lead, DEFAULT_VARIANT));
+  const representative =
+    free.find((member) => member.sample?.representative) ?? free[start % free.length];
+  add(representative, cellOf(representative, DEFAULT_VARIANT));
 
   const variants: string[] = [];
   for (const member of free) {
@@ -78,7 +79,7 @@ export function sample(
   coverage: Coverage,
   draw: Draw | undefined,
 ): Map<string, Cell[]> {
-  if (coverage === "full") {
+  if (coverage === "every-cell") {
     return new Map(fixtures.map((one) => [one.name, cellsFor(one)]));
   }
   const asked = draw ?? { seed: "", touched: [] };
@@ -93,7 +94,7 @@ export function sample(
     groups.set(group, [...(groups.get(group) ?? []), one]);
   }
   for (const [group, members] of groups) {
-    for (const [name, cells] of coverGroup(group, members, cellsFor, asked)) {
+    for (const [name, cells] of sampleGroup(group, members, cellsFor, asked)) {
       out.set(name, cells);
     }
   }

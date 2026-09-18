@@ -99,7 +99,7 @@ describe("stands", () => {
     const { cli, calls } = cliOver((args) =>
       describeStacks(args) ? tableAsked(args) : page(["j-1-node"]),
     );
-    assert.equal(await awsStore(undefined, cli).stands("j-1-node"), true);
+    assert.equal(await awsStore(undefined, cli).exists("j-1-node"), true);
     const queried = calls.filter((args) => args[0] === "dynamodb");
     assert.equal(queried.length, 1);
     assert.ok(queried[0]?.includes("pk = :pk AND begins_with(sk, :sk)"));
@@ -114,7 +114,7 @@ describe("stands", () => {
     const { cli } = cliOver((args) =>
       describeStacks(args) ? tableAsked(args) : page(["j-1-node-two"]),
     );
-    assert.equal(await awsStore(undefined, cli).stands("j-1-node"), false);
+    assert.equal(await awsStore(undefined, cli).exists("j-1-node"), false);
   });
 
   it("carries the failure out rather than answering that the slug is gone", async () => {
@@ -124,7 +124,7 @@ describe("stands", () => {
       }
       return tableAsked(args);
     });
-    await assert.rejects(awsStore(undefined, cli).stands("j-1-node"), /ThrottlingException/);
+    await assert.rejects(awsStore(undefined, cli).exists("j-1-node"), /ThrottlingException/);
   });
 });
 

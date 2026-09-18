@@ -2,9 +2,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { currentRunIdentity } from "../identity";
 import { laneDir } from "../paths";
-import { type Expectations, type Plan, type PlannedTest, testsOf } from "../plan";
+import { type ExpectedFailures, type Plan, type PlannedTest, testsOf } from "../plan";
 import { readPrepared } from "../prepare";
-import { type RecordedRow, readRows } from "../run/ledger";
+import { readResults, type StepResult } from "../run/results";
 import type { Target } from "../targets/types";
 import { type Report, reconcile, type TestResult } from "./reconcile";
 import { journeyVerdict, type SummaryMeta, summaryTable } from "./summary";
@@ -16,10 +16,10 @@ import {
   timingTable,
 } from "./timeline";
 
-export type Run = { exitCode: number | null; signal: string | null };
+export type SuiteExit = { exitCode: number | null; signal: string | null };
 
 export type TimingInput = {
-  rows: RecordedRow[];
+  results: StepResult[];
   prepareMs?: number;
   runStart: number;
   runEnd: number;
@@ -27,15 +27,15 @@ export type TimingInput = {
   planned: PlannedTest[];
 };
 
-export type AccountInput = TimingInput & {
-  run: Run;
-  expectations: Expectations;
+export type JourneyReportInput = TimingInput & {
+  exit: SuiteExit;
+  expectedFailures: ExpectedFailures;
   meta: SummaryMeta;
 };
 
 export type Timed = { tests: TimelineTest[]; modules: TimelineModule[]; timeline: Timeline };
 
-export type Account = Timed & {
+export type JourneyReport = Timed & {
   report: Report;
   summary: string;
   timing: string;
@@ -50,22 +50,22 @@ function key(cell: string, title: string): string {
   return JSON.stringify([cell, title]);
 }
 
-export function unhandledFrom(run: Run, rows: RecordedRow[]): string[] {
-  if (run.signal === null && (run.exitCode === 0 || run.exitCode === 1)) {
-    if (run.exitCode === 0 || rows.some((row) => row.outcome === "failed")) {
+export function unhandledFrom(exit: SuiteExit, results: StepResult[]): string[] {
+  if (exit.signal === null && (exit.exitCode === 0 || exit.exitCode === 1)) {
+    if (exit.exitCode === 0 || results.some((result) => result.outcome === "failed")) {
       return [];
     }
   }
-  return [`bun test exited ${run.signal ?? run.exitCode} without a failing test`];
+  return [`bun test exited ${exit.signal ?? exit.exitCode} without a failing test`];
 }
 
-function modulesFrom(rows: RecordedRow[]): TimelineModule[] {
+function modulesFrom(results: StepResult[]): TimelineModule[] {
   const spans = new Map<string, { from: number; to: number }>();
-  for (const row of rows) {
-    const cell = cellOf(row.cell);
+  for (const result of results) {
+    const cell = cellOf(result.cell);
     const held = spans.get(cell);
-    const from = Math.min(held?.from ?? row.startTime, row.startTime);
-    const to = Math.max(held?.to ?? 0, row.startTime + row.duration);
+    const from = Math.min(held?.from ?? result.startTime, result.startTime);
+    const to = Math.max(held?.to ?? 0, result.startTime + result.duration);
     spans.set(cell, { from, to });
   }
   return [...spans.entries()].map(([cell, span]) => ({
@@ -78,14 +78,14 @@ export function timelineFrom(input: TimingInput): Timed {
   const phaseByKey = new Map(
     input.planned.map((entry) => [key(entry.cell, entry.title), entry.phase]),
   );
-  const tests: TimelineTest[] = input.rows.map((row) => ({
-    cell: cellOf(row.cell),
-    phase: phaseByKey.get(key(row.cell, row.title)),
-    title: row.title,
-    startTime: row.startTime,
-    duration: row.duration,
+  const tests: TimelineTest[] = input.results.map((result) => ({
+    cell: cellOf(result.cell),
+    phase: phaseByKey.get(key(result.cell, result.title)),
+    title: result.title,
+    startTime: result.startTime,
+    duration: result.duration,
   }));
-  const modules = modulesFrom(input.rows);
+  const modules = modulesFrom(input.results);
   return {
     tests,
     modules,
@@ -100,25 +100,25 @@ export function timelineFrom(input: TimingInput): Timed {
   };
 }
 
-export function accountOf(input: AccountInput): Account {
+export function journeyReportOf(input: JourneyReportInput): JourneyReport {
   const timed = timelineFrom(input);
-  const results: TestResult[] = input.rows.map((row) => ({
-    cell: row.cell,
-    title: row.title,
-    outcome: row.outcome,
-    ...(row.error === undefined ? {} : { error: row.error }),
+  const outcomes: TestResult[] = input.results.map((result) => ({
+    cell: result.cell,
+    title: result.title,
+    outcome: result.outcome,
+    ...(result.error === undefined ? {} : { error: result.error }),
   }));
   const report = reconcile({
     planned: input.planned,
-    results,
-    expectations: input.expectations,
+    results: outcomes,
+    expectedFailures: input.expectedFailures,
   });
   return {
     ...timed,
     report,
     summary: summaryTable(report, input.meta),
     timing: timingTable(timed.timeline, { target: input.meta.target, runId: input.meta.runId }),
-    verdict: journeyVerdict(report, unhandledFrom(input.run, input.rows)),
+    verdict: journeyVerdict(report, unhandledFrom(input.exit, input.results)),
   };
 }
 
@@ -145,10 +145,10 @@ async function writeTiming(
   );
 }
 
-export async function settleAccount(input: {
+export async function writeReport(input: {
   target: Target;
   plan: Plan;
-  run: Run;
+  exit: SuiteExit;
   runStart: number;
   runEnd: number;
   workers: number;
@@ -160,7 +160,7 @@ export async function settleAccount(input: {
   const planned = testsOf(input.plan);
   const prepared = readPrepared(runId, input.target.name);
   const shared: TimingInput = {
-    rows: await readRows(runId, input.target.name),
+    results: await readResults(runId, input.target.name),
     ...(prepared === undefined ? {} : { prepareMs: prepared.ms }),
     runStart: input.runStart,
     runEnd: input.runEnd,
@@ -174,10 +174,10 @@ export async function settleAccount(input: {
     runEnd: input.runEnd,
   });
 
-  const account = accountOf({
+  const account = journeyReportOf({
     ...shared,
-    run: input.run,
-    expectations: input.plan.expectations,
+    exit: input.exit,
+    expectedFailures: input.plan.expectedFailures,
     meta: {
       target: input.target.name,
       lane: input.plan.lane,

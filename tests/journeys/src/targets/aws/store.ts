@@ -15,7 +15,7 @@ export type Cli = (args: string[]) => Promise<string>;
 export type Store = {
   callerAccount(): Promise<string>;
   deployedSlugs(): Promise<string[]>;
-  stands(slug: string): Promise<boolean>;
+  exists(slug: string): Promise<boolean>;
 };
 
 export function cliAt(endpoint: string | undefined): Cli {
@@ -145,7 +145,7 @@ export function awsStore(
 
   return {
     async callerAccount() {
-      return cli(["sts", "get-caller-identity", "--query", "Account", "--output", "text"]);
+      return cli(["sts", "get-caller-identity", "--query", "JourneyReport", "--output", "text"]);
     },
 
     async deployedSlugs() {
@@ -162,7 +162,7 @@ export function awsStore(
       return [...found];
     },
 
-    async stands(slug) {
+    async exists(slug) {
       const table = await stateTable(cli, stack);
       if (!table) {
         return false;

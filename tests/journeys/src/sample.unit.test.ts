@@ -6,16 +6,16 @@ import { type CellsFor, type Draw, sample } from "./sample";
 const edge = variant("edge", { offeredOn: ["aws"], config: {} });
 const box = variant("box", { offeredOn: ["aws"], config: {} });
 
-function member(name: string, lead?: true): Fixture {
+function member(name: string, representative?: true): Fixture {
   return fixture(name, {
     apps: ["web"],
     checks: [],
     on: { aws: [defaults, edge, box] },
-    sample: lead ? { group: "http", lead } : { group: "http" },
+    sample: representative ? { group: "http", representative } : { group: "http" },
   });
 }
 
-const lead = member("deploy/lead", true);
+const representative = member("deploy/representative", true);
 const other = member("deploy/other");
 const third = member("deploy/third");
 const loner = fixture("deploy/loner", {
@@ -23,7 +23,7 @@ const loner = fixture("deploy/loner", {
   checks: [],
   on: { aws: [defaults, edge] },
 });
-const GROUP = [lead, other, third];
+const GROUP = [representative, other, third];
 const ALL = [...GROUP, loner];
 const SEEDS = ["1", "2", "3", "4", "5", "938"];
 
@@ -36,15 +36,15 @@ const every: CellsFor = (one) => [
 const seeded = (seed: string, touched: string[] = []): Draw => ({ seed, touched });
 
 function covered(fixtures: Fixture[], cellsFor: CellsFor, draw: Draw): Cell[] {
-  const chosen = sample(fixtures, cellsFor, "covering", draw);
+  const chosen = sample(fixtures, cellsFor, "sampled", draw);
   return fixtures.flatMap((one) => chosen.get(one.name) ?? []);
 }
 
 const variantOf = (cell: Cell) => cell.variant.name;
 
 describe("sampling the cells of a group", () => {
-  it("runs every cell of every fixture under full coverage", () => {
-    const chosen = sample(ALL, every, "full", seeded("7"));
+  it("runs every cell of every fixture when asked for every cell", () => {
+    const chosen = sample(ALL, every, "every-cell", seeded("7"));
     for (const one of ALL) {
       expect(chosen.get(one.name)).toEqual(every(one));
     }
@@ -58,16 +58,18 @@ describe("sampling the cells of a group", () => {
     }
   });
 
-  it("runs the default cell on the member the group leads with", () => {
+  it("runs the default cell on the group's representative", () => {
     for (const seed of SEEDS) {
-      const chosen = sample(GROUP, every, "covering", seeded(seed));
-      expect(chosen.get(lead.name)?.map((cell) => cell.name)).toContain(lead.name);
+      const chosen = sample(GROUP, every, "sampled", seeded(seed));
+      expect(chosen.get(representative.name)?.map((cell) => cell.name)).toContain(
+        representative.name,
+      );
     }
   });
 
   it("runs a default cell on every member that took no variant", () => {
     for (const seed of SEEDS) {
-      const chosen = sample(GROUP, every, "covering", seeded(seed));
+      const chosen = sample(GROUP, every, "sampled", seeded(seed));
       for (const one of GROUP) {
         expect((chosen.get(one.name) ?? []).length).toBeGreaterThan(0);
       }
@@ -83,10 +85,10 @@ describe("sampling the cells of a group", () => {
 
   it("runs every cell of a member the diff touches, and spreads the rest", () => {
     for (const seed of SEEDS) {
-      const chosen = sample(GROUP, every, "covering", seeded(seed, ["deploy/other"]));
+      const chosen = sample(GROUP, every, "sampled", seeded(seed, ["deploy/other"]));
       expect(chosen.get(other.name)).toEqual(every(other));
-      const rest = [lead, third].flatMap((one) => chosen.get(one.name) ?? []);
-      expect(rest.length).toBeLessThan([lead, third].flatMap(every).length);
+      const rest = [representative, third].flatMap((one) => chosen.get(one.name) ?? []);
+      expect(rest.length).toBeLessThan([representative, third].flatMap(every).length);
     }
   });
 
@@ -106,7 +108,7 @@ describe("sampling the cells of a group", () => {
     const noOtherBox: CellsFor = (one) =>
       every(one).filter((cell) => !(one === other && cell.variant === box));
     for (const seed of SEEDS) {
-      const chosen = sample(GROUP, noOtherBox, "covering", seeded(seed));
+      const chosen = sample(GROUP, noOtherBox, "sampled", seeded(seed));
       expect(chosen.get(other.name)?.some((cell) => cell.variant === box)).toBe(false);
       expect(covered(GROUP, noOtherBox, seeded(seed)).map(variantOf)).toContain("box");
     }
@@ -118,14 +120,14 @@ describe("sampling the cells of a group", () => {
   });
 
   it("runs every cell of a fixture that samples with no group", () => {
-    const chosen = sample(ALL, every, "covering", seeded("9"));
+    const chosen = sample(ALL, every, "sampled", seeded("9"));
     expect(chosen.get(loner.name)).toEqual(every(loner));
   });
 
   it("keeps groups of one name apart across concerns", () => {
-    const sdk = member("sdk/lead", true);
+    const sdk = member("sdk/representative", true);
     for (const seed of SEEDS) {
-      const chosen = sample([lead, other, sdk], every, "covering", seeded(seed));
+      const chosen = sample([representative, other, sdk], every, "sampled", seeded(seed));
       expect(chosen.get(sdk.name)).toEqual(every(sdk));
     }
   });

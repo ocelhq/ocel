@@ -1,12 +1,12 @@
 import { currentRunIdentity } from "./identity";
-import { sweepAsk } from "./sweepArgs";
+import { sweepArgs } from "./sweepArgs";
 import { targetNamed } from "./targets";
 
 async function main(argv: string[]): Promise<void> {
-  const ask = sweepAsk(argv, currentRunIdentity());
-  const target = targetNamed(ask.target);
+  const args = sweepArgs(argv, currentRunIdentity());
+  const target = targetNamed(args.target);
   await target.detectLane();
-  await (ask.oneRun ? target.sweeper.sweepRun(ask.runId) : target.sweeper.sweepStale(ask.runId));
+  await (args.oneRun ? target.sweeper.sweepRun(args.runId) : target.sweeper.sweepStale(args.runId));
 }
 
 main(process.argv.slice(2)).then(

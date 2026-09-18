@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import type { Check } from "./checks/context";
-import { check, stepRef } from "./lifecycle";
 import { type Fixture, fixture, type Gap, type Lane, variant } from "./matrix/types";
 import { defaults } from "./matrix/variants";
-import { type Ask, EVERYTHING, type Plan, plan } from "./plan";
+import { NO_FILTER, type Plan, plan, type RunFilter } from "./plan";
+import { check, step } from "./steps";
 import { ExternalStack } from "./targets/aws/stacks/bindings";
 
 const edge = variant("edge", { offeredOn: ["aws"], config: {} });
@@ -33,7 +33,7 @@ function one(name: string, over: Partial<Omit<Fixture, "name" | "concern">> = {}
   });
 }
 
-type Input = { lane?: Lane; ask?: Partial<Ask>; gaps?: Gap[]; releaseCycle?: boolean };
+type Input = { lane?: Lane; filter?: Partial<RunFilter>; gaps?: Gap[]; releaseCycle?: boolean };
 
 function planOf(fixtures: Fixture[], input: Input = {}): Plan {
   return plan({
@@ -41,7 +41,7 @@ function planOf(fixtures: Fixture[], input: Input = {}): Plan {
     gaps: input.gaps ?? [],
     lane: input.lane ?? "aws",
     releaseCycle: input.releaseCycle ?? true,
-    ask: { ...EVERYTHING, ...input.ask },
+    filter: { ...NO_FILTER, ...input.filter },
   });
 }
 
@@ -112,7 +112,7 @@ describe("the steps a cell walks through", () => {
   });
 
   it("leaves destroy out of a lane that keeps its cells standing", () => {
-    const planned = planOf([one("deploy/node")], { ask: { keep: true } });
+    const planned = planOf([one("deploy/node")], { filter: { keep: true } });
     expect(titlesOf(planned, "deploy/node")).toEqual(["deploy", "ping"]);
     expect(planned.keep).toBe(true);
   });
@@ -158,34 +158,36 @@ describe("what a lane is asked to run", () => {
   const living = one("lifecycle/next", { redeploys: true });
 
   it("runs only the concerns asked for", () => {
-    expect(cellsOf(planOf([node, sdk], { ask: { concerns: ["sdk"] } }))).toEqual(["sdk/node"]);
+    expect(cellsOf(planOf([node, sdk], { filter: { concerns: ["sdk"] } }))).toEqual(["sdk/node"]);
   });
 
   it("runs only the fixtures named, in matrix order, and refuses one the target does not run", () => {
-    const named = planOf([node, sdk], { ask: { fixtures: ["sdk/node", "deploy/node"] } });
+    const named = planOf([node, sdk], { filter: { fixtures: ["sdk/node", "deploy/node"] } });
     expect(named.cells.map((cell) => cell.fixture)).toEqual([
       "deploy/node",
       "deploy/node",
       "deploy/node",
       "sdk/node",
     ]);
-    expect(() => planOf([node, sdk], { ask: { fixtures: ["sdk/next"] } })).toThrow(
+    expect(() => planOf([node, sdk], { filter: { fixtures: ["sdk/next"] } })).toThrow(
       /this target runs no fixture named sdk\/next \(deploy\/node, sdk\/node\)/,
     );
   });
 
   it("runs only the variants named, the default among them", () => {
-    expect(cellsOf(planOf([node], { ask: { variants: ["default", "box"] } }))).toEqual([
+    expect(cellsOf(planOf([node], { filter: { variants: ["default", "box"] } }))).toEqual([
       "deploy/node",
       "deploy/node-box",
     ]);
   });
 
   it("refuses a variant no fixture lists, and runs nothing for one only another target runs", () => {
-    expect(() => planOf([node], { ask: { variants: ["fastly"] } })).toThrow(
+    expect(() => planOf([node], { filter: { variants: ["fastly"] } })).toThrow(
       /no fixture lists a variant named fastly \(default, edge, box\)/,
     );
-    expect(cellsOf(planOf([node, sdk], { lane: "vps", ask: { variants: ["edge"] } }))).toEqual([]);
+    expect(cellsOf(planOf([node, sdk], { lane: "vps", filter: { variants: ["edge"] } }))).toEqual(
+      [],
+    );
   });
 
   it("runs the cells that live longest first, and keeps matrix order among equals", () => {
@@ -198,24 +200,24 @@ describe("what a lane is asked to run", () => {
     ]);
   });
 
-  it("samples a group under covering, and runs all of it under full", () => {
+  it("samples a group when sampled, and runs all of it for every cell", () => {
     const grouped = [
       one("deploy/a", { on: { aws: [defaults, edge] }, sample: { group: "g" } }),
       one("deploy/b", { on: { aws: [defaults, edge] }, sample: { group: "g" } }),
     ];
     expect(cellsOf(planOf(grouped))).toHaveLength(4);
-    const covering = planOf(grouped, {
-      ask: { coverage: "covering", draw: { seed: "1", touched: [] } },
+    const sampled = planOf(grouped, {
+      filter: { coverage: "sampled", draw: { seed: "1", touched: [] } },
     });
-    expect(cellsOf(covering).filter((name) => name.endsWith("-edge"))).toHaveLength(1);
-    expect(cellsOf(covering)).toHaveLength(3);
+    expect(cellsOf(sampled).filter((name) => name.endsWith("-edge"))).toHaveLength(1);
+    expect(cellsOf(sampled)).toHaveLength(3);
   });
 });
 
-function gap(id: string, affects: Gap["affects"], issue?: number): Gap {
+function gap(id: string, where: Gap["where"], issue?: number): Gap {
   return issue === undefined
-    ? { id, reason: `reason for ${id}`, affects }
-    : { id, reason: `reason for ${id}`, issue, affects };
+    ? { id, reason: `reason for ${id}`, where }
+    : { id, reason: `reason for ${id}`, issue, where };
 }
 
 describe("the gaps a lane expects", () => {
@@ -233,81 +235,82 @@ describe("the gaps a lane expects", () => {
   it("lists a test under every gap that names it", () => {
     const planned = planOf(matrix, {
       gaps: [
-        gap("one", [{ on: ["aws"], fixtures: [node], tests: [stepRef.deploy] }], 1),
-        gap("two", [{ on: ["aws"], fixtures: [node], tests: [stepRef.deploy] }]),
+        gap("one", [{ on: ["aws"], fixtures: [node], fails: [step.deploy] }], 1),
+        gap("two", [{ on: ["aws"], fixtures: [node], fails: [step.deploy] }]),
       ],
     });
-    expect(planned.expectations["deploy/node/web"]?.deploy).toEqual([
+    expect(planned.expectedFailures["deploy/node/web"]?.deploy).toEqual([
       { id: "one", reason: "reason for one", issue: 1 },
       { id: "two", reason: "reason for two" },
     ]);
   });
 
-  it("lists a test once under a gap whose blocks overlap", () => {
+  it("lists a test once under a gap whose scopes overlap", () => {
     const planned = planOf(matrix, {
       gaps: [
         gap("one", [
-          { on: ["aws"], fixtures: [node], tests: [stepRef.deploy] },
-          { on: ["aws"], tests: [stepRef.deploy] },
+          { on: ["aws"], fixtures: [node], fails: [step.deploy] },
+          { on: ["aws"], fails: [step.deploy] },
         ]),
       ],
     });
-    expect(planned.expectations["deploy/node/web"]?.deploy).toHaveLength(1);
-    expect(planned.expectations["sdk/workspace-edge/api"]?.deploy).toHaveLength(1);
+    expect(planned.expectedFailures["deploy/node/web"]?.deploy).toHaveLength(1);
+    expect(planned.expectedFailures["sdk/workspace-edge/api"]?.deploy).toHaveLength(1);
   });
 
   it("expands a check across the phases a cell verifies it in", () => {
     const planned = planOf(matrix, {
-      gaps: [gap("one", [{ on: ["aws"], tests: [check(ping)] }])],
+      gaps: [gap("one", [{ on: ["aws"], fails: [check(ping)] }])],
     });
-    expect(Object.keys(planned.expectations["lifecycle/next/web"] ?? {})).toEqual([
+    expect(Object.keys(planned.expectedFailures["lifecycle/next/web"] ?? {})).toEqual([
       "ping",
       "redeploy · ping",
       "rollback · ping",
     ]);
-    expect(Object.keys(planned.expectations["deploy/node/web"] ?? {})).toEqual(["ping"]);
+    expect(Object.keys(planned.expectedFailures["deploy/node/web"] ?? {})).toEqual(["ping"]);
   });
 
   it("expands a check across only the phases named", () => {
     const planned = planOf(matrix, {
-      gaps: [gap("one", [{ on: ["aws"], tests: [check([ping, pong], ["rollback"])] }])],
+      gaps: [gap("one", [{ on: ["aws"], fails: [check([ping, pong], ["rollback"])] }])],
     });
-    expect(Object.keys(planned.expectations["lifecycle/next/web"] ?? {})).toEqual([
+    expect(Object.keys(planned.expectedFailures["lifecycle/next/web"] ?? {})).toEqual([
       "rollback · ping",
     ]);
   });
 
-  it("reaches every variant of a fixture unless the block names some", () => {
+  it("reaches every variant of a fixture unless the scope names some", () => {
     const every = planOf(matrix, {
-      gaps: [gap("one", [{ on: ["aws"], fixtures: [node], tests: [stepRef.deploy] }])],
+      gaps: [gap("one", [{ on: ["aws"], fixtures: [node], fails: [step.deploy] }])],
     });
-    expect(every.expectations["deploy/node-edge/web"]?.deploy).toBeDefined();
+    expect(every.expectedFailures["deploy/node-edge/web"]?.deploy).toBeDefined();
     const unvaried = planOf(matrix, {
       gaps: [
-        gap("one", [
-          { on: ["aws"], fixtures: [node], variants: [defaults], tests: [stepRef.deploy] },
-        ]),
+        gap("one", [{ on: ["aws"], fixtures: [node], variants: [defaults], fails: [step.deploy] }]),
       ],
     });
-    expect(unvaried.expectations["deploy/node/web"]?.deploy).toBeDefined();
-    expect(unvaried.expectations["deploy/node-edge/web"]).toBeUndefined();
+    expect(unvaried.expectedFailures["deploy/node/web"]?.deploy).toBeDefined();
+    expect(unvaried.expectedFailures["deploy/node-edge/web"]).toBeUndefined();
   });
 
-  it("reads a block only on the lanes it names", () => {
-    const gaps = [gap("one", [{ on: ["vps"], tests: [stepRef.deploy] }])];
-    expect(planOf(matrix, { gaps }).expectations).toEqual({});
-    expect(planOf(matrix, { gaps, lane: "vps" }).expectations["deploy/node/web"]).toBeDefined();
+  it("reads a scope only on the lanes it names", () => {
+    const gaps = [gap("one", [{ on: ["vps"], fails: [step.deploy] }])];
+    expect(planOf(matrix, { gaps }).expectedFailures).toEqual({});
+    expect(planOf(matrix, { gaps, lane: "vps" }).expectedFailures["deploy/node/web"]).toBeDefined();
   });
 
   it("expects only what the lane runs", () => {
     const planned = planOf(matrix, {
-      gaps: [gap("one", [{ on: ["aws"], tests: [stepRef.deploy] }])],
-      ask: { fixtures: ["deploy/node"] },
+      gaps: [gap("one", [{ on: ["aws"], fails: [step.deploy] }])],
+      filter: { fixtures: ["deploy/node"] },
     });
-    expect(Object.keys(planned.expectations)).toEqual(["deploy/node/web", "deploy/node-edge/web"]);
+    expect(Object.keys(planned.expectedFailures)).toEqual([
+      "deploy/node/web",
+      "deploy/node-edge/web",
+    ]);
   });
 
-  it("skips the whole cell a skipping block reaches, and names it under the gap", () => {
+  it("skips the whole cell a skipping scope reaches, and names it under the gap", () => {
     const planned = planOf(matrix, {
       gaps: [
         gap(
@@ -317,8 +320,8 @@ describe("the gaps a lane expects", () => {
               on: ["aws"],
               fixtures: [workspace],
               variants: [edge],
-              tests: [stepRef.deploy],
-              skip: true,
+              fails: [step.deploy],
+              skipsCell: true,
             },
           ],
           9,
@@ -331,12 +334,12 @@ describe("the gaps a lane expects", () => {
     });
   });
 
-  it("names a skipped cell once however many blocks of one gap skip it", () => {
+  it("names a skipped cell once however many scopes of one gap skip it", () => {
     const planned = planOf(matrix, {
       gaps: [
         gap("one", [
-          { on: ["aws"], fixtures: [node], tests: [stepRef.deploy], skip: true },
-          { on: ["aws"], variants: [defaults], tests: [stepRef.deploy], skip: true },
+          { on: ["aws"], fixtures: [node], fails: [step.deploy], skipsCell: true },
+          { on: ["aws"], variants: [defaults], fails: [step.deploy], skipsCell: true },
         ]),
       ],
     });
@@ -345,25 +348,27 @@ describe("the gaps a lane expects", () => {
 
   it("names only the skipped cells the lane was asked to run", () => {
     const gaps = [
-      gap("one", [{ on: ["aws"], fixtures: [node], tests: [stepRef.deploy], skip: true }]),
+      gap("one", [{ on: ["aws"], fixtures: [node], fails: [step.deploy], skipsCell: true }]),
     ];
     expect(Object.keys(planOf(matrix, { gaps }).skipped)).toEqual([
       "deploy/node",
       "deploy/node-edge",
     ]);
-    expect(planOf(matrix, { gaps, ask: { variants: ["default"] } }).skipped).toEqual({
+    expect(planOf(matrix, { gaps, filter: { variants: ["default"] } }).skipped).toEqual({
       "deploy/node": [{ id: "one", reason: "reason for one" }],
     });
   });
 
   it("runs a skipped cell when the skips are lifted, still expecting it red", () => {
     const planned = planOf(matrix, {
-      gaps: [gap("one", [{ on: ["aws"], fixtures: [node], tests: [stepRef.deploy], skip: true }])],
-      ask: { runSkipped: true },
+      gaps: [
+        gap("one", [{ on: ["aws"], fixtures: [node], fails: [step.deploy], skipsCell: true }]),
+      ],
+      filter: { runSkipped: true },
     });
     expect(cellsOf(planned)).toContain("deploy/node");
     expect(planned.skipped).toEqual({});
-    expect(planned.expectations["deploy/node/web"]?.deploy).toBeDefined();
+    expect(planned.expectedFailures["deploy/node/web"]?.deploy).toBeDefined();
   });
 });
 
@@ -374,7 +379,7 @@ describe("a gap that reaches nothing", () => {
   it("refuses a fixture that plans none of the tests named", () => {
     expect(() =>
       planOf([node, living], {
-        gaps: [gap("one", [{ on: ["aws"], fixtures: [node], tests: [stepRef.redeploy] }])],
+        gaps: [gap("one", [{ on: ["aws"], fixtures: [node], fails: [step.redeploy] }])],
       }),
     ).toThrow(/one on aws lists deploy\/node, which plans none of the tests named/);
   });
@@ -383,7 +388,7 @@ describe("a gap that reaches nothing", () => {
     expect(() =>
       planOf([node, living], {
         lane: "vps",
-        gaps: [gap("one", [{ on: ["vps"], variants: [edge], tests: [stepRef.deploy] }])],
+        gaps: [gap("one", [{ on: ["vps"], variants: [edge], fails: [step.deploy] }])],
       }),
     ).toThrow(/one on vps lists edge, which plans none of the tests named/);
   });
@@ -391,7 +396,7 @@ describe("a gap that reaches nothing", () => {
   it("refuses a phase no cell it reaches walks", () => {
     expect(() =>
       planOf([node], {
-        gaps: [gap("one", [{ on: ["aws"], tests: [check(ping, ["rollback"])] }])],
+        gaps: [gap("one", [{ on: ["aws"], fails: [check(ping, ["rollback"])] }])],
       }),
     ).toThrow(/one on aws lists nothing that is planned/);
   });
@@ -400,13 +405,13 @@ describe("a gap that reaches nothing", () => {
     expect(() =>
       planOf([node, living], {
         lane: "vps",
-        gaps: [gap("one", [{ on: ["vps"], fixtures: [living], tests: [stepRef.deploy] }])],
+        gaps: [gap("one", [{ on: ["vps"], fixtures: [living], fails: [step.deploy] }])],
       }),
     ).toThrow(/one on vps lists lifecycle\/next/);
     expect(() =>
       planOf([node, living], {
-        gaps: [gap("one", [{ on: ["aws"], fixtures: [node], tests: [stepRef.deploy] }])],
-        ask: { fixtures: ["lifecycle/next"] },
+        gaps: [gap("one", [{ on: ["aws"], fixtures: [node], fails: [step.deploy] }])],
+        filter: { fixtures: ["lifecycle/next"] },
       }),
     ).not.toThrow();
   });
@@ -414,7 +419,7 @@ describe("a gap that reaches nothing", () => {
   it("refuses two gaps of one id, and a gap that affects nothing", () => {
     expect(() =>
       planOf([node], {
-        gaps: [gap("one", [{ on: ["aws"], tests: [stepRef.deploy] }]), gap("one", [])],
+        gaps: [gap("one", [{ on: ["aws"], fails: [step.deploy] }]), gap("one", [])],
       }),
     ).toThrow(/the gap one is listed twice/);
     expect(() => planOf([node], { gaps: [gap("one", [])] })).toThrow(/the gap one affects nothing/);
@@ -451,12 +456,13 @@ describe("a matrix that cannot be planned", () => {
     );
   });
 
-  it("refuses a sample group led by two members", () => {
-    const led = (name: string) => one(name, { sample: { group: "g", lead: true } });
-    expect(() => planOf([led("deploy/a"), led("deploy/b")])).toThrow(
-      /the deploy\/g group is led by deploy\/a and deploy\/b/,
+  it("refuses a sample group with two representatives", () => {
+    const represents = (name: string) =>
+      one(name, { sample: { group: "g", representative: true } });
+    expect(() => planOf([represents("deploy/a"), represents("deploy/b")])).toThrow(
+      /the deploy\/g group is represented by both deploy\/a and deploy\/b/,
     );
-    expect(() => planOf([led("deploy/a"), led("sdk/b")])).not.toThrow();
+    expect(() => planOf([represents("deploy/a"), represents("sdk/b")])).not.toThrow();
   });
 
   it("refuses a variant that calls itself the default", () => {

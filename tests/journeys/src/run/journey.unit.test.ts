@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { outputRoot, prepareFile } from "../paths";
-import { EVERYTHING } from "../plan";
+import { NO_FILTER } from "../plan";
 import type { Target } from "../targets/types";
 import { runJourney } from "./journey";
 
@@ -56,7 +56,7 @@ describe("a lane that selects no cell", () => {
     const prepared: string[] = [];
 
     const exitCode = await runJourney(laneThatPrepares(prepared), {
-      ...EVERYTHING,
+      ...NO_FILTER,
       fixtures: ["deploy/node"],
       variants: ["container"],
     });

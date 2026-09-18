@@ -1,5 +1,5 @@
 import { rm } from "node:fs/promises";
-import { AWS_BASE, type Overlay, sweepShapeFor, writeJourneyConfig } from "../../config";
+import { AWS_BASE, awsSweepOverlay, type Overlay, writeJourneyConfig } from "../../config";
 import { projectSlug, slugPart } from "../../identity";
 import { fixtures as matrix } from "../../matrix/fixtures";
 import type { Cell, Fixture } from "../../matrix/types";
@@ -108,7 +108,7 @@ export function sweepPlan(
       return {
         slug: stranded.slug,
         fixture: cell?.fixture ?? fallback,
-        overlay: sweepShapeFor(cell, stranded.slug, env),
+        overlay: awsSweepOverlay(cell, stranded.slug, env),
       };
     }),
     complaints: [],
@@ -124,7 +124,7 @@ export class AwsSweeper implements Sweeper {
 
   async exists(slug: string): Promise<boolean> {
     const real = await this.world.real();
-    return (await this.store(real ? namespaceOfSlug(slug) : undefined)).stands(slug);
+    return (await this.store(real ? namespaceOfSlug(slug) : undefined)).exists(slug);
   }
 
   async sweepStale(runId: string): Promise<void> {

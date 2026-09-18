@@ -1,4 +1,4 @@
-export type SweepAsk = { target: string; runId: string; oneRun: boolean };
+export type SweepArgs = { target: string; runId: string; oneRun: boolean };
 
 export const SWEEP_USAGE = "pnpm sweep --target <name> [--own] [--run <id>]";
 
@@ -14,7 +14,7 @@ function flag(argv: string[], name: string): string | undefined {
   return value;
 }
 
-export function sweepAsk(argv: string[], current: string): SweepAsk {
+export function sweepArgs(argv: string[], current: string): SweepArgs {
   const target = flag(argv, "target");
   if (!target) {
     throw new Error(SWEEP_USAGE);

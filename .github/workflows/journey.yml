@@ -43,10 +43,10 @@ on:
         type: choice
         options: [skip, run]
       coverage:
-        description: "covering runs each variant on one member of a group; full runs every cell."
-        default: "full"
+        description: "sampled runs each variant on one member of a group; every-cell runs every cell."
+        default: "every-cell"
         type: choice
-        options: [full, covering]
+        options: [every-cell, sampled]
       concern:
         description: "Concerns each lane covers, space separated: deploy asks whether the app runs there, lifecycle whether a release can be replaced and rolled back there, sdk whether its resources do."
         default: "deploy lifecycle sdk"
@@ -184,10 +184,10 @@ jobs:
           fi
 
           if [ "$real" = true ]; then
-            coverage=${COVERAGE:-full}
+            coverage=${COVERAGE:-every-cell}
             concern=${CONCERN:-deploy lifecycle sdk}
           else
-            coverage=covering
+            coverage=sampled
             concern="deploy lifecycle"
             VARIANTS=
             SKIPS=
@@ -268,7 +268,7 @@ jobs:
           OCEL_JOURNEY_CONCERN: deploy
           OCEL_JOURNEY_FIXTURES: deploy/next
           OCEL_JOURNEY_VARIANTS: cloudflare
-          OCEL_JOURNEY_COVERAGE: full
+          OCEL_JOURNEY_COVERAGE: every-cell
           OCEL_JOURNEY_SKIPS: skip
           OCEL_JOURNEY_KEEP: "1"
           OCEL_JOURNEY_SEED: ""
@@ -646,7 +646,7 @@ jobs:
       OCEL_JOURNEY_CONCERN: deploy
       OCEL_JOURNEY_FIXTURES: deploy/next
       OCEL_JOURNEY_VARIANTS: cloudflare
-      OCEL_JOURNEY_COVERAGE: full
+      OCEL_JOURNEY_COVERAGE: every-cell
       OCEL_JOURNEY_SKIPS: skip
       OCEL_JOURNEY_KEEP: "1"
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}

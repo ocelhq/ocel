@@ -1,6 +1,6 @@
 import { parseShard } from "../shard";
 import { targetNamed } from "../targets";
-import { askFrom, concernsNamed } from "./ask";
+import { concernsNamed, filterFrom } from "./filter";
 import { runJourney } from "./journey";
 
 const USAGE =
@@ -32,7 +32,7 @@ async function main(argv: string[]): Promise<number> {
     throw new Error(`--concern names one concern, not ${concernName}\n${USAGE}`);
   }
   return runJourney(targetNamed(targetName), {
-    ...askFrom(process.env),
+    ...filterFrom(process.env),
     concerns: [concern],
     fixtures: [`${concern}/${fixtureName}`],
   });

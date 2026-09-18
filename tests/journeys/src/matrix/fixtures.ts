@@ -92,7 +92,7 @@ export const deploy = {
       vps: [defaults],
       gcp: [defaults, container],
     },
-    sample: { group: "node-http", lead: true },
+    sample: { group: "node-http", representative: true },
   }),
 };
 
@@ -147,7 +147,7 @@ export const sdk = {
       aws: [defaults, container, cloudflare],
       vps: [defaults],
     },
-    sample: { group: "node-http", lead: true },
+    sample: { group: "node-http", representative: true },
   }),
   withTransforms: fixture("sdk/with-transforms", {
     apps: ["web"],

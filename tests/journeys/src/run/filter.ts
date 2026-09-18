@@ -1,5 +1,5 @@
 import { CONCERNS, type Concern } from "../matrix/types";
-import type { Ask } from "../plan";
+import type { RunFilter } from "../plan";
 import { COVERAGES, type Coverage, type Draw } from "../sample";
 
 function listed(value: string | undefined, separators: RegExp): string[] {
@@ -24,11 +24,11 @@ export function concernsNamed(asked: string | undefined): Concern[] {
 function coverageFrom(env: NodeJS.ProcessEnv): Coverage {
   const asked = (env.OCEL_JOURNEY_COVERAGE ?? "").trim();
   if (asked === "") {
-    return "covering";
+    return "sampled";
   }
   if (!(COVERAGES as string[]).includes(asked)) {
     throw new Error(
-      `OCEL_JOURNEY_COVERAGE is ${asked}, and a journey covers its cells ${COVERAGES.join(" or ")}`,
+      `OCEL_JOURNEY_COVERAGE is ${asked}, and a journey runs ${COVERAGES.join(" or ")}`,
     );
   }
   return asked as Coverage;
@@ -64,7 +64,7 @@ function keepsStanding(env: NodeJS.ProcessEnv): boolean {
   throw new Error(`OCEL_JOURNEY_KEEP is ${asked}, and a cell is either kept standing or destroyed`);
 }
 
-export function askFrom(env: NodeJS.ProcessEnv): Ask {
+export function filterFrom(env: NodeJS.ProcessEnv): RunFilter {
   const draw = drawFrom(env);
   return {
     concerns: concernsNamed(env.OCEL_JOURNEY_CONCERN),

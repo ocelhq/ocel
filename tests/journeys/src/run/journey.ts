@@ -2,24 +2,24 @@ import { spawn } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { currentRunIdentity } from "../identity";
-import { follow, LIVE_ENV } from "../live";
 import { fixtures } from "../matrix/fixtures";
 import { gaps } from "../matrix/gaps";
 import {
   cellFile,
   cellFilesDir,
   cellsDir,
-  liveFile,
   packageRoot,
   planFile,
   prepareFile,
+  progressFile,
 } from "../paths";
-import { type Ask, type Plan, plan } from "../plan";
+import { type Plan, plan, type RunFilter } from "../plan";
 import type { PrepareFailures } from "../prepare";
-import { type Run, settleAccount } from "../report/account";
+import { follow, PROGRESS_ENV } from "../progress";
+import { type SuiteExit, writeReport } from "../report";
 import { hasReleaseCycle, laneWorkers, selectedTarget } from "../targets";
 import type { Target } from "../targets/types";
-import { askFrom } from "./ask";
+import { filterFrom } from "./filter";
 
 const DESCRIBE_CELL = path.join(packageRoot, "src", "run", "describeCell.ts");
 
@@ -48,15 +48,15 @@ async function writeCellFiles(runId: string, target: Target, planned: Plan): Pro
   return files;
 }
 
-async function runSuite(target: Target, files: string[], workers: number, live: string) {
-  await rm(live, { force: true });
-  const stop = follow(live);
+async function runSuite(target: Target, files: string[], workers: number, progressLog: string) {
+  await rm(progressLog, { force: true });
+  const stop = follow(progressLog);
   const child = spawn(
     "bun",
     ["test", `--parallel=${workers}`, `--timeout=${target.stepTimeoutMs}`, ...files],
-    { cwd: packageRoot, stdio: "inherit", env: { ...process.env, [LIVE_ENV]: live } },
+    { cwd: packageRoot, stdio: "inherit", env: { ...process.env, [PROGRESS_ENV]: progressLog } },
   );
-  return new Promise<Run>((resolve) => {
+  return new Promise<SuiteExit>((resolve) => {
     child.on("close", (exitCode, signal) => {
       stop();
       resolve({ exitCode, signal });
@@ -77,20 +77,20 @@ async function recordLanePreparation(target: Target, runId: string): Promise<voi
   await writeFile(file, `${JSON.stringify({ ms: Date.now() - began, failures })}\n`, "utf8");
 }
 
-function sayWhatIsSkipped(target: Target, planned: Plan) {
+function logSkipped(target: Target, planned: Plan) {
   for (const [cell, listed] of Object.entries(planned.skipped)) {
     const why = listed.map((gap) => (gap.issue === undefined ? gap.id : `#${gap.issue}`));
     process.stderr.write(`${target.name}: skipping ${cell} (${why.join(", ")})\n`);
   }
 }
 
-export async function runJourney(target: Target, ask: Ask): Promise<number> {
+export async function runJourney(target: Target, filter: RunFilter): Promise<number> {
   const runId = currentRunIdentity();
   await rm(cellsDir(runId, target.name), { recursive: true, force: true });
 
   const lane = await target.detectLane();
-  const planned = plan({ fixtures, gaps, lane, releaseCycle: hasReleaseCycle(target), ask });
-  sayWhatIsSkipped(target, planned);
+  const planned = plan({ fixtures, gaps, lane, releaseCycle: hasReleaseCycle(target), filter });
+  logSkipped(target, planned);
   const files = await writeCellFiles(runId, target, planned);
   const workers = laneWorkers(target);
 
@@ -99,12 +99,12 @@ export async function runJourney(target: Target, ask: Ask): Promise<number> {
     await recordLanePreparation(target, runId);
   }
   const runStart = Date.now();
-  const run: Run = idle
+  const exit: SuiteExit = idle
     ? { exitCode: 0, signal: null }
-    : await runSuite(target, files, workers, liveFile(runId, target.name));
+    : await runSuite(target, files, workers, progressFile(runId, target.name));
   const runEnd = Date.now();
 
-  const verdict = await settleAccount({ target, plan: planned, run, runStart, runEnd, workers });
+  const verdict = await writeReport({ target, plan: planned, exit, runStart, runEnd, workers });
   if (verdict.exitCode !== 0) {
     process.stderr.write(`\nthe journey account does not reconcile:\n${verdict.report}\n`);
   }
@@ -112,7 +112,7 @@ export async function runJourney(target: Target, ask: Ask): Promise<number> {
 }
 
 async function main(): Promise<number> {
-  return runJourney(selectedTarget(), askFrom(process.env));
+  return runJourney(selectedTarget(), filterFrom(process.env));
 }
 
 if (import.meta.main) {
