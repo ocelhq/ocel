@@ -5,8 +5,8 @@ import { workTree } from "../../../ocel";
 import { fixtureDir, laneDir, treeDir } from "../../../paths";
 import { copyTree } from "../../../tree";
 import type { CellContext } from "../../types";
-import { place } from "../place";
 import { spawnBin } from "../run";
+import { emulatorEndpoint } from "../world";
 import { ExternalStack } from "./bindings";
 
 const EMULATED_SERVICES = [
@@ -50,8 +50,8 @@ async function configureStack(dir: string, stack: string, env: NodeJS.ProcessEnv
     ["config", "set", "--secret", "dbPassword", randomBytes(16).toString("hex")],
     env,
   );
-  const where = await place();
-  if (!where.endpoint) {
+  const endpoint = emulatorEndpoint(process.env);
+  if (!endpoint) {
     return;
   }
   await pulumi(dir, ["config", "set", "aws:skipCredentialsValidation", "true"], env);
@@ -59,7 +59,7 @@ async function configureStack(dir: string, stack: string, env: NodeJS.ProcessEnv
   for (const [index, service] of EMULATED_SERVICES.entries()) {
     await pulumi(
       dir,
-      ["config", "set", "--path", `aws:endpoints[${index}].${service}`, where.endpoint],
+      ["config", "set", "--path", `aws:endpoints[${index}].${service}`, endpoint],
       env,
     );
   }

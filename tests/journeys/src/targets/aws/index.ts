@@ -1,191 +1,24 @@
 import { access, rm } from "node:fs/promises";
-import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { migrates, setsEnv } from "../../checks";
-import { type Fetch, INITIAL_GREETING, SECRET_TOKEN } from "../../checks/context";
-import {
-  AWS_BASE,
-  journeyConfigIn,
-  type Overlay,
-  sweepShapeFor,
-  writeJourneyConfig,
-} from "../../config";
-import { appHostname, currentRunIdentity, projectSlug, slugPart } from "../../identity";
-import { fixtures as matrix } from "../../matrix/fixtures";
-import type { Cell, Fixture, Lane, Phase } from "../../matrix/types";
-import { configTree, ocel, runOcel, treeRoot, workTree } from "../../ocel";
-import { fixtureDir, treeDir } from "../../paths";
-import { cellsOn, fixturesOn } from "../../plan";
+import { INITIAL_GREETING, SECRET_TOKEN } from "../../checks/context";
+import { appHostname } from "../../identity";
+import type { Lane, Phase } from "../../matrix/types";
+import { configTree, runOcel, treeRoot, workTree } from "../../ocel";
 import type { PrepareFailures } from "../../prepare";
-import { copyTree } from "../../tree";
 import { migrateCommand } from "../../workspace";
 import type { CellContext, Deployment, ReleaseCycle, Target } from "../types";
-import { authoritativeFetch, emulatorFetch } from "./dispatch";
-import { NAMESPACE_ENV, namespaceFor, namespaceOfSlug, strayNamespaces } from "./namespace";
-import { place } from "./place";
-import { githubRuns, livelyRuns, ofRun, runIdOf } from "./runs";
+import { AwsBootstrap } from "./bootstrap";
+import { AwsDispatch } from "./dispatch";
+import { ocelEnvIn } from "./namespace";
 import { awaitServing } from "./serving";
-import { reclaimable, type Stranded, sweepable } from "./slugs";
-import { awsStore, cliAt, namespacesStanding, type Store, said } from "./store";
-import { laneOf } from "./world";
-
-const LEG_TIMEOUT_MS = process.env.AWS_ENDPOINT_URL ? 600_000 : 1_800_000;
+import { AwsSweeper } from "./sweeper";
+import { AwsWorld } from "./world";
 
 const FUNCTION_URL_BODY_BYTES = 4_500_000;
 
-const DEFAULT_VPC_TRIES = 30;
 const SERVING_TIMEOUT_MS = 900_000;
 const SERVING_INTERVAL_MS = 5_000;
-
-let dispatching: Promise<Fetch> | undefined;
-
-const EVERY_FEATURE = "all";
-const FLOCI_FEATURES = ["isr", "image-optimization", "cloudfront-edge", "apigateway-edge"];
-
-const BOOTSTRAP_ARGS = ["bootstrap", "production", "--yes", "--features", EVERY_FEATURE];
-const BOOTSTRAP_DESTROY_ARGS = ["bootstrap", "destroy", "production", "--yes"];
-
-async function guard(): Promise<Lane> {
-  return laneOf((await place()).world);
-}
-
-function childEnv(dir: string, namespace?: string): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)),
-    ...(namespace ? { [NAMESPACE_ENV]: namespace } : {}),
-  };
-}
-
-async function ownNamespace(cell: CellContext): Promise<string | undefined> {
-  return (await place()).world === "real" ? namespaceFor(cell.name, cell.runId) : undefined;
-}
-
-async function cellEnv(cell: CellContext, dir: string): Promise<NodeJS.ProcessEnv> {
-  return childEnv(dir, await ownNamespace(cell));
-}
-
-async function store(namespace?: string): Promise<Store> {
-  const where = await place();
-  return namespace ? awsStore(where.endpoint, undefined, namespace) : awsStore(where.endpoint);
-}
-
-function zone(): string {
-  const named = process.env.OCEL_JOURNEY_ZONE;
-  if (!named) {
-    throw new Error("the aws target reached a cell before it knew which zone to serve on");
-  }
-  return named;
-}
-
-function hostnames(cell: CellContext): Map<string, string> {
-  return new Map(
-    cell.fixture.apps.map((app) => {
-      const host = appHostname(app, cell.slug, zone());
-      if (!host) {
-        throw new Error(`${cell.slug} declares no hostname for ${app}`);
-      }
-      return [app, host];
-    }),
-  );
-}
-
-async function dispatcher(): Promise<Fetch> {
-  dispatching ??= (async () => {
-    const where = await place();
-    return where.endpoint ? emulatorFetch(where.endpoint) : authoritativeFetch(zone());
-  })();
-  return dispatching;
-}
-
-function deployment(cell: CellContext, dispatch: Fetch): Deployment {
-  const hosts = hostnames(cell);
-  return {
-    baseUrl: (app) => {
-      const host = hosts.get(app);
-      if (!host) {
-        throw new Error(`${cell.name} has no app named ${app} on aws`);
-      }
-      return `https://${host}`;
-    },
-    fetch: dispatch,
-  };
-}
-
-async function awaitEdge(cell: CellContext, phase: Phase, deployed: Deployment): Promise<void> {
-  if ((await place()).world !== "real") {
-    return;
-  }
-  const urls = new Map(cell.fixture.apps.map((app) => [app, deployed.baseUrl(app)]));
-  const served = await awaitServing(deployed.fetch, urls, {
-    timeoutMs: SERVING_TIMEOUT_MS,
-    intervalMs: SERVING_INTERVAL_MS,
-    now: () => Date.now(),
-    sleep: (ms) => pause(ms),
-  });
-  await cell.evidence.write(phase, "serving.json", `${JSON.stringify(served, null, 2)}\n`);
-}
-
-async function awaitDefaultVpc(endpoint: string): Promise<void> {
-  const cli = cliAt(endpoint);
-  let last = "";
-  for (let attempt = 0; attempt < DEFAULT_VPC_TRIES; attempt++) {
-    try {
-      const raw = await cli([
-        "ec2",
-        "describe-vpcs",
-        "--filters",
-        "Name=isDefault,Values=true",
-        "--output",
-        "json",
-      ]);
-      if ((JSON.parse(raw) as { Vpcs?: unknown[] }).Vpcs?.length) {
-        return;
-      }
-      last = "the emulator lists no default VPC";
-    } catch (error) {
-      last = said(error);
-    }
-    await pause(1000);
-  }
-  throw new Error(
-    `the emulator never showed a default VPC, and every deploy looks one up first: ${last}`,
-  );
-}
-
-async function prepare(): Promise<PrepareFailures> {
-  const where = await place();
-  if (where.world === "real") {
-    return {};
-  }
-  if (where.endpoint) {
-    await awaitDefaultVpc(where.endpoint);
-  }
-  const [first] = fixturesOn(matrix, "aws");
-  if (!first) {
-    throw new Error("no fixture in the matrix runs on aws, so there is nothing to bootstrap");
-  }
-  const runId = currentRunIdentity();
-  const slug = projectSlug(path.posix.basename(first.name), runId);
-  const dir = await copyTree(fixtureDir(first.name), treeDir(runId, "aws", "bootstrap"));
-  try {
-    await writeJourneyConfig(dir, { base: AWS_BASE, slug });
-    await ocel(
-      dir,
-      ["bootstrap", "production", "--yes", "--features", FLOCI_FEATURES.join(",")],
-      childEnv(dir),
-    );
-  } catch (error) {
-    return { lane: error instanceof Error ? error.message : String(error) };
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-  return {};
-}
-
-async function setup(): Promise<void> {
-  await place();
-}
 
 async function cellTree(cell: CellContext): Promise<string> {
   const dir = configTree(cell, "aws");
@@ -197,389 +30,174 @@ async function cellTree(cell: CellContext): Promise<string> {
   }
 }
 
-async function deploy(cell: CellContext): Promise<Deployment> {
-  const dir = await cellTree(cell);
-  const env = await cellEnv(cell, dir);
+export class AwsTarget implements Target, ReleaseCycle {
+  readonly name = "aws";
+  readonly workers = 3;
+  readonly maxRequestBodyBytes = FUNCTION_URL_BODY_BYTES;
+  readonly stepTimeoutMs = process.env.AWS_ENDPOINT_URL ? 600_000 : 1_800_000;
 
-  if (await ownNamespace(cell)) {
-    await runOcel(cell, dir, "deploy", "bootstrap", BOOTSTRAP_ARGS, env);
+  private readonly world = new AwsWorld();
+  private readonly bootstrap = new AwsBootstrap(this.world);
+  private readonly dispatch = new AwsDispatch(this.world);
+  readonly sweeper = new AwsSweeper(this.world);
+
+  detectLane(): Promise<Lane> {
+    return this.world.lane();
   }
 
-  if (setsEnv(cell.fixture.checks)) {
-    await runOcel(
-      cell,
-      dir,
-      "deploy",
-      "env-greeting",
-      ["env", "set", `GREETING=${INITIAL_GREETING}`],
-      env,
-    );
-    await runOcel(
-      cell,
-      dir,
-      "deploy",
-      "env-secret",
-      ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`],
-      env,
-    );
-  }
-  await runOcel(cell, dir, "deploy", "deploy", ["deploy", "--yes"], env);
-  await runOcel(cell, dir, "deploy", "domain-add", ["domain", "add"], env);
-  await runOcel(cell, dir, "deploy", "deploy-bound", ["deploy", "--yes"], env);
-
-  const deployed = deployment(cell, await dispatcher());
-  await awaitEdge(cell, "deploy", deployed);
-
-  if (migrates(cell.fixture.checks)) {
-    await runOcel(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env);
+  prepareLane(): Promise<PrepareFailures> {
+    return this.bootstrap.prepareLane();
   }
 
-  await cell.evidence.write(
-    "deploy",
-    "deployment.json",
-    `${JSON.stringify(
-      {
-        slug: cell.slug,
-        variant: cell.variant.name,
-        apps: Object.fromEntries(cell.fixture.apps.map((app) => [app, deployed.baseUrl(app)])),
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  return deployed;
-}
-
-async function redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
-  const dir = await cellTree(cell);
-  const env = await cellEnv(cell, dir);
-  if (setsEnv(cell.fixture.checks)) {
-    await runOcel(
-      cell,
-      dir,
-      "redeploy",
-      "env-greeting",
-      ["env", "set", `GREETING=${greeting}`],
-      env,
-    );
+  async prepareProcess(): Promise<void> {
+    await this.world.settle();
   }
-  await runOcel(cell, dir, "redeploy", "deploy", ["deploy", "--yes"], env);
-  const deployed = deployment(cell, await dispatcher());
-  await awaitEdge(cell, "redeploy", deployed);
-  return deployed;
-}
 
-async function rollback(cell: CellContext): Promise<Deployment> {
-  const dir = await cellTree(cell);
-  await runOcel(cell, dir, "rollback", "rollback", ["rollback"], await cellEnv(cell, dir));
-  const deployed = deployment(cell, await dispatcher());
-  await awaitEdge(cell, "rollback", deployed);
-  return deployed;
-}
+  async deploy(cell: CellContext): Promise<Deployment> {
+    const dir = await cellTree(cell);
+    const env = ocelEnvIn(dir, await this.bootstrap.namespaceOf(cell));
 
-async function destroy(cell: CellContext): Promise<void> {
-  const namespace = await ownNamespace(cell);
-  const hosts = hostnames(cell);
-  const unbound: string[] = [];
-  let dir: string | undefined;
-  try {
-    dir = await cellTree(cell);
-    const env = childEnv(dir, namespace);
-    for (const [app, host] of hosts) {
-      try {
-        await runOcel(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
-      } catch (error) {
-        unbound.push(error instanceof Error ? error.message : String(error));
-      }
-    }
-    await runOcel(cell, dir, "destroy", "destroy", ["destroy", "production", "--yes"], env);
-    if (unbound.length > 0 && (await stands(cell.slug))) {
-      throw new Error(unbound.join("\n"));
-    }
-  } finally {
-    if (dir && namespace) {
-      const env = childEnv(dir, namespace);
-      await runOcel(cell, dir, "destroy", "bootstrap-destroy", BOOTSTRAP_DESTROY_ARGS, env);
-    }
-    await rm(treeRoot(cell, "aws"), { recursive: true, force: true });
-  }
-}
+    await this.bootstrap.bootstrapCell(cell, dir);
 
-async function list(): Promise<string[]> {
-  return (await store()).deployedSlugs();
-}
-
-async function stands(slug: string): Promise<boolean> {
-  const where = await place();
-  return (await store(where.world === "real" ? namespaceOfSlug(slug) : undefined)).stands(slug);
-}
-
-export function cellsBySlugPart(cells: Cell[]): Map<string, Cell> {
-  const byPart = new Map<string, Cell>();
-  for (const cell of cells) {
-    const part = slugPart(cell.name);
-    const taken = byPart.get(part);
-    if (taken) {
-      throw new Error(
-        `${cell.name} and ${taken.name} both slug to ${part}, so a sweep could not tell them apart`,
+    if (setsEnv(cell.fixture.checks)) {
+      await runOcel(
+        cell,
+        dir,
+        "deploy",
+        "env-greeting",
+        ["env", "set", `GREETING=${INITIAL_GREETING}`],
+        env,
+      );
+      await runOcel(
+        cell,
+        dir,
+        "deploy",
+        "env-secret",
+        ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`],
+        env,
       );
     }
-    byPart.set(part, cell);
-  }
-  return byPart;
-}
+    await runOcel(cell, dir, "deploy", "deploy", ["deploy", "--yes"], env);
+    await runOcel(cell, dir, "deploy", "domain-add", ["domain", "add"], env);
+    await runOcel(cell, dir, "deploy", "deploy-bound", ["deploy", "--yes"], env);
 
-export async function despite(
-  complaints: string[],
-  said: string,
-  work: () => Promise<void>,
-): Promise<void> {
-  try {
-    await work();
-  } catch (error) {
-    complaints.push(`${said}: ${String(error)}`);
-  }
-}
+    const deployed = await this.deployment(cell);
+    await this.awaitEdge(cell, "deploy", deployed);
 
-async function sweepStrayNamespace(
-  runId: string,
-  namespace: string,
-  byPart: Map<string, Cell>,
-  complaints: string[],
-): Promise<void> {
-  const where = await place();
-  const held = awsStore(where.endpoint, undefined, namespace);
-  const fixtures = fixturesOn(matrix, "aws");
-  const stranded: Stranded[] = [];
-  for (const slug of await held.deployedSlugs()) {
-    const read = reclaimable(slug, [...byPart.keys()]);
-    if (!read) {
-      complaints.push(`${slug} stands in the ${namespace} bootstrap and no harness run made it`);
-      continue;
+    if (migrates(cell.fixture.checks)) {
+      await runOcel(cell, dir, "deploy", "migrate", ["run", "--", ...migrateCommand()], env);
     }
-    stranded.push(read);
-  }
-  const { swept, complaints: unplanned } = sweepPlan(stranded, byPart, fixtures, process.env);
-  complaints.push(...unplanned);
-  for (const one of swept) {
-    await inFixture(one.fixture.name, runId, `sweep-${one.slug}`, async (dir) => {
-      await writeJourneyConfig(dir, one.overlay);
-      await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir, namespace));
-      process.stdout.write(`swept ${one.slug} from the ${namespace} bootstrap\n`);
-    }).catch((error) => complaints.push(`${one.slug}: ${String(error)}`));
+
+    await cell.evidence.write(
+      "deploy",
+      "deployment.json",
+      `${JSON.stringify(
+        {
+          slug: cell.slug,
+          variant: cell.variant.name,
+          apps: Object.fromEntries(cell.fixture.apps.map((app) => [app, deployed.baseUrl(app)])),
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    return deployed;
   }
 
-  const [first] = fixtures;
-  if (!first) {
-    return;
-  }
-  await inFixture(first.name, runId, `sweep-bootstrap-${namespace}`, async (dir) => {
-    await writeJourneyConfig(dir, { base: AWS_BASE, slug: namespace });
-    await ocel(dir, BOOTSTRAP_DESTROY_ARGS, childEnv(dir, namespace));
-    process.stdout.write(`swept the ${namespace} bootstrap\n`);
-  }).catch((error) => complaints.push(`${namespace} bootstrap: ${String(error)}`));
-}
-
-async function inFixture(
-  from: string,
-  runId: string,
-  name: string,
-  work: (dir: string) => Promise<void>,
-): Promise<void> {
-  const dir = await copyTree(fixtureDir(from), treeDir(runId, "aws", name));
-  try {
-    await work(dir);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-}
-
-type Busy = (names: string[]) => Promise<Set<string>>;
-
-function busyRuns(real: boolean, complaints: string[]): Busy {
-  if (!real) {
-    return async () => new Set<string>();
-  }
-  const look = githubRuns(process.env);
-  const told = new Set<string>();
-  return async (names) => {
-    const ids = names.flatMap((name) => runIdOf(name) ?? []);
-    const { keep, unreadable } = await livelyRuns(ids, look);
-    for (const { id, reason } of unreadable) {
-      if (told.has(id)) {
-        continue;
-      }
-      told.add(id);
-      complaints.push(
-        `run ${id} could not be read (${reason}), so its slugs and namespace were kept`,
+  async redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
+    const dir = await cellTree(cell);
+    const env = ocelEnvIn(dir, await this.bootstrap.namespaceOf(cell));
+    if (setsEnv(cell.fixture.checks)) {
+      await runOcel(
+        cell,
+        dir,
+        "redeploy",
+        "env-greeting",
+        ["env", "set", `GREETING=${greeting}`],
+        env,
       );
     }
-    return keep;
-  };
-}
-
-function underway(name: string, live: Set<string>): boolean {
-  const id = runIdOf(name);
-  return id !== undefined && live.has(id);
-}
-
-async function sweepNamespaces(
-  runId: string,
-  cells: Cell[],
-  byPart: Map<string, Cell>,
-  complaints: string[],
-  busy: Busy,
-): Promise<void> {
-  const where = await place();
-  if (where.world !== "real") {
-    return;
+    await runOcel(cell, dir, "redeploy", "deploy", ["deploy", "--yes"], env);
+    const deployed = await this.deployment(cell);
+    await this.awaitEdge(cell, "redeploy", deployed);
+    return deployed;
   }
-  const mine = cells.map((cell) => namespaceFor(cell.name, runId));
-  const stray = strayNamespaces(await namespacesStanding(cliAt(where.endpoint)), mine);
-  const live = await busy(stray);
-  for (const namespace of stray.filter((name) => !underway(name, live))) {
-    await despite(complaints, `${namespace} sweep`, () =>
-      sweepStrayNamespace(runId, namespace, byPart, complaints),
+
+  async rollback(cell: CellContext): Promise<Deployment> {
+    const dir = await cellTree(cell);
+    const env = ocelEnvIn(dir, await this.bootstrap.namespaceOf(cell));
+    await runOcel(cell, dir, "rollback", "rollback", ["rollback"], env);
+    const deployed = await this.deployment(cell);
+    await this.awaitEdge(cell, "rollback", deployed);
+    return deployed;
+  }
+
+  async destroy(cell: CellContext): Promise<void> {
+    const namespace = await this.bootstrap.namespaceOf(cell);
+    const hosts = this.hostnames(cell);
+    const unbound: string[] = [];
+    let dir: string | undefined;
+    try {
+      dir = await cellTree(cell);
+      const env = ocelEnvIn(dir, namespace);
+      for (const [app, host] of hosts) {
+        try {
+          await runOcel(cell, dir, "destroy", `domain-rm-${app}`, ["domain", "rm", host], env);
+        } catch (error) {
+          unbound.push(error instanceof Error ? error.message : String(error));
+        }
+      }
+      await runOcel(cell, dir, "destroy", "destroy", ["destroy", "production", "--yes"], env);
+      if (unbound.length > 0 && (await this.sweeper.exists(cell.slug))) {
+        throw new Error(unbound.join("\n"));
+      }
+    } finally {
+      if (dir && namespace) {
+        await this.bootstrap.destroyCellBootstrap(cell, dir, namespace);
+      }
+      await rm(treeRoot(cell, "aws"), { recursive: true, force: true });
+    }
+  }
+
+  private hostnames(cell: CellContext): Map<string, string> {
+    const zone = this.world.zone();
+    return new Map(
+      cell.fixture.apps.map((app) => {
+        const host = appHostname(app, cell.slug, zone);
+        if (!host) {
+          throw new Error(`${cell.slug} declares no hostname for ${app}`);
+        }
+        return [app, host];
+      }),
     );
   }
-}
 
-export type Swept = { slug: string; fixture: Fixture; overlay: Overlay };
-
-export function sweepPlan(
-  reclaim: Stranded[],
-  byPart: Map<string, Cell>,
-  fixtures: Fixture[],
-  env: NodeJS.ProcessEnv,
-): { swept: Swept[]; complaints: string[] } {
-  const [fallback] = fixtures;
-  if (!fallback) {
-    const slugs = reclaim.map((stranded) => stranded.slug);
+  private async deployment(cell: CellContext): Promise<Deployment> {
+    const dispatch = await this.dispatch.fetch();
+    const hosts = this.hostnames(cell);
     return {
-      swept: [],
-      complaints:
-        slugs.length > 0 ? [`no fixture runs on aws, so nothing destroys ${slugs.join(", ")}`] : [],
+      baseUrl: (app) => {
+        const host = hosts.get(app);
+        if (!host) {
+          throw new Error(`${cell.name} has no app named ${app} on aws`);
+        }
+        return `https://${host}`;
+      },
+      fetch: dispatch,
     };
   }
-  return {
-    swept: reclaim.map((stranded) => {
-      const cell = stranded.cell ? byPart.get(stranded.cell) : undefined;
-      return {
-        slug: stranded.slug,
-        fixture: cell?.fixture ?? fallback,
-        overlay: sweepShapeFor(cell, stranded.slug, env),
-      };
-    }),
-    complaints: [],
-  };
-}
 
-async function reclaimSlugs(
-  runId: string,
-  reclaim: Stranded[],
-  byPart: Map<string, Cell>,
-  fixtures: Fixture[],
-  complaints: string[],
-): Promise<void> {
-  const { swept, complaints: unplanned } = sweepPlan(reclaim, byPart, fixtures, process.env);
-  complaints.push(...unplanned);
-  for (const one of swept) {
-    await inFixture(one.fixture.name, runId, `sweep-${one.slug}`, async (dir) => {
-      await writeJourneyConfig(dir, one.overlay);
-      await ocel(dir, ["destroy", "production", "--yes"], childEnv(dir));
-      process.stdout.write(`swept ${one.slug}\n`);
-    }).catch((error) => complaints.push(`${one.slug}: ${String(error)}`));
-  }
-
-  const left = new Set(await list());
-  for (const one of swept) {
-    if (left.has(one.slug)) {
-      complaints.push(`${one.slug} still stands after the sweep destroyed it`);
+  private async awaitEdge(cell: CellContext, phase: Phase, deployed: Deployment): Promise<void> {
+    if (!(await this.world.real())) {
+      return;
     }
+    const urls = new Map(cell.fixture.apps.map((app) => [app, deployed.baseUrl(app)]));
+    const served = await awaitServing(deployed.fetch, urls, {
+      timeoutMs: SERVING_TIMEOUT_MS,
+      intervalMs: SERVING_INTERVAL_MS,
+      now: () => Date.now(),
+      sleep: (ms) => pause(ms),
+    });
+    await cell.evidence.write(phase, "serving.json", `${JSON.stringify(served, null, 2)}\n`);
   }
 }
-
-async function report(real: boolean, complaints: string[]): Promise<void> {
-  if (complaints.length === 0) {
-    return;
-  }
-  const said = `the aws sweep left work behind:\n${complaints.join("\n")}`;
-  if (real) {
-    throw new Error(said);
-  }
-  process.stderr.write(`${said}\n`);
-}
-
-async function sweep(runId: string): Promise<void> {
-  const where = await place();
-  const fixtures = fixturesOn(matrix, "aws");
-  const cells = fixtures.flatMap((fixture) => cellsOn(fixture, "aws"));
-  const byPart = cellsBySlugPart(cells);
-  const mine = cells.map((cell) => projectSlug(cell.name, runId));
-  const reclaim = sweepable(await list(), mine, [...byPart.keys()]);
-
-  const complaints: string[] = [];
-  const busy = busyRuns(where.world === "real", complaints);
-  const live = await busy(reclaim.map((entry) => entry.slug));
-  await reclaimSlugs(
-    runId,
-    reclaim.filter((entry) => !underway(entry.slug, live)),
-    byPart,
-    fixtures,
-    complaints,
-  );
-
-  await despite(complaints, "namespace sweep", () =>
-    sweepNamespaces(runId, cells, byPart, complaints, busy),
-  );
-
-  for (const fixture of fixtures) {
-    const stack = fixture.stack;
-    if (stack) {
-      await despite(complaints, `${fixture.name} stack sweep`, () => stack.sweep(runId));
-    }
-  }
-
-  await report(where.world === "real", complaints);
-}
-
-async function sweepOwn(runId: string): Promise<void> {
-  const where = await place();
-  if (where.world !== "real") {
-    await sweep(runId);
-    return;
-  }
-  const fixtures = fixturesOn(matrix, "aws");
-  const cells = fixtures.flatMap((fixture) => cellsOn(fixture, "aws"));
-  const byPart = cellsBySlugPart(cells);
-  const reclaim = sweepable(ofRun(await list(), runId), [], [...byPart.keys()]);
-
-  const complaints: string[] = [];
-  await reclaimSlugs(runId, reclaim, byPart, fixtures, complaints);
-
-  for (const namespace of ofRun(await namespacesStanding(cliAt(where.endpoint)), runId)) {
-    await despite(complaints, `${namespace} sweep`, () =>
-      sweepStrayNamespace(runId, namespace, byPart, complaints),
-    );
-  }
-
-  await report(true, complaints);
-}
-
-export const awsTarget: Target & ReleaseCycle = {
-  name: "aws",
-  concurrency: 3,
-  largeBodyBytes: FUNCTION_URL_BODY_BYTES,
-  legTimeoutMs: LEG_TIMEOUT_MS,
-  guard,
-  prepare,
-  setup,
-  deploy,
-  redeploy,
-  rollback,
-  destroy,
-  list,
-  stands,
-  sweep,
-  sweepOwn,
-};

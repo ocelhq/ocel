@@ -53,7 +53,7 @@ export function describeCell(planFile: string, name: string) {
 
   const write = ledgerFor(runId, target.name, name);
   const say = live(name);
-  const timeout = target.legTimeoutMs;
+  const timeout = target.stepTimeoutMs;
   const stack = fixture.stack;
 
   let deployment: Deployment | undefined;
@@ -73,6 +73,9 @@ export function describeCell(planFile: string, name: string) {
   });
   const tearDown = once(() => target.destroy(cell));
   const deployStack = once(async () => {
+    if (setupFailure) {
+      throw setupFailure.error;
+    }
     await stack?.deploy(cell);
   });
   const destroyStack = once(async () => {
@@ -106,7 +109,7 @@ export function describeCell(planFile: string, name: string) {
     destroy: async () => {
       await tearDown();
       assert.ok(
-        !(await target.stands(slug)),
+        !(await target.sweeper.exists(slug)),
         `${slug} still exists on ${target.name} after destroy`,
       );
     },
@@ -117,7 +120,7 @@ export function describeCell(planFile: string, name: string) {
         app,
         baseUrl: deployment.baseUrl(app),
         greeting,
-        largeBodyBytes: target.largeBodyBytes,
+        maxRequestBodyBytes: target.maxRequestBodyBytes,
         phase,
         notes,
         fetch: secretGuarded(deployment.fetch),
@@ -128,7 +131,7 @@ export function describeCell(planFile: string, name: string) {
   describe(name, () => {
     beforeAll(
       async () => {
-        await target.setup().catch((error: unknown) => {
+        await target.prepareProcess().catch((error: unknown) => {
           setupFailure = { error };
         });
       },

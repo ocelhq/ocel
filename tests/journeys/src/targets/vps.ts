@@ -17,9 +17,10 @@ import { appHostname, HARNESS_PREFIX, isStranded } from "../identity";
 import type { Lane, Phase } from "../matrix/types";
 import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
 import { outputRoot } from "../paths";
+import type { PrepareFailures } from "../prepare";
 import { migrateCommand } from "../workspace";
 import { type Gateway, openGateway } from "./gateway";
-import type { CellContext, Deployment, ReleaseCycle, Target } from "./types";
+import type { CellContext, Deployment, ReleaseCycle, Sweeper, Target } from "./types";
 
 const DEFAULT_ZONE = "localhost";
 const DEPLOY_LOGIN = "ocel-deploy";
@@ -39,13 +40,7 @@ const BRING_A_BOX_UP = [
 
 export type Box = { host: string; user: string; identityFile: string };
 
-type Standing = { dir: string; gateway: Gateway; env: NodeJS.ProcessEnv };
-
-const standing = new Map<string, Standing>();
-
-let resolvedBox: Box | undefined;
-
-let resolvedZone: string | undefined;
+type BoxSession = { dir: string; gateway: Gateway; env: NodeJS.ProcessEnv };
 
 const ran = promisify(execFile);
 
@@ -113,16 +108,6 @@ function readBox(): Box {
   return { host, user, identityFile };
 }
 
-function box(): Box {
-  resolvedBox ??= readBox();
-  return resolvedBox;
-}
-
-function zone(): string {
-  resolvedZone ??= journeyZone(process.env);
-  return resolvedZone;
-}
-
 export async function ssh(target: Box, login: string, command: string): Promise<string> {
   try {
     const { stdout } = await ran("ssh", [
@@ -145,278 +130,293 @@ export async function ssh(target: Box, login: string, command: string): Promise<
   }
 }
 
-async function guard(): Promise<Lane> {
-  const target = box();
-  let said: string;
-  try {
-    said = await ssh(target, target.user, `test -e ${INCUS_MARKER} && echo incus || echo real`);
-  } catch (error) {
-    throw new Error(
-      `${target.user}@${target.host} does not answer over ssh, and the journey harness never ` +
-        `brings a box up. Run:\n  ${BRING_A_BOX_UP}\n\n${(error as Error).message}`,
-    );
-  }
-  return boxLane(said);
-}
+export class VpsTarget implements Target, ReleaseCycle {
+  readonly name = "vps";
+  readonly workers = 2;
+  readonly maxRequestBodyBytes = UNCAPPED_BODY_BYTES;
+  readonly stepTimeoutMs = 600_000;
 
-function boxEnv(login: string): NodeJS.ProcessEnv {
-  const target = box();
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    OCEL_VPS_HOST: target.host,
-    OCEL_VPS_USER: login,
-    OCEL_VPS_IDENTITY_FILE: target.identityFile,
+  private readonly sessions = new Map<string, BoxSession>();
+  private resolvedBox: Box | undefined;
+  private resolvedZone: string | undefined;
+
+  readonly sweeper: Sweeper = {
+    list: () => this.recordedSlugs(),
+    exists: (slug) => this.stillRecorded(slug),
+    sweepStale: (runId) => this.sweepStale(runId),
+    sweepRun: async () => {},
   };
-  for (const name of HARNESS_ONLY_ENV) {
-    delete env[name];
-  }
-  return env;
-}
 
-async function boxConfig(dir: string, slug: string, login: string): Promise<string> {
-  const target = box();
-  await mkdir(dir, { recursive: true });
-  await writeFile(
-    path.join(dir, "ocel.json"),
-    `${JSON.stringify(
-      {
-        slug,
-        provider: {
-          name: "vps",
-          options: {
-            ssh: { host: target.host, user: login, identityFile: target.identityFile },
-          },
-        },
-        apps: [],
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
-  return dir;
-}
-
-async function prepare(): Promise<void> {
-  await guard();
-  const target = box();
-  const dir = await boxConfig(
-    path.join(outputRoot, "vps", "box"),
-    `${HARNESS_PREFIX}journey-bootstrap`,
-    target.user,
-  );
-  const args = ["bootstrap", "production", "--yes"];
-  const result = await spawnOcel(dir, args, boxEnv(target.user));
-  const log = redact(`${result.stdout}${result.stderr}`);
-  await writeFile(path.join(dir, "bootstrap.log"), log, "utf8");
-  if (result.code !== 0) {
-    throw exitedBadly(args, result);
-  }
-}
-
-async function trusted(cell: CellContext): Promise<string | undefined> {
-  if (!issuedByTheBox(zone())) {
-    return undefined;
-  }
-  const target = box();
-  const deadline = Date.now() + ROOT_WAIT_MS;
-  let wait = ROOT_FIRST_WAIT_MS;
-  while (true) {
-    const root = await ssh(target, target.user, `sudo cat ${PROXY_ROOT} 2>/dev/null || true`);
-    if (root.includes("BEGIN CERTIFICATE")) {
-      await cell.evidence.write("deploy", "proxy-root.pem", root);
-      return path.join(cell.evidence.dir, "deploy", "proxy-root.pem");
-    }
-    if (Date.now() >= deadline) {
+  async detectLane(): Promise<Lane> {
+    const target = this.box();
+    let said: string;
+    try {
+      said = await ssh(target, target.user, `test -e ${INCUS_MARKER} && echo incus || echo real`);
+    } catch (error) {
       throw new Error(
-        `${PROXY_ROOT} holds no issuing root ${ROOT_WAIT_MS / 1000}s after the deploy, and every ` +
-          `hostname on ${zone()} is settled against a certificate this box issues itself`,
+        `${target.user}@${target.host} does not answer over ssh, and the journey harness never ` +
+          `brings a box up. Run:\n  ${BRING_A_BOX_UP}\n\n${(error as Error).message}`,
       );
     }
-    await delay(wait);
-    wait = Math.min(wait * 2, ROOT_LONGEST_WAIT_MS);
+    return boxLane(said);
   }
-}
 
-async function bindDomains(cell: CellContext, started: Standing): Promise<void> {
-  const root = await trusted(cell);
-  await runOcel(
-    cell,
-    started.dir,
-    "deploy",
-    "domain-add",
-    ["--config", journeyConfigIn(started.dir), "domain", "add"],
-    {
-      ...started.env,
-      HTTPS_PROXY: started.gateway.tunnelUrl,
-      ...(root ? { SSL_CERT_FILE: root } : {}),
-    },
-  );
-}
-
-function hostnamesOf(cell: CellContext): Map<string, string> {
-  return new Map(
-    cell.fixture.apps.map((app) => {
-      const hostname = appHostname(app, cell.slug, zone());
-      if (!hostname) {
-        throw new Error(`${app} has no hostname on ${zone()}`);
-      }
-      return [app, hostname];
-    }),
-  );
-}
-
-async function deployment(cell: CellContext, started: Standing): Promise<Deployment> {
-  const urls = new Map<string, string>();
-  for (const [app, hostname] of hostnamesOf(cell)) {
-    urls.set(app, await started.gateway.serving(hostname));
-  }
-  await cell.evidence.write(
-    "deploy",
-    "deployment.json",
-    `${JSON.stringify({ slug: cell.slug, zone: zone(), apps: Object.fromEntries(urls) }, null, 2)}\n`,
-  );
-  return {
-    baseUrl: (app) => {
-      const url = urls.get(app);
-      if (!url) {
-        throw new Error(`${cell.name} has no app named ${app} on vps`);
-      }
-      return url;
-    },
-    fetch: (...args) => fetch(...args),
-  };
-}
-
-async function standingFor(cell: CellContext): Promise<Standing> {
-  const already = standing.get(cell.slug);
-  if (already) {
-    return already;
-  }
-  const started: Standing = {
-    dir: await workTree(cell, "vps"),
-    gateway: await openGateway(box().host),
-    env: boxEnv(DEPLOY_LOGIN),
-  };
-  standing.set(cell.slug, started);
-  return started;
-}
-
-function driving(cell: CellContext, started: Standing, phase: Phase) {
-  return (name: string, args: string[]) =>
-    runOcel(
-      cell,
-      started.dir,
-      phase,
-      name,
-      ["--config", journeyConfigIn(started.dir), ...args],
-      started.env,
+  async prepareLane(): Promise<PrepareFailures> {
+    await this.detectLane();
+    const target = this.box();
+    const dir = await this.boxConfig(
+      path.join(outputRoot, "vps", "box"),
+      `${HARNESS_PREFIX}journey-bootstrap`,
+      target.user,
     );
-}
-
-async function deploy(cell: CellContext): Promise<Deployment> {
-  const started = await standingFor(cell);
-  const drive = driving(cell, started, "deploy");
-
-  if (setsEnv(cell.fixture.checks)) {
-    await drive("env-greeting", ["env", "set", `GREETING=${INITIAL_GREETING}`]);
-    await drive("env-secret", ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`]);
-  }
-  await drive("deploy", ["deploy", "--yes"]);
-  await bindDomains(cell, started);
-  if (migrates(cell.fixture.checks)) {
-    await drive("migrate", ["run", "--", ...migrateCommand()]);
-  }
-  return deployment(cell, started);
-}
-
-async function redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
-  const started = await standingFor(cell);
-  const drive = driving(cell, started, "redeploy");
-
-  if (setsEnv(cell.fixture.checks)) {
-    await drive("env-greeting", ["env", "set", `GREETING=${greeting}`]);
-  }
-  await drive("deploy", ["deploy", "--yes"]);
-  return deployment(cell, started);
-}
-
-async function rollback(cell: CellContext): Promise<Deployment> {
-  const started = await standingFor(cell);
-
-  await driving(cell, started, "rollback")("rollback", ["rollback", "--yes"]);
-  return deployment(cell, started);
-}
-
-async function stillRecorded(slug: string): Promise<boolean> {
-  const target = box();
-  const said = await ssh(
-    target,
-    DEPLOY_LOGIN,
-    `test -e '${PROJECT_RECORDS}/${recordFile(slug)}' && echo held || echo gone`,
-  );
-  return said.trim() === "held";
-}
-
-async function destroy(cell: CellContext): Promise<void> {
-  const started = standing.get(cell.slug);
-  if (!started) {
-    return;
-  }
-  standing.delete(cell.slug);
-  const args = ["--config", journeyConfigIn(started.dir), "destroy", "production", "--yes"];
-  try {
-    await runOcel(cell, started.dir, "destroy", "destroy", args, started.env);
-  } catch (refused) {
-    if (await stillRecorded(cell.slug)) {
-      throw refused;
+    const args = ["bootstrap", "production", "--yes"];
+    const result = await spawnOcel(dir, args, this.boxEnv(target.user));
+    const log = redact(`${result.stdout}${result.stderr}`);
+    await writeFile(path.join(dir, "bootstrap.log"), log, "utf8");
+    if (result.code !== 0) {
+      throw exitedBadly(args, result);
     }
-  } finally {
-    await started.gateway.close();
+    return {};
   }
-}
 
-async function list(): Promise<string[]> {
-  const target = box();
-  const listing = await ssh(
-    target,
-    DEPLOY_LOGIN,
-    `test -d '${PROJECT_RECORDS}' && { ls -1d '${PROJECT_RECORDS}'/${HARNESS_PREFIX}*.rec 2>/dev/null || true; } || echo ${NO_RECORDS_TIER}`,
-  );
-  return slugsOf(listing);
-}
+  async prepareProcess(): Promise<void> {
+    await this.detectLane();
+  }
 
-async function sweep(runId: string): Promise<void> {
-  const lane = await guard();
-  if (lane !== "vps.incus") {
-    throw new Error(
-      "sweep destroys every project a harness run left on the box, and this box is not the disposable incus one: " +
-        "reclaim a real box by naming what to destroy yourself",
+  async deploy(cell: CellContext): Promise<Deployment> {
+    const session = await this.sessionFor(cell);
+    const drive = this.driving(cell, session, "deploy");
+
+    if (setsEnv(cell.fixture.checks)) {
+      await drive("env-greeting", ["env", "set", `GREETING=${INITIAL_GREETING}`]);
+      await drive("env-secret", ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`]);
+    }
+    await drive("deploy", ["deploy", "--yes"]);
+    await this.bindDomains(cell, session);
+    if (migrates(cell.fixture.checks)) {
+      await drive("migrate", ["run", "--", ...migrateCommand()]);
+    }
+    return this.deployment(cell, session);
+  }
+
+  async redeploy(cell: CellContext, greeting: string): Promise<Deployment> {
+    const session = await this.sessionFor(cell);
+    const drive = this.driving(cell, session, "redeploy");
+
+    if (setsEnv(cell.fixture.checks)) {
+      await drive("env-greeting", ["env", "set", `GREETING=${greeting}`]);
+    }
+    await drive("deploy", ["deploy", "--yes"]);
+    return this.deployment(cell, session);
+  }
+
+  async rollback(cell: CellContext): Promise<Deployment> {
+    const session = await this.sessionFor(cell);
+
+    await this.driving(cell, session, "rollback")("rollback", ["rollback", "--yes"]);
+    return this.deployment(cell, session);
+  }
+
+  async destroy(cell: CellContext): Promise<void> {
+    const session = this.sessions.get(cell.slug);
+    if (!session) {
+      return;
+    }
+    this.sessions.delete(cell.slug);
+    const args = ["--config", journeyConfigIn(session.dir), "destroy", "production", "--yes"];
+    try {
+      await runOcel(cell, session.dir, "destroy", "destroy", args, session.env);
+    } catch (refused) {
+      if (await this.stillRecorded(cell.slug)) {
+        throw refused;
+      }
+    } finally {
+      await session.gateway.close();
+    }
+  }
+
+  private box(): Box {
+    this.resolvedBox ??= readBox();
+    return this.resolvedBox;
+  }
+
+  private zone(): string {
+    this.resolvedZone ??= journeyZone(process.env);
+    return this.resolvedZone;
+  }
+
+  private boxEnv(login: string): NodeJS.ProcessEnv {
+    const target = this.box();
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      OCEL_VPS_HOST: target.host,
+      OCEL_VPS_USER: login,
+      OCEL_VPS_IDENTITY_FILE: target.identityFile,
+    };
+    for (const name of HARNESS_ONLY_ENV) {
+      delete env[name];
+    }
+    return env;
+  }
+
+  private async boxConfig(dir: string, slug: string, login: string): Promise<string> {
+    const target = this.box();
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      path.join(dir, "ocel.json"),
+      `${JSON.stringify(
+        {
+          slug,
+          provider: {
+            name: "vps",
+            options: {
+              ssh: { host: target.host, user: login, identityFile: target.identityFile },
+            },
+          },
+          apps: [],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+    return dir;
+  }
+
+  private async trusted(cell: CellContext): Promise<string | undefined> {
+    if (!issuedByTheBox(this.zone())) {
+      return undefined;
+    }
+    const target = this.box();
+    const deadline = Date.now() + ROOT_WAIT_MS;
+    let wait = ROOT_FIRST_WAIT_MS;
+    while (true) {
+      const root = await ssh(target, target.user, `sudo cat ${PROXY_ROOT} 2>/dev/null || true`);
+      if (root.includes("BEGIN CERTIFICATE")) {
+        await cell.evidence.write("deploy", "proxy-root.pem", root);
+        return path.join(cell.evidence.dir, "deploy", "proxy-root.pem");
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `${PROXY_ROOT} holds no issuing root ${ROOT_WAIT_MS / 1000}s after the deploy, and every ` +
+            `hostname on ${this.zone()} is settled against a certificate this box issues itself`,
+        );
+      }
+      await delay(wait);
+      wait = Math.min(wait * 2, ROOT_LONGEST_WAIT_MS);
+    }
+  }
+
+  private async bindDomains(cell: CellContext, session: BoxSession): Promise<void> {
+    const root = await this.trusted(cell);
+    await runOcel(
+      cell,
+      session.dir,
+      "deploy",
+      "domain-add",
+      ["--config", journeyConfigIn(session.dir), "domain", "add"],
+      {
+        ...session.env,
+        HTTPS_PROXY: session.gateway.tunnelUrl,
+        ...(root ? { SSL_CERT_FILE: root } : {}),
+      },
     );
   }
-  const stranded = (await list()).filter((slug) => isStranded(slug, runId));
-  for (const slug of stranded) {
-    const dir = await boxConfig(path.join(outputRoot, "vps", "sweep", slug), slug, DEPLOY_LOGIN);
-    await ocel(dir, ["destroy", "production", "--yes"], boxEnv(DEPLOY_LOGIN));
+
+  private hostnamesOf(cell: CellContext): Map<string, string> {
+    return new Map(
+      cell.fixture.apps.map((app) => {
+        const hostname = appHostname(app, cell.slug, this.zone());
+        if (!hostname) {
+          throw new Error(`${app} has no hostname on ${this.zone()}`);
+        }
+        return [app, hostname];
+      }),
+    );
+  }
+
+  private async deployment(cell: CellContext, session: BoxSession): Promise<Deployment> {
+    const urls = new Map<string, string>();
+    for (const [app, hostname] of this.hostnamesOf(cell)) {
+      urls.set(app, await session.gateway.serving(hostname));
+    }
+    await cell.evidence.write(
+      "deploy",
+      "deployment.json",
+      `${JSON.stringify({ slug: cell.slug, zone: this.zone(), apps: Object.fromEntries(urls) }, null, 2)}\n`,
+    );
+    return {
+      baseUrl: (app) => {
+        const url = urls.get(app);
+        if (!url) {
+          throw new Error(`${cell.name} has no app named ${app} on vps`);
+        }
+        return url;
+      },
+      fetch: (...args) => fetch(...args),
+    };
+  }
+
+  private async sessionFor(cell: CellContext): Promise<BoxSession> {
+    const already = this.sessions.get(cell.slug);
+    if (already) {
+      return already;
+    }
+    const session: BoxSession = {
+      dir: await workTree(cell, "vps"),
+      gateway: await openGateway(this.box().host),
+      env: this.boxEnv(DEPLOY_LOGIN),
+    };
+    this.sessions.set(cell.slug, session);
+    return session;
+  }
+
+  private driving(cell: CellContext, session: BoxSession, phase: Phase) {
+    return (name: string, args: string[]) =>
+      runOcel(
+        cell,
+        session.dir,
+        phase,
+        name,
+        ["--config", journeyConfigIn(session.dir), ...args],
+        session.env,
+      );
+  }
+
+  private async stillRecorded(slug: string): Promise<boolean> {
+    const said = await ssh(
+      this.box(),
+      DEPLOY_LOGIN,
+      `test -e '${PROJECT_RECORDS}/${recordFile(slug)}' && echo held || echo gone`,
+    );
+    return said.trim() === "held";
+  }
+
+  private async recordedSlugs(): Promise<string[]> {
+    const listing = await ssh(
+      this.box(),
+      DEPLOY_LOGIN,
+      `test -d '${PROJECT_RECORDS}' && { ls -1d '${PROJECT_RECORDS}'/${HARNESS_PREFIX}*.rec 2>/dev/null || true; } || echo ${NO_RECORDS_TIER}`,
+    );
+    return slugsOf(listing);
+  }
+
+  private async sweepStale(runId: string): Promise<void> {
+    const lane = await this.detectLane();
+    if (lane !== "vps.incus") {
+      throw new Error(
+        "sweep destroys every project a harness run left on the box, and this box is not the disposable incus one: " +
+          "reclaim a real box by naming what to destroy yourself",
+      );
+    }
+    const stranded = (await this.recordedSlugs()).filter((slug) => isStranded(slug, runId));
+    for (const slug of stranded) {
+      const dir = await this.boxConfig(
+        path.join(outputRoot, "vps", "sweep", slug),
+        slug,
+        DEPLOY_LOGIN,
+      );
+      await ocel(dir, ["destroy", "production", "--yes"], this.boxEnv(DEPLOY_LOGIN));
+    }
   }
 }
-
-export const vpsTarget: Target & ReleaseCycle = {
-  name: "vps",
-  concurrency: 2,
-  largeBodyBytes: UNCAPPED_BODY_BYTES,
-  legTimeoutMs: 600_000,
-  guard,
-  prepare,
-  setup: async () => {
-    await guard();
-  },
-  deploy,
-  redeploy,
-  rollback,
-  destroy,
-  list,
-  stands: stillRecorded,
-  sweep,
-  sweepOwn: async () => {},
-};

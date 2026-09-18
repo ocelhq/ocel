@@ -53,7 +53,7 @@ async function runSuite(target: Target, files: string[], workers: number, live: 
   const stop = follow(live);
   const child = spawn(
     "bun",
-    ["test", `--parallel=${workers}`, `--timeout=${target.legTimeoutMs}`, ...files],
+    ["test", `--parallel=${workers}`, `--timeout=${target.stepTimeoutMs}`, ...files],
     { cwd: packageRoot, stdio: "inherit", env: { ...process.env, [LIVE_ENV]: live } },
   );
   return new Promise<Run>((resolve) => {
@@ -64,11 +64,11 @@ async function runSuite(target: Target, files: string[], workers: number, live: 
   });
 }
 
-async function prepareLane(target: Target, runId: string): Promise<void> {
+async function recordLanePreparation(target: Target, runId: string): Promise<void> {
   const began = Date.now();
   let failures: PrepareFailures = {};
   try {
-    failures = (await target.prepare?.()) ?? {};
+    failures = await target.prepareLane();
   } catch (error) {
     failures = { lane: error instanceof Error ? error.message : String(error) };
   }
@@ -88,7 +88,7 @@ export async function runJourney(target: Target, ask: Ask): Promise<number> {
   const runId = currentRunIdentity();
   await rm(cellsDir(runId, target.name), { recursive: true, force: true });
 
-  const lane = await target.guard();
+  const lane = await target.detectLane();
   const planned = plan({ fixtures, gaps, lane, releaseCycle: hasReleaseCycle(target), ask });
   sayWhatIsSkipped(target, planned);
   const files = await writeCellFiles(runId, target, planned);
@@ -96,7 +96,7 @@ export async function runJourney(target: Target, ask: Ask): Promise<number> {
 
   const idle = files.length === 0;
   if (!idle) {
-    await prepareLane(target, runId);
+    await recordLanePreparation(target, runId);
   }
   const runStart = Date.now();
   const run: Run = idle

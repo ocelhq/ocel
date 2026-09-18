@@ -1,4 +1,9 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import type { Lane } from "../../matrix/types";
+import { outputRoot } from "../../paths";
+import { accountFiles, PROFILE_VARS, pinnedEnv } from "./account";
+import { answersAsFloci, awsStore } from "./store";
 
 export type World = "floci" | "real";
 
@@ -15,8 +20,16 @@ export type Probes = {
 
 export type Where = { world: World; endpoint?: string };
 
+const FLOCI_ZONE = "journey.test";
+
+const PINNED_DIR = path.join(outputRoot, "aws-account");
+
+export function emulatorEndpoint(env: NodeJS.ProcessEnv): string | undefined {
+  return env[ENDPOINT_ENV]?.trim() || undefined;
+}
+
 export async function detectWorld(env: NodeJS.ProcessEnv, probes: Probes): Promise<Where> {
-  const endpoint = env[ENDPOINT_ENV]?.trim();
+  const endpoint = emulatorEndpoint(env);
   if (endpoint) {
     if (!(await probes.answersAsFloci(endpoint))) {
       throw new Error(
@@ -42,4 +55,64 @@ export async function detectWorld(env: NodeJS.ProcessEnv, probes: Probes): Promi
 
 export function laneOf(world: World): Lane {
   return world === "floci" ? "aws.floci" : "aws";
+}
+
+async function pinAccountFiles(): Promise<void> {
+  await mkdir(PINNED_DIR, { recursive: true });
+  const { config, credentials } = accountFiles(PINNED_DIR);
+  await writeFile(config, "", "utf8");
+  await writeFile(credentials, "", "utf8");
+  const pinned = pinnedEnv(process.env, PINNED_DIR);
+  for (const name of PROFILE_VARS) {
+    delete process.env[name];
+  }
+  Object.assign(process.env, pinned);
+}
+
+export class AwsWorld {
+  private settled: Promise<Where> | undefined;
+
+  settle(): Promise<Where> {
+    this.settled ??= (async () => {
+      await pinAccountFiles();
+      const where = await detectWorld(process.env, {
+        answersAsFloci,
+        callerAccount: () => awsStore(process.env.AWS_ENDPOINT_URL).callerAccount(),
+      });
+      if (where.world === "floci") {
+        process.env.AWS_ACCESS_KEY_ID ??= "test";
+        process.env.AWS_SECRET_ACCESS_KEY ??= "test";
+        process.env.OCEL_JOURNEY_ZONE ??= FLOCI_ZONE;
+      } else {
+        if (!process.env.OCEL_JOURNEY_ZONE) {
+          throw new Error(
+            "OCEL_JOURNEY_ZONE names the zone this run's production hostnames hang under, and an aws project with no production hostname has nowhere to serve",
+          );
+        }
+        process.env.OCEL_JOURNEY_DNS = "cloudflare";
+      }
+      return where;
+    })();
+    return this.settled;
+  }
+
+  async lane(): Promise<Lane> {
+    return laneOf((await this.settle()).world);
+  }
+
+  async real(): Promise<boolean> {
+    return (await this.settle()).world === "real";
+  }
+
+  async endpoint(): Promise<string | undefined> {
+    return (await this.settle()).endpoint;
+  }
+
+  zone(): string {
+    const named = process.env.OCEL_JOURNEY_ZONE;
+    if (!named) {
+      throw new Error("the aws target reached a cell before it knew which zone to serve on");
+    }
+    return named;
+  }
 }

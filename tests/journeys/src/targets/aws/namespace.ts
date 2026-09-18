@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import path from "node:path";
+import { journeyConfigIn } from "../../config";
 import { HARNESS_PREFIX, projectSlug } from "../../identity";
 
 export const NAMESPACE_ENV = "OCEL_NAMESPACE";
@@ -51,4 +53,12 @@ export function strayNamespaces(found: string[], mine: Iterable<string>): string
     }
   }
   return [...stray];
+}
+
+export function ocelEnvIn(dir: string, namespace?: string): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    OCEL_CONFIG: path.join(dir, journeyConfigIn(dir)),
+    ...(namespace ? { [NAMESPACE_ENV]: namespace } : {}),
+  };
 }

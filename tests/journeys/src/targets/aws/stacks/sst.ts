@@ -5,9 +5,9 @@ import { workTree } from "../../../ocel";
 import { fixtureDir, treeDir } from "../../../paths";
 import { copyTree } from "../../../tree";
 import type { CellContext } from "../../types";
-import { place } from "../place";
 import { spawnBin } from "../run";
 import { type Cli, cliAt } from "../store";
+import { emulatorEndpoint } from "../world";
 import { ExternalStack } from "./bindings";
 
 function parseSstOutputs(stdout: string): Record<string, string> {
@@ -22,8 +22,8 @@ function parseSstOutputs(stdout: string): Record<string, string> {
 }
 
 async function deployEnv(): Promise<NodeJS.ProcessEnv> {
-  const where = await place();
-  return where.endpoint ? { ...process.env, AWS_ENDPOINT_URL: where.endpoint } : { ...process.env };
+  const endpoint = emulatorEndpoint(process.env);
+  return endpoint ? { ...process.env, AWS_ENDPOINT_URL: endpoint } : { ...process.env };
 }
 
 export class SstStack extends ExternalStack {
@@ -48,10 +48,9 @@ export class SstStack extends ExternalStack {
   }
 
   async sweep(runId: string): Promise<void> {
-    const where = await place();
     const stages = new Set([
       `${HARNESS_PREFIX}${runId}`,
-      ...(await recordedStages(cliAt(where.endpoint))),
+      ...(await recordedStages(cliAt(emulatorEndpoint(process.env)))),
     ]);
     const dir = await copyTree(
       fixtureDir("sdk/with-sst"),
