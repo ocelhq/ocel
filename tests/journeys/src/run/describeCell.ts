@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { INITIAL_GREETING, REDEPLOY_GREETING, secretGuarded } from "../contract";
 import { evidence } from "../evidence";
 import { currentRunIdentity, projectSlug } from "../identity";
-import { type CellRun, stepsOf } from "../lifecycle";
+import { type CellRun, legsDriven, stepsPlanned } from "../lifecycle";
 import { live } from "../live";
 import { fixtures } from "../matrix/fixtures";
 import type { Leg } from "../matrix/types";
@@ -30,12 +30,14 @@ function messageOf(error: unknown): string {
 
 export function describeCell(planFile: string, name: string) {
   const planned = JSON.parse(readFileSync(planFile, "utf8")) as Plan;
-  const legs = planned.cells.find((one) => one.name === name)?.legs;
-  if (!legs) {
+  const plannedCell = planned.cells.find((one) => one.name === name);
+  if (!plannedCell) {
     throw new Error(`${planFile} plans no cell named ${name}`);
   }
   const target = targetNamed(planned.target);
+  const legs = legsDriven(target, plannedCell.legs);
   const found = cellNamed(fixtures, target.name, name);
+  const steps = stepsPlanned(found, plannedCell);
   const { fixture, variant } = found;
   const runId = currentRunIdentity();
   const slug = projectSlug(name, runId);
@@ -79,12 +81,12 @@ export function describeCell(planFile: string, name: string) {
     }
   });
   const redeployed = once(async () => {
-    assert.ok(target.redeploy, `${target.name} declares a redeploy leg without a redeploy`);
+    assert.ok(target.redeploy);
     deployment = await target.redeploy(cell, REDEPLOY_GREETING);
     greeting = REDEPLOY_GREETING;
   });
   const rolledBack = once(async () => {
-    assert.ok(target.rollback, `${target.name} declares a rollback leg without a rollback`);
+    assert.ok(target.rollback);
     deployment = await target.rollback(cell, INITIAL_GREETING);
     greeting = INITIAL_GREETING;
   });
@@ -153,7 +155,7 @@ export function describeCell(planFile: string, name: string) {
       { timeout },
     );
 
-    for (const step of stepsOf(found, legs)) {
+    for (const step of steps) {
       const key = cellKey(name, step.app);
       describe(key, () => {
         it(

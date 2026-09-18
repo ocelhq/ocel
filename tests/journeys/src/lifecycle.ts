@@ -1,6 +1,6 @@
 import type { Check, ContractContext } from "./contract";
 import type { Cell, LadderCheck, LadderPoint, Leg } from "./matrix/types";
-import type { CellContext } from "./targets/types";
+import type { CellContext, Target } from "./targets/types";
 
 export type CellRun = {
   cell: CellContext;
@@ -143,4 +143,37 @@ export function stepsOf(cell: Cell, legs: Leg[]): Step[] {
       })),
     ]),
   ];
+}
+
+type PlannedSteps = { legs: Leg[]; steps: Array<Pick<Step, "app" | "title" | "leg">> };
+
+function said(steps: PlannedSteps["steps"]): string {
+  return steps.map((one) => `${one.app} · ${one.title}`).join(", ");
+}
+
+export function stepsPlanned(cell: Cell, planned: PlannedSteps): Step[] {
+  const steps = stepsOf(cell, planned.legs);
+  const same =
+    steps.length === planned.steps.length &&
+    steps.every((one, index) => {
+      const at = planned.steps[index];
+      return at?.app === one.app && at.title === one.title && at.leg === one.leg;
+    });
+  if (!same) {
+    throw new Error(`${cell.name} walks ${said(steps)}, not the planned ${said(planned.steps)}`);
+  }
+  return steps;
+}
+
+export function legsDriven(
+  target: Pick<Target, "name" | "redeploy" | "rollback">,
+  legs: Leg[],
+): Leg[] {
+  const missing = (["redeploy", "rollback"] as const).filter(
+    (leg) => legs.includes(leg) && target[leg] === undefined,
+  );
+  if (missing.length > 0) {
+    throw new Error(`${target.name} walks ${missing.join(", ")} without a method for it`);
+  }
+  return legs;
 }
