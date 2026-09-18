@@ -182,6 +182,12 @@ describe("what a lane is asked to run", () => {
     ]);
   });
 
+  it("refuses base, which the default variant replaced", () => {
+    expect(() => planOf([node], { filter: { variants: ["base"] } })).toThrow(
+      /no fixture lists a variant named base \(default, edge, box\)/,
+    );
+  });
+
   it("refuses a variant no fixture lists, and runs nothing for one only another target runs", () => {
     expect(() => planOf([node], { filter: { variants: ["fastly"] } })).toThrow(
       /no fixture lists a variant named fastly \(default, edge, box\)/,
