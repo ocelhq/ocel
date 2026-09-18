@@ -6,9 +6,10 @@ import { journeyConfigIn } from "../config";
 import { isStranded } from "../identity";
 import type { Lane } from "../matrix/types";
 import { runOcel } from "../ocel";
+import type { CellUnderTest } from "../run/cellRun";
 import { appCommand, migrateCommand } from "../workspace";
 import { LocalDevTarget } from "./localDev";
-import type { CellContext, Sweeper } from "./types";
+import type { Sweeper } from "./types";
 
 const START_CONSOLE = [
   "docker compose up -d postgres ocel-cloud minio",
@@ -66,7 +67,7 @@ export class DevTarget extends LocalDevTarget {
   }
 
   protected async beforeServing(
-    cell: CellContext,
+    cell: CellUnderTest,
     dir: string,
     env: NodeJS.ProcessEnv,
   ): Promise<void> {
@@ -94,11 +95,11 @@ export class DevTarget extends LocalDevTarget {
     }
   }
 
-  protected serveArgs(cell: CellContext, app: string): string[] {
+  protected serveArgs(cell: CellUnderTest, app: string): string[] {
     return ["dev", "--", ...appCommand(cell.fixture, app)];
   }
 
-  protected async afterStopping(cell: CellContext): Promise<void> {
+  protected async afterStopping(cell: CellUnderTest): Promise<void> {
     const project = (await this.consoleProjects()).find((found) => found.slug === cell.slug);
     if (project) {
       await this.deleteConsoleProject(project);

@@ -5,7 +5,7 @@ import type { CheckContext } from "../../../checks/context";
 import { journeyConfigIn } from "../../../config";
 import { live } from "../../../live";
 import { ocel, spawnOcel, workTree } from "../../../ocel";
-import type { CellContext } from "../../types";
+import type { CellUnderTest } from "../../../run/cellRun";
 import { awsBindingStore, awsStore, type Cli, cliAt, said } from "../store";
 import { emulatorEndpoint } from "../world";
 
@@ -25,7 +25,7 @@ export type StackPoint = "afterPublish" | "whileServing" | "afterOcelDestroy" | 
 
 export type StackCheck = {
   title: string;
-  run: (cell: CellContext, serving?: CheckContext) => Promise<void>;
+  run: (cell: CellUnderTest, serving?: CheckContext) => Promise<void>;
 };
 
 export type StackChecks = Record<StackPoint, StackCheck[]>;
@@ -401,13 +401,13 @@ export abstract class ExternalStack {
     ],
   };
 
-  abstract deploy(cell: CellContext): Promise<void>;
+  abstract deploy(cell: CellUnderTest): Promise<void>;
 
-  abstract destroy(cell: CellContext): Promise<void>;
+  abstract destroy(cell: CellUnderTest): Promise<void>;
 
   abstract sweep(runId: string): Promise<void>;
 
-  async refuse(cell: CellContext): Promise<void> {
+  async refuse(cell: CellUnderTest): Promise<void> {
     const dir = await workTree(cell, "aws");
     const env = {
       ...process.env,

@@ -1,28 +1,16 @@
 import { afterAll, beforeAll, describe, it } from "bun:test";
-import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { INITIAL_GREETING, REDEPLOY_GREETING, secretGuarded } from "../checks/context";
 import { evidence } from "../evidence";
-import { currentRunIdentity, projectSlug } from "../identity";
-import { type CellRun, phasesDriven, stepsPlanned } from "../lifecycle";
+import { currentRunIdentity } from "../identity";
+import { phasesDriven, stepsPlanned } from "../lifecycle";
 import { live } from "../live";
 import { fixtures } from "../matrix/fixtures";
-import type { Phase } from "../matrix/types";
-import { evidenceDir, fixtureDir } from "../paths";
+import { evidenceDir } from "../paths";
 import { cellKey, cellNamed, type Plan } from "../plan";
 import { readPrepareFailure } from "../prepare";
-import { hasReleaseCycle, targetNamed } from "../targets";
-import { namespaceOfSlug } from "../targets/aws/namespace";
-import type { CellContext, Deployment } from "../targets/types";
+import { targetNamed } from "../targets";
+import { CellRun } from "./cellRun";
 import { ledgerFor } from "./ledger";
-
-function once<T>(work: () => Promise<T>): () => Promise<T> {
-  let started: Promise<T> | undefined;
-  return () => {
-    started ??= work();
-    return started;
-  };
-}
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -36,127 +24,27 @@ export function describeCell(planFile: string, name: string) {
   }
   const target = targetNamed(planned.target);
   const phases = phasesDriven(target, plannedCell.phases);
-  const found = cellNamed(fixtures, target.name, name);
-  const steps = stepsPlanned(found, plannedCell);
-  const { fixture, variant } = found;
+  const cell = cellNamed(fixtures, target.name, name);
+  const steps = stepsPlanned(cell, plannedCell);
   const runId = currentRunIdentity();
-  const slug = projectSlug(name, runId);
-  const cell: CellContext = {
-    fixture,
-    name,
-    variant,
-    dir: fixtureDir(fixture.name),
-    slug,
+  const prepareFailure = readPrepareFailure(runId, target.name);
+  const run = new CellRun({
+    cell,
+    target,
     runId,
+    keep: planned.keep,
     evidence: evidence(evidenceDir(runId, target.name, name)),
-  };
+    ...(prepareFailure === undefined ? {} : { prepareFailure }),
+  });
 
   const write = ledgerFor(runId, target.name, name);
   const say = live(name);
   const timeout = target.stepTimeoutMs;
-  const stack = fixture.stack;
-
-  let deployment: Deployment | undefined;
-  let greeting = INITIAL_GREETING;
-  const notes = new Map<string, string>();
-
-  const prepareFailure = readPrepareFailure(runId, target.name);
-  let setupFailure: { error: unknown } | undefined = prepareFailure
-    ? { error: new Error(prepareFailure) }
-    : undefined;
-
-  const bringUp = once(async () => {
-    if (setupFailure) {
-      throw setupFailure.error;
-    }
-    deployment = await target.deploy(cell);
-  });
-  const tearDown = once(() => target.destroy(cell));
-  const deployStack = once(async () => {
-    if (setupFailure) {
-      throw setupFailure.error;
-    }
-    await stack?.deploy(cell);
-  });
-  const destroyStack = once(async () => {
-    if (!planned.keep) {
-      await stack?.destroy(cell);
-    }
-  });
-  const redeployed = once(async () => {
-    assert.ok(hasReleaseCycle(target), `${target.name} has no release cycle to redeploy with`);
-    deployment = await target.redeploy(cell, REDEPLOY_GREETING);
-    greeting = REDEPLOY_GREETING;
-  });
-  const rolledBack = once(async () => {
-    assert.ok(hasReleaseCycle(target), `${target.name} has no release cycle to roll back with`);
-    deployment = await target.rollback(cell, INITIAL_GREETING);
-    greeting = INITIAL_GREETING;
-  });
-
-  const run: CellRun = {
-    cell,
-    deployStack,
-    deploy: bringUp,
-    redeploy: async () => {
-      await bringUp();
-      await redeployed();
-    },
-    rollback: async () => {
-      await bringUp();
-      await rolledBack();
-    },
-    destroy: async () => {
-      await tearDown();
-      assert.ok(
-        !(await target.sweeper.exists(slug)),
-        `${slug} still exists on ${target.name} after destroy`,
-      );
-    },
-    destroyStack,
-    live: (app: string, phase: Phase) => {
-      assert.ok(deployment, "a check ran before the cell was deployed");
-      return {
-        app,
-        baseUrl: deployment.baseUrl(app),
-        greeting,
-        maxRequestBodyBytes: target.maxRequestBodyBytes,
-        phase,
-        notes,
-        fetch: secretGuarded(deployment.fetch),
-      };
-    },
-  };
 
   describe(name, () => {
-    beforeAll(
-      async () => {
-        await target.prepareProcess().catch((error: unknown) => {
-          setupFailure = { error };
-        });
-      },
-      { timeout },
-    );
+    beforeAll(() => run.prepareProcess(), { timeout });
 
-    afterAll(
-      async () => {
-        if (!planned.keep) {
-          await tearDown().catch(() => undefined);
-          return;
-        }
-        const [last] = phases.slice(-1);
-        if (last) {
-          await cell.evidence
-            .write(
-              last,
-              "kept.json",
-              `${JSON.stringify({ slug, namespace: namespaceOfSlug(slug) }, null, 2)}\n`,
-            )
-            .catch(() => undefined);
-        }
-      },
-      { timeout },
-    );
+    afterAll(() => run.finish(phases), { timeout });
 
     for (const step of steps) {
       const key = cellKey(name, step.app);

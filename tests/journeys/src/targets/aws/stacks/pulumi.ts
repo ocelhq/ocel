@@ -3,8 +3,8 @@ import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { workTree } from "../../../ocel";
 import { fixtureDir, laneDir, treeDir } from "../../../paths";
+import type { CellUnderTest } from "../../../run/cellRun";
 import { copyTree } from "../../../tree";
-import type { CellContext } from "../../types";
 import { spawnBin } from "../run";
 import { emulatorEndpoint } from "../world";
 import { ExternalStack } from "./bindings";
@@ -66,7 +66,7 @@ async function configureStack(dir: string, stack: string, env: NodeJS.ProcessEnv
 }
 
 export class PulumiStack extends ExternalStack {
-  async deploy(cell: CellContext): Promise<void> {
+  async deploy(cell: CellUnderTest): Promise<void> {
     const dir = await workTree(cell, "aws");
     const stack = `j-${cell.runId}`;
     const env = await pulumiEnv(cell.runId);
@@ -83,7 +83,7 @@ export class PulumiStack extends ExternalStack {
     });
   }
 
-  async destroy(cell: CellContext): Promise<void> {
+  async destroy(cell: CellUnderTest): Promise<void> {
     const dir = await workTree(cell, "aws");
     const stack = `j-${cell.runId}`;
     const env = await pulumiEnv(cell.runId);

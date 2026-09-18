@@ -4,8 +4,8 @@ import path from "node:path";
 import stripJsonComments from "strip-json-comments";
 import { appHostname } from "./identity";
 import type { Cell, Compute, Edge, TargetName } from "./matrix/types";
+import type { CellUnderTest } from "./run/cellRun";
 import { gcpSlug } from "./targets/gcp/names";
-import type { CellContext } from "./targets/types";
 
 export const JOURNEY_TS = "ocel.journey.config.ts";
 export const JOURNEY_JSON = "ocel.journey.json";
@@ -36,7 +36,7 @@ const EDGE_IMPORTS: Record<Edge, { name: string; from: string }> = {
   cloudflare: { name: "cloudflare", from: "ocel/edge" },
 };
 
-function hostnamesOf(cell: CellContext, zone: string): Record<string, string> {
+function hostnamesOf(cell: CellUnderTest, zone: string): Record<string, string> {
   const named: Record<string, string> = {};
   for (const app of cell.fixture.apps) {
     const host = appHostname(app, cell.slug, zone);
@@ -59,7 +59,7 @@ export function sweepShapeFor(
   return { base: AWS_BASE, slug, ...cell?.variant?.config, ...dnsOf(env) };
 }
 
-export function shapeFor(cell: CellContext, target: TargetName, env: NodeJS.ProcessEnv): Overlay {
+export function shapeFor(cell: CellUnderTest, target: TargetName, env: NodeJS.ProcessEnv): Overlay {
   const zone = env.OCEL_JOURNEY_ZONE?.trim() || undefined;
   switch (target) {
     case "aws": {

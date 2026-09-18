@@ -8,8 +8,8 @@ import { ocel, runOcel } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import { fixturesOn } from "../../plan";
 import type { PrepareFailures } from "../../prepare";
+import type { CellUnderTest } from "../../run/cellRun";
 import { copyTree } from "../../tree";
-import type { CellContext } from "../types";
 import { namespaceFor, ocelEnvIn } from "./namespace";
 import { cliAt, said } from "./store";
 import type { AwsWorld } from "./world";
@@ -82,11 +82,11 @@ export class AwsBootstrap {
     return {};
   }
 
-  async namespaceOf(cell: CellContext): Promise<string | undefined> {
+  async namespaceOf(cell: CellUnderTest): Promise<string | undefined> {
     return (await this.world.real()) ? namespaceFor(cell.name, cell.runId) : undefined;
   }
 
-  async bootstrapCell(cell: CellContext, dir: string): Promise<void> {
+  async bootstrapCell(cell: CellUnderTest, dir: string): Promise<void> {
     const namespace = await this.namespaceOf(cell);
     if (namespace) {
       await runOcel(
@@ -100,7 +100,7 @@ export class AwsBootstrap {
     }
   }
 
-  async destroyCellBootstrap(cell: CellContext, dir: string, namespace: string): Promise<void> {
+  async destroyCellBootstrap(cell: CellUnderTest, dir: string, namespace: string): Promise<void> {
     await runOcel(
       cell,
       dir,

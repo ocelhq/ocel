@@ -8,9 +8,10 @@ import { journeyConfigIn } from "../config";
 import { HARNESS_PREFIX, isStranded } from "../identity";
 import type { Lane } from "../matrix/types";
 import { runOcel } from "../ocel";
+import type { CellUnderTest } from "../run/cellRun";
 import { appCommand, migrateCommand } from "../workspace";
 import { LocalDevTarget } from "./localDev";
-import type { CellContext, Sweeper } from "./types";
+import type { Sweeper } from "./types";
 
 const DOTFILE = ".env";
 
@@ -69,7 +70,7 @@ async function dropDatabase(slug: string): Promise<void> {
   });
 }
 
-async function writeDotfile(cell: CellContext, dir: string): Promise<void> {
+async function writeDotfile(cell: CellUnderTest, dir: string): Promise<void> {
   const lines: string[] = [];
   if (setsEnv(cell.fixture.checks)) {
     lines.push(`GREETING=${INITIAL_GREETING}`, `SECRET_TOKEN=${SECRET_TOKEN}`);
@@ -121,7 +122,7 @@ export class DevLocalTarget extends LocalDevTarget {
   }
 
   protected async beforeServing(
-    cell: CellContext,
+    cell: CellUnderTest,
     dir: string,
     env: NodeJS.ProcessEnv,
   ): Promise<void> {
@@ -138,11 +139,11 @@ export class DevLocalTarget extends LocalDevTarget {
     }
   }
 
-  protected serveArgs(cell: CellContext, app: string): string[] {
+  protected serveArgs(cell: CellUnderTest, app: string): string[] {
     return ["dev", "--local", "--", ...appCommand(cell.fixture, app)];
   }
 
-  protected async afterStopping(cell: CellContext): Promise<void> {
+  protected async afterStopping(cell: CellUnderTest): Promise<void> {
     if (migrates(cell.fixture.checks)) {
       await dropDatabase(cell.slug);
     }

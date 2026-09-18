@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { CellContext } from "../types";
+import type { CellUnderTest } from "../../run/cellRun";
 
 export const NAMESPACE_ENV = "OCEL_NAMESPACE";
 
@@ -52,7 +52,7 @@ export function fittedSlug(slug: string, room: number): string {
 }
 
 export function gcpSlug(
-  cell: Pick<CellContext, "slug" | "fixture">,
+  cell: Pick<CellUnderTest, "slug" | "fixture">,
   env: NodeJS.ProcessEnv,
 ): string {
   return fittedSlug(cell.slug, roomForSlug(namespaceOf(env), cell.fixture.apps));
