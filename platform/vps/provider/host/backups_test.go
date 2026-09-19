@@ -26,6 +26,7 @@ func backupsOn(t *testing.T, labelled ...string) backupBench {
 		"printf '%s\\n' \"$*\" >>" + filepath.Join(bench.bin, "log") + "\n" +
 		"case \"$1\" in\n" +
 		"ps) cat " + filepath.Join(bench.bin, "labelled") + " ;;\n" +
+		"inspect) printf '%s\\n' \"$(cat " + filepath.Join(bench.bin, "mounted") + ")\" ;;\n" +
 		"exec)\n" +
 		"  for arg in \"$@\"; do case $arg in\n" +
 		"    pg_dump) if [ -f " + filepath.Join(bench.bin, "broken") + " ]; then printf 'half a du'; echo 'pg_dump: connection refused' >&2; exit 1; fi\n" +
@@ -43,6 +44,14 @@ func backupsOn(t *testing.T, labelled ...string) backupBench {
 	}
 	bench.holds(t, "labelled", strings.Join(labelled, "\n")+"\n")
 	bench.holds(t, "free", "1000000000")
+	mounted := filepath.Join(bench.root, "volume")
+	if err := os.MkdirAll(mounted, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mounted, "object"), []byte("bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bench.holds(t, "mounted", mounted)
 	return bench
 }
 
@@ -190,8 +199,10 @@ func TestASweepDumpsEveryResourceThatAsksAndOneFailureStopsNoOther(t *testing.T)
 	t.Parallel()
 
 	bench := backupsOn(t,
-		"shop-main-pg\tproduction\tmain",
-		"blog-posts-pg\tpreview\tposts",
+		"shop-main-pg\tproduction\tmain\tpg",
+		"blog-posts-pg\tpreview\tposts\tpg",
+		"shop-store-s3\tproduction\tstore\tvol",
+		"shop-web-app\tproduction\tweb\t",
 	)
 	if _, stderr, code := bench.runs(t, "sweep"); code != 0 {
 		t.Fatalf("sweep exited %d: %s", code, stderr)
@@ -201,6 +212,13 @@ func TestASweepDumpsEveryResourceThatAsksAndOneFailureStopsNoOther(t *testing.T)
 	}
 	if got := bench.kept(t, "preview", "blog-posts-pg"); len(got) != 2 {
 		t.Errorf("blog's postgres has %v", got)
+	}
+	store := bench.kept(t, "production", "shop-store-s3")
+	if len(store) != 1 || !strings.HasSuffix(store[0], ".tar") {
+		t.Errorf("shop's store has %v, want a tar of the volume it mounts", store)
+	}
+	if got := bench.kept(t, "production", "shop-web-app"); len(got) != 0 {
+		t.Errorf("a container that asks for no dump has %v", got)
 	}
 }
 

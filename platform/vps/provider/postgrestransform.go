@@ -21,6 +21,7 @@ import (
 const (
 	transformProvider     = "vps"
 	transformTypePostgres = "postgres"
+	transformTypeBucket   = "bucket"
 
 	surfaceContainer = "container"
 	surfaceVolume    = "volume"
@@ -29,6 +30,20 @@ const (
 )
 
 var pinnedImage = regexp.MustCompile(`@sha256:[0-9a-f]{64}$`)
+
+var ownEnv = map[string][]string{
+	transformTypePostgres: postgresOwnEnv,
+	transformTypeBucket:   storeOwnEnv,
+}
+
+var storeOwnEnv = []string{
+	"RUSTFS_ACCESS_KEY", "RUSTFS_ACCESS_KEY_FILE",
+	"RUSTFS_ADDRESS",
+	"RUSTFS_REGION",
+	"RUSTFS_ROOT_PASSWORD", "RUSTFS_ROOT_USER",
+	"RUSTFS_SECRET_KEY", "RUSTFS_SECRET_KEY_FILE",
+	"RUSTFS_VOLUMES",
+}
 
 var postgresOwnEnv = []string{
 	"PGDATA",
@@ -73,13 +88,13 @@ func decodePatch(patch map[string]any, into any) error {
 	return strict.Decode(into)
 }
 
-func unrenderable(resource, surface string, why error) error {
+func unrenderable(kind, resource, surface string, why error) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
 		"a transform patches %s.%s.%s on %s with something a box cannot render: %v",
-		transformProvider, transformTypePostgres, surface, resource, why)
+		transformProvider, kind, surface, resource, why)
 }
 
-func (p *Provider) reshaped(ctx context.Context, in resources.Instruction, spec host.ResourceContainer) (host.ResourceContainer, error) {
+func (p *Provider) reshaped(ctx context.Context, in resources.Instruction, kind string, spec host.ResourceContainer) (host.ResourceContainer, error) {
 	if p.transform == nil {
 		return spec, nil
 	}
@@ -88,7 +103,7 @@ func (p *Provider) reshaped(ctx context.Context, in resources.Instruction, spec 
 		EnvClass: string(in.Ref.Class),
 		Env:      in.Ref.Name.Env,
 		Resources: []transformkit.Resource{
-			{Type: transformTypePostgres, Name: in.Resource.Name},
+			{Type: kind, Name: in.Resource.Name},
 		},
 	})
 	if err != nil || len(results) == 0 {
@@ -98,13 +113,13 @@ func (p *Provider) reshaped(ctx context.Context, in resources.Instruction, spec 
 		patch := results[0].Patches[surface]
 		switch surface {
 		case surfaceContainer:
-			if spec, err = containerPatched(in.Resource.Name, spec, patch); err != nil {
+			if spec, err = containerPatched(kind, in.Resource.Name, spec, patch); err != nil {
 				return spec, err
 			}
 		case surfaceVolume:
 			var held volumePatch
 			if err := decodePatch(patch, &held); err != nil {
-				return spec, unrenderable(in.Resource.Name, surface, err)
+				return spec, unrenderable(kind, in.Resource.Name, surface, err)
 			}
 			if held.Driver != "" {
 				spec.Volume.Driver = held.Driver
@@ -114,8 +129,8 @@ func (p *Provider) reshaped(ctx context.Context, in resources.Instruction, spec 
 			}
 		default:
 			return spec, providerkit.Refuse(providerkit.CodeInvalid,
-				"a transform patches %s.%s.%s on %s, and a box stands up a %s and a %s for a postgres and nothing else",
-				transformProvider, transformTypePostgres, surface, in.Resource.Name, surfaceContainer, surfaceVolume)
+				"a transform patches %s.%s.%s on %s, and a box stands up a %s and a %s for a %s and nothing else",
+				transformProvider, kind, surface, in.Resource.Name, surfaceContainer, surfaceVolume, kind)
 		}
 	}
 	for key, value := range results[0].Tags {
@@ -132,24 +147,24 @@ func (p *Provider) reshaped(ctx context.Context, in resources.Instruction, spec 
 	return spec, nil
 }
 
-func containerPatched(resource string, spec host.ResourceContainer, patch map[string]any) (host.ResourceContainer, error) {
+func containerPatched(kind, resource string, spec host.ResourceContainer, patch map[string]any) (host.ResourceContainer, error) {
 	var held containerPatch
 	if err := decodePatch(patch, &held); err != nil {
-		return spec, unrenderable(resource, surfaceContainer, err)
+		return spec, unrenderable(kind, resource, surfaceContainer, err)
 	}
 	if held.Image != "" {
 		if !pinnedImage.MatchString(held.Image) {
 			return spec, providerkit.Refuse(providerkit.CodeInvalid,
-				"a transform runs postgres %s as %q, which a registry can move under whoever pulls it: pin it as <image>@sha256:<digest>",
-				resource, held.Image)
+				"a transform runs %s %s as %q, which a registry can move under whoever pulls it: pin it as <image>@sha256:<digest>",
+				kind, resource, held.Image)
 		}
 		spec.Image = held.Image
 	}
 	for _, name := range slices.Sorted(maps.Keys(held.Env)) {
-		if slices.Contains(postgresOwnEnv, name) {
+		if slices.Contains(ownEnv[kind], name) {
 			return spec, providerkit.Refuse(providerkit.CodeInvalid,
-				"a transform hands postgres %s the variable %s, and what an app binds to — the role, the database, the password and where the data is kept — is ocel's to set: drop it",
-				resource, name)
+				"a transform hands %s %s the variable %s, and what an app binds to — the credential, the address and where the data is kept — is ocel's to set: drop it",
+				kind, resource, name)
 		}
 		spec.Env[name] = held.Env[name]
 	}

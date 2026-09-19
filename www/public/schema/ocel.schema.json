@@ -314,6 +314,45 @@
             "options": {
               "additionalProperties": false,
               "properties": {
+                "bucket": {
+                  "additionalProperties": false,
+                  "description": "An S3-compatible store to keep this project's buckets in, instead of the one a box runs for itself. Each declared bucket becomes a key prefix inside the named bucket.",
+                  "properties": {
+                    "accessKeyId": {
+                      "description": "The public half of the credential that reaches the store.",
+                      "type": "string"
+                    },
+                    "bucket": {
+                      "description": "The bucket every declared bucket takes a key prefix inside.",
+                      "type": "string"
+                    },
+                    "endpoint": {
+                      "description": "The address the store answers on.",
+                      "type": "string"
+                    },
+                    "pathStyle": {
+                      "description": "Address buckets as a path segment rather than a subdomain. Stores that serve no wildcard DNS need it.",
+                      "type": "boolean"
+                    },
+                    "region": {
+                      "description": "The region the store signs requests against.",
+                      "type": "string"
+                    },
+                    "secretAccessKey": {
+                      "description": "The secret half of the credential that reaches the store.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "endpoint",
+                    "region",
+                    "bucket",
+                    "accessKeyId",
+                    "secretAccessKey"
+                  ],
+                  "title": "VpsExternalStore",
+                  "type": "object"
+                },
                 "certificates": {
                   "additionalProperties": {
                     "type": "string"

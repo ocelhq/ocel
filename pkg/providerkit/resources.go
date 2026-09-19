@@ -50,12 +50,13 @@ const (
 )
 
 const (
-	PropertyHost     = "host"
-	PropertyPort     = "port"
-	PropertyDatabase = "database"
-	PropertyUsername = "username"
-	PropertyPassword = "password"
-	PropertyBucket   = "bucket"
+	PropertyHost          = "host"
+	PropertyPort          = "port"
+	PropertyDatabase      = "database"
+	PropertyUsername      = "username"
+	PropertyPassword      = "password"
+	PropertyBucket        = "bucket"
+	PropertyPublicBaseURL = "publicBaseUrl"
 )
 
 func RequiredProperties(t BindingType) []string {
@@ -105,7 +106,8 @@ func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
 		}}
 	case BindingBucket:
 		message.Properties = &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{
-			Bucket: binding.Properties[PropertyBucket],
+			Bucket:        binding.Properties[PropertyBucket],
+			PublicBaseUrl: binding.Properties[PropertyPublicBaseURL],
 		}}
 	default:
 		fields := make(map[string]any, len(binding.Properties))

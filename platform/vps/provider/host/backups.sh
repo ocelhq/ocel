@@ -20,20 +20,52 @@ owned() {
   fi
 }
 
+room_for() {
+  dir=$1 container=$2 suffix=$3
+  last=$(ls -1 "$dir" 2>/dev/null | grep "$suffix\$" | sort | tail -n 1 || true)
+  [ -n "$last" ] || return 0
+  size=$(wc -c <"$dir/$last")
+  free=$(df -B1 --output=avail "$dir" | tail -n 1 | tr -d ' ')
+  if [ "$free" -lt $((size * 2)) ]; then
+    abort "$dir has $free bytes free and the last dump of $container took $size: a dump is taken with room for two, because a full disk takes the resource down with it"
+  fi
+}
+
+keep_newest() {
+  dir=$1 suffix=$2
+  ls -1 "$dir" | grep "$suffix\$" | sort -r | tail -n +$((keep + 1)) | while read -r old; do
+    rm -f "$dir/$old" "$dir/${old%$suffix}.roles.sql"
+  done
+}
+
+dump_volume() {
+  class=$1 container=$2
+  dir=$(dir_of "$class" "$container")
+  umask 077
+  mkdir -p "$dir"
+  room_for "$dir" "$container" .tar
+
+  source=$(docker inspect --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Source}}{{end}}{{end}}' "$container")
+  [ -n "$source" ] || abort "$container mounts no volume, and a volume dump is a copy of what it mounts"
+
+  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+  partial="$dir/.$stamp.$$.partial"
+  if ! tar -C "$source" -cf "$partial" .; then
+    rm -f "$partial"
+    abort "tar of $source for $container failed, and nothing was kept of it"
+  fi
+  mv -f "$partial" "$dir/$stamp.tar"
+  keep_newest "$dir" .tar
+  owned "$class" "$root/$class/backups"
+  printf '%s\n' "$dir/$stamp.tar"
+}
+
 dump() {
   class=$1 container=$2 database=$3
   dir=$(dir_of "$class" "$container")
   umask 077
   mkdir -p "$dir"
-
-  last=$(ls -1 "$dir" 2>/dev/null | grep '\.dump$' | sort | tail -n 1 || true)
-  if [ -n "$last" ]; then
-    size=$(wc -c <"$dir/$last")
-    free=$(df -B1 --output=avail "$dir" | tail -n 1 | tr -d ' ')
-    if [ "$free" -lt $((size * 2)) ]; then
-      abort "$dir has $free bytes free and the last dump of $container took $size: a dump is taken with room for two, because a full disk takes the database down with it"
-    fi
-  fi
+  room_for "$dir" "$container" .dump
 
   stamp=$(date -u +%Y%m%dT%H%M%SZ)
   partial="$dir/.$stamp.$$.partial"
@@ -49,9 +81,7 @@ dump() {
   mv -f "$roles" "$dir/$stamp.roles.sql"
   mv -f "$partial" "$dir/$stamp.dump"
 
-  ls -1 "$dir" | grep '\.dump$' | sort -r | tail -n +$((keep + 1)) | while read -r old; do
-    rm -f "$dir/$old" "$dir/${old%.dump}.roles.sql"
-  done
+  keep_newest "$dir" .dump
   owned "$class" "$root/$class/backups"
   printf '%s\n' "$dir/$stamp.dump"
 }
@@ -69,11 +99,15 @@ restore() {
 
 sweep() {
   failed=0
-  docker ps --filter label=ocel.backup=pg \
-    --format '{{.Names}}	{{.Label "ocel.class"}}	{{.Label "ocel.resource"}}' |
-    while IFS='	' read -r container class database; do
+  docker ps --filter label=ocel.backup \
+    --format '{{.Names}}	{{.Label "ocel.class"}}	{{.Label "ocel.resource"}}	{{.Label "ocel.backup"}}' |
+    while IFS='	' read -r container class database kind; do
       [ -n "$container" ] || continue
-      ( dump "$class" "$container" "$database" >/dev/null ) || echo failed
+      case "$kind" in
+      pg) ( dump "$class" "$container" "$database" >/dev/null ) || echo failed ;;
+      vol) ( dump_volume "$class" "$container" >/dev/null ) || echo failed ;;
+      *) ;;
+      esac
     done | grep -q failed && failed=1
   return $failed
 }
