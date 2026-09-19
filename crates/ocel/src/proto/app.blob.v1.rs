@@ -387,6 +387,16 @@ pub struct PresignedTarget {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
     )]
     pub content_disposition: ::buffa::alloc::string::String,
+    /// Field 5: `headers`
+    #[serde(
+        rename = "headers",
+        skip_serializing_if = "::buffa::__private::HashMap::is_empty",
+        deserialize_with = "::buffa::json_helpers::null_as_default"
+    )]
+    pub headers: ::buffa::__private::HashMap<
+        ::buffa::alloc::string::String,
+        ::buffa::alloc::string::String,
+    >,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -398,6 +408,7 @@ impl ::core::fmt::Debug for PresignedTarget {
             .field("key", &self.key)
             .field("name", &self.name)
             .field("content_disposition", &self.content_disposition)
+            .field("headers", &self.headers)
             .finish()
     }
 }
@@ -443,6 +454,12 @@ impl ::buffa::Message for PresignedTarget {
                     + ::buffa::types::string_encoded_len(&self.content_disposition)
                         as u64;
         }
+        size
+            += ::buffa::map_codec::field_len::<
+                ::buffa::map_codec::Str,
+                ::buffa::map_codec::Str,
+                _,
+            >(&self.headers, 1u64);
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -465,6 +482,11 @@ impl ::buffa::Message for PresignedTarget {
         if !self.content_disposition.is_empty() {
             ::buffa::types::put_string_field(4u32, &self.content_disposition, buf);
         }
+        ::buffa::map_codec::write_field::<
+            ::buffa::map_codec::Str,
+            ::buffa::map_codec::Str,
+            _,
+        >(&self.headers, 5u32, buf);
         self.__buffa_unknown_fields.write_to(buf);
     }
     fn merge_field(
@@ -506,6 +528,17 @@ impl ::buffa::Message for PresignedTarget {
                 )?;
                 ::buffa::types::merge_string(&mut self.content_disposition, buf)?;
             }
+            5u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::map_codec::merge_entry::<
+                    ::buffa::map_codec::Str,
+                    ::buffa::map_codec::Str,
+                    _,
+                >(&mut self.headers, buf, ctx)?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -518,6 +551,7 @@ impl ::buffa::Message for PresignedTarget {
         self.key.clear();
         self.name.clear();
         self.content_disposition.clear();
+        self.headers.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -2126,6 +2160,8 @@ pub mod __buffa {
             pub name: &'a str,
             /// Field 4: `content_disposition`
             pub content_disposition: &'a str,
+            /// Field 5: `headers` (map)
+            pub headers: ::buffa::MapView<'a, &'a str, &'a str>,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::buffa::MessageView<'a> for PresignedTargetView<'a> {
@@ -2192,6 +2228,49 @@ pub mod __buffa {
                         )?;
                         view.content_disposition = ::buffa::types::borrow_str(&mut cur)?;
                     }
+                    5u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let entry_bytes = ::buffa::types::borrow_bytes(&mut cur)?;
+                        let mut entry_cur: &'a [u8] = entry_bytes;
+                        let mut key = "";
+                        let mut val = "";
+                        ctx.register_element_memory(
+                            ::buffa::__private::element_footprint(&key)
+                                + ::buffa::__private::element_footprint(&val),
+                        )?;
+                        while !entry_cur.is_empty() {
+                            let entry_tag = ::buffa::encoding::Tag::decode(
+                                &mut entry_cur,
+                            )?;
+                            match entry_tag.field_number() {
+                                1 => {
+                                    ::buffa::encoding::check_wire_type(
+                                        entry_tag,
+                                        ::buffa::encoding::WireType::LengthDelimited,
+                                    )?;
+                                    key = ::buffa::types::borrow_str(&mut entry_cur)?;
+                                }
+                                2 => {
+                                    ::buffa::encoding::check_wire_type(
+                                        entry_tag,
+                                        ::buffa::encoding::WireType::LengthDelimited,
+                                    )?;
+                                    val = ::buffa::types::borrow_str(&mut entry_cur)?;
+                                }
+                                _ => {
+                                    ::buffa::encoding::skip_field_depth(
+                                        entry_tag,
+                                        &mut entry_cur,
+                                        ctx.depth(),
+                                    )?;
+                                }
+                            }
+                        }
+                        view.headers.push(key, val);
+                    }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                         let span_len = before_tag.len() - cur.len();
@@ -2225,6 +2304,11 @@ pub mod __buffa {
                     key: self.key.to_string(),
                     name: self.name.to_string(),
                     content_disposition: self.content_disposition.to_string(),
+                    headers: self
+                        .headers
+                        .iter()
+                        .map(|(k, v)| (k.to_string(), v.to_string()))
+                        .collect(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -2255,6 +2339,15 @@ pub mod __buffa {
                                 &self.content_disposition,
                             ) as u64;
                 }
+                #[allow(clippy::for_kv_map)]
+                for (k, v) in &self.headers {
+                    let entry_size: u64 = 1u64
+                        + ::buffa::types::string_encoded_len(k) as u64 + 1u64
+                        + ::buffa::types::string_encoded_len(v) as u64;
+                    size
+                        += 1u64 + ::buffa::encoding::varint_len(entry_size) as u64
+                            + entry_size;
+                }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
             }
@@ -2281,6 +2374,29 @@ pub mod __buffa {
                         &self.content_disposition,
                         buf,
                     );
+                }
+                for (k, v) in &self.headers {
+                    let entry_size: u64 = 1u64
+                        + ::buffa::types::string_encoded_len(k) as u64 + 1u64
+                        + ::buffa::types::string_encoded_len(v) as u64;
+                    ::buffa::encoding::Tag::new(
+                            5u32,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )
+                        .encode(buf);
+                    ::buffa::encoding::encode_varint(entry_size, buf);
+                    ::buffa::encoding::Tag::new(
+                            1u32,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )
+                        .encode(buf);
+                    ::buffa::types::encode_string(k, buf);
+                    ::buffa::encoding::Tag::new(
+                            2u32,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )
+                        .encode(buf);
+                    ::buffa::types::encode_string(v, buf);
                 }
                 self.__buffa_unknown_fields.write_to(buf);
             }
@@ -2320,6 +2436,26 @@ pub mod __buffa {
                             "contentDisposition",
                             self.content_disposition,
                         )?;
+                }
+                if !self.headers.is_empty() {
+                    struct _WM<'__a, '__x>(
+                        &'__x ::buffa::MapView<'__x, &'__a str, &'__a str>,
+                    );
+                    impl<'__a> ::serde::Serialize for _WM<'__a, '_> {
+                        fn serialize<__S: ::serde::Serializer>(
+                            &self,
+                            __s: __S,
+                        ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                            use ::serde::ser::SerializeMap as _;
+                            let mut __m = __s
+                                .serialize_map(::core::option::Option::Some(self.0.len()))?;
+                            for (k, v) in self.0.iter_unique() {
+                                __m.serialize_entry(k, v)?;
+                            }
+                            __m.end()
+                        }
+                    }
+                    __map.serialize_entry("headers", &_WM(&self.headers))?;
                 }
                 __map.end()
             }
@@ -2435,6 +2571,11 @@ pub mod __buffa {
             #[must_use]
             pub fn content_disposition(&self) -> &'_ str {
                 self.0.reborrow().content_disposition
+            }
+            /// Field 5: `headers` (map)
+            #[must_use]
+            pub fn headers(&self) -> &::buffa::MapView<'_, &'_ str, &'_ str> {
+                &self.0.reborrow().headers
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<PresignedTargetView<'static>>>

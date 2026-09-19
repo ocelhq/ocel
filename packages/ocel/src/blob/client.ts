@@ -55,6 +55,7 @@ interface PresignResponse {
     key: string;
     name: string;
     contentDisposition?: string;
+    headers?: Record<string, string>;
   }[];
 }
 
@@ -115,9 +116,12 @@ export function createUploadClient<B extends Bucket<Record<string, AnyUploader>>
 
       await Promise.all(
         presign.files.map((target, i) => {
-          const headers = target.contentDisposition
-            ? { "content-disposition": target.contentDisposition }
-            : undefined;
+          const headers = {
+            ...target.headers,
+            ...(target.contentDisposition
+              ? { "content-disposition": target.contentDisposition }
+              : {}),
+          };
           return fetchImpl(target.url, {
             method: "PUT",
             body: args.files[i],

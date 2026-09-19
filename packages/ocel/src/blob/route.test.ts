@@ -105,6 +105,34 @@ describe("op=presign", () => {
     });
   });
 
+  it("hands the uploader the headers the store signed the target with", async () => {
+    const { ctx } = fakeContext({
+      presignUpload: vi.fn(async () => ({
+        sessionId: "sess-1",
+        files: [
+          {
+            url: "https://store/put/a",
+            key: "avatars/photo.jpg",
+            name: "photo.jpg",
+            headers: { "x-amz-tagging": "sessionId=sess-1" },
+          },
+        ],
+      })),
+    });
+    const { POST } = createRouteHandler(storage, { runtime: ctx });
+
+    const res = await POST(
+      makeReq(presignUrl, {
+        uploader: "avatar",
+        input: { userId: "u1" },
+        files: [{ name: "photo.jpg", size: 500, mimeType: "image/jpeg" }],
+      }),
+    );
+
+    const out = (await res.json()) as any;
+    expect(out.files[0].headers).toEqual({ "x-amz-tagging": "sessionId=sess-1" });
+  });
+
   it("short-circuits (no presign) when middleware throws", async () => {
     const rejecting = bucket("s2", {
       uploaders: {

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	connect "connectrpc.com/connect"
@@ -71,7 +72,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *blobv1.PresignUploadRe
 	targets := make([]*blobv1.PresignedTarget, len(req.GetFiles()))
 
 	for i, f := range req.GetFiles() {
-		url, err := s.presignPut(ctx, req.GetBucket(), f.GetKey(), f.GetMimeType(), f.GetSize(), sessionID, req.GetContentDisposition())
+		url, headers, err := s.presignPut(ctx, req.GetBucket(), f.GetKey(), f.GetMimeType(), f.GetSize(), sessionID, req.GetContentDisposition())
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("presign %q: %w", f.GetKey(), err))
 		}
@@ -87,6 +88,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *blobv1.PresignUploadRe
 			Key:                f.GetKey(),
 			Name:               f.GetName(),
 			ContentDisposition: req.GetContentDisposition(),
+			Headers:            headers,
 		}
 	}
 
@@ -108,7 +110,9 @@ func (s *Service) PresignUpload(ctx context.Context, req *blobv1.PresignUploadRe
 	return &blobv1.PresignUploadResponse{SessionId: sessionID, Files: targets}, nil
 }
 
-func (s *Service) presignPut(ctx context.Context, bucket, key, contentType string, size int64, sessionID, contentDisposition string) (string, error) {
+const vendorHeaderPrefix = "x-amz-"
+
+func (s *Service) presignPut(ctx context.Context, bucket, key, contentType string, size int64, sessionID, contentDisposition string) (string, map[string]string, error) {
 	in := &s3.PutObjectInput{
 		Bucket:        aws.String(bucket),
 		Key:           aws.String(key),
@@ -123,9 +127,15 @@ func (s *Service) presignPut(ctx context.Context, bucket, key, contentType strin
 		o.Expires = presignTTL
 	})
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return req.URL, nil
+	headers := map[string]string{}
+	for name, values := range req.SignedHeader {
+		if lower := strings.ToLower(name); strings.HasPrefix(lower, vendorHeaderPrefix) && len(values) > 0 {
+			headers[lower] = values[0]
+		}
+	}
+	return req.URL, headers, nil
 }
 
 func (s *Service) VerifyUploadSignature(ctx context.Context, req *blobv1.VerifyUploadSignatureRequest) (*blobv1.VerifyUploadSignatureResponse, error) {

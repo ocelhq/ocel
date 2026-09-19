@@ -63,7 +63,7 @@ class PresignFile(Message[_PresignFileFields]):
         size: int
         mime_type: str
 
-_PresignedTargetFields: TypeAlias = Literal["url", "key", "name", "content_disposition"]
+_PresignedTargetFields: TypeAlias = Literal["url", "key", "name", "content_disposition", "headers"]
 
 class PresignedTarget(Message[_PresignedTargetFields]):
     """
@@ -88,9 +88,13 @@ class PresignedTarget(Message[_PresignedTargetFields]):
             ```proto
             string content_disposition = 4;
             ```
+        headers:
+            ```proto
+            map<string, string> headers = 5;
+            ```
     """
 
-    __slots__ = ("url", "key", "name", "content_disposition")
+    __slots__ = ("url", "key", "name", "content_disposition", "headers")
 
     if TYPE_CHECKING:
 
@@ -101,6 +105,7 @@ class PresignedTarget(Message[_PresignedTargetFields]):
             key: str = "",
             name: str = "",
             content_disposition: str = "",
+            headers: dict[str, str] | None = None,
         ) -> None:
             pass
 
@@ -108,6 +113,7 @@ class PresignedTarget(Message[_PresignedTargetFields]):
         key: str
         name: str
         content_disposition: str
+        headers: dict[str, str]
 
 _CompletedFileFields: TypeAlias = Literal["key", "name", "size", "mime_type"]
 
@@ -409,7 +415,7 @@ class UploadState(Enum):
 
 
 _DESC = file_desc(
-    b'\n\x16app/blob/v1/blob.proto\x12\x0bapp.blob.v1\x1a\x1bbuf/validate/validate.proto"\xc0\x03\n\x0bPresignFile\x12\xeb\x02\n\x03key\x18\x01 \x01(\tR\x03keyB\xd8\x02\xbaH\xd4\x02\xba\x01\xcb\x02\n\x18buckets.presign_file.key\x12\xa3\x01a key names a file under the bucket\'s prefix: every segment must be non-empty and neither "." nor "..", and the key may carry no backslash and no control character\x1a\x88\x01this.split(\'/\').all(segment, segment != \'\' && segment != \'.\' && segment != \'..\') && !this.contains(\'\\\\\') && !this.matches(\'[[:cntrl:]]\')r\x03\x18\x80\x08\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n\tmime_type\x18\x04 \x01(\tR\x08mimeType"z\n\x0fPresignedTarget\x12\x10\n\x03url\x18\x01 \x01(\tR\x03url\x12\x10\n\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n\x04name\x18\x03 \x01(\tR\x04name\x12/\n\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition"f\n\rCompletedFile\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n\tmime_type\x18\x04 \x01(\tR\x08mimeType"\xea\x01\n\x14PresignUploadRequest\x12\x1f\n\x06bucket\x18\x01 \x01(\tR\x06bucketB\x07\xbaH\x04r\x02\x10\x01\x128\n\x05files\x18\x02 \x03(\x0b2\x18.app.blob.v1.PresignFileR\x05filesB\x08\xbaH\x05\x92\x01\x02\x08\x01\x12\x1a\n\x08metadata\x18\x03 \x01(\x0cR\x08metadata\x12/\n\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\x12*\n\x11callback_base_url\x18\x05 \x01(\tR\x0fcallbackBaseUrl"j\n\x15PresignUploadResponse\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x122\n\x05files\x18\x02 \x03(\x0b2\x1c.app.blob.v1.PresignedTargetR\x05files"\x93\x01\n\x1cVerifyUploadSignatureRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12\x1c\n\tsignature\x18\x02 \x01(\tR\tsignature\x126\n\x04file\x18\x03 \x01(\x0b2\x1a.app.blob.v1.CompletedFileR\x04fileB\x06\xbaH\x03\xc8\x01\x01"Q\n\x1dVerifyUploadSignatureResponse\x12\x14\n\x05valid\x18\x01 \x01(\x08R\x05valid\x12\x1a\n\x08metadata\x18\x02 \x01(\x0cR\x08metadata"7\n\x16GetUploadStatusRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId"_\n\x17GetUploadStatusResponse\x12.\n\x05state\x18\x01 \x01(\x0e2\x18.app.blob.v1.UploadStateR\x05state\x12\x14\n\x05error\x18\x02 \x01(\tR\x05error*{\n\x0bUploadState\x12\x1c\n\x18UPLOAD_STATE_UNSPECIFIED\x10\x00\x12\x18\n\x14UPLOAD_STATE_PENDING\x10\x01\x12\x1a\n\x16UPLOAD_STATE_SUCCEEDED\x10\x02\x12\x18\n\x14UPLOAD_STATE_EXPIRED\x10\x032\xb5\x02\n\rBucketService\x12V\n\rPresignUpload\x12!.app.blob.v1.PresignUploadRequest\x1a".app.blob.v1.PresignUploadResponse\x12n\n\x15VerifyUploadSignature\x12).app.blob.v1.VerifyUploadSignatureRequest\x1a*.app.blob.v1.VerifyUploadSignatureResponse\x12\\\n\x0fGetUploadStatus\x12#.app.blob.v1.GetUploadStatusRequest\x1a$.app.blob.v1.GetUploadStatusResponseB5Z3github.com/ocelhq/ocel/pkg/proto/app/blob/v1;blobv1b\x06proto3',
+    b'\n\x16app/blob/v1/blob.proto\x12\x0bapp.blob.v1\x1a\x1bbuf/validate/validate.proto"\xc0\x03\n\x0bPresignFile\x12\xeb\x02\n\x03key\x18\x01 \x01(\tR\x03keyB\xd8\x02\xbaH\xd4\x02\xba\x01\xcb\x02\n\x18buckets.presign_file.key\x12\xa3\x01a key names a file under the bucket\'s prefix: every segment must be non-empty and neither "." nor "..", and the key may carry no backslash and no control character\x1a\x88\x01this.split(\'/\').all(segment, segment != \'\' && segment != \'.\' && segment != \'..\') && !this.contains(\'\\\\\') && !this.matches(\'[[:cntrl:]]\')r\x03\x18\x80\x08\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n\tmime_type\x18\x04 \x01(\tR\x08mimeType"\xfb\x01\n\x0fPresignedTarget\x12\x10\n\x03url\x18\x01 \x01(\tR\x03url\x12\x10\n\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n\x04name\x18\x03 \x01(\tR\x04name\x12/\n\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\x12C\n\x07headers\x18\x05 \x03(\x0b2).app.blob.v1.PresignedTarget.HeadersEntryR\x07headers\x1a:\n\x0cHeadersEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x028\x01"f\n\rCompletedFile\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n\tmime_type\x18\x04 \x01(\tR\x08mimeType"\xea\x01\n\x14PresignUploadRequest\x12\x1f\n\x06bucket\x18\x01 \x01(\tR\x06bucketB\x07\xbaH\x04r\x02\x10\x01\x128\n\x05files\x18\x02 \x03(\x0b2\x18.app.blob.v1.PresignFileR\x05filesB\x08\xbaH\x05\x92\x01\x02\x08\x01\x12\x1a\n\x08metadata\x18\x03 \x01(\x0cR\x08metadata\x12/\n\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\x12*\n\x11callback_base_url\x18\x05 \x01(\tR\x0fcallbackBaseUrl"j\n\x15PresignUploadResponse\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x122\n\x05files\x18\x02 \x03(\x0b2\x1c.app.blob.v1.PresignedTargetR\x05files"\x93\x01\n\x1cVerifyUploadSignatureRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12\x1c\n\tsignature\x18\x02 \x01(\tR\tsignature\x126\n\x04file\x18\x03 \x01(\x0b2\x1a.app.blob.v1.CompletedFileR\x04fileB\x06\xbaH\x03\xc8\x01\x01"Q\n\x1dVerifyUploadSignatureResponse\x12\x14\n\x05valid\x18\x01 \x01(\x08R\x05valid\x12\x1a\n\x08metadata\x18\x02 \x01(\x0cR\x08metadata"7\n\x16GetUploadStatusRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId"_\n\x17GetUploadStatusResponse\x12.\n\x05state\x18\x01 \x01(\x0e2\x18.app.blob.v1.UploadStateR\x05state\x12\x14\n\x05error\x18\x02 \x01(\tR\x05error*{\n\x0bUploadState\x12\x1c\n\x18UPLOAD_STATE_UNSPECIFIED\x10\x00\x12\x18\n\x14UPLOAD_STATE_PENDING\x10\x01\x12\x1a\n\x16UPLOAD_STATE_SUCCEEDED\x10\x02\x12\x18\n\x14UPLOAD_STATE_EXPIRED\x10\x032\xb5\x02\n\rBucketService\x12V\n\rPresignUpload\x12!.app.blob.v1.PresignUploadRequest\x1a".app.blob.v1.PresignUploadResponse\x12n\n\x15VerifyUploadSignature\x12).app.blob.v1.VerifyUploadSignatureRequest\x1a*.app.blob.v1.VerifyUploadSignatureResponse\x12\\\n\x0fGetUploadStatus\x12#.app.blob.v1.GetUploadStatusRequest\x1a$.app.blob.v1.GetUploadStatusResponseB5Z3github.com/ocelhq/ocel/pkg/proto/app/blob/v1;blobv1b\x06proto3',
     [
         validate_pb.desc(),
     ],

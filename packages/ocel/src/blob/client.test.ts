@@ -67,6 +67,39 @@ describe("createUploadClient", () => {
     expect(result.files).toEqual([{ key: "avatars/a.jpg", name: "a.jpg" }]);
   });
 
+  it("sends the headers a target states, beside its content disposition", async () => {
+    const fetch = vi.fn(async (url: string, _init?: FetchInit) => {
+      if (url.includes("op=presign")) {
+        return jsonRes({
+          sessionId: "sess-1",
+          files: [
+            {
+              url: "https://store/put/a",
+              key: "avatars/a.jpg",
+              name: "a.jpg",
+              contentDisposition: "inline",
+              headers: { "x-amz-tagging": "sessionId=sess-1" },
+            },
+          ],
+        });
+      }
+      return jsonRes({ state: "succeeded" });
+    });
+    const client = createUploadClient<TestBucket>({
+      url: "https://app/api/upload",
+      pollIntervalMs: 1,
+      fetch,
+    });
+
+    await client.upload("avatar", { files: [file], input: { userId: "u1" } });
+
+    const putCall = fetch.mock.calls.find((c) => c[0] === "https://store/put/a")!;
+    expect(putCall[1]!.headers).toEqual({
+      "x-amz-tagging": "sessionId=sess-1",
+      "content-disposition": "inline",
+    });
+  });
+
   it("re-polls until a terminal state", async () => {
     const fetch = fakeFetch(["pending", "pending", "succeeded"]);
     const client = createUploadClient<TestBucket>({
