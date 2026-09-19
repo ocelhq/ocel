@@ -37,11 +37,11 @@ func RunPorts(t *testing.T, provider providerkit.Provider) {
 
 	t.Run("RecordStore", func(t *testing.T) { RunRecordStore(t, provider.Records()) })
 	t.Run("Sealer", func(t *testing.T) { RunSealer(t, provider.Sealer()) })
+	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, provider.Artifacts()) })
+	t.Run("Releaser", func(t *testing.T) { RunReleaser(t, provider.Releases(), provider.Artifacts(), provider.Serves()) })
 	t.Run("Bootstrapper", func(t *testing.T) {
 		RunBootstrapper(t, bootstrapperOf(t, provider), provider.Edges().Default())
 	})
-	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, provider.Artifacts()) })
-	t.Run("Releaser", func(t *testing.T) { RunReleaser(t, provider.Releases(), provider.Artifacts(), provider.Serves()) })
 	t.Run("Credentials", func(t *testing.T) { RunCredentials(t, provider.Credentials()) })
 	t.Run("EdgeRegistry", func(t *testing.T) { RunEdgeRegistry(t, provider.Edges()) })
 	t.Run("DNSRegistry", func(t *testing.T) { RunDNSRegistry(t, provider.DNS()) })
