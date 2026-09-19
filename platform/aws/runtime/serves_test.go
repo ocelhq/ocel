@@ -1,4 +1,4 @@
-package proxy_test
+package runtime_test
 
 import (
 	"slices"
@@ -6,8 +6,8 @@ import (
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/runtimekit/proxy"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	"github.com/ocelhq/ocel/platform/aws/runtime/proxy"
 )
 
 func TestEveryProxiedTypeThisProviderServesIsOneTheRuntimeRuns(t *testing.T) {

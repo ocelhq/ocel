@@ -2,23 +2,17 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/proxy"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bucket"
-	"github.com/ocelhq/ocel/platform/aws/runtime/proxy"
 )
 
 const (
@@ -57,24 +51,11 @@ func serveProxy(ctx context.Context, bindings []live.Binding, table, sessionPref
 		SessionKeyPrefix: sessionPrefix,
 	})
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	served, err := proxy.Serve(svc)
 	if err != nil {
-		return nil, nil, fmt.Errorf("bind the proxy listener: %w", err)
-	}
-	token, err := proxyToken()
-	if err != nil {
-		ln.Close()
 		return nil, nil, err
 	}
-
-	srv := &http.Server{Handler: proxy.NewMux(token, svc)}
-	served := make(chan error, 1)
-	go func() { served <- srv.Serve(ln) }()
-
-	return []string{
-		constants.RuntimeAddressEnvName + "=http://" + ln.Addr().String(),
-		channel.SessionTokenEnvVar + "=" + token,
-	}, served, nil
+	return served.Env, served.Errs, nil
 }
 
 func superviseProxy(served <-chan error) {
@@ -84,12 +65,4 @@ func superviseProxy(served <-chan error) {
 	err := <-served
 	fmt.Fprintf(os.Stderr, "ocel: the proxy stopped serving this deployment's bindings: %v\n", err)
 	os.Exit(1)
-}
-
-func proxyToken() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("draw a proxy session token: %w", err)
-	}
-	return hex.EncodeToString(b), nil
 }
