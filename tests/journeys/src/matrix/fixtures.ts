@@ -148,7 +148,7 @@ export const sdk = {
     apps: ["web"],
     redeploys: true,
     checks: BINDING_CHECKS,
-    on: { aws: [container, apiGateway] },
+    on: { aws: [container, apiGateway], vps: [defaults] },
   }),
   withSst: fixture("sdk/with-sst", {
     apps: ["web"],

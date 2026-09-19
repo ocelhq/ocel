@@ -55,6 +55,39 @@ differently refuses rather than letting one win.
 | `bucket` | `bucket`, `publicAccessBlock`, `cors`, `uploadCompleterRole`, `uploadCompleterS3Policy`, `uploadCompleterSessionsPolicy`, `uploadCompleterLogsPolicy`, `uploadCompleterLogGroup`, `uploadCompleter`, `uploadCompleterPermission`, `notification` |
 | `postgres` | `securityGroup`, `subnetGroup`, `cluster`, `instance` |
 
+## On a VPS
+
+A box has no Pulumi resources, so the `vps` branch patches what the box runs instead: the
+container and the volume a `postgres` stands up as.
+
+```ts title="transforms/stack.transform.ts"
+import { defineTransform } from "@ocel/transforms";
+
+export default defineTransform({
+  vps: {
+    postgres: {
+      container: {
+        image: "pgvector/pgvector@sha256:…",
+        args: ["-c", "max_connections=200"],
+        memory: "2g",
+      },
+      volume: { driverOpts: { type: "none", o: "bind", device: "/mnt/pg" } },
+    },
+  },
+});
+```
+
+| ocel resource | what the box runs | you can set |
+| --- | --- | --- |
+| `postgres` | `container` | `image`, `args`, `env`, `memory`, `cpus`, `shmSize` |
+| `postgres` | `volume` | `driver`, `driverOpts` |
+
+An `image` has to be pinned by digest. The container's name, network, labels, published ports
+and mounts stay ocel's, and so do the variables an app's binding depends on: `POSTGRES_USER`,
+`POSTGRES_DB`, `POSTGRES_PASSWORD`, `POSTGRES_HOST_AUTH_METHOD` and `PGDATA`. `tags` become
+labels on the container and the volume. Every value is written down; a box has no binding
+outputs to fill one from.
+
 ## Gates and tags
 
 A rule can carry an `if` gate, decided from the environment being deployed and the app the

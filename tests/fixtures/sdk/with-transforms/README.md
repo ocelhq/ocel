@@ -36,5 +36,9 @@ ocel deploy
 To see the effect, look at what landed in your AWS account: the Lambda behind each route,
 the Aurora cluster behind `main`, and the tags on both.
 
+`ocel --config ocel.vps.json deploy` is the same project on a box of your own, where the
+module's `vps` rule reshapes the postgres container instead: `docker inspect` it to see the
+arguments, the shared memory and the label.
+
 `ocel deploy` targets production. Stand a branch environment up with `ocel preview up` to
 see the same module render a different result, and `ocel preview rm` to tear it down.

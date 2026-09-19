@@ -13,6 +13,9 @@ export default defineTransform([
     },
   },
   {
+    vps: { postgres: { container: { args: ["-c", "max_connections=200"], shmSize: "256m" } } },
+  },
+  {
     tags: { "acme:cost-center": "platform" },
   },
 ]);
