@@ -136,6 +136,35 @@ func TestTheStoreIsHeldToACredentialTheBoxKeepsSealed(t *testing.T) {
 
 func quotedPath(path string) string { return "'" + path + "'" }
 
+func sealingStore(t *testing.T, declared ...string) string {
+	t.Helper()
+	machine := &box{}
+	provider := over(machine)
+	for _, name := range declared {
+		if _, err := provider.Bucket(context.Background(), aBucket(t, name, false), nil); err != nil {
+			t.Fatalf("Bucket(%s) = %v", name, err)
+		}
+	}
+	for _, command := range machine.commands() {
+		if strings.Contains(command, host.SealHelper) {
+			return command
+		}
+	}
+	t.Fatal("nothing the deploy ran sealed the store's credential")
+	return ""
+}
+
+func TestTheStoreCredentialIsSealedUnderTheStoreAndNotWhicheverBucketStoodItUp(t *testing.T) {
+	t.Parallel()
+
+	first := sealingStore(t, "avatars", "uploads")
+	second := sealingStore(t, "uploads", "avatars")
+	if first != second {
+		t.Errorf("the store's credential is sealed at\n%s\nwhen avatars is declared first and at\n%s\nwhen uploads is:"+
+			" the coordinate is what the seal is bound to, so the next deploy opens nothing", first, second)
+	}
+}
+
 func bindingBucket() providerkit.Binding {
 	return providerkit.Binding{
 		Type: providerkit.BindingBucket, Name: "uploads", Resource: "uploads",
