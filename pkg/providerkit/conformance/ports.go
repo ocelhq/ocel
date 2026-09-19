@@ -853,6 +853,13 @@ func RunReleaser(t *testing.T, releaser providerkit.Releaser, artifacts provider
 				"the plan and the apply must ship it down one path")
 		}
 
+		if _, storeless := artifacts.(providerkit.NoArtifacts); storeless {
+			if _, err := releaser.Provision(ctx, shipping, nil); err == nil {
+				t.Fatal("Provision() shipped an artifact through a provider that keeps no artifact store, " +
+					"so the release reported a write that landed nowhere")
+			}
+			return
+		}
 		if _, err := releaser.Provision(ctx, shipping, nil); err != nil {
 			t.Fatalf("Provision() of the release whose plan showed the artifact = %v", err)
 		}
