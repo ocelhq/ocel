@@ -15,7 +15,7 @@ import (
 
 const liveEnv = "OCEL_LIVE_DOCKER"
 
-func TestLiveDeclaredDatabasesComeUpAndKeepTheirDataAcrossRuns(t *testing.T) {
+func TestDockerDeclaredDatabasesComeUpAndKeepTheirDataAcrossRuns(t *testing.T) {
 	if os.Getenv(liveEnv) == "" {
 		t.Skipf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
 	}

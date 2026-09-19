@@ -93,7 +93,7 @@ func put(t *testing.T, target *blobv1.PresignedTarget, contentType, body string)
 	return resp
 }
 
-func TestLiveAnUploadCompletesThroughTheDeployedBucketService(t *testing.T) {
+func TestDockerAnUploadCompletesThroughTheDeployedBucketService(t *testing.T) {
 	live := startLive(t, "bucket-live-test", http.StatusOK)
 	ctx := context.Background()
 
@@ -162,7 +162,7 @@ func TestAnUploadThatBreaksItsSignedConditionsIsRefused(t *testing.T) {
 	}
 }
 
-func TestLiveACompletionTheAppKeepsRefusingIsReportedOnceAndDropped(t *testing.T) {
+func TestDockerACompletionTheAppKeepsRefusingIsReportedOnceAndDropped(t *testing.T) {
 	live := startLive(t, "bucket-live-poison-test", http.StatusInternalServerError)
 
 	presigned, err := live.component.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
@@ -195,7 +195,7 @@ func TestLiveACompletionTheAppKeepsRefusingIsReportedOnceAndDropped(t *testing.T
 	}
 }
 
-func TestLiveTheAppsOriginIsReadAgainOnEverySync(t *testing.T) {
+func TestDockerTheAppsOriginIsReadAgainOnEverySync(t *testing.T) {
 	live := startLive(t, "bucket-live-origins-test", http.StatusOK)
 
 	allowed := func(origin string) string {

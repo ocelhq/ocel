@@ -29,7 +29,7 @@ func requireDocker(t *testing.T) docker.Engine {
 	return engine
 }
 
-func TestLiveAContainerRunsOnALoopbackPortAndItsVolumeOutlivesIt(t *testing.T) {
+func TestDockerAContainerRunsOnALoopbackPortAndItsVolumeOutlivesIt(t *testing.T) {
 	engine := requireDocker(t)
 	ctx := context.Background()
 	labels := map[string]string{"dev.ocel.project": "docker-live-test", "dev.ocel.component": "postgres"}

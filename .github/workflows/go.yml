@@ -198,11 +198,11 @@ jobs:
           OCEL_LIVE_DOCKER: "1"
         run: |
           set -euo pipefail
-          go test -race -count=1 -timeout 20m -run '^TestLive' -json ./cli/internal/devstack/... | tee live-devstack.json
+          go test -race -count=1 -timeout 20m -run '^TestDocker' -json ./cli/internal/devstack/... | tee live-devstack.json
 
       - name: Assert the dev stack's live suite ran
         if: matrix.group.name == 'cli'
-        run: scripts/assert-ran.sh live-devstack.json TestLive
+        run: scripts/assert-ran.sh live-devstack.json TestDocker
 
       - name: Pull the gcp emulator
         if: matrix.group.name == 'gcp' && steps.gate-gcp-live.outputs.green != 'true'
