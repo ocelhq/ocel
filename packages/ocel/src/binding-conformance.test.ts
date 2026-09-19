@@ -8,7 +8,7 @@ vi.mock("./utils/rpc", () => ({
 }));
 
 const { postgres } = await import("./postgres/index.js");
-const { bucket } = await import("./blob/bucket.js");
+const { bucket } = await import("./bucket/bucket.js");
 
 function repoRoot() {
   let dir = new URL("./", import.meta.url);

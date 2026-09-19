@@ -517,7 +517,7 @@ describe("placeFile", () => {
   const at = (p: string) => path.join(root, p);
 
   it("maps a workspace package (no node_modules segment) by identity", () => {
-    expect(placeFile(at("packages/ocel/dist/blob/express.js"), cwd).dest).toBe(
+    expect(placeFile(at("packages/ocel/dist/bucket/express.js"), cwd).dest).toBe(
       path.join("node_modules", "ocel", "dist", "blob", "express.js"),
     );
   });

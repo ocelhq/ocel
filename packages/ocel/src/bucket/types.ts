@@ -4,7 +4,7 @@ export type MaybePromise<T> = T | Promise<T>;
 
 export type UploadStatusState = "pending" | "succeeded" | "expired";
 
-export interface BlobRequest {
+export interface UploadRequest {
   readonly url: string;
   readonly headers: { get(name: string): string | null };
   json(): Promise<unknown>;
@@ -56,7 +56,7 @@ export interface UploaderUpload<TMetadata> {
   onUploadComplete?: (ctx: { metadata: TMetadata; file: CompletedFile }) => MaybePromise<void>;
 }
 
-export interface Uploader<TInputParsed = unknown, TMetadata = unknown, TReq = BlobRequest> {
+export interface Uploader<TInputParsed = unknown, TMetadata = unknown, TReq = UploadRequest> {
   readonly auth: UploaderAuth<TReq, z.ZodType | undefined, TMetadata>;
   readonly upload: UploaderUpload<TMetadata>;
   readonly __input?: TInputParsed;

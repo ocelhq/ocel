@@ -63,25 +63,25 @@
       "types": "./dist/postgres/index.d.ts",
       "import": "./dist/postgres/index.js"
     },
-    "./blob": {
-      "types": "./dist/blob/index.d.ts",
-      "import": "./dist/blob/index.js"
+    "./bucket": {
+      "types": "./dist/bucket/index.d.ts",
+      "import": "./dist/bucket/index.js"
     },
-    "./blob/next": {
-      "types": "./dist/blob/next.d.ts",
-      "import": "./dist/blob/next.js"
+    "./bucket/next": {
+      "types": "./dist/bucket/next.d.ts",
+      "import": "./dist/bucket/next.js"
     },
-    "./blob/hono": {
-      "types": "./dist/blob/hono.d.ts",
-      "import": "./dist/blob/hono.js"
+    "./bucket/hono": {
+      "types": "./dist/bucket/hono.d.ts",
+      "import": "./dist/bucket/hono.js"
     },
-    "./blob/express": {
-      "types": "./dist/blob/express.d.ts",
-      "import": "./dist/blob/express.js"
+    "./bucket/express": {
+      "types": "./dist/bucket/express.d.ts",
+      "import": "./dist/bucket/express.js"
     },
-    "./blob/client": {
-      "types": "./dist/blob/client.d.ts",
-      "import": "./dist/blob/client.js"
+    "./bucket/client": {
+      "types": "./dist/bucket/client.d.ts",
+      "import": "./dist/bucket/client.js"
     },
     "./package.json": "./package.json"
   },

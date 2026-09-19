@@ -11,7 +11,6 @@ export {
 } from "./route.js";
 export type {
   AnyUploader,
-  BlobRequest,
   CompletedFile,
   FileInfo,
   Limits,
@@ -19,5 +18,6 @@ export type {
   Uploader,
   UploaderAuth,
   UploaderUpload,
+  UploadRequest,
 } from "./types.js";
 export { uploader } from "./uploader.js";
