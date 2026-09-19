@@ -6,15 +6,17 @@
 
 from __future__ import annotations
 
-from typing import Literal, TYPE_CHECKING, TypeAlias
+from typing import Literal, NoReturn, TYPE_CHECKING, TypeAlias
 
 from protobuf import Enum, Message
 from protobuf._codegen import file_desc
+from protobuf.wkt import duration_pb, timestamp_pb
 
 from ....buf.validate import validate_pb
 
 if TYPE_CHECKING:
     from protobuf import DescFile
+    from protobuf.wkt import Duration, Timestamp
 
 
 _PresignFileFields: TypeAlias = Literal["key", "name", "size", "mime_type"]
@@ -63,7 +65,7 @@ class PresignFile(Message[_PresignFileFields]):
         size: int
         mime_type: str
 
-_PresignedTargetFields: TypeAlias = Literal["url", "key", "name", "content_disposition", "headers"]
+_PresignedTargetFields: TypeAlias = Literal["url", "key", "name", "content_disposition", "headers", "method", "fields"]
 
 class PresignedTarget(Message[_PresignedTargetFields]):
     """
@@ -92,9 +94,17 @@ class PresignedTarget(Message[_PresignedTargetFields]):
             ```proto
             map<string, string> headers = 5;
             ```
+        method:
+            ```proto
+            string method = 6;
+            ```
+        fields:
+            ```proto
+            map<string, string> fields = 7;
+            ```
     """
 
-    __slots__ = ("url", "key", "name", "content_disposition", "headers")
+    __slots__ = ("url", "key", "name", "content_disposition", "headers", "method", "fields")
 
     if TYPE_CHECKING:
 
@@ -106,6 +116,8 @@ class PresignedTarget(Message[_PresignedTargetFields]):
             name: str = "",
             content_disposition: str = "",
             headers: dict[str, str] | None = None,
+            method: str = "",
+            fields: dict[str, str] | None = None,
         ) -> None:
             pass
 
@@ -114,6 +126,8 @@ class PresignedTarget(Message[_PresignedTargetFields]):
         name: str
         content_disposition: str
         headers: dict[str, str]
+        method: str
+        fields: dict[str, str]
 
 _CompletedFileFields: TypeAlias = Literal["key", "name", "size", "mime_type"]
 
@@ -160,6 +174,64 @@ class CompletedFile(Message[_CompletedFileFields]):
         name: str
         size: int
         mime_type: str
+
+_ObjectInfoFields: TypeAlias = Literal["key", "size", "etag", "content_type", "uploaded_at", "metadata"]
+
+class ObjectInfo(Message[_ObjectInfoFields]):
+    """
+    ```proto
+    message app.bucket.v1.ObjectInfo
+    ```
+
+    Attributes:
+        key:
+            ```proto
+            string key = 1;
+            ```
+        size:
+            ```proto
+            int64 size = 2;
+            ```
+        etag:
+            ```proto
+            string etag = 3;
+            ```
+        content_type:
+            ```proto
+            string content_type = 4;
+            ```
+        uploaded_at:
+            ```proto
+            optional google.protobuf.Timestamp uploaded_at = 5;
+            ```
+        metadata:
+            ```proto
+            map<string, string> metadata = 6;
+            ```
+    """
+
+    __slots__ = ("key", "size", "etag", "content_type", "uploaded_at", "metadata")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            key: str = "",
+            size: int = 0,
+            etag: str = "",
+            content_type: str = "",
+            uploaded_at: Timestamp | None = None,
+            metadata: dict[str, str] | None = None,
+        ) -> None:
+            pass
+
+        key: str
+        size: int
+        etag: str
+        content_type: str
+        uploaded_at: Timestamp | None
+        metadata: dict[str, str]
 
 _PresignUploadRequestFields: TypeAlias = Literal["bucket", "files", "metadata", "content_disposition", "callback_base_url"]
 
@@ -383,6 +455,852 @@ class GetUploadStatusResponse(Message[_GetUploadStatusResponseFields]):
         state: UploadState
         error: str
 
+_CompleteUploadRequestFields: TypeAlias = Literal["session_id"]
+
+class CompleteUploadRequest(Message[_CompleteUploadRequestFields]):
+    """
+    ```proto
+    message app.bucket.v1.CompleteUploadRequest
+    ```
+
+    Attributes:
+        session_id:
+            ```proto
+            string session_id = 1;
+            ```
+    """
+
+    __slots__ = ("session_id",)
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            session_id: str = "",
+        ) -> None:
+            pass
+
+        session_id: str
+
+_CompleteUploadResponseFields: TypeAlias = Literal["state", "error"]
+
+class CompleteUploadResponse(Message[_CompleteUploadResponseFields]):
+    """
+    ```proto
+    message app.bucket.v1.CompleteUploadResponse
+    ```
+
+    Attributes:
+        state:
+            ```proto
+            app.bucket.v1.UploadState state = 1;
+            ```
+        error:
+            ```proto
+            string error = 2;
+            ```
+    """
+
+    __slots__ = ("state", "error")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            state: UploadState | None = None,
+            error: str = "",
+        ) -> None:
+            pass
+
+        state: UploadState
+        error: str
+
+_HeadRequestFields: TypeAlias = Literal["bucket", "key"]
+
+class HeadRequest(Message[_HeadRequestFields]):
+    """
+    ```proto
+    message app.bucket.v1.HeadRequest
+    ```
+
+    Attributes:
+        bucket:
+            ```proto
+            string bucket = 1;
+            ```
+        key:
+            ```proto
+            string key = 2;
+            ```
+    """
+
+    __slots__ = ("bucket", "key")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            bucket: str = "",
+            key: str = "",
+        ) -> None:
+            pass
+
+        bucket: str
+        key: str
+
+_HeadResponseFields: TypeAlias = Literal["object"]
+
+class HeadResponse(Message[_HeadResponseFields]):
+    """
+    ```proto
+    message app.bucket.v1.HeadResponse
+    ```
+
+    Attributes:
+        object:
+            ```proto
+            optional app.bucket.v1.ObjectInfo object = 1;
+            ```
+    """
+
+    __slots__ = ("object",)
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            object: ObjectInfo | None = None,
+        ) -> None:
+            pass
+
+        object: ObjectInfo | None
+
+_ListRequestFields: TypeAlias = Literal["bucket", "prefix", "cursor", "limit"]
+
+class ListRequest(Message[_ListRequestFields]):
+    """
+    ```proto
+    message app.bucket.v1.ListRequest
+    ```
+
+    Attributes:
+        bucket:
+            ```proto
+            string bucket = 1;
+            ```
+        prefix:
+            ```proto
+            string prefix = 2;
+            ```
+        cursor:
+            ```proto
+            string cursor = 3;
+            ```
+        limit:
+            ```proto
+            int32 limit = 4;
+            ```
+    """
+
+    __slots__ = ("bucket", "prefix", "cursor", "limit")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            bucket: str = "",
+            prefix: str = "",
+            cursor: str = "",
+            limit: int = 0,
+        ) -> None:
+            pass
+
+        bucket: str
+        prefix: str
+        cursor: str
+        limit: int
+
+_ListResponseFields: TypeAlias = Literal["objects", "next_cursor"]
+
+class ListResponse(Message[_ListResponseFields]):
+    """
+    ```proto
+    message app.bucket.v1.ListResponse
+    ```
+
+    Attributes:
+        objects:
+            ```proto
+            repeated app.bucket.v1.ObjectInfo objects = 1;
+            ```
+        next_cursor:
+            ```proto
+            string next_cursor = 2;
+            ```
+    """
+
+    __slots__ = ("objects", "next_cursor")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            objects: list[ObjectInfo] | None = None,
+            next_cursor: str = "",
+        ) -> None:
+            pass
+
+        objects: list[ObjectInfo]
+        next_cursor: str
+
+_DeleteRequestFields: TypeAlias = Literal["bucket", "keys"]
+
+class DeleteRequest(Message[_DeleteRequestFields]):
+    """
+    ```proto
+    message app.bucket.v1.DeleteRequest
+    ```
+
+    Attributes:
+        bucket:
+            ```proto
+            string bucket = 1;
+            ```
+        keys:
+            ```proto
+            repeated string keys = 2;
+            ```
+    """
+
+    __slots__ = ("bucket", "keys")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            bucket: str = "",
+            keys: list[str] | None = None,
+        ) -> None:
+            pass
+
+        bucket: str
+        keys: list[str]
+
+_DeleteResponseFields: TypeAlias = NoReturn
+
+class DeleteResponse(Message[_DeleteResponseFields]):
+    """
+    ```proto
+    message app.bucket.v1.DeleteResponse
+    ```
+    """
+
+    __slots__ = ()
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+        ) -> None:
+            pass
+
+_CopyRequestFields: TypeAlias = Literal["bucket", "source_key", "destination_key"]
+
+class CopyRequest(Message[_CopyRequestFields]):
+    """
+    ```proto
+    message app.bucket.v1.CopyRequest
+    ```
+
+    Attributes:
+        bucket:
+            ```proto
+            string bucket = 1;
+            ```
+        source_key:
+            ```proto
+            string source_key = 2;
+            ```
+        destination_key:
+            ```proto
+            string destination_key = 3;
+            ```
+    """
+
+    __slots__ = ("bucket", "source_key", "destination_key")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            bucket: str = "",
+            source_key: str = "",
+            destination_key: str = "",
+        ) -> None:
+            pass
+
+        bucket: str
+        source_key: str
+        destination_key: str
+
+_CopyResponseFields: TypeAlias = Literal["object"]
+
+class CopyResponse(Message[_CopyResponseFields]):
+    """
+    ```proto
+    message app.bucket.v1.CopyResponse
+    ```
+
+    Attributes:
+        object:
+            ```proto
+            optional app.bucket.v1.ObjectInfo object = 1;
+            ```
+    """
+
+    __slots__ = ("object",)
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            object: ObjectInfo | None = None,
+        ) -> None:
+            pass
+
+        object: ObjectInfo | None
+
+_SignConstraintsFields: TypeAlias = Literal["content_type", "max_size", "download_filename", "if_none_match", "if_match"]
+
+class SignConstraints(Message[_SignConstraintsFields]):
+    """
+    ```proto
+    message app.bucket.v1.SignConstraints
+    ```
+
+    Attributes:
+        content_type:
+            ```proto
+            string content_type = 1;
+            ```
+        max_size:
+            ```proto
+            int64 max_size = 2;
+            ```
+        download_filename:
+            ```proto
+            string download_filename = 3;
+            ```
+        if_none_match:
+            ```proto
+            string if_none_match = 4;
+            ```
+        if_match:
+            ```proto
+            string if_match = 5;
+            ```
+    """
+
+    __slots__ = ("content_type", "max_size", "download_filename", "if_none_match", "if_match")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            content_type: str = "",
+            max_size: int = 0,
+            download_filename: str = "",
+            if_none_match: str = "",
+            if_match: str = "",
+        ) -> None:
+            pass
+
+        content_type: str
+        max_size: int
+        download_filename: str
+        if_none_match: str
+        if_match: str
+
+_SignRequestFields: TypeAlias = Literal["bucket", "key", "operation", "audience", "expires_in", "constraints"]
+
+class SignRequest(Message[_SignRequestFields]):
+    """
+    ```proto
+    message app.bucket.v1.SignRequest
+    ```
+
+    Attributes:
+        bucket:
+            ```proto
+            string bucket = 1;
+            ```
+        key:
+            ```proto
+            string key = 2;
+            ```
+        operation:
+            ```proto
+            app.bucket.v1.SignedOperation operation = 3;
+            ```
+        audience:
+            ```proto
+            app.bucket.v1.SignedAudience audience = 4;
+            ```
+        expires_in:
+            ```proto
+            optional google.protobuf.Duration expires_in = 5;
+            ```
+        constraints:
+            ```proto
+            optional app.bucket.v1.SignConstraints constraints = 6;
+            ```
+    """
+
+    __slots__ = ("bucket", "key", "operation", "audience", "expires_in", "constraints")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            bucket: str = "",
+            key: str = "",
+            operation: SignedOperation | None = None,
+            audience: SignedAudience | None = None,
+            expires_in: Duration | None = None,
+            constraints: SignConstraints | None = None,
+        ) -> None:
+            pass
+
+        bucket: str
+        key: str
+        operation: SignedOperation
+        audience: SignedAudience
+        expires_in: Duration | None
+        constraints: SignConstraints | None
+
+_SignResponseFields: TypeAlias = Literal["target"]
+
+class SignResponse(Message[_SignResponseFields]):
+    """
+    ```proto
+    message app.bucket.v1.SignResponse
+    ```
+
+    Attributes:
+        target:
+            ```proto
+            optional app.bucket.v1.PresignedTarget target = 1;
+            ```
+    """
+
+    __slots__ = ("target",)
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            target: PresignedTarget | None = None,
+        ) -> None:
+            pass
+
+        target: PresignedTarget | None
+
+_CreateMultipartRequestFields: TypeAlias = Literal["bucket", "key", "content_type", "metadata", "cache_control"]
+
+class CreateMultipartRequest(Message[_CreateMultipartRequestFields]):
+    """
+    ```proto
+    message app.bucket.v1.CreateMultipartRequest
+    ```
+
+    Attributes:
+        bucket:
+            ```proto
+            string bucket = 1;
+            ```
+        key:
+            ```proto
+            string key = 2;
+            ```
+        content_type:
+            ```proto
+            string content_type = 3;
+            ```
+        metadata:
+            ```proto
+            map<string, string> metadata = 4;
+            ```
+        cache_control:
+            ```proto
+            string cache_control = 5;
+            ```
+    """
+
+    __slots__ = ("bucket", "key", "content_type", "metadata", "cache_control")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            bucket: str = "",
+            key: str = "",
+            content_type: str = "",
+            metadata: dict[str, str] | None = None,
+            cache_control: str = "",
+        ) -> None:
+            pass
+
+        bucket: str
+        key: str
+        content_type: str
+        metadata: dict[str, str]
+        cache_control: str
+
+_CreateMultipartResponseFields: TypeAlias = Literal["upload_id"]
+
+class CreateMultipartResponse(Message[_CreateMultipartResponseFields]):
+    """
+    ```proto
+    message app.bucket.v1.CreateMultipartResponse
+    ```
+
+    Attributes:
+        upload_id:
+            ```proto
+            string upload_id = 1;
+            ```
+    """
+
+    __slots__ = ("upload_id",)
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            upload_id: str = "",
+        ) -> None:
+            pass
+
+        upload_id: str
+
+_SignPartsRequestFields: TypeAlias = Literal["bucket", "key", "upload_id", "part_numbers", "expires_in", "audience"]
+
+class SignPartsRequest(Message[_SignPartsRequestFields]):
+    """
+    ```proto
+    message app.bucket.v1.SignPartsRequest
+    ```
+
+    Attributes:
+        bucket:
+            ```proto
+            string bucket = 1;
+            ```
+        key:
+            ```proto
+            string key = 2;
+            ```
+        upload_id:
+            ```proto
+            string upload_id = 3;
+            ```
+        part_numbers:
+            ```proto
+            repeated int32 part_numbers = 4 [packed = true];
+            ```
+        expires_in:
+            ```proto
+            optional google.protobuf.Duration expires_in = 5;
+            ```
+        audience:
+            ```proto
+            app.bucket.v1.SignedAudience audience = 6;
+            ```
+    """
+
+    __slots__ = ("bucket", "key", "upload_id", "part_numbers", "expires_in", "audience")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            bucket: str = "",
+            key: str = "",
+            upload_id: str = "",
+            part_numbers: list[int] | None = None,
+            expires_in: Duration | None = None,
+            audience: SignedAudience | None = None,
+        ) -> None:
+            pass
+
+        bucket: str
+        key: str
+        upload_id: str
+        part_numbers: list[int]
+        expires_in: Duration | None
+        audience: SignedAudience
+
+_SignedPartFields: TypeAlias = Literal["part_number", "url", "headers"]
+
+class SignedPart(Message[_SignedPartFields]):
+    """
+    ```proto
+    message app.bucket.v1.SignedPart
+    ```
+
+    Attributes:
+        part_number:
+            ```proto
+            int32 part_number = 1;
+            ```
+        url:
+            ```proto
+            string url = 2;
+            ```
+        headers:
+            ```proto
+            map<string, string> headers = 3;
+            ```
+    """
+
+    __slots__ = ("part_number", "url", "headers")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            part_number: int = 0,
+            url: str = "",
+            headers: dict[str, str] | None = None,
+        ) -> None:
+            pass
+
+        part_number: int
+        url: str
+        headers: dict[str, str]
+
+_SignPartsResponseFields: TypeAlias = Literal["parts"]
+
+class SignPartsResponse(Message[_SignPartsResponseFields]):
+    """
+    ```proto
+    message app.bucket.v1.SignPartsResponse
+    ```
+
+    Attributes:
+        parts:
+            ```proto
+            repeated app.bucket.v1.SignedPart parts = 1;
+            ```
+    """
+
+    __slots__ = ("parts",)
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            parts: list[SignedPart] | None = None,
+        ) -> None:
+            pass
+
+        parts: list[SignedPart]
+
+_CompletedPartFields: TypeAlias = Literal["part_number", "etag"]
+
+class CompletedPart(Message[_CompletedPartFields]):
+    """
+    ```proto
+    message app.bucket.v1.CompletedPart
+    ```
+
+    Attributes:
+        part_number:
+            ```proto
+            int32 part_number = 1;
+            ```
+        etag:
+            ```proto
+            string etag = 2;
+            ```
+    """
+
+    __slots__ = ("part_number", "etag")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            part_number: int = 0,
+            etag: str = "",
+        ) -> None:
+            pass
+
+        part_number: int
+        etag: str
+
+_CompleteMultipartRequestFields: TypeAlias = Literal["bucket", "key", "upload_id", "parts", "if_none_match", "if_match"]
+
+class CompleteMultipartRequest(Message[_CompleteMultipartRequestFields]):
+    """
+    ```proto
+    message app.bucket.v1.CompleteMultipartRequest
+    ```
+
+    Attributes:
+        bucket:
+            ```proto
+            string bucket = 1;
+            ```
+        key:
+            ```proto
+            string key = 2;
+            ```
+        upload_id:
+            ```proto
+            string upload_id = 3;
+            ```
+        parts:
+            ```proto
+            repeated app.bucket.v1.CompletedPart parts = 4;
+            ```
+        if_none_match:
+            ```proto
+            string if_none_match = 5;
+            ```
+        if_match:
+            ```proto
+            string if_match = 6;
+            ```
+    """
+
+    __slots__ = ("bucket", "key", "upload_id", "parts", "if_none_match", "if_match")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            bucket: str = "",
+            key: str = "",
+            upload_id: str = "",
+            parts: list[CompletedPart] | None = None,
+            if_none_match: str = "",
+            if_match: str = "",
+        ) -> None:
+            pass
+
+        bucket: str
+        key: str
+        upload_id: str
+        parts: list[CompletedPart]
+        if_none_match: str
+        if_match: str
+
+_CompleteMultipartResponseFields: TypeAlias = Literal["object"]
+
+class CompleteMultipartResponse(Message[_CompleteMultipartResponseFields]):
+    """
+    ```proto
+    message app.bucket.v1.CompleteMultipartResponse
+    ```
+
+    Attributes:
+        object:
+            ```proto
+            optional app.bucket.v1.ObjectInfo object = 1;
+            ```
+    """
+
+    __slots__ = ("object",)
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            object: ObjectInfo | None = None,
+        ) -> None:
+            pass
+
+        object: ObjectInfo | None
+
+_AbortMultipartRequestFields: TypeAlias = Literal["bucket", "key", "upload_id"]
+
+class AbortMultipartRequest(Message[_AbortMultipartRequestFields]):
+    """
+    ```proto
+    message app.bucket.v1.AbortMultipartRequest
+    ```
+
+    Attributes:
+        bucket:
+            ```proto
+            string bucket = 1;
+            ```
+        key:
+            ```proto
+            string key = 2;
+            ```
+        upload_id:
+            ```proto
+            string upload_id = 3;
+            ```
+    """
+
+    __slots__ = ("bucket", "key", "upload_id")
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+            *,
+            bucket: str = "",
+            key: str = "",
+            upload_id: str = "",
+        ) -> None:
+            pass
+
+        bucket: str
+        key: str
+        upload_id: str
+
+_AbortMultipartResponseFields: TypeAlias = NoReturn
+
+class AbortMultipartResponse(Message[_AbortMultipartResponseFields]):
+    """
+    ```proto
+    message app.bucket.v1.AbortMultipartResponse
+    ```
+    """
+
+    __slots__ = ()
+
+    if TYPE_CHECKING:
+
+        def __init__(
+            self,
+        ) -> None:
+            pass
+
 class UploadState(Enum):
     """
     ```proto
@@ -413,23 +1331,106 @@ class UploadState(Enum):
     SUCCEEDED = 2
     EXPIRED = 3
 
+class SignedOperation(Enum):
+    """
+    ```proto
+    enum app.bucket.v1.SignedOperation
+    ```
+
+    Attributes:
+        UNSPECIFIED:
+            ```proto
+            SIGNED_OPERATION_UNSPECIFIED = 0
+            ```
+        GET:
+            ```proto
+            SIGNED_OPERATION_GET = 1
+            ```
+        PUT:
+            ```proto
+            SIGNED_OPERATION_PUT = 2
+            ```
+        POST_UPLOAD:
+            ```proto
+            SIGNED_OPERATION_POST_UPLOAD = 3
+            ```
+    """
+
+    UNSPECIFIED = 0
+    GET = 1
+    PUT = 2
+    POST_UPLOAD = 3
+
+class SignedAudience(Enum):
+    """
+    ```proto
+    enum app.bucket.v1.SignedAudience
+    ```
+
+    Attributes:
+        UNSPECIFIED:
+            ```proto
+            SIGNED_AUDIENCE_UNSPECIFIED = 0
+            ```
+        INTERNAL:
+            ```proto
+            SIGNED_AUDIENCE_INTERNAL = 1
+            ```
+        EXTERNAL:
+            ```proto
+            SIGNED_AUDIENCE_EXTERNAL = 2
+            ```
+    """
+
+    UNSPECIFIED = 0
+    INTERNAL = 1
+    EXTERNAL = 2
+
 
 _DESC = file_desc(
-    b'\n\x1aapp/bucket/v1/bucket.proto\x12\rapp.bucket.v1\x1a\x1bbuf/validate/validate.proto"\xc0\x03\n\x0bPresignFile\x12\xeb\x02\n\x03key\x18\x01 \x01(\tR\x03keyB\xd8\x02\xbaH\xd4\x02\xba\x01\xcb\x02\n\x18buckets.presign_file.key\x12\xa3\x01a key names a file under the bucket\'s prefix: every segment must be non-empty and neither "." nor "..", and the key may carry no backslash and no control character\x1a\x88\x01this.split(\'/\').all(segment, segment != \'\' && segment != \'.\' && segment != \'..\') && !this.contains(\'\\\\\') && !this.matches(\'[[:cntrl:]]\')r\x03\x18\x80\x08\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n\tmime_type\x18\x04 \x01(\tR\x08mimeType"\xfd\x01\n\x0fPresignedTarget\x12\x10\n\x03url\x18\x01 \x01(\tR\x03url\x12\x10\n\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n\x04name\x18\x03 \x01(\tR\x04name\x12/\n\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\x12E\n\x07headers\x18\x05 \x03(\x0b2+.app.bucket.v1.PresignedTarget.HeadersEntryR\x07headers\x1a:\n\x0cHeadersEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x028\x01"f\n\rCompletedFile\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n\tmime_type\x18\x04 \x01(\tR\x08mimeType"\xec\x01\n\x14PresignUploadRequest\x12\x1f\n\x06bucket\x18\x01 \x01(\tR\x06bucketB\x07\xbaH\x04r\x02\x10\x01\x12:\n\x05files\x18\x02 \x03(\x0b2\x1a.app.bucket.v1.PresignFileR\x05filesB\x08\xbaH\x05\x92\x01\x02\x08\x01\x12\x1a\n\x08metadata\x18\x03 \x01(\x0cR\x08metadata\x12/\n\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\x12*\n\x11callback_base_url\x18\x05 \x01(\tR\x0fcallbackBaseUrl"l\n\x15PresignUploadResponse\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x124\n\x05files\x18\x02 \x03(\x0b2\x1e.app.bucket.v1.PresignedTargetR\x05files"\x95\x01\n\x1cVerifyUploadSignatureRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12\x1c\n\tsignature\x18\x02 \x01(\tR\tsignature\x128\n\x04file\x18\x03 \x01(\x0b2\x1c.app.bucket.v1.CompletedFileR\x04fileB\x06\xbaH\x03\xc8\x01\x01"Q\n\x1dVerifyUploadSignatureResponse\x12\x14\n\x05valid\x18\x01 \x01(\x08R\x05valid\x12\x1a\n\x08metadata\x18\x02 \x01(\x0cR\x08metadata"7\n\x16GetUploadStatusRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId"a\n\x17GetUploadStatusResponse\x120\n\x05state\x18\x01 \x01(\x0e2\x1a.app.bucket.v1.UploadStateR\x05state\x12\x14\n\x05error\x18\x02 \x01(\tR\x05error*{\n\x0bUploadState\x12\x1c\n\x18UPLOAD_STATE_UNSPECIFIED\x10\x00\x12\x18\n\x14UPLOAD_STATE_PENDING\x10\x01\x12\x1a\n\x16UPLOAD_STATE_SUCCEEDED\x10\x02\x12\x18\n\x14UPLOAD_STATE_EXPIRED\x10\x032\xc1\x02\n\rBucketService\x12Z\n\rPresignUpload\x12#.app.bucket.v1.PresignUploadRequest\x1a$.app.bucket.v1.PresignUploadResponse\x12r\n\x15VerifyUploadSignature\x12+.app.bucket.v1.VerifyUploadSignatureRequest\x1a,.app.bucket.v1.VerifyUploadSignatureResponse\x12`\n\x0fGetUploadStatus\x12%.app.bucket.v1.GetUploadStatusRequest\x1a&.app.bucket.v1.GetUploadStatusResponseB9Z7github.com/ocelhq/ocel/pkg/proto/app/bucket/v1;bucketv1b\x06proto3',
+    b'\n\x1aapp/bucket/v1/bucket.proto\x12\rapp.bucket.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto"\xf4\x03\n\x0bPresignFile\x12\x9f\x03\n\x03key\x18\x01 \x01(\tR\x03keyB\x8c\x03\xbaH\x88\x03\xba\x01\xff\x02\n\x18buckets.presign_file.key\x12\xb9\x01a key names a file under the bucket\'s prefix: every segment must be non-empty and neither "." nor "..", the key may carry no backslash and no control character, and ".ocel/" is reserved\x1a\xa6\x01this.split(\'/\').all(segment, segment != \'\' && segment != \'.\' && segment != \'..\') && !this.contains(\'\\\\\') && !this.matches(\'[[:cntrl:]]\') && !this.startsWith(\'.ocel/\')r\x03\x18\x80\x08\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n\tmime_type\x18\x04 \x01(\tR\x08mimeType"\x94\x03\n\x0fPresignedTarget\x12\x10\n\x03url\x18\x01 \x01(\tR\x03url\x12\x10\n\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n\x04name\x18\x03 \x01(\tR\x04name\x12/\n\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\x12E\n\x07headers\x18\x05 \x03(\x0b2+.app.bucket.v1.PresignedTarget.HeadersEntryR\x07headers\x12\x16\n\x06method\x18\x06 \x01(\tR\x06method\x12B\n\x06fields\x18\x07 \x03(\x0b2*.app.bucket.v1.PresignedTarget.FieldsEntryR\x06fields\x1a:\n\x0cHeadersEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n\x0bFieldsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x028\x01"f\n\rCompletedFile\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n\tmime_type\x18\x04 \x01(\tR\x08mimeType"\xa8\x02\n\nObjectInfo\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n\x04size\x18\x02 \x01(\x03R\x04size\x12\x12\n\x04etag\x18\x03 \x01(\tR\x04etag\x12!\n\x0ccontent_type\x18\x04 \x01(\tR\x0bcontentType\x12;\n\x0buploaded_at\x18\x05 \x01(\x0b2\x1a.google.protobuf.TimestampR\nuploadedAt\x12C\n\x08metadata\x18\x06 \x03(\x0b2\'.app.bucket.v1.ObjectInfo.MetadataEntryR\x08metadata\x1a;\n\rMetadataEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x028\x01"\xec\x01\n\x14PresignUploadRequest\x12\x1f\n\x06bucket\x18\x01 \x01(\tR\x06bucketB\x07\xbaH\x04r\x02\x10\x01\x12:\n\x05files\x18\x02 \x03(\x0b2\x1a.app.bucket.v1.PresignFileR\x05filesB\x08\xbaH\x05\x92\x01\x02\x08\x01\x12\x1a\n\x08metadata\x18\x03 \x01(\x0cR\x08metadata\x12/\n\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\x12*\n\x11callback_base_url\x18\x05 \x01(\tR\x0fcallbackBaseUrl"l\n\x15PresignUploadResponse\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x124\n\x05files\x18\x02 \x03(\x0b2\x1e.app.bucket.v1.PresignedTargetR\x05files"\x95\x01\n\x1cVerifyUploadSignatureRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId\x12\x1c\n\tsignature\x18\x02 \x01(\tR\tsignature\x128\n\x04file\x18\x03 \x01(\x0b2\x1c.app.bucket.v1.CompletedFileR\x04fileB\x06\xbaH\x03\xc8\x01\x01"Q\n\x1dVerifyUploadSignatureResponse\x12\x14\n\x05valid\x18\x01 \x01(\x08R\x05valid\x12\x1a\n\x08metadata\x18\x02 \x01(\x0cR\x08metadata"7\n\x16GetUploadStatusRequest\x12\x1d\n\nsession_id\x18\x01 \x01(\tR\tsessionId"a\n\x17GetUploadStatusResponse\x120\n\x05state\x18\x01 \x01(\x0e2\x1a.app.bucket.v1.UploadStateR\x05state\x12\x14\n\x05error\x18\x02 \x01(\tR\x05error"?\n\x15CompleteUploadRequest\x12&\n\nsession_id\x18\x01 \x01(\tR\tsessionIdB\x07\xbaH\x04r\x02\x10\x01"`\n\x16CompleteUploadResponse\x120\n\x05state\x18\x01 \x01(\x0e2\x1a.app.bucket.v1.UploadStateR\x05state\x12\x14\n\x05error\x18\x02 \x01(\tR\x05error"\xc8\x03\n\x0bHeadRequest\x12\x1f\n\x06bucket\x18\x01 \x01(\tR\x06bucketB\x07\xbaH\x04r\x02\x10\x01\x12\x97\x03\n\x03key\x18\x02 \x01(\tR\x03keyB\x84\x03\xbaH\x80\x03\xba\x01\xf7\x02\n\x10buckets.head.key\x12\xb9\x01a key names a file under the bucket\'s prefix: every segment must be non-empty and neither "." nor "..", the key may carry no backslash and no control character, and ".ocel/" is reserved\x1a\xa6\x01this.split(\'/\').all(segment, segment != \'\' && segment != \'.\' && segment != \'..\') && !this.contains(\'\\\\\') && !this.matches(\'[[:cntrl:]]\') && !this.startsWith(\'.ocel/\')r\x03\x18\x80\x08"A\n\x0cHeadResponse\x121\n\x06object\x18\x01 \x01(\x0b2\x19.app.bucket.v1.ObjectInfoR\x06object"\x8a\x01\n\x0bListRequest\x12\x1f\n\x06bucket\x18\x01 \x01(\tR\x06bucketB\x07\xbaH\x04r\x02\x10\x01\x12 \n\x06prefix\x18\x02 \x01(\tR\x06prefixB\x08\xbaH\x05r\x03\x18\x80\x08\x12\x16\n\x06cursor\x18\x03 \x01(\tR\x06cursor\x12 \n\x05limit\x18\x04 \x01(\x05R\x05limitB\n\xbaH\x07\x1a\x05\x18\xe8\x07(\x00"d\n\x0cListResponse\x123\n\x07objects\x18\x01 \x03(\x0b2\x19.app.bucket.v1.ObjectInfoR\x07objects\x12\x1f\n\x0bnext_cursor\x18\x02 \x01(\tR\nnextCursor"\xda\x03\n\rDeleteRequest\x12\x1f\n\x06bucket\x18\x01 \x01(\tR\x06bucketB\x07\xbaH\x04r\x02\x10\x01\x12\xa7\x03\n\x04keys\x18\x02 \x03(\tR\x04keysB\x92\x03\xbaH\x8e\x03\x92\x01\x8a\x03\x08\x01\x10\xe8\x07"\x82\x03\xba\x01\xf9\x02\n\x12buckets.delete.key\x12\xb9\x01a key names a file under the bucket\'s prefix: every segment must be non-empty and neither "." nor "..", the key may carry no backslash and no control character, and ".ocel/" is reserved\x1a\xa6\x01this.split(\'/\').all(segment, segment != \'\' && segment != \'.\' && segment != \'..\') && !this.contains(\'\\\\\') && !this.matches(\'[[:cntrl:]]\') && !this.startsWith(\'.ocel/\')r\x03\x18\x80\x08"\x10\n\x0eDeleteResponse"\x99\x07\n\x0bCopyRequest\x12\x1f\n\x06bucket\x18\x01 \x01(\tR\x06bucketB\x07\xbaH\x04r\x02\x10\x01\x12\xab\x03\n\nsource_key\x18\x02 \x01(\tR\tsourceKeyB\x8b\x03\xbaH\x87\x03\xba\x01\xfe\x02\n\x17buckets.copy.source_key\x12\xb9\x01a key names a file under the bucket\'s prefix: every segment must be non-empty and neither "." nor "..", the key may carry no backslash and no control character, and ".ocel/" is reserved\x1a\xa6\x01this.split(\'/\').all(segment, segment != \'\' && segment != \'.\' && segment != \'..\') && !this.contains(\'\\\\\') && !this.matches(\'[[:cntrl:]]\') && !this.startsWith(\'.ocel/\')r\x03\x18\x80\x08\x12\xba\x03\n\x0fdestination_key\x18\x03 \x01(\tR\x0edestinationKeyB\x90\x03\xbaH\x8c\x03\xba\x01\x83\x03\n\x1cbuckets.copy.destination_key\x12\xb9\x01a key names a file under the bucket\'s prefix: every segment must be non-empty and neither "." nor "..", the key may carry no backslash and no control character, and ".ocel/" is reserved\x1a\xa6\x01this.split(\'/\').all(segment, segment != \'\' && segment != \'.\' && segment != \'..\') && !this.contains(\'\\\\\') && !this.matches(\'[[:cntrl:]]\') && !this.startsWith(\'.ocel/\')r\x03\x18\x80\x08"A\n\x0cCopyResponse\x121\n\x06object\x18\x01 \x01(\x0b2\x19.app.bucket.v1.ObjectInfoR\x06object"\xbb\x01\n\x0fSignConstraints\x12!\n\x0ccontent_type\x18\x01 \x01(\tR\x0bcontentType\x12\x19\n\x08max_size\x18\x02 \x01(\x03R\x07maxSize\x12+\n\x11download_filename\x18\x03 \x01(\tR\x10downloadFilename\x12"\n\rif_none_match\x18\x04 \x01(\tR\x0bifNoneMatch\x12\x19\n\x08if_match\x18\x05 \x01(\tR\x07ifMatch"\xd1\x05\n\x0bSignRequest\x12\x1f\n\x06bucket\x18\x01 \x01(\tR\x06bucketB\x07\xbaH\x04r\x02\x10\x01\x12\x97\x03\n\x03key\x18\x02 \x01(\tR\x03keyB\x84\x03\xbaH\x80\x03\xba\x01\xf7\x02\n\x10buckets.sign.key\x12\xb9\x01a key names a file under the bucket\'s prefix: every segment must be non-empty and neither "." nor "..", the key may carry no backslash and no control character, and ".ocel/" is reserved\x1a\xa6\x01this.split(\'/\').all(segment, segment != \'\' && segment != \'.\' && segment != \'..\') && !this.contains(\'\\\\\') && !this.matches(\'[[:cntrl:]]\') && !this.startsWith(\'.ocel/\')r\x03\x18\x80\x08\x12F\n\toperation\x18\x03 \x01(\x0e2\x1e.app.bucket.v1.SignedOperationR\toperationB\x08\xbaH\x05\x82\x01\x02\x10\x01\x12C\n\x08audience\x18\x04 \x01(\x0e2\x1d.app.bucket.v1.SignedAudienceR\x08audienceB\x08\xbaH\x05\x82\x01\x02\x10\x01\x128\n\nexpires_in\x18\x05 \x01(\x0b2\x19.google.protobuf.DurationR\texpiresIn\x12@\n\x0bconstraints\x18\x06 \x01(\x0b2\x1e.app.bucket.v1.SignConstraintsR\x0bconstraints"F\n\x0cSignResponse\x126\n\x06target\x18\x01 \x01(\x0b2\x1e.app.bucket.v1.PresignedTargetR\x06target"\xb5\x05\n\x16CreateMultipartRequest\x12\x1f\n\x06bucket\x18\x01 \x01(\tR\x06bucketB\x07\xbaH\x04r\x02\x10\x01\x12\xa3\x03\n\x03key\x18\x02 \x01(\tR\x03keyB\x90\x03\xbaH\x8c\x03\xba\x01\x83\x03\n\x1cbuckets.create_multipart.key\x12\xb9\x01a key names a file under the bucket\'s prefix: every segment must be non-empty and neither "." nor "..", the key may carry no backslash and no control character, and ".ocel/" is reserved\x1a\xa6\x01this.split(\'/\').all(segment, segment != \'\' && segment != \'.\' && segment != \'..\') && !this.contains(\'\\\\\') && !this.matches(\'[[:cntrl:]]\') && !this.startsWith(\'.ocel/\')r\x03\x18\x80\x08\x12!\n\x0ccontent_type\x18\x03 \x01(\tR\x0bcontentType\x12O\n\x08metadata\x18\x04 \x03(\x0b23.app.bucket.v1.CreateMultipartRequest.MetadataEntryR\x08metadata\x12#\n\rcache_control\x18\x05 \x01(\tR\x0ccacheControl\x1a;\n\rMetadataEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x028\x01"6\n\x17CreateMultipartResponse\x12\x1b\n\tupload_id\x18\x01 \x01(\tR\x08uploadId"\xa4\x02\n\x10SignPartsRequest\x12\x1f\n\x06bucket\x18\x01 \x01(\tR\x06bucketB\x07\xbaH\x04r\x02\x10\x01\x12\x1a\n\x03key\x18\x02 \x01(\tR\x03keyB\x08\xbaH\x05r\x03\x18\x80\x08\x12$\n\tupload_id\x18\x03 \x01(\tR\x08uploadIdB\x07\xbaH\x04r\x02\x10\x01\x12.\n\x0cpart_numbers\x18\x04 \x03(\x05R\x0bpartNumbersB\x0b\xbaH\x08\x92\x01\x05\x08\x01\x10\xe8\x07\x128\n\nexpires_in\x18\x05 \x01(\x0b2\x19.google.protobuf.DurationR\texpiresIn\x12C\n\x08audience\x18\x06 \x01(\x0e2\x1d.app.bucket.v1.SignedAudienceR\x08audienceB\x08\xbaH\x05\x82\x01\x02\x10\x01"\xbd\x01\n\nSignedPart\x12\x1f\n\x0bpart_number\x18\x01 \x01(\x05R\npartNumber\x12\x10\n\x03url\x18\x02 \x01(\tR\x03url\x12@\n\x07headers\x18\x03 \x03(\x0b2&.app.bucket.v1.SignedPart.HeadersEntryR\x07headers\x1a:\n\x0cHeadersEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x028\x01"D\n\x11SignPartsResponse\x12/\n\x05parts\x18\x01 \x03(\x0b2\x19.app.bucket.v1.SignedPartR\x05parts"D\n\rCompletedPart\x12\x1f\n\x0bpart_number\x18\x01 \x01(\x05R\npartNumber\x12\x12\n\x04etag\x18\x02 \x01(\tR\x04etag"\xfa\x01\n\x18CompleteMultipartRequest\x12\x1f\n\x06bucket\x18\x01 \x01(\tR\x06bucketB\x07\xbaH\x04r\x02\x10\x01\x12\x1a\n\x03key\x18\x02 \x01(\tR\x03keyB\x08\xbaH\x05r\x03\x18\x80\x08\x12$\n\tupload_id\x18\x03 \x01(\tR\x08uploadIdB\x07\xbaH\x04r\x02\x10\x01\x12<\n\x05parts\x18\x04 \x03(\x0b2\x1c.app.bucket.v1.CompletedPartR\x05partsB\x08\xbaH\x05\x92\x01\x02\x08\x01\x12"\n\rif_none_match\x18\x05 \x01(\tR\x0bifNoneMatch\x12\x19\n\x08if_match\x18\x06 \x01(\tR\x07ifMatch"N\n\x19CompleteMultipartResponse\x121\n\x06object\x18\x01 \x01(\x0b2\x19.app.bucket.v1.ObjectInfoR\x06object"z\n\x15AbortMultipartRequest\x12\x1f\n\x06bucket\x18\x01 \x01(\tR\x06bucketB\x07\xbaH\x04r\x02\x10\x01\x12\x1a\n\x03key\x18\x02 \x01(\tR\x03keyB\x08\xbaH\x05r\x03\x18\x80\x08\x12$\n\tupload_id\x18\x03 \x01(\tR\x08uploadIdB\x07\xbaH\x04r\x02\x10\x01"\x18\n\x16AbortMultipartResponse*{\n\x0bUploadState\x12\x1c\n\x18UPLOAD_STATE_UNSPECIFIED\x10\x00\x12\x18\n\x14UPLOAD_STATE_PENDING\x10\x01\x12\x1a\n\x16UPLOAD_STATE_SUCCEEDED\x10\x02\x12\x18\n\x14UPLOAD_STATE_EXPIRED\x10\x03*\x89\x01\n\x0fSignedOperation\x12 \n\x1cSIGNED_OPERATION_UNSPECIFIED\x10\x00\x12\x18\n\x14SIGNED_OPERATION_GET\x10\x01\x12\x18\n\x14SIGNED_OPERATION_PUT\x10\x02\x12 \n\x1cSIGNED_OPERATION_POST_UPLOAD\x10\x03*m\n\x0eSignedAudience\x12\x1f\n\x1bSIGNED_AUDIENCE_UNSPECIFIED\x10\x00\x12\x1c\n\x18SIGNED_AUDIENCE_INTERNAL\x10\x01\x12\x1c\n\x18SIGNED_AUDIENCE_EXTERNAL\x10\x022\xe4\x08\n\rBucketService\x12Z\n\rPresignUpload\x12#.app.bucket.v1.PresignUploadRequest\x1a$.app.bucket.v1.PresignUploadResponse\x12r\n\x15VerifyUploadSignature\x12+.app.bucket.v1.VerifyUploadSignatureRequest\x1a,.app.bucket.v1.VerifyUploadSignatureResponse\x12`\n\x0fGetUploadStatus\x12%.app.bucket.v1.GetUploadStatusRequest\x1a&.app.bucket.v1.GetUploadStatusResponse\x12]\n\x0eCompleteUpload\x12$.app.bucket.v1.CompleteUploadRequest\x1a%.app.bucket.v1.CompleteUploadResponse\x12?\n\x04Head\x12\x1a.app.bucket.v1.HeadRequest\x1a\x1b.app.bucket.v1.HeadResponse\x12?\n\x04List\x12\x1a.app.bucket.v1.ListRequest\x1a\x1b.app.bucket.v1.ListResponse\x12E\n\x06Delete\x12\x1c.app.bucket.v1.DeleteRequest\x1a\x1d.app.bucket.v1.DeleteResponse\x12?\n\x04Copy\x12\x1a.app.bucket.v1.CopyRequest\x1a\x1b.app.bucket.v1.CopyResponse\x12?\n\x04Sign\x12\x1a.app.bucket.v1.SignRequest\x1a\x1b.app.bucket.v1.SignResponse\x12`\n\x0fCreateMultipart\x12%.app.bucket.v1.CreateMultipartRequest\x1a&.app.bucket.v1.CreateMultipartResponse\x12N\n\tSignParts\x12\x1f.app.bucket.v1.SignPartsRequest\x1a .app.bucket.v1.SignPartsResponse\x12f\n\x11CompleteMultipart\x12\'.app.bucket.v1.CompleteMultipartRequest\x1a(.app.bucket.v1.CompleteMultipartResponse\x12]\n\x0eAbortMultipart\x12$.app.bucket.v1.AbortMultipartRequest\x1a%.app.bucket.v1.AbortMultipartResponseB9Z7github.com/ocelhq/ocel/pkg/proto/app/bucket/v1;bucketv1b\x06proto3',
     [
         validate_pb.desc(),
+        duration_pb.desc(),
+        timestamp_pb.desc(),
     ],
     {
         "PresignFile": PresignFile,
         "PresignedTarget": PresignedTarget,
         "CompletedFile": CompletedFile,
+        "ObjectInfo": ObjectInfo,
         "PresignUploadRequest": PresignUploadRequest,
         "PresignUploadResponse": PresignUploadResponse,
         "VerifyUploadSignatureRequest": VerifyUploadSignatureRequest,
         "VerifyUploadSignatureResponse": VerifyUploadSignatureResponse,
         "GetUploadStatusRequest": GetUploadStatusRequest,
         "GetUploadStatusResponse": GetUploadStatusResponse,
+        "CompleteUploadRequest": CompleteUploadRequest,
+        "CompleteUploadResponse": CompleteUploadResponse,
+        "HeadRequest": HeadRequest,
+        "HeadResponse": HeadResponse,
+        "ListRequest": ListRequest,
+        "ListResponse": ListResponse,
+        "DeleteRequest": DeleteRequest,
+        "DeleteResponse": DeleteResponse,
+        "CopyRequest": CopyRequest,
+        "CopyResponse": CopyResponse,
+        "SignConstraints": SignConstraints,
+        "SignRequest": SignRequest,
+        "SignResponse": SignResponse,
+        "CreateMultipartRequest": CreateMultipartRequest,
+        "CreateMultipartResponse": CreateMultipartResponse,
+        "SignPartsRequest": SignPartsRequest,
+        "SignedPart": SignedPart,
+        "SignPartsResponse": SignPartsResponse,
+        "CompletedPart": CompletedPart,
+        "CompleteMultipartRequest": CompleteMultipartRequest,
+        "CompleteMultipartResponse": CompleteMultipartResponse,
+        "AbortMultipartRequest": AbortMultipartRequest,
+        "AbortMultipartResponse": AbortMultipartResponse,
         "UploadState": UploadState,
+        "SignedOperation": SignedOperation,
+        "SignedAudience": SignedAudience,
     },
 )
 

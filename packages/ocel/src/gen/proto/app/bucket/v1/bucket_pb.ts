@@ -5,13 +5,15 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb.js";
+import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_duration, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file app/bucket/v1/bucket.proto.
  */
 export const file_app_bucket_v1_bucket: GenFile = /*@__PURE__*/
-  fileDesc("ChphcHAvYnVja2V0L3YxL2J1Y2tldC5wcm90bxINYXBwLmJ1Y2tldC52MSKlAwoLUHJlc2lnbkZpbGUS5gIKA2tleRgBIAEoCULYArpI1AK6AcsCChhidWNrZXRzLnByZXNpZ25fZmlsZS5rZXkSowFhIGtleSBuYW1lcyBhIGZpbGUgdW5kZXIgdGhlIGJ1Y2tldCdzIHByZWZpeDogZXZlcnkgc2VnbWVudCBtdXN0IGJlIG5vbi1lbXB0eSBhbmQgbmVpdGhlciAiLiIgbm9yICIuLiIsIGFuZCB0aGUga2V5IG1heSBjYXJyeSBubyBiYWNrc2xhc2ggYW5kIG5vIGNvbnRyb2wgY2hhcmFjdGVyGogBdGhpcy5zcGxpdCgnLycpLmFsbChzZWdtZW50LCBzZWdtZW50ICE9ICcnICYmIHNlZ21lbnQgIT0gJy4nICYmIHNlZ21lbnQgIT0gJy4uJykgJiYgIXRoaXMuY29udGFpbnMoJ1xcJykgJiYgIXRoaXMubWF0Y2hlcygnW1s6Y250cmw6XV0nKXIDGIAIEgwKBG5hbWUYAiABKAkSDAoEc2l6ZRgDIAEoAxIRCgltaW1lX3R5cGUYBCABKAkixAEKD1ByZXNpZ25lZFRhcmdldBILCgN1cmwYASABKAkSCwoDa2V5GAIgASgJEgwKBG5hbWUYAyABKAkSGwoTY29udGVudF9kaXNwb3NpdGlvbhgEIAEoCRI8CgdoZWFkZXJzGAUgAygLMisuYXBwLmJ1Y2tldC52MS5QcmVzaWduZWRUYXJnZXQuSGVhZGVyc0VudHJ5Gi4KDEhlYWRlcnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIksKDUNvbXBsZXRlZEZpbGUSCwoDa2V5GAEgASgJEgwKBG5hbWUYAiABKAkSDAoEc2l6ZRgDIAEoAxIRCgltaW1lX3R5cGUYBCABKAkirgEKFFByZXNpZ25VcGxvYWRSZXF1ZXN0EhcKBmJ1Y2tldBgBIAEoCUIHukgEcgIQARIzCgVmaWxlcxgCIAMoCzIaLmFwcC5idWNrZXQudjEuUHJlc2lnbkZpbGVCCLpIBZIBAggBEhAKCG1ldGFkYXRhGAMgASgMEhsKE2NvbnRlbnRfZGlzcG9zaXRpb24YBCABKAkSGQoRY2FsbGJhY2tfYmFzZV91cmwYBSABKAkiWgoVUHJlc2lnblVwbG9hZFJlc3BvbnNlEhIKCnNlc3Npb25faWQYASABKAkSLQoFZmlsZXMYAiADKAsyHi5hcHAuYnVja2V0LnYxLlByZXNpZ25lZFRhcmdldCJ5ChxWZXJpZnlVcGxvYWRTaWduYXR1cmVSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkSEQoJc2lnbmF0dXJlGAIgASgJEjIKBGZpbGUYAyABKAsyHC5hcHAuYnVja2V0LnYxLkNvbXBsZXRlZEZpbGVCBrpIA8gBASJACh1WZXJpZnlVcGxvYWRTaWduYXR1cmVSZXNwb25zZRINCgV2YWxpZBgBIAEoCBIQCghtZXRhZGF0YRgCIAEoDCIsChZHZXRVcGxvYWRTdGF0dXNSZXF1ZXN0EhIKCnNlc3Npb25faWQYASABKAkiUwoXR2V0VXBsb2FkU3RhdHVzUmVzcG9uc2USKQoFc3RhdGUYASABKA4yGi5hcHAuYnVja2V0LnYxLlVwbG9hZFN0YXRlEg0KBWVycm9yGAIgASgJKnsKC1VwbG9hZFN0YXRlEhwKGFVQTE9BRF9TVEFURV9VTlNQRUNJRklFRBAAEhgKFFVQTE9BRF9TVEFURV9QRU5ESU5HEAESGgoWVVBMT0FEX1NUQVRFX1NVQ0NFRURFRBACEhgKFFVQTE9BRF9TVEFURV9FWFBJUkVEEAMywQIKDUJ1Y2tldFNlcnZpY2USWgoNUHJlc2lnblVwbG9hZBIjLmFwcC5idWNrZXQudjEuUHJlc2lnblVwbG9hZFJlcXVlc3QaJC5hcHAuYnVja2V0LnYxLlByZXNpZ25VcGxvYWRSZXNwb25zZRJyChVWZXJpZnlVcGxvYWRTaWduYXR1cmUSKy5hcHAuYnVja2V0LnYxLlZlcmlmeVVwbG9hZFNpZ25hdHVyZVJlcXVlc3QaLC5hcHAuYnVja2V0LnYxLlZlcmlmeVVwbG9hZFNpZ25hdHVyZVJlc3BvbnNlEmAKD0dldFVwbG9hZFN0YXR1cxIlLmFwcC5idWNrZXQudjEuR2V0VXBsb2FkU3RhdHVzUmVxdWVzdBomLmFwcC5idWNrZXQudjEuR2V0VXBsb2FkU3RhdHVzUmVzcG9uc2VCOVo3Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vYXBwL2J1Y2tldC92MTtidWNrZXR2MWIGcHJvdG8z", [file_buf_validate_validate]);
+  fileDesc("ChphcHAvYnVja2V0L3YxL2J1Y2tldC5wcm90bxINYXBwLmJ1Y2tldC52MSLZAwoLUHJlc2lnbkZpbGUSmgMKA2tleRgBIAEoCUKMA7pIiAO6Af8CChhidWNrZXRzLnByZXNpZ25fZmlsZS5rZXkSuQFhIGtleSBuYW1lcyBhIGZpbGUgdW5kZXIgdGhlIGJ1Y2tldCdzIHByZWZpeDogZXZlcnkgc2VnbWVudCBtdXN0IGJlIG5vbi1lbXB0eSBhbmQgbmVpdGhlciAiLiIgbm9yICIuLiIsIHRoZSBrZXkgbWF5IGNhcnJ5IG5vIGJhY2tzbGFzaCBhbmQgbm8gY29udHJvbCBjaGFyYWN0ZXIsIGFuZCAiLm9jZWwvIiBpcyByZXNlcnZlZBqmAXRoaXMuc3BsaXQoJy8nKS5hbGwoc2VnbWVudCwgc2VnbWVudCAhPSAnJyAmJiBzZWdtZW50ICE9ICcuJyAmJiBzZWdtZW50ICE9ICcuLicpICYmICF0aGlzLmNvbnRhaW5zKCdcXCcpICYmICF0aGlzLm1hdGNoZXMoJ1tbOmNudHJsOl1dJykgJiYgIXRoaXMuc3RhcnRzV2l0aCgnLm9jZWwvJylyAxiACBIMCgRuYW1lGAIgASgJEgwKBHNpemUYAyABKAMSEQoJbWltZV90eXBlGAQgASgJIr8CCg9QcmVzaWduZWRUYXJnZXQSCwoDdXJsGAEgASgJEgsKA2tleRgCIAEoCRIMCgRuYW1lGAMgASgJEhsKE2NvbnRlbnRfZGlzcG9zaXRpb24YBCABKAkSPAoHaGVhZGVycxgFIAMoCzIrLmFwcC5idWNrZXQudjEuUHJlc2lnbmVkVGFyZ2V0LkhlYWRlcnNFbnRyeRIOCgZtZXRob2QYBiABKAkSOgoGZmllbGRzGAcgAygLMiouYXBwLmJ1Y2tldC52MS5QcmVzaWduZWRUYXJnZXQuRmllbGRzRW50cnkaLgoMSGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaLQoLRmllbGRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJLCg1Db21wbGV0ZWRGaWxlEgsKA2tleRgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHNpemUYAyABKAMSEQoJbWltZV90eXBlGAQgASgJIugBCgpPYmplY3RJbmZvEgsKA2tleRgBIAEoCRIMCgRzaXplGAIgASgDEgwKBGV0YWcYAyABKAkSFAoMY29udGVudF90eXBlGAQgASgJEi8KC3VwbG9hZGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI5CghtZXRhZGF0YRgGIAMoCzInLmFwcC5idWNrZXQudjEuT2JqZWN0SW5mby5NZXRhZGF0YUVudHJ5Gi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKuAQoUUHJlc2lnblVwbG9hZFJlcXVlc3QSFwoGYnVja2V0GAEgASgJQge6SARyAhABEjMKBWZpbGVzGAIgAygLMhouYXBwLmJ1Y2tldC52MS5QcmVzaWduRmlsZUIIukgFkgECCAESEAoIbWV0YWRhdGEYAyABKAwSGwoTY29udGVudF9kaXNwb3NpdGlvbhgEIAEoCRIZChFjYWxsYmFja19iYXNlX3VybBgFIAEoCSJaChVQcmVzaWduVXBsb2FkUmVzcG9uc2USEgoKc2Vzc2lvbl9pZBgBIAEoCRItCgVmaWxlcxgCIAMoCzIeLmFwcC5idWNrZXQudjEuUHJlc2lnbmVkVGFyZ2V0InkKHFZlcmlmeVVwbG9hZFNpZ25hdHVyZVJlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCRIRCglzaWduYXR1cmUYAiABKAkSMgoEZmlsZRgDIAEoCzIcLmFwcC5idWNrZXQudjEuQ29tcGxldGVkRmlsZUIGukgDyAEBIkAKHVZlcmlmeVVwbG9hZFNpZ25hdHVyZVJlc3BvbnNlEg0KBXZhbGlkGAEgASgIEhAKCG1ldGFkYXRhGAIgASgMIiwKFkdldFVwbG9hZFN0YXR1c1JlcXVlc3QSEgoKc2Vzc2lvbl9pZBgBIAEoCSJTChdHZXRVcGxvYWRTdGF0dXNSZXNwb25zZRIpCgVzdGF0ZRgBIAEoDjIaLmFwcC5idWNrZXQudjEuVXBsb2FkU3RhdGUSDQoFZXJyb3IYAiABKAkiNAoVQ29tcGxldGVVcGxvYWRSZXF1ZXN0EhsKCnNlc3Npb25faWQYASABKAlCB7pIBHICEAEiUgoWQ29tcGxldGVVcGxvYWRSZXNwb25zZRIpCgVzdGF0ZRgBIAEoDjIaLmFwcC5idWNrZXQudjEuVXBsb2FkU3RhdGUSDQoFZXJyb3IYAiABKAkiuwMKC0hlYWRSZXF1ZXN0EhcKBmJ1Y2tldBgBIAEoCUIHukgEcgIQARKSAwoDa2V5GAIgASgJQoQDukiAA7oB9wIKEGJ1Y2tldHMuaGVhZC5rZXkSuQFhIGtleSBuYW1lcyBhIGZpbGUgdW5kZXIgdGhlIGJ1Y2tldCdzIHByZWZpeDogZXZlcnkgc2VnbWVudCBtdXN0IGJlIG5vbi1lbXB0eSBhbmQgbmVpdGhlciAiLiIgbm9yICIuLiIsIHRoZSBrZXkgbWF5IGNhcnJ5IG5vIGJhY2tzbGFzaCBhbmQgbm8gY29udHJvbCBjaGFyYWN0ZXIsIGFuZCAiLm9jZWwvIiBpcyByZXNlcnZlZBqmAXRoaXMuc3BsaXQoJy8nKS5hbGwoc2VnbWVudCwgc2VnbWVudCAhPSAnJyAmJiBzZWdtZW50ICE9ICcuJyAmJiBzZWdtZW50ICE9ICcuLicpICYmICF0aGlzLmNvbnRhaW5zKCdcXCcpICYmICF0aGlzLm1hdGNoZXMoJ1tbOmNudHJsOl1dJykgJiYgIXRoaXMuc3RhcnRzV2l0aCgnLm9jZWwvJylyAxiACCI5CgxIZWFkUmVzcG9uc2USKQoGb2JqZWN0GAEgASgLMhkuYXBwLmJ1Y2tldC52MS5PYmplY3RJbmZvImsKC0xpc3RSZXF1ZXN0EhcKBmJ1Y2tldBgBIAEoCUIHukgEcgIQARIYCgZwcmVmaXgYAiABKAlCCLpIBXIDGIAIEg4KBmN1cnNvchgDIAEoCRIZCgVsaW1pdBgEIAEoBUIKukgHGgUY6AcoACJPCgxMaXN0UmVzcG9uc2USKgoHb2JqZWN0cxgBIAMoCzIZLmFwcC5idWNrZXQudjEuT2JqZWN0SW5mbxITCgtuZXh0X2N1cnNvchgCIAEoCSLMAwoNRGVsZXRlUmVxdWVzdBIXCgZidWNrZXQYASABKAlCB7pIBHICEAESoQMKBGtleXMYAiADKAlCkgO6SI4DkgGKAwgBEOgHIoIDugH5AgoSYnVja2V0cy5kZWxldGUua2V5ErkBYSBrZXkgbmFtZXMgYSBmaWxlIHVuZGVyIHRoZSBidWNrZXQncyBwcmVmaXg6IGV2ZXJ5IHNlZ21lbnQgbXVzdCBiZSBub24tZW1wdHkgYW5kIG5laXRoZXIgIi4iIG5vciAiLi4iLCB0aGUga2V5IG1heSBjYXJyeSBubyBiYWNrc2xhc2ggYW5kIG5vIGNvbnRyb2wgY2hhcmFjdGVyLCBhbmQgIi5vY2VsLyIgaXMgcmVzZXJ2ZWQapgF0aGlzLnNwbGl0KCcvJykuYWxsKHNlZ21lbnQsIHNlZ21lbnQgIT0gJycgJiYgc2VnbWVudCAhPSAnLicgJiYgc2VnbWVudCAhPSAnLi4nKSAmJiAhdGhpcy5jb250YWlucygnXFwnKSAmJiAhdGhpcy5tYXRjaGVzKCdbWzpjbnRybDpdXScpICYmICF0aGlzLnN0YXJ0c1dpdGgoJy5vY2VsLycpcgMYgAgiEAoORGVsZXRlUmVzcG9uc2Ui9gYKC0NvcHlSZXF1ZXN0EhcKBmJ1Y2tldBgBIAEoCUIHukgEcgIQARKgAwoKc291cmNlX2tleRgCIAEoCUKLA7pIhwO6Af4CChdidWNrZXRzLmNvcHkuc291cmNlX2tleRK5AWEga2V5IG5hbWVzIGEgZmlsZSB1bmRlciB0aGUgYnVja2V0J3MgcHJlZml4OiBldmVyeSBzZWdtZW50IG11c3QgYmUgbm9uLWVtcHR5IGFuZCBuZWl0aGVyICIuIiBub3IgIi4uIiwgdGhlIGtleSBtYXkgY2Fycnkgbm8gYmFja3NsYXNoIGFuZCBubyBjb250cm9sIGNoYXJhY3RlciwgYW5kICIub2NlbC8iIGlzIHJlc2VydmVkGqYBdGhpcy5zcGxpdCgnLycpLmFsbChzZWdtZW50LCBzZWdtZW50ICE9ICcnICYmIHNlZ21lbnQgIT0gJy4nICYmIHNlZ21lbnQgIT0gJy4uJykgJiYgIXRoaXMuY29udGFpbnMoJ1xcJykgJiYgIXRoaXMubWF0Y2hlcygnW1s6Y250cmw6XV0nKSAmJiAhdGhpcy5zdGFydHNXaXRoKCcub2NlbC8nKXIDGIAIEqoDCg9kZXN0aW5hdGlvbl9rZXkYAyABKAlCkAO6SIwDugGDAwocYnVja2V0cy5jb3B5LmRlc3RpbmF0aW9uX2tleRK5AWEga2V5IG5hbWVzIGEgZmlsZSB1bmRlciB0aGUgYnVja2V0J3MgcHJlZml4OiBldmVyeSBzZWdtZW50IG11c3QgYmUgbm9uLWVtcHR5IGFuZCBuZWl0aGVyICIuIiBub3IgIi4uIiwgdGhlIGtleSBtYXkgY2Fycnkgbm8gYmFja3NsYXNoIGFuZCBubyBjb250cm9sIGNoYXJhY3RlciwgYW5kICIub2NlbC8iIGlzIHJlc2VydmVkGqYBdGhpcy5zcGxpdCgnLycpLmFsbChzZWdtZW50LCBzZWdtZW50ICE9ICcnICYmIHNlZ21lbnQgIT0gJy4nICYmIHNlZ21lbnQgIT0gJy4uJykgJiYgIXRoaXMuY29udGFpbnMoJ1xcJykgJiYgIXRoaXMubWF0Y2hlcygnW1s6Y250cmw6XV0nKSAmJiAhdGhpcy5zdGFydHNXaXRoKCcub2NlbC8nKXIDGIAIIjkKDENvcHlSZXNwb25zZRIpCgZvYmplY3QYASABKAsyGS5hcHAuYnVja2V0LnYxLk9iamVjdEluZm8ifQoPU2lnbkNvbnN0cmFpbnRzEhQKDGNvbnRlbnRfdHlwZRgBIAEoCRIQCghtYXhfc2l6ZRgCIAEoAxIZChFkb3dubG9hZF9maWxlbmFtZRgDIAEoCRIVCg1pZl9ub25lX21hdGNoGAQgASgJEhAKCGlmX21hdGNoGAUgASgJIpcFCgtTaWduUmVxdWVzdBIXCgZidWNrZXQYASABKAlCB7pIBHICEAESkgMKA2tleRgCIAEoCUKEA7pIgAO6AfcCChBidWNrZXRzLnNpZ24ua2V5ErkBYSBrZXkgbmFtZXMgYSBmaWxlIHVuZGVyIHRoZSBidWNrZXQncyBwcmVmaXg6IGV2ZXJ5IHNlZ21lbnQgbXVzdCBiZSBub24tZW1wdHkgYW5kIG5laXRoZXIgIi4iIG5vciAiLi4iLCB0aGUga2V5IG1heSBjYXJyeSBubyBiYWNrc2xhc2ggYW5kIG5vIGNvbnRyb2wgY2hhcmFjdGVyLCBhbmQgIi5vY2VsLyIgaXMgcmVzZXJ2ZWQapgF0aGlzLnNwbGl0KCcvJykuYWxsKHNlZ21lbnQsIHNlZ21lbnQgIT0gJycgJiYgc2VnbWVudCAhPSAnLicgJiYgc2VnbWVudCAhPSAnLi4nKSAmJiAhdGhpcy5jb250YWlucygnXFwnKSAmJiAhdGhpcy5tYXRjaGVzKCdbWzpjbnRybDpdXScpICYmICF0aGlzLnN0YXJ0c1dpdGgoJy5vY2VsLycpcgMYgAgSOwoJb3BlcmF0aW9uGAMgASgOMh4uYXBwLmJ1Y2tldC52MS5TaWduZWRPcGVyYXRpb25CCLpIBYIBAhABEjkKCGF1ZGllbmNlGAQgASgOMh0uYXBwLmJ1Y2tldC52MS5TaWduZWRBdWRpZW5jZUIIukgFggECEAESLQoKZXhwaXJlc19pbhgFIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIzCgtjb25zdHJhaW50cxgGIAEoCzIeLmFwcC5idWNrZXQudjEuU2lnbkNvbnN0cmFpbnRzIj4KDFNpZ25SZXNwb25zZRIuCgZ0YXJnZXQYASABKAsyHi5hcHAuYnVja2V0LnYxLlByZXNpZ25lZFRhcmdldCL3BAoWQ3JlYXRlTXVsdGlwYXJ0UmVxdWVzdBIXCgZidWNrZXQYASABKAlCB7pIBHICEAESngMKA2tleRgCIAEoCUKQA7pIjAO6AYMDChxidWNrZXRzLmNyZWF0ZV9tdWx0aXBhcnQua2V5ErkBYSBrZXkgbmFtZXMgYSBmaWxlIHVuZGVyIHRoZSBidWNrZXQncyBwcmVmaXg6IGV2ZXJ5IHNlZ21lbnQgbXVzdCBiZSBub24tZW1wdHkgYW5kIG5laXRoZXIgIi4iIG5vciAiLi4iLCB0aGUga2V5IG1heSBjYXJyeSBubyBiYWNrc2xhc2ggYW5kIG5vIGNvbnRyb2wgY2hhcmFjdGVyLCBhbmQgIi5vY2VsLyIgaXMgcmVzZXJ2ZWQapgF0aGlzLnNwbGl0KCcvJykuYWxsKHNlZ21lbnQsIHNlZ21lbnQgIT0gJycgJiYgc2VnbWVudCAhPSAnLicgJiYgc2VnbWVudCAhPSAnLi4nKSAmJiAhdGhpcy5jb250YWlucygnXFwnKSAmJiAhdGhpcy5tYXRjaGVzKCdbWzpjbnRybDpdXScpICYmICF0aGlzLnN0YXJ0c1dpdGgoJy5vY2VsLycpcgMYgAgSFAoMY29udGVudF90eXBlGAMgASgJEkUKCG1ldGFkYXRhGAQgAygLMjMuYXBwLmJ1Y2tldC52MS5DcmVhdGVNdWx0aXBhcnRSZXF1ZXN0Lk1ldGFkYXRhRW50cnkSFQoNY2FjaGVfY29udHJvbBgFIAEoCRovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiLAoXQ3JlYXRlTXVsdGlwYXJ0UmVzcG9uc2USEQoJdXBsb2FkX2lkGAEgASgJIusBChBTaWduUGFydHNSZXF1ZXN0EhcKBmJ1Y2tldBgBIAEoCUIHukgEcgIQARIVCgNrZXkYAiABKAlCCLpIBXIDGIAIEhoKCXVwbG9hZF9pZBgDIAEoCUIHukgEcgIQARIhCgxwYXJ0X251bWJlcnMYBCADKAVCC7pICJIBBQgBEOgHEi0KCmV4cGlyZXNfaW4YBSABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SOQoIYXVkaWVuY2UYBiABKA4yHS5hcHAuYnVja2V0LnYxLlNpZ25lZEF1ZGllbmNlQgi6SAWCAQIQASKXAQoKU2lnbmVkUGFydBITCgtwYXJ0X251bWJlchgBIAEoBRILCgN1cmwYAiABKAkSNwoHaGVhZGVycxgDIAMoCzImLmFwcC5idWNrZXQudjEuU2lnbmVkUGFydC5IZWFkZXJzRW50cnkaLgoMSGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiPQoRU2lnblBhcnRzUmVzcG9uc2USKAoFcGFydHMYASADKAsyGS5hcHAuYnVja2V0LnYxLlNpZ25lZFBhcnQiMgoNQ29tcGxldGVkUGFydBITCgtwYXJ0X251bWJlchgBIAEoBRIMCgRldGFnGAIgASgJIsYBChhDb21wbGV0ZU11bHRpcGFydFJlcXVlc3QSFwoGYnVja2V0GAEgASgJQge6SARyAhABEhUKA2tleRgCIAEoCUIIukgFcgMYgAgSGgoJdXBsb2FkX2lkGAMgASgJQge6SARyAhABEjUKBXBhcnRzGAQgAygLMhwuYXBwLmJ1Y2tldC52MS5Db21wbGV0ZWRQYXJ0Qgi6SAWSAQIIARIVCg1pZl9ub25lX21hdGNoGAUgASgJEhAKCGlmX21hdGNoGAYgASgJIkYKGUNvbXBsZXRlTXVsdGlwYXJ0UmVzcG9uc2USKQoGb2JqZWN0GAEgASgLMhkuYXBwLmJ1Y2tldC52MS5PYmplY3RJbmZvImMKFUFib3J0TXVsdGlwYXJ0UmVxdWVzdBIXCgZidWNrZXQYASABKAlCB7pIBHICEAESFQoDa2V5GAIgASgJQgi6SAVyAxiACBIaCgl1cGxvYWRfaWQYAyABKAlCB7pIBHICEAEiGAoWQWJvcnRNdWx0aXBhcnRSZXNwb25zZSp7CgtVcGxvYWRTdGF0ZRIcChhVUExPQURfU1RBVEVfVU5TUEVDSUZJRUQQABIYChRVUExPQURfU1RBVEVfUEVORElORxABEhoKFlVQTE9BRF9TVEFURV9TVUNDRUVERUQQAhIYChRVUExPQURfU1RBVEVfRVhQSVJFRBADKokBCg9TaWduZWRPcGVyYXRpb24SIAocU0lHTkVEX09QRVJBVElPTl9VTlNQRUNJRklFRBAAEhgKFFNJR05FRF9PUEVSQVRJT05fR0VUEAESGAoUU0lHTkVEX09QRVJBVElPTl9QVVQQAhIgChxTSUdORURfT1BFUkFUSU9OX1BPU1RfVVBMT0FEEAMqbQoOU2lnbmVkQXVkaWVuY2USHwobU0lHTkVEX0FVRElFTkNFX1VOU1BFQ0lGSUVEEAASHAoYU0lHTkVEX0FVRElFTkNFX0lOVEVSTkFMEAESHAoYU0lHTkVEX0FVRElFTkNFX0VYVEVSTkFMEAIy5AgKDUJ1Y2tldFNlcnZpY2USWgoNUHJlc2lnblVwbG9hZBIjLmFwcC5idWNrZXQudjEuUHJlc2lnblVwbG9hZFJlcXVlc3QaJC5hcHAuYnVja2V0LnYxLlByZXNpZ25VcGxvYWRSZXNwb25zZRJyChVWZXJpZnlVcGxvYWRTaWduYXR1cmUSKy5hcHAuYnVja2V0LnYxLlZlcmlmeVVwbG9hZFNpZ25hdHVyZVJlcXVlc3QaLC5hcHAuYnVja2V0LnYxLlZlcmlmeVVwbG9hZFNpZ25hdHVyZVJlc3BvbnNlEmAKD0dldFVwbG9hZFN0YXR1cxIlLmFwcC5idWNrZXQudjEuR2V0VXBsb2FkU3RhdHVzUmVxdWVzdBomLmFwcC5idWNrZXQudjEuR2V0VXBsb2FkU3RhdHVzUmVzcG9uc2USXQoOQ29tcGxldGVVcGxvYWQSJC5hcHAuYnVja2V0LnYxLkNvbXBsZXRlVXBsb2FkUmVxdWVzdBolLmFwcC5idWNrZXQudjEuQ29tcGxldGVVcGxvYWRSZXNwb25zZRI/CgRIZWFkEhouYXBwLmJ1Y2tldC52MS5IZWFkUmVxdWVzdBobLmFwcC5idWNrZXQudjEuSGVhZFJlc3BvbnNlEj8KBExpc3QSGi5hcHAuYnVja2V0LnYxLkxpc3RSZXF1ZXN0GhsuYXBwLmJ1Y2tldC52MS5MaXN0UmVzcG9uc2USRQoGRGVsZXRlEhwuYXBwLmJ1Y2tldC52MS5EZWxldGVSZXF1ZXN0Gh0uYXBwLmJ1Y2tldC52MS5EZWxldGVSZXNwb25zZRI/CgRDb3B5EhouYXBwLmJ1Y2tldC52MS5Db3B5UmVxdWVzdBobLmFwcC5idWNrZXQudjEuQ29weVJlc3BvbnNlEj8KBFNpZ24SGi5hcHAuYnVja2V0LnYxLlNpZ25SZXF1ZXN0GhsuYXBwLmJ1Y2tldC52MS5TaWduUmVzcG9uc2USYAoPQ3JlYXRlTXVsdGlwYXJ0EiUuYXBwLmJ1Y2tldC52MS5DcmVhdGVNdWx0aXBhcnRSZXF1ZXN0GiYuYXBwLmJ1Y2tldC52MS5DcmVhdGVNdWx0aXBhcnRSZXNwb25zZRJOCglTaWduUGFydHMSHy5hcHAuYnVja2V0LnYxLlNpZ25QYXJ0c1JlcXVlc3QaIC5hcHAuYnVja2V0LnYxLlNpZ25QYXJ0c1Jlc3BvbnNlEmYKEUNvbXBsZXRlTXVsdGlwYXJ0EicuYXBwLmJ1Y2tldC52MS5Db21wbGV0ZU11bHRpcGFydFJlcXVlc3QaKC5hcHAuYnVja2V0LnYxLkNvbXBsZXRlTXVsdGlwYXJ0UmVzcG9uc2USXQoOQWJvcnRNdWx0aXBhcnQSJC5hcHAuYnVja2V0LnYxLkFib3J0TXVsdGlwYXJ0UmVxdWVzdBolLmFwcC5idWNrZXQudjEuQWJvcnRNdWx0aXBhcnRSZXNwb25zZUI5WjdnaXRodWIuY29tL29jZWxocS9vY2VsL3BrZy9wcm90by9hcHAvYnVja2V0L3YxO2J1Y2tldHYxYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message app.bucket.v1.PresignFile
@@ -73,6 +75,16 @@ export type PresignedTarget = Message<"app.bucket.v1.PresignedTarget"> & {
    * @generated from field: map<string, string> headers = 5;
    */
   headers: { [key: string]: string };
+
+  /**
+   * @generated from field: string method = 6;
+   */
+  method: string;
+
+  /**
+   * @generated from field: map<string, string> fields = 7;
+   */
+  fields: { [key: string]: string };
 };
 
 /**
@@ -115,6 +127,48 @@ export const CompletedFileSchema: GenMessage<CompletedFile> = /*@__PURE__*/
   messageDesc(file_app_bucket_v1_bucket, 2);
 
 /**
+ * @generated from message app.bucket.v1.ObjectInfo
+ */
+export type ObjectInfo = Message<"app.bucket.v1.ObjectInfo"> & {
+  /**
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * @generated from field: int64 size = 2;
+   */
+  size: bigint;
+
+  /**
+   * @generated from field: string etag = 3;
+   */
+  etag: string;
+
+  /**
+   * @generated from field: string content_type = 4;
+   */
+  contentType: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp uploaded_at = 5;
+   */
+  uploadedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: map<string, string> metadata = 6;
+   */
+  metadata: { [key: string]: string };
+};
+
+/**
+ * Describes the message app.bucket.v1.ObjectInfo.
+ * Use `create(ObjectInfoSchema)` to create a new message.
+ */
+export const ObjectInfoSchema: GenMessage<ObjectInfo> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 3);
+
+/**
  * @generated from message app.bucket.v1.PresignUploadRequest
  */
 export type PresignUploadRequest = Message<"app.bucket.v1.PresignUploadRequest"> & {
@@ -149,7 +203,7 @@ export type PresignUploadRequest = Message<"app.bucket.v1.PresignUploadRequest">
  * Use `create(PresignUploadRequestSchema)` to create a new message.
  */
 export const PresignUploadRequestSchema: GenMessage<PresignUploadRequest> = /*@__PURE__*/
-  messageDesc(file_app_bucket_v1_bucket, 3);
+  messageDesc(file_app_bucket_v1_bucket, 4);
 
 /**
  * @generated from message app.bucket.v1.PresignUploadResponse
@@ -171,7 +225,7 @@ export type PresignUploadResponse = Message<"app.bucket.v1.PresignUploadResponse
  * Use `create(PresignUploadResponseSchema)` to create a new message.
  */
 export const PresignUploadResponseSchema: GenMessage<PresignUploadResponse> = /*@__PURE__*/
-  messageDesc(file_app_bucket_v1_bucket, 4);
+  messageDesc(file_app_bucket_v1_bucket, 5);
 
 /**
  * @generated from message app.bucket.v1.VerifyUploadSignatureRequest
@@ -198,7 +252,7 @@ export type VerifyUploadSignatureRequest = Message<"app.bucket.v1.VerifyUploadSi
  * Use `create(VerifyUploadSignatureRequestSchema)` to create a new message.
  */
 export const VerifyUploadSignatureRequestSchema: GenMessage<VerifyUploadSignatureRequest> = /*@__PURE__*/
-  messageDesc(file_app_bucket_v1_bucket, 5);
+  messageDesc(file_app_bucket_v1_bucket, 6);
 
 /**
  * @generated from message app.bucket.v1.VerifyUploadSignatureResponse
@@ -220,7 +274,7 @@ export type VerifyUploadSignatureResponse = Message<"app.bucket.v1.VerifyUploadS
  * Use `create(VerifyUploadSignatureResponseSchema)` to create a new message.
  */
 export const VerifyUploadSignatureResponseSchema: GenMessage<VerifyUploadSignatureResponse> = /*@__PURE__*/
-  messageDesc(file_app_bucket_v1_bucket, 6);
+  messageDesc(file_app_bucket_v1_bucket, 7);
 
 /**
  * @generated from message app.bucket.v1.GetUploadStatusRequest
@@ -237,7 +291,7 @@ export type GetUploadStatusRequest = Message<"app.bucket.v1.GetUploadStatusReque
  * Use `create(GetUploadStatusRequestSchema)` to create a new message.
  */
 export const GetUploadStatusRequestSchema: GenMessage<GetUploadStatusRequest> = /*@__PURE__*/
-  messageDesc(file_app_bucket_v1_bucket, 7);
+  messageDesc(file_app_bucket_v1_bucket, 8);
 
 /**
  * @generated from message app.bucket.v1.GetUploadStatusResponse
@@ -259,7 +313,575 @@ export type GetUploadStatusResponse = Message<"app.bucket.v1.GetUploadStatusResp
  * Use `create(GetUploadStatusResponseSchema)` to create a new message.
  */
 export const GetUploadStatusResponseSchema: GenMessage<GetUploadStatusResponse> = /*@__PURE__*/
-  messageDesc(file_app_bucket_v1_bucket, 8);
+  messageDesc(file_app_bucket_v1_bucket, 9);
+
+/**
+ * @generated from message app.bucket.v1.CompleteUploadRequest
+ */
+export type CompleteUploadRequest = Message<"app.bucket.v1.CompleteUploadRequest"> & {
+  /**
+   * @generated from field: string session_id = 1;
+   */
+  sessionId: string;
+};
+
+/**
+ * Describes the message app.bucket.v1.CompleteUploadRequest.
+ * Use `create(CompleteUploadRequestSchema)` to create a new message.
+ */
+export const CompleteUploadRequestSchema: GenMessage<CompleteUploadRequest> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 10);
+
+/**
+ * @generated from message app.bucket.v1.CompleteUploadResponse
+ */
+export type CompleteUploadResponse = Message<"app.bucket.v1.CompleteUploadResponse"> & {
+  /**
+   * @generated from field: app.bucket.v1.UploadState state = 1;
+   */
+  state: UploadState;
+
+  /**
+   * @generated from field: string error = 2;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message app.bucket.v1.CompleteUploadResponse.
+ * Use `create(CompleteUploadResponseSchema)` to create a new message.
+ */
+export const CompleteUploadResponseSchema: GenMessage<CompleteUploadResponse> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 11);
+
+/**
+ * @generated from message app.bucket.v1.HeadRequest
+ */
+export type HeadRequest = Message<"app.bucket.v1.HeadRequest"> & {
+  /**
+   * @generated from field: string bucket = 1;
+   */
+  bucket: string;
+
+  /**
+   * @generated from field: string key = 2;
+   */
+  key: string;
+};
+
+/**
+ * Describes the message app.bucket.v1.HeadRequest.
+ * Use `create(HeadRequestSchema)` to create a new message.
+ */
+export const HeadRequestSchema: GenMessage<HeadRequest> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 12);
+
+/**
+ * @generated from message app.bucket.v1.HeadResponse
+ */
+export type HeadResponse = Message<"app.bucket.v1.HeadResponse"> & {
+  /**
+   * @generated from field: app.bucket.v1.ObjectInfo object = 1;
+   */
+  object?: ObjectInfo | undefined;
+};
+
+/**
+ * Describes the message app.bucket.v1.HeadResponse.
+ * Use `create(HeadResponseSchema)` to create a new message.
+ */
+export const HeadResponseSchema: GenMessage<HeadResponse> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 13);
+
+/**
+ * @generated from message app.bucket.v1.ListRequest
+ */
+export type ListRequest = Message<"app.bucket.v1.ListRequest"> & {
+  /**
+   * @generated from field: string bucket = 1;
+   */
+  bucket: string;
+
+  /**
+   * @generated from field: string prefix = 2;
+   */
+  prefix: string;
+
+  /**
+   * @generated from field: string cursor = 3;
+   */
+  cursor: string;
+
+  /**
+   * @generated from field: int32 limit = 4;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message app.bucket.v1.ListRequest.
+ * Use `create(ListRequestSchema)` to create a new message.
+ */
+export const ListRequestSchema: GenMessage<ListRequest> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 14);
+
+/**
+ * @generated from message app.bucket.v1.ListResponse
+ */
+export type ListResponse = Message<"app.bucket.v1.ListResponse"> & {
+  /**
+   * @generated from field: repeated app.bucket.v1.ObjectInfo objects = 1;
+   */
+  objects: ObjectInfo[];
+
+  /**
+   * @generated from field: string next_cursor = 2;
+   */
+  nextCursor: string;
+};
+
+/**
+ * Describes the message app.bucket.v1.ListResponse.
+ * Use `create(ListResponseSchema)` to create a new message.
+ */
+export const ListResponseSchema: GenMessage<ListResponse> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 15);
+
+/**
+ * @generated from message app.bucket.v1.DeleteRequest
+ */
+export type DeleteRequest = Message<"app.bucket.v1.DeleteRequest"> & {
+  /**
+   * @generated from field: string bucket = 1;
+   */
+  bucket: string;
+
+  /**
+   * @generated from field: repeated string keys = 2;
+   */
+  keys: string[];
+};
+
+/**
+ * Describes the message app.bucket.v1.DeleteRequest.
+ * Use `create(DeleteRequestSchema)` to create a new message.
+ */
+export const DeleteRequestSchema: GenMessage<DeleteRequest> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 16);
+
+/**
+ * @generated from message app.bucket.v1.DeleteResponse
+ */
+export type DeleteResponse = Message<"app.bucket.v1.DeleteResponse"> & {
+};
+
+/**
+ * Describes the message app.bucket.v1.DeleteResponse.
+ * Use `create(DeleteResponseSchema)` to create a new message.
+ */
+export const DeleteResponseSchema: GenMessage<DeleteResponse> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 17);
+
+/**
+ * @generated from message app.bucket.v1.CopyRequest
+ */
+export type CopyRequest = Message<"app.bucket.v1.CopyRequest"> & {
+  /**
+   * @generated from field: string bucket = 1;
+   */
+  bucket: string;
+
+  /**
+   * @generated from field: string source_key = 2;
+   */
+  sourceKey: string;
+
+  /**
+   * @generated from field: string destination_key = 3;
+   */
+  destinationKey: string;
+};
+
+/**
+ * Describes the message app.bucket.v1.CopyRequest.
+ * Use `create(CopyRequestSchema)` to create a new message.
+ */
+export const CopyRequestSchema: GenMessage<CopyRequest> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 18);
+
+/**
+ * @generated from message app.bucket.v1.CopyResponse
+ */
+export type CopyResponse = Message<"app.bucket.v1.CopyResponse"> & {
+  /**
+   * @generated from field: app.bucket.v1.ObjectInfo object = 1;
+   */
+  object?: ObjectInfo | undefined;
+};
+
+/**
+ * Describes the message app.bucket.v1.CopyResponse.
+ * Use `create(CopyResponseSchema)` to create a new message.
+ */
+export const CopyResponseSchema: GenMessage<CopyResponse> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 19);
+
+/**
+ * @generated from message app.bucket.v1.SignConstraints
+ */
+export type SignConstraints = Message<"app.bucket.v1.SignConstraints"> & {
+  /**
+   * @generated from field: string content_type = 1;
+   */
+  contentType: string;
+
+  /**
+   * @generated from field: int64 max_size = 2;
+   */
+  maxSize: bigint;
+
+  /**
+   * @generated from field: string download_filename = 3;
+   */
+  downloadFilename: string;
+
+  /**
+   * @generated from field: string if_none_match = 4;
+   */
+  ifNoneMatch: string;
+
+  /**
+   * @generated from field: string if_match = 5;
+   */
+  ifMatch: string;
+};
+
+/**
+ * Describes the message app.bucket.v1.SignConstraints.
+ * Use `create(SignConstraintsSchema)` to create a new message.
+ */
+export const SignConstraintsSchema: GenMessage<SignConstraints> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 20);
+
+/**
+ * @generated from message app.bucket.v1.SignRequest
+ */
+export type SignRequest = Message<"app.bucket.v1.SignRequest"> & {
+  /**
+   * @generated from field: string bucket = 1;
+   */
+  bucket: string;
+
+  /**
+   * @generated from field: string key = 2;
+   */
+  key: string;
+
+  /**
+   * @generated from field: app.bucket.v1.SignedOperation operation = 3;
+   */
+  operation: SignedOperation;
+
+  /**
+   * @generated from field: app.bucket.v1.SignedAudience audience = 4;
+   */
+  audience: SignedAudience;
+
+  /**
+   * @generated from field: google.protobuf.Duration expires_in = 5;
+   */
+  expiresIn?: Duration | undefined;
+
+  /**
+   * @generated from field: app.bucket.v1.SignConstraints constraints = 6;
+   */
+  constraints?: SignConstraints | undefined;
+};
+
+/**
+ * Describes the message app.bucket.v1.SignRequest.
+ * Use `create(SignRequestSchema)` to create a new message.
+ */
+export const SignRequestSchema: GenMessage<SignRequest> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 21);
+
+/**
+ * @generated from message app.bucket.v1.SignResponse
+ */
+export type SignResponse = Message<"app.bucket.v1.SignResponse"> & {
+  /**
+   * @generated from field: app.bucket.v1.PresignedTarget target = 1;
+   */
+  target?: PresignedTarget | undefined;
+};
+
+/**
+ * Describes the message app.bucket.v1.SignResponse.
+ * Use `create(SignResponseSchema)` to create a new message.
+ */
+export const SignResponseSchema: GenMessage<SignResponse> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 22);
+
+/**
+ * @generated from message app.bucket.v1.CreateMultipartRequest
+ */
+export type CreateMultipartRequest = Message<"app.bucket.v1.CreateMultipartRequest"> & {
+  /**
+   * @generated from field: string bucket = 1;
+   */
+  bucket: string;
+
+  /**
+   * @generated from field: string key = 2;
+   */
+  key: string;
+
+  /**
+   * @generated from field: string content_type = 3;
+   */
+  contentType: string;
+
+  /**
+   * @generated from field: map<string, string> metadata = 4;
+   */
+  metadata: { [key: string]: string };
+
+  /**
+   * @generated from field: string cache_control = 5;
+   */
+  cacheControl: string;
+};
+
+/**
+ * Describes the message app.bucket.v1.CreateMultipartRequest.
+ * Use `create(CreateMultipartRequestSchema)` to create a new message.
+ */
+export const CreateMultipartRequestSchema: GenMessage<CreateMultipartRequest> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 23);
+
+/**
+ * @generated from message app.bucket.v1.CreateMultipartResponse
+ */
+export type CreateMultipartResponse = Message<"app.bucket.v1.CreateMultipartResponse"> & {
+  /**
+   * @generated from field: string upload_id = 1;
+   */
+  uploadId: string;
+};
+
+/**
+ * Describes the message app.bucket.v1.CreateMultipartResponse.
+ * Use `create(CreateMultipartResponseSchema)` to create a new message.
+ */
+export const CreateMultipartResponseSchema: GenMessage<CreateMultipartResponse> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 24);
+
+/**
+ * @generated from message app.bucket.v1.SignPartsRequest
+ */
+export type SignPartsRequest = Message<"app.bucket.v1.SignPartsRequest"> & {
+  /**
+   * @generated from field: string bucket = 1;
+   */
+  bucket: string;
+
+  /**
+   * @generated from field: string key = 2;
+   */
+  key: string;
+
+  /**
+   * @generated from field: string upload_id = 3;
+   */
+  uploadId: string;
+
+  /**
+   * @generated from field: repeated int32 part_numbers = 4;
+   */
+  partNumbers: number[];
+
+  /**
+   * @generated from field: google.protobuf.Duration expires_in = 5;
+   */
+  expiresIn?: Duration | undefined;
+
+  /**
+   * @generated from field: app.bucket.v1.SignedAudience audience = 6;
+   */
+  audience: SignedAudience;
+};
+
+/**
+ * Describes the message app.bucket.v1.SignPartsRequest.
+ * Use `create(SignPartsRequestSchema)` to create a new message.
+ */
+export const SignPartsRequestSchema: GenMessage<SignPartsRequest> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 25);
+
+/**
+ * @generated from message app.bucket.v1.SignedPart
+ */
+export type SignedPart = Message<"app.bucket.v1.SignedPart"> & {
+  /**
+   * @generated from field: int32 part_number = 1;
+   */
+  partNumber: number;
+
+  /**
+   * @generated from field: string url = 2;
+   */
+  url: string;
+
+  /**
+   * @generated from field: map<string, string> headers = 3;
+   */
+  headers: { [key: string]: string };
+};
+
+/**
+ * Describes the message app.bucket.v1.SignedPart.
+ * Use `create(SignedPartSchema)` to create a new message.
+ */
+export const SignedPartSchema: GenMessage<SignedPart> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 26);
+
+/**
+ * @generated from message app.bucket.v1.SignPartsResponse
+ */
+export type SignPartsResponse = Message<"app.bucket.v1.SignPartsResponse"> & {
+  /**
+   * @generated from field: repeated app.bucket.v1.SignedPart parts = 1;
+   */
+  parts: SignedPart[];
+};
+
+/**
+ * Describes the message app.bucket.v1.SignPartsResponse.
+ * Use `create(SignPartsResponseSchema)` to create a new message.
+ */
+export const SignPartsResponseSchema: GenMessage<SignPartsResponse> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 27);
+
+/**
+ * @generated from message app.bucket.v1.CompletedPart
+ */
+export type CompletedPart = Message<"app.bucket.v1.CompletedPart"> & {
+  /**
+   * @generated from field: int32 part_number = 1;
+   */
+  partNumber: number;
+
+  /**
+   * @generated from field: string etag = 2;
+   */
+  etag: string;
+};
+
+/**
+ * Describes the message app.bucket.v1.CompletedPart.
+ * Use `create(CompletedPartSchema)` to create a new message.
+ */
+export const CompletedPartSchema: GenMessage<CompletedPart> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 28);
+
+/**
+ * @generated from message app.bucket.v1.CompleteMultipartRequest
+ */
+export type CompleteMultipartRequest = Message<"app.bucket.v1.CompleteMultipartRequest"> & {
+  /**
+   * @generated from field: string bucket = 1;
+   */
+  bucket: string;
+
+  /**
+   * @generated from field: string key = 2;
+   */
+  key: string;
+
+  /**
+   * @generated from field: string upload_id = 3;
+   */
+  uploadId: string;
+
+  /**
+   * @generated from field: repeated app.bucket.v1.CompletedPart parts = 4;
+   */
+  parts: CompletedPart[];
+
+  /**
+   * @generated from field: string if_none_match = 5;
+   */
+  ifNoneMatch: string;
+
+  /**
+   * @generated from field: string if_match = 6;
+   */
+  ifMatch: string;
+};
+
+/**
+ * Describes the message app.bucket.v1.CompleteMultipartRequest.
+ * Use `create(CompleteMultipartRequestSchema)` to create a new message.
+ */
+export const CompleteMultipartRequestSchema: GenMessage<CompleteMultipartRequest> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 29);
+
+/**
+ * @generated from message app.bucket.v1.CompleteMultipartResponse
+ */
+export type CompleteMultipartResponse = Message<"app.bucket.v1.CompleteMultipartResponse"> & {
+  /**
+   * @generated from field: app.bucket.v1.ObjectInfo object = 1;
+   */
+  object?: ObjectInfo | undefined;
+};
+
+/**
+ * Describes the message app.bucket.v1.CompleteMultipartResponse.
+ * Use `create(CompleteMultipartResponseSchema)` to create a new message.
+ */
+export const CompleteMultipartResponseSchema: GenMessage<CompleteMultipartResponse> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 30);
+
+/**
+ * @generated from message app.bucket.v1.AbortMultipartRequest
+ */
+export type AbortMultipartRequest = Message<"app.bucket.v1.AbortMultipartRequest"> & {
+  /**
+   * @generated from field: string bucket = 1;
+   */
+  bucket: string;
+
+  /**
+   * @generated from field: string key = 2;
+   */
+  key: string;
+
+  /**
+   * @generated from field: string upload_id = 3;
+   */
+  uploadId: string;
+};
+
+/**
+ * Describes the message app.bucket.v1.AbortMultipartRequest.
+ * Use `create(AbortMultipartRequestSchema)` to create a new message.
+ */
+export const AbortMultipartRequestSchema: GenMessage<AbortMultipartRequest> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 31);
+
+/**
+ * @generated from message app.bucket.v1.AbortMultipartResponse
+ */
+export type AbortMultipartResponse = Message<"app.bucket.v1.AbortMultipartResponse"> & {
+};
+
+/**
+ * Describes the message app.bucket.v1.AbortMultipartResponse.
+ * Use `create(AbortMultipartResponseSchema)` to create a new message.
+ */
+export const AbortMultipartResponseSchema: GenMessage<AbortMultipartResponse> = /*@__PURE__*/
+  messageDesc(file_app_bucket_v1_bucket, 32);
 
 /**
  * @generated from enum app.bucket.v1.UploadState
@@ -293,6 +915,63 @@ export const UploadStateSchema: GenEnum<UploadState> = /*@__PURE__*/
   enumDesc(file_app_bucket_v1_bucket, 0);
 
 /**
+ * @generated from enum app.bucket.v1.SignedOperation
+ */
+export enum SignedOperation {
+  /**
+   * @generated from enum value: SIGNED_OPERATION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: SIGNED_OPERATION_GET = 1;
+   */
+  GET = 1,
+
+  /**
+   * @generated from enum value: SIGNED_OPERATION_PUT = 2;
+   */
+  PUT = 2,
+
+  /**
+   * @generated from enum value: SIGNED_OPERATION_POST_UPLOAD = 3;
+   */
+  POST_UPLOAD = 3,
+}
+
+/**
+ * Describes the enum app.bucket.v1.SignedOperation.
+ */
+export const SignedOperationSchema: GenEnum<SignedOperation> = /*@__PURE__*/
+  enumDesc(file_app_bucket_v1_bucket, 1);
+
+/**
+ * @generated from enum app.bucket.v1.SignedAudience
+ */
+export enum SignedAudience {
+  /**
+   * @generated from enum value: SIGNED_AUDIENCE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: SIGNED_AUDIENCE_INTERNAL = 1;
+   */
+  INTERNAL = 1,
+
+  /**
+   * @generated from enum value: SIGNED_AUDIENCE_EXTERNAL = 2;
+   */
+  EXTERNAL = 2,
+}
+
+/**
+ * Describes the enum app.bucket.v1.SignedAudience.
+ */
+export const SignedAudienceSchema: GenEnum<SignedAudience> = /*@__PURE__*/
+  enumDesc(file_app_bucket_v1_bucket, 2);
+
+/**
  * @generated from service app.bucket.v1.BucketService
  */
 export const BucketService: GenService<{
@@ -319,6 +998,86 @@ export const BucketService: GenService<{
     methodKind: "unary";
     input: typeof GetUploadStatusRequestSchema;
     output: typeof GetUploadStatusResponseSchema;
+  },
+  /**
+   * @generated from rpc app.bucket.v1.BucketService.CompleteUpload
+   */
+  completeUpload: {
+    methodKind: "unary";
+    input: typeof CompleteUploadRequestSchema;
+    output: typeof CompleteUploadResponseSchema;
+  },
+  /**
+   * @generated from rpc app.bucket.v1.BucketService.Head
+   */
+  head: {
+    methodKind: "unary";
+    input: typeof HeadRequestSchema;
+    output: typeof HeadResponseSchema;
+  },
+  /**
+   * @generated from rpc app.bucket.v1.BucketService.List
+   */
+  list: {
+    methodKind: "unary";
+    input: typeof ListRequestSchema;
+    output: typeof ListResponseSchema;
+  },
+  /**
+   * @generated from rpc app.bucket.v1.BucketService.Delete
+   */
+  delete: {
+    methodKind: "unary";
+    input: typeof DeleteRequestSchema;
+    output: typeof DeleteResponseSchema;
+  },
+  /**
+   * @generated from rpc app.bucket.v1.BucketService.Copy
+   */
+  copy: {
+    methodKind: "unary";
+    input: typeof CopyRequestSchema;
+    output: typeof CopyResponseSchema;
+  },
+  /**
+   * @generated from rpc app.bucket.v1.BucketService.Sign
+   */
+  sign: {
+    methodKind: "unary";
+    input: typeof SignRequestSchema;
+    output: typeof SignResponseSchema;
+  },
+  /**
+   * @generated from rpc app.bucket.v1.BucketService.CreateMultipart
+   */
+  createMultipart: {
+    methodKind: "unary";
+    input: typeof CreateMultipartRequestSchema;
+    output: typeof CreateMultipartResponseSchema;
+  },
+  /**
+   * @generated from rpc app.bucket.v1.BucketService.SignParts
+   */
+  signParts: {
+    methodKind: "unary";
+    input: typeof SignPartsRequestSchema;
+    output: typeof SignPartsResponseSchema;
+  },
+  /**
+   * @generated from rpc app.bucket.v1.BucketService.CompleteMultipart
+   */
+  completeMultipart: {
+    methodKind: "unary";
+    input: typeof CompleteMultipartRequestSchema;
+    output: typeof CompleteMultipartResponseSchema;
+  },
+  /**
+   * @generated from rpc app.bucket.v1.BucketService.AbortMultipart
+   */
+  abortMultipart: {
+    methodKind: "unary";
+    input: typeof AbortMultipartRequestSchema;
+    output: typeof AbortMultipartResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_app_bucket_v1_bucket, 0);

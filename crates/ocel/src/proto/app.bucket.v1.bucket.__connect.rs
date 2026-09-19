@@ -26,6 +26,86 @@ pub type OwnedGetUploadStatusRequestView = ::buffa::view::OwnedView<
 pub type OwnedGetUploadStatusResponseView = ::buffa::view::OwnedView<
     crate::proto::app::bucket::v1::__buffa::view::GetUploadStatusResponseView<'static>,
 >;
+///Shorthand for `OwnedView<CompleteUploadRequestView<'static>>`.
+pub type OwnedCompleteUploadRequestView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::CompleteUploadRequestView<'static>,
+>;
+///Shorthand for `OwnedView<CompleteUploadResponseView<'static>>`.
+pub type OwnedCompleteUploadResponseView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::CompleteUploadResponseView<'static>,
+>;
+///Shorthand for `OwnedView<HeadRequestView<'static>>`.
+pub type OwnedHeadRequestView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::HeadRequestView<'static>,
+>;
+///Shorthand for `OwnedView<HeadResponseView<'static>>`.
+pub type OwnedHeadResponseView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::HeadResponseView<'static>,
+>;
+///Shorthand for `OwnedView<ListRequestView<'static>>`.
+pub type OwnedListRequestView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::ListRequestView<'static>,
+>;
+///Shorthand for `OwnedView<ListResponseView<'static>>`.
+pub type OwnedListResponseView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::ListResponseView<'static>,
+>;
+///Shorthand for `OwnedView<DeleteRequestView<'static>>`.
+pub type OwnedDeleteRequestView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::DeleteRequestView<'static>,
+>;
+///Shorthand for `OwnedView<DeleteResponseView<'static>>`.
+pub type OwnedDeleteResponseView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::DeleteResponseView<'static>,
+>;
+///Shorthand for `OwnedView<CopyRequestView<'static>>`.
+pub type OwnedCopyRequestView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::CopyRequestView<'static>,
+>;
+///Shorthand for `OwnedView<CopyResponseView<'static>>`.
+pub type OwnedCopyResponseView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::CopyResponseView<'static>,
+>;
+///Shorthand for `OwnedView<SignRequestView<'static>>`.
+pub type OwnedSignRequestView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::SignRequestView<'static>,
+>;
+///Shorthand for `OwnedView<SignResponseView<'static>>`.
+pub type OwnedSignResponseView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::SignResponseView<'static>,
+>;
+///Shorthand for `OwnedView<CreateMultipartRequestView<'static>>`.
+pub type OwnedCreateMultipartRequestView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::CreateMultipartRequestView<'static>,
+>;
+///Shorthand for `OwnedView<CreateMultipartResponseView<'static>>`.
+pub type OwnedCreateMultipartResponseView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::CreateMultipartResponseView<'static>,
+>;
+///Shorthand for `OwnedView<SignPartsRequestView<'static>>`.
+pub type OwnedSignPartsRequestView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::SignPartsRequestView<'static>,
+>;
+///Shorthand for `OwnedView<SignPartsResponseView<'static>>`.
+pub type OwnedSignPartsResponseView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::SignPartsResponseView<'static>,
+>;
+///Shorthand for `OwnedView<CompleteMultipartRequestView<'static>>`.
+pub type OwnedCompleteMultipartRequestView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::CompleteMultipartRequestView<'static>,
+>;
+///Shorthand for `OwnedView<CompleteMultipartResponseView<'static>>`.
+pub type OwnedCompleteMultipartResponseView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::CompleteMultipartResponseView<'static>,
+>;
+///Shorthand for `OwnedView<AbortMultipartRequestView<'static>>`.
+pub type OwnedAbortMultipartRequestView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::AbortMultipartRequestView<'static>,
+>;
+///Shorthand for `OwnedView<AbortMultipartResponseView<'static>>`.
+pub type OwnedAbortMultipartResponseView = ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::AbortMultipartResponseView<'static>,
+>;
 impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::PresignUploadResponse>
 for crate::proto::app::bucket::v1::__buffa::view::PresignUploadResponseView<'_> {
     fn encode(
@@ -134,6 +214,346 @@ for ::buffa::view::OwnedView<
         )
     }
 }
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::CompleteUploadResponse>
+for crate::proto::app::bucket::v1::__buffa::view::CompleteUploadResponseView<'_> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::CompleteUploadResponse>
+for ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::CompleteUploadResponseView<'static>,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::HeadResponse>
+for crate::proto::app::bucket::v1::__buffa::view::HeadResponseView<'_> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::HeadResponse>
+for ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::HeadResponseView<'static>,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::ListResponse>
+for crate::proto::app::bucket::v1::__buffa::view::ListResponseView<'_> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::ListResponse>
+for ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::ListResponseView<'static>,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::DeleteResponse>
+for crate::proto::app::bucket::v1::__buffa::view::DeleteResponseView<'_> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::DeleteResponse>
+for ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::DeleteResponseView<'static>,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::CopyResponse>
+for crate::proto::app::bucket::v1::__buffa::view::CopyResponseView<'_> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::CopyResponse>
+for ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::CopyResponseView<'static>,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::SignResponse>
+for crate::proto::app::bucket::v1::__buffa::view::SignResponseView<'_> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::SignResponse>
+for ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::SignResponseView<'static>,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::CreateMultipartResponse>
+for crate::proto::app::bucket::v1::__buffa::view::CreateMultipartResponseView<'_> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::CreateMultipartResponse>
+for ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::CreateMultipartResponseView<'static>,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::SignPartsResponse>
+for crate::proto::app::bucket::v1::__buffa::view::SignPartsResponseView<'_> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::SignPartsResponse>
+for ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::SignPartsResponseView<'static>,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::CompleteMultipartResponse>
+for crate::proto::app::bucket::v1::__buffa::view::CompleteMultipartResponseView<'_> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::CompleteMultipartResponse>
+for ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::CompleteMultipartResponseView<'static>,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::AbortMultipartResponse>
+for crate::proto::app::bucket::v1::__buffa::view::AbortMultipartResponseView<'_> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self, codec)
+    }
+}
+impl ::connectrpc::Encodable<crate::proto::app::bucket::v1::AbortMultipartResponse>
+for ::buffa::view::OwnedView<
+    crate::proto::app::bucket::v1::__buffa::view::AbortMultipartResponseView<'static>,
+> {
+    fn encode(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::buffa::bytes::Bytes, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body(self.reborrow(), codec)
+    }
+    /// An `OwnedView` still holds the buffer it was decoded from, so
+    /// its large fields can be handed to the response body by
+    /// reference count instead of copied. The bare view impl above
+    /// cannot do this: it has borrows but no buffer to name.
+    fn encode_segments(
+        &self,
+        codec: ::connectrpc::CodecFormat,
+    ) -> ::std::result::Result<::connectrpc::EncodedBody, ::connectrpc::ConnectError> {
+        ::connectrpc::__codegen::encode_view_body_segments(
+            self.reborrow(),
+            self.bytes(),
+            codec,
+        )
+    }
+}
 /// Full service name for this service.
 pub const BUCKET_SERVICE_SERVICE_NAME: &str = "app.bucket.v1.BucketService";
 /// Static [`Spec`](::connectrpc::Spec) for the `PresignUpload` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
@@ -151,6 +571,66 @@ pub const BUCKET_SERVICE_VERIFY_UPLOAD_SIGNATURE_SPEC: ::connectrpc::Spec = ::co
 /// Static [`Spec`](::connectrpc::Spec) for the `GetUploadStatus` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
 pub const BUCKET_SERVICE_GET_UPLOAD_STATUS_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
         "/app.bucket.v1.BucketService/GetUploadStatus",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
+/// Static [`Spec`](::connectrpc::Spec) for the `CompleteUpload` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const BUCKET_SERVICE_COMPLETE_UPLOAD_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/app.bucket.v1.BucketService/CompleteUpload",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
+/// Static [`Spec`](::connectrpc::Spec) for the `Head` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const BUCKET_SERVICE_HEAD_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/app.bucket.v1.BucketService/Head",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
+/// Static [`Spec`](::connectrpc::Spec) for the `List` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const BUCKET_SERVICE_LIST_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/app.bucket.v1.BucketService/List",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
+/// Static [`Spec`](::connectrpc::Spec) for the `Delete` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const BUCKET_SERVICE_DELETE_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/app.bucket.v1.BucketService/Delete",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
+/// Static [`Spec`](::connectrpc::Spec) for the `Copy` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const BUCKET_SERVICE_COPY_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/app.bucket.v1.BucketService/Copy",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
+/// Static [`Spec`](::connectrpc::Spec) for the `Sign` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const BUCKET_SERVICE_SIGN_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/app.bucket.v1.BucketService/Sign",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
+/// Static [`Spec`](::connectrpc::Spec) for the `CreateMultipart` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const BUCKET_SERVICE_CREATE_MULTIPART_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/app.bucket.v1.BucketService/CreateMultipart",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
+/// Static [`Spec`](::connectrpc::Spec) for the `SignParts` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const BUCKET_SERVICE_SIGN_PARTS_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/app.bucket.v1.BucketService/SignParts",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
+/// Static [`Spec`](::connectrpc::Spec) for the `CompleteMultipart` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const BUCKET_SERVICE_COMPLETE_MULTIPART_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/app.bucket.v1.BucketService/CompleteMultipart",
+        ::connectrpc::StreamType::Unary,
+    )
+    .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
+/// Static [`Spec`](::connectrpc::Spec) for the `AbortMultipart` RPC, as seen by the server; the generated client passes it with [`origin`](::connectrpc::Spec::origin) `Client` (compare across sides with [`Spec::same_method`](::connectrpc::Spec::same_method)).
+pub const BUCKET_SERVICE_ABORT_MULTIPART_SPEC: ::connectrpc::Spec = ::connectrpc::Spec::server(
+        "/app.bucket.v1.BucketService/AbortMultipart",
         ::connectrpc::StreamType::Unary,
     )
     .with_idempotency_level(::connectrpc::IdempotencyLevel::Unknown);
@@ -274,6 +754,236 @@ pub trait BucketService: Send + Sync + 'static {
             > + Send + use<'a, Self>,
         >,
     > + Send;
+    /// Handle the CompleteUpload RPC.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn complete_upload<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::app::bucket::v1::CompleteUploadRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                crate::proto::app::bucket::v1::CompleteUploadResponse,
+            > + Send + use<'a, Self>,
+        >,
+    > + Send;
+    /// Handle the Head RPC.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn head<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::app::bucket::v1::HeadRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                crate::proto::app::bucket::v1::HeadResponse,
+            > + Send + use<'a, Self>,
+        >,
+    > + Send;
+    /// Handle the List RPC.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn list<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::app::bucket::v1::ListRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                crate::proto::app::bucket::v1::ListResponse,
+            > + Send + use<'a, Self>,
+        >,
+    > + Send;
+    /// Handle the Delete RPC.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn delete<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::app::bucket::v1::DeleteRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                crate::proto::app::bucket::v1::DeleteResponse,
+            > + Send + use<'a, Self>,
+        >,
+    > + Send;
+    /// Handle the Copy RPC.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn copy<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::app::bucket::v1::CopyRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                crate::proto::app::bucket::v1::CopyResponse,
+            > + Send + use<'a, Self>,
+        >,
+    > + Send;
+    /// Handle the Sign RPC.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn sign<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::app::bucket::v1::SignRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                crate::proto::app::bucket::v1::SignResponse,
+            > + Send + use<'a, Self>,
+        >,
+    > + Send;
+    /// Handle the CreateMultipart RPC.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn create_multipart<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::app::bucket::v1::CreateMultipartRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                crate::proto::app::bucket::v1::CreateMultipartResponse,
+            > + Send + use<'a, Self>,
+        >,
+    > + Send;
+    /// Handle the SignParts RPC.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn sign_parts<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::app::bucket::v1::SignPartsRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                crate::proto::app::bucket::v1::SignPartsResponse,
+            > + Send + use<'a, Self>,
+        >,
+    > + Send;
+    /// Handle the CompleteMultipart RPC.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn complete_multipart<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::app::bucket::v1::CompleteMultipartRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                crate::proto::app::bucket::v1::CompleteMultipartResponse,
+            > + Send + use<'a, Self>,
+        >,
+    > + Send;
+    /// Handle the AbortMultipart RPC.
+    ///
+    /// `'a` lets the response body borrow from `&self` (e.g. server-resident state).
+    ///
+    /// `request` is borrowed from the request body and is valid for the
+    /// duration of the call; message fields are read directly on it
+    /// (zero-copy). The response cannot borrow from `request` — use
+    /// `.to_owned_message()` (or copy the specific fields) for anything
+    /// returned, stored, or moved into `tokio::spawn`.
+    fn abort_multipart<'a>(
+        &'a self,
+        ctx: ::connectrpc::RequestContext,
+        request: ::connectrpc::ServiceRequest<
+            '_,
+            crate::proto::app::bucket::v1::AbortMultipartRequest,
+        >,
+    ) -> impl ::std::future::Future<
+        Output = ::connectrpc::ServiceResult<
+            impl ::connectrpc::Encodable<
+                crate::proto::app::bucket::v1::AbortMultipartResponse,
+            > + Send + use<'a, Self>,
+        >,
+    > + Send;
 }
 /// Extension trait for registering a service implementation with a Router.
 ///
@@ -393,6 +1103,296 @@ impl<S: BucketService> BucketServiceExt for S {
                 },
             )
             .with_spec(BUCKET_SERVICE_GET_UPLOAD_STATUS_SPEC)
+            .route_view(
+                BUCKET_SERVICE_SERVICE_NAME,
+                "CompleteUpload",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::app::bucket::v1::__buffa::view::CompleteUploadRequestView<
+                                'static,
+                            >,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::app::bucket::v1::CompleteUploadRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.complete_upload(ctx, sreq)
+                                .await?
+                                .encode::<
+                                    crate::proto::app::bucket::v1::CompleteUploadResponse,
+                                >(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(BUCKET_SERVICE_COMPLETE_UPLOAD_SPEC)
+            .route_view(
+                BUCKET_SERVICE_SERVICE_NAME,
+                "Head",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::app::bucket::v1::__buffa::view::HeadRequestView<
+                                'static,
+                            >,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::app::bucket::v1::HeadRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.head(ctx, sreq)
+                                .await?
+                                .encode::<
+                                    crate::proto::app::bucket::v1::HeadResponse,
+                                >(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(BUCKET_SERVICE_HEAD_SPEC)
+            .route_view(
+                BUCKET_SERVICE_SERVICE_NAME,
+                "List",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::app::bucket::v1::__buffa::view::ListRequestView<
+                                'static,
+                            >,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::app::bucket::v1::ListRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.list(ctx, sreq)
+                                .await?
+                                .encode::<
+                                    crate::proto::app::bucket::v1::ListResponse,
+                                >(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(BUCKET_SERVICE_LIST_SPEC)
+            .route_view(
+                BUCKET_SERVICE_SERVICE_NAME,
+                "Delete",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::app::bucket::v1::__buffa::view::DeleteRequestView<
+                                'static,
+                            >,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::app::bucket::v1::DeleteRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.delete(ctx, sreq)
+                                .await?
+                                .encode::<
+                                    crate::proto::app::bucket::v1::DeleteResponse,
+                                >(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(BUCKET_SERVICE_DELETE_SPEC)
+            .route_view(
+                BUCKET_SERVICE_SERVICE_NAME,
+                "Copy",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::app::bucket::v1::__buffa::view::CopyRequestView<
+                                'static,
+                            >,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::app::bucket::v1::CopyRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.copy(ctx, sreq)
+                                .await?
+                                .encode::<
+                                    crate::proto::app::bucket::v1::CopyResponse,
+                                >(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(BUCKET_SERVICE_COPY_SPEC)
+            .route_view(
+                BUCKET_SERVICE_SERVICE_NAME,
+                "Sign",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::app::bucket::v1::__buffa::view::SignRequestView<
+                                'static,
+                            >,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::app::bucket::v1::SignRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.sign(ctx, sreq)
+                                .await?
+                                .encode::<
+                                    crate::proto::app::bucket::v1::SignResponse,
+                                >(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(BUCKET_SERVICE_SIGN_SPEC)
+            .route_view(
+                BUCKET_SERVICE_SERVICE_NAME,
+                "CreateMultipart",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::app::bucket::v1::__buffa::view::CreateMultipartRequestView<
+                                'static,
+                            >,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::app::bucket::v1::CreateMultipartRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.create_multipart(ctx, sreq)
+                                .await?
+                                .encode::<
+                                    crate::proto::app::bucket::v1::CreateMultipartResponse,
+                                >(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(BUCKET_SERVICE_CREATE_MULTIPART_SPEC)
+            .route_view(
+                BUCKET_SERVICE_SERVICE_NAME,
+                "SignParts",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::app::bucket::v1::__buffa::view::SignPartsRequestView<
+                                'static,
+                            >,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::app::bucket::v1::SignPartsRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.sign_parts(ctx, sreq)
+                                .await?
+                                .encode::<
+                                    crate::proto::app::bucket::v1::SignPartsResponse,
+                                >(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(BUCKET_SERVICE_SIGN_PARTS_SPEC)
+            .route_view(
+                BUCKET_SERVICE_SERVICE_NAME,
+                "CompleteMultipart",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::app::bucket::v1::__buffa::view::CompleteMultipartRequestView<
+                                'static,
+                            >,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::app::bucket::v1::CompleteMultipartRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.complete_multipart(ctx, sreq)
+                                .await?
+                                .encode::<
+                                    crate::proto::app::bucket::v1::CompleteMultipartResponse,
+                                >(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(BUCKET_SERVICE_COMPLETE_MULTIPART_SPEC)
+            .route_view(
+                BUCKET_SERVICE_SERVICE_NAME,
+                "AbortMultipart",
+                {
+                    let svc = ::std::sync::Arc::clone(&self);
+                    ::connectrpc::view_handler_fn(move |
+                        ctx,
+                        req: ::buffa::view::OwnedView<
+                            crate::proto::app::bucket::v1::__buffa::view::AbortMultipartRequestView<
+                                'static,
+                            >,
+                        >,
+                        format|
+                    {
+                        let svc = ::std::sync::Arc::clone(&svc);
+                        async move {
+                            let sreq = ::connectrpc::ServiceRequest::<
+                                crate::proto::app::bucket::v1::AbortMultipartRequest,
+                            >::from_parts(req.reborrow(), req.bytes());
+                            svc.abort_multipart(ctx, sreq)
+                                .await?
+                                .encode::<
+                                    crate::proto::app::bucket::v1::AbortMultipartResponse,
+                                >(format)
+                        }
+                    })
+                },
+            )
+            .with_spec(BUCKET_SERVICE_ABORT_MULTIPART_SPEC)
     }
 }
 /// Type-inference marker used by [`Router::add_service`](::connectrpc::Router::add_service).
@@ -463,6 +1463,66 @@ impl<T: BucketService> ::connectrpc::Dispatcher for BucketServiceServer<T> {
                 Some(
                     ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
                         .with_spec(BUCKET_SERVICE_GET_UPLOAD_STATUS_SPEC),
+                )
+            }
+            "CompleteUpload" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
+                        .with_spec(BUCKET_SERVICE_COMPLETE_UPLOAD_SPEC),
+                )
+            }
+            "Head" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
+                        .with_spec(BUCKET_SERVICE_HEAD_SPEC),
+                )
+            }
+            "List" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
+                        .with_spec(BUCKET_SERVICE_LIST_SPEC),
+                )
+            }
+            "Delete" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
+                        .with_spec(BUCKET_SERVICE_DELETE_SPEC),
+                )
+            }
+            "Copy" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
+                        .with_spec(BUCKET_SERVICE_COPY_SPEC),
+                )
+            }
+            "Sign" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
+                        .with_spec(BUCKET_SERVICE_SIGN_SPEC),
+                )
+            }
+            "CreateMultipart" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
+                        .with_spec(BUCKET_SERVICE_CREATE_MULTIPART_SPEC),
+                )
+            }
+            "SignParts" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
+                        .with_spec(BUCKET_SERVICE_SIGN_PARTS_SPEC),
+                )
+            }
+            "CompleteMultipart" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
+                        .with_spec(BUCKET_SERVICE_COMPLETE_MULTIPART_SPEC),
+                )
+            }
+            "AbortMultipart" => {
+                Some(
+                    ::connectrpc::dispatcher::codegen::MethodDescriptor::unary(false)
+                        .with_spec(BUCKET_SERVICE_ABORT_MULTIPART_SPEC),
                 )
             }
             _ => None,
@@ -543,6 +1603,216 @@ impl<T: BucketService> ::connectrpc::Dispatcher for BucketServiceServer<T> {
                         .await?
                         .encode::<
                             crate::proto::app::bucket::v1::GetUploadStatusResponse,
+                        >(format)
+                })
+            }
+            "CompleteUpload" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::app::bucket::v1::CompleteUploadRequest,
+                    >(request.encoded()?, format)?;
+                    let req: crate::proto::app::bucket::v1::__buffa::view::CompleteUploadRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::app::bucket::v1::CompleteUploadRequest,
+                    >::from_parts(&req, &body);
+                    svc.complete_upload(ctx, req)
+                        .await?
+                        .encode::<
+                            crate::proto::app::bucket::v1::CompleteUploadResponse,
+                        >(format)
+                })
+            }
+            "Head" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::app::bucket::v1::HeadRequest,
+                    >(request.encoded()?, format)?;
+                    let req: crate::proto::app::bucket::v1::__buffa::view::HeadRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::app::bucket::v1::HeadRequest,
+                    >::from_parts(&req, &body);
+                    svc.head(ctx, req)
+                        .await?
+                        .encode::<crate::proto::app::bucket::v1::HeadResponse>(format)
+                })
+            }
+            "List" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::app::bucket::v1::ListRequest,
+                    >(request.encoded()?, format)?;
+                    let req: crate::proto::app::bucket::v1::__buffa::view::ListRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::app::bucket::v1::ListRequest,
+                    >::from_parts(&req, &body);
+                    svc.list(ctx, req)
+                        .await?
+                        .encode::<crate::proto::app::bucket::v1::ListResponse>(format)
+                })
+            }
+            "Delete" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::app::bucket::v1::DeleteRequest,
+                    >(request.encoded()?, format)?;
+                    let req: crate::proto::app::bucket::v1::__buffa::view::DeleteRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::app::bucket::v1::DeleteRequest,
+                    >::from_parts(&req, &body);
+                    svc.delete(ctx, req)
+                        .await?
+                        .encode::<crate::proto::app::bucket::v1::DeleteResponse>(format)
+                })
+            }
+            "Copy" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::app::bucket::v1::CopyRequest,
+                    >(request.encoded()?, format)?;
+                    let req: crate::proto::app::bucket::v1::__buffa::view::CopyRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::app::bucket::v1::CopyRequest,
+                    >::from_parts(&req, &body);
+                    svc.copy(ctx, req)
+                        .await?
+                        .encode::<crate::proto::app::bucket::v1::CopyResponse>(format)
+                })
+            }
+            "Sign" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::app::bucket::v1::SignRequest,
+                    >(request.encoded()?, format)?;
+                    let req: crate::proto::app::bucket::v1::__buffa::view::SignRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::app::bucket::v1::SignRequest,
+                    >::from_parts(&req, &body);
+                    svc.sign(ctx, req)
+                        .await?
+                        .encode::<crate::proto::app::bucket::v1::SignResponse>(format)
+                })
+            }
+            "CreateMultipart" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::app::bucket::v1::CreateMultipartRequest,
+                    >(request.encoded()?, format)?;
+                    let req: crate::proto::app::bucket::v1::__buffa::view::CreateMultipartRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::app::bucket::v1::CreateMultipartRequest,
+                    >::from_parts(&req, &body);
+                    svc.create_multipart(ctx, req)
+                        .await?
+                        .encode::<
+                            crate::proto::app::bucket::v1::CreateMultipartResponse,
+                        >(format)
+                })
+            }
+            "SignParts" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::app::bucket::v1::SignPartsRequest,
+                    >(request.encoded()?, format)?;
+                    let req: crate::proto::app::bucket::v1::__buffa::view::SignPartsRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::app::bucket::v1::SignPartsRequest,
+                    >::from_parts(&req, &body);
+                    svc.sign_parts(ctx, req)
+                        .await?
+                        .encode::<
+                            crate::proto::app::bucket::v1::SignPartsResponse,
+                        >(format)
+                })
+            }
+            "CompleteMultipart" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::app::bucket::v1::CompleteMultipartRequest,
+                    >(request.encoded()?, format)?;
+                    let req: crate::proto::app::bucket::v1::__buffa::view::CompleteMultipartRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::app::bucket::v1::CompleteMultipartRequest,
+                    >::from_parts(&req, &body);
+                    svc.complete_multipart(ctx, req)
+                        .await?
+                        .encode::<
+                            crate::proto::app::bucket::v1::CompleteMultipartResponse,
+                        >(format)
+                })
+            }
+            "AbortMultipart" => {
+                let svc = ::std::sync::Arc::clone(&self.inner);
+                Box::pin(async move {
+                    let body = ::connectrpc::dispatcher::codegen::request_proto_bytes::<
+                        crate::proto::app::bucket::v1::AbortMultipartRequest,
+                    >(request.encoded()?, format)?;
+                    let req: crate::proto::app::bucket::v1::__buffa::view::AbortMultipartRequestView<
+                        '_,
+                    > = ::connectrpc::dispatcher::codegen::decode_borrowed_request_view(
+                        &body,
+                        ctx.decode_options(),
+                    )?;
+                    let req = ::connectrpc::ServiceRequest::<
+                        crate::proto::app::bucket::v1::AbortMultipartRequest,
+                    >::from_parts(&req, &body);
+                    svc.abort_multipart(ctx, req)
+                        .await?
+                        .encode::<
+                            crate::proto::app::bucket::v1::AbortMultipartResponse,
                         >(format)
                 })
             }
@@ -803,6 +2073,416 @@ where
                 &self.transport,
                 &self.config,
                 BUCKET_SERVICE_GET_UPLOAD_STATUS_SPEC
+                    .with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the CompleteUpload RPC. Sends a request to /app.bucket.v1.BucketService/CompleteUpload.
+    pub async fn complete_upload(
+        &self,
+        request: crate::proto::app::bucket::v1::CompleteUploadRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::CompleteUploadResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.complete_upload_with_options(
+                request,
+                ::connectrpc::client::CallOptions::default(),
+            )
+            .await
+    }
+    /// Call the CompleteUpload RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn complete_upload_with_options(
+        &self,
+        request: crate::proto::app::bucket::v1::CompleteUploadRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::CompleteUploadResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                BUCKET_SERVICE_COMPLETE_UPLOAD_SPEC
+                    .with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the Head RPC. Sends a request to /app.bucket.v1.BucketService/Head.
+    pub async fn head(
+        &self,
+        request: crate::proto::app::bucket::v1::HeadRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::HeadResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.head_with_options(request, ::connectrpc::client::CallOptions::default())
+            .await
+    }
+    /// Call the Head RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn head_with_options(
+        &self,
+        request: crate::proto::app::bucket::v1::HeadRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::HeadResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                BUCKET_SERVICE_HEAD_SPEC.with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the List RPC. Sends a request to /app.bucket.v1.BucketService/List.
+    pub async fn list(
+        &self,
+        request: crate::proto::app::bucket::v1::ListRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::ListResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.list_with_options(request, ::connectrpc::client::CallOptions::default())
+            .await
+    }
+    /// Call the List RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn list_with_options(
+        &self,
+        request: crate::proto::app::bucket::v1::ListRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::ListResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                BUCKET_SERVICE_LIST_SPEC.with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the Delete RPC. Sends a request to /app.bucket.v1.BucketService/Delete.
+    pub async fn delete(
+        &self,
+        request: crate::proto::app::bucket::v1::DeleteRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::DeleteResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.delete_with_options(request, ::connectrpc::client::CallOptions::default())
+            .await
+    }
+    /// Call the Delete RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn delete_with_options(
+        &self,
+        request: crate::proto::app::bucket::v1::DeleteRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::DeleteResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                BUCKET_SERVICE_DELETE_SPEC.with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the Copy RPC. Sends a request to /app.bucket.v1.BucketService/Copy.
+    pub async fn copy(
+        &self,
+        request: crate::proto::app::bucket::v1::CopyRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::CopyResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.copy_with_options(request, ::connectrpc::client::CallOptions::default())
+            .await
+    }
+    /// Call the Copy RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn copy_with_options(
+        &self,
+        request: crate::proto::app::bucket::v1::CopyRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::CopyResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                BUCKET_SERVICE_COPY_SPEC.with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the Sign RPC. Sends a request to /app.bucket.v1.BucketService/Sign.
+    pub async fn sign(
+        &self,
+        request: crate::proto::app::bucket::v1::SignRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::SignResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.sign_with_options(request, ::connectrpc::client::CallOptions::default())
+            .await
+    }
+    /// Call the Sign RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn sign_with_options(
+        &self,
+        request: crate::proto::app::bucket::v1::SignRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::SignResponseView<'static>,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                BUCKET_SERVICE_SIGN_SPEC.with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the CreateMultipart RPC. Sends a request to /app.bucket.v1.BucketService/CreateMultipart.
+    pub async fn create_multipart(
+        &self,
+        request: crate::proto::app::bucket::v1::CreateMultipartRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::CreateMultipartResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.create_multipart_with_options(
+                request,
+                ::connectrpc::client::CallOptions::default(),
+            )
+            .await
+    }
+    /// Call the CreateMultipart RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn create_multipart_with_options(
+        &self,
+        request: crate::proto::app::bucket::v1::CreateMultipartRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::CreateMultipartResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                BUCKET_SERVICE_CREATE_MULTIPART_SPEC
+                    .with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the SignParts RPC. Sends a request to /app.bucket.v1.BucketService/SignParts.
+    pub async fn sign_parts(
+        &self,
+        request: crate::proto::app::bucket::v1::SignPartsRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::SignPartsResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.sign_parts_with_options(
+                request,
+                ::connectrpc::client::CallOptions::default(),
+            )
+            .await
+    }
+    /// Call the SignParts RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn sign_parts_with_options(
+        &self,
+        request: crate::proto::app::bucket::v1::SignPartsRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::SignPartsResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                BUCKET_SERVICE_SIGN_PARTS_SPEC
+                    .with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the CompleteMultipart RPC. Sends a request to /app.bucket.v1.BucketService/CompleteMultipart.
+    pub async fn complete_multipart(
+        &self,
+        request: crate::proto::app::bucket::v1::CompleteMultipartRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::CompleteMultipartResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.complete_multipart_with_options(
+                request,
+                ::connectrpc::client::CallOptions::default(),
+            )
+            .await
+    }
+    /// Call the CompleteMultipart RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn complete_multipart_with_options(
+        &self,
+        request: crate::proto::app::bucket::v1::CompleteMultipartRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::CompleteMultipartResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                BUCKET_SERVICE_COMPLETE_MULTIPART_SPEC
+                    .with_origin(::connectrpc::SpecOrigin::Client),
+                request,
+                options,
+            )
+            .await
+    }
+    /// Call the AbortMultipart RPC. Sends a request to /app.bucket.v1.BucketService/AbortMultipart.
+    pub async fn abort_multipart(
+        &self,
+        request: crate::proto::app::bucket::v1::AbortMultipartRequest,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::AbortMultipartResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        self.abort_multipart_with_options(
+                request,
+                ::connectrpc::client::CallOptions::default(),
+            )
+            .await
+    }
+    /// Call the AbortMultipart RPC with explicit per-call options. Options override [`ClientConfig`](::connectrpc::client::ClientConfig) defaults.
+    pub async fn abort_multipart_with_options(
+        &self,
+        request: crate::proto::app::bucket::v1::AbortMultipartRequest,
+        options: ::connectrpc::client::CallOptions,
+    ) -> Result<
+        ::connectrpc::client::UnaryResponse<
+            ::buffa::view::OwnedView<
+                crate::proto::app::bucket::v1::__buffa::view::AbortMultipartResponseView<
+                    'static,
+                >,
+            >,
+        >,
+        ::connectrpc::ConnectError,
+    > {
+        ::connectrpc::client::call_unary(
+                &self.transport,
+                &self.config,
+                BUCKET_SERVICE_ABORT_MULTIPART_SPEC
                     .with_origin(::connectrpc::SpecOrigin::Client),
                 request,
                 options,

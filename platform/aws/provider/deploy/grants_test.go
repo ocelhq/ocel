@@ -18,6 +18,32 @@ import (
 
 const rolePolicyToken = "aws:iam/rolePolicy:RolePolicy"
 
+func TestBucketGrantsCoverEveryCallTheRuntimeMakes(t *testing.T) {
+	t.Parallel()
+
+	granted := map[string]bool{}
+	for _, grant := range bucketGrants("shop-prod-uploads-abc", testSessions) {
+		for _, action := range grant.GetActions() {
+			granted[action] = true
+		}
+	}
+
+	for _, action := range []string{
+		"s3:AbortMultipartUpload",
+		"s3:DeleteObject",
+		"s3:GetObject",
+		"s3:ListBucket",
+		"s3:ListBucketMultipartUploads",
+		"s3:ListMultipartUploadParts",
+		"s3:PutObject",
+		"s3:PutObjectTagging",
+	} {
+		if !granted[action] {
+			t.Errorf("an app's bucket role may not %s, and the runtime's data plane calls it", action)
+		}
+	}
+}
+
 type policyRecorder struct {
 	mu       sync.Mutex
 	policies map[string]string

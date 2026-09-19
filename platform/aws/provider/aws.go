@@ -187,6 +187,9 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPr
 	if err := refuseContainersBehindFunctionEdge(pre); err != nil {
 		return err
 	}
+	if err := refusePublicBuckets(pre); err != nil {
+		return err
+	}
 	if err := p.nagStaleEdgeKey(ctx, pre); err != nil {
 		return err
 	}
@@ -273,6 +276,18 @@ func refuseContainersBehindFunctionEdge(pre providerkit.DeployPreflight) error {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"app %s runs as a container, and the %q edge reaches a release's entry function rather than an origin that demands the class's secret, so it has no way to reach one: front this project with %q, or give %s `compute: \"serverless\"`",
 			app.App, pre.Edge, edges.DefaultKind, app.App)
+	}
+	return nil
+}
+
+func refusePublicBuckets(pre providerkit.DeployPreflight) error {
+	for _, resource := range pre.Resources {
+		if resource.Bucket == nil || !resource.Bucket.Public {
+			continue
+		}
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"bucket %s asks to be public, and this provider stands its buckets up with public access blocked at the account's edge: serve the objects through your app or a signed url instead, or drop `public` from %s",
+			resource.Name, resource.Name)
 	}
 	return nil
 }

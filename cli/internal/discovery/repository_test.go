@@ -80,9 +80,17 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		rel, err := filepath.Rel(repo, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
 		if entry.IsDir() {
 			switch entry.Name() {
 			case ".git", ".next", ".venv", ".claude", constants.ProjectStateDirName, "node_modules", "dist", "target":
+				return filepath.SkipDir
+			}
+			if rel == "pkg/proto" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -90,11 +98,6 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		if filepath.Ext(path) != ".go" {
 			return nil
 		}
-		rel, err := filepath.Rel(repo, path)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
 		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
 		if err != nil {
 			return err

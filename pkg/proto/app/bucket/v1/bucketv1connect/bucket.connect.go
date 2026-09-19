@@ -42,6 +42,30 @@ const (
 	// BucketServiceGetUploadStatusProcedure is the fully-qualified name of the BucketService's
 	// GetUploadStatus RPC.
 	BucketServiceGetUploadStatusProcedure = "/app.bucket.v1.BucketService/GetUploadStatus"
+	// BucketServiceCompleteUploadProcedure is the fully-qualified name of the BucketService's
+	// CompleteUpload RPC.
+	BucketServiceCompleteUploadProcedure = "/app.bucket.v1.BucketService/CompleteUpload"
+	// BucketServiceHeadProcedure is the fully-qualified name of the BucketService's Head RPC.
+	BucketServiceHeadProcedure = "/app.bucket.v1.BucketService/Head"
+	// BucketServiceListProcedure is the fully-qualified name of the BucketService's List RPC.
+	BucketServiceListProcedure = "/app.bucket.v1.BucketService/List"
+	// BucketServiceDeleteProcedure is the fully-qualified name of the BucketService's Delete RPC.
+	BucketServiceDeleteProcedure = "/app.bucket.v1.BucketService/Delete"
+	// BucketServiceCopyProcedure is the fully-qualified name of the BucketService's Copy RPC.
+	BucketServiceCopyProcedure = "/app.bucket.v1.BucketService/Copy"
+	// BucketServiceSignProcedure is the fully-qualified name of the BucketService's Sign RPC.
+	BucketServiceSignProcedure = "/app.bucket.v1.BucketService/Sign"
+	// BucketServiceCreateMultipartProcedure is the fully-qualified name of the BucketService's
+	// CreateMultipart RPC.
+	BucketServiceCreateMultipartProcedure = "/app.bucket.v1.BucketService/CreateMultipart"
+	// BucketServiceSignPartsProcedure is the fully-qualified name of the BucketService's SignParts RPC.
+	BucketServiceSignPartsProcedure = "/app.bucket.v1.BucketService/SignParts"
+	// BucketServiceCompleteMultipartProcedure is the fully-qualified name of the BucketService's
+	// CompleteMultipart RPC.
+	BucketServiceCompleteMultipartProcedure = "/app.bucket.v1.BucketService/CompleteMultipart"
+	// BucketServiceAbortMultipartProcedure is the fully-qualified name of the BucketService's
+	// AbortMultipart RPC.
+	BucketServiceAbortMultipartProcedure = "/app.bucket.v1.BucketService/AbortMultipart"
 )
 
 // BucketServiceClient is a client for the app.bucket.v1.BucketService service.
@@ -49,6 +73,16 @@ type BucketServiceClient interface {
 	PresignUpload(context.Context, *v1.PresignUploadRequest) (*v1.PresignUploadResponse, error)
 	VerifyUploadSignature(context.Context, *v1.VerifyUploadSignatureRequest) (*v1.VerifyUploadSignatureResponse, error)
 	GetUploadStatus(context.Context, *v1.GetUploadStatusRequest) (*v1.GetUploadStatusResponse, error)
+	CompleteUpload(context.Context, *v1.CompleteUploadRequest) (*v1.CompleteUploadResponse, error)
+	Head(context.Context, *v1.HeadRequest) (*v1.HeadResponse, error)
+	List(context.Context, *v1.ListRequest) (*v1.ListResponse, error)
+	Delete(context.Context, *v1.DeleteRequest) (*v1.DeleteResponse, error)
+	Copy(context.Context, *v1.CopyRequest) (*v1.CopyResponse, error)
+	Sign(context.Context, *v1.SignRequest) (*v1.SignResponse, error)
+	CreateMultipart(context.Context, *v1.CreateMultipartRequest) (*v1.CreateMultipartResponse, error)
+	SignParts(context.Context, *v1.SignPartsRequest) (*v1.SignPartsResponse, error)
+	CompleteMultipart(context.Context, *v1.CompleteMultipartRequest) (*v1.CompleteMultipartResponse, error)
+	AbortMultipart(context.Context, *v1.AbortMultipartRequest) (*v1.AbortMultipartResponse, error)
 }
 
 // NewBucketServiceClient constructs a client for the app.bucket.v1.BucketService service. By
@@ -80,6 +114,66 @@ func NewBucketServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(bucketServiceMethods.ByName("GetUploadStatus")),
 			connect.WithClientOptions(opts...),
 		),
+		completeUpload: connect.NewClient[v1.CompleteUploadRequest, v1.CompleteUploadResponse](
+			httpClient,
+			baseURL+BucketServiceCompleteUploadProcedure,
+			connect.WithSchema(bucketServiceMethods.ByName("CompleteUpload")),
+			connect.WithClientOptions(opts...),
+		),
+		head: connect.NewClient[v1.HeadRequest, v1.HeadResponse](
+			httpClient,
+			baseURL+BucketServiceHeadProcedure,
+			connect.WithSchema(bucketServiceMethods.ByName("Head")),
+			connect.WithClientOptions(opts...),
+		),
+		list: connect.NewClient[v1.ListRequest, v1.ListResponse](
+			httpClient,
+			baseURL+BucketServiceListProcedure,
+			connect.WithSchema(bucketServiceMethods.ByName("List")),
+			connect.WithClientOptions(opts...),
+		),
+		delete: connect.NewClient[v1.DeleteRequest, v1.DeleteResponse](
+			httpClient,
+			baseURL+BucketServiceDeleteProcedure,
+			connect.WithSchema(bucketServiceMethods.ByName("Delete")),
+			connect.WithClientOptions(opts...),
+		),
+		copy: connect.NewClient[v1.CopyRequest, v1.CopyResponse](
+			httpClient,
+			baseURL+BucketServiceCopyProcedure,
+			connect.WithSchema(bucketServiceMethods.ByName("Copy")),
+			connect.WithClientOptions(opts...),
+		),
+		sign: connect.NewClient[v1.SignRequest, v1.SignResponse](
+			httpClient,
+			baseURL+BucketServiceSignProcedure,
+			connect.WithSchema(bucketServiceMethods.ByName("Sign")),
+			connect.WithClientOptions(opts...),
+		),
+		createMultipart: connect.NewClient[v1.CreateMultipartRequest, v1.CreateMultipartResponse](
+			httpClient,
+			baseURL+BucketServiceCreateMultipartProcedure,
+			connect.WithSchema(bucketServiceMethods.ByName("CreateMultipart")),
+			connect.WithClientOptions(opts...),
+		),
+		signParts: connect.NewClient[v1.SignPartsRequest, v1.SignPartsResponse](
+			httpClient,
+			baseURL+BucketServiceSignPartsProcedure,
+			connect.WithSchema(bucketServiceMethods.ByName("SignParts")),
+			connect.WithClientOptions(opts...),
+		),
+		completeMultipart: connect.NewClient[v1.CompleteMultipartRequest, v1.CompleteMultipartResponse](
+			httpClient,
+			baseURL+BucketServiceCompleteMultipartProcedure,
+			connect.WithSchema(bucketServiceMethods.ByName("CompleteMultipart")),
+			connect.WithClientOptions(opts...),
+		),
+		abortMultipart: connect.NewClient[v1.AbortMultipartRequest, v1.AbortMultipartResponse](
+			httpClient,
+			baseURL+BucketServiceAbortMultipartProcedure,
+			connect.WithSchema(bucketServiceMethods.ByName("AbortMultipart")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -88,6 +182,16 @@ type bucketServiceClient struct {
 	presignUpload         *connect.Client[v1.PresignUploadRequest, v1.PresignUploadResponse]
 	verifyUploadSignature *connect.Client[v1.VerifyUploadSignatureRequest, v1.VerifyUploadSignatureResponse]
 	getUploadStatus       *connect.Client[v1.GetUploadStatusRequest, v1.GetUploadStatusResponse]
+	completeUpload        *connect.Client[v1.CompleteUploadRequest, v1.CompleteUploadResponse]
+	head                  *connect.Client[v1.HeadRequest, v1.HeadResponse]
+	list                  *connect.Client[v1.ListRequest, v1.ListResponse]
+	delete                *connect.Client[v1.DeleteRequest, v1.DeleteResponse]
+	copy                  *connect.Client[v1.CopyRequest, v1.CopyResponse]
+	sign                  *connect.Client[v1.SignRequest, v1.SignResponse]
+	createMultipart       *connect.Client[v1.CreateMultipartRequest, v1.CreateMultipartResponse]
+	signParts             *connect.Client[v1.SignPartsRequest, v1.SignPartsResponse]
+	completeMultipart     *connect.Client[v1.CompleteMultipartRequest, v1.CompleteMultipartResponse]
+	abortMultipart        *connect.Client[v1.AbortMultipartRequest, v1.AbortMultipartResponse]
 }
 
 // PresignUpload calls app.bucket.v1.BucketService.PresignUpload.
@@ -117,11 +221,111 @@ func (c *bucketServiceClient) GetUploadStatus(ctx context.Context, req *v1.GetUp
 	return nil, err
 }
 
+// CompleteUpload calls app.bucket.v1.BucketService.CompleteUpload.
+func (c *bucketServiceClient) CompleteUpload(ctx context.Context, req *v1.CompleteUploadRequest) (*v1.CompleteUploadResponse, error) {
+	response, err := c.completeUpload.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// Head calls app.bucket.v1.BucketService.Head.
+func (c *bucketServiceClient) Head(ctx context.Context, req *v1.HeadRequest) (*v1.HeadResponse, error) {
+	response, err := c.head.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// List calls app.bucket.v1.BucketService.List.
+func (c *bucketServiceClient) List(ctx context.Context, req *v1.ListRequest) (*v1.ListResponse, error) {
+	response, err := c.list.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// Delete calls app.bucket.v1.BucketService.Delete.
+func (c *bucketServiceClient) Delete(ctx context.Context, req *v1.DeleteRequest) (*v1.DeleteResponse, error) {
+	response, err := c.delete.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// Copy calls app.bucket.v1.BucketService.Copy.
+func (c *bucketServiceClient) Copy(ctx context.Context, req *v1.CopyRequest) (*v1.CopyResponse, error) {
+	response, err := c.copy.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// Sign calls app.bucket.v1.BucketService.Sign.
+func (c *bucketServiceClient) Sign(ctx context.Context, req *v1.SignRequest) (*v1.SignResponse, error) {
+	response, err := c.sign.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// CreateMultipart calls app.bucket.v1.BucketService.CreateMultipart.
+func (c *bucketServiceClient) CreateMultipart(ctx context.Context, req *v1.CreateMultipartRequest) (*v1.CreateMultipartResponse, error) {
+	response, err := c.createMultipart.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// SignParts calls app.bucket.v1.BucketService.SignParts.
+func (c *bucketServiceClient) SignParts(ctx context.Context, req *v1.SignPartsRequest) (*v1.SignPartsResponse, error) {
+	response, err := c.signParts.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// CompleteMultipart calls app.bucket.v1.BucketService.CompleteMultipart.
+func (c *bucketServiceClient) CompleteMultipart(ctx context.Context, req *v1.CompleteMultipartRequest) (*v1.CompleteMultipartResponse, error) {
+	response, err := c.completeMultipart.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// AbortMultipart calls app.bucket.v1.BucketService.AbortMultipart.
+func (c *bucketServiceClient) AbortMultipart(ctx context.Context, req *v1.AbortMultipartRequest) (*v1.AbortMultipartResponse, error) {
+	response, err := c.abortMultipart.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // BucketServiceHandler is an implementation of the app.bucket.v1.BucketService service.
 type BucketServiceHandler interface {
 	PresignUpload(context.Context, *v1.PresignUploadRequest) (*v1.PresignUploadResponse, error)
 	VerifyUploadSignature(context.Context, *v1.VerifyUploadSignatureRequest) (*v1.VerifyUploadSignatureResponse, error)
 	GetUploadStatus(context.Context, *v1.GetUploadStatusRequest) (*v1.GetUploadStatusResponse, error)
+	CompleteUpload(context.Context, *v1.CompleteUploadRequest) (*v1.CompleteUploadResponse, error)
+	Head(context.Context, *v1.HeadRequest) (*v1.HeadResponse, error)
+	List(context.Context, *v1.ListRequest) (*v1.ListResponse, error)
+	Delete(context.Context, *v1.DeleteRequest) (*v1.DeleteResponse, error)
+	Copy(context.Context, *v1.CopyRequest) (*v1.CopyResponse, error)
+	Sign(context.Context, *v1.SignRequest) (*v1.SignResponse, error)
+	CreateMultipart(context.Context, *v1.CreateMultipartRequest) (*v1.CreateMultipartResponse, error)
+	SignParts(context.Context, *v1.SignPartsRequest) (*v1.SignPartsResponse, error)
+	CompleteMultipart(context.Context, *v1.CompleteMultipartRequest) (*v1.CompleteMultipartResponse, error)
+	AbortMultipart(context.Context, *v1.AbortMultipartRequest) (*v1.AbortMultipartResponse, error)
 }
 
 // NewBucketServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -149,6 +353,66 @@ func NewBucketServiceHandler(svc BucketServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(bucketServiceMethods.ByName("GetUploadStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
+	bucketServiceCompleteUploadHandler := connect.NewUnaryHandlerSimple(
+		BucketServiceCompleteUploadProcedure,
+		svc.CompleteUpload,
+		connect.WithSchema(bucketServiceMethods.ByName("CompleteUpload")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bucketServiceHeadHandler := connect.NewUnaryHandlerSimple(
+		BucketServiceHeadProcedure,
+		svc.Head,
+		connect.WithSchema(bucketServiceMethods.ByName("Head")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bucketServiceListHandler := connect.NewUnaryHandlerSimple(
+		BucketServiceListProcedure,
+		svc.List,
+		connect.WithSchema(bucketServiceMethods.ByName("List")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bucketServiceDeleteHandler := connect.NewUnaryHandlerSimple(
+		BucketServiceDeleteProcedure,
+		svc.Delete,
+		connect.WithSchema(bucketServiceMethods.ByName("Delete")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bucketServiceCopyHandler := connect.NewUnaryHandlerSimple(
+		BucketServiceCopyProcedure,
+		svc.Copy,
+		connect.WithSchema(bucketServiceMethods.ByName("Copy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bucketServiceSignHandler := connect.NewUnaryHandlerSimple(
+		BucketServiceSignProcedure,
+		svc.Sign,
+		connect.WithSchema(bucketServiceMethods.ByName("Sign")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bucketServiceCreateMultipartHandler := connect.NewUnaryHandlerSimple(
+		BucketServiceCreateMultipartProcedure,
+		svc.CreateMultipart,
+		connect.WithSchema(bucketServiceMethods.ByName("CreateMultipart")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bucketServiceSignPartsHandler := connect.NewUnaryHandlerSimple(
+		BucketServiceSignPartsProcedure,
+		svc.SignParts,
+		connect.WithSchema(bucketServiceMethods.ByName("SignParts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bucketServiceCompleteMultipartHandler := connect.NewUnaryHandlerSimple(
+		BucketServiceCompleteMultipartProcedure,
+		svc.CompleteMultipart,
+		connect.WithSchema(bucketServiceMethods.ByName("CompleteMultipart")),
+		connect.WithHandlerOptions(opts...),
+	)
+	bucketServiceAbortMultipartHandler := connect.NewUnaryHandlerSimple(
+		BucketServiceAbortMultipartProcedure,
+		svc.AbortMultipart,
+		connect.WithSchema(bucketServiceMethods.ByName("AbortMultipart")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/app.bucket.v1.BucketService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case BucketServicePresignUploadProcedure:
@@ -157,6 +421,26 @@ func NewBucketServiceHandler(svc BucketServiceHandler, opts ...connect.HandlerOp
 			bucketServiceVerifyUploadSignatureHandler.ServeHTTP(w, r)
 		case BucketServiceGetUploadStatusProcedure:
 			bucketServiceGetUploadStatusHandler.ServeHTTP(w, r)
+		case BucketServiceCompleteUploadProcedure:
+			bucketServiceCompleteUploadHandler.ServeHTTP(w, r)
+		case BucketServiceHeadProcedure:
+			bucketServiceHeadHandler.ServeHTTP(w, r)
+		case BucketServiceListProcedure:
+			bucketServiceListHandler.ServeHTTP(w, r)
+		case BucketServiceDeleteProcedure:
+			bucketServiceDeleteHandler.ServeHTTP(w, r)
+		case BucketServiceCopyProcedure:
+			bucketServiceCopyHandler.ServeHTTP(w, r)
+		case BucketServiceSignProcedure:
+			bucketServiceSignHandler.ServeHTTP(w, r)
+		case BucketServiceCreateMultipartProcedure:
+			bucketServiceCreateMultipartHandler.ServeHTTP(w, r)
+		case BucketServiceSignPartsProcedure:
+			bucketServiceSignPartsHandler.ServeHTTP(w, r)
+		case BucketServiceCompleteMultipartProcedure:
+			bucketServiceCompleteMultipartHandler.ServeHTTP(w, r)
+		case BucketServiceAbortMultipartProcedure:
+			bucketServiceAbortMultipartHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -176,4 +460,44 @@ func (UnimplementedBucketServiceHandler) VerifyUploadSignature(context.Context, 
 
 func (UnimplementedBucketServiceHandler) GetUploadStatus(context.Context, *v1.GetUploadStatusRequest) (*v1.GetUploadStatusResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.bucket.v1.BucketService.GetUploadStatus is not implemented"))
+}
+
+func (UnimplementedBucketServiceHandler) CompleteUpload(context.Context, *v1.CompleteUploadRequest) (*v1.CompleteUploadResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.bucket.v1.BucketService.CompleteUpload is not implemented"))
+}
+
+func (UnimplementedBucketServiceHandler) Head(context.Context, *v1.HeadRequest) (*v1.HeadResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.bucket.v1.BucketService.Head is not implemented"))
+}
+
+func (UnimplementedBucketServiceHandler) List(context.Context, *v1.ListRequest) (*v1.ListResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.bucket.v1.BucketService.List is not implemented"))
+}
+
+func (UnimplementedBucketServiceHandler) Delete(context.Context, *v1.DeleteRequest) (*v1.DeleteResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.bucket.v1.BucketService.Delete is not implemented"))
+}
+
+func (UnimplementedBucketServiceHandler) Copy(context.Context, *v1.CopyRequest) (*v1.CopyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.bucket.v1.BucketService.Copy is not implemented"))
+}
+
+func (UnimplementedBucketServiceHandler) Sign(context.Context, *v1.SignRequest) (*v1.SignResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.bucket.v1.BucketService.Sign is not implemented"))
+}
+
+func (UnimplementedBucketServiceHandler) CreateMultipart(context.Context, *v1.CreateMultipartRequest) (*v1.CreateMultipartResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.bucket.v1.BucketService.CreateMultipart is not implemented"))
+}
+
+func (UnimplementedBucketServiceHandler) SignParts(context.Context, *v1.SignPartsRequest) (*v1.SignPartsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.bucket.v1.BucketService.SignParts is not implemented"))
+}
+
+func (UnimplementedBucketServiceHandler) CompleteMultipart(context.Context, *v1.CompleteMultipartRequest) (*v1.CompleteMultipartResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.bucket.v1.BucketService.CompleteMultipart is not implemented"))
+}
+
+func (UnimplementedBucketServiceHandler) AbortMultipart(context.Context, *v1.AbortMultipartRequest) (*v1.AbortMultipartResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("app.bucket.v1.BucketService.AbortMultipart is not implemented"))
 }

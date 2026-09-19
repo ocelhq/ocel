@@ -17,6 +17,7 @@ import (
 const testToken = "proxy-session-token"
 
 type recordingBuckets struct {
+	bucketv1connect.UnimplementedBucketServiceHandler
 	presigned []*bucketv1.PresignFile
 }
 

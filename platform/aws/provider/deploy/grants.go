@@ -29,13 +29,20 @@ func bucketGrants(bucket string, sessions sessionScope) []*bindingsv1.Grant {
 	arn := s3ARNPrefix + bucket
 	return []*bindingsv1.Grant{
 		{
-			Label:     "objects",
-			Actions:   []string{"s3:DeleteObject", "s3:GetObject", "s3:PutObject", "s3:PutObjectTagging"},
+			Label: "objects",
+			Actions: []string{
+				"s3:AbortMultipartUpload",
+				"s3:DeleteObject",
+				"s3:GetObject",
+				"s3:ListMultipartUploadParts",
+				"s3:PutObject",
+				"s3:PutObjectTagging",
+			},
 			Resources: []string{arn + "/*"},
 		},
 		{
 			Label:     "listing",
-			Actions:   []string{"s3:ListBucket"},
+			Actions:   []string{"s3:ListBucket", "s3:ListBucketMultipartUploads"},
 			Resources: []string{arn},
 		},
 		{
