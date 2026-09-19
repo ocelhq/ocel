@@ -10,7 +10,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const standingRootKey = "9a3b48264c5d6e7f8091a2b3c4d5e6f7"
@@ -133,6 +135,104 @@ func TestTheStoreIsHeldToACredentialTheBoxKeepsSealed(t *testing.T) {
 }
 
 func quotedPath(path string) string { return "'" + path + "'" }
+
+func bindingBucket() providerkit.Binding {
+	return providerkit.Binding{
+		Type: providerkit.BindingBucket, Name: "uploads", Resource: "uploads",
+		Properties: map[string]string{providerkit.PropertyBucket: "prod-web-r0a1b2c3d-uploads"},
+	}
+}
+
+func storeManifest(t *testing.T, machine *box, options vps.Options) vars.Manifest {
+	t.Helper()
+	app := anApp()
+	app.Values = providerkit.AppValues{Bindings: []providerkit.Binding{bindingBucket()}}
+	provider := vps.ProviderOver(options, func(context.Context) (host.Conn, error) { return machine, nil })
+	if _, err := provider.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	for _, carried := range machine.carried() {
+		for line := range strings.SplitSeq(carried, "\n") {
+			raw, held := strings.CutPrefix(line, vars.EnvVar+"=")
+			if !held {
+				continue
+			}
+			parsed, err := vars.Parse([]byte(raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return parsed
+		}
+	}
+	t.Fatal("nothing the deploy carried to the box held a live manifest for the app")
+	return vars.Manifest{}
+}
+
+func TestAnAppBindingABucketIsHandedItsStoreSealedAndNeverInPlaintext(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{kept: sealedRootKey()}
+	manifest := storeManifest(t, machine, vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}})
+	if manifest.Store == nil {
+		t.Fatal("the manifest names no store, so the runtime in front of the app has nothing to sign against")
+	}
+	if manifest.Store.Endpoint != "http://prod-web-r0a1b2c3d-store-s3:9000" || !manifest.Store.PathStyle {
+		t.Errorf("the manifest points the runtime at %+v, want the store this project runs, addressed path-style", manifest.Store)
+	}
+	if manifest.Store.Sealed == "" {
+		t.Error("the manifest carries no sealed credential, so the runtime could reach no store")
+	}
+	if strings.Contains(manifest.Store.Sealed, standingRootKey) {
+		t.Errorf("the manifest carries the store credential in plaintext: %q", manifest.Store.Sealed)
+	}
+	if manifest.Store.Volume == "" {
+		t.Error("the manifest names no volume, so the disk guard has nothing to measure")
+	}
+	if manifest.Store.Sessions == "" {
+		t.Error("the manifest names no bucket for upload sessions to live in")
+	}
+}
+
+func TestAnAppBindingNoBucketIsHandedNoStore(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	app := anApp()
+	app.Values = providerkit.AppValues{Secrets: []providerkit.SecretRef{{Key: "DATABASE_URL"}}}
+	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	for _, command := range machine.commands() {
+		if strings.Contains(command, `"store"`) {
+			t.Errorf("an app binding no bucket was handed a store:\n%s", command)
+		}
+	}
+}
+
+func TestAnAppBoundToAnExternalStoreIsHandedThatStoreAndItsOwnPrefix(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	manifest := storeManifest(t, machine, vps.Options{
+		SSH: vps.Target{Host: "box.invalid", User: "ada"},
+		Bucket: vps.ExternalStore{
+			Endpoint: "https://s3.example.com", Region: "eu-west-1", Bucket: "shared",
+			AccessKeyID: "AKIA", SecretAccessKey: "elsewhere", PathStyle: true,
+		},
+	})
+	if manifest.Store == nil || manifest.Store.Endpoint != "https://s3.example.com" {
+		t.Fatalf("the manifest points the runtime at %+v, want the store the project was pointed at", manifest.Store)
+	}
+	if manifest.Store.Sessions != "shared/shop/prod" {
+		t.Errorf("upload sessions live under %q, want the prefix this project and environment own inside the named bucket", manifest.Store.Sessions)
+	}
+	if manifest.Store.Volume != "" {
+		t.Errorf("the manifest names volume %q for a store this box does not run", manifest.Store.Volume)
+	}
+	if strings.Contains(manifest.Store.Sealed, "elsewhere") {
+		t.Errorf("the external store's credential rides the manifest in plaintext: %q", manifest.Store.Sealed)
+	}
+}
 
 func TestRemovingABucketTakesItsObjectsWithIt(t *testing.T) {
 	t.Parallel()

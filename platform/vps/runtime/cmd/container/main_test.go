@@ -8,9 +8,14 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -59,6 +64,97 @@ func TestTheRuntimeProjectsLiveValuesIntoADirectoryTheImageNeverHadToCarry(t *te
 		if !slices.Contains(env, want) {
 			t.Errorf("the app is handed %q, which never says %s", env, want)
 		}
+	}
+}
+
+func bucketManifest(t *testing.T, store *vars.Store) (vars.Manifest, string) {
+	t.Helper()
+	manifest := vars.Manifest{
+		Slug: "shop", Class: "production",
+		Bindings: []rt.Binding{{
+			Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads",
+			Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET,
+		}},
+		Store: store,
+	}
+	record, err := protojson.Marshal(&bindingsv1.Binding{
+		Name:       "uploads",
+		Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "shop-prod-uploads"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return manifest, string(record)
+}
+
+func TestTheRuntimeFrontsAProxiedBindingAndKeepsTheStoreCredentialToItself(t *testing.T) {
+	manifest, record := bucketManifest(t, &vars.Store{
+		Env: "shop-prod", Endpoint: "http://shop-prod-store-s3:9000", Region: "us-east-1",
+		AccessKeyID: "ocel", PathStyle: true, Sessions: "shop-prod-uploads", Volume: "shop-prod-store-s3",
+	})
+	socket := answering(t, map[string]string{
+		"OCEL_RESOURCE_BUCKET_uploads": record,
+		vars.StoreSecretKey:            "s3cr3t",
+	})
+	rendered, err := vars.Render(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, err := resolve(context.Background(), string(rendered), socket, filepath.Join(t.TempDir(), "live"))
+	if err != nil {
+		t.Fatalf("resolve() = %v", err)
+	}
+
+	served, err := proxying(manifest, values, socket)
+	if err != nil {
+		t.Fatalf("proxying() = %v", err)
+	}
+	t.Cleanup(func() { _ = served.Close() })
+
+	var address, token string
+	for _, entry := range served.Env {
+		name, value, _ := strings.Cut(entry, "=")
+		switch name {
+		case constants.RuntimeAddressEnvName:
+			address = value
+		case channel.SessionTokenEnvVar:
+			token = value
+		}
+	}
+	if !strings.HasPrefix(address, "http://127.0.0.1:") {
+		t.Errorf("the app is pointed at %q, and the proxy answers on loopback alone", address)
+	}
+	if token == "" {
+		t.Errorf("the app is handed no session token, and an unauthenticated proxy serves anyone in the container")
+	}
+	for _, entry := range append(slices.Clone(served.Env), values.Env()...) {
+		if strings.Contains(entry, "s3cr3t") {
+			t.Errorf("the app is handed %q: the store credential is the proxy's alone", entry)
+		}
+	}
+}
+
+func TestTheRuntimeFrontsNothingWhereNoBindingIsProxied(t *testing.T) {
+	manifest := vars.Manifest{Slug: "shop", Class: "production", Keys: []rt.Key{{Key: "DATABASE_URL"}}}
+	served, err := proxying(manifest, nil, filepath.Join(t.TempDir(), "absent.sock"))
+	if err != nil || served.Env != nil {
+		t.Errorf("proxying() = %+v, %v, want no proxy for a deployment binding nothing it must be fronted for", served, err)
+	}
+}
+
+func TestAProxiedBindingWithNoStoreCredentialIsRefused(t *testing.T) {
+	manifest, record := bucketManifest(t, &vars.Store{Env: "shop-prod", Endpoint: "http://store:9000", Region: "us-east-1", AccessKeyID: "ocel"})
+	socket := answering(t, map[string]string{"OCEL_RESOURCE_BUCKET_uploads": record})
+	rendered, err := vars.Render(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, err := resolve(context.Background(), string(rendered), socket, filepath.Join(t.TempDir(), "live"))
+	if err != nil {
+		t.Fatalf("resolve() = %v", err)
+	}
+	if _, err := proxying(manifest, values, socket); err == nil {
+		t.Error("proxying() stood a proxy up with no credential to reach the store with, which would fail every write instead of the deploy")
 	}
 }
 

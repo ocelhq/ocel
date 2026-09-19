@@ -380,6 +380,30 @@ func TestLiveValues(t *testing.T) {
 	})
 }
 
+func TestAValueResolvedUnderNoDeclaredKeyIsTheRuntimesAloneAndReachesNoChild(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	values := New(resolves(map[string]string{"DATABASE_URL": "postgres://app", "ocel.store.secretAccessKey": "s3cr3t"}),
+		[]string{"DATABASE_URL"}, nil, nil)
+	if err := values.Join(values.Prefetch(context.Background())); err != nil {
+		t.Fatalf("Prefetch() = %v", err)
+	}
+	if err := values.Project(root); err != nil {
+		t.Fatalf("Project() = %v", err)
+	}
+	if held := values.Value("ocel.store.secretAccessKey"); held != "s3cr3t" {
+		t.Errorf("Value() = %q, want the credential the runtime holds for itself", held)
+	}
+	if _, err := os.Stat(filepath.Join(root, "ocel.store.secretAccessKey")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the undeclared value was projected into %s, where the app it fronts would read it", root)
+	}
+	for _, entry := range values.Env() {
+		if strings.Contains(entry, "s3cr3t") {
+			t.Errorf("Env() carries %q, and the app must never be handed the store's credential", entry)
+		}
+	}
+}
+
 func TestMissing(t *testing.T) {
 	t.Run("names the keys the store held nothing for", func(t *testing.T) {
 		l := New(resolves(map[string]string{"DB_PASSWORD": "hunter2"}), []string{"DB_PASSWORD", "SESSION_SECRET", "API_KEY"}, nil, nil)
