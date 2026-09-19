@@ -521,3 +521,28 @@ func TestAContainerWhoseClassResolvedNoAppBoundaryIsRefusedBeforeARoleIsMinted(t
 		t.Fatalf("containerWork() with no boundary = %v, want a refusal naming the boundary", err)
 	}
 }
+
+func TestAContainersTaskIsStoodUpOnTheArchitectureItsAppDeclares(t *testing.T) {
+	t.Parallel()
+
+	for declared, want := range map[string]string{"": "X86_64", providerkit.ArchX8664: "X86_64", providerkit.ArchARM64: "ARM64"} {
+		cfg, plan := plannedContainerStack(t)
+		plan.App.Arch = declared
+		release := releasing(t, cfg)
+		work, err := release.containerWork(plan, fixtureSubstrate())
+		if err != nil {
+			t.Fatalf("containerWork() = %v", err)
+		}
+		if err := release.placeRule(context.Background(), work); err != nil {
+			t.Fatalf("placeRule() = %v", err)
+		}
+		rec := &inputRecorder{}
+		if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", plan.Ref.Name.String(), rec)); err != nil {
+			t.Fatalf("run the container program: %v", err)
+		}
+		task := recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")
+		if got := task["runtimePlatform"].ObjectValue()["cpuArchitecture"].StringValue(); got != want {
+			t.Errorf("an app declaring arch %q runs on %s, want %s: its image is built for the architecture it declares", declared, got, want)
+		}
+	}
+}

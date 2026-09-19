@@ -91,7 +91,7 @@ export interface VpsTarget {
 }
 
 export interface AppConfig {
-  /** The processor architecture a serverless app's functions are built for. Left off, the provider's default architecture. */
+  /** The processor architecture an app's functions or container image are built for. Left off, what the provider runs the app on. */
   arch?: "x86_64" | "arm64";
   /** How a container app's image is built. */
   build?: BuildConfig;

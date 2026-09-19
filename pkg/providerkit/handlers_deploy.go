@@ -730,6 +730,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 					Functions:       r.functionSpecs(entry),
 					Image:           runs(images, entry),
 					HealthCheckPath: entry.HealthCheckPath,
+					Arch:            entry.Arch,
 					Values:          values,
 					Grants:          grants,
 					Routing:         facts.Routing,
@@ -1411,7 +1412,7 @@ func runs(images ImagePlan, entry AppEntry) string {
 
 func (r *deployRun) containerPush(ctx context.Context, entry AppEntry) (ImagePush, error) {
 	if wrapper, wraps := r.provider.(ContainerRuntimer); wraps {
-		return r.wrappedPush(ctx, entry.App, entry.Image, wrapper)
+		return r.wrappedPush(ctx, entry, wrapper)
 	}
 	return imagePush(entry.App, entry.Image, r.registry)
 }

@@ -3,6 +3,7 @@ package providerkit_test
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -67,12 +68,16 @@ func TestPreflightNamesTheArchitectureContainerImagesAreBuiltFor(t *testing.T) {
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
 		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
 		Slug:         "shop",
+		Containers: []*contractv1.ContainerApp{
+			{App: "web"},
+			{App: "worker", Arch: providerkit.ArchX8664},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Preflight() error = %v", err)
 	}
-	if resp.GetContainerArch() != "arm64" {
-		t.Errorf("Preflight() container arch = %q, want the arm64 the target runs: the image is built before anything else can say so", resp.GetContainerArch())
+	if want := map[string]string{"web": "arm64", "worker": "amd64"}; !maps.Equal(resp.GetContainerArchs(), want) {
+		t.Errorf("Preflight() container archs = %v, want %v: each image is built for what its own app runs on, before anything else can say so", resp.GetContainerArchs(), want)
 	}
 }
 
@@ -87,8 +92,8 @@ func TestPreflightNamesNoContainerArchitectureForAProviderThatWrapsNone(t *testi
 	if err != nil {
 		t.Fatalf("Preflight() error = %v", err)
 	}
-	if resp.GetContainerArch() != "" {
-		t.Errorf("Preflight() container arch = %q, want none from a provider that runs no containers", resp.GetContainerArch())
+	if len(resp.GetContainerArchs()) != 0 {
+		t.Errorf("Preflight() container archs = %v, want none from a provider that wraps no containers", resp.GetContainerArchs())
 	}
 }
 
@@ -409,7 +414,9 @@ type wrappingProvider struct {
 	*fake.Provider
 }
 
-func (wrappingProvider) ContainerArch(context.Context) (string, error) { return "amd64", nil }
+func (wrappingProvider) ContainerArch(context.Context, string, string) (string, error) {
+	return "amd64", nil
+}
 
 func (wrappingProvider) ContainerRuntime(context.Context, string) ([]byte, error) {
 	return []byte("runtime"), nil

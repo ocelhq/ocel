@@ -129,7 +129,7 @@ func classic() *types.WorkerRecord {
 func TestTheBuilderIsReachedByUpgradingTheDaemonSocketRatherThanDiallingIt(t *testing.T) {
 	seen := servesBuilder(t, containerd())
 
-	if err := imagebuild.Reachable(context.Background(), ""); err != nil {
+	if err := imagebuild.Reachable(context.Background()); err != nil {
 		t.Fatalf("Reachable() = %v, want the handshake a daemon that serves a builder answers", err)
 	}
 
@@ -148,7 +148,7 @@ func TestTheBuilderIsReachedByUpgradingTheDaemonSocketRatherThanDiallingIt(t *te
 func TestADaemonKeepingImagesInTheClassicStoreIsRefusedAtPreflight(t *testing.T) {
 	servesBuilder(t, classic())
 
-	err := imagebuild.Reachable(context.Background(), "")
+	err := imagebuild.Reachable(context.Background())
 	if err == nil {
 		t.Fatal("Reachable() passed a daemon whose store addresses no image by its digest, so the refusal lands after the user has consented to a bootstrap")
 	}
@@ -160,7 +160,7 @@ func TestADaemonKeepingImagesInTheClassicStoreIsRefusedAtPreflight(t *testing.T)
 func TestOneWorkerWithTheContainerdStoreIsEnoughToBuildOn(t *testing.T) {
 	servesBuilder(t, classic(), containerd())
 
-	if err := imagebuild.Reachable(context.Background(), ""); err != nil {
+	if err := imagebuild.Reachable(context.Background()); err != nil {
 		t.Fatalf("Reachable() = %v, want the daemon accepted on the worker whose store either builder can be exported into", err)
 	}
 }
@@ -187,6 +187,15 @@ func TestADaemonEmulatingTheTargetsArchitectureIsEnoughToBuildOn(t *testing.T) {
 	}
 }
 
+func TestEveryArchitectureTheProjectsContainersRunOnMustBeOneTheDaemonBuildsFor(t *testing.T) {
+	servesBuilder(t, containerdBuildingFor("amd64"))
+
+	err := imagebuild.Reachable(context.Background(), "amd64", "arm64")
+	if err == nil || !strings.Contains(err.Error(), "linux/arm64") {
+		t.Fatalf("Reachable() = %v, want the daemon refused for the arm64 app it cannot build, however many others it can", err)
+	}
+}
+
 func TestAPlatformOnlyTheClassicStoresWorkerBuildsForIsStillRefused(t *testing.T) {
 	onClassic := classic()
 	onClassic.Platforms = []*pb.Platform{{OS: "linux", Architecture: "amd64"}}
@@ -200,7 +209,7 @@ func TestAPlatformOnlyTheClassicStoresWorkerBuildsForIsStillRefused(t *testing.T
 func TestABuildForThisMachinesOwnArchitectureAsksNothingOfTheWorkersPlatforms(t *testing.T) {
 	servesBuilder(t, containerd())
 
-	if err := imagebuild.Reachable(context.Background(), ""); err != nil {
+	if err := imagebuild.Reachable(context.Background()); err != nil {
 		t.Fatalf("Reachable() = %v, want a build pinned to nothing accepted on any worker it can export from", err)
 	}
 }
@@ -208,7 +217,7 @@ func TestABuildForThisMachinesOwnArchitectureAsksNothingOfTheWorkersPlatforms(t 
 func TestADaemonWithNoWorkerAtAllIsRefusedAtPreflight(t *testing.T) {
 	servesBuilder(t)
 
-	if err := imagebuild.Reachable(context.Background(), ""); err == nil {
+	if err := imagebuild.Reachable(context.Background()); err == nil {
 		t.Fatal("Reachable() passed a daemon that named no worker, so the build has nothing to run on")
 	}
 }
@@ -216,7 +225,7 @@ func TestADaemonWithNoWorkerAtAllIsRefusedAtPreflight(t *testing.T) {
 func TestADaemonThatServesNoBuilderIsRefusedWithTheAnswerItGave(t *testing.T) {
 	standIn(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
 
-	err := imagebuild.Reachable(context.Background(), "")
+	err := imagebuild.Reachable(context.Background())
 	if err == nil {
 		t.Fatal("Reachable() over a daemon that answers 404 succeeded, so the build would be attempted against nothing")
 	}
@@ -228,7 +237,7 @@ func TestADaemonThatServesNoBuilderIsRefusedWithTheAnswerItGave(t *testing.T) {
 func TestNoDaemonAtAllNamesTheVariableThatPointsAtOne(t *testing.T) {
 	t.Setenv(providerkit.DockerHostEnv, "unix://"+filepath.Join(t.TempDir(), "absent.sock"))
 
-	err := imagebuild.Reachable(context.Background(), "")
+	err := imagebuild.Reachable(context.Background())
 	if err == nil {
 		t.Fatal("Reachable() with no daemon behind the socket succeeded")
 	}
@@ -240,7 +249,7 @@ func TestNoDaemonAtAllNamesTheVariableThatPointsAtOne(t *testing.T) {
 func TestASchemeOcelCannotDialIsRefusedBeforeAnythingIsDialled(t *testing.T) {
 	t.Setenv(providerkit.DockerHostEnv, "ssh://ubuntu@build-box")
 
-	err := imagebuild.Reachable(context.Background(), "")
+	err := imagebuild.Reachable(context.Background())
 	if err == nil {
 		t.Fatal("Reachable() over a scheme ocel cannot dial succeeded")
 	}

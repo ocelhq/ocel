@@ -3,13 +3,15 @@ package appimages
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
-func RequireBuilder(ctx context.Context, rep runui.Reporter, cfg *projectconfig.Config, arch string) error {
+func RequireBuilder(ctx context.Context, rep runui.Reporter, cfg *projectconfig.Config, archs map[string]string) error {
 	var chosen []imagebuild.Choice
 	for _, app := range Apps(cfg) {
 		built, err := Describe(cfg, app)
@@ -32,7 +34,7 @@ func RequireBuilder(ctx context.Context, rep runui.Reporter, cfg *projectconfig.
 			rep.Diagnostic(notice)
 		}
 	}
-	if err := imagebuild.Reachable(ctx, arch); err != nil {
+	if err := imagebuild.Reachable(ctx, slices.Sorted(maps.Values(archs))...); err != nil {
 		return fmt.Errorf("building the container image for %s happens on this machine, before anything is provisioned:\n    %w", runui.Quoted(containers), err)
 	}
 	return nil

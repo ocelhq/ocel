@@ -289,7 +289,13 @@ func (p *Provider) WrappingContainers(arch string, runtime []byte) ContainerWrap
 	return ContainerWrapper{Provider: p, arch: arch, runtime: runtime}
 }
 
-func (w ContainerWrapper) ContainerArch(context.Context) (string, error) { return w.arch, nil }
+func (w ContainerWrapper) ContainerArch(_ context.Context, _, declared string) (string, error) {
+	if declared == "" {
+		return w.arch, nil
+	}
+	runs, _ := providerkit.GoArch(declared)
+	return runs, nil
+}
 
 func (w ContainerWrapper) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
 	w.mu.Lock()

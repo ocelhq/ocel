@@ -25,7 +25,7 @@ func TestAContainerAppWithNoDaemonToBuildItIsRefusedBeforeAnythingIsBuilt(t *tes
 	cfg.Apps = append([]projectconfig.App{{Name: "api", Compute: "serverless"}}, cfg.Apps...)
 	rep, _ := said(t)
 
-	err := RequireBuilder(context.Background(), rep, cfg, "")
+	err := RequireBuilder(context.Background(), rep, cfg, nil)
 	if err == nil {
 		t.Fatal("RequireBuilder() with no daemon reachable succeeded, so a container deploy would provision before discovering it cannot build")
 	}
@@ -84,7 +84,7 @@ func TestAProjectOfServerlessAppsNeverAsksForADaemon(t *testing.T) {
 
 	rep, _ := said(t)
 
-	if err := RequireBuilder(context.Background(), rep, cfg, ""); err != nil {
+	if err := RequireBuilder(context.Background(), rep, cfg, nil); err != nil {
 		t.Errorf("RequireBuilder() over a project with no container app = %v, want a deploy that never needed docker to be unaffected by its absence", err)
 	}
 }
@@ -118,7 +118,7 @@ func TestTheDeployAnnouncesTheDockerfileAnAppSwitchedItselfTo(t *testing.T) {
 	cfg := containerProject(t, "services/web/Dockerfile")
 	rep, out := said(t)
 
-	if err := RequireBuilder(context.Background(), rep, cfg, ""); err == nil {
+	if err := RequireBuilder(context.Background(), rep, cfg, nil); err == nil {
 		t.Fatal("RequireBuilder() with no daemon reachable succeeded")
 	}
 
@@ -133,7 +133,7 @@ func TestAContainerAppRailpackBuildsAnnouncesNothing(t *testing.T) {
 	cfg := containerProject(t, "")
 	rep, out := said(t)
 
-	if err := RequireBuilder(context.Background(), rep, cfg, ""); err == nil {
+	if err := RequireBuilder(context.Background(), rep, cfg, nil); err == nil {
 		t.Fatal("RequireBuilder() with no daemon reachable succeeded")
 	}
 
@@ -148,7 +148,7 @@ func TestABuildDockerfileNamingNothingStopsTheDeployBeforeTheDaemonIsAsked(t *te
 	cfg.Apps[0].Build = &projectconfig.Build{Dockerfile: "../shared/Dockerfile"}
 	rep, _ := said(t)
 
-	err := RequireBuilder(context.Background(), rep, cfg, "")
+	err := RequireBuilder(context.Background(), rep, cfg, nil)
 	if err == nil {
 		t.Fatal("RequireBuilder() accepted a build.dockerfile naming nothing")
 	}

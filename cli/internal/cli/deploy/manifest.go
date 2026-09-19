@@ -34,7 +34,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session, compute, containerArch string, urls map[string]string) (*contractv1.Manifest, error) {
+func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, error) {
 	buildOut := ui.BuildWriter()
 
 	captured := &boundedCapture{}
@@ -88,7 +88,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		}
 	}
 
-	images, err := deps.BuildAppImages(ctx, cfg, containerArch, buildOut)
+	images, err := deps.BuildAppImages(ctx, cfg, containerArchs, buildOut)
 	if err != nil {
 		return nil, err
 	}

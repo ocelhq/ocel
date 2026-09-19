@@ -157,6 +157,24 @@ func TestAnImageBuiltForAnArchitectureTheTargetDoesNotRunIsRefusedBeforeItIsPush
 	}
 }
 
+func TestAnAppsOwnDeclaredArchitectureIsTheOneItsImageIsHeldTo(t *testing.T) {
+	builtProject(t)
+	daemonHoldingTheBuiltImage(t, "arm64")
+	client, provider := wrappingServedOn(t, "amd64")
+
+	req := registryDeployRequest()
+	for _, container := range req.GetManifest().GetContainers() {
+		container.Arch = providerkit.ArchARM64
+	}
+	result, _ := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed: the app declares arm64 and its image is built for it", result.GetError())
+	}
+	if asked := provider.WrappedFor(); len(asked) == 0 || asked[0] != "arm64" {
+		t.Errorf("the provider was asked for a runtime built for %v, want arm64", asked)
+	}
+}
+
 func TestAWrappedContainerRunsTheCoordinateItWasPushedUnder(t *testing.T) {
 	builtProject(t)
 	daemonHoldingTheBuiltImage(t, "amd64")
