@@ -10,11 +10,7 @@ export function DevTerminal() {
         <span className="text-[#7d8590]">$</span>{" "}
         <span className="text-[#f2f1ec]">ocel dev -- next dev</span>
         {"\n\n"}
-        <span className="text-[#3ecf7a]">✓</span> Resolved 1 resource:{" "}
-        <span className="text-[#f2f1ec]">postgres("main")</span>
-        {"\n"}
-        <span className="text-[#3ecf7a]">✓</span> Connected, ready in{" "}
-        <span className="text-[#f2f1ec]">0.4s</span>
+        <span className="text-[#f2f1ec]">postgres "main"</span> → postgres:17 @ 127.0.0.1:54312
         {"\n\n"}
         {"  "}
         <span className="text-[#f2f1ec]">▲ Next.js 16.0.0</span>

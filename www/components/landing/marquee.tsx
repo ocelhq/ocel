@@ -2,7 +2,7 @@ const items = [
   "ZERO CONFIG",
   "NO MARKUP",
   "NO LOCK-IN",
-  "REAL INFRA IN DEV",
+  "ONE-COMMAND DEV",
   "YOUR ACCOUNT, YOUR NAME",
 ];
 
