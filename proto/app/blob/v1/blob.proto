@@ -40,6 +40,8 @@ message PresignedTarget {
   string name = 3;
 
   string content_disposition = 4;
+
+  map<string, string> headers = 5;
 }
 
 message CompletedFile {

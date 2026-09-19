@@ -148,6 +148,7 @@ type PresignedTarget struct {
 	Key                string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
 	Name               string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	ContentDisposition string                 `protobuf:"bytes,4,opt,name=content_disposition,json=contentDisposition,proto3" json:"content_disposition,omitempty"`
+	Headers            map[string]string      `protobuf:"bytes,5,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -208,6 +209,13 @@ func (x *PresignedTarget) GetContentDisposition() string {
 		return x.ContentDisposition
 	}
 	return ""
+}
+
+func (x *PresignedTarget) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
 }
 
 type CompletedFile struct {
@@ -624,12 +632,16 @@ const file_app_blob_v1_blob_proto_rawDesc = "" +
 	"\x18buckets.presign_file.key\x12\xa3\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", and the key may carry no backslash and no control character\x1a\x88\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]')r\x03\x18\x80\bR\x03key\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n" +
-	"\tmime_type\x18\x04 \x01(\tR\bmimeType\"z\n" +
+	"\tmime_type\x18\x04 \x01(\tR\bmimeType\"\xfb\x01\n" +
 	"\x0fPresignedTarget\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12/\n" +
-	"\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\"f\n" +
+	"\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\x12C\n" +
+	"\aheaders\x18\x05 \x03(\v2).app.blob.v1.PresignedTarget.HeadersEntryR\aheaders\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"f\n" +
 	"\rCompletedFile\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -682,7 +694,7 @@ func file_app_blob_v1_blob_proto_rawDescGZIP() []byte {
 }
 
 var file_app_blob_v1_blob_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_app_blob_v1_blob_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_app_blob_v1_blob_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_app_blob_v1_blob_proto_goTypes = []any{
 	(UploadState)(0),                      // 0: app.blob.v1.UploadState
 	(*PresignFile)(nil),                   // 1: app.blob.v1.PresignFile
@@ -694,23 +706,25 @@ var file_app_blob_v1_blob_proto_goTypes = []any{
 	(*VerifyUploadSignatureResponse)(nil), // 7: app.blob.v1.VerifyUploadSignatureResponse
 	(*GetUploadStatusRequest)(nil),        // 8: app.blob.v1.GetUploadStatusRequest
 	(*GetUploadStatusResponse)(nil),       // 9: app.blob.v1.GetUploadStatusResponse
+	nil,                                   // 10: app.blob.v1.PresignedTarget.HeadersEntry
 }
 var file_app_blob_v1_blob_proto_depIdxs = []int32{
-	1, // 0: app.blob.v1.PresignUploadRequest.files:type_name -> app.blob.v1.PresignFile
-	2, // 1: app.blob.v1.PresignUploadResponse.files:type_name -> app.blob.v1.PresignedTarget
-	3, // 2: app.blob.v1.VerifyUploadSignatureRequest.file:type_name -> app.blob.v1.CompletedFile
-	0, // 3: app.blob.v1.GetUploadStatusResponse.state:type_name -> app.blob.v1.UploadState
-	4, // 4: app.blob.v1.BucketService.PresignUpload:input_type -> app.blob.v1.PresignUploadRequest
-	6, // 5: app.blob.v1.BucketService.VerifyUploadSignature:input_type -> app.blob.v1.VerifyUploadSignatureRequest
-	8, // 6: app.blob.v1.BucketService.GetUploadStatus:input_type -> app.blob.v1.GetUploadStatusRequest
-	5, // 7: app.blob.v1.BucketService.PresignUpload:output_type -> app.blob.v1.PresignUploadResponse
-	7, // 8: app.blob.v1.BucketService.VerifyUploadSignature:output_type -> app.blob.v1.VerifyUploadSignatureResponse
-	9, // 9: app.blob.v1.BucketService.GetUploadStatus:output_type -> app.blob.v1.GetUploadStatusResponse
-	7, // [7:10] is the sub-list for method output_type
-	4, // [4:7] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	10, // 0: app.blob.v1.PresignedTarget.headers:type_name -> app.blob.v1.PresignedTarget.HeadersEntry
+	1,  // 1: app.blob.v1.PresignUploadRequest.files:type_name -> app.blob.v1.PresignFile
+	2,  // 2: app.blob.v1.PresignUploadResponse.files:type_name -> app.blob.v1.PresignedTarget
+	3,  // 3: app.blob.v1.VerifyUploadSignatureRequest.file:type_name -> app.blob.v1.CompletedFile
+	0,  // 4: app.blob.v1.GetUploadStatusResponse.state:type_name -> app.blob.v1.UploadState
+	4,  // 5: app.blob.v1.BucketService.PresignUpload:input_type -> app.blob.v1.PresignUploadRequest
+	6,  // 6: app.blob.v1.BucketService.VerifyUploadSignature:input_type -> app.blob.v1.VerifyUploadSignatureRequest
+	8,  // 7: app.blob.v1.BucketService.GetUploadStatus:input_type -> app.blob.v1.GetUploadStatusRequest
+	5,  // 8: app.blob.v1.BucketService.PresignUpload:output_type -> app.blob.v1.PresignUploadResponse
+	7,  // 9: app.blob.v1.BucketService.VerifyUploadSignature:output_type -> app.blob.v1.VerifyUploadSignatureResponse
+	9,  // 10: app.blob.v1.BucketService.GetUploadStatus:output_type -> app.blob.v1.GetUploadStatusResponse
+	8,  // [8:11] is the sub-list for method output_type
+	5,  // [5:8] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_app_blob_v1_blob_proto_init() }
@@ -724,7 +738,7 @@ func file_app_blob_v1_blob_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_blob_v1_blob_proto_rawDesc), len(file_app_blob_v1_blob_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
