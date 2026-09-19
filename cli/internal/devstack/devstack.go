@@ -149,9 +149,13 @@ func (s *Stack) announce(line string) {
 }
 
 func (s *Stack) Close(ctx context.Context) error {
-	var failed []error
+	closing := make(chan error, len(s.components))
 	for _, component := range s.components {
-		if err := component.Close(ctx); err != nil {
+		go func() { closing <- component.Close(ctx) }()
+	}
+	var failed []error
+	for range s.components {
+		if err := <-closing; err != nil {
 			failed = append(failed, err)
 		}
 	}
