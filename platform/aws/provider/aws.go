@@ -105,6 +105,10 @@ func (p *Provider) ImageRegistry(ctx context.Context, _ providerkit.Class, _ []s
 	return registry.Resolve(ctx, ecr.NewFromConfig(p.aws))
 }
 
+func (p *Provider) ContainerArch(_ context.Context, app, declared string) (string, error) {
+	return deploy.ContainerArch(app, declared)
+}
+
 func (p *Provider) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
 	held, err := payloads.ContainerRuntime(arch)
 	if err != nil {

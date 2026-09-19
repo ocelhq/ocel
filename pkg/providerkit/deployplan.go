@@ -36,6 +36,7 @@ type AppEntry struct {
 
 	Image           string
 	HealthCheckPath string
+	Arch            string
 }
 
 func (e AppEntry) Compute() Compute { return Compute(e.Manifest.GetCompute()) }
@@ -82,6 +83,7 @@ func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployP
 		if container, ours := containers[entry.App]; ours {
 			entry.Image = container.GetImage()
 			entry.HealthCheckPath = container.GetHealthCheckPath()
+			entry.Arch = container.GetArch()
 			plan.Builds[entry.App] = entry.Image
 		} else {
 			plan.Builds[entry.App] = entry.Build.String()

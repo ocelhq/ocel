@@ -48,6 +48,7 @@ func buildContainers(manifestApps []*contractv1.ManifestApp, apps []App, functio
 			App:             name,
 			Image:           configured.Image,
 			HealthCheckPath: path,
+			Arch:            configured.Runtime.Arch,
 		})
 	}
 	if len(containers) == 0 {

@@ -61,6 +61,7 @@ type RuleDescriber interface {
 type containerWork struct {
 	priority    int
 	app         string
+	arch        string
 	image       string
 	healthPath  string
 	env         map[string]string
@@ -74,6 +75,24 @@ type containerWork struct {
 	service     naming.Coordinate
 	role        naming.Coordinate
 	substrate   substrate
+}
+
+var fargateCPUArchitectures = map[string]string{
+	providerkit.ArchX8664: "X86_64",
+	providerkit.ArchARM64: "ARM64",
+}
+
+func fargateCPUArchitecture(declared string) string {
+	return fargateCPUArchitectures[providerkit.Architecture(declared)]
+}
+
+func ContainerArch(app, declared string) (string, error) {
+	runs, known := providerkit.GoArch(declared)
+	if !known {
+		return "", providerkit.Refuse(providerkit.CodeInvalid,
+			"app %s declares arch %q, and a container runs on %s or %s alone", app, declared, providerkit.ArchX8664, providerkit.ArchARM64)
+	}
+	return runs, nil
 }
 
 func (w *containerWork) readsLive() bool { return w.values.ValuesTableARN != "" }
@@ -142,6 +161,7 @@ func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, er
 	}
 	return &containerWork{
 		app:        app.App,
+		arch:       app.Arch,
 		image:      app.Image,
 		healthPath: app.HealthCheckPath,
 		env:        env,
@@ -356,7 +376,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		ContainerDefinitions:    pulumi.ToSecret(pulumi.String(definition)).(pulumi.StringOutput),
 		RuntimePlatform: &ecs.TaskDefinitionRuntimePlatformArgs{
 			OperatingSystemFamily: pulumi.String("LINUX"),
-			CpuArchitecture:       pulumi.String("X86_64"),
+			CpuArchitecture:       pulumi.String(fargateCPUArchitecture(w.arch)),
 		},
 		Tags: tags,
 	}, pulumi.DependsOn(before))

@@ -11,6 +11,7 @@ import (
 
 	control "github.com/moby/buildkit/api/services/control"
 	types "github.com/moby/buildkit/api/types"
+	"github.com/moby/buildkit/solver/pb"
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"google.golang.org/grpc"
@@ -113,6 +114,14 @@ func containerd() *types.WorkerRecord {
 	return &types.WorkerRecord{ID: "containerd", Labels: map[string]string{snapshotterLabel: "overlayfs"}}
 }
 
+func containerdBuildingFor(arches ...string) *types.WorkerRecord {
+	worker := containerd()
+	for _, arch := range arches {
+		worker.Platforms = append(worker.Platforms, &pb.Platform{OS: "linux", Architecture: arch})
+	}
+	return worker
+}
+
 func classic() *types.WorkerRecord {
 	return &types.WorkerRecord{ID: "classic", Labels: map[string]string{"org.mobyproject.buildkit.worker.executor": "oci"}}
 }
@@ -153,6 +162,55 @@ func TestOneWorkerWithTheContainerdStoreIsEnoughToBuildOn(t *testing.T) {
 
 	if err := imagebuild.Reachable(context.Background()); err != nil {
 		t.Fatalf("Reachable() = %v, want the daemon accepted on the worker whose store either builder can be exported into", err)
+	}
+}
+
+func TestADaemonThatCannotBuildForTheTargetsArchitectureIsRefusedAtPreflight(t *testing.T) {
+	servesBuilder(t, containerdBuildingFor("arm64"))
+
+	err := imagebuild.Reachable(context.Background(), "amd64")
+	if err == nil {
+		t.Fatal("Reachable() passed a daemon with no way to build for the target, so the refusal lands mid-build, after the user has consented to a bootstrap")
+	}
+	for _, named := range []string{"linux/arm64", "linux/amd64", "binfmt"} {
+		if !strings.Contains(err.Error(), named) {
+			t.Errorf("Reachable() = %v, and the reader is never told %s", err, named)
+		}
+	}
+}
+
+func TestADaemonEmulatingTheTargetsArchitectureIsEnoughToBuildOn(t *testing.T) {
+	servesBuilder(t, containerdBuildingFor("arm64", "amd64"))
+
+	if err := imagebuild.Reachable(context.Background(), "amd64"); err != nil {
+		t.Fatalf("Reachable() = %v, want the daemon accepted: its builder names the target's architecture among those it runs", err)
+	}
+}
+
+func TestEveryArchitectureTheProjectsContainersRunOnMustBeOneTheDaemonBuildsFor(t *testing.T) {
+	servesBuilder(t, containerdBuildingFor("amd64"))
+
+	err := imagebuild.Reachable(context.Background(), "amd64", "arm64")
+	if err == nil || !strings.Contains(err.Error(), "linux/arm64") {
+		t.Fatalf("Reachable() = %v, want the daemon refused for the arm64 app it cannot build, however many others it can", err)
+	}
+}
+
+func TestAPlatformOnlyTheClassicStoresWorkerBuildsForIsStillRefused(t *testing.T) {
+	onClassic := classic()
+	onClassic.Platforms = []*pb.Platform{{OS: "linux", Architecture: "amd64"}}
+	servesBuilder(t, onClassic, containerdBuildingFor("arm64"))
+
+	if err := imagebuild.Reachable(context.Background(), "amd64"); err == nil {
+		t.Fatal("Reachable() passed on a worker whose store addresses no image by digest, and the build cannot be exported from it")
+	}
+}
+
+func TestABuildForThisMachinesOwnArchitectureAsksNothingOfTheWorkersPlatforms(t *testing.T) {
+	servesBuilder(t, containerd())
+
+	if err := imagebuild.Reachable(context.Background()); err != nil {
+		t.Fatalf("Reachable() = %v, want a build pinned to nothing accepted on any worker it can export from", err)
 	}
 }
 

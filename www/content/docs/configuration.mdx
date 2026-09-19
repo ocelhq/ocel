@@ -109,7 +109,7 @@ neither names a linker for the target.
 
 ## arch
 
-The processor architecture an app's functions are built for.
+The processor architecture an app's functions or container image are built for.
 
 ```json title="ocel.json"
 {
@@ -119,7 +119,8 @@ The processor architecture an app's functions are built for.
 }
 ```
 
-Either `x86_64` or `arm64`. Left off, it is your provider's own default.
+Either `x86_64` or `arm64`. Left off, it is what your provider runs the app on. A provider
+that cannot run the one you name refuses the deploy before anything is built.
 
 ## Another config per target
 

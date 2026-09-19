@@ -3,6 +3,7 @@ package providerkit_test
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -55,6 +56,44 @@ func TestPreflightReportsWhoThisRunIsAndWhatItCarries(t *testing.T) {
 	}
 	if !slices.Equal(resp.GetKnownSlugs(), []string{"blog"}) {
 		t.Errorf("Preflight() known slugs = %v, want the projects besides the one asking", resp.GetKnownSlugs())
+	}
+}
+
+func TestPreflightNamesTheArchitectureContainerImagesAreBuiltFor(t *testing.T) {
+	t.Parallel()
+
+	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
+	client := servedBy(t, provider.WrappingContainers("arm64", []byte("runtime")))
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+		Containers: []*contractv1.ContainerApp{
+			{App: "web"},
+			{App: "worker", Arch: providerkit.ArchX8664},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if want := map[string]string{"web": "arm64", "worker": "amd64"}; !maps.Equal(resp.GetContainerArchs(), want) {
+		t.Errorf("Preflight() container archs = %v, want %v: each image is built for what its own app runs on, before anything else can say so", resp.GetContainerArchs(), want)
+	}
+}
+
+func TestPreflightNamesNoContainerArchitectureForAProviderThatWrapsNone(t *testing.T) {
+	t.Parallel()
+
+	client, _ := contractServed(t, "1.2.3")
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if len(resp.GetContainerArchs()) != 0 {
+		t.Errorf("Preflight() container archs = %v, want none from a provider that wraps no containers", resp.GetContainerArchs())
 	}
 }
 
@@ -375,6 +414,10 @@ type wrappingProvider struct {
 	*fake.Provider
 }
 
+func (wrappingProvider) ContainerArch(context.Context, string, string) (string, error) {
+	return "amd64", nil
+}
+
 func (wrappingProvider) ContainerRuntime(context.Context, string) ([]byte, error) {
 	return []byte("runtime"), nil
 }
@@ -440,7 +483,7 @@ func TestBakesIsTrueOnlyWhereAnImageRunsWithNoRuntimeOfOcelsInside(t *testing.T)
 		container, serverless bool
 	}{
 		{base, "a provider handed images it runs as they are", true, false},
-		{base.WrappingContainers(containerRuntimeBytes), "a provider that wraps the containers it is handed", false, false},
+		{base.WrappingContainers("amd64", containerRuntimeBytes), "a provider that wraps the containers it is handed", false, false},
 		{imaging{Provider: base}, "a provider that builds function images", true, true},
 		{wrappingImaging{imaging{Provider: base}, containerRuntimeBytes}, "a provider that builds function images and wraps every image", false, false},
 	} {

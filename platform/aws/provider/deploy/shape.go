@@ -138,14 +138,14 @@ func (s shaper) container(scope string, app providerkit.AppEntry) {
 		"cpu":                      containerCPU,
 		"memory":                   containerMemory,
 		"requires_compatibilities": []any{"FARGATE"},
-		"runtime_platform":         map[string]any{"cpu_architecture": "X86_64", "operating_system_family": "LINUX"},
+		"runtime_platform":         map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"},
 	})
 	s.plain(scope, tfECSService, app.App, map[string]any{
 		"desired_count":    fargateDesiredCount,
 		"launch_type":      "FARGATE",
 		"cpu":              containerCPU,
 		"memory":           containerMemory,
-		"runtime_platform": map[string]any{"cpu_architecture": "X86_64", "operating_system_family": "LINUX"},
+		"runtime_platform": map[string]any{"cpu_architecture": fargateCPUArchitecture(app.Arch), "operating_system_family": "LINUX"},
 	})
 	s.plain(scope, tfECRRepository, app.App, map[string]any{"image_tag_mutability": "IMMUTABLE"})
 }

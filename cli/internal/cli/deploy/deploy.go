@@ -115,11 +115,12 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 					Tier:   environmentv1.Tier_TIER_PRODUCTION,
 				}, scope)
 			},
-			command: "ocel deploy",
-			compute: standing.compute,
-			urls:    standing.urls,
-			ui:      ui,
-			enabled: !opts.dry && browser,
+			command:        "ocel deploy",
+			compute:        standing.compute,
+			containerArchs: standing.containerArchs,
+			urls:           standing.urls,
+			ui:             ui,
+			enabled:        !opts.dry && browser,
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {

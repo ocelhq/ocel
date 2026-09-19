@@ -14,6 +14,7 @@ import (
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 func Run(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, runtimes []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
@@ -47,6 +48,7 @@ func announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, 
 		Slug:         slug,
 		Domains:      domains,
 		Runtimes:     runtimes,
+		Containers:   Containers(cfg),
 		Edge:         edgewire.Selection(cfg),
 	})
 	spinner.Stop()
@@ -74,6 +76,16 @@ func Runtimes(cfg *projectconfig.Config) []string {
 	}
 	slices.Sort(runtimes)
 	return slices.Compact(runtimes)
+}
+
+func Containers(cfg *projectconfig.Config) []*contractv1.ContainerApp {
+	var containers []*contractv1.ContainerApp
+	for _, app := range cfg.Apps {
+		if app.Compute == string(providerkit.ComputeContainer) {
+			containers = append(containers, &contractv1.ContainerApp{App: app.Name, Arch: app.Runtime.Arch})
+		}
+	}
+	return containers
 }
 
 type Hostname struct {

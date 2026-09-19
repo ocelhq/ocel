@@ -126,7 +126,7 @@ func deliveredByWrapping(t *testing.T, req *contractv1.DeployRequest, publish fu
 	builtProject(t)
 	daemonHoldingTheBuiltImage(t, "amd64")
 	provider := fake.NewProvider(fake.Options{})
-	client := servedBy(t, provider.WrappingContainers(containerRuntimeBytes))
+	client := servedBy(t, provider.WrappingContainers("amd64", containerRuntimeBytes))
 	if publish != nil {
 		publish(provider)
 	}
@@ -184,7 +184,7 @@ func TestAnUnsetSecretIsRefusedByThePlanOfAWrappingProvidersContainerApp(t *test
 	builtProject(t)
 	daemonHoldingTheBuiltImage(t, "amd64")
 	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
-	client := servedBy(t, provider.WrappingContainers(containerRuntimeBytes))
+	client := servedBy(t, provider.WrappingContainers("amd64", containerRuntimeBytes))
 
 	req := declaring(namingARegistry(containerDeployRequest("/healthz")),
 		resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, "DATABASE_URL", "")
@@ -213,7 +213,7 @@ func TestAWrappingProvidersContainerAppIsHeldToTheSameReservedNames(t *testing.T
 			builtProject(t)
 			daemonHoldingTheBuiltImage(t, "amd64")
 			provider := fake.NewProvider(fake.Options{Region: "nowhere"})
-			client := servedBy(t, provider.WrappingContainers(containerRuntimeBytes))
+			client := servedBy(t, provider.WrappingContainers("amd64", containerRuntimeBytes))
 
 			message, _ := refusedPlanOn(t, client, declares(namingARegistry(containerDeployRequest("/healthz"))))
 			if !strings.Contains(message, "web") {
@@ -228,7 +228,7 @@ func TestTheStagedRecordNamesEveryValueAWrappingProvidersAppDeclares(t *testing.
 	daemonHoldingTheBuiltImage(t, "amd64")
 	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
 	held := staging(t, provider)
-	client := servedBy(t, provider.WrappingContainers(containerRuntimeBytes))
+	client := servedBy(t, provider.WrappingContainers("amd64", containerRuntimeBytes))
 
 	req := namingARegistry(containerDeployRequest("/healthz"))
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")

@@ -281,11 +281,20 @@ func (d DeployPreflighter) PreflightDeploy(_ context.Context, pre providerkit.De
 
 type ContainerWrapper struct {
 	*Provider
+	arch    string
 	runtime []byte
 }
 
-func (p *Provider) WrappingContainers(runtime []byte) ContainerWrapper {
-	return ContainerWrapper{Provider: p, runtime: runtime}
+func (p *Provider) WrappingContainers(arch string, runtime []byte) ContainerWrapper {
+	return ContainerWrapper{Provider: p, arch: arch, runtime: runtime}
+}
+
+func (w ContainerWrapper) ContainerArch(_ context.Context, _, declared string) (string, error) {
+	if declared == "" {
+		return w.arch, nil
+	}
+	runs, _ := providerkit.GoArch(declared)
+	return runs, nil
 }
 
 func (w ContainerWrapper) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
