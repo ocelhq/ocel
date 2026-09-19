@@ -53,7 +53,7 @@ var devCmd = &cobra.Command{
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
+		ctx, stop := installDevInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
 		return runDev(ctx, newDeps(), devReset, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
@@ -99,38 +99,33 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, r
 	}
 	reportDotfile(stdout, cfg.Dir, file.Values, dotfileWatchedAdvice)
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return fmt.Errorf("start dev server: %w", err)
-	}
-
-	addr := listener.Addr().String()
-	devServerAddr := "http://" + addr
-
 	if reset {
-		if err := devstack.Reset(ctx, deps.OpenDocker, devstack.ProjectName(cfg.Dir)); err != nil {
+		if err := devstack.Reset(ctx, deps.OpenDocker, devStateDir(cfg), devstack.ProjectName(cfg.Dir)); err != nil {
 			return err
 		}
 	}
 
-	shared := readSharedEnv(ctx, deps, cfg.Dir, stderr)
+	host, err := startDevHost(ctx, deps, cfg, stdout, stderr)
+	if err != nil {
+		return err
+	}
+	claimed := false
+	defer func() {
+		host.close()
+		if claimed {
+			_ = result.Release()
+		}
+	}()
+	srv, shared := host.srv, host.shared
 	run := invocation{name: "dev", loggedOut: shared.loggedOut}
-
-	stack := newDevStack(deps, cfg, file.Values, stdout, stderr)
-	defer closeDevStack(ctx, stack, stderr)
-
-	srv := devserver.New(devServerAddr, stack)
-	httpSrv := &http.Server{Handler: srv.Mux()}
-	go httpSrv.Serve(listener)
-	defer httpSrv.Close()
 
 	background, stopBackground := context.WithCancel(ctx)
 	defer stopBackground()
 
-	if err := result.Claim(devlock.Lease{Addr: addr, Token: srv.AppToken()}); err != nil {
+	if err := result.Claim(devlock.Lease{Addr: host.addr, Token: srv.AppToken()}); err != nil {
 		return err
 	}
-	defer func() { _ = result.Release() }()
+	claimed = true
 
 	resolved, err := resolveOnce(ctx, srv, cfg, shared.values, run, stdout, stderr)
 	if err != nil {
@@ -228,23 +223,55 @@ func refusedSync(srv *devserver.Server, err error) error {
 	return err
 }
 
-func newDevStack(deps cmddeps.Deps, cfg *projectconfig.Config, dotfile map[string]string, stdout, stderr io.Writer) *devstack.Stack {
-	port := cmp.Or(dotfile[portEnv], os.Getenv(portEnv), defaultDevPort)
-	return devstack.New(devstack.ProjectName(cfg.Dir), devstack.Env{
+type devHost struct {
+	srv    *devserver.Server
+	shared sharedEnv
+	addr   string
+	close  func()
+}
+
+func startDevHost(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, stdout, stderr io.Writer) (*devHost, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, fmt.Errorf("start dev server: %w", err)
+	}
+	addr := listener.Addr().String()
+
+	shared := readSharedEnv(ctx, deps, cfg.Dir, stderr)
+	stack := devstack.New(devstack.ProjectName(cfg.Dir), devstack.Env{
 		Open:       deps.OpenDocker,
-		AppOrigins: []string{"http://localhost:" + port, "http://127.0.0.1:" + port},
+		StateDir:   devStateDir(cfg),
+		AppOrigins: devAppOrigins(cfg.Dir),
 		Stdout:     stdout,
 		Report:     func(err error) { fmt.Fprintln(stderr, "dev resources:", err) },
 	})
+
+	srv := devserver.New("http://"+addr, stack)
+	httpSrv := &http.Server{Handler: srv.Mux()}
+	go httpSrv.Serve(listener)
+
+	return &devHost{srv: srv, shared: shared, addr: addr, close: func() {
+		_ = httpSrv.Close()
+		stopping, cancel := context.WithTimeout(context.WithoutCancel(ctx), devStackStopsWithin)
+		defer cancel()
+		if err := stack.Close(stopping); err != nil {
+			fmt.Fprintln(stderr, "stop dev resources:", err)
+		}
+	}}, nil
 }
 
-const devStackStopsWithin = 30 * time.Second
+func devStateDir(cfg *projectconfig.Config) string {
+	return filepath.Join(cfg.Dir, constants.ProjectStateDirName, "devstack")
+}
 
-func closeDevStack(ctx context.Context, stack *devstack.Stack, stderr io.Writer) {
-	stopping, cancel := context.WithTimeout(context.WithoutCancel(ctx), devStackStopsWithin)
-	defer cancel()
-	if err := stack.Close(stopping); err != nil {
-		fmt.Fprintln(stderr, "stop dev resources:", err)
+func devAppOrigins(dir string) func() []string {
+	return func() []string {
+		var inFile string
+		if file, err := dotenv.Load(dir); err == nil {
+			inFile = file.Values[portEnv]
+		}
+		port := cmp.Or(inFile, os.Getenv(portEnv), defaultDevPort)
+		return []string{"http://localhost:" + port, "http://127.0.0.1:" + port}
 	}
 }
 

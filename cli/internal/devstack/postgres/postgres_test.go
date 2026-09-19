@@ -2,12 +2,16 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker/dockertest"
 	"github.com/ocelhq/ocel/cli/internal/devstack/postgres"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -38,7 +42,7 @@ func TestResolve(t *testing.T) {
 		t.Parallel()
 
 		engine := &dockertest.Engine{}
-		component := postgres.New(engine.Opener())
+		component := postgres.New(engine.Opener(), t.TempDir())
 
 		resolved, err := component.Resolve(context.Background(), "shop-1a2b", []declare.Resource{declared("main", "17"), declared("audit", "17")})
 		if err != nil {
@@ -84,7 +88,7 @@ func TestResolve(t *testing.T) {
 		t.Parallel()
 
 		engine := &dockertest.Engine{}
-		if _, err := postgres.New(engine.Opener()).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17"), declared("legacy", "15")}); err != nil {
+		if _, err := postgres.New(engine.Opener(), t.TempDir()).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17"), declared("legacy", "15")}); err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
 		if len(engine.Specs) != 2 {
@@ -102,7 +106,7 @@ func TestResolve(t *testing.T) {
 			}
 			return "", nil
 		}
-		component := postgres.New(engine.Opener())
+		component := postgres.New(engine.Opener(), t.TempDir())
 		first, err := component.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")})
 		if err != nil {
 			t.Fatalf("Resolve = %v", err)
@@ -126,7 +130,7 @@ func TestResolve(t *testing.T) {
 		t.Parallel()
 
 		engine := &dockertest.Engine{}
-		_, err := postgres.New(engine.Opener()).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "9")})
+		_, err := postgres.New(engine.Opener(), t.TempDir()).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "9")})
 		if err == nil || !strings.Contains(err.Error(), `"main"`) || !strings.Contains(err.Error(), "17") {
 			t.Fatalf("Resolve = %v, want a refusal naming the resource and the versions dev can run", err)
 		}
@@ -139,15 +143,156 @@ func TestResolve(t *testing.T) {
 		t.Parallel()
 
 		engine := &dockertest.Engine{}
-		component := postgres.New(engine.Opener())
+		component := postgres.New(engine.Opener(), t.TempDir())
 		if _, err := component.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17"), declared("legacy", "15")}); err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
-		if err := component.Close(context.Background()); err != nil {
+		if err := component.Close(context.Background(), true); err != nil {
 			t.Fatalf("Close = %v", err)
 		}
 		if len(engine.Stopped) != 2 {
 			t.Fatalf("stopped %v, want both containers", engine.Stopped)
 		}
 	})
+}
+
+func TestAnInterruptWhilePostgresComesUpLeavesAContainerCloseStillStops(t *testing.T) {
+	t.Parallel()
+
+	ctx, interrupt := context.WithCancel(context.Background())
+	engine := &dockertest.Engine{}
+	engine.Answer = func(argv []string) (string, error) {
+		if argv[0] == "pg_isready" {
+			interrupt()
+			return "", errors.New("no response")
+		}
+		return "", nil
+	}
+	component := postgres.New(engine.Opener(), t.TempDir())
+
+	if _, err := component.Resolve(ctx, "shop", []declare.Resource{declared("main", "17")}); err == nil {
+		t.Fatal("Resolve = nil for a startup that was interrupted")
+	}
+	if err := component.Close(context.Background(), true); err != nil {
+		t.Fatalf("Close = %v", err)
+	}
+	if len(engine.Stopped) != 1 {
+		t.Fatalf("stopped %v, want the container that was running when the interrupt landed", engine.Stopped)
+	}
+}
+
+func TestAPostgresThatWasNotReadyIsPreparedAgainOnTheNextSync(t *testing.T) {
+	t.Parallel()
+
+	engine := &dockertest.Engine{}
+	failing := true
+	engine.Answer = func(argv []string) (string, error) {
+		if argv[0] == "psql" && failing && engine.Inputs[len(engine.Inputs)-1] != "" {
+			return "", &docker.ExecFailed{Argv: argv, Code: 2, Output: "the server is starting up"}
+		}
+		return "", nil
+	}
+	component := postgres.New(engine.Opener(), t.TempDir())
+
+	if _, err := component.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")}); err == nil {
+		t.Fatal("Resolve = nil though the password could not be set")
+	}
+	failing = false
+	if _, err := component.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")}); err != nil {
+		t.Fatalf("second Resolve = %v", err)
+	}
+	if len(engine.Specs) != 1 {
+		t.Fatalf("ran %d containers, want the one from the first sync reused", len(engine.Specs))
+	}
+	set := 0
+	for _, input := range engine.Inputs {
+		if strings.Contains(input, "PASSWORD") {
+			set++
+		}
+	}
+	if set != 2 {
+		t.Fatalf("the password was set %d times, want it set again once the server answered", set)
+	}
+}
+
+func TestThePasswordNeverReachesArgvOrAnError(t *testing.T) {
+	t.Parallel()
+
+	state := t.TempDir()
+	engine := &dockertest.Engine{}
+	engine.Answer = func(argv []string) (string, error) {
+		if input := engine.Inputs[len(engine.Inputs)-1]; input != "" {
+			return "", &docker.ExecFailed{Argv: argv, Code: 3, Output: "ERROR:  syntax error\nLINE 1: " + input}
+		}
+		return "", nil
+	}
+
+	_, err := postgres.New(engine.Opener(), state).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")})
+	if err == nil {
+		t.Fatal("Resolve = nil though the statement failed")
+	}
+
+	password := keptPassword(t, state)
+	if strings.Contains(err.Error(), password) {
+		t.Fatalf("the error repeats the password: %v", err)
+	}
+	for _, argv := range engine.Execs {
+		if strings.Contains(dockertest.Joined(argv), password) {
+			t.Fatalf("the password rode in argv: %v", argv)
+		}
+	}
+}
+
+func keptPassword(t *testing.T, state string) string {
+	t.Helper()
+	kept, err := filepath.Glob(filepath.Join(state, "*"))
+	if err != nil || len(kept) != 1 {
+		t.Fatalf("state holds %v (%v), want the one password file", kept, err)
+	}
+	info, err := os.Stat(kept[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("the password file is %v, want it readable by its owner alone", info.Mode().Perm())
+	}
+	raw, err := os.ReadFile(kept[0])
+	if err != nil || len(raw) == 0 {
+		t.Fatalf("read the password file: %q, %v", raw, err)
+	}
+	return string(raw)
+}
+
+func TestTwoProcessesOfOneProjectHandOutTheSamePassword(t *testing.T) {
+	t.Parallel()
+
+	state := t.TempDir()
+	var passwords []string
+	for range 2 {
+		engine := &dockertest.Engine{}
+		resolved, err := postgres.New(engine.Opener(), state).Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")})
+		if err != nil {
+			t.Fatalf("Resolve = %v", err)
+		}
+		passwords = append(passwords, binding(t, resolved[0].Env["OCEL_RESOURCE_POSTGRES_main"]).GetPostgres().GetPassword())
+	}
+	if passwords[0] != passwords[1] || passwords[0] != keptPassword(t, state) {
+		t.Fatalf("passwords = %v, want both the one kept for the project", passwords)
+	}
+}
+
+func TestCloseLeavesContainersAnotherProcessStillUses(t *testing.T) {
+	t.Parallel()
+
+	engine := &dockertest.Engine{}
+	component := postgres.New(engine.Opener(), t.TempDir())
+	if _, err := component.Resolve(context.Background(), "shop", []declare.Resource{declared("main", "17")}); err != nil {
+		t.Fatalf("Resolve = %v", err)
+	}
+	if err := component.Close(context.Background(), false); err != nil {
+		t.Fatalf("Close = %v", err)
+	}
+	if len(engine.Stopped) != 0 {
+		t.Fatalf("stopped %v, want the container left running", engine.Stopped)
+	}
 }

@@ -30,7 +30,7 @@ func TestLiveDeclaredDatabasesComeUpAndKeepTheirDataAcrossRuns(t *testing.T) {
 		_ = engine.Close()
 	})
 
-	first := postgres.New(docker.Open)
+	first := postgres.New(docker.Open, t.TempDir())
 	resolved, err := first.Resolve(ctx, project, []declare.Resource{declared("main", "17"), declared("audit log", "17")})
 	if err != nil {
 		t.Fatalf("Resolve = %v", err)
@@ -43,19 +43,30 @@ func TestLiveDeclaredDatabasesComeUpAndKeepTheirDataAcrossRuns(t *testing.T) {
 	_ = conn.Close()
 
 	name := docker.Name(project, "postgres", "17")
+	acceptsThePassword(t, engine, name, props.GetPassword())
 	if _, err := engine.Exec(ctx, name, "psql", "-U", "postgres", "-d", "audit log", "-v", "ON_ERROR_STOP=1", "-c", "CREATE TABLE kept (id int)"); err != nil {
 		t.Fatalf("the declared database is not there to write to: %v", err)
 	}
-	if err := first.Close(ctx); err != nil {
+	if err := first.Close(ctx, true); err != nil {
 		t.Fatalf("Close = %v", err)
 	}
 
-	second := postgres.New(docker.Open)
-	t.Cleanup(func() { _ = second.Close(ctx) })
-	if _, err := second.Resolve(ctx, project, []declare.Resource{declared("audit log", "17")}); err != nil {
+	second := postgres.New(docker.Open, t.TempDir())
+	t.Cleanup(func() { _ = second.Close(ctx, true) })
+	again, err := second.Resolve(ctx, project, []declare.Resource{declared("audit log", "17")})
+	if err != nil {
 		t.Fatalf("Resolve on a second run = %v", err)
 	}
+	acceptsThePassword(t, engine, name, binding(t, again[0].Env["OCEL_RESOURCE_POSTGRES_audit log"]).GetPostgres().GetPassword())
 	if _, err := engine.Exec(ctx, name, "psql", "-U", "postgres", "-d", "audit log", "-v", "ON_ERROR_STOP=1", "-c", "SELECT id FROM kept"); err != nil {
 		t.Fatalf("the data did not survive the container being stopped: %v", err)
+	}
+}
+
+func acceptsThePassword(t *testing.T, engine docker.Engine, container, password string) {
+	t.Helper()
+	overTheNetwork := `psql "postgresql://postgres:` + password + `@$(hostname -i):5432/postgres" -v ON_ERROR_STOP=1 -c "SELECT 1"`
+	if _, err := engine.Exec(context.Background(), container, "sh", "-c", overTheNetwork); err != nil {
+		t.Fatalf("the password in the binding does not open a connection that has to present one: %v", err)
 	}
 }

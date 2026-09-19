@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -811,6 +812,102 @@ func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
 			t.Errorf("stopped %v, want the command's container stopped once it exited", engine.Stopped)
 		}
 	})
+}
+
+type stopWatchingEngine struct {
+	*dockertest.Engine
+	onStop func()
+}
+
+func (e stopWatchingEngine) Stop(ctx context.Context, id string) error {
+	e.onStop()
+	return e.Engine.Stop(ctx, id)
+}
+
+func TestDevLeavesNothingBehind(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	t.Run("an interrupt while a resource is still coming up stops the container it started", func(t *testing.T) {
+		root := t.TempDir()
+		t.Cleanup(func() { _ = devlock.Remove(root) })
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
+
+		ctx, interrupt := context.WithCancel(context.Background())
+		engine := &dockertest.Engine{}
+		engine.Answer = func(argv []string) (string, error) {
+			if argv[0] == "pg_isready" {
+				interrupt()
+				return "", errors.New("no response")
+			}
+			return "", nil
+		}
+		deps := devDeps()
+		deps.OpenDocker = engine.Opener()
+
+		var stdout, stderr syncBuffer
+		if err := runDev(ctx, deps, false, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr, strings.NewReader("")); err == nil {
+			t.Fatal("runDev = nil for a startup that was interrupted")
+		}
+		if len(engine.Specs) != 1 || len(engine.Stopped) != 1 {
+			t.Fatalf("ran %d containers and stopped %v, want the one that was started stopped; stderr=%s", len(engine.Specs), engine.Stopped, stderr.String())
+		}
+	})
+
+	t.Run("the leader keeps its lease until its containers are stopped", func(t *testing.T) {
+		root := t.TempDir()
+		t.Cleanup(func() { _ = devlock.Remove(root) })
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
+
+		var leaseAtStop error
+		engine := stopWatchingEngine{Engine: &dockertest.Engine{}, onStop: func() { _, leaseAtStop = devlock.Read(root) }}
+		deps := devDeps()
+		deps.OpenDocker = func(context.Context) (docker.Engine, error) { return engine, nil }
+
+		var stdout, stderr syncBuffer
+		if err := runDev(context.Background(), deps, false, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runDev err = %v; stderr=%s", err, stderr.String())
+		}
+		if len(engine.Stopped) != 1 {
+			t.Fatalf("stopped %v, want the run's container stopped", engine.Stopped)
+		}
+		if leaseAtStop != nil {
+			t.Fatalf("the lease was already gone while the container was being stopped: %v", leaseAtStop)
+		}
+		if _, err := devlock.Read(root); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("devlock.Read after exit = %v, want the lease released", err)
+		}
+	})
+
+	t.Run("an interrupted run has time to stop its containers before the hard exit", func(t *testing.T) {
+		if docker.StopsWithin != 6*time.Second {
+			t.Errorf("docker.StopsWithin = %s, want 6s: a 3s grace, then docker's kill and the removal", docker.StopsWithin)
+		}
+		if devStackStopsWithin < docker.StopsWithin {
+			t.Errorf("the stack is given %s to stop and one container may take %s", devStackStopsWithin, docker.StopsWithin)
+		}
+		if spent := appChildWaitDelay + devStackStopsWithin; devShutdownWindow < spent+time.Second {
+			t.Errorf("the hard exit lands %s after the interrupt, and the app child then the stack may take %s", devShutdownWindow, spent)
+		}
+		if devShutdownWindow != 14*time.Second {
+			t.Errorf("devShutdownWindow = %s, want 14s", devShutdownWindow)
+		}
+	})
+}
+
+func TestTheAppsOriginsFollowThePortInTheDotfile(t *testing.T) {
+	root := t.TempDir()
+	origins := devAppOrigins(root)
+
+	clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "PORT=4100\n")
+	if got := origins(); !slices.Contains(got, "http://localhost:4100") || !slices.Contains(got, "http://127.0.0.1:4100") {
+		t.Fatalf("origins = %v, want the app on port 4100", got)
+	}
+	clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "PORT=4200\n")
+	if got := origins(); !slices.Contains(got, "http://localhost:4200") || slices.Contains(got, "http://localhost:4100") {
+		t.Fatalf("origins = %v after the port moved to 4200", got)
+	}
 }
 
 func testProjectID(t *testing.T) string {

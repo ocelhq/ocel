@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 
@@ -13,7 +11,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/devlock"
-	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -31,7 +28,7 @@ var runCmd = &cobra.Command{
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
+		ctx, stop := installDevInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
 		return runRun(ctx, newDeps(), cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
@@ -88,23 +85,13 @@ func runStandalone(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Co
 	reportUnreadableLines(stdout, file.Unreadable)
 	reportDotfile(stdout, cfg.Dir, file.Values, dotfileReadOnceAdvice)
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	host, err := startDevHost(ctx, deps, cfg, stdout, stderr)
 	if err != nil {
-		return fmt.Errorf("start dev server: %w", err)
+		return err
 	}
-
-	devServerAddr := "http://" + listener.Addr().String()
-
-	shared := readSharedEnv(ctx, deps, cfg.Dir, stderr)
-
-	stack := newDevStack(deps, cfg, file.Values, stdout, stderr)
-	defer closeDevStack(ctx, stack, stderr)
-
-	srv := devserver.New(devServerAddr, stack)
+	defer host.close()
+	srv, shared := host.srv, host.shared
 	srv.UseValues(storeValues(shared.values, file.Values), envwire.Scope(cfg, false, ""))
-	httpSrv := &http.Server{Handler: srv.Mux()}
-	go httpSrv.Serve(listener)
-	defer httpSrv.Close()
 
 	resolved, err := discoverAndSync(ctx, srv, cfg, shared.values, file.Values, scope, invocation{name: "run", loggedOut: shared.loggedOut}, stdout, stderr)
 	if err != nil {

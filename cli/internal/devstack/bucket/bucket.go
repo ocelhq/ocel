@@ -1,11 +1,9 @@
 package bucket
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -21,7 +19,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
-	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
@@ -65,15 +62,15 @@ type emulator struct {
 
 type Component struct {
 	open       docker.Opener
-	appOrigins []string
+	appOrigins func() []string
 	report     func(error)
 
-	mu       sync.Mutex
-	engine   docker.Engine
-	emulator *emulator
+	mu        sync.Mutex
+	container *docker.Container
+	emulator  *emulator
 }
 
-func New(open docker.Opener, appOrigins []string, report func(error)) *Component {
+func New(open docker.Opener, appOrigins func() []string, report func(error)) *Component {
 	if report == nil {
 		report = func(error) {}
 	}
@@ -92,7 +89,7 @@ func (c *Component) Resolve(ctx context.Context, project string, resources []dec
 	out := make([]resolve.Resource, 0, len(resources))
 	for _, resource := range resources {
 		name := bucketName(resource.Name)
-		origins := append(slices.Clone(resource.Bucket.GetAllowedOrigins()), c.appOrigins...)
+		origins := append(slices.Clone(resource.Bucket.GetAllowedOrigins()), c.appOrigins()...)
 		if err := running.provision(ctx, name, origins); err != nil {
 			return nil, fmt.Errorf("bucket %q: %w", resource.Name, err)
 		}
@@ -118,52 +115,38 @@ func bucketName(resource string) string {
 }
 
 func bind(resource declare.Resource, name string) (resolve.Resource, error) {
-	key, err := resolve.EnvName(resource.Type, resource.Name)
-	if err != nil {
-		return resolve.Resource{}, err
-	}
-	value, err := protojson.Marshal(&bindingsv1.Binding{
+	return resolve.Bound(resource.Type, &bindingsv1.Binding{
 		Name:       resource.Name,
 		Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: name}},
 	})
-	if err != nil {
-		return resolve.Resource{}, err
-	}
-	var stable bytes.Buffer
-	if err := json.Compact(&stable, value); err != nil {
-		return resolve.Resource{}, err
-	}
-	return resolve.Resource{Name: resource.Name, Type: resource.Type, Env: map[string]string{key: stable.String()}}, nil
 }
 
 func (c *Component) running(ctx context.Context, project string) (*emulator, error) {
 	if c.emulator != nil {
 		return c.emulator, nil
 	}
-	if c.engine == nil {
+	if c.container == nil {
 		engine, err := c.open(ctx)
 		if err != nil {
 			return nil, err
 		}
-		c.engine = engine
+		name := docker.Name(project, component)
+		container, err := engine.Run(ctx, docker.Spec{
+			Name:       name,
+			Image:      image,
+			Env:        []string{"FLOCI_STORAGE_MODE=persistent"},
+			Port:       emulatorPort,
+			Volume:     name,
+			VolumePath: dataPath,
+			Labels:     docker.Labels(project, component),
+		})
+		if err != nil {
+			return nil, err
+		}
+		c.container = &container
 	}
-
-	name := docker.Name(project, component)
-	container, err := c.engine.Run(ctx, docker.Spec{
-		Name:       name,
-		Image:      image,
-		Env:        []string{"FLOCI_STORAGE_MODE=persistent"},
-		Port:       emulatorPort,
-		Volume:     name,
-		VolumePath: dataPath,
-		Labels:     docker.Labels(project, component),
-	})
+	started, err := start(ctx, *c.container, c.report)
 	if err != nil {
-		return nil, err
-	}
-	started, err := start(ctx, container, c.report)
-	if err != nil {
-		_ = c.engine.Stop(ctx, container.ID)
 		return nil, err
 	}
 	c.emulator = started
@@ -256,15 +239,25 @@ func (c *Component) Routes(mux *http.ServeMux, guard func(http.Handler) http.Han
 	mux.Handle(path, guard(handler))
 }
 
-func (c *Component) Close(ctx context.Context) error {
+func (c *Component) Close(ctx context.Context, stop bool) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.emulator == nil {
+	if c.emulator != nil {
+		c.emulator.uploads.stop()
+		c.emulator = nil
+	}
+	if c.container == nil {
 		return nil
 	}
-	c.emulator.uploads.stop()
-	err := c.engine.Stop(ctx, c.emulator.container.ID)
-	c.emulator = nil
-	return err
+	held := c.container
+	c.container = nil
+	if !stop {
+		return nil
+	}
+	engine, err := c.open(ctx)
+	if err != nil {
+		return err
+	}
+	return engine.Stop(ctx, held.ID)
 }

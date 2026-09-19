@@ -47,9 +47,12 @@ func (e *Engine) ExecInput(_ context.Context, _, input string, argv ...string) (
 	return "", nil
 }
 
-func (e *Engine) Stop(_ context.Context, id string) error {
+func (e *Engine) Stop(ctx context.Context, id string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	e.Stopped = append(e.Stopped, id)
 	return nil
 }

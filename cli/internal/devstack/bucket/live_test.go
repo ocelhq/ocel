@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,29 +26,35 @@ const liveEnv = "OCEL_LIVE_DOCKER"
 type liveBucket struct {
 	component *bucket.Component
 	name      string
+	endpoint  string
 	callbacks chan map[string]any
+	reported  chan error
 	app       *httptest.Server
+	origins   *[]string
 }
 
-func startLive(t *testing.T, project string) liveBucket {
+func startLive(t *testing.T, project string, answer int) liveBucket {
 	t.Helper()
 	if os.Getenv(liveEnv) == "" {
 		t.Skipf("no docker daemon promised to this run; set %s=1 where one is running", liveEnv)
 	}
 	ctx := context.Background()
 
-	callbacks := make(chan map[string]any, 4)
+	callbacks := make(chan map[string]any, 16)
+	reported := make(chan error, 16)
 	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		body["op"] = r.URL.Query().Get("op")
 		callbacks <- body
+		w.WriteHeader(answer)
 	}))
 	t.Cleanup(app.Close)
 
-	component := bucket.New(docker.Open, []string{app.URL}, func(err error) { t.Logf("reported: %v", err) })
+	origins := []string{app.URL}
+	component := bucket.New(docker.Open, func() []string { return origins }, func(err error) { reported <- err })
 	t.Cleanup(func() {
-		_ = component.Close(ctx)
+		_ = component.Close(ctx, true)
 		engine, err := docker.Open(ctx)
 		if err != nil {
 			return
@@ -64,7 +71,8 @@ func startLive(t *testing.T, project string) liveBucket {
 	if err := protojson.Unmarshal([]byte(resolved[0].Env["OCEL_RESOURCE_BUCKET_User Uploads"]), &bound); err != nil {
 		t.Fatalf("the binding is not the JSON the SDKs read: %v (%v)", err, resolved[0].Env)
 	}
-	return liveBucket{component: component, name: bound.GetBucket().GetBucket(), callbacks: callbacks, app: app}
+	_, endpoint, _ := strings.Cut(resolved[0].Origin, " @ ")
+	return liveBucket{component: component, name: bound.GetBucket().GetBucket(), endpoint: "http://" + endpoint, callbacks: callbacks, reported: reported, app: app, origins: &origins}
 }
 
 func put(t *testing.T, target *blobv1.PresignedTarget, contentType, body string) *http.Response {
@@ -86,7 +94,7 @@ func put(t *testing.T, target *blobv1.PresignedTarget, contentType, body string)
 }
 
 func TestLiveAnUploadCompletesThroughTheDeployedBucketService(t *testing.T) {
-	live := startLive(t, "bucket-live-test")
+	live := startLive(t, "bucket-live-test", http.StatusOK)
 	ctx := context.Background()
 
 	presigned, err := live.component.PresignUpload(ctx, &blobv1.PresignUploadRequest{
@@ -134,7 +142,7 @@ func TestLiveAnUploadCompletesThroughTheDeployedBucketService(t *testing.T) {
 func TestAnUploadThatBreaksItsSignedConditionsIsRefused(t *testing.T) {
 	t.Skip("TODO(#1203): ghcr.io/ocelhq/floci:2.0.1-ocel.2 verifies no query signature, so a presigned PUT with another content type or length is stored; unskip once the fork enforces SigV4 presigned requests")
 
-	live := startLive(t, "bucket-live-conditions-test")
+	live := startLive(t, "bucket-live-conditions-test", http.StatusOK)
 	presigned, err := live.component.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
 		Bucket:          live.name,
 		CallbackBaseUrl: live.app.URL + "/api/upload",
@@ -151,5 +159,69 @@ func TestAnUploadThatBreaksItsSignedConditionsIsRefused(t *testing.T) {
 	}
 	if resp := put(t, presigned.GetFiles()[1], "text/plain", "hello, this is far more than five bytes"); resp.StatusCode != http.StatusForbidden {
 		t.Errorf("a PUT of another length answered %s, want 403", resp.Status)
+	}
+}
+
+func TestLiveACompletionTheAppKeepsRefusingIsReportedOnceAndDropped(t *testing.T) {
+	live := startLive(t, "bucket-live-poison-test", http.StatusInternalServerError)
+
+	presigned, err := live.component.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
+		Bucket:          live.name,
+		CallbackBaseUrl: live.app.URL + "/api/upload",
+		Files:           []*blobv1.PresignFile{{Key: "a.txt", Name: "a.txt", Size: 5, MimeType: "text/plain"}},
+	})
+	if err != nil {
+		t.Fatalf("PresignUpload = %v", err)
+	}
+	if resp := put(t, presigned.GetFiles()[0], "text/plain", "hello"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT to the presigned url answered %s", resp.Status)
+	}
+
+	select {
+	case err := <-live.reported:
+		if !strings.Contains(err.Error(), "3 attempts") {
+			t.Fatalf("reported %v, want the completion given up on after 3 attempts", err)
+		}
+	case <-time.After(time.Minute):
+		t.Fatal("a completion that keeps failing was never reported")
+	}
+
+	time.Sleep(12 * time.Second)
+	if attempts := len(live.callbacks); attempts != 3 {
+		t.Errorf("the app was called %d times, want 3 and then no more", attempts)
+	}
+	if again := len(live.reported); again != 0 {
+		t.Errorf("the failure was reported %d more times, want it said once", again)
+	}
+}
+
+func TestLiveTheAppsOriginIsReadAgainOnEverySync(t *testing.T) {
+	live := startLive(t, "bucket-live-origins-test", http.StatusOK)
+
+	allowed := func(origin string) string {
+		req, err := http.NewRequest(http.MethodOptions, live.endpoint+"/"+live.name+"/a.txt", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Access-Control-Request-Method", http.MethodPut)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("preflight = %v", err)
+		}
+		_ = resp.Body.Close()
+		return resp.Header.Get("Access-Control-Allow-Origin")
+	}
+
+	const moved = "http://localhost:4100"
+	if got := allowed(moved); got == moved {
+		t.Fatalf("%s may upload before the app ever ran there", moved)
+	}
+	*live.origins = []string{moved}
+	if _, err := live.component.Resolve(context.Background(), "bucket-live-origins-test", []declare.Resource{declared("User Uploads")}); err != nil {
+		t.Fatalf("Resolve = %v", err)
+	}
+	if got := allowed(moved); got != moved {
+		t.Fatalf("Access-Control-Allow-Origin = %q for %s after the app moved there", got, moved)
 	}
 }

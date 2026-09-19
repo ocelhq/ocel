@@ -27,7 +27,7 @@ func TestAnUploadBeforeAnyBucketIsDeclaredIsRefusedWithoutDocker(t *testing.T) {
 	t.Parallel()
 
 	engine := &dockertest.Engine{}
-	component := bucket.New(engine.Opener(), nil, nil)
+	component := bucket.New(engine.Opener(), func() []string { return nil }, nil)
 
 	_, err := component.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{Bucket: "uploads"})
 
@@ -40,11 +40,11 @@ func TestAnUploadBeforeAnyBucketIsDeclaredIsRefusedWithoutDocker(t *testing.T) {
 	}
 }
 
-func TestTheEmulatorRunsPinnedLabelledAndOnAVolumeOfTheProject(t *testing.T) {
+func TestTheEmulatorRunsPinnedLabelledOnAVolumeOfTheProjectAndStopsEvenIfInterrupted(t *testing.T) {
 	t.Parallel()
 
 	engine := &dockertest.Engine{}
-	component := bucket.New(engine.Opener(), nil, nil)
+	component := bucket.New(engine.Opener(), func() []string { return nil }, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -66,7 +66,10 @@ func TestTheEmulatorRunsPinnedLabelledAndOnAVolumeOfTheProject(t *testing.T) {
 	if !strings.Contains(spec.Volume, "shop-1a2b") {
 		t.Errorf("Volume = %q, want one named for the project", spec.Volume)
 	}
+	if err := component.Close(context.Background(), true); err != nil {
+		t.Fatalf("Close = %v", err)
+	}
 	if len(engine.Stopped) != 1 {
-		t.Errorf("stopped %v, want the emulator that never became ready", engine.Stopped)
+		t.Errorf("stopped %v, want the emulator that was running when the interrupt landed stopped by Close", engine.Stopped)
 	}
 }
