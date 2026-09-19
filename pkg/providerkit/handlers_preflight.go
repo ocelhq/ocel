@@ -33,6 +33,12 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return resp, nil
 	}
 	resp.Identity = IdentityProto(provider.Vendor(), identity)
+	if wrapper, wraps := provider.(ContainerRuntimer); wraps {
+		resp.ContainerArch, err = wrapper.ContainerArch(ctx)
+		if err != nil {
+			return nil, RefusalError(err)
+		}
+	}
 	if err := h.edgeIdentity(ctx, provider, gate.Edge, req.GetEdge(), resp); err != nil {
 		return nil, err
 	}

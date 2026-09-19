@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -30,5 +31,19 @@ func TestAContainerAppIsRefusedBehindEveryEdgeButTheDefault(t *testing.T) {
 	}
 	if err := refuseContainersBehindFunctionEdge(providerkit.DeployPreflight{Edge: apigateway.Kind, Plan: providerkit.DeployPlan{Apps: apps[1:]}}); err != nil {
 		t.Fatalf("preflight of serverless apps behind %s = %v, want it to pass", apigateway.Kind, err)
+	}
+}
+
+func TestTheArchitectureContainersAreBuiltForIsOneTheProviderCarriesARuntimeFor(t *testing.T) {
+	t.Parallel()
+
+	p := &Provider{}
+	runs, err := p.ContainerArch(context.Background())
+	if err != nil {
+		t.Fatalf("ContainerArch() = %v", err)
+	}
+	held, err := p.ContainerRuntime(context.Background(), runs)
+	if err != nil || len(held) == 0 {
+		t.Fatalf("ContainerRuntime(%s) = %d bytes, %v, want the runtime every container boots through: the image is built for whatever ContainerArch names", runs, len(held), err)
 	}
 }

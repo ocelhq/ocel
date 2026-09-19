@@ -58,6 +58,40 @@ func TestPreflightReportsWhoThisRunIsAndWhatItCarries(t *testing.T) {
 	}
 }
 
+func TestPreflightNamesTheArchitectureContainerImagesAreBuiltFor(t *testing.T) {
+	t.Parallel()
+
+	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
+	client := servedBy(t, provider.WrappingContainers("arm64", []byte("runtime")))
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if resp.GetContainerArch() != "arm64" {
+		t.Errorf("Preflight() container arch = %q, want the arm64 the target runs: the image is built before anything else can say so", resp.GetContainerArch())
+	}
+}
+
+func TestPreflightNamesNoContainerArchitectureForAProviderThatWrapsNone(t *testing.T) {
+	t.Parallel()
+
+	client, _ := contractServed(t, "1.2.3")
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug:         "shop",
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if resp.GetContainerArch() != "" {
+		t.Errorf("Preflight() container arch = %q, want none from a provider that runs no containers", resp.GetContainerArch())
+	}
+}
+
 func TestPreflightReportsCredentialsThatWereDenied(t *testing.T) {
 	t.Parallel()
 
@@ -375,6 +409,8 @@ type wrappingProvider struct {
 	*fake.Provider
 }
 
+func (wrappingProvider) ContainerArch(context.Context) (string, error) { return "amd64", nil }
+
 func (wrappingProvider) ContainerRuntime(context.Context, string) ([]byte, error) {
 	return []byte("runtime"), nil
 }
@@ -440,7 +476,7 @@ func TestBakesIsTrueOnlyWhereAnImageRunsWithNoRuntimeOfOcelsInside(t *testing.T)
 		container, serverless bool
 	}{
 		{base, "a provider handed images it runs as they are", true, false},
-		{base.WrappingContainers(containerRuntimeBytes), "a provider that wraps the containers it is handed", false, false},
+		{base.WrappingContainers("amd64", containerRuntimeBytes), "a provider that wraps the containers it is handed", false, false},
 		{imaging{Provider: base}, "a provider that builds function images", true, true},
 		{wrappingImaging{imaging{Provider: base}, containerRuntimeBytes}, "a provider that builds function images and wraps every image", false, false},
 	} {

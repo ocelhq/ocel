@@ -281,12 +281,15 @@ func (d DeployPreflighter) PreflightDeploy(_ context.Context, pre providerkit.De
 
 type ContainerWrapper struct {
 	*Provider
+	arch    string
 	runtime []byte
 }
 
-func (p *Provider) WrappingContainers(runtime []byte) ContainerWrapper {
-	return ContainerWrapper{Provider: p, runtime: runtime}
+func (p *Provider) WrappingContainers(arch string, runtime []byte) ContainerWrapper {
+	return ContainerWrapper{Provider: p, arch: arch, runtime: runtime}
 }
+
+func (w ContainerWrapper) ContainerArch(context.Context) (string, error) { return w.arch, nil }
 
 func (w ContainerWrapper) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
 	w.mu.Lock()

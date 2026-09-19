@@ -73,8 +73,13 @@ func daemonHoldingTheBuiltImage(t *testing.T, arch string) *daemonHolding {
 
 func wrappingServed(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider) {
 	t.Helper()
+	return wrappingServedOn(t, "amd64")
+}
+
+func wrappingServedOn(t *testing.T, arch string) (contractv1connect.ProviderServiceClient, *fake.Provider) {
+	t.Helper()
 	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
-	client := servedBy(t, provider.WrappingContainers(containerRuntimeBytes))
+	client := servedBy(t, provider.WrappingContainers(arch, containerRuntimeBytes))
 	return client, provider
 }
 
@@ -118,7 +123,7 @@ func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItCarriesNam
 func TestTheArchitectureTheDaemonNamesIsWhatTheRuntimeIsAskedFor(t *testing.T) {
 	builtProject(t)
 	daemonHoldingTheBuiltImage(t, "arm64")
-	client, provider := wrappingServed(t)
+	client, provider := wrappingServedOn(t, "arm64")
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
@@ -127,6 +132,28 @@ func TestTheArchitectureTheDaemonNamesIsWhatTheRuntimeIsAskedFor(t *testing.T) {
 
 	if asked := provider.WrappedFor(); len(asked) == 0 || asked[0] != "arm64" {
 		t.Errorf("the provider was asked for a runtime built for %v, want the architecture the daemon says the image is built for: a runtime built for another one cannot execute", asked)
+	}
+}
+
+func TestAnImageBuiltForAnArchitectureTheTargetDoesNotRunIsRefusedBeforeItIsPushed(t *testing.T) {
+	builtProject(t)
+	daemon := daemonHoldingTheBuiltImage(t, "arm64")
+	client, provider := wrappingServedOn(t, "amd64")
+
+	_, _, err := deployStream(t, client, registryDeployRequest())
+	if err == nil {
+		t.Fatal("Deploy() succeeded, want it refused: the target cannot execute an image built for another architecture")
+	}
+	for _, named := range []string{"linux/arm64", "linux/amd64"} {
+		if !strings.Contains(err.Error(), named) {
+			t.Errorf("Deploy() refused with %q, want it to name %s so the mismatch reads at a glance", err, named)
+		}
+	}
+	if pushed := provider.Registry().Pushed(); len(pushed) != 0 {
+		t.Errorf("the store was handed %v, want nothing pushed for an image the target cannot run", pushed)
+	}
+	if daemon.exports() != 0 {
+		t.Errorf("the deploy read the image out of the daemon %d times, want none for an image it refuses", daemon.exports())
 	}
 }
 

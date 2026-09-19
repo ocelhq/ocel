@@ -27,8 +27,11 @@ const (
 const runtimeTagHexLen = 12
 
 type ContainerRuntimer interface {
+	ContainerArch(ctx context.Context) (string, error)
 	ContainerRuntime(ctx context.Context, arch string) ([]byte, error)
 }
+
+func ContainerPlatform(arch string) string { return "linux/" + arch }
 
 func WrapContainer(base v1.Image, runtime []byte) (v1.Image, error) {
 	file, err := base.ConfigFile()
@@ -105,6 +108,15 @@ func (r *deployRun) wrappedPush(ctx context.Context, app, ref string, wrapper Co
 	arch, err := builtArchitecture(ctx, repository, digest)
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("read the architecture %s's image is built for: %w", app, err)
+	}
+	runs, err := wrapper.ContainerArch(ctx)
+	if err != nil {
+		return ImagePush{}, fmt.Errorf("read the architecture %s's container runs on: %w", app, err)
+	}
+	if arch != runs {
+		return ImagePush{}, Refuse(CodeInvalid,
+			"app %s's image is built for %s and the target runs %s, which cannot execute it: build it for %s, and drop any --platform its Dockerfile pins a FROM to",
+			app, ContainerPlatform(arch), ContainerPlatform(runs), ContainerPlatform(runs))
 	}
 	runtime, err := wrapper.ContainerRuntime(ctx, arch)
 	if err != nil {

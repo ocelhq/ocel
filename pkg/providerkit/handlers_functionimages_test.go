@@ -264,8 +264,12 @@ type wrappingImaging struct {
 	runtime []byte
 }
 
+func (w wrappingImaging) ContainerArch(ctx context.Context) (string, error) {
+	return w.Provider.WrappingContainers("amd64", w.runtime).ContainerArch(ctx)
+}
+
 func (w wrappingImaging) ContainerRuntime(ctx context.Context, arch string) ([]byte, error) {
-	return w.Provider.WrappingContainers(w.runtime).ContainerRuntime(ctx, arch)
+	return w.Provider.WrappingContainers("amd64", w.runtime).ContainerRuntime(ctx, arch)
 }
 
 func wrappingImagingServed(t *testing.T, runtime []byte) (contractv1connect.ProviderServiceClient, *fake.Provider) {

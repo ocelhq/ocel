@@ -496,6 +496,8 @@ message PreflightResponse {
   repeated StandingCheck standing = 10;
 
   repeated string baked_computes = 11;
+
+  string container_arch = 12 [(buf.validate.field).string = {in: ["amd64", "arm64"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 }
 
 message ResolveImageRegistryRequest {

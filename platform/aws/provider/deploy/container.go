@@ -36,6 +36,9 @@ const (
 	containerName       = "app"
 	containerPortEnv    = "PORT"
 
+	ContainerArch          = "amd64"
+	fargateCPUArchitecture = "X86_64"
+
 	containerLocalName = "container"
 
 	targetGroupNamePrefix = "ocel-"
@@ -356,7 +359,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		ContainerDefinitions:    pulumi.ToSecret(pulumi.String(definition)).(pulumi.StringOutput),
 		RuntimePlatform: &ecs.TaskDefinitionRuntimePlatformArgs{
 			OperatingSystemFamily: pulumi.String("LINUX"),
-			CpuArchitecture:       pulumi.String("X86_64"),
+			CpuArchitecture:       pulumi.String(fargateCPUArchitecture),
 		},
 		Tags: tags,
 	}, pulumi.DependsOn(before))

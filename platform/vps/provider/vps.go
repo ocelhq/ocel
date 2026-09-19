@@ -228,6 +228,8 @@ func pins(configured map[string]string) []host.Pin {
 
 func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
 
+func (p *Provider) ContainerArch(ctx context.Context) (string, error) { return p.host.Arch(ctx) }
+
 func (p *Provider) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
 	return host.ContainerRuntime(arch)
 }
