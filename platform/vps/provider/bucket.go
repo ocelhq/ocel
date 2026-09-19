@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"regexp"
@@ -15,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -27,9 +29,6 @@ const (
 	storeAccessKey = "ocel"
 	storeSecretEnv = "RUSTFS_SECRET_KEY"
 	storeSecretLen = 24
-
-	storeSecretFolder = "resources"
-	storeSecretName   = "rootkey"
 
 	storeBucketNameMax = 63
 )
@@ -87,26 +86,82 @@ func mintStoreSecret() (string, error) {
 	return hex.EncodeToString(raw), nil
 }
 
-type standingStores struct {
-	mu    sync.Mutex
-	stood map[string]string
+type storeCredential struct {
+	sealed []byte
+	secret string
 }
 
-func (s *standingStores) once(name string, stand func() (string, error)) (string, error) {
+type standingStores struct {
+	mu    sync.Mutex
+	stood map[string]storeCredential
+	spec  *host.ResourceContainer
+}
+
+func (s *standingStores) shaped(spec host.ResourceContainer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if secret, held := s.stood[name]; held {
-		return secret, nil
+	s.spec = &spec
+}
+
+func (s *standingStores) shape() *host.ResourceContainer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.spec
+}
+
+func (s *standingStores) once(name string, stand func() (storeCredential, error)) (storeCredential, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if held, stood := s.stood[name]; stood {
+		return held, nil
 	}
-	secret, err := stand()
+	held, err := stand()
 	if err != nil {
-		return "", err
+		return storeCredential{}, err
 	}
 	if s.stood == nil {
-		s.stood = map[string]string{}
+		s.stood = map[string]storeCredential{}
 	}
-	s.stood[name] = secret
-	return secret, nil
+	s.stood[name] = held
+	return held, nil
+}
+
+func storeCoordinate(ref providerkit.StackRef) providerkit.Coordinate {
+	return providerkit.Coordinate{
+		Project: ref.Project, Class: ref.Class, Env: ref.Name.String(),
+		Folder: live.StoreSecretFolder, Binding: live.StoreSecretBinding, Name: live.StoreSecretName,
+	}
+}
+
+func (p *Provider) storeCredential(ctx context.Context, ref providerkit.StackRef, name string) (storeCredential, error) {
+	at := storeCoordinate(ref)
+	sealed, err := p.host.Kept(ctx, ref.Class, name)
+	if err != nil {
+		return storeCredential{}, err
+	}
+	if len(sealed) == 0 {
+		minted, err := mintStoreSecret()
+		if err != nil {
+			return storeCredential{}, err
+		}
+		candidate, err := p.sealer.Seal(ctx, at, []byte(minted))
+		if err != nil {
+			return storeCredential{}, err
+		}
+		if sealed, err = p.host.KeepOnce(ctx, ref.Class, name, candidate); err != nil {
+			return storeCredential{}, err
+		}
+	}
+	opened, err := p.sealer.Open(ctx, at, sealed)
+	if err != nil {
+		return storeCredential{}, err
+	}
+	if len(opened) == 0 {
+		return storeCredential{}, providerkit.Refuse(providerkit.CodeNotReady,
+			"what this box keeps for %s opens to nothing, so there is no credential to reach the store with. Remove %s on the box and run this again",
+			name, host.KeptPath(ref.Class, name))
+	}
+	return storeCredential{sealed: sealed, secret: string(opened)}, nil
 }
 
 // Bucket stands this project's object store up, if it is not already standing,
@@ -121,17 +176,18 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 	if err != nil {
 		return providerkit.Binding{}, err
 	}
+	p.stores.shaped(spec)
 	if report != nil {
 		report.Say("Standing bucket " + in.Resource.Name + " up in " + spec.Name)
 	}
 
-	secret, err := p.stores.once(spec.Name, func() (string, error) {
-		held, err := p.heldSecret(ctx, in, spec.Name, storeSecretFolder, storeSecretName, mintStoreSecret)
+	held, err := p.stores.once(spec.Name, func() (storeCredential, error) {
+		held, err := p.storeCredential(ctx, in.Ref, spec.Name)
 		if err != nil {
-			return "", err
+			return storeCredential{}, err
 		}
-		if err := p.host.StandResource(ctx, spec, held); err != nil {
-			return "", err
+		if err := p.host.StandResource(ctx, spec, held.secret); err != nil {
+			return storeCredential{}, err
 		}
 		return held, nil
 	})
@@ -146,7 +202,7 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 		Endpoint:       "http://127.0.0.1:" + storePort,
 		Region:         storeRegion,
 		AccessKeyID:    storeAccessKey,
-		SecretKey:      secret,
+		SecretKey:      held.secret,
 		Bucket:         bucket,
 		AllowedOrigins: declaredOrigins(in.Resource.Bucket),
 		Public:         declaredPublic(in.Resource.Bucket),
@@ -179,6 +235,57 @@ func (p *Provider) externalBucket(in resources.Instruction, report providerkit.R
 		Properties: map[string]string{
 			providerkit.PropertyBucket: p.options.Bucket.Bucket + "/" + prefix,
 		},
+	}, nil
+}
+
+func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan) (*live.Store, error) {
+	sessions := ""
+	for _, binding := range plan.App.Values.Bindings {
+		if binding.Type != providerkit.BindingBucket {
+			continue
+		}
+		if held := binding.Properties[providerkit.PropertyBucket]; sessions == "" || held < sessions {
+			sessions = held
+		}
+	}
+	if sessions == "" {
+		return nil, nil
+	}
+	if external := p.options.Bucket; external.configured() {
+		sealed, err := p.sealer.Seal(ctx, storeCoordinate(plan.Ref), []byte(external.SecretAccessKey))
+		if err != nil {
+			return nil, err
+		}
+		return &live.Store{
+			Env:         plan.Ref.Name.String(),
+			Endpoint:    external.Endpoint,
+			Region:      external.Region,
+			AccessKeyID: external.AccessKeyID,
+			PathStyle:   external.PathStyle,
+			Sessions:    external.Bucket + "/" + naming.Sanitize(plan.Ref.Project) + "/" + naming.Sanitize(plan.Ref.Name.Env),
+			Sealed:      base64.StdEncoding.EncodeToString(sealed),
+		}, nil
+	}
+	spec := p.stores.shape()
+	if spec == nil {
+		shaped := storeContainer(resources.Instruction{Ref: plan.Ref})
+		spec = &shaped
+	}
+	held, err := p.stores.once(spec.Name, func() (storeCredential, error) {
+		return p.storeCredential(ctx, plan.Ref, spec.Name)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &live.Store{
+		Env:         plan.Ref.Name.String(),
+		Endpoint:    "http://" + spec.Name + ":" + storePort,
+		Region:      storeRegion,
+		AccessKeyID: storeAccessKey,
+		PathStyle:   true,
+		Volume:      spec.VolumeName(),
+		Sessions:    sessions,
+		Sealed:      base64.StdEncoding.EncodeToString(held.sealed),
 	}, nil
 }
 

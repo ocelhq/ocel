@@ -28,12 +28,17 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 			"app %s carries no health check path, and up means a 2xx on the path the wire named rather than on one this provider chose", app.App)
 	}
 	physical := host.ContainerName(plan.Ref.Name.String(), app.App, app.Deployment, app.Image)
+	store, err := p.storeSection(ctx, plan)
+	if err != nil {
+		return nil, fmt.Errorf("pin the store %s writes through: %w", app.App, err)
+	}
 	manifest, err := live.Render(live.Manifest{
 		Slug:        plan.Ref.Project,
 		Class:       string(plan.Ref.Class),
 		Environment: liveEnvironment(plan.Ref),
 		Keys:        liveKeys(app.Values),
 		Bindings:    liveBindings(app.Values),
+		Store:       store,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("pin %s's live values: %w", app.App, err)

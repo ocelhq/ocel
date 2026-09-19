@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -88,10 +90,15 @@ type Resolver interface {
 	Resolve(ctx context.Context, manifest live.Manifest) (map[string]string, error)
 }
 
+type Measurer interface {
+	Space(ctx context.Context, volume string) (free uint64, total uint64, err error)
+}
+
 type Server struct {
 	Proc    string
 	Inspect Inspector
 	Resolve Resolver
+	Space   Measurer
 }
 
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
@@ -123,38 +130,65 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(http.MethodGet+" "+live.ValuesPath, s.answer)
+	mux.HandleFunc(http.MethodGet+" "+live.SpacePath, s.measure)
 	return mux
 }
 
-func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
+func (s *Server) manifestOf(w http.ResponseWriter, r *http.Request) (live.Manifest, bool) {
 	held, _ := r.Context().Value(peerKey{}).(peer)
 	if held.err != nil {
 		http.Error(w, "the caller could not be identified: "+held.err.Error(), http.StatusForbidden)
-		return
+		return live.Manifest{}, false
 	}
 	container, err := s.containerOf(held.pid)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
-		return
+		return live.Manifest{}, false
 	}
 	inspecting, cancel := context.WithTimeout(r.Context(), inspectWindow)
 	defer cancel()
 	raw, err := s.Inspect.Manifest(inspecting, container)
 	if err != nil {
 		http.Error(w, "the box could not read what the caller's container was handed: "+err.Error(), http.StatusBadGateway)
-		return
+		return live.Manifest{}, false
 	}
 	if raw == "" {
 		http.Error(w, "the caller's container carries no live-value manifest", http.StatusNotFound)
-		return
+		return live.Manifest{}, false
 	}
 	manifest, err := live.Parse([]byte(raw))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
+		return live.Manifest{}, false
 	}
 	if !manifest.Live() {
 		http.Error(w, "the caller's container carries a manifest naming nothing live", http.StatusNotFound)
+		return live.Manifest{}, false
+	}
+	return manifest, true
+}
+
+func (s *Server) measure(w http.ResponseWriter, r *http.Request) {
+	manifest, held := s.manifestOf(w, r)
+	if !held {
+		return
+	}
+	if manifest.Store == nil || manifest.Store.Volume == "" || s.Space == nil {
+		http.Error(w, "the caller's container names no store volume this box holds", http.StatusNotFound)
+		return
+	}
+	free, total, err := s.Space.Space(r.Context(), manifest.Store.Volume)
+	if err != nil {
+		http.Error(w, "measure "+manifest.Store.Volume+": "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(live.Space{Free: free, Total: total})
+}
+
+func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
+	manifest, held := s.manifestOf(w, r)
+	if !held {
 		return
 	}
 	resolved, err := s.Resolve.Resolve(r.Context(), manifest)
@@ -223,6 +257,36 @@ func (d *Docker) Manifest(ctx context.Context, container string) (string, error)
 	return ManifestIn(inspected.Config.Env), nil
 }
 
+func (d *Docker) Space(ctx context.Context, volume string) (uint64, uint64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/volumes/"+url.PathEscape(volume), nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	resp, err := (&http.Client{Transport: d.transport}).Do(req)
+	if err != nil {
+		return 0, 0, fmt.Errorf("ask the daemon at %s about volume %s: %w", d.host.Address, volume, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		said, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return 0, 0, fmt.Errorf("the daemon at %s answered %q about volume %s: %s", d.host.Address, resp.Status, volume, strings.TrimSpace(string(said)))
+	}
+	var inspected struct {
+		Mountpoint string `json:"Mountpoint"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, inspectLimit)).Decode(&inspected); err != nil {
+		return 0, 0, fmt.Errorf("read what the daemon says about volume %s: %w", volume, err)
+	}
+	if inspected.Mountpoint == "" {
+		return 0, 0, fmt.Errorf("the daemon places volume %s nowhere on this box's filesystem", volume)
+	}
+	var stat unix.Statfs_t
+	if err := unix.Statfs(inspected.Mountpoint, &stat); err != nil {
+		return 0, 0, fmt.Errorf("measure %s: %w", inspected.Mountpoint, err)
+	}
+	return stat.Bavail * uint64(stat.Bsize), stat.Blocks * uint64(stat.Bsize), nil
+}
+
 func ManifestIn(env []string) string {
 	for _, entry := range env {
 		if value, named := strings.CutPrefix(entry, live.EnvVar+"="); named {
@@ -260,7 +324,28 @@ func (s Store) Resolve(ctx context.Context, manifest live.Manifest) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	return merged(resolved, manifest.Bindings, records), nil
+	answer := merged(resolved, manifest.Bindings, records)
+	if manifest.Store == nil || manifest.Store.Sealed == "" {
+		return answer, nil
+	}
+	secret, err := s.storeSecret(ctx, manifest)
+	if err != nil {
+		return nil, err
+	}
+	answer[live.StoreSecretKey] = secret
+	return answer, nil
+}
+
+func (s Store) storeSecret(ctx context.Context, manifest live.Manifest) (string, error) {
+	sealed, err := base64.StdEncoding.DecodeString(manifest.Store.Sealed)
+	if err != nil {
+		return "", fmt.Errorf("the manifest carries a %s that nothing ocel sealed encodes to", live.StoreSecretName)
+	}
+	opened, err := (live.Sealer{Root: s.ClassRoot}).Open(ctx, manifest.StoreCoordinate(), sealed)
+	if err != nil {
+		return "", err
+	}
+	return string(opened), nil
 }
 
 func merged(resolved map[string]string, bindings []rt.Binding, records []values.Published) map[string]string {

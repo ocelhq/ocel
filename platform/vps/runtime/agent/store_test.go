@@ -246,3 +246,59 @@ func TestTheStoreOpensNothingUnderAClassWhoseKeyIsGone(t *testing.T) {
 		t.Errorf("Resolve() with no key = %v, want a refusal naming the key", err)
 	}
 }
+
+func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *testing.T) {
+	t.Parallel()
+	b := aBox(t, t.TempDir())
+	at := providerkit.Coordinate{
+		Project: "shop", Class: providerkit.ClassProduction, Env: "shop-prod",
+		Folder: live.StoreSecretFolder, Binding: live.StoreSecretBinding, Name: live.StoreSecretName,
+	}
+	sealed, err := b.sealer.Seal(context.Background(), at, []byte("s3cr3t"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.bind(t, shop, "", "uploads", &bindingsv1.Binding{
+		Name: "uploads", Source: "terraform",
+		Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "shop-prod-uploads"}},
+	})
+	b.dump(t)
+
+	resolved, err := b.resolver().Resolve(context.Background(), live.Manifest{
+		Slug: "shop", Class: "production",
+		Bindings: []rt.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
+		Store: &live.Store{
+			Env: "shop-prod", Endpoint: "http://shop-prod-store-s3:9000", Region: "us-east-1",
+			AccessKeyID: "ocel", Sealed: base64.StdEncoding.EncodeToString(sealed),
+		},
+	})
+	if err != nil {
+		t.Fatalf("Resolve() = %v", err)
+	}
+	if resolved[live.StoreSecretKey] != "s3cr3t" {
+		t.Errorf("Resolve() handed %q under %s, want the store credential the deploy sealed for this box's runtime",
+			resolved[live.StoreSecretKey], live.StoreSecretKey)
+	}
+}
+
+func TestTheStoreRefusesAStoreCredentialSealedForAnotherProject(t *testing.T) {
+	t.Parallel()
+	b := aBox(t, t.TempDir())
+	elsewhere := providerkit.Coordinate{
+		Project: "other", Class: providerkit.ClassProduction, Env: "other-prod",
+		Folder: live.StoreSecretFolder, Binding: live.StoreSecretBinding, Name: live.StoreSecretName,
+	}
+	sealed, err := b.sealer.Seal(context.Background(), elsewhere, []byte("s3cr3t"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.dump(t)
+	_, err = b.resolver().Resolve(context.Background(), live.Manifest{
+		Slug: "shop", Class: "production",
+		Keys:  []rt.Key{{Key: "DATABASE_URL"}},
+		Store: &live.Store{Env: "shop-prod", Sealed: base64.StdEncoding.EncodeToString(sealed)},
+	})
+	if err == nil || !strings.Contains(err.Error(), live.StoreSecretName) {
+		t.Errorf("Resolve() = %v, want a refusal: a credential sealed for another project must not open here", err)
+	}
+}

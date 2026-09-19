@@ -46,6 +46,36 @@ func (f *socketFetcher) FetchLive(ctx context.Context) (map[string]string, error
 	return answer.Values, nil
 }
 
+func (f *socketFetcher) FreeSpace() (uint64, uint64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), rt.FetchBudget)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ocel-live"+vars.SpacePath, nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return 0, 0, fmt.Errorf("ask the box how much room the store's volume has over %s: %w", f.socket, err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, answerCeiling))
+	if err != nil {
+		return 0, 0, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return 0, 0, fmt.Errorf("the box answered %q asking after the store's volume: %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	var space vars.Space
+	if err := json.Unmarshal(body, &space); err != nil {
+		return 0, 0, fmt.Errorf("the box answered something that is not a measurement: %w", err)
+	}
+	return space.Free, space.Total, nil
+}
+
+func FreeSpace(socket string) func() (uint64, uint64, error) {
+	return over(socket).FreeSpace
+}
+
 func FromManifest(raw []byte, socket string) (*Values, error) {
 	manifest, err := vars.Parse(raw)
 	if err != nil {
@@ -58,10 +88,13 @@ func FromManifest(raw []byte, socket string) (*Values, error) {
 }
 
 func Over(manifest vars.Manifest, socket string) *Values {
-	fetcher := &socketFetcher{socket: socket, client: &http.Client{Transport: &http.Transport{
+	return rt.New(over(socket), rt.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil)
+}
+
+func over(socket string) *socketFetcher {
+	return &socketFetcher{socket: socket, client: &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 		},
 	}}}
-	return rt.New(fetcher, rt.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil)
 }

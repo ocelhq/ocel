@@ -175,6 +175,8 @@ func volumeName(name, generation string) string {
 
 func (r ResourceContainer) volume() string { return volumeName(r.Name, r.Volume.Generation) }
 
+func (r ResourceContainer) VolumeName() string { return r.volume() }
+
 func volumesOf(class providerkit.Class, project, resource, name string) string {
 	return "docker volume ls --filter " + quoted("name=^"+name) +
 		" --filter " + quoted("label="+LabelClass+"="+string(class)) +

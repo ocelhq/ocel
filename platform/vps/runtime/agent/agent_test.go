@@ -179,6 +179,94 @@ func TestTheAgentAnswersACallerWithTheValuesItsOwnContainerWasHandedAndNothingIt
 	}
 }
 
+type measuring struct {
+	mu     sync.Mutex
+	asked  []string
+	free   uint64
+	total  uint64
+	broken error
+}
+
+func (m *measuring) Space(_ context.Context, volume string) (uint64, uint64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.asked = append(m.asked, volume)
+	return m.free, m.total, m.broken
+}
+
+func storeManifest(t *testing.T, volume string) string {
+	t.Helper()
+	rendered, err := live.Render(live.Manifest{
+		Slug: "shop", Class: "production", Keys: []rt.Key{{Key: "DATABASE_URL"}},
+		Store: &live.Store{Env: "shop-prod", Volume: volume},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(rendered)
+}
+
+func askSpace(t *testing.T, socket string) (int, string) {
+	t.Helper()
+	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+	}}}
+	resp, err := client.Get("http://ocel-live" + live.SpacePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, string(body)
+}
+
+func TestTheAgentMeasuresTheVolumeTheCallersOwnManifestNamesAndNoOther(t *testing.T) {
+	t.Parallel()
+	space := &measuring{free: 7 << 30, total: 40 << 30}
+	socket := serving(t, &Server{
+		Proc:    procNaming(t, "0::/system.slice/docker-"+containerID+".scope\n"),
+		Inspect: &inspecting{manifests: map[string]string{containerID: storeManifest(t, "shop-prod-store-s3-data")}},
+		Resolve: &resolving{},
+		Space:   space,
+	})
+
+	status, body := askSpace(t, socket)
+	if status != http.StatusOK {
+		t.Fatalf("the agent answered %d asking after the store volume: %s", status, body)
+	}
+	var answer live.Space
+	if err := json.Unmarshal([]byte(body), &answer); err != nil {
+		t.Fatalf("the agent answered %q, which is no measurement: %v", body, err)
+	}
+	if answer.Free != 7<<30 || answer.Total != 40<<30 {
+		t.Errorf("the agent answered %+v, want what the store's volume holds", answer)
+	}
+	if len(space.asked) != 1 || space.asked[0] != "shop-prod-store-s3-data" {
+		t.Errorf("the agent measured %v, want the volume the caller's own manifest names", space.asked)
+	}
+}
+
+func TestACallerWhoseManifestNamesNoStoreIsToldOfNoVolume(t *testing.T) {
+	t.Parallel()
+	space := &measuring{free: 1, total: 2}
+	socket := serving(t, &Server{
+		Proc:    procNaming(t, "0::/system.slice/docker-"+containerID+".scope\n"),
+		Inspect: &inspecting{manifests: map[string]string{containerID: manifestFor(t, "shop", "")}},
+		Resolve: &resolving{},
+		Space:   space,
+	})
+	status, body := askSpace(t, socket)
+	if status != http.StatusNotFound {
+		t.Errorf("the agent answered %d %q, want a refusal: a container with no store of its own measures nothing", status, body)
+	}
+	if len(space.asked) != 0 {
+		t.Errorf("the agent measured %v for a caller whose manifest names no store volume", space.asked)
+	}
+}
+
 func TestACallerOutsideEveryContainerIsRefused(t *testing.T) {
 	t.Parallel()
 	inspect := &inspecting{manifests: map[string]string{containerID: manifestFor(t, "shop", "")}}

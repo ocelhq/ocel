@@ -9,17 +9,21 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/runtimekit/child"
 	"github.com/ocelhq/ocel/pkg/runtimekit/front"
 	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/proxy"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/runtime/bucket"
 	"github.com/ocelhq/ocel/platform/vps/runtime/live"
 )
 
@@ -64,12 +68,23 @@ func run(ctx context.Context, command []string, environ []string) int {
 		return fatal(err.Error())
 	}
 
+	pinned, err := pinned(manifest)
+	if err != nil {
+		return fatal(err.Error())
+	}
+	fronting, err := proxying(pinned, values, vars.SocketPath)
+	if err != nil {
+		return fatal(err.Error())
+	}
+	defer fronting.Close()
+
 	internal, err := child.FreePort()
 	if err != nil {
 		return fatal(fmt.Sprintf("find a loopback port for the app: %v", err))
 	}
 	env = append(env, providerkit.InjectedPortName+"="+strconv.Itoa(internal))
 	env = append(env, values.Env()...)
+	env = append(env, fronting.Env...)
 
 	proc, err := child.Start(child.Options{Command: command, Env: env, Stdout: os.Stdout, Stderr: os.Stderr})
 	if err != nil {
@@ -137,6 +152,49 @@ func exitCode(exit child.Exit) int {
 		return 1
 	}
 	return exit.Code
+}
+
+func pinned(manifest string) (vars.Manifest, error) {
+	if manifest == "" {
+		return vars.Manifest{}, nil
+	}
+	return vars.Parse([]byte(manifest))
+}
+
+func proxying(manifest vars.Manifest, values *rt.Values, socket string) (proxy.Served, error) {
+	if manifest.Store == nil || !slices.ContainsFunc(manifest.Bindings, func(l rt.Binding) bool { return naming.Proxied(l.Type) }) {
+		return proxy.Served{}, nil
+	}
+	secret := values.Value(vars.StoreSecretKey)
+	if secret == "" {
+		return proxy.Served{}, fmt.Errorf(
+			"this deployment binds a bucket and the box handed its runtime no credential for the store at %s, so nothing it wrote could be signed",
+			manifest.Store.Endpoint)
+	}
+	internal := bucket.Store{
+		Endpoint:        manifest.Store.Endpoint,
+		Region:          manifest.Store.Region,
+		AccessKeyID:     manifest.Store.AccessKeyID,
+		SecretAccessKey: secret,
+		PathStyle:       manifest.Store.PathStyle,
+	}
+	cfg := bucket.Config{
+		Objects:      internal.Client(),
+		Internal:     internal.Presigner(),
+		PublicHost:   manifest.Store.PublicBaseURL,
+		Callbacks:    bucket.HTTPPoster{},
+		PostPolicies: true,
+		Sessions:     manifest.Store.Sessions,
+	}
+	if manifest.Store.PublicBaseURL != "" {
+		external := internal
+		external.Endpoint = manifest.Store.PublicBaseURL
+		cfg.External = external.Presigner()
+	}
+	if manifest.Store.Volume != "" {
+		cfg.Volume = live.FreeSpace(socket)
+	}
+	return proxy.Serve(bucket.New(cfg))
 }
 
 func resolve(ctx context.Context, manifest, socket, dir string) (*rt.Values, error) {

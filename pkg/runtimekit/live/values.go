@@ -79,6 +79,15 @@ func (l *Values) Env() []string {
 	return env
 }
 
+func (l *Values) Value(key string) string {
+	if l == nil {
+		return ""
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.values[key]
+}
+
 func (l *Values) Keys() []string {
 	if l == nil {
 		return nil

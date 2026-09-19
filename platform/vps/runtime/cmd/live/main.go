@@ -55,6 +55,7 @@ func run(argv []string, errs *os.File) int {
 		Proc:    *proc,
 		Inspect: inspect,
 		Resolve: agent.Store{ClassRoot: *classRoot, StateRoot: *stateRoot},
+		Space:   inspect,
 	}
 	if err := server.Serve(ctx, ln); err != nil {
 		fmt.Fprintln(errs, "ocel-live: "+err.Error())
