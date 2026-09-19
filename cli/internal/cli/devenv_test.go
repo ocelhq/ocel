@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -17,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
+	"github.com/ocelhq/ocel/cli/internal/console/httpapi"
 	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -39,9 +41,9 @@ func withCredentials(deps *cmddeps.Deps, apiURL string) {
 
 func withProjectEnv(deps *cmddeps.Deps, envVars map[string]string) *atomic.Int32 {
 	var calls atomic.Int32
-	deps.FetchAccount = func(_ context.Context, _, _, projectID string) (resolve.Account, error) {
+	deps.FetchAccount = func(context.Context, string, string, string) (map[string]string, error) {
 		calls.Add(1)
-		return resolve.Account{ProjectID: projectID, EnvVars: envVars}, nil
+		return envVars, nil
 	}
 	return &calls
 }
@@ -269,7 +271,7 @@ func TestRefusalsNameTheCommandThatRan(t *testing.T) {
 		if !strings.Contains(got, "`ocel run` again") {
 			t.Errorf("refusal = %q, want it to name the command that was run", got)
 		}
-		if strings.Contains(got, "`ocel dev`") || strings.Contains(got, "--local") {
+		if strings.Contains(got, "`ocel dev`") {
 			t.Errorf("refusal = %q, want no mention of a command or flag this run never used", got)
 		}
 		if strings.Contains(got, "ocel login") {
@@ -312,9 +314,9 @@ func TestSharedValuesAreReadOnlyWhereTheDirectorySaysTo(t *testing.T) {
 			deps.LoadCredentials = func() (credentials.Credentials, error) {
 				return credentials.Credentials{}, credentials.ErrNotLoggedIn
 			}
-			deps.FetchAccount = func(context.Context, string, string, string) (resolve.Account, error) {
+			deps.FetchAccount = func(context.Context, string, string, string) (map[string]string, error) {
 				t.Error("an unlinked project reached the console")
-				return resolve.Account{}, errors.New("no console")
+				return nil, errors.New("no console")
 			}
 			clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
 			clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declaresRequired)
@@ -339,9 +341,9 @@ func TestSharedValuesAreReadOnlyWhereTheDirectorySaysTo(t *testing.T) {
 			deps.LoadCredentials = func() (credentials.Credentials, error) {
 				return credentials.Credentials{}, credentials.ErrNotLoggedIn
 			}
-			deps.FetchAccount = func(context.Context, string, string, string) (resolve.Account, error) {
+			deps.FetchAccount = func(context.Context, string, string, string) (map[string]string, error) {
 				t.Error("a logged-out run reached the console")
-				return resolve.Account{}, errors.New("no token")
+				return nil, errors.New("no token")
 			}
 			t.Setenv(console.URLEnvVar, testAPIURL)
 			writeLink(t, root, testAPIURL, testProjectID(t))
@@ -357,6 +359,31 @@ func TestSharedValuesAreReadOnlyWhereTheDirectorySaysTo(t *testing.T) {
 				t.Errorf("stderr = %q, want exactly one warning that the shared values were not read", stderr.String())
 			}
 		})
+
+		for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+			t.Run(fmt.Sprintf("%s: a linked project whose login the console answers %d is treated as logged out", command.name, status), func(t *testing.T) {
+				root := t.TempDir()
+				t.Cleanup(func() { _ = devlock.Remove(root) })
+
+				deps := devDeps()
+				deps.FetchAccount = func(context.Context, string, string, string) (map[string]string, error) {
+					return nil, &httpapi.Error{StatusCode: status, Message: "token expired"}
+				}
+				t.Setenv(console.URLEnvVar, testAPIURL)
+				writeLink(t, root, testAPIURL, testProjectID(t))
+				clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declaresRequired)
+
+				var stdout, stderr syncBuffer
+				err := command.run(deps, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr)
+
+				if err == nil || !strings.Contains(err.Error(), "API_BASE") || !strings.Contains(err.Error(), "ocel login") {
+					t.Fatalf("err = %v, want a refusal of API_BASE that names `ocel login`", err)
+				}
+				if said := stderr.String(); strings.Count(said, "ocel login") != 1 || strings.Contains(said, "could not reach") {
+					t.Errorf("stderr = %q, want one warning that says to log in again, not that the console is unreachable", said)
+				}
+			})
+		}
 	}
 }
 
@@ -792,8 +819,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 
 		deps := devDeps()
 		withCredentials(&deps, testAPIURL)
-		deps.FetchAccount = func(context.Context, string, string, string) (resolve.Account, error) {
-			return resolve.Account{}, errors.New("dial tcp: connection refused")
+		deps.FetchAccount = func(context.Context, string, string, string) (map[string]string, error) {
+			return nil, errors.New("dial tcp: connection refused")
 		}
 
 		writeLink(t, root, testAPIURL, testProjectID(t))

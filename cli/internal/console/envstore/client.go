@@ -7,7 +7,6 @@ import (
 	"net/url"
 
 	"github.com/ocelhq/ocel/cli/internal/console/httpapi"
-	"github.com/ocelhq/ocel/cli/internal/resolve"
 )
 
 var ErrNoValue = errors.New("the console holds no value under that key")
@@ -68,15 +67,15 @@ func (c *Client) keyPath(projectID, key string) string {
 	return c.path(projectID) + "/" + url.PathEscape(key)
 }
 
-func FetchAccount(ctx context.Context, apiURL, token, projectID string) (resolve.Account, error) {
+func FetchAccount(ctx context.Context, apiURL, token, projectID string) (map[string]string, error) {
 	values, err := New(apiURL).List(ctx, token, projectID)
 	if err != nil {
-		return resolve.Account{}, err
+		return nil, err
 	}
 
 	env := make(map[string]string, len(values))
 	for _, value := range values {
 		env[value.Key] = value.Value
 	}
-	return resolve.Account{ProjectID: projectID, EnvVars: env}, nil
+	return env, nil
 }
