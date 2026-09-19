@@ -369,3 +369,32 @@ func TestAPostgresDeclaringNoVersionRunsTheOneEverySdkDeclaresByDefault(t *testi
 		t.Errorf("a postgres naming no version was stood up as:\n%s\nwant the major every sdk declares when the app names none", stood)
 	}
 }
+
+func TestALoginThatDoesNotOwnTheStateDirectoryKeepsThePasswordThroughSudo(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{unsocket: true}
+	machine.refuses = func(command string) (session.Result, bool) {
+		owns := strings.Contains(command, "/kept/") || strings.Contains(command, ".env")
+		if owns && !strings.HasPrefix(command, "sudo ") {
+			return session.Result{Code: 1, Stderr: "mkdir: cannot create directory '/var/lib/ocel': Permission denied"}, true
+		}
+		return session.Result{}, false
+	}
+	binding, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil)
+	if err != nil {
+		t.Fatalf("Postgres() as a login with sudo that does not own the state directory = %v, and a bootstrap login deploys as readily as the deploy login does", err)
+	}
+	if binding.Properties[providerkit.PropertyPassword] == "" {
+		t.Error("the binding carries no password")
+	}
+	kept := machine.commands()[len(machine.commands())-1]
+	for _, command := range machine.commands() {
+		if strings.HasPrefix(command, "sudo ") && strings.Contains(command, "/kept/") && strings.Contains(command, "ln ") {
+			kept = command
+		}
+	}
+	if !strings.Contains(kept, "chown") {
+		t.Errorf("what root kept is left root's, and the deploy login that owns the state directory can no longer open it:\n%s", kept)
+	}
+}
