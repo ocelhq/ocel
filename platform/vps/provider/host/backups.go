@@ -21,6 +21,13 @@ const (
 	backupsDir = "backups"
 
 	LabelBackup = "ocel.backup"
+
+	// BackupPostgres is the ocel.backup label a container carries when its dump
+	// is taken with pg_dump.
+	BackupPostgres = "pg"
+	// BackupVolume is the ocel.backup label a container carries when its dump is
+	// a tar of the volume it mounts.
+	BackupVolume = "vol"
 )
 
 func BackupsDir(class providerkit.Class, container string) string {

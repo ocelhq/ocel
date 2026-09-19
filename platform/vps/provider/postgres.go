@@ -58,7 +58,7 @@ func postgresContainer(in resources.Instruction) (host.ResourceContainer, error)
 			},
 		},
 		Ready:    []string{"pg_isready", "-h", "127.0.0.1", "-U", postgresSuperuser},
-		Backup:   postgresKind,
+		Backup:   host.BackupPostgres,
 		Database: in.Resource.Name,
 	}, nil
 }
@@ -76,7 +76,7 @@ func (p *Provider) Postgres(ctx context.Context, in resources.Instruction, repor
 	if err != nil {
 		return providerkit.Binding{}, err
 	}
-	if spec, err = p.reshaped(ctx, in, spec); err != nil {
+	if spec, err = p.reshaped(ctx, in, transformTypePostgres, spec); err != nil {
 		return providerkit.Binding{}, err
 	}
 	if report != nil {
@@ -103,16 +103,20 @@ func (p *Provider) Postgres(ctx context.Context, in resources.Instruction, repor
 }
 
 func (p *Provider) held(ctx context.Context, in resources.Instruction, name string) (string, error) {
+	return p.heldSecret(ctx, in, name, postgresSecretFolder, postgresSecretName, mintPostgresSecret)
+}
+
+func (p *Provider) heldSecret(ctx context.Context, in resources.Instruction, name, folder, item string, mint func() (string, error)) (string, error) {
 	at := providerkit.Coordinate{
 		Project: in.Ref.Project, Class: in.Ref.Class, Env: in.Ref.Name.String(),
-		Folder: postgresSecretFolder, Binding: in.Resource.Name, Name: postgresSecretName,
+		Folder: folder, Binding: in.Resource.Name, Name: item,
 	}
 	sealed, err := p.host.Kept(ctx, in.Ref.Class, name)
 	if err != nil {
 		return "", err
 	}
 	if len(sealed) == 0 {
-		minted, err := mintPostgresSecret()
+		minted, err := mint()
 		if err != nil {
 			return "", err
 		}
@@ -130,21 +134,25 @@ func (p *Provider) held(ctx context.Context, in resources.Instruction, name stri
 	}
 	if len(opened) == 0 {
 		return "", providerkit.Refuse(providerkit.CodeNotReady,
-			"what this box keeps for postgres %s opens to nothing, so there is no password to bind an app to. Remove %s on the box and run this again",
+			"what this box keeps for %s opens to nothing, so there is no credential to bind an app to. Remove %s on the box and run this again",
 			in.Resource.Name, host.KeptPath(in.Ref.Class, name))
 	}
 	return string(opened), nil
 }
 
 func (p *Provider) RemoveResource(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error {
-	if binding.Type != providerkit.BindingPostgres {
+	switch binding.Type {
+	case providerkit.BindingPostgres:
+		name := host.ResourceName(ref.Name.String(), binding.Name, postgresKind)
+		if report != nil {
+			report.Say("Taking postgres " + binding.Name + " and its data down")
+		}
+		return p.host.RemoveResource(ctx, host.ResourceRef{Class: ref.Class, Project: ref.Project, Resource: binding.Name, Name: name})
+	case providerkit.BindingBucket:
+		return p.removeBucket(ctx, ref, binding, report)
+	default:
 		return nil
 	}
-	name := host.ResourceName(ref.Name.String(), binding.Name, postgresKind)
-	if report != nil {
-		report.Say("Taking postgres " + binding.Name + " and its data down")
-	}
-	return p.host.RemoveResource(ctx, host.ResourceRef{Class: ref.Class, Project: ref.Project, Resource: binding.Name, Name: name})
 }
 
 var (
