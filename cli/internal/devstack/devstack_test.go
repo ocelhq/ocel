@@ -126,6 +126,9 @@ func TestResetWipesOnlyThisProjectsVolumes(t *testing.T) {
 func TestProjectNamesAreReadableAndDistinctPerDirectory(t *testing.T) {
 	t.Parallel()
 
+	if got := devstack.ProjectName("/work/trees/sdk-node/My Shop"); got != "my-shop-2d2cdb07" {
+		t.Fatalf("ProjectName = %q, want my-shop-2d2cdb07, the name the journey harness looks containers up by", got)
+	}
 	a, b := devstack.ProjectName("/home/ada/work/My Shop"), devstack.ProjectName("/home/ada/play/My Shop")
 	if !strings.HasPrefix(a, "my-shop-") || a == b {
 		t.Fatalf("ProjectName = %q and %q, want a readable name that differs between two directories called the same", a, b)

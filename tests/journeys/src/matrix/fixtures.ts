@@ -38,7 +38,6 @@ export const deploy = {
     checks: NODE_CHECKS,
     on: {
       dev: [defaults],
-      "dev-local": [defaults],
       aws: [container, apiGateway],
       vps: [defaults],
       gcp: [defaults, container],
@@ -77,7 +76,6 @@ export const deploy = {
     checks: [...NODE_CHECKS, ...NEXT_ROUTING_AND_CACHE_CHECKS],
     on: {
       dev: [defaults],
-      "dev-local": [defaults],
       aws: [defaults, container, cloudflare],
       vps: [defaults],
       gcp: [defaults, container],
@@ -88,7 +86,6 @@ export const deploy = {
     checks: NODE_CHECKS,
     on: {
       dev: [defaults],
-      "dev-local": [defaults],
       aws: [defaults, container, cloudflare],
       vps: [defaults],
       gcp: [defaults, container],
@@ -119,7 +116,6 @@ export const sdk = {
     checks: NODE_SDK_CHECKS,
     on: {
       dev: [defaults],
-      "dev-local": [defaults],
       aws: [container, apiGateway],
       vps: [defaults],
     },
@@ -134,7 +130,6 @@ export const sdk = {
     ],
     on: {
       dev: [defaults],
-      "dev-local": [defaults],
       aws: [defaults, container, cloudflare],
       vps: [defaults],
     },
@@ -144,7 +139,6 @@ export const sdk = {
     checks: NODE_SDK_CHECKS,
     on: {
       dev: [defaults],
-      "dev-local": [defaults],
       aws: [defaults, container, cloudflare],
       vps: [defaults],
     },

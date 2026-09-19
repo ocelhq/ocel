@@ -5,25 +5,16 @@ import type { TestSelector } from "../steps";
 
 export type { Compute };
 
-export type TargetName = "dev" | "dev-local" | "aws" | "vps" | "gcp";
+export type TargetName = "dev" | "aws" | "vps" | "gcp";
 
-export const TARGETS: TargetName[] = ["dev", "dev-local", "aws", "vps", "gcp"];
+export const TARGETS: TargetName[] = ["dev", "aws", "vps", "gcp"];
 
-export type Lane =
-  | "aws"
-  | "aws.floci"
-  | "dev"
-  | "dev-local"
-  | "gcp"
-  | "gcp.floci"
-  | "vps"
-  | "vps.incus";
+export type Lane = "aws" | "aws.floci" | "dev" | "gcp" | "gcp.floci" | "vps" | "vps.incus";
 
 const TARGET_OF: Record<Lane, TargetName> = {
   aws: "aws",
   "aws.floci": "aws",
   dev: "dev",
-  "dev-local": "dev-local",
   gcp: "gcp",
   "gcp.floci": "gcp",
   vps: "vps",

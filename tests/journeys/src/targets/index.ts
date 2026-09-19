@@ -1,7 +1,6 @@
 import type { TargetName } from "../matrix/types";
 import { AwsTarget } from "./aws";
 import { DevTarget } from "./dev";
-import { DevLocalTarget } from "./devLocal";
 import { GcpTarget } from "./gcp";
 import type { Target } from "./types";
 import { VpsTarget } from "./vps";
@@ -11,7 +10,6 @@ export { hasReleaseCycle } from "./types";
 const TARGETS: Record<TargetName, () => Target> = {
   aws: () => new AwsTarget(),
   dev: () => new DevTarget(),
-  "dev-local": () => new DevLocalTarget(),
   gcp: () => new GcpTarget(),
   vps: () => new VpsTarget(),
 };

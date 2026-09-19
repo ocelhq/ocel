@@ -4,15 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./env": "./src/env.ts",
-    "./seed": "./src/seed.ts"
+    "./env": "./src/env.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@console/auth": "workspace:*",
-    "@console/db": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",

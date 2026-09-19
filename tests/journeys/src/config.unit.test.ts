@@ -3,8 +3,8 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
-  AWS_BASE,
   awsSweepOverlay,
+  DEFAULT_BASE,
   GCP_BASE,
   JOURNEY_JSON,
   JOURNEY_TS,
@@ -50,7 +50,7 @@ describe("journeyZone", () => {
 describe("awsSweepOverlay", () => {
   it("destroys a cell through the edge its variant stood it up behind", () => {
     expect(awsSweepOverlay(cell(sdk.workspace, cloudflare), "j-9-sdk-workspace", {})).toEqual({
-      base: AWS_BASE,
+      base: DEFAULT_BASE,
       slug: "j-9-sdk-workspace",
       edge: "cloudflare",
     });
@@ -58,7 +58,7 @@ describe("awsSweepOverlay", () => {
 
   it("names no edge for a default cell", () => {
     expect(awsSweepOverlay(cell(deploy.node), "j-9-deploy-node", {})).toEqual({
-      base: AWS_BASE,
+      base: DEFAULT_BASE,
       slug: "j-9-deploy-node",
     });
   });
@@ -71,7 +71,7 @@ describe("awsSweepOverlay", () => {
         OCEL_AWS_VARS_KEY: "arn:aws:kms:key/k",
       }),
     ).toEqual({
-      base: AWS_BASE,
+      base: DEFAULT_BASE,
       slug: "j-9-deploy-node",
       dns: "cloudflare",
     });
@@ -86,7 +86,7 @@ describe("overlayFor", () => {
         OCEL_JOURNEY_DNS: "cloudflare",
       }),
     ).toEqual({
-      base: AWS_BASE,
+      base: DEFAULT_BASE,
       slug: "j-1-sdk-workspace",
       edge: "cloudflare",
       dns: "cloudflare",
@@ -99,7 +99,7 @@ describe("overlayFor", () => {
 
   it("takes the compute a container variant names", () => {
     expect(overlayFor(cell(deploy.node, container), "aws", {})).toEqual({
-      base: AWS_BASE,
+      base: DEFAULT_BASE,
       slug: "j-1-deploy-node",
       compute: "container",
     });
@@ -107,7 +107,7 @@ describe("overlayFor", () => {
 
   it("leaves the fixture's config alone for a default cell, and dns alone off a real zone", () => {
     expect(overlayFor(cell(deploy.node), "aws", { OCEL_JOURNEY_ZONE: "j.example" })).toEqual({
-      base: AWS_BASE,
+      base: DEFAULT_BASE,
       slug: "j-1-deploy-node",
       hostnames: { web: "web-j-1-deploy-node.j.example" },
     });
@@ -117,7 +117,7 @@ describe("overlayFor", () => {
     expect(
       overlayFor(cell(deploy.node), "aws", { OCEL_AWS_VARS_KEY: " arn:aws:kms:key/k " }),
     ).toEqual({
-      base: AWS_BASE,
+      base: DEFAULT_BASE,
       slug: "j-1-deploy-node",
       varsKey: "arn:aws:kms:key/k",
     });
@@ -140,7 +140,7 @@ describe("overlayFor", () => {
         OCEL_AWS_VARS_KEY: "arn:aws:kms:key/k",
       }),
     ).toEqual({
-      base: AWS_BASE,
+      base: DEFAULT_BASE,
       slug: "j-1-deploy-node",
     });
   });
@@ -155,7 +155,7 @@ const ARCHED_JSON_BASE = `{
 
 describe("a container cell", () => {
   it("carries no framework on any target, because a container runs the image it is given", () => {
-    for (const base of [AWS_BASE, GCP_BASE, VPS_BASE]) {
+    for (const base of [DEFAULT_BASE, GCP_BASE, VPS_BASE]) {
       expect(renderConfig({ base, slug: "j-1-deploy-node", compute: "container" })).toContain(
         "framework: undefined,",
       );
@@ -163,7 +163,7 @@ describe("a container cell", () => {
   });
 
   it("carries no arch either, because the image names the platform it is built for", () => {
-    for (const base of [AWS_BASE, GCP_BASE, VPS_BASE]) {
+    for (const base of [DEFAULT_BASE, GCP_BASE, VPS_BASE]) {
       expect(renderConfig({ base, slug: "j-1-deploy-node", compute: "container" })).toContain(
         "arch: undefined,",
       );
@@ -337,7 +337,7 @@ describe("writeJourneyConfig", () => {
   it("writes the overlay in the form the fixture's own base is written in", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "journey-config-"));
     await writeFile(path.join(dir, "ocel.json"), COMMENTED_JSON_BASE, "utf8");
-    const file = await writeJourneyConfig(dir, { base: AWS_BASE, slug: "j-1-go" });
+    const file = await writeJourneyConfig(dir, { base: DEFAULT_BASE, slug: "j-1-go" });
 
     expect(file).toBe(path.join(dir, JOURNEY_JSON));
     expect(journeyConfigIn(dir)).toBe(JOURNEY_JSON);
@@ -347,7 +347,7 @@ describe("writeJourneyConfig", () => {
   it("writes a program where the fixture's own base is one", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "journey-config-"));
     await writeFile(path.join(dir, "ocel.config.ts"), "export default {};\n", "utf8");
-    const file = await writeJourneyConfig(dir, { base: AWS_BASE, slug: "j-1-node" });
+    const file = await writeJourneyConfig(dir, { base: DEFAULT_BASE, slug: "j-1-node" });
 
     expect(file).toBe(path.join(dir, JOURNEY_TS));
     expect(journeyConfigIn(dir)).toBe(JOURNEY_TS);

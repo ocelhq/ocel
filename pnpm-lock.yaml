@@ -1665,13 +1665,6 @@ importers:
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.1)(vite@8.1.3(@types/node@26.1.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
 
   tests/shared:
-    dependencies:
-      '@console/auth':
-        specifier: workspace:*
-        version: link:../../console/auth
-      '@console/db':
-        specifier: workspace:*
-        version: link:../../console/db
     devDependencies:
       '@types/node':
         specifier: ^20

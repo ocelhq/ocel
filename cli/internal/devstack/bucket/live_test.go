@@ -67,14 +67,16 @@ func startLive(t *testing.T, project string) liveBucket {
 	return liveBucket{component: component, name: bound.GetBucket().GetBucket(), callbacks: callbacks, app: app}
 }
 
-func put(t *testing.T, url, sessionID, contentType, body string) *http.Response {
+func put(t *testing.T, target *blobv1.PresignedTarget, contentType, body string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPut, url, bytes.NewReader([]byte(body)))
+	req, err := http.NewRequest(http.MethodPut, target.GetUrl(), bytes.NewReader([]byte(body)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("x-amz-tagging", "sessionId="+sessionID)
+	for name, value := range target.GetHeaders() {
+		req.Header.Set(name, value)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PUT = %v", err)
@@ -96,7 +98,7 @@ func TestLiveAnUploadCompletesThroughTheDeployedBucketService(t *testing.T) {
 		t.Fatalf("PresignUpload = %v", err)
 	}
 
-	resp := put(t, presigned.GetFiles()[0].GetUrl(), presigned.GetSessionId(), "text/plain", "hello")
+	resp := put(t, presigned.GetFiles()[0], "text/plain", "hello")
 	if resp.StatusCode != http.StatusOK {
 		said, _ := io.ReadAll(resp.Body)
 		t.Fatalf("PUT to the presigned url answered %s: %s", resp.Status, said)
@@ -144,10 +146,10 @@ func TestLiveAnUploadThatBreaksItsSignedConditionsIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PresignUpload = %v", err)
 	}
-	if resp := put(t, presigned.GetFiles()[0].GetUrl(), presigned.GetSessionId(), "image/png", "hello"); resp.StatusCode != http.StatusForbidden {
+	if resp := put(t, presigned.GetFiles()[0], "image/png", "hello"); resp.StatusCode != http.StatusForbidden {
 		t.Errorf("a PUT under another content type answered %s, want 403", resp.Status)
 	}
-	if resp := put(t, presigned.GetFiles()[1].GetUrl(), presigned.GetSessionId(), "text/plain", "hello, this is far more than five bytes"); resp.StatusCode != http.StatusForbidden {
+	if resp := put(t, presigned.GetFiles()[1], "text/plain", "hello, this is far more than five bytes"); resp.StatusCode != http.StatusForbidden {
 		t.Errorf("a PUT of another length answered %s, want 403", resp.Status)
 	}
 }
