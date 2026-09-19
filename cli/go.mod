@@ -9,12 +9,15 @@ require (
 	connectrpc.com/validate v0.6.0
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/charmbracelet/x/ansi v0.11.8
+	github.com/containerd/errdefs v1.0.0
 	github.com/creack/pty v1.1.24
 	github.com/evanw/esbuild v0.28.1
 	github.com/fatih/color v1.18.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/mattn/go-isatty v0.0.24
 	github.com/moby/buildkit v0.32.2
+	github.com/moby/moby/api v1.54.2
+	github.com/moby/moby/client v0.4.1
 	github.com/moby/patternmatcher v0.6.1
 	github.com/ocelhq/ocel/pkg/channel v0.0.0
 	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
@@ -86,7 +89,6 @@ require (
 	github.com/containerd/containerd/api v1.11.1 // indirect
 	github.com/containerd/containerd/v2 v2.3.4 // indirect
 	github.com/containerd/continuity v0.5.0 // indirect
-	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v1.0.0-rc.5 // indirect
@@ -164,8 +166,6 @@ require (
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/locker v1.0.1 // indirect
-	github.com/moby/moby/api v1.54.2 // indirect
-	github.com/moby/moby/client v0.4.1 // indirect
 	github.com/moby/sys/signal v0.7.1 // indirect
 	github.com/morikuni/aec v1.1.0 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
