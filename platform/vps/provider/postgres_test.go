@@ -236,3 +236,24 @@ var (
 	_ resources.Postgres = (*vps.Provider)(nil)
 	_ resources.Remover  = (*vps.Provider)(nil)
 )
+
+func TestARemovalReachesOnlyTheServerItsOwnStackStoodUp(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	in := aPostgres(t, "17")
+	foreign := providerkit.Binding{
+		Type: providerkit.BindingPostgres, Name: "main",
+		Properties: map[string]string{providerkit.PropertyHost: "someone-elses-container"},
+	}
+	if err := over(machine).RemoveResource(context.Background(), in.Ref, foreign, nil); err != nil {
+		t.Fatalf("RemoveResource() = %v", err)
+	}
+	joined := strings.Join(machine.commands(), "\n")
+	if strings.Contains(joined, "someone-elses-container") {
+		t.Errorf("a removal took its target from the record it was handed and ran %q: the name is the stack's and the resource's, and a record naming another container removes that one", joined)
+	}
+	if !strings.Contains(joined, "prod-web-r0a1b2c3d-main-pg") {
+		t.Errorf("a removal ran %q and never reached the server this stack stood up for main", joined)
+	}
+}

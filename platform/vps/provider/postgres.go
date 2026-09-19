@@ -138,10 +138,7 @@ func (p *Provider) RemoveResource(ctx context.Context, ref providerkit.StackRef,
 	if binding.Type != providerkit.BindingPostgres {
 		return nil
 	}
-	name := binding.Properties[providerkit.PropertyHost]
-	if name == "" {
-		return nil
-	}
+	name := host.ResourceName(ref.Name.String(), binding.Name, postgresKind)
 	if report != nil {
 		report.Say("Taking postgres " + binding.Name + " and its data down")
 	}
