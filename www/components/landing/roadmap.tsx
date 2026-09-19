@@ -18,7 +18,7 @@ const columns: Column[] = [
     items: [
       "Zero-config CLI deploys",
       "SDK primitives — postgres, bucket, queue",
-      "ocel dev — real cloud sandboxes",
+      "ocel dev — the declared stack, one command",
       "Preview environments per branch",
       "One-command rollback",
     ],

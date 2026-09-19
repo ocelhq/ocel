@@ -97,7 +97,7 @@ type CliCommand = {
 
 const cliCommands: CliCommand[] = [
   { name: "init", desc: "create a new project" },
-  { name: "dev", desc: "real cloud infra, instantly", note: "later ↓" },
+  { name: "dev", desc: "your app and its stack, one command", note: "later ↓" },
   { name: "deploy", desc: "ship to your account", primary: true },
   { name: "preview", desc: "a URL for the current branch", primary: true },
   { name: "rollback", desc: "revert production, instantly", primary: true },
@@ -368,18 +368,18 @@ const devModeTiles: { label: string; visual: ReactNode; copy: string }[] = [
     copy: "Connection strings and keys are injected at boot. No .env stitching between services.",
   },
   {
-    label: "NO LOCAL STACK",
+    label: "ONE COMMAND",
     visual: (
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 font-mono text-[12.5px]">
-        <span className="text-dim line-through decoration-dim">docker</span>
-        <span className="text-dim line-through decoration-dim">emulators</span>
+        <span className="text-dim line-through decoration-dim">compose files</span>
+        <span className="text-dim line-through decoration-dim">seed scripts</span>
         <span className="inline-flex items-center gap-1.5 text-foreground">
           <span className="size-[7px] rounded-full bg-chart-2" />
-          real cloud
+          docker only
         </span>
       </div>
     ),
-    copy: "No containers, no emulators to boot. You develop against real infrastructure, instantly.",
+    copy: "The postgres and buckets your code declares come up with it. Docker is the only prerequisite.",
   },
   {
     label: "ZERO SETUP",
@@ -406,10 +406,10 @@ function DevMode() {
             <Eyebrow>03 — DEV MODE</Eyebrow>
             <SectionHeading>Dev that mirrors production.</SectionHeading>
             <p className="mt-4 max-w-[46ch] text-[15px] leading-[1.65] text-muted-foreground">
-              No emulators, no Docker, no shared staging database.{" "}
+              No compose file to keep in sync, no shared staging database.{" "}
               <span className="bg-chip px-[5px] py-px font-mono text-[13.5px]">ocel dev</span>{" "}
-              connects you to real cloud resources in seconds — a private sandbox for every
-              developer on the team.
+              starts the stack your code declares on your own machine — a private copy for every
+              developer on the team, with Docker as the only prerequisite.
             </p>
             <p className="mt-3.5 max-w-[46ch] text-[15px] leading-[1.65] text-muted-foreground">
               When your code reaches production it runs against your own account. No code changes.
@@ -425,15 +425,16 @@ function DevMode() {
               <span className="text-dim">$</span> ocel dev
             </div>
             <div>
-              <span className="text-chart-2">●</span> sandbox ready{" "}
-              <span className="text-dim">— 4s, real infra</span>
+              <span className="text-chart-2">●</span> stack ready{" "}
+              <span className="text-dim">— on this machine</span>
             </div>
-            <div className="text-dim">&nbsp;&nbsp;postgres main ······· connected</div>
-            <div className="text-dim">&nbsp;&nbsp;bucket uploads ······ connected</div>
-            <div className="text-dim">&nbsp;&nbsp;queue emails ········ connected</div>
+            <div className="text-dim">
+              &nbsp;&nbsp;postgres "main" → postgres:17 @ 127.0.0.1:54312
+            </div>
+            <div className="text-dim">&nbsp;&nbsp;bucket "uploads" → floci @ 127.0.0.1:54313</div>
             <div className="mt-2">
               <span className="text-electric">→</span> watching src/{" "}
-              <span className="text-dim">— your team gets their own sandboxes too</span>
+              <span className="text-dim">— every teammate's run gets its own</span>
             </div>
           </Terminal>
         </div>
@@ -570,7 +571,7 @@ const faqs = [
   },
   {
     q: "Where does dev mode run?",
-    a: 'Sandboxes run on Ocel\'s dev cloud so your team is productive in seconds — the one exception to "your account". Production always runs in yours.',
+    a: "On your machine. ocel dev starts the postgres and buckets your code declares in Docker containers, so nothing leaves your laptop. Production always runs in your account.",
   },
 ];
 
