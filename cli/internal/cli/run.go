@@ -8,27 +8,18 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/cli/link"
-	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
-	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/resolve"
-	"github.com/ocelhq/ocel/pkg/constants"
 )
-
-var runLocal bool
 
 var runCmd = &cobra.Command{
 	Use:   "run -- <command> [args...]",
@@ -43,27 +34,13 @@ var runCmd = &cobra.Command{
 		ctx, stop := installInterruptHandler(cmd.Context(), cmd.ErrOrStderr())
 		defer stop()
 
-		return runRun(ctx, newDeps(), runLocal, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runRun(ctx, newDeps(), cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
-func init() {
-	runCmd.Flags().BoolVarP(&runLocal, "local", "L", false, "Run with no console: .env alone carries every value and every resource")
-}
-
-func runRun(ctx context.Context, deps cmddeps.Deps, local bool, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runRun(ctx context.Context, deps cmddeps.Deps, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	// TODO: unlike build/deploy, this never calls runtrace.Start, so discovery
 	// below produces no spans or logs and nothing else says so.
-	var creds credentials.Credentials
-	if !local {
-		loaded, err := deps.LoadCredentials()
-		if err != nil {
-			fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first, or `ocel run --local` to run without one.")
-			return &exitsig.ExitError{Code: 1}
-		}
-		creds = loaded
-	}
-
 	cfg, err := projectconfig.ResolveOptional(ctx, cwd, explicitConfigPath())
 	if err != nil {
 		return err
@@ -77,16 +54,7 @@ func runRun(ctx context.Context, deps cmddeps.Deps, local bool, cwd string, appA
 		return runOnceAsFollower(ctx, deps, leader, appArgs, stdout, stderr, stdin)
 	}
 
-	var consoleLink *devConsole
-	if !local {
-		apiURL := console.EffectiveBaseURL(creds.APIURL)
-		bound, bindErr := link.Ensure(ctx, deps, cfg.Dir, apiURL, stdout, stderr, stdin)
-		if bindErr != nil {
-			return bindErr
-		}
-		consoleLink = &devConsole{apiURL: apiURL, token: creds.AccessToken, projectID: bound.ProjectID}
-	}
-	return runStandalone(ctx, deps, consoleLink, cfg, targetScope(cfg, cwd), appArgs, stdout, stderr, stdin)
+	return runStandalone(ctx, deps, cfg, targetScope(cfg, cwd), appArgs, stdout, stderr, stdin)
 }
 
 func runningDevServer(root string) (devlock.Lease, bool, error) {
@@ -112,7 +80,7 @@ func runOnceAsFollower(ctx context.Context, deps cmddeps.Deps, leader devlock.Le
 	return runChildOnce(ctx, deps, appArgs, env, stdin, stdout, stderr)
 }
 
-func runStandalone(ctx context.Context, deps cmddeps.Deps, link *devConsole, cfg *projectconfig.Config, scope envgate.Scope, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runStandalone(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, scope envgate.Scope, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	file, err := dotenv.Load(cfg.Dir)
 	if err != nil {
 		return err
@@ -127,22 +95,18 @@ func runStandalone(ctx context.Context, deps cmddeps.Deps, link *devConsole, cfg
 
 	devServerAddr := "http://" + listener.Addr().String()
 
-	var srv *devserver.Server
-	var projectCfg resolve.Account
-	if link == nil {
-		reportLocal(stdout)
-		srv = devserver.NewLocal(devServerAddr, filepath.Join(cfg.Dir, constants.ProjectStateDirName, "blob"))
-	} else {
-		projectCfg = resolveAccount(ctx, deps, link.apiURL, link.token, link.projectID, stderr)
-		srv = devserver.New(link.apiURL, link.token, link.projectID, devServerAddr)
-		srv.UseAccount(projectCfg)
-	}
-	srv.UseValues(storeValues(projectCfg.EnvVars, file.Values), envwire.Scope(cfg, false, ""))
+	shared := readSharedEnv(ctx, deps, cfg.Dir, stderr)
+
+	stack := newDevStack(deps, cfg, file.Values, stdout, stderr)
+	defer closeDevStack(ctx, stack, stderr)
+
+	srv := devserver.New(devServerAddr, stack)
+	srv.UseValues(storeValues(shared.values, file.Values), envwire.Scope(cfg, false, ""))
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
 
-	resolved, err := discoverAndSync(ctx, srv, cfg, file.Values, scope, invocation{name: "run", local: link == nil}, stdout, stderr)
+	resolved, err := discoverAndSync(ctx, srv, cfg, shared.values, file.Values, scope, invocation{name: "run", loggedOut: shared.loggedOut}, stdout, stderr)
 	if err != nil {
 		return err
 	}

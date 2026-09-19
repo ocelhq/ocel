@@ -14,46 +14,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
+	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
 func TestRunRun(t *testing.T) {
-	t.Run("not logged in returns an exit error pointing at `ocel login`", func(t *testing.T) {
-		deps := newDeps()
-		deps.LoadCredentials = func() (credentials.Credentials, error) {
-			return credentials.Credentials{}, credentials.ErrNotLoggedIn
-		}
-
-		var stderr bytes.Buffer
-		err := runRun(context.Background(), deps, false, t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
-
-		var exitErr *exitsig.ExitError
-		if !errors.As(err, &exitErr) {
-			t.Fatalf("runRun err = %v (%T), want *exitsig.ExitError", err, err)
-		}
-		if exitErr.Code == 0 {
-			t.Fatalf("ExitError.Code = 0, want non-zero")
-		}
-		if !strings.Contains(stderr.String(), "ocel login") {
-			t.Fatalf("stderr = %q, want it to mention `ocel login`", stderr.String())
-		}
-	})
-
 	t.Run("with no leader it stands alone, resolves, runs and tears down", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -61,14 +37,14 @@ func TestRunRun(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr bytes.Buffer
-		err := runRun(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		t.Run("the child's exit code becomes the command's", func(t *testing.T) {
 			var exitErr *exitsig.ExitError
@@ -108,11 +84,8 @@ export default { slug: "test-app" };
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -120,7 +93,7 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -138,7 +111,7 @@ export default { slug: "test-app" };
 		runAppArgs := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
 
 		var stdout, stderr bytes.Buffer
-		err := runRun(context.Background(), deps, false, root, runAppArgs, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, root, runAppArgs, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) {
@@ -175,7 +148,7 @@ export default { slug: "test-app" };
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		deps := newDeps()
+		deps := devDeps()
 		clitest.SetLoggedIn(&deps)
 
 		root := t.TempDir()
@@ -187,7 +160,7 @@ export default { slug: "test-app" };
 		if err != nil {
 			t.Fatalf("listen: %v", err)
 		}
-		srv := devserver.New(apiURL, "tok", projectID, "http://"+listener.Addr().String())
+		srv := devserver.New("http://"+listener.Addr().String(), devstack.New("a-leader", devstack.Env{}))
 		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
 
 		httpSrv := &http.Server{Handler: srv.Mux()}
@@ -206,7 +179,7 @@ export default { slug: "test-app" };
 		var stdout, stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runRun(context.Background(), deps, false, root, []string{"true"}, &stdout, &stderr, strings.NewReader(""))
+			done <- runRun(context.Background(), deps, root, []string{"true"}, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		select {

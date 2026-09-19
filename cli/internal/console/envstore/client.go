@@ -78,5 +78,5 @@ func FetchAccount(ctx context.Context, apiURL, token, projectID string) (resolve
 	for _, value := range values {
 		env[value.Key] = value.Value
 	}
-	return resolve.Account{ProjectID: projectID, EnvVars: env, APIURL: apiURL, Token: token}, nil
+	return resolve.Account{ProjectID: projectID, EnvVars: env}, nil
 }

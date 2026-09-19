@@ -13,27 +13,18 @@ import (
 	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
-	"github.com/ocelhq/ocel/cli/internal/console/blob"
-	"github.com/ocelhq/ocel/cli/internal/console/envstore"
-	"github.com/ocelhq/ocel/cli/internal/console/resolver"
 	"github.com/ocelhq/ocel/cli/internal/declare"
-	"github.com/ocelhq/ocel/cli/internal/devblob"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 type SyncResult struct {
-	Account          resolve.Account
 	Resources        []resolve.Resource
 	DevServerAddress string
 	AppToken         string
@@ -42,76 +33,39 @@ type SyncResult struct {
 	Err              error
 }
 
+type Stack interface {
+	Resolve(ctx context.Context, resources []declare.Resource) ([]resolve.Resource, error)
+	Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption)
+}
+
 type Server struct {
 	registry      *resourceregistry.Registry
-	apiURL        string
-	token         string
-	projectID     string
+	stack         Stack
 	devServerAddr string
 	sessionToken  string
 	appToken      string
-	blob          blobv1connect.BucketServiceHandler
-	detector      *blob.Detector
-	uploads       *devblob.Store
 	syncCh        chan SyncResult
 
-	fetchAccount    func(ctx context.Context, apiURL, token, projectID string) (resolve.Account, error)
-	resolve         func(ctx context.Context, cfg resolve.Account, resources []resourceregistry.Entry) ([]resolve.Resource, error)
-	fetchLiveValues func(ctx context.Context, apiURL, token, projectID string, keys []string) (map[string]string, error)
-
-	config *configCache
 	live   *liveKeys
 	env    *envState
 	fanout *envFanout
 }
 
-func New(apiURL, token, projectID, devServerAddr string) *Server {
+func New(devServerAddr string, stack Stack) *Server {
 	return &Server{
-		registry:        resourceregistry.New(),
-		apiURL:          apiURL,
-		token:           token,
-		projectID:       projectID,
-		devServerAddr:   devServerAddr,
-		sessionToken:    channel.NewSessionToken(),
-		appToken:        channel.NewSessionToken(),
-		blob:            blob.NewProxy(apiURL, token, projectID),
-		detector:        blob.NewDetector(apiURL, token, projectID),
-		syncCh:          make(chan SyncResult, 1),
-		fetchAccount:    envstore.FetchAccount,
-		resolve:         resolver.Resolve,
-		fetchLiveValues: resolve.StubLiveValues,
-		config:          newConfigCache(),
-		live:            newLiveKeys(),
-		env:             newEnvState(),
-		fanout:          newEnvFanout(),
-	}
-}
-
-func NewLocal(devServerAddr, blobDir string) *Server {
-	s := &Server{
 		registry:      resourceregistry.New(),
+		stack:         stack,
 		devServerAddr: devServerAddr,
 		sessionToken:  channel.NewSessionToken(),
 		appToken:      channel.NewSessionToken(),
-		uploads:       devblob.New(blobDir, devServerAddr),
 		syncCh:        make(chan SyncResult, 1),
-		config:        newConfigCache(),
 		live:          newLiveKeys(),
 		env:           newEnvState(),
 		fanout:        newEnvFanout(),
 	}
-	s.blob = s.uploads
-	s.resolve = s.resolveFromEnv
-	s.fetchLiveValues = s.liveValuesFromEnv
-	s.config.use(resolve.Account{})
-	return s
 }
 
-func (s *Server) resolveFromEnv(_ context.Context, _ resolve.Account, resources []resourceregistry.Entry) ([]resolve.Resource, error) {
-	return resolve.FromEnv(resources, s.env.snapshot())
-}
-
-func (s *Server) liveValuesFromEnv(_ context.Context, _, _, _ string, keys []string) (map[string]string, error) {
+func (s *Server) liveValues(keys []string) map[string]string {
 	values := s.env.snapshot()
 	live := make(map[string]string, len(keys))
 	for _, key := range keys {
@@ -119,14 +73,7 @@ func (s *Server) liveValuesFromEnv(_ context.Context, _, _, _ string, keys []str
 			live[key] = value
 		}
 	}
-	return live, nil
-}
-
-func (s *Server) RunDetector(ctx context.Context, reportErr func(error)) {
-	if s.detector == nil {
-		return
-	}
-	s.detector.Run(ctx, reportErr)
+	return live
 }
 
 func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*resourcesv1.DeclareResponse, error) {
@@ -135,23 +82,12 @@ func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*r
 		return nil, err
 	}
 
-	s.registry.Add(resourceregistry.Entry{Name: res.Name, Type: res.Type})
+	s.registry.Add(res)
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
 func (s *Server) UseValues(values map[string]string, scope envgate.Scope) {
 	s.env.use(values, scope)
-}
-
-func (s *Server) UseAccount(cfg resolve.Account) {
-	s.config.use(cfg)
-}
-
-func (s *Server) account(ctx context.Context) (resolve.Account, error) {
-	if cfg, ok := s.config.held(); ok {
-		return cfg, nil
-	}
-	return s.fetchAccount(ctx, s.apiURL, s.token, s.projectID)
 }
 
 func (s *Server) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
@@ -220,11 +156,7 @@ func (s *Server) Mux() *http.ServeMux {
 	interceptors := connect.WithInterceptors(validate.NewInterceptor())
 	resourcePath, resourceHandler := resourcesv1connect.NewResourceServiceHandler(s, interceptors)
 	mux.Handle(resourcePath, s.guard(s.sessionToken, resourceHandler))
-	blobPath, blobHandler := blobv1connect.NewBucketServiceHandler(s.blob, interceptors)
-	mux.Handle(blobPath, s.guard(s.appToken, blobHandler))
-	if s.uploads != nil {
-		s.uploads.Routes(mux)
-	}
+	s.stack.Routes(mux, func(next http.Handler) http.Handler { return s.guard(s.appToken, next) }, interceptors)
 	mux.Handle("/sync", s.guard(s.sessionToken, http.HandlerFunc(s.handleSync)))
 	mux.Handle("/env", s.guard(s.appToken, http.HandlerFunc(s.handleEnv)))
 	return mux
@@ -290,68 +222,17 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := r.Context()
-	var toResolve, buckets []resourceregistry.Entry
-	for _, e := range s.registry.Snapshot() {
-		if e.Type == resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET {
-			buckets = append(buckets, e)
-		} else {
-			toResolve = append(toResolve, e)
-		}
-	}
-
-	cfg, err := s.account(ctx)
-	if err != nil {
-		err = fmt.Errorf("fetch project config: %w", err)
-		s.deliverSync(SyncResult{Err: err})
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	resolved, err := s.resolve(ctx, cfg, toResolve)
+	resolved, err := s.stack.Resolve(r.Context(), s.registry.Snapshot())
 	if err != nil {
 		err = fmt.Errorf("resolve resources: %w", err)
 		s.deliverSync(SyncResult{Err: err})
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	resolved = append(resolved, s.bucketResources(buckets)...)
 
-	var liveValues map[string]string
 	liveKeys := s.live.sorted()
-	if len(liveKeys) > 0 {
-		liveValues, err = s.fetchLiveValues(ctx, s.apiURL, s.token, s.projectID, liveKeys)
-		if err != nil {
-			err = fmt.Errorf("resolve live values (%s): %w", strings.Join(liveKeys, ", "), err)
-			s.deliverSync(SyncResult{Err: err})
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-
-	s.deliverSync(SyncResult{Account: cfg, Resources: resolved, DevServerAddress: s.devServerAddr, AppToken: s.appToken, LiveValues: liveValues, LiveKeys: liveKeys})
+	s.deliverSync(SyncResult{Resources: resolved, DevServerAddress: s.devServerAddr, AppToken: s.appToken, LiveValues: s.liveValues(liveKeys), LiveKeys: liveKeys})
 	w.WriteHeader(http.StatusOK)
-}
-
-func (s *Server) bucketResources(buckets []resourceregistry.Entry) []resolve.Resource {
-	out := make([]resolve.Resource, 0, len(buckets))
-	for _, b := range buckets {
-		value, _ := protojson.Marshal(&bindingsv1.Binding{
-			Name:       b.Name,
-			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: b.Name}},
-		})
-		out = append(out, resolve.Resource{
-			Name: b.Name,
-			Type: b.Type,
-			Env:  map[string]string{bucketEnvName(b.Type, b.Name): string(value)},
-		})
-	}
-	return out
-}
-
-func bucketEnvName(t resourcesv1.ResourceType, name string) string {
-	bound, _ := naming.BindableAs(t)
-	return naming.ResourceEnvName(bound, name)
 }
 
 func (s *Server) Discover(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer) error {

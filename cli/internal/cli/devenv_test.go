@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -14,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/console"
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
@@ -21,7 +23,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
-	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
@@ -38,9 +39,9 @@ func withCredentials(deps *cmddeps.Deps, apiURL string) {
 
 func withProjectEnv(deps *cmddeps.Deps, envVars map[string]string) *atomic.Int32 {
 	var calls atomic.Int32
-	deps.FetchAccount = func(_ context.Context, apiURL, token, projectID string) (resolve.Account, error) {
+	deps.FetchAccount = func(_ context.Context, _, _, projectID string) (resolve.Account, error) {
 		calls.Add(1)
-		return resolve.Account{ProjectID: projectID, EnvVars: envVars, APIURL: apiURL, Token: token}, nil
+		return resolve.Account{ProjectID: projectID, EnvVars: envVars}, nil
 	}
 	return &calls
 }
@@ -254,39 +255,109 @@ func TestDevRefusal(t *testing.T) {
 }
 
 func TestRefusalsNameTheCommandThatRan(t *testing.T) {
-	t.Run("a resource refusal names the command and the flag it was run with", func(t *testing.T) {
-		missing := &resolve.Missing{Resources: []resourceregistry.Entry{
-			{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
-		}}
+	refusal := &envgate.Refusal{
+		Problems: []*resourcesv1.VariableProblem{
+			{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
+		},
+	}
 
-		got := localResourceRefusal(missing, nil, invocation{name: "run", local: true}).Error()
-
-		if !strings.Contains(got, "`ocel run --local` again") {
-			t.Errorf("refusal = %q, want it to name the command that was run", got)
-		}
-		if strings.Contains(got, "ocel dev") {
-			t.Errorf("refusal = %q, want no mention of a command this run never used", got)
-		}
-	})
-
-	t.Run("a variable refusal names the command and the flag it was run with", func(t *testing.T) {
+	t.Run("a variable refusal names the command that was run", func(t *testing.T) {
 		t.Setenv("DATABASE_URL", "postgres://from-the-shell")
 
-		refusal := &envgate.Refusal{
-			Problems: []*resourcesv1.VariableProblem{
-				{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
-			},
-		}
+		got := devRefusal(refusal, nil, invocation{name: "run"}).Error()
 
-		got := devRefusal(refusal, nil, invocation{name: "run", local: true}).Error()
-
-		if !strings.Contains(got, "`ocel run --local` again") {
+		if !strings.Contains(got, "`ocel run` again") {
 			t.Errorf("refusal = %q, want it to name the command that was run", got)
 		}
-		if strings.Contains(got, "`ocel dev`") {
-			t.Errorf("refusal = %q, want the shell hint to name the command that was run", got)
+		if strings.Contains(got, "`ocel dev`") || strings.Contains(got, "--local") {
+			t.Errorf("refusal = %q, want no mention of a command or flag this run never used", got)
+		}
+		if strings.Contains(got, "ocel login") {
+			t.Errorf("refusal = %q, want no login hint for a run that was not logged out of a linked project", got)
 		}
 	})
+
+	t.Run("a linked project that is logged out is pointed at `ocel login`", func(t *testing.T) {
+		got := devRefusal(refusal, nil, invocation{name: "dev", loggedOut: true}).Error()
+
+		if !strings.Contains(got, "ocel login") {
+			t.Errorf("refusal = %q, want it to say the missing value may be one `ocel login` brings in", got)
+		}
+	})
+}
+
+func TestSharedValuesAreReadOnlyWhereTheDirectorySaysTo(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	declaresRequired := declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true}`)
+
+	for _, command := range []struct {
+		name string
+		run  func(deps cmddeps.Deps, root string, appCmd []string, stdout, stderr io.Writer) error
+	}{
+		{"dev", func(deps cmddeps.Deps, root string, appCmd []string, stdout, stderr io.Writer) error {
+			return runDev(context.Background(), deps, false, root, appCmd, stdout, stderr, strings.NewReader(""))
+		}},
+		{"run", func(deps cmddeps.Deps, root string, appCmd []string, stdout, stderr io.Writer) error {
+			return runRun(context.Background(), deps, root, appCmd, stdout, stderr, strings.NewReader(""))
+		}},
+	} {
+		t.Run(command.name+": an unlinked project runs on the dotfile alone, logged out, and says nothing of it", func(t *testing.T) {
+			root := t.TempDir()
+			t.Cleanup(func() { _ = devlock.Remove(root) })
+
+			deps := devDeps()
+			deps.LoadCredentials = func() (credentials.Credentials, error) {
+				return credentials.Credentials{}, credentials.ErrNotLoggedIn
+			}
+			deps.FetchAccount = func(context.Context, string, string, string) (resolve.Account, error) {
+				t.Error("an unlinked project reached the console")
+				return resolve.Account{}, errors.New("no console")
+			}
+			clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
+			clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declaresRequired)
+
+			var stdout, stderr syncBuffer
+			err := command.run(deps, root, []string{"sh", "-c", "exit 7"}, &stdout, &stderr)
+
+			var exitErr *exitsig.ExitError
+			if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+				t.Fatalf("err = %v, want exit 7; stderr=%s", err, stderr.String())
+			}
+			if said := stderr.String(); strings.Contains(said, "ocel login") || strings.Contains(said, "ocel link") {
+				t.Errorf("stderr = %q, want no mention of a login or a link nothing asked for", said)
+			}
+		})
+
+		t.Run(command.name+": a linked project that is logged out warns once, runs on the dotfile, and its refusal names `ocel login`", func(t *testing.T) {
+			root := t.TempDir()
+			t.Cleanup(func() { _ = devlock.Remove(root) })
+
+			deps := devDeps()
+			deps.LoadCredentials = func() (credentials.Credentials, error) {
+				return credentials.Credentials{}, credentials.ErrNotLoggedIn
+			}
+			deps.FetchAccount = func(context.Context, string, string, string) (resolve.Account, error) {
+				t.Error("a logged-out run reached the console")
+				return resolve.Account{}, errors.New("no token")
+			}
+			t.Setenv(console.URLEnvVar, testAPIURL)
+			writeLink(t, root, testAPIURL, testProjectID(t))
+			clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declaresRequired)
+
+			var stdout, stderr syncBuffer
+			err := command.run(deps, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr)
+
+			if err == nil || !strings.Contains(err.Error(), "API_BASE") || !strings.Contains(err.Error(), "ocel login") {
+				t.Fatalf("err = %v, want a refusal of API_BASE that names `ocel login`", err)
+			}
+			if warnings := strings.Count(stderr.String(), "not logged in"); warnings != 1 {
+				t.Errorf("stderr = %q, want exactly one warning that the shared values were not read", stderr.String())
+			}
+		})
+	}
 }
 
 func TestReportDotfile(t *testing.T) {
@@ -483,15 +554,12 @@ func TestRunDevEnvironment(t *testing.T) {
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
@@ -548,15 +616,12 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
@@ -581,15 +646,12 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
@@ -618,15 +680,12 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
@@ -653,16 +712,13 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 		calls := withProjectEnv(&deps, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
@@ -695,16 +751,13 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 		withProjectEnv(&deps, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "STRIPE_API_KEY=sk_from_file\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
@@ -734,19 +787,16 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 		deps.FetchAccount = func(context.Context, string, string, string) (resolve.Account, error) {
 			return resolve.Account{}, errors.New("dial tcp: connection refused")
 		}
 
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
@@ -781,15 +831,12 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"DB_PASSWORD","class":"VARIABLE_CLASS_SECRET","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
@@ -815,15 +862,12 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n")
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "PUBLIC_SITE_URL=https://local.example.com\nSTRIPE_API_KEY=sk_local\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(
@@ -876,15 +920,12 @@ func TestRunRunEnvironment(t *testing.T) {
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
@@ -895,7 +936,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
 
 		var stdout, stderr bytes.Buffer
-		err := runRun(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
@@ -911,15 +952,12 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
@@ -931,7 +969,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr bytes.Buffer
-		err := runRun(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
@@ -959,22 +997,19 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
 		appCmd := []string{"sh", "-c", "touch " + startedPath}
 
 		var stdout, stderr bytes.Buffer
-		err := runRun(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		if err == nil {
 			t.Fatal("runRun = nil, want the same refusal `ocel dev` gives")
@@ -995,23 +1030,20 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 		withProjectEnv(&deps, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
 		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 		var stdout, stderr syncBuffer
-		err := runRun(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), deps, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {

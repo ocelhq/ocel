@@ -16,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
+	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
@@ -84,11 +85,9 @@ func waitProcessDead(t *testing.T, pidPath string) {
 
 func TestProcessTreeDiesWithTheCLI(t *testing.T) {
 	t.Run("a standalone `ocel run` kills its worker's grandchildren", func(t *testing.T) {
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -96,7 +95,7 @@ func TestProcessTreeDiesWithTheCLI(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "run")
@@ -107,7 +106,7 @@ export default { slug: "test-app" };
 		var stdout, stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runRun(ctx, deps, false, root, appArgs, &stdout, &stderr, strings.NewReader(""))
+			done <- runRun(ctx, deps, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		waitForFile(t, startedPath)
@@ -123,11 +122,9 @@ export default { slug: "test-app" };
 	})
 
 	t.Run("a standalone `ocel run` kills a 3-level deep descendant, non-tty", func(t *testing.T) {
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -135,7 +132,7 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		appArgs, startedPath, leafPidPath := fixtureDeepWorkerTree(t, root, "run-deep")
@@ -146,7 +143,7 @@ export default { slug: "test-app" };
 		var stdout, stderr bytes.Buffer
 		done := make(chan error, 1)
 		go func() {
-			done <- runRun(ctx, deps, false, root, appArgs, &stdout, &stderr, strings.NewReader(""))
+			done <- runRun(ctx, deps, root, appArgs, &stdout, &stderr, strings.NewReader(""))
 		}()
 
 		waitForFile(t, startedPath)
@@ -162,11 +159,9 @@ export default { slug: "test-app" };
 	})
 
 	t.Run("a leader `ocel dev` kills its app's grandchildren", func(t *testing.T) {
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -174,7 +169,7 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "leader")
@@ -202,7 +197,7 @@ export default { slug: "test-app" };
 	})
 
 	t.Run("a follower `ocel dev` kills its app's grandchildren", func(t *testing.T) {
-		deps := newDeps()
+		deps := devDeps()
 		clitest.SetLoggedIn(&deps)
 
 		root := t.TempDir()
@@ -214,7 +209,7 @@ export default { slug: "test-app" };
 		if err != nil {
 			t.Fatalf("listen: %v", err)
 		}
-		srv := devserver.New(apiURL, "tok", projectID, "http://"+listener.Addr().String())
+		srv := devserver.New("http://"+listener.Addr().String(), devstack.New("a-leader", devstack.Env{}))
 		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
 
 		httpSrv := &http.Server{Handler: srv.Mux()}

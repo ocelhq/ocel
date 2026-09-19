@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
-	"github.com/ocelhq/ocel/cli/internal/resolve"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -105,30 +104,6 @@ func (l *liveKeys) reset() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.keys = make(map[string]struct{})
-}
-
-type configCache struct {
-	mu  sync.Mutex
-	cfg *resolve.Account
-}
-
-func newConfigCache() *configCache {
-	return &configCache{}
-}
-
-func (c *configCache) use(cfg resolve.Account) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cfg = &cfg
-}
-
-func (c *configCache) held() (resolve.Account, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.cfg == nil {
-		return resolve.Account{}, false
-	}
-	return *c.cfg, true
 }
 
 type envFanout struct {

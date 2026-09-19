@@ -13,7 +13,7 @@ import (
 
 func serveResources(t *testing.T) resourcesv1connect.ResourceServiceClient {
 	t.Helper()
-	url := serve(t, New("http://127.0.0.1:0", "leader-tok", "proj_1", "http://127.0.0.1:0"))
+	url := serve(t, newDevServer(&fakeStack{}))
 	return resourcesv1connect.NewResourceServiceClient(testClient, url)
 }
 
