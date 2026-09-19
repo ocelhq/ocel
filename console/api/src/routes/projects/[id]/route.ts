@@ -7,7 +7,6 @@ import { db } from "@console/db";
 import { project } from "@console/db/schema";
 import { and, eq } from "drizzle-orm";
 import { readBody } from "../../../body";
-import { deleteProjectObjects } from "../../blob/store";
 import { updateProjectSchema } from "../validation";
 
 export async function getProjectById(request: Request, id: string): Promise<Response> {
@@ -65,12 +64,6 @@ export async function deleteProject(request: Request, id: string): Promise<Respo
   const [found] = await db.select({ id: project.id }).from(project).where(owned);
   if (!found) {
     return Response.json({ error: "Not found" }, { status: 404 });
-  }
-
-  try {
-    await deleteProjectObjects(session.activeOrganizationId, id);
-  } catch {
-    return Response.json({ error: "Could not empty the project's blob store" }, { status: 500 });
   }
 
   const [deleted] = await db.delete(project).where(owned).returning({ id: project.id });
