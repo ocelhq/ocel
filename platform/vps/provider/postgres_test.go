@@ -227,6 +227,12 @@ func TestARemovedPostgresTakesItsVolumeWithIt(t *testing.T) {
 	if !strings.Contains(joined, "docker volume rm") {
 		t.Errorf("a teardown ran %q and left the data on the box, where no later deploy reclaims it", joined)
 	}
+	if !strings.Contains(joined, host.BackupsDir(providerkit.ClassProduction, name)) {
+		t.Errorf("a teardown ran %q and left the dumps taken of it on the box", joined)
+	}
+	if !strings.Contains(joined, name+"-retired") {
+		t.Errorf("a teardown ran %q and would leave the server an interrupted upgrade retired", joined)
+	}
 	if !strings.Contains(joined, host.KeptPath(providerkit.ClassProduction, name)) {
 		t.Errorf("a teardown ran %q and left the sealed password behind", joined)
 	}
@@ -258,23 +264,72 @@ func TestARemovalReachesOnlyTheServerItsOwnStackStoodUp(t *testing.T) {
 	}
 }
 
-func TestAPostgresDeclaredUnderAnotherMajorIsRefusedBeforeTheRunningServerIsTouched(t *testing.T) {
-	t.Parallel()
+const takenDump = "/var/lib/ocel/production/backups/prod-web-r0a1b2c3d-main-pg/20260919T000000Z.dump"
 
-	machine := &box{}
+func heldByAnotherMajor(machine *box, state string) {
 	holdingAPostgres(machine)
 	machine.refuses = func(command string) (session.Result, bool) {
 		switch {
 		case strings.Contains(command, "docker volume ls") && strings.Contains(command, host.LabelGeneration):
 			return session.Result{Stdout: "16\n"}, true
 		case strings.Contains(command, ".State.Status"):
-			return session.Result{Stdout: "running postgres:16 0123456789ab\n"}, true
+			return session.Result{Stdout: state + " postgres:16 0123456789ab\n"}, true
+		case strings.Contains(command, host.BackupsHelper) && strings.Contains(command, "'dump'"):
+			return session.Result{Stdout: takenDump + "\n"}, true
 		}
 		return session.Result{}, false
 	}
+}
+
+func TestAPostgresDeclaredUnderANewerMajorIsDumpedThenSwappedWithAWayBack(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	heldByAnotherMajor(machine, "running")
+	binding, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil)
+	if err != nil {
+		t.Fatalf("Postgres() = %v", err)
+	}
+	if got := binding.Properties[providerkit.PropertyPassword]; got != standingPassword {
+		t.Error("the upgraded server is bound under another password, and every app bound to the old one is locked out")
+	}
+	dumped := machine.at("'dump'")
+	swapped := machine.at("docker rename")
+	if dumped < 0 || swapped < 0 || dumped > swapped {
+		t.Fatalf("the dump ran at %d and the swap at %d: the old server is dumped while it still runs, before anything about it changes:\n%s",
+			dumped, swapped, strings.Join(machine.commands(), "\n"))
+	}
+	swap := machine.commands()[swapped]
+	for _, want := range []string{
+		"trap ", "docker stop 'prod-web-r0a1b2c3d-main-pg'",
+		"'prod-web-r0a1b2c3d-main-pg-retired'",
+		"src=prod-web-r0a1b2c3d-main-pg-g17",
+		"'restore' 'prod-web-r0a1b2c3d-main-pg' 'main' '" + takenDump + "'",
+		"docker volume rm 'prod-web-r0a1b2c3d-main-pg-g16'",
+		"docker start 'prod-web-r0a1b2c3d-main-pg'",
+	} {
+		if !strings.Contains(swap, want) {
+			t.Errorf("the swap never runs %s:\n%s", want, swap)
+		}
+	}
+	if restored, removed := strings.Index(swap, "'restore'"), strings.LastIndex(swap, "docker volume rm 'prod-web-r0a1b2c3d-main-pg-g16'"); removed < restored {
+		t.Errorf("the old data is removed before the new server has it back:\n%s", swap)
+	}
+	for at, command := range machine.commands() {
+		if at != swapped && (strings.Contains(command, "docker rm") || strings.Contains(command, "docker stop")) {
+			t.Errorf("the old server was touched outside the one script that can put it back: %s", command)
+		}
+	}
+}
+
+func TestAStoppedPostgresUnderAnotherMajorIsRefusedBecauseNothingCanBeDumpedFromIt(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	heldByAnotherMajor(machine, "exited")
 	_, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil)
 	if err == nil {
-		t.Fatal("a postgres 17 was stood up over the data a 16 initialised, which it refuses to start on, and the database is down until the version is put back")
+		t.Fatal("a server that is not running was upgraded, and there was nothing to dump its data from")
 	}
 	for _, want := range []string{"main", "16", "17"} {
 		if !strings.Contains(err.Error(), want) {
@@ -282,8 +337,8 @@ func TestAPostgresDeclaredUnderAnotherMajorIsRefusedBeforeTheRunningServerIsTouc
 		}
 	}
 	joined := strings.Join(machine.commands(), "\n")
-	if strings.Contains(joined, "docker rm") || strings.Contains(joined, "'docker' 'run'") {
-		t.Errorf("the running server was touched before the refusal:\n%s", joined)
+	if strings.Contains(joined, "docker rm") || strings.Contains(joined, "'docker' 'run'") || strings.Contains(joined, "docker rename") {
+		t.Errorf("the stopped server was touched before the refusal:\n%s", joined)
 	}
 }
 

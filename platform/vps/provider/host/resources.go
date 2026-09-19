@@ -99,6 +99,8 @@ type ResourceContainer struct {
 	Volume     Volume
 	Credential Credential
 	Ready      []string
+	Backup     string
+	Database   string
 }
 
 func ResourceName(stack, resource, kind string) string {
@@ -126,6 +128,24 @@ func (r ResourceContainer) labels() []string {
 	return argv
 }
 
+const retiredSuffix = "-retired"
+
+func volumeName(name, generation string) string {
+	if generation == "" {
+		return name
+	}
+	return name + "-g" + naming.Sanitize(generation)
+}
+
+func (r ResourceContainer) volume() string { return volumeName(r.Name, r.Volume.Generation) }
+
+func volumesOf(class providerkit.Class, project, resource, name string) string {
+	return "docker volume ls --filter " + quoted("name=^"+name) +
+		" --filter " + quoted("label="+LabelClass+"="+string(class)) +
+		" --filter " + quoted("label="+LabelProject+"="+naming.Sanitize(project)) +
+		" --filter " + quoted("label="+LabelResource+"="+resource)
+}
+
 func volumeCreating(spec ResourceContainer) string {
 	argv := append([]string{"docker", "volume", "create"}, spec.labels()...)
 	if spec.Volume.Generation != "" {
@@ -137,7 +157,7 @@ func volumeCreating(spec ResourceContainer) string {
 	for _, key := range slices.Sorted(maps.Keys(spec.Volume.Options)) {
 		argv = append(argv, "--opt", key+"="+spec.Volume.Options[key])
 	}
-	return words(append(argv, spec.Name)) + " >/dev/null"
+	return words(append(argv, spec.volume())) + " >/dev/null"
 }
 
 func resourceRun(spec ResourceContainer, digest, envFile string) []string {
@@ -148,6 +168,9 @@ func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 	}
 	argv = append(argv, spec.labels()...)
 	argv = append(argv, "--label", LabelRef+"="+spec.Image, "--label", LabelEnv+"="+digest)
+	if spec.Backup != "" {
+		argv = append(argv, "--label", LabelBackup+"="+spec.Backup)
+	}
 	argv = append(argv, logging()...)
 	argv = append(argv, confined(spec.Capabilities, false)...)
 	for _, limit := range [][2]string{{"--memory", spec.Memory}, {"--cpus", spec.CPUs}, {"--shm-size", spec.ShmSize}} {
@@ -156,29 +179,90 @@ func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 		}
 	}
 	argv = append(argv, "--env-file", envFile,
-		"--mount", "type=volume,src="+spec.Name+",dst="+spec.Volume.Path, spec.Image)
+		"--mount", "type=volume,src="+spec.volume()+",dst="+spec.Volume.Path, spec.Image)
 	return append(argv, spec.Args...)
 }
 
 func generationCommand(spec ResourceContainer) string {
-	return "docker volume ls --filter " + quoted("name=^"+spec.Name+"$") +
+	return volumesOf(spec.Class, spec.Project, spec.Resource, spec.Name) +
 		" --format " + quoted(`{{.Label "`+LabelGeneration+`"}}`)
 }
 
-func (h *Host) sameGeneration(ctx context.Context, spec ResourceContainer, elevation string) error {
+func (h *Host) initialisedUnder(ctx context.Context, spec ResourceContainer, elevation string) (string, error) {
 	if spec.Volume.Generation == "" {
-		return nil
+		return "", nil
 	}
 	said, err := h.ran(ctx, "read what initialised "+spec.Resource+"'s data", generationCommand(spec), nil, elevation)
 	if err != nil {
+		return "", err
+	}
+	held := strings.Fields(said)
+	if len(held) == 0 || slices.Contains(held, spec.Volume.Generation) {
+		return "", nil
+	}
+	return held[0], nil
+}
+
+func swapCommand(spec ResourceContainer, from, digest, envFile, dump string) string {
+	name, retired := quoted(spec.Name), quoted(spec.Name+retiredSuffix)
+	fresh, stale := quoted(spec.volume()), quoted(volumeName(spec.Name, from))
+	return "set -eu\n" +
+		"swapped=0\n" +
+		"back() {\n" +
+		"if [ \"$swapped\" -eq 0 ]; then\n" +
+		"docker rm --force " + name + " >/dev/null 2>&1 || true\n" +
+		"docker volume rm " + fresh + " >/dev/null 2>&1 || true\n" +
+		"docker rename " + retired + " " + name + " >/dev/null 2>&1 || true\n" +
+		"docker start " + name + " >/dev/null 2>&1 || true\n" +
+		"fi\n" +
+		"}\n" +
+		"trap back EXIT\n" +
+		"trap 'exit 1' HUP INT TERM\n" +
+		"docker stop " + name + " >/dev/null\n" +
+		"docker rename " + name + " " + retired + "\n" +
+		volumeCreating(spec) + "\n" +
+		words(resourceRun(spec, digest, envFile)) + " >/dev/null\n" +
+		readyCommand(spec) + "\n" +
+		restoreCommand(spec.Class, spec.Name, spec.Database, dump) + "\n" +
+		"swapped=1\n" +
+		"docker rm --force " + retired + " >/dev/null\n" +
+		"docker volume rm " + stale + " >/dev/null"
+}
+
+func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest, secret, elevation string) (err error) {
+	dumped, err := h.ran(ctx, "dump "+spec.Resource+" while version "+from+" still serves it",
+		dumpCommand(spec.Class, spec.Name, spec.Database), nil, elevation)
+	if err != nil {
 		return err
 	}
-	if held := strings.TrimSpace(said); held != "" && held != spec.Volume.Generation {
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"%s keeps data that version %s initialised, and this deploy declares version %s, which will not start on it: put the version back to %s. Moving data between versions is an upgrade ocel does not run for you yet",
-			spec.Resource, held, spec.Volume.Generation, held)
+	held, err := h.handResource(ctx, spec, secret)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, h.forget(ctx, held)) }()
+	if _, err := h.ran(ctx, "move "+spec.Resource+" from version "+from+" to "+spec.Volume.Generation,
+		swapCommand(spec, from, digest, held.path, strings.TrimSpace(dumped)), nil, elevation); err != nil {
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"%s could not be moved from version %s to %s and is back on %s with its data as it was: %v",
+			spec.Resource, from, spec.Volume.Generation, from, err)
 	}
 	return nil
+}
+
+func (h *Host) handResource(ctx context.Context, spec ResourceContainer, secret string) (handoff, error) {
+	env := maps.Clone(spec.Env)
+	if env == nil {
+		env = map[string]string{}
+	}
+	env[spec.Credential.Env] = secret
+	rendered, err := RenderEnvFile(env)
+	if err != nil {
+		return handoff{}, err
+	}
+	held := handoff{path: EnvFile(spec.Class, spec.Name)}
+	_, err = h.ran(ctx, "write what "+spec.Resource+" is handed",
+		"install -m 0600 /dev/stdin "+quoted(held.path), bytes.NewReader(rendered), "")
+	return held, err
 }
 
 func readyCommand(spec ResourceContainer) string {
@@ -208,8 +292,17 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	if stillServing(said, spec.Image, digest) {
 		return nil
 	}
-	if err := h.sameGeneration(ctx, spec, elevation); err != nil {
+	from, err := h.initialisedUnder(ctx, spec, elevation)
+	if err != nil {
 		return err
+	}
+	if from != "" {
+		if !strings.HasPrefix(said, "running ") {
+			return providerkit.Refuse(providerkit.CodeNotReady,
+				"%s keeps data that version %s initialised and this deploy declares version %s, and moving it means dumping it from the running server, which is not running: start %s on the box, or put the version back to %s",
+				spec.Resource, from, spec.Volume.Generation, spec.Name, from)
+		}
+		return h.upgrade(ctx, spec, from, digest, secret, elevation)
 	}
 	if said != "" {
 		if _, err := h.ran(ctx, "clear the name "+spec.Name,
@@ -226,21 +319,11 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	if _, err := h.ran(ctx, "keep a volume for "+spec.Resource, volumeCreating(spec), nil, elevation); err != nil {
 		return err
 	}
-	env := maps.Clone(spec.Env)
-	if env == nil {
-		env = map[string]string{}
-	}
-	env[spec.Credential.Env] = secret
-	rendered, err := RenderEnvFile(env)
+	held, err := h.handResource(ctx, spec, secret)
 	if err != nil {
 		return err
 	}
-	held := handoff{path: EnvFile(spec.Class, spec.Name)}
 	defer func() { err = errors.Join(err, h.forget(ctx, held)) }()
-	if _, err := h.ran(ctx, "write what "+spec.Resource+" is handed",
-		"install -m 0600 /dev/stdin "+quoted(held.path), bytes.NewReader(rendered), ""); err != nil {
-		return err
-	}
 	_, refused, stood := h.spoke(ctx, "stand "+spec.Resource+" up as "+spec.Name,
 		words(resourceRun(spec, digest, held.path))+" >/dev/null", nil, elevation)
 	if stood != nil && !strings.Contains(refused, nameTaken) {
@@ -260,18 +343,27 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	return nil
 }
 
-func (h *Host) RemoveResource(ctx context.Context, class providerkit.Class, name string) error {
+type ResourceRef struct {
+	Class    providerkit.Class
+	Project  string
+	Resource string
+	Name     string
+}
+
+func (h *Host) RemoveResource(ctx context.Context, ref ResourceRef) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err
 	}
-	volume := quoted(name)
-	_, err = h.ran(ctx, "take "+name+" and its data down",
-		"docker rm --force "+volume+" >/dev/null 2>&1 || true\n"+
-			"docker volume rm "+volume+" >/dev/null 2>&1 || [ -z \"$(docker volume ls --quiet --filter "+quoted("name=^"+name+"$")+")\" ]", nil, elevation)
+	volumes := volumesOf(ref.Class, ref.Project, ref.Resource, ref.Name) + " --quiet"
+	_, err = h.ran(ctx, "take "+ref.Name+" and its data down",
+		"docker rm --force "+quoted(ref.Name)+" "+quoted(ref.Name+retiredSuffix)+" >/dev/null 2>&1 || true\n"+
+			volumes+" | xargs -r docker volume rm >/dev/null\n"+
+			"[ -z \"$("+volumes+")\" ]", nil, elevation)
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "forget what "+name+" was held to", "rm -f "+quoted(KeptPath(class, name)), nil, "")
+	_, err = h.ran(ctx, "forget what "+ref.Name+" was held to and the dumps taken of it",
+		"rm -f "+quoted(KeptPath(ref.Class, ref.Name))+"\nrm -rf "+quoted(BackupsDir(ref.Class, ref.Name)), nil, elevation)
 	return err
 }

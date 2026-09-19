@@ -31,6 +31,32 @@ ocel deploy
 
 Bootstrap creates the `ocel-deploy` login every later deploy acts as.
 
+## Postgres
+
+`postgres("main")` runs as one container on the box, on your project's own network. It
+publishes no port on the machine, so only your project's apps reach it. Its data lives on a
+docker volume, and its password is generated on the first deploy and kept sealed on the box.
+
+A [transform](/docs/transforms#on-a-vps) changes what runs: the image, its arguments, its
+memory, where the volume lives.
+
+**Backups.** The box dumps every postgres once a day and keeps the newest seven under
+`/var/lib/ocel/<class>/backups/<container>/`. Take one now, or read one back, on the box:
+
+```bash
+sudo /usr/local/lib/ocel/backups production dump <container> main
+sudo /usr/local/lib/ocel/backups production restore <container> main <file>
+```
+
+`docker ps --filter label=ocel.resource` names the container. The dumps are on the same disk
+as the database, so copy them somewhere else if losing the machine must not lose the data.
+
+**Changing the version.** Moving `version` to a newer major dumps the running database,
+starts the new version on a fresh volume, and restores into it. The database is down while
+that runs. If any step fails, the old version is started again on the data it had.
+
+**Removing it.** `ocel destroy` takes the container, its volume, its password and its dumps.
+
 ## Options
 
 | Option | What it does |
