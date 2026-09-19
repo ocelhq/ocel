@@ -23,8 +23,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
-	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
-	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
+	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	production "github.com/ocelhq/ocel/platform/aws/runtime/bucket"
 )
@@ -49,7 +49,7 @@ const (
 	sessionPrefix = "dev#"
 )
 
-var _ blobv1connect.BucketServiceHandler = (*Component)(nil)
+var _ bucketv1connect.BucketServiceHandler = (*Component)(nil)
 
 type emulator struct {
 	container docker.Container
@@ -210,7 +210,7 @@ func (c *Component) service() (*production.Service, error) {
 	return c.emulator.service, nil
 }
 
-func (c *Component) PresignUpload(ctx context.Context, req *blobv1.PresignUploadRequest) (*blobv1.PresignUploadResponse, error) {
+func (c *Component) PresignUpload(ctx context.Context, req *bucketv1.PresignUploadRequest) (*bucketv1.PresignUploadResponse, error) {
 	service, err := c.service()
 	if err != nil {
 		return nil, err
@@ -218,7 +218,7 @@ func (c *Component) PresignUpload(ctx context.Context, req *blobv1.PresignUpload
 	return service.PresignUpload(ctx, req)
 }
 
-func (c *Component) VerifyUploadSignature(ctx context.Context, req *blobv1.VerifyUploadSignatureRequest) (*blobv1.VerifyUploadSignatureResponse, error) {
+func (c *Component) VerifyUploadSignature(ctx context.Context, req *bucketv1.VerifyUploadSignatureRequest) (*bucketv1.VerifyUploadSignatureResponse, error) {
 	service, err := c.service()
 	if err != nil {
 		return nil, err
@@ -226,7 +226,7 @@ func (c *Component) VerifyUploadSignature(ctx context.Context, req *blobv1.Verif
 	return service.VerifyUploadSignature(ctx, req)
 }
 
-func (c *Component) GetUploadStatus(ctx context.Context, req *blobv1.GetUploadStatusRequest) (*blobv1.GetUploadStatusResponse, error) {
+func (c *Component) GetUploadStatus(ctx context.Context, req *bucketv1.GetUploadStatusRequest) (*bucketv1.GetUploadStatusResponse, error) {
 	service, err := c.service()
 	if err != nil {
 		return nil, err
@@ -235,7 +235,7 @@ func (c *Component) GetUploadStatus(ctx context.Context, req *blobv1.GetUploadSt
 }
 
 func (c *Component) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {
-	path, handler := blobv1connect.NewBucketServiceHandler(c, options...)
+	path, handler := bucketv1connect.NewBucketServiceHandler(c, options...)
 	mux.Handle(path, guard(handler))
 }
 

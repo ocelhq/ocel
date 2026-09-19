@@ -1,7 +1,7 @@
 import type { Client } from "@connectrpc/connect";
 import { createRouterTransport } from "@connectrpc/connect";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { BucketService } from "../gen/proto/app/blob/v1/blob_pb.js";
+import type { BucketService } from "../gen/proto/app/bucket/v1/bucket_pb.js";
 import { type BucketServiceClient, createBucketClient } from "./bucket-client.js";
 
 describe("createBucketClient", () => {

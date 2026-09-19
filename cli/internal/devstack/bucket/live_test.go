@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/devstack/bucket"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
-	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
+	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
@@ -75,7 +75,7 @@ func startLive(t *testing.T, project string, answer int) liveBucket {
 	return liveBucket{component: component, name: bound.GetBucket().GetBucket(), endpoint: "http://" + endpoint, callbacks: callbacks, reported: reported, app: app, origins: &origins}
 }
 
-func put(t *testing.T, target *blobv1.PresignedTarget, contentType, body string) *http.Response {
+func put(t *testing.T, target *bucketv1.PresignedTarget, contentType, body string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPut, target.GetUrl(), bytes.NewReader([]byte(body)))
 	if err != nil {
@@ -97,10 +97,10 @@ func TestDockerAnUploadCompletesThroughTheDeployedBucketService(t *testing.T) {
 	live := startLive(t, "bucket-live-test", http.StatusOK)
 	ctx := context.Background()
 
-	presigned, err := live.component.PresignUpload(ctx, &blobv1.PresignUploadRequest{
+	presigned, err := live.component.PresignUpload(ctx, &bucketv1.PresignUploadRequest{
 		Bucket:          live.name,
 		CallbackBaseUrl: live.app.URL + "/api/upload",
-		Files:           []*blobv1.PresignFile{{Key: "a.txt", Name: "a.txt", Size: 5, MimeType: "text/plain"}},
+		Files:           []*bucketv1.PresignFile{{Key: "a.txt", Name: "a.txt", Size: 5, MimeType: "text/plain"}},
 	})
 	if err != nil {
 		t.Fatalf("PresignUpload = %v", err)
@@ -118,10 +118,10 @@ func TestDockerAnUploadCompletesThroughTheDeployedBucketService(t *testing.T) {
 			t.Fatalf("callback = %v, want the completion of session %s", callback, presigned.GetSessionId())
 		}
 		file, _ := callback["file"].(map[string]any)
-		verified, err := live.component.VerifyUploadSignature(ctx, &blobv1.VerifyUploadSignatureRequest{
+		verified, err := live.component.VerifyUploadSignature(ctx, &bucketv1.VerifyUploadSignatureRequest{
 			SessionId: presigned.GetSessionId(),
 			Signature: callback["signature"].(string),
-			File:      &blobv1.CompletedFile{Key: file["key"].(string), Name: file["name"].(string), Size: int64(file["size"].(float64)), MimeType: file["mimeType"].(string)},
+			File:      &bucketv1.CompletedFile{Key: file["key"].(string), Name: file["name"].(string), Size: int64(file["size"].(float64)), MimeType: file["mimeType"].(string)},
 		})
 		if err != nil || !verified.GetValid() {
 			t.Fatalf("VerifyUploadSignature = %v, %v, want the callback's signature to hold", verified, err)
@@ -130,11 +130,11 @@ func TestDockerAnUploadCompletesThroughTheDeployedBucketService(t *testing.T) {
 		t.Fatal("the app was never told the upload finished")
 	}
 
-	status, err := live.component.GetUploadStatus(ctx, &blobv1.GetUploadStatusRequest{SessionId: presigned.GetSessionId()})
+	status, err := live.component.GetUploadStatus(ctx, &bucketv1.GetUploadStatusRequest{SessionId: presigned.GetSessionId()})
 	if err != nil {
 		t.Fatalf("GetUploadStatus = %v", err)
 	}
-	if status.GetState() != blobv1.UploadState_UPLOAD_STATE_SUCCEEDED {
+	if status.GetState() != bucketv1.UploadState_UPLOAD_STATE_SUCCEEDED {
 		t.Fatalf("state = %v, want succeeded", status.GetState())
 	}
 }
@@ -143,10 +143,10 @@ func TestAnUploadThatBreaksItsSignedConditionsIsRefused(t *testing.T) {
 	t.Skip("TODO(#1203): ghcr.io/ocelhq/floci:2.0.1-ocel.2 verifies no query signature, so a presigned PUT with another content type or length is stored; unskip once the fork enforces SigV4 presigned requests")
 
 	live := startLive(t, "bucket-live-conditions-test", http.StatusOK)
-	presigned, err := live.component.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
+	presigned, err := live.component.PresignUpload(context.Background(), &bucketv1.PresignUploadRequest{
 		Bucket:          live.name,
 		CallbackBaseUrl: live.app.URL + "/api/upload",
-		Files: []*blobv1.PresignFile{
+		Files: []*bucketv1.PresignFile{
 			{Key: "type.txt", Name: "type.txt", Size: 5, MimeType: "text/plain"},
 			{Key: "size.txt", Name: "size.txt", Size: 5, MimeType: "text/plain"},
 		},
@@ -165,10 +165,10 @@ func TestAnUploadThatBreaksItsSignedConditionsIsRefused(t *testing.T) {
 func TestDockerACompletionTheAppKeepsRefusingIsReportedOnceAndDropped(t *testing.T) {
 	live := startLive(t, "bucket-live-poison-test", http.StatusInternalServerError)
 
-	presigned, err := live.component.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
+	presigned, err := live.component.PresignUpload(context.Background(), &bucketv1.PresignUploadRequest{
 		Bucket:          live.name,
 		CallbackBaseUrl: live.app.URL + "/api/upload",
-		Files:           []*blobv1.PresignFile{{Key: "a.txt", Name: "a.txt", Size: 5, MimeType: "text/plain"}},
+		Files:           []*bucketv1.PresignFile{{Key: "a.txt", Name: "a.txt", Size: 5, MimeType: "text/plain"}},
 	})
 	if err != nil {
 		t.Fatalf("PresignUpload = %v", err)

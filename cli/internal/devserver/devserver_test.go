@@ -19,8 +19,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/pkg/channel"
-	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
-	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
+	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 )
@@ -48,7 +48,7 @@ func (f *fakeStack) Resolve(_ context.Context, resources []declare.Resource) ([]
 
 func (f *fakeStack) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {
 	f.mounted = true
-	path, handler := blobv1connect.NewBucketServiceHandler(blobv1connect.UnimplementedBucketServiceHandler{}, options...)
+	path, handler := bucketv1connect.NewBucketServiceHandler(bucketv1connect.UnimplementedBucketServiceHandler{}, options...)
 	mux.Handle(path, guard(handler))
 }
 
@@ -153,9 +153,9 @@ func TestAnAppRouteAnswersOnlyTheAppTokenTheChildWasHanded(t *testing.T) {
 				t.Errorf("GET /env status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 			}
 
-			_, err = blobv1connect.NewBucketServiceClient(client, url).GetUploadStatus(
+			_, err = bucketv1connect.NewBucketServiceClient(client, url).GetUploadStatus(
 				context.Background(),
-				&blobv1.GetUploadStatusRequest{SessionId: "sess_1"},
+				&bucketv1.GetUploadStatusRequest{SessionId: "sess_1"},
 			)
 			if connect.CodeOf(err) != connect.CodePermissionDenied {
 				t.Errorf("GetUploadStatus error = %v, want permission denied", err)

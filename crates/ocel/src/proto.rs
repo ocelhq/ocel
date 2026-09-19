@@ -7,10 +7,10 @@
 )]
 
 pub mod app {
-    pub mod blob {
+    pub mod bucket {
         pub mod v1 {
-            include!("proto/app.blob.v1.rs");
-            include!("proto/app.blob.v1.mod.rs");
+            include!("proto/app.bucket.v1.rs");
+            include!("proto/app.bucket.v1.mod.rs");
         }
     }
 

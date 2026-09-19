@@ -45,4 +45,6 @@ message PostgresConfig {
 
 message BucketConfig {
   repeated string allowed_origins = 1;
+
+  bool public = 2;
 }

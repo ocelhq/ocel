@@ -213,14 +213,14 @@ impl PresignFile {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.PresignFile";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.PresignFile";
 }
 ::buffa::impl_default_instance!(PresignFile);
 impl ::buffa::MessageName for PresignFile {
-    const PACKAGE: &'static str = "app.blob.v1";
+    const PACKAGE: &'static str = "app.bucket.v1";
     const NAME: &'static str = "PresignFile";
-    const FULL_NAME: &'static str = "app.blob.v1.PresignFile";
-    const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.PresignFile";
+    const FULL_NAME: &'static str = "app.bucket.v1.PresignFile";
+    const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.PresignFile";
 }
 impl ::buffa::Message for PresignFile {
     /// Returns the total encoded size in bytes.
@@ -326,7 +326,7 @@ impl ::buffa::Message for PresignFile {
     }
 }
 impl ::buffa::ExtensionSet for PresignFile {
-    const PROTO_FQN: &'static str = "app.blob.v1.PresignFile";
+    const PROTO_FQN: &'static str = "app.bucket.v1.PresignFile";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -349,7 +349,7 @@ impl ::buffa::json_helpers::ProtoElemJson for PresignFile {
 }
 #[doc(hidden)]
 pub const __PRESIGN_FILE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/app.blob.v1.PresignFile",
+    type_url: "type.googleapis.com/app.bucket.v1.PresignFile",
     to_json: ::buffa::type_registry::any_to_json::<PresignFile>,
     from_json: ::buffa::type_registry::any_from_json::<PresignFile>,
     is_wkt: false,
@@ -417,14 +417,14 @@ impl PresignedTarget {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.PresignedTarget";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.PresignedTarget";
 }
 ::buffa::impl_default_instance!(PresignedTarget);
 impl ::buffa::MessageName for PresignedTarget {
-    const PACKAGE: &'static str = "app.blob.v1";
+    const PACKAGE: &'static str = "app.bucket.v1";
     const NAME: &'static str = "PresignedTarget";
-    const FULL_NAME: &'static str = "app.blob.v1.PresignedTarget";
-    const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.PresignedTarget";
+    const FULL_NAME: &'static str = "app.bucket.v1.PresignedTarget";
+    const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.PresignedTarget";
 }
 impl ::buffa::Message for PresignedTarget {
     /// Returns the total encoded size in bytes.
@@ -556,7 +556,7 @@ impl ::buffa::Message for PresignedTarget {
     }
 }
 impl ::buffa::ExtensionSet for PresignedTarget {
-    const PROTO_FQN: &'static str = "app.blob.v1.PresignedTarget";
+    const PROTO_FQN: &'static str = "app.bucket.v1.PresignedTarget";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -579,7 +579,7 @@ impl ::buffa::json_helpers::ProtoElemJson for PresignedTarget {
 }
 #[doc(hidden)]
 pub const __PRESIGNED_TARGET_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/app.blob.v1.PresignedTarget",
+    type_url: "type.googleapis.com/app.bucket.v1.PresignedTarget",
     to_json: ::buffa::type_registry::any_to_json::<PresignedTarget>,
     from_json: ::buffa::type_registry::any_from_json::<PresignedTarget>,
     is_wkt: false,
@@ -636,14 +636,14 @@ impl CompletedFile {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.CompletedFile";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.CompletedFile";
 }
 ::buffa::impl_default_instance!(CompletedFile);
 impl ::buffa::MessageName for CompletedFile {
-    const PACKAGE: &'static str = "app.blob.v1";
+    const PACKAGE: &'static str = "app.bucket.v1";
     const NAME: &'static str = "CompletedFile";
-    const FULL_NAME: &'static str = "app.blob.v1.CompletedFile";
-    const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.CompletedFile";
+    const FULL_NAME: &'static str = "app.bucket.v1.CompletedFile";
+    const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.CompletedFile";
 }
 impl ::buffa::Message for CompletedFile {
     /// Returns the total encoded size in bytes.
@@ -749,7 +749,7 @@ impl ::buffa::Message for CompletedFile {
     }
 }
 impl ::buffa::ExtensionSet for CompletedFile {
-    const PROTO_FQN: &'static str = "app.blob.v1.CompletedFile";
+    const PROTO_FQN: &'static str = "app.bucket.v1.CompletedFile";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -772,7 +772,7 @@ impl ::buffa::json_helpers::ProtoElemJson for CompletedFile {
 }
 #[doc(hidden)]
 pub const __COMPLETED_FILE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/app.blob.v1.CompletedFile",
+    type_url: "type.googleapis.com/app.bucket.v1.CompletedFile",
     to_json: ::buffa::type_registry::any_to_json::<CompletedFile>,
     from_json: ::buffa::type_registry::any_from_json::<CompletedFile>,
     is_wkt: false,
@@ -838,14 +838,14 @@ impl PresignUploadRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.PresignUploadRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.PresignUploadRequest";
 }
 ::buffa::impl_default_instance!(PresignUploadRequest);
 impl ::buffa::MessageName for PresignUploadRequest {
-    const PACKAGE: &'static str = "app.blob.v1";
+    const PACKAGE: &'static str = "app.bucket.v1";
     const NAME: &'static str = "PresignUploadRequest";
-    const FULL_NAME: &'static str = "app.blob.v1.PresignUploadRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.PresignUploadRequest";
+    const FULL_NAME: &'static str = "app.bucket.v1.PresignUploadRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.PresignUploadRequest";
 }
 impl ::buffa::Message for PresignUploadRequest {
     /// Returns the total encoded size in bytes.
@@ -985,7 +985,7 @@ impl ::buffa::Message for PresignUploadRequest {
     }
 }
 impl ::buffa::ExtensionSet for PresignUploadRequest {
-    const PROTO_FQN: &'static str = "app.blob.v1.PresignUploadRequest";
+    const PROTO_FQN: &'static str = "app.bucket.v1.PresignUploadRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1008,7 +1008,7 @@ impl ::buffa::json_helpers::ProtoElemJson for PresignUploadRequest {
 }
 #[doc(hidden)]
 pub const __PRESIGN_UPLOAD_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/app.blob.v1.PresignUploadRequest",
+    type_url: "type.googleapis.com/app.bucket.v1.PresignUploadRequest",
     to_json: ::buffa::type_registry::any_to_json::<PresignUploadRequest>,
     from_json: ::buffa::type_registry::any_from_json::<PresignUploadRequest>,
     is_wkt: false,
@@ -1049,14 +1049,14 @@ impl PresignUploadResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.PresignUploadResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.PresignUploadResponse";
 }
 ::buffa::impl_default_instance!(PresignUploadResponse);
 impl ::buffa::MessageName for PresignUploadResponse {
-    const PACKAGE: &'static str = "app.blob.v1";
+    const PACKAGE: &'static str = "app.bucket.v1";
     const NAME: &'static str = "PresignUploadResponse";
-    const FULL_NAME: &'static str = "app.blob.v1.PresignUploadResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.PresignUploadResponse";
+    const FULL_NAME: &'static str = "app.bucket.v1.PresignUploadResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.PresignUploadResponse";
 }
 impl ::buffa::Message for PresignUploadResponse {
     /// Returns the total encoded size in bytes.
@@ -1149,7 +1149,7 @@ impl ::buffa::Message for PresignUploadResponse {
     }
 }
 impl ::buffa::ExtensionSet for PresignUploadResponse {
-    const PROTO_FQN: &'static str = "app.blob.v1.PresignUploadResponse";
+    const PROTO_FQN: &'static str = "app.bucket.v1.PresignUploadResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1172,7 +1172,7 @@ impl ::buffa::json_helpers::ProtoElemJson for PresignUploadResponse {
 }
 #[doc(hidden)]
 pub const __PRESIGN_UPLOAD_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/app.blob.v1.PresignUploadResponse",
+    type_url: "type.googleapis.com/app.bucket.v1.PresignUploadResponse",
     to_json: ::buffa::type_registry::any_to_json::<PresignUploadResponse>,
     from_json: ::buffa::type_registry::any_from_json::<PresignUploadResponse>,
     is_wkt: false,
@@ -1220,14 +1220,14 @@ impl VerifyUploadSignatureRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.VerifyUploadSignatureRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.VerifyUploadSignatureRequest";
 }
 ::buffa::impl_default_instance!(VerifyUploadSignatureRequest);
 impl ::buffa::MessageName for VerifyUploadSignatureRequest {
-    const PACKAGE: &'static str = "app.blob.v1";
+    const PACKAGE: &'static str = "app.bucket.v1";
     const NAME: &'static str = "VerifyUploadSignatureRequest";
-    const FULL_NAME: &'static str = "app.blob.v1.VerifyUploadSignatureRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.VerifyUploadSignatureRequest";
+    const FULL_NAME: &'static str = "app.bucket.v1.VerifyUploadSignatureRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.VerifyUploadSignatureRequest";
 }
 impl ::buffa::Message for VerifyUploadSignatureRequest {
     /// Returns the total encoded size in bytes.
@@ -1333,7 +1333,7 @@ impl ::buffa::Message for VerifyUploadSignatureRequest {
     }
 }
 impl ::buffa::ExtensionSet for VerifyUploadSignatureRequest {
-    const PROTO_FQN: &'static str = "app.blob.v1.VerifyUploadSignatureRequest";
+    const PROTO_FQN: &'static str = "app.bucket.v1.VerifyUploadSignatureRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1356,7 +1356,7 @@ impl ::buffa::json_helpers::ProtoElemJson for VerifyUploadSignatureRequest {
 }
 #[doc(hidden)]
 pub const __VERIFY_UPLOAD_SIGNATURE_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/app.blob.v1.VerifyUploadSignatureRequest",
+    type_url: "type.googleapis.com/app.bucket.v1.VerifyUploadSignatureRequest",
     to_json: ::buffa::type_registry::any_to_json::<VerifyUploadSignatureRequest>,
     from_json: ::buffa::type_registry::any_from_json::<VerifyUploadSignatureRequest>,
     is_wkt: false,
@@ -1396,14 +1396,14 @@ impl VerifyUploadSignatureResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.VerifyUploadSignatureResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.VerifyUploadSignatureResponse";
 }
 ::buffa::impl_default_instance!(VerifyUploadSignatureResponse);
 impl ::buffa::MessageName for VerifyUploadSignatureResponse {
-    const PACKAGE: &'static str = "app.blob.v1";
+    const PACKAGE: &'static str = "app.bucket.v1";
     const NAME: &'static str = "VerifyUploadSignatureResponse";
-    const FULL_NAME: &'static str = "app.blob.v1.VerifyUploadSignatureResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.VerifyUploadSignatureResponse";
+    const FULL_NAME: &'static str = "app.bucket.v1.VerifyUploadSignatureResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.VerifyUploadSignatureResponse";
 }
 impl ::buffa::Message for VerifyUploadSignatureResponse {
     /// Returns the total encoded size in bytes.
@@ -1481,7 +1481,7 @@ impl ::buffa::Message for VerifyUploadSignatureResponse {
     }
 }
 impl ::buffa::ExtensionSet for VerifyUploadSignatureResponse {
-    const PROTO_FQN: &'static str = "app.blob.v1.VerifyUploadSignatureResponse";
+    const PROTO_FQN: &'static str = "app.bucket.v1.VerifyUploadSignatureResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1504,7 +1504,7 @@ impl ::buffa::json_helpers::ProtoElemJson for VerifyUploadSignatureResponse {
 }
 #[doc(hidden)]
 pub const __VERIFY_UPLOAD_SIGNATURE_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/app.blob.v1.VerifyUploadSignatureResponse",
+    type_url: "type.googleapis.com/app.bucket.v1.VerifyUploadSignatureResponse",
     to_json: ::buffa::type_registry::any_to_json::<VerifyUploadSignatureResponse>,
     from_json: ::buffa::type_registry::any_from_json::<VerifyUploadSignatureResponse>,
     is_wkt: false,
@@ -1537,14 +1537,14 @@ impl GetUploadStatusRequest {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.GetUploadStatusRequest";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.GetUploadStatusRequest";
 }
 ::buffa::impl_default_instance!(GetUploadStatusRequest);
 impl ::buffa::MessageName for GetUploadStatusRequest {
-    const PACKAGE: &'static str = "app.blob.v1";
+    const PACKAGE: &'static str = "app.bucket.v1";
     const NAME: &'static str = "GetUploadStatusRequest";
-    const FULL_NAME: &'static str = "app.blob.v1.GetUploadStatusRequest";
-    const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.GetUploadStatusRequest";
+    const FULL_NAME: &'static str = "app.bucket.v1.GetUploadStatusRequest";
+    const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.GetUploadStatusRequest";
 }
 impl ::buffa::Message for GetUploadStatusRequest {
     /// Returns the total encoded size in bytes.
@@ -1608,7 +1608,7 @@ impl ::buffa::Message for GetUploadStatusRequest {
     }
 }
 impl ::buffa::ExtensionSet for GetUploadStatusRequest {
-    const PROTO_FQN: &'static str = "app.blob.v1.GetUploadStatusRequest";
+    const PROTO_FQN: &'static str = "app.bucket.v1.GetUploadStatusRequest";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1631,7 +1631,7 @@ impl ::buffa::json_helpers::ProtoElemJson for GetUploadStatusRequest {
 }
 #[doc(hidden)]
 pub const __GET_UPLOAD_STATUS_REQUEST_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/app.blob.v1.GetUploadStatusRequest",
+    type_url: "type.googleapis.com/app.bucket.v1.GetUploadStatusRequest",
     to_json: ::buffa::type_registry::any_to_json::<GetUploadStatusRequest>,
     from_json: ::buffa::type_registry::any_from_json::<GetUploadStatusRequest>,
     is_wkt: false,
@@ -1671,14 +1671,14 @@ impl GetUploadStatusResponse {
     /// `Any::unpack_if`.
     ///
     /// Format: `type.googleapis.com/<fully.qualified.TypeName>`
-    pub const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.GetUploadStatusResponse";
+    pub const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.GetUploadStatusResponse";
 }
 ::buffa::impl_default_instance!(GetUploadStatusResponse);
 impl ::buffa::MessageName for GetUploadStatusResponse {
-    const PACKAGE: &'static str = "app.blob.v1";
+    const PACKAGE: &'static str = "app.bucket.v1";
     const NAME: &'static str = "GetUploadStatusResponse";
-    const FULL_NAME: &'static str = "app.blob.v1.GetUploadStatusResponse";
-    const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.GetUploadStatusResponse";
+    const FULL_NAME: &'static str = "app.bucket.v1.GetUploadStatusResponse";
+    const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.GetUploadStatusResponse";
 }
 impl ::buffa::Message for GetUploadStatusResponse {
     /// Returns the total encoded size in bytes.
@@ -1764,7 +1764,7 @@ impl ::buffa::Message for GetUploadStatusResponse {
     }
 }
 impl ::buffa::ExtensionSet for GetUploadStatusResponse {
-    const PROTO_FQN: &'static str = "app.blob.v1.GetUploadStatusResponse";
+    const PROTO_FQN: &'static str = "app.bucket.v1.GetUploadStatusResponse";
     fn unknown_fields(&self) -> &::buffa::UnknownFields {
         &self.__buffa_unknown_fields
     }
@@ -1787,7 +1787,7 @@ impl ::buffa::json_helpers::ProtoElemJson for GetUploadStatusResponse {
 }
 #[doc(hidden)]
 pub const __GET_UPLOAD_STATUS_RESPONSE_JSON_ANY: ::buffa::type_registry::JsonAnyEntry = ::buffa::type_registry::JsonAnyEntry {
-    type_url: "type.googleapis.com/app.blob.v1.GetUploadStatusResponse",
+    type_url: "type.googleapis.com/app.bucket.v1.GetUploadStatusResponse",
     to_json: ::buffa::type_registry::any_to_json::<GetUploadStatusResponse>,
     from_json: ::buffa::type_registry::any_from_json::<GetUploadStatusResponse>,
     is_wkt: false,
@@ -2010,10 +2010,10 @@ pub mod __buffa {
             }
         }
         impl<'a> ::buffa::MessageName for PresignFileView<'a> {
-            const PACKAGE: &'static str = "app.blob.v1";
+            const PACKAGE: &'static str = "app.bucket.v1";
             const NAME: &'static str = "PresignFile";
-            const FULL_NAME: &'static str = "app.blob.v1.PresignFile";
-            const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.PresignFile";
+            const FULL_NAME: &'static str = "app.bucket.v1.PresignFile";
+            const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.PresignFile";
         }
         ::buffa::impl_default_view_instance!(PresignFileView);
         ::buffa::impl_view_reborrow!(PresignFileView);
@@ -2461,10 +2461,10 @@ pub mod __buffa {
             }
         }
         impl<'a> ::buffa::MessageName for PresignedTargetView<'a> {
-            const PACKAGE: &'static str = "app.blob.v1";
+            const PACKAGE: &'static str = "app.bucket.v1";
             const NAME: &'static str = "PresignedTarget";
-            const FULL_NAME: &'static str = "app.blob.v1.PresignedTarget";
-            const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.PresignedTarget";
+            const FULL_NAME: &'static str = "app.bucket.v1.PresignedTarget";
+            const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.PresignedTarget";
         }
         ::buffa::impl_default_view_instance!(PresignedTargetView);
         ::buffa::impl_view_reborrow!(PresignedTargetView);
@@ -2809,10 +2809,10 @@ pub mod __buffa {
             }
         }
         impl<'a> ::buffa::MessageName for CompletedFileView<'a> {
-            const PACKAGE: &'static str = "app.blob.v1";
+            const PACKAGE: &'static str = "app.bucket.v1";
             const NAME: &'static str = "CompletedFile";
-            const FULL_NAME: &'static str = "app.blob.v1.CompletedFile";
-            const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.CompletedFile";
+            const FULL_NAME: &'static str = "app.bucket.v1.CompletedFile";
+            const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.CompletedFile";
         }
         ::buffa::impl_default_view_instance!(CompletedFileView);
         ::buffa::impl_view_reborrow!(CompletedFileView);
@@ -3222,10 +3222,10 @@ pub mod __buffa {
             }
         }
         impl<'a> ::buffa::MessageName for PresignUploadRequestView<'a> {
-            const PACKAGE: &'static str = "app.blob.v1";
+            const PACKAGE: &'static str = "app.bucket.v1";
             const NAME: &'static str = "PresignUploadRequest";
-            const FULL_NAME: &'static str = "app.blob.v1.PresignUploadRequest";
-            const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.PresignUploadRequest";
+            const FULL_NAME: &'static str = "app.bucket.v1.PresignUploadRequest";
+            const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.PresignUploadRequest";
         }
         ::buffa::impl_default_view_instance!(PresignUploadRequestView);
         ::buffa::impl_view_reborrow!(PresignUploadRequestView);
@@ -3567,10 +3567,10 @@ pub mod __buffa {
             }
         }
         impl<'a> ::buffa::MessageName for PresignUploadResponseView<'a> {
-            const PACKAGE: &'static str = "app.blob.v1";
+            const PACKAGE: &'static str = "app.bucket.v1";
             const NAME: &'static str = "PresignUploadResponse";
-            const FULL_NAME: &'static str = "app.blob.v1.PresignUploadResponse";
-            const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.PresignUploadResponse";
+            const FULL_NAME: &'static str = "app.bucket.v1.PresignUploadResponse";
+            const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.PresignUploadResponse";
         }
         ::buffa::impl_default_view_instance!(PresignUploadResponseView);
         ::buffa::impl_view_reborrow!(PresignUploadResponseView);
@@ -3929,10 +3929,10 @@ pub mod __buffa {
             }
         }
         impl<'a> ::buffa::MessageName for VerifyUploadSignatureRequestView<'a> {
-            const PACKAGE: &'static str = "app.blob.v1";
+            const PACKAGE: &'static str = "app.bucket.v1";
             const NAME: &'static str = "VerifyUploadSignatureRequest";
-            const FULL_NAME: &'static str = "app.blob.v1.VerifyUploadSignatureRequest";
-            const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.VerifyUploadSignatureRequest";
+            const FULL_NAME: &'static str = "app.bucket.v1.VerifyUploadSignatureRequest";
+            const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.VerifyUploadSignatureRequest";
         }
         ::buffa::impl_default_view_instance!(VerifyUploadSignatureRequestView);
         ::buffa::impl_view_reborrow!(VerifyUploadSignatureRequestView);
@@ -4245,10 +4245,10 @@ pub mod __buffa {
             }
         }
         impl<'a> ::buffa::MessageName for VerifyUploadSignatureResponseView<'a> {
-            const PACKAGE: &'static str = "app.blob.v1";
+            const PACKAGE: &'static str = "app.bucket.v1";
             const NAME: &'static str = "VerifyUploadSignatureResponse";
-            const FULL_NAME: &'static str = "app.blob.v1.VerifyUploadSignatureResponse";
-            const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.VerifyUploadSignatureResponse";
+            const FULL_NAME: &'static str = "app.bucket.v1.VerifyUploadSignatureResponse";
+            const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.VerifyUploadSignatureResponse";
         }
         ::buffa::impl_default_view_instance!(VerifyUploadSignatureResponseView);
         ::buffa::impl_view_reborrow!(VerifyUploadSignatureResponseView);
@@ -4530,10 +4530,10 @@ pub mod __buffa {
             }
         }
         impl<'a> ::buffa::MessageName for GetUploadStatusRequestView<'a> {
-            const PACKAGE: &'static str = "app.blob.v1";
+            const PACKAGE: &'static str = "app.bucket.v1";
             const NAME: &'static str = "GetUploadStatusRequest";
-            const FULL_NAME: &'static str = "app.blob.v1.GetUploadStatusRequest";
-            const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.GetUploadStatusRequest";
+            const FULL_NAME: &'static str = "app.bucket.v1.GetUploadStatusRequest";
+            const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.GetUploadStatusRequest";
         }
         ::buffa::impl_default_view_instance!(GetUploadStatusRequestView);
         ::buffa::impl_view_reborrow!(GetUploadStatusRequestView);
@@ -4829,10 +4829,10 @@ pub mod __buffa {
             }
         }
         impl<'a> ::buffa::MessageName for GetUploadStatusResponseView<'a> {
-            const PACKAGE: &'static str = "app.blob.v1";
+            const PACKAGE: &'static str = "app.bucket.v1";
             const NAME: &'static str = "GetUploadStatusResponse";
-            const FULL_NAME: &'static str = "app.blob.v1.GetUploadStatusResponse";
-            const TYPE_URL: &'static str = "type.googleapis.com/app.blob.v1.GetUploadStatusResponse";
+            const FULL_NAME: &'static str = "app.bucket.v1.GetUploadStatusResponse";
+            const TYPE_URL: &'static str = "type.googleapis.com/app.bucket.v1.GetUploadStatusResponse";
         }
         ::buffa::impl_default_view_instance!(GetUploadStatusResponseView);
         ::buffa::impl_view_reborrow!(GetUploadStatusResponseView);

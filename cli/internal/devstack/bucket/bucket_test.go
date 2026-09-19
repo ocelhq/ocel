@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/devstack/bucket"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker/dockertest"
-	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
+	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
@@ -29,7 +29,7 @@ func TestAnUploadBeforeAnyBucketIsDeclaredIsRefusedWithoutDocker(t *testing.T) {
 	engine := &dockertest.Engine{}
 	component := bucket.New(engine.Opener(), func() []string { return nil }, nil)
 
-	_, err := component.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{Bucket: "uploads"})
+	_, err := component.PresignUpload(context.Background(), &bucketv1.PresignUploadRequest{Bucket: "uploads"})
 
 	var refused *connect.Error
 	if !errors.As(err, &refused) || refused.Code() != connect.CodeFailedPrecondition {

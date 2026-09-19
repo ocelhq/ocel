@@ -137,7 +137,7 @@ class PostgresConfig(Message[_PostgresConfigFields]):
 
         version: str
 
-_BucketConfigFields: TypeAlias = Literal["allowed_origins"]
+_BucketConfigFields: TypeAlias = Literal["allowed_origins", "public"]
 
 class BucketConfig(Message[_BucketConfigFields]):
     """
@@ -150,9 +150,13 @@ class BucketConfig(Message[_BucketConfigFields]):
             ```proto
             repeated string allowed_origins = 1;
             ```
+        public:
+            ```proto
+            bool public = 2;
+            ```
     """
 
-    __slots__ = ("allowed_origins",)
+    __slots__ = ("allowed_origins", "public")
 
     if TYPE_CHECKING:
 
@@ -160,10 +164,12 @@ class BucketConfig(Message[_BucketConfigFields]):
             self,
             *,
             allowed_origins: list[str] | None = None,
+            public: bool = False,
         ) -> None:
             pass
 
         allowed_origins: list[str]
+        public: bool
 
 class ResourceType(Enum):
     """
@@ -197,7 +203,7 @@ class ResourceType(Enum):
 
 
 _DESC = file_desc(
-    b'\n app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto"\\\n\x12ResourceIdentifier\x122\n\x04type\x18\x01 \x01(\x0e2\x1e.app.resources.v1.ResourceTypeR\x04type\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name"\x11\n\x0fDeclareResponse"\xee\x01\n\x0eDeclareRequest\x12@\n\x08resource\x18\x01 \x01(\x0b2$.app.resources.v1.ResourceIdentifierR\x08resource\x12>\n\x08postgres\x18\x02 \x01(\x0b2 .app.resources.v1.PostgresConfigH\x00R\x08postgres\x128\n\x06bucket\x18\x03 \x01(\x0b2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x12\x16\n\x06source\x18\x04 \x01(\tR\x06sourceB\x08\n\x06config"*\n\x0ePostgresConfig\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version"7\n\x0cBucketConfig\x12\'\n\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins*\x80\x01\n\x0cResourceType\x12\x1d\n\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n\x14RESOURCE_TYPE_BUCKET\x10\x02\x12\x1b\n\x17RESOURCE_TYPE_CONTAINER\x10\x032\xa8\x02\n\x0fResourceService\x12N\n\x07Declare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n\nDeclareEnv\x12#.app.resources.v1.DeclareEnvRequest\x1a$.app.resources.v1.DeclareEnvResponse\x12l\n\x11ReportEnvProblems\x12*.app.resources.v1.ReportEnvProblemsRequest\x1a+.app.resources.v1.ReportEnvProblemsResponseB?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
+    b'\n app/resources/v1/resources.proto\x12\x10app.resources.v1\x1a app/resources/v1/variables.proto"\\\n\x12ResourceIdentifier\x122\n\x04type\x18\x01 \x01(\x0e2\x1e.app.resources.v1.ResourceTypeR\x04type\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name"\x11\n\x0fDeclareResponse"\xee\x01\n\x0eDeclareRequest\x12@\n\x08resource\x18\x01 \x01(\x0b2$.app.resources.v1.ResourceIdentifierR\x08resource\x12>\n\x08postgres\x18\x02 \x01(\x0b2 .app.resources.v1.PostgresConfigH\x00R\x08postgres\x128\n\x06bucket\x18\x03 \x01(\x0b2\x1e.app.resources.v1.BucketConfigH\x00R\x06bucket\x12\x16\n\x06source\x18\x04 \x01(\tR\x06sourceB\x08\n\x06config"*\n\x0ePostgresConfig\x12\x18\n\x07version\x18\x01 \x01(\tR\x07version"O\n\x0cBucketConfig\x12\'\n\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins\x12\x16\n\x06public\x18\x02 \x01(\x08R\x06public*\x80\x01\n\x0cResourceType\x12\x1d\n\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n\x14RESOURCE_TYPE_BUCKET\x10\x02\x12\x1b\n\x17RESOURCE_TYPE_CONTAINER\x10\x032\xa8\x02\n\x0fResourceService\x12N\n\x07Declare\x12 .app.resources.v1.DeclareRequest\x1a!.app.resources.v1.DeclareResponse\x12W\n\nDeclareEnv\x12#.app.resources.v1.DeclareEnvRequest\x1a$.app.resources.v1.DeclareEnvResponse\x12l\n\x11ReportEnvProblems\x12*.app.resources.v1.ReportEnvProblemsRequest\x1a+.app.resources.v1.ReportEnvProblemsResponseB?Z=github.com/ocelhq/ocel/pkg/proto/app/resources/v1;resourcesv1b\x06proto3',
     [
         variables_pb.desc(),
     ],

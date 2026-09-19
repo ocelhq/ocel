@@ -2697,6 +2697,13 @@ pub struct BucketConfig {
         deserialize_with = "::buffa::json_helpers::null_as_default"
     )]
     pub allowed_origins: ::buffa::alloc::vec::Vec<::buffa::alloc::string::String>,
+    /// Field 2: `public`
+    #[serde(
+        rename = "public",
+        with = "::buffa::json_helpers::proto_bool",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
+    )]
+    pub public: bool,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -2705,6 +2712,7 @@ impl ::core::fmt::Debug for BucketConfig {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         f.debug_struct("BucketConfig")
             .field("allowed_origins", &self.allowed_origins)
+            .field("public", &self.public)
             .finish()
     }
 }
@@ -2738,6 +2746,9 @@ impl ::buffa::Message for BucketConfig {
         for v in &self.allowed_origins {
             size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
         }
+        if self.public {
+            size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -2750,6 +2761,9 @@ impl ::buffa::Message for BucketConfig {
         use ::buffa::Enumeration as _;
         for v in &self.allowed_origins {
             ::buffa::types::put_string_field(1u32, v, buf);
+        }
+        if self.public {
+            ::buffa::types::put_bool_field(2u32, self.public, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -2775,6 +2789,13 @@ impl ::buffa::Message for BucketConfig {
                 )?;
                 self.allowed_origins.push(__elem);
             }
+            2u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.public = ::buffa::types::decode_bool(buf)?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -2784,6 +2805,7 @@ impl ::buffa::Message for BucketConfig {
     }
     fn clear(&mut self) {
         self.allowed_origins.clear();
+        self.public = false;
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -6842,6 +6864,8 @@ pub mod __buffa {
         pub struct BucketConfigView<'a> {
             /// Field 1: `allowed_origins`
             pub allowed_origins: ::buffa::RepeatedView<'a, &'a str>,
+            /// Field 2: `public`
+            pub public: bool,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::buffa::MessageView<'a> for BucketConfigView<'a> {
@@ -6880,6 +6904,13 @@ pub mod __buffa {
                 let view = self;
                 let mut cur = cur;
                 match tag.field_number() {
+                    2u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.public = ::buffa::types::decode_bool(&mut cur)?;
+                    }
                     1u32 => {
                         ::buffa::encoding::check_wire_type(
                             tag,
@@ -6925,6 +6956,7 @@ pub mod __buffa {
                         .iter()
                         .map(|s| s.to_string())
                         .collect(),
+                    public: self.public,
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -6942,6 +6974,9 @@ pub mod __buffa {
                 for v in &self.allowed_origins {
                     size += 1u64 + ::buffa::types::string_encoded_len(v) as u64;
                 }
+                if self.public {
+                    size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
+                }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
             }
@@ -6955,6 +6990,9 @@ pub mod __buffa {
                 use ::buffa::Enumeration as _;
                 for v in &self.allowed_origins {
                     ::buffa::types::put_string_field(1u32, v, buf);
+                }
+                if self.public {
+                    ::buffa::types::put_bool_field(2u32, self.public, buf);
                 }
                 self.__buffa_unknown_fields.write_to(buf);
             }
@@ -6979,6 +7017,9 @@ pub mod __buffa {
                 let mut __map = __s.serialize_map(::core::option::Option::None)?;
                 if !self.allowed_origins.is_empty() {
                     __map.serialize_entry("allowedOrigins", &*self.allowed_origins)?;
+                }
+                if self.public {
+                    __map.serialize_entry("public", &self.public)?;
                 }
                 __map.end()
             }
@@ -7077,6 +7118,11 @@ pub mod __buffa {
             #[must_use]
             pub fn allowed_origins(&self) -> &::buffa::RepeatedView<'_, &'_ str> {
                 &self.0.reborrow().allowed_origins
+            }
+            /// Field 2: `public`
+            #[must_use]
+            pub fn public(&self) -> bool {
+                self.0.reborrow().public
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<BucketConfigView<'static>>>
