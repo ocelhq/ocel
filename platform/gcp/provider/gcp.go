@@ -145,6 +145,8 @@ func (p *Provider) Releases() providerkit.Releaser {
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return artifacts{p: p} }
 
+func (p *Provider) ContainerArch(context.Context) (string, error) { return payloads.ContainerArch, nil }
+
 func (p *Provider) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
 	return payloads.ContainerRuntime(arch)
 }

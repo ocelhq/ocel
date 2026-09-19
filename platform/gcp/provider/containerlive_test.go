@@ -114,9 +114,13 @@ func TestTheProviderWrapsEveryContainerInTheRuntimeItCarries(t *testing.T) {
 	if providerkit.Bakes(p, providerkit.ComputeContainer) {
 		t.Fatal("Bakes(container) = true, so a secret would be resolved on the deploy machine and handed to the revision in the clear")
 	}
-	held, err := p.ContainerRuntime(context.Background(), payloads.ContainerArch)
+	runs, err := p.ContainerArch(context.Background())
+	if err != nil || runs != payloads.ContainerArch {
+		t.Fatalf("ContainerArch() = %q, %v, want the %s Cloud Run runs: the image is built for whatever this names", runs, err, payloads.ContainerArch)
+	}
+	held, err := p.ContainerRuntime(context.Background(), runs)
 	if err != nil {
-		t.Fatalf("ContainerRuntime(%s) = %v", payloads.ContainerArch, err)
+		t.Fatalf("ContainerRuntime(%s) = %v", runs, err)
 	}
 	if want, _ := payloads.ContainerRuntime(payloads.ContainerArch); !bytes.Equal(held, want) {
 		t.Error("ContainerRuntime() hands back something other than the embedded payload")
