@@ -11,7 +11,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
-	"github.com/ocelhq/ocel/platform/aws/provider/transform"
+	"github.com/ocelhq/ocel/pkg/transformkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -99,7 +99,7 @@ type Config struct {
 
 	StackState edge.StackState
 
-	Transform transform.Evaluator
+	Transform transformkit.Evaluator
 }
 
 type RecordWaiter interface {

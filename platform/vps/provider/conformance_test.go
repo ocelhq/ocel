@@ -92,8 +92,8 @@ func TestTheRootCarriesTheVendorAndNoOptionalSetYet(t *testing.T) {
 	if p.Vendor() != vps.Vendor {
 		t.Errorf("Vendor() = %q, want %q", p.Vendor(), vps.Vendor)
 	}
-	if got := p.Serves(); len(got) != 0 {
-		t.Errorf("Serves() = %v, want nothing until the provider provisions bindings of its own", got)
+	if got := p.Serves(); !slices.Equal(got, []providerkit.BindingType{providerkit.BindingPostgres}) {
+		t.Errorf("Serves() = %v, want the one binding type a box provisions for itself", got)
 	}
 
 	var root providerkit.Provider = p

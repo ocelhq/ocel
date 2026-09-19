@@ -19,6 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
+	"github.com/ocelhq/ocel/pkg/constants"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
@@ -30,13 +31,6 @@ const (
 	dataPath     = "/var/lib/postgresql/data"
 	readyIn      = 2 * time.Minute
 )
-
-var images = map[string]string{
-	"14": "postgres:14.19@sha256:962ffbe9f6418387643411b127c1db27465e5a23b9a8849bfaf45fa6323963ce",
-	"15": "postgres:15.14@sha256:822f8795764a670160640888508b2a68ea5c4b045012c2de17e1d0447bdbdc99",
-	"16": "postgres:16.10@sha256:21f6013073bc6b92830a2129570e2f5ec42a6c734b5a985a41e83aa58f54c3c1",
-	"17": "postgres:17.6@sha256:00bc86618629af00d2937fdc5a5d63db3ff8450acf52f0636ec813c7f4902929",
-}
 
 type server struct {
 	container docker.Container
@@ -61,8 +55,8 @@ func (c *Component) Resolve(ctx context.Context, project string, resources []dec
 	defer c.mu.Unlock()
 
 	for _, resource := range resources {
-		if _, known := images[resource.Postgres.GetVersion()]; !known {
-			return nil, fmt.Errorf("postgres %q asks for version %q, and ocel dev runs %s: declare one of those", resource.Name, resource.Postgres.GetVersion(), strings.Join(versions(), ", "))
+		if _, known := constants.PostgresImage(resource.Postgres.GetVersion()); !known {
+			return nil, fmt.Errorf("postgres %q asks for version %q, and ocel dev runs %s: declare one of those", resource.Name, resource.Postgres.GetVersion(), strings.Join(constants.PostgresVersions(), ", "))
 		}
 	}
 
@@ -90,15 +84,6 @@ func (c *Component) Resolve(ctx context.Context, project string, resources []dec
 	return out, nil
 }
 
-func versions() []string {
-	known := make([]string, 0, len(images))
-	for version := range images {
-		known = append(known, version)
-	}
-	slices.Sort(known)
-	return known
-}
-
 func (c *Component) server(ctx context.Context, engine docker.Engine, project, version string) (*server, error) {
 	held, running := c.servers[version]
 	if !running {
@@ -107,9 +92,10 @@ func (c *Component) server(ctx context.Context, engine docker.Engine, project, v
 			return nil, err
 		}
 		name := docker.Name(project, component, version)
+		image, _ := constants.PostgresImage(version)
 		container, err := engine.Run(ctx, docker.Spec{
 			Name:       name,
-			Image:      images[version],
+			Image:      image,
 			Env:        []string{"POSTGRES_PASSWORD=" + password},
 			Port:       serverPort,
 			Volume:     name,

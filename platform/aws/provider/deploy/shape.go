@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/costkit"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/aws/provider/transform"
+	"github.com/ocelhq/ocel/pkg/transformkit"
 )
 
 const (
@@ -44,7 +44,7 @@ type shapedPatches struct {
 	unknown map[resourceRef][]string
 }
 
-func Shape(ctx context.Context, evaluator transform.Evaluator, region string, req providerkit.ShapeRequest, tree *costkit.Tree, scopes ShapeScopes) error {
+func Shape(ctx context.Context, evaluator transformkit.Evaluator, region string, req providerkit.ShapeRequest, tree *costkit.Tree, scopes ShapeScopes) error {
 	project := naming.Sanitize(req.Plan.Slug)
 	patched, err := shapeTransforms(ctx, evaluator, project, req)
 	if err != nil {
@@ -193,12 +193,12 @@ func (s shaper) bucket(scope, project, env string, resource providerkit.Resource
 	s.add(scope, tfLogGroup, resource.Name+"-"+uploadCompleterLocalName, map[string]any{"retention_in_days": lambdaLogRetentionDays}, names["uploadCompleterLogGroup"])
 }
 
-func shapeTransforms(ctx context.Context, evaluator transform.Evaluator, project string, req providerkit.ShapeRequest) (shapedPatches, error) {
+func shapeTransforms(ctx context.Context, evaluator transformkit.Evaluator, project string, req providerkit.ShapeRequest) (shapedPatches, error) {
 	held := shapedPatches{patches: map[resourceRef]map[string]any{}, unknown: map[resourceRef][]string{}}
 	if evaluator == nil {
 		return held, nil
 	}
-	request := transform.Request{Provider: transform.Provider, EnvClass: string(req.Plan.Class), Env: req.Plan.Env}
+	request := transformkit.Request{Provider: transformProvider, EnvClass: string(req.Plan.Class), Env: req.Plan.Env}
 	var candidates []transformCandidate
 	for _, resource := range req.Resources {
 		if resource.Binding != "" {
@@ -206,10 +206,10 @@ func shapeTransforms(ctx context.Context, evaluator transform.Evaluator, project
 		}
 		switch resource.Type {
 		case providerkit.BindingPostgres:
-			request.Resources = append(request.Resources, transform.Resource{Type: transformTypePostgres, Name: resource.Name})
+			request.Resources = append(request.Resources, transformkit.Resource{Type: transformTypePostgres, Name: resource.Name})
 			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypePostgres, Name: resource.Name}, names: postgresResourceNames(project, req.Plan.Env, resource.Name)})
 		case providerkit.BindingBucket:
-			request.Resources = append(request.Resources, transform.Resource{Type: transformTypeBucket, Name: resource.Name})
+			request.Resources = append(request.Resources, transformkit.Resource{Type: transformTypeBucket, Name: resource.Name})
 			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeBucket, Name: resource.Name}, names: bucketResourceNames(project, req.Plan.Env, resource.Name)})
 		}
 	}
@@ -222,7 +222,7 @@ func shapeTransforms(ctx context.Context, evaluator transform.Evaluator, project
 			specs = []providerkit.FunctionSpec{{Name: app.App}}
 		}
 		for _, spec := range specs {
-			request.Resources = append(request.Resources, transform.Resource{Type: transformTypeFunction, Name: spec.Name, App: app.App})
+			request.Resources = append(request.Resources, transformkit.Resource{Type: transformTypeFunction, Name: spec.Name, App: app.App})
 			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeFunction, Name: spec.Name}, names: functionResourceNames(project, app.Stack, spec.Name)})
 		}
 	}

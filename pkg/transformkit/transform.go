@@ -1,8 +1,6 @@
-package transform
+package transformkit
 
 import "context"
-
-const Provider = "aws"
 
 type Patches map[string]map[string]any
 

@@ -3,6 +3,7 @@ package vps_test
 import (
 	"archive/tar"
 	"context"
+	"encoding/base64"
 	"errors"
 	"io"
 	"log"
@@ -36,6 +37,7 @@ type box struct {
 	images   map[string]string
 	reads    map[string]string
 	leaf     string
+	kept     string
 	refuses  func(command string) (session.Result, bool)
 }
 
@@ -62,6 +64,15 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 	}
 	if read, named := b.catting(command); named {
 		return read, nil
+	}
+	if sealed, sealing := b.sealing(command, carried); sealing {
+		return sealed, nil
+	}
+	if strings.Contains(command, "/kept/") {
+		if strings.Contains(command, "ln ") && b.kept == "" {
+			b.kept = carried
+		}
+		return session.Result{Stdout: b.kept}, nil
 	}
 	var said string
 	for _, line := range strings.Split(command, "\n") {
@@ -111,6 +122,26 @@ func (b *box) catting(command string) (session.Result, bool) {
 		return session.Result{Code: 3, Stderr: "ocel-proxyctl: the proxy served no certificate"}, true
 	}
 	return session.Result{Stdout: b.leaf}, true
+}
+
+const fakeSeal = "sealed:"
+
+func (b *box) sealing(command, carried string) (session.Result, bool) {
+	if !strings.Contains(command, host.SealHelper) {
+		return session.Result{}, false
+	}
+	body, err := base64.StdEncoding.DecodeString(strings.TrimSpace(carried))
+	if err != nil {
+		return session.Result{Code: 1, Stderr: "seal: not base64"}, true
+	}
+	if strings.Contains(command, "'open'") {
+		if body, err = base64.StdEncoding.DecodeString(strings.TrimPrefix(string(body), fakeSeal)); err != nil {
+			return session.Result{Code: 1, Stderr: "seal: not a value this box sealed"}, true
+		}
+	} else {
+		body = []byte(fakeSeal + base64.StdEncoding.EncodeToString(body))
+	}
+	return session.Result{Stdout: base64.StdEncoding.EncodeToString(body) + "\n"}, true
 }
 
 func (b *box) at(fragment string) int {

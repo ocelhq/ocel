@@ -37,11 +37,13 @@ func RunPorts(t *testing.T, provider providerkit.Provider) {
 
 	t.Run("RecordStore", func(t *testing.T) { RunRecordStore(t, provider.Records()) })
 	t.Run("Sealer", func(t *testing.T) { RunSealer(t, provider.Sealer()) })
+	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, provider.Artifacts()) })
+	t.Run("Releaser", func(t *testing.T) {
+		RunReleaser(t, provider.Releases(), provider.Artifacts(), provider.Records(), provider.Serves())
+	})
 	t.Run("Bootstrapper", func(t *testing.T) {
 		RunBootstrapper(t, bootstrapperOf(t, provider), provider.Edges().Default())
 	})
-	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, provider.Artifacts()) })
-	t.Run("Releaser", func(t *testing.T) { RunReleaser(t, provider.Releases(), provider.Artifacts(), provider.Serves()) })
 	t.Run("Credentials", func(t *testing.T) { RunCredentials(t, provider.Credentials()) })
 	t.Run("EdgeRegistry", func(t *testing.T) { RunEdgeRegistry(t, provider.Edges()) })
 	t.Run("DNSRegistry", func(t *testing.T) { RunDNSRegistry(t, provider.DNS()) })
@@ -788,7 +790,7 @@ func writtenArtifact(t *testing.T) string {
 	return path
 }
 
-func RunReleaser(t *testing.T, releaser providerkit.Releaser, artifacts providerkit.ArtifactStore, serves []providerkit.BindingType) {
+func RunReleaser(t *testing.T, releaser providerkit.Releaser, artifacts providerkit.ArtifactStore, records providerkit.RecordStore, serves []providerkit.BindingType) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -853,6 +855,13 @@ func RunReleaser(t *testing.T, releaser providerkit.Releaser, artifacts provider
 				"the plan and the apply must ship it down one path")
 		}
 
+		if _, storeless := artifacts.(providerkit.NoArtifacts); storeless {
+			if _, err := releaser.Provision(ctx, shipping, nil); err == nil {
+				t.Fatal("Provision() shipped an artifact through a provider that keeps no artifact store, " +
+					"so the release reported a write that landed nowhere")
+			}
+			return
+		}
 		if _, err := releaser.Provision(ctx, shipping, nil); err != nil {
 			t.Fatalf("Provision() of the release whose plan showed the artifact = %v", err)
 		}
@@ -946,6 +955,18 @@ func RunReleaser(t *testing.T, releaser providerkit.Releaser, artifacts provider
 			if err := providerkit.VerifyProperties(binding); err != nil {
 				t.Errorf("Provision() returned a binding the kit refuses to record: %v", err)
 			}
+		}
+
+		if records != nil {
+			recorded := providerkit.Stack{Kind: providerkit.StackInfra, Bindings: result.Bindings}
+			if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, recorded); err != nil {
+				t.Fatalf("recording what the release returned, as the kit does after every Provision() = %v", err)
+			}
+			defer func() {
+				if err := providerkit.ForgetStack(ctx, records, ref.Class, ref.Project, ref.Name); err != nil {
+					t.Errorf("forgetting the stack the teardown took = %v", err)
+				}
+			}()
 		}
 
 		removal, err := releaser.PlanDestroy(ctx, ref, nil)

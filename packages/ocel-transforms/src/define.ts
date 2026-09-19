@@ -1,5 +1,6 @@
 import type { AwsSurfaces } from "./aws";
 import type { TransformBindings } from "./index";
+import type { VpsSurfaces } from "./vps";
 
 /** The environment classes a deploy can target. */
 export type EnvClass = "development" | "preview" | "production";
@@ -30,6 +31,7 @@ export const reservedTagPrefix = "ocel:";
 /** What a provider renders that a transform may patch, keyed by provider name. */
 export interface ProviderSurfaces {
   aws: AwsSurfaces;
+  vps: VpsSurfaces;
 }
 
 /** The providers that render patchable resources. */

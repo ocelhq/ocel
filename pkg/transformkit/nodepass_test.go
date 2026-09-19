@@ -1,4 +1,4 @@
-package transform
+package transformkit
 
 import (
 	"maps"
@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/transform/transformtest"
+	"github.com/ocelhq/ocel/pkg/transformkit/transformtest"
 )
 
 func functionRequest() Request {
 	return Request{
-		Provider:  Provider,
+		Provider:  "aws",
 		EnvClass:  "production",
 		Env:       "prod",
 		Resources: []Resource{{Type: "function", Name: "api-users", App: "api"}},
@@ -21,7 +21,11 @@ func functionRequest() Request {
 func evaluateWith(t *testing.T, req Request, modules map[string]string, listed ...string) ([]Result, error) {
 	t.Helper()
 	root := transformtest.Root(t, modules)
-	return NodePass{Root: root, Modules: listed}.Evaluate(t.Context(), req)
+	return NodePass{
+		Root: root, Modules: listed,
+		External:    []string{"@pulumi/*"},
+		Uninstalled: "install it as a devDependency and re-run.",
+	}.Evaluate(t.Context(), req)
 }
 
 func TestNodePassEvaluate(t *testing.T) {

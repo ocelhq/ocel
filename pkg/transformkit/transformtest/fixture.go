@@ -14,7 +14,7 @@ func repo(t *testing.T) string {
 	if !ok {
 		t.Fatal("locate the test source")
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", ".."))
+	return filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", ".."))
 }
 
 func FixtureModule(t *testing.T, fixture, module string) string {

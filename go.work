@@ -13,6 +13,7 @@ use (
 	./pkg/providerkit/pulumi
 	./pkg/runtimekit
 	./pkg/target
+	./pkg/transformkit
 	./platform/aws/connector
 	./platform/aws/provider
 	./platform/aws/runtime

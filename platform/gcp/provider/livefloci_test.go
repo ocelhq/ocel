@@ -69,7 +69,7 @@ func TestLiveCredentials(t *testing.T) {
 func TestLiveReleaser(t *testing.T) {
 	p := live(t)
 
-	conformance.RunReleaser(t, p.Releases(), p.Artifacts(), p.Serves())
+	conformance.RunReleaser(t, p.Releases(), p.Artifacts(), p.Records(), p.Serves())
 }
 
 func TestLiveRecordStore(t *testing.T) {

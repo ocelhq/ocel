@@ -10,30 +10,42 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/aws/provider/transform"
+	"github.com/ocelhq/ocel/pkg/transformkit"
 )
 
-func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan providerkit.StackPlan) (*transformPatches, error) {
+//go:generate go generate -C ../../../../pkg/transformkit ./...
+
+const transformProvider = "aws"
+
+func NodePass(root string, modules []string) transformkit.NodePass {
+	return transformkit.NodePass{
+		Root: root, Modules: modules,
+		External:    []string{"@pulumi/*"},
+		Uninstalled: "`@ocel/transforms` carries `@pulumi/aws` itself: install it as a devDependency and re-run.",
+	}
+}
+
+func transformStackPlan(ctx context.Context, evaluator transformkit.Evaluator, plan providerkit.StackPlan) (*transformPatches, error) {
 	if evaluator == nil {
 		return nil, nil
 	}
 	project, stack := naming.Sanitize(plan.Ref.Project), plan.Ref.Name
-	req := transform.Request{
-		Provider: transform.Provider,
+	req := transformkit.Request{
+		Provider: transformProvider,
 		EnvClass: string(plan.Ref.Class),
 		Env:      stack.Env,
 	}
 	var candidates []transformCandidate
 
 	if app := plan.App; app != nil && app.Compute == providerkit.ComputeContainer {
-		req.Resources = append(req.Resources, transform.Resource{Type: transformTypeContainer, Name: app.App, App: app.App})
+		req.Resources = append(req.Resources, transformkit.Resource{Type: transformTypeContainer, Name: app.App, App: app.App})
 		candidates = append(candidates, transformCandidate{
 			key:   resourceKey{Type: transformTypeContainer, Name: app.App},
 			names: containerResourceNames(),
 		})
 	} else if app != nil {
 		for _, spec := range app.Functions {
-			req.Resources = append(req.Resources, transform.Resource{
+			req.Resources = append(req.Resources, transformkit.Resource{
 				Type: transformTypeFunction, Name: spec.Name, App: app.App,
 			})
 			candidates = append(candidates, transformCandidate{
@@ -48,13 +60,13 @@ func transformStackPlan(ctx context.Context, evaluator transform.Evaluator, plan
 			}
 			switch resource.Type {
 			case providerkit.BindingPostgres:
-				req.Resources = append(req.Resources, transform.Resource{Type: transformTypePostgres, Name: resource.Name})
+				req.Resources = append(req.Resources, transformkit.Resource{Type: transformTypePostgres, Name: resource.Name})
 				candidates = append(candidates, transformCandidate{
 					key:   resourceKey{Type: transformTypePostgres, Name: resource.Name},
 					names: postgresResourceNames(project, stack.Env, resource.Name),
 				})
 			case providerkit.BindingBucket:
-				req.Resources = append(req.Resources, transform.Resource{Type: transformTypeBucket, Name: resource.Name})
+				req.Resources = append(req.Resources, transformkit.Resource{Type: transformTypeBucket, Name: resource.Name})
 				candidates = append(candidates, transformCandidate{
 					key:   resourceKey{Type: transformTypeBucket, Name: resource.Name},
 					names: bucketResourceNames(project, stack.Env, resource.Name),
@@ -137,7 +149,7 @@ func managedRuntime(name string) string {
 	return providedFunctionRuntime
 }
 
-func resolvePlanOutputs(ctx context.Context, plan providerkit.StackPlan, candidates []transformCandidate, results []transform.Result) error {
+func resolvePlanOutputs(ctx context.Context, plan providerkit.StackPlan, candidates []transformCandidate, results []transformkit.Result) error {
 	var placed []placedOutput
 	if err := walkOutputs(candidates, results, func(ref outputRef, at outputSite, authored any) (any, error) {
 		placed = append(placed, placedOutput{Ref: ref, At: at})

@@ -10,6 +10,7 @@ import {
 } from "./define";
 import type { TransformBindings } from "./index";
 import { bindings, isBindingOutput } from "./output";
+import { vpsOwnedFields } from "./vps";
 
 /**
  * What one ocel resource's rules came to: a patch per underlying resource the
@@ -53,6 +54,7 @@ export interface TransformModule {
 
 const ownedFields: Record<string, Record<string, Record<string, readonly string[]>>> = {
   aws: awsOwnedFields,
+  vps: vpsOwnedFields,
 };
 
 interface LoadedModule {

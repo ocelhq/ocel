@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/transform"
+	"github.com/ocelhq/ocel/pkg/transformkit"
 )
 
 const (
@@ -133,7 +133,7 @@ func (e *EmptyOutputError) Error() string {
 		e.At, e.Ref, e.Ref.Property)
 }
 
-func walkOutputs(candidates []transformCandidate, results []transform.Result, resolve func(outputRef, outputSite, any) (any, error)) error {
+func walkOutputs(candidates []transformCandidate, results []transformkit.Result, resolve func(outputRef, outputSite, any) (any, error)) error {
 	for i, result := range results {
 		for _, key := range slices.Sorted(maps.Keys(result.Patches)) {
 			patch := result.Patches[key]

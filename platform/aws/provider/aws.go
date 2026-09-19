@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -37,7 +38,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
-	"github.com/ocelhq/ocel/platform/aws/provider/transform"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -506,11 +506,11 @@ func (p *Provider) standing(held bootstrap.Deployed, class providerkit.Class) er
 	return nil
 }
 
-func (p *Provider) transformPass(root string) transform.Evaluator {
+func (p *Provider) transformPass(root string) transformkit.Evaluator {
 	if len(p.transforms) == 0 {
 		return nil
 	}
-	return transform.NodePass{Root: root, Modules: p.transforms}
+	return deploy.NodePass(root, p.transforms)
 }
 
 func tableARN(region, account, table string) string {
