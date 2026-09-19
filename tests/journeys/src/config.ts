@@ -10,7 +10,7 @@ import { gcpSlug } from "./targets/gcp/names";
 export const JOURNEY_TS = "ocel.journey.config.ts";
 export const JOURNEY_JSON = "ocel.journey.json";
 
-export const AWS_BASE = "./ocel.json";
+export const DEFAULT_BASE = "./ocel.json";
 export const VPS_BASE = "./ocel.vps.json";
 export const GCP_BASE = "./ocel.gcp.json";
 
@@ -56,7 +56,7 @@ export function awsSweepOverlay(
   slug: string,
   env: NodeJS.ProcessEnv,
 ): Overlay {
-  return { base: AWS_BASE, slug, ...cell?.variant?.config, ...dnsOf(env) };
+  return { base: DEFAULT_BASE, slug, ...cell?.variant?.config, ...dnsOf(env) };
 }
 
 export function overlayFor(
@@ -69,7 +69,7 @@ export function overlayFor(
     case "aws": {
       const varsKey = env.OCEL_AWS_VARS_KEY?.trim() || undefined;
       return {
-        base: AWS_BASE,
+        base: DEFAULT_BASE,
         slug: cell.slug,
         ...cell.variant.config,
         ...dnsOf(env),
@@ -82,8 +82,7 @@ export function overlayFor(
     case "vps":
       return { base: VPS_BASE, slug: cell.slug, hostnames: hostnamesOf(cell, journeyZone(env)) };
     case "dev":
-    case "dev-local":
-      return { base: AWS_BASE, slug: cell.slug };
+      return { base: DEFAULT_BASE, slug: cell.slug };
   }
 }
 

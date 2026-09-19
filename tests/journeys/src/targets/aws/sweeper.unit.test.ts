@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { AWS_BASE } from "../../config";
+import { DEFAULT_BASE } from "../../config";
 import { deploy, fixtures as matrix } from "../../matrix/fixtures";
 import type { Cell } from "../../matrix/types";
 import { defaults } from "../../matrix/variants";
@@ -74,7 +74,7 @@ describe("sweepPlan", () => {
     }
 
     expect(planOne(`j-1874-${part}`, part).overlay).toEqual({
-      base: AWS_BASE,
+      base: DEFAULT_BASE,
       slug: `j-1874-${part}`,
       edge: "api-gateway",
     });
@@ -84,7 +84,7 @@ describe("sweepPlan", () => {
     const one = planOne("j-local-apigw3-hello-express", undefined);
 
     expect(one.fixture).toBe(fixtures[0]);
-    expect(one.overlay).toEqual({ base: AWS_BASE, slug: "j-local-apigw3-hello-express" });
+    expect(one.overlay).toEqual({ base: DEFAULT_BASE, slug: "j-local-apigw3-hello-express" });
   });
 
   it("complains once, and sweeps nothing, when no fixture runs on aws", () => {

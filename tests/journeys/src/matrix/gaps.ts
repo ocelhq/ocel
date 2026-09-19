@@ -22,7 +22,7 @@ export const gaps: Gap[] = [
     issue: 898,
     where: [
       {
-        on: ["dev", "dev-local"],
+        on: ["dev"],
         fixtures: [deploy.next, sdk.next],
         fails: [check(NEXT_CACHE, ["verify"])],
       },

@@ -19,14 +19,11 @@ whether a runtime runs on a target at all, and its apps under `fixtures/deploy/`
 resources; `lifecycle` asks whether a release can be replaced and rolled back there, from
 `fixtures/lifecycle/`; `sdk` asks whether what an app declares is provisioned, bound and
 usable, from `fixtures/sdk/`. The harness starts nothing but the `ocel` binary; bring up
-what the target needs first. For `dev` that is postgres, the control-plane schema and the
-console:
+what the target needs first. For `dev` that is a docker daemon, which `ocel dev` runs a
+declared postgres and bucket in:
 
 ```
 node scripts/snapshot.mjs
-docker compose up -d postgres ocel-cloud minio
-pnpm --filter @console/db db:push
-pnpm --filter @console/web dev
 ```
 
 Then run one cell:
@@ -54,7 +51,7 @@ list marks dead at deploy, which a run otherwise leaves out.
 `pnpm --filter @ocel-tests/journeys plan --lane <lane>` prints what a lane would run under
 the same variables — its cells, each cell's steps, the tests a gap expects red and the cells
 it skips — without deploying anything. A lane is a target and where it runs: `aws`,
-`aws.floci`, `gcp`, `gcp.floci`, `vps`, `vps.incus`, `dev` or `dev-local`.
+`aws.floci`, `gcp`, `gcp.floci`, `vps`, `vps.incus` or `dev`.
 
 The host is `localhost.localstack.cloud`, not the `127.0.0.1` the script prints: S3-Control
 addresses its endpoint as `<account>.<host>`, and `<account>.127.0.0.1` resolves nowhere,
