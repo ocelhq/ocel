@@ -11,6 +11,8 @@ import (
 	"github.com/moby/buildkit/exporter/containerimage/exptypes"
 	railpack "github.com/railwayapp/railpack/buildkit"
 	"github.com/tonistiigi/fsutil"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const (
@@ -20,10 +22,12 @@ const (
 
 	dockerfileFrontend = "dockerfile.v0"
 	filenameAttr       = "filename"
+	platformAttr       = "platform"
 )
 
 type Builder struct {
 	Progress io.Writer
+	Arch     string
 }
 
 func (b Builder) Build(ctx context.Context, app App) (Image, error) {
@@ -41,11 +45,11 @@ func (b Builder) Build(ctx context.Context, app App) (Image, error) {
 	}
 	defer func() { _ = builder.Close() }()
 
-	if err := d.usable(ctx, builder); err != nil {
+	if err := d.usable(ctx, builder, b.Arch); err != nil {
 		return Image{}, err
 	}
 
-	opt, done, err := choice.solve()
+	opt, done, err := choice.solve(b.Arch)
 	if err != nil {
 		return Image{}, err
 	}
@@ -75,7 +79,19 @@ func (b Builder) Build(ctx context.Context, app App) (Image, error) {
 
 func (c Choice) railpack() bool { return c.Dockerfile == "" }
 
-func (c Choice) solve() (client.SolveOpt, func(), error) {
+func (c Choice) solve(arch string) (client.SolveOpt, func(), error) {
+	opt, done, err := c.unpinned()
+	if err != nil || arch == "" {
+		return opt, done, err
+	}
+	if opt.FrontendAttrs == nil {
+		opt.FrontendAttrs = map[string]string{}
+	}
+	opt.FrontendAttrs[platformAttr] = providerkit.ContainerPlatform(arch)
+	return opt, done, nil
+}
+
+func (c Choice) unpinned() (client.SolveOpt, func(), error) {
 	if !c.railpack() {
 		opt, err := dockerfileOptions(c.App.Workspace.Root, c.Dockerfile)
 		return opt, func() {}, err

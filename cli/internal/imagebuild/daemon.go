@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/moby/buildkit/client"
@@ -21,6 +23,7 @@ const (
 	upgradeTo   = "h2c"
 
 	snapshotterLabel = "org.mobyproject.buildkit.worker.snapshotter"
+	containerOS      = "linux"
 
 	handshakeTimeout = 10 * time.Second
 )
@@ -109,21 +112,52 @@ func (d daemon) builder(ctx context.Context) (*client.Client, error) {
 	)
 }
 
-func (d daemon) usable(ctx context.Context, builder *client.Client) error {
+func (d daemon) usable(ctx context.Context, builder *client.Client, arch string) error {
 	workers, err := builder.ListWorkers(ctx)
 	if err != nil {
 		return d.noBuilder(err)
 	}
-	return d.addressable(workers)
+	exporting, err := d.addressable(workers)
+	if err != nil || arch == "" {
+		return err
+	}
+	return d.buildsFor(exporting, arch)
 }
 
-func (d daemon) addressable(workers []*client.WorkerInfo) error {
+func (d daemon) buildsFor(workers []*client.WorkerInfo, arch string) error {
+	var runs []string
 	for _, worker := range workers {
-		if worker.Labels[snapshotterLabel] != "" {
-			return nil
+		for _, platform := range worker.Platforms {
+			if platform.OS == containerOS && platform.Architecture == arch {
+				return nil
+			}
+			runs = append(runs, platform.OS+"/"+platform.Architecture)
 		}
 	}
-	return fmt.Errorf("the docker daemon at %s keeps images in its classic store, where an image is not addressable by the digest it is built under, and where buildkit additionally refuses the merge operations a railpack plan is assembled from: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.Address, providerkit.DockerHostEnv)
+	slices.Sort(runs)
+	target := providerkit.ContainerPlatform(arch)
+	return fmt.Errorf("the target runs %s, and the docker daemon at %s builds for %s alone: give it an emulator for %s (docker run --privileged --rm tonistiigi/binfmt --install %s, then restart docker), or set %s to a daemon running on a %s machine",
+		target, d.Address, builtFor(runs), target, arch, providerkit.DockerHostEnv, target)
+}
+
+func builtFor(runs []string) string {
+	if len(runs) == 0 {
+		return "no platform it names"
+	}
+	return strings.Join(slices.Compact(runs), ", ")
+}
+
+func (d daemon) addressable(workers []*client.WorkerInfo) ([]*client.WorkerInfo, error) {
+	var exporting []*client.WorkerInfo
+	for _, worker := range workers {
+		if worker.Labels[snapshotterLabel] != "" {
+			exporting = append(exporting, worker)
+		}
+	}
+	if len(exporting) > 0 {
+		return exporting, nil
+	}
+	return nil, fmt.Errorf("the docker daemon at %s keeps images in its classic store, where an image is not addressable by the digest it is built under, and where buildkit additionally refuses the merge operations a railpack plan is assembled from: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.Address, providerkit.DockerHostEnv)
 }
 
 func (d daemon) tag(ctx context.Context, image Image) error {
@@ -140,7 +174,7 @@ func (d daemon) noBuilder(err error) error {
 	return fmt.Errorf("the daemon at %s never named a builder to run the build on: start docker, or set %s to a daemon that is running\n    %w", d.Address, providerkit.DockerHostEnv, err)
 }
 
-func Reachable(ctx context.Context) error {
+func Reachable(ctx context.Context, arch string) error {
 	d, err := openDaemon()
 	if err != nil {
 		return err
@@ -152,5 +186,5 @@ func Reachable(ctx context.Context) error {
 		return d.unreachable(err)
 	}
 	defer func() { _ = builder.Close() }()
-	return d.usable(ctx, builder)
+	return d.usable(ctx, builder, arch)
 }
