@@ -147,4 +147,60 @@ describe("createUploadClient", () => {
     ).rejects.toThrow("upload expired");
     expect(onError).toHaveBeenCalled();
   });
+
+  it("tells the route the upload is finished before it starts polling", async () => {
+    const fetch = fakeFetch(["succeeded"]);
+    const client = createUploadClient<TestBucket>({
+      url: "https://app/api/upload",
+      pollIntervalMs: 1,
+      fetch,
+    });
+
+    await client.upload("avatar", { files: [file], input: { userId: "u1" } });
+
+    const order = fetch.mock.calls.map((c) => c[0]);
+    const completed = order.findIndex((url) => url.includes("op=complete"));
+    const polled = order.findIndex((url) => url.includes("op=poll"));
+    expect(completed).toBeGreaterThan(order.indexOf("https://store/put/a"));
+    expect(polled).toBeGreaterThan(completed);
+    expect(JSON.parse(fetch.mock.calls[completed]![1]!.body as string)).toEqual({
+      sessionId: "sess-1",
+    });
+  });
+
+  it("posts a form when the target carries policy fields", async () => {
+    const fetch = vi.fn(async (url: string, _init?: FetchInit) => {
+      if (url.includes("op=presign")) {
+        return jsonRes({
+          sessionId: "sess-1",
+          files: [
+            {
+              url: "https://store/post",
+              key: "avatars/a.jpg",
+              name: "a.jpg",
+              method: "POST",
+              fields: { key: "avatars/a.jpg", policy: "signed" },
+            },
+          ],
+        });
+      }
+      if (url.includes("op=poll")) return jsonRes({ state: "succeeded" });
+      return jsonRes({});
+    });
+    const client = createUploadClient<TestBucket>({
+      url: "https://app/api/upload",
+      pollIntervalMs: 1,
+      fetch,
+    });
+
+    await client.upload("avatar", { files: [file], input: { userId: "u1" } });
+
+    const post = fetch.mock.calls.find((c) => c[0] === "https://store/post")!;
+    expect(post[1]!.method).toBe("POST");
+    const form = post[1]!.body as FormData;
+    expect(form).toBeInstanceOf(FormData);
+    expect(form.get("policy")).toBe("signed");
+    expect(form.get("key")).toBe("avatars/a.jpg");
+    expect(post[1]!.headers).toBeUndefined();
+  });
 });

@@ -67,6 +67,10 @@ const presignBody = z.object({
   input: z.unknown().optional(),
 });
 
+const completeBody = z.object({
+  sessionId: z.string().min(1),
+});
+
 const callbackBody = z.object({
   sessionId: z.string(),
   signature: z.string(),
@@ -243,15 +247,18 @@ async function handleCallback(bucket: Bucket, ctx: BucketContext, req: RouteRequ
   return json({ ok: true });
 }
 
-async function handlePoll(ctx: BucketContext, req: RouteRequest) {
-  const sessionId = new URL(requestUrl(req)).searchParams.get("sessionId");
+async function handleComplete(ctx: BucketContext, sessionId: string | null) {
   if (!sessionId) return json({ error: "missing sessionId" }, 400);
 
-  const res = await ctx.client.getUploadStatus({ sessionId });
+  const res = await ctx.client.completeUpload({ sessionId });
   return json({
     state: stateToString(res.state),
     error: res.error || undefined,
   });
+}
+
+function sessionOf(req: RouteRequest): string | null {
+  return new URL(requestUrl(req)).searchParams.get("sessionId");
 }
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -273,12 +280,16 @@ export function createRouteHandler(bucket: Bucket, options: RouteOptions = {}): 
       return handlePresign(bucket, getCtx(), req, middlewareReq ?? req);
     }
     if (op === "callback") return handleCallback(bucket, getCtx(), req);
+    if (op === "complete") {
+      const body = completeBody.safeParse(await requestJson(req));
+      return handleComplete(getCtx(), body.success ? body.data.sessionId : sessionOf(req));
+    }
     return json({ error: `unknown op '${op}'` }, 400);
   }
 
   async function GET(req: RouteRequest) {
     const op = opOf(req);
-    if (op === "poll") return handlePoll(getCtx(), req);
+    if (op === "poll" || op === "complete") return handleComplete(getCtx(), sessionOf(req));
     return json({ error: `unknown op '${op}'` }, 400);
   }
 

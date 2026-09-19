@@ -2,6 +2,7 @@ import { expectTypeOf } from "vitest";
 import { z } from "zod";
 import { bucket } from "./bucket.js";
 import { createUploadClient } from "./client.js";
+import type { ObjectBody, ObjectInfo } from "./objects.js";
 import { uploader } from "./uploader.js";
 
 const avatar = uploader(
@@ -49,3 +50,24 @@ export async function _typeChecks() {
   // @ts-expect-error `doc` takes no input
   await client.upload("doc", { files: [], input: { userId: "x" } });
 }
+
+const assets = bucket("assets", { public: true });
+
+export async function _objectTypeChecks() {
+  expectTypeOf(await storage.head("a.png")).toEqualTypeOf<ObjectInfo | null>();
+  expectTypeOf(await storage.get("a.png")).toEqualTypeOf<ObjectBody | null>();
+  expectTypeOf(await storage.put("a.png", "x")).toEqualTypeOf<ObjectInfo>();
+  await storage.delete(["a.png", "b.png"]);
+  for await (const held of storage.list({ prefix: "a/" })) {
+    expectTypeOf(held).toEqualTypeOf<ObjectInfo>();
+  }
+  expectTypeOf(await storage.signedUrl("a.png")).toEqualTypeOf<string>();
+
+  expectTypeOf(assets.publicUrl("a.png")).toEqualTypeOf<string>();
+
+  // @ts-expect-error a bucket that was not declared public has no public address
+  storage.publicUrl("a.png");
+}
+
+const uploadersAreOptional = bucket("plain");
+export type _PlainBucketStillReads = ReturnType<typeof uploadersAreOptional.head>;

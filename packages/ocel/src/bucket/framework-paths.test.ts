@@ -26,7 +26,7 @@ function fakeContext() {
     verifyUploadSignature: vi.fn(),
     getUploadStatus: vi.fn(async () => ({ state: UploadState.PENDING, error: "" })),
   } as unknown as BucketServiceClient;
-  const ctx: BucketContext = { client, bucket: "store-bucket" };
+  const ctx: BucketContext = { client, bucket: "store-bucket", publicBaseUrl: "" };
   return { ctx, presignUpload };
 }
 

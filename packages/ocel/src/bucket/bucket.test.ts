@@ -45,7 +45,7 @@ describe("Bucket discovery declare", () => {
     expect(declareMock).toHaveBeenCalledWith(
       expect.objectContaining({
         resource: { name: "storage", type: BindingType.BUCKET },
-        config: { case: "bucket", value: { allowedOrigins: [] } },
+        config: { case: "bucket", value: { allowedOrigins: [], public: false } },
       }),
     );
   });
@@ -60,8 +60,18 @@ describe("Bucket discovery declare", () => {
       expect.objectContaining({
         config: {
           case: "bucket",
-          value: { allowedOrigins: ["https://app.example.com"] },
+          value: { allowedOrigins: ["https://app.example.com"], public: false },
         },
+      }),
+    );
+  });
+
+  it("declares a bucket asking to be served anonymously", () => {
+    bucket("storage", { public: true });
+
+    expect(declareMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: { case: "bucket", value: { allowedOrigins: [], public: true } },
       }),
     );
   });

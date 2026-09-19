@@ -36,6 +36,8 @@ message PostgresProperties {
 
 message BucketProperties {
   string bucket = 1;
+
+  string public_base_url = 2;
 }
 
 message Grant {
