@@ -176,5 +176,5 @@ func Reset(ctx context.Context, open docker.Opener, project string) error {
 		return err
 	}
 	defer func() { _ = engine.Close() }()
-	return engine.RemoveVolumes(ctx, docker.ProjectLabels(project))
+	return engine.Wipe(ctx, docker.ProjectLabels(project))
 }

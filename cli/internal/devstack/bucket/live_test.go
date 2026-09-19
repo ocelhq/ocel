@@ -52,7 +52,7 @@ func startLive(t *testing.T, project string) liveBucket {
 		if err != nil {
 			return
 		}
-		_ = engine.RemoveVolumes(ctx, docker.ProjectLabels(project))
+		_ = engine.Wipe(ctx, docker.ProjectLabels(project))
 		_ = engine.Close()
 	})
 

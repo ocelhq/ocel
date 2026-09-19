@@ -42,7 +42,7 @@ func TestLiveAContainerRunsOnALoopbackPortAndItsVolumeOutlivesIt(t *testing.T) {
 		VolumePath: "/var/lib/postgresql/data",
 		Labels:     labels,
 	}
-	t.Cleanup(func() { _ = engine.RemoveVolumes(ctx, labels) })
+	t.Cleanup(func() { _ = engine.Wipe(ctx, labels) })
 
 	running, err := engine.Run(ctx, spec)
 	if err != nil {
@@ -67,6 +67,9 @@ func TestLiveAContainerRunsOnALoopbackPortAndItsVolumeOutlivesIt(t *testing.T) {
 	if out, err := engine.Exec(ctx, running.ID, "echo", "hello"); err != nil || strings.TrimSpace(out) != "hello" {
 		t.Fatalf("Exec(echo hello) = %q, %v", out, err)
 	}
+	if out, err := engine.ExecInput(ctx, running.ID, "read on stdin\n", "cat"); err != nil || strings.TrimSpace(out) != "read on stdin" {
+		t.Fatalf("ExecInput(cat) = %q, %v, want what was written to its stdin", out, err)
+	}
 	var failed *docker.ExecFailed
 	if _, err := engine.Exec(ctx, running.ID, "false"); !errors.As(err, &failed) || failed.Code != 1 {
 		t.Fatalf("Exec(false) = %v, want an ExecFailed carrying exit code 1", err)
@@ -87,14 +90,14 @@ func TestLiveAContainerRunsOnALoopbackPortAndItsVolumeOutlivesIt(t *testing.T) {
 		t.Fatalf("the volume did not outlive its container: %v", err)
 	}
 
-	if err := engine.RemoveVolumes(ctx, labels); err != nil {
-		t.Fatalf("RemoveVolumes = %v", err)
+	if err := engine.Wipe(ctx, labels); err != nil {
+		t.Fatalf("Wipe = %v", err)
 	}
 	fresh, err := engine.Run(ctx, spec)
 	if err != nil {
-		t.Fatalf("Run after RemoveVolumes = %v", err)
+		t.Fatalf("Run after Wipe = %v", err)
 	}
 	if _, err := engine.Exec(ctx, fresh.ID, "test", "-e", "/var/lib/postgresql/data/kept"); err == nil {
-		t.Fatal("the volume survived RemoveVolumes")
+		t.Fatal("the volume survived Wipe")
 	}
 }

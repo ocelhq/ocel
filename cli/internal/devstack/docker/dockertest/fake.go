@@ -14,6 +14,7 @@ type Engine struct {
 
 	Specs    []docker.Spec
 	Execs    [][]string
+	Inputs   []string
 	Stopped  []string
 	Wiped    []map[string]string
 	Closed   bool
@@ -31,10 +32,15 @@ func (e *Engine) Run(_ context.Context, spec docker.Spec) (docker.Container, err
 	return docker.Container{ID: spec.Name, Addr: fmt.Sprintf("127.0.0.1:%d", 54000+len(e.Specs))}, nil
 }
 
-func (e *Engine) Exec(_ context.Context, _ string, argv ...string) (string, error) {
+func (e *Engine) Exec(ctx context.Context, id string, argv ...string) (string, error) {
+	return e.ExecInput(ctx, id, "", argv...)
+}
+
+func (e *Engine) ExecInput(_ context.Context, _, input string, argv ...string) (string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.Execs = append(e.Execs, argv)
+	e.Inputs = append(e.Inputs, input)
 	if e.Answer != nil {
 		return e.Answer(argv)
 	}
@@ -48,7 +54,7 @@ func (e *Engine) Stop(_ context.Context, id string) error {
 	return nil
 }
 
-func (e *Engine) RemoveVolumes(_ context.Context, labels map[string]string) error {
+func (e *Engine) Wipe(_ context.Context, labels map[string]string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.Wiped = append(e.Wiped, labels)
