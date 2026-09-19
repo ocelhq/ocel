@@ -35,10 +35,9 @@ import (
 const (
 	component = "bucket"
 
-	// TODO: this build accepts a presigned PUT whose content type, length or tags differ from the
-	// ones signed, and with FLOCI_AUTH_VALIDATE_SIGNATURES=true it refuses a correctly signed one,
-	// so an upload's signed conditions are not enforced in dev until ocelhq/floci verifies query
-	// signatures. TestLiveAnUploadThatBreaksItsSignedConditionsIsRefused is skipped until then.
+	// TODO(#1203): this build verifies no presigned signature, so an upload's signed content type
+	// and length are not enforced in dev; move the pin and unskip
+	// TestAnUploadThatBreaksItsSignedConditionsIsRefused once ocelhq/floci verifies them.
 	image = "ghcr.io/ocelhq/floci:2.0.1-ocel.2@sha256:3e541597f1aeaf99e0ff12aaaa5296da665c280a1c60bf9a3c7b751602defe9f"
 
 	emulatorPort = 4566
