@@ -445,6 +445,8 @@ func (r removal) command() string {
 		return unitRemoval(r.path)
 	case r.kind == KindApps:
 		return "docker ps --all --quiet --filter " + quoted("label="+r.path) + " | xargs -r docker rm --force >/dev/null"
+	case r.kind == KindResourceVolumes:
+		return "docker volume ls --quiet --filter " + quoted("label="+r.path) + " | xargs -r docker volume rm >/dev/null"
 	case r.kind == KindAppNetworks:
 		return "for net in $(docker network ls --quiet --filter " + quoted("label="+r.path) + "); do\n" +
 			"docker network disconnect --force \"$net\" " + quoted(ProxyContainer) + " >/dev/null 2>&1 || true\n" +
@@ -479,9 +481,11 @@ func (b Bootstrapper) removals(ctx context.Context, class providerkit.Class) ([]
 const (
 	KindApps        = "docker:app-containers"
 	KindAppNetworks = "docker:app-networks"
+
+	KindResourceVolumes = "docker:resource-volumes"
 )
 
-type appsStanding struct{ containers, networks bool }
+type appsStanding struct{ containers, networks, volumes bool }
 
 func classSelector(class providerkit.Class) string { return LabelClass + "=" + string(class) }
 
@@ -490,6 +494,7 @@ func appsProbe(class providerkit.Class) string {
 	return "if command -v " + quoted(dockerEngine) + " >/dev/null 2>&1; then\n" +
 		"if [ -n \"$(docker ps --all --quiet --filter " + filter + " 2>/dev/null)\" ]; then echo containers; fi\n" +
 		"if [ -n \"$(docker network ls --quiet --filter " + filter + " 2>/dev/null)\" ]; then echo networks; fi\n" +
+		"if [ -n \"$(docker volume ls --quiet --filter " + filter + " 2>/dev/null)\" ]; then echo volumes; fi\n" +
 		"fi"
 }
 
@@ -501,6 +506,7 @@ func (h *Host) appsStanding(ctx context.Context, class providerkit.Class) (appsS
 	return appsStanding{
 		containers: strings.Contains(said, "containers"),
 		networks:   strings.Contains(said, "networks"),
+		volumes:    strings.Contains(said, "volumes"),
 	}, nil
 }
 
@@ -509,6 +515,10 @@ func appsRemoving(class providerkit.Class, apps appsStanding) []removal {
 	if apps.containers {
 		taken = append(taken, taking(KindApps, classSelector(class),
 			"every app container this class stood up, each holding the values its deploy handed it; nothing routes to them once the class is gone"))
+	}
+	if apps.volumes {
+		taken = append(taken, taking(KindResourceVolumes, classSelector(class),
+			"the volume each of this class's resources kept its data on; the data goes with it, and nothing on this box holds another copy"))
 	}
 	if apps.networks {
 		taken = append(taken, taking(KindAppNetworks, classSelector(class),
@@ -549,7 +559,7 @@ func removing(read, sibling Reading, apps appsStanding) []removal {
 
 	standing := make([]removal, 0, len(ordered))
 	for _, candidate := range ordered {
-		if candidate.kind == KindApps || candidate.kind == KindAppNetworks ||
+		if candidate.kind == KindApps || candidate.kind == KindResourceVolumes || candidate.kind == KindAppNetworks ||
 			read.standing(candidate.kind, candidate.path) || sibling.standing(candidate.kind, candidate.path) {
 			standing = append(standing, candidate)
 		}
