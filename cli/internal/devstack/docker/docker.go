@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/netip"
 	"strconv"
+	"strings"
 	"time"
 
 	cerrdefs "github.com/containerd/errdefs"
@@ -46,6 +47,25 @@ type Engine interface {
 	Stop(ctx context.Context, id string) error
 	RemoveVolumes(ctx context.Context, labels map[string]string) error
 	Close() error
+}
+
+type Opener func(ctx context.Context) (Engine, error)
+
+const (
+	LabelProject   = "dev.ocel.project"
+	LabelComponent = "dev.ocel.component"
+)
+
+func Labels(project, component string) map[string]string {
+	return map[string]string{LabelProject: project, LabelComponent: component}
+}
+
+func ProjectLabels(project string) map[string]string {
+	return map[string]string{LabelProject: project}
+}
+
+func Name(project string, parts ...string) string {
+	return strings.Join(append([]string{"ocel-dev", project}, parts...), "-")
 }
 
 type Unreachable struct {
