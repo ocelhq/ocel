@@ -5,6 +5,8 @@ import (
 	"slices"
 )
 
+const DefaultPostgresVersion = "17"
+
 var postgresImages = map[string]string{
 	"14": "postgres:14.19@sha256:962ffbe9f6418387643411b127c1db27465e5a23b9a8849bfaf45fa6323963ce",
 	"15": "postgres:15.14@sha256:822f8795764a670160640888508b2a68ea5c4b045012c2de17e1d0447bdbdc99",
