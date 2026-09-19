@@ -57,7 +57,9 @@ func postgresContainer(in resources.Instruction) (host.ResourceContainer, error)
 					"ALTER USER " + postgresSuperuser + " PASSWORD '" + secret + "';\n"
 			},
 		},
-		Ready: []string{"pg_isready", "-h", "127.0.0.1", "-U", postgresSuperuser},
+		Ready:    []string{"pg_isready", "-h", "127.0.0.1", "-U", postgresSuperuser},
+		Backup:   postgresKind,
+		Database: in.Resource.Name,
 	}, nil
 }
 
@@ -142,7 +144,7 @@ func (p *Provider) RemoveResource(ctx context.Context, ref providerkit.StackRef,
 	if report != nil {
 		report.Say("Taking postgres " + binding.Name + " and its data down")
 	}
-	return p.host.RemoveResource(ctx, ref.Class, name)
+	return p.host.RemoveResource(ctx, host.ResourceRef{Class: ref.Class, Project: ref.Project, Resource: binding.Name, Name: name})
 }
 
 var (

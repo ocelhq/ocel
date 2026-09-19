@@ -25,7 +25,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 	bootstrapped(t, vm, providerkit.ClassProduction)
 	p := vm.deploying(t)
 	ctx := context.Background()
-	in := aPostgres(t, "17")
+	in := aPostgres(t, "16")
 	t.Cleanup(func() {
 		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelResource+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 		vm.ssh(t, "sudo docker volume ls -q --filter label="+host.LabelResource+" | xargs -r sudo docker volume rm >/dev/null 2>&1 || true")
@@ -62,11 +62,26 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 		t.Errorf("the data a second deploy finds is %q, want the row the first one wrote", said)
 	}
 
-	if _, err := p.Postgres(ctx, aPostgres(t, "16"), nil); err == nil {
-		t.Error("a postgres 16 was stood up over the data a 17 initialised")
+	dumped := strings.TrimSpace(vm.ssh(t, "sudo "+host.BackupsHelper+" production dump "+quote(name)+" main"))
+	if !vm.stands(t, dumped) {
+		t.Fatalf("the helper said it dumped %s to %q and nothing stands there", name, dumped)
 	}
-	if !vm.running(t, name) {
-		t.Errorf("%s was taken down by a deploy that was refused", name)
+	if armed := strings.TrimSpace(vm.ssh(t, "systemctl is-enabled "+host.BackupsTimer+" || true")); armed != "enabled" {
+		t.Errorf("the daily dump is %q on a bootstrapped box, and a database nothing dumps is one disk away from gone", armed)
+	}
+
+	upgraded, err := p.Postgres(ctx, aPostgres(t, "17"), nil)
+	if err != nil {
+		t.Fatalf("moving %s from 16 to 17 = %v", name, err)
+	}
+	if said := vm.queries(t, upgraded, "SELECT id FROM kept"); said != "7" {
+		t.Errorf("the data after the move to 17 is %q, want the row version 16 held", said)
+	}
+	if said := vm.queries(t, upgraded, "SHOW server_version_num"); !strings.HasPrefix(said, "17") {
+		t.Errorf("the server answers as version %q after the move to 17", said)
+	}
+	if left := strings.TrimSpace(vm.ssh(t, "sudo docker volume ls -q --filter name="+quote("^"+name+"-g16$"))); left != "" {
+		t.Errorf("version 16's volume %q outlives the move, and nothing after this reclaims it", left)
 	}
 
 	if err := p.RemoveResource(ctx, in.Ref, again, nil); err != nil {
@@ -75,8 +90,11 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 	if vm.running(t, name) {
 		t.Errorf("%s still runs after its stack was removed", name)
 	}
-	if volumes := strings.TrimSpace(vm.ssh(t, "sudo docker volume ls -q --filter name="+quote("^"+name+"$"))); volumes != "" {
+	if volumes := strings.TrimSpace(vm.ssh(t, "sudo docker volume ls -q --filter name="+quote("^"+name))); volumes != "" {
 		t.Errorf("the volume %q outlives the stack that declared it, and nothing after this reclaims the disk", volumes)
+	}
+	if vm.stands(t, host.BackupsDir(providerkit.ClassProduction, name)) {
+		t.Errorf("the dumps taken of %s outlive the stack that declared it", name)
 	}
 	if vm.stands(t, host.KeptPath(providerkit.ClassProduction, name)) {
 		t.Errorf("the sealed password for %s outlives the server it opened", name)

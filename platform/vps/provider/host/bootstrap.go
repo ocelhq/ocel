@@ -542,6 +542,7 @@ func removing(read, sibling Reading, apps appsStanding) []removal {
 	if last {
 		beneath = append(beneath, proxyRemovals()...)
 		beneath = append(beneath, liveRemovals()...)
+		beneath = append(beneath, backupRemovals()...)
 		beneath = append(beneath,
 			taking(KindDir, sshDir, "the deploy login's own key store, which nothing but ocel ever wrote"),
 			taking(KindDir, releasesRoot, "the window naming which images this host still owes a rollback to; the images themselves stay, because what this host runs stays when ocel goes"),
