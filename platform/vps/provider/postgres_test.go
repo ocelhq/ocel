@@ -354,3 +354,18 @@ func TestAVolumeIsLabelledWithTheMajorThatInitialisedIt(t *testing.T) {
 		t.Errorf("the volume was created as %q, and the next deploy cannot tell which major wrote what is on it", kept)
 	}
 }
+
+func TestAPostgresDeclaringNoVersionRunsTheOneEverySdkDeclaresByDefault(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	in := aPostgres(t, "")
+	in.Resource.Postgres = nil
+	if _, err := over(machine).Postgres(context.Background(), in, nil); err != nil {
+		t.Fatalf("Postgres() of a resource naming no version = %v, and a version is a preference, not something a deploy is refused for leaving out", err)
+	}
+	stood := machine.commands()[machine.at("'docker' 'run'")]
+	if !strings.Contains(stood, "postgres:17.") {
+		t.Errorf("a postgres naming no version was stood up as:\n%s\nwant the major every sdk declares when the app names none", stood)
+	}
+}

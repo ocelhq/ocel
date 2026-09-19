@@ -29,8 +29,8 @@ const (
 var postgresCapabilities = []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"}
 
 func postgresContainer(in resources.Instruction) (host.ResourceContainer, error) {
-	version := ""
-	if in.Resource.Postgres != nil {
+	version := constants.DefaultPostgresVersion
+	if in.Resource.Postgres != nil && in.Resource.Postgres.Version != "" {
 		version = in.Resource.Postgres.Version
 	}
 	image, pinned := constants.PostgresImage(version)

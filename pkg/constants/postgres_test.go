@@ -34,3 +34,11 @@ func TestAPostgresVersionNothingPinsNamesNoImage(t *testing.T) {
 		t.Errorf("PostgresImage(%q) = %q, and nothing pins that version", "9", image)
 	}
 }
+
+func TestTheDefaultPostgresVersionIsOneThatIsPinned(t *testing.T) {
+	t.Parallel()
+
+	if _, pinned := PostgresImage(DefaultPostgresVersion); !pinned {
+		t.Errorf("the default version %q names no pinned image", DefaultPostgresVersion)
+	}
+}
