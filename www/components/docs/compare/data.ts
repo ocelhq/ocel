@@ -81,7 +81,7 @@ const linkedPostgres: Pane = {
 };
 
 const ocelDevVerdict =
-  "Once the project is linked on the console, `ocel dev` runs your framework's own dev command with the real resources resolved, on every machine on the team.";
+  "`ocel dev` starts the postgres and buckets your code declares in containers on your machine, then runs your framework's own dev command against them. Docker is the only prerequisite.";
 
 const ocelDev: Pane = {
   code: { lang: "bash", code: `ocel dev -- next dev` },
@@ -196,7 +196,7 @@ vercel env pull`,
         },
         ocel: ocelDev,
         verdict:
-          "`vercel dev` replicates the deployment environment locally and `vercel env pull` writes the variables to `.env`, though Vercel recommends `next dev` when that already covers you; `ocel dev` wraps that same dev command with the resources resolved, once the project is linked on the console.",
+          "`vercel dev` replicates the deployment environment locally and `vercel env pull` writes the variables to `.env`, though Vercel recommends `next dev` when that already covers you; `ocel dev` wraps that same dev command and starts the postgres and buckets your code declares on your machine, with docker the only prerequisite.",
       },
       {
         key: "pick",
@@ -298,7 +298,7 @@ railway dev`,
         },
         ocel: ocelDev,
         verdict:
-          "`railway run` injects the project's environment variables into a local command; once the project is linked on the console, `ocel dev` resolves the resources your app code asked for instead of a variable list.",
+          "`railway run` injects the project's environment variables into a local command; `ocel dev` starts the postgres and buckets your app code asked for on your machine, and `ocel env set --dev` shares the values a team has in common.",
       },
       {
         key: "pick",
@@ -804,7 +804,7 @@ link.postgres("orders", {
         },
         ocel: ocelDev,
         verdict:
-          "Both run your code locally against real resources; once the project is linked on the console, `ocel dev` wraps your framework's own dev command rather than a function runtime.",
+          "`sst dev` runs your code locally against resources deployed to your AWS account; `ocel dev` starts the declared postgres and buckets in containers on your machine and wraps your framework's own dev command rather than a function runtime.",
       },
       {
         key: "beside",
@@ -1198,7 +1198,7 @@ volumes:
         },
         ocel: ocelDev,
         verdict:
-          "Compose gives you a local database; once the project is linked on the console, `ocel dev` gives you the deployed one, resolved for every machine on the team.",
+          "Compose gives you a local database from a file you write and keep in step; `ocel dev` starts one from the declaration already in your app code, on the same docker.",
       },
       {
         key: "pick",
