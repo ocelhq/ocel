@@ -131,8 +131,8 @@ func TestLiveAnUploadCompletesThroughTheDeployedBucketService(t *testing.T) {
 	}
 }
 
-func TestLiveAnUploadThatBreaksItsSignedConditionsIsRefused(t *testing.T) {
-	t.Skip("TODO: ghcr.io/ocelhq/floci:2.0.1-ocel.2 verifies no query signature, so a presigned PUT with another content type or length is stored; unskip once the fork enforces SigV4 presigned requests")
+func TestAnUploadThatBreaksItsSignedConditionsIsRefused(t *testing.T) {
+	t.Skip("TODO(#1203): ghcr.io/ocelhq/floci:2.0.1-ocel.2 verifies no query signature, so a presigned PUT with another content type or length is stored; unskip once the fork enforces SigV4 presigned requests")
 
 	live := startLive(t, "bucket-live-conditions-test")
 	presigned, err := live.component.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{

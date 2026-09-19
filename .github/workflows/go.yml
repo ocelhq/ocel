@@ -192,6 +192,18 @@ jobs:
       - name: go test -race
         run: go test -race -count=1 $PACKAGES
 
+      - name: Run the dev stack's live suite on the runner's docker
+        if: matrix.group.name == 'cli'
+        env:
+          OCEL_LIVE_DOCKER: "1"
+        run: |
+          set -euo pipefail
+          go test -race -count=1 -timeout 20m -run '^TestLive' -json ./cli/internal/devstack/... | tee live-devstack.json
+
+      - name: Assert the dev stack's live suite ran
+        if: matrix.group.name == 'cli'
+        run: scripts/assert-ran.sh live-devstack.json TestLive
+
       - name: Pull the gcp emulator
         if: matrix.group.name == 'gcp' && steps.gate-gcp-live.outputs.green != 'true'
         run: docker pull "$OCEL_FLOCI_GCP_IMAGE"
