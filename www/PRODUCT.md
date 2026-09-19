@@ -44,8 +44,10 @@ own account, and find the reference they need without having to search for it.
 - **Application-defined infrastructure.** A database or bucket is a function call in app
   code, and the call is the provisioning step. There is no second definition to keep in
   sync. Proto-backed and language-neutral.
-- **Real infrastructure in dev.** Link a project on the console and `ocel dev` resolves
-  real resources on every machine for the whole team. No emulators, no containers.
+- **Declared resources in dev.** `ocel dev` starts the postgres and buckets the app
+  declares in containers on the developer's machine. Docker is the only prerequisite and
+  no account is needed. The console only adds values a team shares, set with
+  `ocel env set --dev`.
 - **Not an IaC replacement.** Ocel does not try to replace Terraform, Pulumi, or SST and
   can interoperate with them (`examples/with-pulumi`, `examples/with-sst`). Never frame
   it as "a plain alternative" to them.
