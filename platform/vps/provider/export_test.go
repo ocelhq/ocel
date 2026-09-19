@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -25,6 +26,8 @@ func (p *Provider) Probing(client *http.Client) { p.probing = client }
 func (p *Provider) Resolving(look Lookup) { p.resolve = look }
 
 func (p *Provider) Reaching(dial Reach) { p.reaches = dial }
+
+func (p *Provider) Transforming(pass transformkit.Evaluator) { p.transform = pass }
 
 func DNSVerdict(ctx context.Context, look Lookup, hostname, address string) providerkit.StandingCheck {
 	here, unread := look(ctx, address)

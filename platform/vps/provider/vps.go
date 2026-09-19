@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	"github.com/ocelhq/ocel/pkg/transformkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -79,9 +80,11 @@ type Provider struct {
 	host    *host.Host
 	records *host.Records
 	sealer  *host.Sealer
-	probing *http.Client
-	resolve Lookup
-	reaches Reach
+
+	transform transformkit.Evaluator
+	probing   *http.Client
+	resolve   Lookup
+	reaches   Reach
 
 	probed    sync.Mutex
 	unreached map[string]string
@@ -136,7 +139,11 @@ func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider
 	if port := decoded.SSH.Port; port != 0 && (port < 1 || port > 65535) {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid, "option %q names port %d, which is outside 1-65535", "ssh", port)
 	}
-	return NewProvider(decoded), nil
+	p := NewProvider(decoded)
+	if len(settings.Transforms) > 0 {
+		p.transform = nodePass(settings.Transforms)
+	}
+	return p, nil
 }
 
 func NewProvider(options Options) *Provider {
@@ -156,6 +163,8 @@ func (p *Provider) standing(dial host.Dial) *Provider {
 }
 
 func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
+
+func (p *Provider) RendersTransforms() {}
 
 func (p *Provider) Target() Target { return p.options.SSH }
 

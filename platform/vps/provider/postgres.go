@@ -74,6 +74,9 @@ func (p *Provider) Postgres(ctx context.Context, in resources.Instruction, repor
 	if err != nil {
 		return providerkit.Binding{}, err
 	}
+	if spec, err = p.reshaped(ctx, in, spec); err != nil {
+		return providerkit.Binding{}, err
+	}
 	if report != nil {
 		report.Say("Standing postgres " + in.Resource.Name + " up as " + spec.Name)
 	}

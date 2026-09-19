@@ -10,6 +10,7 @@ require (
 	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/proto v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
+	github.com/ocelhq/ocel/pkg/transformkit v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 )
@@ -95,3 +96,5 @@ replace github.com/ocelhq/ocel/pkg/constants => ../../../pkg/constants
 replace github.com/ocelhq/ocel/pkg/costkit => ../../../pkg/costkit
 
 replace github.com/ocelhq/ocel/pkg/runtimekit => ../../../pkg/runtimekit
+
+replace github.com/ocelhq/ocel/pkg/transformkit => ../../../pkg/transformkit
