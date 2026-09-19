@@ -16,21 +16,34 @@ func handedTo(spec Container) handoff {
 }
 
 const (
-	appContainer   = "the app container a deploy stands up"
-	proxyContainer = "the proxy container a bootstrap runs"
+	appContainer      = "the app container a deploy stands up"
+	proxyContainer    = "the proxy container a bootstrap runs"
+	resourceContainer = "the resource container a deploy stands up"
 )
+
+func resourced() ResourceContainer {
+	return ResourceContainer{
+		Name: "prod-web-r0a1b2c3d-main-pg", Project: valued().Project, Resource: "main", Class: valued().Class,
+		Image:        "public.ecr.aws/docker/library/postgres:17.6@sha256:00bc86618629af00d2937fdc5a5d63db3ff8450acf52f0636ec813c7f4902929",
+		Capabilities: []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"},
+		Volume:       Volume{Path: "/var/lib/postgresql/data"},
+		Credential:   Credential{Env: "POSTGRES_PASSWORD"},
+	}
+}
 
 func running() map[string]string {
 	return map[string]string{
-		appContainer:   words(containerRun(valued(), handedTo(valued()))),
-		proxyContainer: words(proxyRun()),
+		appContainer:      words(containerRun(valued(), handedTo(valued()))),
+		proxyContainer:    words(proxyRun()),
+		resourceContainer: words(resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Class, resourced().Name))),
 	}
 }
 
 func owed() map[string][]string {
 	return map[string][]string{
-		appContainer:   {EnvFile(valued().Class, valued().Name)},
-		proxyContainer: {proxyRoot, ProxyPins, ProxyData},
+		appContainer:      {EnvFile(valued().Class, valued().Name)},
+		proxyContainer:    {proxyRoot, ProxyPins, ProxyData},
+		resourceContainer: {EnvFile(resourced().Class, resourced().Name)},
 	}
 }
 
@@ -142,6 +155,6 @@ func TestNothingAContainerIsOwedIsTheKeyTheRecordsOrTheClassStateItself(t *testi
 func TestEveryContainerThisPackageRunsIsHeldToTheIsolationRules(t *testing.T) {
 	t.Parallel()
 
-	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "proxyRun"},
+	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "proxyRun", "resourceRun"},
 		"a container run built somewhere this bench does not read is held to none of the rules in this file")
 }

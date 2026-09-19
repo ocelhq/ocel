@@ -21,6 +21,8 @@ const (
 	LabelRef     = "ocel.ref"
 	LabelEnv     = "ocel.env"
 	LabelClass   = "ocel.class"
+
+	LabelResource = "ocel.resource"
 )
 
 const (
@@ -40,16 +42,21 @@ func networkLabels(class providerkit.Class, project string) []string {
 	}
 }
 
-func networkStanding(spec Container) string {
-	network := quoted(AppNetwork(spec.Class, spec.Project))
-	create := "docker network create " + words(networkLabels(spec.Class, spec.Project)) + " " + network
+func networkCreating(class providerkit.Class, project string) string {
+	network := quoted(AppNetwork(class, project))
+	create := "docker network create " + words(networkLabels(class, project)) + " " + network
 	return "set -e\n" +
 		"if ! docker network inspect " + network + " >/dev/null 2>&1; then\n" +
 		"if ! said=$(" + create + " 2>&1 >/dev/null) && ! docker network inspect " + network + " >/dev/null 2>&1; then\n" +
 		"printf '%s\\n' \"$said\" >&2\n" +
 		"exit 1\n" +
 		"fi\n" +
-		"fi\n" +
+		"fi"
+}
+
+func networkStanding(spec Container) string {
+	network := quoted(AppNetwork(spec.Class, spec.Project))
+	return networkCreating(spec.Class, spec.Project) + "\n" +
 		"if ! docker network connect " + network + " " + quoted(ProxyContainer) + " >/dev/null 2>&1 && " +
 		"! docker network inspect --format " + quoted(membersFormat) + " " + network + " | grep -qx " + quoted(ProxyContainer) + "; then\n" +
 		"printf '%s\\n' " + quoted(ProxyContainer+" is not attached to "+AppNetwork(spec.Class, spec.Project)+" and could not be: the proxy is the one path to an app on this box, and a container it cannot reach is one nothing routes to") + " >&2\n" +
@@ -68,12 +75,16 @@ func networkForgetting(class providerkit.Class, project string) string {
 }
 
 func (h *Host) join(ctx context.Context, spec Container, elevation string) error {
-	_, said, err := h.spoke(ctx, "put "+spec.App+" on "+AppNetwork(spec.Class, spec.Project), networkStanding(spec), nil, elevation)
+	return h.joining(ctx, spec.App, spec.Class, spec.Project, networkStanding(spec), elevation)
+}
+
+func (h *Host) joining(ctx context.Context, who string, class providerkit.Class, project, command, elevation string) error {
+	_, said, err := h.spoke(ctx, "put "+who+" on "+AppNetwork(class, project), command, nil, elevation)
 	if err != nil && strings.Contains(said, poolExhausted) {
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"%s has no subnet left for %s, and every project on this box runs on a network of its own so that the proxy is the one thing that reaches it: %s\n"+
 				"The engine's stock pools allow about thirty networks. Give it more in /etc/docker/daemon.json, as `\"default-address-pools\": [{\"base\": \"10.200.0.0/16\", \"size\": 24}]`, restart it, and run this again",
-			h.named(), AppNetwork(spec.Class, spec.Project), said)
+			h.named(), AppNetwork(class, project), said)
 	}
 	return err
 }
