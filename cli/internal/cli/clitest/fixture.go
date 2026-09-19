@@ -36,15 +36,8 @@ func DiscoveryDir(root string) string {
 	return filepath.Join(root, constants.DefaultDiscoveryDirName)
 }
 
-func fakeAccount(_ context.Context, apiURL, token, projectID string) (resolve.Account, error) {
-	return resolve.Account{
-		OrgID:     "org_fake",
-		ProjectID: projectID,
-		UserID:    "user_fake",
-		EnvVars:   map[string]string{},
-		APIURL:    apiURL,
-		Token:     token,
-	}, nil
+func fakeAccount(_ context.Context, _, _, projectID string) (resolve.Account, error) {
+	return resolve.Account{ProjectID: projectID, EnvVars: map[string]string{}}, nil
 }
 
 func NewDeps() cmddeps.Deps {

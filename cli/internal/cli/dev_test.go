@@ -3,13 +3,11 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,10 +18,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
+	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
@@ -33,6 +31,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
+	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
+	"github.com/ocelhq/ocel/cli/internal/devstack/docker/dockertest"
 )
 
 func init() {
@@ -91,108 +92,39 @@ func TestReportLiveValues(t *testing.T) {
 		t.Parallel()
 
 		var quiet bytes.Buffer
-		reportLiveValues(&quiet, nil, invocation{name: "dev"})
+		reportLiveValues(&quiet, nil)
 		if quiet.Len() != 0 {
 			t.Errorf("reportLiveValues wrote %q for a run with no live values, want nothing", quiet.String())
 		}
 	})
 
-	t.Run("it names every live key and says dev resolves them once", func(t *testing.T) {
+	t.Run("it names every live key and says dev resolves them like any other value", func(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		reportLiveValues(&out, []string{"WEBHOOK_SECRET", "API_TOKEN"}, invocation{name: "dev"})
+		reportLiveValues(&out, []string{"WEBHOOK_SECRET", "API_TOKEN"})
 		got := out.String()
-		for _, want := range []string{"API_TOKEN", "WEBHOOK_SECRET", "once", "restart"} {
+		for _, want := range []string{"API_TOKEN", "WEBHOOK_SECRET", "every other value", "bounded window"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("reportLiveValues wrote %q, want it to mention %q", got, want)
 			}
-		}
-	})
-
-	t.Run("a local run says the dotfile carries the live value like every other", func(t *testing.T) {
-		t.Parallel()
-
-		var out bytes.Buffer
-		reportLiveValues(&out, []string{"WEBHOOK_SECRET"}, invocation{name: "run", local: true})
-		got := out.String()
-		for _, want := range []string{"WEBHOOK_SECRET", dotenv.FileName} {
-			if !strings.Contains(got, want) {
-				t.Errorf("reportLiveValues wrote %q, want it to mention %q", got, want)
-			}
-		}
-		if strings.Contains(got, "restart") {
-			t.Errorf("reportLiveValues wrote %q, want no restart advice for a run that reads the file", got)
 		}
 	})
 }
 
 func TestRunDev(t *testing.T) {
-	t.Run("not logged in returns an exit error pointing at `ocel login`", func(t *testing.T) {
-		deps := newDeps()
-		deps.LoadCredentials = func() (credentials.Credentials, error) {
-			return credentials.Credentials{}, credentials.ErrNotLoggedIn
-		}
-
-		var stderr bytes.Buffer
-		err := runDev(context.Background(), deps, false, t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
-
-		var exitErr *exitsig.ExitError
-		if !errors.As(err, &exitErr) {
-			t.Fatalf("runDev err = %v (%T), want *exitsig.ExitError", err, err)
-		}
-		if exitErr.Code == 0 {
-			t.Fatalf("ExitError.Code = 0, want non-zero")
-		}
-		if !strings.Contains(stderr.String(), "ocel login") {
-			t.Fatalf("stderr = %q, want it to mention `ocel login`", stderr.String())
-		}
-	})
-
-	t.Run("an unlinked directory with no terminal errors toward `ocel link`", func(t *testing.T) {
-		deps := newDeps()
-		clitest.SetLoggedIn(&deps)
-
-		var stdout, stderr bytes.Buffer
-		err := runDev(context.Background(), deps, false, t.TempDir(), []string{"true"}, &stdout, &stderr, strings.NewReader(""))
-
-		if err == nil {
-			t.Fatal("runDev: expected an error for an unlinked directory, got nil")
-		}
-		if !strings.Contains(err.Error(), "ocel link") {
-			t.Fatalf("err = %q, want it to point at `ocel link`", err.Error())
-		}
-	})
-
-	t.Run("a directory linked to another control plane errors toward `ocel link`", func(t *testing.T) {
-		deps := newDeps()
-		clitest.SetLoggedIn(&deps)
-
-		root := t.TempDir()
-		writeLink(t, root, "https://elsewhere.example.com", "proj_elsewhere")
-
-		err := runDev(context.Background(), deps, false, root, []string{"true"}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
-
-		if err == nil || !strings.Contains(err.Error(), "ocel link") {
-			t.Fatalf("runDev err = %v, want it to point at `ocel link`", err)
-		}
-	})
-
 	t.Run("with no config file it discovers, declares, syncs and spawns", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		envDumpPath := filepath.Join(root, "env.out")
@@ -228,21 +160,18 @@ func TestRunDev(t *testing.T) {
 		})
 	})
 
-	t.Run("it joins the watcher and the detector before it returns", func(t *testing.T) {
+	t.Run("it joins the watcher before it returns", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		var stdout, stderr syncBuffer
@@ -255,7 +184,6 @@ func TestRunDev(t *testing.T) {
 
 		for _, frame := range []string{
 			"github.com/ocelhq/ocel/cli/internal/watcher.run",
-			"github.com/ocelhq/ocel/cli/internal/console/blob.(*Detector).Run",
 		} {
 			if stacks := goroutineStacks(t); strings.Contains(stacks, frame) {
 				t.Errorf("%s still running after runDev returned; it can still write into the project directory:\n%s", frame, stacks)
@@ -268,11 +196,8 @@ func TestRunDev(t *testing.T) {
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -280,7 +205,7 @@ func TestRunDev(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -343,22 +268,19 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 
 		projectID := "proj_" + t.Name()
 
 		firstClone := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(firstClone) })
-		writeLink(t, firstClone, resolveServer.URL, projectID)
+		writeLink(t, firstClone, testAPIURL, projectID)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(firstClone), "main.ts"), declareResourceScript("first"))
 
 		secondClone := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(secondClone) })
-		writeLink(t, secondClone, resolveServer.URL, projectID)
+		writeLink(t, secondClone, testAPIURL, projectID)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(secondClone), "main.ts"), declareResourceScript("second"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -412,11 +334,8 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -424,7 +343,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -476,15 +395,12 @@ export default { slug: "test-app" };
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
@@ -539,15 +455,12 @@ export default { slug: "test-app" };
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
@@ -614,15 +527,12 @@ export default { slug: "test-app" };
 		}
 		t.Cleanup(func() { startWatching = stalled })
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
@@ -676,15 +586,12 @@ export default { slug: "test-app" };
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		resolveServer := newFakeResolveServer(t)
-		defer resolveServer.Close()
-
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := newDeps()
-		withCredentials(&deps, resolveServer.URL)
-		writeLink(t, root, resolveServer.URL, testProjectID(t))
+		deps := devDeps()
+		withCredentials(&deps, testAPIURL)
+		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
@@ -719,7 +626,7 @@ export default { slug: "test-app" };
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		deps := newDeps()
+		deps := devDeps()
 		clitest.SetLoggedIn(&deps)
 
 		root := t.TempDir()
@@ -731,7 +638,7 @@ export default { slug: "test-app" };
 		if err != nil {
 			t.Fatalf("listen: %v", err)
 		}
-		srv := devserver.New(apiURL, "tok", projectID, "http://"+listener.Addr().String())
+		srv := devserver.New("http://"+listener.Addr().String(), devstack.New("a-leader", devstack.Env{}))
 		srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"name":"main","postgres":{"host":"resolved","port":5432,"database":"main","username":"u","password":"p"}}`})
 
 		httpSrv := &http.Server{Handler: srv.Mux()}
@@ -779,6 +686,133 @@ export default { slug: "test-app" };
 	})
 }
 
+func TestDevSuppliesDeclaredResourcesItself(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	t.Run("a declared postgres comes from the dev stack, says where it landed, and stops with the run", func(t *testing.T) {
+		root := t.TempDir()
+		t.Cleanup(func() { _ = devlock.Remove(root) })
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
+
+		engine := &dockertest.Engine{}
+		deps := devDeps()
+		deps.OpenDocker = engine.Opener()
+
+		envDumpPath := filepath.Join(root, "env.out")
+		var stdout, stderr syncBuffer
+		err := runDev(context.Background(), deps, false, root, []string{"sh", "-c", "env > " + envDumpPath}, &stdout, &stderr, strings.NewReader(""))
+		if err != nil {
+			t.Fatalf("runDev err = %v; stderr=%s", err, stderr.String())
+		}
+
+		dumped, readErr := os.ReadFile(envDumpPath)
+		if readErr != nil {
+			t.Fatalf("read env dump: %v", readErr)
+		}
+		env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
+		if raw := env["OCEL_RESOURCE_POSTGRES_main"]; !strings.Contains(raw, `"host":"127.0.0.1"`) || !strings.Contains(raw, `"database":"main"`) {
+			t.Errorf("OCEL_RESOURCE_POSTGRES_main = %q, want the binding of the container the run started", raw)
+		}
+		if !strings.Contains(stdout.String(), `postgres "main" → postgres:17 @ 127.0.0.1:`) {
+			t.Errorf("stdout = %q, want one line saying where postgres \"main\" landed", stdout.String())
+		}
+		if len(engine.Specs) != 1 || engine.Specs[0].Labels["dev.ocel.project"] == "" {
+			t.Fatalf("ran %+v, want one container labelled with the project", engine.Specs)
+		}
+		if len(engine.Stopped) != 1 {
+			t.Errorf("stopped %v, want the run's container stopped on exit", engine.Stopped)
+		}
+		if len(engine.Wiped) != 0 {
+			t.Errorf("wiped %v, want volumes kept when --reset was not asked for", engine.Wiped)
+		}
+	})
+
+	t.Run("an app that declares no resource never needs docker", func(t *testing.T) {
+		root := t.TempDir()
+		t.Cleanup(func() { _ = devlock.Remove(root) })
+
+		deps := devDeps()
+		deps.OpenDocker = func(context.Context) (docker.Engine, error) {
+			t.Error("docker was opened for an app that declares nothing")
+			return nil, errors.New("no daemon")
+		}
+
+		var stdout, stderr syncBuffer
+		err := runDev(context.Background(), deps, false, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr, strings.NewReader(""))
+		if err != nil {
+			t.Fatalf("runDev err = %v; stderr=%s", err, stderr.String())
+		}
+	})
+
+	t.Run("with no docker daemon the refusal names the resource that needed one", func(t *testing.T) {
+		root := t.TempDir()
+		t.Cleanup(func() { _ = devlock.Remove(root) })
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
+
+		deps := devDeps()
+		deps.OpenDocker = func(context.Context) (docker.Engine, error) {
+			return nil, &docker.Unreachable{Address: "unix:///var/run/docker.sock", Err: errors.New("connect: no such file or directory")}
+		}
+
+		var stdout, stderr syncBuffer
+		err := runDev(context.Background(), deps, false, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr, strings.NewReader(""))
+		if err == nil {
+			t.Fatal("runDev started the app without the postgres it declared")
+		}
+		for _, want := range []string{`postgres "main"`, "start docker", "DOCKER_HOST"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %q, want it to mention %q", err.Error(), want)
+			}
+		}
+	})
+
+	t.Run("--reset wipes this project's volumes before anything starts", func(t *testing.T) {
+		root := t.TempDir()
+		t.Cleanup(func() { _ = devlock.Remove(root) })
+
+		engine := &dockertest.Engine{}
+		deps := devDeps()
+		deps.OpenDocker = engine.Opener()
+
+		var stdout, stderr syncBuffer
+		err := runDev(context.Background(), deps, true, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr, strings.NewReader(""))
+		if err != nil {
+			t.Fatalf("runDev err = %v; stderr=%s", err, stderr.String())
+		}
+		if len(engine.Wiped) != 1 || engine.Wiped[0]["dev.ocel.project"] == "" || len(engine.Wiped[0]) != 1 {
+			t.Fatalf("wiped %v, want exactly this project's volumes", engine.Wiped)
+		}
+	})
+
+	t.Run("`ocel run` standing alone gets the same resources", func(t *testing.T) {
+		root := t.TempDir()
+		t.Cleanup(func() { _ = devlock.Remove(root) })
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
+
+		engine := &dockertest.Engine{}
+		deps := devDeps()
+		deps.OpenDocker = engine.Opener()
+
+		envDumpPath := filepath.Join(root, "env.out")
+		var stdout, stderr syncBuffer
+		if err := runRun(context.Background(), deps, root, []string{"sh", "-c", "env > " + envDumpPath}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runRun err = %v; stderr=%s", err, stderr.String())
+		}
+		dumped, readErr := os.ReadFile(envDumpPath)
+		if readErr != nil {
+			t.Fatalf("read env dump: %v", readErr)
+		}
+		if !strings.Contains(string(dumped), "OCEL_RESOURCE_POSTGRES_main=") {
+			t.Errorf("command env carries no OCEL_RESOURCE_POSTGRES_main: %s", dumped)
+		}
+		if len(engine.Stopped) != 1 {
+			t.Errorf("stopped %v, want the command's container stopped once it exited", engine.Stopped)
+		}
+	})
+}
+
 func testProjectID(t *testing.T) string {
 	t.Helper()
 	return "proj_" + strings.ReplaceAll(t.Name(), "/", "_")
@@ -803,39 +837,15 @@ func toMap(env []string) map[string]string {
 	return m
 }
 
-func newFakeResolveServer(t *testing.T) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/blob/detect" {
-			json.NewEncoder(w).Encode(map[string]any{"completions": []any{}})
-			return
-		}
-		if r.URL.Path != "/api/resources/resolve" {
-			http.NotFound(w, r)
-			return
-		}
-		var req struct {
-			Resources []struct {
-				Name string `json:"name"`
-				Type string `json:"type"`
-			} `json:"resources"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
+const testAPIURL = "https://console.example.test"
 
-		env := make(map[string]string, len(req.Resources))
-		for _, r := range req.Resources {
-			key := fmt.Sprintf("OCEL_RESOURCE_%s_%s", r.Type, r.Name)
-			env[key] = fmt.Sprintf(`{"name":%q,"postgres":{"host":"resolved","port":5432,"database":%q}}`, r.Name, r.Name)
-		}
-
-		json.NewEncoder(w).Encode(map[string]any{
-			"env":       env,
-			"expiresAt": time.Now().Add(time.Hour).Format(time.RFC3339),
-		})
-	}))
+func devDeps() cmddeps.Deps {
+	deps := newDeps()
+	deps.OpenDocker = (&dockertest.Engine{}).Opener()
+	deps.FetchAccount = func(_ context.Context, _, _, projectID string) (resolve.Account, error) {
+		return resolve.Account{ProjectID: projectID, EnvVars: map[string]string{}}, nil
+	}
+	return deps
 }
 
 func waitForLockfile(t *testing.T, root string) {

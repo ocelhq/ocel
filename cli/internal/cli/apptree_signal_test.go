@@ -69,16 +69,12 @@ func procTreeSubprocessCmd(t *testing.T, root, apiURL string, appArgs []string) 
 
 func setUpProcTreeFixtureProject(t *testing.T) (root, apiURL string) {
 	t.Helper()
-	resolveServer := newFakeResolveServer(t)
-	t.Cleanup(resolveServer.Close)
 
 	root = t.TempDir()
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-	writeLink(t, root, resolveServer.URL, testProjectID(t))
-	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
-	return root, resolveServer.URL
+	return root, testAPIURL
 }
 
 func TestProcessTreeRealSIGINTKillsTheWholeTree(t *testing.T) {

@@ -2,9 +2,7 @@ package cli
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,18 +12,13 @@ import (
 	"strconv"
 	"strings"
 
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
-
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
+	"github.com/ocelhq/ocel/cli/internal/console"
+	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/resolve"
-	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
 func storeValues(projectEnv, dotfile map[string]string) map[string]string {
@@ -39,96 +32,41 @@ func storeValues(projectEnv, dotfile map[string]string) map[string]string {
 	return values
 }
 
-func resolveAccount(ctx context.Context, deps cmddeps.Deps, apiURL, token, projectID string, stderr io.Writer) resolve.Account {
-	cfg, err := deps.FetchAccount(ctx, apiURL, token, projectID)
-	if err == nil {
-		return cfg
-	}
-	fmt.Fprintf(stderr, "could not reach the control plane (%v). This run resolves values from %s alone; anything set with `ocel env set` is not in play.\n", err, dotenv.FileName)
-	return resolve.Account{ProjectID: projectID, APIURL: apiURL, Token: token}
+type sharedEnv struct {
+	values    map[string]string
+	loggedOut bool
 }
 
-func reportLocal(stdout io.Writer) {
-	fmt.Fprintf(stdout, "running without the console: %s alone carries every value, every resource is an OCEL_RESOURCE_ entry in it, and uploads land under %s.\n",
-		dotenv.FileName, filepath.Join(constants.ProjectStateDirName, "blob"))
+func readSharedEnv(ctx context.Context, deps cmddeps.Deps, dir string, stderr io.Writer) sharedEnv {
+	creds, credsErr := deps.LoadCredentials()
+	apiURL := console.EffectiveBaseURL(creds.APIURL)
+	linked, err := consolelink.Read(dir, apiURL)
+	if err != nil {
+		fmt.Fprintf(stderr, "could not read this project's link (%v). This run resolves values from %s alone; anything set with `ocel env set --dev` is not in play.\n", err, dotenv.FileName)
+		return sharedEnv{}
+	}
+	if linked == nil {
+		return sharedEnv{}
+	}
+	if credsErr != nil {
+		fmt.Fprintf(stderr, "this project is linked and you are not logged in. This run resolves values from %s alone; run `ocel login` to bring in what was set with `ocel env set --dev`.\n", dotenv.FileName)
+		return sharedEnv{loggedOut: true}
+	}
+	account, err := deps.FetchAccount(ctx, apiURL, creds.AccessToken, linked.ProjectID)
+	if err != nil {
+		fmt.Fprintf(stderr, "could not reach the control plane (%v). This run resolves values from %s alone; anything set with `ocel env set --dev` is not in play.\n", err, dotenv.FileName)
+		return sharedEnv{}
+	}
+	return sharedEnv{values: account.EnvVars}
 }
 
 type invocation struct {
-	name  string
-	local bool
+	name      string
+	loggedOut bool
 }
 
 func (i invocation) command() string {
-	if i.local {
-		return "ocel " + i.name + " --local"
-	}
 	return "ocel " + i.name
-}
-
-func localResourceRefusal(err error, dotfileKeys map[string]struct{}, run invocation) error {
-	missing := resolve.MissingResources(err)
-	if len(missing) == 0 {
-		return nil
-	}
-
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s not ready — the app has not been started.\n", localPlural(len(missing)))
-	for _, resource := range missing {
-		key, keyErr := resolve.EnvName(resource.Type, resource.Name)
-		if keyErr != nil {
-			return keyErr
-		}
-		example, exampleErr := exampleBinding(resource.Type, resource.Name)
-		if exampleErr != nil {
-			return exampleErr
-		}
-		fmt.Fprintf(&b, "\n  %s %s\n    no %s is set, and this run resolves a resource from %s alone\n    fix: add %s=%s to %s\n",
-			strings.ToLower(typeFragment(resource.Type)), resource.Name, key, dotenv.FileName, key, example, dotenv.FileName)
-		if hint := shellHint(key, dotfileKeys, run); hint != "" {
-			b.WriteString("    " + hint + "\n")
-		}
-	}
-	fmt.Fprintf(&b, "\nSet the entries above in %s, then run `%s` again.", dotenv.FileName, run.command())
-	return errors.New(b.String())
-}
-
-func typeFragment(t resourcesv1.ResourceType) string {
-	bound, _ := naming.BindableAs(t)
-	return naming.EnvFragment(bound)
-}
-
-func localPlural(n int) string {
-	if n == 1 {
-		return "1 resource is"
-	}
-	return fmt.Sprintf("%d resources are", n)
-}
-
-func exampleBinding(t resourcesv1.ResourceType, name string) (string, error) {
-	bound, _ := naming.BindableAs(t)
-	binding := &bindingsv1.Binding{Name: name}
-	switch bound {
-	case bindingsv1.BindingType_BINDING_TYPE_POSTGRES:
-		binding.Properties = &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
-			Host: "localhost", Port: 5432, Database: name, Username: name, Password: "a-password",
-		}}
-	default:
-		fields, err := structpb.NewStruct(map[string]any{"url": "https://example.invalid"})
-		if err != nil {
-			return "", err
-		}
-		binding.Properties = &bindingsv1.Binding_Custom{Custom: fields}
-	}
-
-	encoded, err := protojson.Marshal(binding)
-	if err != nil {
-		return "", err
-	}
-	var stable bytes.Buffer
-	if err := json.Compact(&stable, encoded); err != nil {
-		return "", err
-	}
-	return stable.String(), nil
 }
 
 func devRefusal(err error, dotfileKeys map[string]struct{}, run invocation) error {
@@ -148,6 +86,9 @@ func devRefusal(err error, dotfileKeys map[string]struct{}, run invocation) erro
 		}
 	}
 	fmt.Fprintf(&b, "\nSet the values above in %s, then run `%s` again.", dotenv.FileName, run.command())
+	if run.loggedOut {
+		b.WriteString(" This project is linked: a value set with `ocel env set --dev` is read once you run `ocel login`.")
+	}
 	return errors.New(b.String())
 }
 

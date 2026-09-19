@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/console/credentials"
 	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -21,6 +22,7 @@ import (
 type Deps struct {
 	LoadCredentials     func() (credentials.Credentials, error)
 	FetchAccount        func(ctx context.Context, apiURL, token, projectID string) (resolve.Account, error)
+	OpenDocker          docker.Opener
 	BuildApp            func(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, out io.Writer) error
 	RequireImageBuilder func(ctx context.Context, rep runui.Reporter, cfg *projectconfig.Config) error
 	BuildAppImages      func(ctx context.Context, cfg *projectconfig.Config, out io.Writer) (map[string]string, error)
