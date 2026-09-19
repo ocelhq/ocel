@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const root = join(here, "..", "..", "..", "..");
+const root = join(here, "..", "..");
 const dist = join(here, "dist");
 
 await rm(dist, { recursive: true, force: true });

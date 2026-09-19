@@ -8,7 +8,7 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/aws/provider/transform"
+	"github.com/ocelhq/ocel/pkg/transformkit"
 )
 
 func TestAnOutputThatResolvedToNothingNeverLandsInAPatch(t *testing.T) {
@@ -22,7 +22,7 @@ func TestAnOutputThatResolvedToNothingNeverLandsInAPatch(t *testing.T) {
 	candidates := []transformCandidate{
 		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--users"}, names: functionResourceNames("shop", stack, "fn--api--users")},
 	}
-	results := []transform.Result{{Patches: transform.Patches{
+	results := []transformkit.Result{{Patches: transformkit.Patches{
 		"lambda": map[string]any{"description": placeholderFor(customBindingType, "legacy", "subnetIds")},
 	}}}
 
@@ -221,18 +221,18 @@ func TestTwoCandidatesGivingOneSharedResourceDifferentValuesIsRefused(t *testing
 		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--users"}, names: functionResourceNames("shop", stack, "fn--api--users")},
 		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--orders"}, names: functionResourceNames("shop", stack, "fn--api--orders")},
 	}
-	results := []transform.Result{
-		{Patches: transform.Patches{"role": map[string]any{"path": "/one/"}}},
-		{Patches: transform.Patches{"role": map[string]any{"path": "/another/"}}},
+	results := []transformkit.Result{
+		{Patches: transformkit.Patches{"role": map[string]any{"path": "/one/"}}},
+		{Patches: transformkit.Patches{"role": map[string]any{"path": "/another/"}}},
 	}
 
 	if _, err := indexPatches(candidates, results); err == nil {
 		t.Fatal("two functions gave the role they share two paths and the last one silently won")
 	}
 
-	agreed := []transform.Result{
-		{Patches: transform.Patches{"role": map[string]any{"path": "/one/"}}},
-		{Patches: transform.Patches{"role": map[string]any{"path": "/one/"}}},
+	agreed := []transformkit.Result{
+		{Patches: transformkit.Patches{"role": map[string]any{"path": "/one/"}}},
+		{Patches: transformkit.Patches{"role": map[string]any{"path": "/one/"}}},
 	}
 	if _, err := indexPatches(candidates, agreed); err != nil {
 		t.Errorf("indexPatches() = %v, want the same value written twice accepted", err)
@@ -257,7 +257,7 @@ func TestAFunctionPlacedInAVPCWithHalfOfWhatALambdaNeedsIsRefused(t *testing.T) 
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			results := []transform.Result{{Patches: transform.Patches{
+			results := []transformkit.Result{{Patches: transformkit.Patches{
 				"lambda": map[string]any{lambdaVPCConfigField: tc.config},
 			}}}
 			_, err := indexPatches(candidates, results)
@@ -267,7 +267,7 @@ func TestAFunctionPlacedInAVPCWithHalfOfWhatALambdaNeedsIsRefused(t *testing.T) 
 		})
 	}
 
-	results := []transform.Result{{Patches: transform.Patches{
+	results := []transformkit.Result{{Patches: transformkit.Patches{
 		"lambda": map[string]any{lambdaVPCConfigField: map[string]any{
 			"subnetIds": []any{"subnet-1"}, "securityGroupIds": []any{"sg-1"},
 		}},

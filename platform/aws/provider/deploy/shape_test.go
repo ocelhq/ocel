@@ -15,8 +15,8 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/aws/provider/transform"
-	"github.com/ocelhq/ocel/platform/aws/provider/transform/transformtest"
+	"github.com/ocelhq/ocel/pkg/transformkit"
+	"github.com/ocelhq/ocel/pkg/transformkit/transformtest"
 )
 
 var pulumiTokens = map[string]string{
@@ -57,7 +57,7 @@ func shapeRequest(t *testing.T) providerkit.ShapeRequest {
 	}
 }
 
-func shaped(t *testing.T, evaluator transform.Evaluator, req providerkit.ShapeRequest) *costv1.ResourceSet {
+func shaped(t *testing.T, evaluator transformkit.Evaluator, req providerkit.ShapeRequest) *costv1.ResourceSet {
 	t.Helper()
 	tree := &costkit.Tree{}
 	project := tree.Scope("", "project", "shop")
@@ -238,7 +238,7 @@ func TestTransformsResizeTheShapeAndBindingOutputsStayUnknown(t *testing.T) {
 	t.Parallel()
 
 	root := transformtest.Root(t, map[string]string{"sizing.transform.ts": sizingModule})
-	evaluator := transform.NodePass{Root: root, Modules: []string{"./sizing.transform.ts"}}
+	evaluator := NodePass(root, []string{"./sizing.transform.ts"})
 	set := shaped(t, evaluator, shapeRequest(t))
 
 	lambda := shapedNamed(t, set, "aws_lambda_function", "fn--web--entry")

@@ -1,9 +1,9 @@
 {
-  "name": "@platform/aws-transform-runner",
+  "name": "@pkg/transform-runner",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "the transform runner the aws provider embeds and hands to node at deploy time",
+  "description": "the transform runner a provider embeds and hands to node at deploy time",
   "scripts": {
     "build": "bun build.mjs"
   },
