@@ -881,13 +881,24 @@ pub struct BucketProperties {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
     )]
     pub bucket: ::buffa::alloc::string::String,
+    /// Field 2: `public_base_url`
+    #[serde(
+        rename = "publicBaseUrl",
+        alias = "public_base_url",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub public_base_url: ::buffa::alloc::string::String,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
 }
 impl ::core::fmt::Debug for BucketProperties {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        f.debug_struct("BucketProperties").field("bucket", &self.bucket).finish()
+        f.debug_struct("BucketProperties")
+            .field("bucket", &self.bucket)
+            .field("public_base_url", &self.public_base_url)
+            .finish()
     }
 }
 impl BucketProperties {
@@ -920,6 +931,11 @@ impl ::buffa::Message for BucketProperties {
         if !self.bucket.is_empty() {
             size += 1u64 + ::buffa::types::string_encoded_len(&self.bucket) as u64;
         }
+        if !self.public_base_url.is_empty() {
+            size
+                += 1u64
+                    + ::buffa::types::string_encoded_len(&self.public_base_url) as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -932,6 +948,9 @@ impl ::buffa::Message for BucketProperties {
         use ::buffa::Enumeration as _;
         if !self.bucket.is_empty() {
             ::buffa::types::put_string_field(1u32, &self.bucket, buf);
+        }
+        if !self.public_base_url.is_empty() {
+            ::buffa::types::put_string_field(2u32, &self.public_base_url, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -953,6 +972,13 @@ impl ::buffa::Message for BucketProperties {
                 )?;
                 ::buffa::types::merge_string(&mut self.bucket, buf)?;
             }
+            2u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.public_base_url, buf)?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -962,6 +988,7 @@ impl ::buffa::Message for BucketProperties {
     }
     fn clear(&mut self) {
         self.bucket.clear();
+        self.public_base_url.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -2353,6 +2380,8 @@ pub mod __buffa {
         pub struct BucketPropertiesView<'a> {
             /// Field 1: `bucket`
             pub bucket: &'a str,
+            /// Field 2: `public_base_url`
+            pub public_base_url: &'a str,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::buffa::MessageView<'a> for BucketPropertiesView<'a> {
@@ -2398,6 +2427,13 @@ pub mod __buffa {
                         )?;
                         view.bucket = ::buffa::types::borrow_str(&mut cur)?;
                     }
+                    2u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.public_base_url = ::buffa::types::borrow_str(&mut cur)?;
+                    }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                         let span_len = before_tag.len() - cur.len();
@@ -2428,6 +2464,7 @@ pub mod __buffa {
                 let _ = __buffa_src;
                 ::core::result::Result::Ok(super::super::BucketProperties {
                     bucket: self.bucket.to_string(),
+                    public_base_url: self.public_base_url.to_string(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -2447,6 +2484,12 @@ pub mod __buffa {
                         += 1u64
                             + ::buffa::types::string_encoded_len(&self.bucket) as u64;
                 }
+                if !self.public_base_url.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.public_base_url)
+                                as u64;
+                }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
             }
@@ -2460,6 +2503,9 @@ pub mod __buffa {
                 use ::buffa::Enumeration as _;
                 if !self.bucket.is_empty() {
                     ::buffa::types::put_string_field(1u32, &self.bucket, buf);
+                }
+                if !self.public_base_url.is_empty() {
+                    ::buffa::types::put_string_field(2u32, &self.public_base_url, buf);
                 }
                 self.__buffa_unknown_fields.write_to(buf);
             }
@@ -2484,6 +2530,9 @@ pub mod __buffa {
                 let mut __map = __s.serialize_map(::core::option::Option::None)?;
                 if !::buffa::json_helpers::skip_if::is_empty_str(self.bucket) {
                     __map.serialize_entry("bucket", self.bucket)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.public_base_url) {
+                    __map.serialize_entry("publicBaseUrl", self.public_base_url)?;
                 }
                 __map.end()
             }
@@ -2584,6 +2633,11 @@ pub mod __buffa {
             #[must_use]
             pub fn bucket(&self) -> &'_ str {
                 self.0.reborrow().bucket
+            }
+            /// Field 2: `public_base_url`
+            #[must_use]
+            pub fn public_base_url(&self) -> &'_ str {
+                self.0.reborrow().public_base_url
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<BucketPropertiesView<'static>>>

@@ -7,6 +7,7 @@ import { type BucketServiceClient, createBucketClient } from "./bucket-client.js
 export interface BucketContext {
   client: BucketServiceClient;
   bucket: string;
+  publicBaseUrl: string;
 }
 
 function authorized(token: string): Interceptor {
@@ -17,11 +18,11 @@ function authorized(token: string): Interceptor {
 }
 
 export function resolveBucketContext(bucket: Bucket): BucketContext {
-  const { bucket: storeBucket } = bucket.__config();
+  const { bucket: storeBucket, publicBaseUrl } = bucket.__config();
   const transport = createConnectTransport({
     httpVersion: "1.1",
     baseUrl: getRuntimeAddress(),
     interceptors: [authorized(getSessionToken())],
   });
-  return { client: createBucketClient(transport), bucket: storeBucket };
+  return { client: createBucketClient(transport), bucket: storeBucket, publicBaseUrl };
 }

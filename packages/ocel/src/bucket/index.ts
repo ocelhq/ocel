@@ -4,6 +4,20 @@ export {
   type BucketContext,
   resolveBucketContext,
 } from "./bucket-context.js";
+export { ObjectNotFoundError, PreconditionFailedError } from "./errors.js";
+export type {
+  GetOptions,
+  ListOptions,
+  ObjectBody,
+  ObjectInfo,
+  ObjectListing,
+  ObjectPage,
+  PutBody,
+  PutOptions,
+  SignedUpload,
+  SignedUploadOptions,
+  SignedUrlOptions,
+} from "./objects.js";
 export {
   createRouteHandler,
   type RouteHandlers,

@@ -25,7 +25,7 @@ function fakeContext(overrides: Partial<Record<string, unknown>> = {}) {
     getUploadStatus: vi.fn(async () => ({ state: UploadState.PENDING, error: "" })),
     ...overrides,
   } as unknown as BucketServiceClient;
-  const ctx: BucketContext = { client, bucket: "store-bucket" };
+  const ctx: BucketContext = { client, bucket: "store-bucket", publicBaseUrl: "" };
   return { ctx, presignUpload };
 }
 

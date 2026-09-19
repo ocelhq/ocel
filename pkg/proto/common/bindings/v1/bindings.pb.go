@@ -275,6 +275,7 @@ func (x *PostgresProperties) GetPassword() string {
 type BucketProperties struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	PublicBaseUrl string                 `protobuf:"bytes,2,opt,name=public_base_url,json=publicBaseUrl,proto3" json:"public_base_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -312,6 +313,13 @@ func (*BucketProperties) Descriptor() ([]byte, []int) {
 func (x *BucketProperties) GetBucket() string {
 	if x != nil {
 		return x.Bucket
+	}
+	return ""
+}
+
+func (x *BucketProperties) GetPublicBaseUrl() string {
+	if x != nil {
+		return x.PublicBaseUrl
 	}
 	return ""
 }
@@ -463,9 +471,10 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
 	"\bdatabase\x18\x03 \x01(\tR\bdatabase\x12\x1a\n" +
 	"\busername\x18\x04 \x01(\tR\busername\x12\x1f\n" +
-	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\"*\n" +
+	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\"R\n" +
 	"\x10BucketProperties\x12\x16\n" +
-	"\x06bucket\x18\x01 \x01(\tR\x06bucket\"\x99\x01\n" +
+	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12&\n" +
+	"\x0fpublic_base_url\x18\x02 \x01(\tR\rpublicBaseUrl\"\x99\x01\n" +
 	"\x05Grant\x12\x18\n" +
 	"\aactions\x18\x01 \x03(\tR\aactions\x12\x1c\n" +
 	"\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n" +

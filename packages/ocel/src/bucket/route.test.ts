@@ -35,16 +35,21 @@ function fakeContext(overrides: Partial<Record<string, unknown>> = {}) {
     state: UploadState.PENDING,
     error: "",
   }));
+  const completeUpload = vi.fn(async (_req: unknown) => ({
+    state: UploadState.PENDING,
+    error: "",
+  }));
 
   const client = {
     presignUpload,
     verifyUploadSignature,
     getUploadStatus,
+    completeUpload,
     ...overrides,
   } as unknown as BucketServiceClient;
 
-  const ctx: BucketContext = { client, bucket: "store-bucket" };
-  return { ctx, presignUpload, verifyUploadSignature, getUploadStatus };
+  const ctx: BucketContext = { client, bucket: "store-bucket", publicBaseUrl: "" };
+  return { ctx, presignUpload, verifyUploadSignature, getUploadStatus, completeUpload };
 }
 
 const onUploadComplete = vi.fn();
@@ -337,7 +342,7 @@ describe("op=poll", () => {
     [UploadState.EXPIRED, "expired"],
   ] as const)("maps runtime state %s to %s", async (state, expected) => {
     const { ctx } = fakeContext({
-      getUploadStatus: vi.fn(async () => ({ state, error: "" })),
+      completeUpload: vi.fn(async () => ({ state, error: "" })),
     });
     const { GET } = createRouteHandler(storage, { runtime: ctx });
     const res = await GET(makeReq(pollUrl));
@@ -347,10 +352,45 @@ describe("op=poll", () => {
 
   it("propagates an error message when present", async () => {
     const { ctx } = fakeContext({
-      getUploadStatus: vi.fn(async () => ({ state: UploadState.EXPIRED, error: "gone" })),
+      completeUpload: vi.fn(async () => ({ state: UploadState.EXPIRED, error: "gone" })),
     });
     const { GET } = createRouteHandler(storage, { runtime: ctx });
     const res = await GET(makeReq(pollUrl));
     expect(((await res.json()) as any).error).toBe("gone");
+  });
+
+  it("asks the runtime to verify, not only to read, so a store that raises no event still settles", async () => {
+    const completeUpload = vi.fn(async () => ({ state: UploadState.SUCCEEDED, error: "" }));
+    const { ctx } = fakeContext({ completeUpload });
+    const { GET } = createRouteHandler(storage, { runtime: ctx });
+
+    await GET(makeReq(pollUrl));
+
+    expect(completeUpload).toHaveBeenCalledWith({ sessionId: "sess-1" });
+  });
+});
+
+describe("op=complete", () => {
+  const completeUrl = "https://app.example.com/api/upload?op=complete";
+
+  it("settles the session the client says it finished", async () => {
+    const completeUpload = vi.fn(async () => ({ state: UploadState.SUCCEEDED, error: "" }));
+    const { ctx } = fakeContext({ completeUpload });
+    const { POST } = createRouteHandler(storage, { runtime: ctx });
+
+    const res = await POST(makeReq(completeUrl, { sessionId: "sess-1" }));
+
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as any).state).toBe("succeeded");
+    expect(completeUpload).toHaveBeenCalledWith({ sessionId: "sess-1" });
+  });
+
+  it("refuses a request naming no session", async () => {
+    const { ctx } = fakeContext();
+    const { POST } = createRouteHandler(storage, { runtime: ctx });
+
+    const res = await POST(makeReq(completeUrl, {}));
+
+    expect(res.status).toBe(400);
   });
 });

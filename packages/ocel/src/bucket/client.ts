@@ -56,6 +56,8 @@ interface PresignResponse {
     name: string;
     contentDisposition?: string;
     headers?: Record<string, string>;
+    method?: string;
+    fields?: Record<string, string>;
   }[];
 }
 
@@ -116,6 +118,21 @@ export function createUploadClient<B extends Bucket<Record<string, AnyUploader>>
 
       await Promise.all(
         presign.files.map((target, i) => {
+          const method = target.method || "PUT";
+          const file = args.files[i];
+          if (target.fields && Object.keys(target.fields).length > 0) {
+            const form = new FormData();
+            for (const [name, value] of Object.entries(target.fields)) form.append(name, value);
+            if (target.contentDisposition) {
+              form.append("Content-Disposition", target.contentDisposition);
+            }
+            form.append("file", file as unknown as Blob);
+            return fetchImpl(target.url, { method, body: form }).then((res) => {
+              if (!res.ok) {
+                throw new Error(`upload ${method} failed (${res.status})`);
+              }
+            });
+          }
           const headers = {
             ...target.headers,
             ...(target.contentDisposition
@@ -123,16 +140,22 @@ export function createUploadClient<B extends Bucket<Record<string, AnyUploader>>
               : {}),
           };
           return fetchImpl(target.url, {
-            method: "PUT",
-            body: args.files[i],
+            method,
+            body: file,
             headers,
           }).then((res) => {
             if (!res.ok) {
-              throw new Error(`upload PUT failed (${res.status})`);
+              throw new Error(`upload ${method} failed (${res.status})`);
             }
           });
         }),
       );
+
+      await fetchImpl(`${options.url}?op=complete`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionId: presign.sessionId }),
+      });
 
       const status = await pollUntilTerminal(
         fetchImpl,

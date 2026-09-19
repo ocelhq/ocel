@@ -1,3 +1,4 @@
+import "./server-only.js";
 import type { NextRequest } from "next/server";
 import type { z } from "zod";
 import type { Bucket } from "./bucket.js";
