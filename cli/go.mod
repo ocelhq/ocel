@@ -19,6 +19,7 @@ require (
 	github.com/evanw/esbuild v0.28.1
 	github.com/fatih/color v1.18.0
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/gofrs/flock v0.13.0
 	github.com/mattn/go-isatty v0.0.24
 	github.com/moby/buildkit v0.32.2
 	github.com/moby/moby/api v1.54.2
@@ -154,7 +155,6 @@ require (
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
-	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gohugoio/hugo v0.149.1 // indirect
 	github.com/google/cel-go v0.26.1 // indirect
 	github.com/google/certificate-transparency-go v1.3.3 // indirect

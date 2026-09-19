@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	connect "connectrpc.com/connect"
+	"github.com/gofrs/flock"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/devstack/bucket"
@@ -26,7 +29,7 @@ import (
 
 type Component interface {
 	Resolve(ctx context.Context, project string, resources []declare.Resource) ([]resolve.Resource, error)
-	Close(ctx context.Context) error
+	Close(ctx context.Context, stop bool) error
 }
 
 type Router interface {
@@ -35,21 +38,32 @@ type Router interface {
 
 type Env struct {
 	Open       docker.Opener
-	AppOrigins []string
+	StateDir   string
+	AppOrigins func() []string
 	Stdout     io.Writer
 	Report     func(error)
 }
 
 var table = map[resourcesv1.ResourceType]func(Env) Component{
-	resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES: func(env Env) Component { return postgres.New(env.Open) },
+	resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES: func(env Env) Component {
+		return postgres.New(env.Open, filepath.Join(env.StateDir, keptDir))
+	},
 	resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET: func(env Env) Component {
 		return bucket.New(env.Open, env.AppOrigins, env.Report)
 	},
 }
 
-func Serves(kind resourcesv1.ResourceType) bool {
-	_, served := table[kind]
-	return served
+const (
+	keptDir      = "kept"
+	leaseFile    = "lock"
+	leasePollsAt = 100 * time.Millisecond
+)
+
+func lease(stateDir string) (*flock.Flock, error) {
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		return nil, fmt.Errorf("keep this project's dev state: %w", err)
+	}
+	return flock.New(filepath.Join(stateDir, leaseFile)), nil
 }
 
 type Stack struct {
@@ -60,6 +74,7 @@ type Stack struct {
 
 	mu      sync.Mutex
 	engine  docker.Engine
+	lease   *flock.Flock
 	printed map[string]struct{}
 }
 
@@ -67,18 +82,32 @@ func New(project string, env Env) *Stack {
 	if env.Stdout == nil {
 		env.Stdout = io.Discard
 	}
+	if env.AppOrigins == nil {
+		env.AppOrigins = func() []string { return nil }
+	}
 	s := &Stack{project: project, stdout: env.Stdout, components: map[resourcesv1.ResourceType]Component{}, printed: map[string]struct{}{}}
 	open := env.Open
 	env.Open = func(ctx context.Context) (docker.Engine, error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if s.engine == nil {
-			engine, err := open(ctx)
+		if s.engine != nil {
+			return s.engine, nil
+		}
+		if s.lease == nil {
+			held, err := lease(env.StateDir)
 			if err != nil {
 				return nil, err
 			}
-			s.engine = engine
+			if shared, err := held.TryRLockContext(ctx, leasePollsAt); err != nil || !shared {
+				return nil, fmt.Errorf("wait for this project's dev resources to finish stopping: %w", err)
+			}
+			s.lease = held
 		}
+		engine, err := open(ctx)
+		if err != nil {
+			return nil, err
+		}
+		s.engine = engine
 		return s.engine, nil
 	}
 	for kind, build := range table {
@@ -149,16 +178,22 @@ func (s *Stack) announce(line string) {
 }
 
 func (s *Stack) Close(ctx context.Context) error {
+	var failed []error
+	alone, err := s.lastOneOut()
+	if err != nil {
+		failed = append(failed, err)
+	}
+
 	closing := make(chan error, len(s.components))
 	for _, component := range s.components {
-		go func() { closing <- component.Close(ctx) }()
+		go func() { closing <- component.Close(ctx, alone) }()
 	}
-	var failed []error
 	for range s.components {
 		if err := <-closing; err != nil {
 			failed = append(failed, err)
 		}
 	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.engine != nil {
@@ -167,14 +202,55 @@ func (s *Stack) Close(ctx context.Context) error {
 		}
 		s.engine = nil
 	}
+	if s.lease != nil {
+		if err := s.lease.Unlock(); err != nil {
+			failed = append(failed, err)
+		}
+		s.lease = nil
+	}
 	return errors.Join(failed...)
 }
 
-func Reset(ctx context.Context, open docker.Opener, project string) error {
+func (s *Stack) lastOneOut() (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.lease == nil {
+		return true, nil
+	}
+	if err := s.lease.Unlock(); err != nil {
+		return false, fmt.Errorf("learn whether another ocel command still uses this project's dev resources, which are left running: %w", err)
+	}
+	alone, err := s.lease.TryLock()
+	if err != nil {
+		return false, fmt.Errorf("learn whether another ocel command still uses this project's dev resources, which are left running: %w", err)
+	}
+	return alone, nil
+}
+
+func Reset(ctx context.Context, open docker.Opener, stateDir, project string) error {
+	held, err := lease(stateDir)
+	if err != nil {
+		return err
+	}
+	alone, err := held.TryLock()
+	if err != nil {
+		return fmt.Errorf("claim this project's dev resources: %w", err)
+	}
+	if !alone {
+		return errors.New("another ocel command is using this project's dev resources: stop it, then run `ocel dev --reset` again")
+	}
+	defer func() { _ = held.Unlock() }()
+
 	engine, err := open(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = engine.Close() }()
-	return engine.Wipe(ctx, docker.ProjectLabels(project))
+	if err := engine.Wipe(ctx, docker.ProjectLabels(project)); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(filepath.Join(stateDir, keptDir)); err != nil {
+		return fmt.Errorf("forget what was kept for the wiped resources: %w", err)
+	}
+	return nil
 }

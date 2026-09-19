@@ -27,6 +27,7 @@ const (
 	longPollSeconds     = 10
 	firstReceiveBackoff = time.Second
 	maxReceiveBackoff   = 30 * time.Second
+	completionAttempts  = 3
 )
 
 func ensureSessionTable(ctx context.Context, ddb *dynamodb.Client) error {
@@ -57,6 +58,7 @@ type uploads struct {
 
 	mu         sync.Mutex
 	completers map[string]completing
+	failed     map[string]int
 }
 
 type completing struct {
@@ -90,6 +92,7 @@ func watchUploads(ctx context.Context, queue *sqs.Client, report func(error)) (*
 		cancel:     cancel,
 		done:       make(chan struct{}),
 		completers: map[string]completing{},
+		failed:     map[string]int{},
 	}
 	go u.watch(watching, queue, report)
 	return u, nil
@@ -127,14 +130,40 @@ func (u *uploads) watch(ctx context.Context, queue *sqs.Client, report func(erro
 
 		for _, message := range received.Messages {
 			if err := u.complete(ctx, aws.ToString(message.Body)); err != nil {
-				report(fmt.Errorf("complete an upload: %w", err))
-				continue
+				if ctx.Err() != nil || !u.givesUpOn(aws.ToString(message.MessageId)) {
+					continue
+				}
+				report(fmt.Errorf("complete an upload, given up on after %d attempts: %w", completionAttempts, err))
 			}
 			if _, err := queue.DeleteMessage(ctx, &sqs.DeleteMessageInput{QueueUrl: aws.String(u.queueURL), ReceiptHandle: message.ReceiptHandle}); err != nil && ctx.Err() == nil {
 				report(fmt.Errorf("acknowledge an upload notification: %w", err))
 			}
 		}
 	}
+}
+
+func (u *uploads) givesUpOn(messageID string) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.failed[messageID]++
+	if u.failed[messageID] < completionAttempts {
+		return false
+	}
+	delete(u.failed, messageID)
+	return true
+}
+
+func (u *uploads) serves(name string, origins []string) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	held, provisioned := u.completers[name]
+	return provisioned && slices.Equal(held.origins, origins)
+}
+
+func (u *uploads) serve(name string, held completing) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.completers[name] = held
 }
 
 func (u *uploads) complete(ctx context.Context, body string) error {
@@ -157,10 +186,7 @@ func (u *uploads) complete(ctx context.Context, body string) error {
 }
 
 func (e *emulator) provision(ctx context.Context, name string, origins []string) error {
-	e.uploads.mu.Lock()
-	held, provisioned := e.uploads.completers[name]
-	e.uploads.mu.Unlock()
-	if provisioned && slices.Equal(held.origins, origins) {
+	if e.uploads.serves(name, origins) {
 		return nil
 	}
 
@@ -195,14 +221,12 @@ func (e *emulator) provision(ctx context.Context, name string, origins []string)
 		return fmt.Errorf("have it announce finished uploads: %w", err)
 	}
 
-	e.uploads.mu.Lock()
-	e.uploads.completers[name] = completing{origins: origins, completer: production.NewUploadCompleter(production.UploadCompleterConfig{
+	e.uploads.serve(name, completing{origins: origins, completer: production.NewUploadCompleter(production.UploadCompleterConfig{
 		DDB:              e.ddb,
 		Tagger:           e.s3,
 		Table:            sessionTable,
 		SessionKeyPrefix: sessionPrefix,
 		AllowedOrigins:   origins,
-	})}
-	e.uploads.mu.Unlock()
+	})})
 	return nil
 }

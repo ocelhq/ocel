@@ -22,13 +22,17 @@ func postgres(name string) declare.Resource {
 func TestEveryBindableResourceTypeHasAComponent(t *testing.T) {
 	t.Parallel()
 
+	interrupted, interrupt := context.WithCancel(context.Background())
+	interrupt()
 	for number := range resourcesv1.ResourceType_name {
 		kind := resourcesv1.ResourceType(number)
 		if _, bindable := naming.BindableAs(kind); !bindable {
 			continue
 		}
-		if !devstack.Serves(kind) {
-			t.Errorf("%s can be declared and no component serves it in dev", kind)
+		stack := devstack.New("shop", devstack.Env{Open: (&dockertest.Engine{}).Opener(), StateDir: t.TempDir()})
+		_, err := stack.Resolve(interrupted, []declare.Resource{{Name: "declared", Type: kind}})
+		if err != nil && strings.Contains(err.Error(), "serves no") {
+			t.Errorf("%s can be declared and no component serves it in dev: %v", kind, err)
 		}
 	}
 }
@@ -40,7 +44,7 @@ func TestResolve(t *testing.T) {
 		t.Parallel()
 
 		opened := false
-		stack := devstack.New("shop", devstack.Env{Open: func(context.Context) (docker.Engine, error) {
+		stack := devstack.New("shop", devstack.Env{StateDir: t.TempDir(), Open: func(context.Context) (docker.Engine, error) {
 			opened = true
 			return nil, errors.New("no daemon")
 		}})
@@ -59,7 +63,7 @@ func TestResolve(t *testing.T) {
 
 		engine := &dockertest.Engine{}
 		var out bytes.Buffer
-		stack := devstack.New("shop", devstack.Env{Open: engine.Opener(), Stdout: &out})
+		stack := devstack.New("shop", devstack.Env{Open: engine.Opener(), StateDir: t.TempDir(), Stdout: &out})
 
 		for range 2 {
 			resolved, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")})
@@ -79,7 +83,7 @@ func TestResolve(t *testing.T) {
 	t.Run("a missing daemon is refused by naming the resource that needed it", func(t *testing.T) {
 		t.Parallel()
 
-		stack := devstack.New("shop", devstack.Env{Open: func(context.Context) (docker.Engine, error) {
+		stack := devstack.New("shop", devstack.Env{StateDir: t.TempDir(), Open: func(context.Context) (docker.Engine, error) {
 			return nil, &docker.Unreachable{Address: "unix:///var/run/docker.sock", Err: errors.New("connect: no such file or directory")}
 		}})
 
@@ -98,7 +102,7 @@ func TestResolve(t *testing.T) {
 		t.Parallel()
 
 		engine := &dockertest.Engine{}
-		stack := devstack.New("shop", devstack.Env{Open: engine.Opener()})
+		stack := devstack.New("shop", devstack.Env{Open: engine.Opener(), StateDir: t.TempDir()})
 		if _, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")}); err != nil {
 			t.Fatalf("Resolve = %v", err)
 		}
@@ -111,16 +115,85 @@ func TestResolve(t *testing.T) {
 	})
 }
 
-func TestResetWipesOnlyThisProjectsVolumes(t *testing.T) {
+func TestTwoProcessesOfOneProjectShareTheStackAndTheLastOneOutStopsIt(t *testing.T) {
 	t.Parallel()
 
+	state := t.TempDir()
 	engine := &dockertest.Engine{}
-	if err := devstack.Reset(context.Background(), engine.Opener(), "shop-1a2b"); err != nil {
-		t.Fatalf("Reset = %v", err)
+	first := devstack.New("shop", devstack.Env{Open: engine.Opener(), StateDir: state})
+	second := devstack.New("shop", devstack.Env{Open: engine.Opener(), StateDir: state})
+	for _, stack := range []*devstack.Stack{first, second} {
+		if _, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")}); err != nil {
+			t.Fatalf("Resolve = %v", err)
+		}
 	}
-	if len(engine.Wiped) != 1 || engine.Wiped[0]["dev.ocel.project"] != "shop-1a2b" || len(engine.Wiped[0]) != 1 {
-		t.Fatalf("wiped %v, want exactly the volumes labelled with this project", engine.Wiped)
+
+	if err := first.Close(context.Background()); err != nil {
+		t.Fatalf("Close = %v", err)
 	}
+	if len(engine.Stopped) != 0 {
+		t.Fatalf("stopped %v while another process of the project still used them", engine.Stopped)
+	}
+	if err := second.Close(context.Background()); err != nil {
+		t.Fatalf("second Close = %v", err)
+	}
+	if len(engine.Stopped) != 1 {
+		t.Fatalf("stopped %v, want the last process out to stop the container", engine.Stopped)
+	}
+}
+
+func TestReset(t *testing.T) {
+	t.Parallel()
+
+	t.Run("wipes only this project's containers and volumes, and what was kept for them", func(t *testing.T) {
+		t.Parallel()
+
+		state := t.TempDir()
+		engine := &dockertest.Engine{}
+		stack := devstack.New("shop-1a2b", devstack.Env{Open: engine.Opener(), StateDir: state})
+		first, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")})
+		if err != nil {
+			t.Fatalf("Resolve = %v", err)
+		}
+		if err := stack.Close(context.Background()); err != nil {
+			t.Fatalf("Close = %v", err)
+		}
+
+		if err := devstack.Reset(context.Background(), engine.Opener(), state, "shop-1a2b"); err != nil {
+			t.Fatalf("Reset = %v", err)
+		}
+		if len(engine.Wiped) != 1 || engine.Wiped[0]["dev.ocel.project"] != "shop-1a2b" || len(engine.Wiped[0]) != 1 {
+			t.Fatalf("wiped %v, want exactly what is labelled with this project", engine.Wiped)
+		}
+
+		again, err := devstack.New("shop-1a2b", devstack.Env{Open: engine.Opener(), StateDir: state}).Resolve(context.Background(), []declare.Resource{postgres("main")})
+		if err != nil {
+			t.Fatalf("Resolve after Reset = %v", err)
+		}
+		if first[0].Env["OCEL_RESOURCE_POSTGRES_main"] == again[0].Env["OCEL_RESOURCE_POSTGRES_main"] {
+			t.Fatal("the password kept for the wiped database outlived the reset")
+		}
+	})
+
+	t.Run("is refused while another process of the project uses the stack", func(t *testing.T) {
+		t.Parallel()
+
+		state := t.TempDir()
+		engine := &dockertest.Engine{}
+		stack := devstack.New("shop", devstack.Env{Open: engine.Opener(), StateDir: state})
+		if _, err := stack.Resolve(context.Background(), []declare.Resource{postgres("main")}); err != nil {
+			t.Fatalf("Resolve = %v", err)
+		}
+		t.Cleanup(func() { _ = stack.Close(context.Background()) })
+
+		err := devstack.Reset(context.Background(), engine.Opener(), state, "shop")
+		if err == nil || !strings.Contains(err.Error(), "ocel dev --reset") {
+			t.Fatalf("Reset = %v, want a refusal saying to stop the other command first", err)
+		}
+		if len(engine.Wiped) != 0 {
+			t.Fatalf("wiped %v under a process that is using it", engine.Wiped)
+		}
+	})
 }
 
 func TestProjectNamesAreReadableAndDistinctPerDirectory(t *testing.T) {
