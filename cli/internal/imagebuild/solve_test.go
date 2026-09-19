@@ -102,16 +102,45 @@ func at(t *testing.T, dir string) workspace.Location {
 
 func dockerfileSolve(t *testing.T) client.SolveOpt {
 	t.Helper()
+	return dockerfileSolveFor(t, "")
+}
+
+func dockerfileSolveFor(t *testing.T, arch string) client.SolveOpt {
+	t.Helper()
 	choice, err := Choose(App{Name: "web", Workspace: at(t, "testdata/dockerfileapp")})
 	if err != nil {
 		t.Fatalf("Choose() = %v", err)
 	}
-	opt, done, err := choice.solve()
+	opt, done, err := choice.solve(arch)
 	if err != nil {
 		t.Fatalf("solve() = %v", err)
 	}
 	t.Cleanup(done)
 	return opt
+}
+
+func TestEitherBuilderIsPinnedToTheArchitectureTheTargetRuns(t *testing.T) {
+	planned, err := Choose(App{Name: "web", Workspace: at(t, "testdata/plainserver")})
+	if err != nil {
+		t.Fatalf("Choose() = %v", err)
+	}
+	railpacked, done, err := planned.solve("arm64")
+	if err != nil {
+		t.Fatalf("solve() = %v", err)
+	}
+	t.Cleanup(done)
+
+	for name, opt := range map[string]client.SolveOpt{"railpack": railpacked, "dockerfile": dockerfileSolveFor(t, "arm64")} {
+		if got := opt.FrontendAttrs[platformAttr]; got != "linux/arm64" {
+			t.Errorf("the %s solve is pinned to %q, want linux/arm64: left unpinned it builds for this machine, which the target may not run", name, got)
+		}
+	}
+}
+
+func TestABuildPinnedToNothingLeavesThePlatformToTheBuilder(t *testing.T) {
+	if pinned, set := dockerfileSolve(t).FrontendAttrs[platformAttr]; set {
+		t.Errorf("the solve is pinned to %q, want no platform at all: a dev build runs on this machine and nowhere else", pinned)
+	}
 }
 
 func TestADockerfileBuildIsHandedToTheFrontendTheDaemonAlreadyHas(t *testing.T) {

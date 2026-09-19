@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
 func registryProject(t *testing.T, registry string) (cmddeps.Deps, string, func() bool) {
@@ -22,7 +23,7 @@ func registryProject(t *testing.T, registry string) (cmddeps.Deps, string, func(
 	clitest.StubBuild(&deps, nil)
 	clitest.StubAppImages(&deps, "api")
 	built := false
-	deps.BuildAppImages = func(context.Context, *projectconfig.Config, io.Writer) (map[string]string, error) {
+	deps.BuildAppImages = func(context.Context, *projectconfig.Config, string, io.Writer) (map[string]string, error) {
 		built = true
 		return map[string]string{"api": clitest.FixtureImage("api")}, nil
 	}
@@ -237,5 +238,30 @@ export default {
 	want := "REGISTRY server=ghcr.io"
 	if !strings.Contains(stdout.String(), want) {
 		t.Errorf("stdout = %q, want %q — a provider that runs its functions from images pushes them somewhere too", stdout.String(), want)
+	}
+}
+
+func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *testing.T) {
+	deps, root, _ := registryProject(t, "")
+	t.Setenv(clitest.FakeContainerArchEnvVar, "arm64")
+	var required, built string
+	deps.RequireImageBuilder = func(_ context.Context, _ runui.Reporter, _ *projectconfig.Config, arch string) error {
+		required = arch
+		return nil
+	}
+	deps.BuildAppImages = func(_ context.Context, _ *projectconfig.Config, arch string, _ io.Writer) (map[string]string, error) {
+		built = arch
+		return map[string]string{"api": clitest.FixtureImage("api")}, nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if required != "arm64" {
+		t.Errorf("the builder was checked for %q, want arm64: a daemon that cannot build for the target is refused before anything is provisioned", required)
+	}
+	if built != "arm64" {
+		t.Errorf("the image was built for %q, want the arm64 the provider names: left to this machine's own architecture, the target may not run it", built)
 	}
 }

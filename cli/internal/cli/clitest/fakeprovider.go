@@ -66,6 +66,8 @@ const FakeComputesEnvVar = "OCEL_TEST_FAKE_COMPUTES"
 
 const FakeBakedComputesEnvVar = "OCEL_TEST_FAKE_BAKED_COMPUTES"
 
+const FakeContainerArchEnvVar = "OCEL_TEST_FAKE_CONTAINER_ARCH"
+
 const FakePublishedBindingsEnvVar = "OCEL_TEST_FAKE_PUBLISHED_BINDINGS"
 
 const FakePreflightJournalEnvVar = "OCEL_TEST_FAKE_PREFLIGHT_JOURNAL"
@@ -793,6 +795,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 	resp := &contractv1.PreflightResponse{
 		Computes:              fakeComputes(),
 		BakedComputes:         fakeBakedComputes(),
+		ContainerArch:         os.Getenv(FakeContainerArchEnvVar),
 		InfraTier:             parseInfraTier(os.Getenv(FakeInfraTierEnvVar)),
 		InfrastructurePresent: os.Getenv(FakeInfraPresentEnvVar) != "0",
 		Identity: &contractv1.Identity{

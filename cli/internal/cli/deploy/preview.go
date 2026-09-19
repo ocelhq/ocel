@@ -230,11 +230,12 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 					Tier:   environmentv1.Tier_TIER_PREVIEW,
 				}, scope)
 			},
-			command: "ocel preview up",
-			compute: standing.compute,
-			urls:    standing.urls,
-			ui:      ui,
-			enabled: !opts.dry && browser,
+			command:       "ocel preview up",
+			compute:       standing.compute,
+			containerArch: standing.containerArch,
+			urls:          standing.urls,
+			ui:            ui,
+			enabled:       !opts.dry && browser,
 		}
 		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {

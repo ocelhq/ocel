@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
-func RequireBuilder(ctx context.Context, rep runui.Reporter, cfg *projectconfig.Config) error {
+func RequireBuilder(ctx context.Context, rep runui.Reporter, cfg *projectconfig.Config, arch string) error {
 	var chosen []imagebuild.Choice
 	for _, app := range Apps(cfg) {
 		built, err := Describe(cfg, app)
@@ -32,7 +32,7 @@ func RequireBuilder(ctx context.Context, rep runui.Reporter, cfg *projectconfig.
 			rep.Diagnostic(notice)
 		}
 	}
-	if err := imagebuild.Reachable(ctx); err != nil {
+	if err := imagebuild.Reachable(ctx, arch); err != nil {
 		return fmt.Errorf("building the container image for %s happens on this machine, before anything is provisioned:\n    %w", runui.Quoted(containers), err)
 	}
 	return nil

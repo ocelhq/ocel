@@ -124,7 +124,7 @@ func (vm Machine) Forward(t *testing.T) {
 	t.Setenv(providerkit.DockerHostEnv, "unix://"+socket)
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		err := imagebuild.Reachable(context.Background())
+		err := imagebuild.Reachable(context.Background(), "")
 		if err == nil {
 			return
 		}

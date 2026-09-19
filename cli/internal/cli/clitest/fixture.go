@@ -205,8 +205,8 @@ func StubAppImages(deps *cmddeps.Deps, apps ...string) {
 	for _, app := range apps {
 		refs[app] = FixtureImage(app)
 	}
-	deps.RequireImageBuilder = func(context.Context, runui.Reporter, *projectconfig.Config) error { return nil }
-	deps.BuildAppImages = func(context.Context, *projectconfig.Config, io.Writer) (map[string]string, error) {
+	deps.RequireImageBuilder = func(context.Context, runui.Reporter, *projectconfig.Config, string) error { return nil }
+	deps.BuildAppImages = func(context.Context, *projectconfig.Config, string, io.Writer) (map[string]string, error) {
 		return refs, nil
 	}
 }
