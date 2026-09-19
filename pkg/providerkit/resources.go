@@ -28,6 +28,7 @@ type PostgresSpec struct {
 
 type BucketSpec struct {
 	AllowedOrigins []string
+	Public         bool
 }
 
 type ContainerSpec struct {
@@ -220,7 +221,7 @@ func manifestResource(held *contractv1.ManifestResource) (Resource, error) {
 	case held.GetPostgres() != nil:
 		resource.Postgres = &PostgresSpec{Version: held.GetPostgres().GetVersion()}
 	case held.GetBucket() != nil:
-		resource.Bucket = &BucketSpec{AllowedOrigins: held.GetBucket().GetAllowedOrigins()}
+		resource.Bucket = &BucketSpec{AllowedOrigins: held.GetBucket().GetAllowedOrigins(), Public: held.GetBucket().GetPublic()}
 	}
 	return resource, nil
 }

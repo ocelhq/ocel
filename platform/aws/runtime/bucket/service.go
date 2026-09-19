@@ -27,11 +27,15 @@ const (
 
 type presignAPI interface {
 	PresignPutObject(context.Context, *s3.PutObjectInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+	PresignGetObject(context.Context, *s3.GetObjectInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+	PresignUploadPart(context.Context, *s3.UploadPartInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+	PresignPostObject(context.Context, *s3.PutObjectInput, ...func(*s3.PresignPostOptions)) (*s3.PresignedPostRequest, error)
 }
 
 type Service struct {
 	store     *sessionStore
 	presigner presignAPI
+	objects   objectAPI
 
 	now       func() time.Time
 	newID     func() string
@@ -43,6 +47,7 @@ var _ bucketv1connect.BucketServiceHandler = (*Service)(nil)
 type Config struct {
 	DDB              ddbAPI
 	Presigner        presignAPI
+	Objects          objectAPI
 	Table            string
 	SessionKeyPrefix string
 }
@@ -51,6 +56,7 @@ func New(cfg Config) *Service {
 	return &Service{
 		store:     &sessionStore{client: cfg.DDB, table: cfg.Table, keyPrefix: cfg.SessionKeyPrefix},
 		presigner: cfg.Presigner,
+		objects:   cfg.Objects,
 		now:       time.Now,
 		newID:     func() string { return "sess_" + randomHex(16) },
 		newSecret: func() string { return randomHex(32) },

@@ -93,6 +93,23 @@ func (p *fakePresigner) PresignPutObject(_ context.Context, in *s3.PutObjectInpu
 	return &v4.PresignedHTTPRequest{URL: u, Method: "PUT"}, nil
 }
 
+func (p *fakePresigner) PresignGetObject(_ context.Context, in *s3.GetObjectInput, _ ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+	return &v4.PresignedHTTPRequest{URL: "https://example.test/" + aws.ToString(in.Bucket) + "/" + aws.ToString(in.Key), Method: "GET"}, nil
+}
+
+func (p *fakePresigner) PresignUploadPart(_ context.Context, in *s3.UploadPartInput, _ ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+	u := fmt.Sprintf("https://example.test/%s/%s?partNumber=%d&uploadId=%s",
+		aws.ToString(in.Bucket), aws.ToString(in.Key), aws.ToInt32(in.PartNumber), aws.ToString(in.UploadId))
+	return &v4.PresignedHTTPRequest{URL: u, Method: "PUT"}, nil
+}
+
+func (p *fakePresigner) PresignPostObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.PresignPostOptions)) (*s3.PresignedPostRequest, error) {
+	return &s3.PresignedPostRequest{
+		URL:    "https://example.test/" + aws.ToString(in.Bucket),
+		Values: map[string]string{"key": aws.ToString(in.Key), "policy": "signed"},
+	}, nil
+}
+
 const testSessionKeyPrefix = "PROJECT#shop#ENV#prod#SESSION#"
 
 func newTestService(ddb ddbAPI, ps presignAPI) *Service {

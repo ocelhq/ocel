@@ -191,6 +191,7 @@ func start(ctx context.Context, container docker.Container, report func(error)) 
 	running.service = production.New(production.Config{
 		DDB:              running.ddb,
 		Presigner:        s3.NewPresignClient(running.s3),
+		Objects:          running.s3,
 		Table:            sessionTable,
 		SessionKeyPrefix: sessionPrefix,
 	})
@@ -232,6 +233,86 @@ func (c *Component) GetUploadStatus(ctx context.Context, req *bucketv1.GetUpload
 		return nil, err
 	}
 	return service.GetUploadStatus(ctx, req)
+}
+
+func (c *Component) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUploadRequest) (*bucketv1.CompleteUploadResponse, error) {
+	service, err := c.service()
+	if err != nil {
+		return nil, err
+	}
+	return service.CompleteUpload(ctx, req)
+}
+
+func (c *Component) Head(ctx context.Context, req *bucketv1.HeadRequest) (*bucketv1.HeadResponse, error) {
+	service, err := c.service()
+	if err != nil {
+		return nil, err
+	}
+	return service.Head(ctx, req)
+}
+
+func (c *Component) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv1.ListResponse, error) {
+	service, err := c.service()
+	if err != nil {
+		return nil, err
+	}
+	return service.List(ctx, req)
+}
+
+func (c *Component) Delete(ctx context.Context, req *bucketv1.DeleteRequest) (*bucketv1.DeleteResponse, error) {
+	service, err := c.service()
+	if err != nil {
+		return nil, err
+	}
+	return service.Delete(ctx, req)
+}
+
+func (c *Component) Copy(ctx context.Context, req *bucketv1.CopyRequest) (*bucketv1.CopyResponse, error) {
+	service, err := c.service()
+	if err != nil {
+		return nil, err
+	}
+	return service.Copy(ctx, req)
+}
+
+func (c *Component) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv1.SignResponse, error) {
+	service, err := c.service()
+	if err != nil {
+		return nil, err
+	}
+	return service.Sign(ctx, req)
+}
+
+func (c *Component) CreateMultipart(ctx context.Context, req *bucketv1.CreateMultipartRequest) (*bucketv1.CreateMultipartResponse, error) {
+	service, err := c.service()
+	if err != nil {
+		return nil, err
+	}
+	return service.CreateMultipart(ctx, req)
+}
+
+func (c *Component) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest) (*bucketv1.SignPartsResponse, error) {
+	service, err := c.service()
+	if err != nil {
+		return nil, err
+	}
+	return service.SignParts(ctx, req)
+}
+
+func (c *Component) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteMultipartRequest) (*bucketv1.CompleteMultipartResponse, error) {
+	service, err := c.service()
+	if err != nil {
+		return nil, err
+	}
+	return service.CompleteMultipart(ctx, req)
+}
+
+func (c *Component) AbortMultipart(ctx context.Context, req *bucketv1.AbortMultipartRequest) (*bucketv1.AbortMultipartResponse, error) {
+	service, err := c.service()
+	if err != nil {
+		return nil, err
+	}
+	return service.AbortMultipart(ctx, req)
 }
 
 func (c *Component) Routes(mux *http.ServeMux, guard func(http.Handler) http.Handler, options ...connect.HandlerOption) {

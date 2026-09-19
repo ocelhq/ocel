@@ -14,7 +14,7 @@ from connectrpc.errors import ConnectError
 from connectrpc.method import IdempotencyLevel, MethodInfo
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, Endpoint, EndpointSync
 
-from .bucket_pb import GetUploadStatusRequest, GetUploadStatusResponse, PresignUploadRequest, PresignUploadResponse, VerifyUploadSignatureRequest, VerifyUploadSignatureResponse
+from .bucket_pb import AbortMultipartRequest, AbortMultipartResponse, CompleteMultipartRequest, CompleteMultipartResponse, CompleteUploadRequest, CompleteUploadResponse, CopyRequest, CopyResponse, CreateMultipartRequest, CreateMultipartResponse, DeleteRequest, DeleteResponse, GetUploadStatusRequest, GetUploadStatusResponse, HeadRequest, HeadResponse, ListRequest, ListResponse, PresignUploadRequest, PresignUploadResponse, SignPartsRequest, SignPartsResponse, SignRequest, SignResponse, VerifyUploadSignatureRequest, VerifyUploadSignatureResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -33,6 +33,36 @@ class BucketService(Protocol):
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
     async def get_upload_status(self, request: GetUploadStatusRequest, ctx: RequestContext[GetUploadStatusRequest, GetUploadStatusResponse]) -> GetUploadStatusResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def complete_upload(self, request: CompleteUploadRequest, ctx: RequestContext[CompleteUploadRequest, CompleteUploadResponse]) -> CompleteUploadResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def head(self, request: HeadRequest, ctx: RequestContext[HeadRequest, HeadResponse]) -> HeadResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def list(self, request: ListRequest, ctx: RequestContext[ListRequest, ListResponse]) -> ListResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def delete(self, request: DeleteRequest, ctx: RequestContext[DeleteRequest, DeleteResponse]) -> DeleteResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def copy(self, request: CopyRequest, ctx: RequestContext[CopyRequest, CopyResponse]) -> CopyResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def sign(self, request: SignRequest, ctx: RequestContext[SignRequest, SignResponse]) -> SignResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def create_multipart(self, request: CreateMultipartRequest, ctx: RequestContext[CreateMultipartRequest, CreateMultipartResponse]) -> CreateMultipartResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def sign_parts(self, request: SignPartsRequest, ctx: RequestContext[SignPartsRequest, SignPartsResponse]) -> SignPartsResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def complete_multipart(self, request: CompleteMultipartRequest, ctx: RequestContext[CompleteMultipartRequest, CompleteMultipartResponse]) -> CompleteMultipartResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def abort_multipart(self, request: AbortMultipartRequest, ctx: RequestContext[AbortMultipartRequest, AbortMultipartResponse]) -> AbortMultipartResponse:
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
 
@@ -78,6 +108,106 @@ class BucketServiceASGIApplication(ConnectASGIApplication[BucketService]):
                         idempotency_level=IdempotencyLevel.UNKNOWN,
                     ),
                     function=svc.get_upload_status,
+                ),
+                "/app.bucket.v1.BucketService/CompleteUpload": Endpoint.unary(
+                    method=MethodInfo(
+                        name="CompleteUpload",
+                        service_name="app.bucket.v1.BucketService",
+                        input=CompleteUploadRequest,
+                        output=CompleteUploadResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=svc.complete_upload,
+                ),
+                "/app.bucket.v1.BucketService/Head": Endpoint.unary(
+                    method=MethodInfo(
+                        name="Head",
+                        service_name="app.bucket.v1.BucketService",
+                        input=HeadRequest,
+                        output=HeadResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=svc.head,
+                ),
+                "/app.bucket.v1.BucketService/List": Endpoint.unary(
+                    method=MethodInfo(
+                        name="List",
+                        service_name="app.bucket.v1.BucketService",
+                        input=ListRequest,
+                        output=ListResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=svc.list,
+                ),
+                "/app.bucket.v1.BucketService/Delete": Endpoint.unary(
+                    method=MethodInfo(
+                        name="Delete",
+                        service_name="app.bucket.v1.BucketService",
+                        input=DeleteRequest,
+                        output=DeleteResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=svc.delete,
+                ),
+                "/app.bucket.v1.BucketService/Copy": Endpoint.unary(
+                    method=MethodInfo(
+                        name="Copy",
+                        service_name="app.bucket.v1.BucketService",
+                        input=CopyRequest,
+                        output=CopyResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=svc.copy,
+                ),
+                "/app.bucket.v1.BucketService/Sign": Endpoint.unary(
+                    method=MethodInfo(
+                        name="Sign",
+                        service_name="app.bucket.v1.BucketService",
+                        input=SignRequest,
+                        output=SignResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=svc.sign,
+                ),
+                "/app.bucket.v1.BucketService/CreateMultipart": Endpoint.unary(
+                    method=MethodInfo(
+                        name="CreateMultipart",
+                        service_name="app.bucket.v1.BucketService",
+                        input=CreateMultipartRequest,
+                        output=CreateMultipartResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=svc.create_multipart,
+                ),
+                "/app.bucket.v1.BucketService/SignParts": Endpoint.unary(
+                    method=MethodInfo(
+                        name="SignParts",
+                        service_name="app.bucket.v1.BucketService",
+                        input=SignPartsRequest,
+                        output=SignPartsResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=svc.sign_parts,
+                ),
+                "/app.bucket.v1.BucketService/CompleteMultipart": Endpoint.unary(
+                    method=MethodInfo(
+                        name="CompleteMultipart",
+                        service_name="app.bucket.v1.BucketService",
+                        input=CompleteMultipartRequest,
+                        output=CompleteMultipartResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=svc.complete_multipart,
+                ),
+                "/app.bucket.v1.BucketService/AbortMultipart": Endpoint.unary(
+                    method=MethodInfo(
+                        name="AbortMultipart",
+                        service_name="app.bucket.v1.BucketService",
+                        input=AbortMultipartRequest,
+                        output=AbortMultipartResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=svc.abort_multipart,
                 ),
             },
             interceptors=interceptors,
@@ -153,6 +283,206 @@ class BucketServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
         )
 
+    async def complete_upload(
+        self,
+        request: CompleteUploadRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CompleteUploadResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="CompleteUpload",
+                service_name="app.bucket.v1.BucketService",
+                input=CompleteUploadRequest,
+                output=CompleteUploadResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
+    async def head(
+        self,
+        request: HeadRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> HeadResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Head",
+                service_name="app.bucket.v1.BucketService",
+                input=HeadRequest,
+                output=HeadResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
+    async def list(
+        self,
+        request: ListRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> ListResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="List",
+                service_name="app.bucket.v1.BucketService",
+                input=ListRequest,
+                output=ListResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
+    async def delete(
+        self,
+        request: DeleteRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> DeleteResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Delete",
+                service_name="app.bucket.v1.BucketService",
+                input=DeleteRequest,
+                output=DeleteResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
+    async def copy(
+        self,
+        request: CopyRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CopyResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Copy",
+                service_name="app.bucket.v1.BucketService",
+                input=CopyRequest,
+                output=CopyResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
+    async def sign(
+        self,
+        request: SignRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> SignResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Sign",
+                service_name="app.bucket.v1.BucketService",
+                input=SignRequest,
+                output=SignResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
+    async def create_multipart(
+        self,
+        request: CreateMultipartRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CreateMultipartResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="CreateMultipart",
+                service_name="app.bucket.v1.BucketService",
+                input=CreateMultipartRequest,
+                output=CreateMultipartResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
+    async def sign_parts(
+        self,
+        request: SignPartsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> SignPartsResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="SignParts",
+                service_name="app.bucket.v1.BucketService",
+                input=SignPartsRequest,
+                output=SignPartsResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
+    async def complete_multipart(
+        self,
+        request: CompleteMultipartRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CompleteMultipartResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="CompleteMultipart",
+                service_name="app.bucket.v1.BucketService",
+                input=CompleteMultipartRequest,
+                output=CompleteMultipartResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
+    async def abort_multipart(
+        self,
+        request: AbortMultipartRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> AbortMultipartResponse:
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="AbortMultipart",
+                service_name="app.bucket.v1.BucketService",
+                input=AbortMultipartRequest,
+                output=AbortMultipartResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+
 class BucketServiceSync(Protocol):
     def presign_upload(self, request: PresignUploadRequest, ctx: RequestContext[PresignUploadRequest, PresignUploadResponse]) -> PresignUploadResponse:
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
@@ -161,6 +491,36 @@ class BucketServiceSync(Protocol):
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
     def get_upload_status(self, request: GetUploadStatusRequest, ctx: RequestContext[GetUploadStatusRequest, GetUploadStatusResponse]) -> GetUploadStatusResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def complete_upload(self, request: CompleteUploadRequest, ctx: RequestContext[CompleteUploadRequest, CompleteUploadResponse]) -> CompleteUploadResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def head(self, request: HeadRequest, ctx: RequestContext[HeadRequest, HeadResponse]) -> HeadResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def list(self, request: ListRequest, ctx: RequestContext[ListRequest, ListResponse]) -> ListResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def delete(self, request: DeleteRequest, ctx: RequestContext[DeleteRequest, DeleteResponse]) -> DeleteResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def copy(self, request: CopyRequest, ctx: RequestContext[CopyRequest, CopyResponse]) -> CopyResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def sign(self, request: SignRequest, ctx: RequestContext[SignRequest, SignResponse]) -> SignResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def create_multipart(self, request: CreateMultipartRequest, ctx: RequestContext[CreateMultipartRequest, CreateMultipartResponse]) -> CreateMultipartResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def sign_parts(self, request: SignPartsRequest, ctx: RequestContext[SignPartsRequest, SignPartsResponse]) -> SignPartsResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def complete_multipart(self, request: CompleteMultipartRequest, ctx: RequestContext[CompleteMultipartRequest, CompleteMultipartResponse]) -> CompleteMultipartResponse:
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def abort_multipart(self, request: AbortMultipartRequest, ctx: RequestContext[AbortMultipartRequest, AbortMultipartResponse]) -> AbortMultipartResponse:
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
 
@@ -204,6 +564,106 @@ class BucketServiceWSGIApplication(ConnectWSGIApplication):
                         idempotency_level=IdempotencyLevel.UNKNOWN,
                     ),
                     function=service.get_upload_status,
+                ),
+                "/app.bucket.v1.BucketService/CompleteUpload": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="CompleteUpload",
+                        service_name="app.bucket.v1.BucketService",
+                        input=CompleteUploadRequest,
+                        output=CompleteUploadResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=service.complete_upload,
+                ),
+                "/app.bucket.v1.BucketService/Head": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="Head",
+                        service_name="app.bucket.v1.BucketService",
+                        input=HeadRequest,
+                        output=HeadResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=service.head,
+                ),
+                "/app.bucket.v1.BucketService/List": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="List",
+                        service_name="app.bucket.v1.BucketService",
+                        input=ListRequest,
+                        output=ListResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=service.list,
+                ),
+                "/app.bucket.v1.BucketService/Delete": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="Delete",
+                        service_name="app.bucket.v1.BucketService",
+                        input=DeleteRequest,
+                        output=DeleteResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=service.delete,
+                ),
+                "/app.bucket.v1.BucketService/Copy": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="Copy",
+                        service_name="app.bucket.v1.BucketService",
+                        input=CopyRequest,
+                        output=CopyResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=service.copy,
+                ),
+                "/app.bucket.v1.BucketService/Sign": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="Sign",
+                        service_name="app.bucket.v1.BucketService",
+                        input=SignRequest,
+                        output=SignResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=service.sign,
+                ),
+                "/app.bucket.v1.BucketService/CreateMultipart": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="CreateMultipart",
+                        service_name="app.bucket.v1.BucketService",
+                        input=CreateMultipartRequest,
+                        output=CreateMultipartResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=service.create_multipart,
+                ),
+                "/app.bucket.v1.BucketService/SignParts": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="SignParts",
+                        service_name="app.bucket.v1.BucketService",
+                        input=SignPartsRequest,
+                        output=SignPartsResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=service.sign_parts,
+                ),
+                "/app.bucket.v1.BucketService/CompleteMultipart": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="CompleteMultipart",
+                        service_name="app.bucket.v1.BucketService",
+                        input=CompleteMultipartRequest,
+                        output=CompleteMultipartResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=service.complete_multipart,
+                ),
+                "/app.bucket.v1.BucketService/AbortMultipart": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="AbortMultipart",
+                        service_name="app.bucket.v1.BucketService",
+                        input=AbortMultipartRequest,
+                        output=AbortMultipartResponse,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                    ),
+                    function=service.abort_multipart,
                 ),
             },
             interceptors=interceptors,
@@ -271,6 +731,196 @@ class BucketServiceClientSync(ConnectClientSync):
                 service_name="app.bucket.v1.BucketService",
                 input=GetUploadStatusRequest,
                 output=GetUploadStatusResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def complete_upload(
+        self,
+        request: CompleteUploadRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CompleteUploadResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="CompleteUpload",
+                service_name="app.bucket.v1.BucketService",
+                input=CompleteUploadRequest,
+                output=CompleteUploadResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def head(
+        self,
+        request: HeadRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> HeadResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Head",
+                service_name="app.bucket.v1.BucketService",
+                input=HeadRequest,
+                output=HeadResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def list(
+        self,
+        request: ListRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> ListResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="List",
+                service_name="app.bucket.v1.BucketService",
+                input=ListRequest,
+                output=ListResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def delete(
+        self,
+        request: DeleteRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> DeleteResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Delete",
+                service_name="app.bucket.v1.BucketService",
+                input=DeleteRequest,
+                output=DeleteResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def copy(
+        self,
+        request: CopyRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CopyResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Copy",
+                service_name="app.bucket.v1.BucketService",
+                input=CopyRequest,
+                output=CopyResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def sign(
+        self,
+        request: SignRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> SignResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="Sign",
+                service_name="app.bucket.v1.BucketService",
+                input=SignRequest,
+                output=SignResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def create_multipart(
+        self,
+        request: CreateMultipartRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CreateMultipartResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="CreateMultipart",
+                service_name="app.bucket.v1.BucketService",
+                input=CreateMultipartRequest,
+                output=CreateMultipartResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def sign_parts(
+        self,
+        request: SignPartsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> SignPartsResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="SignParts",
+                service_name="app.bucket.v1.BucketService",
+                input=SignPartsRequest,
+                output=SignPartsResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def complete_multipart(
+        self,
+        request: CompleteMultipartRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> CompleteMultipartResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="CompleteMultipart",
+                service_name="app.bucket.v1.BucketService",
+                input=CompleteMultipartRequest,
+                output=CompleteMultipartResponse,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def abort_multipart(
+        self,
+        request: AbortMultipartRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> AbortMultipartResponse:
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="AbortMultipart",
+                service_name="app.bucket.v1.BucketService",
+                input=AbortMultipartRequest,
+                output=AbortMultipartResponse,
                 idempotency_level=IdempotencyLevel.UNKNOWN,
             ),
             headers=headers,

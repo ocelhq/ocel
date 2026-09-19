@@ -34,6 +34,25 @@ func TestAContainerAppIsRefusedBehindEveryEdgeButTheDefault(t *testing.T) {
 	}
 }
 
+func TestAPublicBucketIsRefusedOnAws(t *testing.T) {
+	t.Parallel()
+
+	pre := providerkit.DeployPreflight{Resources: []providerkit.Resource{
+		{Name: "avatars", Type: providerkit.BindingBucket, Bucket: &providerkit.BucketSpec{Public: true}},
+		{Name: "uploads", Type: providerkit.BindingBucket, Bucket: &providerkit.BucketSpec{}},
+	}}
+
+	err := refusePublicBuckets(pre)
+	if err == nil || !strings.Contains(err.Error(), "avatars") {
+		t.Fatalf("preflight = %v, want the public bucket refused by name", err)
+	}
+
+	private := providerkit.DeployPreflight{Resources: pre.Resources[1:]}
+	if err := refusePublicBuckets(private); err != nil {
+		t.Fatalf("preflight of a private bucket = %v, want it to pass", err)
+	}
+}
+
 func TestTheArchitectureContainersAreBuiltForIsOneTheProviderCarriesARuntimeFor(t *testing.T) {
 	t.Parallel()
 

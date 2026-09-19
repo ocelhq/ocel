@@ -4,6 +4,8 @@ package app.bucket.v1;
 option go_package = "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1;bucketv1";
 
 import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 service BucketService {
   rpc PresignUpload(PresignUploadRequest) returns (PresignUploadResponse);
@@ -11,6 +13,26 @@ service BucketService {
   rpc VerifyUploadSignature(VerifyUploadSignatureRequest) returns (VerifyUploadSignatureResponse);
 
   rpc GetUploadStatus(GetUploadStatusRequest) returns (GetUploadStatusResponse);
+
+  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
+
+  rpc Head(HeadRequest) returns (HeadResponse);
+
+  rpc List(ListRequest) returns (ListResponse);
+
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+
+  rpc Copy(CopyRequest) returns (CopyResponse);
+
+  rpc Sign(SignRequest) returns (SignResponse);
+
+  rpc CreateMultipart(CreateMultipartRequest) returns (CreateMultipartResponse);
+
+  rpc SignParts(SignPartsRequest) returns (SignPartsResponse);
+
+  rpc CompleteMultipart(CompleteMultipartRequest) returns (CompleteMultipartResponse);
+
+  rpc AbortMultipart(AbortMultipartRequest) returns (AbortMultipartResponse);
 }
 
 enum UploadState {
@@ -20,13 +42,26 @@ enum UploadState {
   UPLOAD_STATE_EXPIRED = 3;
 }
 
+enum SignedOperation {
+  SIGNED_OPERATION_UNSPECIFIED = 0;
+  SIGNED_OPERATION_GET = 1;
+  SIGNED_OPERATION_PUT = 2;
+  SIGNED_OPERATION_POST_UPLOAD = 3;
+}
+
+enum SignedAudience {
+  SIGNED_AUDIENCE_UNSPECIFIED = 0;
+  SIGNED_AUDIENCE_INTERNAL = 1;
+  SIGNED_AUDIENCE_EXTERNAL = 2;
+}
+
 message PresignFile {
   string key = 1 [
     (buf.validate.field).string.max_len = 1024,
     (buf.validate.field).cel = {
       id: "buckets.presign_file.key"
-      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", and the key may carry no backslash and no control character"
-      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]')"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
     }
   ];
   string name = 2;
@@ -42,6 +77,10 @@ message PresignedTarget {
   string content_disposition = 4;
 
   map<string, string> headers = 5;
+
+  string method = 6;
+
+  map<string, string> fields = 7;
 }
 
 message CompletedFile {
@@ -49,6 +88,15 @@ message CompletedFile {
   string name = 2;
   int64 size = 3;
   string mime_type = 4;
+}
+
+message ObjectInfo {
+  string key = 1;
+  int64 size = 2;
+  string etag = 3;
+  string content_type = 4;
+  google.protobuf.Timestamp uploaded_at = 5;
+  map<string, string> metadata = 6;
 }
 
 message PresignUploadRequest {
@@ -91,3 +139,181 @@ message GetUploadStatusResponse {
 
   string error = 2;
 }
+
+message CompleteUploadRequest {
+  string session_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message CompleteUploadResponse {
+  UploadState state = 1;
+
+  string error = 2;
+}
+
+message HeadRequest {
+  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  string key = 2 [
+    (buf.validate.field).string.max_len = 1024,
+    (buf.validate.field).cel = {
+      id: "buckets.head.key"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+    }
+  ];
+}
+
+message HeadResponse {
+  ObjectInfo object = 1;
+}
+
+message ListRequest {
+  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  string prefix = 2 [(buf.validate.field).string.max_len = 1024];
+  string cursor = 3;
+  int32 limit = 4 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 1000
+  ];
+}
+
+message ListResponse {
+  repeated ObjectInfo objects = 1;
+  string next_cursor = 2;
+}
+
+message DeleteRequest {
+  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  repeated string keys = 2 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 1000,
+    (buf.validate.field).repeated.items = {
+      string: {max_len: 1024}
+      cel: {
+        id: "buckets.delete.key"
+        message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+        expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+      }
+    }
+  ];
+}
+
+message DeleteResponse {}
+
+message CopyRequest {
+  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  string source_key = 2 [
+    (buf.validate.field).string.max_len = 1024,
+    (buf.validate.field).cel = {
+      id: "buckets.copy.source_key"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+    }
+  ];
+  string destination_key = 3 [
+    (buf.validate.field).string.max_len = 1024,
+    (buf.validate.field).cel = {
+      id: "buckets.copy.destination_key"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+    }
+  ];
+}
+
+message CopyResponse {
+  ObjectInfo object = 1;
+}
+
+message SignConstraints {
+  string content_type = 1;
+  int64 max_size = 2;
+  string download_filename = 3;
+  string if_none_match = 4;
+  string if_match = 5;
+}
+
+message SignRequest {
+  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  string key = 2 [
+    (buf.validate.field).string.max_len = 1024,
+    (buf.validate.field).cel = {
+      id: "buckets.sign.key"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+    }
+  ];
+  SignedOperation operation = 3 [(buf.validate.field).enum.defined_only = true];
+  SignedAudience audience = 4 [(buf.validate.field).enum.defined_only = true];
+  google.protobuf.Duration expires_in = 5;
+  SignConstraints constraints = 6;
+}
+
+message SignResponse {
+  PresignedTarget target = 1;
+}
+
+message CreateMultipartRequest {
+  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  string key = 2 [
+    (buf.validate.field).string.max_len = 1024,
+    (buf.validate.field).cel = {
+      id: "buckets.create_multipart.key"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+    }
+  ];
+  string content_type = 3;
+  map<string, string> metadata = 4;
+  string cache_control = 5;
+}
+
+message CreateMultipartResponse {
+  string upload_id = 1;
+}
+
+message SignPartsRequest {
+  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  string key = 2 [(buf.validate.field).string.max_len = 1024];
+  string upload_id = 3 [(buf.validate.field).string.min_len = 1];
+  repeated int32 part_numbers = 4 [
+    (buf.validate.field).repeated.min_items = 1,
+    (buf.validate.field).repeated.max_items = 1000
+  ];
+  google.protobuf.Duration expires_in = 5;
+  SignedAudience audience = 6 [(buf.validate.field).enum.defined_only = true];
+}
+
+message SignedPart {
+  int32 part_number = 1;
+  string url = 2;
+  map<string, string> headers = 3;
+}
+
+message SignPartsResponse {
+  repeated SignedPart parts = 1;
+}
+
+message CompletedPart {
+  int32 part_number = 1;
+  string etag = 2;
+}
+
+message CompleteMultipartRequest {
+  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  string key = 2 [(buf.validate.field).string.max_len = 1024];
+  string upload_id = 3 [(buf.validate.field).string.min_len = 1];
+  repeated CompletedPart parts = 4 [(buf.validate.field).repeated.min_items = 1];
+  string if_none_match = 5;
+  string if_match = 6;
+}
+
+message CompleteMultipartResponse {
+  ObjectInfo object = 1;
+}
+
+message AbortMultipartRequest {
+  string bucket = 1 [(buf.validate.field).string.min_len = 1];
+  string key = 2 [(buf.validate.field).string.max_len = 1024];
+  string upload_id = 3 [(buf.validate.field).string.min_len = 1];
+}
+
+message AbortMultipartResponse {}

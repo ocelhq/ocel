@@ -44,9 +44,11 @@ func serveProxy(ctx context.Context, bindings []live.Binding, table, sessionPref
 	if err != nil {
 		return nil, nil, fmt.Errorf("load aws config: %w", err)
 	}
+	objects := s3.NewFromConfig(cfg)
 	svc := bucket.New(bucket.Config{
 		DDB:              dynamodb.NewFromConfig(cfg),
-		Presigner:        s3.NewPresignClient(s3.NewFromConfig(cfg)),
+		Presigner:        s3.NewPresignClient(objects),
+		Objects:          objects,
 		Table:            table,
 		SessionKeyPrefix: sessionPrefix,
 	})
