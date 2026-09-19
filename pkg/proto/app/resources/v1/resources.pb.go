@@ -306,6 +306,7 @@ func (x *PostgresConfig) GetVersion() string {
 type BucketConfig struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	AllowedOrigins []string               `protobuf:"bytes,1,rep,name=allowed_origins,json=allowedOrigins,proto3" json:"allowed_origins,omitempty"`
+	Public         bool                   `protobuf:"varint,2,opt,name=public,proto3" json:"public,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -347,6 +348,13 @@ func (x *BucketConfig) GetAllowedOrigins() []string {
 	return nil
 }
 
+func (x *BucketConfig) GetPublic() bool {
+	if x != nil {
+		return x.Public
+	}
+	return false
+}
+
 var File_app_resources_v1_resources_proto protoreflect.FileDescriptor
 
 const file_app_resources_v1_resources_proto_rawDesc = "" +
@@ -363,9 +371,10 @@ const file_app_resources_v1_resources_proto_rawDesc = "" +
 	"\x06source\x18\x04 \x01(\tR\x06sourceB\b\n" +
 	"\x06config\"*\n" +
 	"\x0ePostgresConfig\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\tR\aversion\"7\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\"O\n" +
 	"\fBucketConfig\x12'\n" +
-	"\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins*\x80\x01\n" +
+	"\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins\x12\x16\n" +
+	"\x06public\x18\x02 \x01(\bR\x06public*\x80\x01\n" +
 	"\fResourceType\x12\x1d\n" +
 	"\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n" +

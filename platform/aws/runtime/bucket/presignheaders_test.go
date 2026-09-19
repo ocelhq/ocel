@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
+	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 )
 
 func TestAPresignedTargetStatesEveryVendorHeaderItsSignatureCovers(t *testing.T) {
@@ -21,10 +21,10 @@ func TestAPresignedTargetStatesEveryVendorHeaderItsSignatureCovers(t *testing.T)
 	}))
 	svc := newTestService(newFakeDDB(), presigner)
 
-	resp, err := svc.PresignUpload(context.Background(), &blobv1.PresignUploadRequest{
+	resp, err := svc.PresignUpload(context.Background(), &bucketv1.PresignUploadRequest{
 		Bucket:          "storage",
 		CallbackBaseUrl: "https://app.example/api/blob",
-		Files:           []*blobv1.PresignFile{{Key: "avatar.png", Name: "avatar.png", Size: 1024, MimeType: "image/png"}},
+		Files:           []*bucketv1.PresignFile{{Key: "avatar.png", Name: "avatar.png", Size: 1024, MimeType: "image/png"}},
 	})
 	if err != nil {
 		t.Fatalf("PresignUpload: %v", err)

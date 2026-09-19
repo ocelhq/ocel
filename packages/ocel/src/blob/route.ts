@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
-import { UploadState } from "../gen/proto/app/blob/v1/blob_pb.js";
+import { UploadState } from "../gen/proto/app/bucket/v1/bucket_pb.js";
 import type { Bucket } from "./bucket.js";
 import { type BucketContext, resolveBucketContext } from "./bucket-context.js";
 import { generateKey } from "./keys.js";

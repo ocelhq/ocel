@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { UploadState } from "../gen/proto/app/blob/v1/blob_pb.js";
+import { UploadState } from "../gen/proto/app/bucket/v1/bucket_pb.js";
 
 vi.mock("../utils/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },

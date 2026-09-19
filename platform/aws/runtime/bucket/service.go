@@ -14,8 +14,8 @@ import (
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
-	"github.com/ocelhq/ocel/pkg/proto/app/blob/v1/blobv1connect"
+	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
+	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 )
 
 const (
@@ -38,7 +38,7 @@ type Service struct {
 	newSecret func() string
 }
 
-var _ blobv1connect.BucketServiceHandler = (*Service)(nil)
+var _ bucketv1connect.BucketServiceHandler = (*Service)(nil)
 
 type Config struct {
 	DDB              ddbAPI
@@ -63,13 +63,13 @@ func randomHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-func (s *Service) PresignUpload(ctx context.Context, req *blobv1.PresignUploadRequest) (*blobv1.PresignUploadResponse, error) {
+func (s *Service) PresignUpload(ctx context.Context, req *bucketv1.PresignUploadRequest) (*bucketv1.PresignUploadResponse, error) {
 	sessionID := s.newID()
 	secret := s.newSecret()
 	now := s.now()
 
 	files := make([]sessionFile, len(req.GetFiles()))
-	targets := make([]*blobv1.PresignedTarget, len(req.GetFiles()))
+	targets := make([]*bucketv1.PresignedTarget, len(req.GetFiles()))
 
 	for i, f := range req.GetFiles() {
 		url, headers, err := s.presignPut(ctx, req.GetBucket(), f.GetKey(), f.GetMimeType(), f.GetSize(), sessionID, req.GetContentDisposition())
@@ -83,7 +83,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *blobv1.PresignUploadRe
 			MimeType: f.GetMimeType(),
 			State:    statePending,
 		}
-		targets[i] = &blobv1.PresignedTarget{
+		targets[i] = &bucketv1.PresignedTarget{
 			Url:                url,
 			Key:                f.GetKey(),
 			Name:               f.GetName(),
@@ -107,7 +107,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *blobv1.PresignUploadRe
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return &blobv1.PresignUploadResponse{SessionId: sessionID, Files: targets}, nil
+	return &bucketv1.PresignUploadResponse{SessionId: sessionID, Files: targets}, nil
 }
 
 const vendorHeaderPrefix = "x-amz-"
@@ -138,10 +138,10 @@ func (s *Service) presignPut(ctx context.Context, bucket, key, contentType strin
 	return req.URL, headers, nil
 }
 
-func (s *Service) VerifyUploadSignature(ctx context.Context, req *blobv1.VerifyUploadSignatureRequest) (*blobv1.VerifyUploadSignatureResponse, error) {
+func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketv1.VerifyUploadSignatureRequest) (*bucketv1.VerifyUploadSignatureResponse, error) {
 	sess, err := s.store.get(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {
-		return &blobv1.VerifyUploadSignatureResponse{Valid: false}, nil
+		return &bucketv1.VerifyUploadSignatureResponse{Valid: false}, nil
 	}
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -159,12 +159,12 @@ func (s *Service) VerifyUploadSignature(ctx context.Context, req *blobv1.VerifyU
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	if !valid {
-		return &blobv1.VerifyUploadSignatureResponse{Valid: false}, nil
+		return &bucketv1.VerifyUploadSignatureResponse{Valid: false}, nil
 	}
-	return &blobv1.VerifyUploadSignatureResponse{Valid: true, Metadata: sess.Metadata}, nil
+	return &bucketv1.VerifyUploadSignatureResponse{Valid: true, Metadata: sess.Metadata}, nil
 }
 
-func (s *Service) GetUploadStatus(ctx context.Context, req *blobv1.GetUploadStatusRequest) (*blobv1.GetUploadStatusResponse, error) {
+func (s *Service) GetUploadStatus(ctx context.Context, req *bucketv1.GetUploadStatusRequest) (*bucketv1.GetUploadStatusResponse, error) {
 	sess, err := s.store.get(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("session not found"))
@@ -178,22 +178,22 @@ func (s *Service) GetUploadStatus(ctx context.Context, req *blobv1.GetUploadStat
 		state = stateExpired
 	}
 
-	resp := &blobv1.GetUploadStatusResponse{State: toProtoState(state)}
+	resp := &bucketv1.GetUploadStatusResponse{State: toProtoState(state)}
 	if state == stateExpired {
 		resp.Error = "upload expired"
 	}
 	return resp, nil
 }
 
-func toProtoState(s fileState) blobv1.UploadState {
+func toProtoState(s fileState) bucketv1.UploadState {
 	switch s {
 	case statePending:
-		return blobv1.UploadState_UPLOAD_STATE_PENDING
+		return bucketv1.UploadState_UPLOAD_STATE_PENDING
 	case stateSucceeded:
-		return blobv1.UploadState_UPLOAD_STATE_SUCCEEDED
+		return bucketv1.UploadState_UPLOAD_STATE_SUCCEEDED
 	case stateExpired:
-		return blobv1.UploadState_UPLOAD_STATE_EXPIRED
+		return bucketv1.UploadState_UPLOAD_STATE_EXPIRED
 	default:
-		return blobv1.UploadState_UPLOAD_STATE_UNSPECIFIED
+		return bucketv1.UploadState_UPLOAD_STATE_UNSPECIFIED
 	}
 }

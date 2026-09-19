@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	blobv1 "github.com/ocelhq/ocel/pkg/proto/app/blob/v1"
+	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 )
 
 const (
@@ -283,11 +283,11 @@ func queryOp(t *testing.T, rawURL string) string {
 	return u.Query().Get("op")
 }
 
-func verifyReq(sessionID string, c signedCompletion) *blobv1.VerifyUploadSignatureRequest {
-	return &blobv1.VerifyUploadSignatureRequest{
+func verifyReq(sessionID string, c signedCompletion) *bucketv1.VerifyUploadSignatureRequest {
+	return &bucketv1.VerifyUploadSignatureRequest{
 		SessionId: sessionID,
 		Signature: c.Signature,
-		File: &blobv1.CompletedFile{
+		File: &bucketv1.CompletedFile{
 			Key:      c.File.Key,
 			Name:     c.File.Name,
 			Size:     c.File.Size,

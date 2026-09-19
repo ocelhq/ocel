@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        (unknown)
-// source: app/blob/v1/blob.proto
+// source: app/bucket/v1/bucket.proto
 
-package blobv1
+package bucketv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
@@ -58,11 +58,11 @@ func (x UploadState) String() string {
 }
 
 func (UploadState) Descriptor() protoreflect.EnumDescriptor {
-	return file_app_blob_v1_blob_proto_enumTypes[0].Descriptor()
+	return file_app_bucket_v1_bucket_proto_enumTypes[0].Descriptor()
 }
 
 func (UploadState) Type() protoreflect.EnumType {
-	return &file_app_blob_v1_blob_proto_enumTypes[0]
+	return &file_app_bucket_v1_bucket_proto_enumTypes[0]
 }
 
 func (x UploadState) Number() protoreflect.EnumNumber {
@@ -71,7 +71,7 @@ func (x UploadState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use UploadState.Descriptor instead.
 func (UploadState) EnumDescriptor() ([]byte, []int) {
-	return file_app_blob_v1_blob_proto_rawDescGZIP(), []int{0}
+	return file_app_bucket_v1_bucket_proto_rawDescGZIP(), []int{0}
 }
 
 type PresignFile struct {
@@ -86,7 +86,7 @@ type PresignFile struct {
 
 func (x *PresignFile) Reset() {
 	*x = PresignFile{}
-	mi := &file_app_blob_v1_blob_proto_msgTypes[0]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -98,7 +98,7 @@ func (x *PresignFile) String() string {
 func (*PresignFile) ProtoMessage() {}
 
 func (x *PresignFile) ProtoReflect() protoreflect.Message {
-	mi := &file_app_blob_v1_blob_proto_msgTypes[0]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -111,7 +111,7 @@ func (x *PresignFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PresignFile.ProtoReflect.Descriptor instead.
 func (*PresignFile) Descriptor() ([]byte, []int) {
-	return file_app_blob_v1_blob_proto_rawDescGZIP(), []int{0}
+	return file_app_bucket_v1_bucket_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *PresignFile) GetKey() string {
@@ -155,7 +155,7 @@ type PresignedTarget struct {
 
 func (x *PresignedTarget) Reset() {
 	*x = PresignedTarget{}
-	mi := &file_app_blob_v1_blob_proto_msgTypes[1]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -167,7 +167,7 @@ func (x *PresignedTarget) String() string {
 func (*PresignedTarget) ProtoMessage() {}
 
 func (x *PresignedTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_app_blob_v1_blob_proto_msgTypes[1]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -180,7 +180,7 @@ func (x *PresignedTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PresignedTarget.ProtoReflect.Descriptor instead.
 func (*PresignedTarget) Descriptor() ([]byte, []int) {
-	return file_app_blob_v1_blob_proto_rawDescGZIP(), []int{1}
+	return file_app_bucket_v1_bucket_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *PresignedTarget) GetUrl() string {
@@ -230,7 +230,7 @@ type CompletedFile struct {
 
 func (x *CompletedFile) Reset() {
 	*x = CompletedFile{}
-	mi := &file_app_blob_v1_blob_proto_msgTypes[2]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -242,7 +242,7 @@ func (x *CompletedFile) String() string {
 func (*CompletedFile) ProtoMessage() {}
 
 func (x *CompletedFile) ProtoReflect() protoreflect.Message {
-	mi := &file_app_blob_v1_blob_proto_msgTypes[2]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -255,7 +255,7 @@ func (x *CompletedFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompletedFile.ProtoReflect.Descriptor instead.
 func (*CompletedFile) Descriptor() ([]byte, []int) {
-	return file_app_blob_v1_blob_proto_rawDescGZIP(), []int{2}
+	return file_app_bucket_v1_bucket_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CompletedFile) GetKey() string {
@@ -299,7 +299,7 @@ type PresignUploadRequest struct {
 
 func (x *PresignUploadRequest) Reset() {
 	*x = PresignUploadRequest{}
-	mi := &file_app_blob_v1_blob_proto_msgTypes[3]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -311,7 +311,7 @@ func (x *PresignUploadRequest) String() string {
 func (*PresignUploadRequest) ProtoMessage() {}
 
 func (x *PresignUploadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_blob_v1_blob_proto_msgTypes[3]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -324,7 +324,7 @@ func (x *PresignUploadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PresignUploadRequest.ProtoReflect.Descriptor instead.
 func (*PresignUploadRequest) Descriptor() ([]byte, []int) {
-	return file_app_blob_v1_blob_proto_rawDescGZIP(), []int{3}
+	return file_app_bucket_v1_bucket_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *PresignUploadRequest) GetBucket() string {
@@ -372,7 +372,7 @@ type PresignUploadResponse struct {
 
 func (x *PresignUploadResponse) Reset() {
 	*x = PresignUploadResponse{}
-	mi := &file_app_blob_v1_blob_proto_msgTypes[4]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -384,7 +384,7 @@ func (x *PresignUploadResponse) String() string {
 func (*PresignUploadResponse) ProtoMessage() {}
 
 func (x *PresignUploadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_blob_v1_blob_proto_msgTypes[4]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -397,7 +397,7 @@ func (x *PresignUploadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PresignUploadResponse.ProtoReflect.Descriptor instead.
 func (*PresignUploadResponse) Descriptor() ([]byte, []int) {
-	return file_app_blob_v1_blob_proto_rawDescGZIP(), []int{4}
+	return file_app_bucket_v1_bucket_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *PresignUploadResponse) GetSessionId() string {
@@ -425,7 +425,7 @@ type VerifyUploadSignatureRequest struct {
 
 func (x *VerifyUploadSignatureRequest) Reset() {
 	*x = VerifyUploadSignatureRequest{}
-	mi := &file_app_blob_v1_blob_proto_msgTypes[5]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -437,7 +437,7 @@ func (x *VerifyUploadSignatureRequest) String() string {
 func (*VerifyUploadSignatureRequest) ProtoMessage() {}
 
 func (x *VerifyUploadSignatureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_blob_v1_blob_proto_msgTypes[5]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -450,7 +450,7 @@ func (x *VerifyUploadSignatureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyUploadSignatureRequest.ProtoReflect.Descriptor instead.
 func (*VerifyUploadSignatureRequest) Descriptor() ([]byte, []int) {
-	return file_app_blob_v1_blob_proto_rawDescGZIP(), []int{5}
+	return file_app_bucket_v1_bucket_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *VerifyUploadSignatureRequest) GetSessionId() string {
@@ -484,7 +484,7 @@ type VerifyUploadSignatureResponse struct {
 
 func (x *VerifyUploadSignatureResponse) Reset() {
 	*x = VerifyUploadSignatureResponse{}
-	mi := &file_app_blob_v1_blob_proto_msgTypes[6]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -496,7 +496,7 @@ func (x *VerifyUploadSignatureResponse) String() string {
 func (*VerifyUploadSignatureResponse) ProtoMessage() {}
 
 func (x *VerifyUploadSignatureResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_blob_v1_blob_proto_msgTypes[6]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -509,7 +509,7 @@ func (x *VerifyUploadSignatureResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyUploadSignatureResponse.ProtoReflect.Descriptor instead.
 func (*VerifyUploadSignatureResponse) Descriptor() ([]byte, []int) {
-	return file_app_blob_v1_blob_proto_rawDescGZIP(), []int{6}
+	return file_app_bucket_v1_bucket_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *VerifyUploadSignatureResponse) GetValid() bool {
@@ -535,7 +535,7 @@ type GetUploadStatusRequest struct {
 
 func (x *GetUploadStatusRequest) Reset() {
 	*x = GetUploadStatusRequest{}
-	mi := &file_app_blob_v1_blob_proto_msgTypes[7]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -547,7 +547,7 @@ func (x *GetUploadStatusRequest) String() string {
 func (*GetUploadStatusRequest) ProtoMessage() {}
 
 func (x *GetUploadStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_app_blob_v1_blob_proto_msgTypes[7]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -560,7 +560,7 @@ func (x *GetUploadStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUploadStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetUploadStatusRequest) Descriptor() ([]byte, []int) {
-	return file_app_blob_v1_blob_proto_rawDescGZIP(), []int{7}
+	return file_app_bucket_v1_bucket_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetUploadStatusRequest) GetSessionId() string {
@@ -572,7 +572,7 @@ func (x *GetUploadStatusRequest) GetSessionId() string {
 
 type GetUploadStatusResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	State         UploadState            `protobuf:"varint,1,opt,name=state,proto3,enum=app.blob.v1.UploadState" json:"state,omitempty"`
+	State         UploadState            `protobuf:"varint,1,opt,name=state,proto3,enum=app.bucket.v1.UploadState" json:"state,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -580,7 +580,7 @@ type GetUploadStatusResponse struct {
 
 func (x *GetUploadStatusResponse) Reset() {
 	*x = GetUploadStatusResponse{}
-	mi := &file_app_blob_v1_blob_proto_msgTypes[8]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -592,7 +592,7 @@ func (x *GetUploadStatusResponse) String() string {
 func (*GetUploadStatusResponse) ProtoMessage() {}
 
 func (x *GetUploadStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_app_blob_v1_blob_proto_msgTypes[8]
+	mi := &file_app_bucket_v1_bucket_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -605,7 +605,7 @@ func (x *GetUploadStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUploadStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetUploadStatusResponse) Descriptor() ([]byte, []int) {
-	return file_app_blob_v1_blob_proto_rawDescGZIP(), []int{8}
+	return file_app_bucket_v1_bucket_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetUploadStatusResponse) GetState() UploadState {
@@ -622,23 +622,23 @@ func (x *GetUploadStatusResponse) GetError() string {
 	return ""
 }
 
-var File_app_blob_v1_blob_proto protoreflect.FileDescriptor
+var File_app_bucket_v1_bucket_proto protoreflect.FileDescriptor
 
-const file_app_blob_v1_blob_proto_rawDesc = "" +
+const file_app_bucket_v1_bucket_proto_rawDesc = "" +
 	"\n" +
-	"\x16app/blob/v1/blob.proto\x12\vapp.blob.v1\x1a\x1bbuf/validate/validate.proto\"\xc0\x03\n" +
+	"\x1aapp/bucket/v1/bucket.proto\x12\rapp.bucket.v1\x1a\x1bbuf/validate/validate.proto\"\xc0\x03\n" +
 	"\vPresignFile\x12\xeb\x02\n" +
 	"\x03key\x18\x01 \x01(\tB\xd8\x02\xbaH\xd4\x02\xba\x01\xcb\x02\n" +
 	"\x18buckets.presign_file.key\x12\xa3\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", and the key may carry no backslash and no control character\x1a\x88\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]')r\x03\x18\x80\bR\x03key\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n" +
-	"\tmime_type\x18\x04 \x01(\tR\bmimeType\"\xfb\x01\n" +
+	"\tmime_type\x18\x04 \x01(\tR\bmimeType\"\xfd\x01\n" +
 	"\x0fPresignedTarget\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12/\n" +
-	"\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\x12C\n" +
-	"\aheaders\x18\x05 \x03(\v2).app.blob.v1.PresignedTarget.HeadersEntryR\aheaders\x1a:\n" +
+	"\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\x12E\n" +
+	"\aheaders\x18\x05 \x03(\v2+.app.bucket.v1.PresignedTarget.HeadersEntryR\aheaders\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"f\n" +
@@ -646,80 +646,80 @@ const file_app_blob_v1_blob_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n" +
-	"\tmime_type\x18\x04 \x01(\tR\bmimeType\"\xea\x01\n" +
+	"\tmime_type\x18\x04 \x01(\tR\bmimeType\"\xec\x01\n" +
 	"\x14PresignUploadRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x128\n" +
-	"\x05files\x18\x02 \x03(\v2\x18.app.blob.v1.PresignFileB\b\xbaH\x05\x92\x01\x02\b\x01R\x05files\x12\x1a\n" +
+	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12:\n" +
+	"\x05files\x18\x02 \x03(\v2\x1a.app.bucket.v1.PresignFileB\b\xbaH\x05\x92\x01\x02\b\x01R\x05files\x12\x1a\n" +
 	"\bmetadata\x18\x03 \x01(\fR\bmetadata\x12/\n" +
 	"\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\x12*\n" +
-	"\x11callback_base_url\x18\x05 \x01(\tR\x0fcallbackBaseUrl\"j\n" +
+	"\x11callback_base_url\x18\x05 \x01(\tR\x0fcallbackBaseUrl\"l\n" +
 	"\x15PresignUploadResponse\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x122\n" +
-	"\x05files\x18\x02 \x03(\v2\x1c.app.blob.v1.PresignedTargetR\x05files\"\x93\x01\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x124\n" +
+	"\x05files\x18\x02 \x03(\v2\x1e.app.bucket.v1.PresignedTargetR\x05files\"\x95\x01\n" +
 	"\x1cVerifyUploadSignatureRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1c\n" +
-	"\tsignature\x18\x02 \x01(\tR\tsignature\x126\n" +
-	"\x04file\x18\x03 \x01(\v2\x1a.app.blob.v1.CompletedFileB\x06\xbaH\x03\xc8\x01\x01R\x04file\"Q\n" +
+	"\tsignature\x18\x02 \x01(\tR\tsignature\x128\n" +
+	"\x04file\x18\x03 \x01(\v2\x1c.app.bucket.v1.CompletedFileB\x06\xbaH\x03\xc8\x01\x01R\x04file\"Q\n" +
 	"\x1dVerifyUploadSignatureResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x1a\n" +
 	"\bmetadata\x18\x02 \x01(\fR\bmetadata\"7\n" +
 	"\x16GetUploadStatusRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"_\n" +
-	"\x17GetUploadStatusResponse\x12.\n" +
-	"\x05state\x18\x01 \x01(\x0e2\x18.app.blob.v1.UploadStateR\x05state\x12\x14\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"a\n" +
+	"\x17GetUploadStatusResponse\x120\n" +
+	"\x05state\x18\x01 \x01(\x0e2\x1a.app.bucket.v1.UploadStateR\x05state\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error*{\n" +
 	"\vUploadState\x12\x1c\n" +
 	"\x18UPLOAD_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14UPLOAD_STATE_PENDING\x10\x01\x12\x1a\n" +
 	"\x16UPLOAD_STATE_SUCCEEDED\x10\x02\x12\x18\n" +
-	"\x14UPLOAD_STATE_EXPIRED\x10\x032\xb5\x02\n" +
-	"\rBucketService\x12V\n" +
-	"\rPresignUpload\x12!.app.blob.v1.PresignUploadRequest\x1a\".app.blob.v1.PresignUploadResponse\x12n\n" +
-	"\x15VerifyUploadSignature\x12).app.blob.v1.VerifyUploadSignatureRequest\x1a*.app.blob.v1.VerifyUploadSignatureResponse\x12\\\n" +
-	"\x0fGetUploadStatus\x12#.app.blob.v1.GetUploadStatusRequest\x1a$.app.blob.v1.GetUploadStatusResponseB5Z3github.com/ocelhq/ocel/pkg/proto/app/blob/v1;blobv1b\x06proto3"
+	"\x14UPLOAD_STATE_EXPIRED\x10\x032\xc1\x02\n" +
+	"\rBucketService\x12Z\n" +
+	"\rPresignUpload\x12#.app.bucket.v1.PresignUploadRequest\x1a$.app.bucket.v1.PresignUploadResponse\x12r\n" +
+	"\x15VerifyUploadSignature\x12+.app.bucket.v1.VerifyUploadSignatureRequest\x1a,.app.bucket.v1.VerifyUploadSignatureResponse\x12`\n" +
+	"\x0fGetUploadStatus\x12%.app.bucket.v1.GetUploadStatusRequest\x1a&.app.bucket.v1.GetUploadStatusResponseB9Z7github.com/ocelhq/ocel/pkg/proto/app/bucket/v1;bucketv1b\x06proto3"
 
 var (
-	file_app_blob_v1_blob_proto_rawDescOnce sync.Once
-	file_app_blob_v1_blob_proto_rawDescData []byte
+	file_app_bucket_v1_bucket_proto_rawDescOnce sync.Once
+	file_app_bucket_v1_bucket_proto_rawDescData []byte
 )
 
-func file_app_blob_v1_blob_proto_rawDescGZIP() []byte {
-	file_app_blob_v1_blob_proto_rawDescOnce.Do(func() {
-		file_app_blob_v1_blob_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_app_blob_v1_blob_proto_rawDesc), len(file_app_blob_v1_blob_proto_rawDesc)))
+func file_app_bucket_v1_bucket_proto_rawDescGZIP() []byte {
+	file_app_bucket_v1_bucket_proto_rawDescOnce.Do(func() {
+		file_app_bucket_v1_bucket_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_app_bucket_v1_bucket_proto_rawDesc), len(file_app_bucket_v1_bucket_proto_rawDesc)))
 	})
-	return file_app_blob_v1_blob_proto_rawDescData
+	return file_app_bucket_v1_bucket_proto_rawDescData
 }
 
-var file_app_blob_v1_blob_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_app_blob_v1_blob_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
-var file_app_blob_v1_blob_proto_goTypes = []any{
-	(UploadState)(0),                      // 0: app.blob.v1.UploadState
-	(*PresignFile)(nil),                   // 1: app.blob.v1.PresignFile
-	(*PresignedTarget)(nil),               // 2: app.blob.v1.PresignedTarget
-	(*CompletedFile)(nil),                 // 3: app.blob.v1.CompletedFile
-	(*PresignUploadRequest)(nil),          // 4: app.blob.v1.PresignUploadRequest
-	(*PresignUploadResponse)(nil),         // 5: app.blob.v1.PresignUploadResponse
-	(*VerifyUploadSignatureRequest)(nil),  // 6: app.blob.v1.VerifyUploadSignatureRequest
-	(*VerifyUploadSignatureResponse)(nil), // 7: app.blob.v1.VerifyUploadSignatureResponse
-	(*GetUploadStatusRequest)(nil),        // 8: app.blob.v1.GetUploadStatusRequest
-	(*GetUploadStatusResponse)(nil),       // 9: app.blob.v1.GetUploadStatusResponse
-	nil,                                   // 10: app.blob.v1.PresignedTarget.HeadersEntry
+var file_app_bucket_v1_bucket_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_app_bucket_v1_bucket_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_app_bucket_v1_bucket_proto_goTypes = []any{
+	(UploadState)(0),                      // 0: app.bucket.v1.UploadState
+	(*PresignFile)(nil),                   // 1: app.bucket.v1.PresignFile
+	(*PresignedTarget)(nil),               // 2: app.bucket.v1.PresignedTarget
+	(*CompletedFile)(nil),                 // 3: app.bucket.v1.CompletedFile
+	(*PresignUploadRequest)(nil),          // 4: app.bucket.v1.PresignUploadRequest
+	(*PresignUploadResponse)(nil),         // 5: app.bucket.v1.PresignUploadResponse
+	(*VerifyUploadSignatureRequest)(nil),  // 6: app.bucket.v1.VerifyUploadSignatureRequest
+	(*VerifyUploadSignatureResponse)(nil), // 7: app.bucket.v1.VerifyUploadSignatureResponse
+	(*GetUploadStatusRequest)(nil),        // 8: app.bucket.v1.GetUploadStatusRequest
+	(*GetUploadStatusResponse)(nil),       // 9: app.bucket.v1.GetUploadStatusResponse
+	nil,                                   // 10: app.bucket.v1.PresignedTarget.HeadersEntry
 }
-var file_app_blob_v1_blob_proto_depIdxs = []int32{
-	10, // 0: app.blob.v1.PresignedTarget.headers:type_name -> app.blob.v1.PresignedTarget.HeadersEntry
-	1,  // 1: app.blob.v1.PresignUploadRequest.files:type_name -> app.blob.v1.PresignFile
-	2,  // 2: app.blob.v1.PresignUploadResponse.files:type_name -> app.blob.v1.PresignedTarget
-	3,  // 3: app.blob.v1.VerifyUploadSignatureRequest.file:type_name -> app.blob.v1.CompletedFile
-	0,  // 4: app.blob.v1.GetUploadStatusResponse.state:type_name -> app.blob.v1.UploadState
-	4,  // 5: app.blob.v1.BucketService.PresignUpload:input_type -> app.blob.v1.PresignUploadRequest
-	6,  // 6: app.blob.v1.BucketService.VerifyUploadSignature:input_type -> app.blob.v1.VerifyUploadSignatureRequest
-	8,  // 7: app.blob.v1.BucketService.GetUploadStatus:input_type -> app.blob.v1.GetUploadStatusRequest
-	5,  // 8: app.blob.v1.BucketService.PresignUpload:output_type -> app.blob.v1.PresignUploadResponse
-	7,  // 9: app.blob.v1.BucketService.VerifyUploadSignature:output_type -> app.blob.v1.VerifyUploadSignatureResponse
-	9,  // 10: app.blob.v1.BucketService.GetUploadStatus:output_type -> app.blob.v1.GetUploadStatusResponse
+var file_app_bucket_v1_bucket_proto_depIdxs = []int32{
+	10, // 0: app.bucket.v1.PresignedTarget.headers:type_name -> app.bucket.v1.PresignedTarget.HeadersEntry
+	1,  // 1: app.bucket.v1.PresignUploadRequest.files:type_name -> app.bucket.v1.PresignFile
+	2,  // 2: app.bucket.v1.PresignUploadResponse.files:type_name -> app.bucket.v1.PresignedTarget
+	3,  // 3: app.bucket.v1.VerifyUploadSignatureRequest.file:type_name -> app.bucket.v1.CompletedFile
+	0,  // 4: app.bucket.v1.GetUploadStatusResponse.state:type_name -> app.bucket.v1.UploadState
+	4,  // 5: app.bucket.v1.BucketService.PresignUpload:input_type -> app.bucket.v1.PresignUploadRequest
+	6,  // 6: app.bucket.v1.BucketService.VerifyUploadSignature:input_type -> app.bucket.v1.VerifyUploadSignatureRequest
+	8,  // 7: app.bucket.v1.BucketService.GetUploadStatus:input_type -> app.bucket.v1.GetUploadStatusRequest
+	5,  // 8: app.bucket.v1.BucketService.PresignUpload:output_type -> app.bucket.v1.PresignUploadResponse
+	7,  // 9: app.bucket.v1.BucketService.VerifyUploadSignature:output_type -> app.bucket.v1.VerifyUploadSignatureResponse
+	9,  // 10: app.bucket.v1.BucketService.GetUploadStatus:output_type -> app.bucket.v1.GetUploadStatusResponse
 	8,  // [8:11] is the sub-list for method output_type
 	5,  // [5:8] is the sub-list for method input_type
 	5,  // [5:5] is the sub-list for extension type_name
@@ -727,27 +727,27 @@ var file_app_blob_v1_blob_proto_depIdxs = []int32{
 	0,  // [0:5] is the sub-list for field type_name
 }
 
-func init() { file_app_blob_v1_blob_proto_init() }
-func file_app_blob_v1_blob_proto_init() {
-	if File_app_blob_v1_blob_proto != nil {
+func init() { file_app_bucket_v1_bucket_proto_init() }
+func file_app_bucket_v1_bucket_proto_init() {
+	if File_app_bucket_v1_bucket_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_blob_v1_blob_proto_rawDesc), len(file_app_blob_v1_blob_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_bucket_v1_bucket_proto_rawDesc), len(file_app_bucket_v1_bucket_proto_rawDesc)),
 			NumEnums:      1,
 			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_app_blob_v1_blob_proto_goTypes,
-		DependencyIndexes: file_app_blob_v1_blob_proto_depIdxs,
-		EnumInfos:         file_app_blob_v1_blob_proto_enumTypes,
-		MessageInfos:      file_app_blob_v1_blob_proto_msgTypes,
+		GoTypes:           file_app_bucket_v1_bucket_proto_goTypes,
+		DependencyIndexes: file_app_bucket_v1_bucket_proto_depIdxs,
+		EnumInfos:         file_app_bucket_v1_bucket_proto_enumTypes,
+		MessageInfos:      file_app_bucket_v1_bucket_proto_msgTypes,
 	}.Build()
-	File_app_blob_v1_blob_proto = out.File
-	file_app_blob_v1_blob_proto_goTypes = nil
-	file_app_blob_v1_blob_proto_depIdxs = nil
+	File_app_bucket_v1_bucket_proto = out.File
+	file_app_bucket_v1_bucket_proto_goTypes = nil
+	file_app_bucket_v1_bucket_proto_depIdxs = nil
 }

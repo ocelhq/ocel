@@ -1,7 +1,7 @@
 syntax = "proto3";
-package app.blob.v1;
+package app.bucket.v1;
 
-option go_package = "github.com/ocelhq/ocel/pkg/proto/app/blob/v1;blobv1";
+option go_package = "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1;bucketv1";
 
 import "buf/validate/validate.proto";
 
