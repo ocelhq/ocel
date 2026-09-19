@@ -1,5 +1,5 @@
 import express, { type NextFunction, type Request, type Response } from "express";
-import { createRouteHandler } from "ocel/blob/express";
+import { createRouteHandler } from "ocel/bucket/express";
 import { pg, uploads } from "../../../infra/index";
 import { probes } from "./probes";
 

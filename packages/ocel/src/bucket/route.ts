@@ -7,17 +7,17 @@ import { generateKey } from "./keys.js";
 import { decodeMetadata, encodeMetadata } from "./metadata.js";
 import type {
   AnyUploader,
-  BlobRequest,
   CompletedFile,
   FileInfo,
   LimitValue,
+  UploadRequest,
   UploadStatusState,
 } from "./types.js";
 
-export type RouteRequest = BlobRequest | IncomingMessage;
+export type RouteRequest = UploadRequest | IncomingMessage;
 
-function isWebRequest(req: RouteRequest): req is BlobRequest {
-  return typeof (req as BlobRequest).json === "function";
+function isWebRequest(req: RouteRequest): req is UploadRequest {
+  return typeof (req as UploadRequest).json === "function";
 }
 
 function headerOf(req: RouteRequest, name: string): string | null {

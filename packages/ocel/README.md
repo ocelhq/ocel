@@ -31,11 +31,11 @@ Every entry point is a subpath — there is no root export.
 | --- | --- |
 | `ocel/config` | `defineConfig`, and the `OcelConfig` / `AppConfig` / `DomainConfig` / `ProviderDescriptor` types |
 | `ocel/postgres` | `postgres(id, config?)` — declares a Postgres database and returns a connected client |
-| `ocel/blob` | `bucket`, `uploader`, `createRouteHandler`, `resolveBucketContext` — framework-agnostic |
-| `ocel/blob/next` | `bucket`, `uploader`, `createRouteHandler` returning Next route handlers |
-| `ocel/blob/hono` | `bucket`, `uploader`, `createRouteHandler` returning a Hono handler |
-| `ocel/blob/express` | `bucket`, `uploader`, `createRouteHandler` returning Express middleware |
-| `ocel/blob/client` | `createUploadClient` — browser-side uploads against a bucket's uploaders |
+| `ocel/bucket` | `bucket`, `uploader`, `createRouteHandler`, `resolveBucketContext` — framework-agnostic |
+| `ocel/bucket/next` | `bucket`, `uploader`, `createRouteHandler` returning Next route handlers |
+| `ocel/bucket/hono` | `bucket`, `uploader`, `createRouteHandler` returning a Hono handler |
+| `ocel/bucket/express` | `bucket`, `uploader`, `createRouteHandler` returning Express middleware |
+| `ocel/bucket/client` | `createUploadClient` — browser-side uploads against a bucket's uploaders |
 
 `next`, `hono`, `express`, and `pg` are optional peer dependencies; install only the one
 your app uses.
@@ -59,7 +59,7 @@ Point any command at a different config with `--config <path>` (or `OCEL_CONFIG`
 
 ```ts
 // ocel/index.ts
-import { bucket, uploader } from "ocel/blob/next";
+import { bucket, uploader } from "ocel/bucket/next";
 import { postgres } from "ocel/postgres";
 
 export const db = postgres("main");

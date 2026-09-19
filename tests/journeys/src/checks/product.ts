@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import type { AnyUploader, Bucket } from "ocel/blob";
-import { createUploadClient } from "ocel/blob/client";
+import type { AnyUploader, Bucket } from "ocel/bucket";
+import { createUploadClient } from "ocel/bucket/client";
 import { type Check, type CheckContext, json } from "./context";
 
 async function createTodo(ctx: CheckContext, title: string) {

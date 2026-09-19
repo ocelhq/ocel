@@ -1,10 +1,16 @@
 import type { z } from "zod";
-import type { BlobRequest, ParsedInput, Uploader, UploaderAuth, UploaderUpload } from "./types.js";
+import type {
+  ParsedInput,
+  Uploader,
+  UploaderAuth,
+  UploaderUpload,
+  UploadRequest,
+} from "./types.js";
 
 export function uploader<
   TInput extends z.ZodType | undefined = undefined,
   TMetadata = unknown,
-  TReq = BlobRequest,
+  TReq = UploadRequest,
 >(
   auth: UploaderAuth<TReq, TInput, TMetadata>,
   upload: UploaderUpload<TMetadata> = {},
