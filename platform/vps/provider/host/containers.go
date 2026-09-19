@@ -22,7 +22,8 @@ const (
 	LabelEnv     = "ocel.env"
 	LabelClass   = "ocel.class"
 
-	LabelResource = "ocel.resource"
+	LabelResource   = "ocel.resource"
+	LabelGeneration = "ocel.generation"
 )
 
 const (

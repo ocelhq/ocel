@@ -62,6 +62,13 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 		t.Errorf("the data a second deploy finds is %q, want the row the first one wrote", said)
 	}
 
+	if _, err := p.Postgres(ctx, aPostgres(t, "16"), nil); err == nil {
+		t.Error("a postgres 16 was stood up over the data a 17 initialised")
+	}
+	if !vm.running(t, name) {
+		t.Errorf("%s was taken down by a deploy that was refused", name)
+	}
+
 	if err := p.RemoveResource(ctx, in.Ref, again, nil); err != nil {
 		t.Fatalf("RemoveResource() = %v", err)
 	}
