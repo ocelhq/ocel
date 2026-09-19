@@ -70,9 +70,10 @@ func unkept(name, said string) ([]byte, error) {
 }
 
 type Volume struct {
-	Path    string
-	Driver  string
-	Options map[string]string
+	Path       string
+	Driver     string
+	Options    map[string]string
+	Generation string
 }
 
 type Credential struct {
@@ -127,6 +128,9 @@ func (r ResourceContainer) labels() []string {
 
 func volumeCreating(spec ResourceContainer) string {
 	argv := append([]string{"docker", "volume", "create"}, spec.labels()...)
+	if spec.Volume.Generation != "" {
+		argv = append(argv, "--label", LabelGeneration+"="+spec.Volume.Generation)
+	}
 	if spec.Volume.Driver != "" {
 		argv = append(argv, "--driver", spec.Volume.Driver)
 	}
@@ -156,6 +160,27 @@ func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 	return append(argv, spec.Args...)
 }
 
+func generationCommand(spec ResourceContainer) string {
+	return "docker volume ls --filter " + quoted("name=^"+spec.Name+"$") +
+		" --format " + quoted(`{{.Label "`+LabelGeneration+`"}}`)
+}
+
+func (h *Host) sameGeneration(ctx context.Context, spec ResourceContainer, elevation string) error {
+	if spec.Volume.Generation == "" {
+		return nil
+	}
+	said, err := h.ran(ctx, "read what initialised "+spec.Resource+"'s data", generationCommand(spec), nil, elevation)
+	if err != nil {
+		return err
+	}
+	if held := strings.TrimSpace(said); held != "" && held != spec.Volume.Generation {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"%s keeps data that version %s initialised, and this deploy declares version %s, which will not start on it: put the version back to %s. Moving data between versions is an upgrade ocel does not run for you yet",
+			spec.Resource, held, spec.Volume.Generation, held)
+	}
+	return nil
+}
+
 func readyCommand(spec ResourceContainer) string {
 	probe := words(append([]string{"docker", "exec", spec.Name}, spec.Ready...))
 	return "tries=0\n" +
@@ -182,6 +207,9 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	said := h.said(ctx, servingCommand(spec.Name), elevation)
 	if stillServing(said, spec.Image, digest) {
 		return nil
+	}
+	if err := h.sameGeneration(ctx, spec, elevation); err != nil {
+		return err
 	}
 	if said != "" {
 		if _, err := h.ran(ctx, "clear the name "+spec.Name,

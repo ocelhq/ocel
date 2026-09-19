@@ -49,7 +49,7 @@ func postgresContainer(in resources.Instruction) (host.ResourceContainer, error)
 		Env:          map[string]string{"POSTGRES_DB": in.Resource.Name},
 		Capabilities: postgresCapabilities,
 
-		Volume: host.Volume{Path: postgresData},
+		Volume: host.Volume{Path: postgresData, Generation: version},
 		Credential: host.Credential{
 			Env: postgresSecretEnv,
 			Reassert: func(secret string) ([]string, string) {

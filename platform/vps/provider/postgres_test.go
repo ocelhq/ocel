@@ -257,3 +257,45 @@ func TestARemovalReachesOnlyTheServerItsOwnStackStoodUp(t *testing.T) {
 		t.Errorf("a removal ran %q and never reached the server this stack stood up for main", joined)
 	}
 }
+
+func TestAPostgresDeclaredUnderAnotherMajorIsRefusedBeforeTheRunningServerIsTouched(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	holdingAPostgres(machine)
+	machine.refuses = func(command string) (session.Result, bool) {
+		switch {
+		case strings.Contains(command, "docker volume ls") && strings.Contains(command, host.LabelGeneration):
+			return session.Result{Stdout: "16\n"}, true
+		case strings.Contains(command, ".State.Status"):
+			return session.Result{Stdout: "running postgres:16 0123456789ab\n"}, true
+		}
+		return session.Result{}, false
+	}
+	_, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil)
+	if err == nil {
+		t.Fatal("a postgres 17 was stood up over the data a 16 initialised, which it refuses to start on, and the database is down until the version is put back")
+	}
+	for _, want := range []string{"main", "16", "17"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal reads %q and never says %s", err, want)
+		}
+	}
+	joined := strings.Join(machine.commands(), "\n")
+	if strings.Contains(joined, "docker rm") || strings.Contains(joined, "'docker' 'run'") {
+		t.Errorf("the running server was touched before the refusal:\n%s", joined)
+	}
+}
+
+func TestAVolumeIsLabelledWithTheMajorThatInitialisedIt(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	if _, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
+		t.Fatal(err)
+	}
+	kept := machine.commands()[machine.at("'docker' 'volume' 'create'")]
+	if !strings.Contains(kept, "'"+host.LabelGeneration+"=17'") {
+		t.Errorf("the volume was created as %q, and the next deploy cannot tell which major wrote what is on it", kept)
+	}
+}
