@@ -3,13 +3,13 @@ packages:
   - console/*
   - cli/node
   - packages/*
+  - pkg/transformkit
   - ui/*
   - frameworks/*/*
   - platform/aws/functions/*
   - platform/aws/runtime
   - platform/aws/provider/edges/cloudfront/resolver
   - platform/aws/provider/payloads
-  - platform/aws/provider/transform
   - platform/gcp/provider/payloads
   - platform/gcp/provider/suite
   - platform/vps/provider/host

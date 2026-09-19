@@ -869,6 +869,12 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.43)(vite@8.1.3(@types/node@20.19.43)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
 
+  pkg/transformkit:
+    devDependencies:
+      '@ocel/transforms':
+        specifier: workspace:^
+        version: link:../../packages/ocel-transforms
+
   platform/aws/functions/image-optimizer:
     dependencies:
       '@aws-sdk/client-s3':
@@ -989,12 +995,6 @@ importers:
       '@platform/aws-tag-publisher':
         specifier: workspace:*
         version: link:../../functions/tag-publisher
-
-  platform/aws/provider/transform:
-    devDependencies:
-      '@ocel/transforms':
-        specifier: workspace:^
-        version: link:../../../../packages/ocel-transforms
 
   platform/aws/runtime:
     dependencies:

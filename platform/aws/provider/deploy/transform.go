@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/aws/provider/transform"
+	"github.com/ocelhq/ocel/pkg/transformkit"
 )
 
 const (
@@ -152,7 +152,7 @@ func mergeInput(held sdk.Input, over any) sdk.Input {
 	return mergeProps(under, nested)
 }
 
-func indexPatches(candidates []transformCandidate, results []transform.Result) (*transformPatches, error) {
+func indexPatches(candidates []transformCandidate, results []transformkit.Result) (*transformPatches, error) {
 	held := &transformPatches{
 		patches:  map[resourceRef]map[string]any{},
 		sites:    map[resourceRef]string{},

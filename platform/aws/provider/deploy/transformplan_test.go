@@ -10,7 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/aws/provider/transform"
+	"github.com/ocelhq/ocel/pkg/transformkit"
 )
 
 type publishedReader struct {
@@ -69,20 +69,20 @@ func planUnderTransform() providerkit.StackPlan {
 }
 
 type patchingEvaluator struct {
-	patch func([]transform.Patches)
+	patch func([]transformkit.Patches)
 }
 
-func (e patchingEvaluator) Evaluate(_ context.Context, req transform.Request) ([]transform.Result, error) {
-	patches := make([]transform.Patches, len(req.Resources))
+func (e patchingEvaluator) Evaluate(_ context.Context, req transformkit.Request) ([]transformkit.Result, error) {
+	patches := make([]transformkit.Patches, len(req.Resources))
 	for i := range req.Resources {
-		patches[i] = transform.Patches{}
+		patches[i] = transformkit.Patches{}
 	}
 	if e.patch != nil {
 		e.patch(patches)
 	}
-	results := make([]transform.Result, len(patches))
+	results := make([]transformkit.Result, len(patches))
 	for i, held := range overTheWire(patches) {
-		results[i] = transform.Result{Patches: held}
+		results[i] = transformkit.Result{Patches: held}
 	}
 	return results, nil
 }
@@ -94,7 +94,7 @@ func placeholderFor(kind, name, property string) map[string]any {
 }
 
 func filledFromBinding(kind, name, property string) patchingEvaluator {
-	return patchingEvaluator{patch: func(patches []transform.Patches) {
+	return patchingEvaluator{patch: func(patches []transformkit.Patches) {
 		patches[len(patches)-1]["lambda"] = map[string]any{"runtime": placeholderFor(kind, name, property)}
 	}}
 }
@@ -119,8 +119,8 @@ func TestAnAppStackOffersOnlyTheFunctionsItStandsUp(t *testing.T) {
 	if strings.Join(seen, ",") != strings.Join(want, ",") {
 		t.Fatalf("the app stack offered %v, want %v — a patch on a resource this stack never constructs reaches nothing", seen, want)
 	}
-	if evaluator.seen.Provider != transform.Provider {
-		t.Errorf("the transform was told provider %q, want %q", evaluator.seen.Provider, transform.Provider)
+	if evaluator.seen.Provider != transformProvider {
+		t.Errorf("the transform was told provider %q, want %q", evaluator.seen.Provider, transformProvider)
 	}
 	if evaluator.seen.Env != "production" || evaluator.seen.EnvClass != string(providerkit.ClassProduction) {
 		t.Errorf("the transform was told env %q class %q, want the plan's own coordinate", evaluator.seen.Env, evaluator.seen.EnvClass)
@@ -138,7 +138,7 @@ func TestAPlanWithNoTransformIsLeftExactlyAsItWasPlanned(t *testing.T) {
 }
 
 func TestAPatchLandsOnThePulumiResourceThatOcelConstructsForIt(t *testing.T) {
-	evaluator := patchingEvaluator{patch: func(patches []transform.Patches) {
+	evaluator := patchingEvaluator{patch: func(patches []transformkit.Patches) {
 		patches[len(patches)-1]["lambda"] = map[string]any{"memorySize": 2048}
 	}}
 
@@ -174,7 +174,7 @@ func TestAPatchOnAResourceThisProviderNeverConstructsIsRefused(t *testing.T) {
 	plan := planUnderTransform()
 	plan.App = nil
 	plan.Kind = providerkit.StackInfra
-	evaluator := patchingEvaluator{patch: func(patches []transform.Patches) {
+	evaluator := patchingEvaluator{patch: func(patches []transformkit.Patches) {
 		patches[1]["queue"] = map[string]any{"fifo": true}
 	}}
 
@@ -188,7 +188,7 @@ func TestABucketWithNoDeclaredOriginsCanStillBeGivenCORSByATransform(t *testing.
 	plan := planUnderTransform()
 	plan.App = nil
 	plan.Kind = providerkit.StackInfra
-	evaluator := patchingEvaluator{patch: func(patches []transform.Patches) {
+	evaluator := patchingEvaluator{patch: func(patches []transformkit.Patches) {
 		patches[1]["cors"] = map[string]any{"corsRules": []any{map[string]any{"allowedMethods": []any{"GET"}}}}
 	}}
 
@@ -327,7 +327,7 @@ func TestEveryOutputOffTheSameBindingResolvesItOnce(t *testing.T) {
 	plan := planUnderTransform()
 	plan.Bindings = bindings
 
-	evaluator := patchingEvaluator{patch: func(patches []transform.Patches) {
+	evaluator := patchingEvaluator{patch: func(patches []transformkit.Patches) {
 		placeholder := placeholderFor(customBindingType, "legacy", "runtime")
 		patches[len(patches)-1]["lambda"] = map[string]any{
 			"runtime":     placeholder,

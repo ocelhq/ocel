@@ -1,4 +1,4 @@
-package transform
+package transformkit
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-//go:generate pnpm --dir ../../../.. exec turbo run build --filter=@platform/aws-transform-runner
+//go:generate pnpm --dir ../.. exec turbo run build --filter=@pkg/transform-runner
 
 //go:embed dist/runner.mjs
 var runner []byte
@@ -31,6 +31,9 @@ const (
 type NodePass struct {
 	Root    string
 	Modules []string
+
+	External    []string
+	Uninstalled string
 }
 
 func (p NodePass) Evaluate(ctx context.Context, req Request) ([]Result, error) {
@@ -48,7 +51,7 @@ func (p NodePass) Evaluate(ctx context.Context, req Request) ([]Result, error) {
 		return nil, fmt.Errorf("encode transform request: %w", err)
 	}
 
-	out, err := runNode(ctx, bundle, payload)
+	out, err := p.runNode(ctx, bundle, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +109,7 @@ func (p NodePass) bundle() (string, error) {
 			Loader:     api.LoaderTS,
 		},
 		Bundle:   true,
-		External: []string{"@pulumi/*"},
+		External: p.External,
 		Platform: api.PlatformNode,
 		Format:   api.FormatESModule,
 		Outfile:  outfile,
@@ -147,7 +150,7 @@ func (p NodePass) resolve(module string) string {
 	return module
 }
 
-func runNode(ctx context.Context, bundle string, payload []byte) ([]byte, error) {
+func (p NodePass) runNode(ctx context.Context, bundle string, payload []byte) ([]byte, error) {
 	if _, err := exec.LookPath("node"); err != nil {
 		return nil, fmt.Errorf("transforms need node on PATH: %w", err)
 	}
@@ -187,8 +190,8 @@ func runNode(ctx context.Context, bundle string, payload []byte) ([]byte, error)
 	}
 	if strings.Contains(said, "ERR_MODULE_NOT_FOUND") {
 		return nil, providerkit.Refuse(providerkit.CodeNotReady,
-			"a transform module imports a package this project has not installed, so node could not load it. `@ocel/transforms` carries `@pulumi/aws` itself: install it as a devDependency and re-run.\n%s",
-			said)
+			"a transform module imports a package this project has not installed, so node could not load it. %s\n%s",
+			p.Uninstalled, said)
 	}
 	return nil, fmt.Errorf("run transforms: %w\n%s", waited, said)
 }
