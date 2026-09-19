@@ -26,7 +26,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/providers"
-	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/constants"
@@ -36,8 +35,8 @@ func DiscoveryDir(root string) string {
 	return filepath.Join(root, constants.DefaultDiscoveryDirName)
 }
 
-func fakeAccount(_ context.Context, _, _, projectID string) (resolve.Account, error) {
-	return resolve.Account{ProjectID: projectID, EnvVars: map[string]string{}}, nil
+func fakeAccount(_ context.Context, _, _, _ string) (map[string]string, error) {
+	return map[string]string{}, nil
 }
 
 func NewDeps() cmddeps.Deps {

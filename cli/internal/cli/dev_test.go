@@ -842,8 +842,8 @@ const testAPIURL = "https://console.example.test"
 func devDeps() cmddeps.Deps {
 	deps := newDeps()
 	deps.OpenDocker = (&dockertest.Engine{}).Opener()
-	deps.FetchAccount = func(_ context.Context, _, _, projectID string) (resolve.Account, error) {
-		return resolve.Account{ProjectID: projectID, EnvVars: map[string]string{}}, nil
+	deps.FetchAccount = func(_ context.Context, _, _, _ string) (map[string]string, error) {
+		return map[string]string{}, nil
 	}
 	return deps
 }

@@ -14,14 +14,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
-	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 )
 
 type Deps struct {
 	LoadCredentials     func() (credentials.Credentials, error)
-	FetchAccount        func(ctx context.Context, apiURL, token, projectID string) (resolve.Account, error)
+	FetchAccount        func(ctx context.Context, apiURL, token, projectID string) (map[string]string, error)
 	OpenDocker          docker.Opener
 	BuildApp            func(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, out io.Writer) error
 	RequireImageBuilder func(ctx context.Context, rep runui.Reporter, cfg *projectconfig.Config) error

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/console"
+	"github.com/ocelhq/ocel/cli/internal/console/httpapi"
 	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -37,27 +39,36 @@ type sharedEnv struct {
 	loggedOut bool
 }
 
+var (
+	dotfileAloneUnread = fmt.Sprintf("This run resolves values from %s alone; anything set with `ocel env set --dev` is not in play.", dotenv.FileName)
+	dotfileAloneLogin  = fmt.Sprintf("This run resolves values from %s alone; run `ocel login` to bring in what was set with `ocel env set --dev`.", dotenv.FileName)
+)
+
 func readSharedEnv(ctx context.Context, deps cmddeps.Deps, dir string, stderr io.Writer) sharedEnv {
 	creds, credsErr := deps.LoadCredentials()
 	apiURL := console.EffectiveBaseURL(creds.APIURL)
 	linked, err := consolelink.Read(dir, apiURL)
 	if err != nil {
-		fmt.Fprintf(stderr, "could not read this project's link (%v). This run resolves values from %s alone; anything set with `ocel env set --dev` is not in play.\n", err, dotenv.FileName)
+		fmt.Fprintf(stderr, "could not read this project's link (%v). %s\n", err, dotfileAloneUnread)
 		return sharedEnv{}
 	}
 	if linked == nil {
 		return sharedEnv{}
 	}
 	if credsErr != nil {
-		fmt.Fprintf(stderr, "this project is linked and you are not logged in. This run resolves values from %s alone; run `ocel login` to bring in what was set with `ocel env set --dev`.\n", dotenv.FileName)
+		fmt.Fprintf(stderr, "this project is linked and you are not logged in. %s\n", dotfileAloneLogin)
 		return sharedEnv{loggedOut: true}
 	}
-	account, err := deps.FetchAccount(ctx, apiURL, creds.AccessToken, linked.ProjectID)
+	values, err := deps.FetchAccount(ctx, apiURL, creds.AccessToken, linked.ProjectID)
+	if httpapi.HasStatus(err, http.StatusUnauthorized) || httpapi.HasStatus(err, http.StatusForbidden) {
+		fmt.Fprintf(stderr, "this project is linked and the control plane no longer accepts this login. %s\n", dotfileAloneLogin)
+		return sharedEnv{loggedOut: true}
+	}
 	if err != nil {
-		fmt.Fprintf(stderr, "could not reach the control plane (%v). This run resolves values from %s alone; anything set with `ocel env set --dev` is not in play.\n", err, dotenv.FileName)
+		fmt.Fprintf(stderr, "could not reach the control plane (%v). %s\n", err, dotfileAloneUnread)
 		return sharedEnv{}
 	}
-	return sharedEnv{values: account.EnvVars}
+	return sharedEnv{values: values}
 }
 
 type invocation struct {
