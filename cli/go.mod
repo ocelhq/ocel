@@ -7,6 +7,11 @@ require (
 	charm.land/lipgloss/v2 v2.0.1
 	connectrpc.com/connect v1.20.0
 	connectrpc.com/validate v0.6.0
+	github.com/aws/aws-sdk-go-v2 v1.47.0
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.30
+	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.0
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.106.0
+	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.0
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/containerd/errdefs v1.0.0
@@ -27,6 +32,7 @@ require (
 	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/proto v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
+	github.com/ocelhq/ocel/platform/aws/runtime v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/pelletier/go-toml/v2 v2.3.1
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
@@ -64,6 +70,18 @@ require (
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.14 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.51 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.3 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.3 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.38 // indirect
+	github.com/aws/aws-sdk-go-v2/service/dynamodbstreams v1.35.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.13 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.24 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.12.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.31 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.32 // indirect
+	github.com/aws/smithy-go v1.28.1 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/bep/godartsass/v2 v2.5.0 // indirect
@@ -253,3 +271,11 @@ replace github.com/ocelhq/ocel/pkg/connectorkit => ../pkg/connectorkit
 replace github.com/ocelhq/ocel/pkg/constants => ../pkg/constants
 
 replace github.com/ocelhq/ocel/pkg/costkit => ../pkg/costkit
+
+replace github.com/ocelhq/ocel/platform/aws/runtime => ../platform/aws/runtime
+
+replace github.com/ocelhq/ocel/platform/aws/provider => ../platform/aws/provider
+
+replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../platform/edge/cloudflare/deploy
+
+replace github.com/ocelhq/ocel/pkg/runtimekit => ../pkg/runtimekit
