@@ -16,9 +16,10 @@ type Account struct {
 }
 
 type Resource struct {
-	Name string
-	Type resourcesv1.ResourceType
-	Env  map[string]string
+	Name   string
+	Type   resourcesv1.ResourceType
+	Env    map[string]string
+	Origin string
 }
 
 func StubLiveValues(_ context.Context, apiURL, token, projectID string, keys []string) (map[string]string, error) {
