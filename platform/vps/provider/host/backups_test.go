@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 type backupBench struct {
@@ -224,5 +227,28 @@ func TestARestoreFeedsTheDumpBackThroughTheContainer(t *testing.T) {
 	}
 	if _, _, code := bench.runs(t, "production", "restore", "shop-main-pg", "main", filepath.Join(bench.root, "nothing.dump")); code == 0 {
 		t.Error("a restore from a dump that is not there was reported as done")
+	}
+}
+
+func TestAnApplyOverAHostBootstrappedBeforeBackupsWritesThem(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	var missing []string
+	for _, item := range BackupItems() {
+		missing = append(missing, item.ID())
+	}
+	stood := settledOn(t, class)
+	stood.stands[class] = slices.DeleteFunc(stood.stands[class], func(item Item) bool { return slices.Contains(missing, item.ID()) })
+	report := &said{}
+	if err := Bootstrap(stood.host(), testVendor).Apply(context.Background(),
+		providerkit.BootstrapRequest{Class: class, Writer: "the-suite"}, report); err != nil {
+		t.Fatalf("Apply() = %v", err)
+	}
+	for _, id := range missing {
+		if report.at("wrote "+id) < 0 {
+			t.Errorf("bootstrap says a host carries %s and an apply never wrote it, so every status after it reads drifted and every re-plan moves it:\n%s",
+				id, strings.Join(report.lines, "\n"))
+		}
 	}
 }
