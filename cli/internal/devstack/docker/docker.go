@@ -2,11 +2,14 @@ package docker
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/netip"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -23,7 +26,9 @@ import (
 
 const (
 	pingTimeout = 5 * time.Second
-	stopTimeout = 10
+	stopGrace   = 3 * time.Second
+
+	StopsWithin = stopGrace + 3*time.Second
 )
 
 type Spec struct {
@@ -44,8 +49,9 @@ type Container struct {
 type Engine interface {
 	Run(ctx context.Context, spec Spec) (Container, error)
 	Exec(ctx context.Context, id string, argv ...string) (string, error)
+	ExecInput(ctx context.Context, id, input string, argv ...string) (string, error)
 	Stop(ctx context.Context, id string) error
-	RemoveVolumes(ctx context.Context, labels map[string]string) error
+	Wipe(ctx context.Context, labels map[string]string) error
 	Close() error
 }
 
@@ -95,13 +101,15 @@ func (e *ExecFailed) Error() string {
 }
 
 type daemon struct {
-	api *client.Client
+	api       *client.Client
+	publishOn netip.Addr
+	reachedAt string
 }
 
 func Open(ctx context.Context) (Engine, error) {
 	host, err := providerkit.OpenDockerHost()
 	if err != nil {
-		return nil, err
+		return nil, &Unreachable{Address: cmp.Or(os.Getenv(providerkit.DockerHostEnv), "its default address"), Err: err}
 	}
 	api, err := client.New(
 		client.WithHost("tcp://docker"),
@@ -116,7 +124,23 @@ func Open(ctx context.Context) (Engine, error) {
 		_ = api.Close()
 		return nil, &Unreachable{Address: host.Address, Err: err}
 	}
-	return &daemon{api: api}, nil
+	publishOn, reachedAt := published(host)
+	return &daemon{api: api, publishOn: publishOn, reachedAt: reachedAt}, nil
+}
+
+func published(host providerkit.DockerHost) (netip.Addr, string) {
+	loopback := netip.AddrFrom4([4]byte{127, 0, 0, 1})
+	if host.Network != "tcp" {
+		return loopback, loopback.String()
+	}
+	name, _, err := net.SplitHostPort(host.Target)
+	if err != nil {
+		name = host.Target
+	}
+	if ip, err := netip.ParseAddr(name); name == "localhost" || (err == nil && ip.IsLoopback()) {
+		return loopback, loopback.String()
+	}
+	return netip.IPv4Unspecified(), name
 }
 
 func (d *daemon) Close() error { return d.api.Close() }
@@ -125,16 +149,29 @@ func (d *daemon) Run(ctx context.Context, spec Spec) (Container, error) {
 	if err := d.pull(ctx, spec.Image); err != nil {
 		return Container{}, err
 	}
-	if _, err := d.api.ContainerRemove(ctx, spec.Name, client.ContainerRemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
-		return Container{}, fmt.Errorf("replace the container %s left by an earlier run: %w", spec.Name, err)
-	}
-
 	port, err := network.ParsePort(strconv.Itoa(spec.Port) + "/tcp")
 	if err != nil {
 		return Container{}, err
 	}
+
+	held, err := d.api.ContainerInspect(ctx, spec.Name, client.ContainerInspectOptions{})
+	switch {
+	case cerrdefs.IsNotFound(err):
+	case err != nil:
+		return Container{}, fmt.Errorf("look for the container %s: %w", spec.Name, err)
+	case held.Container.State != nil && held.Container.State.Running:
+		if !runs(held.Container, spec) {
+			return Container{}, fmt.Errorf("a container named %s is running and is not the %s this project asks for, so it may be in use: stop what started it, or remove it with `docker rm -f %s`", spec.Name, spec.Image, spec.Name)
+		}
+		return d.reachable(held.Container, spec.Name, port)
+	default:
+		if _, err := d.api.ContainerRemove(ctx, held.Container.ID, client.ContainerRemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
+			return Container{}, fmt.Errorf("replace the stopped container %s left by an earlier run: %w", spec.Name, err)
+		}
+	}
+
 	hostConfig := &container.HostConfig{
-		PortBindings: network.PortMap{port: {{HostIP: netip.AddrFrom4([4]byte{127, 0, 0, 1})}}},
+		PortBindings: network.PortMap{port: {{HostIP: d.publishOn}}},
 	}
 	if spec.Volume != "" {
 		hostConfig.Mounts = []mount.Mount{{
@@ -158,24 +195,48 @@ func (d *daemon) Run(ctx context.Context, spec Spec) (Container, error) {
 		return Container{}, fmt.Errorf("create the container %s: %w", spec.Name, err)
 	}
 	if _, err := d.api.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
-		_ = d.Stop(ctx, created.ID)
+		d.discard(ctx, created.ID)
 		return Container{}, fmt.Errorf("start the container %s: %w", spec.Name, err)
 	}
-
 	inspected, err := d.api.ContainerInspect(ctx, created.ID, client.ContainerInspectOptions{})
 	if err != nil {
-		_ = d.Stop(ctx, created.ID)
+		d.discard(ctx, created.ID)
 		return Container{}, fmt.Errorf("read the port docker published for %s: %w", spec.Name, err)
 	}
+	running, err := d.reachable(inspected.Container, spec.Name, port)
+	if err != nil {
+		d.discard(ctx, created.ID)
+	}
+	return running, err
+}
+
+func runs(held container.InspectResponse, spec Spec) bool {
+	if held.Config == nil || held.Config.Image != spec.Image {
+		return false
+	}
+	for key, value := range spec.Labels {
+		if held.Config.Labels[key] != value {
+			return false
+		}
+	}
+	return true
+}
+
+func (d *daemon) reachable(held container.InspectResponse, name string, port network.Port) (Container, error) {
 	var bindings []network.PortBinding
-	if settings := inspected.Container.NetworkSettings; settings != nil {
+	if settings := held.NetworkSettings; settings != nil {
 		bindings = settings.Ports[port]
 	}
 	if len(bindings) == 0 {
-		_ = d.Stop(ctx, created.ID)
-		return Container{}, fmt.Errorf("docker published no host port for %s", spec.Name)
+		return Container{}, fmt.Errorf("docker published no host port for %s", name)
 	}
-	return Container{ID: created.ID, Addr: net.JoinHostPort("127.0.0.1", bindings[0].HostPort)}, nil
+	return Container{ID: held.ID, Addr: net.JoinHostPort(d.reachedAt, bindings[0].HostPort)}, nil
+}
+
+func (d *daemon) discard(ctx context.Context, id string) {
+	detached, cancel := context.WithTimeout(context.WithoutCancel(ctx), StopsWithin)
+	defer cancel()
+	_ = d.Stop(detached, id)
 }
 
 func (d *daemon) pull(ctx context.Context, image string) error {
@@ -196,7 +257,11 @@ func (d *daemon) pull(ctx context.Context, image string) error {
 }
 
 func (d *daemon) Exec(ctx context.Context, id string, argv ...string) (string, error) {
-	created, err := d.api.ExecCreate(ctx, id, client.ExecCreateOptions{Cmd: argv, AttachStdout: true, AttachStderr: true})
+	return d.ExecInput(ctx, id, "", argv...)
+}
+
+func (d *daemon) ExecInput(ctx context.Context, id, input string, argv ...string) (string, error) {
+	created, err := d.api.ExecCreate(ctx, id, client.ExecCreateOptions{Cmd: argv, AttachStdin: input != "", AttachStdout: true, AttachStderr: true})
 	if err != nil {
 		return "", fmt.Errorf("run %s in the container: %w", argv[0], err)
 	}
@@ -205,6 +270,14 @@ func (d *daemon) Exec(ctx context.Context, id string, argv ...string) (string, e
 		return "", fmt.Errorf("run %s in the container: %w", argv[0], err)
 	}
 	defer attached.Close()
+	if input != "" {
+		if _, err := io.WriteString(attached.Conn, input); err != nil {
+			return "", fmt.Errorf("write what %s reads: %w", argv[0], err)
+		}
+		if err := attached.CloseWrite(); err != nil {
+			return "", fmt.Errorf("write what %s reads: %w", argv[0], err)
+		}
+	}
 
 	var stdout, stderr bytes.Buffer
 	if _, err := stdcopy.StdCopy(&stdout, &stderr, attached.Reader); err != nil {
@@ -221,7 +294,7 @@ func (d *daemon) Exec(ctx context.Context, id string, argv ...string) (string, e
 }
 
 func (d *daemon) Stop(ctx context.Context, id string) error {
-	timeout := stopTimeout
+	timeout := int(stopGrace / time.Second)
 	if _, err := d.api.ContainerStop(ctx, id, client.ContainerStopOptions{Timeout: &timeout}); err != nil && !cerrdefs.IsNotFound(err) {
 		return fmt.Errorf("stop the container %s: %w", id, err)
 	}
@@ -231,7 +304,7 @@ func (d *daemon) Stop(ctx context.Context, id string) error {
 	return nil
 }
 
-func (d *daemon) RemoveVolumes(ctx context.Context, labels map[string]string) error {
+func (d *daemon) Wipe(ctx context.Context, labels map[string]string) error {
 	filters := make(client.Filters)
 	for key, value := range labels {
 		filters.Add("label", key+"="+value)

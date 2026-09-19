@@ -26,7 +26,7 @@ func TestLiveDeclaredDatabasesComeUpAndKeepTheirDataAcrossRuns(t *testing.T) {
 		t.Fatalf("Open = %v", err)
 	}
 	t.Cleanup(func() {
-		_ = engine.RemoveVolumes(ctx, docker.ProjectLabels(project))
+		_ = engine.Wipe(ctx, docker.ProjectLabels(project))
 		_ = engine.Close()
 	})
 
