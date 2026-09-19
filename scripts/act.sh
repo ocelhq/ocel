@@ -3,8 +3,6 @@ set -euo pipefail
 
 IMAGE="${OCEL_ACT_IMAGE:-ghcr.io/catthehacker/ubuntu:act-latest}"
 DOCKER_SOCK="${OCEL_ACT_DOCKER_SOCK:-/var/run/docker.sock}"
-COMPOSE_PROJECT=ocel-act
-DEV_LANE_PORTS=(5432 5433 3000 9000 9001 8000)
 ALL_WORKFLOWS=(build go journey provider-aws provider-vps)
 
 usage() {
@@ -23,9 +21,8 @@ for CI.
 
   workflows: build go journey provider-aws provider-vps    (default: all five)
 
-journey and provider-aws drive the host docker daemon. journey needs the dev
-compose stack's ports free — stop it first (docker compose stop); its own stack
-runs under the ocel-act compose project and is torn down afterwards.
+journey and provider-aws drive the host docker daemon; the journey dev lane
+runs its postgres and bucket there, on ports docker picks.
 EOF
     exit 2
 }
@@ -118,17 +115,6 @@ run_journey_vps() {
     return $status
 }
 
-dev_lane_ports_free() {
-    local port busy=()
-    for port in "${DEV_LANE_PORTS[@]}"; do
-        if ss -ltn "sport = :$port" 2>/dev/null | grep -q LISTEN; then
-            busy+=("$port")
-        fi
-    done
-    [ ${#busy[@]} -eq 0 ] ||
-        die "the journey dev lane needs ports ${busy[*]} — stop whatever holds them (the dev stack: docker compose stop)"
-}
-
 case "${1:-}" in -h | --help) usage ;; esac
 
 selected=("${@:-}")
@@ -180,8 +166,7 @@ for wf in "${selected[@]}"; do
         ;;
     esac
     if [ "$wf" = journey ]; then
-        dev_lane_ports_free
-        wf_args+=(--env "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT" --env "OCEL_JOURNEY_LANES=dev aws")
+        wf_args+=(--env "OCEL_JOURNEY_LANES=dev aws")
     fi
     if ! "$ACT" workflow_dispatch \
         -W ".github/workflows/$wf.yml" \
@@ -193,7 +178,6 @@ for wf in "${selected[@]}"; do
         failed+=("$wf")
     fi
     if [ "$wf" = journey ]; then
-        docker compose -p "$COMPOSE_PROJECT" down -v --remove-orphans >/dev/null 2>&1 || true
         run_journey_vps || failed+=("journey-vps")
     fi
 done
