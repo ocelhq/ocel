@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"maps"
 	"slices"
 	"strconv"
@@ -28,10 +29,44 @@ func KeptPath(class providerkit.Class, name string) string {
 }
 
 func keptCommand(path string) string {
-	return "if [ -s " + quoted(path) + " ]; then cat " + quoted(path) + "; fi"
+	return "if [ -e " + quoted(stateRoot) + " ] && [ ! -x " + quoted(stateRoot) + " ]; then echo " + quoted(stateRoot+": Permission denied") + " >&2; exit 1; fi\n" +
+		"if [ -s " + quoted(path) + " ]; then cat " + quoted(path) + "; fi"
 }
 
-func keepCommand(path string) string {
+func (h *Host) unhand(ctx context.Context, held handoff) error {
+	taking, stop := context.WithTimeout(context.WithoutCancel(ctx), forgetWindow)
+	defer stop()
+	if _, err := h.owning(taking, "take back "+held.path, "rm -f "+quoted(held.path), nil); err != nil {
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"%s is left standing on %s and holds a resource's credential in plaintext, which no deploy after this one will take back: %v",
+			held.path, h.named(), err)
+	}
+	return nil
+}
+
+func handedBack(class providerkit.Class, path string) string {
+	return "if [ \"$(id -u)\" -eq 0 ]; then chown -R --reference=" + quoted(StateDir(class)) + " " + quoted(path) + "; fi"
+}
+
+func (h *Host) owning(ctx context.Context, what, command string, stdin []byte) (string, error) {
+	fed := func() io.Reader {
+		if stdin == nil {
+			return nil
+		}
+		return bytes.NewReader(stdin)
+	}
+	said, refused, err := h.spoke(ctx, what, command, fed(), "")
+	if err == nil || !strings.Contains(strings.ToLower(refused), "permission denied") {
+		return said, err
+	}
+	elevation, unelevated := h.elevate(ctx)
+	if unelevated != nil || elevation == "" {
+		return said, err
+	}
+	return h.ran(ctx, what, command, fed(), elevation)
+}
+
+func keepCommand(class providerkit.Class, path string) string {
 	dir := path[:strings.LastIndex(path, "/")]
 	return "set -e\n" +
 		"umask 077\n" +
@@ -40,11 +75,12 @@ func keepCommand(path string) string {
 		"cat >\"$writing\"\n" +
 		"ln \"$writing\" " + quoted(path) + " 2>/dev/null || true\n" +
 		"rm -f \"$writing\"\n" +
+		handedBack(class, dir) + "\n" +
 		"cat " + quoted(path)
 }
 
 func (h *Host) Kept(ctx context.Context, class providerkit.Class, name string) ([]byte, error) {
-	said, err := h.ran(ctx, "read what is kept for "+name, keptCommand(KeptPath(class, name)), nil, "")
+	said, err := h.owning(ctx, "read what is kept for "+name, keptCommand(KeptPath(class, name)), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +89,7 @@ func (h *Host) Kept(ctx context.Context, class providerkit.Class, name string) (
 
 func (h *Host) KeepOnce(ctx context.Context, class providerkit.Class, name string, candidate []byte) ([]byte, error) {
 	fed := base64.StdEncoding.EncodeToString(candidate) + "\n"
-	said, err := h.ran(ctx, "keep what "+name+" is held to", keepCommand(KeptPath(class, name)), strings.NewReader(fed), "")
+	said, err := h.owning(ctx, "keep what "+name+" is held to", keepCommand(class, KeptPath(class, name)), []byte(fed))
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +275,7 @@ func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, h.forget(ctx, held)) }()
+	defer func() { err = errors.Join(err, h.unhand(ctx, held)) }()
 	if _, err := h.ran(ctx, "move "+spec.Resource+" from version "+from+" to "+spec.Volume.Generation,
 		swapCommand(spec, from, digest, held.path, strings.TrimSpace(dumped)), nil, elevation); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
@@ -260,8 +296,8 @@ func (h *Host) handResource(ctx context.Context, spec ResourceContainer, secret 
 		return handoff{}, err
 	}
 	held := handoff{path: EnvFile(spec.Class, spec.Name)}
-	_, err = h.ran(ctx, "write what "+spec.Resource+" is handed",
-		"install -m 0600 /dev/stdin "+quoted(held.path), bytes.NewReader(rendered), "")
+	_, err = h.owning(ctx, "write what "+spec.Resource+" is handed",
+		"install -m 0600 /dev/stdin "+quoted(held.path), rendered)
 	return held, err
 }
 
@@ -323,7 +359,7 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, h.forget(ctx, held)) }()
+	defer func() { err = errors.Join(err, h.unhand(ctx, held)) }()
 	_, refused, stood := h.spoke(ctx, "stand "+spec.Resource+" up as "+spec.Name,
 		words(resourceRun(spec, digest, held.path))+" >/dev/null", nil, elevation)
 	if stood != nil && !strings.Contains(refused, nameTaken) {
