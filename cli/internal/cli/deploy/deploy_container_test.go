@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"maps"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,7 +24,7 @@ func registryProject(t *testing.T, registry string) (cmddeps.Deps, string, func(
 	clitest.StubBuild(&deps, nil)
 	clitest.StubAppImages(&deps, "api")
 	built := false
-	deps.BuildAppImages = func(context.Context, *projectconfig.Config, string, io.Writer) (map[string]string, error) {
+	deps.BuildAppImages = func(context.Context, *projectconfig.Config, map[string]string, io.Writer) (map[string]string, error) {
 		built = true
 		return map[string]string{"api": clitest.FixtureImage("api")}, nil
 	}
@@ -244,13 +245,13 @@ export default {
 func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *testing.T) {
 	deps, root, _ := registryProject(t, "")
 	t.Setenv(clitest.FakeContainerArchEnvVar, "arm64")
-	var required, built string
-	deps.RequireImageBuilder = func(_ context.Context, _ runui.Reporter, _ *projectconfig.Config, arch string) error {
-		required = arch
+	var required, built map[string]string
+	deps.RequireImageBuilder = func(_ context.Context, _ runui.Reporter, _ *projectconfig.Config, archs map[string]string) error {
+		required = archs
 		return nil
 	}
-	deps.BuildAppImages = func(_ context.Context, _ *projectconfig.Config, arch string, _ io.Writer) (map[string]string, error) {
-		built = arch
+	deps.BuildAppImages = func(_ context.Context, _ *projectconfig.Config, archs map[string]string, _ io.Writer) (map[string]string, error) {
+		built = archs
 		return map[string]string{"api": clitest.FixtureImage("api")}, nil
 	}
 
@@ -258,10 +259,11 @@ func TestTheImageIsBuiltForTheArchitectureTheProviderSaysItsContainersRunOn(t *t
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runDeploy() err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	if required != "arm64" {
-		t.Errorf("the builder was checked for %q, want arm64: a daemon that cannot build for the target is refused before anything is provisioned", required)
+	want := map[string]string{"api": "arm64"}
+	if !maps.Equal(required, want) {
+		t.Errorf("the builder was checked for %v, want %v: a daemon that cannot build for the target is refused before anything is provisioned", required, want)
 	}
-	if built != "arm64" {
-		t.Errorf("the image was built for %q, want the arm64 the provider names: left to this machine's own architecture, the target may not run it", built)
+	if !maps.Equal(built, want) {
+		t.Errorf("the image was built for %v, want %v, what the provider names for the app: left to this machine's own architecture, the target may not run it", built, want)
 	}
 }

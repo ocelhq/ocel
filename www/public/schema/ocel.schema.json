@@ -27,7 +27,7 @@
         "additionalProperties": false,
         "properties": {
           "arch": {
-            "description": "The processor architecture a serverless app's functions are built for. Left off, the provider's default architecture.",
+            "description": "The processor architecture an app's functions or container image are built for. Left off, what the provider runs the app on.",
             "enum": [
               "x86_64",
               "arm64"

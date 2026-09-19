@@ -74,6 +74,7 @@ type AppPlan struct {
 
 	Image           string
 	HealthCheckPath string
+	Arch            string
 
 	Values AppValues
 

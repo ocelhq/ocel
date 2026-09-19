@@ -34,7 +34,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	}
 	resp.Identity = IdentityProto(provider.Vendor(), identity)
 	if wrapper, wraps := provider.(ContainerRuntimer); wraps {
-		resp.ContainerArch, err = wrapper.ContainerArch(ctx)
+		resp.ContainerArchs, err = containerArchs(ctx, wrapper, req.GetContainers())
 		if err != nil {
 			return nil, RefusalError(err)
 		}
@@ -87,6 +87,21 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		resp.InfraTier, resp.InfrastructurePresent = tierOf(sibling.Class), true
 	}
 	return resp, nil
+}
+
+func containerArchs(ctx context.Context, wrapper ContainerRuntimer, containers []*contractv1.ContainerApp) (map[string]string, error) {
+	if len(containers) == 0 {
+		return nil, nil
+	}
+	archs := make(map[string]string, len(containers))
+	for _, container := range containers {
+		runs, err := wrapper.ContainerArch(ctx, container.GetApp(), container.GetArch())
+		if err != nil {
+			return nil, err
+		}
+		archs[container.GetApp()] = runs
+	}
+	return archs, nil
 }
 
 func bakedComputes(provider Provider) []string {

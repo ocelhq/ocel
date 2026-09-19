@@ -26,10 +26,10 @@ func preflightPreview(ctx context.Context, ui *runui.Session, runner *provider.R
 }
 
 type standing struct {
-	knownSlugs    []string
-	compute       string
-	containerArch string
-	urls          map[string]string
+	knownSlugs     []string
+	compute        string
+	containerArchs map[string]string
+	urls           map[string]string
 }
 
 func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) (standing, error) {
@@ -44,7 +44,7 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Sessio
 	if err := appregistry.RequireSecret(cfg); err != nil {
 		return standing{}, err
 	}
-	if err := deps.RequireImageBuilder(ctx, ui, cfg, resp.GetContainerArch()); err != nil {
+	if err := deps.RequireImageBuilder(ctx, ui, cfg, resp.GetContainerArchs()); err != nil {
 		return standing{}, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), ui.Warning); err != nil {
@@ -58,9 +58,9 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Sessio
 		return standing{}, err
 	}
 	return standing{
-		knownSlugs:    resp.GetKnownSlugs(),
-		compute:       compute,
-		containerArch: resp.GetContainerArch(),
+		knownSlugs:     resp.GetKnownSlugs(),
+		compute:        compute,
+		containerArchs: resp.GetContainerArchs(),
 		urls: appurl.Preview(cfg, func(app string) string {
 			return site.Host(pointer, app)
 		}),
@@ -80,7 +80,7 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, 
 	if err := appregistry.RequireSecret(cfg); err != nil {
 		return standing{}, err
 	}
-	if err := deps.RequireImageBuilder(ctx, ui, cfg, resp.GetContainerArch()); err != nil {
+	if err := deps.RequireImageBuilder(ctx, ui, cfg, resp.GetContainerArchs()); err != nil {
 		return standing{}, err
 	}
 	if err := refuseClaimedDomains(resp.GetDomainClaims(), filepath.Base(cfg.Path), ui.Warning); err != nil {
@@ -89,7 +89,7 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, 
 	if err := settleBootstrap(ctx, ui, runner, cfg, resp.GetBootstrap(), environmentv1.Tier_TIER_PRODUCTION, out, in); err != nil {
 		return standing{}, err
 	}
-	return standing{knownSlugs: resp.GetKnownSlugs(), compute: compute, containerArch: resp.GetContainerArch(), urls: appurl.Production(cfg)}, nil
+	return standing{knownSlugs: resp.GetKnownSlugs(), compute: compute, containerArchs: resp.GetContainerArchs(), urls: appurl.Production(cfg)}, nil
 }
 
 func settleBootstrap(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {

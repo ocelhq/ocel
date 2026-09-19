@@ -3,6 +3,7 @@ package host
 import (
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -72,6 +73,18 @@ func liveAgent(arch string) []byte {
 		panic(err)
 	}
 	return read
+}
+
+func ContainerArch(app, declared, runs string) (string, error) {
+	if declared == "" {
+		return runs, nil
+	}
+	if asked, _ := providerkit.GoArch(declared); asked != runs {
+		return "", providerkit.Refuse(providerkit.CodeInvalid,
+			"app %s declares arch %q, and this host runs %s: drop the arch and the image is built for the host, or deploy %s to a host that runs %s",
+			app, declared, runs, app, declared)
+	}
+	return runs, nil
 }
 
 func ContainerRuntime(arch string) ([]byte, error) {

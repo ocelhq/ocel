@@ -38,12 +38,17 @@ func TestTheArchitectureContainersAreBuiltForIsOneTheProviderCarriesARuntimeFor(
 	t.Parallel()
 
 	p := &Provider{}
-	runs, err := p.ContainerArch(context.Background())
-	if err != nil {
-		t.Fatalf("ContainerArch() = %v", err)
+	for declared, want := range map[string]string{"": "amd64", providerkit.ArchX8664: "amd64", providerkit.ArchARM64: "arm64"} {
+		runs, err := p.ContainerArch(context.Background(), "web", declared)
+		if err != nil || runs != want {
+			t.Fatalf("ContainerArch(%q) = %q, %v, want %s: the image is built for the architecture the app's task is stood up on", declared, runs, err, want)
+		}
+		held, err := p.ContainerRuntime(context.Background(), runs)
+		if err != nil || len(held) == 0 {
+			t.Fatalf("ContainerRuntime(%s) = %d bytes, %v, want the runtime every container boots through", runs, len(held), err)
+		}
 	}
-	held, err := p.ContainerRuntime(context.Background(), runs)
-	if err != nil || len(held) == 0 {
-		t.Fatalf("ContainerRuntime(%s) = %d bytes, %v, want the runtime every container boots through: the image is built for whatever ContainerArch names", runs, len(held), err)
+	if _, err := p.ContainerArch(context.Background(), "web", "riscv64"); err == nil {
+		t.Error("ContainerArch(riscv64) named an architecture, and no Fargate task runs on it")
 	}
 }

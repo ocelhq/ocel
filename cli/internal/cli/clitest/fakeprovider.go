@@ -789,13 +789,25 @@ func (s *deployFakeProviderServer) RemoveBootstrap(ctx context.Context, req *con
 	})
 }
 
+func fakeContainerArchs(containers []*contractv1.ContainerApp) map[string]string {
+	runs := os.Getenv(FakeContainerArchEnvVar)
+	if runs == "" || len(containers) == 0 {
+		return nil
+	}
+	archs := make(map[string]string, len(containers))
+	for _, container := range containers {
+		archs[container.GetApp()] = runs
+	}
+	return archs
+}
+
 func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv1.PreflightRequest) (*contractv1.PreflightResponse, error) {
 	s.recordPreflight(req.GetSlug(), req.GetDomains(), req.GetRequiredTier())
 	journalPreflight(req)
 	resp := &contractv1.PreflightResponse{
 		Computes:              fakeComputes(),
 		BakedComputes:         fakeBakedComputes(),
-		ContainerArch:         os.Getenv(FakeContainerArchEnvVar),
+		ContainerArchs:        fakeContainerArchs(req.GetContainers()),
 		InfraTier:             parseInfraTier(os.Getenv(FakeInfraTierEnvVar)),
 		InfrastructurePresent: os.Getenv(FakeInfraPresentEnvVar) != "0",
 		Identity: &contractv1.Identity{

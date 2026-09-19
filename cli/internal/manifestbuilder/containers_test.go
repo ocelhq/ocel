@@ -55,6 +55,21 @@ func TestAContainerCarriesTheHealthPathTheAppAsksFor(t *testing.T) {
 	}
 }
 
+func TestAContainerCarriesTheArchitectureItsAppDeclares(t *testing.T) {
+	t.Parallel()
+
+	manifest, err := Build("proj-1", nil, []App{
+		{Name: "api", Compute: "container", Image: "ocel/api@" + fakeDigest, Runtime: Runtime{Arch: "arm64"}},
+	}, "container", nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	if got := containerOf(t, manifest, "api").GetArch(); got != "arm64" {
+		t.Errorf("arch = %q, want arm64: a container app names no runtime, so the container is the only place its architecture rides", got)
+	}
+}
+
 func TestAContainerThatAsksForNoHealthPathIsCarriedWithTheDefaultOne(t *testing.T) {
 	t.Parallel()
 

@@ -112,16 +112,24 @@ func (d daemon) builder(ctx context.Context) (*client.Client, error) {
 	)
 }
 
-func (d daemon) usable(ctx context.Context, builder *client.Client, arch string) error {
+func (d daemon) usable(ctx context.Context, builder *client.Client, arches ...string) error {
 	workers, err := builder.ListWorkers(ctx)
 	if err != nil {
 		return d.noBuilder(err)
 	}
 	exporting, err := d.addressable(workers)
-	if err != nil || arch == "" {
+	if err != nil {
 		return err
 	}
-	return d.buildsFor(exporting, arch)
+	for _, arch := range arches {
+		if arch == "" {
+			continue
+		}
+		if err := d.buildsFor(exporting, arch); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (d daemon) buildsFor(workers []*client.WorkerInfo, arch string) error {
@@ -174,7 +182,7 @@ func (d daemon) noBuilder(err error) error {
 	return fmt.Errorf("the daemon at %s never named a builder to run the build on: start docker, or set %s to a daemon that is running\n    %w", d.Address, providerkit.DockerHostEnv, err)
 }
 
-func Reachable(ctx context.Context, arch string) error {
+func Reachable(ctx context.Context, arches ...string) error {
 	d, err := openDaemon()
 	if err != nil {
 		return err
@@ -186,5 +194,5 @@ func Reachable(ctx context.Context, arch string) error {
 		return d.unreachable(err)
 	}
 	defer func() { _ = builder.Close() }()
-	return d.usable(ctx, builder, arch)
+	return d.usable(ctx, builder, arches...)
 }

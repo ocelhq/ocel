@@ -186,6 +186,8 @@ message ManifestContainer {
   string image = 2 [(buf.validate.field).string.pattern = "^([^/@:[:space:]]+(:[0-9]+)?/)?[^/@:[:space:]]+(/[^/@:[:space:]]+)*@sha256:[0-9a-f]{64}$"];
 
   string health_check_path = 3 [(buf.validate.field).string.pattern = "^/[^#?[:space:][:cntrl:]]*$"];
+
+  string arch = 4 [(buf.validate.field).string = {in: ["x86_64", "arm64"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 }
 
 message ManifestUsage {
@@ -472,6 +474,14 @@ message PreflightRequest {
   bool standing = 7;
 
   repeated string standing_domains = 8;
+
+  repeated ContainerApp containers = 9;
+}
+
+message ContainerApp {
+  string app = 1 [(buf.validate.field).string.min_len = 1];
+
+  string arch = 2 [(buf.validate.field).string = {in: ["x86_64", "arm64"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
 }
 
 message PreflightResponse {
@@ -497,7 +507,7 @@ message PreflightResponse {
 
   repeated string baked_computes = 11;
 
-  string container_arch = 12 [(buf.validate.field).string = {in: ["amd64", "arm64"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
+  map<string, string> container_archs = 12 [(buf.validate.field).map.values.string = {in: ["amd64", "arm64"]}];
 }
 
 message ResolveImageRegistryRequest {

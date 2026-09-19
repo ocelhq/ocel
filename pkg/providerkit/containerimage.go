@@ -27,7 +27,7 @@ const (
 const runtimeTagHexLen = 12
 
 type ContainerRuntimer interface {
-	ContainerArch(ctx context.Context) (string, error)
+	ContainerArch(ctx context.Context, app, declared string) (string, error)
 	ContainerRuntime(ctx context.Context, arch string) ([]byte, error)
 }
 
@@ -99,7 +99,8 @@ func RuntimeTag(digest string, runtime []byte) string {
 
 type Wrapped func(ctx context.Context) (v1.Image, func(), error)
 
-func (r *deployRun) wrappedPush(ctx context.Context, app, ref string, wrapper ContainerRuntimer) (ImagePush, error) {
+func (r *deployRun) wrappedPush(ctx context.Context, entry AppEntry, wrapper ContainerRuntimer) (ImagePush, error) {
+	app, ref := entry.App, entry.Image
 	repository, digest, pinned := strings.Cut(ref, "@")
 	if !pinned || repository == "" || digest == "" {
 		return ImagePush{}, Refuse(CodeInvalid,
@@ -109,7 +110,7 @@ func (r *deployRun) wrappedPush(ctx context.Context, app, ref string, wrapper Co
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("read the architecture %s's image is built for: %w", app, err)
 	}
-	runs, err := wrapper.ContainerArch(ctx)
+	runs, err := wrapper.ContainerArch(ctx, app, entry.Arch)
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("read the architecture %s's container runs on: %w", app, err)
 	}
