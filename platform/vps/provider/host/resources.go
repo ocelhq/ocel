@@ -89,6 +89,7 @@ type ResourceContainer struct {
 	Image        string
 	Args         []string
 	Env          map[string]string
+	Labels       map[string]string
 	Capabilities []string
 	Memory       string
 	CPUs         string
@@ -113,11 +114,15 @@ func (r ResourceContainer) digest() (string, error) {
 }
 
 func (r ResourceContainer) labels() []string {
-	return []string{
+	argv := []string{
 		"--label", LabelClass + "=" + string(r.Class),
 		"--label", LabelProject + "=" + naming.Sanitize(r.Project),
 		"--label", LabelResource + "=" + r.Resource,
 	}
+	for _, key := range slices.Sorted(maps.Keys(r.Labels)) {
+		argv = append(argv, "--label", key+"="+r.Labels[key])
+	}
+	return argv
 }
 
 func volumeCreating(spec ResourceContainer) string {

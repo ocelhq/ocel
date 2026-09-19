@@ -17,6 +17,10 @@
       "types": "./dist/aws/index.d.ts",
       "import": "./dist/aws/index.js"
     },
+    "./vps": {
+      "types": "./dist/vps/index.d.ts",
+      "import": "./dist/vps/index.js"
+    },
     "./run": {
       "types": "./dist/run.d.ts",
       "import": "./dist/run.js"
