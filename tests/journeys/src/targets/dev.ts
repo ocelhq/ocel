@@ -55,7 +55,7 @@ async function freePort(): Promise<number> {
 async function waitForHealth(url: string, served: ServedApp): Promise<void> {
   const deadline = Date.now() + HEALTH_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if (served.child.exitCode !== null || served.child.signalCode !== null) {
+    if (exited(served.child)) {
       throw new Error(`ocel dev exited before ${url} answered:\n${redact(served.output())}`);
     }
     try {
@@ -97,6 +97,10 @@ async function answering(port: number): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export function startedResources(said: string): boolean {
+  return /^\S+ "[^"]+" → /m.test(said);
 }
 
 export function devProject(dir: string): string {
@@ -188,7 +192,10 @@ export class DevTarget implements Target {
       urls.set(app, `http://127.0.0.1:${one.port}`);
     }
     await this.stateStaysHome(cell, dir);
-    if (migrates(cell.fixture.checks)) {
+    if (
+      migrates(cell.fixture.checks) ||
+      served.apps.some((one) => startedResources(one.output()))
+    ) {
       await this.stackIsTraceable(dir);
     }
 
