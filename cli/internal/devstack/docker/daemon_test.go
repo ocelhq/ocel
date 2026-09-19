@@ -21,6 +21,7 @@ type fakeDaemon struct {
 	calls   []string
 	created []map[string]any
 	onStart func()
+	racedBy map[string]any
 }
 
 var versionPrefix = regexp.MustCompile(`^/v[0-9.]+`)
@@ -48,6 +49,13 @@ func (f *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		f.mu.Lock()
+		if f.racedBy != nil {
+			f.held[r.URL.Query().Get("name")] = f.racedBy
+			f.mu.Unlock()
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{"message": "Conflict. The container name is already in use"})
+			return
+		}
 		f.created = append(f.created, body)
 		config := map[string]any{"Image": body["Image"], "Labels": body["Labels"]}
 		f.held["created"] = inspected("created", true, config)
@@ -208,5 +216,18 @@ func TestAnInterruptedStartStillRemovesTheContainerItCreated(t *testing.T) {
 	}
 	if !daemon.saw("DELETE /containers/created") {
 		t.Fatalf("calls = %v, want the created container removed after the interrupt", daemon.calls)
+	}
+}
+
+func TestRunAdoptsTheContainerAnotherProcessCreatedFirst(t *testing.T) {
+	daemon := &fakeDaemon{racedBy: inspected("theirs", true, map[string]any{"Image": spec.Image, "Labels": spec.Labels})}
+	engine := openFake(t, daemon)
+
+	running, err := engine.Run(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Run = %v", err)
+	}
+	if running.ID != "theirs" {
+		t.Fatalf("Run = %+v, want the container that won the name", running)
 	}
 }
