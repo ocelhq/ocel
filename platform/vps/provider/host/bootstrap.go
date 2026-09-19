@@ -195,6 +195,9 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err := b.write(ctx, served, ProxyItems(standing.Arch), report); err != nil {
 		return err
 	}
+	if err := b.write(ctx, served, BackupItems(), report); err != nil {
+		return err
+	}
 	stamp.State, stamp.Seal = StateComplete, minted.Seal
 	return b.host.Stamp(ctx, req.Class, stamp)
 }
