@@ -29,6 +29,8 @@ const (
 	stopGrace   = 3 * time.Second
 
 	StopsWithin = stopGrace + 3*time.Second
+
+	winnerStartsWithin = 10 * time.Second
 )
 
 type Spec struct {
@@ -191,6 +193,9 @@ func (d *daemon) Run(ctx context.Context, spec Spec) (Container, error) {
 		},
 		HostConfig: hostConfig,
 	})
+	if cerrdefs.IsConflict(err) {
+		return d.adoptWinner(ctx, spec, port)
+	}
 	if err != nil {
 		return Container{}, fmt.Errorf("create the container %s: %w", spec.Name, err)
 	}
@@ -208,6 +213,25 @@ func (d *daemon) Run(ctx context.Context, spec Spec) (Container, error) {
 		d.discard(ctx, created.ID)
 	}
 	return running, err
+}
+
+func (d *daemon) adoptWinner(ctx context.Context, spec Spec, port network.Port) (Container, error) {
+	var winner container.InspectResponse
+	err := WaitReady(ctx, winnerStartsWithin, func(ctx context.Context) error {
+		held, err := d.api.ContainerInspect(ctx, spec.Name, client.ContainerInspectOptions{})
+		if err != nil {
+			return err
+		}
+		if held.Container.State == nil || !held.Container.State.Running || !runs(held.Container, spec) {
+			return fmt.Errorf("the container %s another process created is not running %s", spec.Name, spec.Image)
+		}
+		winner = held.Container
+		return nil
+	})
+	if err != nil {
+		return Container{}, err
+	}
+	return d.reachable(winner, spec.Name, port)
 }
 
 func runs(held container.InspectResponse, spec Spec) bool {
