@@ -74,8 +74,10 @@ func proxyStanding(t *testing.T) standingProxy {
 	t.Helper()
 
 	engineOrSkip(t)
-	dir := seenByTheEngine(t)
 	name, network := probeName(t), probeName(t)+"-net"
+	t.Cleanup(func() { exec.Command(dockerEngine, "network", "rm", network).Run() })
+	t.Cleanup(func() { taken(t, name) })
+	dir := seenByTheEngine(t)
 
 	arch, err := Architecture(runtime.GOARCH)
 	if err != nil {
@@ -97,11 +99,11 @@ func proxyStanding(t *testing.T) standingProxy {
 			quoted(ProxyContainer), quoted(name), quoted(ProxyNetwork), quoted(network), `"`+ProxyNetwork+`"`, `"`+network+`"`).Replace(written)
 	}}
 
+	taken(t, name)
+	_ = exec.Command(dockerEngine, "network", "rm", network).Run()
 	if out, err := exec.Command(dockerEngine, "network", "create", network).CombinedOutput(); err != nil {
 		t.Fatalf("create the network every deploy resolves across: %v\n%s", err, out)
 	}
-	t.Cleanup(func() { exec.Command(dockerEngine, "network", "rm", network).Run() })
-	t.Cleanup(func() { taken(t, name) })
 
 	if out, err := exec.Command("/bin/sh", "-c", stood.here(containerCommand())).CombinedOutput(); err != nil {
 		t.Fatalf("the write that stands the proxy up = %v\n%s", err, out)
