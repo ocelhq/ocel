@@ -65,6 +65,8 @@ const unreleasedVersion = "dev"
 func lifecycle(t *testing.T) journey {
 	t.Helper()
 	vm := live(t)
+	vm.purges(t)
+	t.Cleanup(func() { vm.purges(t) })
 
 	dir := t.TempDir()
 	run := journey{
@@ -945,7 +947,6 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	run.declares(t, "one")
 	run.resolving(t, lifecycleHostname, edge.ProbeHostname("*."+lifecyclePreviewBase),
 		lifecyclePreview+"."+lifecyclePreviewBase, "unclaimed."+lifecyclePreviewBase)
-	run.vm.purges(t)
 
 	class := providerkit.ClassProduction
 	fresh := run.must(t, "doctor")
