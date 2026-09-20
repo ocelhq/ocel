@@ -259,6 +259,37 @@ def test_an_object_opened_for_writing_lands_when_it_is_closed(uploads):
     assert uploads.store.objects["a.txt"].content_type == "text/plain"
 
 
+def test_an_object_opened_for_writing_lands_nothing_when_the_body_raises(uploads):
+    store = bucket("uploads")
+    store._single_ceiling = 8
+    store._part_size = 4
+
+    with pytest.raises(RuntimeError, match="the caller gave up"):
+        with store.open("a.txt", "wb") as handle:
+            handle.write(b"0123456789abcde")
+            raise RuntimeError("the caller gave up")
+
+    assert "a.txt" not in uploads.store.objects
+    assert uploads.store.uploads == {}
+
+
+@pytest.mark.asyncio
+async def test_an_object_opened_for_writing_asynchronously_lands_nothing_when_the_body_raises(
+    uploads,
+):
+    store = bucket("uploads")
+    store._single_ceiling = 8
+    store._part_size = 4
+
+    with pytest.raises(RuntimeError, match="the caller gave up"):
+        async with store.open_async("a.txt", "wb") as handle:
+            await handle.write(b"0123456789abcde")
+            raise RuntimeError("the caller gave up")
+
+    assert "a.txt" not in uploads.store.objects
+    assert uploads.store.uploads == {}
+
+
 def test_a_body_too_big_for_one_request_goes_up_in_parts(uploads):
     store = bucket("uploads")
     store._single_ceiling = 8
