@@ -1,12 +1,12 @@
+use crate::env::live_file;
 use crate::proto::common::bindings::v1::binding::Properties;
 use crate::proto::common::bindings::v1::{Binding, PostgresProperties};
 use crate::Error;
 
 pub(crate) fn postgres(name: &str) -> Result<PostgresProperties, Error> {
     let key = format!("OCEL_RESOURCE_POSTGRES_{name}");
-    let raw = match std::env::var(&key) {
-        Ok(raw) if !raw.is_empty() => raw,
-        _ => return Err(Error::MissingBinding { key }),
+    let Some(raw) = delivered(&key) else {
+        return Err(Error::MissingBinding { key });
     };
 
     let delivered: Binding = serde_json::from_str(&raw).map_err(|_| Error::Binding {
@@ -32,6 +32,13 @@ fn carried(properties: &Option<Properties>) -> String {
         None => "UNSPECIFIED",
     }
     .to_string()
+}
+
+fn delivered(key: &str) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .or_else(|| live_file(key))
+        .filter(|raw| !raw.is_empty())
 }
 
 pub(crate) fn encoded(value: &str) -> String {
