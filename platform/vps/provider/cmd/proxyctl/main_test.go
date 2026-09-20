@@ -307,8 +307,10 @@ func TestTheDrainReturnsTheMomentTheRetiredUpstreamReportsNothingInFlight(t *tes
 	if asked := held.asked(); len(asked) != 3 {
 		t.Errorf("the drain asked %d times, want it to stop at the poll that read zero: %v", len(asked), asked)
 	}
-	if out.String() != "" {
-		t.Errorf("a drain that completed printed %q, and the expiry line is what an operator is warned by", out.String())
+	printed := strings.TrimSpace(out.String())
+	if printed != caddyadmin.Drained+" old:8080" {
+		t.Errorf("the completed drain printed %q, want %q: the moment the count read zero is only observable here, and a poller outside the box watching for it races the config write that follows",
+			printed, caddyadmin.Drained+" old:8080")
 	}
 }
 

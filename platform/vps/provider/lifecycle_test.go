@@ -404,7 +404,6 @@ type crossing struct {
 	samples  []string
 	together bool
 	inflight bool
-	drained  int
 	stopped  int
 }
 
@@ -415,7 +414,7 @@ func (j journey) underLoad(t *testing.T, hostname, retiring string, flipping fun
 	address := retiring + ":" + providerkit.InjectedPortText
 	stop := make(chan struct{})
 	var mu sync.Mutex
-	watched := crossing{drained: -1, stopped: -1}
+	watched := crossing{stopped: -1}
 	var group sync.WaitGroup
 
 	const holders = 4
@@ -456,9 +455,6 @@ func (j journey) underLoad(t *testing.T, hostname, retiring string, flipping fun
 				}
 				watched.together = watched.together || len(held) > 1
 				watched.inflight = watched.inflight || one.NumRequests > 0
-				if one.NumRequests == 0 && watched.drained < 0 {
-					watched.drained = at
-				}
 			}
 			if watched.stopped < 0 && strings.TrimSpace(state) == "exited" {
 				watched.stopped = at
@@ -481,7 +477,7 @@ func settled(mu *sync.Mutex, watched *crossing, within time.Duration) {
 	deadline := time.Now().Add(within)
 	for {
 		mu.Lock()
-		read := watched.drained >= 0 && watched.stopped >= 0
+		read := watched.stopped >= 0
 		mu.Unlock()
 		if read || time.Now().After(deadline) {
 			return
@@ -1152,16 +1148,8 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 		t.Errorf("%s stood beside the release that replaced it in the proxy's pool: %v, and was serving a request there: %v — want both, or a request that answered across the flip answered before it and proves nothing:\n%v",
 			retired, watched.together, watched.inflight, watched.samples)
 	}
-	if watched.drained < 0 {
-		t.Errorf("%s's in-flight count was never read as zero while it was retired, and the drain that waits for it is the whole of why the old container is stopped second:\n%v",
-			retired, watched.samples)
-	}
 	if watched.stopped < 0 {
-		t.Errorf("%s was never read as stopped while the flip ran, so nothing here says the drain finished before it went:\n%v", retired, watched.samples)
-	}
-	if watched.drained >= 0 && watched.stopped >= 0 && watched.drained > watched.stopped {
-		t.Errorf("%s was stopped at sample %d and its in-flight count only reached zero at %d, so a request it was still serving died with it:\n%v",
-			retired, watched.stopped, watched.drained, watched.samples)
+		t.Errorf("%s was never read as stopped while the flip ran, so nothing here says the release that replaced it took it out of service at all:\n%v", retired, watched.samples)
 	}
 	if state := run.vm.state(t, retired); state != "exited" {
 		t.Errorf("%s reads %q after the deploy that replaced it, want it stopped and still standing: a rollback the ledger still offers has nothing to restart once it is removed", retired, state)
