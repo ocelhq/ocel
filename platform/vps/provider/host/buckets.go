@@ -17,7 +17,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-// BucketSpec is one bucket inside a box's object store, and how to reach it.
 type BucketSpec struct {
 	Store    string
 	Class    providerkit.Class
@@ -179,12 +178,12 @@ func curlCommand(store string, req *http.Request, call storeCall) string {
 	fed := "printf '%s' " + quoted(base64.StdEncoding.EncodeToString(call.body)) + " | base64 -d | "
 	accepted := make([]string, 0, len(call.allow))
 	for _, code := range call.allow {
-		accepted = append(accepted, "\""+code+"\")")
+		accepted = append(accepted, "\""+code+"\"")
 	}
 	return "set -eu\n" +
 		"answered=$(" + fed + words(argv) + ")\n" +
 		"case \"$answered\" in\n" +
-		strings.Join(accepted, "|") + " ;;\n" +
+		strings.Join(accepted, "|") + ") ;;\n" +
 		"*) printf '%s\\n' " + quoted("the store answered ") + "\"$answered\" >&2; exit 1 ;;\n" +
 		"esac"
 }
@@ -202,14 +201,6 @@ func sortedHeaderNames(header http.Header) []string {
 	return names
 }
 
-// ProvisionBucket creates the bucket this resource names inside the box's
-// store, holds it to the origins a browser may upload from, has it abandon
-// unfinished uploads, and opens it to anonymous reads where the project asked
-// for that.
-//
-// Every request is signed here and replayed by curl inside the store's own
-// container: the store answers on the project network alone, so nothing off
-// the box can reach it and no port is published to make it reachable.
 func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
@@ -234,7 +225,6 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) error {
 	return nil
 }
 
-// BucketRef names one bucket inside a box's store, and the store that holds it.
 type BucketRef struct {
 	Class   providerkit.Class
 	Project string
@@ -242,8 +232,6 @@ type BucketRef struct {
 	Bucket  string
 }
 
-// RemoveBucket empties the bucket and removes it, and takes the store down
-// with the last bucket a project kept in it.
 func (h *Host) RemoveBucket(ctx context.Context, ref BucketRef) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
