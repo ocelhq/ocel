@@ -80,6 +80,13 @@ export const gaps: Gap[] = [
         fails: [step.deploy],
         skipsCell: true,
       },
+      {
+        on: ["vps", "vps.incus"],
+        fixtures: [lifecycle.next, ...SDK_NEXT_BEARING],
+        variants: [defaults],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
     ],
   },
   {
