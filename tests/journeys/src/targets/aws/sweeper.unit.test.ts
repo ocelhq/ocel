@@ -4,7 +4,7 @@ import { deploy, fixtures as matrix } from "../../matrix/fixtures";
 import type { Cell } from "../../matrix/types";
 import { defaults } from "../../matrix/variants";
 import { cellsOn, fixturesOn } from "../../plan";
-import { cellsBySlugPart, despite, sweepPlan } from "./sweeper";
+import { bootstrapHeldBy, cellsBySlugPart, despite, sweepPlan } from "./sweeper";
 
 const fixture = deploy.node;
 
@@ -44,6 +44,20 @@ describe("despite", () => {
     expect(complaints).toEqual([
       "j-1799-half-deleted sweep: Error: the bootstrap stack is stuck in DELETE_FAILED",
     ]);
+  });
+});
+
+describe("bootstrapHeldBy", () => {
+  it("holds the bootstrap back when a project in it was not destroyed", () => {
+    expect(
+      bootstrapHeldBy("j-1799-deploy-next-cloudflare", ["j-1799-deploy-next-cloudflare"]),
+    ).toBe(
+      "the j-1799-deploy-next-cloudflare bootstrap was left standing: j-1799-deploy-next-cloudflare could not be destroyed out of it",
+    );
+  });
+
+  it("lets the bootstrap go when every project in it was destroyed", () => {
+    expect(bootstrapHeldBy("j-1799-deploy-next-cloudflare", [])).toBeUndefined();
   });
 });
 
