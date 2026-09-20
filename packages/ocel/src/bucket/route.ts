@@ -206,6 +206,8 @@ async function handlePresign(
       name: t.name,
       contentDisposition: t.contentDisposition || undefined,
       headers: t.headers && Object.keys(t.headers).length > 0 ? t.headers : undefined,
+      method: t.method || undefined,
+      fields: t.fields && Object.keys(t.fields).length > 0 ? t.fields : undefined,
     })),
   });
 }
