@@ -145,14 +145,27 @@ func TestRunDeclaresWhatTheRustFixtureDeclares(t *testing.T) {
 	}
 
 	declares := collected.declared()
-	if len(declares) != 1 {
-		t.Fatalf("declares = %v, want exactly one", declares)
+	if len(declares) != 2 {
+		t.Fatalf("declares = %v, want the postgres and the bucket the fixture declares", declares)
 	}
-	resource := declares[0].GetResource()
-	if resource.GetName() != "main" || resource.GetType() != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
-		t.Errorf("resource = %v, want the postgres named main", resource)
+	declared := map[resourcesv1.ResourceType]*resourcesv1.DeclareRequest{}
+	for _, request := range declares {
+		declared[request.GetResource().GetType()] = request
 	}
-	source := declares[0].GetSource()
+	for kind, name := range map[resourcesv1.ResourceType]string{
+		resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES: "main",
+		resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET:   "uploads",
+	} {
+		request, found := declared[kind]
+		if !found {
+			t.Fatalf("declares = %v, want one of %v", declares, kind)
+		}
+		if request.GetResource().GetName() != name {
+			t.Errorf("resource = %v, want %q", request.GetResource(), name)
+		}
+	}
+
+	source := declared[resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES].GetSource()
 	colon := strings.LastIndex(source, ":")
 	if colon <= 0 {
 		t.Fatalf("source = %q, want a file and a line", source)
