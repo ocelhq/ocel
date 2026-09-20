@@ -102,12 +102,16 @@ func anonymousReadPolicy(bucket string) ([]byte, error) {
 }
 
 type storeCall struct {
-	what  string
-	query string
-	body  []byte
-	typed string
-	md5   bool
-	allow []string
+	name    string
+	what    string
+	method  string
+	key     string
+	query   string
+	body    []byte
+	typed   string
+	md5     bool
+	capture bool
+	allow   []string
 }
 
 func (s BucketSpec) calls() ([]storeCall, error) {
@@ -116,7 +120,10 @@ func (s BucketSpec) calls() ([]storeCall, error) {
 		return nil, err
 	}
 	calls := []storeCall{
-		{what: "create bucket " + s.Bucket, allow: []string{"200", "204", "409"}},
+		{
+			name: "create", what: "create bucket " + s.Bucket, method: http.MethodPut,
+			allow: []string{"200", "204", "409"},
+		},
 	}
 	if !s.Internal {
 		cors, err := corsBody(s.AllowedOrigins)
@@ -125,14 +132,16 @@ func (s BucketSpec) calls() ([]storeCall, error) {
 		}
 		if cors != nil {
 			calls = append(calls, storeCall{
-				what:  "hold bucket " + s.Bucket + " to the origins it answers",
-				query: "cors", body: cors, typed: "application/xml", md5: true, allow: []string{"200", "204"},
+				name: "cors", what: "hold bucket " + s.Bucket + " to the origins it answers",
+				method: http.MethodPut,
+				query:  "cors", body: cors, typed: "application/xml", md5: true, allow: []string{"200", "204"},
 			})
 		}
 	}
 	calls = append(calls, storeCall{
-		what:  "have bucket " + s.Bucket + " abandon unfinished uploads",
-		query: "lifecycle", body: lifecycle, typed: "application/xml", md5: true, allow: []string{"200", "204", "400", "404", "501"},
+		name: "lifecycle", what: "have bucket " + s.Bucket + " abandon unfinished uploads",
+		method: http.MethodPut,
+		query:  "lifecycle", body: lifecycle, typed: "application/xml", md5: true, allow: []string{"200", "204", "400", "404", "501"},
 	})
 	if s.Public {
 		policy, err := anonymousReadPolicy(s.Bucket)
@@ -140,8 +149,9 @@ func (s BucketSpec) calls() ([]storeCall, error) {
 			return nil, err
 		}
 		calls = append(calls, storeCall{
-			what:  "open bucket " + s.Bucket + " to anonymous reads",
-			query: "policy", body: policy, typed: "application/json", allow: []string{"200", "204"},
+			name: "policy", what: "open bucket " + s.Bucket + " to anonymous reads",
+			method: http.MethodPut,
+			query:  "policy", body: policy, typed: "application/json", allow: []string{"200", "204"},
 		})
 	}
 	return calls, nil
@@ -149,6 +159,9 @@ func (s BucketSpec) calls() ([]storeCall, error) {
 
 func (s BucketSpec) signed(call storeCall, now time.Time) (*http.Request, error) {
 	target := strings.TrimSuffix(s.Endpoint, "/") + "/" + s.Bucket
+	if call.key != "" {
+		target += "/" + call.key
+	}
 	if call.query != "" {
 		target += "?" + call.query
 	}
@@ -156,8 +169,7 @@ func (s BucketSpec) signed(call storeCall, now time.Time) (*http.Request, error)
 	if err != nil {
 		return nil, err
 	}
-	method := http.MethodPut
-	req, err := http.NewRequest(method, parsed.String(), strings.NewReader(string(call.body)))
+	req, err := http.NewRequest(call.method, parsed.String(), strings.NewReader(string(call.body)))
 	if err != nil {
 		return nil, err
 	}
@@ -245,6 +257,23 @@ type BucketRef struct {
 	Project string
 	Store   string
 	Bucket  string
+
+	Endpoint    string
+	Region      string
+	AccessKeyID string
+	SecretKey   string
+}
+
+func (r BucketRef) spec() BucketSpec {
+	return BucketSpec{
+		Store:       r.Store,
+		Class:       r.Class,
+		Endpoint:    r.Endpoint,
+		Region:      r.Region,
+		AccessKeyID: r.AccessKeyID,
+		SecretKey:   r.SecretKey,
+		Bucket:      r.Bucket,
+	}
 }
 
 func (h *Host) RemoveBucket(ctx context.Context, ref BucketRef) error {
@@ -252,16 +281,7 @@ func (h *Host) RemoveBucket(ctx context.Context, ref BucketRef) error {
 	if err != nil {
 		return err
 	}
-	if _, err := h.ran(ctx, "take bucket "+ref.Bucket+" and its objects down",
-		emptyBucketCommand(ref), nil, elevation); err != nil {
-		return err
-	}
-	return nil
-}
-
-func emptyBucketCommand(ref BucketRef) string {
-	return "if docker ps --format '{{.Names}}' | grep -qx " + quoted(ref.Store) + "; then\n" +
-		"docker exec " + quoted(ref.Store) + " sh -c " +
-		quoted("rm -rf /data/"+ref.Bucket) + "\n" +
-		"fi"
+	return removedBucket(ref.spec(), func() time.Time { return time.Now().UTC() }, func(what, script string) (string, error) {
+		return h.ran(ctx, what, script, nil, elevation)
+	})
 }
