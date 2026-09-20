@@ -16,7 +16,7 @@ import { journeyConfigIn, journeyZone } from "../config";
 import { appHostname, HARNESS_PREFIX, isStranded } from "../identity";
 import type { Lane, Phase } from "../matrix/types";
 import { exitedBadly, ocel, runOcel, spawnOcel, workTree } from "../ocel";
-import { outputRoot } from "../paths";
+import { fixtureMember, outputRoot } from "../paths";
 import type { PrepareFailures } from "../prepare";
 import type { CellUnderTest } from "../run/cellRun";
 import { migrateCommand } from "../workspace";
@@ -32,6 +32,8 @@ const NO_RECORDS_TIER = "no-records-tier";
 const ROOT_WAIT_MS = 180_000;
 const ROOT_FIRST_WAIT_MS = 500;
 const ROOT_LONGEST_WAIT_MS = 5_000;
+const CONTAINER_APP_ROOT = "/app";
+const CONTAINER_LIVE_DIR = "/ocel/live";
 
 const BRING_A_BOX_UP = [
   "scripts/incus.sh create <name>",
@@ -195,7 +197,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     await drive("deploy", ["deploy", "--yes"]);
     await this.bindDomains(cell, session);
     if (migrates(cell.fixture.checks)) {
-      await drive("migrate", ["run", "--", ...migrateCommand()]);
+      await this.migrateInPlace(cell);
     }
     return this.deployment(cell, session);
   }
@@ -306,6 +308,35 @@ export class VpsTarget implements Target, ReleaseCycle {
       await delay(wait);
       wait = Math.min(wait * 2, ROOT_LONGEST_WAIT_MS);
     }
+  }
+
+  private async migrateInPlace(cell: CellUnderTest): Promise<void> {
+    const target = this.box();
+    const app = cell.fixture.apps[0];
+    if (!app) {
+      throw new Error(`${cell.fixture.name} names no app to migrate its database from`);
+    }
+    const named = await ssh(
+      target,
+      target.user,
+      `sudo docker ps --filter label=ocel.project=${cell.slug} --filter label=ocel.app=${app} ` +
+        "--format '{{.Names}}'",
+    );
+    const container = named.trim().split("\n")[0] ?? "";
+    if (container === "") {
+      throw new Error(
+        `no container on the box carries ocel.project=${cell.slug} and ocel.app=${app}, and a ` +
+          "deployed database is migrated from the release that binds it",
+      );
+    }
+    const said = await ssh(
+      target,
+      target.user,
+      `sudo docker exec -e OCEL_LIVE_DIR=${CONTAINER_LIVE_DIR} ` +
+        `-w ${CONTAINER_APP_ROOT}/${fixtureMember(cell.fixture.name)} ${container} ` +
+        migrateCommand().join(" "),
+    );
+    await cell.evidence.write("deploy", "migrate.log", redact(said));
   }
 
   private async bindDomains(cell: CellUnderTest, session: BoxSession): Promise<void> {
