@@ -1,6 +1,7 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"crypto/rand"
@@ -8,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -252,28 +254,55 @@ func probeRoot() (string, error) {
 	return probePrefix + hex.EncodeToString(raw) + "/", nil
 }
 
-func probeCalls(store ExternalStore, root string, now time.Time) ([]probeCall, error) {
-	cors, err := corsBody([]string{probeOrigin})
-	if err != nil {
-		return nil, err
+type corsPlan struct {
+	body   []byte
+	origin string
+	drop   bool
+	read   bool
+	said   string
+}
+
+var originInAnswer = regexp.MustCompile(`<AllowedOrigin>([^<]+)</AllowedOrigin>`)
+
+func corsHeld(before probeAnswer) (corsPlan, error) {
+	switch {
+	case before.code == "200" && len(before.body) > 0:
+		found := originInAnswer.FindSubmatch(before.body)
+		if found == nil {
+			return corsPlan{said: "a configuration naming no origin at all"}, nil
+		}
+		return corsPlan{body: before.body, origin: string(found[1]), read: true}, nil
+	case before.code == "404", bytes.Contains(before.body, []byte("NoSuchCORSConfiguration")):
+		body, err := corsBody([]string{probeOrigin})
+		if err != nil {
+			return corsPlan{}, err
+		}
+		return corsPlan{body: body, origin: probeOrigin, drop: true, read: true}, nil
+	default:
+		return corsPlan{said: "the store answered " + before.code + " asked what origins it answers"}, nil
 	}
-	sum := md5.Sum(cors)
-	typed := map[string]string{
-		"Content-Type": "application/xml",
-		"Content-MD5":  base64.StdEncoding.EncodeToString(sum[:]),
-	}
+}
+
+func probeCalls(store ExternalStore, root string, cors corsPlan, now time.Time) ([]probeCall, error) {
 	once := map[string]string{"If-None-Match": "*"}
 
-	made := []func() (probeCall, error){
-		func() (probeCall, error) {
-			return store.call("cors-before", http.MethodGet, "", "cors", nil, nil, true, now)
-		},
-		func() (probeCall, error) {
-			return store.call("cors-put", http.MethodPut, "", "cors", typed, cors, false, now)
-		},
-		func() (probeCall, error) {
-			return store.call("cors-get", http.MethodGet, "", "cors", nil, nil, true, now)
-		},
+	var made []func() (probeCall, error)
+	if cors.read {
+		sum := md5.Sum(cors.body)
+		typed := map[string]string{
+			"Content-Type": "application/xml",
+			"Content-MD5":  base64.StdEncoding.EncodeToString(sum[:]),
+		}
+		made = append(made,
+			func() (probeCall, error) {
+				return store.call("cors-put", http.MethodPut, "", "cors", typed, cors.body, false, now)
+			},
+			func() (probeCall, error) {
+				return store.call("cors-get", http.MethodGet, "", "cors", nil, nil, true, now)
+			},
+		)
+	}
+	made = append(made,
 		func() (probeCall, error) {
 			return store.call("conditional-put", http.MethodPut, root+"conditional", "", once, []byte(probeBody), false, now)
 		},
@@ -290,7 +319,7 @@ func probeCalls(store ExternalStore, root string, now time.Time) ([]probeCall, e
 		func() (probeCall, error) {
 			return store.call("multipart-create", http.MethodPost, root+"multipart", "uploads", nil, nil, true, now)
 		},
-	}
+	)
 	calls := make([]probeCall, 0, len(made))
 	for _, make := range made {
 		call, err := make()
@@ -302,7 +331,7 @@ func probeCalls(store ExternalStore, root string, now time.Time) ([]probeCall, e
 	return calls, nil
 }
 
-func probeCleanup(store ExternalStore, root string, answers map[string]probeAnswer, now time.Time) ([]probeCall, error) {
+func probeCleanup(store ExternalStore, root string, answers map[string]probeAnswer, cors corsPlan, now time.Time) ([]probeCall, error) {
 	var calls []probeCall
 	if held := answers["multipart-create"]; held.code == "200" {
 		if found := uploadIDInAnswer.FindSubmatch(held.body); found != nil {
@@ -321,32 +350,42 @@ func probeCleanup(store ExternalStore, root string, answers map[string]probeAnsw
 		}
 		calls = append(calls, call)
 	}
-	if before := answers["cors-before"]; before.code == "200" && len(before.body) > 0 {
-		sum := md5.Sum(before.body)
+	switch {
+	case !cors.read:
+		return calls, nil
+	case cors.drop:
+		call, err := store.call("cors-drop", http.MethodDelete, "", "cors", nil, nil, false, now)
+		if err != nil {
+			return nil, err
+		}
+		return append(calls, call), nil
+	default:
+		sum := md5.Sum(cors.body)
 		call, err := store.call("cors-restore", http.MethodPut, "", "cors", map[string]string{
 			"Content-Type": "application/xml",
 			"Content-MD5":  base64.StdEncoding.EncodeToString(sum[:]),
-		}, before.body, false, now)
+		}, cors.body, false, now)
 		if err != nil {
 			return nil, err
 		}
 		return append(calls, call), nil
 	}
-	call, err := store.call("cors-drop", http.MethodDelete, "", "cors", nil, nil, false, now)
-	if err != nil {
-		return nil, err
-	}
-	return append(calls, call), nil
 }
 
-func lacking(answers map[string]probeAnswer) []string {
+func lacking(answers map[string]probeAnswer, cors corsPlan) []string {
 	var missing []string
 	if !answeredWith(answers, "conditional-put", storeWrote...) || !answeredWith(answers, "conditional-again", "412") {
 		missing = append(missing, "refuse a second write of a key it already holds (If-None-Match: *), which is how an upload session is claimed exactly once")
 	}
-	if !answeredWith(answers, "cors-put", storeWrote...) || !answeredWith(answers, "cors-get", "200") ||
-		!strings.Contains(string(answers["cors-get"].body), probeOrigin) {
-		missing = append(missing, "hold a bucket to the origins it answers (PutBucketCors and GetBucketCors), which is how a browser reaches it")
+	corsWorks := cors.read &&
+		answeredWith(answers, "cors-put", storeWrote...) && answeredWith(answers, "cors-get", "200") &&
+		strings.Contains(string(answers["cors-get"].body), cors.origin)
+	if !corsWorks {
+		held := "hold a bucket to the origins it answers (PutBucketCors and GetBucketCors), which is how a browser reaches it"
+		if cors.said != "" {
+			held += " — " + cors.said + ", and ocel changes no configuration it could not read back first"
+		}
+		missing = append(missing, held)
 	}
 	if !answeredWith(answers, "presigned-put", storeWrote...) || !answeredWith(answers, "presigned-get", "200") ||
 		string(answers["presigned-get"].body) != probeBody {
@@ -359,27 +398,42 @@ func lacking(answers map[string]probeAnswer) []string {
 	return missing
 }
 
+func unreadable(store ExternalStore, err error) error {
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"the store option %q cannot be probed as it is written: %v", "bucket", err)
+}
+
 func probeExternalStore(store ExternalStore, root string, now time.Time, run probeRunner) (StoreProbe, error) {
-	calls, err := probeCalls(store, root, now)
+	before, err := store.call("cors-before", http.MethodGet, "", "cors", nil, nil, true, now)
 	if err != nil {
-		return StoreProbe{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"the store option %q cannot be probed as it is written: %v", "bucket", err)
+		return StoreProbe{}, unreadable(store, err)
 	}
-	said, err := run("probe the store at "+store.Endpoint, probeScript(calls))
+	said, err := run("read what browsers the store at "+store.Endpoint+" already answers", probeScript([]probeCall{before}))
 	if err != nil {
 		return StoreProbe{}, err
 	}
+	cors, err := corsHeld(readProbe(said)["cors-before"])
+	if err != nil {
+		return StoreProbe{}, unreadable(store, err)
+	}
+
+	calls, err := probeCalls(store, root, cors, now)
+	if err != nil {
+		return StoreProbe{}, unreadable(store, err)
+	}
+	said, probed := run("probe the store at "+store.Endpoint, probeScript(calls))
 	answers := readProbe(said)
 
-	cleanup, err := probeCleanup(store, root, answers, now)
+	cleanup, err := probeCleanup(store, root, answers, cors, now)
 	if err != nil {
-		return StoreProbe{}, err
+		return StoreProbe{}, errors.Join(probed, unreadable(store, err))
 	}
-	if _, err := run("take the probe of "+store.Endpoint+" back down", probeScript(cleanup)); err != nil {
-		return StoreProbe{}, err
+	_, swept := run("take the probe of "+store.Endpoint+" back down", probeScript(cleanup))
+	if probed != nil || swept != nil {
+		return StoreProbe{}, errors.Join(probed, swept)
 	}
 
-	if missing := lacking(answers); len(missing) > 0 {
+	if missing := lacking(answers, cors); len(missing) > 0 {
 		return StoreProbe{}, providerkit.Refuse(providerkit.CodeInvalid,
 			"option %q points this project's objects at bucket %s on %s, and that store cannot:\n\n  - %s\n\n"+
 				"Nothing was provisioned. Point the option at a store that serves all of them, or drop it and let the box run a store of its own.",
