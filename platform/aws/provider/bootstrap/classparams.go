@@ -33,7 +33,9 @@ type ClassParams struct {
 	DeploymentsStore DeploymentsStore
 	ISRWriter        ISRWriter
 	ISRWriterSeed    string
-	OriginSecret     OriginSecret
+
+	OriginSecret    OriginSecret
+	OriginSecretErr error
 }
 
 func ReadCoreParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class string) (ClassParams, error) {
@@ -50,13 +52,11 @@ func ReadCoreParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class st
 	if !ok {
 		return ClassParams{}, fmt.Errorf("read passphrase parameter: %s not found", passphraseParam)
 	}
-	secret, err := originSecretIn(found, origin)
-	if err != nil {
-		return ClassParams{}, err
-	}
+	secret, secretErr := originSecretIn(found, origin)
 	return ClassParams{
 		Passphrase:         passphrase,
 		OriginSecret:       secret,
+		OriginSecretErr:    secretErr,
 		EdgeCredentialsErr: errUnnamedEdge,
 		EdgeValuesErr:      errUnnamedEdge,
 	}, nil
@@ -139,9 +139,7 @@ func ReadClassParams(ctx context.Context, api SSMBatchAPI, ns Namespace, class s
 		}
 	}
 	p.ISRWriterSeed = found[names.isrWriterSeedParam]
-	if p.OriginSecret, err = originSecretIn(found, names.originSecretParam); err != nil {
-		return ClassParams{}, err
-	}
+	p.OriginSecret, p.OriginSecretErr = originSecretIn(found, names.originSecretParam)
 	return p, nil
 }
 

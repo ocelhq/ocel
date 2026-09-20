@@ -202,6 +202,24 @@ func TestClassParamsReadTheEdgeTheyAreGiven(t *testing.T) {
 	}
 }
 
+func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
+	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
+	refusal := providerkit.Refuse(providerkit.CodeNotReady, "/ocel/origin/secret holds something other than the origin secret bootstrap writes")
+	if _, err := p.params.resolve(classEdge{class: providerkit.ClassProduction, kind: cloudflare.Kind}, func() (bootstrap.ClassParams, error) {
+		return bootstrap.ClassParams{OriginSecretErr: refusal}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	pre := providerkit.DeployPreflight{
+		Plan: providerkit.DeployPlan{Class: providerkit.ClassProduction},
+		Edge: cloudflare.Kind,
+	}
+	if err := p.refuseUnreadableOriginSecret(context.Background(), pre); !errors.Is(err, refusal) {
+		t.Fatalf("preflight = %v, want the refusal: a deploy hands every release the secret the edge presents", err)
+	}
+}
+
 func TestBucketsSweepTheCacheStoreOfEveryStandingEdge(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	if _, err := p.deployed.resolve(providerkit.ClassProduction, func() (bootstrap.Deployed, error) {

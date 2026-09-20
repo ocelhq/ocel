@@ -319,8 +319,12 @@ func TestBootstrapParamsCarryTheOriginSecret(t *testing.T) {
 	}
 
 	params[originSecretParam] = "origin-1"
-	if _, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare); err == nil || !strings.Contains(err.Error(), originSecretParam) || !strings.Contains(err.Error(), "ocel bootstrap") {
-		t.Errorf("ReadClassParams over a bare value = %v; want it refused naming the parameter and the bootstrap that replaces it, so a deploy never bakes in something the front will not present", err)
+	bare, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
+	if err != nil {
+		t.Fatalf("ReadClassParams over a bare value = %v, want the read itself to stand: a teardown presents no secret", err)
+	}
+	if bare.OriginSecretErr == nil || !strings.Contains(bare.OriginSecretErr.Error(), originSecretParam) || !strings.Contains(bare.OriginSecretErr.Error(), "ocel bootstrap") {
+		t.Errorf("OriginSecretErr = %v; want the failure carried, naming the parameter and the bootstrap that replaces it, so a deploy never bakes in something the front will not present", bare.OriginSecretErr)
 	}
 
 	delete(params, originSecretParam)

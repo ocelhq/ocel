@@ -190,6 +190,9 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPr
 	if err := p.nagStaleEdgeKey(ctx, pre); err != nil {
 		return err
 	}
+	if err := p.refuseUnreadableOriginSecret(ctx, pre); err != nil {
+		return err
+	}
 	if err := p.nagStaleOriginSecret(ctx, pre); err != nil {
 		return err
 	}
@@ -214,6 +217,14 @@ func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre providerkit.DeployPr
 		pre.Report.Detail(notice)
 	}
 	return nil
+}
+
+func (p *Provider) refuseUnreadableOriginSecret(ctx context.Context, pre providerkit.DeployPreflight) error {
+	params, err := p.classParams(ctx, pre.Plan.Class, pre.Edge)
+	if err != nil {
+		return err
+	}
+	return params.OriginSecretErr
 }
 
 func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre providerkit.DeployPreflight) error {
