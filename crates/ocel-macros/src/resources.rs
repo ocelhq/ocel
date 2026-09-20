@@ -6,10 +6,20 @@ use syn::{Data, DeriveInput, Fields, Type};
 
 const DEFAULT_VERSION: &str = "17";
 
+enum Config {
+    Postgres {
+        version: String,
+    },
+    Bucket {
+        public: bool,
+        allowed_origins: Vec<String>,
+    },
+}
+
 struct Resource {
     ident: syn::Ident,
     name: String,
-    version: String,
+    config: Config,
     file: String,
     line: u32,
 }
@@ -19,15 +29,32 @@ pub(crate) fn derive(input: &DeriveInput) -> syn::Result<TokenStream> {
     let ident = &input.ident;
 
     let declared = resources.iter().map(|resource| {
-        let (name, version) = (&resource.name, &resource.version);
+        let name = &resource.name;
         let (file, line) = (&resource.file, resource.line);
+        let config = match &resource.config {
+            Config::Postgres { version } => {
+                quote!(::ocel::DeclaredConfig::Postgres { version: #version })
+            }
+            Config::Bucket {
+                public,
+                allowed_origins,
+            } => quote! {
+                ::ocel::DeclaredConfig::Bucket {
+                    public: #public,
+                    allowed_origins: &[#(#allowed_origins),*],
+                }
+            },
+        };
         quote! {
-            ::ocel::DeclaredResource { name: #name, version: #version, file: #file, line: #line }
+            ::ocel::DeclaredResource { name: #name, config: #config, file: #file, line: #line }
         }
     });
     let fields = resources.iter().map(|resource| {
         let (field, name) = (&resource.ident, &resource.name);
-        quote!(#field: ::ocel::Postgres::new(#name))
+        match resource.config {
+            Config::Postgres { .. } => quote!(#field: ::ocel::Postgres::new(#name)),
+            Config::Bucket { .. } => quote!(#field: ::ocel::Bucket::new(#name)),
+        }
     });
 
     Ok(quote! {
@@ -75,25 +102,33 @@ fn resources(input: &DeriveInput) -> syn::Result<Vec<Resource>> {
     let mut resources: Vec<Resource> = Vec::new();
     for field in &named.named {
         let ident = field.ident.clone().expect("a named field");
-        if !is_postgres(&field.ty) {
+        let Some(kind) = kind(&field.ty) else {
             return Err(syn::Error::new_spanned(
                 &field.ty,
                 format!(
-                    "field {ident} is not an ocel::Postgres, and every field of an ocel::Resources struct declares one."
+                    "field {ident} is neither an ocel::Postgres nor an ocel::Bucket, and every field of an ocel::Resources struct declares one."
                 ),
             ));
-        }
+        };
 
         let mut name = ident.to_string();
         let mut version = DEFAULT_VERSION.to_string();
+        let mut public = false;
+        let mut allowed_origins = Vec::new();
         for entry in entries(&field.attrs)? {
-            match entry.name.to_string().as_str() {
-                "name" => name = entry.literal()?.to_string(),
-                "version" => version = entry.literal()?.to_string(),
-                other => {
+            match (kind, entry.name.to_string().as_str()) {
+                (_, "name") => name = entry.literal()?.to_string(),
+                (Kind::Postgres, "version") => version = entry.literal()?.to_string(),
+                (Kind::Bucket, "public") => public = true,
+                (Kind::Bucket, "allowed_origins") => allowed_origins = entry.list()?.to_vec(),
+                (_, other) => {
                     return Err(syn::Error::new(
                         entry.span(),
-                        format!("field {ident} has an unknown attribute '{other}'. The attributes are name = \"<NAME>\" and version = \"<VERSION>\"."),
+                        format!(
+                            "field {ident} has an unknown attribute '{other}'. The attributes of {} are {}.",
+                            kind.spelling(),
+                            kind.attributes(),
+                        ),
                     ))
                 }
             }
@@ -111,7 +146,13 @@ fn resources(input: &DeriveInput) -> syn::Result<Vec<Resource>> {
         resources.push(Resource {
             ident,
             name,
-            version,
+            config: match kind {
+                Kind::Postgres => Config::Postgres { version },
+                Kind::Bucket => Config::Bucket {
+                    public,
+                    allowed_origins,
+                },
+            },
             file,
             line,
         });
@@ -119,13 +160,38 @@ fn resources(input: &DeriveInput) -> syn::Result<Vec<Resource>> {
     Ok(resources)
 }
 
-fn is_postgres(ty: &Type) -> bool {
-    match ty {
-        Type::Path(path) if path.qself.is_none() => path
-            .path
-            .segments
-            .last()
-            .is_some_and(|segment| segment.ident == "Postgres"),
-        _ => false,
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Postgres,
+    Bucket,
+}
+
+impl Kind {
+    fn spelling(self) -> &'static str {
+        match self {
+            Self::Postgres => "an ocel::Postgres",
+            Self::Bucket => "an ocel::Bucket",
+        }
+    }
+
+    fn attributes(self) -> &'static str {
+        match self {
+            Self::Postgres => "name = \"<NAME>\" and version = \"<VERSION>\"",
+            Self::Bucket => "name = \"<NAME>\", public and allowed_origins = [\"<ORIGIN>\"]",
+        }
+    }
+}
+
+fn kind(ty: &Type) -> Option<Kind> {
+    let Type::Path(path) = ty else {
+        return None;
+    };
+    if path.qself.is_some() {
+        return None;
+    }
+    match path.path.segments.last()?.ident.to_string().as_str() {
+        "Postgres" => Some(Kind::Postgres),
+        "Bucket" => Some(Kind::Bucket),
+        _ => None,
     }
 }

@@ -24,8 +24,9 @@ fn ungeneric(input: &DeriveInput, derive: &str, because: &str) -> syn::Result<()
 const REGISTERED: &str = "its declarations register once per binary";
 const FIXED: &str = "what it declares is fixed once per binary";
 
-/// Declare every [`Postgres`](https://docs.rs/ocel) field of a struct, and write the
-/// `load` that hands the struct back with a handle in each field.
+/// Declare every [`Postgres`](https://docs.rs/ocel) and [`Bucket`](https://docs.rs/ocel)
+/// field of a struct, and write the `load` that hands the struct back with a handle in each
+/// field.
 ///
 /// ```ignore
 /// #[derive(ocel::Resources, Clone)]
@@ -33,11 +34,15 @@ const FIXED: &str = "what it declares is fixed once per binary";
 ///     #[ocel(name = "main", version = "17")]
 ///     pub db: ocel::Postgres,
 ///     pub cache: ocel::Postgres,
+///     #[ocel(name = "avatars", public, allowed_origins = ["https://shop.example"])]
+///     pub avatars: ocel::Bucket,
 /// }
 /// ```
 ///
-/// A field's name defaults to its identifier and its version to `17`. Every field is an
-/// `ocel::Postgres`, and anything else is a compile error naming the field.
+/// A field's name defaults to its identifier, a postgres field's version to `17`, and a
+/// bucket is private and takes no browser origin unless it says otherwise. Every field is
+/// an `ocel::Postgres` or an `ocel::Bucket`, and anything else is a compile error naming
+/// the field.
 #[proc_macro_derive(Resources, attributes(ocel))]
 pub fn resources(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);

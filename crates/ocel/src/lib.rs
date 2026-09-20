@@ -27,6 +27,7 @@
 //! runtime `load` reads the bindings and the values the deploy delivered.
 
 mod binding;
+mod bucket;
 mod declare;
 mod env;
 mod error;
@@ -34,6 +35,7 @@ mod postgres;
 #[doc(hidden)]
 pub mod proto;
 
+pub use bucket::Bucket;
 pub use declare::discover;
 pub use env::{deployment_url, Secret};
 pub use error::Error;
@@ -42,8 +44,8 @@ pub use postgres::Postgres;
 /// Runs discovery before `main`, and returns from `main` once discovery is done.
 pub use ocel_macros::main;
 
-/// Declares every [`Postgres`] field of a struct, and writes the `load` that hands the
-/// struct back with a handle in each field.
+/// Declares every [`Postgres`] and [`Bucket`] field of a struct, and writes the `load` that
+/// hands the struct back with a handle in each field.
 pub use ocel_macros::Resources;
 
 /// Declares every field of a struct as an environment variable, and writes the `load` that
@@ -56,7 +58,8 @@ pub use ocel_macros::Group;
 
 #[doc(hidden)]
 pub use declare::{
-    Check, Declare, Declared, DeclaredGroup, DeclaredResource, DeclaredVariable, Group, Registered,
+    Check, Declare, Declared, DeclaredConfig, DeclaredGroup, DeclaredResource, DeclaredVariable,
+    Group, Registered,
 };
 #[doc(hidden)]
 pub use env::{check, group_present, optional, secret, value, Boolean, Class};

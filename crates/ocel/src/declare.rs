@@ -1,12 +1,11 @@
 use crate::env::{complaint, Class};
-use crate::postgres::KIND;
 use crate::proto::app::resources::v1::declare_request::Config;
 use crate::proto::app::resources::v1::variable_problem::Kind;
 use crate::proto::app::resources::v1::ResourceType;
 use crate::proto::app::resources::v1::{
-    DeclareEnvRequest, DeclareRequest, GroupDefinition, PostgresConfig, ReportEnvProblemsRequest,
-    ResourceIdentifier, ResourceServiceClient, VariableCell, VariableClass, VariableDefinition,
-    VariableProblem,
+    BucketConfig, DeclareEnvRequest, DeclareRequest, GroupDefinition, PostgresConfig,
+    ReportEnvProblemsRequest, ResourceIdentifier, ResourceServiceClient, VariableCell,
+    VariableClass, VariableDefinition, VariableProblem,
 };
 use crate::Error;
 
@@ -17,9 +16,53 @@ const SOURCE_ROOT_ENV: &str = "OCEL_SOURCE_ROOT";
 const DISCOVERY_PHASE: &str = "discovery";
 
 #[doc(hidden)]
+pub enum DeclaredConfig {
+    Postgres {
+        version: &'static str,
+    },
+    Bucket {
+        public: bool,
+        allowed_origins: &'static [&'static str],
+    },
+}
+
+impl DeclaredConfig {
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::Postgres { .. } => crate::postgres::KIND,
+            Self::Bucket { .. } => crate::bucket::KIND,
+        }
+    }
+
+    fn resource_type(&self) -> ResourceType {
+        match self {
+            Self::Postgres { .. } => ResourceType::RESOURCE_TYPE_POSTGRES,
+            Self::Bucket { .. } => ResourceType::RESOURCE_TYPE_BUCKET,
+        }
+    }
+
+    fn config(&self) -> Config {
+        match self {
+            Self::Postgres { version } => Config::from(PostgresConfig {
+                version: version.to_string(),
+                ..Default::default()
+            }),
+            Self::Bucket {
+                public,
+                allowed_origins,
+            } => Config::from(BucketConfig {
+                public: *public,
+                allowed_origins: allowed_origins.iter().map(|one| one.to_string()).collect(),
+                ..Default::default()
+            }),
+        }
+    }
+}
+
+#[doc(hidden)]
 pub struct DeclaredResource {
     pub name: &'static str,
-    pub version: &'static str,
+    pub config: DeclaredConfig,
     pub file: &'static str,
     pub line: u32,
 }
@@ -404,15 +447,12 @@ fn problem(key: &str, folder: &str, kind: Kind, detail: String) -> VariableProbl
 fn request(resource: &DeclaredResource) -> DeclareRequest {
     DeclareRequest {
         resource: ResourceIdentifier {
-            r#type: ResourceType::RESOURCE_TYPE_POSTGRES.into(),
+            r#type: resource.config.resource_type().into(),
             name: resource.name.to_string(),
             ..Default::default()
         }
         .into(),
-        config: Some(Config::from(PostgresConfig {
-            version: resource.version.to_string(),
-            ..Default::default()
-        })),
+        config: Some(resource.config.config()),
         source: source(resource.file, resource.line),
         ..Default::default()
     }
@@ -437,7 +477,7 @@ fn source_root() -> std::path::PathBuf {
 
 fn failed(resource: &DeclaredResource, said: String) -> Error {
     Error::Declare {
-        kind: KIND.to_string(),
+        kind: resource.config.kind().to_string(),
         name: resource.name.to_string(),
         said,
     }
