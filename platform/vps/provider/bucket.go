@@ -511,10 +511,14 @@ func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, b
 		}
 		return nil
 	}
-	bucket := binding.Properties[providerkit.PropertyBucket]
-	if bucket == "" {
-		bucket = storeBucketName(ref, binding.Name)
+	if err := p.dropBucket(ctx, ref, binding, report); err != nil {
+		return err
 	}
+	p.stores.forgot(ref.Name, binding.Name)
+	return p.reconcileStore(ctx, ref, report)
+}
+
+func (p *Provider) dropBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error {
 	store := storeName(ref)
 	held, err := p.storeRoot(ctx, ref, store)
 	if err != nil {
@@ -526,10 +530,14 @@ func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, b
 		}
 		return nil
 	}
+	bucket := binding.Properties[providerkit.PropertyBucket]
+	if bucket == "" {
+		bucket = storeBucketName(ref, binding.Name)
+	}
 	if report != nil {
 		report.Say("Taking bucket " + binding.Name + " and its objects down")
 	}
-	if err := p.host.RemoveBucket(ctx, host.BucketRef{
+	return p.host.RemoveBucket(ctx, host.BucketRef{
 		Class:       ref.Class,
 		Project:     ref.Project,
 		Store:       store,
@@ -538,18 +546,18 @@ func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, b
 		Region:      storeRegion,
 		AccessKeyID: storeAccessKey,
 		SecretKey:   held.secret,
-	}); err != nil {
-		return err
-	}
-	last, err := p.lastBucket(ctx, ref, binding)
+	})
+}
+
+func (p *Provider) reconcileStore(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
+	last, err := p.lastBucket(ctx, ref)
 	if err != nil || !last {
 		return err
 	}
 	return p.removeStore(ctx, ref, report)
 }
 
-func (p *Provider) lastBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding) (bool, error) {
-	p.stores.forgot(ref.Name, binding.Name)
+func (p *Provider) lastBucket(ctx context.Context, ref providerkit.StackRef) (bool, error) {
 	entries, err := providerkit.ReadStacks(ctx, p.records, ref.Class, ref.Project)
 	if err != nil {
 		return false, err
