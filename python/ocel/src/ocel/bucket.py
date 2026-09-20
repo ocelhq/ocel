@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import IO, BinaryIO, Protocol, runtime_checkable
+from urllib.parse import quote
 
 from connectrpc.code import Code
 from connectrpc.errors import ConnectError
@@ -487,7 +488,8 @@ class Bucket:
                 f"declare the bucket with public=True and give the project a domain to "
                 f"serve it from"
             )
-        return f"{reached.public_base_url.rstrip('/')}/{key}"
+        path = "/".join(quote(segment, safe="") for segment in key.split("/"))
+        return f"{reached.public_base_url.rstrip('/')}/{path}"
 
     async def put_async(
         self,

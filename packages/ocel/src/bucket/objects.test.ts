@@ -278,6 +278,14 @@ describe("publicUrl", () => {
     expect(objects.publicUrl("a/b.png")).toBe("https://storage.example.com/store/a/b.png");
   });
 
+  it("escapes what a key segment may hold without leaving the path", () => {
+    const { objects } = objectsUnderTest({ publicBaseUrl: "https://storage.example.com/store" });
+
+    expect(objects.publicUrl("a b/c#d?e.png")).toBe(
+      "https://storage.example.com/store/a%20b/c%23d%3Fe.png",
+    );
+  });
+
   it("refuses when nothing published the bucket", () => {
     const { objects } = objectsUnderTest();
 
