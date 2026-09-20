@@ -287,7 +287,7 @@ func TestTheStoreKeepsItsSessionsInABucketNoAppDeclaresOrReaches(t *testing.T) {
 func TestDroppingADeclaredBucketLeavesTheStoresSessionsWhereTheyAre(t *testing.T) {
 	t.Parallel()
 
-	machine := &box{}
+	machine := &box{kept: sealedRootKey()}
 	err := over(machine).RemoveResource(context.Background(),
 		providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: aStackName(t)},
 		bindingBucket(), nil)
@@ -383,15 +383,21 @@ func TestAnAppBoundToAnExternalStoreIsHandedThatStoreAndItsOwnPrefix(t *testing.
 func TestRemovingABucketTakesItsObjectsWithIt(t *testing.T) {
 	t.Parallel()
 
-	machine := &box{}
+	machine := &box{kept: sealedRootKey()}
 	err := over(machine).RemoveResource(context.Background(),
 		providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: aStackName(t)},
-		providerkit.Binding{Type: providerkit.BindingBucket, Name: "uploads"}, nil)
+		bindingBucket(), nil)
 	if err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
 	}
-	if len(machine.commands()) == 0 {
-		t.Fatal("removing a bucket ran nothing on the box, so its objects stay on the disk forever")
+	joined := strings.Join(machine.commands(), "\n")
+	if strings.Contains(joined, "rm -rf /data/") {
+		t.Errorf("a bucket was taken off the store's disk behind its back, leaving the store's own record of it standing:\n%s", joined)
+	}
+	for _, want := range []string{"list-type=2", "?uploads", "'DELETE'"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("removing a bucket never asked the store for %s:\n%s", want, joined)
+		}
 	}
 }
 

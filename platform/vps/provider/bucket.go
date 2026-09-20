@@ -471,15 +471,45 @@ func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, b
 	if bucket == "" {
 		bucket = storeBucketName(ref, binding.Name)
 	}
+	store := storeName(ref)
+	held, err := p.storeRoot(ctx, ref, store)
+	if err != nil {
+		return err
+	}
+	if held.secret == "" {
+		if report != nil {
+			report.Say("Leaving bucket " + binding.Name + " where it is: this box keeps no credential for " + store)
+		}
+		return nil
+	}
 	if report != nil {
 		report.Say("Taking bucket " + binding.Name + " and its objects down")
 	}
 	return p.host.RemoveBucket(ctx, host.BucketRef{
-		Class:   ref.Class,
-		Project: ref.Project,
-		Store:   storeName(ref),
-		Bucket:  bucket,
+		Class:       ref.Class,
+		Project:     ref.Project,
+		Store:       store,
+		Bucket:      bucket,
+		Endpoint:    "http://127.0.0.1:" + storePort,
+		Region:      storeRegion,
+		AccessKeyID: storeAccessKey,
+		SecretKey:   held.secret,
 	})
+}
+
+func (p *Provider) storeRoot(ctx context.Context, ref providerkit.StackRef, store string) (storeCredential, error) {
+	sealed, err := p.host.Kept(ctx, ref.Class, store)
+	if err != nil {
+		return storeCredential{}, err
+	}
+	if len(sealed) == 0 {
+		return storeCredential{}, nil
+	}
+	opened, err := p.sealer.Open(ctx, storeCoordinate(ref), sealed)
+	if err != nil {
+		return storeCredential{}, err
+	}
+	return storeCredential{sealed: sealed, secret: string(opened)}, nil
 }
 
 var _ resources.Bucket = (*Provider)(nil)
