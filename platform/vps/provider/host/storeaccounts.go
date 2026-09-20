@@ -16,6 +16,20 @@ import (
 
 const adminPath = "/rustfs/admin/v3/"
 
+const (
+	StoreSecretMin = 8
+	StoreSecretMax = 40
+)
+
+func StoreSecretHeld(secret string) error {
+	if len(secret) < StoreSecretMin || len(secret) > StoreSecretMax {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"a store account's secret is %d characters and the store takes between %d and %d, so the account could never be created and no app would reach its buckets",
+			len(secret), StoreSecretMin, StoreSecretMax)
+	}
+	return nil
+}
+
 type StoreAccount struct {
 	Store    string
 	Class    providerkit.Class
@@ -70,6 +84,9 @@ func accountPolicy(buckets []string, sessions string) ([]byte, error) {
 }
 
 func (a StoreAccount) calls() ([]adminCall, error) {
+	if err := StoreSecretHeld(a.SecretKey); err != nil {
+		return nil, err
+	}
 	policy, err := accountPolicy(a.Buckets, a.Sessions)
 	if err != nil {
 		return nil, err
