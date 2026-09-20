@@ -322,7 +322,15 @@ prefix inside the one you name:
 ```
 
 All five fields go together, or none of them. Add `"pathStyle": true` for a store that serves no
-wildcard DNS.
+wildcard DNS. Every string in `ocel.json` takes `${VAR}` from your environment, so
+`secretAccessKey` need never be written down in the file.
+
+<Callout>
+  That credential reaches the whole bucket you name, and the runtime in front of every app on the
+  box holds it — the apps themselves never see it, and the runtime answers each one only for the
+  prefixes its own deploy granted it, but the boundary is the runtime rather than the store. Issue
+  a key scoped to that one bucket, and give each project a bucket of its own.
+</Callout>
 
 The deploy probes that store before it provisions anything: conditional writes, bucket CORS,
 presigned urls and multipart uploads. A store missing any of them is refused by name, with nothing

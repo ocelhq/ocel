@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	presignTTL = time.Hour
-	sessionTTL = 2 * time.Hour
+	presignTTL    = time.Hour
+	maxPresignTTL = 7 * 24 * time.Hour
+	sessionTTL    = 2 * time.Hour
 
 	sessionPrefix = constants.ReservedKeyPrefix + "sessions/"
 )

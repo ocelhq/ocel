@@ -47,10 +47,24 @@ func preconditionFailed(err error) bool {
 	return false
 }
 
+func timeSkewed(err error) bool {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.ErrorCode() {
+		case "RequestTimeTooSkewed", "AuthorizationHeaderMalformed":
+			return true
+		}
+	}
+	return false
+}
+
 func storeError(op string, err error) error {
 	switch {
 	case missing(err):
 		return connect.NewError(connect.CodeNotFound, fmt.Errorf("%s: no object under that key", op))
+	case timeSkewed(err):
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"%s: the store refused the signature because its clock and this box's disagree — every signed url this deployment hands out fails until one of them is put right", op))
 	case preconditionFailed(err):
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s: the object did not meet the condition the write carried", op))
 	default:

@@ -20,10 +20,15 @@ func ttlOf(d interface{ AsDuration() time.Duration }) time.Duration {
 	if d == nil {
 		return presignTTL
 	}
-	if held := d.AsDuration(); held > 0 {
+	held := d.AsDuration()
+	switch {
+	case held <= 0:
+		return presignTTL
+	case held > maxPresignTTL:
+		return maxPresignTTL
+	default:
 		return held
 	}
-	return presignTTL
 }
 
 // Sign hands back a url the caller drives itself, bounded by the constraints it asked for.
