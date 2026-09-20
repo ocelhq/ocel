@@ -17,6 +17,8 @@ const StalenessBound = 60 * time.Second
 
 const FetchBudget = 3 * time.Second
 
+const RereadFloor = time.Second
+
 type Fetcher interface {
 	FetchLive(ctx context.Context) (map[string]string, error)
 }
@@ -36,6 +38,8 @@ type Values struct {
 	now      func() time.Time
 
 	failed chan struct{}
+
+	rereading sync.Mutex
 
 	mu          sync.Mutex
 	failure     error
@@ -205,6 +209,30 @@ func (l *Values) Refresh(ctx context.Context) {
 		l.mu.Unlock()
 		l.apply(values)
 	}()
+}
+
+func (l *Values) Reread(ctx context.Context) {
+	if l == nil {
+		return
+	}
+	l.rereading.Lock()
+	defer l.rereading.Unlock()
+
+	l.mu.Lock()
+	skip := l.generation == 0 || l.now().Sub(l.fetchedAt) < RereadFloor
+	l.mu.Unlock()
+	if skip {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, FetchBudget)
+	defer cancel()
+	values, err := l.read(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: live value reread failed, serving the last resolved generation: %v\n", err)
+		return
+	}
+	l.apply(values)
 }
 
 func (l *Values) Keep(ctx context.Context) {

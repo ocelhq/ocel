@@ -572,6 +572,45 @@ func TestProject(t *testing.T) {
 	})
 }
 
+func TestReread(t *testing.T) {
+	t.Run("reaches the store inside the staleness bound and hands back what it now holds", func(t *testing.T) {
+		clock := time.Unix(1_700_000_000, 0)
+		fetcher := resolves(
+			map[string]string{"STORE_BASE": ""},
+			map[string]string{"STORE_BASE": "https://storage.shop.example.com"},
+		)
+		l := New(fetcher, []string{"STORE_BASE"}, nil, func() time.Time { return clock })
+
+		if err := l.Join(l.Prefetch(context.Background())); err != nil {
+			t.Fatalf("join: %v", err)
+		}
+		clock = clock.Add(RereadFloor)
+		l.Reread(context.Background())
+
+		if got := l.Value("STORE_BASE"); got != "https://storage.shop.example.com" {
+			t.Errorf("Value() = %q after a reread, want what the store holds now", got)
+		}
+	})
+
+	t.Run("costs no fetch inside its own floor, however often it is asked", func(t *testing.T) {
+		clock := time.Unix(1_700_000_000, 0)
+		fetcher := resolves(map[string]string{"STORE_BASE": ""})
+		l := New(fetcher, []string{"STORE_BASE"}, nil, func() time.Time { return clock })
+
+		if err := l.Join(l.Prefetch(context.Background())); err != nil {
+			t.Fatalf("join: %v", err)
+		}
+		clock = clock.Add(RereadFloor - time.Millisecond)
+		for range 20 {
+			l.Reread(context.Background())
+		}
+
+		if fetcher.count() != 1 {
+			t.Errorf("the store was read %d times, and a reread inside its floor reads nothing", fetcher.count())
+		}
+	})
+}
+
 func TestLiveStalenessBound(t *testing.T) {
 	t.Run("is sixty seconds", func(t *testing.T) {
 		if StalenessBound != 60*time.Second {
