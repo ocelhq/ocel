@@ -63,12 +63,6 @@ type callbackBody struct {
 	File      signedFile `json:"file"`
 }
 
-// CompleteUpload settles a session against what the store actually holds.
-//
-// No store this runtime drives is guaranteed to raise an event when an object
-// lands, so the upload is confirmed by asking: every file the session covers is
-// HEADed, and its size and content type must be the ones the target was signed
-// for. An object that came back different is deleted and the session fails.
 func (s *Service) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUploadRequest) (*bucketv1.CompleteUploadResponse, error) {
 	sess, err := s.anySession(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {

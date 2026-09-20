@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// The worked example in AWS's "Signature Calculations: Using Query Parameters"
-// documentation, whose expected signature the docs publish.
 func TestQueryPresigningMatchesThePublishedExample(t *testing.T) {
 	t.Parallel()
 
@@ -40,8 +38,6 @@ func TestQueryPresigningMatchesThePublishedExample(t *testing.T) {
 	}
 }
 
-// The worked example in AWS's "Signature Calculations for the Authorization
-// Header" documentation, whose expected signature the docs publish.
 func TestSigningMatchesThePublishedExample(t *testing.T) {
 	t.Parallel()
 

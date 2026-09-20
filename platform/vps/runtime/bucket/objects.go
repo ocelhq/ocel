@@ -86,7 +86,6 @@ func headInfo(key string, out *s3.HeadObjectOutput) *bucketv1.ObjectInfo {
 	return info
 }
 
-// Head answers what the store knows about one key, or nothing where it holds none.
 func (s *Service) Head(ctx context.Context, req *bucketv1.HeadRequest) (*bucketv1.HeadResponse, error) {
 	held, key, err := s.reach(req.GetBucket(), req.GetKey())
 	if err != nil {
@@ -105,7 +104,6 @@ func (s *Service) Head(ctx context.Context, req *bucketv1.HeadRequest) (*bucketv
 	return &bucketv1.HeadResponse{Object: headInfo(req.GetKey(), out)}, nil
 }
 
-// List answers one page of the keys under a prefix, never the store's own bookkeeping.
 func (s *Service) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv1.ListResponse, error) {
 	held, prefix, err := s.reach(req.GetBucket(), req.GetPrefix())
 	if err != nil {
@@ -147,7 +145,6 @@ func (s *Service) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv
 	return resp, nil
 }
 
-// Delete removes the named keys; a key the store does not hold is not an error.
 func (s *Service) Delete(ctx context.Context, req *bucketv1.DeleteRequest) (*bucketv1.DeleteResponse, error) {
 	held, err := s.held(req.GetBucket())
 	if err != nil {
@@ -182,7 +179,6 @@ func (s *Service) remove(ctx context.Context, held scope, keys []string) error {
 	return nil
 }
 
-// Copy duplicates one object within the bucket.
 func (s *Service) Copy(ctx context.Context, req *bucketv1.CopyRequest) (*bucketv1.CopyResponse, error) {
 	held, source, err := s.reach(req.GetBucket(), req.GetSourceKey())
 	if err != nil {
