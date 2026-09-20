@@ -31,6 +31,7 @@ export type JourneyReportInput = TimingInput & {
   exit: SuiteExit;
   expectedFailures: ExpectedFailures;
   meta: SummaryMeta;
+  prepareFailure?: string;
 };
 
 export type Timed = { tests: TimelineTest[]; modules: TimelineModule[]; timeline: Timeline };
@@ -112,6 +113,7 @@ export function journeyReportOf(input: JourneyReportInput): JourneyReport {
     planned: input.planned,
     results: outcomes,
     expectedFailures: input.expectedFailures,
+    ...(input.prepareFailure === undefined ? {} : { prepareFailure: input.prepareFailure }),
   });
   return {
     ...timed,
@@ -178,6 +180,7 @@ export async function writeReport(input: {
     ...shared,
     exit: input.exit,
     expectedFailures: input.plan.expectedFailures,
+    ...(prepared?.failures.lane === undefined ? {} : { prepareFailure: prepared.failures.lane }),
     meta: {
       target: input.target.name,
       lane: input.plan.lane,

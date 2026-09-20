@@ -17,6 +17,7 @@ const MARKS: Record<Verdict, string> = {
   "never-ran": "NEVER RAN",
   disabled: "DISABLED",
   unplanned: "UNPLANNED",
+  unprepared: "LANE NEVER PREPARED",
 };
 
 function issueUrl(issue: number): string {

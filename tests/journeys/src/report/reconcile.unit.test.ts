@@ -150,6 +150,51 @@ describe("reconciliation", () => {
     },
   );
 
+  it("claims a lane's prepare failure for the lane rather than for the gaps", () => {
+    const report = reconcile({
+      planned,
+      results: [
+        result(DEPLOY, "failed"),
+        result("GET /health answers", "failed"),
+        result("destroy", "failed"),
+      ],
+      expectedFailures: { "node/web": { [DEPLOY]: [GAP] } },
+      prepareFailure: "bootstrap production: exit status 1",
+    });
+    expect(report.failed).toBe(true);
+    expect(report.failures.map((row) => row.verdict)).toEqual(["unprepared"]);
+    expect(report.failures[0]?.error).toBe("bootstrap production: exit status 1");
+    expect(report.tests.filter((row) => row.verdict === "expected-failure")).toHaveLength(0);
+    expect(report.tests.filter((row) => row.cell === "node/web").map((row) => row.verdict)).toEqual(
+      ["blocked", "blocked", "blocked"],
+    );
+    expect(exitCodeFor(report.tests.map((row) => row.verdict))).toBe(1);
+  });
+
+  it("keeps a red the prepare failure does not account for", () => {
+    const said = "bootstrap production: exit status 1";
+    const report = reconcile({
+      planned,
+      results: [
+        { cell: "node/web", title: DEPLOY, outcome: "failed", error: said },
+        { cell: "node/web", title: "GET /health answers", outcome: "failed", error: said },
+        {
+          cell: "node/web",
+          title: "destroy",
+          outcome: "failed",
+          error: "the sweeper still lists e2e-node-web after destroy",
+        },
+      ],
+      expectedFailures: { "node/web": { [DEPLOY]: [GAP] } },
+      prepareFailure: said,
+    });
+    expect(report.tests.filter((row) => row.cell === "node/web").map((row) => row.verdict)).toEqual(
+      ["blocked", "blocked", "unexpected-failure"],
+    );
+    expect(report.failures.map((row) => row.verdict)).toEqual(["unprepared", "unexpected-failure"]);
+    expect(report.failures[1]?.error).toBe("the sweeper still lists e2e-node-web after destroy");
+  });
+
   it("fails a cell whose deploy failed unlisted", () => {
     const report = reconcile({
       planned,
