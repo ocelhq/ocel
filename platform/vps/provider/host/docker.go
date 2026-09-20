@@ -1,6 +1,10 @@
 package host
 
-import "github.com/ocelhq/ocel/pkg/providerkit"
+import (
+	"strconv"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
+)
 
 const (
 	KindEngine = "docker:engine"
@@ -17,6 +21,13 @@ const (
 	dockerScriptCommit = "2b32480025b223ebfddae9a3a8bef09027680f53"
 	dockerScriptSum    = "fefa50ccd50efb42f438b506fc3a88574118f314aaf2a7cd5b6e1ffb1bffcf26"
 	dockerSource       = "https://raw.githubusercontent.com/docker/docker-install/" + dockerScriptCommit + "/install.sh"
+)
+
+const (
+	engineInstallTries          = 3
+	engineInstallBackoffSeconds = 15
+	engineInstallCeilingSeconds = 60
+	engineInstallJitterSeconds  = 15
 )
 
 const (
@@ -72,7 +83,21 @@ if ! printf '%s  %s\n' ` + dockerScriptSum + ` "$script" | sha256sum -c - >/dev/
 echo '` + dockerSource + ` does not hash to ` + dockerScriptSum + `, which is the install script ocel pinned, so nothing of it runs' >&2
 exit 1
 fi
-VERSION=` + dockerVersion + ` sh "$script"`
+tries=0
+backoff=` + strconv.Itoa(engineInstallBackoffSeconds) + `
+while :; do
+if VERSION=` + dockerVersion + ` sh "$script"; then break; fi
+tries=$((tries + 1))
+if [ "$tries" -ge ` + strconv.Itoa(engineInstallTries) + ` ]; then
+echo '` + dockerSource + ` failed ` + strconv.Itoa(engineInstallTries) + ` times, the last of them above, so ocel stopped retrying it' >&2
+exit 1
+fi
+jitter=$(awk -v seed=$$ -v n="$tries" -v spread=` + strconv.Itoa(engineInstallJitterSeconds) + ` 'BEGIN{srand(seed+n);print int(rand()*spread)}' 2>/dev/null || echo 0)
+[ -n "$jitter" ] || jitter=0
+sleep $((backoff + jitter))
+backoff=$((backoff * 2))
+if [ "$backoff" -gt ` + strconv.Itoa(engineInstallCeilingSeconds) + ` ]; then backoff=` + strconv.Itoa(engineInstallCeilingSeconds) + `; fi
+done`
 }
 
 func unitCommand(i Item) string {
