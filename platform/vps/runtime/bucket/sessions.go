@@ -100,12 +100,12 @@ func (s *Service) anySession(ctx context.Context, id string) (session, error) {
 	return s.readSession(ctx, s.sessions, id)
 }
 
-func (s *Service) writeSession(ctx context.Context, sess session) error {
+func (s *Service) writeSession(ctx context.Context, sess *session) error {
 	body, err := json.Marshal(sess)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("encode the upload session: %w", err))
 	}
-	_, err = s.cfg.Objects.PutObject(ctx, &s3.PutObjectInput{
+	out, err := s.cfg.Objects.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(sess.scope.bucket),
 		Key:         aws.String(sess.scope.key(sessionKey(sess.SessionID))),
 		Body:        bytes.NewReader(body),
@@ -118,6 +118,7 @@ func (s *Service) writeSession(ctx context.Context, sess session) error {
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("settle the upload session: %w", err))
 	}
+	sess.etag = aws.ToString(out.ETag)
 	return nil
 }
 
