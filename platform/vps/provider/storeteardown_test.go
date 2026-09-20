@@ -17,11 +17,12 @@ import (
 func manifestAfterBucket(t *testing.T, machine *box) vars.Manifest {
 	t.Helper()
 	provider := over(machine)
-	if _, err := provider.Bucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+	binding, err := provider.Bucket(context.Background(), aBucket(t, "uploads", false), nil)
+	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
 	app := anApp()
-	app.Values = providerkit.AppValues{Bindings: []providerkit.Binding{bindingBucket()}}
+	app.Values = providerkit.AppValues{Bindings: []providerkit.Binding{binding}}
 	if _, err := provider.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -53,6 +54,27 @@ func TestAStoreThatRefusedToExpireItsOwnUploadsIsSweptByTheRuntime(t *testing.T)
 	manifest := manifestAfterBucket(t, machine)
 	if manifest.Store == nil || !manifest.Store.SweepUploads {
 		t.Error("the store refused the rule that abandons unfinished uploads and nothing sweeps them, so an upload left open holds its parts on the volume forever")
+	}
+}
+
+func TestAStoreThatRefusedToExpireItsUploadsIsSweptByADeployThatOnlyBuildsTheAppSection(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{kept: sealedRootKey(), refuses: lifecycleAnswering("lifecycle=501\n")}
+	binding, err := over(machine).Bucket(context.Background(), aBucket(t, "uploads", false), nil)
+	if err != nil {
+		t.Fatalf("Bucket() = %v", err)
+	}
+	machine.forget()
+
+	app := anApp()
+	app.Values = providerkit.AppValues{Bindings: []providerkit.Binding{binding}}
+	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	manifest := manifestIn(t, machine)
+	if manifest.Store == nil || !manifest.Store.SweepUploads {
+		t.Error("the store refused the rule that abandons unfinished uploads and the app was told to sweep nothing, because what the store answered was only ever held in the memory of the run that asked it")
 	}
 }
 

@@ -35,6 +35,8 @@ const (
 	storeSecretLen = 24
 
 	storeBucketNameMax = 63
+
+	propertySweepUploads = "sweepUploads"
 )
 
 const storeHealthPath = "/health/ready"
@@ -323,6 +325,7 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 		Properties: map[string]string{
 			providerkit.PropertyBucket: bucket,
 			providerkit.PropertyPublic: strconv.FormatBool(public),
+			propertySweepUploads:       strconv.FormatBool(p.stores.sweeping()),
 		},
 	}, nil
 }
@@ -399,7 +402,7 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 		Sessions:     sessionsPrefix(plan),
 		Granted:      grantedBuckets(plan.App),
 		PostPolicies: true,
-		SweepUploads: p.stores.sweeping(),
+		SweepUploads: sweptUploads(plan.App),
 		Sealed:       base64.StdEncoding.EncodeToString(own.held.sealed),
 	}, nil
 }
@@ -461,6 +464,17 @@ func grantedBuckets(app *providerkit.AppPlan) []string {
 		}
 	}
 	return held
+}
+
+func sweptUploads(app *providerkit.AppPlan) bool {
+	if app == nil {
+		return false
+	}
+	return slices.ContainsFunc(append(slices.Clone(app.Values.Bindings), app.Grants...),
+		func(binding providerkit.Binding) bool {
+			return binding.Type == providerkit.BindingBucket &&
+				binding.Properties[propertySweepUploads] == "true"
+		})
 }
 
 func boundBuckets(app *providerkit.AppPlan) []string {
