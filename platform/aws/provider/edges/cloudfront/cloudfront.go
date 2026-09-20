@@ -2,6 +2,7 @@ package cloudfront
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -255,13 +256,41 @@ func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
 		names = append(names, summary.comment)
 	}
 	slices.Sort(names)
-	standing := projectsNamed(names, class)
+	standing, err := p.frontedHere(ctx, c, class, projectsNamed(names, class))
+	if err != nil {
+		return err
+	}
 	if len(standing) == 0 {
 		return nil
 	}
 	return providerkit.Refuse(providerkit.CodeInvalid,
 		"the %q edge still fronts %d project(s) of class %s with a distribution of their own: %s. Run `%s` in each of them first, then take this bootstrap down",
 		Kind, len(standing), class, strings.Join(standing, ", "), "ocel destroy "+string(class))
+}
+
+func (p *provider) frontedHere(ctx context.Context, c Clients, class edge.Class, slugs []string) ([]string, error) {
+	if len(slugs) == 0 {
+		return nil, nil
+	}
+	deployed, err := p.bootstrap(ctx, c, class)
+	if err != nil {
+		return nil, err
+	}
+	if !deployed.Present || deployed.StateTable == "" {
+		return nil, nil
+	}
+	var here []string
+	for _, slug := range slugs {
+		_, err := awsports.Ledger(c.Dynamo, awsports.Table(deployed.StateTable), class, slug).SchemaVersion(ctx)
+		if errors.Is(err, edge.ErrStoreSchemaUnreadable) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		here = append(here, slug)
+	}
+	return here, nil
 }
 
 func projectsNamed(names []string, class edge.Class) []string {

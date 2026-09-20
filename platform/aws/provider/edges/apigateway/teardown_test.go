@@ -6,6 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/apigateway"
+
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -38,5 +41,22 @@ func TestTeardownRefusesWhileAProjectStillHasARestAPI(t *testing.T) {
 	}
 	if err := e.Teardown(ctx, edge.ClassProduction); err != nil {
 		t.Errorf("Teardown after the project's destroy = %v, want nil", err)
+	}
+}
+
+func TestTeardownIgnoresARestAPIAnotherBootstrapFronts(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	e := bootstrapped(t, w)
+	if _, err := w.gateway.CreateRestApi(ctx, &apigateway.CreateRestApiInput{
+		Name: aws.String(apiName("fronted-elsewhere", edge.ClassProduction, "")),
+	}); err != nil {
+		t.Fatalf("CreateRestApi: %v", err)
+	}
+
+	if err := e.Teardown(ctx, edge.ClassProduction); err != nil {
+		t.Errorf("Teardown = %v, want nil: this bootstrap's ledger names no project behind that REST API", err)
 	}
 }
