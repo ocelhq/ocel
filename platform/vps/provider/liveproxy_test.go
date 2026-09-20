@@ -2,6 +2,7 @@ package vps_test
 
 import (
 	"context"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -15,29 +16,74 @@ const adminPort = "2019"
 
 func (vm machine) inspects(t *testing.T, what, name, format string) string {
 	t.Helper()
-	return strings.TrimSpace(vm.ssh(t, "sudo docker "+what+" inspect -f "+quote(format)+" "+quote(name)+" 2>/dev/null || true"))
+	rendered, err := vm.attempt(vm.user, "sudo docker "+what+" inspect -f "+quote(format)+" "+quote(name))
+	if err != nil {
+		if absent(err) {
+			return ""
+		}
+		t.Fatalf("docker %s inspect -f %s %s: %v", what, quote(format), quote(name), err)
+	}
+	return strings.TrimSpace(rendered)
+}
+
+var (
+	noSuchObject   = regexp.MustCompile(`no such (container|image|object|volume|network|plugin|config|secret)\b`)
+	objectNotFound = regexp.MustCompile(`\b(container|image|object|volume|network|plugin|config|secret) \S+ not found\b`)
+)
+
+func absent(said error) bool {
+	lowered := strings.ToLower(said.Error())
+	return noSuchObject.MatchString(lowered) || objectNotFound.MatchString(lowered)
+}
+
+const containerSaid = "ocel-container-said"
+
+func containerScript(command string) string {
+	return quote("{\n" + command + "\n} 2>&1\nprintf " + quote("\n"+containerSaid))
+}
+
+func spoken(rendered string) (string, bool) {
+	said, ran := strings.CutSuffix(rendered, containerSaid)
+	if !ran {
+		return "", false
+	}
+	return strings.TrimSuffix(said, "\n"), true
+}
+
+func (vm machine) ran(t *testing.T, what, command string) string {
+	t.Helper()
+	rendered, err := vm.attempt(vm.user, command)
+	said, ran := spoken(rendered)
+	if !ran {
+		t.Fatalf("%s never ran, so what it would have said is not what this reads: %v\n%s", what, err, rendered)
+	}
+	return said
 }
 
 func (vm machine) inside(t *testing.T, command string) string {
 	t.Helper()
-	return vm.ssh(t, "sudo docker exec "+host.ProxyContainer+" sh -c "+quote(command)+" 2>&1 || true")
+	return vm.ran(t, "a command in "+host.ProxyContainer,
+		"sudo docker exec "+host.ProxyContainer+" sh -c "+containerScript(command))
 }
 
 func (vm machine) drives(t *testing.T, argv string) string {
 	t.Helper()
-	return strings.TrimSpace(vm.ssh(t, "sudo docker exec "+host.ProxyContainer+" "+host.ProxyHelperMount+" "+argv+" 2>&1 || true"))
+	return strings.TrimSpace(vm.ran(t, host.ProxyHelperMount+" in "+host.ProxyContainer,
+		"sudo docker exec "+host.ProxyContainer+" sh -c "+containerScript(host.ProxyHelperMount+" "+argv)))
 }
 
 func (vm machine) peers(t *testing.T, command string) string {
 	t.Helper()
-	return vm.ssh(t, "sudo docker run --rm --network "+quote(host.ProxyNetwork)+" "+quote(host.ProxyImage)+
-		" sh -c "+quote(command)+" 2>&1 || true")
+	return vm.ran(t, "a container on "+host.ProxyNetwork,
+		"sudo docker run --rm --network "+quote(host.ProxyNetwork)+" "+quote(host.ProxyImage)+
+			" sh -c "+containerScript(command))
 }
 
 func (vm machine) beside(t *testing.T, container, command string) string {
 	t.Helper()
-	return vm.ssh(t, "sudo docker run --rm --network "+quote("container:"+container)+" "+quote(host.ProxyImage)+
-		" sh -c "+quote(command)+" 2>&1 || true")
+	return vm.ran(t, "a container sharing the network of "+container,
+		"sudo docker run --rm --network "+quote("container:"+container)+" "+quote(host.ProxyImage)+
+			" sh -c "+containerScript(command))
 }
 
 func quote(arg string) string { return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'" }
@@ -105,7 +151,11 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 		t.Errorf("%s stands at %q, want nothing for group or other: the socket's permissions are the whole of its access control", host.ProxyAdminSocket, mode)
 	}
 
-	if listening := vm.inside(t, "netstat -ltn"); strings.Contains(listening, ":"+adminPort) {
+	listening := vm.inside(t, "command -v netstat >/dev/null || echo no-netstat\nnetstat -ltn")
+	if strings.Contains(listening, "no-netstat") {
+		t.Fatalf("the proxy image carries no netstat, and a listing nothing produced carries no port to find:\n%s", listening)
+	}
+	if strings.Contains(listening, ":"+adminPort) {
 		t.Errorf("the proxy carries a tcp listener on %s, and binding the admin endpoint anywhere but the socket is the failure this pick exists to avoid:\n%s", adminPort, listening)
 	}
 	if bound := vm.ssh(t, "ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null || true"); strings.Contains(bound, ":"+adminPort) {
