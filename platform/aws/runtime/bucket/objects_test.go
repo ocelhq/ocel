@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 )
 
@@ -250,7 +251,7 @@ func TestList(t *testing.T) {
 	t.Run("the reserved prefix is never listed", func(t *testing.T) {
 		t.Parallel()
 		objects := seeded()
-		objects.seed("storage", reservedPrefix+"sessions/sess_1", "{}", "application/json")
+		objects.seed("storage", constants.ReservedKeyPrefix+"sessions/sess_1", "{}", "application/json")
 		svc := newObjectService(t, objects)
 
 		resp, err := svc.List(context.Background(), &bucketv1.ListRequest{Bucket: "storage"})
@@ -258,7 +259,7 @@ func TestList(t *testing.T) {
 			t.Fatalf("List: %v", err)
 		}
 		for _, obj := range resp.GetObjects() {
-			if strings.HasPrefix(obj.GetKey(), reservedPrefix) {
+			if strings.HasPrefix(obj.GetKey(), constants.ReservedKeyPrefix) {
 				t.Fatalf("List returned %q, and the store's own bookkeeping is not the app's to see", obj.GetKey())
 			}
 		}

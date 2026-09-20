@@ -14,6 +14,7 @@ import (
 	"github.com/aws/smithy-go"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 )
 
@@ -110,7 +111,7 @@ func (s *Service) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv
 	resp := &bucketv1.ListResponse{NextCursor: aws.ToString(out.NextContinuationToken)}
 	for _, obj := range out.Contents {
 		key := held.strip(aws.ToString(obj.Key))
-		if strings.HasPrefix(key, reservedPrefix) {
+		if strings.HasPrefix(key, constants.ReservedKeyPrefix) {
 			continue
 		}
 		info := &bucketv1.ObjectInfo{
