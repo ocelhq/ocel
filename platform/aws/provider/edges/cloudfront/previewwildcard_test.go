@@ -12,7 +12,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -315,6 +317,43 @@ func TestTheWildcardIsAFrontTheTagInvalidatorReaches(t *testing.T) {
 			t.Errorf("bootstrap invalidation targets = %v, want a torn-down wildcard invalidated by nobody", held)
 		}
 	})
+}
+
+func TestDestroyPreviewWildcardLeavesTheEntryAnotherNamespaceIsServingPreviewsThrough(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	e := previewBootstrapped(t, w)
+	other := bootstrap.Namespace("other")
+	w.front.distributions["E9"] = &fakeDistribution{
+		id:     "E9",
+		domain: "e9.cloudfront.net",
+		etag:   "dist-9",
+		config: &cftypes.DistributionConfig{
+			Comment: aws.String(previewWildcardName(previewBase)),
+			DefaultCacheBehavior: &cftypes.DefaultCacheBehavior{
+				FunctionAssociations: &cftypes.FunctionAssociations{
+					Quantity: ptr(int32(1)),
+					Items: []cftypes.FunctionAssociation{{
+						EventType:   cftypes.EventTypeViewerRequest,
+						FunctionARN: aws.String("arn:aws:cloudfront::123456789012:function/" + other.EdgeResolverName(edge.ClassPreview)),
+					}},
+				},
+			},
+		},
+	}
+
+	err := e.DestroyPreviewWildcard(context.Background(), previewBase)
+	var refusal providerkit.Refusal
+	if !errors.As(err, &refusal) {
+		t.Fatalf("DestroyPreviewWildcard = %v, want a refusal: %s still routes every preview on %s through this one distribution", err, other, previewBase)
+	}
+	if !strings.Contains(refusal.Message, string(other)) {
+		t.Errorf("refusal = %q, want it to name the namespace still holding the shared entry", refusal.Message)
+	}
+	if w.front.named(previewWildcardName(previewBase)) == nil {
+		t.Error("the shared preview entry was deleted anyway, so every preview another namespace serves on it now answers nothing")
+	}
 }
 
 func TestDestroyPreviewWildcard(t *testing.T) {

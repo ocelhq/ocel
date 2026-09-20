@@ -9,9 +9,11 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
+	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 	"github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
@@ -149,15 +151,20 @@ func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string
 	if err != nil {
 		return err
 	}
+	held, found, err := findDistribution(ctx, c, previewWildcardName(baseDomain))
+	if err != nil {
+		return err
+	}
+	if found {
+		if err := p.ownsSharedPreviewEntry(ctx, c, held.id, baseDomain); err != nil {
+			return err
+		}
+	}
 	var errs []error
 	if err := sweepPreviewRoutes(ctx, c, p.ns, baseDomain); err != nil {
 		errs = append(errs, err)
 	}
-	held, found, err := findDistribution(ctx, c, previewWildcardName(baseDomain))
-	switch {
-	case err != nil:
-		errs = append(errs, err)
-	case found:
+	if found {
 		if err := p.deleteDistribution(ctx, c, kindWildcardDistribution, held.id); err != nil {
 			errs = append(errs, err)
 		} else if err := p.forgetPreviewWildcardTarget(ctx, c, held.id); err != nil {
@@ -165,6 +172,39 @@ func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string
 		}
 	}
 	return errors.Join(errs...)
+}
+
+var previewResolverSuffix = bootstrap.Namespace("").EdgeResolverName(edge.ClassPreview)
+
+func (p *provider) ownsSharedPreviewEntry(ctx context.Context, c Clients, id, baseDomain string) error {
+	config, _, err := configOf(ctx, c, id)
+	if err != nil {
+		return err
+	}
+	serving := resolverNamespaceOf(config)
+	if serving == "" || serving == string(p.ns) {
+		return nil
+	}
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"CloudFront hands %s to one distribution for the whole account, and the one standing reads its routes through the %s namespace's preview resolver, so every preview %s serves answers on it. Releasing it here would take those down. Run `ocel domain rm '%s' --preview` under %s instead",
+		edge.PreviewWildcard(baseDomain), serving, serving, edge.PreviewWildcard(baseDomain), serving)
+}
+
+func resolverNamespaceOf(config *cftypes.DistributionConfig) string {
+	if config == nil || config.DefaultCacheBehavior == nil || config.DefaultCacheBehavior.FunctionAssociations == nil {
+		return ""
+	}
+	for _, held := range config.DefaultCacheBehavior.FunctionAssociations.Items {
+		if held.EventType != cftypes.EventTypeViewerRequest {
+			continue
+		}
+		arn := aws.ToString(held.FunctionARN)
+		name := arn[strings.LastIndex(arn, "/")+1:]
+		if ns, resolver := strings.CutSuffix(name, previewResolverSuffix); resolver {
+			return ns
+		}
+	}
+	return ""
 }
 
 func (p *provider) forgetPreviewWildcardTarget(ctx context.Context, c Clients, distribution string) error {
