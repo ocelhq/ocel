@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -122,10 +123,11 @@ type storeCredential struct {
 }
 
 type standingStores struct {
-	mu    sync.Mutex
-	stood map[string]storeCredential
-	spec  *host.ResourceContainer
-	probe host.StoreProbe
+	mu     sync.Mutex
+	stood  map[string]storeCredential
+	spec   *host.ResourceContainer
+	shaper string
+	probe  host.StoreProbe
 }
 
 func (s *standingStores) probed(probe host.StoreProbe) {
@@ -140,10 +142,22 @@ func (s *standingStores) probing() host.StoreProbe {
 	return s.probe
 }
 
-func (s *standingStores) shaped(spec host.ResourceContainer) {
+func (s *standingStores) shaped(resource string, spec host.ResourceContainer) (host.ResourceContainer, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.spec = &spec
+	if s.spec == nil {
+		s.spec, s.shaper = &spec, resource
+		return spec, nil
+	}
+	if !reflect.DeepEqual(*s.spec, spec) {
+		return host.ResourceContainer{}, providerkit.Refuse(providerkit.CodeInvalid,
+			"bucket %s asks the store to run as one shape and bucket %s asks it to run as another, "+
+				"and this project keeps every bucket in the one store container, so only one of them can be live. "+
+				"Gate the `vps.bucket` rule on the environment rather than on which bucket it reaches, "+
+				"or patch both buckets the same way",
+			resource, s.shaper)
+	}
+	return *s.spec, nil
 }
 
 func (s *standingStores) shape() *host.ResourceContainer {
@@ -217,7 +231,10 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 	if err != nil {
 		return providerkit.Binding{}, err
 	}
-	p.stores.shaped(spec)
+	spec, err = p.stores.shaped(in.Resource.Name, spec)
+	if err != nil {
+		return providerkit.Binding{}, err
+	}
 	if report != nil {
 		report.Say("Standing bucket " + in.Resource.Name + " up in " + spec.Name)
 	}

@@ -164,3 +164,51 @@ func TestEveryFieldTheVpsBranchTypesIsOneABoxRenders(t *testing.T) {
 		}
 	}
 }
+
+type perResource struct {
+	patches map[string]transformkit.Patches
+}
+
+func (p *perResource) Evaluate(_ context.Context, req transformkit.Request) ([]transformkit.Result, error) {
+	if len(req.Resources) == 0 {
+		return nil, nil
+	}
+	return []transformkit.Result{{Patches: p.patches[req.Resources[0].Name]}}, nil
+}
+
+func TestTwoBucketsPatchingTheOneStoreDifferentlyAreRefused(t *testing.T) {
+	t.Parallel()
+
+	provider := over(&box{kept: sealedRootKey()})
+	provider.Transforming(&perResource{patches: map[string]transformkit.Patches{
+		"uploads": {"container": {"memory": "2g"}},
+		"avatars": {"container": {"memory": "4g"}},
+	}})
+
+	if _, err := provider.Bucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+		t.Fatalf("Bucket(uploads) = %v", err)
+	}
+	_, err := provider.Bucket(context.Background(), aBucket(t, "avatars", false), nil)
+	if err == nil {
+		t.Fatal("the second bucket reshaped the one store the first is already running in, and nothing said so")
+	}
+	for _, want := range []string{"avatars", "uploads"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal reads %q and never names %s", err, want)
+		}
+	}
+}
+
+func TestTwoBucketsPatchingTheOneStoreTheSameWayStandUpTogether(t *testing.T) {
+	t.Parallel()
+
+	provider := over(&box{kept: sealedRootKey()})
+	provider.Transforming(&patching{patches: transformkit.Patches{"container": {"memory": "2g"}}})
+
+	if _, err := provider.Bucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+		t.Fatalf("Bucket(uploads) = %v", err)
+	}
+	if _, err := provider.Bucket(context.Background(), aBucket(t, "avatars", false), nil); err != nil {
+		t.Fatalf("Bucket(avatars) = %v, want two buckets shaping the store alike to stand up", err)
+	}
+}
