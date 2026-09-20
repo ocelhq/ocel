@@ -572,4 +572,7 @@ func TestABrowserUploadIsBoundedByPolicyWhereTheStoreSignsOne(t *testing.T) {
 	if target.GetFields()["policy"] == "" {
 		t.Fatalf("fields = %v, want the policy that bounds the body before a byte is sent", target.GetFields())
 	}
+	if got := target.GetFields()["Content-Type"]; got != "image/png" {
+		t.Fatalf("fields carry Content-Type %q, and a policy conditioned on one refuses a form that omits it", got)
+	}
 }
