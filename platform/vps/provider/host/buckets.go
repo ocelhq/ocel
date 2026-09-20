@@ -29,6 +29,7 @@ type BucketSpec struct {
 	Bucket         string
 	AllowedOrigins []string
 	Public         bool
+	Internal       bool
 }
 
 const (
@@ -67,7 +68,7 @@ type lifecycleConfiguration struct {
 
 func corsBody(origins []string) ([]byte, error) {
 	if len(origins) == 0 {
-		origins = []string{}
+		origins = []string{"*"}
 	}
 	return xml.Marshal(corsConfiguration{Rules: []corsRule{{
 		AllowedOrigin: origins,
@@ -109,19 +110,27 @@ type storeCall struct {
 }
 
 func (s BucketSpec) calls() ([]storeCall, error) {
-	cors, err := corsBody(s.AllowedOrigins)
-	if err != nil {
-		return nil, err
-	}
 	lifecycle, err := lifecycleBody()
 	if err != nil {
 		return nil, err
 	}
 	calls := []storeCall{
 		{what: "create bucket " + s.Bucket, allow: []string{"200", "204", "409"}},
-		{what: "hold bucket " + s.Bucket + " to the origins it answers", query: "cors", body: cors, typed: "application/xml", md5: true, allow: []string{"200", "204"}},
-		{what: "have bucket " + s.Bucket + " abandon unfinished uploads", query: "lifecycle", body: lifecycle, typed: "application/xml", md5: true, allow: []string{"200", "204", "400", "404", "501"}},
 	}
+	if !s.Internal {
+		cors, err := corsBody(s.AllowedOrigins)
+		if err != nil {
+			return nil, err
+		}
+		calls = append(calls, storeCall{
+			what:  "hold bucket " + s.Bucket + " to the origins it answers",
+			query: "cors", body: cors, typed: "application/xml", md5: true, allow: []string{"200", "204"},
+		})
+	}
+	calls = append(calls, storeCall{
+		what:  "have bucket " + s.Bucket + " abandon unfinished uploads",
+		query: "lifecycle", body: lifecycle, typed: "application/xml", md5: true, allow: []string{"200", "204", "400", "404", "501"},
+	})
 	if s.Public {
 		policy, err := anonymousReadPolicy(s.Bucket)
 		if err != nil {
