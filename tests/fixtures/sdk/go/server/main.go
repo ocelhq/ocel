@@ -17,7 +17,12 @@ func main() {
 
 	http.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("content-type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "database": infra.DB.Name(), "greeting": infra.Env.Greeting})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":       true,
+			"database": infra.DB.Name(),
+			"bucket":   infra.Uploads.Name(),
+			"greeting": infra.Env.Greeting,
+		})
 	})
 
 	log.Printf("go listening on http://localhost:%s", port)
