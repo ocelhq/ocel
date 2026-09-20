@@ -39,6 +39,16 @@ func (h *Host) RouteResource(ctx context.Context, route AppRoute) error {
 	})
 }
 
+func (h *Host) UnrouteApp(ctx context.Context, key RouteKey) error {
+	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
+		state.Routes = Unrouting(state.Routes, func(route AppRoute) bool { return route.RouteKey == key })
+		state.Claims = Disclaiming(state.Claims, func(claim HostClaim) bool {
+			return claim.Owner == key.Owner && claim.Pointer == key.Pointer && claim.App == key.App
+		})
+		return state, nil
+	})
+}
+
 func (h *Host) UnroutePointer(ctx context.Context, owner, pointer string) error {
 	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
 		state.Routes = Unrouting(state.Routes, func(route AppRoute) bool {

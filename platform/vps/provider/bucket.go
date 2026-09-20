@@ -123,11 +123,31 @@ type storeCredential struct {
 }
 
 type standingStores struct {
-	mu     sync.Mutex
-	stood  map[string]storeCredential
-	spec   *host.ResourceContainer
-	shaper string
-	probe  host.StoreProbe
+	mu      sync.Mutex
+	stood   map[string]storeCredential
+	dropped map[string]bool
+	spec    *host.ResourceContainer
+	shaper  string
+	probe   host.StoreProbe
+}
+
+func droppedBucket(stack naming.StackName, binding string) string {
+	return stack.String() + "/" + binding
+}
+
+func (s *standingStores) forgot(stack naming.StackName, binding string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dropped == nil {
+		s.dropped = map[string]bool{}
+	}
+	s.dropped[droppedBucket(stack, binding)] = true
+}
+
+func (s *standingStores) forgotten(stack naming.StackName, binding string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.dropped[droppedBucket(stack, binding)]
 }
 
 func (s *standingStores) probed(probe host.StoreProbe) {
@@ -485,7 +505,7 @@ func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, b
 	if report != nil {
 		report.Say("Taking bucket " + binding.Name + " and its objects down")
 	}
-	return p.host.RemoveBucket(ctx, host.BucketRef{
+	if err := p.host.RemoveBucket(ctx, host.BucketRef{
 		Class:       ref.Class,
 		Project:     ref.Project,
 		Store:       store,
@@ -494,7 +514,109 @@ func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, b
 		Region:      storeRegion,
 		AccessKeyID: storeAccessKey,
 		SecretKey:   held.secret,
-	})
+	}); err != nil {
+		return err
+	}
+	last, err := p.lastBucket(ctx, ref, binding)
+	if err != nil || !last {
+		return err
+	}
+	return p.removeStore(ctx, ref, report)
+}
+
+func (p *Provider) lastBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding) (bool, error) {
+	p.stores.forgot(ref.Name, binding.Name)
+	entries, err := providerkit.ReadStacks(ctx, p.records, ref.Class, ref.Project)
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if entry.Name.Env != ref.Name.Env {
+			continue
+		}
+		for _, held := range entry.Bindings {
+			if held.Type != providerkit.BindingBucket || p.stores.forgotten(entry.Name, held.Name) {
+				continue
+			}
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (p *Provider) removeStore(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
+	store := storeName(ref)
+	if report != nil {
+		report.Say("Taking the store " + store + " down with the last bucket it held")
+	}
+	if err := p.host.UnrouteApp(ctx, storeRoute(ref, store).RouteKey); err != nil {
+		return err
+	}
+	if err := p.host.RemoveResource(ctx, host.ResourceRef{
+		Class: ref.Class, Project: ref.Project, Resource: storeResource, Name: store,
+	}); err != nil {
+		return err
+	}
+	accounts, err := p.storeAccounts(ctx, ref)
+	if err != nil {
+		return err
+	}
+	return p.host.ForgetKept(ctx, ref.Class, accounts)
+}
+
+func (p *Provider) storeAccounts(ctx context.Context, ref providerkit.StackRef) ([]string, error) {
+	entries, err := providerkit.ReadStacks(ctx, p.records, ref.Class, ref.Project)
+	if err != nil {
+		return nil, err
+	}
+	env := storeRef(ref).Name.String()
+	var accounts []string
+	for _, entry := range entries {
+		if entry.Name.Env != ref.Name.Env {
+			continue
+		}
+		app := entry.App
+		if app == "" {
+			app = entry.Name.App
+		}
+		if app == "" || app == naming.InfraApp {
+			continue
+		}
+		if key := host.StoreAccountKey(env, app); !slices.Contains(accounts, key) {
+			accounts = append(accounts, key)
+		}
+	}
+	return accounts, nil
+}
+
+func (p *Provider) removeStoreAccount(ctx context.Context, ref providerkit.StackRef, app string) error {
+	if external := p.options.Bucket; external.configured() {
+		return nil
+	}
+	store := storeName(ref)
+	key := host.StoreAccountKey(storeRef(ref).Name.String(), app)
+	sealed, err := p.host.Kept(ctx, ref.Class, key)
+	if err != nil || len(sealed) == 0 {
+		return err
+	}
+	held, err := p.storeRoot(ctx, ref, store)
+	if err != nil {
+		return err
+	}
+	if held.secret != "" {
+		if err := p.host.RevokeStoreAccount(ctx, host.StoreAccount{
+			Store:       store,
+			Class:       ref.Class,
+			Endpoint:    "http://127.0.0.1:" + storePort,
+			Region:      storeRegion,
+			RootKeyID:   storeAccessKey,
+			RootSecret:  held.secret,
+			AccessKeyID: key,
+		}); err != nil {
+			return err
+		}
+	}
+	return p.host.ForgetKept(ctx, ref.Class, []string{key})
 }
 
 func (p *Provider) storeRoot(ctx context.Context, ref providerkit.StackRef, store string) (storeCredential, error) {
