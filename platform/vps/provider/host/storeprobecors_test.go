@@ -3,10 +3,48 @@ package host
 import (
 	"encoding/base64"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestARealStoreSettlesASessionWithIfMatchAndRefusesAStaleOne(t *testing.T) {
+	if testing.Short() {
+		t.Skip("stands a real store up")
+	}
+	store := anExternalStore(t, "conditional-bucket")
+	now := time.Now().UTC()
+	const key = "session.json"
+
+	opened, err := store.call("opened", "PUT", key, "", map[string]string{"If-None-Match": "*"}, []byte(probeBody), true, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, err := store.call("read", "HEAD", key, "", nil, nil, true, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	said, err := hereRuns(t)("open a session on the store", probeScript([]probeCall{opened, read}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := readProbe(said)["opened"].code; !slices.Contains(storeWrote, code) {
+		t.Fatalf("the store answered %s claiming a session key it held nothing under", code)
+	}
+
+	settled, err := store.call("settled", "PUT", key, "", map[string]string{"If-Match": "\"nothing-like-the-etag\""}, []byte(probeBody), false, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	said, err = hereRuns(t)("settle a session another replica already moved", probeScript([]probeCall{settled}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := readProbe(said)["settled"].code; code != "412" {
+		t.Errorf("the store answered %s to a write conditional on an etag it does not hold, and two replicas would both fire onUploadComplete", code)
+	}
+}
 
 func anAbsentStore() ExternalStore {
 	return ExternalStore{
