@@ -216,7 +216,7 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 			return storeCredential{}, err
 		}
 		if err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, held.secret,
-			host.BucketSpec{Bucket: constants.StoreSessionsBucket()})); err != nil {
+			host.BucketSpec{Bucket: constants.StoreSessionsBucket(), Internal: true})); err != nil {
 			return storeCredential{}, err
 		}
 		return held, nil
