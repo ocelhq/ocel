@@ -28,9 +28,7 @@ func stubs(t *testing.T, held *account) string {
 	log := filepath.Join(dir, "log")
 	write := func(name, body string) {
 		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+body), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		executable(t, filepath.Join(dir, name), "#!/bin/sh\n"+body)
 	}
 	said := "printf '%s\\n' \"$(basename \"$0\") $*\" >>" + quoted(log) + "\n"
 

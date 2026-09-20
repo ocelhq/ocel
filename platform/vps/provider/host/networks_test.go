@@ -113,9 +113,7 @@ func TestAnEngineOutOfSubnetsIsRefusedWithTheDaemonSettingThatGivesItMore(t *tes
 func dockerStubbing(t *testing.T, script string) string {
 	t.Helper()
 	stub := t.TempDir()
-	if err := os.WriteFile(filepath.Join(stub, dockerEngine), []byte("#!/bin/sh\n"+script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	executable(t, filepath.Join(stub, dockerEngine), "#!/bin/sh\n"+script)
 	return stub
 }
 

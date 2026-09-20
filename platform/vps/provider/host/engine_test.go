@@ -85,9 +85,7 @@ func proxyStanding(t *testing.T) standingProxy {
 	if err := os.WriteFile(config, proxyBaseline, 0o640); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(helper, proxyHelper(arch), 0o750); err != nil {
-		t.Fatal(err)
-	}
+	runnable(t, helper, proxyHelper(arch), 0o750)
 	pins := filepath.Join(dir, "pins")
 	for _, made := range []string{filepath.Join(dir, "data"), pins} {
 		if err := os.MkdirAll(made, 0o700); err != nil {

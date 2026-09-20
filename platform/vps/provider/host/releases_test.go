@@ -184,10 +184,7 @@ func slowGrep(t *testing.T) string {
 		t.Skip("no grep on this machine")
 	}
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "grep"),
-		[]byte("#!/bin/sh\nsleep 5\nexec "+real+" \"$@\"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	executable(t, filepath.Join(dir, "grep"), "#!/bin/sh\nsleep 5\nexec "+real+" \"$@\"\n")
 	return dir
 }
 
@@ -528,9 +525,7 @@ func fakeDocker(t *testing.T, running, images []string) dockerStub {
 		"    grep -F -x -v -e \"$2\" " + filepath.Join(dir, "images") + " >" + filepath.Join(dir, "images.next") + " || true\n" +
 		"    mv -f " + filepath.Join(dir, "images.next") + " " + filepath.Join(dir, "images") + " ;;\n" +
 		"esac\n"
-	if err := os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	executable(t, filepath.Join(dir, "docker"), script)
 	return dockerStub{dir: dir}
 }
 

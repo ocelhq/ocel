@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -19,6 +20,15 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
+
+func runnable(t *testing.T, path string, body []byte, mode os.FileMode) {
+	t.Helper()
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
+	if err := os.WriteFile(path, body, mode); err != nil {
+		t.Fatal(err)
+	}
+}
 
 const (
 	pullUsername = "acme-bot"
@@ -283,9 +293,7 @@ func underShell(t *testing.T, script string) {
 		"pull) echo 'manifest unknown' >&2; exit 1;;\n" +
 		"logout) exit 1;;\n" +
 		"*) exit 0;;\nesac\n"
-	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(refusing), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	runnable(t, filepath.Join(bin, "docker"), []byte(refusing), 0o700)
 
 	ran := exec.Command(shell, "-c", script)
 	ran.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "TMPDIR="+tmp)

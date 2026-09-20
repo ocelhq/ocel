@@ -45,9 +45,7 @@ func dockered(t *testing.T, held engineHolding) map[string]string {
 		"inspect) [ -s " + quoted(facts) + " ] || exit 1; cat " + quoted(facts) + " ;;\n" +
 		"*) exit 1 ;;\n" +
 		"esac\n"
-	if err := os.WriteFile(filepath.Join(dir, dockerEngine), []byte(stub), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	executable(t, filepath.Join(dir, dockerEngine), stub)
 	for _, tool := range []string{"sha256sum", "cut", "cat", "sort"} {
 		found, err := exec.LookPath(tool)
 		if err != nil {
@@ -533,9 +531,7 @@ func TestANetworkAnotherWorkloadHoldsIsReportedKeptRatherThanRemoved(t *testing.
 			"'network rm') exit 1 ;;\n" +
 			"'network inspect') exit " + held + " ;;\n" +
 			"esac\nexit 1\n"
-		if err := os.WriteFile(filepath.Join(stub, dockerEngine), []byte(script), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		executable(t, filepath.Join(stub, dockerEngine), script)
 		run := exec.Command("/bin/sh", "-c", command)
 		run.Env = []string{"PATH=" + stub}
 		rendered, err := run.Output()
@@ -842,9 +838,7 @@ func engineStubAnswering(t *testing.T, upAt, answersAt int) string {
 		"    echo running\n  else\n    echo created\n  fi\n" +
 		"  ;;\n" +
 		"esac\nexit 1\n"
-	if err := os.WriteFile(filepath.Join(dir, dockerEngine), []byte(stub), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	executable(t, filepath.Join(dir, dockerEngine), stub)
 	return dir
 }
 

@@ -26,9 +26,7 @@ func daemon(t *testing.T, held engine) string {
 	dir := t.TempDir()
 	write := func(name, body string) {
 		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+body), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		executable(t, filepath.Join(dir, name), "#!/bin/sh\n"+body)
 	}
 	if held.installed {
 		write(dockerEngine, "exit 0")
