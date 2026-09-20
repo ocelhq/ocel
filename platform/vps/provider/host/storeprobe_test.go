@@ -63,6 +63,7 @@ func anExternalStore(t *testing.T, bucket string) ExternalStore {
 		t.Fatal(err)
 	}
 	made := exec.Command("sh", "-c", curlCommand(store, req, calls[0]))
+	made.Stdin = fedBody(calls[0].body)
 	if out, err := made.CombinedOutput(); err != nil {
 		t.Fatalf("the store kept no bucket to probe: %v\n%s", err, out)
 	}

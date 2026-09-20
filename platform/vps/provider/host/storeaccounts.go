@@ -160,7 +160,7 @@ func (h *Host) GrantStoreAccount(ctx context.Context, account StoreAccount) erro
 		if err != nil {
 			return fmt.Errorf("sign %s: %w", call.what, err)
 		}
-		if _, err := h.ran(ctx, call.what, script, nil, elevation); err != nil {
+		if _, err := h.ran(ctx, call.what, script, fedBody(call.body), elevation); err != nil {
 			return providerkit.Refuse(providerkit.CodeNotReady,
 				"could not %s on %s: %v", call.what, h.named(), err)
 		}

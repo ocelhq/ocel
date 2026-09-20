@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -177,6 +178,10 @@ func (s BucketSpec) signed(call storeCall, now time.Time) (*http.Request, error)
 	return req, nil
 }
 
+func fedBody(body []byte) io.Reader {
+	return strings.NewReader(base64.StdEncoding.EncodeToString(body))
+}
+
 func curlCommand(store string, req *http.Request, call storeCall) string {
 	argv := []string{"docker", "exec", "--interactive", store,
 		"curl", "--silent", "--show-error", "--output", "/dev/null",
@@ -186,13 +191,12 @@ func curlCommand(store string, req *http.Request, call storeCall) string {
 	}
 	argv = append(argv, "--data-binary", "@-", req.URL.String())
 
-	fed := "printf '%s' " + quoted(base64.StdEncoding.EncodeToString(call.body)) + " | base64 -d | "
 	accepted := make([]string, 0, len(call.allow))
 	for _, code := range call.allow {
 		accepted = append(accepted, "\""+code+"\"")
 	}
 	return "set -eu\n" +
-		"answered=$(" + fed + words(argv) + ")\n" +
+		"answered=$(base64 -d | " + words(argv) + ")\n" +
 		"case \"$answered\" in\n" +
 		strings.Join(accepted, "|") + ") ;;\n" +
 		"*) printf '%s\\n' " + quoted("the store answered ") + "\"$answered\" >&2; exit 1 ;;\n" +
@@ -228,7 +232,7 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) error {
 		if err != nil {
 			return fmt.Errorf("sign %s: %w", call.what, err)
 		}
-		if _, err := h.ran(ctx, call.what, curlCommand(spec.Store, req, call), nil, elevation); err != nil {
+		if _, err := h.ran(ctx, call.what, curlCommand(spec.Store, req, call), fedBody(call.body), elevation); err != nil {
 			return providerkit.Refuse(providerkit.CodeNotReady,
 				"could not %s on %s: %v", call.what, h.named(), err)
 		}
