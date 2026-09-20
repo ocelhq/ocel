@@ -57,27 +57,15 @@ type Poster interface {
 // FreeSpace reports the bytes free and the bytes the store's volume holds.
 type FreeSpace func() (free uint64, total uint64, err error)
 
-// Config is what a vps box hands the bucket service it runs.
 type Config struct {
-	// Objects reaches the store over its internal address.
-	Objects ObjectAPI
-	// Internal signs urls the app itself drives, against the store's internal address.
-	Internal PresignAPI
-	// External signs urls a browser drives, against the store's public address, and
-	// names that address. Both are empty while no domain points at the store.
-	External func() (PresignAPI, string)
-	// Callbacks delivers a settled upload to the app.
-	Callbacks Poster
-	// Volume reports the store volume's free space, nil where the store is not ours to watch.
-	Volume FreeSpace
-	// PostPolicies is true where the store signs POST policies, which bound an upload's size.
+	Objects      ObjectAPI
+	Internal     PresignAPI
+	External     func() (PresignAPI, string)
+	Callbacks    Poster
+	Volume       FreeSpace
 	PostPolicies bool
-	// Sessions names the bucket, and optional key prefix, this app's upload sessions live under.
-	// It is never one of Granted, so no request can name it.
-	Sessions string
-	// Granted names every store location this app's deploy handed it, exactly as the
-	// binding it reads names it. A request reaching anywhere else is refused.
-	Granted []string
+	Sessions     string
+	Granted      []string
 }
 
 // Service answers the bucket RPCs against any S3-compatible store.
