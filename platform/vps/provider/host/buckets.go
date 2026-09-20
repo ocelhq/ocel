@@ -68,7 +68,7 @@ type lifecycleConfiguration struct {
 
 func corsBody(origins []string) ([]byte, error) {
 	if len(origins) == 0 {
-		origins = []string{"*"}
+		return nil, nil
 	}
 	return xml.Marshal(corsConfiguration{Rules: []corsRule{{
 		AllowedOrigin: origins,
@@ -122,10 +122,12 @@ func (s BucketSpec) calls() ([]storeCall, error) {
 		if err != nil {
 			return nil, err
 		}
-		calls = append(calls, storeCall{
-			what:  "hold bucket " + s.Bucket + " to the origins it answers",
-			query: "cors", body: cors, typed: "application/xml", md5: true, allow: []string{"200", "204"},
-		})
+		if cors != nil {
+			calls = append(calls, storeCall{
+				what:  "hold bucket " + s.Bucket + " to the origins it answers",
+				query: "cors", body: cors, typed: "application/xml", md5: true, allow: []string{"200", "204"},
+			})
+		}
 	}
 	calls = append(calls, storeCall{
 		what:  "have bucket " + s.Bucket + " abandon unfinished uploads",

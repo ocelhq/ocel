@@ -242,10 +242,14 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 		return providerkit.Binding{}, err
 	}
 
+	origins, err := p.bucketOrigins(ctx, in.Ref, in.Resource.Bucket)
+	if err != nil {
+		return providerkit.Binding{}, err
+	}
 	bucket := storeBucketName(in.Ref, in.Resource.Name)
 	if err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, held.secret, host.BucketSpec{
 		Bucket:         bucket,
-		AllowedOrigins: declaredOrigins(in.Resource.Bucket),
+		AllowedOrigins: origins,
 		Public:         declaredPublic(in.Resource.Bucket),
 	})); err != nil {
 		return providerkit.Binding{}, err
@@ -411,6 +415,24 @@ func declaredOrigins(spec *providerkit.BucketSpec) []string {
 		return nil
 	}
 	return spec.AllowedOrigins
+}
+
+func (p *Provider) bucketOrigins(ctx context.Context, ref providerkit.StackRef, spec *providerkit.BucketSpec) ([]string, error) {
+	origins := slices.Clone(declaredOrigins(spec))
+	claims, err := p.host.Claims(ctx)
+	if err != nil {
+		return nil, err
+	}
+	owner := live.Surface(ref.Project, string(ref.Class))
+	for _, claim := range claims {
+		if claim.Owner != owner || claim.App == live.StoreLabel {
+			continue
+		}
+		if origin := "https://" + claim.Hostname; !slices.Contains(origins, origin) {
+			origins = append(origins, origin)
+		}
+	}
+	return origins, nil
 }
 
 func declaredPublic(spec *providerkit.BucketSpec) bool {
