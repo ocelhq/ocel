@@ -28,13 +28,12 @@ func TestAnAppReachesTheStoreUnderAnAccountOfItsOwn(t *testing.T) {
 	}
 }
 
-func fedBy(t *testing.T, command string) string {
+func fedBy(t *testing.T, machine *box, needle string) string {
 	t.Helper()
-	_, held, cut := strings.Cut(command, "printf '%s' '")
-	if !cut {
-		t.Fatalf("nothing is fed to the store by:\n%s", command)
+	encoded := machine.fedTo(needle)
+	if encoded == "" {
+		t.Fatalf("nothing was fed to the store by the call that would %s", needle)
 	}
-	encoded, _, _ := strings.Cut(held, "'")
 	decoded, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		t.Fatalf("what is fed to the store is not what the box decodes: %v", err)
@@ -48,15 +47,7 @@ func TestAnAppsStoreAccountIsHeldToTheBucketsItBinds(t *testing.T) {
 	machine := &box{kept: sealedRootKey()}
 	storeManifest(t, machine, vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}})
 
-	var policy string
-	for _, command := range machine.commands() {
-		if strings.Contains(command, "add-service-account") {
-			policy = fedBy(t, command)
-		}
-	}
-	if policy == "" {
-		t.Fatal("nothing the deploy ran asked the store for an account")
-	}
+	policy := fedBy(t, machine, "add-service-account")
 	for what, named := range map[string]string{
 		"the bucket the app binds":      "prod-web-r0a1b2c3d-uploads",
 		"the store's own sessions":      constants.StoreSessionsBucket(),
