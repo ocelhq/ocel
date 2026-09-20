@@ -31,7 +31,6 @@ func ttlOf(d interface{ AsDuration() time.Duration }) time.Duration {
 	}
 }
 
-// Sign hands back a url the caller drives itself, bounded by the constraints it asked for.
 func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv1.SignResponse, error) {
 	signer, err := s.signer(ctx, req.GetAudience())
 	if err != nil {
@@ -159,7 +158,6 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 	}
 }
 
-// CreateMultipart opens an upload a caller sends in parts.
 func (s *Service) CreateMultipart(ctx context.Context, req *bucketv1.CreateMultipartRequest) (*bucketv1.CreateMultipartResponse, error) {
 	if err := s.roomToWrite(); err != nil {
 		return nil, err
@@ -190,7 +188,6 @@ func (s *Service) CreateMultipart(ctx context.Context, req *bucketv1.CreateMulti
 	return &bucketv1.CreateMultipartResponse{UploadId: aws.ToString(out.UploadId)}, nil
 }
 
-// SignParts signs the batch of parts a caller is about to send.
 func (s *Service) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest) (*bucketv1.SignPartsResponse, error) {
 	if err := s.roomToWrite(); err != nil {
 		return nil, err
@@ -228,7 +225,6 @@ func (s *Service) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest)
 	return resp, nil
 }
 
-// CompleteMultipart assembles the parts a caller sent into the object.
 func (s *Service) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteMultipartRequest) (*bucketv1.CompleteMultipartResponse, error) {
 	held, key, err := s.reach(req.GetBucket(), req.GetKey())
 	if err != nil {
@@ -266,7 +262,6 @@ func (s *Service) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteM
 	return &bucketv1.CompleteMultipartResponse{Object: headInfo(req.GetKey(), out)}, nil
 }
 
-// AbortMultipart abandons an upload so its parts stop costing storage.
 func (s *Service) AbortMultipart(ctx context.Context, req *bucketv1.AbortMultipartRequest) (*bucketv1.AbortMultipartResponse, error) {
 	held, key, err := s.reach(req.GetBucket(), req.GetKey())
 	if err != nil {

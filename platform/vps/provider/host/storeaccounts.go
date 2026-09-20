@@ -137,8 +137,6 @@ func accountScript(a StoreAccount, call adminCall, now time.Time) (string, error
 	}), nil
 }
 
-// StoreAccountKey names the account an app reaches the store under, in the 20
-// characters a store keeps an access key in.
 func StoreAccountKey(env, app string) string {
 	sum := sha256.Sum256([]byte(env + "/" + app))
 	return "ocel" + hex.EncodeToString(sum[:8])

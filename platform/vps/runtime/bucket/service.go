@@ -29,7 +29,6 @@ const (
 	sessionPrefix = constants.ReservedKeyPrefix + "sessions/"
 )
 
-// ObjectAPI is the slice of S3 a bucket's data plane reaches for.
 type ObjectAPI interface {
 	HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
 	GetObject(context.Context, *s3.GetObjectInput, ...func(*s3.Options)) (*s3.GetObjectOutput, error)
@@ -43,7 +42,6 @@ type ObjectAPI interface {
 	AbortMultipartUpload(context.Context, *s3.AbortMultipartUploadInput, ...func(*s3.Options)) (*s3.AbortMultipartUploadOutput, error)
 }
 
-// PresignAPI signs the requests a caller drives itself.
 type PresignAPI interface {
 	PresignGetObject(context.Context, *s3.GetObjectInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
 	PresignPutObject(context.Context, *s3.PutObjectInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
@@ -51,12 +49,10 @@ type PresignAPI interface {
 	PresignPostObject(context.Context, *s3.PutObjectInput, ...func(*s3.PresignPostOptions)) (*s3.PresignedPostRequest, error)
 }
 
-// Poster delivers a settled upload's callback to the app that asked for it.
 type Poster interface {
 	Post(ctx context.Context, url string, body []byte) error
 }
 
-// FreeSpace reports the bytes free and the bytes the store's volume holds.
 type FreeSpace func() (free uint64, total uint64, err error)
 
 type Config struct {
@@ -71,7 +67,6 @@ type Config struct {
 	Granted      []string
 }
 
-// Service answers the bucket RPCs against any S3-compatible store.
 type Service struct {
 	cfg      Config
 	sessions scope
@@ -88,7 +83,6 @@ type Service struct {
 
 var _ bucketv1connect.BucketServiceHandler = (*Service)(nil)
 
-// New builds the service a box's runtime proxy serves.
 func New(cfg Config) *Service {
 	granted := make(map[string]scope, len(cfg.Granted))
 	for _, name := range cfg.Granted {
@@ -200,7 +194,6 @@ func (s *Service) roomToWrite() error {
 	return nil
 }
 
-// PresignUpload opens a session and signs one target per file the app asked for.
 func (s *Service) PresignUpload(ctx context.Context, req *bucketv1.PresignUploadRequest) (*bucketv1.PresignUploadResponse, error) {
 	if err := s.roomToWrite(); err != nil {
 		return nil, err
@@ -306,7 +299,6 @@ func (s *Service) signUpload(ctx context.Context, signer PresignAPI, held scope,
 	}, nil
 }
 
-// VerifyUploadSignature says whether a callback carries this service's own signature.
 func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketv1.VerifyUploadSignatureRequest) (*bucketv1.VerifyUploadSignatureResponse, error) {
 	sess, err := s.anySession(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {
@@ -331,7 +323,6 @@ func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketv1.Verif
 	return &bucketv1.VerifyUploadSignatureResponse{Valid: true, Metadata: sess.Metadata}, nil
 }
 
-// GetUploadStatus reads a session without touching the objects it covers.
 func (s *Service) GetUploadStatus(ctx context.Context, req *bucketv1.GetUploadStatusRequest) (*bucketv1.GetUploadStatusResponse, error) {
 	sess, err := s.anySession(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {
