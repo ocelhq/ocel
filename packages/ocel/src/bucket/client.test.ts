@@ -112,6 +112,38 @@ describe("createUploadClient", () => {
     expect(pollCalls.length).toBe(3);
   });
 
+  it("waits longer between polls the longer an upload stays pending", async () => {
+    const fetch = fakeFetch([
+      "pending",
+      "pending",
+      "pending",
+      "pending",
+      "pending",
+      "succeeded",
+    ]);
+    const delays: number[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    const spied = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementation(((held: () => void, ms?: number) => {
+        delays.push(ms ?? 0);
+        return realSetTimeout(held, 0);
+      }) as never);
+    const client = createUploadClient<TestBucket>({
+      url: "https://app/api/upload",
+      pollIntervalMs: 100,
+      fetch,
+    });
+
+    await client.upload("avatar", { files: [file], input: { userId: "u1" } });
+    spied.mockRestore();
+
+    expect(delays.length).toBe(5);
+    expect(delays).toEqual([...delays].sort((a, b) => a - b));
+    expect(new Set(delays).size).toBeGreaterThan(1);
+    for (const delay of delays) expect(delay).toBeLessThanOrEqual(15_000);
+  });
+
   it("throws immediately when a presigned PUT returns non-2xx (no polling)", async () => {
     const fetch = vi.fn(async (url: string) => {
       if (url.includes("op=presign")) {

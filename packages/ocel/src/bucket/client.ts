@@ -68,6 +68,8 @@ interface PollResponse {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const pollCeilingMs = 15_000;
+
 async function pollUntilTerminal(
   fetchImpl: FetchLike,
   baseUrl: string,
@@ -76,12 +78,14 @@ async function pollUntilTerminal(
   maxMs: number,
 ): Promise<PollResponse> {
   const deadline = Date.now() + maxMs;
+  let wait = intervalMs;
   for (;;) {
     const res = await fetchImpl(`${baseUrl}?op=poll&sessionId=${encodeURIComponent(sessionId)}`);
     const body = (await res.json()) as PollResponse;
     if (body.state === "succeeded" || body.state === "expired") return body;
     if (Date.now() >= deadline) return { state: "expired" };
-    await sleep(intervalMs);
+    await sleep(wait);
+    wait = Math.min(wait * 2, pollCeilingMs);
   }
 }
 
@@ -90,7 +94,7 @@ export function createUploadClient<B extends Bucket<Record<string, AnyUploader>>
 ) {
   const fetchImpl = options.fetch ?? (globalThis.fetch as unknown as FetchLike);
   const intervalMs = options.pollIntervalMs ?? 1000;
-  const maxMs = options.maxPollMs ?? 2 * 60 * 60 * 1000;
+  const maxMs = options.maxPollMs ?? 15 * 60 * 1000;
 
   async function upload<K extends UploaderName<B>>(
     name: K,
