@@ -29,20 +29,6 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "no-bucket-on-a-box",
-    reason: "the vps provider serves no bucket, so every sdk fixture is refused at deploy",
-    issue: 918,
-    where: [
-      {
-        on: ["vps", "vps.incus"],
-        fixtures: [lifecycle.next, sdk.node, sdk.next, sdk.workspace],
-        variants: [defaults],
-        fails: [step.deploy],
-        skipsCell: true,
-      },
-    ],
-  },
-  {
     id: "no-router-on-a-box",
     reason: "vps serves a Next app from a container behind Caddy, with no cache router in front",
     issue: 900,
