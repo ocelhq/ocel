@@ -62,10 +62,9 @@ type Config struct {
 	Objects ObjectAPI
 	// Internal signs urls the app itself drives, against the store's internal address.
 	Internal PresignAPI
-	// External signs urls a browser drives, against the store's public address.
-	External PresignAPI
-	// PublicHost names the store's public address, empty when nothing published it.
-	PublicHost string
+	// External signs urls a browser drives, against the store's public address, and
+	// names that address. Both are empty while no domain points at the store.
+	External func() (PresignAPI, string)
 	// Callbacks delivers a settled upload to the app.
 	Callbacks Poster
 	// Volume reports the store volume's free space, nil where the store is not ours to watch.
@@ -130,11 +129,16 @@ func scopeOf(spec string) scope {
 
 func (s *Service) signer(audience bucketv1.SignedAudience) (PresignAPI, error) {
 	if audience == bucketv1.SignedAudience_SIGNED_AUDIENCE_EXTERNAL {
-		if s.cfg.External == nil || s.cfg.PublicHost == "" {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(
-				"this project has no domain bound, so its store has no address a browser could reach: bind a domain to this project and deploy again, or keep the bytes behind your app"))
+		var signer PresignAPI
+		var public string
+		if s.cfg.External != nil {
+			signer, public = s.cfg.External()
 		}
-		return s.cfg.External, nil
+		if signer == nil || public == "" {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(
+				"this project has no domain bound, so its store has no address a browser could reach: bind a domain to this project, or keep the bytes behind your app"))
+		}
+		return signer, nil
 	}
 	return s.cfg.Internal, nil
 }

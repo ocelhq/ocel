@@ -29,6 +29,16 @@ func (h *Host) Serving(ctx context.Context, key RouteKey) (string, error) {
 	return state.Routes[at].Upstream, nil
 }
 
+func (h *Host) RouteResource(ctx context.Context, route AppRoute) error {
+	if err := validRoute(route); err != nil {
+		return err
+	}
+	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
+		state.Routes = Routing(state.Routes, route)
+		return state, nil
+	})
+}
+
 func (h *Host) UnroutePointer(ctx context.Context, owner, pointer string) error {
 	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
 		state.Routes = Unrouting(state.Routes, func(route AppRoute) bool {

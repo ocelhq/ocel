@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -35,8 +36,21 @@ const (
 
 const storeHealthPath = "/health/ready"
 
-// StoreLabel is the label a box's edge serves a project's store under.
-const StoreLabel = "storage"
+func storeRoute(ref providerkit.StackRef, store string) host.AppRoute {
+	pointer := edge.DefaultPointer
+	if ref.Class == providerkit.ClassPreview {
+		pointer = ref.Name.Env
+	}
+	return host.AppRoute{
+		RouteKey: host.RouteKey{
+			Owner:   live.Surface(ref.Project, string(ref.Class)),
+			Pointer: pointer,
+			App:     live.StoreLabel,
+		},
+		Upstream: store + ":" + storePort,
+		Health:   storeHealthPath,
+	}
+}
 
 func storeContainer(in resources.Instruction) host.ResourceContainer {
 	return host.ResourceContainer{
@@ -164,8 +178,6 @@ func (p *Provider) storeCredential(ctx context.Context, ref providerkit.StackRef
 	return storeCredential{sealed: sealed, secret: string(opened)}, nil
 }
 
-// Bucket stands this project's object store up, if it is not already standing,
-// and binds the app to the bucket inside it that this resource names.
 func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
 	if external := p.options.Bucket; external.configured() {
 		return p.externalBucket(in, report)
@@ -187,6 +199,9 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 			return storeCredential{}, err
 		}
 		if err := p.host.StandResource(ctx, spec, held.secret); err != nil {
+			return storeCredential{}, err
+		}
+		if err := p.host.RouteResource(ctx, storeRoute(in.Ref, spec.Name)); err != nil {
 			return storeCredential{}, err
 		}
 		return held, nil
@@ -257,13 +272,14 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 			return nil, err
 		}
 		return &live.Store{
-			Env:         plan.Ref.Name.String(),
-			Endpoint:    external.Endpoint,
-			Region:      external.Region,
-			AccessKeyID: external.AccessKeyID,
-			PathStyle:   external.PathStyle,
-			Sessions:    external.Bucket + "/" + naming.Sanitize(plan.Ref.Project) + "/" + naming.Sanitize(plan.Ref.Name.Env),
-			Sealed:      base64.StdEncoding.EncodeToString(sealed),
+			Env:           plan.Ref.Name.String(),
+			Endpoint:      external.Endpoint,
+			PublicBaseURL: external.Endpoint,
+			Region:        external.Region,
+			AccessKeyID:   external.AccessKeyID,
+			PathStyle:     external.PathStyle,
+			Sessions:      external.Bucket + "/" + naming.Sanitize(plan.Ref.Project) + "/" + naming.Sanitize(plan.Ref.Name.Env),
+			Sealed:        base64.StdEncoding.EncodeToString(sealed),
 		}, nil
 	}
 	spec := p.stores.shape()
@@ -283,6 +299,7 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 		Region:      storeRegion,
 		AccessKeyID: storeAccessKey,
 		PathStyle:   true,
+		Pointer:     storeRoute(plan.Ref, spec.Name).Pointer,
 		Volume:      spec.VolumeName(),
 		Sessions:    sessions,
 		Sealed:      base64.StdEncoding.EncodeToString(held.sealed),

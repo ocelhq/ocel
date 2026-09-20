@@ -110,10 +110,11 @@ func (s goSealer) Open(_ context.Context, at providerkit.Coordinate, sealed []by
 }
 
 type box struct {
-	classRoot string
-	stateRoot string
-	records   *memRecords
-	sealer    goSealer
+	classRoot   string
+	stateRoot   string
+	proxyConfig string
+	records     *memRecords
+	sealer      goSealer
 }
 
 func aBox(t *testing.T, root string) *box {
@@ -173,7 +174,66 @@ func (b *box) dump(t *testing.T) {
 	}
 }
 
-func (b *box) resolver() Store { return Store{ClassRoot: b.classRoot, StateRoot: b.stateRoot} }
+func (b *box) resolver() Store {
+	return Store{ClassRoot: b.classRoot, StateRoot: b.stateRoot, ProxyConfig: b.proxyConfig}
+}
+
+func (b *box) claims(t *testing.T, document string) {
+	t.Helper()
+	b.proxyConfig = filepath.Join(b.stateRoot, "caddy.json")
+	if err := os.MkdirAll(b.stateRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(b.proxyConfig, []byte(document), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func aStoreManifest(sealed string) live.Manifest {
+	return live.Manifest{
+		Slug: "shop", Class: "production",
+		Keys: []rt.Key{{Key: "DATABASE_URL"}},
+		Store: &live.Store{
+			Env: "shop-prod", Endpoint: "http://shop-prod-store-s3:9000", Region: "us-east-1",
+			AccessKeyID: "ocel", Pointer: "@production", Sealed: sealed,
+		},
+	}
+}
+
+const claimingStorage = `{"apps":{"http":{"servers":{"ocel":{"routes":[
+	{"@id":"ocel--shop--production/shop.example.com/@production/web"},
+	{"@id":"ocel-host-ocel--shop--production/storage.shop.example.com/@production/storage"}]}}}}}`
+
+func TestTheStoresPublicAddressIsWhateverTheBoxClaimsForItNow(t *testing.T) {
+	t.Parallel()
+	b := aBox(t, t.TempDir())
+	b.dump(t)
+	b.claims(t, claimingStorage)
+
+	resolved, err := b.resolver().Resolve(context.Background(), aStoreManifest(""))
+	if err != nil {
+		t.Fatalf("Resolve() = %v", err)
+	}
+	if resolved[live.StorePublicKey] != "https://storage.shop.example.com" {
+		t.Errorf("Resolve() handed %q under %s, want the name this box claims for the store right now",
+			resolved[live.StorePublicKey], live.StorePublicKey)
+	}
+}
+
+func TestAStoreNoDomainPointsAtHasNoPublicAddress(t *testing.T) {
+	t.Parallel()
+	b := aBox(t, t.TempDir())
+	b.dump(t)
+	b.claims(t, `{"apps":{"http":{"servers":{"ocel":{"routes":[{"@id":"ocel-box"}]}}}}}`)
+
+	resolved, err := b.resolver().Resolve(context.Background(), aStoreManifest(""))
+	if err != nil {
+		t.Fatalf("Resolve() = %v", err)
+	}
+	if held := resolved[live.StorePublicKey]; held != "" {
+		t.Errorf("Resolve() handed %q as the store's public address on a box claiming nothing for it", held)
+	}
+}
 
 var shop = values.Scope{Project: "shop", Class: providerkit.ClassProduction}
 

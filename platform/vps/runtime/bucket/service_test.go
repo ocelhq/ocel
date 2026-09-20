@@ -220,10 +220,11 @@ func newHarness(t *testing.T, tweak func(*Config)) *harness {
 	store := newFakeStore()
 	poster := &recordingPoster{}
 	cfg := Config{
-		Objects:      store,
-		Internal:     presigner(),
-		External:     externalPresigner(),
-		PublicHost:   "storage.example.com",
+		Objects:  store,
+		Internal: presigner(),
+		External: func() (PresignAPI, string) {
+			return externalPresigner(), "https://storage.example.com"
+		},
 		Callbacks:    poster,
 		Sessions:     "store",
 		PostPolicies: true,
@@ -409,7 +410,6 @@ func TestSigningForABrowserNeedsAPublicAddress(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t, func(cfg *Config) {
 		cfg.External = nil
-		cfg.PublicHost = ""
 	})
 
 	_, err := h.svc.Sign(context.Background(), &bucketv1.SignRequest{
