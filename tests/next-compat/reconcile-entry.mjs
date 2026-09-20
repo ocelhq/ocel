@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { renderOcelConfig, withoutSkipDriftChecks } from "./lib.mjs";
+import { renderOcelConfig, requireNamespace, withoutSkipDriftChecks } from "./lib.mjs";
 import { linkSidecar } from "./sidecar.mjs";
 
 const RECONCILE_TIMEOUT_MS = 10 * 60 * 1000;
@@ -18,6 +18,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 }
 
 export function reconcileEntry(wildcard) {
+  requireNamespace();
   const adapterDir = process.env.ADAPTER_DIR;
   const sidecarDir = process.env.OCEL_E2E_SIDECAR_DIR;
   if (!adapterDir || !sidecarDir) {

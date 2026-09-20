@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
@@ -14,6 +15,7 @@ import {
   bytecodeEmbeddedOutcome,
   bytecodeEmbedEnabled,
   bytecodeRehydrateOutcome,
+  DEFAULT_NAMESPACE,
   DNS_LABEL,
   deployURL,
   embeddedArtifactPairs,
@@ -31,6 +33,9 @@ import {
   MAX_SLUG_LEN,
   markerLines,
   mergeBaselineManifest,
+  NAMESPACE_ENV,
+  NEXT_COMPAT_NAMESPACE,
+  namespaceProblem,
   PLAN_APPLY_HINT,
   PREVIEW_ROOT_STACK_PARAM_PREFIX,
   planProblems,
@@ -39,6 +44,7 @@ import {
   projectSlug,
   projectSlugForRun,
   renderOcelConfig,
+  requireNamespace,
   SLUG_PREFIX,
   strandedProjectSlugs,
   strongestCoverage,
@@ -56,6 +62,59 @@ import {
   withPinnedTypeScript,
   zipEntryNames,
 } from "./lib.mjs";
+
+describe("namespaceProblem", () => {
+  it("refuses a run that would bootstrap in the namespace a developer's own account uses", () => {
+    for (const named of [{}, { OCEL_NAMESPACE: "" }, { OCEL_NAMESPACE: " ocel " }]) {
+      const said = namespaceProblem(named);
+      expect(said).toBeTruthy();
+      expect(said).toContain(NEXT_COMPAT_NAMESPACE);
+    }
+  });
+
+  it("lets a run through under a namespace of its own", () => {
+    expect(namespaceProblem({ OCEL_NAMESPACE: NEXT_COMPAT_NAMESPACE })).toBeUndefined();
+    expect(namespaceProblem({ OCEL_NAMESPACE: "e2e-next-compat-34155670856" })).toBeUndefined();
+  });
+
+  it("names the one default namespace the product itself derives", () => {
+    expect(DEFAULT_NAMESPACE).toBe(
+      readFileSync("../../pkg/providerkit/namespace.go", "utf8").match(
+        /DefaultNamespace Namespace = "([a-z0-9-]+)"/,
+      )?.[1],
+    );
+    expect(namespaceProblem({ OCEL_NAMESPACE: DEFAULT_NAMESPACE })).toBeTruthy();
+  });
+});
+
+describe("requireNamespace", () => {
+  it("throws where namespaceProblem speaks and is silent where it does not", () => {
+    expect(() => requireNamespace({})).toThrow(NAMESPACE_ENV);
+    expect(() => requireNamespace({ [NAMESPACE_ENV]: DEFAULT_NAMESPACE })).toThrow(NAMESPACE_ENV);
+    expect(() => requireNamespace({ [NAMESPACE_ENV]: NEXT_COMPAT_NAMESPACE })).not.toThrow();
+  });
+});
+
+describe("every entry that invokes ocel", () => {
+  const entries = [
+    "deploy.mjs",
+    "reconcile-entry.mjs",
+    "project-teardown.mjs",
+    "cleanup.mjs",
+    "sweep-projects.mjs",
+  ];
+
+  it.each(entries)("refuses to run %s under the account's default namespace", (entry) => {
+    const ran = spawnSync(process.execPath, [entry], {
+      cwd: import.meta.dirname,
+      env: { PATH: process.env.PATH, HOME: process.env.HOME, [NAMESPACE_ENV]: DEFAULT_NAMESPACE },
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+    expect(ran.status).not.toBe(0);
+    expect(`${ran.stdout}${ran.stderr}`).toContain(NEXT_COMPAT_NAMESPACE);
+  });
+});
 
 describe("projectSlug", () => {
   it("is a valid single DNS label carrying the run id", () => {

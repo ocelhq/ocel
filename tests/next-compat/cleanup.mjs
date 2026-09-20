@@ -8,11 +8,14 @@ import {
   previewRefForApp,
   projectSlugForRun,
   renderOcelConfig,
+  requireNamespace,
   SKIP_DRIFT_CHECK_ENV,
   STATE_FILE,
 } from "./lib.mjs";
 
 const TEARDOWN_TIMEOUT_MS = 20 * 60 * 1000;
+
+requireNamespace();
 
 const appDir = process.cwd();
 const adapterDir = process.env.ADAPTER_DIR;

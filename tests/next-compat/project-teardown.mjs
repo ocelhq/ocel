@@ -6,7 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { projectSlugForRun, renderOcelConfig, withoutSkipDriftChecks } from "./lib.mjs";
+import {
+  projectSlugForRun,
+  renderOcelConfig,
+  requireNamespace,
+  withoutSkipDriftChecks,
+} from "./lib.mjs";
 import { linkSidecar } from "./sidecar.mjs";
 
 const TEARDOWN_TIMEOUT_MS = 30 * 60 * 1000;
@@ -17,6 +22,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 }
 
 export function destroyProject(slug) {
+  requireNamespace();
   const adapterDir = process.env.ADAPTER_DIR;
   const sidecarDir = process.env.OCEL_E2E_SIDECAR_DIR;
   if (!adapterDir || !sidecarDir) {

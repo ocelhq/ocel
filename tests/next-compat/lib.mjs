@@ -24,6 +24,31 @@ export const SKIP_DRIFT_CHECK_ENV = Object.freeze({
   OCEL_SKIP_TEARDOWN_REFRESH: "1",
 });
 
+export const NAMESPACE_ENV = "OCEL_NAMESPACE";
+
+export const NEXT_COMPAT_NAMESPACE = "e2e-next-compat";
+
+export const DEFAULT_NAMESPACE = "ocel";
+
+export function namespaceProblem(env = process.env) {
+  const named = env[NAMESPACE_ENV]?.trim();
+  if (named && named !== DEFAULT_NAMESPACE) {
+    return undefined;
+  }
+  return (
+    `${NAMESPACE_ENV} names ${named ? `the default namespace ${named}` : "nothing"}, and the e2e account's default namespace ` +
+    `is the one bootstrap in it that no sweep can tell from a stray. ` +
+    `Set ${NAMESPACE_ENV}=${NEXT_COMPAT_NAMESPACE} (or one per run) and try again`
+  );
+}
+
+export function requireNamespace(env = process.env) {
+  const named = namespaceProblem(env);
+  if (named) {
+    throw new Error(named);
+  }
+}
+
 export function withoutSkipDriftChecks(env) {
   const out = { ...env };
   for (const name of Object.keys(SKIP_DRIFT_CHECK_ENV)) {
