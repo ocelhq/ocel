@@ -222,6 +222,48 @@ func TestASweepDumpsEveryResourceThatAsksAndOneFailureStopsNoOther(t *testing.T)
 	}
 }
 
+func (b backupBench) drove(t *testing.T) []string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(b.bin, "log"))
+	if err != nil {
+		t.Fatalf("nothing drove the engine: %v", err)
+	}
+	return strings.Split(strings.TrimSpace(string(raw)), "\n")
+}
+
+func TestAVolumeIsCopiedWhileNothingIsWritingToIt(t *testing.T) {
+	t.Parallel()
+
+	bench := backupsOn(t, "shop-store-s3\tproduction\tstore\tvol")
+	if _, stderr, code := bench.runs(t, "sweep"); code != 0 {
+		t.Fatalf("sweep exited %d: %s", code, stderr)
+	}
+	drove := bench.drove(t)
+	paused := slices.Index(drove, "pause shop-store-s3")
+	unpaused := slices.Index(drove, "unpause shop-store-s3")
+	if paused < 0 || unpaused < 0 {
+		t.Fatalf("the store kept serving while its volume was copied, so the tar holds a half-written object:\n%s",
+			strings.Join(drove, "\n"))
+	}
+	if unpaused < paused {
+		t.Errorf("the store was unpaused before it was paused:\n%s", strings.Join(drove, "\n"))
+	}
+}
+
+func TestAVolumeCopyThatFailsStillStartsTheStoreAgain(t *testing.T) {
+	t.Parallel()
+
+	bench := backupsOn(t, "shop-store-s3\tproduction\tstore\tvol")
+	bench.holds(t, "mounted", filepath.Join(bench.root, "nothing-mounted-here"))
+	if _, _, code := bench.runs(t, "sweep"); code == 0 {
+		t.Fatal("a tar of a directory that is not there was reported as a backup")
+	}
+	if !slices.Contains(bench.drove(t), "unpause shop-store-s3") {
+		t.Fatalf("a failed copy left the store paused, and a paused store answers nothing:\n%s",
+			strings.Join(bench.drove(t), "\n"))
+	}
+}
+
 func TestARestoreFeedsTheDumpBackThroughTheContainer(t *testing.T) {
 	t.Parallel()
 

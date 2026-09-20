@@ -50,10 +50,15 @@ dump_volume() {
 
   stamp=$(date -u +%Y%m%dT%H%M%SZ)
   partial="$dir/.$stamp.$$.partial"
+  docker pause "$container" >/dev/null ||
+    abort "$container would not pause, and a tar of a volume something is still writing to holds whatever it was half-way through"
+  trap 'docker unpause "$container" >/dev/null 2>&1 || true' EXIT INT TERM
   if ! tar -C "$source" -cf "$partial" .; then
     rm -f "$partial"
     abort "tar of $source for $container failed, and nothing was kept of it"
   fi
+  docker unpause "$container" >/dev/null 2>&1 || true
+  trap - EXIT INT TERM
   mv -f "$partial" "$dir/$stamp.tar"
   keep_newest "$dir" .tar
   owned "$class" "$root/$class/backups"
