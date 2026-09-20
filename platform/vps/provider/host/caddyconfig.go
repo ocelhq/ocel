@@ -343,6 +343,25 @@ func refusingHost(identity, hostname string) caddyRoute {
 	return route
 }
 
+const storeAdminSuffix = claimSeparator + "admin"
+
+var storeAdminPaths = []string{"/rustfs", "/rustfs/*", "/health", "/health/*"}
+
+func refusesStoreAdmin(route caddyRoute) bool {
+	if len(route.Match) != 1 || !slices.Equal(route.Match[0].Path, storeAdminPaths) {
+		return false
+	}
+	return len(route.Handle) == 1 &&
+		route.Handle[0].Handler == refuseHandler &&
+		route.Handle[0].Status == http.StatusNotFound
+}
+
+func refusingStoreAdmin(route AppRoute, hostnames []string) caddyRoute {
+	refused := refusing(route.identity() + storeAdminSuffix)
+	refused.Match = []caddyMatch{{Host: hostnamesOf(hostnames...), Path: storeAdminPaths}}
+	return refused
+}
+
 func previewRoutes(base string) ([]caddyRoute, error) {
 	if base == "" {
 		return nil, nil
@@ -442,6 +461,9 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 					hostname, held.identity(), route.identity())
 			}
 			answering[hostname] = route
+		}
+		if !route.app() && len(hostnames) > 0 {
+			routes = append(routes, refusingStoreAdmin(route, hostnames))
 		}
 		routes = append(routes, matching(route, hostnames))
 	}
@@ -690,6 +712,12 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 			state.Claims = append(state.Claims, HostClaim{
 				Hostname: claim.Hostname, Owner: claim.Owner, Pointer: claim.Pointer, App: claim.App,
 			})
+			continue
+		}
+		if held, refuses := strings.CutSuffix(route.Identity, storeAdminSuffix); refuses && strings.HasPrefix(held, routeIdentity) {
+			if !refusesStoreAdmin(route) {
+				return ProxyState{}, unwritten("route", route.Identity)
+			}
 			continue
 		}
 		named, keyed := strings.CutPrefix(route.Identity, routeIdentity)
