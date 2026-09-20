@@ -1043,6 +1043,13 @@ class _WriteStream(io.RawIOBase):
             self._writer.close()
         super().close()
 
+    def __exit__(self, kind, *_exception) -> None:
+        if kind is None:
+            self.close()
+            return
+        self._writer.abort()
+        super().close()
+
 
 class _AsyncWriter:
     def __init__(self, store: Bucket, key: str, options: _WriteOptions):
