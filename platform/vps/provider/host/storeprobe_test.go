@@ -1,6 +1,7 @@
 package host
 
 import (
+	"net/url"
 	"os/exec"
 	"strings"
 	"testing"
@@ -93,7 +94,7 @@ func TestARealStoreAnswersEveryCallTheProbeAsksOfIt(t *testing.T) {
 	}
 	store := anExternalStore(t, "probe-bucket")
 
-	probed, err := probeExternalStore(store, ".ocel/probe/abc123/", time.Now().UTC(), hereRuns(t))
+	probed, err := probeExternalStore(store, probePrefix+"abc123/", time.Now().UTC(), hereRuns(t))
 	if err != nil {
 		t.Fatalf("a store that serves every call was refused: %v", err)
 	}
@@ -108,12 +109,12 @@ func TestTheProbeLeavesNothingOfItsOwnBehind(t *testing.T) {
 	}
 	store := anExternalStore(t, "swept-bucket")
 
-	if _, err := probeExternalStore(store, ".ocel/probe/swept/", time.Now().UTC(), hereRuns(t)); err != nil {
+	if _, err := probeExternalStore(store, probePrefix+"swept/", time.Now().UTC(), hereRuns(t)); err != nil {
 		t.Fatalf("probe = %v", err)
 	}
 
 	now := time.Now().UTC()
-	listed, err := store.call("objects", "GET", "", "list-type=2&prefix=.ocel%2F", nil, nil, true, now)
+	listed, err := store.call("objects", "GET", "", "list-type=2&prefix="+url.QueryEscape(constants.ReservedKeyPrefix), nil, nil, true, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +149,7 @@ func TestAStoreThatAnswersNothingIsRefusedByName(t *testing.T) {
 	}
 	silence := func(what, script string) (string, error) { return "", nil }
 
-	_, err := probeExternalStore(store, ".ocel/probe/silent/", time.Now().UTC(), silence)
+	_, err := probeExternalStore(store, probePrefix+"silent/", time.Now().UTC(), silence)
 	if err == nil {
 		t.Fatal("a store that answered nothing was accepted")
 	}

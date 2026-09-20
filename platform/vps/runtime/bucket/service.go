@@ -24,8 +24,7 @@ const (
 	presignTTL = time.Hour
 	sessionTTL = 2 * time.Hour
 
-	reservedPrefix = constants.ProjectStateDirName + "/"
-	sessionPrefix  = reservedPrefix + "sessions/"
+	sessionPrefix = constants.ReservedKeyPrefix + "sessions/"
 )
 
 // ObjectAPI is the slice of S3 a bucket's data plane reaches for.

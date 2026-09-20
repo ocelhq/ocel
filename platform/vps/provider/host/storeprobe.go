@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -33,7 +34,7 @@ type StoreProbe struct {
 }
 
 const (
-	probePrefix   = ".ocel/probe/"
+	probePrefix   = constants.ReservedKeyPrefix + "probe/"
 	probeOrigin   = "https://probe.ocel.invalid"
 	probeBody     = "ocel"
 	probeExpiry   = 5 * time.Minute

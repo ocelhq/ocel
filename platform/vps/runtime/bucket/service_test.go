@@ -20,6 +20,7 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 )
 
@@ -268,7 +269,7 @@ func TestASessionLivesInTheStoreItGuards(t *testing.T) {
 	}
 	listed, _ := h.svc.List(context.Background(), &bucketv1.ListRequest{Bucket: "store"})
 	for _, obj := range listed.GetObjects() {
-		if strings.HasPrefix(obj.GetKey(), reservedPrefix) {
+		if strings.HasPrefix(obj.GetKey(), constants.ReservedKeyPrefix) {
 			t.Fatalf("List returned %q, and the store's own bookkeeping is not the app's to see", obj.GetKey())
 		}
 	}
