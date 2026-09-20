@@ -53,12 +53,15 @@ Hard-stop on any of these; a bad preflight makes the result meaningless.
    `~/.aws/credentials`. Confirm which AWS profile to use. Subagents inherit
    *your* env, not the user's shell.
 2. **Disposable accounts, confirmed by hand.** `guard-accounts.sh` gates CI, not
-   you: it requires `EXPECTED_AWS_ACCOUNT_ID` and
-   `EXPECTED_CLOUDFLARE_ACCOUNT_ID`, which are workflow secrets, and aborts on
-   the unset variable before comparing anything. Locally, resolve both yourself —
-   `aws sts get-caller-identity` and the `CLOUDFLARE_ACCOUNT_ID` in `.env` — and
-   match them against the `E2E_EXPECTED_*` secrets. This provisions real
-   infrastructure into whichever account the credentials resolve to.
+   you: it compares the session against `EXPECTED_AWS_ACCOUNT_ID` and
+   `EXPECTED_CLOUDFLARE_ACCOUNT_ID`, which CI supplies from the repository
+   secrets `E2E_EXPECTED_AWS_ACCOUNT_ID` and
+   `E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID`. Outside CI they are unset, so it
+   refuses and says in that refusal that it verified nothing and why. Locally,
+   resolve both yourself — `aws sts get-caller-identity` and the
+   `CLOUDFLARE_ACCOUNT_ID` in `.env` — and match them against those two secrets'
+   values. This provisions real infrastructure into whichever account the
+   credentials resolve to.
 3. **Proxied wildcard DNS.** The bootstrap's preview wildcard must exist as a
    Cloudflare record on that zone and be **orange-clouded**. Deploys only verify
    it; a missing or grey record fails every deploy. Check with
