@@ -49,7 +49,7 @@ describe("the ocel package", () => {
 
   it("keeps the runtime and config authoring exports", () => {
     expect(Object.keys(manifest.exports)).toEqual(
-      expect.arrayContaining(["./config", "./edge", "./dns", "./env", "./blob", "./postgres"]),
+      expect.arrayContaining(["./config", "./edge", "./dns", "./env", "./bucket", "./postgres"]),
     );
   });
 });
