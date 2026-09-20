@@ -321,6 +321,35 @@ async fn a_part_the_store_refuses_throws_the_whole_upload_away() {
 }
 
 #[tokio::test]
+async fn a_completion_the_store_refuses_throws_the_whole_upload_away() {
+    let standing = standing("");
+    let bucket = standing.bucket.clone().with_thresholds(8, 4);
+    standing
+        .fake
+        .store
+        .refuse_complete
+        .store(true, Ordering::SeqCst);
+
+    let err = bucket
+        .put("unsettled.bin", vec![b'x'; 26])
+        .await
+        .expect_err("the store refuses to complete the upload");
+    assert!(matches!(err, Error::Refused { .. }), "error = {err}");
+    assert_eq!(
+        standing
+            .fake
+            .store
+            .aborted
+            .lock()
+            .expect("the aborts")
+            .as_slice(),
+        ["upload-for-unsettled.bin"],
+        "a completion that failed left its parts costing storage forever"
+    );
+    assert!(standing.fake.store.held("unsettled.bin").is_none());
+}
+
+#[tokio::test]
 async fn a_reader_and_a_writer_carry_the_bytes_a_stream_at_a_time() {
     let standing = standing("");
     let bucket = standing.bucket.clone().with_thresholds(8, 4);

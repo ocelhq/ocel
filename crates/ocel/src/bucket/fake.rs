@@ -30,6 +30,7 @@ pub(super) struct Store {
     uploads: Mutex<BTreeMap<String, BTreeMap<i32, Vec<u8>>>>,
     pub(super) aborted: Mutex<Vec<String>>,
     pub(super) refuse_parts: AtomicBool,
+    pub(super) refuse_complete: AtomicBool,
     versions: AtomicUsize,
     parts_at_once: AtomicUsize,
     pub(super) most_parts_at_once: AtomicUsize,
@@ -435,6 +436,9 @@ fn rpc(store: &Store, base: &str, received: &Received, json: bool) -> Option<Vec
             )
         }
         "CompleteMultipart" => {
+            if store.refuse_complete.load(Ordering::SeqCst) {
+                return None;
+            }
             let request: CompleteMultipartRequest = decode(body, json);
             let parts = store
                 .uploads
