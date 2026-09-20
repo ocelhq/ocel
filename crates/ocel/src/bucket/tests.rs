@@ -376,6 +376,13 @@ async fn a_signature_names_the_target_the_bytes_go_to_and_come_from() {
             .expect("a public url"),
         "https://storage.shop.example/store/shared.txt"
     );
+    assert_eq!(
+        standing
+            .bucket
+            .public_url("a b/c#d?e.png")
+            .expect("a public url"),
+        "https://storage.shop.example/store/a%20b/c%23d%3Fe.png"
+    );
 }
 
 #[tokio::test]

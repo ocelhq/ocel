@@ -328,6 +328,12 @@ def test_a_public_object_is_addressed_under_the_address_the_deploy_delivered(upl
     assert bucket("uploads").public_url("a/b.txt") == "https://storage.example/uploads/a/b.txt"
 
 
+def test_a_public_url_escapes_what_a_key_segment_may_hold(uploads):
+    assert bucket("uploads").public_url("a b/c#d?e.png") == (
+        "https://storage.example/uploads/a%20b/c%23d%3Fe.png"
+    )
+
+
 def test_a_bucket_with_no_public_address_says_what_would_give_it_one(uploads, monkeypatch):
     monkeypatch.setenv(
         "OCEL_RESOURCE_BUCKET_uploads",

@@ -312,8 +312,13 @@ impl Bucket {
                 key: key.to_string(),
             });
         }
+        let path = key
+            .split('/')
+            .map(escaped_segment)
+            .collect::<Vec<_>>()
+            .join("/");
         Ok(format!(
-            "{}/{key}",
+            "{}/{path}",
             reached.public_base_url.trim_end_matches('/')
         ))
     }
@@ -888,4 +893,17 @@ fn object(info: ObjectInfo) -> Object {
         }),
         metadata: info.metadata.into_iter().collect(),
     }
+}
+
+fn escaped_segment(segment: &str) -> String {
+    let mut out = String::with_capacity(segment.len());
+    for byte in segment.as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(*byte as char)
+            }
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
 }

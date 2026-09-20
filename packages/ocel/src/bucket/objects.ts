@@ -496,7 +496,8 @@ export function createObjects(deps: {
           `this bucket carries no public address, so "${key}" has no public url: declare the bucket with \`public: true\` and give the project a domain to serve it from`,
         );
       }
-      return `${publicBaseUrl.replace(/\/$/, "")}/${key}`;
+      const path = key.split("/").map(encodeURIComponent).join("/");
+      return `${publicBaseUrl.replace(/\/$/, "")}/${path}`;
     },
   };
 }
