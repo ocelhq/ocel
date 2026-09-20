@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	mathrand "math/rand/v2"
+	"slices"
 	"strings"
 	"time"
 
@@ -49,6 +50,8 @@ const (
 	stackWaitMinDelay = 5 * time.Second
 	stackWaitMaxDelay = 20 * time.Second
 )
+
+const failureEventPages = 5
 
 const (
 	deleteBatchSize     = 1000
@@ -201,7 +204,7 @@ func Update(ctx context.Context, cfn API, namer ChangeSetNamer, stackName, templ
 
 	w := cloudformation.NewStackUpdateCompleteWaiter(cfn, UpdateCadence)
 	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, UpdateWaitTimeout); err != nil {
-		return fmt.Errorf("wait for %s update: %w", stackName, err)
+		return waitFailure(ctx, cfn, stackName, "update", err)
 	}
 	return nil
 }
@@ -228,7 +231,7 @@ func Restamp(ctx context.Context, cfn API, stackName string, params []cfntypes.P
 	}
 	w := cloudformation.NewStackUpdateCompleteWaiter(cfn, UpdateCadence)
 	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, UpdateWaitTimeout); err != nil {
-		return fmt.Errorf("wait for the %s restamp: %w", stackName, err)
+		return waitFailure(ctx, cfn, stackName, "restamp", err)
 	}
 	return nil
 }
@@ -375,9 +378,100 @@ func createOnce(ctx context.Context, cfn API, stackName, template string, params
 	}
 	w := cloudformation.NewStackCreateCompleteWaiter(cfn, CreateCadence)
 	if err := w.Wait(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)}, CreateWaitTimeout); err != nil {
-		return fmt.Errorf("wait for %s create: %w", stackName, err)
+		return waitFailure(ctx, cfn, stackName, "create", err)
 	}
 	return nil
+}
+
+func waitFailure(ctx context.Context, cfn API, stackName, action string, err error) error {
+	if reason := firstFailure(ctx, cfn, stackName); reason != "" {
+		return fmt.Errorf("wait for %s %s: %w: %s", stackName, action, err, reason)
+	}
+	return fmt.Errorf("wait for %s %s: %w", stackName, action, err)
+}
+
+func firstFailure(ctx context.Context, cfn API, stackName string) string {
+	held, found := failureOfThisOperation(ctx, cfn, stackName)
+	if !found {
+		return ""
+	}
+	if embedded := embeddedStackOf(held); embedded != "" {
+		if deeper, ok := failureOfThisOperation(ctx, cfn, embedded); ok {
+			return describeFailure(deeper)
+		}
+	}
+	return describeFailure(held)
+}
+
+func failureOfThisOperation(ctx context.Context, cfn API, stackName string) (cfntypes.StackEvent, bool) {
+	var (
+		token  *string
+		failed cfntypes.StackEvent
+		found  bool
+	)
+	for range failureEventPages {
+		out, err := cfn.DescribeStackEvents(ctx, &cloudformation.DescribeStackEventsInput{
+			StackName: aws.String(stackName),
+			NextToken: token,
+		})
+		if err != nil {
+			return failed, found
+		}
+		for _, held := range out.StackEvents {
+			if beganTheOperation(held) {
+				return failed, found
+			}
+			if failedEvent(held) {
+				failed, found = held, true
+			}
+		}
+		if token = out.NextToken; aws.ToString(token) == "" {
+			return failed, found
+		}
+	}
+	return failed, found
+}
+
+var operationStarts = []cfntypes.ResourceStatus{
+	cfntypes.ResourceStatusCreateInProgress,
+	cfntypes.ResourceStatusUpdateInProgress,
+	cfntypes.ResourceStatusImportInProgress,
+}
+
+func beganTheOperation(held cfntypes.StackEvent) bool {
+	id := aws.ToString(held.StackId)
+	return id != "" && aws.ToString(held.PhysicalResourceId) == id &&
+		slices.Contains(operationStarts, held.ResourceStatus)
+}
+
+const stackResourceType = "AWS::CloudFormation::Stack"
+
+func embeddedStackOf(held cfntypes.StackEvent) string {
+	if aws.ToString(held.ResourceType) != stackResourceType {
+		return ""
+	}
+	if id := aws.ToString(held.PhysicalResourceId); id != aws.ToString(held.StackId) {
+		return id
+	}
+	return ""
+}
+
+var cancellations = []string{
+	"Resource creation cancelled",
+	"Resource update cancelled",
+	"Resource deletion cancelled",
+}
+
+func failedEvent(held cfntypes.StackEvent) bool {
+	reason := strings.TrimSuffix(strings.TrimSpace(aws.ToString(held.ResourceStatusReason)), ".")
+	return strings.HasSuffix(string(held.ResourceStatus), "_FAILED") &&
+		reason != "" && !slices.Contains(cancellations, reason)
+}
+
+func describeFailure(held cfntypes.StackEvent) string {
+	return fmt.Sprintf("%s %s %s: %s",
+		aws.ToString(held.LogicalResourceId), aws.ToString(held.ResourceType),
+		held.ResourceStatus, aws.ToString(held.ResourceStatusReason))
 }
 
 func NameHeldDelay(attempt int) time.Duration {
