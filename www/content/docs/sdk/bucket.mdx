@@ -89,6 +89,7 @@ await uploads.delete(["reports/q3.pdf", "reports/q2.pdf"]);
 
 `get` and `head` answer `null` when the bucket holds nothing under the key. `copy` moves bytes
 within one bucket, and `list` is also walked a page at a time with `list().page({ cursor })`.
+A write also takes `cacheControl` and `metadata`; the metadata comes back on the object's `info`.
 
 </Tab>
 
@@ -131,8 +132,9 @@ for entry in uploads.list(prefix="reports/"):
 uploads.delete("reports/q3.pdf", "reports/q2.pdf")
 ```
 
-`uploads.open(key, "rb")` treats an object as a binary file. Every method has an `_async` twin
-that runs on a loop, and a read that finds nothing raises `ocel.ObjectNotFound`.
+`uploads.open(key, "rb")` treats an object as a binary file. Every method that reaches the store
+has an `_async` twin that runs on a loop; `public_url` only formats an address, so it has none. A
+read that finds nothing raises `ocel.ObjectNotFound`.
 
 </Tab>
 
@@ -185,7 +187,10 @@ export const assets = bucket("assets", { public: true });
 ```
 
 The public address comes from the domain bound to the project, so a project with no domain has
-none. `ocel.BucketPublic()`, `public=True` and `#[ocel(public)]` declare the same thing.
+none, and `publicUrl` fails rather than returning an address nothing answers. On a VPS the address
+is the `storage.` hostname the box currently claims, read where your app runs, so it follows a
+domain you bind without your having to pass it anywhere. `ocel.BucketPublic()`, `public=True` and
+`#[ocel(public)]` declare the same thing.
 
 ## Signed urls
 
@@ -209,6 +214,9 @@ const write = await uploads.signedUpload("reports/q4.pdf", {
 `fields` a POST target carries. Send the body exactly as the target describes: a changed header
 breaks the signature. Both are minted against the store's public address, so both need a domain
 bound to the project.
+
+`expiresIn` is clamped to seven days, the longest a sigv4 signature is valid for. Ask for more and
+you get seven days.
 
 ## Browser uploads
 
@@ -269,7 +277,12 @@ await client.upload("document", { files, input: { ownerId } });
 The client is typed from the bucket: an uploader name it does not declare, or an input that does
 not match that uploader's schema, is a compile error. It presigns each file, sends it straight to
 the store, and waits for the upload to be recorded before resolving, so `onUploadComplete` has run
-by the time it returns.
+by the time it returns. It asks after a second, then doubles the wait up to fifteen seconds, and
+gives the upload up after fifteen minutes. `pollIntervalMs` and `maxPollMs` move the first wait
+and that deadline.
+
+`allowedOrigins` is what the browser sends from. The store answers those origins and the hostnames
+the project holds, and nothing else: there is no rule that answers every origin.
 
 Go, Python and Rust have no browser half of their own. Mint a `signedUpload` on the server, hand
 the target to the page, and let JavaScript send the body to it.
@@ -298,6 +311,10 @@ bound since.
 
 The store writes to the same disk as everything else on the box, so it stops signing writes while
 the volume has less than 1 GiB, or a tenth of its size, free.
+
+Drop the last bucket a project declares in an environment and the store goes with it: the
+container, its volume and every byte those buckets held, its route on the proxy, and the
+credentials the box kept for it. Take a backup first if you want the objects.
 
 Point the project at an S3-compatible store instead, and every declared bucket becomes a key
 prefix inside the one you name:
@@ -339,13 +356,22 @@ presigned urls and multipart uploads. A store missing any of them is refused by 
 provisioned, and the probe deletes everything it wrote. `public` is refused on an external store,
 since anonymous access there is that store's to grant.
 
+Past the probe, the deploy leaves that bucket's own configuration alone. It writes no lifecycle
+rule, and instead abandons an unfinished multipart upload once the upload is a day old, so a
+browser that walked away stops costing you storage. It writes no CORS rule either, so
+`allowedOrigins` has nothing to set there: put the origins your pages are served from on the
+bucket yourself, or browser uploads and signed writes from a page are refused by the store.
+
 <Callout>
   The box's own store is as durable as the box's disk. Point `bucket` at a store you trust for
   anything you cannot afford to lose with the machine.
 </Callout>
 
 A [transform](/docs/transforms#on-a-vps) changes what the store container runs: its image, its
-memory, where its volume lives.
+memory, where its volume lives. One container holds every bucket a project declares in an
+environment, so it runs as one shape. Two buckets patched into different shapes are refused by
+name: gate the rule on the environment rather than on which bucket it reaches, or patch both the
+same way.
 
 ## On AWS
 
