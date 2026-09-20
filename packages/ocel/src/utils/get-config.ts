@@ -1,4 +1,5 @@
 import { fromJson } from "@bufbuild/protobuf";
+import { readLiveFile } from "../env/file.js";
 import { readLive } from "../env/live.js";
 import {
   type Binding,
@@ -43,7 +44,7 @@ export function getConfig<TCase extends BindingCase>(
 ): BindingProperties<TCase> {
   const type = typeOfCase[kind];
   const key = bindingKey(name, type);
-  const raw = readLive(key) ?? process.env[key];
+  const raw = readLive(key) ?? readLiveFile(key) ?? process.env[key];
 
   if (!raw) {
     throw new Error(

@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { BindingType } from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import { bindingKey, bindingTypeOf, getConfig, getRuntimeAddress } from "./get-config.js";
@@ -32,6 +35,17 @@ describe("getConfig", () => {
     keys.push(key);
     process.env[key] = value;
   };
+
+  it("reads a binding the runtime projected to a file when nothing pushed it", () => {
+    const dir = mkdtempSync(join(tmpdir(), "ocel-live-"));
+    writeFileSync(join(dir, "OCEL_RESOURCE_POSTGRES_main"), postgresRecord);
+    setEnv("OCEL_LIVE_DIR", dir);
+
+    expect(getConfig("main", "postgres")).toMatchObject({
+      host: "db.internal",
+      password: "s3cret",
+    });
+  });
 
   it("keys a binding by its type's enum name", () => {
     expect(bindingKey("main", BindingType.POSTGRES)).toBe("OCEL_RESOURCE_POSTGRES_main");
