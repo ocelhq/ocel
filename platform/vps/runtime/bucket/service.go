@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -228,6 +229,9 @@ func (s *Service) signUpload(ctx context.Context, signer PresignAPI, held scope,
 			map[string]string{"Content-Type": f.GetMimeType()},
 			[]any{"content-length-range", f.GetSize(), f.GetSize()},
 		}
+		if disposition != "" {
+			conditions = append(conditions, map[string]string{"Content-Disposition": disposition})
+		}
 		signed, err := signer.PresignPostObject(ctx, in, func(o *s3.PresignPostOptions) {
 			o.Expires = presignTTL
 			o.Conditions = conditions
@@ -235,13 +239,15 @@ func (s *Service) signUpload(ctx context.Context, signer PresignAPI, held scope,
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("sign a browser upload of %q: %w", f.GetKey(), err))
 		}
+		form := map[string]string{"Content-Type": f.GetMimeType()}
+		maps.Copy(form, signed.Values)
 		return &bucketv1.PresignedTarget{
 			Url:                signed.URL,
 			Key:                f.GetKey(),
 			Name:               f.GetName(),
 			ContentDisposition: disposition,
 			Method:             "POST",
-			Fields:             signed.Values,
+			Fields:             form,
 		}, nil
 	}
 

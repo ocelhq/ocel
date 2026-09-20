@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"mime"
 	"time"
 
@@ -112,11 +113,16 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("sign a browser upload of %q: %w", req.GetKey(), err))
 		}
+		fields := make(map[string]string, len(signed.Values)+1)
+		maps.Copy(fields, signed.Values)
+		if c.GetContentType() != "" {
+			fields["Content-Type"] = c.GetContentType()
+		}
 		return &bucketv1.SignResponse{Target: &bucketv1.PresignedTarget{
 			Url:    signed.URL,
 			Key:    req.GetKey(),
 			Method: "POST",
-			Fields: signed.Values,
+			Fields: fields,
 		}}, nil
 
 	default:
