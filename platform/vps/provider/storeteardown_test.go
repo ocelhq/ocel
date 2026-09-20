@@ -182,6 +182,48 @@ func TestATeardownThatStoppedHalfwayIsRunAgainWithoutComplaint(t *testing.T) {
 	}
 }
 
+func TestATeardownThatStoppedAfterTheStoreWentIsFinishedByTheNextRun(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{kept: sealedRootKey()}
+	stack := aStackName(t)
+	ref := providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack}
+	own := host.StoreAccountKey(naming.InfraStack(ref.Name.Env).String(), "web")
+
+	stopped := over(machine)
+	binding := standingBucket(t, machine, stopped, "uploads")
+	holdingBuckets(t, stopped, stack, "uploads")
+	machine.refuses = func(command string) (session.Result, bool) {
+		if !strings.Contains(command, "/kept/"+own) {
+			return session.Result{}, false
+		}
+		return session.Result{Code: 1, Stderr: "the box went away"}, true
+	}
+	if err := stopped.RemoveResource(context.Background(), ref, binding, nil); err == nil {
+		t.Fatal("RemoveResource(bucket) = nil, want the failure that stops the teardown halfway")
+	}
+
+	machine.refuses = nil
+	machine.kept = ""
+	machine.forget()
+	again := over(machine)
+	holdingBuckets(t, again, stack, "uploads")
+	if err := again.RemoveResource(context.Background(), ref, binding, nil); err != nil {
+		t.Fatalf("RemoveResource(bucket) run 2 = %v", err)
+	}
+
+	joined := strings.Join(machine.commands(), "\n")
+	store := vps.StoreName(ref)
+	for _, want := range []string{"docker rm --force '" + store + "'", "/kept/" + own} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("a teardown that stopped after the store's credential went is never finished, and %q never ran on the run after it:\n%s", want, joined)
+		}
+	}
+	if strings.Contains(machine.proxied(), store+":9000") {
+		t.Errorf("the proxy still forwards to a store this box no longer runs:\n%s", machine.proxied())
+	}
+}
+
 func TestAnAppThatGoesTakesItsOwnStoreAccountWithIt(t *testing.T) {
 	t.Parallel()
 
