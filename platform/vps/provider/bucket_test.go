@@ -84,6 +84,34 @@ func TestADeclaredBucketStandsAStoreUpOnlyItsProjectReaches(t *testing.T) {
 	}
 }
 
+func TestABindingIsKeyedByTheNameTheAppDeclaredTheResourceUnder(t *testing.T) {
+	t.Parallel()
+
+	postgres := aPostgres(t, "17")
+	postgres.Resource.Name, postgres.Resource.Declared = "db--main", "main"
+	machine := &box{}
+	holdingAPostgres(machine)
+	held, err := over(machine).Postgres(context.Background(), postgres, nil)
+	if err != nil {
+		t.Fatalf("Postgres() = %v", err)
+	}
+	if held.Resource != "main" {
+		t.Errorf("the postgres binding names resource %q, so the app reads it off %s rather than off %s",
+			held.Resource, providerkit.ResourceEnvName(held.Type, held.Name), providerkit.ResourceEnvName(held.Type, "main"))
+	}
+
+	bucket := aBucket(t, "bucket--uploads", false)
+	bucket.Resource.Declared = "uploads"
+	held, err = over(&box{kept: sealedRootKey()}).Bucket(context.Background(), bucket, nil)
+	if err != nil {
+		t.Fatalf("Bucket() = %v", err)
+	}
+	if held.Resource != "uploads" {
+		t.Errorf("the bucket binding names resource %q, so the app reads it off %s rather than off %s",
+			held.Resource, providerkit.ResourceEnvName(held.Type, held.Name), providerkit.ResourceEnvName(held.Type, "uploads"))
+	}
+}
+
 func TestOneStoreServesEveryBucketAProjectDeclares(t *testing.T) {
 	t.Parallel()
 

@@ -90,8 +90,9 @@ func (p *Provider) Postgres(ctx context.Context, in resources.Instruction, repor
 		return providerkit.Binding{}, err
 	}
 	return providerkit.Binding{
-		Type: providerkit.BindingPostgres,
-		Name: in.Resource.Name,
+		Type:     providerkit.BindingPostgres,
+		Name:     in.Resource.Name,
+		Resource: in.Resource.Declared,
 		Properties: map[string]string{
 			providerkit.PropertyHost:     spec.Name,
 			providerkit.PropertyPort:     postgresPort,

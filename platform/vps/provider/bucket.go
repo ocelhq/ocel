@@ -239,8 +239,9 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 	}
 
 	return providerkit.Binding{
-		Type: providerkit.BindingBucket,
-		Name: in.Resource.Name,
+		Type:     providerkit.BindingBucket,
+		Name:     in.Resource.Name,
+		Resource: in.Resource.Declared,
 		Properties: map[string]string{
 			providerkit.PropertyBucket: bucket,
 		},
@@ -258,8 +259,9 @@ func (p *Provider) externalBucket(in resources.Instruction, report providerkit.R
 		report.Say("Binding bucket " + in.Resource.Name + " to " + p.options.Bucket.Bucket + "/" + prefix)
 	}
 	return providerkit.Binding{
-		Type: providerkit.BindingBucket,
-		Name: in.Resource.Name,
+		Type:     providerkit.BindingBucket,
+		Name:     in.Resource.Name,
+		Resource: in.Resource.Declared,
 		Properties: map[string]string{
 			providerkit.PropertyBucket: p.options.Bucket.Bucket + "/" + prefix,
 		},
