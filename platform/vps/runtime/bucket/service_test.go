@@ -541,6 +541,18 @@ func TestAStoreWithNoRoomSignsNoWrite(t *testing.T) {
 	if _, err := roomy.svc.Sign(context.Background(), write); err != nil {
 		t.Fatalf("Sign a write against a volume with room = %v, want it signed", err)
 	}
+
+	parts := &bucketv1.SignPartsRequest{
+		Bucket: "store", Key: "a.png", UploadId: "upload-1",
+		PartNumbers: []int32{1}, Audience: bucketv1.SignedAudience_SIGNED_AUDIENCE_INTERNAL,
+	}
+	_, err = full.svc.SignParts(context.Background(), parts)
+	if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeResourceExhausted {
+		t.Fatalf("SignParts against a full volume = %v, want it refused: a part carries the same bytes a put would", err)
+	}
+	if _, err := roomy.svc.SignParts(context.Background(), parts); err != nil {
+		t.Fatalf("SignParts against a volume with room = %v, want it signed", err)
+	}
 }
 
 func TestAStoreThatSignsNoPolicyStillBoundsAnUploadByHead(t *testing.T) {
