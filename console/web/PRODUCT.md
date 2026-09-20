@@ -64,8 +64,7 @@ terminal, and trusting that what they see is exactly what the CLI last reported.
 - Organization settings: rename and re-slug, leave, delete. Members: invite by link (no
   email is sent), change roles, remove, accept an invitation at `/invite/<id>`.
 - Project registry: name, slug, description, detected frameworks.
-- Dev env values and per-user dev resource resolution for `ocel dev`.
-- Blob presigning for uploads.
+- Dev env values shared across a project, for `ocel dev`.
 - Navigation for deployments, variables, resources, domains, monitoring, and spend.
   Every one of these pages is a notice naming the CLI command that does the job.
 

@@ -919,7 +919,7 @@ func TestBindBindings(t *testing.T) {
 
 	t.Run("one declared name under two types binds each apart", func(t *testing.T) {
 		t.Parallel()
-		both := append(append([]Declaration{}, declarations...), Declaration{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "main", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/blob.ts:1"})
+		both := append(append([]Declaration{}, declarations...), Declaration{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "main", Bucket: &resourcesv1.BucketConfig{}, Source: "ocel/bucket.ts:1"})
 		manifest, err := Build("proj-1", nil, nil, "serverless", both, []Binding{
 			postgres("main", "sst-pg-main"),
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "main", External: "sst-s3-main"},
