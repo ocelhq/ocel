@@ -41,10 +41,9 @@ func (s Store) Presigner() *s3.PresignClient {
 	return s3.NewPresignClient(s.Client())
 }
 
-// HTTPPoster delivers callbacks over plain HTTP.
 type HTTPPoster struct {
-	// Client sends the request; nil uses the default client.
 	Client *http.Client
+	App    string
 }
 
 // Post delivers one callback body to the app's upload route.
@@ -56,6 +55,10 @@ func (p HTTPPoster) Post(ctx context.Context, url string, body []byte) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err
+	}
+	if p.App != "" {
+		req.Host = req.URL.Host
+		req.URL.Scheme, req.URL.Host = "http", p.App
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
