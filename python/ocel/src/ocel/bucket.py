@@ -1315,6 +1315,8 @@ def _put_constraints(options: _WriteOptions) -> SignConstraints:
         content_type=options.content_type or "",
         if_none_match=options.if_none_match,
         if_match=options.if_match or "",
+        cache_control=options.cache_control or "",
+        metadata=dict(options.metadata or {}),
     )
 
 
@@ -1328,8 +1330,6 @@ def _put_headers(target: PresignedTarget, options: _WriteOptions) -> dict[str, s
         headers["if-none-match"] = options.if_none_match
     if options.if_match:
         headers["if-match"] = options.if_match
-    for name, value in (options.metadata or {}).items():
-        headers[f"x-amz-meta-{name}"] = value
     return headers
 
 

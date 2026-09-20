@@ -272,6 +272,13 @@ impl Core {
                     content_type: self.options.content_type.clone(),
                     if_none_match: self.options.if_none_match.clone(),
                     if_match: self.options.if_match.clone(),
+                    cache_control: self.options.cache_control.clone(),
+                    metadata: self
+                        .options
+                        .metadata
+                        .iter()
+                        .map(|(name, value)| (name.clone(), value.clone()))
+                        .collect(),
                     ..Default::default()
                 })
                 .into(),
@@ -297,9 +304,6 @@ impl Core {
             if !value.is_empty() {
                 request = request.header(name, value);
             }
-        }
-        for (name, value) in &self.options.metadata {
-            request = request.header(format!("x-amz-meta-{name}"), value);
         }
         let body = Bytes::from(std::mem::take(&mut self.buffered));
         let response = send(&self.reached, request, body).await?;

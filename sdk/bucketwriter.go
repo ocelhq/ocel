@@ -285,9 +285,11 @@ func (w *Writer) putWhole() error {
 		bucketv1.SignedOperation_SIGNED_OPERATION_PUT,
 		bucketv1.SignedAudience_SIGNED_AUDIENCE_INTERNAL,
 		&bucketv1.SignConstraints{
-			ContentType: w.options.contentType,
-			IfNoneMatch: w.options.ifNoneMatch,
-			IfMatch:     w.options.ifMatch,
+			ContentType:  w.options.contentType,
+			IfNoneMatch:  w.options.ifNoneMatch,
+			IfMatch:      w.options.ifMatch,
+			CacheControl: w.options.cacheControl,
+			Metadata:     w.options.metadata,
 		}, 0,
 	)
 	if err != nil {
@@ -315,9 +317,6 @@ func (w *Writer) putWhole() error {
 	}
 	if w.options.ifMatch != "" {
 		req.Header.Set("If-Match", w.options.ifMatch)
-	}
-	for name, value := range w.options.metadata {
-		req.Header.Set("x-amz-meta-"+name, value)
 	}
 	req.ContentLength = int64(len(w.buffered))
 	res, err := w.store.http.Do(req)

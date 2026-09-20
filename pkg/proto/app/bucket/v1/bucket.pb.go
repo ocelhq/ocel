@@ -1336,6 +1336,8 @@ type SignConstraints struct {
 	DownloadFilename string                 `protobuf:"bytes,3,opt,name=download_filename,json=downloadFilename,proto3" json:"download_filename,omitempty"`
 	IfNoneMatch      string                 `protobuf:"bytes,4,opt,name=if_none_match,json=ifNoneMatch,proto3" json:"if_none_match,omitempty"`
 	IfMatch          string                 `protobuf:"bytes,5,opt,name=if_match,json=ifMatch,proto3" json:"if_match,omitempty"`
+	CacheControl     string                 `protobuf:"bytes,6,opt,name=cache_control,json=cacheControl,proto3" json:"cache_control,omitempty"`
+	Metadata         map[string]string      `protobuf:"bytes,7,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1403,6 +1405,20 @@ func (x *SignConstraints) GetIfMatch() string {
 		return x.IfMatch
 	}
 	return ""
+}
+
+func (x *SignConstraints) GetCacheControl() string {
+	if x != nil {
+		return x.CacheControl
+	}
+	return ""
+}
+
+func (x *SignConstraints) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
 }
 
 type SignRequest struct {
@@ -2219,13 +2235,18 @@ const file_app_bucket_v1_bucket_proto_rawDesc = "" +
 	"\x0fdestination_key\x18\x03 \x01(\tB\x90\x03\xbaH\x8c\x03\xba\x01\x83\x03\n" +
 	"\x1cbuckets.copy.destination_key\x12\xb9\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x0edestinationKey\"A\n" +
 	"\fCopyResponse\x121\n" +
-	"\x06object\x18\x01 \x01(\v2\x19.app.bucket.v1.ObjectInfoR\x06object\"\xbb\x01\n" +
+	"\x06object\x18\x01 \x01(\v2\x19.app.bucket.v1.ObjectInfoR\x06object\"\xe7\x02\n" +
 	"\x0fSignConstraints\x12!\n" +
 	"\fcontent_type\x18\x01 \x01(\tR\vcontentType\x12\x19\n" +
 	"\bmax_size\x18\x02 \x01(\x03R\amaxSize\x12+\n" +
 	"\x11download_filename\x18\x03 \x01(\tR\x10downloadFilename\x12\"\n" +
 	"\rif_none_match\x18\x04 \x01(\tR\vifNoneMatch\x12\x19\n" +
-	"\bif_match\x18\x05 \x01(\tR\aifMatch\"\xd1\x05\n" +
+	"\bif_match\x18\x05 \x01(\tR\aifMatch\x12#\n" +
+	"\rcache_control\x18\x06 \x01(\tR\fcacheControl\x12H\n" +
+	"\bmetadata\x18\a \x03(\v2,.app.bucket.v1.SignConstraints.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd1\x05\n" +
 	"\vSignRequest\x12\x1f\n" +
 	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x97\x03\n" +
 	"\x03key\x18\x02 \x01(\tB\x84\x03\xbaH\x80\x03\xba\x01\xf7\x02\n" +
@@ -2331,7 +2352,7 @@ func file_app_bucket_v1_bucket_proto_rawDescGZIP() []byte {
 }
 
 var file_app_bucket_v1_bucket_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_app_bucket_v1_bucket_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_app_bucket_v1_bucket_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_app_bucket_v1_bucket_proto_goTypes = []any{
 	(UploadState)(0),                      // 0: app.bucket.v1.UploadState
 	(SignedOperation)(0),                  // 1: app.bucket.v1.SignedOperation
@@ -2372,15 +2393,16 @@ var file_app_bucket_v1_bucket_proto_goTypes = []any{
 	nil,                                   // 36: app.bucket.v1.PresignedTarget.HeadersEntry
 	nil,                                   // 37: app.bucket.v1.PresignedTarget.FieldsEntry
 	nil,                                   // 38: app.bucket.v1.ObjectInfo.MetadataEntry
-	nil,                                   // 39: app.bucket.v1.CreateMultipartRequest.MetadataEntry
-	nil,                                   // 40: app.bucket.v1.SignedPart.HeadersEntry
-	(*timestamppb.Timestamp)(nil),         // 41: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),           // 42: google.protobuf.Duration
+	nil,                                   // 39: app.bucket.v1.SignConstraints.MetadataEntry
+	nil,                                   // 40: app.bucket.v1.CreateMultipartRequest.MetadataEntry
+	nil,                                   // 41: app.bucket.v1.SignedPart.HeadersEntry
+	(*timestamppb.Timestamp)(nil),         // 42: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),           // 43: google.protobuf.Duration
 }
 var file_app_bucket_v1_bucket_proto_depIdxs = []int32{
 	36, // 0: app.bucket.v1.PresignedTarget.headers:type_name -> app.bucket.v1.PresignedTarget.HeadersEntry
 	37, // 1: app.bucket.v1.PresignedTarget.fields:type_name -> app.bucket.v1.PresignedTarget.FieldsEntry
-	41, // 2: app.bucket.v1.ObjectInfo.uploaded_at:type_name -> google.protobuf.Timestamp
+	42, // 2: app.bucket.v1.ObjectInfo.uploaded_at:type_name -> google.protobuf.Timestamp
 	38, // 3: app.bucket.v1.ObjectInfo.metadata:type_name -> app.bucket.v1.ObjectInfo.MetadataEntry
 	3,  // 4: app.bucket.v1.PresignUploadRequest.files:type_name -> app.bucket.v1.PresignFile
 	4,  // 5: app.bucket.v1.PresignUploadResponse.files:type_name -> app.bucket.v1.PresignedTarget
@@ -2390,49 +2412,50 @@ var file_app_bucket_v1_bucket_proto_depIdxs = []int32{
 	6,  // 9: app.bucket.v1.HeadResponse.object:type_name -> app.bucket.v1.ObjectInfo
 	6,  // 10: app.bucket.v1.ListResponse.objects:type_name -> app.bucket.v1.ObjectInfo
 	6,  // 11: app.bucket.v1.CopyResponse.object:type_name -> app.bucket.v1.ObjectInfo
-	1,  // 12: app.bucket.v1.SignRequest.operation:type_name -> app.bucket.v1.SignedOperation
-	2,  // 13: app.bucket.v1.SignRequest.audience:type_name -> app.bucket.v1.SignedAudience
-	42, // 14: app.bucket.v1.SignRequest.expires_in:type_name -> google.protobuf.Duration
-	23, // 15: app.bucket.v1.SignRequest.constraints:type_name -> app.bucket.v1.SignConstraints
-	4,  // 16: app.bucket.v1.SignResponse.target:type_name -> app.bucket.v1.PresignedTarget
-	39, // 17: app.bucket.v1.CreateMultipartRequest.metadata:type_name -> app.bucket.v1.CreateMultipartRequest.MetadataEntry
-	42, // 18: app.bucket.v1.SignPartsRequest.expires_in:type_name -> google.protobuf.Duration
-	2,  // 19: app.bucket.v1.SignPartsRequest.audience:type_name -> app.bucket.v1.SignedAudience
-	40, // 20: app.bucket.v1.SignedPart.headers:type_name -> app.bucket.v1.SignedPart.HeadersEntry
-	29, // 21: app.bucket.v1.SignPartsResponse.parts:type_name -> app.bucket.v1.SignedPart
-	31, // 22: app.bucket.v1.CompleteMultipartRequest.parts:type_name -> app.bucket.v1.CompletedPart
-	6,  // 23: app.bucket.v1.CompleteMultipartResponse.object:type_name -> app.bucket.v1.ObjectInfo
-	7,  // 24: app.bucket.v1.BucketService.PresignUpload:input_type -> app.bucket.v1.PresignUploadRequest
-	9,  // 25: app.bucket.v1.BucketService.VerifyUploadSignature:input_type -> app.bucket.v1.VerifyUploadSignatureRequest
-	11, // 26: app.bucket.v1.BucketService.GetUploadStatus:input_type -> app.bucket.v1.GetUploadStatusRequest
-	13, // 27: app.bucket.v1.BucketService.CompleteUpload:input_type -> app.bucket.v1.CompleteUploadRequest
-	15, // 28: app.bucket.v1.BucketService.Head:input_type -> app.bucket.v1.HeadRequest
-	17, // 29: app.bucket.v1.BucketService.List:input_type -> app.bucket.v1.ListRequest
-	19, // 30: app.bucket.v1.BucketService.Delete:input_type -> app.bucket.v1.DeleteRequest
-	21, // 31: app.bucket.v1.BucketService.Copy:input_type -> app.bucket.v1.CopyRequest
-	24, // 32: app.bucket.v1.BucketService.Sign:input_type -> app.bucket.v1.SignRequest
-	26, // 33: app.bucket.v1.BucketService.CreateMultipart:input_type -> app.bucket.v1.CreateMultipartRequest
-	28, // 34: app.bucket.v1.BucketService.SignParts:input_type -> app.bucket.v1.SignPartsRequest
-	32, // 35: app.bucket.v1.BucketService.CompleteMultipart:input_type -> app.bucket.v1.CompleteMultipartRequest
-	34, // 36: app.bucket.v1.BucketService.AbortMultipart:input_type -> app.bucket.v1.AbortMultipartRequest
-	8,  // 37: app.bucket.v1.BucketService.PresignUpload:output_type -> app.bucket.v1.PresignUploadResponse
-	10, // 38: app.bucket.v1.BucketService.VerifyUploadSignature:output_type -> app.bucket.v1.VerifyUploadSignatureResponse
-	12, // 39: app.bucket.v1.BucketService.GetUploadStatus:output_type -> app.bucket.v1.GetUploadStatusResponse
-	14, // 40: app.bucket.v1.BucketService.CompleteUpload:output_type -> app.bucket.v1.CompleteUploadResponse
-	16, // 41: app.bucket.v1.BucketService.Head:output_type -> app.bucket.v1.HeadResponse
-	18, // 42: app.bucket.v1.BucketService.List:output_type -> app.bucket.v1.ListResponse
-	20, // 43: app.bucket.v1.BucketService.Delete:output_type -> app.bucket.v1.DeleteResponse
-	22, // 44: app.bucket.v1.BucketService.Copy:output_type -> app.bucket.v1.CopyResponse
-	25, // 45: app.bucket.v1.BucketService.Sign:output_type -> app.bucket.v1.SignResponse
-	27, // 46: app.bucket.v1.BucketService.CreateMultipart:output_type -> app.bucket.v1.CreateMultipartResponse
-	30, // 47: app.bucket.v1.BucketService.SignParts:output_type -> app.bucket.v1.SignPartsResponse
-	33, // 48: app.bucket.v1.BucketService.CompleteMultipart:output_type -> app.bucket.v1.CompleteMultipartResponse
-	35, // 49: app.bucket.v1.BucketService.AbortMultipart:output_type -> app.bucket.v1.AbortMultipartResponse
-	37, // [37:50] is the sub-list for method output_type
-	24, // [24:37] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	39, // 12: app.bucket.v1.SignConstraints.metadata:type_name -> app.bucket.v1.SignConstraints.MetadataEntry
+	1,  // 13: app.bucket.v1.SignRequest.operation:type_name -> app.bucket.v1.SignedOperation
+	2,  // 14: app.bucket.v1.SignRequest.audience:type_name -> app.bucket.v1.SignedAudience
+	43, // 15: app.bucket.v1.SignRequest.expires_in:type_name -> google.protobuf.Duration
+	23, // 16: app.bucket.v1.SignRequest.constraints:type_name -> app.bucket.v1.SignConstraints
+	4,  // 17: app.bucket.v1.SignResponse.target:type_name -> app.bucket.v1.PresignedTarget
+	40, // 18: app.bucket.v1.CreateMultipartRequest.metadata:type_name -> app.bucket.v1.CreateMultipartRequest.MetadataEntry
+	43, // 19: app.bucket.v1.SignPartsRequest.expires_in:type_name -> google.protobuf.Duration
+	2,  // 20: app.bucket.v1.SignPartsRequest.audience:type_name -> app.bucket.v1.SignedAudience
+	41, // 21: app.bucket.v1.SignedPart.headers:type_name -> app.bucket.v1.SignedPart.HeadersEntry
+	29, // 22: app.bucket.v1.SignPartsResponse.parts:type_name -> app.bucket.v1.SignedPart
+	31, // 23: app.bucket.v1.CompleteMultipartRequest.parts:type_name -> app.bucket.v1.CompletedPart
+	6,  // 24: app.bucket.v1.CompleteMultipartResponse.object:type_name -> app.bucket.v1.ObjectInfo
+	7,  // 25: app.bucket.v1.BucketService.PresignUpload:input_type -> app.bucket.v1.PresignUploadRequest
+	9,  // 26: app.bucket.v1.BucketService.VerifyUploadSignature:input_type -> app.bucket.v1.VerifyUploadSignatureRequest
+	11, // 27: app.bucket.v1.BucketService.GetUploadStatus:input_type -> app.bucket.v1.GetUploadStatusRequest
+	13, // 28: app.bucket.v1.BucketService.CompleteUpload:input_type -> app.bucket.v1.CompleteUploadRequest
+	15, // 29: app.bucket.v1.BucketService.Head:input_type -> app.bucket.v1.HeadRequest
+	17, // 30: app.bucket.v1.BucketService.List:input_type -> app.bucket.v1.ListRequest
+	19, // 31: app.bucket.v1.BucketService.Delete:input_type -> app.bucket.v1.DeleteRequest
+	21, // 32: app.bucket.v1.BucketService.Copy:input_type -> app.bucket.v1.CopyRequest
+	24, // 33: app.bucket.v1.BucketService.Sign:input_type -> app.bucket.v1.SignRequest
+	26, // 34: app.bucket.v1.BucketService.CreateMultipart:input_type -> app.bucket.v1.CreateMultipartRequest
+	28, // 35: app.bucket.v1.BucketService.SignParts:input_type -> app.bucket.v1.SignPartsRequest
+	32, // 36: app.bucket.v1.BucketService.CompleteMultipart:input_type -> app.bucket.v1.CompleteMultipartRequest
+	34, // 37: app.bucket.v1.BucketService.AbortMultipart:input_type -> app.bucket.v1.AbortMultipartRequest
+	8,  // 38: app.bucket.v1.BucketService.PresignUpload:output_type -> app.bucket.v1.PresignUploadResponse
+	10, // 39: app.bucket.v1.BucketService.VerifyUploadSignature:output_type -> app.bucket.v1.VerifyUploadSignatureResponse
+	12, // 40: app.bucket.v1.BucketService.GetUploadStatus:output_type -> app.bucket.v1.GetUploadStatusResponse
+	14, // 41: app.bucket.v1.BucketService.CompleteUpload:output_type -> app.bucket.v1.CompleteUploadResponse
+	16, // 42: app.bucket.v1.BucketService.Head:output_type -> app.bucket.v1.HeadResponse
+	18, // 43: app.bucket.v1.BucketService.List:output_type -> app.bucket.v1.ListResponse
+	20, // 44: app.bucket.v1.BucketService.Delete:output_type -> app.bucket.v1.DeleteResponse
+	22, // 45: app.bucket.v1.BucketService.Copy:output_type -> app.bucket.v1.CopyResponse
+	25, // 46: app.bucket.v1.BucketService.Sign:output_type -> app.bucket.v1.SignResponse
+	27, // 47: app.bucket.v1.BucketService.CreateMultipart:output_type -> app.bucket.v1.CreateMultipartResponse
+	30, // 48: app.bucket.v1.BucketService.SignParts:output_type -> app.bucket.v1.SignPartsResponse
+	33, // 49: app.bucket.v1.BucketService.CompleteMultipart:output_type -> app.bucket.v1.CompleteMultipartResponse
+	35, // 50: app.bucket.v1.BucketService.AbortMultipart:output_type -> app.bucket.v1.AbortMultipartResponse
+	38, // [38:51] is the sub-list for method output_type
+	25, // [25:38] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_app_bucket_v1_bucket_proto_init() }
@@ -2446,7 +2469,7 @@ func file_app_bucket_v1_bucket_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_bucket_v1_bucket_proto_rawDesc), len(file_app_bucket_v1_bucket_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   38,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -133,10 +133,12 @@ class Service:
                 )
             )
         method = "PUT" if request.operation is SignedOperation.PUT else "GET"
+        headers = {"x-fake-signature": "signed"}
+        if constraints:
+            for name, value in constraints.metadata.items():
+                headers[f"x-amz-meta-{name}"] = value
         return SignResponse(
-            target=PresignedTarget(
-                url=url, key=request.key, method=method, headers={"x-fake-signature": "signed"}
-            )
+            target=PresignedTarget(url=url, key=request.key, method=method, headers=headers)
         )
 
     def create_multipart(self, request, ctx):

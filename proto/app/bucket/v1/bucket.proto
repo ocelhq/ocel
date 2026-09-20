@@ -236,6 +236,8 @@ message SignConstraints {
   string download_filename = 3;
   string if_none_match = 4;
   string if_match = 5;
+  string cache_control = 6;
+  map<string, string> metadata = 7;
 }
 
 message SignRequest {
