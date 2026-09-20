@@ -38,6 +38,7 @@ type Store struct {
 	AccessKeyID   string `json:"accessKeyId"`
 	Sessions      string `json:"sessions,omitempty"`
 	PathStyle     bool   `json:"pathStyle,omitempty"`
+	PostPolicies  bool   `json:"postPolicies,omitempty"`
 	PublicBaseURL string `json:"publicBaseUrl,omitempty"`
 	Pointer       string `json:"pointer,omitempty"`
 	Volume        string `json:"volume,omitempty"`

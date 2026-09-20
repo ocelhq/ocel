@@ -186,7 +186,7 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 		Internal:     internal.Presigner(),
 		External:     publishing(internal, manifest.Store.PublicBaseURL, values),
 		Callbacks:    bucket.HTTPPoster{App: app},
-		PostPolicies: true,
+		PostPolicies: manifest.Store.PostPolicies,
 		Sessions:     manifest.Store.Sessions,
 	}
 	if manifest.Store.Volume != "" {

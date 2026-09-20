@@ -38,6 +38,17 @@ type ExternalStore struct {
 	PathStyle       bool   `json:"pathStyle,omitempty" doc:"Address buckets as a path segment rather than a subdomain. Stores that serve no wildcard DNS need it."`
 }
 
+func (s ExternalStore) probing() host.ExternalStore {
+	return host.ExternalStore{
+		Endpoint:    s.Endpoint,
+		Region:      s.Region,
+		Bucket:      s.Bucket,
+		AccessKeyID: s.AccessKeyID,
+		SecretKey:   s.SecretAccessKey,
+		PathStyle:   s.PathStyle,
+	}
+}
+
 func (s ExternalStore) configured() bool {
 	return strings.TrimSpace(s.Endpoint) != "" || strings.TrimSpace(s.Bucket) != ""
 }

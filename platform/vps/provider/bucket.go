@@ -124,6 +124,19 @@ type standingStores struct {
 	mu    sync.Mutex
 	stood map[string]storeCredential
 	spec  *host.ResourceContainer
+	probe host.StoreProbe
+}
+
+func (s *standingStores) probed(probe host.StoreProbe) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.probe = probe
+}
+
+func (s *standingStores) probing() host.StoreProbe {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.probe
 }
 
 func (s *standingStores) shaped(spec host.ResourceContainer) {
@@ -287,6 +300,7 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 			AccessKeyID:   external.AccessKeyID,
 			PathStyle:     external.PathStyle,
 			Sessions:      external.Bucket + "/" + naming.Sanitize(plan.Ref.Project) + "/" + naming.Sanitize(plan.Ref.Name.Env),
+			PostPolicies:  p.stores.probing().PostPolicies,
 			Sealed:        base64.StdEncoding.EncodeToString(sealed),
 		}, nil
 	}
@@ -302,15 +316,16 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 		return nil, err
 	}
 	return &live.Store{
-		Env:         storeRef(plan.Ref).Name.String(),
-		Endpoint:    "http://" + spec.Name + ":" + storePort,
-		Region:      storeRegion,
-		AccessKeyID: storeAccessKey,
-		PathStyle:   true,
-		Pointer:     storeRoute(plan.Ref, spec.Name).Pointer,
-		Volume:      spec.VolumeName(),
-		Sessions:    constants.StoreSessionsBucket(),
-		Sealed:      base64.StdEncoding.EncodeToString(held.sealed),
+		Env:          storeRef(plan.Ref).Name.String(),
+		Endpoint:     "http://" + spec.Name + ":" + storePort,
+		Region:       storeRegion,
+		AccessKeyID:  storeAccessKey,
+		PathStyle:    true,
+		Pointer:      storeRoute(plan.Ref, spec.Name).Pointer,
+		Volume:       spec.VolumeName(),
+		Sessions:     constants.StoreSessionsBucket(),
+		PostPolicies: true,
+		Sealed:       base64.StdEncoding.EncodeToString(held.sealed),
 	}, nil
 }
 

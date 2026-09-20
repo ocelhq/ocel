@@ -215,7 +215,12 @@ func storeManifest(t *testing.T, machine *box, options vps.Options) vars.Manifes
 
 func manifestIn(t *testing.T, machine *box) vars.Manifest {
 	t.Helper()
-	for _, carried := range machine.carried() {
+	return manifestFed(t, machine.carried())
+}
+
+func manifestFed(t *testing.T, fed []string) vars.Manifest {
+	t.Helper()
+	for _, carried := range fed {
 		for line := range strings.SplitSeq(carried, "\n") {
 			raw, held := strings.CutPrefix(line, vars.EnvVar+"=")
 			if !held {
