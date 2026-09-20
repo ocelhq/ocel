@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -115,7 +116,7 @@ func TestAHostnameClaimForwardsNothingAndIsReachedBeforeTheAppItSitsBeside(t *te
 			t.Errorf("the route %q matches every hostname this box receives, and the route after it is then dead configuration", route.Identity)
 		}
 	}
-	if !strings.HasPrefix(routes[0].Identity, claimIdentity) {
+	if !strings.HasPrefix(routes[0].Identity, live.ClaimPrefix) {
 		t.Errorf("route 0 is %q, want the claim first: the proxy takes the first route that matches, so a claim reached after a catch-all is never reached at all", routes[0].Identity)
 	}
 	if len(routes[0].Handle) != 0 {
@@ -142,7 +143,7 @@ func TestARouteNamingASurfaceAndNoHostIsNotOneOcelWrote(t *testing.T) {
 
 	document := strings.Replace(string(mustRender(t, routed())),
 		`"@id":"`+keyed("web").identity()+`"`,
-		`"@id":"`+claimIdentity+surface+claimSeparator+claimed+`"`, 1)
+		`"@id":"`+live.ClaimPrefix+surface+claimSeparator+claimed+`"`, 1)
 	if _, err := ReadProxyState([]byte(document)); err == nil {
 		t.Error("a claim carrying an app's forwarding handler reads back as a claim, and a deploy that rewrites this file whole would drop what it forwards to")
 	}
@@ -730,12 +731,12 @@ func TestAProjectWideClaimStillNamesNoAppOnTheWireItIsWrittenTo(t *testing.T) {
 	wide.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 	rendered := mustRender(t, wide)
 
-	if want := claimIdentity + surface + claimSeparator + claimed + claimSeparator + pointed; !strings.Contains(string(rendered), `"@id":"`+want+`"`) {
+	if want := live.ClaimPrefix + surface + claimSeparator + claimed + claimSeparator + pointed; !strings.Contains(string(rendered), `"@id":"`+want+`"`) {
 		t.Errorf("a project-wide claim renders its identity as something other than %q:\n%s", want, rendered)
 	}
 	attributed := routed()
 	attributed.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed, App: "web"}}
-	if want := claimIdentity + surface + claimSeparator + claimed + claimSeparator + pointed + claimSeparator + "web"; !strings.Contains(string(mustRender(t, attributed)), `"@id":"`+want+`"`) {
+	if want := live.ClaimPrefix + surface + claimSeparator + claimed + claimSeparator + pointed + claimSeparator + "web"; !strings.Contains(string(mustRender(t, attributed)), `"@id":"`+want+`"`) {
 		t.Errorf("a claim declared under an app renders its identity without the app, so nothing distinguishes it from the project-wide claim it is not")
 	}
 }

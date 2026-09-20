@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -29,8 +30,8 @@ const (
 
 const (
 	ProxyHelper = helperRoot + "/" + proxyHelperName
-	proxyRoot   = stateRoot + "/proxy"
-	ProxyConfig = proxyRoot + "/" + proxyConfigName
+	proxyRoot   = live.ProxyDir
+	ProxyConfig = live.ProxyConfig
 	ProxyData   = proxyRoot + "/data"
 	ProxyPins   = classRoot + "/certs"
 )

@@ -15,6 +15,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -22,8 +23,7 @@ const (
 	proxyDrainServer = "ocel_drain"
 	drainListen      = "127.0.0.1:9"
 	routeIdentity    = "ocel-app-"
-	claimIdentity    = "ocel-host-"
-	claimSeparator   = "/"
+	claimSeparator   = live.ClaimSeparator
 	drainIdentity    = "ocel-retiring"
 	boxIdentity      = "ocel-box"
 	connectorRoute   = "ocel-connector"
@@ -107,12 +107,10 @@ func (r AppRoute) surface() surfaceKey {
 }
 
 func (c HostClaim) identity() string {
-	fields := []string{c.Owner, c.Hostname, c.Pointer}
-	if c.App != "" {
-		fields = append(fields, c.App)
-	}
-	return claimIdentity + strings.Join(fields, claimSeparator)
+	return live.ClaimIdentity(live.Claimed{Owner: c.Owner, Hostname: c.Hostname, Pointer: c.Pointer, App: c.App})
 }
+
+func (r AppRoute) app() bool { return r.App != live.StoreLabel }
 
 type Pin struct {
 	Hostname string
@@ -414,6 +412,9 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 		if err := validRoute(route); err != nil {
 			return nil, err
 		}
+		if !route.app() {
+			continue
+		}
 		if !slices.Contains(running[route.surface()], route.App) {
 			running[route.surface()] = append(running[route.surface()], route.App)
 		}
@@ -430,7 +431,7 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 	answering := map[string]AppRoute{}
 	for _, route := range standing {
 		hostnames := claimed[claimKey{Owner: route.Owner, Pointer: route.Pointer, App: route.App}]
-		if len(running[route.surface()]) == 1 {
+		if route.app() && len(running[route.surface()]) == 1 {
 			hostnames = append(slices.Clone(hostnames), claimed[claimKey{Owner: route.Owner, Pointer: route.Pointer}]...)
 		}
 		slices.Sort(hostnames)
@@ -681,16 +682,14 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 			entry[named] = base
 			continue
 		}
-		if claim, mine := strings.CutPrefix(route.Identity, claimIdentity); mine {
-			fields := strings.Split(claim, claimSeparator)
-			if len(fields) < 3 || len(fields) > 4 || slices.Contains(fields, "") || !claimsOnly(route, fields[1]) {
+		if strings.HasPrefix(route.Identity, live.ClaimPrefix) {
+			claim, named := live.ClaimedAt(route.Identity)
+			if !named || !claimsOnly(route, claim.Hostname) {
 				return ProxyState{}, unwritten("route", route.Identity)
 			}
-			held := HostClaim{Hostname: fields[1], Owner: fields[0], Pointer: fields[2]}
-			if len(fields) == 4 {
-				held.App = fields[3]
-			}
-			state.Claims = append(state.Claims, held)
+			state.Claims = append(state.Claims, HostClaim{
+				Hostname: claim.Hostname, Owner: claim.Owner, Pointer: claim.Pointer, App: claim.App,
+			})
 			continue
 		}
 		named, keyed := strings.CutPrefix(route.Identity, routeIdentity)
