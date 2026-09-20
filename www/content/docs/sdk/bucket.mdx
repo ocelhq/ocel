@@ -3,6 +3,342 @@ title: Bucket
 description: Object storage.
 ---
 
-```go
-bucket := sdk.Bucket("main")
+Declaring a bucket in a [discovery folder](/docs/configuration#discoverypaths) hands back the
+handle your app reads and writes its objects through. There is no client to construct and no
+endpoint to configure: the deploy provisions the store and delivers the binding under the name
+you declared.
+
+<Tabs items={["TypeScript", "Go", "Python", "Rust"]}>
+
+<Tab value="TypeScript">
+
+```ts title="resources/index.ts"
+import { bucket } from "ocel/bucket";
+
+export const uploads = bucket("uploads");
 ```
+
+</Tab>
+
+<Tab value="Go">
+
+```go title="resources/resources.go"
+package resources
+
+import ocel "github.com/ocelhq/ocel/sdk"
+
+var Uploads = ocel.Bucket("uploads")
+```
+
+</Tab>
+
+<Tab value="Python">
+
+```python title="resources/__init__.py"
+import ocel
+
+uploads = ocel.bucket("uploads")
+```
+
+</Tab>
+
+<Tab value="Rust">
+
+```rust title="src/main.rs"
+#[derive(ocel::Resources)]
+pub struct Infra {
+    pub uploads: ocel::Bucket,
+}
+
+#[ocel::main]
+fn main() {
+    let infra = Infra::load().expect("the resources this app declares");
+}
+```
+
+Rust declares from the app crate itself, so a field of type `ocel::Bucket` is the declaration.
+The field's identifier is the bucket's name unless `#[ocel(name = "…")]` says otherwise.
+
+</Tab>
+
+</Tabs>
+
+## Reading and writing
+
+A key is a path under the bucket. Every segment must be non-empty and neither `.` nor `..`, and
+`.ocel/` is reserved for the runtime.
+
+<Tabs items={["TypeScript", "Go", "Python", "Rust"]}>
+
+<Tab value="TypeScript">
+
+```ts
+import { uploads } from "../resources";
+
+await uploads.put("reports/q3.pdf", bytes, { contentType: "application/pdf" });
+
+const held = await uploads.get("reports/q3.pdf");
+if (held) console.log(held.info.size, await held.text());
+
+for await (const object of uploads.list({ prefix: "reports/" })) {
+  console.log(object.key, object.etag);
+}
+
+await uploads.delete(["reports/q3.pdf", "reports/q2.pdf"]);
+```
+
+`get` and `head` answer `null` when the bucket holds nothing under the key. `copy` moves bytes
+within one bucket, and `list` is also walked a page at a time with `list().page({ cursor })`.
+
+</Tab>
+
+<Tab value="Go">
+
+```go
+err := resources.Uploads.WriteAll(ctx, "reports/q3.pdf", data,
+    ocel.ContentType("application/pdf"))
+
+held, err := resources.Uploads.ReadAll(ctx, "reports/q3.pdf")
+
+for object, err := range resources.Uploads.List(ctx, ocel.Prefix("reports/")) {
+    if err != nil {
+        return err
+    }
+    log.Println(object.Key, object.ETag)
+}
+
+err = resources.Uploads.Delete(ctx, "reports/q3.pdf", "reports/q2.pdf")
+```
+
+`NewReader` and `NewWriter` stream one object instead of holding it in memory, and a read that
+finds nothing reports `ocel.ErrObjectNotFound`.
+
+</Tab>
+
+<Tab value="Python">
+
+```python
+from resources import uploads
+
+uploads.put("reports/q3.pdf", data, content_type="application/pdf")
+
+with uploads.get("reports/q3.pdf") as held:
+    print(held.info.size, held.bytes())
+
+for entry in uploads.list(prefix="reports/"):
+    print(entry.key, entry.etag)
+
+uploads.delete("reports/q3.pdf", "reports/q2.pdf")
+```
+
+`uploads.open(key, "rb")` treats an object as a binary file. Every method has an `_async` twin
+that runs on a loop, and a read that finds nothing raises `ocel.ObjectNotFound`.
+
+</Tab>
+
+<Tab value="Rust">
+
+```rust
+use futures::StreamExt;
+
+infra.uploads
+    .put("reports/q3.pdf", data)
+    .content_type("application/pdf")
+    .await?;
+
+let held = infra.uploads.get("reports/q3.pdf").await?;
+println!("{}", held.info().size);
+let bytes = held.bytes().await?;
+
+let mut walk = std::pin::pin!(infra.uploads.list().prefix("reports/").into_stream());
+while let Some(object) = walk.next().await {
+    println!("{}", object?.key);
+}
+
+infra.uploads.delete("reports/q3.pdf").await?;
+```
+
+`put`, `get`, `list`, `signed_url` and `signed_upload` return builders, and awaiting one performs
+the call. `reader` and `writer` stream an object, and a read that finds nothing fails with
+`Error::NotFound`.
+
+</Tab>
+
+</Tabs>
+
+Conditional writes go with the write: `ifNoneMatch: "*"` (`ocel.IfNotExists()`, `if_not_exists=True`,
+`.if_not_exists()`) writes only where the bucket holds nothing, and `ifMatch` only while the object
+still carries that etag. Either unmet is refused rather than overwritten.
+
+## Public buckets
+
+A bucket declared `public` serves every object it holds anonymously, and `publicUrl(key)` is the
+address. In TypeScript that method exists only on a bucket declared public; the other languages
+fail at the call on a bucket that carries no public address.
+
+```ts title="resources/index.ts"
+import { bucket } from "ocel/bucket";
+
+export const assets = bucket("assets", { public: true });
+
+// assets.publicUrl("logo.svg") -> https://storage.example.com/logo.svg
+```
+
+The public address comes from the domain bound to the project, so a project with no domain has
+none. `ocel.BucketPublic()`, `public=True` and `#[ocel(public)]` declare the same thing.
+
+## Signed urls
+
+A signed url hands one object to someone who holds no credential, for as long as it stays valid.
+`signedUrl` reads and `signedUpload` writes:
+
+```ts
+const read = await uploads.signedUrl("reports/q3.pdf", {
+  expiresIn: 300,
+  download: "q3.pdf",
+});
+
+const write = await uploads.signedUpload("reports/q4.pdf", {
+  expiresIn: 300,
+  maxSize: 10 * 1024 * 1024,
+  contentType: "application/pdf",
+});
+```
+
+`signedUpload` answers a `url`, a `method`, the `headers` the signature covers and the form
+`fields` a POST target carries. Send the body exactly as the target describes: a changed header
+breaks the signature. Both are minted against the store's public address, so both need a domain
+bound to the project.
+
+## Browser uploads
+
+An uploader is a named flow the browser drives. It authorizes the request, bounds what the
+browser may send, decides the key, and runs your code once the bytes have landed:
+
+```ts title="resources/index.ts"
+import { bucket, uploader } from "ocel/bucket/next";
+import { z } from "zod";
+import { pg } from "./postgres";
+
+export const uploads = bucket("uploads", {
+  allowedOrigins: ["https://app.example.com"],
+  uploaders: {
+    document: uploader(
+      {
+        input: z.object({ ownerId: z.string() }),
+        middleware: ({ input }) => ({ ownerId: input.ownerId }),
+      },
+      {
+        accept: ["image/*", "application/pdf"],
+        limits: { maxFileCount: 5, maxFileSize: 10 * 1024 * 1024 },
+        path: { prefix: "documents/", randomSuffix: true },
+        onUploadComplete: async ({ metadata, file }) => {
+          await pg.query("insert into documents (key, owner_id) values ($1, $2)", [
+            file.key,
+            metadata.ownerId,
+          ]);
+        },
+      },
+    ),
+  },
+});
+```
+
+What `middleware` returns is the metadata the rest of the uploader reads, and a request it throws
+on is refused. Mount the route the browser talks to:
+
+```ts title="app/api/upload/route.ts"
+import { createRouteHandler } from "ocel/bucket/next";
+import { uploads } from "../../../resources";
+
+export const { GET, POST } = createRouteHandler(uploads);
+```
+
+`ocel/bucket/hono` and `ocel/bucket/express` are the same two functions shaped for those
+frameworks, and `ocel/bucket` is the framework-neutral pair. Then in the browser:
+
+```ts title="app/upload-button.tsx"
+import { createUploadClient } from "ocel/bucket/client";
+import type { uploads } from "../resources";
+
+const client = createUploadClient<typeof uploads>({ url: "/api/upload" });
+
+await client.upload("document", { files, input: { ownerId } });
+```
+
+The client is typed from the bucket: an uploader name it does not declare, or an input that does
+not match that uploader's schema, is a compile error. It presigns each file, sends it straight to
+the store, and waits for the upload to be recorded before resolving, so `onUploadComplete` has run
+by the time it returns.
+
+Go, Python and Rust have no browser half of their own. Mint a `signedUpload` on the server, hand
+the target to the page, and let JavaScript send the body to it.
+
+## Limits
+
+A server write of 16 MB or less goes in one request. Anything larger is split into 8 MB parts,
+four in flight, and settled as one object. You do not ask for that, and nothing is stored until
+the last part lands.
+
+A browser upload is a single request, so it is bounded by what the store accepts in one, which on
+S3 is 5 GB. Cap it lower with `maxFileSize` on the uploader or `maxSize` on a signed upload.
+
+One listing page carries at most 1000 objects, and user metadata is capped at 2 KB per object.
+
+## On a VPS
+
+The box runs a RustFS store of its own, on your project's own network, with
+its data on a docker volume. Every bucket you declare is a bucket inside it. It publishes no port
+on the machine, and reaches browsers through `storage.<domain>` on the same proxy that serves your
+apps, claimed when a domain is bound to the project. Until then a signed url, a browser upload and
+a public object have no address, and the runtime refuses them rather than handing out one nothing
+can reach.
+
+The store writes to the same disk as everything else on the box, so it stops signing writes while
+the volume has less than 1 GiB, or a tenth of its size, free.
+
+Point the project at an S3-compatible store instead, and every declared bucket becomes a key
+prefix inside the one you name:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "name": "vps",
+    "options": {
+      "ssh": { "host": "${DEPLOY_HOST}", "user": "deploy" },
+      "bucket": {
+        "endpoint": "https://s3.eu-west-1.amazonaws.com",
+        "region": "eu-west-1",
+        "bucket": "my-app-objects",
+        "accessKeyId": "${STORE_ACCESS_KEY_ID}",
+        "secretAccessKey": "${STORE_SECRET_ACCESS_KEY}"
+      }
+    }
+  },
+  "apps": [{ "name": "web", "path": ".", "compute": "container" }]
+}
+```
+
+All five fields go together, or none of them. Add `"pathStyle": true` for a store that serves no
+wildcard DNS.
+
+The deploy probes that store before it provisions anything: conditional writes, bucket CORS,
+presigned urls and multipart uploads. A store missing any of them is refused by name, with nothing
+provisioned, and the probe deletes everything it wrote. `public` is refused on an external store,
+since anonymous access there is that store's to grant.
+
+<Callout>
+  The box's own store is as durable as the box's disk. Point `bucket` at a store you trust for
+  anything you cannot afford to lose with the machine.
+</Callout>
+
+A [transform](/docs/transforms#on-a-vps) changes what the store container runs: its image, its
+memory, where its volume lives.
+
+## On AWS
+
+Each declared bucket is its own S3 bucket, with CORS set from `allowedOrigins` and browser uploads
+recorded by a function the deploy stands up beside it. `public` is refused: the provider blocks
+public access at the account's edge, so serve those objects through your app or a signed url.

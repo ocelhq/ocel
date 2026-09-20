@@ -31,7 +31,7 @@ Every entry point is a subpath — there is no root export.
 | --- | --- |
 | `ocel/config` | `defineConfig`, and the `OcelConfig` / `AppConfig` / `DomainConfig` / `ProviderDescriptor` types |
 | `ocel/postgres` | `postgres(id, config?)` — declares a Postgres database and returns a connected client |
-| `ocel/bucket` | `bucket`, `uploader`, `createRouteHandler`, `resolveBucketContext` — framework-agnostic |
+| `ocel/bucket` | `bucket(name, options?)` — declares a bucket and returns the handle its objects are read and written through, plus `uploader`, `createRouteHandler` and `resolveBucketContext`, framework-agnostic |
 | `ocel/bucket/next` | `bucket`, `uploader`, `createRouteHandler` returning Next route handlers |
 | `ocel/bucket/hono` | `bucket`, `uploader`, `createRouteHandler` returning a Hono handler |
 | `ocel/bucket/express` | `bucket`, `uploader`, `createRouteHandler` returning Express middleware |
@@ -74,6 +74,19 @@ export const uploads = bucket("uploads", {
     ),
   },
 });
+```
+
+The handle `bucket()` returns is how the app reaches its objects: `put`, `get`, `head`,
+`delete`, `copy`, `list`, `signedUrl` and `signedUpload`, plus `publicUrl` on a bucket
+declared `public: true`. A `put` over 16 MB is uploaded in parts without being asked to.
+
+```ts
+await uploads.put("reports/q3.pdf", bytes, { contentType: "application/pdf" });
+
+const held = await uploads.get("reports/q3.pdf");
+if (held) console.log(held.info.etag, await held.bytes());
+
+for await (const object of uploads.list({ prefix: "reports/" })) console.log(object.key);
 ```
 
 Resource declarations resolve through `ocel dev`, so importing them outside a `dev`/`run`
