@@ -493,6 +493,9 @@ func (s *stack) Destroy(ctx context.Context) error {
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}
+	if s.own.API != "" && !slices.Contains(ids, s.own.API) {
+		ids = append(ids, s.own.API)
+	}
 	drained := s.p.deleter().drain(ctx, c, ids)
 	if drained != nil {
 		return errors.Join(append(errs, drained)...)

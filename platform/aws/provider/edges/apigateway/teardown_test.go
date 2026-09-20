@@ -44,6 +44,30 @@ func TestTeardownRefusesWhileAProjectStillHasARestAPI(t *testing.T) {
 	}
 }
 
+func TestDestroyReclaimsTheRestAPIThisStackRecorded(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	e := bootstrapped(t, w)
+	stack, err := e.Reconcile(ctx, testSpec(), edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	held := w.gateway.named(productionAPIName())
+	if held == nil {
+		t.Fatalf("Reconcile stood up no API named %s", productionAPIName())
+	}
+	held.name = "legacy--" + conformanceSlug + "--production"
+
+	if err := stack.Destroy(ctx); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+	if w.gateway.apis[held.id] != nil {
+		t.Errorf("Destroy left %s standing: a stack reaches the API it recorded by id, not only by the name this run mints", held.id)
+	}
+}
+
 func TestTeardownLeavesTheRestAPIsAnotherNamespaceFronts(t *testing.T) {
 	t.Parallel()
 
