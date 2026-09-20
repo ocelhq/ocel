@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -50,6 +51,16 @@ func storeRoute(ref providerkit.StackRef, store string) host.AppRoute {
 		Upstream: store + ":" + storePort,
 		Health:   storeHealthPath,
 	}
+}
+
+func storeBucketSpec(ref providerkit.StackRef, store, secret string, spec host.BucketSpec) host.BucketSpec {
+	spec.Store = store
+	spec.Class = ref.Class
+	spec.Endpoint = "http://127.0.0.1:" + storePort
+	spec.Region = storeRegion
+	spec.AccessKeyID = storeAccessKey
+	spec.SecretKey = secret
+	return spec
 }
 
 func storeContainer(in resources.Instruction) host.ResourceContainer {
@@ -204,6 +215,10 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 		if err := p.host.RouteResource(ctx, storeRoute(in.Ref, spec.Name)); err != nil {
 			return storeCredential{}, err
 		}
+		if err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, held.secret,
+			host.BucketSpec{Bucket: constants.StoreSessionsBucket()})); err != nil {
+			return storeCredential{}, err
+		}
 		return held, nil
 	})
 	if err != nil {
@@ -211,17 +226,11 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 	}
 
 	bucket := storeBucketName(in.Ref, in.Resource.Name)
-	if err := p.host.ProvisionBucket(ctx, host.BucketSpec{
-		Store:          spec.Name,
-		Class:          in.Ref.Class,
-		Endpoint:       "http://127.0.0.1:" + storePort,
-		Region:         storeRegion,
-		AccessKeyID:    storeAccessKey,
-		SecretKey:      held.secret,
+	if err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, held.secret, host.BucketSpec{
 		Bucket:         bucket,
 		AllowedOrigins: declaredOrigins(in.Resource.Bucket),
 		Public:         declaredPublic(in.Resource.Bucket),
-	}); err != nil {
+	})); err != nil {
 		return providerkit.Binding{}, err
 	}
 
@@ -254,16 +263,9 @@ func (p *Provider) externalBucket(in resources.Instruction, report providerkit.R
 }
 
 func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan) (*live.Store, error) {
-	sessions := ""
-	for _, binding := range plan.App.Values.Bindings {
-		if binding.Type != providerkit.BindingBucket {
-			continue
-		}
-		if held := binding.Properties[providerkit.PropertyBucket]; sessions == "" || held < sessions {
-			sessions = held
-		}
-	}
-	if sessions == "" {
+	if !slices.ContainsFunc(plan.App.Values.Bindings, func(binding providerkit.Binding) bool {
+		return binding.Type == providerkit.BindingBucket
+	}) {
 		return nil, nil
 	}
 	if external := p.options.Bucket; external.configured() {
@@ -301,7 +303,7 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 		PathStyle:   true,
 		Pointer:     storeRoute(plan.Ref, spec.Name).Pointer,
 		Volume:      spec.VolumeName(),
-		Sessions:    sessions,
+		Sessions:    constants.StoreSessionsBucket(),
 		Sealed:      base64.StdEncoding.EncodeToString(held.sealed),
 	}, nil
 }
