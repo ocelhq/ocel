@@ -263,21 +263,22 @@ impl Core {
 
     async fn complete(&mut self) -> Result<Object, Error> {
         self.completed.sort_by_key(|part| part.part_number);
-        let upload_id = std::mem::take(&mut *self.leash.held());
         let response = self
             .reached
             .client
             .complete_multipart(CompleteMultipartRequest {
                 bucket: self.reached.bucket.clone(),
                 key: self.key.clone(),
-                upload_id,
-                parts: std::mem::take(&mut self.completed),
+                upload_id: self.leash.upload_id(),
+                parts: self.completed.clone(),
                 if_none_match: self.options.if_none_match.clone(),
                 if_match: self.options.if_match.clone(),
                 ..Default::default()
             })
             .await
             .map_err(|err| refused(&self.key, &err))?;
+        self.leash.held().clear();
+        self.completed.clear();
         response
             .into_owned()
             .object
