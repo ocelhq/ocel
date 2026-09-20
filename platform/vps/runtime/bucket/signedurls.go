@@ -191,6 +191,9 @@ func (s *Service) CreateMultipart(ctx context.Context, req *bucketv1.CreateMulti
 
 // SignParts signs the batch of parts a caller is about to send.
 func (s *Service) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest) (*bucketv1.SignPartsResponse, error) {
+	if err := s.roomToWrite(); err != nil {
+		return nil, err
+	}
 	signer, err := s.signer(req.GetAudience())
 	if err != nil {
 		return nil, err
