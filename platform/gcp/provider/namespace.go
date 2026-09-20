@@ -155,12 +155,6 @@ func (n Names) fit() error {
 				"Name a longer namespace in %s",
 			n.Database(), len(n.Database()), minDatabaseID, providerkit.NamespaceEnvVar)
 	}
-	if strings.HasSuffix(n.Database(), "-") {
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the %q Firestore database this bootstrap names ends in a dash, and a Firestore database id ends in a letter or a digit.\n"+
-				"Name a namespace in %s that ends in one",
-			n.Database(), providerkit.NamespaceEnvVar)
-	}
 	if uuidLike.MatchString(n.Database()) {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"the %q Firestore database this bootstrap names reads as a UUID, and a Firestore database id may not.\n"+

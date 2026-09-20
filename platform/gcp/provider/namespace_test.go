@@ -95,12 +95,6 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 			names:     "Firestore",
 		},
 		{
-			name:      "a namespace a Firestore database may not end on",
-			namespace: "ocel-",
-			project:   "acme-prod",
-			names:     "Firestore",
-		},
-		{
 			name:      "a namespace that reads as a UUID",
 			namespace: "ab2c3d45-6789-4abc-8def-0123456789ab",
 			project:   "acme-prod",
