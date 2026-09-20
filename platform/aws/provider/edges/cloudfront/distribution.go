@@ -24,13 +24,6 @@ const (
 	maxDistributionNameLen = 128
 )
 
-func capDistributionName(name string) string {
-	if len(name) <= maxDistributionNameLen {
-		return name
-	}
-	return strings.ToValidUTF8(name[:maxDistributionNameLen], "")
-}
-
 type front struct {
 	id         string
 	domainName string
@@ -129,8 +122,8 @@ func (p distributionPlan) ready() error {
 func (p distributionPlan) config(aliases []string, certificate string) *cftypes.DistributionConfig {
 	slices.Sort(aliases)
 	config := &cftypes.DistributionConfig{
-		CallerReference:              aws.String(capDistributionName(p.name)),
-		Comment:                      aws.String(capDistributionName(p.name)),
+		CallerReference:              aws.String(p.name),
+		Comment:                      aws.String(p.name),
 		Enabled:                      ptr(true),
 		HttpVersion:                  cftypes.HttpVersionHttp2and3,
 		IsIPV6Enabled:                ptr(true),
@@ -336,9 +329,8 @@ func findDistribution(ctx context.Context, c Clients, name string) (front, bool,
 	if err != nil {
 		return front{}, false, err
 	}
-	held := capDistributionName(name)
 	for _, summary := range summaries {
-		if summary.comment == held {
+		if summary.comment == name {
 			return front{id: summary.id, domainName: summary.domainName}, true, nil
 		}
 	}

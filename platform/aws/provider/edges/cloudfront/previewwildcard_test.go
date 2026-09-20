@@ -16,6 +16,18 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
+func TestTheSharedPreviewNameFitsTheCommentCloudFrontAccepts(t *testing.T) {
+	t.Parallel()
+
+	name := previewWildcardName(strings.Repeat("preview-", 30) + ".example.com")
+	if len(name) > maxDistributionNameLen {
+		t.Fatalf("previewWildcardName is %d characters and CloudFront holds %d: %q", len(name), maxDistributionNameLen, name)
+	}
+	if other := previewWildcardName(strings.Repeat("preview-", 30) + ".example.net"); other == name {
+		t.Errorf("two base domains both mint %q, so each would adopt the other's shared distribution", name)
+	}
+}
+
 const (
 	previewBase    = "preview.example.com"
 	previewWild    = "*." + previewBase

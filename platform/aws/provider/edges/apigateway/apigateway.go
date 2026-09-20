@@ -16,10 +16,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges/surface"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -39,8 +39,6 @@ const (
 	assetsVariable = "assets"
 
 	unsetVariable = "unset"
-
-	apiNamespace = "ocel"
 )
 
 type APIGatewayAPI interface {
@@ -83,10 +81,10 @@ type Clients struct {
 	Dynamo     awsports.DynamoAPI
 	CFN        cfn.Describer
 	Region     string
-	Namespace  bootstrap.Namespace
 }
 
 type provider struct {
+	ns   bootstrap.Namespace
 	open func(context.Context) (Clients, error)
 
 	mu      sync.Mutex
@@ -96,11 +94,11 @@ type provider struct {
 
 var _ edge.Edge = (*provider)(nil)
 
-func New(open func(context.Context) (Clients, error)) edge.Edge {
-	return &provider{open: open, delete: NewDeleter()}
+func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) edge.Edge {
+	return &provider{ns: ns, open: open, delete: NewDeleter()}
 }
 
-func FromConfig(load func(context.Context) (aws.Config, error), ns bootstrap.Namespace) func(context.Context) (Clients, error) {
+func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Context) (Clients, error) {
 	return func(ctx context.Context) (Clients, error) {
 		if load == nil {
 			return Clients{}, fmt.Errorf("the %q edge was built without a way to load AWS configuration", Kind)
@@ -115,7 +113,6 @@ func FromConfig(load func(context.Context) (aws.Config, error), ns bootstrap.Nam
 			Dynamo:     dynamodb.NewFromConfig(awscfg),
 			CFN:        cloudformation.NewFromConfig(awscfg),
 			Region:     awscfg.Region,
-			Namespace:  ns,
 		}, nil
 	}
 }
@@ -236,9 +233,9 @@ func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (
 		return bootstrap.Deployed{}, err
 	}
 	if class == edge.ClassPreview {
-		return bootstrap.CheckDeployedPreview(ctx, c.CFN, c.Namespace)
+		return bootstrap.CheckDeployedPreview(ctx, c.CFN, p.ns)
 	}
-	return bootstrap.CheckDeployed(ctx, c.CFN, c.Namespace)
+	return bootstrap.CheckDeployed(ctx, c.CFN, p.ns)
 }
 
 func (p *provider) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
@@ -260,27 +257,13 @@ func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
 	if err != nil {
 		return err
 	}
-	standing := projectsNamed(slices.Sorted(maps.Values(names)), class)
+	standing := surface.ProjectsNamed(p.ns, slices.Sorted(maps.Values(names)), class)
 	if len(standing) == 0 {
 		return nil
 	}
 	return providerkit.Refuse(providerkit.CodeInvalid,
 		"the %q edge still fronts %d project(s) of class %s with a REST API of their own: %s. Run `%s` in each of them first, then take this bootstrap down",
 		Kind, len(standing), class, strings.Join(standing, ", "), "ocel destroy "+string(class))
-}
-
-func projectsNamed(names []string, class edge.Class) []string {
-	var standing []string
-	for _, name := range names {
-		fields := strings.Split(name, naming.FieldSeparator)
-		if len(fields) < 3 || fields[0] != apiNamespace || fields[2] != string(class) {
-			continue
-		}
-		if !slices.Contains(standing, fields[1]) {
-			standing = append(standing, fields[1])
-		}
-	}
-	return standing
 }
 
 func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
@@ -298,7 +281,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	if !deployed.Present {
 		return nil, fmt.Errorf("the %s bootstrap is not standing, so the %q edge has no state table to keep %s's deployments in", spec.Class, Kind, spec.Slug)
 	}
-	role, err := requireInvokeRole(c.Namespace, deployed, spec.Class)
+	role, err := requireInvokeRole(p.ns, deployed, spec.Class)
 	if err != nil {
 		return nil, err
 	}
@@ -342,7 +325,7 @@ func (p *provider) Open(state edge.StackState) (edge.EdgeStack, error) {
 }
 
 func (p *provider) ProjectOwner(slug string, class edge.Class) string {
-	return apiName(slug, class, "")
+	return apiName(p.ns, slug, class, "")
 }
 
 func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, error) {
@@ -384,12 +367,11 @@ func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, er
 	return "", nil
 }
 
-func apiName(slug string, class edge.Class, pointer string) string {
-	fields := []string{apiNamespace, slug, string(class)}
+func apiName(ns bootstrap.Namespace, slug string, class edge.Class, pointer string) string {
 	if p := pointerOr(pointer); p != edge.DefaultPointer {
-		fields = append(fields, p)
+		return surface.Name(ns, slug, class, p)
 	}
-	return naming.Join(naming.FieldSeparator, fields...)
+	return surface.Name(ns, slug, class)
 }
 
 func pointerOr(pointer string) string {

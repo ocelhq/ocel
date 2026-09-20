@@ -47,7 +47,7 @@ func (s *stack) class() edge.Class { return s.state.Class }
 
 func (s *stack) plan(pointer string) apiPlan {
 	return apiPlan{
-		name:        apiName(s.slug(), s.class(), pointer),
+		name:        apiName(s.p.ns, s.slug(), s.class(), pointer),
 		region:      s.own.Region,
 		account:     accountOf(s.own.Role),
 		role:        s.own.Role,
@@ -289,7 +289,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Report
 		if err := s.unroutePreview(ctx, c, pointer); err != nil {
 			return edge.PruneResult{}, err
 		}
-		id, found, err := findAPI(ctx, c, apiName(s.slug(), s.class(), pointer))
+		id, found, err := findAPI(ctx, c, apiName(s.p.ns, s.slug(), s.class(), pointer))
 		if err != nil {
 			return edge.PruneResult{}, err
 		}
@@ -482,9 +482,9 @@ func (s *stack) Destroy(ctx context.Context) error {
 	if err != nil {
 		return errors.Join(append(errs, err)...)
 	}
-	names := []string{apiName(s.slug(), s.class(), "")}
+	names := []string{apiName(s.p.ns, s.slug(), s.class(), "")}
 	for _, pointer := range pointers {
-		names = append(names, apiName(s.slug(), s.class(), pointer))
+		names = append(names, apiName(s.p.ns, s.slug(), s.class(), pointer))
 	}
 	if err := s.unrouteProject(ctx, c); err != nil {
 		errs = append(errs, err)

@@ -28,7 +28,9 @@ func testSpec() edge.StackSpec {
 	return edge.StackSpec{Version: "v1", Class: edge.ClassProduction, Slug: conformanceSlug}
 }
 
-func productionAPIName() string { return apiName(conformanceSlug, edge.ClassProduction, "") }
+func productionAPIName() string {
+	return apiName(defaultNamespace, conformanceSlug, edge.ClassProduction, "")
+}
 
 func bootstrapped(t *testing.T, w *world) *provider {
 	t.Helper()
@@ -577,12 +579,12 @@ func TestReconcileRewritesResponseHeadersThatNoLongerMatchThePlan(t *testing.T) 
 func TestAPINamesCannotCollideAcrossSlugsAndPointers(t *testing.T) {
 	t.Parallel()
 
-	slugged := apiName("shop-pr1", edge.ClassProduction, "")
-	pointed := apiName("shop", edge.ClassProduction, "pr1")
+	slugged := apiName(defaultNamespace, "shop-pr1", edge.ClassProduction, "")
+	pointed := apiName(defaultNamespace, "shop", edge.ClassProduction, "pr1")
 	if slugged == pointed {
 		t.Errorf("apiName is %q for both a slug and a pointer that end the same; two projects would share one API", slugged)
 	}
-	if got := apiName("shop", edge.ClassProduction, ""); got != "ocel--shop--production" {
+	if got := apiName(defaultNamespace, "shop", edge.ClassProduction, ""); got != "ocel--shop--production" {
 		t.Errorf("apiName = %q, want the project stem the rest of the deploy path matches on", got)
 	}
 	if name := defaultNamespace.EdgeNotFoundAPIName(edge.ClassProduction); deploy.ProjectOwnsWorker("not", name) || strings.Contains(name, "--") {
