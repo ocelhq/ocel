@@ -115,6 +115,54 @@ pub enum Error {
         key: String,
     },
 
+    /// An operation that cannot answer with nothing named an object the bucket does not
+    /// hold.
+    #[error("the bucket holds no object under '{key}'")]
+    NotFound {
+        /// The key that named nothing.
+        key: String,
+    },
+
+    /// A write carried `if_not_exists` or `if_match`, and the object did not meet it.
+    #[error("the object under '{key}' did not meet the condition this write carried")]
+    PreconditionFailed {
+        /// The key whose current state refused the write.
+        key: String,
+    },
+
+    /// The store refused an operation on an object.
+    #[error("'{key}' was refused by the store: {said}")]
+    Refused {
+        /// The key the operation names.
+        key: String,
+        /// What the store or the runtime said.
+        said: String,
+    },
+
+    /// Nothing told this app where the runtime that serves its resources listens.
+    #[error("OCEL_RUNTIME_ADDRESS is not defined, so no resource the ocel runtime serves can be reached. Run `ocel dev` to serve it locally, or `ocel deploy` to have the deployed runtime's address delivered.")]
+    UnreachableRuntime,
+
+    /// The address the runtime was said to listen on is not a URL.
+    #[error(
+        "ocel: OCEL_RUNTIME_ADDRESS does not hold a URL the runtime can be reached at: '{address}'"
+    )]
+    RuntimeAddress {
+        /// The address the environment carried.
+        address: String,
+    },
+
+    /// No session token was delivered, so every call to the runtime would be refused.
+    #[error("OCEL_SESSION_TOKEN is not defined, so the ocel runtime at OCEL_RUNTIME_ADDRESS would refuse every call. It is delivered beside the address by `ocel dev` and by the deployed runtime, never set by hand.")]
+    UntrustedRuntime,
+
+    /// A public url was asked of a bucket that is served at no public address.
+    #[error("this bucket carries no public address, so '{key}' has no public url: declare the bucket with #[ocel(public)] and give the project a domain to serve it from")]
+    NotPublic {
+        /// The key a public url was asked for.
+        key: String,
+    },
+
     /// The pool over a delivered binding could not be opened.
     #[cfg(feature = "postgres")]
     #[error("{0}")]
