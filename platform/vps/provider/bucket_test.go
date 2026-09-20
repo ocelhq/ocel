@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
@@ -221,8 +222,42 @@ func TestAnAppBindingABucketIsHandedItsStoreSealedAndNeverInPlaintext(t *testing
 	if manifest.Store.Volume == "" {
 		t.Error("the manifest names no volume, so the disk guard has nothing to measure")
 	}
-	if manifest.Store.Sessions == "" {
-		t.Error("the manifest names no bucket for upload sessions to live in")
+	if manifest.Store.Sessions != constants.StoreSessionsBucket() {
+		t.Errorf("upload sessions live in %q, want the store's own bucket: a session kept inside a declared bucket is stranded the day that bucket is dropped",
+			manifest.Store.Sessions)
+	}
+}
+
+func TestTheStoreKeepsItsSessionsInABucketNoAppDeclaresOrReaches(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	if _, err := over(machine).Bucket(context.Background(), aBucket(t, "uploads", true), nil); err != nil {
+		t.Fatalf("Bucket() = %v", err)
+	}
+	joined := strings.Join(machine.commands(), "\n")
+	if !strings.Contains(joined, "/"+constants.StoreSessionsBucket()) {
+		t.Fatalf("standing a store created no bucket for its sessions:\n%s", joined)
+	}
+	for line := range strings.SplitSeq(joined, "\n") {
+		if strings.Contains(line, constants.StoreSessionsBucket()) && strings.Contains(line, "?policy") {
+			t.Errorf("the store's own sessions bucket was given a policy of its own:\n%s", line)
+		}
+	}
+}
+
+func TestDroppingADeclaredBucketLeavesTheStoresSessionsWhereTheyAre(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	err := over(machine).RemoveResource(context.Background(),
+		providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: aStackName(t)},
+		bindingBucket(), nil)
+	if err != nil {
+		t.Fatalf("RemoveResource(bucket) = %v", err)
+	}
+	if joined := strings.Join(machine.commands(), "\n"); strings.Contains(joined, constants.StoreSessionsBucket()) {
+		t.Errorf("dropping one declared bucket reached for the store's sessions:\n%s", joined)
 	}
 }
 
