@@ -198,8 +198,13 @@ func publishing(store bucket.Store, configured string, values *rt.Values) func()
 	var base string
 	var signer bucket.PresignAPI
 	return func() (bucket.PresignAPI, string) {
+		claimed := values.Value(vars.StorePublicKey)
+		if claimed == "" {
+			values.Reread(context.Background())
+			claimed = values.Value(vars.StorePublicKey)
+		}
 		now := configured
-		if claimed := values.Value(vars.StorePublicKey); claimed != "" {
+		if claimed != "" {
 			now = claimed
 		}
 		if now == "" {
