@@ -113,22 +113,16 @@ describe("createUploadClient", () => {
   });
 
   it("waits longer between polls the longer an upload stays pending", async () => {
-    const fetch = fakeFetch([
-      "pending",
-      "pending",
-      "pending",
-      "pending",
-      "pending",
-      "succeeded",
-    ]);
+    const fetch = fakeFetch(["pending", "pending", "pending", "pending", "pending", "succeeded"]);
     const delays: number[] = [];
     const realSetTimeout = globalThis.setTimeout;
-    const spied = vi
-      .spyOn(globalThis, "setTimeout")
-      .mockImplementation(((held: () => void, ms?: number) => {
-        delays.push(ms ?? 0);
-        return realSetTimeout(held, 0);
-      }) as never);
+    const spied = vi.spyOn(globalThis, "setTimeout").mockImplementation(((
+      held: () => void,
+      ms?: number,
+    ) => {
+      delays.push(ms ?? 0);
+      return realSetTimeout(held, 0);
+    }) as never);
     const client = createUploadClient<TestBucket>({
       url: "https://app/api/upload",
       pollIntervalMs: 100,
