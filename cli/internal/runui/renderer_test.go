@@ -138,7 +138,7 @@ func TestAnInRunNoticeIsCommittedAboveALiveFrameThatStillErasesExactly(t *testin
 	))
 	s.Emit(progressEvent(phase, "compiling", 6, u32(9)))
 
-	const notice = "Serving previews on the global preview domain *.previews.ocel.dev"
+	const notice = "Serving previews on the global preview domain *.preview.ocel.app"
 	s.Emit(diagnosticEvent(notice))
 
 	if !strings.Contains(out.String(), notice) {

@@ -256,7 +256,7 @@ export default {
 		stubGit(&deps, "feature/login", "")
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
-		t.Setenv(clitest.FakeGlobalDomainEnvVar, "previews.ocel.dev")
+		t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.ocel.app")
 
 		var stdout, stderr bytes.Buffer
 		if err := runPreviewUp(context.Background(), deps, root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -264,7 +264,7 @@ export default {
 		}
 
 		out := stdout.String()
-		for _, want := range []string{"Serving previews on global *.previews.ocel.dev", "DEPLOY tier=TIER_PREVIEW"} {
+		for _, want := range []string{"Serving previews on global *.preview.ocel.app", "DEPLOY tier=TIER_PREVIEW"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want it to contain %q", out, want)
 			}
@@ -772,7 +772,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 	declared := &projectconfig.Config{Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}
 	bare := &projectconfig.Config{}
 	global := &contractv1.PreviewWildcard{
-		BaseDomain:     "previews.ocel.dev",
+		BaseDomain:     "preview.ocel.app",
 		GrammarMin:     1,
 		GrammarMax:     1,
 		RouteInstalled: true,
@@ -800,7 +800,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		if _, err := requirePreviewDomain(bare, global, nil, "pr-1", runui.Plain(runui.Presentation{}, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
-		for _, want := range []string{"Serving previews on global *.previews.ocel.dev"} {
+		for _, want := range []string{"Serving previews on global *.preview.ocel.app"} {
 			if !strings.Contains(out.String(), want) {
 				t.Errorf("out = %q, want it to contain %q", out.String(), want)
 			}
@@ -847,7 +847,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 			Slug: "acme",
 			Apps: []projectconfig.App{{Name: "web", Domains: map[string][]string{"preview": {"*.preview.acme.com"}}}},
 		}
-		broken := &contractv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
+		broken := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", GrammarMin: 1, GrammarMax: 1}
 		var out bytes.Buffer
 		if _, err := requirePreviewDomain(cfg, broken, nil, "pr-1", runui.Plain(runui.Presentation{}, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
@@ -890,7 +890,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 		if _, err := requirePreviewDomain(declared, global, nil, "pr-1", runui.Plain(runui.Presentation{}, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
-		for _, want := range []string{"*.preview.acme.com", "*.previews.ocel.dev", "ignored"} {
+		for _, want := range []string{"*.preview.acme.com", "*.preview.ocel.app", "ignored"} {
 			if !strings.Contains(out.String(), want) {
 				t.Errorf("out = %q, want it to contain %q", out.String(), want)
 			}
@@ -900,12 +900,12 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("a declared domain equal to the global one serves as the project's own and calls nothing ignored", func(t *testing.T) {
 		t.Parallel()
 
-		same := &projectconfig.Config{Slug: "acme", Domains: map[string][]string{"preview": {"*.previews.ocel.dev"}}}
+		same := &projectconfig.Config{Slug: "acme", Domains: map[string][]string{"preview": {"*.preview.ocel.app"}}}
 		var out bytes.Buffer
 		if _, err := requirePreviewDomain(same, global, nil, "pr-1", runui.Plain(runui.Presentation{}, &out)); err != nil {
 			t.Fatalf("requirePreviewDomain err = %v, want nil", err)
 		}
-		if got := out.String(); !strings.Contains(got, "Serving previews on project-level *.previews.ocel.dev, also the global preview domain") || strings.Contains(got, "ignored") {
+		if got := out.String(); !strings.Contains(got, "Serving previews on project-level *.preview.ocel.app, also the global preview domain") || strings.Contains(got, "ignored") {
 			t.Errorf("out = %q, want the one wildcard named as both, nothing ignored", got)
 		}
 
@@ -919,7 +919,7 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("an edge account mismatch refuses with the account to point at", func(t *testing.T) {
 		t.Parallel()
 
-		elsewhere := &contractv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", EdgeScope: "cf-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
+		elsewhere := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", EdgeScope: "cf-owner", GrammarMin: 1, GrammarMax: 1, RouteInstalled: true}
 		var out bytes.Buffer
 		_, err := requirePreviewDomain(bare, elsewhere, &contractv1.Identity{EdgeScope: "cf-other"}, "pr-1", runui.Plain(runui.Presentation{}, &out))
 		if err == nil {
@@ -935,13 +935,13 @@ func TestRequirePreviewDomain(t *testing.T) {
 	t.Run("a missing wildcard route refuses, pointing at ocel domain use", func(t *testing.T) {
 		t.Parallel()
 
-		uninstalled := &contractv1.PreviewWildcard{BaseDomain: "previews.ocel.dev", GrammarMin: 1, GrammarMax: 1}
+		uninstalled := &contractv1.PreviewWildcard{BaseDomain: "preview.ocel.app", GrammarMin: 1, GrammarMax: 1}
 		var out bytes.Buffer
 		_, err := requirePreviewDomain(bare, uninstalled, nil, "pr-1", runui.Plain(runui.Presentation{}, &out))
 		if err == nil {
 			t.Fatal("requirePreviewDomain err = nil, want a route refusal")
 		}
-		for _, want := range []string{"wildcard route is not installed", "ocel domain use '*.previews.ocel.dev' --preview"} {
+		for _, want := range []string{"wildcard route is not installed", "ocel domain use '*.preview.ocel.app' --preview"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("err = %v, want it to contain %q", err, want)
 			}
@@ -952,8 +952,8 @@ func TestRequirePreviewDomain(t *testing.T) {
 		t.Parallel()
 
 		for _, g := range []*contractv1.PreviewWildcard{
-			{BaseDomain: "previews.ocel.dev", GrammarMin: 2, GrammarMax: 3, RouteInstalled: true},
-			{BaseDomain: "previews.ocel.dev", GrammarMin: 0, GrammarMax: 0, RouteInstalled: true},
+			{BaseDomain: "preview.ocel.app", GrammarMin: 2, GrammarMax: 3, RouteInstalled: true},
+			{BaseDomain: "preview.ocel.app", GrammarMin: 0, GrammarMax: 0, RouteInstalled: true},
 		} {
 			var out bytes.Buffer
 			_, err := requirePreviewDomain(bare, g, nil, "pr-1", runui.Plain(runui.Presentation{}, &out))
