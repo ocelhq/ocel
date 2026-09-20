@@ -162,6 +162,9 @@ func (s *fakeStore) Sign(_ context.Context, req *bucketv1.SignRequest) (*bucketv
 	switch req.GetOperation() {
 	case bucketv1.SignedOperation_SIGNED_OPERATION_PUT:
 		target.Method = http.MethodPut
+		for name, value := range req.GetConstraints().GetMetadata() {
+			target.Headers["x-amz-meta-"+name] = value
+		}
 	case bucketv1.SignedOperation_SIGNED_OPERATION_POST_UPLOAD:
 		target.Method = http.MethodPost
 		target.Fields = map[string]string{"key": req.GetKey(), "policy": "signed"}

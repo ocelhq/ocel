@@ -359,9 +359,26 @@ func toProtoState(state fileState) bucketv1.UploadState {
 func vendorHeaders(signed map[string][]string) map[string]string {
 	headers := map[string]string{}
 	for name, values := range signed {
-		if lower := strings.ToLower(name); strings.HasPrefix(lower, "x-amz-") && len(values) > 0 {
-			headers[lower] = values[0]
+		lower := strings.ToLower(name)
+		if len(values) == 0 || lower == "host" || lower == "content-length" {
+			continue
 		}
+		headers[lower] = values[0]
 	}
 	return headers
+}
+
+const metadataCap = 2048
+
+func withinMetadataCap(metadata map[string]string) error {
+	held := 0
+	for name, value := range metadata {
+		held += len(name) + len(value)
+	}
+	if held <= metadataCap {
+		return nil
+	}
+	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+		"this object's metadata is %d bytes across its names and values and a store holds at most %d, so it is refused before anything is signed",
+		held, metadataCap))
 }

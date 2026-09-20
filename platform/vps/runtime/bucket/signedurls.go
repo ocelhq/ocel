@@ -69,9 +69,15 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 		if err := s.roomToWrite(); err != nil {
 			return nil, err
 		}
-		in := &s3.PutObjectInput{Bucket: aws.String(held.bucket), Key: aws.String(key)}
+		if err := withinMetadataCap(c.GetMetadata()); err != nil {
+			return nil, err
+		}
+		in := &s3.PutObjectInput{Bucket: aws.String(held.bucket), Key: aws.String(key), Metadata: c.GetMetadata()}
 		if c.GetContentType() != "" {
 			in.ContentType = aws.String(c.GetContentType())
+		}
+		if c.GetCacheControl() != "" {
+			in.CacheControl = aws.String(c.GetCacheControl())
 		}
 		if c.GetIfNoneMatch() != "" {
 			in.IfNoneMatch = aws.String(c.GetIfNoneMatch())
@@ -94,7 +100,10 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 		if err := s.roomToWrite(); err != nil {
 			return nil, err
 		}
-		in := &s3.PutObjectInput{Bucket: aws.String(held.bucket), Key: aws.String(key)}
+		if err := withinMetadataCap(c.GetMetadata()); err != nil {
+			return nil, err
+		}
+		in := &s3.PutObjectInput{Bucket: aws.String(held.bucket), Key: aws.String(key), Metadata: c.GetMetadata()}
 		if !s.cfg.PostPolicies {
 			return s.Sign(ctx, &bucketv1.SignRequest{
 				Bucket:      req.GetBucket(),
@@ -113,6 +122,13 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 		if c.GetMaxSize() > 0 {
 			conditions = append(conditions, []any{"content-length-range", 0, c.GetMaxSize()})
 		}
+		if c.GetCacheControl() != "" {
+			in.CacheControl = aws.String(c.GetCacheControl())
+			conditions = append(conditions, map[string]string{"Cache-Control": c.GetCacheControl()})
+		}
+		for name, value := range c.GetMetadata() {
+			conditions = append(conditions, map[string]string{"x-amz-meta-" + name: value})
+		}
 		signed, err := signer.PresignPostObject(ctx, in, func(o *s3.PresignPostOptions) {
 			o.Expires = ttl
 			o.Conditions = conditions
@@ -120,10 +136,16 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("sign a browser upload of %q: %w", req.GetKey(), err))
 		}
-		fields := make(map[string]string, len(signed.Values)+1)
+		fields := make(map[string]string, len(signed.Values)+len(c.GetMetadata())+2)
 		maps.Copy(fields, signed.Values)
 		if c.GetContentType() != "" {
 			fields["Content-Type"] = c.GetContentType()
+		}
+		if c.GetCacheControl() != "" {
+			fields["Cache-Control"] = c.GetCacheControl()
+		}
+		for name, value := range c.GetMetadata() {
+			fields["x-amz-meta-"+name] = value
 		}
 		return &bucketv1.SignResponse{Target: &bucketv1.PresignedTarget{
 			Url:    signed.URL,
@@ -140,6 +162,9 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 // CreateMultipart opens an upload a caller sends in parts.
 func (s *Service) CreateMultipart(ctx context.Context, req *bucketv1.CreateMultipartRequest) (*bucketv1.CreateMultipartResponse, error) {
 	if err := s.roomToWrite(); err != nil {
+		return nil, err
+	}
+	if err := withinMetadataCap(req.GetMetadata()); err != nil {
 		return nil, err
 	}
 	held, key, err := s.reach(req.GetBucket(), req.GetKey())

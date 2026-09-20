@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"mime"
 	"strings"
 	"time"
@@ -35,11 +36,28 @@ func ttlOf(d interface{ AsDuration() time.Duration }) time.Duration {
 func vendorHeaders(signed map[string][]string) map[string]string {
 	headers := map[string]string{}
 	for name, values := range signed {
-		if lower := strings.ToLower(name); strings.HasPrefix(lower, vendorHeaderPrefix) && len(values) > 0 {
-			headers[lower] = values[0]
+		lower := strings.ToLower(name)
+		if len(values) == 0 || lower == "host" || lower == "content-length" {
+			continue
 		}
+		headers[lower] = values[0]
 	}
 	return headers
+}
+
+const metadataCap = 2048
+
+func withinMetadataCap(metadata map[string]string) error {
+	held := 0
+	for name, value := range metadata {
+		held += len(name) + len(value)
+	}
+	if held <= metadataCap {
+		return nil
+	}
+	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+		"this object's metadata is %d bytes across its names and values and a store holds at most %d, so it is refused before anything is signed",
+		held, metadataCap))
 }
 
 func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv1.SignResponse, error) {
@@ -62,9 +80,15 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 		return &bucketv1.SignResponse{Target: target(req.GetKey(), signed)}, nil
 
 	case bucketv1.SignedOperation_SIGNED_OPERATION_PUT:
-		in := &s3.PutObjectInput{Bucket: aws.String(req.GetBucket()), Key: aws.String(req.GetKey())}
+		if err := withinMetadataCap(c.GetMetadata()); err != nil {
+			return nil, err
+		}
+		in := &s3.PutObjectInput{Bucket: aws.String(req.GetBucket()), Key: aws.String(req.GetKey()), Metadata: c.GetMetadata()}
 		if c.GetContentType() != "" {
 			in.ContentType = aws.String(c.GetContentType())
+		}
+		if c.GetCacheControl() != "" {
+			in.CacheControl = aws.String(c.GetCacheControl())
 		}
 		if c.GetIfNoneMatch() != "" {
 			in.IfNoneMatch = aws.String(c.GetIfNoneMatch())
@@ -79,7 +103,10 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 		return &bucketv1.SignResponse{Target: target(req.GetKey(), signed)}, nil
 
 	case bucketv1.SignedOperation_SIGNED_OPERATION_POST_UPLOAD:
-		in := &s3.PutObjectInput{Bucket: aws.String(req.GetBucket()), Key: aws.String(req.GetKey())}
+		if err := withinMetadataCap(c.GetMetadata()); err != nil {
+			return nil, err
+		}
+		in := &s3.PutObjectInput{Bucket: aws.String(req.GetBucket()), Key: aws.String(req.GetKey()), Metadata: c.GetMetadata()}
 		conditions := []any{}
 		if c.GetContentType() != "" {
 			in.ContentType = aws.String(c.GetContentType())
@@ -88,6 +115,13 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 		if c.GetMaxSize() > 0 {
 			conditions = append(conditions, []any{"content-length-range", 0, c.GetMaxSize()})
 		}
+		if c.GetCacheControl() != "" {
+			in.CacheControl = aws.String(c.GetCacheControl())
+			conditions = append(conditions, map[string]string{"Cache-Control": c.GetCacheControl()})
+		}
+		for name, value := range c.GetMetadata() {
+			conditions = append(conditions, map[string]string{"x-amz-meta-" + name: value})
+		}
 		signed, err := s.presigner.PresignPostObject(ctx, in, func(o *s3.PresignPostOptions) {
 			o.Expires = ttl
 			o.Conditions = conditions
@@ -95,11 +129,22 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("sign a browser upload of %q: %w", req.GetKey(), err))
 		}
+		fields := make(map[string]string, len(signed.Values)+len(c.GetMetadata())+2)
+		maps.Copy(fields, signed.Values)
+		if c.GetContentType() != "" {
+			fields["Content-Type"] = c.GetContentType()
+		}
+		if c.GetCacheControl() != "" {
+			fields["Cache-Control"] = c.GetCacheControl()
+		}
+		for name, value := range c.GetMetadata() {
+			fields["x-amz-meta-"+name] = value
+		}
 		return &bucketv1.SignResponse{Target: &bucketv1.PresignedTarget{
 			Url:    signed.URL,
 			Key:    req.GetKey(),
 			Method: "POST",
-			Fields: signed.Values,
+			Fields: fields,
 		}}, nil
 
 	default:
@@ -118,6 +163,9 @@ func target(key string, signed *v4.PresignedHTTPRequest) *bucketv1.PresignedTarg
 
 func (s *Service) CreateMultipart(ctx context.Context, req *bucketv1.CreateMultipartRequest) (*bucketv1.CreateMultipartResponse, error) {
 	if err := s.reach(req.GetBucket(), req.GetKey()); err != nil {
+		return nil, err
+	}
+	if err := withinMetadataCap(req.GetMetadata()); err != nil {
 		return nil, err
 	}
 	in := &s3.CreateMultipartUploadInput{

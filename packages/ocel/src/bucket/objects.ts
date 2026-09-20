@@ -242,6 +242,8 @@ export function createObjects(deps: {
       downloadFilename?: string;
       ifNoneMatch?: string;
       ifMatch?: string;
+      cacheControl?: string;
+      metadata?: Record<string, string>;
       expiresIn?: number;
     },
   ) => {
@@ -260,6 +262,8 @@ export function createObjects(deps: {
         downloadFilename: constraints?.downloadFilename ?? "",
         ifNoneMatch: constraints?.ifNoneMatch ?? "",
         ifMatch: constraints?.ifMatch ?? "",
+        cacheControl: constraints?.cacheControl ?? "",
+        metadata: constraints?.metadata ?? {},
       },
     });
     const target = res.target;
@@ -272,15 +276,14 @@ export function createObjects(deps: {
       contentType: options.contentType,
       ifNoneMatch: options.ifNoneMatch,
       ifMatch: options.ifMatch,
+      cacheControl: options.cacheControl,
+      metadata: options.metadata,
     });
     const headers: Record<string, string> = { ...target.headers };
     if (options.contentType) headers["content-type"] = options.contentType;
     if (options.cacheControl) headers["cache-control"] = options.cacheControl;
     if (options.ifNoneMatch) headers["if-none-match"] = options.ifNoneMatch;
     if (options.ifMatch) headers["if-match"] = options.ifMatch;
-    for (const [name, value] of Object.entries(options.metadata ?? {})) {
-      headers[`x-amz-meta-${name}`] = value;
-    }
     const res = await send(target.url, {
       method: target.method || "PUT",
       body: bytes,

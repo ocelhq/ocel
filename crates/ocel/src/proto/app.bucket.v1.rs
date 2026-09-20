@@ -3964,6 +3964,24 @@ pub struct SignConstraints {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
     )]
     pub if_match: ::buffa::alloc::string::String,
+    /// Field 6: `cache_control`
+    #[serde(
+        rename = "cacheControl",
+        alias = "cache_control",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub cache_control: ::buffa::alloc::string::String,
+    /// Field 7: `metadata`
+    #[serde(
+        rename = "metadata",
+        skip_serializing_if = "::buffa::__private::HashMap::is_empty",
+        deserialize_with = "::buffa::json_helpers::null_as_default"
+    )]
+    pub metadata: ::buffa::__private::HashMap<
+        ::buffa::alloc::string::String,
+        ::buffa::alloc::string::String,
+    >,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -3976,6 +3994,8 @@ impl ::core::fmt::Debug for SignConstraints {
             .field("download_filename", &self.download_filename)
             .field("if_none_match", &self.if_none_match)
             .field("if_match", &self.if_match)
+            .field("cache_control", &self.cache_control)
+            .field("metadata", &self.metadata)
             .finish()
     }
 }
@@ -4024,6 +4044,16 @@ impl ::buffa::Message for SignConstraints {
         if !self.if_match.is_empty() {
             size += 1u64 + ::buffa::types::string_encoded_len(&self.if_match) as u64;
         }
+        if !self.cache_control.is_empty() {
+            size
+                += 1u64 + ::buffa::types::string_encoded_len(&self.cache_control) as u64;
+        }
+        size
+            += ::buffa::map_codec::field_len::<
+                ::buffa::map_codec::Str,
+                ::buffa::map_codec::Str,
+                _,
+            >(&self.metadata, 1u64);
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -4049,6 +4079,14 @@ impl ::buffa::Message for SignConstraints {
         if !self.if_match.is_empty() {
             ::buffa::types::put_string_field(5u32, &self.if_match, buf);
         }
+        if !self.cache_control.is_empty() {
+            ::buffa::types::put_string_field(6u32, &self.cache_control, buf);
+        }
+        ::buffa::map_codec::write_field::<
+            ::buffa::map_codec::Str,
+            ::buffa::map_codec::Str,
+            _,
+        >(&self.metadata, 7u32, buf);
         self.__buffa_unknown_fields.write_to(buf);
     }
     fn merge_field(
@@ -4097,6 +4135,24 @@ impl ::buffa::Message for SignConstraints {
                 )?;
                 ::buffa::types::merge_string(&mut self.if_match, buf)?;
             }
+            6u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.cache_control, buf)?;
+            }
+            7u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::map_codec::merge_entry::<
+                    ::buffa::map_codec::Str,
+                    ::buffa::map_codec::Str,
+                    _,
+                >(&mut self.metadata, buf, ctx)?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -4110,6 +4166,8 @@ impl ::buffa::Message for SignConstraints {
         self.download_filename.clear();
         self.if_none_match.clear();
         self.if_match.clear();
+        self.cache_control.clear();
+        self.metadata.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -13208,6 +13266,10 @@ pub mod __buffa {
             pub if_none_match: &'a str,
             /// Field 5: `if_match`
             pub if_match: &'a str,
+            /// Field 6: `cache_control`
+            pub cache_control: &'a str,
+            /// Field 7: `metadata` (map)
+            pub metadata: ::buffa::MapView<'a, &'a str, &'a str>,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::buffa::MessageView<'a> for SignConstraintsView<'a> {
@@ -13281,6 +13343,56 @@ pub mod __buffa {
                         )?;
                         view.if_match = ::buffa::types::borrow_str(&mut cur)?;
                     }
+                    6u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.cache_control = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    7u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        let entry_bytes = ::buffa::types::borrow_bytes(&mut cur)?;
+                        let mut entry_cur: &'a [u8] = entry_bytes;
+                        let mut key = "";
+                        let mut val = "";
+                        ctx.register_element_memory(
+                            ::buffa::__private::element_footprint(&key)
+                                + ::buffa::__private::element_footprint(&val),
+                        )?;
+                        while !entry_cur.is_empty() {
+                            let entry_tag = ::buffa::encoding::Tag::decode(
+                                &mut entry_cur,
+                            )?;
+                            match entry_tag.field_number() {
+                                1 => {
+                                    ::buffa::encoding::check_wire_type(
+                                        entry_tag,
+                                        ::buffa::encoding::WireType::LengthDelimited,
+                                    )?;
+                                    key = ::buffa::types::borrow_str(&mut entry_cur)?;
+                                }
+                                2 => {
+                                    ::buffa::encoding::check_wire_type(
+                                        entry_tag,
+                                        ::buffa::encoding::WireType::LengthDelimited,
+                                    )?;
+                                    val = ::buffa::types::borrow_str(&mut entry_cur)?;
+                                }
+                                _ => {
+                                    ::buffa::encoding::skip_field_depth(
+                                        entry_tag,
+                                        &mut entry_cur,
+                                        ctx.depth(),
+                                    )?;
+                                }
+                            }
+                        }
+                        view.metadata.push(key, val);
+                    }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                         let span_len = before_tag.len() - cur.len();
@@ -13315,6 +13427,12 @@ pub mod __buffa {
                     download_filename: self.download_filename.to_string(),
                     if_none_match: self.if_none_match.to_string(),
                     if_match: self.if_match.to_string(),
+                    cache_control: self.cache_control.to_string(),
+                    metadata: self
+                        .metadata
+                        .iter()
+                        .map(|(k, v)| (k.to_string(), v.to_string()))
+                        .collect(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -13357,6 +13475,21 @@ pub mod __buffa {
                         += 1u64
                             + ::buffa::types::string_encoded_len(&self.if_match) as u64;
                 }
+                if !self.cache_control.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.cache_control)
+                                as u64;
+                }
+                #[allow(clippy::for_kv_map)]
+                for (k, v) in &self.metadata {
+                    let entry_size: u64 = 1u64
+                        + ::buffa::types::string_encoded_len(k) as u64 + 1u64
+                        + ::buffa::types::string_encoded_len(v) as u64;
+                    size
+                        += 1u64 + ::buffa::encoding::varint_len(entry_size) as u64
+                            + entry_size;
+                }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
             }
@@ -13382,6 +13515,32 @@ pub mod __buffa {
                 }
                 if !self.if_match.is_empty() {
                     ::buffa::types::put_string_field(5u32, &self.if_match, buf);
+                }
+                if !self.cache_control.is_empty() {
+                    ::buffa::types::put_string_field(6u32, &self.cache_control, buf);
+                }
+                for (k, v) in &self.metadata {
+                    let entry_size: u64 = 1u64
+                        + ::buffa::types::string_encoded_len(k) as u64 + 1u64
+                        + ::buffa::types::string_encoded_len(v) as u64;
+                    ::buffa::encoding::Tag::new(
+                            7u32,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )
+                        .encode(buf);
+                    ::buffa::encoding::encode_varint(entry_size, buf);
+                    ::buffa::encoding::Tag::new(
+                            1u32,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )
+                        .encode(buf);
+                    ::buffa::types::encode_string(k, buf);
+                    ::buffa::encoding::Tag::new(
+                            2u32,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )
+                        .encode(buf);
+                    ::buffa::types::encode_string(v, buf);
                 }
                 self.__buffa_unknown_fields.write_to(buf);
             }
@@ -13424,6 +13583,29 @@ pub mod __buffa {
                 }
                 if !::buffa::json_helpers::skip_if::is_empty_str(self.if_match) {
                     __map.serialize_entry("ifMatch", self.if_match)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.cache_control) {
+                    __map.serialize_entry("cacheControl", self.cache_control)?;
+                }
+                if !self.metadata.is_empty() {
+                    struct _WM<'__a, '__x>(
+                        &'__x ::buffa::MapView<'__x, &'__a str, &'__a str>,
+                    );
+                    impl<'__a> ::serde::Serialize for _WM<'__a, '_> {
+                        fn serialize<__S: ::serde::Serializer>(
+                            &self,
+                            __s: __S,
+                        ) -> ::core::result::Result<__S::Ok, __S::Error> {
+                            use ::serde::ser::SerializeMap as _;
+                            let mut __m = __s
+                                .serialize_map(::core::option::Option::Some(self.0.len()))?;
+                            for (k, v) in self.0.iter_unique() {
+                                __m.serialize_entry(k, v)?;
+                            }
+                            __m.end()
+                        }
+                    }
+                    __map.serialize_entry("metadata", &_WM(&self.metadata))?;
                 }
                 __map.end()
             }
@@ -13544,6 +13726,16 @@ pub mod __buffa {
             #[must_use]
             pub fn if_match(&self) -> &'_ str {
                 self.0.reborrow().if_match
+            }
+            /// Field 6: `cache_control`
+            #[must_use]
+            pub fn cache_control(&self) -> &'_ str {
+                self.0.reborrow().cache_control
+            }
+            /// Field 7: `metadata` (map)
+            #[must_use]
+            pub fn metadata(&self) -> &::buffa::MapView<'_, &'_ str, &'_ str> {
+                &self.0.reborrow().metadata
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<SignConstraintsView<'static>>>
