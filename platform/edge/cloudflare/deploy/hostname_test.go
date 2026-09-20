@@ -467,7 +467,7 @@ func stemPlan(stem string, desired ...string) routePlan {
 }
 
 func ownedPlan(slug string, desired ...string) routePlan {
-	return routePlan{desired: desired, owns: projectOwnsScript(slug)}
+	return routePlan{desired: desired, owns: projectOwnsScript(defaultNamespace, slug)}
 }
 
 func requiredRecordPlan(record string, desired ...string) routePlan {
@@ -675,12 +675,12 @@ func TestReconcileWorkerRoutes(t *testing.T) {
 			wantErr: []string{"ocel-other-prod", "shop.app.com/*"},
 		},
 		{
-			name: "a route an older worker of the same project holds is repointed",
+			name: "a route another worker of the same project holds is repointed",
 			mock: &cfMock{
 				zoneID:   "zone1",
 				zoneName: "app.com",
 				existingRoutes: []map[string]any{
-					{"id": "mine", "pattern": "shop.app.com/*", "script": "ocel-shop--prod--root"},
+					{"id": "mine", "pattern": "shop.app.com/*", "script": "ocel--shop--prod--root"},
 				},
 			},
 			script:          "ocel--shop--prod--web",

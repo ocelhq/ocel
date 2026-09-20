@@ -1,6 +1,8 @@
 package deploy
 
 import (
+	"fmt"
+
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -8,6 +10,7 @@ import (
 type EdgeProgram struct {
 	Class             providerkit.Class
 	Kind              edge.Kind
+	Namespace         string
 	Slug              string
 	Env               string
 	PreviewBaseDomain string
@@ -23,6 +26,9 @@ type EdgeProgram struct {
 }
 
 func (p EdgeProgram) Build() (providerkit.EdgeProgram, error) {
+	if p.Slug != "" && p.Namespace == "" {
+		return providerkit.EdgeProgram{}, fmt.Errorf("an edge worker is named for the namespace that stood its bootstrap up, and this program carries none; a name without it reaches whatever another namespace deployed for %s", p.Slug)
+	}
 	generic, err := sharedWorker(p.Kind, p.Worker)
 	if err != nil {
 		return providerkit.EdgeProgram{}, err
@@ -47,12 +53,12 @@ func (p EdgeProgram) Build() (providerkit.EdgeProgram, error) {
 		return providerkit.EdgeProgram{Spec: spec, Values: p.Values}, nil
 	}
 	if p.Class == providerkit.ClassPreview {
-		spec.Name = previewWorkerName(p.Slug)
-		spec.PruneWorkerStem = previewWorkerStem(p.Slug)
+		spec.Name = previewWorkerName(p.Namespace, p.Slug)
+		spec.PruneWorkerStem = previewWorkerStem(p.Namespace, p.Slug)
 		spec.Worker = withPreviewVars(generic, p.PreviewBaseDomain, p.Apps)
 		return providerkit.EdgeProgram{Spec: spec, Values: p.Values}, nil
 	}
-	spec.Name = rootWorkerName(p.Slug, p.Env)
+	spec.Name = rootWorkerName(p.Namespace, p.Slug, p.Env)
 	spec.Worker = generic
 	return providerkit.EdgeProgram{Spec: spec, Values: p.Values}, nil
 }

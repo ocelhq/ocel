@@ -82,6 +82,12 @@ func SanitizeAlpha(value string) string {
 	return out
 }
 
+const MaxNamespaceField = 12
+
+func NamespaceField(namespace string) string {
+	return Fit(MaxNamespaceField, WordSeparator, Compressible(namespace))
+}
+
 const WildcardSuffix = "wildcard"
 
 func SanitizeHost(hostname string) string {

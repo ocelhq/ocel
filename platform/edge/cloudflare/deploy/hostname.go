@@ -13,6 +13,7 @@ import (
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 	"github.com/cloudflare/cloudflare-go/v4/zones"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -32,15 +33,13 @@ func (plan routePlan) ownsRoute(scriptName, held string) bool {
 	return plan.owns != nil && plan.owns(held)
 }
 
-func projectOwnsScript(slug string) func(script string) bool {
+func projectOwnsScript(namespace, slug string) func(script string) bool {
+	stem := naming.NamespaceField(namespace) + fieldSeparator + slug + fieldSeparator
 	return func(script string) bool {
-		if slug == "" || script == "" {
+		if namespace == "" || slug == "" || script == "" {
 			return false
 		}
-		project := workerNamespace + wordSeparator + slug
-		return script == project ||
-			strings.HasPrefix(script, project+wordSeparator) ||
-			strings.HasPrefix(script, workerNamespace+fieldSeparator+slug+fieldSeparator)
+		return strings.HasPrefix(script, stem)
 	}
 }
 

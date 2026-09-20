@@ -300,6 +300,7 @@ func (p *Provider) EdgeProgram(ctx context.Context, req providerkit.EdgeProgramR
 	program := deploy.EdgeProgram{
 		Class:             req.Class,
 		Kind:              req.Kind,
+		Namespace:         string(p.namespace),
 		Slug:              req.Slug,
 		Env:               req.Env,
 		PreviewBaseDomain: req.PreviewBaseDomain,

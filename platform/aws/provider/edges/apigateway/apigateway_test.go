@@ -587,7 +587,7 @@ func TestAPINamesCannotCollideAcrossSlugsAndPointers(t *testing.T) {
 	if got := apiName(defaultNamespace, "shop", edge.ClassProduction, ""); got != "ocel--shop--production" {
 		t.Errorf("apiName = %q, want the project stem the rest of the deploy path matches on", got)
 	}
-	if name := defaultNamespace.EdgeNotFoundAPIName(edge.ClassProduction); deploy.ProjectOwnsWorker("not", name) || strings.Contains(name, "--") {
+	if name := defaultNamespace.EdgeNotFoundAPIName(edge.ClassProduction); deploy.ProjectOwnsWorker(string(defaultNamespace), "not", name) || strings.Contains(name, "--") {
 		t.Errorf("the not-found API is named %q, which a project could claim as its own", name)
 	}
 }
@@ -610,10 +610,10 @@ func TestDomainOwnerNamesTheProjectThatHoldsTheHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
-	if !deploy.ProjectOwnsWorker(conformanceSlug, owner) {
+	if !deploy.ProjectOwnsWorker(string(defaultNamespace), conformanceSlug, owner) {
 		t.Errorf("DomainOwner = %q, which %q is not recognised as owning; preflight would report the project's own host as claimed by someone else", owner, conformanceSlug)
 	}
-	if deploy.ProjectOwnsWorker("other", owner) {
+	if deploy.ProjectOwnsWorker(string(defaultNamespace), "other", owner) {
 		t.Errorf("DomainOwner = %q, which another project is recognised as owning", owner)
 	}
 }

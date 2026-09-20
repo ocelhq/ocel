@@ -42,44 +42,38 @@ func appArtifactRoot(artifactRoot, app string) string {
 
 const (
 	maxWorkerNameLen = 63
-	workerNamespace  = "ocel"
 	previewWorkerEnv = "preview"
 	rootWorkerApp    = "root"
 )
 
-func projectWorkerStem(slug string) string {
-	return naming.Join(naming.FieldSeparator, workerNamespace, slug) + naming.FieldSeparator
+func projectWorkerStem(namespace, slug string) string {
+	return naming.Join(naming.FieldSeparator, naming.NamespaceField(namespace), slug) + naming.FieldSeparator
 }
 
-func workerScriptName(slug, env, app string) string {
+func workerScriptName(namespace, slug, env, app string) string {
 	return naming.Fit(maxWorkerNameLen, naming.FieldSeparator,
-		naming.Fixed(workerNamespace),
+		naming.Fixed(naming.NamespaceField(namespace)),
 		naming.Fixed(slug),
 		naming.Fixed(env),
 		naming.Compressible(app),
 	)
 }
 
-func rootWorkerName(slug, env string) string {
-	return workerScriptName(slug, env, rootWorkerApp)
+func rootWorkerName(namespace, slug, env string) string {
+	return workerScriptName(namespace, slug, env, rootWorkerApp)
 }
 
-func previewWorkerName(slug string) string {
-	return rootWorkerName(slug, previewWorkerEnv)
+func previewWorkerName(namespace, slug string) string {
+	return rootWorkerName(namespace, slug, previewWorkerEnv)
 }
 
-func previewWorkerStem(slug string) string {
-	return naming.Join(naming.FieldSeparator, workerNamespace, slug, previewWorkerEnv)
+func previewWorkerStem(namespace, slug string) string {
+	return naming.Join(naming.FieldSeparator, naming.NamespaceField(namespace), slug, previewWorkerEnv)
 }
 
-func ProjectOwnsWorker(slug, script string) bool {
-	if slug == "" || script == "" {
+func ProjectOwnsWorker(namespace, slug, script string) bool {
+	if namespace == "" || slug == "" || script == "" {
 		return false
 	}
-	return strings.HasPrefix(script, projectWorkerStem(slug)) ||
-		strings.HasPrefix(script, retiredProjectWorkerStem(slug))
-}
-
-func retiredProjectWorkerStem(slug string) string {
-	return naming.Join(naming.WordSeparator, workerNamespace, slug) + naming.FieldSeparator
+	return strings.HasPrefix(script, projectWorkerStem(namespace, slug))
 }
