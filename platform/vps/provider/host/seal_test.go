@@ -338,9 +338,7 @@ func TestWritingAKeyThatStandsReassertsItsPostureAndMintsNothing(t *testing.T) {
 	stubbed := t.TempDir()
 	for _, name := range []string{"chown", "chmod"} {
 		body := "#!/bin/sh\nprintf '%s\\n' \"$(basename \"$0\") $*\" >>" + quoted(filepath.Join(stubbed, "log")) + "\n"
-		if err := os.WriteFile(filepath.Join(stubbed, name), []byte(body), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		executable(t, filepath.Join(stubbed, name), body)
 	}
 
 	item := Item{Kind: KindSealKey, Name: key, Mode: sealKeyMode, Owner: rootOwner, Class: providerkit.ClassProduction}

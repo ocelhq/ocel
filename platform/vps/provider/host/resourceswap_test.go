@@ -19,9 +19,7 @@ func swapping(t *testing.T, restoreFails bool) (string, int) {
 		helper += "echo 'pg_restore: role \"reporting\" does not exist' >&2\nexit 1\n"
 	}
 	for name, body := range map[string]string{"docker": docker, "backups": helper} {
-		if err := os.WriteFile(filepath.Join(bin, name), []byte(body), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		executable(t, filepath.Join(bin, name), body)
 	}
 	spec := resourced()
 	spec.Volume.Generation, spec.Database = "17", "main"

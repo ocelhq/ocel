@@ -38,9 +38,7 @@ func backupsOn(t *testing.T, labelled ...string) backupBench {
 		"esac\n"
 	df := "#!/bin/sh\nprintf 'Avail\\n%s\\n' \"$(cat " + filepath.Join(bench.bin, "free") + ")\"\n"
 	for name, body := range map[string]string{"docker": docker, "df": df} {
-		if err := os.WriteFile(filepath.Join(bench.bin, name), []byte(body), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		executable(t, filepath.Join(bench.bin, name), body)
 	}
 	bench.holds(t, "labelled", strings.Join(labelled, "\n")+"\n")
 	bench.holds(t, "free", "1000000000")

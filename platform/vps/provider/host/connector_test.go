@@ -128,23 +128,19 @@ func TestTheProbeReadsAWatchedUnitExactlyAsTheItemStatesIt(t *testing.T) {
 	write := func(name, body string) string {
 		t.Helper()
 		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		executable(t, path, body)
 		return path
 	}
 	binary, config, unit := write("connector", "#!/bin/sh\n"), write("config.json", string(connectorConfig())), write("unit", string(connectorUnit()))
 
 	path := t.TempDir()
-	if err := os.WriteFile(filepath.Join(path, "systemctl"), []byte(`#!/bin/sh
+	executable(t, filepath.Join(path, "systemctl"), `#!/bin/sh
 case "$1" in
 cat) exit 0 ;;
 is-active) printf 'active\n' ;;
 is-enabled) printf 'enabled\n' ;;
 *) exit 1 ;;
-esac`), 0o755); err != nil {
-		t.Fatal(err)
-	}
+esac`)
 	for _, tool := range []string{"sha256sum", "cut"} {
 		found, err := exec.LookPath(tool)
 		if err != nil {
