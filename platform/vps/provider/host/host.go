@@ -502,18 +502,48 @@ done`)
 	return probes.String() + script.String()
 }
 
-const kindLink = "fs:link"
+const (
+	kindLink       = "fs:link"
+	kindUnreadable = "probe:unreadable"
+)
+
+func unreadable(kind, name, why string) string {
+	return reports(quoted(kindUnreadable), name, "0", quoted(kind), why)
+}
+
+func column(columns []string, at int, absent string) string {
+	if at < len(columns) && columns[at] != "" {
+		return columns[at]
+	}
+	return absent
+}
+
+func remainder(columns []string, separator, absent string) string {
+	if len(columns) > 4 && columns[4] != "" {
+		return strings.Join(columns[4:], separator)
+	}
+	return absent
+}
+
+const unnamedPath = "a path this host did not name"
+
+func couldNotLook(columns []string) error {
+	return providerkit.Refuse(providerkit.CodeNotReady,
+		"this host could not be asked whether %s %s stands: %s.\n"+
+			"Ocel will not read a probe that could not run as a host carrying nothing, because that reading is what makes a deploy write an account, a network or an engine over one that is already there.\n"+
+			"Fix what stopped the probe and run this again",
+		column(columns, 3, "what stands at"),
+		column(columns, 1, unnamedPath),
+		remainder(columns, " ", "the command it runs did not"))
+}
 
 func pointedAway(columns []string) error {
-	pointed := "somewhere this survey could not read"
-	if len(columns) > 4 && columns[4] != "" {
-		pointed = strings.Join(columns[4:], "\t")
-	}
+	named := column(columns, 1, unnamedPath)
 	return providerkit.Refuse(providerkit.CodeDenied,
 		"%s is a symbolic link to %s.\n"+
 			"Ocel writes the paths it names and follows nothing to get there, and every mode and owner this host reports for that path is the target's, not the link's.\n"+
 			"Put a real directory or file back at %s and try again",
-		columns[1], pointed, columns[1])
+		named, remainder(columns, "\t", "somewhere this survey could not read"), named)
 }
 
 func reports(kind, name, mode, owner, sum string) string {
@@ -530,6 +560,9 @@ func readSurvey(rendered string) (map[string]string, Seal, error) {
 		columns := strings.Split(strings.TrimRight(line, "\r"), "\t")
 		if columns[0] == kindLink {
 			return nil, Seal{}, pointedAway(columns)
+		}
+		if columns[0] == kindUnreadable {
+			return nil, Seal{}, couldNotLook(columns)
 		}
 		sealed := columns[0] == KindSealKey
 		if (sealed && len(columns) != 6) || (!sealed && len(columns) != 5) {

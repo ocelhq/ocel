@@ -158,6 +158,34 @@ func TestAPrincipalThatDriftedFromWhatOcelWroteIsNotCurrent(t *testing.T) {
 	}
 }
 
+func TestAGetentThatWillNotRunIsNotAHostCarryingNoAccount(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	executable(t, filepath.Join(dir, "getent"), "#!/bin/sh\nexit 126\n")
+	executable(t, filepath.Join(dir, "id"), "#!/bin/sh\nexit 1\n")
+
+	observed, _, err := readSurvey(sh(t, dir, deployLogin().survey()))
+	if err == nil {
+		t.Fatalf("a survey whose getent could not be run read %v, and an account read as absent is one apply writes over: the deploy principal is recreated and its password reset under whatever is already logging in as it", observed)
+	}
+	if !strings.Contains(err.Error(), deployUser) {
+		t.Errorf("the refusal reads %q and never names the account nothing could be read about", err)
+	}
+}
+
+func TestAGetentThatFindsNoSuchAccountIsAnAbsenceAndNotARefusal(t *testing.T) {
+	t.Parallel()
+
+	observed, _, err := readSurvey(sh(t, stubs(t, nil), deployLogin().survey()))
+	if err != nil {
+		t.Fatalf("a survey of a host that carries no such account = %v, want the absence a first bootstrap reads", err)
+	}
+	if _, stood := observed[principal().ID()]; stood {
+		t.Errorf("the probe read %s on a host whose getent knows no such account", principal().ID())
+	}
+}
+
 func TestOneSurveyReadsBackBothTheAccountAndThePaths(t *testing.T) {
 	t.Parallel()
 

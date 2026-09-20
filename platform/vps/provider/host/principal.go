@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -17,6 +18,8 @@ const (
 
 	lockedPassword = "*"
 	lockedFact     = "locked"
+
+	getentNoSuchKey = 2
 )
 
 const (
@@ -76,7 +79,10 @@ func (l login) survey() string {
 	if l.group != "" {
 		membership = "if id -nG " + quoted(l.name) + " 2>/dev/null | tr ' ' '\\n' | grep -qx " + quoted(l.group) + "; then held=" + quoted(l.group) + "; fi\n"
 	}
-	return `if entry=$(getent passwd ` + quoted(l.name) + ` 2>/dev/null); then
+	return `if entry=$(getent passwd ` + quoted(l.name) + ` 2>/dev/null); then found=0; else found=$?; fi
+if [ "$found" -ne 0 ] && [ "$found" -ne ` + strconv.Itoa(getentNoSuchKey) + ` ]; then
+` + unreadable(KindUser, quoted(l.name), `"getent passwd exited $found"`) + `
+elif [ "$found" -eq 0 ]; then
 held=''
 ` + membership + `line=$(getent shadow ` + quoted(l.name) + ` 2>/dev/null || true)
 if [ -z "$line" ] && [ -r /etc/shadow ]; then line=$(grep ` + quoted("^"+l.name+":") + ` /etc/shadow 2>/dev/null || true); fi
