@@ -19,3 +19,7 @@ export const envChecks: Check[] = [
 export function setsEnv(checks: Check[]): boolean {
   return checks.some((one) => envChecks.includes(one) || bindingChecks.includes(one));
 }
+
+export function setsSecret(checks: Check[]): boolean {
+  return checks.some((one) => envChecks.includes(one));
+}
