@@ -232,6 +232,17 @@ func (b *box) carried() []string {
 	return append([]string(nil), b.fed...)
 }
 
+func (b *box) fedTo(needle string) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for i, command := range b.ran {
+		if strings.Contains(command, needle) {
+			return b.fed[i]
+		}
+	}
+	return ""
+}
+
 func standing(t *testing.T, machine *box) providerkit.ImageStore {
 	t.Helper()
 	p := vps.ProviderOver(

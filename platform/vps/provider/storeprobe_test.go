@@ -13,7 +13,7 @@ import (
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-const probedStore = "X-Amz-Credential"
+const probedStore = "?cors"
 
 func aNamedStore() vps.ExternalStore {
 	return vps.ExternalStore{

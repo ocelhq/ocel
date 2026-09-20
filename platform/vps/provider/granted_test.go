@@ -2,7 +2,6 @@ package vps_test
 
 import (
 	"context"
-	"encoding/base64"
 	"slices"
 	"strings"
 	"testing"
@@ -13,20 +12,6 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
-
-func decodedBody(t *testing.T, script string) string {
-	t.Helper()
-	_, held, cut := strings.Cut(script, "printf '%s' '")
-	if !cut {
-		t.Fatalf("nothing in this script carries a body:\n%s", script)
-	}
-	encoded, _, _ := strings.Cut(held, "'")
-	body, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		t.Fatalf("the body this script feeds the store is not one ocel encoded: %v", err)
-	}
-	return string(body)
-}
 
 func TestABucketAnswersTheHostnamesItsOwnProjectClaims(t *testing.T) {
 	t.Parallel()
@@ -48,15 +33,7 @@ func TestABucketAnswersTheHostnamesItsOwnProjectClaims(t *testing.T) {
 		t.Fatalf("Bucket() = %v", err)
 	}
 
-	held := ""
-	for _, command := range machine.commands() {
-		if strings.Contains(command, "?cors") {
-			held = decodedBody(t, command)
-		}
-	}
-	if held == "" {
-		t.Fatal("nothing held the bucket to the origins it answers")
-	}
+	held := fedBy(t, machine, "?cors")
 	if !strings.Contains(held, "<AllowedOrigin>https://shop.example.com</AllowedOrigin>") {
 		t.Errorf("the bucket does not answer the hostname its own project claims, so a browser on it is refused:\n%s", held)
 	}
@@ -133,16 +110,7 @@ func TestAnAppsStoreAccountIsHeldToItsOwnSessions(t *testing.T) {
 	machine := &box{kept: sealedRootKey()}
 	manifest := manifestFor(t, machine, vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}}, boundApp())
 
-	granting := ""
-	for _, command := range machine.commands() {
-		if strings.Contains(command, "add-service-account") {
-			granting = command
-		}
-	}
-	if granting == "" {
-		t.Fatal("nothing the deploy ran gave the app an account on the store")
-	}
-	policy := decodedBody(t, granting)
+	policy := fedBy(t, machine, "add-service-account")
 	if !strings.Contains(policy, "arn:aws:s3:::"+manifest.Store.Sessions+"/*") {
 		t.Errorf("the app's account is not held to its own sessions prefix:\n%s", policy)
 	}
