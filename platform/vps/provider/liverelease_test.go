@@ -199,8 +199,9 @@ func TestLiveARedeployUnderContinuousLoadDropsNothingAndDrainsWhenTheHeldRequest
 	}()
 
 	heldOpenAgainst(t, vm, one, 1)
+	told := &said{}
 	began := time.Now()
-	if err := releasing(p, two, one.address, 30*time.Second, nil); err != nil {
+	if err := releasing(p, two, one.address, 30*time.Second, told); err != nil {
 		close(done)
 		group.Wait()
 		t.Fatalf("Release() over a box under load = %v", err)
@@ -225,23 +226,25 @@ func TestLiveARedeployUnderContinuousLoadDropsNothingAndDrainsWhenTheHeldRequest
 		t.Errorf("the proxy serves %q after the flip", served)
 	}
 
-	both, zeroed := false, false
+	both := false
 	sampling.Lock()
 	defer sampling.Unlock()
 	for _, read := range samples {
 		if strings.Contains(read, one.address) && strings.Contains(read, two.address) {
 			both = true
 		}
-		if strings.Contains(read, one.address) && strings.Contains(read, `"num_requests":0`) {
-			zeroed = true
-		}
 	}
 	if !both {
 		t.Errorf("the retired upstream never appeared beside the new one in %s:\n%v\nthe drain reads the live config's upstreams, so a retired container that leaves the pool at the flip cannot be waited on at all",
 			"/reverse_proxy/upstreams", samples)
 	}
-	if !zeroed {
-		t.Errorf("the retired upstream's in-flight count was never read as zero:\n%v", samples)
+	drained := told.at(one.physical + " reported nothing in flight")
+	if drained < 0 {
+		t.Errorf("the release said %v and never that the drain read %s empty, so nothing here says it waited rather than expired: the count is zero for about one drain poll before the steady-state config drops the upstream, which is too short a window for an outside sampler to be held to",
+			told.lines, one.physical)
+	}
+	if stopping := told.at("Stopping " + one.physical); stopping < 0 || drained > stopping {
+		t.Errorf("the release said %v, want the drain's outcome before it stopped %s: the drain that waits for the count is the whole of why the old container goes second", told.lines, one.physical)
 	}
 	if vm.running(t, one.physical) {
 		t.Error("the retired container is still running after the release returned")

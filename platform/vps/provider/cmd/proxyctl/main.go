@@ -334,6 +334,7 @@ func draining(socket, address string, window time.Duration, out, errs io.Writer)
 			return exitUnattributable
 		}
 		if held == 0 {
+			fmt.Fprintf(out, "%s %s\n", caddyadmin.Drained, address)
 			return 0
 		}
 		inFlight = held

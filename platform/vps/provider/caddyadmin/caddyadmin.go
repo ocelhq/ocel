@@ -6,7 +6,10 @@ import (
 	"fmt"
 )
 
-const DrainExpired = "drain-expired"
+const (
+	DrainExpired = "drain-expired"
+	Drained      = "drained"
+)
 
 const SocketMode = "0600"
 

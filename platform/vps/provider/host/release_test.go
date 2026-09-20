@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -24,12 +25,24 @@ var (
 )
 
 type watched struct {
-	said []string
-	told []string
+	said  []string
+	told  []string
+	lines []string
 }
 
-func (w *watched) Say(message string)    { w.said = append(w.said, message) }
-func (w *watched) Detail(message string) { w.told = append(w.told, message) }
+func (w *watched) Say(message string) {
+	w.said = append(w.said, message)
+	w.lines = append(w.lines, message)
+}
+
+func (w *watched) Detail(message string) {
+	w.told = append(w.told, message)
+	w.lines = append(w.lines, message)
+}
+
+func (w *watched) at(fragment string) int {
+	return slices.IndexFunc(w.lines, func(line string) bool { return strings.Contains(line, fragment) })
+}
 
 func (w *watched) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
 
@@ -342,6 +355,23 @@ func TestTheFlipConfigDeclaresTheRetiredUpstreamAndTheHelperIsToldToDrainIt(t *t
 		if !strings.Contains(deployed, wanted) {
 			t.Errorf("the one call is made as %q, which carries no %s", deployed, wanted)
 		}
+	}
+}
+
+func TestADrainThatReadZeroIsToldBeforeTheContainerItFreedIsStopped(t *testing.T) {
+	t.Parallel()
+
+	report := &watched{}
+	_, err := released(t, aRelease(), session.Result{Stdout: caddyadmin.Drained + " " + retired + "\n"}, report)
+	if err != nil {
+		t.Fatalf("Release() over a drain that read zero = %v", err)
+	}
+	drained := report.at(retiring + " reported nothing in flight")
+	if drained < 0 {
+		t.Fatalf("the release said %v and never that the drain read the retired upstream empty: the count reaches zero for about one drain poll before the config that carries the upstream is rewritten, so the drain's own word is the only thing that can witness it", report.lines)
+	}
+	if stopping := report.at("Stopping " + retiring); stopping < 0 || drained > stopping {
+		t.Errorf("the release said %v, want the drain's outcome before %q: a report that names the stop first reads as though the container went while it was still serving", report.lines, "Stopping "+retiring)
 	}
 }
 

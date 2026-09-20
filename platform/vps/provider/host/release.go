@@ -30,13 +30,12 @@ type Release struct {
 	DrainTimeout  time.Duration
 }
 
-func (r Release) targetName() string {
-	name, _, _ := strings.Cut(r.Target, ":")
-	return name
-}
+func (r Release) targetName() string { return containerOf(r.Target) }
 
-func (r Release) retiredName() string {
-	name, _, _ := strings.Cut(r.Retire, ":")
+func (r Release) retiredName() string { return containerOf(r.Retire) }
+
+func containerOf(address string) string {
+	name, _, _ := strings.Cut(address, ":")
 	return name
 }
 
@@ -86,13 +85,13 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 	if result.Code != 0 {
 		return h.evidence(ctx, rel, fmt.Sprintf("exited %d", result.Code), strings.TrimSpace(result.Stderr), held.text, flipped, elevation)
 	}
+	tellDrain(report, result.Stdout)
 	if retiring != "" {
 		say(report, "Stopping "+rel.retiredName())
 		if err := h.StopContainer(ctx, rel.retiredName()); err != nil {
 			return err
 		}
 	}
-	warnExpiry(report, result.Stdout)
 	if _, err := h.composeProxy(ctx, rel.DrainTimeout, func(standing ProxyState, _ bool) (ProxyState, bool, error) {
 		standing = compose(standing)
 		if standing.Retiring == retiring {
@@ -120,15 +119,18 @@ func (h *Host) serving(rel Release, retired string, why error) error {
 		rel.App, h.named(), rel.targetName(), why, left)
 }
 
-func warnExpiry(report providerkit.Reporter, said string) {
+func tellDrain(report providerkit.Reporter, said string) {
+	if report == nil {
+		return
+	}
 	for line := range strings.Lines(said) {
 		fields := strings.Fields(line)
-		if len(fields) != 3 || fields[0] != caddyadmin.DrainExpired {
-			continue
-		}
-		if report != nil {
+		switch {
+		case len(fields) == 3 && fields[0] == caddyadmin.DrainExpired:
 			report.Detail(fmt.Sprintf("%s still held %s request(s) when the drain window closed: %s. %s",
 				fields[1], fields[2], drainCeiling, hijackedFate))
+		case len(fields) == 2 && fields[0] == caddyadmin.Drained:
+			report.Detail(containerOf(fields[1]) + " reported nothing in flight, and is stopped only after that")
 		}
 	}
 }
