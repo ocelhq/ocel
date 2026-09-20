@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -16,8 +17,26 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
+func gitIgnoredDirs(t *testing.T, repo string) map[string]bool {
+	t.Helper()
+
+	listed, err := exec.Command("git", "-C", repo, "ls-files",
+		"--others", "--ignored", "--exclude-standard", "--directory").Output()
+	if err != nil {
+		t.Fatalf("ask git what it ignores: %v", err)
+	}
+	ignored := map[string]bool{}
+	for line := range strings.Lines(string(listed)) {
+		if rel := strings.TrimSuffix(strings.TrimSpace(line), "/"); rel != "" {
+			ignored[rel] = true
+		}
+	}
+	return ignored
+}
+
 func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 	repo := fixturetest.RepoDir(t)
+	ignored := gitIgnoredDirs(t, repo)
 	allowed := map[string]map[string]bool{
 		"cli/internal/attribution/rust_test.go": {
 			constants.DefaultDiscoveryDirName: true,
@@ -90,7 +109,7 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 			case ".git", ".next", ".venv", ".claude", constants.ProjectStateDirName, "node_modules", "dist", "target":
 				return filepath.SkipDir
 			}
-			if rel == "pkg/proto" {
+			if rel == "pkg/proto" || ignored[rel] {
 				return filepath.SkipDir
 			}
 			return nil
@@ -127,6 +146,7 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 
 func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 	repo := fixturetest.RepoDir(t)
+	ignored := gitIgnoredDirs(t, repo)
 	fixtureRoots := []string{
 		"tests/fixtures/lifecycle/next",
 		"tests/fixtures/sdk/go",
@@ -172,6 +192,13 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 		if entry.IsDir() {
 			switch entry.Name() {
 			case ".git", ".next", ".venv", ".claude", constants.ProjectStateDirName, "node_modules", "dist", "target":
+				return filepath.SkipDir
+			}
+			rel, err := filepath.Rel(repo, path)
+			if err != nil {
+				return err
+			}
+			if ignored[filepath.ToSlash(rel)] {
 				return filepath.SkipDir
 			}
 			return nil
