@@ -4,8 +4,8 @@ use crate::Error;
 
 pub(crate) fn postgres(name: &str) -> Result<PostgresProperties, Error> {
     let key = format!("OCEL_RESOURCE_POSTGRES_{name}");
-    let raw = match std::env::var(&key) {
-        Ok(raw) if !raw.is_empty() => raw,
+    let raw = match crate::env::live_file(&key).or_else(|| std::env::var(&key).ok()) {
+        Some(raw) if !raw.is_empty() => raw,
         _ => return Err(Error::MissingBinding { key }),
     };
 

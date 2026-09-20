@@ -1,5 +1,6 @@
 import os
 
+from ocel.env import _live_file
 from ocel.gen.common.bindings.v1.bindings_pb import Binding, PostgresProperties
 
 
@@ -19,7 +20,7 @@ def unprovisioned(what: str, access: str) -> UnprovisionedResourceError:
 
 def binding(name: str) -> PostgresProperties:
     key = f"OCEL_RESOURCE_POSTGRES_{name}"
-    raw = os.environ.get(key)
+    raw = _live_file(key) or os.environ.get(key)
     if not raw:
         raise RuntimeError(
             f"Value for {key} is not defined. Run `ocel dev` to resolve it locally, "

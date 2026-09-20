@@ -22,6 +22,25 @@ fn a_connection_string_carries_credentials_percent_encoded() {
 }
 
 #[test]
+fn a_binding_only_the_live_directory_holds_is_read_from_its_file() {
+    let _env = env();
+    let dir = std::env::temp_dir().join("ocel-live-binding");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("the directory is made");
+    std::fs::write(
+        dir.join("OCEL_RESOURCE_POSTGRES_projected"),
+        r#"{"name":"projected","postgres":{"host":"h","port":5432,"database":"d","username":"u","password":"p"}}"#,
+    )
+    .expect("the file is written");
+    std::env::set_var("OCEL_LIVE_DIR", &dir);
+
+    let got = Postgres::new("projected").connection_string();
+
+    std::env::remove_var("OCEL_LIVE_DIR");
+    assert_eq!(got.expect("a connection string"), "postgres://u:p@h:5432/d");
+}
+
+#[test]
 fn a_binding_that_was_never_delivered_names_the_commands_that_deliver_it() {
     let _env = env();
     let err = Postgres::new("absent")

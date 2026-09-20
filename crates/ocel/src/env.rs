@@ -214,7 +214,7 @@ fn delivered(key: &str) -> Option<String> {
         .or_else(|| live_file(key))
 }
 
-fn live_file(key: &str) -> Option<String> {
+pub(crate) fn live_file(key: &str) -> Option<String> {
     let directory = std::env::var(LIVE_DIR_ENV).ok()?;
     if directory.is_empty() {
         return None;

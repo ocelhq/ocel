@@ -55,7 +55,10 @@ func kindOf(typ bindingsv1.BindingType) string {
 
 func binding(name string, typ bindingsv1.BindingType) (*bindingsv1.Binding, error) {
 	key := bindingKey(name, typ)
-	raw := os.Getenv(key)
+	raw, live := readLiveFile(key)
+	if !live {
+		raw = os.Getenv(key)
+	}
 	if raw == "" {
 		return nil, &MissingBindingError{Key: key}
 	}
