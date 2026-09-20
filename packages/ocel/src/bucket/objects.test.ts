@@ -171,6 +171,31 @@ describe("put", () => {
     expect(client.abortMultipart).toHaveBeenCalledOnce();
   });
 
+  it("cancels the source and the sibling parts when a part fails", async () => {
+    const { objects, fetchImpl } = objectsUnderTest();
+    let cancelled = false;
+    let aborted = 0;
+    const source = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(4 * 1024 * 1024).fill(3));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    fetchImpl.mockImplementation((async (_input: string, init?: { signal?: AbortSignal }) => {
+      init?.signal?.addEventListener("abort", () => {
+        aborted += 1;
+      });
+      return new Response("nope", { status: 500 });
+    }) as never);
+
+    await expect(objects.put("big.bin", source)).rejects.toThrow();
+
+    expect(cancelled).toBe(true);
+    expect(aborted).toBeGreaterThan(0);
+  });
+
   it("turns a refused precondition into a typed error", async () => {
     const { objects, fetchImpl } = objectsUnderTest();
     fetchImpl.mockImplementationOnce(async () => new Response("exists", { status: 412 }));
