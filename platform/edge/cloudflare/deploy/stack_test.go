@@ -715,10 +715,6 @@ func TestDestroy(t *testing.T) {
 			"ocel--acme-web--prod--web",
 			"ocel--acme-web--prod--api",
 			"ocel--acme-web--prod--root",
-			"ocel-acme-web--prod-web",
-			"ocel-acme-web--prod-api",
-			"ocel-acme-web--prod-root",
-			"ocel-acme-web-prod",
 		})
 		if _, err := stackOn(p, state).History(t.Context(), ""); err == nil {
 			t.Error("history after Destroy: err = nil, want the wiped instance to reject the secret")

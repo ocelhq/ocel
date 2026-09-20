@@ -8,6 +8,7 @@ require (
 	github.com/aws/smithy-go v1.27.3
 	github.com/cloudflare/cloudflare-go/v4 v4.6.0
 	github.com/ocelhq/ocel/pkg/costkit v0.0.0
+	github.com/ocelhq/ocel/pkg/naming v0.0.0
 	github.com/ocelhq/ocel/pkg/proto v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/shopspring/decimal v1.4.0
@@ -35,3 +36,5 @@ replace github.com/ocelhq/ocel/platform/edge/contract => ../../contract
 replace github.com/ocelhq/ocel/pkg/costkit => ../../../../pkg/costkit
 
 replace github.com/ocelhq/ocel/pkg/proto => ../../../../pkg/proto
+
+replace github.com/ocelhq/ocel/pkg/naming => ../../../../pkg/naming

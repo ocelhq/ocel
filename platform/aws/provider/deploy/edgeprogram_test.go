@@ -27,10 +27,11 @@ func setWorkerBundle(t *testing.T) {
 
 func programmed(slug string, class providerkit.Class) EdgeProgram {
 	return EdgeProgram{
-		Class: class,
-		Kind:  cloudflare.Kind,
-		Slug:  slug,
-		Env:   "prod",
+		Class:     class,
+		Kind:      cloudflare.Kind,
+		Namespace: defaultNamespace,
+		Slug:      slug,
+		Env:       "prod",
 		Worker: WorkerFacts{
 			Region:             "eu-west-1",
 			StateTable:         "ocel-state",
@@ -124,11 +125,11 @@ func TestEdgeProgramForAPreviewProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if built.Spec.Name != previewWorkerName("proj") {
-		t.Errorf("Name = %q, want %q", built.Spec.Name, previewWorkerName("proj"))
+	if built.Spec.Name != previewWorkerName(defaultNamespace, "proj") {
+		t.Errorf("Name = %q, want %q", built.Spec.Name, previewWorkerName(defaultNamespace, "proj"))
 	}
-	if built.Spec.PruneWorkerStem != previewWorkerStem("proj") {
-		t.Errorf("PruneWorkerStem = %q, want %q", built.Spec.PruneWorkerStem, previewWorkerStem("proj"))
+	if built.Spec.PruneWorkerStem != previewWorkerStem(defaultNamespace, "proj") {
+		t.Errorf("PruneWorkerStem = %q, want %q", built.Spec.PruneWorkerStem, previewWorkerStem(defaultNamespace, "proj"))
 	}
 	if built.Spec.RequiredRecord != "" {
 		t.Errorf("RequiredRecord = %q, want empty: ocel plants the records for the domains it serves", built.Spec.RequiredRecord)
@@ -170,7 +171,7 @@ func TestEdgeProgramForAPreviewProjectOnTheSharedWildcard(t *testing.T) {
 			t.Errorf("Vars[%s] = %q, want %q", name, built.Spec.Worker.Vars[name], want)
 		}
 	}
-	if built.Spec.Name != previewWorkerName("proj") || built.Spec.PruneWorkerStem != previewWorkerStem("proj") {
+	if built.Spec.Name != previewWorkerName(defaultNamespace, "proj") || built.Spec.PruneWorkerStem != previewWorkerStem(defaultNamespace, "proj") {
 		t.Errorf("name = %q, stem = %q, want the project's preview worker named so the edge can sweep it",
 			built.Spec.Name, built.Spec.PruneWorkerStem)
 	}
@@ -183,8 +184,8 @@ func TestEdgeProgramForAProductionProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if built.Spec.Name != rootWorkerName("proj", "prod") {
-		t.Errorf("Name = %q, want %q", built.Spec.Name, rootWorkerName("proj", "prod"))
+	if built.Spec.Name != rootWorkerName(defaultNamespace, "proj", "prod") {
+		t.Errorf("Name = %q, want %q", built.Spec.Name, rootWorkerName(defaultNamespace, "proj", "prod"))
 	}
 	if built.Spec.PruneWorkerStem != "" {
 		t.Errorf("PruneWorkerStem = %q, want empty: a production spec sweeps its own script alone", built.Spec.PruneWorkerStem)

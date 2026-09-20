@@ -201,7 +201,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		prune:          spec.PruneRoutes,
 		pruneStem:      program.PruneWorkerStem,
 		requiredRecord: program.RequiredRecord,
-		owns:           projectOwnsScript(slug),
+		owns:           projectOwnsScript(p.namespace, slug),
 	}, spec.Warn); err != nil {
 		return nil, err
 	}
@@ -338,7 +338,7 @@ func (p *provider) stackWorkers(ctx context.Context, state edge.StackState) ([]s
 		apps = deployed
 	}
 
-	conventional, err := conventionWorkerNames(state.Slug, state.Class, apps)
+	conventional, err := conventionWorkerNames(p.namespace, state.Slug, state.Class, apps)
 	if err != nil {
 		return nil, err
 	}
