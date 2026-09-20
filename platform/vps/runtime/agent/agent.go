@@ -297,8 +297,9 @@ func ManifestIn(env []string) string {
 }
 
 type Store struct {
-	ClassRoot string
-	StateRoot string
+	ClassRoot   string
+	StateRoot   string
+	ProxyConfig string
 }
 
 func (s Store) Resolve(ctx context.Context, manifest live.Manifest) (map[string]string, error) {
@@ -325,7 +326,13 @@ func (s Store) Resolve(ctx context.Context, manifest live.Manifest) (map[string]
 		return nil, err
 	}
 	answer := merged(resolved, manifest.Bindings, records)
-	if manifest.Store == nil || manifest.Store.Sealed == "" {
+	if manifest.Store == nil {
+		return answer, nil
+	}
+	if base := s.storeBase(manifest); base != "" {
+		answer[live.StorePublicKey] = base
+	}
+	if manifest.Store.Sealed == "" {
 		return answer, nil
 	}
 	secret, err := s.storeSecret(ctx, manifest)
@@ -334,6 +341,25 @@ func (s Store) Resolve(ctx context.Context, manifest live.Manifest) (map[string]
 	}
 	answer[live.StoreSecretKey] = secret
 	return answer, nil
+}
+
+func (s Store) storeBase(manifest live.Manifest) string {
+	if manifest.Store.Pointer == "" {
+		return ""
+	}
+	at := s.ProxyConfig
+	if at == "" {
+		at = live.ProxyConfig
+	}
+	document, err := os.ReadFile(at)
+	if err != nil {
+		return ""
+	}
+	claims, err := live.ClaimedIn(document)
+	if err != nil {
+		return ""
+	}
+	return live.StoreBase(claims, live.Surface(manifest.Slug, manifest.Class), manifest.Store.Pointer)
 }
 
 func (s Store) storeSecret(ctx context.Context, manifest live.Manifest) (string, error) {

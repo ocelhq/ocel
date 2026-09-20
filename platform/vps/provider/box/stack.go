@@ -10,6 +10,7 @@ import (
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 type stack struct {
@@ -60,7 +61,7 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	if err := s.ledger().Promote(ctx, promotion, pointer, report); err != nil {
 		return err
 	}
-	claims, err := s.previewClaims(pointer, slices.Sorted(maps.Keys(promotion.Builds)))
+	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(promotion.Builds)))
 	if err != nil {
 		return err
 	}
@@ -156,12 +157,19 @@ func (s *stack) previewSite() edge.PreviewSite {
 	return edge.SharedPreview(s.state.Slug, s.state.GlobalPreview)
 }
 
-func (s *stack) previewClaims(pointer string, apps []string) ([]host.HostClaim, error) {
+func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string) ([]host.HostClaim, error) {
 	site := s.previewSite()
 	if !site.Serves() || len(apps) == 0 || named(pointer) == edge.DefaultPointer {
 		return nil, nil
 	}
+	stores, err := s.stores(ctx, named(pointer))
+	if err != nil {
+		return nil, err
+	}
 	hostnames := site.Hosts(pointer, apps)
+	if stores {
+		hostnames = append(hostnames, site.Host(pointer, live.StoreLabel))
+	}
 	if err := site.LabelProblem(hostnames); err != nil {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"%s claims no preview hostname on this box: %s", s.surface(), err)
@@ -171,6 +179,9 @@ func (s *stack) previewClaims(pointer string, apps []string) ([]host.HostClaim, 
 		app := ""
 		if at := slices.IndexFunc(apps, func(app string) bool { return site.Host(pointer, app) == hostname }); at >= 0 {
 			app = apps[at]
+		}
+		if hostname == site.Host(pointer, live.StoreLabel) {
+			app = live.StoreLabel
 		}
 		claims = append(claims, host.HostClaim{
 			Hostname: hostname, Owner: s.surface(), Pointer: pointer, App: app,
@@ -253,9 +264,20 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err != nil {
 		return err
 	}
-	if err := s.e.machine.ClaimHosts(ctx, []host.HostClaim{{
+	claims := []host.HostClaim{{
 		Hostname: binding.Hostname, Owner: s.surface(), Pointer: edge.DefaultPointer, App: binding.App,
-	}}); err != nil {
+	}}
+	stores, err := s.stores(ctx, edge.DefaultPointer)
+	if err != nil {
+		return err
+	}
+	if stores {
+		claims = append(claims, host.HostClaim{
+			Hostname: live.StoreHostname(binding.Hostname), Owner: s.surface(),
+			Pointer: edge.DefaultPointer, App: live.StoreLabel,
+		})
+	}
+	if err := s.e.machine.ClaimHosts(ctx, claims); err != nil {
 		return err
 	}
 	s.state.Bind(binding.Hostname)
@@ -263,8 +285,16 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	return nil
 }
 
+func (s *stack) stores(ctx context.Context, pointer string) (bool, error) {
+	upstream, err := s.e.machine.Serving(ctx, s.routeKey(pointer, live.StoreLabel))
+	return upstream != "", err
+}
+
 func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if err := s.e.machine.DisclaimHost(ctx, hostname, s.surface()); err != nil {
+		return err
+	}
+	if err := s.e.machine.DisclaimHost(ctx, live.StoreHostname(hostname), s.surface()); err != nil {
 		return err
 	}
 	s.state.Release(hostname)

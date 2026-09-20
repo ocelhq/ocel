@@ -5,11 +5,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const Kind edge.Kind = "box"
@@ -72,7 +72,7 @@ func (e *Edge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, err
 func (e *Edge) Teardown(context.Context, edge.Class) error { return nil }
 
 func Surface(slug string, class edge.Class) string {
-	return naming.Join(naming.FieldSeparator, "ocel", naming.Sanitize(slug), string(class))
+	return live.Surface(slug, string(class))
 }
 
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {

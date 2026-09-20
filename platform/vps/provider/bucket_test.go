@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -205,6 +206,9 @@ func TestAnAppBindingABucketIsHandedItsStoreSealedAndNeverInPlaintext(t *testing
 	if manifest.Store == nil {
 		t.Fatal("the manifest names no store, so the runtime in front of the app has nothing to sign against")
 	}
+	if manifest.Store.Pointer != edge.DefaultPointer {
+		t.Errorf("the manifest names pointer %q, and the box answers the store's public address out of what that pointer claims", manifest.Store.Pointer)
+	}
 	if manifest.Store.Endpoint != "http://prod-web-r0a1b2c3d-store-s3:9000" || !manifest.Store.PathStyle {
 		t.Errorf("the manifest points the runtime at %+v, want the store this project runs, addressed path-style", manifest.Store)
 	}
@@ -275,6 +279,30 @@ func TestRemovingABucketTakesItsObjectsWithIt(t *testing.T) {
 	}
 	if len(machine.commands()) == 0 {
 		t.Fatal("removing a bucket ran nothing on the box, so its objects stay on the disk forever")
+	}
+}
+
+func TestAStandingStoreIsRoutedOnTheBoxsProxyUnderALabelOfItsOwn(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	if _, err := over(machine).Bucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+		t.Fatalf("Bucket() = %v", err)
+	}
+	state, err := host.ReadProxyState([]byte(machine.proxyDoc))
+	if err != nil {
+		t.Fatalf("ReadProxyState() = %v", err)
+	}
+	at := slices.IndexFunc(state.Routes, func(route host.AppRoute) bool { return route.App == vars.StoreLabel })
+	if at < 0 {
+		t.Fatalf("standing a store left the proxy routing %v, and nothing off the box reaches it", state.Routes)
+	}
+	route := state.Routes[at]
+	if route.Owner != vars.Surface("shop", "production") || route.Pointer != edge.DefaultPointer {
+		t.Errorf("the store is routed under %s/%s, want the surface and pointer its project's domains are claimed under", route.Owner, route.Pointer)
+	}
+	if !strings.HasSuffix(route.Upstream, ":9000") || !strings.Contains(route.Upstream, "store-s3") {
+		t.Errorf("the store's route forwards to %q, want the store container's own name and port", route.Upstream)
 	}
 }
 

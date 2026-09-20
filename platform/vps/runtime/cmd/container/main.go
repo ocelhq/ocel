@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -181,20 +182,38 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket string) (proxy.S
 	cfg := bucket.Config{
 		Objects:      internal.Client(),
 		Internal:     internal.Presigner(),
-		PublicHost:   manifest.Store.PublicBaseURL,
+		External:     publishing(internal, manifest.Store.PublicBaseURL, values),
 		Callbacks:    bucket.HTTPPoster{},
 		PostPolicies: true,
 		Sessions:     manifest.Store.Sessions,
-	}
-	if manifest.Store.PublicBaseURL != "" {
-		external := internal
-		external.Endpoint = manifest.Store.PublicBaseURL
-		cfg.External = external.Presigner()
 	}
 	if manifest.Store.Volume != "" {
 		cfg.Volume = live.FreeSpace(socket)
 	}
 	return proxy.Serve(bucket.New(cfg))
+}
+
+func publishing(store bucket.Store, configured string, values *rt.Values) func() (bucket.PresignAPI, string) {
+	var mu sync.Mutex
+	var base string
+	var signer bucket.PresignAPI
+	return func() (bucket.PresignAPI, string) {
+		now := configured
+		if claimed := values.Value(vars.StorePublicKey); claimed != "" {
+			now = claimed
+		}
+		if now == "" {
+			return nil, ""
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if now != base {
+			published := store
+			published.Endpoint = now
+			base, signer = now, published.Presigner()
+		}
+		return signer, base
+	}
 }
 
 func resolve(ctx context.Context, manifest, socket, dir string) (*rt.Values, error) {

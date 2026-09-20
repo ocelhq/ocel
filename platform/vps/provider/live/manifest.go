@@ -26,7 +26,10 @@ const (
 	StoreSecretName    = "storekey"
 )
 
-const StoreSecretKey = "ocel.store.secretAccessKey"
+const (
+	StoreSecretKey = "ocel.store.secretAccessKey"
+	StorePublicKey = "ocel.store.publicBaseUrl"
+)
 
 type Store struct {
 	Env           string `json:"env"`
@@ -36,6 +39,7 @@ type Store struct {
 	Sessions      string `json:"sessions,omitempty"`
 	PathStyle     bool   `json:"pathStyle,omitempty"`
 	PublicBaseURL string `json:"publicBaseUrl,omitempty"`
+	Pointer       string `json:"pointer,omitempty"`
 	Volume        string `json:"volume,omitempty"`
 	Sealed        string `json:"sealed"`
 }

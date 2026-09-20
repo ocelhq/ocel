@@ -3,7 +3,9 @@ package vps_test
 import (
 	"archive/tar"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"io"
 	"log"
@@ -38,6 +40,7 @@ type box struct {
 	reads    map[string]string
 	leaf     string
 	kept     string
+	proxyDoc string
 	refuses  func(command string) (session.Result, bool)
 }
 
@@ -61,6 +64,9 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 	}
 	if b.unsocket && strings.Contains(command, "docker version") {
 		return session.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, nil
+	}
+	if read, named := b.proxying(command, carried); named {
+		return read, nil
 	}
 	if read, named := b.catting(command); named {
 		return read, nil
@@ -101,6 +107,30 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 		}
 	}
 	return session.Result{Stdout: said}, nil
+}
+
+func (b *box) proxying(command, carried string) (session.Result, bool) {
+	if !strings.Contains(command, quote(host.ProxyConfig)) {
+		return session.Result{}, false
+	}
+	if b.proxyDoc == "" {
+		rendered, err := host.RenderProxyConfig(host.ProxyState{Grace: host.DrainWindow})
+		if err != nil {
+			return session.Result{Code: 1, Stderr: err.Error()}, true
+		}
+		b.proxyDoc = string(rendered)
+	}
+	sum := sha256.Sum256([]byte(b.proxyDoc))
+	digest := hex.EncodeToString(sum[:])
+	switch {
+	case strings.HasPrefix(command, "set -e\nsha256sum "):
+		return session.Result{Stdout: digest + "\n" + b.proxyDoc}, true
+	case strings.Contains(command, `mv "$staged" `):
+		b.proxyDoc = carried
+		sum = sha256.Sum256([]byte(b.proxyDoc))
+		return session.Result{Stdout: hex.EncodeToString(sum[:]) + "\n"}, true
+	}
+	return session.Result{}, false
 }
 
 func (b *box) catting(command string) (session.Result, bool) {
