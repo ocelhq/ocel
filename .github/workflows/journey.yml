@@ -215,6 +215,10 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
       - name: Has aws already passed what it reads
         id: gate-aws
         if: ${{ steps.lanes.outputs.aws == 'true' && steps.lanes.outputs.real != 'true' }}
@@ -316,7 +320,7 @@ jobs:
           role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
       - name: Build, typecheck and test the workspace
-        run: pnpm turbo run build typecheck test --filter='!./console/*' --filter='!./tests/fixtures/**' --filter='!./tests/*'
+        run: pnpm turbo run build typecheck test --filter='!./console/*' --filter='!./tests/fixtures/**' --filter='!./tests/next-compat'
 
       - uses: ./.github/actions/goreleaser
         if: ${{ steps.gate.outputs.any == 'true' }}
