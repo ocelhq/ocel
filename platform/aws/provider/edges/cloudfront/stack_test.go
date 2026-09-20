@@ -164,6 +164,7 @@ func TestDestroyHoldsBeforeItFirstAsksHowTheRolloutIsGoing(t *testing.T) {
 
 	w := newWorld()
 	e := &provider{
+		ns:   defaultNamespace,
 		open: func(context.Context) (Clients, error) { return w.clients(), nil },
 		settle: Settler{
 			Wait: func(context.Context, time.Duration) error {
@@ -197,11 +198,11 @@ func TestDestroyHoldsBeforeItFirstAsksHowTheRolloutIsGoing(t *testing.T) {
 	}
 }
 
-func TestADistributionNamedPastTheCommentCeilingIsStillFoundByName(t *testing.T) {
+func TestADistributionOfAProjectWithALongSlugIsFoundByTheNameItWasMintedUnder(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
-	name := strings.Repeat("storefront-", 20)
+	name := distributionName(defaultNamespace, strings.Repeat("storefront-", 20), edge.ClassProduction)
 	plan := distributionPlan{
 		name:          name,
 		assetOrigin:   "assets.s3.eu-west-1.amazonaws.com",
@@ -221,8 +222,11 @@ func TestADistributionNamedPastTheCommentCeilingIsStillFoundByName(t *testing.T)
 		"comment":          aws.ToString(held.config.Comment),
 		"caller reference": aws.ToString(held.config.CallerReference),
 	} {
-		if len(value) != maxDistributionNameLen {
-			t.Errorf("%s is %d characters, want it clamped to the %d CloudFront accepts", field, len(value), maxDistributionNameLen)
+		if value != name {
+			t.Errorf("%s is %q, want the name the project was minted under, %q", field, value, name)
+		}
+		if len(value) > maxDistributionNameLen {
+			t.Errorf("%s is %d characters and CloudFront accepts %d", field, len(value), maxDistributionNameLen)
 		}
 	}
 

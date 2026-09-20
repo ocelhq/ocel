@@ -385,7 +385,7 @@ func TestDestroyTakesEveryPreviewItRouted(t *testing.T) {
 		if left[host] != nil {
 			t.Errorf("%s is still routed after the stack that served it was destroyed", host)
 		}
-		if w.gateway.named(apiName(conformanceSlug, edge.ClassPreview, pointer)) != nil {
+		if w.gateway.named(apiName(defaultNamespace, conformanceSlug, edge.ClassPreview, pointer)) != nil {
 			t.Errorf("the REST API for %s survived the destroy", pointer)
 		}
 	}

@@ -88,7 +88,6 @@ func (w *world) clients() Clients {
 		SSM:           w.ssm,
 		CFN:           w.cfn,
 		Region:        fakeRegion,
-		Namespace:     defaultNamespace,
 	}
 }
 
@@ -106,6 +105,7 @@ func (w *world) invalidationTargets(scope string) []string {
 
 func (w *world) edge() *provider {
 	return &provider{
+		ns:   defaultNamespace,
 		open: func(context.Context) (Clients, error) { return w.clients(), nil },
 		settle: Settler{
 			Wait:     func(context.Context, time.Duration) error { return nil },

@@ -22,7 +22,11 @@ import (
 const previewSweepPage = 50
 
 func previewWildcardName(baseDomain string) string {
-	return naming.Join(naming.FieldSeparator, namespace, string(edge.ClassPreview), baseDomain)
+	return naming.Fit(maxDistributionNameLen, naming.FieldSeparator,
+		naming.Fixed(sharedNamespace),
+		naming.Fixed(string(edge.ClassPreview)),
+		naming.Compressible(baseDomain),
+	)
 }
 
 func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
@@ -146,7 +150,7 @@ func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string
 		return err
 	}
 	var errs []error
-	if err := sweepPreviewRoutes(ctx, c, baseDomain); err != nil {
+	if err := sweepPreviewRoutes(ctx, c, p.ns, baseDomain); err != nil {
 		errs = append(errs, err)
 	}
 	held, found, err := findDistribution(ctx, c, previewWildcardName(baseDomain))
@@ -174,9 +178,9 @@ func (p *provider) forgetPreviewWildcardTarget(ctx context.Context, c Clients, d
 	return bootstrapLedger(c, edge.ClassPreview, deployed).ForgetInvalidationTarget(ctx, distribution)
 }
 
-func sweepPreviewRoutes(ctx context.Context, c Clients, baseDomain string) error {
+func sweepPreviewRoutes(ctx context.Context, c Clients, ns bootstrap.Namespace, baseDomain string) error {
 	store, err := c.CloudFront.DescribeKeyValueStore(ctx, &cloudfront.DescribeKeyValueStoreInput{
-		Name: aws.String(c.Namespace.EdgeRoutesStoreName(edge.ClassPreview)),
+		Name: aws.String(ns.EdgeRoutesStoreName(edge.ClassPreview)),
 	})
 	if err != nil {
 		if isNotFound(err) {

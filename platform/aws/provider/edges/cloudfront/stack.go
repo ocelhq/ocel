@@ -54,7 +54,7 @@ func (s *stack) class() edge.Class { return s.state.Class }
 
 func (s *stack) plan() distributionPlan {
 	return distributionPlan{
-		name:          distributionName(s.slug(), s.class()),
+		name:          distributionName(s.p.ns, s.slug(), s.class()),
 		assetOrigin:   assetOriginDomain(s.own.AssetBucket, s.own.Region),
 		function:      s.own.Function,
 		emptyBody:     s.own.EmptyBodyFunction,
@@ -392,7 +392,7 @@ func (s *stack) serveContainers(ctx context.Context, c Clients, promotion edge.P
 
 func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSecret, error) {
 	command := providerkit.BootstrapCommand(s.class())
-	name, err := c.Namespace.OriginSecretParamFor(string(s.class()))
+	name, err := s.p.ns.OriginSecretParamFor(string(s.class()))
 	if err != nil {
 		return bootstrap.OriginSecret{}, err
 	}

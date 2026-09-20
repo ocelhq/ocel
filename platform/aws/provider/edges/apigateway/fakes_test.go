@@ -52,11 +52,12 @@ func newWorld() *world {
 }
 
 func (w *world) clients() Clients {
-	return Clients{APIGateway: w.gateway, Routing: w.routing, Dynamo: w.dynamo, CFN: w.cfn, Region: fakeRegion, Namespace: defaultNamespace}
+	return Clients{APIGateway: w.gateway, Routing: w.routing, Dynamo: w.dynamo, CFN: w.cfn, Region: fakeRegion}
 }
 
 func (w *world) edge() *provider {
 	return &provider{
+		ns:     defaultNamespace,
 		open:   func(context.Context) (Clients, error) { return w.clients(), nil },
 		delete: w.deleter(30),
 	}

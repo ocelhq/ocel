@@ -40,7 +40,7 @@ func testSpec() edge.StackSpec {
 }
 
 func productionDistributionName() string {
-	return distributionName(conformanceSlug, edge.ClassProduction)
+	return distributionName(defaultNamespace, conformanceSlug, edge.ClassProduction)
 }
 
 func bootstrapped(t *testing.T, w *world) *provider {
