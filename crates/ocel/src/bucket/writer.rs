@@ -10,6 +10,7 @@ use crate::Error;
 use bytes::Bytes;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Context, Poll};
 
 /// One object's bytes, written as they are produced. A small body goes up in a single
@@ -18,6 +19,25 @@ use std::task::{Context, Poll};
 /// the shutdown returns without an error.
 pub struct Writer {
     state: State,
+    leash: Arc<Leash>,
+}
+
+struct Leash {
+    reached: Reached,
+    key: String,
+    upload_id: Mutex<String>,
+}
+
+impl Leash {
+    fn upload_id(&self) -> String {
+        self.held().clone()
+    }
+
+    fn held(&self) -> MutexGuard<'_, String> {
+        self.upload_id
+            .lock()
+            .unwrap_or_else(|held| held.into_inner())
+    }
 }
 
 enum State {
@@ -35,7 +55,7 @@ struct Core {
     options: Written,
     thresholds: Thresholds,
     buffered: Vec<u8>,
-    upload_id: String,
+    leash: Arc<Leash>,
     next_part: i32,
     pending: Vec<(i32, Bytes)>,
     completed: Vec<CompletedPart>,
@@ -51,6 +71,11 @@ fn settled() -> Error {
 impl Writer {
     pub(super) async fn open(bucket: &Bucket, key: &str, options: Written) -> Result<Self, Error> {
         let reached = bucket.reached("writer")?.clone();
+        let leash = Arc::new(Leash {
+            reached: reached.clone(),
+            key: key.to_string(),
+            upload_id: Mutex::new(String::new()),
+        });
         Ok(Self {
             state: State::Ready(Box::new(Core {
                 reached,
@@ -58,11 +83,12 @@ impl Writer {
                 options,
                 thresholds: bucket.thresholds,
                 buffered: Vec::new(),
-                upload_id: String::new(),
+                leash: leash.clone(),
                 next_part: 1,
                 pending: Vec::new(),
                 completed: Vec::new(),
             })),
+            leash,
         })
     }
 
@@ -121,7 +147,7 @@ async fn head(reached: &Reached, key: &str) -> Result<Object, Error> {
 
 impl Core {
     async fn drain(&mut self, last: bool) -> Result<(), Error> {
-        if self.upload_id.is_empty() {
+        if self.leash.upload_id().is_empty() {
             if last || self.buffered.len() <= self.thresholds.single_ceiling {
                 return Ok(());
             }
@@ -146,7 +172,9 @@ impl Core {
     }
 
     async fn finish(&mut self) -> Result<Option<Object>, Error> {
-        if self.upload_id.is_empty() && self.buffered.len() <= self.thresholds.single_ceiling {
+        if self.leash.upload_id().is_empty()
+            && self.buffered.len() <= self.thresholds.single_ceiling
+        {
             self.put_whole().await?;
             return Ok(None);
         }
@@ -178,7 +206,7 @@ impl Core {
             })
             .await
             .map_err(|err| refused(&self.key, &err))?;
-        self.upload_id = response.into_owned().upload_id;
+        *self.leash.held() = response.into_owned().upload_id;
         Ok(())
     }
 
@@ -193,7 +221,7 @@ impl Core {
             .sign_parts(SignPartsRequest {
                 bucket: self.reached.bucket.clone(),
                 key: self.key.clone(),
-                upload_id: self.upload_id.clone(),
+                upload_id: self.leash.upload_id(),
                 part_numbers: staged.iter().map(|(number, _)| *number).collect(),
                 audience: SignedAudience::Internal.into(),
                 ..Default::default()
@@ -235,13 +263,14 @@ impl Core {
 
     async fn complete(&mut self) -> Result<Object, Error> {
         self.completed.sort_by_key(|part| part.part_number);
+        let upload_id = std::mem::take(&mut *self.leash.held());
         let response = self
             .reached
             .client
             .complete_multipart(CompleteMultipartRequest {
                 bucket: self.reached.bucket.clone(),
                 key: self.key.clone(),
-                upload_id: std::mem::take(&mut self.upload_id),
+                upload_id,
                 parts: std::mem::take(&mut self.completed),
                 if_none_match: self.options.if_none_match.clone(),
                 if_match: self.options.if_match.clone(),
@@ -311,7 +340,8 @@ impl Core {
     }
 
     async fn abort(&mut self) {
-        if self.upload_id.is_empty() {
+        let upload_id = std::mem::take(&mut *self.leash.held());
+        if upload_id.is_empty() {
             return;
         }
         let _ = self
@@ -320,7 +350,7 @@ impl Core {
             .abort_multipart(AbortMultipartRequest {
                 bucket: self.reached.bucket.clone(),
                 key: self.key.clone(),
-                upload_id: std::mem::take(&mut self.upload_id),
+                upload_id,
                 ..Default::default()
             })
             .await;
@@ -422,20 +452,18 @@ impl tokio::io::AsyncWrite for Writer {
 
 impl Drop for Writer {
     fn drop(&mut self) {
-        let State::Ready(core) = &mut self.state else {
-            return;
-        };
-        if core.upload_id.is_empty() {
+        let upload_id = std::mem::take(&mut *self.leash.held());
+        if upload_id.is_empty() {
             return;
         }
         let Ok(handle) = tokio::runtime::Handle::try_current() else {
             return;
         };
-        let reached = core.reached.clone();
+        let reached = self.leash.reached.clone();
         let request = AbortMultipartRequest {
             bucket: reached.bucket.clone(),
-            key: core.key.clone(),
-            upload_id: std::mem::take(&mut core.upload_id),
+            key: self.leash.key.clone(),
+            upload_id,
             ..Default::default()
         };
         handle.spawn(async move {

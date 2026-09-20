@@ -338,6 +338,33 @@ async fn a_reader_and_a_writer_carry_the_bytes_a_stream_at_a_time() {
 }
 
 #[tokio::test]
+async fn a_writer_dropped_mid_flight_throws_its_upload_away() {
+    let standing = standing("");
+    let bucket = standing.bucket.clone().with_thresholds(8, 4);
+
+    let mut writer = bucket.writer("abandoned.bin").await.expect("a writer");
+    for _ in 0..4 {
+        writer.write_all(b"abcdefg").await.expect("the write");
+    }
+    writer.write_all(b"hijklmn").await.expect("the write");
+    drop(writer);
+    tokio::task::yield_now().await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    assert_eq!(
+        standing
+            .fake
+            .store
+            .aborted
+            .lock()
+            .expect("the aborts")
+            .as_slice(),
+        ["upload-for-abandoned.bin"],
+        "a writer dropped while it was still draining left its parts costing storage forever"
+    );
+}
+
+#[tokio::test]
 async fn a_signature_names_the_target_the_bytes_go_to_and_come_from() {
     let standing = standing("https://storage.shop.example/store");
     standing
