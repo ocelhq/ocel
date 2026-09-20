@@ -51,6 +51,10 @@ export interface VpsResourceArgs {
     container: VpsContainerArgs;
     volume: VpsVolumeArgs;
   };
+  bucket: {
+    container: VpsContainerArgs;
+    volume: VpsVolumeArgs;
+  };
 }
 
 /** The ocel resource types the vps provider renders patchable resources for. */
@@ -70,6 +74,10 @@ type OwnedFieldNames = {
  */
 export const vpsOwnedFields = {
   postgres: {
+    container: ["name", "network", "labels", "publish", "mounts"],
+    volume: ["name", "labels"],
+  },
+  bucket: {
     container: ["name", "network", "labels", "publish", "mounts"],
     volume: ["name", "labels"],
   },
