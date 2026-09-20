@@ -1,10 +1,14 @@
 from ocel._binding import UnprovisionedResourceError
 from ocel.bucket import (
+    AsyncBucket,
+    AsyncObjectBody,
     Bucket,
+    ObjectBody,
     ObjectInfo,
     ObjectNotFound,
     PreconditionFailed,
     SignedUpload,
+    SyncBucket,
     bucket,
 )
 from ocel.env import (
@@ -21,18 +25,22 @@ from ocel.env import (
 from ocel.postgres import Postgres, postgres
 
 __all__ = [
+    "AsyncBucket",
+    "AsyncObjectBody",
     "Bucket",
     "Env",
     "EnvDefinitionError",
     "EnvScopeError",
     "EnvValueError",
     "Group",
+    "ObjectBody",
     "ObjectInfo",
     "ObjectNotFound",
     "Postgres",
     "PreconditionFailed",
     "Secret",
     "SignedUpload",
+    "SyncBucket",
     "UnprovisionedResourceError",
     "bucket",
     "deployment_url",

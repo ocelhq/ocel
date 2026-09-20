@@ -5,7 +5,15 @@ from datetime import datetime, timedelta, timezone
 import fakebucket
 import pytest
 
-from ocel import ObjectNotFound, PreconditionFailed, UnprovisionedResourceError, bucket
+from ocel import (
+    AsyncBucket,
+    ObjectInfo,
+    ObjectNotFound,
+    PreconditionFailed,
+    SyncBucket,
+    UnprovisionedResourceError,
+    bucket,
+)
 from ocel.gen.app.bucket.v1.bucket_pb import SignedAudience, SignedOperation
 from ocel.gen.app.resources.v1.resources_pb import ResourceType
 
@@ -332,3 +340,124 @@ def test_a_bucket_with_no_public_address_says_what_would_give_it_one(uploads, mo
         'this bucket carries no public address, so "a.txt" has no public url: declare the '
         "bucket with public=True and give the project a domain to serve it from"
     )
+
+
+def test_the_handle_answers_to_the_protocols_a_fake_is_written_against(uploads):
+    store = bucket("uploads")
+
+    assert isinstance(store, SyncBucket)
+    assert isinstance(store, AsyncBucket)
+
+
+def test_a_fake_that_answers_like_a_bucket_satisfies_the_sync_protocol():
+    class FakeBucket:
+        name = "uploads"
+
+        def put(self, key, data, **options):
+            return ObjectInfo(key=key, size=0, etag="", content_type="")
+
+        def get(self, key, **options): ...
+        def open(self, key, mode="rb", **options): ...
+        def head(self, key): ...
+        def exists(self, key): ...
+        def delete(self, *keys): ...
+        def copy(self, src, dst): ...
+        def list(self, **options): ...
+        def signed_url(self, key, **options): ...
+        def signed_upload(self, key, **options): ...
+        def public_url(self, key): ...
+
+    assert isinstance(FakeBucket(), SyncBucket)
+    assert not isinstance(FakeBucket(), AsyncBucket)
+
+
+@pytest.mark.asyncio
+async def test_bytes_written_by_the_async_twin_come_back_as_they_went_in(uploads):
+    store = bucket("uploads")
+
+    held = await store.put_async("a.txt", b"hello", content_type="text/plain")
+
+    assert held.size == 5
+    read = await store.get_async("a.txt")
+    assert await read.text() == "hello"
+
+
+@pytest.mark.asyncio
+async def test_the_async_twins_answer_for_the_keys_the_bucket_holds(uploads):
+    store = bucket("uploads")
+    await store.put_async("kept/a", b"1")
+    await store.put_async("kept/b", b"2")
+
+    assert (await store.head_async("kept/a")).size == 1
+    assert await store.exists_async("kept/b") is True
+    assert [held.key async for held in store.list_async(prefix="kept/")] == ["kept/a", "kept/b"]
+
+    await store.copy_async("kept/a", "kept/c")
+    await store.delete_async("kept/a", "gone.txt")
+
+    assert await store.head_async("kept/a") is None
+    assert await store.exists_async("kept/c") is True
+
+
+@pytest.mark.asyncio
+async def test_an_async_read_of_a_key_the_bucket_does_not_hold_names_what_was_missing(uploads):
+    with pytest.raises(ObjectNotFound):
+        await bucket("uploads").get_async("gone.txt")
+
+
+@pytest.mark.asyncio
+async def test_an_async_body_too_big_for_one_request_goes_up_in_parts(uploads):
+    store = bucket("uploads")
+    store._single_ceiling = 8
+    store._part_size = 4
+
+    await store.put_async("a.txt", b"0123456789abcde")
+
+    assert uploads.store.objects["a.txt"].data == b"0123456789abcde"
+    assert uploads.store.uploads == {}
+
+
+@pytest.mark.asyncio
+async def test_an_async_part_the_store_refuses_abandons_the_whole_write(uploads):
+    uploads.store.refuse_part = 2
+    store = bucket("uploads")
+    store._single_ceiling = 8
+    store._part_size = 4
+
+    with pytest.raises(RuntimeError):
+        await store.put_async("a.txt", b"0123456789abcde")
+    assert uploads.store.aborted == ["upload-1"]
+    assert "a.txt" not in uploads.store.objects
+
+
+@pytest.mark.asyncio
+async def test_an_async_write_that_must_not_replace_refuses_a_key_the_bucket_holds(uploads):
+    store = bucket("uploads")
+    await store.put_async("a.txt", b"first")
+
+    with pytest.raises(PreconditionFailed):
+        await store.put_async("a.txt", b"second", if_not_exists=True)
+
+
+@pytest.mark.asyncio
+async def test_an_object_opened_async_for_writing_lands_when_it_is_closed(uploads):
+    store = bucket("uploads")
+
+    async with store.open_async("a.txt", "wb") as handle:
+        await handle.write(b"hello ")
+        await handle.write(b"world")
+
+    assert uploads.store.objects["a.txt"].data == b"hello world"
+
+    async with store.open_async("a.txt", "rb") as handle:
+        assert await handle.read(5) == b"hello"
+        assert await handle.read() == b" world"
+
+
+@pytest.mark.asyncio
+async def test_an_async_signed_upload_carries_the_form_the_uploader_must_send(uploads):
+    signed = await bucket("uploads").signed_upload_async("a.txt", max_size=1024)
+
+    assert signed.method == "POST"
+    assert signed.fields == {"key": "a.txt"}
+    assert (await bucket("uploads").signed_url_async("a.txt")).startswith(uploads.url)
