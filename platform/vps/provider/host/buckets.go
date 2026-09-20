@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,7 +37,10 @@ type BucketSpec struct {
 const (
 	multipartExpiry   = 1
 	corsMaxAgeSeconds = 3000
+	lifecycleCall     = "lifecycle"
 )
+
+var storeTook = []string{"200", "204"}
 
 type corsRule struct {
 	AllowedOrigin []string `xml:"AllowedOrigin"`
@@ -139,7 +143,7 @@ func (s BucketSpec) calls() ([]storeCall, error) {
 		}
 	}
 	calls = append(calls, storeCall{
-		name: "lifecycle", what: "have bucket " + s.Bucket + " abandon unfinished uploads",
+		name: lifecycleCall, what: "have bucket " + s.Bucket + " abandon unfinished uploads",
 		method: http.MethodPut,
 		query:  "lifecycle", body: lifecycle, typed: "application/xml", md5: true, allow: []string{"200", "204", "400", "404", "501"},
 	})
@@ -228,28 +232,44 @@ func sortedHeaderNames(header http.Header) []string {
 	return names
 }
 
-func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) error {
+type BucketStanding struct {
+	ExpiresUploads bool
+}
+
+func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStanding, error) {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
-		return err
+		return BucketStanding{}, err
 	}
 	calls, err := spec.calls()
 	if err != nil {
-		return providerkit.Refuse(providerkit.CodeInvalid,
+		return BucketStanding{}, providerkit.Refuse(providerkit.CodeInvalid,
 			"bucket %s cannot be described to the store: %v", spec.Bucket, err)
 	}
 	now := time.Now().UTC()
+	var standing BucketStanding
 	for _, call := range calls {
+		if call.name == lifecycleCall {
+			taken, err := droveStore(spec, []storeCall{call}, now, func(what, script string) (string, error) {
+				return h.ran(ctx, what, script, nil, elevation)
+			})
+			if err != nil {
+				return BucketStanding{}, providerkit.Refuse(providerkit.CodeNotReady,
+					"could not %s on %s: %v", call.what, h.named(), err)
+			}
+			standing.ExpiresUploads = slices.Contains(storeTook, taken[call.name].code)
+			continue
+		}
 		req, err := spec.signed(call, now)
 		if err != nil {
-			return fmt.Errorf("sign %s: %w", call.what, err)
+			return BucketStanding{}, fmt.Errorf("sign %s: %w", call.what, err)
 		}
 		if _, err := h.ran(ctx, call.what, curlCommand(spec.Store, req, call), fedBody(call.body), elevation); err != nil {
-			return providerkit.Refuse(providerkit.CodeNotReady,
+			return BucketStanding{}, providerkit.Refuse(providerkit.CodeNotReady,
 				"could not %s on %s: %v", call.what, h.named(), err)
 		}
 	}
-	return nil
+	return standing, nil
 }
 
 type BucketRef struct {

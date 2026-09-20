@@ -10,7 +10,70 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
+
+func manifestAfterBucket(t *testing.T, machine *box) vars.Manifest {
+	t.Helper()
+	provider := over(machine)
+	if _, err := provider.Bucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+		t.Fatalf("Bucket() = %v", err)
+	}
+	app := anApp()
+	app.Values = providerkit.AppValues{Bindings: []providerkit.Binding{bindingBucket()}}
+	if _, err := provider.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	return manifestIn(t, machine)
+}
+
+func lifecycleAnswering(said string) func(string) (session.Result, bool) {
+	return func(command string) (session.Result, bool) {
+		if !strings.Contains(command, "?lifecycle") {
+			return session.Result{}, false
+		}
+		return session.Result{Stdout: said}, true
+	}
+}
+
+func TestAStoreThatExpiresItsOwnUploadsIsNotSweptByTheRuntime(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{kept: sealedRootKey(), refuses: lifecycleAnswering("lifecycle=200\n")}
+	if manifest := manifestAfterBucket(t, machine); manifest.Store == nil || manifest.Store.SweepUploads {
+		t.Error("a store that took the rule to abandon unfinished uploads is swept by every app anyway, and that is a listing charged to writes for nothing")
+	}
+}
+
+func TestAStoreThatRefusedToExpireItsOwnUploadsIsSweptByTheRuntime(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{kept: sealedRootKey(), refuses: lifecycleAnswering("lifecycle=501\n")}
+	manifest := manifestAfterBucket(t, machine)
+	if manifest.Store == nil || !manifest.Store.SweepUploads {
+		t.Error("the store refused the rule that abandons unfinished uploads and nothing sweeps them, so an upload left open holds its parts on the volume forever")
+	}
+}
+
+func TestAnExternalStoreIsSweptAndItsLifecycleLeftAlone(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	manifest := storeManifest(t, machine, vps.Options{
+		SSH: vps.Target{Host: "box.invalid", User: "ada"},
+		Bucket: vps.ExternalStore{
+			Endpoint: "https://s3.example.com", Region: "eu-west-1", Bucket: "shared",
+			AccessKeyID: "AKIA", SecretAccessKey: "elsewhere", PathStyle: true,
+		},
+	})
+	if manifest.Store == nil || !manifest.Store.SweepUploads {
+		t.Error("a bucket ocel was pointed at is left to expire its own unfinished uploads, and ocel writes no lifecycle rule on a bucket it does not own")
+	}
+	if joined := strings.Join(machine.commands(), "\n"); strings.Contains(joined, "?lifecycle") {
+		t.Errorf("ocel wrote a lifecycle rule onto the customer's own bucket:\n%s", joined)
+	}
+}
 
 func (b *box) forget() {
 	b.mu.Lock()

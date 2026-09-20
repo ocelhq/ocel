@@ -186,6 +186,7 @@ func (s *Service) CreateMultipart(ctx context.Context, req *bucketv1.CreateMulti
 	if err != nil {
 		return nil, storeError("open a multipart upload of "+req.GetKey(), err)
 	}
+	s.sweep(held)
 	return &bucketv1.CreateMultipartResponse{UploadId: aws.ToString(out.UploadId)}, nil
 }
 

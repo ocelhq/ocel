@@ -164,6 +164,10 @@ func (f *fakeStore) CreateMultipartUpload(_ context.Context, in *s3.CreateMultip
 	return &s3.CreateMultipartUploadOutput{UploadId: aws.String("upload-1")}, nil
 }
 
+func (f *fakeStore) ListMultipartUploads(_ context.Context, _ *s3.ListMultipartUploadsInput, _ ...func(*s3.Options)) (*s3.ListMultipartUploadsOutput, error) {
+	return &s3.ListMultipartUploadsOutput{}, nil
+}
+
 func (f *fakeStore) CompleteMultipartUpload(_ context.Context, in *s3.CompleteMultipartUploadInput, _ ...func(*s3.Options)) (*s3.CompleteMultipartUploadOutput, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

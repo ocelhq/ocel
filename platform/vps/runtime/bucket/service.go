@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"strings"
+	"sync"
 	"time"
 
 	connect "connectrpc.com/connect"
@@ -37,6 +38,7 @@ type ObjectAPI interface {
 	DeleteObjects(context.Context, *s3.DeleteObjectsInput, ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
 	CopyObject(context.Context, *s3.CopyObjectInput, ...func(*s3.Options)) (*s3.CopyObjectOutput, error)
 	CreateMultipartUpload(context.Context, *s3.CreateMultipartUploadInput, ...func(*s3.Options)) (*s3.CreateMultipartUploadOutput, error)
+	ListMultipartUploads(context.Context, *s3.ListMultipartUploadsInput, ...func(*s3.Options)) (*s3.ListMultipartUploadsOutput, error)
 	CompleteMultipartUpload(context.Context, *s3.CompleteMultipartUploadInput, ...func(*s3.Options)) (*s3.CompleteMultipartUploadOutput, error)
 	AbortMultipartUpload(context.Context, *s3.AbortMultipartUploadInput, ...func(*s3.Options)) (*s3.AbortMultipartUploadOutput, error)
 }
@@ -64,6 +66,7 @@ type Config struct {
 	Callbacks    Poster
 	Volume       FreeSpace
 	PostPolicies bool
+	SweepUploads bool
 	Sessions     string
 	Granted      []string
 }
@@ -77,6 +80,10 @@ type Service struct {
 	now       func() time.Time
 	newID     func() string
 	newSecret func() string
+	sweeping  func(run func())
+
+	mu    sync.Mutex
+	swept map[string]time.Time
 }
 
 var _ bucketv1connect.BucketServiceHandler = (*Service)(nil)
@@ -94,6 +101,7 @@ func New(cfg Config) *Service {
 		now:       time.Now,
 		newID:     func() string { return "sess_" + randomHex(16) },
 		newSecret: func() string { return randomHex(32) },
+		sweeping:  func(run func()) { go run() },
 	}
 }
 
