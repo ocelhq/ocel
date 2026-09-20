@@ -14,6 +14,8 @@ import (
 	"sync"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
@@ -360,5 +362,56 @@ func TestTheStoreRefusesAStoreCredentialSealedForAnotherProject(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), live.StoreSecretName) {
 		t.Errorf("Resolve() = %v, want a refusal: a credential sealed for another project must not open here", err)
+	}
+}
+
+func aBucketBinding(t *testing.T, b *box, public bool) []rt.Binding {
+	t.Helper()
+	b.bind(t, shop, "", "uploads", &bindingsv1.Binding{
+		Name:   "uploads",
+		Source: "terraform",
+		Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{
+			Bucket: "shop-prod-uploads", Public: public,
+		}},
+	})
+	b.dump(t)
+	b.claims(t, claimingStorage)
+	return []rt.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}}
+}
+
+func resolvedBucket(t *testing.T, b *box, bindings []rt.Binding) *bindingsv1.BucketProperties {
+	t.Helper()
+	resolved, err := b.resolver().Resolve(context.Background(), live.Manifest{
+		Slug: "shop", Class: "production", Bindings: bindings,
+		Store: aStoreManifest("").Store,
+	})
+	if err != nil {
+		t.Fatalf("Resolve() = %v", err)
+	}
+	record := &bindingsv1.Binding{}
+	if err := protojson.Unmarshal([]byte(resolved["OCEL_RESOURCE_BUCKET_uploads"]), record); err != nil {
+		t.Fatalf("the binding the runtime reads is no record: %v", err)
+	}
+	return record.GetBucket()
+}
+
+func TestAPublicBucketIsDeliveredTheAddressTheBoxClaimsForItNow(t *testing.T) {
+	t.Parallel()
+	b := aBox(t, t.TempDir())
+	bindings := aBucketBinding(t, b, true)
+
+	held := resolvedBucket(t, b, bindings)
+	if got, want := held.GetPublicBaseUrl(), "https://storage.shop.example.com/shop-prod-uploads"; got != want {
+		t.Errorf("publicBaseUrl = %q, want %q: a public bucket's address is whatever the box claims for its store right now", got, want)
+	}
+}
+
+func TestABucketThatWasNeverDeclaredPublicIsDeliveredNoPublicAddress(t *testing.T) {
+	t.Parallel()
+	b := aBox(t, t.TempDir())
+	bindings := aBucketBinding(t, b, false)
+
+	if held := resolvedBucket(t, b, bindings).GetPublicBaseUrl(); held != "" {
+		t.Errorf("publicBaseUrl = %q on a bucket nothing serves anonymously, so every url it hands out would be refused", held)
 	}
 }
