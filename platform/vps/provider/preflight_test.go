@@ -24,7 +24,14 @@ type answer struct {
 type scripted struct {
 	mu     sync.Mutex
 	ran    []string
+	fed    []string
 	answer func(command string) (answer, bool)
+}
+
+func (s *scripted) carried() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.fed...)
 }
 
 const (
@@ -91,9 +98,18 @@ func TestNoTwoThingsThisBenchScriptsAreNamedByTheSameCommand(t *testing.T) {
 	}
 }
 
-func (s *scripted) Stream(_ context.Context, command string, _ io.Reader) (session.Result, error) {
+func (s *scripted) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {
+	var carried string
+	if stdin != nil {
+		raw, err := io.ReadAll(stdin)
+		if err != nil {
+			return session.Result{}, err
+		}
+		carried = string(raw)
+	}
 	s.mu.Lock()
 	s.ran = append(s.ran, command)
+	s.fed = append(s.fed, carried)
 	s.mu.Unlock()
 	if said, held := s.answer(command); held {
 		return session.Result{Code: said.code, Stdout: said.stdout, Stderr: said.stderr}, nil

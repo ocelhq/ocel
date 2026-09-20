@@ -2,10 +2,43 @@ package host
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 )
+
+// The worked example in AWS's "Signature Calculations: Using Query Parameters"
+// documentation, whose expected signature the docs publish.
+func TestQueryPresigningMatchesThePublishedExample(t *testing.T) {
+	t.Parallel()
+
+	at, err := url.Parse("https://examplebucket.s3.amazonaws.com/test.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed := presignURL(http.MethodGet, at, credential{
+		AccessKeyID: "AKIAIOSFODNN7EXAMPLE",
+		SecretKey:   "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		Region:      "us-east-1",
+	}, 86400*time.Second, time.Date(2013, 5, 24, 0, 0, 0, 0, time.UTC))
+
+	const want = "aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404"
+	if !strings.HasSuffix(signed, "X-Amz-Signature="+want) {
+		t.Fatalf("presigned url = %q, want it to end in the published signature %s", signed, want)
+	}
+	for _, held := range []string{
+		"X-Amz-Algorithm=AWS4-HMAC-SHA256",
+		"X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request",
+		"X-Amz-Date=20130524T000000Z",
+		"X-Amz-Expires=86400",
+		"X-Amz-SignedHeaders=host",
+	} {
+		if !strings.Contains(signed, held) {
+			t.Errorf("presigned url = %q, want it to carry %s", signed, held)
+		}
+	}
+}
 
 // The worked example in AWS's "Signature Calculations for the Authorization
 // Header" documentation, whose expected signature the docs publish.
