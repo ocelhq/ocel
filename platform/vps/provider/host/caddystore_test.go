@@ -88,6 +88,17 @@ func TestAStoreRouteIsNotAnAppTheProjectsOwnHostnameCouldBeAmbiguousBetween(t *t
 	}
 }
 
+func TestAStoreStandingBeforeAnyDomainIsBoundIsAConfigCaddyLoads(t *testing.T) {
+	t.Parallel()
+
+	state := storing()
+	state.Claims = nil
+	ask := probing(t, state)
+	if held := ask("nothing.example.com"); held.status != 404 {
+		t.Errorf("a box routing a store nothing claims a name for answered %d", held.status)
+	}
+}
+
 func TestTheStoresRouteSurvivesBeingWrittenAndReadBack(t *testing.T) {
 	t.Parallel()
 

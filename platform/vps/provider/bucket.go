@@ -86,8 +86,12 @@ func storeContainer(in resources.Instruction) host.ResourceContainer {
 	}
 }
 
+func storeRef(ref providerkit.StackRef) providerkit.StackRef {
+	return providerkit.StackRef{Project: ref.Project, Class: ref.Class, Name: naming.InfraStack(ref.Name.Env)}
+}
+
 func storeName(ref providerkit.StackRef) string {
-	return host.ResourceName(ref.Name.String(), storeResource, storeKind)
+	return host.ResourceName(storeRef(ref).Name.String(), storeResource, storeKind)
 }
 
 var unsafeInBucketName = regexp.MustCompile(`[^a-z0-9]+`)
@@ -153,7 +157,7 @@ func (s *standingStores) once(name string, stand func() (storeCredential, error)
 
 func storeCoordinate(ref providerkit.StackRef) providerkit.Coordinate {
 	return providerkit.Coordinate{
-		Project: ref.Project, Class: ref.Class, Env: ref.Name.String(),
+		Project: ref.Project, Class: ref.Class, Env: storeRef(ref).Name.String(),
 		Folder: live.StoreSecretFolder, Binding: live.StoreSecretBinding, Name: live.StoreSecretName,
 	}
 }
@@ -274,7 +278,7 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 			return nil, err
 		}
 		return &live.Store{
-			Env:           plan.Ref.Name.String(),
+			Env:           storeRef(plan.Ref).Name.String(),
 			Endpoint:      external.Endpoint,
 			PublicBaseURL: external.Endpoint,
 			Region:        external.Region,
@@ -286,7 +290,7 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 	}
 	spec := p.stores.shape()
 	if spec == nil {
-		shaped := storeContainer(resources.Instruction{Ref: plan.Ref})
+		shaped := storeContainer(resources.Instruction{Ref: storeRef(plan.Ref)})
 		spec = &shaped
 	}
 	held, err := p.stores.once(spec.Name, func() (storeCredential, error) {
@@ -296,7 +300,7 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 		return nil, err
 	}
 	return &live.Store{
-		Env:         plan.Ref.Name.String(),
+		Env:         storeRef(plan.Ref).Name.String(),
 		Endpoint:    "http://" + spec.Name + ":" + storePort,
 		Region:      storeRegion,
 		AccessKeyID: storeAccessKey,

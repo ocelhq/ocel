@@ -122,7 +122,7 @@ func TestTheStoreIsHeldToACredentialTheBoxKeepsSealed(t *testing.T) {
 	}
 
 	joined := strings.Join(machine.commands(), "\n")
-	if !strings.Contains(joined, host.KeptPath(providerkit.ClassProduction, "prod-web-r0a1b2c3d-store-s3")) {
+	if !strings.Contains(joined, host.KeptPath(providerkit.ClassProduction, "prod-infra-store-s3")) {
 		t.Fatalf("nothing about the store's credential was kept on the box:\n%s", joined)
 	}
 	for _, fed := range machine.carried() {
@@ -130,7 +130,7 @@ func TestTheStoreIsHeldToACredentialTheBoxKeepsSealed(t *testing.T) {
 			t.Fatalf("the store's root credential was carried to the box outside the env file it is handed in:\n%s", fed)
 		}
 	}
-	handed := host.EnvFile(providerkit.ClassProduction, "prod-web-r0a1b2c3d-store-s3")
+	handed := host.EnvFile(providerkit.ClassProduction, "prod-infra-store-s3")
 	if !strings.Contains(joined, "rm -f "+quotedPath(handed)) {
 		t.Fatalf("the file the store's credential was handed over in is left standing on the box:\n%s", joined)
 	}
@@ -182,6 +182,11 @@ func storeManifest(t *testing.T, machine *box, options vps.Options) vars.Manifes
 	if _, err := provider.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
+	return manifestIn(t, machine)
+}
+
+func manifestIn(t *testing.T, machine *box) vars.Manifest {
+	t.Helper()
 	for _, carried := range machine.carried() {
 		for line := range strings.SplitSeq(carried, "\n") {
 			raw, held := strings.CutPrefix(line, vars.EnvVar+"=")
@@ -210,7 +215,7 @@ func TestAnAppBindingABucketIsHandedItsStoreSealedAndNeverInPlaintext(t *testing
 	if manifest.Store.Pointer != edge.DefaultPointer {
 		t.Errorf("the manifest names pointer %q, and the box answers the store's public address out of what that pointer claims", manifest.Store.Pointer)
 	}
-	if manifest.Store.Endpoint != "http://prod-web-r0a1b2c3d-store-s3:9000" || !manifest.Store.PathStyle {
+	if manifest.Store.Endpoint != "http://prod-infra-store-s3:9000" || !manifest.Store.PathStyle {
 		t.Errorf("the manifest points the runtime at %+v, want the store this project runs, addressed path-style", manifest.Store)
 	}
 	if manifest.Store.Sealed == "" {
@@ -258,6 +263,46 @@ func TestDroppingADeclaredBucketLeavesTheStoresSessionsWhereTheyAre(t *testing.T
 	}
 	if joined := strings.Join(machine.commands(), "\n"); strings.Contains(joined, constants.StoreSessionsBucket()) {
 		t.Errorf("dropping one declared bucket reached for the store's sessions:\n%s", joined)
+	}
+}
+
+func anInfraStack(t *testing.T) providerkit.StackRef {
+	t.Helper()
+	return providerkit.StackRef{
+		Project: "shop", Class: providerkit.ClassProduction, Name: naming.InfraStack("prod"),
+	}
+}
+
+func TestTheCoordinateTheRuntimeOpensTheStoreAtIsTheOneTheDeploySealedAt(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{kept: sealedRootKey()}
+	provider := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	stood := aBucket(t, "uploads", false)
+	stood.Ref = anInfraStack(t)
+	if _, err := provider.Bucket(context.Background(), stood, nil); err != nil {
+		t.Fatalf("Bucket() = %v", err)
+	}
+
+	app := anApp()
+	app.Values = providerkit.AppValues{Bindings: []providerkit.Binding{bindingBucket()}}
+	if _, err := provider.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	manifest := manifestIn(t, machine)
+	if manifest.Store == nil {
+		t.Fatal("the app binding a bucket was handed no store")
+	}
+	if held, want := manifest.StoreCoordinate(), vps.StoreCoordinate(stood.Ref); held != want {
+		t.Errorf("the runtime would open the store's credential at %+v and the deploy sealed it at %+v:"+
+			" a resource stands on its environment's infra stack and an app runs on its own, so a coordinate"+
+			" naming the asking stack opens nothing", held, want)
+	}
+	if manifest.Store.Endpoint != "http://"+vps.StoreName(stood.Ref)+":9000" {
+		t.Errorf("the runtime is pointed at %q, want the store this environment runs", manifest.Store.Endpoint)
 	}
 }
 

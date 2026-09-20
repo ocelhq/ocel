@@ -11,6 +11,10 @@ import (
 
 var ProviderOver = newProvider
 
+func StoreCoordinate(ref providerkit.StackRef) providerkit.Coordinate { return storeCoordinate(ref) }
+
+func StoreName(ref providerkit.StackRef) string { return storeName(ref) }
+
 func Whoami(ctx context.Context, live surveyor) (providerkit.Identity, error) {
 	return whoami(ctx, live)
 }
