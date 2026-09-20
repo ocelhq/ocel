@@ -6,6 +6,8 @@
 //! pub struct Infra {
 //!     #[ocel(name = "main", version = "17")]
 //!     pub db: ocel::Postgres,
+//!     #[ocel(name = "avatars", public)]
+//!     pub avatars: ocel::Bucket,
 //! }
 //!
 //! #[derive(ocel::Env, Clone)]
@@ -35,7 +37,10 @@ mod postgres;
 #[doc(hidden)]
 pub mod proto;
 
-pub use bucket::Bucket;
+pub use bucket::{
+    Bucket, Get, GetResult, List, Object, Payload, Put, Reader, Sign, SignUpload, SignedUpload,
+    Writer,
+};
 pub use declare::discover;
 pub use env::{deployment_url, Secret};
 pub use error::Error;

@@ -14,13 +14,19 @@ postgres = ["dep:sqlx"]
 ocel-macros = { path = "../ocel-macros", version = "0.0.1-alpha.0" }
 buffa = { version = "0.9", features = ["json"] }
 buffa-types = { version = "0.9", features = ["json"] }
+bytes = "1"
 connectrpc = { version = "0.9", features = ["client"] }
+futures-core = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+http = "1"
+http-body-util = "0.1"
 inventory = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres"], optional = true }
-tokio = { version = "1", default-features = false, features = ["rt", "sync"] }
+tokio = { version = "1", default-features = false, features = ["io-util", "rt", "sync"] }
+tokio-util = { version = "0.7", default-features = false, features = ["io"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
