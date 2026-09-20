@@ -73,16 +73,18 @@ func run(ctx context.Context, command []string, environ []string) int {
 	if err != nil {
 		return fatal(err.Error())
 	}
-	fronting, err := proxying(pinned, values, vars.SocketPath)
+	internal, err := child.FreePort()
+	if err != nil {
+		return fatal(fmt.Sprintf("find a loopback port for the app: %v", err))
+	}
+	app := "127.0.0.1:" + strconv.Itoa(internal)
+
+	fronting, err := proxying(pinned, values, vars.SocketPath, app)
 	if err != nil {
 		return fatal(err.Error())
 	}
 	defer fronting.Close()
 
-	internal, err := child.FreePort()
-	if err != nil {
-		return fatal(fmt.Sprintf("find a loopback port for the app: %v", err))
-	}
 	env = append(env, providerkit.InjectedPortName+"="+strconv.Itoa(internal))
 	env = append(env, values.Env()...)
 	env = append(env, fronting.Env...)
@@ -93,7 +95,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	}
 
 	var ready atomic.Bool
-	listening := child.WatchListening("127.0.0.1:"+strconv.Itoa(internal), nil)
+	listening := child.WatchListening(app, nil)
 	go func() {
 		if err := <-listening; err == nil {
 			ready.Store(true)
@@ -105,7 +107,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 		_ = proc.Stop(stopGrace)
 		return fatal(fmt.Sprintf("listen on port %s: %v", exposed, err))
 	}
-	upstream := &url.URL{Scheme: "http", Host: "127.0.0.1:" + strconv.Itoa(internal)}
+	upstream := &url.URL{Scheme: "http", Host: app}
 	server := &http.Server{Handler: front.Handler(front.Options{
 		Upstream:   upstream,
 		Guard:      guard,
@@ -162,7 +164,7 @@ func pinned(manifest string) (vars.Manifest, error) {
 	return vars.Parse([]byte(manifest))
 }
 
-func proxying(manifest vars.Manifest, values *rt.Values, socket string) (proxy.Served, error) {
+func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (proxy.Served, error) {
 	if manifest.Store == nil || !slices.ContainsFunc(manifest.Bindings, func(l rt.Binding) bool { return naming.Proxied(l.Type) }) {
 		return proxy.Served{}, nil
 	}
@@ -183,7 +185,7 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket string) (proxy.S
 		Objects:      internal.Client(),
 		Internal:     internal.Presigner(),
 		External:     publishing(internal, manifest.Store.PublicBaseURL, values),
-		Callbacks:    bucket.HTTPPoster{},
+		Callbacks:    bucket.HTTPPoster{App: app},
 		PostPolicies: true,
 		Sessions:     manifest.Store.Sessions,
 	}

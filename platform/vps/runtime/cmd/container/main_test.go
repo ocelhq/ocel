@@ -105,7 +105,7 @@ func TestTheRuntimeFrontsAProxiedBindingAndKeepsTheStoreCredentialToItself(t *te
 		t.Fatalf("resolve() = %v", err)
 	}
 
-	served, err := proxying(manifest, values, socket)
+	served, err := proxying(manifest, values, socket, "127.0.0.1:1")
 	if err != nil {
 		t.Fatalf("proxying() = %v", err)
 	}
@@ -136,7 +136,7 @@ func TestTheRuntimeFrontsAProxiedBindingAndKeepsTheStoreCredentialToItself(t *te
 
 func TestTheRuntimeFrontsNothingWhereNoBindingIsProxied(t *testing.T) {
 	manifest := vars.Manifest{Slug: "shop", Class: "production", Keys: []rt.Key{{Key: "DATABASE_URL"}}}
-	served, err := proxying(manifest, nil, filepath.Join(t.TempDir(), "absent.sock"))
+	served, err := proxying(manifest, nil, filepath.Join(t.TempDir(), "absent.sock"), "127.0.0.1:1")
 	if err != nil || served.Env != nil {
 		t.Errorf("proxying() = %+v, %v, want no proxy for a deployment binding nothing it must be fronted for", served, err)
 	}
@@ -153,7 +153,7 @@ func TestAProxiedBindingWithNoStoreCredentialIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve() = %v", err)
 	}
-	if _, err := proxying(manifest, values, socket); err == nil {
+	if _, err := proxying(manifest, values, socket, "127.0.0.1:1"); err == nil {
 		t.Error("proxying() stood a proxy up with no credential to reach the store with, which would fail every write instead of the deploy")
 	}
 }
