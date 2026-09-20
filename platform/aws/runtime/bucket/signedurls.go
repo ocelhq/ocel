@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"mime"
 	"strings"
+	"time"
 
 	connect "connectrpc.com/connect"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -15,6 +16,21 @@ import (
 
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 )
+
+func ttlOf(d interface{ AsDuration() time.Duration }) time.Duration {
+	if d == nil {
+		return presignTTL
+	}
+	held := d.AsDuration()
+	switch {
+	case held <= 0:
+		return presignTTL
+	case held > maxPresignTTL:
+		return maxPresignTTL
+	default:
+		return held
+	}
+}
 
 func vendorHeaders(signed map[string][]string) map[string]string {
 	headers := map[string]string{}
@@ -30,10 +46,7 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 	if err := s.reach(req.GetBucket(), req.GetKey()); err != nil {
 		return nil, err
 	}
-	ttl := presignTTL
-	if req.GetExpiresIn() != nil && req.GetExpiresIn().AsDuration() > 0 {
-		ttl = req.GetExpiresIn().AsDuration()
-	}
+	ttl := ttlOf(req.GetExpiresIn())
 	c := req.GetConstraints()
 
 	switch req.GetOperation() {
@@ -129,10 +142,7 @@ func (s *Service) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest)
 	if err := s.reach(req.GetBucket(), req.GetKey()); err != nil {
 		return nil, err
 	}
-	ttl := presignTTL
-	if req.GetExpiresIn() != nil && req.GetExpiresIn().AsDuration() > 0 {
-		ttl = req.GetExpiresIn().AsDuration()
-	}
+	ttl := ttlOf(req.GetExpiresIn())
 	resp := &bucketv1.SignPartsResponse{Parts: make([]*bucketv1.SignedPart, 0, len(req.GetPartNumbers()))}
 	for _, number := range req.GetPartNumbers() {
 		signed, err := s.presigner.PresignUploadPart(ctx, &s3.UploadPartInput{
