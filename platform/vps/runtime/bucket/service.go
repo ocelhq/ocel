@@ -60,7 +60,7 @@ type FreeSpace func() (free uint64, total uint64, err error)
 type Config struct {
 	Objects      ObjectAPI
 	Internal     PresignAPI
-	External     func() (PresignAPI, string)
+	External     func(context.Context) (PresignAPI, string)
 	Callbacks    Poster
 	Volume       FreeSpace
 	PostPolicies bool
@@ -154,12 +154,12 @@ func reserved(key string) error {
 		key, constants.ReservedKeyPrefix))
 }
 
-func (s *Service) signer(audience bucketv1.SignedAudience) (PresignAPI, error) {
+func (s *Service) signer(ctx context.Context, audience bucketv1.SignedAudience) (PresignAPI, error) {
 	if audience == bucketv1.SignedAudience_SIGNED_AUDIENCE_EXTERNAL {
 		var signer PresignAPI
 		var public string
 		if s.cfg.External != nil {
-			signer, public = s.cfg.External()
+			signer, public = s.cfg.External(ctx)
 		}
 		if signer == nil || public == "" {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(
@@ -197,7 +197,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *bucketv1.PresignUpload
 	if err := s.roomToWrite(); err != nil {
 		return nil, err
 	}
-	signer, err := s.signer(bucketv1.SignedAudience_SIGNED_AUDIENCE_EXTERNAL)
+	signer, err := s.signer(ctx, bucketv1.SignedAudience_SIGNED_AUDIENCE_EXTERNAL)
 	if err != nil {
 		return nil, err
 	}
