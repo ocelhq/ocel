@@ -126,6 +126,7 @@ type standingStores struct {
 	mu      sync.Mutex
 	stood   map[string]storeCredential
 	dropped map[string]bool
+	sweeps  bool
 	spec    *host.ResourceContainer
 	shaper  string
 	probe   host.StoreProbe
@@ -148,6 +149,18 @@ func (s *standingStores) forgotten(stack naming.StackName, binding string) bool 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.dropped[droppedBucket(stack, binding)]
+}
+
+func (s *standingStores) expiring(standing host.BucketStanding) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sweeps = s.sweeps || !standing.ExpiresUploads
+}
+
+func (s *standingStores) sweeping() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sweeps
 }
 
 func (s *standingStores) probed(probe host.StoreProbe) {
@@ -259,6 +272,8 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 		report.Say("Standing bucket " + in.Resource.Name + " up in " + spec.Name)
 	}
 
+	var sessions host.BucketStanding
+	stood := false
 	held, err := p.stores.once(spec.Name, func() (storeCredential, error) {
 		held, err := p.storeCredential(ctx, in.Ref, spec.Name)
 		if err != nil {
@@ -270,14 +285,19 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 		if err := p.host.RouteResource(ctx, storeRoute(in.Ref, spec.Name)); err != nil {
 			return storeCredential{}, err
 		}
-		if err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, held.secret,
-			host.BucketSpec{Bucket: constants.StoreSessionsBucket(), Internal: true})); err != nil {
+		standing, err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, held.secret,
+			host.BucketSpec{Bucket: constants.StoreSessionsBucket(), Internal: true}))
+		if err != nil {
 			return storeCredential{}, err
 		}
+		sessions, stood = standing, true
 		return held, nil
 	})
 	if err != nil {
 		return providerkit.Binding{}, err
+	}
+	if stood {
+		p.stores.expiring(sessions)
 	}
 
 	origins, err := p.bucketOrigins(ctx, in.Ref, in.Resource.Bucket)
@@ -286,13 +306,15 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 	}
 	public := declaredPublic(in.Resource.Bucket)
 	bucket := storeBucketName(in.Ref, in.Resource.Name)
-	if err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, held.secret, host.BucketSpec{
+	standing, err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, held.secret, host.BucketSpec{
 		Bucket:         bucket,
 		AllowedOrigins: origins,
 		Public:         public,
-	})); err != nil {
+	}))
+	if err != nil {
 		return providerkit.Binding{}, err
 	}
+	p.stores.expiring(standing)
 
 	return providerkit.Binding{
 		Type:     providerkit.BindingBucket,
@@ -347,6 +369,7 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 				naming.Sanitize(plan.Ref.Name.Env) + "/" + naming.Sanitize(appNameOf(plan.App)),
 			Granted:      grantedBuckets(plan.App),
 			PostPolicies: p.stores.probing().PostPolicies,
+			SweepUploads: true,
 			Sealed:       base64.StdEncoding.EncodeToString(sealed),
 		}, nil
 	}
@@ -376,6 +399,7 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 		Sessions:     sessionsPrefix(plan),
 		Granted:      grantedBuckets(plan.App),
 		PostPolicies: true,
+		SweepUploads: p.stores.sweeping(),
 		Sealed:       base64.StdEncoding.EncodeToString(own.held.sealed),
 	}, nil
 }

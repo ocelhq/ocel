@@ -187,6 +187,7 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 		External:     publishing(internal, manifest.Store.PublicBaseURL, values),
 		Callbacks:    bucket.HTTPPoster{App: app},
 		PostPolicies: manifest.Store.PostPolicies,
+		SweepUploads: manifest.Store.SweepUploads,
 		Sessions:     manifest.Store.Sessions,
 		Granted:      manifest.Store.Granted,
 	}

@@ -40,6 +40,7 @@ type Store struct {
 	Granted       []string `json:"granted,omitempty"`
 	PathStyle     bool     `json:"pathStyle,omitempty"`
 	PostPolicies  bool     `json:"postPolicies,omitempty"`
+	SweepUploads  bool     `json:"sweepUploads,omitempty"`
 	PublicBaseURL string   `json:"publicBaseUrl,omitempty"`
 	Pointer       string   `json:"pointer,omitempty"`
 	Volume        string   `json:"volume,omitempty"`
