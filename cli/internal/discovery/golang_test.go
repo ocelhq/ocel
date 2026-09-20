@@ -108,17 +108,32 @@ func TestRunDeclaresWhatTheGoFixtureDeclares(t *testing.T) {
 	}
 
 	declares := collected.declared()
-	if len(declares) != 1 {
-		t.Fatalf("declares = %v, want exactly one", declares)
+	if len(declares) != 2 {
+		t.Fatalf("declares = %v, want the postgres and the bucket the fixture declares", declares)
 	}
-	resource := declares[0].GetResource()
-	if resource.GetName() != "main" || resource.GetType() != resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES {
-		t.Errorf("resource = %v, want the postgres named main", resource)
+	declared := map[resourcesv1.ResourceType]*resourcesv1.DeclareRequest{}
+	for _, request := range declares {
+		declared[request.GetResource().GetType()] = request
 	}
-	source := declares[0].GetSource()
-	want := filepath.ToSlash(filepath.Join(constants.DefaultDiscoveryDirName, "infra.go")) + ":5"
-	if !strings.HasSuffix(filepath.ToSlash(source), want) {
-		t.Errorf("source = %q, want it to end with %q", source, want)
+	for _, want := range []struct {
+		kind resourcesv1.ResourceType
+		name string
+		line string
+	}{
+		{resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "main", ":5"},
+		{resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, "uploads", ":11"},
+	} {
+		request, found := declared[want.kind]
+		if !found {
+			t.Fatalf("declares = %v, want one of %v", declares, want.kind)
+		}
+		if request.GetResource().GetName() != want.name {
+			t.Errorf("resource = %v, want %q", request.GetResource(), want.name)
+		}
+		source := filepath.ToSlash(filepath.Join(constants.DefaultDiscoveryDirName, "infra.go")) + want.line
+		if !strings.HasSuffix(filepath.ToSlash(request.GetSource()), source) {
+			t.Errorf("source = %q, want it to end with %q", request.GetSource(), source)
+		}
 	}
 
 	variables := collected.declaredVariables()
