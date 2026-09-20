@@ -1,6 +1,11 @@
 import os
 
-from ocel.gen.common.bindings.v1.bindings_pb import Binding, PostgresProperties
+from ocel._live import live_value
+from ocel.gen.common.bindings.v1.bindings_pb import (
+    Binding,
+    BucketProperties,
+    PostgresProperties,
+)
 
 
 class UnprovisionedResourceError(RuntimeError):
@@ -17,9 +22,17 @@ def unprovisioned(what: str, access: str) -> UnprovisionedResourceError:
     )
 
 
-def binding(name: str) -> PostgresProperties:
-    key = f"OCEL_RESOURCE_POSTGRES_{name}"
-    raw = os.environ.get(key)
+def postgres_binding(name: str) -> PostgresProperties:
+    return _properties(name, "postgres")
+
+
+def bucket_binding(name: str) -> BucketProperties:
+    return _properties(name, "bucket")
+
+
+def _properties(name: str, kind: str):
+    key = f"OCEL_RESOURCE_{kind.upper()}_{name}"
+    raw = os.environ.get(key) or live_value(key)
     if not raw:
         raise RuntimeError(
             f"Value for {key} is not defined. Run `ocel dev` to resolve it locally, "
@@ -29,12 +42,12 @@ def binding(name: str) -> PostgresProperties:
         delivered = Binding.from_json(raw, ignore_unknown_fields=True)
     except Exception:
         raise RuntimeError(
-            f"{key} does not carry a binding record, so this app cannot read it as a POSTGRES"
+            f"{key} does not carry a binding record, so this app cannot read it as a {kind.upper()}"
         ) from None
     properties = delivered.properties
-    if properties is None or properties.field != "postgres":
+    if properties is None or properties.field != kind:
         carried = properties.field.upper() if properties else "UNSPECIFIED"
         raise RuntimeError(
-            f"{key} carries a {carried} binding, and this app reads it as a POSTGRES"
+            f"{key} carries a {carried} binding, and this app reads it as a {kind.upper()}"
         )
     return properties.value

@@ -69,6 +69,28 @@ def test_a_database_with_no_binding_delivered_names_the_commands_that_deliver_on
     )
 
 
+def test_a_binding_is_read_from_the_projected_live_directory(monkeypatch, tmp_path):
+    monkeypatch.delenv("OCEL_PHASE", raising=False)
+    monkeypatch.delenv("OCEL_RESOURCE_POSTGRES_main", raising=False)
+    (tmp_path / "OCEL_RESOURCE_POSTGRES_main").write_text(
+        json.dumps(
+            {
+                "name": "main",
+                "postgres": {
+                    "host": "h",
+                    "port": 5432,
+                    "database": "d",
+                    "username": "u",
+                    "password": "p",
+                },
+            }
+        )
+    )
+    monkeypatch.setenv("OCEL_LIVE_DIR", str(tmp_path))
+
+    assert postgres("main").connection_string == "postgres://u:p@h:5432/d"
+
+
 def test_a_binding_of_another_type_is_refused_for_the_type_it_carries(monkeypatch):
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.setenv(
