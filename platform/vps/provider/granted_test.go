@@ -28,6 +28,43 @@ func decodedBody(t *testing.T, script string) string {
 	return string(body)
 }
 
+func TestABucketAnswersTheHostnamesItsOwnProjectClaims(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	rendered, err := host.RenderProxyConfig(host.ProxyState{
+		Grace: host.DrainWindow,
+		Claims: []host.HostClaim{{
+			Hostname: "shop.example.com", Owner: vars.Surface("shop", "production"),
+			Pointer: "@production", App: "web",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	machine.proxyDoc = string(rendered)
+
+	if _, err := over(machine).Bucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+		t.Fatalf("Bucket() = %v", err)
+	}
+
+	held := ""
+	for _, command := range machine.commands() {
+		if strings.Contains(command, "?cors") {
+			held = decodedBody(t, command)
+		}
+	}
+	if held == "" {
+		t.Fatal("nothing held the bucket to the origins it answers")
+	}
+	if !strings.Contains(held, "<AllowedOrigin>https://shop.example.com</AllowedOrigin>") {
+		t.Errorf("the bucket does not answer the hostname its own project claims, so a browser on it is refused:\n%s", held)
+	}
+	if strings.Contains(held, "<AllowedOrigin>*</AllowedOrigin>") {
+		t.Errorf("the bucket answers every origin on the internet:\n%s", held)
+	}
+}
+
 func grantedBucket() providerkit.Binding {
 	return providerkit.Binding{
 		Type: providerkit.BindingBucket, Name: "shared", Resource: "shared",
