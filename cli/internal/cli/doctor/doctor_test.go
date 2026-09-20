@@ -363,7 +363,7 @@ export default {
 `)
 	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
 	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakeGlobalDomainEnvVar, "previews.ocel.dev")
+	t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.ocel.app")
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
@@ -377,7 +377,7 @@ export default {
 	if strings.Contains(out, "no preview domain") {
 		t.Errorf("doctor warned about a preview domain the global wildcard already supplies:\n%s", out)
 	}
-	for _, want := range []string{"Preview  *.previews.ocel.dev (global)", "Good to go."} {
+	for _, want := range []string{"Preview  *.preview.ocel.app (global)", "Good to go."} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout missing %q; got:\n%s", want, out)
 		}
@@ -388,7 +388,7 @@ func TestRunDoctorNotesAProjectPreviewDomainShadowingTheGlobalOne(t *testing.T) 
 	root := healthyProject(t)
 	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
 	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakeGlobalDomainEnvVar, "previews.ocel.dev")
+	t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.ocel.app")
 
 	deps := clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
@@ -399,7 +399,7 @@ func TestRunDoctorNotesAProjectPreviewDomainShadowingTheGlobalOne(t *testing.T) 
 	}
 
 	out := rendered(t, stdout.String())
-	for _, want := range []string{"Preview  *.preview.example.com", "  – project-level preview domain; global *.previews.ocel.dev ignored", "Good to go."} {
+	for _, want := range []string{"Preview  *.preview.example.com", "  – project-level preview domain; global *.preview.ocel.app ignored", "Good to go."} {
 		if !strings.Contains(out, want) {
 			t.Errorf("stdout missing %q; got:\n%s", want, out)
 		}

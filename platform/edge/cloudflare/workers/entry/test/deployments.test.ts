@@ -271,7 +271,7 @@ describe("resolveDeployment", () => {
     const acme = await resolveDeployment({
       binding,
       slug: "acme",
-      host: "acme--pr-42.preview.ocel.sh",
+      host: "acme--pr-42.preview.ocel.app",
       app: "web",
       pointer: "pr-42",
       now: () => clock.ms,
@@ -279,7 +279,7 @@ describe("resolveDeployment", () => {
     const globex = await resolveDeployment({
       binding,
       slug: "globex",
-      host: "globex--pr-42.preview.ocel.sh",
+      host: "globex--pr-42.preview.ocel.app",
       app: "web",
       pointer: "pr-42",
       now: () => clock.ms,
@@ -301,7 +301,7 @@ describe("resolveDeployment", () => {
     const d: DeploymentsDeps = {
       binding,
       slug: "acme",
-      host: "acme--pr-42.preview.ocel.sh",
+      host: "acme--pr-42.preview.ocel.app",
       pointer: "pr-42",
       now: () => clock.ms,
     };
@@ -325,7 +325,7 @@ describe("resolveDeployment", () => {
       resolveDeployment({
         binding,
         slug: `p${n}`,
-        host: `p${n}.preview.ocel.sh`,
+        host: `p${n}.preview.ocel.app`,
         pointer: "pr-1",
         now: () => clock.ms,
       });
@@ -352,7 +352,7 @@ describe("resolveDeployment", () => {
       resolveDeployment({
         binding,
         slug: `q${n}`,
-        host: `q${n}.preview.ocel.sh`,
+        host: `q${n}.preview.ocel.app`,
         pointer: "pr-1",
         now: () => clock.ms,
       });
@@ -384,7 +384,7 @@ describe("resolveDeployment", () => {
     const resolution = await resolveDeployment({
       binding,
       slug: "acme",
-      host: "acme--pr-42.preview.ocel.sh",
+      host: "acme--pr-42.preview.ocel.app",
       pointer: "pr-42",
       now: () => clock.ms,
     });

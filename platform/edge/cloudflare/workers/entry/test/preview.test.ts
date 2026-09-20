@@ -118,7 +118,7 @@ describe("previewTarget", () => {
 });
 
 describe("globalPreviewTarget", () => {
-  const BASE = "preview.ocel.sh";
+  const BASE = "preview.ocel.app";
 
   it("reads slug--pointer--app positionally", () => {
     expect(globalPreviewTarget(`acme--pr-42--admin.${BASE}`, BASE)).toEqual({
@@ -170,7 +170,7 @@ describe("globalPreviewTarget", () => {
   });
 
   it("returns null when the base domain is empty", () => {
-    expect(globalPreviewTarget("acme--pr-42.preview.ocel.sh", "")).toBeNull();
+    expect(globalPreviewTarget("acme--pr-42.preview.ocel.app", "")).toBeNull();
   });
 
   it("tolerates surrounding dots on the base domain", () => {
