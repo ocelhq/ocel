@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -162,6 +164,23 @@ func TestConnectionStringPercentEncodesCredentials(t *testing.T) {
 	}
 	want := "postgres://user%20name:p%40ss%3Aword%2Fwith%23odd%3Fchars@h:5432/d"
 	if got != want {
+		t.Errorf("ConnectionString() = %q, want %q", got, want)
+	}
+}
+
+func TestABindingIsReadFromTheProjectedLiveDirectory(t *testing.T) {
+	dir := t.TempDir()
+	write := []byte(`{"name":"main","postgres":{"host":"h","port":5432,"database":"d","username":"u","password":"p"}}`)
+	if err := os.WriteFile(filepath.Join(dir, "OCEL_RESOURCE_POSTGRES_main"), write, 0o600); err != nil {
+		t.Fatalf("project the binding: %v", err)
+	}
+	t.Setenv(constants.LiveDirEnvName, dir)
+
+	got, err := ocel.Postgres("main").ConnectionString()
+	if err != nil {
+		t.Fatalf("ConnectionString() error = %v", err)
+	}
+	if want := "postgres://u:p@h:5432/d"; got != want {
 		t.Errorf("ConnectionString() = %q, want %q", got, want)
 	}
 }

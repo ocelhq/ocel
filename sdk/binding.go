@@ -55,19 +55,26 @@ func kindOf(typ bindingsv1.BindingType) string {
 
 func binding(name string, typ bindingsv1.BindingType) (*bindingsv1.Binding, error) {
 	key := bindingKey(name, typ)
-	raw := os.Getenv(key)
-	if raw == "" {
+	raw, delivered := readBinding(key)
+	if !delivered || raw == "" {
 		return nil, &MissingBindingError{Key: key}
 	}
 
-	delivered := &bindingsv1.Binding{}
-	if err := protojson.Unmarshal([]byte(raw), delivered); err != nil {
+	record := &bindingsv1.Binding{}
+	if err := protojson.Unmarshal([]byte(raw), record); err != nil {
 		return nil, fmt.Errorf("%s does not carry a binding record, so this app cannot read it as a %s", key, kindOf(typ))
 	}
-	if got := typeOf(delivered); got != typ {
+	if got := typeOf(record); got != typ {
 		return nil, fmt.Errorf("%s carries a %s binding, and this app reads it as a %s", key, kindOf(got), kindOf(typ))
 	}
-	return delivered, nil
+	return record, nil
+}
+
+func readBinding(key string) (string, bool) {
+	if value, ok := os.LookupEnv(key); ok {
+		return value, true
+	}
+	return readLiveFile(key)
 }
 
 func typeOf(delivered *bindingsv1.Binding) bindingsv1.BindingType {
