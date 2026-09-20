@@ -52,7 +52,7 @@ pub struct Infra {
 
 #[ocel::main]
 fn main() {
-    let infra = Infra::load().expect("the resources this app declares");
+    let resources = Infra::load().expect("the resources this app declares");
 }
 ```
 
@@ -143,21 +143,21 @@ read that finds nothing raises `ocel.ObjectNotFound`.
 ```rust
 use futures::StreamExt;
 
-infra.uploads
+resources.uploads
     .put("reports/q3.pdf", data)
     .content_type("application/pdf")
     .await?;
 
-let held = infra.uploads.get("reports/q3.pdf").await?;
+let held = resources.uploads.get("reports/q3.pdf").await?;
 println!("{}", held.info().size);
 let bytes = held.bytes().await?;
 
-let mut walk = std::pin::pin!(infra.uploads.list().prefix("reports/").into_stream());
+let mut walk = std::pin::pin!(resources.uploads.list().prefix("reports/").into_stream());
 while let Some(object) = walk.next().await {
     println!("{}", object?.key);
 }
 
-infra.uploads.delete("reports/q3.pdf").await?;
+resources.uploads.delete("reports/q3.pdf").await?;
 ```
 
 `put`, `get`, `list`, `signed_url` and `signed_upload` return builders, and awaiting one performs
