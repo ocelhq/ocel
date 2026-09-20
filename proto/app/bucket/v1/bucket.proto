@@ -168,7 +168,14 @@ message HeadResponse {
 
 message ListRequest {
   string bucket = 1 [(buf.validate.field).string.min_len = 1];
-  string prefix = 2 [(buf.validate.field).string.max_len = 1024];
+  string prefix = 2 [
+    (buf.validate.field).string.max_len = 1024,
+    (buf.validate.field).cel = {
+      id: "buckets.list.prefix"
+      message: "a prefix names where under the bucket's prefix to look: no segment may be \".\" or \"..\", it may carry no backslash and no control character, and \".ocel\" is reserved"
+      expression: "this.split('/').all(segment, segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel')"
+    }
+  ];
   string cursor = 3;
   int32 limit = 4 [
     (buf.validate.field).int32.gte = 0,
@@ -272,7 +279,14 @@ message CreateMultipartResponse {
 
 message SignPartsRequest {
   string bucket = 1 [(buf.validate.field).string.min_len = 1];
-  string key = 2 [(buf.validate.field).string.max_len = 1024];
+  string key = 2 [
+    (buf.validate.field).string.max_len = 1024,
+    (buf.validate.field).cel = {
+      id: "buckets.sign_parts.key"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+    }
+  ];
   string upload_id = 3 [(buf.validate.field).string.min_len = 1];
   repeated int32 part_numbers = 4 [
     (buf.validate.field).repeated.min_items = 1,
@@ -299,7 +313,14 @@ message CompletedPart {
 
 message CompleteMultipartRequest {
   string bucket = 1 [(buf.validate.field).string.min_len = 1];
-  string key = 2 [(buf.validate.field).string.max_len = 1024];
+  string key = 2 [
+    (buf.validate.field).string.max_len = 1024,
+    (buf.validate.field).cel = {
+      id: "buckets.complete_multipart.key"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+    }
+  ];
   string upload_id = 3 [(buf.validate.field).string.min_len = 1];
   repeated CompletedPart parts = 4 [(buf.validate.field).repeated.min_items = 1];
   string if_none_match = 5;
@@ -312,7 +333,14 @@ message CompleteMultipartResponse {
 
 message AbortMultipartRequest {
   string bucket = 1 [(buf.validate.field).string.min_len = 1];
-  string key = 2 [(buf.validate.field).string.max_len = 1024];
+  string key = 2 [
+    (buf.validate.field).string.max_len = 1024,
+    (buf.validate.field).cel = {
+      id: "buckets.abort_multipart.key"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
+    }
+  ];
   string upload_id = 3 [(buf.validate.field).string.min_len = 1];
 }
 
