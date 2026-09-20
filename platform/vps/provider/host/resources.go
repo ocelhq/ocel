@@ -79,6 +79,19 @@ func keepCommand(class providerkit.Class, path string) string {
 		"cat " + quoted(path)
 }
 
+func (h *Host) ForgetKept(ctx context.Context, class providerkit.Class, names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
+	paths := make([]string, 0, len(names))
+	for _, name := range names {
+		paths = append(paths, quoted(KeptPath(class, name)))
+	}
+	_, err := h.owning(ctx, "forget what "+strings.Join(names, ", ")+" was held to",
+		"rm -f "+strings.Join(paths, " "), nil)
+	return err
+}
+
 func (h *Host) Kept(ctx context.Context, class providerkit.Class, name string) ([]byte, error) {
 	said, err := h.owning(ctx, "read what is kept for "+name, keptCommand(KeptPath(class, name)), nil)
 	if err != nil {

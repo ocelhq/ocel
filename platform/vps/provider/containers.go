@@ -80,6 +80,9 @@ func (p *Provider) RemoveContainers(ctx context.Context, ref providerkit.StackRe
 		if err := p.host.TakeDown(ctx, ref.Class, container.Physical); err != nil {
 			return err
 		}
+		if err := p.removeStoreAccount(ctx, ref, container.Name); err != nil {
+			return err
+		}
 	}
 	return nil
 }

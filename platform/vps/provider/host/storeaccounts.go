@@ -144,6 +144,32 @@ func StoreAccountKey(env, app string) string {
 	return "ocel" + hex.EncodeToString(sum[:8])
 }
 
+func (a StoreAccount) revoking() adminCall {
+	return adminCall{
+		what:   "take the account " + a.AccessKeyID + " reached the store under back",
+		method: http.MethodDelete, action: "delete-service-account",
+		query: "accessKey=" + url.QueryEscape(a.AccessKeyID),
+		allow: []string{"200", "204", "404"},
+	}
+}
+
+func (h *Host) RevokeStoreAccount(ctx context.Context, account StoreAccount) error {
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return err
+	}
+	call := account.revoking()
+	script, err := accountScript(account, call, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("sign %s: %w", call.what, err)
+	}
+	if _, err := h.ran(ctx, call.what, script, fedBody(call.body), elevation); err != nil {
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"could not %s on %s: %v", call.what, h.named(), err)
+	}
+	return nil
+}
+
 func (h *Host) GrantStoreAccount(ctx context.Context, account StoreAccount) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {

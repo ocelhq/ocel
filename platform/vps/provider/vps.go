@@ -120,7 +120,7 @@ func (t *Target) UnmarshalJSON(data []byte) error {
 type Provider struct {
 	options Options
 	host    *host.Host
-	records *host.Records
+	records providerkit.RecordStore
 	sealer  *host.Sealer
 
 	transform transformkit.Evaluator
