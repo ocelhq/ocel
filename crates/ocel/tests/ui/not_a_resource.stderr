@@ -1,0 +1,5 @@
+error: field cache is neither an ocel::Postgres nor an ocel::Bucket, and every field of an ocel::Resources struct declares one.
+ --> tests/ui/not_a_resource.rs:4:12
+  |
+4 |     cache: String,
+  |            ^^^^^^
