@@ -1,0 +1,154 @@
+package host
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
+)
+
+const adminPath = "/rustfs/admin/v3/"
+
+type StoreAccount struct {
+	Store    string
+	Class    providerkit.Class
+	Endpoint string
+	Region   string
+
+	RootKeyID  string
+	RootSecret string
+
+	AccessKeyID string
+	SecretKey   string
+	Buckets     []string
+}
+
+type adminCall struct {
+	what   string
+	method string
+	action string
+	query  string
+	body   []byte
+	allow  []string
+}
+
+func accountPolicy(buckets []string) ([]byte, error) {
+	resources := make([]string, 0, len(buckets)*2)
+	for _, bucket := range buckets {
+		resources = append(resources, "arn:aws:s3:::"+bucket, "arn:aws:s3:::"+bucket+"/*")
+	}
+	return json.Marshal(map[string]any{
+		"Version": "2012-10-17",
+		"Statement": []any{map[string]any{
+			"Effect":   "Allow",
+			"Action":   []string{"s3:*"},
+			"Resource": resources,
+		}},
+	})
+}
+
+func (a StoreAccount) calls() ([]adminCall, error) {
+	policy, err := accountPolicy(a.Buckets)
+	if err != nil {
+		return nil, err
+	}
+	var held any
+	if err := json.Unmarshal(policy, &held); err != nil {
+		return nil, err
+	}
+	added, err := json.Marshal(map[string]any{
+		"targetUser": a.RootKeyID,
+		"accessKey":  a.AccessKeyID,
+		"secretKey":  a.SecretKey,
+		"policy":     held,
+	})
+	if err != nil {
+		return nil, err
+	}
+	updated, err := json.Marshal(map[string]any{
+		"newSecretKey": a.SecretKey,
+		"newPolicy":    held,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return []adminCall{
+		{
+			what:   "give " + a.AccessKeyID + " an account of its own on the store",
+			method: http.MethodPut, action: "add-service-account",
+			body: added, allow: []string{"200", "400"},
+		},
+		{
+			what:   "hold " + a.AccessKeyID + " to the buckets its app declares",
+			method: http.MethodPost, action: "update-service-account",
+			query: "accessKey=" + url.QueryEscape(a.AccessKeyID),
+			body:  updated, allow: []string{"200", "204"},
+		},
+	}, nil
+}
+
+func (a StoreAccount) signed(call adminCall, now time.Time) (*http.Request, error) {
+	target := strings.TrimSuffix(a.Endpoint, "/") + adminPath + call.action
+	if call.query != "" {
+		target += "?" + call.query
+	}
+	req, err := http.NewRequest(call.method, target, strings.NewReader(string(call.body)))
+	if err != nil {
+		return nil, err
+	}
+	req.ContentLength = int64(len(call.body))
+	req.Header.Set("Content-Type", "application/json")
+	payload := sha256.Sum256(call.body)
+	signRequest(req, credential{
+		AccessKeyID: a.RootKeyID, SecretKey: a.RootSecret, Region: a.Region,
+	}, hex.EncodeToString(payload[:]), now)
+	return req, nil
+}
+
+func accountScript(a StoreAccount, call adminCall, now time.Time) (string, error) {
+	req, err := a.signed(call, now)
+	if err != nil {
+		return "", err
+	}
+	return curlCommand(a.Store, req, storeCall{
+		what: call.what, body: call.body, allow: call.allow,
+	}), nil
+}
+
+// StoreAccountKey names the account an app reaches the store under, in the 20
+// characters a store keeps an access key in.
+func StoreAccountKey(env, app string) string {
+	sum := sha256.Sum256([]byte(env + "/" + app))
+	return "ocel" + hex.EncodeToString(sum[:8])
+}
+
+func (h *Host) GrantStoreAccount(ctx context.Context, account StoreAccount) error {
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return err
+	}
+	calls, err := account.calls()
+	if err != nil {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"the account %s reaches the store as cannot be described: %v", account.AccessKeyID, err)
+	}
+	now := time.Now().UTC()
+	for _, call := range calls {
+		script, err := accountScript(account, call, now)
+		if err != nil {
+			return fmt.Errorf("sign %s: %w", call.what, err)
+		}
+		if _, err := h.ran(ctx, call.what, script, nil, elevation); err != nil {
+			return providerkit.Refuse(providerkit.CodeNotReady,
+				"could not %s on %s: %v", call.what, h.named(), err)
+		}
+	}
+	return nil
+}
