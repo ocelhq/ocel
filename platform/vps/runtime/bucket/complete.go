@@ -78,14 +78,17 @@ func (s *Service) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUplo
 		return nil, err
 	}
 
-	if state := aggregate(sess.Files); state != statePending {
-		return &bucketv1.CompleteUploadResponse{State: toProtoState(state), Error: sess.Error}, nil
-	}
-
 	held, err := s.held(sess.Bucket)
 	if err != nil {
 		return nil, err
 	}
+	switch aggregate(sess.Files) {
+	case stateSucceeded:
+		return s.settle(ctx, sess)
+	case stateExpired:
+		return &bucketv1.CompleteUploadResponse{State: bucketv1.UploadState_UPLOAD_STATE_EXPIRED, Error: sess.Error}, nil
+	}
+
 	if s.now().Unix() >= sess.ExpiresAt {
 		return s.expire(ctx, sess, held)
 	}
@@ -126,7 +129,7 @@ func (s *Service) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUplo
 		for i := range sess.Files {
 			sess.Files[i].State = stateExpired
 		}
-		if err := s.close(ctx, sess); err != nil {
+		if err := s.close(ctx, &sess); err != nil {
 			return nil, err
 		}
 		return &bucketv1.CompleteUploadResponse{State: bucketv1.UploadState_UPLOAD_STATE_EXPIRED, Error: failure}, nil
@@ -136,24 +139,50 @@ func (s *Service) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUplo
 	if aggregate(settled) != stateSucceeded {
 		return &bucketv1.CompleteUploadResponse{State: bucketv1.UploadState_UPLOAD_STATE_PENDING}, nil
 	}
+	return s.settle(ctx, sess)
+}
 
-	unnotified := make([]sessionFile, 0, len(settled))
-	for i, file := range settled {
+func (s *Service) settle(ctx context.Context, sess session) (*bucketv1.CompleteUploadResponse, error) {
+	succeeded := &bucketv1.CompleteUploadResponse{State: bucketv1.UploadState_UPLOAD_STATE_SUCCEEDED}
+
+	claimed := make([]sessionFile, 0, len(sess.Files))
+	for i, file := range sess.Files {
 		if !file.Notified {
-			unnotified = append(unnotified, file)
+			claimed = append(claimed, file)
 			sess.Files[i].Notified = true
 		}
 	}
-	if err := s.close(ctx, sess); err != nil {
+	if len(claimed) == 0 {
+		return succeeded, nil
+	}
+	if err := s.close(ctx, &sess); err != nil {
 		if errors.Is(err, errSessionMoved) {
-			return &bucketv1.CompleteUploadResponse{State: bucketv1.UploadState_UPLOAD_STATE_SUCCEEDED}, nil
+			return succeeded, nil
 		}
 		return nil, err
 	}
-	if err := s.notify(ctx, sess, unnotified); err != nil {
-		return nil, err
+	delivered, err := s.notify(ctx, sess, claimed)
+	if err != nil {
+		return nil, errors.Join(err, s.disown(ctx, sess, claimed[delivered:]))
 	}
-	return &bucketv1.CompleteUploadResponse{State: bucketv1.UploadState_UPLOAD_STATE_SUCCEEDED}, nil
+	return succeeded, nil
+}
+
+func (s *Service) disown(ctx context.Context, sess session, lost []sessionFile) error {
+	if len(lost) == 0 {
+		return nil
+	}
+	for i := range sess.Files {
+		for _, file := range lost {
+			if sess.Files[i].Key == file.Key {
+				sess.Files[i].Notified = false
+			}
+		}
+	}
+	if err := s.close(ctx, &sess); err != nil && !errors.Is(err, errSessionMoved) {
+		return err
+	}
+	return nil
 }
 
 func (s *Service) expire(ctx context.Context, sess session, held scope) (*bucketv1.CompleteUploadResponse, error) {
@@ -170,7 +199,7 @@ func (s *Service) expire(ctx context.Context, sess session, held scope) (*bucket
 		sess.Files[i].State = stateExpired
 	}
 	sess.Error = "upload expired"
-	if err := s.close(ctx, sess); err != nil && !errors.Is(err, errSessionMoved) {
+	if err := s.close(ctx, &sess); err != nil && !errors.Is(err, errSessionMoved) {
 		return nil, err
 	}
 	return &bucketv1.CompleteUploadResponse{
@@ -179,27 +208,27 @@ func (s *Service) expire(ctx context.Context, sess session, held scope) (*bucket
 	}, nil
 }
 
-func (s *Service) close(ctx context.Context, sess session) error {
+func (s *Service) close(ctx context.Context, sess *session) error {
 	return s.writeSession(ctx, sess)
 }
 
-func (s *Service) notify(ctx context.Context, sess session, files []sessionFile) error {
+func (s *Service) notify(ctx context.Context, sess session, files []sessionFile) (int, error) {
 	if s.cfg.Callbacks == nil || sess.CallbackBaseURL == "" {
-		return nil
+		return len(files), nil
 	}
-	for _, file := range files {
+	for delivered, file := range files {
 		payload := signedFile{Key: file.Key, Name: file.Name, Size: file.Size, MimeType: file.MimeType}
 		signature, err := signUpload(sess.Secret, sess.SessionID, payload)
 		if err != nil {
-			return connect.NewError(connect.CodeInternal, err)
+			return delivered, connect.NewError(connect.CodeInternal, err)
 		}
 		body, err := json.Marshal(callbackBody{SessionID: sess.SessionID, Signature: signature, File: payload})
 		if err != nil {
-			return connect.NewError(connect.CodeInternal, fmt.Errorf("encode the upload callback: %w", err))
+			return delivered, connect.NewError(connect.CodeInternal, fmt.Errorf("encode the upload callback: %w", err))
 		}
 		if err := s.cfg.Callbacks.Post(ctx, sess.CallbackBaseURL+"?op=callback", body); err != nil {
-			return connect.NewError(connect.CodeInternal, fmt.Errorf("deliver the upload callback: %w", err))
+			return delivered, connect.NewError(connect.CodeInternal, fmt.Errorf("deliver the upload callback: %w", err))
 		}
 	}
-	return nil
+	return len(files), nil
 }
