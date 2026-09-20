@@ -315,18 +315,76 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 	if err != nil {
 		return nil, err
 	}
+	own, err := p.storeAccount(ctx, plan, spec.Name, held)
+	if err != nil {
+		return nil, err
+	}
 	return &live.Store{
 		Env:          storeRef(plan.Ref).Name.String(),
 		Endpoint:     "http://" + spec.Name + ":" + storePort,
 		Region:       storeRegion,
-		AccessKeyID:  storeAccessKey,
+		AccessKeyID:  own.key,
 		PathStyle:    true,
 		Pointer:      storeRoute(plan.Ref, spec.Name).Pointer,
 		Volume:       spec.VolumeName(),
 		Sessions:     constants.StoreSessionsBucket(),
 		PostPolicies: true,
-		Sealed:       base64.StdEncoding.EncodeToString(held.sealed),
+		Sealed:       base64.StdEncoding.EncodeToString(own.held.sealed),
 	}, nil
+}
+
+type appAccount struct {
+	key  string
+	held storeCredential
+}
+
+func (p *Provider) storeAccount(ctx context.Context, plan providerkit.StackPlan, store string, root storeCredential) (appAccount, error) {
+	env := storeRef(plan.Ref).Name.String()
+	key := host.StoreAccountKey(env, appNameOf(plan.App))
+	held, err := p.stores.once(key, func() (storeCredential, error) {
+		return p.storeCredential(ctx, plan.Ref, key)
+	})
+	if err != nil {
+		return appAccount{}, err
+	}
+	if err := p.host.GrantStoreAccount(ctx, host.StoreAccount{
+		Store:       store,
+		Class:       plan.Ref.Class,
+		Endpoint:    "http://127.0.0.1:" + storePort,
+		Region:      storeRegion,
+		RootKeyID:   storeAccessKey,
+		RootSecret:  root.secret,
+		AccessKeyID: key,
+		SecretKey:   held.secret,
+		Buckets:     append(boundBuckets(plan.App), constants.StoreSessionsBucket()),
+	}); err != nil {
+		return appAccount{}, err
+	}
+	return appAccount{key: key, held: held}, nil
+}
+
+func appNameOf(app *providerkit.AppPlan) string {
+	if app == nil {
+		return ""
+	}
+	return app.App
+}
+
+func boundBuckets(app *providerkit.AppPlan) []string {
+	if app == nil {
+		return nil
+	}
+	var held []string
+	for _, binding := range append(slices.Clone(app.Values.Bindings), app.Grants...) {
+		if binding.Type != providerkit.BindingBucket {
+			continue
+		}
+		bucket, _, _ := strings.Cut(binding.Properties[providerkit.PropertyBucket], "/")
+		if bucket != "" && !slices.Contains(held, bucket) {
+			held = append(held, bucket)
+		}
+	}
+	return held
 }
 
 func declaredOrigins(spec *providerkit.BucketSpec) []string {
