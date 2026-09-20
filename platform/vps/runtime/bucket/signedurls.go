@@ -32,8 +32,10 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 	if err != nil {
 		return nil, err
 	}
-	held := scopeOf(req.GetBucket())
-	key := held.key(req.GetKey())
+	held, key, err := s.reach(req.GetBucket(), req.GetKey())
+	if err != nil {
+		return nil, err
+	}
 	c := req.GetConstraints()
 
 	ttl := presignTTL
@@ -135,10 +137,13 @@ func (s *Service) CreateMultipart(ctx context.Context, req *bucketv1.CreateMulti
 	if err := s.roomToWrite(); err != nil {
 		return nil, err
 	}
-	held := scopeOf(req.GetBucket())
+	held, key, err := s.reach(req.GetBucket(), req.GetKey())
+	if err != nil {
+		return nil, err
+	}
 	in := &s3.CreateMultipartUploadInput{
 		Bucket:   aws.String(held.bucket),
-		Key:      aws.String(held.key(req.GetKey())),
+		Key:      aws.String(key),
 		Metadata: req.GetMetadata(),
 	}
 	if req.GetContentType() != "" {
@@ -160,7 +165,10 @@ func (s *Service) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest)
 	if err != nil {
 		return nil, err
 	}
-	held := scopeOf(req.GetBucket())
+	held, key, err := s.reach(req.GetBucket(), req.GetKey())
+	if err != nil {
+		return nil, err
+	}
 	ttl := presignTTL
 	if req.GetExpiresIn() != nil {
 		ttl = ttlOf(req.GetExpiresIn())
@@ -170,7 +178,7 @@ func (s *Service) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest)
 	for _, number := range req.GetPartNumbers() {
 		signed, err := signer.PresignUploadPart(ctx, &s3.UploadPartInput{
 			Bucket:     aws.String(held.bucket),
-			Key:        aws.String(held.key(req.GetKey())),
+			Key:        aws.String(key),
 			UploadId:   aws.String(req.GetUploadId()),
 			PartNumber: aws.Int32(number),
 		}, func(o *s3.PresignOptions) { o.Expires = ttl })
@@ -188,7 +196,10 @@ func (s *Service) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest)
 
 // CompleteMultipart assembles the parts a caller sent into the object.
 func (s *Service) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteMultipartRequest) (*bucketv1.CompleteMultipartResponse, error) {
-	held := scopeOf(req.GetBucket())
+	held, key, err := s.reach(req.GetBucket(), req.GetKey())
+	if err != nil {
+		return nil, err
+	}
 	parts := make([]s3types.CompletedPart, 0, len(req.GetParts()))
 	for _, part := range req.GetParts() {
 		parts = append(parts, s3types.CompletedPart{
@@ -198,7 +209,7 @@ func (s *Service) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteM
 	}
 	in := &s3.CompleteMultipartUploadInput{
 		Bucket:          aws.String(held.bucket),
-		Key:             aws.String(held.key(req.GetKey())),
+		Key:             aws.String(key),
 		UploadId:        aws.String(req.GetUploadId()),
 		MultipartUpload: &s3types.CompletedMultipartUpload{Parts: parts},
 	}
@@ -213,7 +224,7 @@ func (s *Service) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteM
 	}
 	out, err := s.cfg.Objects.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(held.bucket),
-		Key:    aws.String(held.key(req.GetKey())),
+		Key:    aws.String(key),
 	})
 	if err != nil {
 		return nil, storeError("head "+req.GetKey(), err)
@@ -223,10 +234,13 @@ func (s *Service) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteM
 
 // AbortMultipart abandons an upload so its parts stop costing storage.
 func (s *Service) AbortMultipart(ctx context.Context, req *bucketv1.AbortMultipartRequest) (*bucketv1.AbortMultipartResponse, error) {
-	held := scopeOf(req.GetBucket())
-	_, err := s.cfg.Objects.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
+	held, key, err := s.reach(req.GetBucket(), req.GetKey())
+	if err != nil {
+		return nil, err
+	}
+	_, err = s.cfg.Objects.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
 		Bucket:   aws.String(held.bucket),
-		Key:      aws.String(held.key(req.GetKey())),
+		Key:      aws.String(key),
 		UploadId: aws.String(req.GetUploadId()),
 	})
 	if err != nil && !missing(err) {

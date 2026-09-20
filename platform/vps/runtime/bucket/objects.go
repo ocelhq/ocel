@@ -74,10 +74,13 @@ func headInfo(key string, out *s3.HeadObjectOutput) *bucketv1.ObjectInfo {
 
 // Head answers what the store knows about one key, or nothing where it holds none.
 func (s *Service) Head(ctx context.Context, req *bucketv1.HeadRequest) (*bucketv1.HeadResponse, error) {
-	held := scopeOf(req.GetBucket())
+	held, key, err := s.reach(req.GetBucket(), req.GetKey())
+	if err != nil {
+		return nil, err
+	}
 	out, err := s.cfg.Objects.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(held.bucket),
-		Key:    aws.String(held.key(req.GetKey())),
+		Key:    aws.String(key),
 	})
 	if missing(err) {
 		return &bucketv1.HeadResponse{}, nil
@@ -90,14 +93,17 @@ func (s *Service) Head(ctx context.Context, req *bucketv1.HeadRequest) (*bucketv
 
 // List answers one page of the keys under a prefix, never the store's own bookkeeping.
 func (s *Service) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv1.ListResponse, error) {
-	held := scopeOf(req.GetBucket())
+	held, prefix, err := s.reach(req.GetBucket(), req.GetPrefix())
+	if err != nil {
+		return nil, err
+	}
 	limit := req.GetLimit()
 	if limit <= 0 {
 		limit = listPageSize
 	}
 	in := &s3.ListObjectsV2Input{
 		Bucket:  aws.String(held.bucket),
-		Prefix:  aws.String(held.key(req.GetPrefix())),
+		Prefix:  aws.String(prefix),
 		MaxKeys: aws.Int32(limit),
 	}
 	if req.GetCursor() != "" {
@@ -129,7 +135,15 @@ func (s *Service) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv
 
 // Delete removes the named keys; a key the store does not hold is not an error.
 func (s *Service) Delete(ctx context.Context, req *bucketv1.DeleteRequest) (*bucketv1.DeleteResponse, error) {
-	held := scopeOf(req.GetBucket())
+	held, err := s.held(req.GetBucket())
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range req.GetKeys() {
+		if err := reserved(key); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.remove(ctx, held, req.GetKeys()); err != nil {
 		return nil, err
 	}
@@ -156,18 +170,25 @@ func (s *Service) remove(ctx context.Context, held scope, keys []string) error {
 
 // Copy duplicates one object within the bucket.
 func (s *Service) Copy(ctx context.Context, req *bucketv1.CopyRequest) (*bucketv1.CopyResponse, error) {
-	held := scopeOf(req.GetBucket())
-	_, err := s.cfg.Objects.CopyObject(ctx, &s3.CopyObjectInput{
+	held, source, err := s.reach(req.GetBucket(), req.GetSourceKey())
+	if err != nil {
+		return nil, err
+	}
+	if err := reserved(req.GetDestinationKey()); err != nil {
+		return nil, err
+	}
+	destination := held.key(req.GetDestinationKey())
+	_, err = s.cfg.Objects.CopyObject(ctx, &s3.CopyObjectInput{
 		Bucket:     aws.String(held.bucket),
-		Key:        aws.String(held.key(req.GetDestinationKey())),
-		CopySource: aws.String(copySource(held.bucket, held.key(req.GetSourceKey()))),
+		Key:        aws.String(destination),
+		CopySource: aws.String(copySource(held.bucket, source)),
 	})
 	if err != nil {
 		return nil, storeError("copy "+req.GetSourceKey(), err)
 	}
 	out, err := s.cfg.Objects.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(held.bucket),
-		Key:    aws.String(held.key(req.GetDestinationKey())),
+		Key:    aws.String(destination),
 	})
 	if err != nil {
 		return nil, storeError("head "+req.GetDestinationKey(), err)

@@ -188,6 +188,7 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 		Callbacks:    bucket.HTTPPoster{App: app},
 		PostPolicies: manifest.Store.PostPolicies,
 		Sessions:     manifest.Store.Sessions,
+		Granted:      manifest.Store.Granted,
 	}
 	if manifest.Store.Volume != "" {
 		cfg.Volume = live.FreeSpace(socket)

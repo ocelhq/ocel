@@ -153,6 +153,7 @@ func newObjectService(t *testing.T, objects *fakeS3) *Service {
 		Objects:          objects,
 		Table:            "sessions",
 		SessionKeyPrefix: testSessionKeyPrefix,
+		Granted:          func() []string { return []string{"storage", "b"} },
 	})
 	svc.now = func() time.Time { return time.Unix(1_000_000, 0) }
 	return svc

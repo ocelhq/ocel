@@ -71,14 +71,19 @@ type Config struct {
 	Volume FreeSpace
 	// PostPolicies is true where the store signs POST policies, which bound an upload's size.
 	PostPolicies bool
-	// Sessions names the bucket, and optional key prefix, this project's upload sessions live under.
+	// Sessions names the bucket, and optional key prefix, this app's upload sessions live under.
+	// It is never one of Granted, so no request can name it.
 	Sessions string
+	// Granted names every store location this app's deploy handed it, exactly as the
+	// binding it reads names it. A request reaching anywhere else is refused.
+	Granted []string
 }
 
 // Service answers the bucket RPCs against any S3-compatible store.
 type Service struct {
 	cfg      Config
 	sessions scope
+	granted  map[string]scope
 
 	now       func() time.Time
 	newID     func() string
@@ -89,9 +94,14 @@ var _ bucketv1connect.BucketServiceHandler = (*Service)(nil)
 
 // New builds the service a box's runtime proxy serves.
 func New(cfg Config) *Service {
+	granted := make(map[string]scope, len(cfg.Granted))
+	for _, name := range cfg.Granted {
+		granted[name] = scopeOf(name)
+	}
 	return &Service{
 		cfg:       cfg,
 		sessions:  scopeOf(cfg.Sessions),
+		granted:   granted,
 		now:       time.Now,
 		newID:     func() string { return "sess_" + randomHex(16) },
 		newSecret: func() string { return randomHex(32) },
@@ -125,6 +135,34 @@ func scopeOf(spec string) scope {
 		return scope{bucket: spec}
 	}
 	return scope{bucket: bucket, prefix: strings.TrimSuffix(prefix, "/") + "/"}
+}
+
+func (s *Service) held(name string) (scope, error) {
+	if granted, ok := s.granted[name]; ok {
+		return granted, nil
+	}
+	return scope{}, connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
+		"this app was granted no bucket called %q, and a deployment reaches the buckets its own code declares and the ones it is granted and nothing else", name))
+}
+
+func (s *Service) reach(name, key string) (scope, string, error) {
+	granted, err := s.held(name)
+	if err != nil {
+		return scope{}, "", err
+	}
+	if err := reserved(key); err != nil {
+		return scope{}, "", err
+	}
+	return granted, granted.key(key), nil
+}
+
+func reserved(key string) error {
+	if !strings.HasPrefix(key, constants.ReservedKeyPrefix) {
+		return nil
+	}
+	return connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
+		"%q names a key under %s, which is where the store keeps its own bookkeeping and is no app's to read or write",
+		key, constants.ReservedKeyPrefix))
 }
 
 func (s *Service) signer(audience bucketv1.SignedAudience) (PresignAPI, error) {
@@ -175,13 +213,19 @@ func (s *Service) PresignUpload(ctx context.Context, req *bucketv1.PresignUpload
 		return nil, err
 	}
 
-	held := scopeOf(req.GetBucket())
+	held, err := s.held(req.GetBucket())
+	if err != nil {
+		return nil, err
+	}
 	sessionID := s.newID()
 	now := s.now()
 
 	files := make([]sessionFile, len(req.GetFiles()))
 	targets := make([]*bucketv1.PresignedTarget, len(req.GetFiles()))
 	for i, f := range req.GetFiles() {
+		if err := reserved(f.GetKey()); err != nil {
+			return nil, err
+		}
 		target, err := s.signUpload(ctx, signer, held, f, req.GetContentDisposition())
 		if err != nil {
 			return nil, err

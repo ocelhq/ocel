@@ -4,11 +4,15 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	"github.com/ocelhq/ocel/pkg/naming"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/pkg/runtimekit/proxy"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
@@ -29,7 +33,32 @@ func proxyWanted(bindings []live.Binding) bool {
 	return false
 }
 
-func serveProxy(ctx context.Context, bindings []live.Binding, table, sessionPrefix string) ([]string, <-chan error, error) {
+type bindingValues interface {
+	Value(key string) string
+	Bindings() []live.Binding
+}
+
+func grantedBuckets(values bindingValues) func() []string {
+	return func() []string {
+		var held []string
+		for _, l := range values.Bindings() {
+			if l.Type != bindingsv1.BindingType_BINDING_TYPE_BUCKET {
+				continue
+			}
+			record := &bindingsv1.Binding{}
+			if err := protojson.Unmarshal([]byte(values.Value(l.Key)), record); err != nil {
+				continue
+			}
+			if name := record.GetBucket().GetBucket(); name != "" && !slices.Contains(held, name) {
+				held = append(held, name)
+			}
+		}
+		return held
+	}
+}
+
+func serveProxy(ctx context.Context, values bindingValues, table, sessionPrefix string) ([]string, <-chan error, error) {
+	bindings := values.Bindings()
 	if !proxyWanted(bindings) {
 		return nil, nil, nil
 	}
@@ -51,6 +80,7 @@ func serveProxy(ctx context.Context, bindings []live.Binding, table, sessionPref
 		Objects:          objects,
 		Table:            table,
 		SessionKeyPrefix: sessionPrefix,
+		Granted:          grantedBuckets(values),
 	})
 
 	served, err := proxy.Serve(svc)

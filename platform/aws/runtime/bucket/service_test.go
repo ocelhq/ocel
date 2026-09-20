@@ -113,7 +113,8 @@ func (p *fakePresigner) PresignPostObject(_ context.Context, in *s3.PutObjectInp
 const testSessionKeyPrefix = "PROJECT#shop#ENV#prod#SESSION#"
 
 func newTestService(ddb ddbAPI, ps presignAPI) *Service {
-	s := New(Config{DDB: ddb, Presigner: ps, Table: "sessions", SessionKeyPrefix: testSessionKeyPrefix})
+	s := New(Config{DDB: ddb, Presigner: ps, Table: "sessions", SessionKeyPrefix: testSessionKeyPrefix,
+		Granted: func() []string { return []string{"storage", "b"} }})
 	s.newID = func() string { return "sess_fixed" }
 	s.newSecret = func() string { return "test-secret" }
 	s.now = func() time.Time { return time.Unix(1_000_000, 0) }

@@ -31,9 +31,20 @@ func proxyEnvValue(t *testing.T, env []string, key string) string {
 
 var testSessionPrefix = naming.SessionKeyPrefix("shop", "prod")
 
+type declared struct {
+	bindings []live.Binding
+	values   map[string]string
+}
+
+func (d declared) Bindings() []live.Binding { return d.bindings }
+
+func (d declared) Value(key string) string { return d.values[key] }
+
+func binds(bindings ...live.Binding) declared { return declared{bindings: bindings} }
+
 func TestServeProxy(t *testing.T) {
 	t.Run("a deployment whose bindings all go direct serves nothing", func(t *testing.T) {
-		env, served, err := serveProxy(context.Background(), []live.Binding{{Name: "db--main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}, "state", testSessionPrefix)
+		env, served, err := serveProxy(context.Background(), binds(live.Binding{Name: "db--main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}), "state", testSessionPrefix)
 		if err != nil {
 			t.Fatalf("serveProxy: %v", err)
 		}
@@ -43,14 +54,14 @@ func TestServeProxy(t *testing.T) {
 	})
 
 	t.Run("a bucket with nowhere to keep its sessions fails by name", func(t *testing.T) {
-		_, _, err := serveProxy(context.Background(), []live.Binding{{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}}, "", testSessionPrefix)
+		_, _, err := serveProxy(context.Background(), binds(live.Binding{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}), "", testSessionPrefix)
 		if err == nil || !strings.Contains(err.Error(), stateTableEnvVar) {
 			t.Fatalf("serveProxy err = %v, want it to name %s", err, stateTableEnvVar)
 		}
 	})
 
 	t.Run("a bucket whose sessions have no key scope refuses to serve", func(t *testing.T) {
-		_, _, err := serveProxy(context.Background(), []live.Binding{{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}}, "state", "")
+		_, _, err := serveProxy(context.Background(), binds(live.Binding{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}), "state", "")
 		if err == nil || !strings.Contains(err.Error(), sessionPrefixEnvVar) {
 			t.Fatalf("serveProxy err = %v, want it to name %s", err, sessionPrefixEnvVar)
 		}
@@ -61,7 +72,7 @@ func TestServeProxy(t *testing.T) {
 		t.Setenv("AWS_ACCESS_KEY_ID", "test")
 		t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
 
-		env, served, err := serveProxy(context.Background(), []live.Binding{{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}}, "state", testSessionPrefix)
+		env, served, err := serveProxy(context.Background(), binds(live.Binding{Name: "bucket--uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}), "state", testSessionPrefix)
 		if err != nil {
 			t.Fatalf("serveProxy: %v", err)
 		}

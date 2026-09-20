@@ -260,8 +260,8 @@ func TestAnAppBindingABucketIsHandedItsStoreSealedAndNeverInPlaintext(t *testing
 	if manifest.Store.Volume == "" {
 		t.Error("the manifest names no volume, so the disk guard has nothing to measure")
 	}
-	if manifest.Store.Sessions != constants.StoreSessionsBucket() {
-		t.Errorf("upload sessions live in %q, want the store's own bucket: a session kept inside a declared bucket is stranded the day that bucket is dropped",
+	if !strings.HasPrefix(manifest.Store.Sessions, constants.StoreSessionsBucket()+"/") {
+		t.Errorf("upload sessions live in %q, want a prefix of the store's own bucket: a session kept inside a declared bucket is stranded the day that bucket is dropped",
 			manifest.Store.Sessions)
 	}
 }
@@ -369,8 +369,8 @@ func TestAnAppBoundToAnExternalStoreIsHandedThatStoreAndItsOwnPrefix(t *testing.
 	if manifest.Store == nil || manifest.Store.Endpoint != "https://s3.example.com" {
 		t.Fatalf("the manifest points the runtime at %+v, want the store the project was pointed at", manifest.Store)
 	}
-	if manifest.Store.Sessions != "shared/shop/prod" {
-		t.Errorf("upload sessions live under %q, want the prefix this project and environment own inside the named bucket", manifest.Store.Sessions)
+	if manifest.Store.Sessions != "shared/shop/prod/web" {
+		t.Errorf("upload sessions live under %q, want the prefix this project, environment and app own inside the named bucket", manifest.Store.Sessions)
 	}
 	if manifest.Store.Volume != "" {
 		t.Errorf("the manifest names volume %q for a store this box does not run", manifest.Store.Volume)

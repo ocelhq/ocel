@@ -64,6 +64,8 @@ type stubValues struct {
 	refreshs int
 }
 
+func (s *stubValues) Value(key string) string { return s.pushed[key] }
+
 func (s *stubValues) Prefetch(context.Context) <-chan error {
 	done := make(chan error, 1)
 	go func() {

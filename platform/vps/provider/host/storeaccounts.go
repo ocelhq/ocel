@@ -28,6 +28,7 @@ type StoreAccount struct {
 	AccessKeyID string
 	SecretKey   string
 	Buckets     []string
+	Sessions    string
 }
 
 type adminCall struct {
@@ -39,10 +40,13 @@ type adminCall struct {
 	allow  []string
 }
 
-func accountPolicy(buckets []string) ([]byte, error) {
-	resources := make([]string, 0, len(buckets)*2)
+func accountPolicy(buckets []string, sessions string) ([]byte, error) {
+	resources := make([]string, 0, len(buckets)*2+1)
 	for _, bucket := range buckets {
 		resources = append(resources, "arn:aws:s3:::"+bucket, "arn:aws:s3:::"+bucket+"/*")
+	}
+	if sessions != "" {
+		resources = append(resources, "arn:aws:s3:::"+strings.TrimSuffix(sessions, "/")+"/*")
 	}
 	return json.Marshal(map[string]any{
 		"Version": "2012-10-17",
@@ -55,7 +59,7 @@ func accountPolicy(buckets []string) ([]byte, error) {
 }
 
 func (a StoreAccount) calls() ([]adminCall, error) {
-	policy, err := accountPolicy(a.Buckets)
+	policy, err := accountPolicy(a.Buckets, a.Sessions)
 	if err != nil {
 		return nil, err
 	}

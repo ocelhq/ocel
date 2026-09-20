@@ -299,9 +299,11 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 			Region:        external.Region,
 			AccessKeyID:   external.AccessKeyID,
 			PathStyle:     external.PathStyle,
-			Sessions:      external.Bucket + "/" + naming.Sanitize(plan.Ref.Project) + "/" + naming.Sanitize(plan.Ref.Name.Env),
-			PostPolicies:  p.stores.probing().PostPolicies,
-			Sealed:        base64.StdEncoding.EncodeToString(sealed),
+			Sessions: external.Bucket + "/" + naming.Sanitize(plan.Ref.Project) + "/" +
+				naming.Sanitize(plan.Ref.Name.Env) + "/" + naming.Sanitize(appNameOf(plan.App)),
+			Granted:      grantedBuckets(plan.App),
+			PostPolicies: p.stores.probing().PostPolicies,
+			Sealed:       base64.StdEncoding.EncodeToString(sealed),
 		}, nil
 	}
 	spec := p.stores.shape()
@@ -327,10 +329,16 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 		PathStyle:    true,
 		Pointer:      storeRoute(plan.Ref, spec.Name).Pointer,
 		Volume:       spec.VolumeName(),
-		Sessions:     constants.StoreSessionsBucket(),
+		Sessions:     sessionsPrefix(plan),
+		Granted:      grantedBuckets(plan.App),
 		PostPolicies: true,
 		Sealed:       base64.StdEncoding.EncodeToString(own.held.sealed),
 	}, nil
+}
+
+func sessionsPrefix(plan providerkit.StackPlan) string {
+	return constants.StoreSessionsBucket() + "/" +
+		storeRef(plan.Ref).Name.String() + "/" + naming.Sanitize(appNameOf(plan.App))
 }
 
 type appAccount struct {
@@ -356,7 +364,8 @@ func (p *Provider) storeAccount(ctx context.Context, plan providerkit.StackPlan,
 		RootSecret:  root.secret,
 		AccessKeyID: key,
 		SecretKey:   held.secret,
-		Buckets:     append(boundBuckets(plan.App), constants.StoreSessionsBucket()),
+		Buckets:     boundBuckets(plan.App),
+		Sessions:    sessionsPrefix(plan),
 	}); err != nil {
 		return appAccount{}, err
 	}
@@ -370,7 +379,7 @@ func appNameOf(app *providerkit.AppPlan) string {
 	return app.App
 }
 
-func boundBuckets(app *providerkit.AppPlan) []string {
+func grantedBuckets(app *providerkit.AppPlan) []string {
 	if app == nil {
 		return nil
 	}
@@ -379,7 +388,17 @@ func boundBuckets(app *providerkit.AppPlan) []string {
 		if binding.Type != providerkit.BindingBucket {
 			continue
 		}
-		bucket, _, _ := strings.Cut(binding.Properties[providerkit.PropertyBucket], "/")
+		if spec := binding.Properties[providerkit.PropertyBucket]; spec != "" && !slices.Contains(held, spec) {
+			held = append(held, spec)
+		}
+	}
+	return held
+}
+
+func boundBuckets(app *providerkit.AppPlan) []string {
+	var held []string
+	for _, spec := range grantedBuckets(app) {
+		bucket, _, _ := strings.Cut(spec, "/")
 		if bucket != "" && !slices.Contains(held, bucket) {
 			held = append(held, bucket)
 		}
