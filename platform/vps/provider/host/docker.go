@@ -110,11 +110,19 @@ func unitCommand(i Item) string {
 
 func engineProbe() string {
 	return `if command -v ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then
-if systemctl cat ` + quoted(dockerUnit) + ` >/dev/null 2>&1; then engine=present; else engine=` + quoted(unservedFact) + `; fi
+if systemctl cat ` + quoted(dockerUnit) + ` >/dev/null 2>&1; then engine=present
+elif ` + systemdAnswers + `; then engine=` + quoted(unservedFact) + `
+else engine=''
+` + unreadable(KindEngine, quoted(dockerEngine), `'systemctl would not answer, so nothing here can tell an engine this host already serves from one a deploy would install over it. Ocel runs the engine as a systemd unit: run systemctl status on this host to see what stopped systemctl, and if this box is served by an init other than systemd it is not one ocel can stand an engine on'`) + `
+fi
+if [ -n "$engine" ]; then
 ` + reports(quoted(KindEngine), quoted(dockerEngine), "0", quoted(rootOwner),
 		`"$(printf 'engine=%s\n' "$engine" | sha256sum | cut -d' ' -f1)"`) + `
+fi
 fi`
 }
+
+const systemdAnswers = "systemctl list-unit-files >/dev/null 2>&1"
 
 func unitProbe(i Item) string {
 	name := quoted(i.Name)
@@ -128,6 +136,8 @@ enabled=$(systemctl is-enabled ` + name + ` 2>/dev/null || true)
 facts=$( printf 'active=%s\nenabled=%s\n' "$active" "$enabled"
 ` + watching + `)
 ` + reports(quoted(KindUnit), name, "0", quoted(rootOwner), `"$(printf '%s\n' "$facts" | sha256sum | cut -d' ' -f1)"`) + `
+elif ! ` + systemdAnswers + `; then
+` + unreadable(KindUnit, name, `'systemctl would not run to read the unit'`) + `
 fi`
 }
 

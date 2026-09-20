@@ -281,6 +281,28 @@ func TestABoxStandingAtTheStampAWriteLeftDescribesItselfAsCurrent(t *testing.T) 
 	}
 }
 
+func TestOneProbeThatCouldNotLookRefusesTheWholeReadingRatherThanPlanningOverIt(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := settledOn(t, class)
+	held := stood.answer
+	stood.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, "for p in") {
+			return session.Result{Stdout: strings.Join([]string{kindUnreadable, deployUser, "0", KindUser, "getent passwd exited 126"}, "\t") + "\n"}, true
+		}
+		return held(command)
+	}
+
+	described, err := Bootstrap(stood.host(), testVendor).Describe(context.Background(), class)
+	if err == nil {
+		t.Fatalf("Describe() over a survey that could not run one of its probes = %+v, want a refusal: a plan built on it writes over whatever the probe could not see", described)
+	}
+	if !strings.Contains(err.Error(), deployUser) {
+		t.Errorf("Describe() refused with %q and never names what could not be read", err)
+	}
+}
+
 func TestOneItemTheReadingCannotHashIsDriftRatherThanAnAbsence(t *testing.T) {
 	t.Parallel()
 

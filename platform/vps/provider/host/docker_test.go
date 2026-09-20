@@ -13,6 +13,7 @@ import (
 type engine struct {
 	installed bool
 	unit      bool
+	deaf      bool
 	active    string
 	enabled   string
 }
@@ -35,12 +36,17 @@ func daemon(t *testing.T, held engine) string {
 	if held.unit {
 		known = "exit 0"
 	}
-	write("systemctl", `case "$1" in
-cat) `+known+` ;;
-is-active) printf '%s\n' `+quoted(held.active)+` ;;
-is-enabled) printf '%s\n' `+quoted(held.enabled)+` ;;
+	manager := `case "$1" in
+cat) ` + known + ` ;;
+is-active) printf '%s\n' ` + quoted(held.active) + ` ;;
+is-enabled) printf '%s\n' ` + quoted(held.enabled) + ` ;;
+list-unit-files) exit 0 ;;
 *) exit 1 ;;
-esac`)
+esac`
+	if held.deaf {
+		manager = "exit 126"
+	}
+	write("systemctl", manager)
 	for _, tool := range []string{"sha256sum", "cut"} {
 		found, err := exec.LookPath(tool)
 		if err != nil {
@@ -55,6 +61,15 @@ esac`)
 
 func probed(t *testing.T, held engine) map[string]string {
 	t.Helper()
+	observed, err := engineProbed(t, held)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return observed
+}
+
+func engineProbed(t *testing.T, held engine) (map[string]string, error) {
+	t.Helper()
 	dir := daemon(t, held)
 	cmd := exec.Command("/bin/sh", "-c", engineProbe()+"\n"+unitProbe(unitItem()))
 	cmd.Env = []string{"PATH=" + dir}
@@ -65,10 +80,19 @@ func probed(t *testing.T, held engine) map[string]string {
 		t.Fatalf("probe the engine: %v\n%s", err, stderr.String())
 	}
 	observed, _, err := readSurvey(string(rendered))
-	if err != nil {
-		t.Fatal(err)
+	return observed, err
+}
+
+func TestASystemctlThatWillNotRunIsNotAnEngineNothingServesAndNoUnit(t *testing.T) {
+	t.Parallel()
+
+	observed, err := engineProbed(t, engine{installed: true, unit: true, deaf: true, active: "active", enabled: "enabled"})
+	if err == nil {
+		t.Fatalf("a survey whose systemctl could not be run read %v: an engine read as unserved is one apply reinstalls, as root, over the daemon already running every container on the box", observed)
 	}
-	return observed
+	if !strings.Contains(err.Error(), dockerEngine) {
+		t.Errorf("the refusal reads %q and never names what nothing could be read about", err)
+	}
 }
 
 func TestTheProbeAndTheWriteAgreeOnWhatAServingEngineIs(t *testing.T) {
