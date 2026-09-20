@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -30,6 +31,27 @@ func TestParseNamespaceRefuses(t *testing.T) {
 	for _, given := range []string{"Ocel", "ocel_one", "1ocel", "-ocel", "ocel bootstrap", "ocel/one", strings.Repeat("a", providerkit.MaxNamespaceLength+1)} {
 		if _, err := providerkit.ParseNamespace(given); err == nil {
 			t.Errorf("ParseNamespace(%q) was accepted, want a refusal", given)
+		}
+	}
+}
+
+func TestParseNamespaceRefusesASpellingNamingWouldNotMint(t *testing.T) {
+	for _, given := range []string{"a--b", "abc-", "a---b", "ocel--two"} {
+		ns, err := providerkit.ParseNamespace(given)
+		if err == nil {
+			t.Errorf("ParseNamespace(%q) = %q, want a refusal: it is not the spelling a name minted from it would carry", given, ns)
+		}
+	}
+}
+
+func TestEveryAcceptedNamespaceIsTheFieldANameMintsFromIt(t *testing.T) {
+	for _, given := range []string{"ocel", "j-a1b2c3-cache", "a", "a1"} {
+		ns, err := providerkit.ParseNamespace(given)
+		if err != nil {
+			t.Fatalf("ParseNamespace(%q): %v", given, err)
+		}
+		if minted := naming.Join(naming.FieldSeparator, ns.String()); minted != ns.String() {
+			t.Errorf("a name minted from namespace %q carries the field %q, so what is minted and what is matched differ", ns, minted)
 		}
 	}
 }
