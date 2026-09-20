@@ -196,22 +196,26 @@ async function* chunked(
   const reader = stream.getReader();
   let held: Uint8Array[] = [];
   let length = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (value) {
-      held.push(value);
-      length += value.byteLength;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (value) {
+        held.push(value);
+        length += value.byteLength;
+      }
+      while (length >= size) {
+        const joined = concat(held, length);
+        yield joined.subarray(0, size);
+        const rest = joined.subarray(size);
+        held = rest.byteLength > 0 ? [rest] : [];
+        length = rest.byteLength;
+      }
+      if (done) break;
     }
-    while (length >= size) {
-      const joined = concat(held, length);
-      yield joined.subarray(0, size);
-      const rest = joined.subarray(size);
-      held = rest.byteLength > 0 ? [rest] : [];
-      length = rest.byteLength;
-    }
-    if (done) break;
+    if (length > 0) yield concat(held, length);
+  } finally {
+    await reader.cancel().catch(() => {});
   }
-  if (length > 0) yield concat(held, length);
 }
 
 function concat(chunks: Uint8Array[], length: number): Uint8Array {
@@ -310,6 +314,9 @@ export function createObjects(deps: {
     });
 
     const completed: { partNumber: number; etag: string }[] = [];
+    const inFlight = new AbortController();
+    const giveUp = () => inFlight.abort();
+    options.signal?.addEventListener("abort", giveUp);
     let next = 1;
     try {
       for (;;) {
@@ -338,7 +345,7 @@ export function createObjects(deps: {
               method: "PUT",
               body: part.bytes,
               headers: { ...target.headers },
-              signal: options.signal,
+              signal: inFlight.signal,
             });
             if (!res.ok) {
               throw new Error(`part ${part.partNumber} of "${key}" was refused (${res.status})`);
@@ -361,8 +368,12 @@ export function createObjects(deps: {
         ifMatch: options.ifMatch ?? "",
       });
     } catch (error) {
+      inFlight.abort();
+      await parts.return(undefined).catch(() => {});
       await client.abortMultipart({ bucket, key, uploadId }).catch(() => {});
       throw wireRefusal(key, error);
+    } finally {
+      options.signal?.removeEventListener("abort", giveUp);
     }
   };
 
