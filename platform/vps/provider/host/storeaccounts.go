@@ -40,22 +40,33 @@ type adminCall struct {
 	allow  []string
 }
 
+var (
+	bucketActions = []string{"s3:ListBucket", "s3:GetBucketLocation", "s3:ListBucketMultipartUploads"}
+	objectActions = []string{"s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"}
+)
+
 func accountPolicy(buckets []string, sessions string) ([]byte, error) {
-	resources := make([]string, 0, len(buckets)*2+1)
+	named := make([]string, 0, len(buckets))
+	objects := make([]string, 0, len(buckets)+1)
 	for _, bucket := range buckets {
-		resources = append(resources, "arn:aws:s3:::"+bucket, "arn:aws:s3:::"+bucket+"/*")
+		named = append(named, "arn:aws:s3:::"+bucket)
+		objects = append(objects, "arn:aws:s3:::"+bucket+"/*")
 	}
 	if sessions != "" {
-		resources = append(resources, "arn:aws:s3:::"+strings.TrimSuffix(sessions, "/")+"/*")
+		objects = append(objects, "arn:aws:s3:::"+strings.TrimSuffix(sessions, "/")+"/*")
 	}
-	return json.Marshal(map[string]any{
-		"Version": "2012-10-17",
-		"Statement": []any{map[string]any{
-			"Effect":   "Allow",
-			"Action":   []string{"s3:*"},
-			"Resource": resources,
-		}},
-	})
+	var statements []any
+	if len(named) > 0 {
+		statements = append(statements, map[string]any{
+			"Effect": "Allow", "Action": bucketActions, "Resource": named,
+		})
+	}
+	if len(objects) > 0 {
+		statements = append(statements, map[string]any{
+			"Effect": "Allow", "Action": objectActions, "Resource": objects,
+		})
+	}
+	return json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": statements})
 }
 
 func (a StoreAccount) calls() ([]adminCall, error) {
