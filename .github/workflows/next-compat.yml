@@ -17,6 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  OCEL_NAMESPACE: e2e-next-compat
   BASELINE_MANIFEST: test/ocel-deploy-tests-manifest.json
   ADAPTER_BASELINE: tests/next-compat/baseline-manifest.json
   NODE_VERSION: "22"

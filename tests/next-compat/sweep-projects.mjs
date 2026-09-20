@@ -4,11 +4,14 @@ import { listParameterNames, POLL_INTERVAL_MS, sleep } from "./aws.mjs";
 import {
   PREVIEW_ROOT_STACK_PARAM_PREFIX,
   projectSlugForRun,
+  requireNamespace,
   strandedProjectSlugs,
 } from "./lib.mjs";
 import { destroyProject } from "./project-teardown.mjs";
 
 const LIST_DEADLINE_MS = 120_000;
+
+requireNamespace();
 
 async function listRootStackParams() {
   const deadline = Date.now() + LIST_DEADLINE_MS;

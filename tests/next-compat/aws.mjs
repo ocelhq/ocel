@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-import { envSegment, lambdaFunctionNames } from "./lib.mjs";
+import { DEFAULT_NAMESPACE, envSegment, lambdaFunctionNames } from "./lib.mjs";
 
 export const POLL_INTERVAL_MS = 3_000;
 
@@ -145,8 +145,6 @@ export function resolveFunctionName(slug, app, environment, fail) {
   }
   return names[0];
 }
-
-export const DEFAULT_NAMESPACE = "ocel";
 
 export function previewBootstrapStack(env = process.env) {
   return `${env.OCEL_NAMESPACE?.trim() || DEFAULT_NAMESPACE}-bootstrap-preview`;

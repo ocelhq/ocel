@@ -21,6 +21,7 @@ import {
   previewRefForApp,
   projectSlugForRun,
   renderOcelConfig,
+  requireNamespace,
   SKIP_DRIFT_CHECK_ENV,
   STATE_FILE,
   tail,
@@ -64,6 +65,7 @@ try {
 }
 
 function deploy() {
+  requireNamespace();
   const adapterDir = required("ADAPTER_DIR");
   const sidecarDir = required("OCEL_E2E_SIDECAR_DIR");
 
