@@ -4,7 +4,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
-import { migrates, setsEnv } from "../checks";
+import { migrates, setsEnv, setsSecret } from "../checks";
 import {
   INITIAL_GREETING,
   REDACTED,
@@ -192,6 +192,8 @@ export class VpsTarget implements Target, ReleaseCycle {
 
     if (setsEnv(cell.fixture.checks)) {
       await drive("env-greeting", ["env", "set", `GREETING=${INITIAL_GREETING}`]);
+    }
+    if (setsSecret(cell.fixture.checks)) {
       await drive("env-secret", ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`]);
     }
     await drive("deploy", ["deploy", "--yes"]);

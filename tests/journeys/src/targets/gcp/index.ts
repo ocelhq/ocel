@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { migrates, setsEnv } from "../../checks";
+import { migrates, setsEnv, setsSecret } from "../../checks";
 import { INITIAL_GREETING, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../../checks/context";
 import { GCP_BASE, journeyConfigIn, type Overlay, writeJourneyConfig } from "../../config";
 import { currentRunIdentity, projectSlug, slugPart } from "../../identity";
@@ -181,6 +181,8 @@ export class GcpTarget implements Target, ReleaseCycle {
         ["env", "set", `GREETING=${INITIAL_GREETING}`],
         env,
       );
+    }
+    if (setsSecret(cell.fixture.checks)) {
       await runOcel(
         cell,
         dir,

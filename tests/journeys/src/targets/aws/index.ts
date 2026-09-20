@@ -1,6 +1,6 @@
 import { access, rm } from "node:fs/promises";
 import { setTimeout as pause } from "node:timers/promises";
-import { migrates, setsEnv } from "../../checks";
+import { migrates, setsEnv, setsSecret } from "../../checks";
 import { INITIAL_GREETING, SECRET_TOKEN } from "../../checks/context";
 import { appHostname } from "../../identity";
 import type { Lane, Phase } from "../../matrix/types";
@@ -69,6 +69,8 @@ export class AwsTarget implements Target, ReleaseCycle {
         ["env", "set", `GREETING=${INITIAL_GREETING}`],
         env,
       );
+    }
+    if (setsSecret(cell.fixture.checks)) {
       await runOcel(
         cell,
         dir,

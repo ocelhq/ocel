@@ -6,7 +6,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
-import { migrates, setsEnv } from "../checks";
+import { migrates, setsEnv, setsSecret } from "../checks";
 import { INITIAL_GREETING, redact, SECRET_TOKEN, UNCAPPED_BODY_BYTES } from "../checks/context";
 import { journeyConfigIn } from "../config";
 import type { Lane } from "../matrix/types";
@@ -137,7 +137,10 @@ async function removeStack(project: string): Promise<void> {
 async function writeDotfile(cell: CellUnderTest, dir: string): Promise<void> {
   const lines: string[] = [];
   if (setsEnv(cell.fixture.checks)) {
-    lines.push(`GREETING=${INITIAL_GREETING}`, `SECRET_TOKEN=${SECRET_TOKEN}`);
+    lines.push(`GREETING=${INITIAL_GREETING}`);
+  }
+  if (setsSecret(cell.fixture.checks)) {
+    lines.push(`SECRET_TOKEN=${SECRET_TOKEN}`);
   }
   await writeFile(path.join(dir, DOTFILE), `${lines.join("\n")}\n`, "utf8");
   await cell.evidence.write("deploy", DOTFILE, `${lines.join("\n")}\n`);
