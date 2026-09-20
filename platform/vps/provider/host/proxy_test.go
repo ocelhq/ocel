@@ -210,7 +210,8 @@ func TestTheProxyImageIsPulledOffTheAnonymousHubCeilingAndRetriedBeforeTheRun(t 
 	for _, want := range []string{
 		"docker image inspect " + quoted(ProxyImage),
 		fmt.Sprintf("-ge %d", proxyPulls),
-		"sleep $((at * 2))",
+		pullHold.start(),
+		pullHold.again(),
 	} {
 		if !strings.Contains(command, want) {
 			t.Errorf("the pull carries no %q, so it is either unbounded or repeated on a box that already holds the image:\n%s", want, command)

@@ -23,12 +23,30 @@ const (
 	dockerSource       = "https://raw.githubusercontent.com/docker/docker-install/" + dockerScriptCommit + "/install.sh"
 )
 
-const (
-	engineInstallTries          = 3
-	engineInstallBackoffSeconds = 15
-	engineInstallCeilingSeconds = 60
-	engineInstallJitterSeconds  = 15
+const engineInstallTries = 3
+
+type hold struct {
+	counter string
+	base    int
+	ceiling int
+	spread  int
+}
+
+var (
+	engineInstallHold = hold{counter: "tries", base: 15, ceiling: 60, spread: 15}
+	pullHold          = hold{counter: "at", base: 2, ceiling: 30, spread: 5}
 )
+
+func (h hold) start() string { return "backoff=" + strconv.Itoa(h.base) + "\n" }
+
+func (h hold) again() string {
+	return `jitter=$(awk -v seed=$$ -v n="$` + h.counter + `" -v spread=` + strconv.Itoa(h.spread) + ` 'BEGIN{srand(seed+n);print int(rand()*spread)}' 2>/dev/null || echo 0)
+[ -n "$jitter" ] || jitter=0
+sleep $((backoff + jitter))
+backoff=$((backoff * 2))
+if [ "$backoff" -gt ` + strconv.Itoa(h.ceiling) + ` ]; then backoff=` + strconv.Itoa(h.ceiling) + `; fi
+`
+}
 
 const (
 	engineFact   = "engine=present\n"
@@ -84,20 +102,14 @@ echo '` + dockerSource + ` does not hash to ` + dockerScriptSum + `, which is th
 exit 1
 fi
 tries=0
-backoff=` + strconv.Itoa(engineInstallBackoffSeconds) + `
-while :; do
+` + engineInstallHold.start() + `while :; do
 if VERSION=` + dockerVersion + ` sh "$script"; then break; fi
 tries=$((tries + 1))
 if [ "$tries" -ge ` + strconv.Itoa(engineInstallTries) + ` ]; then
 echo '` + dockerSource + ` failed ` + strconv.Itoa(engineInstallTries) + ` times, the last of them above, so ocel stopped retrying it' >&2
 exit 1
 fi
-jitter=$(awk -v seed=$$ -v n="$tries" -v spread=` + strconv.Itoa(engineInstallJitterSeconds) + ` 'BEGIN{srand(seed+n);print int(rand()*spread)}' 2>/dev/null || echo 0)
-[ -n "$jitter" ] || jitter=0
-sleep $((backoff + jitter))
-backoff=$((backoff * 2))
-if [ "$backoff" -gt ` + strconv.Itoa(engineInstallCeilingSeconds) + ` ]; then backoff=` + strconv.Itoa(engineInstallCeilingSeconds) + `; fi
-done`
+` + engineInstallHold.again() + `done`
 }
 
 func unitCommand(i Item) string {
