@@ -354,8 +354,24 @@ export class VpsTarget implements Target, ReleaseCycle {
         }
         return url;
       },
-      fetch: (...args) => fetch(...args),
+      fetch: (input, init) => this.reaching(session, input, init),
     };
+  }
+
+  private async reaching(
+    session: BoxSession,
+    input: string | URL | Request,
+    init?: RequestInit,
+  ): Promise<Response> {
+    const asked = typeof input === "string" || input instanceof URL ? input.toString() : input.url;
+    const url = new URL(asked);
+    if (url.hostname === `${this.zone()}` || !url.hostname.endsWith(`.${this.zone()}`)) {
+      return fetch(input, init);
+    }
+    const front = new URL(await session.gateway.serving(url.hostname));
+    url.protocol = front.protocol;
+    url.host = front.host;
+    return fetch(url, init);
   }
 
   private async sessionFor(cell: CellUnderTest): Promise<BoxSession> {
