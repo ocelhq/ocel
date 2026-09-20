@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from typing import Any, overload
 
 from ocel._declare import declare_env, discovering, report_env_problems
+from ocel._live import live_value
 from ocel.gen.app.resources.v1.variables_pb import (
     DeclareEnvRequest,
     GroupDefinition,
@@ -33,7 +34,6 @@ __all__ = [
 
 DELIVERED_PREFIX = "OCEL_VAR_"
 APP_FOLDER_ENV = "OCEL_APP_FOLDER"
-LIVE_DIR_ENV = "OCEL_LIVE_DIR"
 RESERVED_PREFIX = "OCEL_"
 URL_KEY = "OCEL_URL"
 
@@ -885,18 +885,7 @@ def _delivered(key: str) -> str | None:
     plain = os.environ.get(key)
     if plain is not None:
         return plain
-    return _live_file(key)
-
-
-def _live_file(key: str) -> str | None:
-    directory = os.environ.get(LIVE_DIR_ENV)
-    if not directory:
-        return None
-    try:
-        with open(os.path.join(directory, key), "rb") as handle:
-            return handle.read().decode()
-    except (OSError, ValueError):
-        return None
+    return live_value(key)
 
 
 def _unset(key: str) -> EnvValueError:

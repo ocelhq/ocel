@@ -4,7 +4,7 @@ from urllib.parse import quote
 
 from protobuf import Oneof
 
-from ocel._binding import binding, unprovisioned
+from ocel._binding import postgres_binding, unprovisioned
 from ocel._declare import declare, discovering
 from ocel.gen.app.resources.v1.resources_pb import (
     DeclareRequest,
@@ -33,7 +33,7 @@ class Postgres:
     @property
     def connection_string(self) -> str:
         """The postgres URL of the delivered binding, with the credentials percent-encoded."""
-        properties = binding(self.name)
+        properties = postgres_binding(self.name)
         user = quote(properties.username, safe="")
         password = quote(properties.password, safe="")
         database = quote(properties.database, safe="")
