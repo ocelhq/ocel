@@ -138,6 +138,40 @@ describe("op=presign", () => {
     expect(out.files[0].headers).toEqual({ "x-amz-tagging": "sessionId=sess-1" });
   });
 
+  it("hands the uploader the form the store signed a post policy for", async () => {
+    const { ctx } = fakeContext({
+      presignUpload: vi.fn(async () => ({
+        sessionId: "sess-1",
+        files: [
+          {
+            url: "https://store/bucket",
+            key: "avatars/photo.jpg",
+            name: "photo.jpg",
+            method: "POST",
+            fields: { key: "avatars/photo.jpg", policy: "eyJ9", "x-amz-signature": "abc" },
+          },
+        ],
+      })),
+    });
+    const { POST } = createRouteHandler(storage, { runtime: ctx });
+
+    const res = await POST(
+      makeReq(presignUrl, {
+        uploader: "avatar",
+        input: { userId: "u1" },
+        files: [{ name: "photo.jpg", size: 500, mimeType: "image/jpeg" }],
+      }),
+    );
+
+    const out = (await res.json()) as any;
+    expect(out.files[0].method).toBe("POST");
+    expect(out.files[0].fields).toEqual({
+      key: "avatars/photo.jpg",
+      policy: "eyJ9",
+      "x-amz-signature": "abc",
+    });
+  });
+
   it("short-circuits (no presign) when middleware throws", async () => {
     const rejecting = bucket("s2", {
       uploaders: {
