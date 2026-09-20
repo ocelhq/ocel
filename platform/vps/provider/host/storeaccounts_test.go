@@ -25,7 +25,9 @@ func aBucketOn(t *testing.T, store, bucket string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out, err := exec.Command("sh", "-c", curlCommand(store, req, calls[0])).CombinedOutput(); err != nil {
+	made := exec.Command("sh", "-c", curlCommand(store, req, calls[0]))
+	made.Stdin = fedBody(calls[0].body)
+	if out, err := made.CombinedOutput(); err != nil {
 		t.Fatalf("the store kept no bucket %s: %v\n%s", bucket, err, out)
 	}
 }
@@ -47,7 +49,9 @@ func anAccountOn(t *testing.T, store string, account StoreAccount) error {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if out, err := exec.Command("sh", "-c", script).CombinedOutput(); err != nil {
+		ran := exec.Command("sh", "-c", script)
+		ran.Stdin = fedBody(call.body)
+		if out, err := ran.CombinedOutput(); err != nil {
 			t.Logf("%s: %s", call.what, strings.TrimSpace(string(out)))
 			return err
 		}
@@ -138,6 +142,37 @@ func TestAnAccountIsNamedInWhatEveryStoreKeepsAnAccessKeyIn(t *testing.T) {
 	}
 	if key == StoreAccountKey("prod", "admin") || key == StoreAccountKey("preview-pr-1", "web") {
 		t.Error("two apps reach the store under one account, so either reaches what the other was granted")
+	}
+}
+
+func TestTheSecretAnAppReachesTheStoreWithNeverRidesTheCommandLine(t *testing.T) {
+	t.Parallel()
+
+	const secret = "a-secret-no-process-list-should-hold"
+	account := StoreAccount{
+		Store: "shop-prod-store-s3", Endpoint: "http://127.0.0.1:9000", Region: "us-east-1",
+		RootKeyID: "ocel", RootSecret: "root-secret",
+		AccessKeyID: StoreAccountKey("prod", "web"), SecretKey: secret,
+		Buckets: []string{"shop-prod-uploads"},
+	}
+	calls, err := account.calls()
+	if err != nil {
+		t.Fatalf("calls() = %v", err)
+	}
+	for _, call := range calls {
+		script, err := accountScript(account, call, time.Unix(0, 0).UTC())
+		if err != nil {
+			t.Fatalf("accountScript(%s) = %v", call.what, err)
+		}
+		for what, held := range map[string]string{
+			"in the clear": secret,
+			"base64'd":     base64.StdEncoding.EncodeToString(call.body),
+		} {
+			if strings.Contains(script, held) {
+				t.Errorf("the script that would %s carries the app's store secret %s, and every process on the box reads it out of the process list:\n%s",
+					call.what, what, script)
+			}
+		}
 	}
 }
 

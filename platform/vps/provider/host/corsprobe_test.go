@@ -68,6 +68,7 @@ func TestARealStoreTakesEveryCallABucketIsDescribedWith(t *testing.T) {
 				t.Fatalf("%s: signed(%s) = %v", what, call.what, err)
 			}
 			run := exec.Command("sh", "-c", curlCommand(store, req, call))
+			run.Stdin = fedBody(call.body)
 			if out, err := run.CombinedOutput(); err != nil {
 				t.Errorf("%s: the store refused to %s: %v\n%s",
 					what, call.what, err, strings.TrimSpace(string(out)))
