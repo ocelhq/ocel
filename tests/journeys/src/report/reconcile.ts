@@ -19,7 +19,8 @@ export type Verdict =
   | "listed-and-passed"
   | "never-ran"
   | "disabled"
-  | "unplanned";
+  | "unplanned"
+  | "unprepared";
 
 export type ReconciledTest = {
   cell: string;
@@ -42,7 +43,10 @@ const FAILING_VERDICTS: ReadonlySet<Verdict> = new Set<Verdict>([
   "never-ran",
   "disabled",
   "unplanned",
+  "unprepared",
 ]);
+
+const LANE = "(lane)";
 
 const DISABLED: ReadonlySet<TestOutcome> = new Set<TestOutcome>(["skipped", "todo", "only"]);
 
@@ -100,11 +104,41 @@ function blockingByCell(
   return blocking;
 }
 
+function unprepared(planned: PlannedTest[], results: TestResult[], said: string): Report {
+  const lane: ReconciledTest = {
+    cell: LANE,
+    title: "prepare",
+    verdict: "unprepared",
+    listed: [],
+    error: said,
+  };
+  const byKey = new Map(results.map((result) => [key(result.cell, result.title), result]));
+  const tests: ReconciledTest[] = planned.map((entry) => {
+    const result = byKey.get(key(entry.cell, entry.title));
+    const ownReason =
+      result?.outcome === "failed" && result.error !== undefined && result.error !== said;
+    return {
+      cell: entry.cell,
+      title: entry.title,
+      phase: entry.phase,
+      verdict: ownReason ? "unexpected-failure" : "blocked",
+      listed: [],
+      ...(ownReason ? { error: result?.error } : {}),
+    };
+  });
+  const failures = [lane, ...tests.filter((test) => FAILING_VERDICTS.has(test.verdict))];
+  return { tests: [lane, ...tests], failures, failed: true };
+}
+
 export function reconcile(input: {
   planned: PlannedTest[];
   results: TestResult[];
   expectedFailures: ExpectedFailures;
+  prepareFailure?: string;
 }): Report {
+  if (input.prepareFailure !== undefined) {
+    return unprepared(input.planned, input.results, input.prepareFailure);
+  }
   const byKey = new Map(input.results.map((result) => [key(result.cell, result.title), result]));
   const blocking = blockingByCell(input.planned, byKey, input.expectedFailures);
   const seen = new Set<string>();
