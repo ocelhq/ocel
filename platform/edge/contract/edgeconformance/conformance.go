@@ -814,8 +814,25 @@ func runPreviews(t *testing.T, suite Suite) {
 			const pointer = "conformance-preview"
 			promote(t, stack, edge.Promotion{PromotionID: "previewed", Ts: 1, Builds: map[string]string{"web": "b1"}}, pointer)
 
-			if _, err := stack.RemovePointer(ctx, pointer, edge.DiscardReporter()); err != nil {
+			if host := edge.SharedPreview(spec.Slug, wildcard.BaseDomain).Host(pointer, ""); host == "" {
+				t.Fatalf("a preview promoted under %q on %q is addressed by no hostname, so nothing was published for anyone to reach", pointer, wildcard.BaseDomain)
+			}
+			served, err := stack.Ledger().History(ctx, pointer)
+			if err != nil {
+				t.Fatalf("History(%s): %v", pointer, err)
+			}
+			if !slices.ContainsFunc(served, func(entry edge.HistoryEntry) bool {
+				return entry.PromotionID == "previewed" && entry.Active
+			}) {
+				t.Fatalf("history under %q = %v, want the promotion this preview serves marked active; a preview that never landed makes every assertion after it vacuous", pointer, served)
+			}
+
+			pruned, err := stack.RemovePointer(ctx, pointer, edge.DiscardReporter())
+			if err != nil {
 				t.Fatalf("RemovePointer: %v", err)
+			}
+			if len(pruned.SurvivingPointerRecordKeys) != 0 {
+				t.Errorf("RemovePointer left %v under %q, and a key per preview ever served is a retention term that grows with previews-ever", pruned.SurvivingPointerRecordKeys, pointer)
 			}
 			left, err := stack.Ledger().History(ctx, pointer)
 			if err != nil {
