@@ -85,6 +85,13 @@ function underway(name: string, live: Set<string>): boolean {
   return id !== undefined && live.has(id);
 }
 
+export function bootstrapHeldBy(namespace: string, standing: string[]): string | undefined {
+  if (standing.length === 0) {
+    return undefined;
+  }
+  return `the ${namespace} bootstrap was left standing: ${standing.join(", ")} could not be destroyed out of it`;
+}
+
 export type Swept = { slug: string; fixture: Fixture; overlay: Overlay };
 
 export function sweepPlan(
@@ -197,10 +204,12 @@ export class AwsSweeper implements Sweeper {
     const held = await this.store(namespace);
     const fixtures = fixturesOn(matrix, "aws");
     const stranded: Stranded[] = [];
+    const standing: string[] = [];
     for (const slug of await held.deployedSlugs()) {
       const read = reclaimable(slug, [...byPart.keys()]);
       if (!read) {
         complaints.push(`${slug} stands in the ${namespace} bootstrap and no harness run made it`);
+        standing.push(slug);
         continue;
       }
       stranded.push(read);
@@ -212,7 +221,16 @@ export class AwsSweeper implements Sweeper {
         await writeJourneyConfig(dir, one.overlay);
         await ocel(dir, ["destroy", "production", "--yes"], ocelEnvIn(dir, namespace));
         process.stdout.write(`swept ${one.slug} from the ${namespace} bootstrap\n`);
-      }).catch((error) => complaints.push(`${one.slug}: ${String(error)}`));
+      }).catch((error) => {
+        complaints.push(`${one.slug}: ${String(error)}`);
+        standing.push(one.slug);
+      });
+    }
+
+    const kept = bootstrapHeldBy(namespace, standing);
+    if (kept) {
+      complaints.push(kept);
+      return;
     }
 
     const [first] = fixtures;
