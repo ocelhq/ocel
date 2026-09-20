@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -246,11 +247,12 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 	if err != nil {
 		return providerkit.Binding{}, err
 	}
+	public := declaredPublic(in.Resource.Bucket)
 	bucket := storeBucketName(in.Ref, in.Resource.Name)
 	if err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, held.secret, host.BucketSpec{
 		Bucket:         bucket,
 		AllowedOrigins: origins,
-		Public:         declaredPublic(in.Resource.Bucket),
+		Public:         public,
 	})); err != nil {
 		return providerkit.Binding{}, err
 	}
@@ -261,6 +263,7 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 		Resource: in.Resource.Declared,
 		Properties: map[string]string{
 			providerkit.PropertyBucket: bucket,
+			providerkit.PropertyPublic: strconv.FormatBool(public),
 		},
 	}, nil
 }

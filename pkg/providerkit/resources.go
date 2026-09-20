@@ -57,6 +57,7 @@ const (
 	PropertyPassword      = "password"
 	PropertyBucket        = "bucket"
 	PropertyPublicBaseURL = "publicBaseUrl"
+	PropertyPublic        = "public"
 )
 
 func RequiredProperties(t BindingType) []string {
@@ -108,6 +109,7 @@ func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
 		message.Properties = &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{
 			Bucket:        binding.Properties[PropertyBucket],
 			PublicBaseUrl: binding.Properties[PropertyPublicBaseURL],
+			Public:        binding.Properties[PropertyPublic] == "true",
 		}}
 	default:
 		fields := make(map[string]any, len(binding.Properties))

@@ -20,6 +20,9 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
@@ -331,6 +334,7 @@ func (s Store) Resolve(ctx context.Context, manifest live.Manifest) (map[string]
 	}
 	if base := s.storeBase(manifest); base != "" {
 		answer[live.StorePublicKey] = base
+		published(answer, manifest.Bindings, base)
 	}
 	if manifest.Store.Sealed == "" {
 		return answer, nil
@@ -372,6 +376,32 @@ func (s Store) storeSecret(ctx context.Context, manifest live.Manifest) (string,
 		return "", err
 	}
 	return string(opened), nil
+}
+
+func published(answer map[string]string, bindings []rt.Binding, base string) {
+	for _, binding := range bindings {
+		if binding.Type != bindingsv1.BindingType_BINDING_TYPE_BUCKET {
+			continue
+		}
+		held, ok := answer[binding.Key]
+		if !ok {
+			continue
+		}
+		record := &bindingsv1.Binding{}
+		if err := protojson.Unmarshal([]byte(held), record); err != nil {
+			continue
+		}
+		properties := record.GetBucket()
+		if properties == nil || !properties.GetPublic() {
+			continue
+		}
+		properties.PublicBaseUrl = base + "/" + properties.GetBucket()
+		republished, err := protojson.Marshal(record)
+		if err != nil {
+			continue
+		}
+		answer[binding.Key] = string(republished)
+	}
 }
 
 func merged(resolved map[string]string, bindings []rt.Binding, records []values.Published) map[string]string {

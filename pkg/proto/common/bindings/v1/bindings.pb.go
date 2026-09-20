@@ -276,6 +276,7 @@ type BucketProperties struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
 	PublicBaseUrl string                 `protobuf:"bytes,2,opt,name=public_base_url,json=publicBaseUrl,proto3" json:"public_base_url,omitempty"`
+	Public        bool                   `protobuf:"varint,3,opt,name=public,proto3" json:"public,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -322,6 +323,13 @@ func (x *BucketProperties) GetPublicBaseUrl() string {
 		return x.PublicBaseUrl
 	}
 	return ""
+}
+
+func (x *BucketProperties) GetPublic() bool {
+	if x != nil {
+		return x.Public
+	}
+	return false
 }
 
 type Grant struct {
@@ -471,10 +479,11 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
 	"\bdatabase\x18\x03 \x01(\tR\bdatabase\x12\x1a\n" +
 	"\busername\x18\x04 \x01(\tR\busername\x12\x1f\n" +
-	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\"R\n" +
+	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\"j\n" +
 	"\x10BucketProperties\x12\x16\n" +
 	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12&\n" +
-	"\x0fpublic_base_url\x18\x02 \x01(\tR\rpublicBaseUrl\"\x99\x01\n" +
+	"\x0fpublic_base_url\x18\x02 \x01(\tR\rpublicBaseUrl\x12\x16\n" +
+	"\x06public\x18\x03 \x01(\bR\x06public\"\x99\x01\n" +
 	"\x05Grant\x12\x18\n" +
 	"\aactions\x18\x01 \x03(\tR\aactions\x12\x1c\n" +
 	"\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n" +

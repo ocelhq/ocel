@@ -38,6 +38,8 @@ message BucketProperties {
   string bucket = 1;
 
   string public_base_url = 2;
+
+  bool public = 3;
 }
 
 message Grant {
