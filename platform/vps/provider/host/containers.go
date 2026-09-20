@@ -179,6 +179,12 @@ func ContainerName(stack, app, deployment, image string) string {
 	return naming.Sanitize(stack) + "-" + naming.Sanitize(app) + "-" + naming.Sanitize(identity[:min(len(identity), nameShort)])
 }
 
+const appPulls = 5
+
+func containerStanding(spec Container, held handoff) string {
+	return imageHeld(spec.Image, appPulls) + words(containerRun(spec, held)) + " >/dev/null"
+}
+
 func containerRun(spec Container, held handoff) []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", spec.Name,
@@ -310,7 +316,7 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 		}
 	}
 	_, stood := h.ran(ctx, "stand "+spec.App+" up as "+spec.Name,
-		words(containerRun(spec, held))+" >/dev/null", nil, elevation)
+		containerStanding(spec, held), nil, elevation)
 	return stood
 }
 

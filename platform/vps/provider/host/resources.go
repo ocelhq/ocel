@@ -196,6 +196,10 @@ func volumeCreating(spec ResourceContainer) string {
 	return words(append(argv, spec.volume())) + " >/dev/null"
 }
 
+func resourceStanding(spec ResourceContainer, digest, envFile string) string {
+	return imageHeld(spec.Image, appPulls) + words(resourceRun(spec, digest, envFile)) + " >/dev/null"
+}
+
 func resourceRun(spec ResourceContainer, digest, envFile string) []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", spec.Name,
@@ -361,7 +365,7 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	}
 	defer func() { err = errors.Join(err, h.unhand(ctx, held)) }()
 	_, refused, stood := h.spoke(ctx, "stand "+spec.Resource+" up as "+spec.Name,
-		words(resourceRun(spec, digest, held.path))+" >/dev/null", nil, elevation)
+		resourceStanding(spec, digest, held.path), nil, elevation)
 	if stood != nil && !strings.Contains(refused, nameTaken) {
 		return stood
 	}

@@ -108,15 +108,15 @@ func TestTheWaitBetweenInstallAttemptsGrowsAndIsNotTheSameOnEveryHost(t *testing
 		if len(waits) != engineInstallTries-1 {
 			t.Fatalf("the engine step waited %v over %d attempts, want one wait between each pair", waits, engineInstallTries)
 		}
-		if waits[0] < engineInstallBackoffSeconds {
-			t.Errorf("the first wait is %ds, want at least %ds: a mirror mid-sync needs longer than a round trip to finish it", waits[0], engineInstallBackoffSeconds)
+		if waits[0] < engineInstallHold.base {
+			t.Errorf("the first wait is %ds, want at least %ds: a mirror mid-sync needs longer than a round trip to finish it", waits[0], engineInstallHold.base)
 		}
 		if waits[1] <= waits[0] {
 			t.Errorf("the second wait %ds is no longer than the first %ds, and a retry that does not back off hammers a mirror that is already refusing", waits[1], waits[0])
 		}
 		for _, held := range waits {
-			if held > engineInstallCeilingSeconds+engineInstallJitterSeconds {
-				t.Errorf("the engine step waited %ds, past the %ds ceiling: an apply that stalls unboundedly is one nobody can time out", held, engineInstallCeilingSeconds+engineInstallJitterSeconds)
+			if held > engineInstallHold.ceiling+engineInstallHold.spread {
+				t.Errorf("the engine step waited %ds, past the %ds ceiling: an apply that stalls unboundedly is one nobody can time out", held, engineInstallHold.ceiling+engineInstallHold.spread)
 			}
 		}
 		spread[fmt.Sprint(waits)] = true
