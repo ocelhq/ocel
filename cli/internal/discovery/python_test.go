@@ -141,7 +141,7 @@ func pythonSDKEnvironment(t *testing.T) string {
 		t.Fatalf("locate the python workspace: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "python3")); err != nil {
-		t.Fatalf("the python sdk and its dependencies are not installed: run `uv sync --all-extras` in python/ (%v)", err)
+		t.Skipf("the python sdk and its dependencies are not installed: run `uv sync --all-extras` in python/ (%v)", err)
 	}
 	return dir
 }
