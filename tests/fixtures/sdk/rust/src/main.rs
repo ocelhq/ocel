@@ -5,6 +5,8 @@ use std::net::TcpListener;
 struct Infra {
     #[ocel(name = "main")]
     db: ocel::Postgres,
+    #[ocel(name = "uploads")]
+    uploads: ocel::Bucket,
 }
 
 #[derive(ocel::Env)]
@@ -27,8 +29,9 @@ fn main() {
     for stream in listener.incoming() {
         let mut stream = stream.expect("accept");
         let body = format!(
-            "{{\"ok\":true,\"database\":\"{}\",\"greeting\":\"{}\"}}",
+            "{{\"ok\":true,\"database\":\"{}\",\"bucket\":\"{}\",\"greeting\":\"{}\"}}",
             infra.db.name(),
+            infra.uploads.name(),
             env.greeting
         );
         let response = format!(
