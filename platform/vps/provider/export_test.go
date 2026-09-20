@@ -11,6 +11,8 @@ import (
 
 var ProviderOver = newProvider
 
+var MintStoreSecret = mintStoreSecret
+
 func StoreCoordinate(ref providerkit.StackRef) providerkit.Coordinate { return storeCoordinate(ref) }
 
 func StoreName(ref providerkit.StackRef) string { return storeName(ref) }

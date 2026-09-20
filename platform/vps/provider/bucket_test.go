@@ -195,6 +195,18 @@ func TestTheStoreCredentialIsSealedUnderTheStoreAndNotWhicheverBucketStoodItUp(t
 	}
 }
 
+func TestTheSecretAStoreAccountIsMintedWithIsOneTheStoreWillTake(t *testing.T) {
+	t.Parallel()
+
+	secret, err := vps.MintStoreSecret()
+	if err != nil {
+		t.Fatalf("MintStoreSecret() = %v", err)
+	}
+	if err := host.StoreSecretHeld(secret); err != nil {
+		t.Errorf("a minted store secret is %d characters: %v", len(secret), err)
+	}
+}
+
 func bindingBucket() providerkit.Binding {
 	return providerkit.Binding{
 		Type: providerkit.BindingBucket, Name: "uploads", Resource: "uploads",

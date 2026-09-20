@@ -32,7 +32,7 @@ const (
 
 	storeAccessKey = "ocel"
 	storeSecretEnv = "RUSTFS_SECRET_KEY"
-	storeSecretLen = 24
+	storeSecretLen = host.StoreSecretMax / 2
 
 	storeBucketNameMax = 63
 
