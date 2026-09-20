@@ -33,7 +33,7 @@ func ttlOf(d interface{ AsDuration() time.Duration }) time.Duration {
 
 // Sign hands back a url the caller drives itself, bounded by the constraints it asked for.
 func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv1.SignResponse, error) {
-	signer, err := s.signer(req.GetAudience())
+	signer, err := s.signer(ctx, req.GetAudience())
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +194,7 @@ func (s *Service) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest)
 	if err := s.roomToWrite(); err != nil {
 		return nil, err
 	}
-	signer, err := s.signer(req.GetAudience())
+	signer, err := s.signer(ctx, req.GetAudience())
 	if err != nil {
 		return nil, err
 	}

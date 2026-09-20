@@ -223,7 +223,7 @@ func newHarness(t *testing.T, tweak func(*Config)) *harness {
 	cfg := Config{
 		Objects:  store,
 		Internal: presigner(),
-		External: func() (PresignAPI, string) {
+		External: func(context.Context) (PresignAPI, string) {
 			return externalPresigner(), "https://storage.example.com"
 		},
 		Callbacks:    poster,

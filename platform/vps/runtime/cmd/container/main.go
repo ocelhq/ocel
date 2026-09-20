@@ -196,15 +196,26 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 	return proxy.Serve(bucket.New(cfg))
 }
 
-func publishing(store bucket.Store, configured string, values *rt.Values) func() (bucket.PresignAPI, string) {
+const unclaimedWindow = 10 * time.Second
+
+func publishing(store bucket.Store, configured string, values *rt.Values) func(context.Context) (bucket.PresignAPI, string) {
 	var mu sync.Mutex
 	var base string
 	var signer bucket.PresignAPI
-	return func() (bucket.PresignAPI, string) {
+	var looked time.Time
+	return func(ctx context.Context) (bucket.PresignAPI, string) {
 		claimed := values.Value(vars.StorePublicKey)
 		if claimed == "" {
-			values.Reread(context.Background())
-			claimed = values.Value(vars.StorePublicKey)
+			mu.Lock()
+			stale := time.Since(looked) >= unclaimedWindow
+			if stale {
+				looked = time.Now()
+			}
+			mu.Unlock()
+			if stale {
+				values.Reread(ctx)
+				claimed = values.Value(vars.StorePublicKey)
+			}
 		}
 		now := configured
 		if claimed != "" {
