@@ -228,6 +228,7 @@ func newHarness(t *testing.T, tweak func(*Config)) *harness {
 		},
 		Callbacks:    poster,
 		Sessions:     "store",
+		Granted:      []string{"store"},
 		PostPolicies: true,
 	}
 	if tweak != nil {
@@ -469,7 +470,10 @@ func TestSignedUrlsAddressTheAudienceTheyAreFor(t *testing.T) {
 
 func TestAnExternalStoreNeverShowsItsPrefix(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t, func(cfg *Config) { cfg.Sessions = "shared/shop/prod/uploads" })
+	h := newHarness(t, func(cfg *Config) {
+		cfg.Sessions = "shared/shop/prod/web"
+		cfg.Granted = []string{"shared/shop/prod/uploads"}
+	})
 	ctx := context.Background()
 	const spec = "shared/shop/prod/uploads"
 

@@ -160,6 +160,16 @@ func (u *uploads) serves(name string, origins []string) bool {
 	return provisioned && slices.Equal(held.origins, origins)
 }
 
+func (u *uploads) granted() []string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	held := make([]string, 0, len(u.completers))
+	for name := range u.completers {
+		held = append(held, name)
+	}
+	return held
+}
+
 func (u *uploads) serve(name string, held completing) {
 	u.mu.Lock()
 	defer u.mu.Unlock()

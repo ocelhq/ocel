@@ -82,7 +82,10 @@ func (s *Service) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUplo
 		return &bucketv1.CompleteUploadResponse{State: toProtoState(state), Error: sess.Error}, nil
 	}
 
-	held := scopeOf(sess.Bucket)
+	held, err := s.held(sess.Bucket)
+	if err != nil {
+		return nil, err
+	}
 	if s.now().Unix() >= sess.ExpiresAt {
 		return s.expire(ctx, sess, held)
 	}

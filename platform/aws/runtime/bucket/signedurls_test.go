@@ -27,6 +27,7 @@ func newSigningService(objects *fakeS3) *Service {
 		Objects:          objects,
 		Table:            "sessions",
 		SessionKeyPrefix: testSessionKeyPrefix,
+		Granted:          func() []string { return []string{"storage", "b"} },
 	})
 }
 

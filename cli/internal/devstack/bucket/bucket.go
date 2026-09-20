@@ -188,17 +188,18 @@ func start(ctx context.Context, container docker.Container, report func(error)) 
 	if err := ensureSessionTable(ctx, running.ddb); err != nil {
 		return nil, err
 	}
+	running.uploads, err = watchUploads(ctx, running.sqs, report)
+	if err != nil {
+		return nil, err
+	}
 	running.service = production.New(production.Config{
 		DDB:              running.ddb,
 		Presigner:        s3.NewPresignClient(running.s3),
 		Objects:          running.s3,
 		Table:            sessionTable,
 		SessionKeyPrefix: sessionPrefix,
+		Granted:          running.uploads.granted,
 	})
-	running.uploads, err = watchUploads(ctx, running.sqs, report)
-	if err != nil {
-		return nil, err
-	}
 	return running, nil
 }
 

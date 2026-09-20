@@ -88,6 +88,9 @@ func headInfo(key string, out *s3.HeadObjectOutput) *bucketv1.ObjectInfo {
 }
 
 func (s *Service) Head(ctx context.Context, req *bucketv1.HeadRequest) (*bucketv1.HeadResponse, error) {
+	if err := s.reach(req.GetBucket(), req.GetKey()); err != nil {
+		return nil, err
+	}
 	out, err := s.objects.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(req.GetBucket()),
 		Key:    aws.String(req.GetKey()),
@@ -102,6 +105,9 @@ func (s *Service) Head(ctx context.Context, req *bucketv1.HeadRequest) (*bucketv
 }
 
 func (s *Service) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv1.ListResponse, error) {
+	if err := s.reach(req.GetBucket(), req.GetPrefix()); err != nil {
+		return nil, err
+	}
 	limit := req.GetLimit()
 	if limit <= 0 {
 		limit = listPageSize
@@ -139,6 +145,9 @@ func (s *Service) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv
 }
 
 func (s *Service) Delete(ctx context.Context, req *bucketv1.DeleteRequest) (*bucketv1.DeleteResponse, error) {
+	if err := s.reach(req.GetBucket(), req.GetKeys()...); err != nil {
+		return nil, err
+	}
 	ids := make([]s3types.ObjectIdentifier, 0, len(req.GetKeys()))
 	for _, key := range req.GetKeys() {
 		ids = append(ids, s3types.ObjectIdentifier{Key: aws.String(key)})
@@ -154,6 +163,9 @@ func (s *Service) Delete(ctx context.Context, req *bucketv1.DeleteRequest) (*buc
 }
 
 func (s *Service) Copy(ctx context.Context, req *bucketv1.CopyRequest) (*bucketv1.CopyResponse, error) {
+	if err := s.reach(req.GetBucket(), req.GetSourceKey(), req.GetDestinationKey()); err != nil {
+		return nil, err
+	}
 	_, err := s.objects.CopyObject(ctx, &s3.CopyObjectInput{
 		Bucket:     aws.String(req.GetBucket()),
 		Key:        aws.String(req.GetDestinationKey()),

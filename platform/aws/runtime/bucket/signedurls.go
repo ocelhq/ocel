@@ -27,6 +27,9 @@ func vendorHeaders(signed map[string][]string) map[string]string {
 }
 
 func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv1.SignResponse, error) {
+	if err := s.reach(req.GetBucket(), req.GetKey()); err != nil {
+		return nil, err
+	}
 	ttl := presignTTL
 	if req.GetExpiresIn() != nil && req.GetExpiresIn().AsDuration() > 0 {
 		ttl = req.GetExpiresIn().AsDuration()
@@ -101,6 +104,9 @@ func target(key string, signed *v4.PresignedHTTPRequest) *bucketv1.PresignedTarg
 }
 
 func (s *Service) CreateMultipart(ctx context.Context, req *bucketv1.CreateMultipartRequest) (*bucketv1.CreateMultipartResponse, error) {
+	if err := s.reach(req.GetBucket(), req.GetKey()); err != nil {
+		return nil, err
+	}
 	in := &s3.CreateMultipartUploadInput{
 		Bucket:   aws.String(req.GetBucket()),
 		Key:      aws.String(req.GetKey()),
@@ -120,6 +126,9 @@ func (s *Service) CreateMultipart(ctx context.Context, req *bucketv1.CreateMulti
 }
 
 func (s *Service) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest) (*bucketv1.SignPartsResponse, error) {
+	if err := s.reach(req.GetBucket(), req.GetKey()); err != nil {
+		return nil, err
+	}
 	ttl := presignTTL
 	if req.GetExpiresIn() != nil && req.GetExpiresIn().AsDuration() > 0 {
 		ttl = req.GetExpiresIn().AsDuration()
@@ -145,6 +154,9 @@ func (s *Service) SignParts(ctx context.Context, req *bucketv1.SignPartsRequest)
 }
 
 func (s *Service) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteMultipartRequest) (*bucketv1.CompleteMultipartResponse, error) {
+	if err := s.reach(req.GetBucket(), req.GetKey()); err != nil {
+		return nil, err
+	}
 	parts := make([]s3types.CompletedPart, 0, len(req.GetParts()))
 	for _, part := range req.GetParts() {
 		parts = append(parts, s3types.CompletedPart{
@@ -178,6 +190,9 @@ func (s *Service) CompleteMultipart(ctx context.Context, req *bucketv1.CompleteM
 }
 
 func (s *Service) AbortMultipart(ctx context.Context, req *bucketv1.AbortMultipartRequest) (*bucketv1.AbortMultipartResponse, error) {
+	if err := s.reach(req.GetBucket(), req.GetKey()); err != nil {
+		return nil, err
+	}
 	_, err := s.objects.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
 		Bucket:   aws.String(req.GetBucket()),
 		Key:      aws.String(req.GetKey()),

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
+	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
 )
@@ -36,6 +38,7 @@ type Service struct {
 	store     *sessionStore
 	presigner presignAPI
 	objects   objectAPI
+	granted   func() []string
 
 	now       func() time.Time
 	newID     func() string
@@ -50,17 +53,46 @@ type Config struct {
 	Objects          objectAPI
 	Table            string
 	SessionKeyPrefix string
+	Granted          func() []string
 }
 
 func New(cfg Config) *Service {
+	granted := cfg.Granted
+	if granted == nil {
+		granted = func() []string { return nil }
+	}
 	return &Service{
 		store:     &sessionStore{client: cfg.DDB, table: cfg.Table, keyPrefix: cfg.SessionKeyPrefix},
 		presigner: cfg.Presigner,
 		objects:   cfg.Objects,
+		granted:   granted,
 		now:       time.Now,
 		newID:     func() string { return "sess_" + randomHex(16) },
 		newSecret: func() string { return randomHex(32) },
 	}
+}
+
+func (s *Service) held(bucket string) error {
+	if slices.Contains(s.granted(), bucket) {
+		return nil
+	}
+	return connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
+		"this app was granted no bucket called %q, and a deployment reaches the buckets its own code declares and the ones it is granted and nothing else", bucket))
+}
+
+func (s *Service) reach(bucket string, keys ...string) error {
+	if err := s.held(bucket); err != nil {
+		return err
+	}
+	for _, key := range keys {
+		if !strings.HasPrefix(key, constants.ReservedKeyPrefix) {
+			continue
+		}
+		return connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
+			"%q names a key under %s, which is where the store keeps its own bookkeeping and is no app's to read or write",
+			key, constants.ReservedKeyPrefix))
+	}
+	return nil
 }
 
 func randomHex(n int) string {
@@ -70,6 +102,13 @@ func randomHex(n int) string {
 }
 
 func (s *Service) PresignUpload(ctx context.Context, req *bucketv1.PresignUploadRequest) (*bucketv1.PresignUploadResponse, error) {
+	keys := make([]string, 0, len(req.GetFiles()))
+	for _, f := range req.GetFiles() {
+		keys = append(keys, f.GetKey())
+	}
+	if err := s.reach(req.GetBucket(), keys...); err != nil {
+		return nil, err
+	}
 	sessionID := s.newID()
 	secret := s.newSecret()
 	now := s.now()
