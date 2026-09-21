@@ -398,7 +398,7 @@ func lacking(answers map[string]probeAnswer, cors corsPlan) []string {
 	return missing
 }
 
-func unreadable(store ExternalStore, err error) error {
+func unprobeable(err error) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
 		"the store option %q cannot be probed as it is written: %v", "bucket", err)
 }
@@ -406,7 +406,7 @@ func unreadable(store ExternalStore, err error) error {
 func probeExternalStore(store ExternalStore, root string, now time.Time, run probeRunner) (StoreProbe, error) {
 	before, err := store.call("cors-before", http.MethodGet, "", "cors", nil, nil, true, now)
 	if err != nil {
-		return StoreProbe{}, unreadable(store, err)
+		return StoreProbe{}, unprobeable(err)
 	}
 	said, err := run("read what browsers the store at "+store.Endpoint+" already answers", probeScript([]probeCall{before}))
 	if err != nil {
@@ -414,19 +414,19 @@ func probeExternalStore(store ExternalStore, root string, now time.Time, run pro
 	}
 	cors, err := corsHeld(readProbe(said)["cors-before"])
 	if err != nil {
-		return StoreProbe{}, unreadable(store, err)
+		return StoreProbe{}, unprobeable(err)
 	}
 
 	calls, err := probeCalls(store, root, cors, now)
 	if err != nil {
-		return StoreProbe{}, unreadable(store, err)
+		return StoreProbe{}, unprobeable(err)
 	}
 	said, probed := run("probe the store at "+store.Endpoint, probeScript(calls))
 	answers := readProbe(said)
 
 	cleanup, err := probeCleanup(store, root, answers, cors, now)
 	if err != nil {
-		return StoreProbe{}, errors.Join(probed, unreadable(store, err))
+		return StoreProbe{}, errors.Join(probed, unprobeable(err))
 	}
 	_, swept := run("take the probe of "+store.Endpoint+" back down", probeScript(cleanup))
 	if probed != nil || swept != nil {
