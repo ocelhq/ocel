@@ -70,6 +70,12 @@ export function withPathPins(manifest, version) {
   );
 }
 
+export function withSdkVersion(text, version) {
+  const stamp = /^export const SDK_VERSION = "[^"]*";$/m;
+  if (!stamp.test(text)) throw new Error("the module exports no SDK_VERSION");
+  return text.replace(stamp, `export const SDK_VERSION = "${version}";`);
+}
+
 export function withSchemaURLs(text, version) {
   return text.replace(SCHEMA_URL, schemaURL(version));
 }
@@ -106,6 +112,9 @@ function stampNpm(version) {
     manifest.version = version;
     writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
   }
+  edit(join(REPO_ROOT, "packages", "ocel", "src", "utils", "version.ts"), (text) =>
+    withSdkVersion(text, version),
+  );
 }
 
 function stampPython(version) {

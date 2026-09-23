@@ -5,6 +5,7 @@ import {
   pep440,
   withPathPins,
   withSchemaURLs,
+  withSdkVersion,
   withSection,
   withVersionLine,
 } from "./version.mjs";
@@ -123,5 +124,18 @@ describe("withSchemaURLs", () => {
   it("leaves a url the code builds from a version alone", () => {
     const text = `const url = \`https://ocel.dev/schema/\${version}/ocel.schema.json\`;`;
     assert.equal(withSchemaURLs(text, "0.0.4"), text);
+  });
+});
+
+describe("withSdkVersion", () => {
+  it("stamps the version the npm sdk sends the CLI", () => {
+    assert.equal(
+      withSdkVersion('export const SDK_VERSION = "0.0.0";\n', "0.1.0-rc.2"),
+      'export const SDK_VERSION = "0.1.0-rc.2";\n',
+    );
+  });
+
+  it("refuses a module that exports no version", () => {
+    assert.throws(() => withSdkVersion("export {};\n", "0.1.0"));
   });
 });
