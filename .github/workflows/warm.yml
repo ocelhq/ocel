@@ -21,8 +21,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: warm
-  cancel-in-progress: true
+  group: warm-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
