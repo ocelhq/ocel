@@ -87,7 +87,7 @@ wheels = [
 
 [[package]]
 name = "ocel"
-version = "0.0.1a0"
+version = "0.0.0"
 source = { editable = "ocel" }
 dependencies = [
     { name = "connectrpc" },

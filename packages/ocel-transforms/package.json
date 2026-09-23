@@ -1,6 +1,6 @@
 {
   "name": "@ocel/transforms",
-  "version": "0.0.1-alpha.0",
+  "version": "0.0.0",
   "private": false,
   "type": "module",
   "description": "Patches the underlying cloud resources ocel provisions, typed from the provider's own SDK",

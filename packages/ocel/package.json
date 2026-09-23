@@ -1,6 +1,6 @@
 {
   "name": "ocel",
-  "version": "0.0.1-alpha.0",
+  "version": "0.0.0",
   "type": "module",
   "description": "ocel runtime sdk — turns cloud infrastructure into function calls",
   "files": [

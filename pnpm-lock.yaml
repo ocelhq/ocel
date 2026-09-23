@@ -1148,6 +1148,8 @@ importers:
 
   platform/vps/provider/host: {}
 
+  scripts/release: {}
+
   tests/fixtures/deploy/next:
     dependencies:
       better-sqlite3:

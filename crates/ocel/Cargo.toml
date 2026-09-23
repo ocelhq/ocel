@@ -11,7 +11,7 @@ repository.workspace = true
 postgres = ["dep:sqlx"]
 
 [dependencies]
-ocel-macros = { path = "../ocel-macros", version = "0.0.1-alpha.0" }
+ocel-macros = { path = "../ocel-macros", version = "0.0.0" }
 buffa = { version = "0.9", features = ["json"] }
 buffa-types = { version = "0.9", features = ["json"] }
 bytes = "1"

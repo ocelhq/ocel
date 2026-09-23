@@ -533,7 +533,7 @@ dependencies = [
 
 [[package]]
 name = "ocel"
-version = "0.0.1-alpha.0"
+version = "0.0.0"
 dependencies = [
  "buffa",
  "buffa-types",
@@ -554,7 +554,7 @@ dependencies = [
 
 [[package]]
 name = "ocel-macros"
-version = "0.0.1-alpha.0"
+version = "0.0.0"
 dependencies = [
  "proc-macro2",
  "quote",
