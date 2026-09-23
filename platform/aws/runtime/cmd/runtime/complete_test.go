@@ -148,6 +148,27 @@ func TestHandleInvocationComplete(t *testing.T) {
 			t.Errorf("pending waiters after release = %d, want 0", n)
 		}
 	})
+
+	t.Run("a child that never comes up is answered with a status before the deadline", func(t *testing.T) {
+		deadline := time.Now().Add(completionMargin + 300*time.Millisecond)
+		rt, captured := fakeRuntimeWithDeadline(t, []byte(getEvent), deadline)
+		m := &nodeChild{ready: make(chan struct{}), pending: map[string]chan struct{}{}}
+
+		if err := handleInvocation(context.Background(), rt, m); err != nil {
+			t.Fatalf("handleInvocation: %v", err)
+		}
+		if late := time.Since(deadline); late > -completionMargin/2 {
+			t.Errorf("answered %v after the deadline's margin began, want the margin left to deliver it", late+completionMargin)
+		}
+
+		p, body := splitPrelude(t, captured.body)
+		if p.StatusCode != http.StatusServiceUnavailable {
+			t.Errorf("status = %d, want %d rather than the empty 200 a prelude-less stream becomes", p.StatusCode, http.StatusServiceUnavailable)
+		}
+		if !strings.Contains(string(body), "starting") {
+			t.Errorf("body = %q, want it to name the app that has not finished starting", body)
+		}
+	})
 }
 
 func fakeRuntimeWithDeadline(t *testing.T, event []byte, deadline time.Time) (*runtimeClient, *capturedResponse) {
