@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Lifecycle scripts driving the Next.js deployment-adapter compatibility harness against Ocel",
+  "license": "Apache-2.0",
   "scripts": {
     "test": "vitest run"
   },

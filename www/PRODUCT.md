@@ -101,7 +101,7 @@ Binding, confirmed by the owner:
   `components/logo.tsx`. The identity is settled.
 - **Electric blue accent.** The `--electric` color is a brand color, not a docs-theme
   choice.
-- **Open source.** MIT, public at github.com/ocelhq/ocel, and the site says so.
+- **Open source.** Apache-2.0, public at github.com/ocelhq/ocel, and the site says so.
 - **Voice.** Plain, direct, no hype. Rules the owner set, binding across landing and docs:
   - Anytime the site asks the user for anything ("you will need X"), it also explains
     why. If it cannot, it probably should not be asking.

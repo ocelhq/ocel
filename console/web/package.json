@@ -1,6 +1,7 @@
 {
   "name": "@console/web",
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "private": true,
   "scripts": {
     "dev": "node --env-file-if-exists=.env.local scripts/dev-env.mjs",

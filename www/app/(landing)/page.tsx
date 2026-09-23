@@ -285,11 +285,7 @@ async function Sdk() {
 
         <div className="mt-14 grid grid-cols-1 gap-8 md:grid-cols-[minmax(0,1fr)_72px_minmax(0,1fr)] md:items-center md:gap-x-0">
           <DarkCodePane file="app/ocel/index.ts" className="w-full">
-            <div
-              className="shiki-pane"
-              // biome-ignore lint/security/noDangerouslySetInnerHtml: server-highlighted static code from a trusted local constant
-              dangerouslySetInnerHTML={{ __html: codeHtml }}
-            />
+            <div className="shiki-pane" dangerouslySetInnerHTML={{ __html: codeHtml }} />
           </DarkCodePane>
 
           <div aria-hidden className="hidden items-center md:flex">
@@ -628,7 +624,7 @@ const footerCols = [
   { title: "RESOURCES", links: ["Docs", "Changelog", "Blog", "Philosophy"] },
   {
     title: "OPEN SOURCE",
-    links: ["GitHub", "Discord", "Contributing", "License (MIT)"],
+    links: ["GitHub", "Discord", "Contributing", "License (Apache-2.0)"],
   },
 ];
 
@@ -654,7 +650,7 @@ function OneMoreThing() {
           Oh — and it's <span className="text-electric">open source.</span>
         </h2>
         <p className="mx-auto mt-[18px] max-w-[52ch] text-[15px] leading-[1.65] text-muted-foreground">
-          MIT licensed. Nothing runs in our account. If you stopped using Ocel tomorrow, the
+          Apache-2.0 licensed. Nothing runs in our account. If you stopped using Ocel tomorrow, the
           infrastructure and the code describing it are still yours to read and run.
         </p>
         <div className="mt-6 flex justify-center gap-3">

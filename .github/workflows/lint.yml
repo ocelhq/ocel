@@ -39,6 +39,16 @@ jobs:
       - name: Nothing regenerated differs from what is committed
         run: git diff --exit-code
 
+  licensing:
+    name: licensing
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The go sdk carries the root's LICENSE and NOTICE, byte for byte
+        run: cmp LICENSE sdk/LICENSE && cmp NOTICE sdk/NOTICE
+
   actions:
     name: actionlint
     runs-on: ubuntu-latest

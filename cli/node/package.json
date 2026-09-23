@@ -10,7 +10,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.vars-ui.json"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": {
     "@framework/next-adapter": "workspace:^",
     "@platform/cf-deployments-store": "workspace:^",
