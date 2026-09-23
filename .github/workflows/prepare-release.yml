@@ -1,0 +1,131 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: auto, patch, minor, major, or an explicit X.Y.Z
+        required: true
+        default: auto
+        type: string
+      rc:
+        description: Cut a release candidate of that version instead
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  prepare:
+    name: prepare
+    runs-on: ubuntu-latest
+    environment: release
+    permissions: {}
+    steps:
+      - name: Mint the release app's token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+
+      - uses: ./.github/actions/changie
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Name the version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+          RC: ${{ inputs.rc }}
+        run: |
+          set -euo pipefail
+          case "$BUMP" in
+            auto | patch | minor | major) base=$(changie next "$BUMP") ;;
+            *) base="$BUMP" ;;
+          esac
+          base="${base#v}"
+          if ! [[ "$base" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::$BUMP names no X.Y.Z version" >&2
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/v$base" > /dev/null; then
+            echo "::error::v$base is already released" >&2
+            exit 1
+          fi
+          version="$base"
+          if [ "$RC" = true ]; then
+            candidates=$(git tag --list "v$base-rc.*" | grep -cE "^v$base-rc\.[1-9][0-9]*$" || true)
+            version="$base-rc.$((candidates + 1))"
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Fold the unreleased changes into the changelog
+        if: ${{ !inputs.rc }}
+        env:
+          BASE: ${{ steps.version.outputs.base }}
+        run: |
+          set -euo pipefail
+          changie batch "v$BASE"
+          changie merge
+
+      - name: Stamp the version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: node scripts/release/version.mjs "$VERSION"
+
+      - name: Open the release pull request
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SLUG: ${{ steps.app.outputs.app-slug }}
+          VERSION: ${{ steps.version.outputs.version }}
+          RC: ${{ inputs.rc }}
+        run: |
+          set -euo pipefail
+          branch="release/v$VERSION"
+          title="chore(release): v$VERSION"
+          id=$(gh api "users/${SLUG}[bot]" --jq .id)
+          git config user.name "${SLUG}[bot]"
+          git config user.email "${id}+${SLUG}[bot]@users.noreply.github.com"
+          git switch -C "$branch"
+          git add --all
+          git commit -m "$title"
+          git push --force origin "$branch"
+          if [ "$RC" = true ]; then
+            {
+              echo "Release candidate v$VERSION. Merging it tags v$VERSION and sdk/v$VERSION and publishes them on the next channel."
+              echo
+              changie batch "v$VERSION" --dry-run
+            } > "$RUNNER_TEMP/body.md"
+          else
+            {
+              echo "Merging this tags v$VERSION and sdk/v$VERSION and publishes them."
+              echo
+              cat ".changes/v$VERSION.md"
+            } > "$RUNNER_TEMP/body.md"
+          fi
+          if [ "$(gh pr list --head "$branch" --state open --json number --jq length)" = 0 ]; then
+            gh pr create --base main --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh pr edit "$branch" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi
