@@ -19,6 +19,7 @@ pub struct Received {
     pub path: String,
     pub protocol: Option<String>,
     pub authorization: Option<String>,
+    pub sdk_version: Option<String>,
     json: bool,
     body: Vec<u8>,
 }
@@ -76,6 +77,7 @@ fn serve(mut stream: TcpStream, cells: &[VariableCell]) -> Received {
     let mut content_type = String::new();
     let mut protocol = None;
     let mut authorization = None;
+    let mut sdk_version = None;
     loop {
         let mut header = String::new();
         reader.read_line(&mut header).expect("header");
@@ -91,6 +93,9 @@ fn serve(mut stream: TcpStream, cells: &[VariableCell]) -> Received {
         }
         if let Some(value) = lowered.strip_prefix("connect-protocol-version:") {
             protocol = Some(value.trim().to_string());
+        }
+        if let Some(value) = lowered.strip_prefix("ocel-sdk-version:") {
+            sdk_version = Some(value.trim().to_string());
         }
         if lowered.starts_with("authorization:") {
             let (_, value) = header.split_once(':').expect("a header value");
@@ -110,6 +115,7 @@ fn serve(mut stream: TcpStream, cells: &[VariableCell]) -> Received {
             path,
             protocol,
             authorization,
+            sdk_version,
             json,
             body,
         };
@@ -134,6 +140,7 @@ fn serve(mut stream: TcpStream, cells: &[VariableCell]) -> Received {
         path,
         protocol,
         authorization,
+        sdk_version,
         json,
         body,
     }
