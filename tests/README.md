@@ -120,7 +120,7 @@ pull request — one shot, the label comes off again as the run starts. From her
 
 `gcp` is not one of them: a real dispatch drives `aws` and `vps` only. The gcp lane runs
 against the floci-gcp emulator on a pull request that touches it, and against the real
-project once a night, in `GCP nightly`, which owns that project's namespace and takes it
+project once a night, in the `Nightly` workflow, which owns that project's namespace and takes it
 down again.
 
 Every known gap is one entry in `journeys/src/matrix/gaps.ts`: a slug, a reason,
@@ -177,7 +177,7 @@ mints, or the assume fails outright.
 The `gcp` lane on a pull request runs against the floci-gcp emulator, which serves one
 implicit Firestore database and no Firestore Admin API. The database row, its delete
 protection and the region check are therefore exercised only against a real project,
-which the nightly `GCP nightly` workflow drives and which you can drive by hand:
+which the `Nightly` workflow drives and which you can drive by hand:
 
 ```bash
 gcloud auth application-default login
@@ -205,10 +205,11 @@ The run creates and destroys buckets, a Firestore database, a key ring and a sec
 that project, and schedules its KMS key material for destruction, so name a project you
 are willing to lose. Unset, and with no emulator answering, every `TestLive` skips.
 
-`GCP nightly` runs the same two suites and then the `gcp` journey against that project,
-every night and on dispatch. It signs in over workload identity federation — no key is
-stored — and takes down the projects it deployed and the bootstrap under its namespace
-whether the run passed or not.
+The `Nightly` workflow's `gcp journey` job runs the same two suites and then the `gcp`
+journey against that project, every night and on dispatch. It signs in over workload
+identity federation — no key is stored — and takes down the projects it deployed and the
+bootstrap under its namespace whether the run passed or not. A pass releases the commit
+it drove as a nightly.
 
 | name                  | kind | what it holds                                                                   |
 | --------------------- | ---- | ------------------------------------------------------------------------------- |

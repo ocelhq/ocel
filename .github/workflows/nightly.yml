@@ -1,19 +1,15 @@
 name: Nightly
 
 on:
-  workflow_run:
-    workflows: [GCP nightly]
-    types: [completed]
-    branches: [main]
+  schedule:
+    - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       ref:
-        description: The branch, tag or commit to release as a nightly
+        description: The branch, tag or commit the journey drives and a pass releases as a nightly
         required: true
         default: main
         type: string
-  schedule:
-    - cron: "0 6 * * *"
 
 concurrency:
   group: nightly
@@ -22,13 +18,143 @@ concurrency:
 permissions: {}
 
 jobs:
-  tag:
-    name: tag
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main')
+  gcp:
+    name: gcp journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    env:
+      NODE_VERSION: "22"
+      PNPM_VERSION: "11.10.0"
+      BUN_VERSION: "1.4.0"
+      FORCE_COLOR: "1"
+      OCEL_NAMESPACE: ocel-nightly
+      OCEL_GCP_PROJECT: ${{ vars.GCP_LIVE_PROJECT }}
+      OCEL_GCP_LIVE_PROJECT: ${{ vars.GCP_LIVE_PROJECT }}
+      OCEL_GCP_REGION: ${{ vars.GCP_LIVE_REGION || 'europe-west1' }}
+      OCEL_GCP_LIVE_REGION: ${{ vars.GCP_LIVE_REGION || 'europe-west1' }}
+      OCEL_TARGET: gcp
+      OCEL_JOURNEY_CONCERN: deploy
+      OCEL_JOURNEY_COVERAGE: every-cell
+    steps:
+      - name: Name the project this run may spend
+        env:
+          PROJECT: ${{ vars.GCP_LIVE_PROJECT }}
+          WIF: ${{ vars.GCP_WIF_PROVIDER }}
+          ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          for named in PROJECT WIF ACCOUNT; do
+            if [ -z "${!named}" ]; then
+              echo "the repository variable behind $named is unset, and this run bootstraps a real project" >&2
+              exit 1
+            fi
+          done
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Name the commit this run drives
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Take the identity this run acts as
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ vars.GCP_LIVE_PROJECT }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: The gcloud the harness mints a token with
+        uses: google-github-actions/setup-gcloud@v2
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: The musl targets a rust fixture compiles for
+        run: rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+
+      - name: Setup Go
+        uses: ./.github/actions/go
+
+      - name: The payloads the provider embeds
+        run: go generate -C platform/gcp/provider ./...
+
+      - name: Run the suites a real project answers differently
+        run: |
+          set -euo pipefail
+          go test -C platform/gcp/provider -count=1 -timeout 60m \
+            -run '^Test(Live|Project)' -json ./... | tee live-gcp.json
+
+      - name: Assert they ran
+        run: |
+          set -euo pipefail
+          scripts/assert-ran.sh live-gcp.json TestLive
+          scripts/assert-ran.sh live-gcp.json TestProject
+
+      - name: The node bundle the fixtures import
+        run: pnpm turbo run build --filter=ocel
+
+      - name: The Docker the container images are built with
+        uses: ./.github/actions/containerd-docker
+
+      - uses: ./.github/actions/goreleaser
+
+      - name: Build the binaries the journey drives
+        run: |
+          set -euo pipefail
+          node scripts/snapshot.mjs | tee -a "$GITHUB_ENV"
+
+      - name: Reclaim what a run that died left behind
+        run: pnpm --filter @ocel-tests/journeys sweep --target gcp
+
+      - name: Run the journey
+        run: pnpm --filter @ocel-tests/journeys journey
+
+      - name: Take down what this run stood up
+        if: always()
+        run: |
+          set -uo pipefail
+          if [ -z "${OCEL_BIN:-}" ]; then
+            echo "no binary was built, so this run stood nothing up to take down"
+            exit 0
+          fi
+          left=0
+          pnpm --filter @ocel-tests/journeys sweep --target gcp --own || left=1
+          (cd tests/fixtures/deploy/node && "$OCEL_BIN" --config ocel.gcp.config.ts bootstrap destroy production --yes) \
+            || left=1
+          exit "$left"
+
+      - name: Pack the evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p tests/journeys/output
+          tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
+            --exclude='*/node_modules' \
+            --exclude='*/node_modules/*' \
+            --exclude='*/trees/*/packages' \
+            -C tests/journeys output
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gcp-nightly-evidence
+          path: ${{ runner.temp }}/journey-evidence.tgz
+          if-no-files-found: warn
+
+  release:
+    name: release
+    needs: gcp
     runs-on: ubuntu-latest
     environment: release
     permissions: {}
@@ -43,7 +169,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha || inputs.ref }}
+          ref: ${{ needs.gcp.outputs.sha }}
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
 
@@ -53,16 +179,16 @@ jobs:
 
       - name: Name the nightly this commit releases
         id: plan
+        env:
+          SHA: ${{ needs.gcp.outputs.sha }}
         run: |
           set -euo pipefail
-          sha=$(git rev-parse HEAD)
-          node scripts/release/nightly.mjs plan "$sha" > "$RUNNER_TEMP/plan"
+          node scripts/release/nightly.mjs plan "$SHA" > "$RUNNER_TEMP/plan"
           cat "$RUNNER_TEMP/plan" >> "$GITHUB_OUTPUT"
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
           if grep -q '^skip=' "$RUNNER_TEMP/plan"; then
             echo "no nightly: $(sed -n 's/^skip=//p' "$RUNNER_TEMP/plan")"
           else
-            echo "releasing $(sed -n 's/^version=//p' "$RUNNER_TEMP/plan") from $sha"
+            echo "releasing $(sed -n 's/^version=//p' "$RUNNER_TEMP/plan") from $SHA"
           fi
 
       - uses: ./.github/actions/node-workspace
@@ -89,7 +215,7 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           SLUG: ${{ steps.app.outputs.app-slug }}
           VERSION: ${{ steps.plan.outputs.version }}
-          SHA: ${{ steps.plan.outputs.sha }}
+          SHA: ${{ needs.gcp.outputs.sha }}
         run: |
           set -euo pipefail
           id=$(gh api "users/${SLUG}[bot]" --jq .id)
