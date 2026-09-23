@@ -2,8 +2,11 @@ name: Journey
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed, labeled]
+    types: [opened, synchronize, reopened, closed, labeled, unlabeled]
     paths:
+      - "www/**"
+      - "console/github/**"
+      - "ocel.aws.json"
       - "cli/**"
       - "packages/**"
       - "frameworks/**"
@@ -58,8 +61,8 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: ${{ github.event.action == 'labeled' && format('journey-real-{0}', github.event.pull_request.number) || format('journey-{0}', github.event.pull_request.number || github.run_id) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
+  group: ${{ (github.event.action == 'labeled' || github.event.action == 'unlabeled') && format('journey-{0}-{1}', github.event.label.name, github.event.pull_request.number) || format('journey-{0}', github.event.pull_request.number || github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' && !(github.event.action == 'labeled' && github.event.label.name == 'journey:real') }}
 
 env:
   OCEL_FLOCI_IMAGE: ghcr.io/ocelhq/floci:2.0.1-ocel.2
@@ -72,7 +75,7 @@ env:
 jobs:
   binary:
     name: binaries
-    if: ${{ github.event.action != 'closed' && (github.event.action != 'labeled' || github.event.label.name == 'journey:real') }}
+    if: ${{ github.event.action != 'closed' && ((github.event.action != 'labeled' && github.event.action != 'unlabeled') || (github.event.action == 'labeled' && github.event.label.name == 'journey:real') || github.event.label.name == 'dogfood:release') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -81,6 +84,7 @@ jobs:
       gcp: ${{ steps.gate.outputs.gcp }}
       vps: ${{ steps.gate.outputs.vps }}
       next: ${{ steps.gate.outputs.next }}
+      preview: ${{ steps.lanes.outputs.preview }}
       variants: ${{ steps.lanes.outputs.variants }}
       skips: ${{ steps.lanes.outputs.skips }}
       coverage: ${{ steps.lanes.outputs.coverage }}
@@ -96,7 +100,7 @@ jobs:
       next_key: ${{ steps.gate-next.outputs.key }}
     steps:
       - name: Spend the label that asked for this run
-        if: ${{ github.event.action == 'labeled' }}
+        if: ${{ github.event.action == 'labeled' && github.event.label.name == 'journey:real' }}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -123,6 +127,8 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
           PR: ${{ github.event.pull_request.number }}
+          OURS: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          RELEASED: ${{ contains(github.event.pull_request.labels.*.name, 'dogfood:release') }}
         run: |
           set -euo pipefail
 
@@ -136,6 +142,7 @@ jobs:
           forced=${OCEL_JOURNEY_LANES:-}
           real=false
           next=false
+          preview=false
           seed=
           touched=
           if [ "$EVENT" = workflow_dispatch ]; then
@@ -158,6 +165,12 @@ jobs:
             aws=$(named aws "$TARGETS")
             gcp=false
             vps=$(named vps "$TARGETS")
+          elif [ "$LABEL" = dogfood:release ]; then
+            dev=false
+            aws=false
+            gcp=false
+            vps=false
+            preview=true
           else
             files=$(git diff --name-only "$BASE" "$HEAD")
             echo "$files"
@@ -172,6 +185,15 @@ jobs:
             gcp=$(hit "$shared"'|^platform/gcp/|^scripts/floci\.sh$')
             vps=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$')
             next=$(hit "$shared"'|^platform/(aws|edge)/')
+            preview=$(hit '^(www|console/github|cli|packages|frameworks|pkg|sdk|proto|platform|scripts)/|^(ocel\.aws\.json|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json)$|^\.github/(actions/|workflows/journey\.yml$)')
+          fi
+
+          if [ "$EVENT" != pull_request ] || [ "$OURS" != true ] || [ "$real" = true ]; then
+            preview=false
+          elif [ "$preview" = true ] && [ "$RELEASED" = true ]; then
+            preview=release
+          elif [ "$preview" = true ]; then
+            preview=head
           fi
 
           if [ "$real" = true ]; then
@@ -190,6 +212,7 @@ jobs:
             echo "gcp=$gcp"
             echo "vps=$vps"
             echo "next=$next"
+            echo "preview=$preview"
             echo "variants=${VARIANTS:-}"
             echo "skips=${SKIPS:-skip}"
             echo "coverage=$coverage"
@@ -281,6 +304,7 @@ jobs:
           VPS_GREEN: ${{ steps.gate-vps.outputs.green }}
           DEV_GREEN: ${{ steps.gate-dev.outputs.green }}
           NEXT_GREEN: ${{ steps.gate-next.outputs.green }}
+          PREVIEW: ${{ steps.lanes.outputs.preview }}
         run: |
           set -euo pipefail
           runs() { if [ "$1" = true ] && [ "$2" != true ]; then echo true; else echo false; fi; }
@@ -291,6 +315,7 @@ jobs:
           next=$(runs "$NEXT" "$NEXT_GREEN")
           any=false
           [ "$aws$gcp$vps$dev$next" = falsefalsefalsefalsefalse ] || any=true
+          [ "$PREVIEW" != head ] || any=true
           {
             echo "aws=$aws"
             echo "gcp=$gcp"
@@ -839,6 +864,167 @@ jobs:
           name: journey-evidence-vps
           path: ${{ runner.temp }}/journey-evidence.tgz
           if-no-files-found: warn
+
+  preview:
+    name: the preview this pull request stands up
+    needs: binary
+    if: ${{ needs.binary.result == 'success' && needs.binary.outputs.preview != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    env:
+      OCEL_CONFIG: ocel.aws.json
+      OCEL_GITHUB_APP_URL: ${{ vars.OCEL_GITHUB_APP_URL }}
+      OCEL_REPORT_SECRET: ${{ secrets.OCEL_REPORT_SECRET }}
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      REF: ${{ github.event.pull_request.head.ref }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout the branch the preview is named after
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Take the CLI this preview is deployed with
+        uses: ./.github/actions/ocel-binary
+        with:
+          source: ${{ needs.binary.outputs.preview == 'release' && 'release' || 'prebuilt' }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Enter the account Ocel deploys itself into
+        uses: ./.github/actions/dogfood-session
+        with:
+          role-to-assume: ${{ secrets.DOGFOOD_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.DOGFOOD_AWS_REGION }}
+          role-session-name: ocel-preview-${{ github.run_id }}
+          expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
+          cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
+          vars-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+
+      - name: Tell the app the preview has started
+        id: report-started
+        continue-on-error: true
+        run: scripts/preview-report.sh started
+
+      - name: Stand the preview up
+        id: up
+        env:
+          OCEL_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          ocel preview up --yes --log-format json 2>&1 | tee "$RUNNER_TEMP/preview.log"
+
+      - name: Drop the deployments this preview has outgrown
+        run: ocel preview prune --yes
+
+      - name: Tell the app the preview is deployed
+        id: report-deployed
+        if: ${{ success() }}
+        continue-on-error: true
+        run: scripts/preview-report.sh deployed .ocel/deploy-result.json
+
+      - name: Tell the app the preview failed
+        id: report-failed
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ERROR=$(scripts/preview-error.sh)
+          export ERROR
+          scripts/preview-report.sh failed
+
+      - name: Mint the token the fallback comment is written with
+        id: app-token
+        if: ${{ always() && (steps.report-deployed.outcome == 'failure' || steps.report-failed.outcome == 'failure') && github.event.pull_request.number }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.OCEL_GITHUB_APP_ID }}
+          private-key: ${{ secrets.OCEL_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Say on the pull request what the app could not
+        if: ${{ always() && steps.app-token.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          OUTCOME: ${{ steps.up.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$OUTCOME" = success ] && [ -f .ocel/deploy-result.json ]; then
+            body=$(scripts/preview-comment.sh deployed .ocel/deploy-result.json)
+          else
+            ERROR=$(scripts/preview-error.sh)
+            body=$(ERROR="$ERROR" scripts/preview-comment.sh failed)
+          fi
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq 'map(select(.body | contains("<!-- ocel-preview -->"))) | first | .id // empty')
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -f body="$body"
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body"
+          fi
+
+      - name: Keep what the preview reported
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-result
+          path: |
+            .ocel/deploy-result.json
+            ${{ runner.temp }}/preview.log
+          if-no-files-found: warn
+
+  preview-down:
+    name: the preview a closed pull request leaves behind
+    if: ${{ github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    env:
+      OCEL_CONFIG: ocel.aws.json
+      OCEL_GITHUB_APP_URL: ${{ vars.OCEL_GITHUB_APP_URL }}
+      OCEL_REPORT_SECRET: ${{ secrets.OCEL_REPORT_SECRET }}
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      REF: ${{ github.event.pull_request.head.ref }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Checkout the base branch, the head one may already be gone
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Take the CLI this preview is torn down with
+        uses: ./.github/actions/ocel-binary
+        with:
+          source: ${{ contains(github.event.pull_request.labels.*.name, 'dogfood:release') && 'release' || 'head' }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Enter the account Ocel deploys itself into
+        uses: ./.github/actions/dogfood-session
+        with:
+          role-to-assume: ${{ secrets.DOGFOOD_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.DOGFOOD_AWS_REGION }}
+          role-session-name: ocel-preview-${{ github.run_id }}
+          expected-aws-account-id: ${{ secrets.DOGFOOD_EXPECTED_AWS_ACCOUNT_ID }}
+          cloudflare-api-token: ${{ secrets.DOGFOOD_CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.DOGFOOD_CLOUDFLARE_ACCOUNT_ID }}
+          vars-key: ${{ vars.DOGFOOD_AWS_VARS_KEY }}
+
+      - name: Tear the preview down
+        env:
+          REF: ${{ github.event.pull_request.head.ref }}
+        run: ocel preview rm --ref "$REF" --yes
+
+      - name: Tell the app the preview is gone
+        continue-on-error: true
+        run: scripts/preview-report.sh removed
 
   reapable:
     name: runs this pull request stood cells up under
