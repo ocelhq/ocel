@@ -60,7 +60,7 @@ runs:
     - name: Take the CLI from the latest release
       if: inputs.source == 'release'
       shell: bash
-      run: npm install --global ocel@latest
+      run: npm install --global @ocel/cli@latest
 
     - name: Say which CLI this run drives
       shell: bash
