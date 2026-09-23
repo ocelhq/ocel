@@ -30,7 +30,7 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 		add      []string
 	}{
 		"go":     {"go.mod", []string{"go", "get", "github.com/ocelhq/ocel/sdk"}},
-		"rust":   {"Cargo.toml", []string{"cargo", "add", "ocel"}},
+		"rust":   {"Cargo.toml", []string{"cargo", "add", "ocel-sdk"}},
 		"python": {"pyproject.toml", []string{"uv", "add", "ocel"}},
 		"node":   {"package.json", []string{"npm", "install", "ocel"}},
 	}
@@ -134,7 +134,7 @@ func TestInitTakesTheLanguageItIsGiven(t *testing.T) {
 	if err := runInit(context.Background(), deps, dir, "acme", initOptions{provider: "acme", language: "rust"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("runInit: %v", err)
 	}
-	if strings.Join(*argv, " ") != "cargo add ocel" {
+	if strings.Join(*argv, " ") != "cargo add ocel-sdk" {
 		t.Fatalf("added the sdk with %v", *argv)
 	}
 }

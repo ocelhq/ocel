@@ -1,6 +1,6 @@
 [package]
 name = "ocel-macros"
-description = "The attribute macros of the ocel crate"
+description = "The attribute macros of the ocel-sdk crate"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
