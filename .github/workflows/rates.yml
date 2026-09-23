@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   refresh:
-    name: refresh the rate cards from the vendors' price lists
+    name: refresh
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

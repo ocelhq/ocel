@@ -866,7 +866,7 @@ jobs:
           if-no-files-found: warn
 
   preview:
-    name: the preview this pull request stands up
+    name: preview
     needs: binary
     if: ${{ needs.binary.result == 'success' && needs.binary.outputs.preview != 'false' }}
     runs-on: ubuntu-latest
@@ -978,7 +978,7 @@ jobs:
           if-no-files-found: warn
 
   preview-down:
-    name: the preview a closed pull request leaves behind
+    name: preview-down
     if: ${{ github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1027,7 +1027,7 @@ jobs:
         run: scripts/preview-report.sh removed
 
   reapable:
-    name: runs this pull request stood cells up under
+    name: reapable
     if: ${{ github.event.action == 'closed' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1050,7 +1050,7 @@ jobs:
           echo "${ids:-no journey run} stood cells up for this pull request"
 
   reap:
-    name: cells this pull request left standing
+    name: reap
     needs: reapable
     if: ${{ needs.reapable.outputs.ids != '' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest

@@ -42,7 +42,7 @@ permissions:
 
 jobs:
   generated:
-    name: generated code is current
+    name: generated
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

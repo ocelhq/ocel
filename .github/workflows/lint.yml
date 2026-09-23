@@ -40,7 +40,7 @@ jobs:
         run: git diff --exit-code
 
   actions:
-    name: workflows
+    name: actionlint
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -50,7 +50,7 @@ jobs:
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color -shellcheck= -pyflakes=
 
   commits:
-    name: commit messages
+    name: commitlint
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10

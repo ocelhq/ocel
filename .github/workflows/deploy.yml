@@ -36,7 +36,7 @@ env:
 
 jobs:
   deploy:
-    name: production, www and the app the previews report to
+    name: production
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
