@@ -15,12 +15,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
-	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
-	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
-	ocel "github.com/ocelhq/ocel/sdk"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"ocel.dev"
+	bucketv1 "ocel.dev/internal/proto/app/bucket/v1"
+	"ocel.dev/internal/proto/app/bucket/v1/bucketv1connect"
 )
 
 const (
@@ -377,7 +375,7 @@ func serveStore(t *testing.T, store *fakeStore) *httptest.Server {
 	mux := http.NewServeMux()
 	path, handler := bucketv1connect.NewBucketServiceHandler(store)
 	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !channel.VerifyAuthHeader(r.Header.Get("Authorization"), storeToken) {
+		if r.Header.Get("Authorization") != "Bearer "+storeToken {
 			http.Error(w, "this request carries no valid session token", http.StatusForbidden)
 			return
 		}
@@ -404,8 +402,8 @@ func privateBucketFixture(t *testing.T, store *fakeStore) *ocel.BucketStore {
 func declaredBucket(t *testing.T, store *fakeStore, public string) *ocel.BucketStore {
 	t.Helper()
 	srv := serveStore(t, store)
-	t.Setenv(constants.RuntimeAddressEnvName, srv.URL)
-	t.Setenv(channel.SessionTokenEnvVar, storeToken)
+	t.Setenv("OCEL_RUNTIME_ADDRESS", srv.URL)
+	t.Setenv("OCEL_SESSION_TOKEN", storeToken)
 	t.Setenv("OCEL_RESOURCE_BUCKET_avatars", fmt.Sprintf(
 		`{"name":"avatars","bucket":{"bucket":%q%s}}`, storeBucket, public,
 	))

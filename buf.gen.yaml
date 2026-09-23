@@ -33,3 +33,22 @@ plugins:
   - remote: buf.build/connectrpc/rust:v0.9.0
     out: crates/ocel-sdk/src/proto
     opt: buffa_module=crate::proto
+
+  - local: [go, tool, protoc-gen-go]
+    out: sdk/internal/proto
+    opt:
+      - paths=source_relative
+      - Mapp/bucket/v1/bucket.proto=ocel.dev/internal/proto/app/bucket/v1;bucketv1
+      - Mapp/resources/v1/resources.proto=ocel.dev/internal/proto/app/resources/v1;resourcesv1
+      - Mapp/resources/v1/variables.proto=ocel.dev/internal/proto/app/resources/v1;resourcesv1
+      - Mcommon/bindings/v1/bindings.proto=ocel.dev/internal/proto/common/bindings/v1;bindingsv1
+
+  - local: [go, tool, protoc-gen-connect-go]
+    out: sdk/internal/proto
+    opt:
+      - paths=source_relative
+      - Mapp/bucket/v1/bucket.proto=ocel.dev/internal/proto/app/bucket/v1;bucketv1
+      - Mapp/resources/v1/resources.proto=ocel.dev/internal/proto/app/resources/v1;resourcesv1
+      - Mapp/resources/v1/variables.proto=ocel.dev/internal/proto/app/resources/v1;resourcesv1
+      - Mcommon/bindings/v1/bindings.proto=ocel.dev/internal/proto/common/bindings/v1;bindingsv1
+      - simple

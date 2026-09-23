@@ -84,7 +84,7 @@ When you are running the CLI (`ocel dev`, `ocel deploy` or `ocel preview`) this 
   [`discovery.paths`](/docs/configuration#discoverypaths).
 </Callout>
 
-A discovery folder does not have to be TypeScript. A folder of `.go` files is a Go package: put `var DB = sdk.Postgres("main")` in it, import [`github.com/ocelhq/ocel/sdk`](https://pkg.go.dev/github.com/ocelhq/ocel/sdk), and discovery generates a `main` that imports the package and nothing else, under the `.ocel/` of the module the nearest `go.mod` above the folder names, then runs it there with `go run`. Your app's own `main` is never built, and your `go.work` is left alone.
+A discovery folder does not have to be TypeScript. A folder of `.go` files is a Go package: put `var DB = ocel.Postgres("main")` in it, import [`ocel.dev`](https://pkg.go.dev/ocel.dev), and discovery generates a `main` that imports the package and nothing else, under the `.ocel/` of the module the nearest `go.mod` above the folder names, then runs it there with `go run`. Your app's own `main` is never built, and your `go.work` is left alone.
 
 A folder of `.py` files is a package. Put `db = postgres("main")` in its `__init__.py`, install [`ocel`](https://pypi.org/project/ocel/), and discovery imports the folder as a package from the nearest `pyproject.toml` or `requirements.txt` above it, through a script it writes under that project's `.ocel/`. The interpreter is the project's own `.venv` when it has one. Your app's `main.py` is never run, and the folder travels with the app into its artifact so the same `from resources import db` resolves once deployed.
 

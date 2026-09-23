@@ -29,7 +29,7 @@ func TestInitWritesAConfigTheLoaderAccepts(t *testing.T) {
 		manifest string
 		add      []string
 	}{
-		"go":     {"go.mod", []string{"go", "get", "github.com/ocelhq/ocel/sdk"}},
+		"go":     {"go.mod", []string{"go", "get", "ocel.dev"}},
 		"rust":   {"Cargo.toml", []string{"cargo", "add", "ocel-sdk"}},
 		"python": {"pyproject.toml", []string{"uv", "add", "ocel"}},
 		"node":   {"package.json", []string{"npm", "install", "ocel"}},

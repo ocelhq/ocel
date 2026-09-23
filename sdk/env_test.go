@@ -14,9 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
-	ocel "github.com/ocelhq/ocel/sdk"
+	"ocel.dev"
 )
 
 type cell struct {
@@ -28,7 +26,7 @@ type cell struct {
 func variablesServer(t *testing.T, cells []cell, seen *[]map[string]any) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !channel.VerifyAuthHeader(r.Header.Get("Authorization"), collectorToken) {
+		if r.Header.Get("Authorization") != "Bearer "+collectorToken {
 			http.Error(w, "this request carries no valid session token", http.StatusForbidden)
 			return
 		}
@@ -57,9 +55,9 @@ func discover(t *testing.T, cells []cell) *[]map[string]any {
 	t.Helper()
 	var seen []map[string]any
 	srv := variablesServer(t, cells, &seen)
-	t.Setenv(constants.PhaseEnvName, "discovery")
-	t.Setenv(constants.DevServerEnvName, srv.URL)
-	t.Setenv(constants.DevServerTokenEnvName, collectorToken)
+	t.Setenv("OCEL_PHASE", "discovery")
+	t.Setenv("OCEL_DEV_SERVER", srv.URL)
+	t.Setenv("OCEL_DEV_SERVER_TOKEN", collectorToken)
 	return &seen
 }
 
@@ -625,7 +623,7 @@ func TestASecretResolvesOnEveryRead(t *testing.T) {
 }
 
 func TestEnvReadsAValueFromTheLiveDirectoryWhenNoVariableCarriesIt(t *testing.T) {
-	t.Setenv(constants.LiveDirEnvName, liveDir(t, map[string]string{"FILE_ONLY": "from the file\n"}))
+	t.Setenv("OCEL_LIVE_DIR", liveDir(t, map[string]string{"FILE_ONLY": "from the file\n"}))
 
 	got := ocel.Env[struct {
 		Key string `ocel:"FILE_ONLY"`
@@ -637,7 +635,7 @@ func TestEnvReadsAValueFromTheLiveDirectoryWhenNoVariableCarriesIt(t *testing.T)
 
 func TestEnvPrefersADeliveredVariableOverTheLiveDirectoryFileOfTheSameKey(t *testing.T) {
 	dir := liveDir(t, map[string]string{"FILE_SHADOWED": "from the file", "FILE_BARE": "from the file"})
-	t.Setenv(constants.LiveDirEnvName, dir)
+	t.Setenv("OCEL_LIVE_DIR", dir)
 	t.Setenv("OCEL_VAR_FILE_SHADOWED", "baked")
 	t.Setenv("FILE_BARE", "bare")
 
@@ -651,7 +649,7 @@ func TestEnvPrefersADeliveredVariableOverTheLiveDirectoryFileOfTheSameKey(t *tes
 }
 
 func TestEnvTakesAKeyTheLiveDirectoryHoldsNoFileForAsUnset(t *testing.T) {
-	t.Setenv(constants.LiveDirEnvName, liveDir(t, nil))
+	t.Setenv("OCEL_LIVE_DIR", liveDir(t, nil))
 
 	err := valueError(t, func() {
 		ocel.Env[struct {
@@ -665,7 +663,7 @@ func TestEnvTakesAKeyTheLiveDirectoryHoldsNoFileForAsUnset(t *testing.T) {
 
 func TestASecretReadsTheRotatedLiveDirectoryFileOnTheNextCall(t *testing.T) {
 	dir := liveDir(t, map[string]string{"ROTATING_KEY": "first"})
-	t.Setenv(constants.LiveDirEnvName, dir)
+	t.Setenv("OCEL_LIVE_DIR", dir)
 
 	got := ocel.Env[struct {
 		Key ocel.Secret `ocel:"ROTATING_KEY"`
@@ -745,7 +743,7 @@ func TestASecretWithNoValueFailsAtInit(t *testing.T) {
 }
 
 func TestEnvRefusesAVariableThisAppsBindingPutsOutOfScope(t *testing.T) {
-	t.Setenv(constants.AppFolderEnvName, "/apps/api")
+	t.Setenv("OCEL_APP_FOLDER", "/apps/api")
 	t.Setenv("KEY", "v")
 	err := caught(t, func() {
 		ocel.Env[struct {
@@ -763,7 +761,7 @@ func TestEnvRefusesAVariableThisAppsBindingPutsOutOfScope(t *testing.T) {
 }
 
 func TestEnvReadsAVariableScopedToTheFolderThisAppIsBoundTo(t *testing.T) {
-	t.Setenv(constants.AppFolderEnvName, "/apps/web")
+	t.Setenv("OCEL_APP_FOLDER", "/apps/web")
 	t.Setenv("KEY", "v")
 	got := ocel.Env[struct {
 		Key string `ocel:"KEY,folders=/apps/api;/apps/web"`
@@ -774,7 +772,7 @@ func TestEnvReadsAVariableScopedToTheFolderThisAppIsBoundTo(t *testing.T) {
 }
 
 func TestDeploymentURLReadsWhatOcelWrote(t *testing.T) {
-	t.Setenv(constants.AppURLEnvName, "https://web-j-1.ocel.site")
+	t.Setenv("OCEL_URL", "https://web-j-1.ocel.site")
 	got, err := ocel.DeploymentURL()
 	if err != nil || got != "https://web-j-1.ocel.site" {
 		t.Errorf("DeploymentURL() = %q, %v", got, err)
@@ -784,8 +782,8 @@ func TestDeploymentURLReadsWhatOcelWrote(t *testing.T) {
 func TestDeploymentURLFailsWhenNoneWasDelivered(t *testing.T) {
 	_, err := ocel.DeploymentURL()
 	var value *ocel.EnvValueError
-	if !errors.As(err, &value) || value.Key != constants.AppURLEnvName {
-		t.Errorf("DeploymentURL() error = %v, want an *EnvValueError for %s", err, constants.AppURLEnvName)
+	if !errors.As(err, &value) || value.Key != "OCEL_URL" {
+		t.Errorf("DeploymentURL() error = %v, want an *EnvValueError for %s", err, "OCEL_URL")
 	}
 }
 
@@ -1081,7 +1079,7 @@ func TestEnvAcceptsAGroupWhoseMembersShareAFolder(t *testing.T) {
 		API   string `ocel:"SHARED_API,folders=/api"`
 		Wider string `ocel:"SHARED_WIDER"`
 	}
-	t.Setenv(constants.AppFolderEnvName, "/api")
+	t.Setenv("OCEL_APP_FOLDER", "/api")
 	t.Setenv("SHARED_BOTH", "b")
 	t.Setenv("SHARED_API", "a")
 	t.Setenv("SHARED_WIDER", "w")

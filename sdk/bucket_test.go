@@ -7,16 +7,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/constants"
-	ocel "github.com/ocelhq/ocel/sdk"
+	"ocel.dev"
 )
 
 func TestBucketDeclaresDuringDiscovery(t *testing.T) {
 	var seen []map[string]any
 	srv := collector(t, &seen)
-	t.Setenv(constants.PhaseEnvName, "discovery")
-	t.Setenv(constants.DevServerEnvName, srv.URL)
-	t.Setenv(constants.DevServerTokenEnvName, collectorToken)
+	t.Setenv("OCEL_PHASE", "discovery")
+	t.Setenv("OCEL_DEV_SERVER", srv.URL)
+	t.Setenv("OCEL_DEV_SERVER_TOKEN", collectorToken)
 
 	_, file, line, _ := runtime.Caller(0)
 	store := ocel.Bucket("avatars", ocel.BucketPublic(), ocel.BucketAllowedOrigins("https://example.com"))
@@ -56,9 +55,9 @@ func TestBucketDeclaresDuringDiscovery(t *testing.T) {
 func TestBucketAccessorsRefuseDuringDiscovery(t *testing.T) {
 	var seen []map[string]any
 	srv := collector(t, &seen)
-	t.Setenv(constants.PhaseEnvName, "discovery")
-	t.Setenv(constants.DevServerEnvName, srv.URL)
-	t.Setenv(constants.DevServerTokenEnvName, collectorToken)
+	t.Setenv("OCEL_PHASE", "discovery")
+	t.Setenv("OCEL_DEV_SERVER", srv.URL)
+	t.Setenv("OCEL_DEV_SERVER_TOKEN", collectorToken)
 
 	store := ocel.Bucket("avatars")
 
@@ -96,9 +95,9 @@ func TestBucketAccessorsRefuseDuringDiscovery(t *testing.T) {
 func TestABucketIsPrivateWithNoOriginsByDefault(t *testing.T) {
 	var seen []map[string]any
 	srv := collector(t, &seen)
-	t.Setenv(constants.PhaseEnvName, "discovery")
-	t.Setenv(constants.DevServerEnvName, srv.URL)
-	t.Setenv(constants.DevServerTokenEnvName, collectorToken)
+	t.Setenv("OCEL_PHASE", "discovery")
+	t.Setenv("OCEL_DEV_SERVER", srv.URL)
+	t.Setenv("OCEL_DEV_SERVER_TOKEN", collectorToken)
 
 	ocel.Bucket("avatars")
 

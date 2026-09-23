@@ -15,8 +15,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/ocelhq/ocel/pkg/constants"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
 )
 
 const (
@@ -417,7 +416,7 @@ func definition(field reflect.StructField, index []int) (variable, error) {
 		return variable{}, &EnvDefinitionError{Key: v.key, Detail: "has an unusable description: " + problem}
 	}
 
-	if v.key == constants.AppURLEnvName {
+	if v.key == appURLEnv {
 		return variable{}, &EnvDefinitionError{Key: v.key, Detail: "is written by Ocel for every app, from the hostname the deploy serves it on, so a declared one would be overwritten before anything read it. Read it with DeploymentURL."}
 	}
 	if !v.confidential() && strings.HasPrefix(v.key, reservedPrefix) {
@@ -615,7 +614,7 @@ func groupDelivered(decl declaration, g group) bool {
 
 func resolveVariable(target reflect.Value, v variable) error {
 	if !inScope(v.folders) {
-		return &EnvScopeError{Key: v.key, Folders: v.folders, Binding: os.Getenv(constants.AppFolderEnvName)}
+		return &EnvScopeError{Key: v.key, Folders: v.folders, Binding: os.Getenv(appFolderEnv)}
 	}
 	field := target.FieldByIndex(v.index)
 	raw, ok := readDelivered(v.key)
@@ -645,7 +644,7 @@ func unset(key string) *EnvValueError {
 }
 
 func inScope(folders []string) bool {
-	return len(folders) == 0 || slices.Contains(folders, os.Getenv(constants.AppFolderEnvName))
+	return len(folders) == 0 || slices.Contains(folders, os.Getenv(appFolderEnv))
 }
 
 func readDelivered(key string) (string, bool) {
@@ -659,7 +658,7 @@ func readDelivered(key string) (string, bool) {
 }
 
 func readLiveFile(key string) (string, bool) {
-	dir := os.Getenv(constants.LiveDirEnvName)
+	dir := os.Getenv(liveDirEnv)
 	if dir == "" {
 		return "", false
 	}
@@ -759,10 +758,10 @@ func parse(t reflect.Type, raw string) (reflect.Value, error) {
 // nothing declares it. It fails with an [*EnvValueError] when the deploy gave
 // this app no hostname.
 func DeploymentURL() (string, error) {
-	url, ok := readDelivered(constants.AppURLEnvName)
+	url, ok := readDelivered(appURLEnv)
 	if !ok {
 		return "", &EnvValueError{
-			Key:    constants.AppURLEnvName,
+			Key:    appURLEnv,
 			Detail: "was not delivered to this app. Ocel writes it from the hostname the deploy serves the app on, and this app is served on none: add one under `domains.production` on the app, or on the project if this is the first app it names, and deploy again.",
 		}
 	}

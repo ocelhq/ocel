@@ -13,13 +13,11 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
-	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
-	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
+	bucketv1 "ocel.dev/internal/proto/app/bucket/v1"
+	"ocel.dev/internal/proto/app/bucket/v1/bucketv1connect"
+	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
+	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
 )
 
 const (
@@ -370,12 +368,12 @@ func (b *BucketStore) runtime(access string) (*reachedBucket, error) {
 			b.err = err
 			return
 		}
-		address := os.Getenv(constants.RuntimeAddressEnvName)
+		address := os.Getenv(runtimeAddressEnv)
 		if address == "" {
 			b.err = &unaddressedRuntimeError{}
 			return
 		}
-		token := os.Getenv(channel.SessionTokenEnvVar)
+		token := os.Getenv(sessionTokenEnv)
 		if token == "" {
 			b.err = &untokenedRuntimeError{}
 			return
@@ -397,7 +395,7 @@ func (*unaddressedRuntimeError) Error() string {
 	return fmt.Sprintf(
 		"%s is not defined, so no resource the ocel runtime serves can be reached. "+
 			"Run `ocel dev` to serve it locally, or `ocel deploy` to have the deployed runtime's address delivered.",
-		constants.RuntimeAddressEnvName,
+		runtimeAddressEnv,
 	)
 }
 
@@ -407,7 +405,7 @@ func (*untokenedRuntimeError) Error() string {
 	return fmt.Sprintf(
 		"%s is not defined, so the ocel runtime at %s would refuse every call. "+
 			"It is delivered beside %s by `ocel dev` and by the deployed runtime, never set by hand.",
-		channel.SessionTokenEnvVar, constants.RuntimeAddressEnvName, constants.RuntimeAddressEnvName,
+		sessionTokenEnv, runtimeAddressEnv, runtimeAddressEnv,
 	)
 }
 
@@ -418,7 +416,7 @@ func (b *BucketStore) resource() string {
 func bearing(token string) connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			req.Header().Set("Authorization", channel.FormatAuthHeader(token))
+			req.Header().Set("Authorization", bearer(token))
 			return next(ctx, req)
 		}
 	})

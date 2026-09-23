@@ -1,6 +1,6 @@
 package infra
 
-import ocel "github.com/ocelhq/ocel/sdk"
+import "ocel.dev"
 
 var DB = ocel.Postgres("main")
 
