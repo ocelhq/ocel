@@ -71,6 +71,13 @@ fn discovery_posts_every_declaration_and_reports_the_problems_it_finds() {
             .all(|one| one.authorization.as_deref() == Some("Bearer opensesame")),
         "a request went out without the dev server token"
     );
+    let named = format!("rust/{}", env!("CARGO_PKG_VERSION"));
+    assert!(
+        received
+            .iter()
+            .all(|one| one.sdk_version.as_deref() == Some(named.as_str())),
+        "a request went out without naming the sdk version"
+    );
 
     let declares: Vec<_> = received
         .iter()

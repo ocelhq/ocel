@@ -14,6 +14,8 @@ const DEV_SERVER_ENV: &str = "OCEL_DEV_SERVER";
 const DEV_SERVER_TOKEN_ENV: &str = "OCEL_DEV_SERVER_TOKEN";
 const SOURCE_ROOT_ENV: &str = "OCEL_SOURCE_ROOT";
 const DISCOVERY_PHASE: &str = "discovery";
+const SDK_VERSION_HEADER: &str = "ocel-sdk-version";
+const SDK_VERSION: &str = concat!("rust/", env!("CARGO_PKG_VERSION"));
 
 #[doc(hidden)]
 pub enum DeclaredConfig {
@@ -279,7 +281,8 @@ async fn post_all(declared: &Declared) -> Result<(), Error> {
     let client = ResourceServiceClient::new(
         connectrpc::client::HttpClient::plaintext(),
         connectrpc::client::ClientConfig::new(base)
-            .with_default_header("authorization", format!("Bearer {token}")),
+            .with_default_header("authorization", format!("Bearer {token}"))
+            .with_default_header(SDK_VERSION_HEADER, SDK_VERSION),
     );
     for resource in &declared.resources {
         client
