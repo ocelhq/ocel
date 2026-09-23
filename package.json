@@ -7,7 +7,6 @@
     "test": "turbo run test",
     "gen": "buf generate --template buf.gen.go.yaml && buf generate --template buf.gen.console.yaml && pnpm buf generate",
     "dev:cli": "go tool air",
-    "ci:version": "changeset version && pnpm install --lockfile-only",
     "lint": "biome check",
     "format": "biome format --write",
     "prepare": "husky"
@@ -29,7 +28,6 @@
     "@bufbuild/buf": "^1.71.0",
     "@bufbuild/protobuf": "^2.12.1",
     "@bufbuild/protoc-gen-es": "^2.12.1",
-    "@changesets/cli": "^2.31.0",
     "@commitlint/cli": "21.2.2",
     "@commitlint/config-conventional": "21.2.2",
     "@ocel/cli": "workspace:^",

@@ -10,7 +10,7 @@
   One exception: a fixture config shows a variant that conflicts with what is live
   as a commented-out line, with one line saying when to pick it — never more.
 - The commits are the ADRs. Rationale belongs in the commit message and PR bodies. Nowhere else.
-- Do not generate changesets unless explicitly instructed.
+- Do not generate changie entries (`.changes/`) unless explicitly instructed.
 - **Clean break** — TODO(alpha): remove when the first non-alpha version ships. Nothing
   is released, so nothing has consumers: replace old behaviour outright and delete the
   old path in the same diff. No shims, aliases, deprecated fallbacks, or migrations for
@@ -100,7 +100,7 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
   apps they drive. A fixture directory exercises one concern and nothing else.
 - **`docs/agents/`** — configuration the agent skills read. Not product documentation;
   nothing that explains the code belongs here.
-- **`.github/`** — CI. **`.changeset/`** — the release mechanism; the workflow runs the
+- **`.github/`** — CI. **`.changes/`** — the release mechanism; the workflow runs the
   version bump, never you.
 
 ## Agent skills
