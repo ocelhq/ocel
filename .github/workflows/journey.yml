@@ -301,23 +301,7 @@ jobs:
           } | tee -a "$GITHUB_OUTPUT"
 
       - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: |
-            cli/go.sum
-            platform/aws/provider/go.sum
-            platform/gcp/provider/go.sum
-            platform/vps/provider/go.sum
-            pkg/proto/go.sum
-            sdk/go.sum
-
-      - name: Setup gobuildcache
-        uses: ./.github/actions/gobuildcache
-        with:
-          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+        uses: ./.github/actions/go
 
       - name: Build, typecheck and test the workspace
         run: pnpm turbo run build typecheck test --filter='!./console/*' --filter='!./tests/fixtures/**' --filter='!./tests/next-compat'
@@ -737,9 +721,9 @@ jobs:
         if: ${{ needs.binary.outputs.real != 'true' }}
         uses: ./.github/actions/incus-vm
         with:
-          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+          go: "false"
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
 
       - uses: ./.github/actions/node-workspace
         if: ${{ needs.binary.outputs.real == 'true' }}
@@ -909,22 +893,7 @@ jobs:
         run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
 
       - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: |
-            cli/go.sum
-            platform/aws/provider/go.sum
-            platform/vps/provider/go.sum
-            pkg/proto/go.sum
-            sdk/go.sum
-
-      - name: Setup gobuildcache
-        uses: ./.github/actions/gobuildcache
-        with:
-          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+        uses: ./.github/actions/go
 
       - uses: ./.github/actions/goreleaser
 

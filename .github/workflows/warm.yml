@@ -1,0 +1,96 @@
+name: Warm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cli/**"
+      - "sdk/**"
+      - "pkg/**"
+      - "platform/**"
+      - "packages/**"
+      - "frameworks/**"
+      - "tests/fixtures/**"
+      - "go.work"
+      - "go.work.sum"
+      - ".goreleaser.yaml"
+      - ".golangci.yml"
+      - "pnpm-lock.yaml"
+      - ".github/actions/go/**"
+      - ".github/workflows/warm.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: warm
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  go:
+    name: the go caches every pull request restores
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        id: go
+        uses: ./.github/actions/go
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: The node halves the binaries embed
+        run: pnpm turbo run build --filter=ocel
+
+      - uses: ./.github/actions/goreleaser
+
+      - name: The snapshot binaries a journey, a preview and a deploy build
+        run: node scripts/snapshot.mjs
+
+      - name: Every module's packages, and their race-instrumented tests
+        run: |
+          set -euo pipefail
+          mapfile -t packages < <(go list -m -f '{{.Dir}}' | sed "s|^$PWD/|./|; s|\$|/...|")
+          go build "${packages[@]}"
+          go test -race -count=1 -run '^$' "${packages[@]}"
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13.2
+          install-only: true
+          skip-cache: true
+
+      - name: Every module's lint
+        run: |
+          for dir in $(go list -m -f '{{.Dir}}'); do
+            (cd "$dir" && golangci-lint run ./... > /dev/null) \
+              || echo "::notice::golangci-lint reported $dir; what it analysed is cached all the same"
+          done
+
+      - name: Save them
+        if: ${{ !cancelled() && steps.go.outcome == 'success' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.go.outputs.paths }}
+          key: ${{ steps.go.outputs.key }}
+
+      - name: Drop the entries this one supersedes
+        if: ${{ !cancelled() && steps.go.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PREFIX: ${{ steps.go.outputs.prefix }}
+          KEY: ${{ steps.go.outputs.key }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          gh cache list --ref "$REF" --key "$PREFIX" --limit 100 --json key --jq '.[].key' \
+            | { grep -vxF "$KEY" || true; } \
+            | xargs -r -n1 gh cache delete

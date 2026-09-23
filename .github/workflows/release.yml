@@ -67,22 +67,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: |
-            cli/go.sum
-            platform/aws/provider/go.sum
-            cloud/edge/cloudflare/go.sum
-            pkg/proto/go.sum
-            sdk/go.sum
-
-      - name: Setup gobuildcache
-        uses: ./.github/actions/gobuildcache
-        with:
-          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+        uses: ./.github/actions/go
 
       - uses: ./.github/actions/node-workspace
         with:
@@ -133,23 +118,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: |
-            cli/go.sum
-            platform/aws/provider/go.sum
-            platform/gcp/provider/go.sum
-            platform/vps/provider/go.sum
-            pkg/proto/go.sum
-            sdk/go.sum
-
-      - name: Setup gobuildcache
-        uses: ./.github/actions/gobuildcache
-        with:
-          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+        uses: ./.github/actions/go
 
       - uses: ./.github/actions/node-workspace
         with:

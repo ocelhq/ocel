@@ -67,22 +67,7 @@ jobs:
         run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
 
       - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: |
-            cli/go.sum
-            platform/aws/provider/go.sum
-            platform/vps/provider/go.sum
-            pkg/proto/go.sum
-            sdk/go.sum
-
-      - name: Setup gobuildcache
-        uses: ./.github/actions/gobuildcache
-        with:
-          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+        uses: ./.github/actions/go
 
       - uses: ./.github/actions/goreleaser
 
@@ -140,9 +125,6 @@ jobs:
           source: head
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
-          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
       - name: Enter the account Ocel deploys itself into
         uses: ./.github/actions/dogfood-session

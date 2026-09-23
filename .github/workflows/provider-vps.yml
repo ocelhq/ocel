@@ -115,9 +115,6 @@ jobs:
       - name: Setup the incus host
         uses: ./.github/actions/incus-vm
         with:
-          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
@@ -193,9 +190,6 @@ jobs:
       - name: Setup the incus host
         uses: ./.github/actions/incus-vm
         with:
-          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 

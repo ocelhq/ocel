@@ -19,12 +19,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Setup Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
-        with:
-          go-version-file: go.work
-          cache-dependency-path: |
-            platform/aws/provider/go.sum
-            platform/gcp/provider/go.sum
+        uses: ./.github/actions/go
 
       - name: Refresh the AWS card
         run: go run -C platform/aws/provider ./cost/refresh -card cost/rates.json
