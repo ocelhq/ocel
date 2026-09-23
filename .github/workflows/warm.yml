@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   go:
-    name: the go caches every pull request restores
+    name: go
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

@@ -14,7 +14,7 @@ env:
 
 jobs:
   ec2:
-    name: boxes a run that died left behind
+    name: ec2
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -41,7 +41,7 @@ jobs:
         run: scripts/ec2.sh sweep
 
   journeys:
-    name: journey cells and namespaces no run is using
+    name: journeys
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:
@@ -108,7 +108,7 @@ jobs:
         run: pnpm --filter @ocel-tests/journeys sweep --target aws
 
   previews:
-    name: previews whose pull request has closed
+    name: previews
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:

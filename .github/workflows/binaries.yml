@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   release:
-    name: Publish the archives a CLI fetches its providers from
+    name: release
     runs-on: ubuntu-latest
     permissions:
       contents: write

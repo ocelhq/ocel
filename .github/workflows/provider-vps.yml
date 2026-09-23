@@ -56,7 +56,7 @@ env:
 jobs:
   gate:
     if: github.event.action != 'closed'
-    name: what still needs proving
+    name: gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -103,7 +103,7 @@ jobs:
   live:
     needs: gate
     if: needs.gate.outputs.live == 'true'
-    name: vps live conformance
+    name: live
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -182,7 +182,7 @@ jobs:
   pipeline:
     needs: gate
     if: needs.gate.outputs.pipeline == 'true'
-    name: vps build pipeline, lifecycle and engine install
+    name: pipeline
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
