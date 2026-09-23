@@ -243,6 +243,7 @@ jobs:
   go:
     name: go proxy
     needs: [release, crates]
+    if: needs.release.outputs.channel != 'nightly'
     runs-on: ubuntu-latest
     continue-on-error: ${{ needs.release.outputs.channel != 'stable' }}
     permissions: {}
