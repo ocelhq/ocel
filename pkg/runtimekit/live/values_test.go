@@ -176,8 +176,8 @@ func TestLiveValues(t *testing.T) {
 		if len(msgs) != 1 {
 			t.Fatalf("pushed %d messages, want exactly the first generation", len(msgs))
 		}
-		if msgs[0].Type != "Values" {
-			t.Errorf("type = %q, want %q", msgs[0].Type, "Values")
+		if msgs[0].Type != "liveValues" {
+			t.Errorf("type = %q, want %q", msgs[0].Type, "liveValues")
 		}
 		if msgs[0].Generation != 1 {
 			t.Errorf("generation = %d, want 1", msgs[0].Generation)

@@ -29,7 +29,7 @@ type valuesMsg struct {
 	Values     map[string]string `json:"values"`
 }
 
-const valuesMsgType = "Values"
+const valuesMsgType = "liveValues"
 
 type Values struct {
 	fetcher  Fetcher
