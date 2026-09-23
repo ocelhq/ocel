@@ -20,7 +20,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
-const committedSchemaFile = "www/public/schema/ocel.schema.json"
+func committedSchemaFile(t *testing.T, root string) string {
+	t.Helper()
+	version, err := os.ReadFile(filepath.Join(root, "VERSION"))
+	if err != nil {
+		t.Fatalf("read the release version: %v", err)
+	}
+	return filepath.Join("www", "public", "schema", strings.TrimSpace(string(version)), "ocel.schema.json")
+}
 
 const compareTable = "www/components/compare/data.ts"
 
@@ -40,7 +47,7 @@ func schemaID(t *testing.T, root string) string {
 	var read struct {
 		ID string `json:"$id"`
 	}
-	data, err := os.ReadFile(filepath.Join(root, committedSchemaFile))
+	data, err := os.ReadFile(filepath.Join(root, committedSchemaFile(t, root)))
 	if err != nil {
 		t.Fatalf("read the committed schema: %v", err)
 	}
@@ -52,7 +59,8 @@ func schemaID(t *testing.T, root string) string {
 
 func committedSchema(t *testing.T, root string) *jsonschema.Schema {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(root, committedSchemaFile))
+	file := committedSchemaFile(t, root)
+	data, err := os.ReadFile(filepath.Join(root, file))
 	if err != nil {
 		t.Fatalf("read the committed schema: %v", err)
 	}
@@ -61,10 +69,10 @@ func committedSchema(t *testing.T, root string) *jsonschema.Schema {
 		t.Fatalf("parse the committed schema: %v", err)
 	}
 	compiler := jsonschema.NewCompiler()
-	if err := compiler.AddResource(committedSchemaFile, doc); err != nil {
+	if err := compiler.AddResource(file, doc); err != nil {
 		t.Fatalf("add the committed schema: %v", err)
 	}
-	schema, err := compiler.Compile(committedSchemaFile)
+	schema, err := compiler.Compile(file)
 	if err != nil {
 		t.Fatalf("compile the committed schema: %v", err)
 	}
