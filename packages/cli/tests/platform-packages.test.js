@@ -1,4 +1,5 @@
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -8,46 +9,52 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const script = join(repo, "scripts", "platform-packages.mjs");
 
+const version = "1.2.3";
 const every = [
-  ["darwin", "amd64", "ocel_darwin_amd64_v1", "ocel"],
-  ["darwin", "arm64", "ocel_darwin_arm64_v8.0", "ocel"],
-  ["linux", "amd64", "ocel_linux_amd64_v1", "ocel"],
-  ["linux", "arm64", "ocel_linux_arm64_v8.0", "ocel"],
-  ["windows", "amd64", "ocel_windows_amd64_v1", "ocel.exe"],
+  ["darwin", "amd64"],
+  ["darwin", "arm64"],
+  ["linux", "amd64"],
+  ["linux", "arm64"],
+  ["windows", "amd64"],
 ];
 
 let root = "";
 
-function binary(goos, goarch, folder, name, id) {
-  mkdirSync(join(root, "dist", folder), { recursive: true });
-  writeFileSync(join(root, "dist", folder, name), `${id} ${goos} ${goarch}`);
-  return {
-    name,
-    path: join("dist", folder, name),
-    goos,
-    goarch,
-    type: "Binary",
-    extra: { ID: id },
-  };
+function archive(goos, goarch) {
+  const windows = goos === "windows";
+  const name = `ocel_${version}_${goos}_${goarch}.${windows ? "zip" : "tar.gz"}`;
+  const staging = mkdtempSync(join(tmpdir(), "ocel-archive-"));
+  const binary = windows ? "ocel.exe" : "ocel";
+  writeFileSync(join(staging, binary), `ocel ${goos} ${goarch}`);
+  const out = join(root, "release", name);
+  if (windows) {
+    execFileSync("zip", ["-q", "-j", out, join(staging, binary)]);
+  } else {
+    execFileSync("tar", ["-czf", out, "-C", staging, binary]);
+  }
+  rmSync(staging, { recursive: true, force: true });
+  return name;
 }
 
-function stage(targets, { from = root, dist = "dist", packages = "packages" } = {}) {
-  const artifacts = targets.map(([goos, goarch, folder, name]) =>
-    binary(goos, goarch, folder, name, "ocel"),
+function stage(targets, { tamper } = {}) {
+  mkdirSync(join(root, "release"), { recursive: true });
+  const lines = targets.map(([goos, goarch]) => {
+    const name = archive(goos, goarch);
+    const sum = createHash("sha256")
+      .update(readFileSync(join(root, "release", name)))
+      .digest("hex");
+    return `${name === tamper ? "0".repeat(64) : sum}  ${name}`;
+  });
+  writeFileSync(join(root, "release", "checksums.txt"), `${lines.join("\n")}\n`);
+  return spawnSync(
+    process.execPath,
+    [script, join(root, "release"), version, join(root, "packages")],
+    { encoding: "utf8" },
   );
-  artifacts.push(
-    binary("linux", "amd64", "provider-aws_linux_amd64_v1", "provider-aws", "provider-aws"),
-  );
-  writeFileSync(join(root, "dist", "artifacts.json"), JSON.stringify(artifacts));
-  for (const [goos, goarch] of every) {
-    const suffix = `${goos === "windows" ? "win32" : goos}-${goarch === "amd64" ? "x64" : goarch}`;
-    mkdirSync(join(root, "packages", `cli-${suffix}`), { recursive: true });
-  }
-  return spawnSync(process.execPath, [script, dist, packages], { cwd: from, encoding: "utf8" });
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "ocel-dist-"));
+  root = mkdtempSync(join(tmpdir(), "ocel-release-"));
 });
 
 afterEach(() => {
@@ -55,7 +62,7 @@ afterEach(() => {
 });
 
 describe("platform-packages.mjs", () => {
-  it("fills every platform package with its executable binary", () => {
+  it("fills every platform package with the executable binary its release archive holds", () => {
     const run = stage(every);
     expect(run.stderr).toBe("");
     expect(run.status).toBe(0);
@@ -73,29 +80,14 @@ describe("platform-packages.mjs", () => {
     }
   });
 
-  it("leaves the provider binaries out of the npm packages", () => {
-    stage(every);
-    expect(() =>
-      statSync(join(root, "packages", "cli-linux-x64", "bin", "provider-aws")),
-    ).toThrow();
+  it("places nothing from an archive checksums.txt does not vouch for", () => {
+    const run = stage(every, { tamper: `ocel_${version}_linux_amd64.tar.gz` });
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain(`ocel_${version}_linux_amd64.tar.gz`);
+    expect(() => statSync(join(root, "packages", "cli-linux-x64", "bin", "ocel"))).toThrow();
   });
 
-  it("reads the manifest's paths against the project root, not the working directory", () => {
-    const elsewhere = mkdtempSync(join(tmpdir(), "ocel-elsewhere-"));
-    const run = stage(every, {
-      from: elsewhere,
-      dist: join(root, "dist"),
-      packages: join(root, "packages"),
-    });
-    rmSync(elsewhere, { recursive: true, force: true });
-    expect(run.stderr).toBe("");
-    expect(run.status).toBe(0);
-    expect(readFileSync(join(root, "packages", "cli-linux-x64", "bin", "ocel"), "utf8")).toBe(
-      "ocel linux amd64",
-    );
-  });
-
-  it("names the target goreleaser did not build", () => {
+  it("names the target the release has no archive for", () => {
     const run = stage(every.filter(([goos, goarch]) => !(goos === "linux" && goarch === "arm64")));
     expect(run.status).not.toBe(0);
     expect(run.stderr).toContain("cli-linux-arm64");

@@ -1,0 +1,42 @@
+name: released archives
+description: >-
+  The CLI archives a GitHub Release published, with its checksums.txt, taken
+  only once cosign has verified checksums.txt was signed by the binaries
+  workflow on that release's tag and every archive matches it.
+
+inputs:
+  version:
+    description: The version released, without the leading v.
+    required: true
+  directory:
+    description: Where the verified archives and checksums.txt land.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Setup cosign
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+      with:
+        cosign-release: v3.1.3
+
+    - name: Download and verify them
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        VERSION: ${{ inputs.version }}
+        DIRECTORY: ${{ inputs.directory }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$DIRECTORY"
+        gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --dir "$DIRECTORY" --clobber \
+          --pattern checksums.txt \
+          --pattern checksums.txt.sigstore.json \
+          --pattern "ocel_${VERSION}_*.tar.gz" \
+          --pattern "ocel_${VERSION}_*.zip"
+        cosign verify-blob \
+          --bundle "$DIRECTORY/checksums.txt.sigstore.json" \
+          --certificate-identity "https://github.com/ocelhq/ocel/.github/workflows/binaries.yml@refs/tags/v$VERSION" \
+          --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+          "$DIRECTORY/checksums.txt"
+        (cd "$DIRECTORY" && sha256sum --check --ignore-missing --strict checksums.txt)

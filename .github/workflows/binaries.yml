@@ -66,40 +66,48 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft,assets \
             --jq 'select(.isDraft | not) | .assets[].name' 2>/dev/null | grep -qx 'checksums.txt.sigstore.json'; then
             echo "published=true" >> "$GITHUB_OUTPUT"
-            echo "$GITHUB_REF_NAME is already published; this run rebuilds it for the registries only"
+            echo "$GITHUB_REF_NAME is already published; the registries take its archives as they are"
           else
             echo "published=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Setup Go
+        if: steps.published.outputs.published == 'false'
         uses: ./.github/actions/go
 
       - uses: ./.github/actions/node-workspace
+        if: steps.published.outputs.published == 'false'
         with:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
       - uses: ./.github/actions/goreleaser
+        if: steps.published.outputs.published == 'false'
 
       - uses: ./.github/actions/changie
+        if: steps.published.outputs.published == 'false'
 
       - name: Setup cosign
+        if: steps.published.outputs.published == 'false'
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
         with:
           cosign-release: v3.1.3
 
       - name: Setup syft
         id: syft
+        if: steps.published.outputs.published == 'false'
         uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26
         with:
           syft-version: v1.52.0
 
       - name: Put syft on PATH
+        if: steps.published.outputs.published == 'false'
         env:
           SYFT: ${{ steps.syft.outputs.cmd }}
         run: dirname "$SYFT" >> "$GITHUB_PATH"
 
       - name: Write the release notes
+        if: steps.published.outputs.published == 'false'
         env:
           VERSION: ${{ steps.version.outputs.version }}
           CHANNEL: ${{ steps.version.outputs.channel }}
@@ -112,28 +120,12 @@ jobs:
           fi
 
       - name: Release
+        if: steps.published.outputs.published == 'false'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
           GORELEASER_PREVIOUS_TAG: ${{ steps.version.outputs.previous }}
-          PUBLISHED: ${{ steps.published.outputs.published }}
-        run: |
-          set -euo pipefail
-          skip=()
-          if [ "$PUBLISHED" = true ]; then
-            skip=("--skip=publish,sign,sbom")
-          fi
-          goreleaser release --clean --release-notes "$RUNNER_TEMP/notes.md" "${skip[@]}"
-
-      - name: Keep what the registries publish
-        uses: actions/upload-artifact@v4
-        with:
-          name: release
-          if-no-files-found: error
-          path: |
-            dist/artifacts.json
-            dist/ocel_*/ocel*
-            dist/homebrew/Casks/ocel.rb
+        run: goreleaser release --clean --release-notes "$RUNNER_TEMP/notes.md"
 
   npm:
     name: npm
@@ -158,14 +150,15 @@ jobs:
       - name: Take the npm that publishes through trusted publishing
         run: npm install --global npm@^11.5.1
 
-      - name: Take the binaries the release built
-        uses: actions/download-artifact@v4
+      - uses: ./.github/actions/released-archives
         with:
-          name: release
-          path: dist
+          version: ${{ needs.release.outputs.version }}
+          directory: ${{ runner.temp }}/release
 
-      - name: Fill the platform packages with this version's binaries
-        run: node scripts/platform-packages.mjs dist packages
+      - name: Fill the platform packages with the released binaries
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: node scripts/platform-packages.mjs "$RUNNER_TEMP/release" "$VERSION" packages
 
       - name: Build the published packages
         run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi --filter=@ocel/transforms
@@ -275,13 +268,27 @@ jobs:
     if: needs.release.outputs.channel == 'stable'
     runs-on: ubuntu-latest
     environment: release
-    permissions: {}
+    permissions:
+      contents: read
     steps:
-      - name: Take the cask the release rendered
-        uses: actions/download-artifact@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          name: release
-          path: dist
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: ./.github/actions/released-archives
+        with:
+          version: ${{ needs.release.outputs.version }}
+          directory: ${{ runner.temp }}/release
+
+      - name: Write the cask for the released archives
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: node scripts/release/cask.mjs "$RUNNER_TEMP/release" "$VERSION" > "$RUNNER_TEMP/ocel.rb"
 
       - name: Mint a token that reaches only the tap
         id: app
@@ -298,7 +305,7 @@ jobs:
           VERSION: ${{ needs.release.outputs.version }}
         run: |
           set -euo pipefail
-          cask=dist/homebrew/Casks/ocel.rb
+          cask="$RUNNER_TEMP/ocel.rb"
           endpoint=repos/ocelhq/homebrew-tap/contents/Casks/ocel.rb
           sha=$(gh api "$endpoint" --jq .sha 2>/dev/null || true)
           if [ -n "$sha" ] && gh api "$endpoint" -H "Accept: application/vnd.github.raw" | cmp -s - "$cask"; then

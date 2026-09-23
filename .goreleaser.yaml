@@ -196,22 +196,3 @@ release:
   replace_existing_artifacts: true
   preflight:
     fail_on_error: true
-
-homebrew_casks:
-  - name: ocel
-    ids: [cli]
-    binaries: [ocel]
-    skip_upload: true
-    repository:
-      owner: ocelhq
-      name: homebrew-tap
-      branch: main
-    homepage: https://ocel.dev
-    description: Deploys apps into your own cloud
-    license: MIT
-    hooks:
-      post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ocel"]
-          end
