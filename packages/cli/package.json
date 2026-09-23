@@ -14,12 +14,17 @@
     "test": "vitest run"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ocelhq/ocel.git",
+    "directory": "packages/cli"
+  },
   "optionalDependencies": {
-    "@ocel/cli-darwin-arm64": "workspace:^",
-    "@ocel/cli-darwin-x64": "workspace:^",
-    "@ocel/cli-linux-arm64": "workspace:^",
-    "@ocel/cli-linux-x64": "workspace:^",
-    "@ocel/cli-win32-x64": "workspace:^"
+    "@ocel/cli-darwin-arm64": "workspace:*",
+    "@ocel/cli-darwin-x64": "workspace:*",
+    "@ocel/cli-linux-arm64": "workspace:*",
+    "@ocel/cli-linux-x64": "workspace:*",
+    "@ocel/cli-win32-x64": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^4.1.9"
