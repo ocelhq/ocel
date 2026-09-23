@@ -184,6 +184,9 @@ jobs:
 
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
 
+      - name: Ship the root LICENSE and NOTICE in the distributions
+        run: cp LICENSE NOTICE python/ocel/
+
       - name: Build the distributions
         working-directory: python
         run: uv build --package ocel --out-dir dist
@@ -227,12 +230,20 @@ jobs:
         run: |
           set -euo pipefail
           for crate in ocel-macros ocel-sdk; do
+            cp ../LICENSE ../NOTICE "$crate/"
+          done
+          if [ -n "$(git status --porcelain)" ]; then
+            git status --porcelain >&2
+            echo "::error::the checkout changed beyond the licensing copies it ignores, so cargo's dirty check cannot be waived" >&2
+            exit 1
+          fi
+          for crate in ocel-macros ocel-sdk; do
             status=$(curl -sS -o /dev/null -w '%{http_code}' \
               -A "ocel-release (https://github.com/ocelhq/ocel)" \
               "https://crates.io/api/v1/crates/$crate/$VERSION")
             case "$status" in
               200) echo "$crate $VERSION is already on crates.io" ;;
-              404) cargo publish --locked -p "$crate" ;;
+              404) cargo publish --locked --allow-dirty -p "$crate" ;;
               *)
                 echo "::error::crates.io answered $status for $crate $VERSION" >&2
                 exit 1

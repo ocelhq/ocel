@@ -6,7 +6,9 @@
   "description": "Publishes Pulumi-defined resources as ocel bindings, one binding per call",
   "files": [
     "dist/",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "exports": {
     ".": {
