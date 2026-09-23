@@ -91,6 +91,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json && tsc --noEmit -p tsconfig.typetests-config.json"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ocelhq/ocel.git",
+    "directory": "packages/ocel"
+  },
   "dependencies": {
     "@bufbuild/protobuf": "^2.12.1",
     "@connectrpc/connect": "^2.1.2",

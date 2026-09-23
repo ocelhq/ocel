@@ -43,6 +43,11 @@
     "vitest": "^4.1.9"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ocelhq/ocel.git",
+    "directory": "packages/ocel-transforms"
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
