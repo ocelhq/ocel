@@ -4,197 +4,89 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 concurrency:
   group: release
   cancel-in-progress: false
 
+permissions: {}
+
 jobs:
-  check-release:
-    runs-on: ubuntu-latest
-    outputs:
-      has-changes: ${{ steps.check.outputs.has-changes }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Check for unreleased changes
-        id: check
-        run: |
-          count=$(find .changes/unreleased -maxdepth 1 -name '*.yaml' | wc -l)
-          echo "Unreleased changes: $count"
-          if [ "$count" -gt 0 ]; then
-            echo "has-changes=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has-changes=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  version-pr:
-    needs: check-release
-    if: needs.check-release.outputs.has-changes == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - uses: ./.github/actions/node-workspace
-        with:
-          turbo-token: ${{ secrets.TURBO_TOKEN }}
-          turbo-team: ${{ vars.TURBO_TEAM }}
-
-      - uses: astral-sh/setup-uv@v5
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Batch the unreleased changes into the next version
-        uses: miniscruff/changie-action@v3
-        with:
-          version: v1.26.0
-          args: batch auto
-
-      - name: Fold the batch into the changelog
-        uses: miniscruff/changie-action@v3
-        with:
-          version: v1.26.0
-          args: merge
-
-      - name: Read the batched version
-        id: latest
-        uses: miniscruff/changie-action@v3
-        with:
-          version: v1.26.0
-          args: latest
-
-      - name: Stamp the batched version
-        env:
-          LATEST: ${{ steps.latest.outputs.output }}
-        run: node scripts/release/version.mjs "${LATEST#v}"
-
-      - name: Create/update Version PR
-        uses: peter-evans/create-pull-request@v7
-        with:
-          branch: release/next
-          commit-message: "chore(release): version ${{ steps.latest.outputs.output }}"
-          title: "chore(release): version ${{ steps.latest.outputs.output }}"
-
-  build-binaries:
-    needs: check-release
-    if: needs.check-release.outputs.has-changes == 'false'
+  plan:
+    name: plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      missing: ${{ steps.plan.outputs.missing }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: ./.github/actions/go
-
-      - uses: ./.github/actions/node-workspace
         with:
-          turbo-token: ${{ secrets.TURBO_TOKEN }}
-          turbo-team: ${{ vars.TURBO_TEAM }}
+          persist-credentials: false
 
-      - name: Typecheck the node side of the cli
-        run: pnpm turbo run typecheck --filter=@cli/node
-
-      - name: Read release version
-        id: version
+      - name: Name the tags this commit's VERSION lacks
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          version=$(cat VERSION)
-          if [ -z "$version" ]; then
-            echo "::error::VERSION names no version" >&2
+          version=$(tr -d '[:space:]' < VERSION)
+          if [ "$version" = 0.0.0 ]; then
+            echo "VERSION is 0.0.0, which no release carries"
+            exit 0
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[1-9][0-9]*)?$ ]]; then
+            echo "::error::VERSION $version is neither X.Y.Z nor X.Y.Z-rc.N" >&2
             exit 1
           fi
+          missing=""
+          for tag in "v$version" "sdk/v$version"; do
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --silent 2>/dev/null; then
+              echo "$tag already exists"
+            else
+              missing="$missing $tag"
+            fi
+          done
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "missing=${missing# }" >> "$GITHUB_OUTPUT"
 
-      - uses: ./.github/actions/goreleaser
-
-      - name: Compile every binary of this version
-        env:
-          GORELEASER_CURRENT_TAG: v${{ steps.version.outputs.version }}
-        run: goreleaser build --clean --skip=validate
-
-      - name: Fill the platform packages with this version's binaries
-        run: node scripts/platform-packages.mjs dist packages
-
-      - name: Upload the binaries the platform packages carry
-        uses: actions/upload-artifact@v4
-        with:
-          name: cli-binaries
-          if-no-files-found: error
-          path: packages/cli-*/bin/ocel*
-
-  publish:
-    needs: build-binaries
+  tag:
+    name: tag
+    needs: plan
+    if: needs.plan.outputs.missing != ''
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
+    environment: release
+    permissions: {}
     steps:
+      - name: Mint the release app's token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
 
-      - name: Setup Go
-        uses: ./.github/actions/go
-
-      - uses: ./.github/actions/node-workspace
-        with:
-          registry-url: https://registry.npmjs.org
-          turbo-token: ${{ secrets.TURBO_TOKEN }}
-          turbo-team: ${{ vars.TURBO_TEAM }}
-
-      - uses: ./.github/actions/goreleaser
-
-      - name: Download the binaries the platform packages carry
-        uses: actions/download-artifact@v4
-        with:
-          name: cli-binaries
-          path: packages
-
-      - name: Make the platform binaries executable
-        run: chmod 0755 packages/cli-*/bin/ocel*
-
-      - name: Build the published packages
-        run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
-
-      - name: Publish packages
+      - name: Tag this commit, which fires the binaries workflow
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SLUG: ${{ steps.app.outputs.app-slug }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          MISSING: ${{ needs.plan.outputs.missing }}
         run: |
           set -euo pipefail
-          for pkg in ocel sst pulumi cli-darwin-arm64 cli-darwin-x64 cli-linux-arm64 cli-linux-x64 cli-win32-x64 cli; do
-            (cd "packages/$pkg" && pnpm publish --access public --provenance --no-git-checks)
+          id=$(gh api "users/${SLUG}[bot]" --jq .id)
+          git config user.name "${SLUG}[bot]"
+          git config user.email "${id}+${SLUG}[bot]@users.noreply.github.com"
+          read -r -a tags <<< "$MISSING"
+          refs=()
+          for tag in "${tags[@]}"; do
+            git tag -a "$tag" -m "ocel $VERSION" "$GITHUB_SHA"
+            refs+=("refs/tags/$tag")
           done
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Tag the release the binaries are published under
-        run: |
-          set -euo pipefail
-          version=$(cat VERSION)
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "v$version" -m "v$version"
-          git push origin "v$version"
-
-      - name: Mint a token that reaches only the tap
-        id: tap-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ vars.HOMEBREW_TAP_APP_ID }}
-          private-key: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}
-          owner: ocelhq
-          repositories: homebrew-tap
-
-      - name: Publish the archives a CLI fetches, and the Homebrew formula
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_TOKEN: ${{ steps.tap-token.outputs.token }}
-        run: goreleaser release --clean
+          git push --atomic origin "${refs[@]}"

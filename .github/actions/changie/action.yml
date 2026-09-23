@@ -1,0 +1,9 @@
+name: changie
+description: The changie that batches the changelog and names the next version, at the version mise.toml pins, on PATH.
+
+runs:
+  using: composite
+  steps:
+    - uses: miniscruff/changie-action@3223cb29b92a0972dedc864ace3da01e04780ae4
+      with:
+        version: v1.26.0
