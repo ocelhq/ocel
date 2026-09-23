@@ -6,3 +6,7 @@ func (b *BucketStore) Thresholds(single, part int64) {
 	b.singleCeiling = single
 	b.partSize = part
 }
+
+func Version() string { return version }
+
+var VersionIn = versionIn

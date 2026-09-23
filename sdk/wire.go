@@ -9,6 +9,7 @@ const (
 	runtimeAddressEnv = "OCEL_RUNTIME_ADDRESS"
 	liveDirEnv        = "OCEL_LIVE_DIR"
 	sessionTokenEnv   = "OCEL_SESSION_TOKEN"
+	sdkVersionHeader  = "Ocel-Sdk-Version"
 )
 
 func bearer(token string) string {
