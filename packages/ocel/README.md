@@ -20,7 +20,7 @@ The `ocel` command is a separate install:
 ```sh
 npm install -g @ocel/cli
 curl -fsSL https://ocel.dev/install.sh | sh
-brew install ocelhq/tap/ocel
+brew install --cask ocelhq/tap/ocel
 ```
 
 ## SDK

@@ -1,6 +1,6 @@
 [tools]
 golangci-lint = "2.13.2"
-goreleaser = "2.12.7"
+goreleaser = "2.18.2"
 act = "0.2.89"
 buf = "1.72.0"
 changie = "1.26.0"
