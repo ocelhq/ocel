@@ -7,7 +7,7 @@ name = "api"
 version = "0.1.0"
 dependencies = [
  "infra",
- "ocel",
+ "ocel-sdk",
 ]
 
 [[package]]
@@ -427,7 +427,7 @@ dependencies = [
 name = "infra"
 version = "0.1.0"
 dependencies = [
- "ocel",
+ "ocel-sdk",
 ]
 
 [[package]]
@@ -532,7 +532,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "ocel"
+name = "ocel-macros"
+version = "0.0.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "ocel-sdk"
 version = "0.0.0"
 dependencies = [
  "buffa",
@@ -550,15 +559,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-util",
-]
-
-[[package]]
-name = "ocel-macros"
-version = "0.0.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
 ]
 
 [[package]]
@@ -971,7 +971,7 @@ name = "web"
 version = "0.1.0"
 dependencies = [
  "infra",
- "ocel",
+ "ocel-sdk",
 ]
 
 [[package]]

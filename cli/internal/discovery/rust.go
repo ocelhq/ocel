@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cargo"
 )
 
-const ocelCrate = "ocel"
+const ocelCrate = "ocel-sdk"
 
 type rustLauncher struct{}
 
@@ -53,11 +53,27 @@ func declaresThroughOcel(at string) bool {
 	if err := toml.Unmarshal(manifest, &crate); err != nil {
 		return false
 	}
-	if _, declares := crate.Dependencies[ocelCrate]; declares {
+	if namesOcel(crate.Dependencies) {
 		return true
 	}
 	for _, target := range crate.Target {
-		if _, declares := target.Dependencies[ocelCrate]; declares {
+		if namesOcel(target.Dependencies) {
+			return true
+		}
+	}
+	return false
+}
+
+func namesOcel(dependencies map[string]any) bool {
+	for name, spec := range dependencies {
+		table, _ := spec.(map[string]any)
+		if renamed, ok := table["package"].(string); ok {
+			if renamed == ocelCrate {
+				return true
+			}
+			continue
+		}
+		if name == ocelCrate {
 			return true
 		}
 	}

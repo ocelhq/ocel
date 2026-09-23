@@ -23,6 +23,8 @@ const sdkPackage = "ocel"
 
 const goSDKModule = "github.com/ocelhq/ocel/sdk"
 
+const rustSDKCrate = "ocel-sdk"
+
 type initOptions struct {
 	provider   string
 	language   string
@@ -74,7 +76,7 @@ type language struct {
 
 var languages = []language{
 	{name: "go", manifest: "go.mod", add: []string{"go", "get", goSDKModule}},
-	{name: "rust", manifest: "Cargo.toml", add: []string{"cargo", "add", sdkPackage}},
+	{name: "rust", manifest: "Cargo.toml", add: []string{"cargo", "add", rustSDKCrate}},
 	{name: "python", manifest: "pyproject.toml", add: []string{"uv", "add", sdkPackage}},
 	{name: "node", manifest: "package.json"},
 }

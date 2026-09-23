@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 infra = { path = "../../crates/infra" }
-ocel = { path = "../../../../../../crates/ocel" }
+ocel-sdk = { path = "../../../../../../crates/ocel-sdk" }

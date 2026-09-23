@@ -97,7 +97,7 @@ fn discovery_posts_every_declaration_and_reports_the_problems_it_finds() {
         .expect("a file and a line in the source");
     assert_eq!(
         std::path::Path::new(file),
-        workspace.join("ocel/tests/declare.rs"),
+        workspace.join("ocel-sdk/tests/declare.rs"),
         "source = {}, want the file the field is written in",
         main.source
     );

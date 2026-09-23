@@ -210,10 +210,12 @@ func TestHoldsJS(t *testing.T) {
 }
 
 const (
-	rustOcelManifest      = rustBinManifest + "\n[dependencies]\nocel = { path = \"../../ocel\" }\n"
-	rustWorkspaceManifest = rustBinManifest + "\n[dependencies]\nocel.workspace = true\n"
-	rustTargetManifest    = rustBinManifest + "\n[target.'cfg(not(target_arch = \"wasm32\"))'.dependencies]\nocel = { path = \"../../ocel\" }\n"
-	rustDevOnlyManifest   = rustBinManifest + "\n[dev-dependencies]\nocel = { path = \"../../ocel\" }\n\n[build-dependencies]\nocel = { path = \"../../ocel\" }\n"
+	rustOcelManifest      = rustBinManifest + "\n[dependencies]\nocel-sdk = { path = \"../../ocel-sdk\" }\n"
+	rustWorkspaceManifest = rustBinManifest + "\n[dependencies]\nocel-sdk.workspace = true\n"
+	rustTargetManifest    = rustBinManifest + "\n[target.'cfg(not(target_arch = \"wasm32\"))'.dependencies]\nocel-sdk = { path = \"../../ocel-sdk\" }\n"
+	rustDevOnlyManifest   = rustBinManifest + "\n[dev-dependencies]\nocel-sdk = { path = \"../../ocel-sdk\" }\n\n[build-dependencies]\nocel-sdk = { path = \"../../ocel-sdk\" }\n"
+	rustRenamedManifest   = rustBinManifest + "\n[dependencies]\nocel = { package = \"ocel-sdk\", version = \"0.0.1\" }\n"
+	rustOtherOcelManifest = rustBinManifest + "\n[dependencies]\nocel = \"0.1\"\n"
 )
 
 func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
@@ -252,6 +254,32 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 		}
 		if len(roots) != 0 {
 			t.Fatalf("roots = %v, want none: nothing here declares through ocel", rootDirs(t, roots, root))
+		}
+	})
+
+	t.Run("a crate depending on ocel-sdk under another name is a root", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "apps", "api", "Cargo.toml"), rustRenamedManifest)
+
+		roots, err := RootsOf(&projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}}})
+		if err != nil {
+			t.Fatalf("RootsOf: %v", err)
+		}
+		if got := rootDirs(t, roots, root); len(got) != 1 || got[0] != "apps/api" {
+			t.Fatalf("roots = %v, want [apps/api]", got)
+		}
+	})
+
+	t.Run("a crate depending on the unrelated crates.io ocel is no root", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "apps", "api", "Cargo.toml"), rustOtherOcelManifest)
+
+		roots, err := RootsOf(&projectconfig.Config{Dir: root, Apps: []projectconfig.App{{Name: "api", Path: "apps/api"}}})
+		if err != nil {
+			t.Fatalf("RootsOf: %v", err)
+		}
+		if len(roots) != 0 {
+			t.Fatalf("roots = %v, want none: the crate named ocel on crates.io is not the sdk", rootDirs(t, roots, root))
 		}
 	})
 
