@@ -66,6 +66,21 @@ describe("the workspace", () => {
   });
 });
 
+describe("the release version", () => {
+  const version = readFileSync(join(repo, "VERSION"), "utf8").trim();
+
+  it("is the version every published package carries", () => {
+    const published = globSync("packages/*/package.json", { cwd: repo }).map((path) => [
+      path,
+      JSON.parse(readFileSync(join(repo, path), "utf8")).version,
+    ]);
+    expect(published.length).toBeGreaterThan(0);
+    for (const [path, stamped] of published) {
+      expect([path, stamped]).toEqual([path, version]);
+    }
+  });
+});
+
 describe("the changesets fixed group", () => {
   const [group, ...rest] = read(".changeset", "config.json").fixed;
 

@@ -1,6 +1,6 @@
 {
   "name": "@ocel/cli-linux-x64",
-  "version": "0.0.1-alpha.0",
+  "version": "0.0.0",
   "description": "The ocel binary for linux-x64",
   "os": [
     "linux"

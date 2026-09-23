@@ -14,7 +14,7 @@ You write one config. It names a target, a cloud or a server, and nothing about 
 
 ```json title="ocel.json" lineNumbers
 {
-  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "acme",
   "provider": { "name": "aws" }, // [!code --]
   "apps": [{ "name": "web", "path": "." }]
@@ -23,7 +23,7 @@ You write one config. It names a target, a cloud or a server, and nothing about 
 
 ```json title="ocel.json" lineNumbers
 {
-  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "acme",
   "provider": { "name": "vps", "options": { "ssh": "my-vps" } }, // [!code ++]
   "apps": [{ "name": "web", "path": "." }]
@@ -38,7 +38,7 @@ Compute is a setting too. On providers that support it, the same app runs as fun
 
 ```json title="ocel.json" lineNumbers
 {
-  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "acme",
   "provider": { "name": "aws" },
   "apps": [{ "name": "web", "path": ".", "compute": "serverless" }] // [!code --]
@@ -47,7 +47,7 @@ Compute is a setting too. On providers that support it, the same app runs as fun
 
 ```json title="ocel.json" lineNumbers
 {
-  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "acme",
   "provider": { "name": "aws" },
   "apps": [{ "name": "web", "path": ".", "compute": "container" }] // [!code ++]

@@ -81,9 +81,9 @@ jobs:
         id: version
         run: |
           set -euo pipefail
-          version=$(node -p "require('./packages/ocel/package.json').version")
-          if [ -z "$version" ] || [ "$version" = "undefined" ]; then
-            echo "::error::Could not resolve version from packages/ocel/package.json" >&2
+          version=$(cat VERSION)
+          if [ -z "$version" ]; then
+            echo "::error::VERSION names no version" >&2
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -152,7 +152,7 @@ jobs:
       - name: Tag the release the binaries are published under
         run: |
           set -euo pipefail
-          version=$(node -p "require('./packages/ocel/package.json').version")
+          version=$(cat VERSION)
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "v$version" -m "v$version"

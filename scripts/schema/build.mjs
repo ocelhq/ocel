@@ -10,7 +10,7 @@ const TYPES_OUT = join(root, "packages", "ocel", "src", "generated", "config.ts"
 
 const read = (path) => JSON.parse(readFileSync(path, "utf8"));
 
-const SCHEMA_URL = `https://ocel.dev/schema/${read(join(root, "packages", "ocel", "package.json")).version}/ocel.schema.json`;
+const SCHEMA_URL = `https://ocel.dev/schema/${readFileSync(join(root, "VERSION"), "utf8").trim()}/ocel.schema.json`;
 
 function providerVariants() {
   const platform = join(root, "platform");

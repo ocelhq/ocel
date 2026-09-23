@@ -264,7 +264,7 @@ export default defineConfig({
 });
 
 const COMMENTED_JSON_BASE = `{
-  "$schema": "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "go",
   "provider": { "name": "aws" },
   "apps": [
@@ -284,7 +284,7 @@ describe("renderJsonConfig", () => {
     expect(
       JSON.parse(renderJsonConfig(COMMENTED_JSON_BASE, { base: "./ocel.json", slug: "j-1-go" })),
     ).toEqual({
-      $schema: "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+      $schema: "https://ocel.dev/schema/0.0.0/ocel.schema.json",
       slug: "j-1-go",
       provider: { name: "aws" },
       apps: [{ name: "web", path: "./server", framework: "go" }],
@@ -305,7 +305,7 @@ describe("renderJsonConfig", () => {
         }),
       ),
     ).toEqual({
-      $schema: "https://ocel.dev/schema/0.0.1-alpha.0/ocel.schema.json",
+      $schema: "https://ocel.dev/schema/0.0.0/ocel.schema.json",
       slug: "j-1-go",
       provider: { name: "aws", options: { varsKey: "arn:aws:kms:key/k" } },
       edge: { kind: "api-gateway" },
