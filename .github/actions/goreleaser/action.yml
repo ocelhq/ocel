@@ -4,7 +4,7 @@ description: The goreleaser that compiles every binary this repo ships, at the v
 runs:
   using: composite
   steps:
-    - uses: goreleaser/goreleaser-action@v6
+    - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94
       with:
         install-only: true
-        version: "2.12.7"
+        version: "2.18.2"

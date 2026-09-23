@@ -16,7 +16,7 @@ Two other ways to install it:
 
 ```sh
 curl -fsSL https://ocel.dev/install.sh | sh
-brew install ocelhq/tap/ocel
+brew install --cask ocelhq/tap/ocel
 ```
 
 The `ocel` package is the SDK your app imports; it no longer carries the binary.

@@ -165,6 +165,10 @@ checksum:
   name_template: checksums.txt
   algorithm: sha256
 
+sboms:
+  - id: archives
+    artifacts: archive
+
 signs:
   - id: checksums
     cmd: cosign
@@ -188,22 +192,26 @@ release:
     owner: ocelhq
     name: ocel
   prerelease: auto
+  make_latest: "{{ if .Prerelease }}false{{ else }}true{{ end }}"
+  replace_existing_artifacts: true
+  preflight:
+    fail_on_error: true
 
-brews:
+homebrew_casks:
   - name: ocel
     ids: [cli]
+    binaries: [ocel]
+    skip_upload: true
     repository:
       owner: ocelhq
       name: homebrew-tap
       branch: main
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://ocel.dev
     description: Deploys apps into your own cloud
     license: MIT
-    commit_author:
-      name: github-actions[bot]
-      email: 41898282+github-actions[bot]@users.noreply.github.com
-    install: |
-      bin.install "ocel"
-    test: |
-      system bin/"ocel", "--version"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ocel"]
+          end
