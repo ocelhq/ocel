@@ -11,3 +11,16 @@ node = "26.7.0"
 
 [env]
 OCEL_ENV = 'dev'
+_.path = "{{config_root}}/dist/bin"
+
+[tasks.oc]
+description = "Build ocel and its providers from this checkout, runnable as oc"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+pnpm turbo run build --filter=ocel
+eval "$(node scripts/snapshot.mjs)"
+mkdir -p dist/bin
+printf '#!/bin/sh\nOCEL_PROVIDERS_DIR=%q exec %q "$@"\n' "$OCEL_PROVIDERS_DIR" "$OCEL_BIN" > dist/bin/oc
+chmod +x dist/bin/oc
+'''
