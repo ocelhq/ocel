@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readdir, rm } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { isBuiltin } from "node:module";
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,18 +35,22 @@ const cjsInterop = [
   "const __dirname = ocelDirname(__filename);",
 ].join("\n");
 
+const inputs = {};
+
 async function bundle(entry, outfile, options) {
   const result = await Bun.build({
     entrypoints: [entry],
     outdir: dirname(outfile),
     naming: basename(outfile),
     target: "node",
+    metafile: true,
     ...options,
   });
   if (!result.success) {
     for (const log of result.logs) console.error(log);
     process.exit(1);
   }
+  Object.assign(inputs, result.metafile.inputs);
 }
 
 await rm(dist, { recursive: true, force: true });
@@ -115,6 +119,18 @@ await Promise.all(
       plugins: [looseImports],
     }),
   ),
+);
+
+await mkdir(join(dist, ".bundles"));
+await writeFile(
+  join(dist, ".bundles/aws-runtime.json"),
+  JSON.stringify({
+    inputs: Object.fromEntries(
+      Object.keys(inputs)
+        .sort()
+        .map((input) => [input, {}]),
+    ),
+  }),
 );
 
 process.stdout.write(

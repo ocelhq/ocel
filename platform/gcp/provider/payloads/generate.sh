@@ -7,8 +7,9 @@ runtime_dir=$(CDPATH= cd -- "$payloads_dir/../../runtime" && pwd)
 dist="$payloads_dir/dist"
 
 rm -rf "$dist"
-mkdir -p "$dist"
+mkdir -p "$dist/.bundles"
 cp "$root/frameworks/node/runtime/dist/serve.mjs" "$dist/serve.mjs"
+cp "$root/frameworks/node/runtime/dist/.bundles/node-runtime.json" "$dist/.bundles/node-runtime.json"
 
 (
   cd "$runtime_dir"

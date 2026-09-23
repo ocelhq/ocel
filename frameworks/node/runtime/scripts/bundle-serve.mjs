@@ -1,3 +1,4 @@
+import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,11 +12,18 @@ const result = await Bun.build({
   naming: basename(outfile),
   target: "node",
   format: "esm",
+  metafile: true,
 });
 
 if (!result.success) {
   for (const log of result.logs) console.error(log);
   process.exit(1);
 }
+
+await mkdir(join(dist, ".bundles"), { recursive: true });
+await writeFile(
+  join(dist, ".bundles/node-runtime.json"),
+  JSON.stringify({ inputs: result.metafile.inputs }),
+);
 
 process.stdout.write(`${outfile}\n`);

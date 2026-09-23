@@ -19,10 +19,15 @@ rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 mkdirSync(out, { recursive: true });
 
-execFileSync("bun", ["build", ...bunArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))], {
-  cwd: root,
-  stdio: "inherit",
-});
+execFileSync(
+  "bun",
+  [
+    "build",
+    ...bunArgs(join(root, "src", "index.mts"), join(out, "index.mjs")),
+    `--metafile=${join(root, "dist", ".bundles", "image-optimizer.json")}`,
+  ],
+  { cwd: root, stdio: "inherit" },
+);
 
 writeFileSync(
   join(stage, "package.json"),

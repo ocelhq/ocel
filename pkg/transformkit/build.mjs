@@ -1,4 +1,4 @@
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,9 +16,16 @@ const result = await Bun.build({
   target: "node",
   format: "esm",
   minify: false,
+  metafile: true,
 });
 
 if (!result.success) {
   for (const log of result.logs) console.error(log);
   process.exit(1);
 }
+
+await mkdir(join(dist, ".bundles"));
+await writeFile(
+  join(dist, ".bundles/transform-runner.json"),
+  JSON.stringify({ inputs: result.metafile.inputs }),
+);

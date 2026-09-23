@@ -36,13 +36,15 @@ build_lambda() {
 }
 
 rm -rf "$dist"
-mkdir -p "$dist"
+mkdir -p "$dist/.bundles"
+cp "$root/platform/aws/runtime/dist/.bundles/"*.json "$dist/.bundles/"
 
 for goarch in amd64 arm64; do
   layer="$stage/runtime-$goarch"
   mkdir -p "$layer/ocel"
   build_lambda ./cmd/runtime "$layer/bootstrap" "$goarch"
   cp -R "$root/platform/aws/runtime/dist/." "$layer/ocel/"
+  rm -rf "$layer/ocel/.bundles"
   pack "$layer" "$dist/runtime-layer-$goarch.zip"
   build_lambda ./cmd/container "$dist/container-runtime-$goarch" "$goarch"
 done
@@ -53,4 +55,5 @@ pack "$stage/upload-completer" "$dist/upload-completer.zip"
 
 for fn in $functions; do
   cp "$root/platform/aws/functions/$fn/dist/$fn.zip" "$dist/$fn.zip"
+  cp "$root/platform/aws/functions/$fn/dist/.bundles/$fn.json" "$dist/.bundles/$fn.json"
 done

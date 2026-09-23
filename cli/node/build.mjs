@@ -10,18 +10,21 @@ const platformDir = dirname(fileURLToPath(import.meta.url));
 const root = dirname(dirname(platformDir));
 const dist = join(platformDir, "dist");
 const workers = join(root, "platform/edge/cloudflare/workers");
+const inputs = {};
 
 async function bundle(entry, outfile, options) {
   const result = await Bun.build({
     entrypoints: [entry],
     outdir: dirname(outfile),
     naming: basename(outfile),
+    metafile: true,
     ...options,
   });
   if (!result.success) {
     for (const log of result.logs) console.error(log);
     process.exit(1);
   }
+  Object.assign(inputs, result.metafile.inputs);
 }
 
 await rm(dist, { recursive: true, force: true });
@@ -53,6 +56,9 @@ const compiled = await postcss([tailwind({ optimize: { minify: true } })]).proce
   { from: sheet, to: join(dist, "vars-ui/app.css") },
 );
 await writeFile(join(dist, "vars-ui/app.css"), compiled.css);
+for (const message of compiled.messages) {
+  if (message.type === "dependency") inputs[message.file] = {};
+}
 await copyFile(join(platformDir, "src/vars-ui/index.html"), join(dist, "vars-ui/index.html"));
 
 await Promise.all([
@@ -69,6 +75,22 @@ await Promise.all([
     join(dist, "workers/isr-writer-cloudflare.js"),
   ),
 ]);
+
+for (const worker of ["entry", "deployments-store", "isr-writer"]) {
+  const meta = JSON.parse(await readFile(join(workers, worker, "dist/bundle-meta.json"), "utf8"));
+  Object.assign(inputs, meta.inputs);
+}
+await mkdir(join(dist, ".bundles"));
+await writeFile(
+  join(dist, ".bundles/cli-node.json"),
+  JSON.stringify({
+    inputs: Object.fromEntries(
+      Object.keys(inputs)
+        .sort()
+        .map((input) => [input, {}]),
+    ),
+  }),
+);
 
 const hasher = new Bun.CryptoHasher("sha256");
 const files = (await readdir(dist, { recursive: true, withFileTypes: true }))
