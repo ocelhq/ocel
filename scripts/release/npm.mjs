@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,8 @@ export const ORDER = [
   "ocel-pulumi",
   "ocel-transforms",
 ];
+
+export const LICENSING = ["LICENSE", "NOTICE"];
 
 const DIST_TAGS = { stable: "latest", rc: "next", nightly: "nightly" };
 
@@ -58,6 +60,7 @@ function main() {
         console.error(`${name}@${version} is already on npm`);
         continue;
       }
+      for (const file of LICENSING) copyFileSync(join(REPO_ROOT, file), join(cwd, file));
       const destination = mkdtempSync(join(packed, "pack-"));
       execFileSync("pnpm", ["pack", "--pack-destination", destination], {
         cwd,

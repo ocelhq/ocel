@@ -8,7 +8,9 @@
   },
   "files": [
     "bin/",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "test": "vitest run"

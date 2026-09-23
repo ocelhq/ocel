@@ -5,7 +5,9 @@
   "description": "ocel runtime sdk — turns cloud infrastructure into function calls",
   "files": [
     "dist/",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "exports": {
     "./config": {

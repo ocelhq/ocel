@@ -227,3 +227,10 @@ platform/vps/provider/cmd/proxyctl/proxyctl
 
 # Local design-review working files.
 .impeccable/
+
+/packages/*/LICENSE
+/packages/*/NOTICE
+/crates/*/LICENSE
+/crates/*/NOTICE
+/python/*/LICENSE
+/python/*/NOTICE

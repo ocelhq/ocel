@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { distTag, ORDER } from "./npm.mjs";
+import { distTag, LICENSING, ORDER } from "./npm.mjs";
 
 const packages = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "packages");
 
@@ -56,6 +56,15 @@ describe("ORDER", () => {
           assert.equal(manifest.devDependencies?.[name], range, `${dir} peer ${name}`);
         }
       }
+    }
+  });
+
+  it("packs the licensing files the publish copies in from the root", () => {
+    for (const dir of ORDER) {
+      const manifest = JSON.parse(readFileSync(join(packages, dir, "package.json"), "utf8"));
+      for (const file of LICENSING)
+        assert.ok(manifest.files.includes(file), `${dir} lacks ${file}`);
+      assert.equal(manifest.license, "Apache-2.0", dir);
     }
   });
 
