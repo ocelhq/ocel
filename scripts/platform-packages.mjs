@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+const NOTICES = "THIRD_PARTY_NOTICES";
+
 const [archives, version, packages] = process.argv.slice(2);
 if (!archives || !version || !packages) {
   console.error(
@@ -50,14 +52,16 @@ for (const [goos, goarch, target] of targets) {
     continue;
   }
   const path = join(archives, archive);
-  const extracted = windows
-    ? execFileSync("unzip", ["-p", path, binary], { maxBuffer: 1 << 30 })
-    : execFileSync("tar", ["-xzOf", path, binary], { maxBuffer: 1 << 30 });
+  const extract = (member) =>
+    windows
+      ? execFileSync("unzip", ["-p", path, member], { maxBuffer: 1 << 30 })
+      : execFileSync("tar", ["-xzOf", path, member], { maxBuffer: 1 << 30 });
   const bin = join(packages, target, "bin");
   mkdirSync(bin, { recursive: true });
   const placed = join(bin, binary);
-  writeFileSync(placed, extracted);
+  writeFileSync(placed, extract(binary));
   chmodSync(placed, 0o755);
+  writeFileSync(join(packages, target, NOTICES), extract(NOTICES));
   console.log(`${archive} -> ${placed}`);
 }
 

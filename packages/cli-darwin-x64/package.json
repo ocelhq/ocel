@@ -11,7 +11,8 @@
   "files": [
     "bin",
     "LICENSE",
-    "NOTICE"
+    "NOTICE",
+    "THIRD_PARTY_NOTICES"
   ],
   "license": "Apache-2.0",
   "repository": {

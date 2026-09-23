@@ -68,6 +68,13 @@ describe("ORDER", () => {
     }
   });
 
+  it("ships the third-party notices beside every binary a platform package carries", () => {
+    for (const dir of ORDER.filter((name) => name.startsWith("cli-"))) {
+      const manifest = JSON.parse(readFileSync(join(packages, dir, "package.json"), "utf8"));
+      assert.ok(manifest.files.includes("THIRD_PARTY_NOTICES"), dir);
+    }
+  });
+
   it("gives every package the repository npm provenance checks", () => {
     for (const dir of ORDER) {
       const manifest = JSON.parse(readFileSync(join(packages, dir, "package.json"), "utf8"));

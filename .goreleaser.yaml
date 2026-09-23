@@ -20,6 +20,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w -X github.com/ocelhq/ocel/cli/internal/version.Version={{ .Version }}
+    hooks:
+      post:
+        - cmd: node scripts/release/notices.mjs "{{ .Path }}" "dist/notices/{{ trimsuffix .Name .Ext }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
     goos: [darwin, linux, windows]
     goarch: [amd64, arm64]
     ignore:
@@ -36,6 +39,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w -X main.version={{ .Version }}
+    hooks:
+      post:
+        - cmd: node scripts/release/notices.mjs "{{ .Path }}" "dist/notices/{{ trimsuffix .Name .Ext }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
     goos: [darwin, linux, windows]
     goarch: [amd64, arm64]
     ignore:
@@ -52,6 +58,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w -X main.version={{ .Version }}
+    hooks:
+      post:
+        - cmd: node scripts/release/notices.mjs "{{ .Path }}" "dist/notices/{{ trimsuffix .Name .Ext }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
     goos: [darwin, linux, windows]
     goarch: [amd64, arm64]
     ignore:
@@ -68,6 +77,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w -X main.version={{ .Version }}
+    hooks:
+      post:
+        - cmd: node scripts/release/notices.mjs "{{ .Path }}" "dist/notices/{{ trimsuffix .Name .Ext }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
     goos: [darwin, linux, windows]
     goarch: [amd64, arm64]
     ignore:
@@ -84,6 +96,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w -X main.version={{ .Version }}
+    hooks:
+      post:
+        - cmd: node scripts/release/notices.mjs "{{ .Path }}" "dist/notices/{{ trimsuffix .Name .Ext }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
     goos: [linux]
     goarch: [arm64]
 
@@ -97,6 +112,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w -X main.version={{ .Version }}
+    hooks:
+      post:
+        - cmd: node scripts/release/notices.mjs "{{ .Path }}" "dist/notices/{{ trimsuffix .Name .Ext }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
     goos: [linux]
     goarch: [amd64]
 
@@ -110,6 +128,9 @@ builds:
       - -trimpath
     ldflags:
       - -s -w -X main.version={{ .Version }}
+    hooks:
+      post:
+        - cmd: node scripts/release/notices.mjs "{{ .Path }}" "dist/notices/{{ trimsuffix .Name .Ext }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
     goos: [linux]
     goarch: [amd64, arm64]
 
@@ -117,7 +138,11 @@ archives:
   - id: cli
     ids: [ocel]
     name_template: "ocel_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files:
+      - LICENSE
+      - NOTICE
+      - src: "dist/notices/{{ .Binary }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
+        strip_parent: true
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -125,7 +150,11 @@ archives:
   - id: provider-aws
     ids: [provider-aws]
     name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files:
+      - LICENSE
+      - NOTICE
+      - src: "dist/notices/{{ .Binary }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
+        strip_parent: true
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -133,7 +162,11 @@ archives:
   - id: provider-gcp
     ids: [provider-gcp]
     name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files:
+      - LICENSE
+      - NOTICE
+      - src: "dist/notices/{{ .Binary }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
+        strip_parent: true
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -141,7 +174,11 @@ archives:
   - id: provider-vps
     ids: [provider-vps]
     name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files:
+      - LICENSE
+      - NOTICE
+      - src: "dist/notices/{{ .Binary }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
+        strip_parent: true
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -149,17 +186,29 @@ archives:
   - id: connector-aws
     ids: [connector-aws]
     name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files:
+      - LICENSE
+      - NOTICE
+      - src: "dist/notices/{{ .Binary }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
+        strip_parent: true
 
   - id: connector-gcp
     ids: [connector-gcp]
     name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files:
+      - LICENSE
+      - NOTICE
+      - src: "dist/notices/{{ .Binary }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
+        strip_parent: true
 
   - id: connector-vps
     ids: [connector-vps]
     name_template: "ocel-{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    files: [LICENSE, NOTICE]
+    files:
+      - LICENSE
+      - NOTICE
+      - src: "dist/notices/{{ .Binary }}_{{ .Os }}_{{ .Arch }}/THIRD_PARTY_NOTICES"
+        strip_parent: true
 
 checksum:
   name_template: checksums.txt

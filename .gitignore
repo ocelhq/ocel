@@ -230,6 +230,7 @@ platform/vps/provider/cmd/proxyctl/proxyctl
 
 /packages/*/LICENSE
 /packages/*/NOTICE
+/packages/*/THIRD_PARTY_NOTICES
 /crates/*/LICENSE
 /crates/*/NOTICE
 /python/*/LICENSE
