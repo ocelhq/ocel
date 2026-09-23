@@ -14,6 +14,8 @@ jobs:
     name: refresh the rate cards from the vendors' price lists
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      GCP_BILLING_API_KEY: ${{ secrets.GCP_BILLING_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -25,9 +27,7 @@ jobs:
         run: go run -C platform/aws/provider ./cost/refresh -card cost/rates.json
 
       - name: Refresh the GCP card
-        if: ${{ secrets.GCP_BILLING_API_KEY != '' }}
-        env:
-          GCP_BILLING_API_KEY: ${{ secrets.GCP_BILLING_API_KEY }}
+        if: ${{ env.GCP_BILLING_API_KEY != '' }}
         run: go run -C platform/gcp/provider ./cost/refresh -card cost/rates.json
 
       - name: Open a pull request with what moved

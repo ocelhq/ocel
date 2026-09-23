@@ -39,6 +39,16 @@ jobs:
       - name: Nothing regenerated differs from what is committed
         run: git diff --exit-code
 
+  actions:
+    name: workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every workflow parses, and every expression is allowed where it stands
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color -shellcheck= -pyflakes=
+
   commits:
     name: commit messages
     if: github.event_name == 'pull_request'
