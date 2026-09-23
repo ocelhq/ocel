@@ -182,8 +182,8 @@ func TestStartExecutable(t *testing.T) {
 		if err := handleInvocation(t.Context(), rt, child); err != nil {
 			t.Fatalf("handleInvocation = %v, want the loop to carry on to the next invocation", err)
 		}
-		if got := captured.trailer.Get(headerErrorType); got != errTypeUpstream {
-			t.Errorf("%s = %q, want %q", headerErrorType, got, errTypeUpstream)
+		if p, _ := splitPrelude(t, captured.body); p.StatusCode != http.StatusServiceUnavailable {
+			t.Errorf("status = %d, want %d", p.StatusCode, http.StatusServiceUnavailable)
 		}
 
 		raw, readErr := os.ReadFile(pidFile)

@@ -214,9 +214,12 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, c child) error {
 		return nil
 	}
 
-	if err := c.awaitReady(ctx); err != nil {
+	readyCtx, cancelReady := answerBefore(ctx)
+	err = c.awaitReady(readyCtx)
+	cancelReady()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: %s: %v\n", inv.lc.AwsRequestID, err)
-		if err := rw.closeWithError(errTypeUpstream, err.Error()); err != nil {
+		if err := (upstream{}).fail(rw, http.StatusServiceUnavailable, err.Error()); err != nil {
 			fmt.Fprintf(os.Stderr, "ocel: deliver response for %s: %v\n", inv.lc.AwsRequestID, err)
 		}
 		return nil
