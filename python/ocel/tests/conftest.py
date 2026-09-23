@@ -31,6 +31,7 @@ class Collector:
     def __init__(self):
         self.declares = []
         self.authorizations = []
+        self.sdk_versions = []
         self.cells = []
         self.server = HTTPServer(("127.0.0.1", 0), self._handler())
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -67,6 +68,7 @@ class Collector:
                 body = self.rfile.read(int(self.headers["Content-Length"]))
                 authorization = self.headers.get("Authorization")
                 collector.authorizations.append(authorization)
+                collector.sdk_versions.append(self.headers.get("Ocel-Sdk-Version"))
                 if authorization != f"Bearer {TOKEN}":
                     self.send_response(403)
                     self.send_header("Content-Length", "0")
