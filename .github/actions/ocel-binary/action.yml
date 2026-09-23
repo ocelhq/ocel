@@ -1,12 +1,13 @@
 name: ocel binary
 description: >-
-  The ocel CLI on PATH. Built from this checkout, it comes with the providers
-  of its own version under OCEL_PROVIDERS_DIR; installed from the latest
-  release, it fetches the providers that release published.
+  The ocel CLI on PATH. Built from this checkout, or taken prebuilt from the
+  binaries job of this run, it comes with the providers of its own version
+  under OCEL_PROVIDERS_DIR; installed from the latest release, it fetches the
+  providers that release published.
 
 inputs:
   source:
-    description: head builds the CLI from this checkout, release installs the published one.
+    description: head builds the CLI from this checkout, prebuilt takes the one the binaries job built, release installs the published one.
     required: false
     default: head
   turbo-token:
@@ -27,6 +28,7 @@ runs:
         turbo-team: ${{ inputs.turbo-team }}
 
     - name: Setup Go
+      if: inputs.source == 'head'
       uses: ./.github/actions/go
 
     - name: Build the node halves the binaries embed
@@ -34,10 +36,10 @@ runs:
       run: pnpm turbo run build --filter=ocel
 
     - uses: ./.github/actions/goreleaser
-      if: inputs.source != 'release'
+      if: inputs.source == 'head'
 
     - name: Build the binaries this deploy drives
-      if: inputs.source != 'release'
+      if: inputs.source == 'head'
       shell: bash
       run: |
         set -euo pipefail
@@ -45,6 +47,15 @@ runs:
         cat "$RUNNER_TEMP/snapshot.env" >> "$GITHUB_ENV"
         . "$RUNNER_TEMP/snapshot.env"
         dirname "$OCEL_BIN" >> "$GITHUB_PATH"
+
+    - name: Take the binaries the binaries job built
+      if: inputs.source == 'prebuilt'
+      uses: ./.github/actions/journey-binaries
+
+    - name: Put that CLI on PATH
+      if: inputs.source == 'prebuilt'
+      shell: bash
+      run: dirname "$OCEL_BIN" >> "$GITHUB_PATH"
 
     - name: Take the CLI from the latest release
       if: inputs.source == 'release'
