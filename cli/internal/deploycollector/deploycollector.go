@@ -5,21 +5,26 @@ import (
 	"net/http"
 	"sync"
 
+	"connectrpc.com/connect"
+
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/sdkversion"
+	"github.com/ocelhq/ocel/cli/internal/version"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
 )
 
 type Collector struct {
 	*envgate.Gate
+	sdk *sdkversion.Gate
 
 	mu        sync.Mutex
 	resources []declare.Resource
 }
 
 func New(gate *envgate.Gate) *Collector {
-	return &Collector{Gate: gate}
+	return &Collector{Gate: gate, sdk: sdkversion.NewGate(version.Version)}
 }
 
 func (c *Collector) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*resourcesv1.DeclareResponse, error) {
@@ -45,7 +50,7 @@ func (c *Collector) Snapshot() []declare.Resource {
 
 func (c *Collector) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
-	path, handler := resourcesv1connect.NewResourceServiceHandler(c)
+	path, handler := resourcesv1connect.NewResourceServiceHandler(c, connect.WithInterceptors(c.sdk.Interceptor()))
 	mux.Handle(path, handler)
 	mux.HandleFunc("/sync", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

@@ -68,7 +68,11 @@ func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate,
 	defer httpSrv.Close()
 
 	server := discovery.Server{URL: "http://" + address, Token: token}
-	if err := discovery.Run(ctx, cfg.Dir, prepared.discovery, server, stdout, stderr); err != nil {
+	err = discovery.Run(ctx, cfg.Dir, prepared.discovery, server, stdout, stderr)
+	if refused := c.sdk.Take(); refused != nil {
+		return nil, refused
+	}
+	if err != nil {
 		return nil, err
 	}
 

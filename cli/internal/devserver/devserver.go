@@ -19,6 +19,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/resolve"
 	"github.com/ocelhq/ocel/cli/internal/resourceregistry"
+	"github.com/ocelhq/ocel/cli/internal/sdkversion"
+	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/channel"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
@@ -45,6 +47,7 @@ type Server struct {
 	sessionToken  string
 	appToken      string
 	syncCh        chan SyncResult
+	sdk           *sdkversion.Gate
 
 	live   *liveKeys
 	env    *envState
@@ -59,6 +62,7 @@ func New(devServerAddr string, stack Stack) *Server {
 		sessionToken:  channel.NewSessionToken(),
 		appToken:      channel.NewSessionToken(),
 		syncCh:        make(chan SyncResult, 1),
+		sdk:           sdkversion.NewGate(version.Version),
 		live:          newLiveKeys(),
 		env:           newEnvState(),
 		fanout:        newEnvFanout(),
@@ -154,7 +158,7 @@ func (s *Server) guard(token string, next http.Handler) http.Handler {
 func (s *Server) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
 	interceptors := connect.WithInterceptors(validate.NewInterceptor())
-	resourcePath, resourceHandler := resourcesv1connect.NewResourceServiceHandler(s, interceptors)
+	resourcePath, resourceHandler := resourcesv1connect.NewResourceServiceHandler(s, connect.WithInterceptors(validate.NewInterceptor(), s.sdk.Interceptor()))
 	mux.Handle(resourcePath, s.guard(s.sessionToken, resourceHandler))
 	s.stack.Routes(mux, func(next http.Handler) http.Handler { return s.guard(s.appToken, next) }, interceptors)
 	mux.Handle("/sync", s.guard(s.sessionToken, http.HandlerFunc(s.handleSync)))
@@ -246,7 +250,12 @@ func (s *Server) Discover(ctx context.Context, cfg *projectconfig.Config, stdout
 		return err
 	}
 
-	return discovery.Run(ctx, cfg.Dir, prepared, discovery.Server{URL: s.devServerAddr, Token: s.sessionToken}, stdout, stderr)
+	_ = s.sdk.Take()
+	err = discovery.Run(ctx, cfg.Dir, prepared, discovery.Server{URL: s.devServerAddr, Token: s.sessionToken}, stdout, stderr)
+	if refused := s.sdk.Take(); refused != nil {
+		return refused
+	}
+	return err
 }
 
 func (s *Server) ClientKeys() ([]clientenv.Key, error) {

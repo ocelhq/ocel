@@ -19,3 +19,5 @@ const RuntimeAddressEnvName = "OCEL_RUNTIME_ADDRESS"
 const LiveKeysEnvName = "OCEL_LIVE_KEYS"
 
 const LiveDirEnvName = "OCEL_LIVE_DIR"
+
+const SDKVersionHeader = "Ocel-Sdk-Version"

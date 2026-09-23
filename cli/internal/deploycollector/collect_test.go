@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/sdkversion"
+	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -210,6 +213,54 @@ await fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+c
 	}
 	if len(resources) != 1 || resources[0].Name != "prepared-once" {
 		t.Fatalf("Collect() returned %+v, want the declare of the bundle Prepare built rather than a second bundle", resources)
+	}
+}
+
+func TestAnSDKOfAnotherReleaseIsRefusedWithTheUpgradeThatFixesIt(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX-style fixture entrypoint")
+	}
+	held := version.Version
+	version.Version = "0.0.3"
+	t.Cleanup(func() { version.Version = held })
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, constants.DefaultDiscoveryDirName, "main.ts"), `
+declare global {
+  var __ocelRegister: Promise<unknown>[];
+}
+globalThis.__ocelRegister ??= [];
+globalThis.__ocelRegister.push(
+  fetch(new URL("/app.resources.v1.ResourceService/Declare", process.env.`+constants.DevServerEnvName+`), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + process.env.`+constants.DevServerTokenEnvName+`,
+      "`+constants.SDKVersionHeader+`": "js/0.0.2",
+    },
+    body: JSON.stringify({
+      resource: { type: "RESOURCE_TYPE_POSTGRES", name: "main" },
+      postgres: { version: "17" },
+    }),
+  }),
+);
+export {};
+`)
+	cfg := &projectconfig.Config{
+		Slug:      "test-app",
+		Dir:       root,
+		Discovery: projectconfig.Discovery{Paths: []string{constants.DefaultDiscoveryDirName}},
+	}
+
+	var stdout, stderr bytes.Buffer
+	resources, err := PrepareAndCollect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
+	var mismatch *sdkversion.MismatchError
+	if !errors.As(err, &mismatch) {
+		t.Fatalf("Collect() = %+v, %v; want the SDK refused for its version; stderr=%s", resources, err, stderr.String())
+	}
+	want := "the JavaScript SDK (ocel) is version 0.0.2 and this CLI is version 0.0.3; an SDK works with the CLI of its own release — run `npm i ocel@0.0.3`"
+	if err.Error() != want {
+		t.Fatalf("Collect() err = %q, want %q", err, want)
 	}
 }
 
