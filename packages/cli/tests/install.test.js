@@ -22,7 +22,9 @@ const repo = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const installer = join(repo, "www", "public", "install.sh");
 
 const version = "1.2.3";
-const marker = "ocel 1.2.3 from the fake release";
+const candidate = "1.2.4-rc.2";
+const nightly = "1.2.4-0.nightly.20260923.gabc1234";
+const marker = (release) => `ocel ${release} from the fake release`;
 const targets = [
   ["linux", "amd64"],
   ["linux", "arm64"],
@@ -34,9 +36,11 @@ let root = "";
 let origin = "";
 let server;
 
-function archive(directory, name) {
+function archive(directory, name, release) {
   const staging = mkdtempSync(join(tmpdir(), "ocel-archive-"));
-  writeFileSync(join(staging, "ocel"), `#!/bin/sh\necho "${marker}"\n`, { mode: 0o755 });
+  writeFileSync(join(staging, "ocel"), `#!/bin/sh\necho "${marker(release)}"\n`, {
+    mode: 0o755,
+  });
   execFileSync("tar", ["-czf", join(directory, name), "-C", staging, "ocel"]);
   rmSync(staging, { recursive: true, force: true });
   return createHash("sha256")
@@ -44,11 +48,11 @@ function archive(directory, name) {
     .digest("hex");
 }
 
-function release(directory, sum) {
+function release(directory, sum, release = version) {
   mkdirSync(directory, { recursive: true });
   const lines = targets.map(([os, arch]) => {
-    const name = `ocel_${version}_${os}_${arch}.tar.gz`;
-    return `${sum(archive(directory, name))}  ${name}`;
+    const name = `ocel_${release}_${os}_${arch}.tar.gz`;
+    return `${sum(archive(directory, name, release))}  ${name}`;
   });
   writeFileSync(join(directory, "checksums.txt"), `${lines.join("\n")}\n`);
 }
@@ -57,10 +61,24 @@ beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), "ocel-release-"));
   release(join(root, "download", `v${version}`), (sum) => sum);
   release(join(root, "tampered", `v${version}`), () => "0".repeat(64));
-  writeFileSync(join(root, "latest.json"), JSON.stringify({ tag_name: `v${version}` }));
+  mkdirSync(join(root, "releases"));
+  writeFileSync(join(root, "releases", "latest"), JSON.stringify({ tag_name: `v${version}` }));
+  release(join(root, "download", `v${candidate}`), (sum) => sum, candidate);
+  release(join(root, "download", `v${nightly}`), (sum) => sum, nightly);
+  writeFileSync(
+    join(root, "releases", "index"),
+    JSON.stringify([
+      { tag_name: `v${nightly}`, prerelease: true, assets: [{ name: "checksums.txt" }] },
+      { tag_name: `v${candidate}`, prerelease: true, assets: [{ name: "checksums.txt" }] },
+      { tag_name: "v1.2.4-rc.1", prerelease: true },
+      { tag_name: `v${version}`, prerelease: false },
+    ]),
+  );
 
   server = createServer((request, response) => {
-    const path = join(root, decodeURIComponent(new URL(request.url, "http://x").pathname));
+    const url = new URL(request.url, "http://x");
+    const listing = url.pathname === "/releases" && url.searchParams.has("per_page");
+    const path = join(root, listing ? "releases/index" : decodeURIComponent(url.pathname));
     if (!path.startsWith(root) || !existsSync(path)) {
       response.writeHead(404).end("not found");
       return;
@@ -85,7 +103,7 @@ function install({ env = {}, path, seed } = {}) {
       PATH: path ? `${path}:${process.env.PATH}` : process.env.PATH,
       HOME: home,
       OCEL_INSTALL_DOWNLOADS: `${origin}/download`,
-      OCEL_INSTALL_LATEST: `${origin}/latest.json`,
+      OCEL_INSTALL_RELEASES: `${origin}/releases`,
       ...env,
     },
   });
@@ -122,7 +140,7 @@ describe.runIf(process.platform !== "win32")("install.sh", () => {
     expect(run.status).toBe(0);
     expect(existsSync(run.installed)).toBe(true);
     expect(statSync(run.installed).mode & 0o111).toBeGreaterThan(0);
-    expect(execFileSync(run.installed, { encoding: "utf8" })).toBe(`${marker}\n`);
+    expect(execFileSync(run.installed, { encoding: "utf8" })).toBe(`${marker(version)}\n`);
     rmSync(run.home, { recursive: true, force: true });
   });
 
@@ -138,12 +156,36 @@ describe.runIf(process.platform !== "win32")("install.sh", () => {
     expect(run.stderr).toBe("");
     expect(run.status).toBe(0);
     expect(run.stdout).toContain(version);
-    expect(execFileSync(run.installed, { encoding: "utf8" })).toBe(`${marker}\n`);
+    expect(execFileSync(run.installed, { encoding: "utf8" })).toBe(`${marker(version)}\n`);
+    rmSync(run.home, { recursive: true, force: true });
+  });
+
+  it("takes the newest release candidate on the next channel", async () => {
+    const run = await install({ env: { OCEL_CHANNEL: "next" } });
+    expect(run.stderr).toBe("");
+    expect(run.status).toBe(0);
+    expect(execFileSync(run.installed, { encoding: "utf8" })).toBe(`${marker(candidate)}\n`);
+    rmSync(run.home, { recursive: true, force: true });
+  });
+
+  it("takes the newest nightly on the nightly channel", async () => {
+    const run = await install({ env: { OCEL_CHANNEL: "nightly" } });
+    expect(run.stderr).toBe("");
+    expect(run.status).toBe(0);
+    expect(execFileSync(run.installed, { encoding: "utf8" })).toBe(`${marker(nightly)}\n`);
+    rmSync(run.home, { recursive: true, force: true });
+  });
+
+  it("refuses a channel it does not know", async () => {
+    const run = await install({ env: { OCEL_CHANNEL: "beta" } });
+    expect(run.status).not.toBe(0);
+    expect(run.stderr).toContain("OCEL_CHANNEL");
+    expect(existsSync(run.installed)).toBe(false);
     rmSync(run.home, { recursive: true, force: true });
   });
 
   it("names OCEL_VERSION when the latest release cannot be read", async () => {
-    const run = await install({ env: { OCEL_INSTALL_LATEST: `${origin}/absent.json` } });
+    const run = await install({ env: { OCEL_INSTALL_RELEASES: `${origin}/absent` } });
     expect(run.status).not.toBe(0);
     expect(run.stderr).toContain("OCEL_VERSION");
     expect(existsSync(run.installed)).toBe(false);
@@ -164,7 +206,7 @@ describe.runIf(process.platform !== "win32")("install.sh", () => {
     expect(run.status).toBe(0);
     expect(lstatSync(run.installed).isSymbolicLink()).toBe(false);
     expect(readFileSync(join(run.home, "decoy"), "utf8")).toBe("#!/bin/sh\necho decoy\n");
-    expect(execFileSync(run.installed, { encoding: "utf8" })).toBe(`${marker}\n`);
+    expect(execFileSync(run.installed, { encoding: "utf8" })).toBe(`${marker(version)}\n`);
     rmSync(run.home, { recursive: true, force: true });
   });
 
