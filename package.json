@@ -11,7 +11,7 @@
     "format": "biome format --write",
     "prepare": "husky"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "devEngines": {
     "packageManager": {
       "name": "pnpm",

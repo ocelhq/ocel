@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "the host-neutral runtime a node function is served through",
+  "license": "Apache-2.0",
   "exports": {
     "./background": "./src/background.mts",
     "./boot": "./src/boot.mts",

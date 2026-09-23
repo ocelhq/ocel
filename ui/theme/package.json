@@ -11,7 +11,7 @@
   "scripts": {
     "test": "vitest run"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "devDependencies": {
     "vitest": "^4.1.9"
   }

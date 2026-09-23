@@ -44,4 +44,4 @@ to write those names and their types down.
 
 ## License
 
-MIT
+Apache-2.0

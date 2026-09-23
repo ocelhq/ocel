@@ -90,7 +90,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json && tsc --noEmit -p tsconfig.typetests-config.json"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ocelhq/ocel.git",
