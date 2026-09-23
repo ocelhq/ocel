@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -51,6 +52,39 @@ func (s *sink) messages(t *testing.T) []map[string]string {
 type resolvedFetcher map[string]string
 
 func (f resolvedFetcher) FetchLive(context.Context) (map[string]string, error) { return f, nil }
+
+func TestLiveValuesReachNode(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "..", "frameworks", "node", "runtime", "src", "live-values.mts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	decl := regexp.MustCompile(`const LIVE_VALUES_MESSAGE = "([^"]+)"`).FindSubmatch(src)
+	if decl == nil {
+		t.Fatal("frameworks/node/runtime/src/live-values.mts no longer declares LIVE_VALUES_MESSAGE, so this test cannot hold the runtime to it")
+	}
+
+	out := &sink{}
+	l := vars.New(resolvedFetcher{"DB_PASSWORD": "hunter2"}, []string{"DB_PASSWORD"}, nil, nil)
+	l.Attach(out)
+	if err := l.Join(l.Prefetch(t.Context())); err != nil {
+		t.Fatalf("join: %v", err)
+	}
+
+	out.mu.Lock()
+	defer out.mu.Unlock()
+	if len(out.lines) != 1 {
+		t.Fatalf("pushed %d lines, want the first generation", len(out.lines))
+	}
+	var msg struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal([]byte(out.lines[0]), &msg); err != nil {
+		t.Fatal(err)
+	}
+	if msg.Type != string(decl[1]) {
+		t.Errorf("the runtime pushes live values as type %q and node waits for %q, so node never imports the app or signals ready", msg.Type, decl[1])
+	}
+}
 
 type stubValues struct {
 	env      []string
