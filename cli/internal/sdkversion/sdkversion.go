@@ -63,6 +63,11 @@ func parse(version string) (release, bool) {
 	return r, true
 }
 
+func Released(version string) bool {
+	_, ok := parse(version)
+	return ok
+}
+
 func Compatible(cli, sdk string) bool {
 	c, known := parse(cli)
 	s, alsoKnown := parse(sdk)
@@ -121,11 +126,15 @@ type MismatchError struct {
 	CLI      string
 }
 
-func (e *MismatchError) Error() string {
-	named, ok := names[e.Language]
-	if !ok {
-		named = "the " + e.Language + " SDK"
+func Name(language string) string {
+	if named, ok := names[language]; ok {
+		return named
 	}
+	return "the " + language + " SDK"
+}
+
+func (e *MismatchError) Error() string {
+	named := Name(e.Language)
 	said := fmt.Sprintf("%s is version %s and this CLI is version %s; an SDK works with the CLI of its own release", named, e.SDK, e.CLI)
 	if upgrade := Upgrade(e.Language, e.CLI); upgrade != "" {
 		said += " — run `" + upgrade + "`"

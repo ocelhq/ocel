@@ -155,6 +155,7 @@ func build(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io
 		project.pass(providerText(descriptor))
 	}
 	project.pass(edgeText(cfg))
+	project.checks = append(project.checks, sdkChecks(cfg, version.Version)...)
 
 	hosts := map[environmentv1.Tier][]string{}
 	for _, tier := range tiers {
