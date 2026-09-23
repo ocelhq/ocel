@@ -118,15 +118,19 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: Bake the box every lane is cloned from
-        run: sg incus-admin -c "scripts/incus.sh bake $VM-base -- '$BAKE'"
+      - name: Bake the box every lane is cloned from, while the race-instrumented test binary compiles
+        run: |
+          set -euo pipefail
+          go test -C platform/vps/provider -race -list '^TestLive' ./... > live.list 2> live.list.log &
+          compile=$!
+          sg incus-admin -c "scripts/incus.sh bake $VM-base -- '$BAKE'"
+          wait "$compile" || { cat live.list.log >&2; exit 1; }
 
-      - name: Compile the race-instrumented test binary once and deal its tests across the lanes
+      - name: Deal its tests across the lanes
         run: |
           set -euo pipefail
           mkdir reports
-          go test -C platform/vps/provider -race -list '^TestLive' ./... \
-            | grep '^TestLive' | grep -vx "$ENGINE_TEST" | sort > live.tests
+          grep '^TestLive' live.list | grep -vx "$ENGINE_TEST" | sort > live.tests
           : > reports/lanes.tsv
           for s in $(seq 0 $((SHARDS - 1))); do
             awk -v n="$SHARDS" -v s="$s" 'NR % n == s' live.tests > "shard-$s.tests"
@@ -193,14 +197,16 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: Bake the box the build and lifecycle lanes are cloned from
-        run: sg incus-admin -c "scripts/incus.sh bake $VM-base -- '$BAKE'"
-
-      - name: Compile the race-instrumented test binaries once
+      - name: Bake the box the build and lifecycle lanes are cloned from, while the race-instrumented test binaries compile
         run: |
           set -euo pipefail
-          go test -C cli -race -list '^TestLive' ./... > /dev/null
-          go test -C platform/vps/provider -race -list '^TestLifecycle' ./... > /dev/null
+          {
+            go test -C cli -race -list '^TestLive' ./... > /dev/null
+            go test -C platform/vps/provider -race -list '^TestLifecycle' ./... > /dev/null
+          } 2> compile.log &
+          compile=$!
+          sg incus-admin -c "scripts/incus.sh bake $VM-base -- '$BAKE'"
+          wait "$compile" || { cat compile.log >&2; exit 1; }
 
       - name: Run the build pipeline, the lifecycle suite and the engine install, a VM each
         run: |
