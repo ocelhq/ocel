@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
+	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 )
 
@@ -77,10 +78,6 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		"pkg/providerkit/release.go": {
 			constants.DefaultDiscoveryDirName: true,
 		},
-		"sdk/env_test.go": {
-			"ocel:\"" + constants.AppURLEnvName + "\"":           true,
-			"ocel:\"" + constants.AppURLEnvName + ",sensitive\"": true,
-		},
 		"tests/fixtures/sdk/go/server/main.go": {
 			"example.com/web/" + constants.DefaultDiscoveryDirName: true,
 		},
@@ -109,7 +106,7 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 			case ".git", ".next", ".venv", ".claude", constants.ProjectStateDirName, "node_modules", "dist", "target":
 				return filepath.SkipDir
 			}
-			if rel == "pkg/proto" || ignored[rel] {
+			if rel == "pkg/proto" || rel == "sdk" || ignored[rel] {
 				return filepath.SkipDir
 			}
 			return nil
@@ -243,5 +240,50 @@ func TestGoCICoversTheSharedConstantsModule(t *testing.T) {
 	}
 	if !strings.Contains(string(workflow), "./pkg/constants/...") {
 		t.Fatal("the Go CI matrix does not build and test the shared constants module")
+	}
+}
+
+func TestGoSDKWireNamesMatchConstants(t *testing.T) {
+	path := filepath.Join(fixturetest.RepoDir(t), "sdk", "wire.go")
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	ast.Inspect(file, func(node ast.Node) bool {
+		spec, ok := node.(*ast.ValueSpec)
+		if !ok || len(spec.Values) != len(spec.Names) {
+			return true
+		}
+		for i, name := range spec.Names {
+			if literal, ok := spec.Values[i].(*ast.BasicLit); ok && literal.Kind == token.STRING {
+				value, err := strconv.Unquote(literal.Value)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got[name.Name] = value
+			}
+		}
+		return true
+	})
+	want := map[string]string{
+		"phaseEnv":          constants.PhaseEnvName,
+		"devServerEnv":      constants.DevServerEnvName,
+		"devServerTokenEnv": constants.DevServerTokenEnvName,
+		"appFolderEnv":      constants.AppFolderEnvName,
+		"appURLEnv":         constants.AppURLEnvName,
+		"runtimeAddressEnv": constants.RuntimeAddressEnvName,
+		"liveDirEnv":        constants.LiveDirEnvName,
+		"sessionTokenEnv":   channel.SessionTokenEnvVar,
+	}
+	for name, value := range want {
+		if got[name] != value {
+			t.Errorf("sdk/wire.go %s = %q, want %q", name, got[name], value)
+		}
+	}
+	for name := range got {
+		if _, ok := want[name]; !ok {
+			t.Errorf("sdk/wire.go %s has no counterpart the CLI names", name)
+		}
 	}
 }
