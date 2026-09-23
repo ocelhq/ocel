@@ -5,7 +5,8 @@ if (set -o pipefail 2>/dev/null); then
 fi
 
 downloads="${OCEL_INSTALL_DOWNLOADS:-https://github.com/ocelhq/ocel/releases/download}"
-latest="${OCEL_INSTALL_LATEST:-https://api.github.com/repos/ocelhq/ocel/releases/latest}"
+releases="${OCEL_INSTALL_RELEASES:-https://api.github.com/repos/ocelhq/ocel/releases}"
+channel="${OCEL_CHANNEL:-stable}"
 destination="$HOME/.local/bin"
 
 fail() {
@@ -43,12 +44,21 @@ case "$machine" in
   *) fail "ocel ships no binary for $kernel $machine; install it with: npm install -g @ocel/cli" ;;
 esac
 
+case "$channel" in
+  stable) listing="$releases/latest" pattern='^v[0-9]*\.[0-9]*\.[0-9]*$' ;;
+  next) listing="$releases?per_page=100" pattern='^v[0-9]*\.[0-9]*\.[0-9]*-rc\.[0-9]*$' ;;
+  nightly) listing="$releases?per_page=100" pattern='^v[0-9]*\.[0-9]*\.[0-9]*-0\.nightly\.[0-9]*\.g[0-9a-f]*$' ;;
+  *) fail "OCEL_CHANNEL is $channel; it takes stable, next or nightly" ;;
+esac
+
 version="${OCEL_VERSION:-}"
 if [ -z "$version" ]; then
-  tag=$(curl -fsSL --retry 3 "$latest") ||
-    fail "could not read the latest release from $latest; set OCEL_VERSION to install a version without it"
-  version=$(printf '%s' "$tag" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
-  [ -n "$version" ] || fail "$latest named no release tag"
+  answer=$(curl -fsSL --retry 3 "$listing") ||
+    fail "could not read the $channel releases from $listing; set OCEL_VERSION to install a version without it"
+  version=$(printf '%s\n' "$answer" | tr ',{' '\n\n' |
+    sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' |
+    grep -e "$pattern" | head -n 1) || true
+  [ -n "$version" ] || fail "$listing names no $channel release"
 fi
 version="${version#v}"
 
