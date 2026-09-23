@@ -1,10 +1,12 @@
 import { createClient, type Interceptor } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
 import { ResourceService } from "../gen/proto/app/resources/v1/resources_pb.js";
-import { getDevServerToken, OCEL_DEV_SERVER } from "./constants.js";
+import { getDevServerToken, OCEL_DEV_SERVER, SDK_VERSION_HEADER } from "./constants.js";
+import { SDK_VERSION } from "./version.js";
 
 export const authorized: Interceptor = (next) => (req) => {
   req.header.set("Authorization", `Bearer ${getDevServerToken()}`);
+  req.header.set(SDK_VERSION_HEADER, `js/${SDK_VERSION}`);
   return next(req);
 };
 

@@ -1,6 +1,8 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, expect, it, vi } from "vitest";
+import packageJson from "../../package.json" with { type: "json" };
+import { SDK_VERSION } from "./version.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -9,8 +11,10 @@ afterEach(() => {
 
 it("presents the dev server token the CLI handed the discovery child", async () => {
   const seen: (string | undefined)[] = [];
+  const versions: (string | string[] | undefined)[] = [];
   const server = createServer((req, res) => {
     seen.push(req.headers.authorization);
+    versions.push(req.headers["ocel-sdk-version"]);
     res.statusCode = 403;
     res.end();
   });
@@ -28,4 +32,9 @@ it("presents the dev server token the CLI handed the discovery child", async () 
     server.close((err) => (err ? reject(err) : resolve())),
   );
   expect(seen).toEqual(["Bearer dev-server-token"]);
+  expect(versions).toEqual([`js/${packageJson.version}`]);
+});
+
+it("knows the version its package was stamped with", () => {
+  expect(SDK_VERSION).toBe(packageJson.version);
 });
