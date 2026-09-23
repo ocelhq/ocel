@@ -5,6 +5,7 @@ import { awsBindingStore, awsStore, type Cli, namespacesStanding } from "./store
 const TABLES: Record<string, string> = {
   StateTableName: "ocel-state",
   VarsTableName: "ocel-vars",
+  StateBucketName: "ocel-statebucket",
 };
 
 const STATE_TABLE = TABLES.StateTableName as string;
@@ -141,6 +142,36 @@ describe("stands", () => {
       return tableAsked(args);
     });
     await assert.rejects(awsStore(undefined, cli).exists("j-1-node"), /ThrottlingException/);
+  });
+});
+
+describe("releaseLocks", () => {
+  it("removes only the locks under the slug's own backend in the namespace's state bucket", async () => {
+    const { cli, calls } = cliOver((args) => (describeStacks(args) ? tableAsked(args) : ""));
+    await awsStore(undefined, cli, "j-9-deploy-next").releaseLocks("j-9-deploy-next");
+    assert.ok(
+      calls.filter(describeStacks).every((args) => args.includes("j-9-deploy-next-bootstrap")),
+    );
+    assert.deepEqual(
+      calls.filter((args) => args[0] === "s3"),
+      [["s3", "rm", "s3://ocel-statebucket/j-9-deploy-next/.pulumi/locks/", "--recursive"]],
+    );
+  });
+
+  it("touches nothing when the namespace has no bootstrap", async () => {
+    const { cli, calls } = cliOver((args) => {
+      if (describeStacks(args)) {
+        throw Object.assign(new Error("Command failed"), { stderr: "Stack does not exist" });
+      }
+      return "";
+    });
+    await awsStore(undefined, cli).releaseLocks("j-1-node");
+    assert.equal(calls.filter((args) => args[0] === "s3").length, 0);
+  });
+
+  it("refuses when the bootstrap publishes no state bucket", async () => {
+    const { cli } = cliOver(() => "None");
+    await assert.rejects(awsStore(undefined, cli).releaseLocks("j-1-node"), /StateBucketName/);
   });
 });
 

@@ -151,6 +151,7 @@ export class AwsSweeper implements Sweeper {
       byPart,
       fixtures,
       complaints,
+      real,
     );
 
     await despite(complaints, "namespace sweep", () =>
@@ -179,11 +180,11 @@ export class AwsSweeper implements Sweeper {
     const reclaim = sweepable(ofRun(await this.list(), runId), [], [...byPart.keys()]);
 
     const complaints: string[] = [];
-    await this.reclaimSlugs(runId, reclaim, byPart, fixtures, complaints);
+    await this.reclaimSlugs(runId, reclaim, byPart, fixtures, complaints, false);
 
     for (const namespace of ofRun(await namespacesStanding(cliAt(where.endpoint)), runId)) {
       await despite(complaints, `${namespace} sweep`, () =>
-        this.sweepStrayNamespace(runId, namespace, byPart, complaints),
+        this.sweepStrayNamespace(runId, namespace, byPart, complaints, false),
       );
     }
 
@@ -200,6 +201,7 @@ export class AwsSweeper implements Sweeper {
     namespace: string,
     byPart: Map<string, Cell>,
     complaints: string[],
+    dead: boolean,
   ): Promise<void> {
     const held = await this.store(namespace);
     const fixtures = fixturesOn(matrix, "aws");
@@ -218,6 +220,9 @@ export class AwsSweeper implements Sweeper {
     complaints.push(...unplanned);
     for (const one of swept) {
       await inFixture(one.fixture.name, runId, `sweep-${one.slug}`, async (dir) => {
+        if (dead) {
+          await held.releaseLocks(one.slug);
+        }
         await writeJourneyConfig(dir, one.overlay);
         await ocel(dir, ["destroy", "production", "--yes"], ocelEnvIn(dir, namespace));
         process.stdout.write(`swept ${one.slug} from the ${namespace} bootstrap\n`);
@@ -260,7 +265,7 @@ export class AwsSweeper implements Sweeper {
     const live = await busy(stray);
     for (const namespace of stray.filter((name) => !underway(name, live))) {
       await despite(complaints, `${namespace} sweep`, () =>
-        this.sweepStrayNamespace(runId, namespace, byPart, complaints),
+        this.sweepStrayNamespace(runId, namespace, byPart, complaints, true),
       );
     }
   }
@@ -271,11 +276,16 @@ export class AwsSweeper implements Sweeper {
     byPart: Map<string, Cell>,
     fixtures: Fixture[],
     complaints: string[],
+    dead: boolean,
   ): Promise<void> {
     const { swept, complaints: unplanned } = sweepPlan(reclaim, byPart, fixtures, process.env);
     complaints.push(...unplanned);
+    const store = await this.store();
     for (const one of swept) {
       await inFixture(one.fixture.name, runId, `sweep-${one.slug}`, async (dir) => {
+        if (dead) {
+          await store.releaseLocks(one.slug);
+        }
         await writeJourneyConfig(dir, one.overlay);
         await ocel(dir, ["destroy", "production", "--yes"], ocelEnvIn(dir));
         process.stdout.write(`swept ${one.slug}\n`);

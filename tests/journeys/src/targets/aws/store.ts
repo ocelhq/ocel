@@ -16,6 +16,7 @@ export type Store = {
   callerAccount(): Promise<string>;
   deployedSlugs(): Promise<string[]>;
   exists(slug: string): Promise<boolean>;
+  releaseLocks(slug: string): Promise<void>;
 };
 
 export function cliAt(endpoint: string | undefined): Cli {
@@ -83,6 +84,8 @@ async function queryPartition(
 }
 
 const STATE_TABLE_OUTPUT = "StateTableName";
+
+const STATE_BUCKET_OUTPUT = "StateBucketName";
 
 async function bootstrapTable(
   cli: Cli,
@@ -173,6 +176,19 @@ export function awsStore(
         }
       }
       return false;
+    },
+
+    async releaseLocks(slug) {
+      const bucket = await bootstrapTable(
+        cli,
+        stack,
+        STATE_BUCKET_OUTPUT,
+        `the locks a killed run left on ${slug} cannot be released`,
+      );
+      if (!bucket) {
+        return;
+      }
+      await cli(["s3", "rm", `s3://${bucket}/${slug}/.pulumi/locks/`, "--recursive"]);
     },
   };
 }
