@@ -1,6 +1,6 @@
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
 import { describe, expect, it } from "vitest";
-import { config, proxy } from "./proxy";
+import { config, middleware } from "./middleware";
 
 const matches = (url: string) => unstable_doesMiddlewareMatch({ config, nextConfig: {}, url });
 
@@ -18,7 +18,7 @@ describe("the go vanity import", () => {
   });
 
   it("points ocel.dev at the sdk directory of the repo", async () => {
-    const response = proxy();
+    const response = middleware();
     expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
     expect(await response.text()).toContain(
       '<meta name="go-import" content="ocel.dev git https://github.com/ocelhq/ocel sdk">',

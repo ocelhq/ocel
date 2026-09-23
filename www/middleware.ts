@@ -11,7 +11,7 @@ const GO_IMPORT = `<!doctype html>
 </html>
 `;
 
-export function proxy(): NextResponse {
+export function middleware(): NextResponse {
   return new NextResponse(GO_IMPORT, {
     headers: { "content-type": "text/html; charset=utf-8" },
   });
