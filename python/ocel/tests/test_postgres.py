@@ -1,5 +1,6 @@
 import json
 import os
+from importlib.metadata import version
 
 import pytest
 
@@ -27,6 +28,12 @@ def test_a_declaration_carries_the_dev_server_token(collector):
     postgres("main")
 
     assert collector.authorizations == ["Bearer opensesame"]
+
+
+def test_a_declaration_names_the_sdk_version_it_was_installed_at(collector):
+    postgres("main")
+
+    assert collector.sdk_versions == [f"python/{version('ocel')}"]
 
 
 def test_a_database_reached_during_discovery_says_it_is_not_provisioned_yet(collector):

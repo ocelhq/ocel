@@ -1,4 +1,6 @@
 import os
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _installed
 
 from ocel.gen.app.resources.v1.resources_connect import ResourceServiceClientSync
 from ocel.gen.app.resources.v1.resources_pb import DeclareRequest
@@ -12,6 +14,14 @@ DISCOVERY_PHASE = "discovery"
 _PHASE_ENV = "OCEL_PHASE"
 _DEV_SERVER_ENV = "OCEL_DEV_SERVER"
 _DEV_SERVER_TOKEN_ENV = "OCEL_DEV_SERVER_TOKEN"
+_SDK_VERSION_HEADER = "Ocel-Sdk-Version"
+
+
+def sdk_version() -> str:
+    try:
+        return _installed("ocel")
+    except PackageNotFoundError:
+        return "dev"
 
 
 def discovering() -> bool:
@@ -24,7 +34,10 @@ def _client() -> ResourceServiceClientSync:
 
 
 def _headers() -> dict[str, str]:
-    return {"Authorization": f"Bearer {os.environ.get(_DEV_SERVER_TOKEN_ENV, '')}"}
+    return {
+        "Authorization": f"Bearer {os.environ.get(_DEV_SERVER_TOKEN_ENV, '')}",
+        _SDK_VERSION_HEADER: f"python/{sdk_version()}",
+    }
 
 
 def declare(request: DeclareRequest) -> None:
