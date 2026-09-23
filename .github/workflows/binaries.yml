@@ -9,18 +9,67 @@ concurrency:
   group: binaries-${{ github.ref }}
   cancel-in-progress: false
 
+permissions: {}
+
 jobs:
   release:
-    name: release
+    name: github release
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: write
       id-token: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      channel: ${{ steps.version.outputs.channel }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Read the version this tag releases
+        id: version
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            channel=stable
+          elif [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-rc\.[1-9][0-9]*$ ]]; then
+            channel=rc
+          elif [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-0\.nightly\.[0-9]{8}\.g[0-9a-f]{7}$ ]]; then
+            channel=nightly
+          else
+            echo "::error::$GITHUB_REF_NAME is none of vX.Y.Z, vX.Y.Z-rc.N or vX.Y.Z-0.nightly.YYYYMMDD.g<sha7>" >&2
+            exit 1
+          fi
+          stamped=$(tr -d '[:space:]' < VERSION)
+          if [ "$stamped" != "$version" ]; then
+            echo "::error::$GITHUB_REF_NAME tags a commit whose VERSION is $stamped" >&2
+            exit 1
+          fi
+          previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude "$GITHUB_REF_NAME" HEAD 2>/dev/null ||
+            git rev-list --max-parents=0 HEAD | tail -n 1)
+          {
+            echo "version=$version"
+            echo "channel=$channel"
+            echo "previous=$previous"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Ask whether this release is already published
+        id: published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft,assets \
+            --jq 'select(.isDraft | not) | .assets[].name' 2>/dev/null | grep -qx 'checksums.txt.sigstore.json'; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "$GITHUB_REF_NAME is already published; this run rebuilds it for the registries only"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Setup Go
         uses: ./.github/actions/go
@@ -32,12 +81,232 @@ jobs:
 
       - uses: ./.github/actions/goreleaser
 
+      - uses: ./.github/actions/changie
+
       - name: Setup cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
         with:
           cosign-release: v3.1.3
 
+      - name: Setup syft
+        id: syft
+        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26
+        with:
+          syft-version: v1.52.0
+
+      - name: Put syft on PATH
+        env:
+          SYFT: ${{ steps.syft.outputs.cmd }}
+        run: dirname "$SYFT" >> "$GITHUB_PATH"
+
+      - name: Write the release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CHANNEL: ${{ steps.version.outputs.channel }}
+        run: |
+          set -euo pipefail
+          if [ "$CHANNEL" = stable ]; then
+            cp ".changes/v$VERSION.md" "$RUNNER_TEMP/notes.md"
+          else
+            changie batch "v$VERSION" --dry-run > "$RUNNER_TEMP/notes.md"
+          fi
+
       - name: Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: goreleaser release --clean
+          GITHUB_TOKEN: ${{ github.token }}
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+          GORELEASER_PREVIOUS_TAG: ${{ steps.version.outputs.previous }}
+          PUBLISHED: ${{ steps.published.outputs.published }}
+        run: |
+          set -euo pipefail
+          skip=()
+          if [ "$PUBLISHED" = true ]; then
+            skip=("--skip=publish,sign,sbom")
+          fi
+          goreleaser release --clean --release-notes "$RUNNER_TEMP/notes.md" "${skip[@]}"
+
+      - name: Keep what the registries publish
+        uses: actions/upload-artifact@v4
+        with:
+          name: release
+          if-no-files-found: error
+          path: |
+            dist/artifacts.json
+            dist/ocel_*/ocel*
+            dist/homebrew/Casks/ocel.rb
+
+  npm:
+    name: npm
+    needs: release
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/node-workspace
+        with:
+          registry-url: https://registry.npmjs.org
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: Take the npm that publishes through trusted publishing
+        run: npm install --global npm@^11.5.1
+
+      - name: Take the binaries the release built
+        uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+
+      - name: Fill the platform packages with this version's binaries
+        run: node scripts/platform-packages.mjs dist packages
+
+      - name: Build the published packages
+        run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi --filter=@ocel/transforms
+
+      - name: Publish every package npm does not have yet
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: node scripts/release/npm.mjs "$VERSION"
+
+  pypi:
+    name: pypi
+    needs: [release, npm]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+
+      - name: Build the distributions
+        working-directory: python
+        run: uv build --package ocel --out-dir dist
+
+      - name: Publish what PyPI does not have yet
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
+        with:
+          packages-dir: python/dist
+          skip-existing: true
+
+  crates:
+    name: crates.io
+    needs: [release, pypi]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        if: needs.release.outputs.channel != 'nightly'
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup rust
+        if: needs.release.outputs.channel != 'nightly'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Exchange this run's identity for a crates.io token
+        id: auth
+        if: needs.release.outputs.channel != 'nightly'
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18
+
+      - name: Publish every crate crates.io does not have yet
+        if: needs.release.outputs.channel != 'nightly'
+        working-directory: crates
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          set -euo pipefail
+          for crate in ocel-macros ocel-sdk; do
+            status=$(curl -sS -o /dev/null -w '%{http_code}' \
+              -A "ocel-release (https://github.com/ocelhq/ocel)" \
+              "https://crates.io/api/v1/crates/$crate/$VERSION")
+            case "$status" in
+              200) echo "$crate $VERSION is already on crates.io" ;;
+              404) cargo publish --locked -p "$crate" ;;
+              *)
+                echo "::error::crates.io answered $status for $crate $VERSION" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+  go:
+    name: go proxy
+    needs: [release, crates]
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ needs.release.outputs.channel != 'stable' }}
+    permissions: {}
+    steps:
+      - name: Have the proxy fetch ocel.dev at this version
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsS "https://proxy.golang.org/ocel.dev/@v/v$VERSION.info"; then
+              exit 0
+            fi
+            echo "the proxy has no ocel.dev v$VERSION yet (attempt $attempt)"
+            sleep 30
+          done
+          echo "::error::proxy.golang.org could not fetch ocel.dev@v$VERSION; check that ocel.dev serves the go-import tag and sdk/v$VERSION exists" >&2
+          exit 1
+
+  homebrew:
+    name: homebrew
+    needs: [release, go]
+    if: needs.release.outputs.channel == 'stable'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions: {}
+    steps:
+      - name: Take the cask the release rendered
+        uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: dist
+
+      - name: Mint a token that reaches only the tap
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ocelhq
+          repositories: homebrew-tap
+
+      - name: Commit the cask unless the tap already carries it
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          cask=dist/homebrew/Casks/ocel.rb
+          endpoint=repos/ocelhq/homebrew-tap/contents/Casks/ocel.rb
+          sha=$(gh api "$endpoint" --jq .sha 2>/dev/null || true)
+          if [ -n "$sha" ] && gh api "$endpoint" -H "Accept: application/vnd.github.raw" | cmp -s - "$cask"; then
+            echo "the tap already carries ocel $VERSION"
+            exit 0
+          fi
+          args=(-X PUT "$endpoint" -f "message=ocel $VERSION" -f "content=$(base64 -w0 "$cask")" -f branch=main)
+          if [ -n "$sha" ]; then
+            args+=(-f "sha=$sha")
+          fi
+          gh api "${args[@]}" --jq .commit.html_url
