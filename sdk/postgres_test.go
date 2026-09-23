@@ -36,6 +36,7 @@ func collector(t *testing.T, seen *[]map[string]any) *httptest.Server {
 		body["__path"] = r.URL.Path
 		body["__contentType"] = r.Header.Get("Content-Type")
 		body["__authorization"] = r.Header.Get("Authorization")
+		body["__sdk"] = r.Header.Get("Ocel-Sdk-Version")
 		*seen = append(*seen, body)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte("{}"))
@@ -58,6 +59,9 @@ func TestADeclarationCarriesTheDevServerToken(t *testing.T) {
 	}
 	if got := seen[0]["__authorization"]; got != "Bearer "+collectorToken {
 		t.Errorf("Authorization = %v, want the dev server token", got)
+	}
+	if got, want := seen[0]["__sdk"], "go/"+ocel.Version(); got != want {
+		t.Errorf("Ocel-Sdk-Version = %v, want %q", got, want)
 	}
 }
 

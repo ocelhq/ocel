@@ -30,6 +30,7 @@ func resources() resourcesv1connect.ResourceServiceClient {
 var authorizing = connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		req.Header().Set("Authorization", bearer(os.Getenv(devServerTokenEnv)))
+		req.Header().Set(sdkVersionHeader, "go/"+version)
 		return next(ctx, req)
 	}
 })

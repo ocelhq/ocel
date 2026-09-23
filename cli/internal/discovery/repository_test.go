@@ -275,6 +275,7 @@ func TestGoSDKWireNamesMatchConstants(t *testing.T) {
 		"runtimeAddressEnv": constants.RuntimeAddressEnvName,
 		"liveDirEnv":        constants.LiveDirEnvName,
 		"sessionTokenEnv":   channel.SessionTokenEnvVar,
+		"sdkVersionHeader":  constants.SDKVersionHeader,
 	}
 	for name, value := range want {
 		if got[name] != value {
