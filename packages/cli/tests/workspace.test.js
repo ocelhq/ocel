@@ -80,12 +80,3 @@ describe("the release version", () => {
     }
   });
 });
-
-describe("the changesets fixed group", () => {
-  const [group, ...rest] = read(".changeset", "config.json").fixed;
-
-  it("bumps the sdk, the wrapper and every platform package together", () => {
-    expect([...group].sort()).toEqual(["@ocel/cli", ...platforms, "ocel"].sort());
-    expect(rest).toEqual([]);
-  });
-});

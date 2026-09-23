@@ -14,25 +14,25 @@ jobs:
   check-release:
     runs-on: ubuntu-latest
     outputs:
-      has-changesets: ${{ steps.check.outputs.has-changesets }}
+      has-changes: ${{ steps.check.outputs.has-changes }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check for pending changesets
+      - name: Check for unreleased changes
         id: check
         run: |
-          count=$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | wc -l)
-          echo "Pending changesets: $count"
+          count=$(find .changes/unreleased -maxdepth 1 -name '*.yaml' | wc -l)
+          echo "Unreleased changes: $count"
           if [ "$count" -gt 0 ]; then
-            echo "has-changesets=true" >> "$GITHUB_OUTPUT"
+            echo "has-changes=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has-changesets=false" >> "$GITHUB_OUTPUT"
+            echo "has-changes=false" >> "$GITHUB_OUTPUT"
           fi
 
   version-pr:
     needs: check-release
-    if: needs.check-release.outputs.has-changesets == 'true'
+    if: needs.check-release.outputs.has-changes == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -46,18 +46,44 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: Create/update Version PR
-        uses: changesets/action@v1
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Batch the unreleased changes into the next version
+        uses: miniscruff/changie-action@v3
         with:
-          version: pnpm ci:version
-          commit: "chore: version packages"
-          title: "chore: version packages"
+          version: v1.26.0
+          args: batch auto
+
+      - name: Fold the batch into the changelog
+        uses: miniscruff/changie-action@v3
+        with:
+          version: v1.26.0
+          args: merge
+
+      - name: Read the batched version
+        id: latest
+        uses: miniscruff/changie-action@v3
+        with:
+          version: v1.26.0
+          args: latest
+
+      - name: Stamp the batched version
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LATEST: ${{ steps.latest.outputs.output }}
+        run: node scripts/release/version.mjs "${LATEST#v}"
+
+      - name: Create/update Version PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: release/next
+          commit-message: "chore(release): version ${{ steps.latest.outputs.output }}"
+          title: "chore(release): version ${{ steps.latest.outputs.output }}"
 
   build-binaries:
     needs: check-release
-    if: needs.check-release.outputs.has-changesets == 'false'
+    if: needs.check-release.outputs.has-changes == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: read
