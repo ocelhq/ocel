@@ -9,30 +9,16 @@ inputs:
     default: ""
   turbo-team:
     default: ""
-  gobuildcache-bucket:
-    default: ""
-  gobuildcache-region:
-    default: ""
-  gobuildcache-role-to-assume:
-    default: ""
+  go:
+    description: false leaves Go out, for a lane that drives binaries built elsewhere.
+    default: "true"
 
 runs:
   using: composite
   steps:
     - name: Setup Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: platform/vps/provider/go.mod
-        cache-dependency-path: |
-          platform/vps/provider/go.sum
-          cli/go.sum
-
-    - name: Setup gobuildcache
-      uses: ./.github/actions/gobuildcache
-      with:
-        bucket: ${{ inputs.gobuildcache-bucket }}
-        region: ${{ inputs.gobuildcache-region }}
-        role-to-assume: ${{ inputs.gobuildcache-role-to-assume }}
+      if: inputs.go == 'true'
+      uses: ./.github/actions/go
 
     - uses: ./.github/actions/node-workspace
       with:
@@ -41,12 +27,15 @@ runs:
 
     - name: The node bundle the CLI binary is built around
       shell: bash
-      run: |
-        set -euo pipefail
-        pnpm turbo run build --filter=ocel
-        go generate -C cli ./...
+      run: pnpm turbo run build --filter=ocel
+
+    - name: Put that bundle where the CLI embeds it
+      if: inputs.go == 'true'
+      shell: bash
+      run: go generate -C cli ./...
 
     - name: The flip helper the provider embeds
+      if: inputs.go == 'true'
       shell: bash
       run: go generate -C platform/vps/provider ./...
 

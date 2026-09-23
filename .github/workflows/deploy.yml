@@ -52,9 +52,6 @@ jobs:
           source: ${{ inputs.cli || 'head' }}
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
-          gobuildcache-bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          gobuildcache-region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          gobuildcache-role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
 
       - name: Enter the account Ocel deploys itself into
         uses: ./.github/actions/dogfood-session

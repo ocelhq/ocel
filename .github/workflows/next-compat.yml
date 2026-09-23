@@ -68,22 +68,10 @@ jobs:
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
 
-      - uses: actions/setup-go@v5
+      - name: Setup Go
+        uses: ./adapter/.github/actions/go
         with:
-          go-version-file: adapter/cli/go.mod
-          cache-dependency-path: |
-            adapter/cli/go.sum
-            adapter/platform/aws/provider/go.sum
-            adapter/platform/edge/cloudflare/deploy/go.sum
-            adapter/pkg/proto/go.sum
-            adapter/sdk/go.sum
-
-      - name: Setup gobuildcache
-        uses: ./adapter/.github/actions/gobuildcache
-        with:
-          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+          go-version-file: adapter/go.work
 
       - name: Install & build Next.js
         working-directory: nextjs
@@ -599,6 +587,22 @@ jobs:
 
       - name: Destroy the project this run deployed into
         run: node adapter/tests/next-compat/project-teardown.mjs
+
+  evict:
+    name: Evict the build this run handed between its jobs
+    needs: [build, destroy, baseline]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Delete the cache entry, which no later run can restore
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          KEY: build-${{ github.sha }}-${{ github.run_id }}
+        run: gh cache delete "$KEY" || echo "no $KEY to delete"
 
   baseline:
     name: Merge the recorded baseline

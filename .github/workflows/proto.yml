@@ -50,10 +50,8 @@ jobs:
 
       - uses: ./.github/actions/node-workspace
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.work
-          cache-dependency-path: cli/go.sum
+      - name: Setup Go
+        uses: ./.github/actions/go
 
       - run: pnpm gen
 

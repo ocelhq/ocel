@@ -17,18 +17,6 @@ inputs:
     description: Team slug the remote cache belongs to.
     required: false
     default: ""
-  gobuildcache-bucket:
-    description: S3 bucket holding the Go build cache.
-    required: false
-    default: ""
-  gobuildcache-region:
-    description: AWS region of that bucket.
-    required: false
-    default: ""
-  gobuildcache-role-to-assume:
-    description: ARN of the build-cache role.
-    required: false
-    default: ""
 
 runs:
   using: composite
@@ -39,21 +27,7 @@ runs:
         turbo-team: ${{ inputs.turbo-team }}
 
     - name: Setup Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: cli/go.mod
-        cache-dependency-path: |
-          cli/go.sum
-          platform/aws/provider/go.sum
-          pkg/proto/go.sum
-          sdk/go.sum
-
-    - name: Setup gobuildcache
-      uses: ./.github/actions/gobuildcache
-      with:
-        bucket: ${{ inputs.gobuildcache-bucket }}
-        region: ${{ inputs.gobuildcache-region }}
-        role-to-assume: ${{ inputs.gobuildcache-role-to-assume }}
+      uses: ./.github/actions/go
 
     - name: Build the node halves the binaries embed
       shell: bash

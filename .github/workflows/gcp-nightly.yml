@@ -69,21 +69,7 @@ jobs:
         run: rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
 
       - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: cli/go.mod
-          cache-dependency-path: |
-            cli/go.sum
-            platform/gcp/provider/go.sum
-            pkg/proto/go.sum
-            sdk/go.sum
-
-      - name: Setup gobuildcache
-        uses: ./.github/actions/gobuildcache
-        with:
-          bucket: ${{ vars.GOBUILDCACHE_S3_BUCKET }}
-          region: ${{ vars.GOBUILDCACHE_AWS_REGION }}
-          role-to-assume: ${{ secrets.GOBUILDCACHE_AWS_ROLE_ARN }}
+        uses: ./.github/actions/go
 
       - name: The payloads the provider embeds
         run: go generate -C platform/gcp/provider ./...

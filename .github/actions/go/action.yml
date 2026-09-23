@@ -1,0 +1,53 @@
+name: go
+description: >-
+  Go at the version go.work pins, with the build, module and lint caches the
+  warm workflow seeds from main put back. Nothing here saves: a cache a pull
+  request saved only that pull request could read, and it would evict the one
+  every ref shares.
+
+inputs:
+  go-version-file:
+    description: The file whose go directive names the version.
+    required: false
+    default: go.work
+
+outputs:
+  key:
+    description: The key the warm workflow saves the caches under for this commit.
+    value: ${{ steps.paths.outputs.key }}
+  prefix:
+    description: What every key the warm workflow saves starts with, for this Go.
+    value: ${{ steps.paths.outputs.prefix }}
+  paths:
+    description: The directories the caches hold, one per line.
+    value: ${{ steps.paths.outputs.paths }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: ${{ inputs.go-version-file }}
+        cache: false
+
+    - name: Name the caches
+      id: paths
+      shell: bash
+      run: |
+        set -euo pipefail
+        prefix="go-$RUNNER_OS-$RUNNER_ARCH-$(go env GOVERSION)-"
+        {
+          echo "prefix=$prefix"
+          echo "key=$prefix$GITHUB_SHA"
+          echo "paths<<GO_CACHE_PATHS"
+          go env GOCACHE
+          go env GOMODCACHE
+          echo "$HOME/.cache/golangci-lint"
+          echo "GO_CACHE_PATHS"
+        } >> "$GITHUB_OUTPUT"
+
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.paths.outputs.paths }}
+        key: ${{ steps.paths.outputs.key }}
+        restore-keys: ${{ steps.paths.outputs.prefix }}
