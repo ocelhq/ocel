@@ -21,7 +21,7 @@ import (
 
 const sdkPackage = "ocel"
 
-const goSDKModule = "github.com/ocelhq/ocel/sdk"
+const goSDKModule = "ocel.dev"
 
 const rustSDKCrate = "ocel-sdk"
 

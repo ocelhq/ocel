@@ -13,9 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
-	ocel "github.com/ocelhq/ocel/sdk"
+	"ocel.dev"
 )
 
 const collectorToken = "opensesame"
@@ -23,7 +21,7 @@ const collectorToken = "opensesame"
 func collector(t *testing.T, seen *[]map[string]any) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !channel.VerifyAuthHeader(r.Header.Get("Authorization"), collectorToken) {
+		if r.Header.Get("Authorization") != "Bearer "+collectorToken {
 			http.Error(w, "this request carries no valid session token", http.StatusForbidden)
 			return
 		}
@@ -49,16 +47,16 @@ func collector(t *testing.T, seen *[]map[string]any) *httptest.Server {
 func TestADeclarationCarriesTheDevServerToken(t *testing.T) {
 	var seen []map[string]any
 	srv := collector(t, &seen)
-	t.Setenv(constants.PhaseEnvName, "discovery")
-	t.Setenv(constants.DevServerEnvName, srv.URL)
-	t.Setenv(constants.DevServerTokenEnvName, collectorToken)
+	t.Setenv("OCEL_PHASE", "discovery")
+	t.Setenv("OCEL_DEV_SERVER", srv.URL)
+	t.Setenv("OCEL_DEV_SERVER_TOKEN", collectorToken)
 
 	ocel.Postgres("main")
 
 	if len(seen) != 1 {
 		t.Fatalf("declares = %d, want 1", len(seen))
 	}
-	if got := seen[0]["__authorization"]; got != channel.FormatAuthHeader(collectorToken) {
+	if got := seen[0]["__authorization"]; got != "Bearer "+collectorToken {
 		t.Errorf("Authorization = %v, want the dev server token", got)
 	}
 }
@@ -66,9 +64,9 @@ func TestADeclarationCarriesTheDevServerToken(t *testing.T) {
 func TestPostgresDeclaresDuringDiscovery(t *testing.T) {
 	var seen []map[string]any
 	srv := collector(t, &seen)
-	t.Setenv(constants.PhaseEnvName, "discovery")
-	t.Setenv(constants.DevServerEnvName, srv.URL)
-	t.Setenv(constants.DevServerTokenEnvName, collectorToken)
+	t.Setenv("OCEL_PHASE", "discovery")
+	t.Setenv("OCEL_DEV_SERVER", srv.URL)
+	t.Setenv("OCEL_DEV_SERVER_TOKEN", collectorToken)
 
 	_, file, line, _ := runtime.Caller(0)
 	db := ocel.Postgres("main")
@@ -108,9 +106,9 @@ func TestPostgresDeclaresDuringDiscovery(t *testing.T) {
 func TestVersionOverridesTheDeclaredVersion(t *testing.T) {
 	var seen []map[string]any
 	srv := collector(t, &seen)
-	t.Setenv(constants.PhaseEnvName, "discovery")
-	t.Setenv(constants.DevServerEnvName, srv.URL)
-	t.Setenv(constants.DevServerTokenEnvName, collectorToken)
+	t.Setenv("OCEL_PHASE", "discovery")
+	t.Setenv("OCEL_DEV_SERVER", srv.URL)
+	t.Setenv("OCEL_DEV_SERVER_TOKEN", collectorToken)
 
 	ocel.Postgres("main", ocel.PostgresVersion("16"))
 
@@ -126,9 +124,9 @@ func TestVersionOverridesTheDeclaredVersion(t *testing.T) {
 func TestAccessorsRefuseDuringDiscovery(t *testing.T) {
 	var seen []map[string]any
 	srv := collector(t, &seen)
-	t.Setenv(constants.PhaseEnvName, "discovery")
-	t.Setenv(constants.DevServerEnvName, srv.URL)
-	t.Setenv(constants.DevServerTokenEnvName, collectorToken)
+	t.Setenv("OCEL_PHASE", "discovery")
+	t.Setenv("OCEL_DEV_SERVER", srv.URL)
+	t.Setenv("OCEL_DEV_SERVER_TOKEN", collectorToken)
 
 	db := ocel.Postgres("main")
 
@@ -174,7 +172,7 @@ func TestABindingIsReadFromTheProjectedLiveDirectory(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "OCEL_RESOURCE_POSTGRES_main"), write, 0o600); err != nil {
 		t.Fatalf("project the binding: %v", err)
 	}
-	t.Setenv(constants.LiveDirEnvName, dir)
+	t.Setenv("OCEL_LIVE_DIR", dir)
 
 	got, err := ocel.Postgres("main").ConnectionString()
 	if err != nil {

@@ -8,10 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
-	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
-	ocel "github.com/ocelhq/ocel/sdk"
+	"ocel.dev"
+	bucketv1 "ocel.dev/internal/proto/app/bucket/v1"
 )
 
 func TestABucketReadsBackWhatItWrote(t *testing.T) {
@@ -447,15 +445,15 @@ func TestABucketWithNoRuntimeToReachSaysSo(t *testing.T) {
 	if err == nil {
 		t.Fatal("Attrs() succeeded with no runtime address")
 	}
-	for _, want := range []string{constants.RuntimeAddressEnvName, "ocel dev", "ocel deploy"} {
+	for _, want := range []string{"OCEL_RUNTIME_ADDRESS", "ocel dev", "ocel deploy"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("Attrs() error = %q, want it to mention %q", err, want)
 		}
 	}
 
-	t.Setenv(constants.RuntimeAddressEnvName, "http://127.0.0.1:1")
+	t.Setenv("OCEL_RUNTIME_ADDRESS", "http://127.0.0.1:1")
 	_, err = ocel.Bucket("avatars").Attrs(t.Context(), "a")
-	if err == nil || !strings.Contains(err.Error(), channel.SessionTokenEnvVar) {
+	if err == nil || !strings.Contains(err.Error(), "OCEL_SESSION_TOKEN") {
 		t.Errorf("Attrs() error = %v, want it to name the token the runtime demands", err)
 	}
 }

@@ -6,10 +6,8 @@ import (
 	"os"
 
 	"connectrpc.com/connect"
-	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/constants"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	"github.com/ocelhq/ocel/pkg/proto/app/resources/v1/resourcesv1connect"
+	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
+	"ocel.dev/internal/proto/app/resources/v1/resourcesv1connect"
 )
 
 const (
@@ -17,13 +15,13 @@ const (
 )
 
 func discovering() bool {
-	return os.Getenv(constants.PhaseEnvName) == discoveryPhase
+	return os.Getenv(phaseEnv) == discoveryPhase
 }
 
 func resources() resourcesv1connect.ResourceServiceClient {
 	return resourcesv1connect.NewResourceServiceClient(
 		http.DefaultClient,
-		os.Getenv(constants.DevServerEnvName),
+		os.Getenv(devServerEnv),
 		connect.WithProtoJSON(),
 		connect.WithInterceptors(authorizing),
 	)
@@ -31,7 +29,7 @@ func resources() resourcesv1connect.ResourceServiceClient {
 
 var authorizing = connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		req.Header().Set("Authorization", channel.FormatAuthHeader(os.Getenv(constants.DevServerTokenEnvName)))
+		req.Header().Set("Authorization", bearer(os.Getenv(devServerTokenEnv)))
 		return next(ctx, req)
 	}
 })

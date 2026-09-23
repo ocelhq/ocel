@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"google.golang.org/protobuf/encoding/protojson"
+	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
 )
 
 // An UnprovisionedError is returned by every accessor of a resource during

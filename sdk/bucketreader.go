@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
+	bucketv1 "ocel.dev/internal/proto/app/bucket/v1"
 )
 
 // A Reader streams one object's bytes out of a bucket. Close it when the read

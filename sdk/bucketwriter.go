@@ -9,7 +9,7 @@ import (
 	"slices"
 	"sync"
 
-	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
+	bucketv1 "ocel.dev/internal/proto/app/bucket/v1"
 )
 
 // A Writer streams one object's bytes into a bucket. Small bodies go up in a

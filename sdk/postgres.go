@@ -11,8 +11,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	resourcesv1 "ocel.dev/internal/proto/app/resources/v1"
+	bindingsv1 "ocel.dev/internal/proto/common/bindings/v1"
 )
 
 const defaultPostgresVersion = "17"
