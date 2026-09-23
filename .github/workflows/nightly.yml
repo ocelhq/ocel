@@ -1,0 +1,150 @@
+name: Nightly
+
+on:
+  workflow_run:
+    workflows: [GCP nightly]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: The branch, tag or commit to release as a nightly
+        required: true
+        default: main
+        type: string
+  schedule:
+    - cron: "0 6 * * *"
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  tag:
+    name: tag
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    environment: release
+    permissions: {}
+    steps:
+      - name: Mint the release app's token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || inputs.ref }}
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Name the nightly this commit releases
+        id: plan
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse HEAD)
+          node scripts/release/nightly.mjs plan "$sha" > "$RUNNER_TEMP/plan"
+          cat "$RUNNER_TEMP/plan" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if grep -q '^skip=' "$RUNNER_TEMP/plan"; then
+            echo "no nightly: $(sed -n 's/^skip=//p' "$RUNNER_TEMP/plan")"
+          else
+            echo "releasing $(sed -n 's/^version=//p' "$RUNNER_TEMP/plan") from $sha"
+          fi
+
+      - uses: ./.github/actions/node-workspace
+        if: steps.plan.outputs.version != ''
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        if: steps.plan.outputs.version != ''
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.plan.outputs.version != ''
+
+      - name: Stamp the version
+        if: steps.plan.outputs.version != ''
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: node scripts/release/version.mjs "$VERSION"
+
+      - name: Tag a commit off main that carries it, which fires the binaries workflow
+        if: steps.plan.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SLUG: ${{ steps.app.outputs.app-slug }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          SHA: ${{ steps.plan.outputs.sha }}
+        run: |
+          set -euo pipefail
+          id=$(gh api "users/${SLUG}[bot]" --jq .id)
+          git config user.name "${SLUG}[bot]"
+          git config user.email "${id}+${SLUG}[bot]@users.noreply.github.com"
+          git switch --detach
+          git add --all
+          git commit -m "chore(release): v$VERSION"
+          git tag -a "v$VERSION" -m "ocel $VERSION, nightly of $SHA"
+          git push origin "refs/tags/v$VERSION"
+
+  prune:
+    name: prune
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions: {}
+    steps:
+      - name: Mint the release app's token
+        id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Delete the nightlies older than thirty days, release then tag
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          set -euo pipefail
+          git ls-remote --tags --refs origin 'v*' | sed 's#.*refs/tags/##' |
+            node scripts/release/nightly.mjs stale 30 > "$RUNNER_TEMP/stale"
+          if [ ! -s "$RUNNER_TEMP/stale" ]; then
+            echo "no nightly is older than thirty days"
+            exit 0
+          fi
+          while read -r tag; do
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json tagName > /dev/null 2>&1; then
+              if ! gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes; then
+                echo "::warning::kept $tag: GitHub refused to delete its release"
+                continue
+              fi
+            fi
+            if gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" --silent; then
+              echo "deleted $tag"
+            else
+              echo "::warning::kept the tag $tag: GitHub refused to delete it"
+            fi
+          done < "$RUNNER_TEMP/stale"
