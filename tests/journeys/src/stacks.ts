@@ -15,5 +15,6 @@ export interface ExternalStack {
   deploy(cell: CellUnderTest): Promise<void>;
   destroy(cell: CellUnderTest): Promise<void>;
   refuse(cell: CellUnderTest): Promise<void>;
-  sweep(runId: string): Promise<void>;
+  sweepStale(runId: string): Promise<void>;
+  sweepRun(runId: string): Promise<void>;
 }
