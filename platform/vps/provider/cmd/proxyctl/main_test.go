@@ -9,12 +9,14 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -29,6 +31,7 @@ type admin struct {
 	status int
 	body   string
 	queue  []string
+	during func()
 }
 
 func served(t *testing.T) (*admin, string) {
@@ -44,6 +47,12 @@ func served(t *testing.T) (*admin, string) {
 	held := &admin{status: http.StatusOK, body: "[]"}
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		read, _ := io.ReadAll(r.Body)
+		held.mu.Lock()
+		during := held.during
+		held.mu.Unlock()
+		if during != nil && r.Method == http.MethodPost {
+			during()
+		}
 		held.mu.Lock()
 		held.seen = append(held.seen, r.Method+" "+r.URL.Path)
 		if len(read) > 0 {
@@ -85,7 +94,7 @@ func ran(t *testing.T, argv ...string) (int, string, string) {
 func ranIn(t *testing.T, data string, argv ...string) (int, string, string) {
 	t.Helper()
 	var out, errs strings.Builder
-	return run(data, t.TempDir(), argv, &out, &errs), out.String(), errs.String()
+	return run(data, t.TempDir(), t.TempDir(), argv, &out, &errs), out.String(), errs.String()
 }
 
 func configFile(t *testing.T, socket, body string) string {
@@ -230,6 +239,165 @@ func TestAProxyThatRefusesTheConfigIsAFailedFlipRatherThanASilentOne(t *testing.
 	}
 }
 
+const routed = "ocel-app-ocel--shop--production/@production/web"
+
+func routing(t *testing.T, socket, upstream string) string {
+	t.Helper()
+	return configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"},"apps":{"http":{"servers":{"ocel":{"listen":[":80"],"routes":[`+
+		`{"@id":"`+routed+`","match":[{"host":["shop.example.com"]}],"handle":[{"handler":"headers"},{"handler":"reverse_proxy","upstreams":[{"dial":"`+upstream+`"}]}]},`+
+		`{"@id":"ocel-box","handle":[{"handler":"static_response","status_code":404}]}]}}}}}`)
+}
+
+func flippedAt(t *testing.T, live, path string) (int, string) {
+	t.Helper()
+	var out, errs strings.Builder
+	return run(t.TempDir(), t.TempDir(), live, []string{"flip", path}, &out, &errs), errs.String()
+}
+
+func upstreamOf(t *testing.T, live, identity string) string {
+	t.Helper()
+	read, err := os.ReadFile(filepath.Join(live, upstreamsDir, url.PathEscape(identity)))
+	if errors.Is(err, os.ErrNotExist) {
+		return ""
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(read)
+}
+
+func TestAFlipThatOnlyMovesAStandingRouteLoadsTheConfigTheProxyAlreadyRuns(t *testing.T) {
+	held, socket := served(t)
+	live := t.TempDir()
+
+	if code, errs := flippedAt(t, live, routing(t, socket, "shop-web-1111:8080")); code != 0 {
+		t.Fatalf("the first flip = %d, %q", code, errs)
+	}
+	first := string(held.loaded)
+	if code, errs := flippedAt(t, live, routing(t, socket, "shop-web-2222:8080")); code != 0 {
+		t.Fatalf("the second flip = %d, %q", code, errs)
+	}
+
+	if string(held.loaded) != first {
+		t.Errorf("the flip that only moved %s to another upstream loaded\n%s\nafter\n%s\ncaddy restarts every server on any change to what it loads, and a server shut down under load closes the connections it accepted before reading their requests: every release would drop requests",
+			routed, held.loaded, first)
+	}
+	for _, upstream := range []string{"shop-web-1111:8080", "shop-web-2222:8080"} {
+		if strings.Contains(string(held.loaded), upstream) {
+			t.Errorf("the proxy was loaded with %s literally:\n%s\nan upstream spelled in the config moves only by a reload", upstream, held.loaded)
+		}
+	}
+	if at := upstreamOf(t, live, routed); at != "shop-web-2222:8080" {
+		t.Errorf("%s reads its upstream as %q after the flip, want the one the config now names", routed, at)
+	}
+}
+
+func TestARouteReadsItsUpstreamBeforeTheLoadThatNamesItAndMovesOnlyOnceThatLoadIsTaken(t *testing.T) {
+	held, socket := served(t)
+	live := t.TempDir()
+	var during []string
+	held.during = func() { during = append(during, upstreamOf(t, live, routed)) }
+
+	if code, errs := flippedAt(t, live, routing(t, socket, "shop-web-1111:8080")); code != 0 {
+		t.Fatalf("the first flip = %d, %q", code, errs)
+	}
+	if code, errs := flippedAt(t, live, routing(t, socket, "shop-web-2222:8080")); code != 0 {
+		t.Fatalf("the second flip = %d, %q", code, errs)
+	}
+
+	if want := []string{"shop-web-1111:8080", "shop-web-1111:8080"}; !slices.Equal(during, want) {
+		t.Errorf("the route read its upstream as %q while each config was loaded, want %q: a route loaded before its upstream is written answers 502, and one moved before a load the proxy may refuse runs a release the config never took",
+			during, want)
+	}
+}
+
+func TestAFlipTheProxyRefusesMovesNoRoute(t *testing.T) {
+	held, socket := served(t)
+	live := t.TempDir()
+	if code, errs := flippedAt(t, live, routing(t, socket, "shop-web-1111:8080")); code != 0 {
+		t.Fatalf("the first flip = %d, %q", code, errs)
+	}
+	held.status, held.body = http.StatusBadRequest, "loading config: unknown module"
+
+	if code, _ := flippedAt(t, live, routing(t, socket, "shop-web-2222:8080")); code != exitRefused {
+		t.Fatalf("a flip the proxy refused = %d, want %d", code, exitRefused)
+	}
+	if at := upstreamOf(t, live, routed); at != "shop-web-1111:8080" {
+		t.Errorf("%s reads %q after a refused flip, want the upstream the running config was loaded with", routed, at)
+	}
+}
+
+func TestARouteTheConfigNoLongerNamesLeavesNoUpstreamBehind(t *testing.T) {
+	_, socket := served(t)
+	live := t.TempDir()
+	if code, errs := flippedAt(t, live, routing(t, socket, "shop-web-1111:8080")); code != 0 {
+		t.Fatalf("the first flip = %d, %q", code, errs)
+	}
+
+	if code, errs := flippedAt(t, live, configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"}}`)); code != 0 {
+		t.Fatalf("the flip that drops the route = %d, %q", code, errs)
+	}
+	left, err := os.ReadDir(filepath.Join(live, upstreamsDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 0 {
+		t.Errorf("%d upstream(s) are still written after the config stopped naming %s", len(left), routed)
+	}
+}
+
+func TestTheProxyIsStartedOnTheShapeEveryFlipLoadsAndNothingItAutosaved(t *testing.T) {
+	held, socket := served(t)
+	live := t.TempDir()
+	config := routing(t, socket, "shop-web-1111:8080")
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, caddyBinary), nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	var started []string
+	starting = func(_ string, argv []string, _ []string) error {
+		started = argv
+		return nil
+	}
+	t.Cleanup(func() { starting = syscall.Exec })
+
+	var out, errs strings.Builder
+	run(t.TempDir(), t.TempDir(), live, []string{"serve", config}, &out, &errs)
+	if want := []string{caddyBinary, "run", "--config", filepath.Join(live, liveConfig)}; !slices.Equal(started, want) {
+		t.Fatalf("the proxy was started as %q, want %q: --resume is documented to use the last autosaved configuration, overriding --config, so the file every deploy replaces would be read and thrown away",
+			started, want)
+	}
+	if at := upstreamOf(t, live, routed); at != "shop-web-1111:8080" {
+		t.Errorf("%s reads its upstream as %q when the proxy starts, want the one the config names", routed, at)
+	}
+	booted, err := os.ReadFile(filepath.Join(live, liveConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, errs := flippedAt(t, live, config); code != 0 {
+		t.Fatalf("the flip after the start = %d, %q", code, errs)
+	}
+	if string(held.loaded) != string(booted) {
+		t.Errorf("the proxy started on\n%s\nand the first flip after it loaded\n%s\nso the first release after every restart restarts every server under load", booted, held.loaded)
+	}
+}
+
+func TestAFlipRefusesARouteForwardedToAPlaceholder(t *testing.T) {
+	held, socket := served(t)
+
+	code, errs := flippedAt(t, t.TempDir(), routing(t, socket, "{file./etc/passwd}"))
+	if code != exitRefused {
+		t.Fatalf("a flip forwarding %s to a placeholder = %d, want %d", routed, code, exitRefused)
+	}
+	if !strings.Contains(errs, routed) {
+		t.Errorf("the refused flip said %q, want it to name the route", errs)
+	}
+	if asked := held.asked(); len(asked) != 0 {
+		t.Errorf("a refused flip still reached the proxy with %v", asked)
+	}
+}
+
 func TestTheHelperReadsTheServedConfigOverTheSameSocketAndNoOtherPath(t *testing.T) {
 	held, _ := served(t)
 	held.body = `"30s"`
@@ -349,19 +517,22 @@ func TestADrainThatExpiresIsNotAFailureAndCarriesTheCountStillInFlight(t *testin
 	}
 }
 
-func TestARetiredUpstreamAbsentFromThePoolIsABrokenCompositionRatherThanADrain(t *testing.T) {
-	_, socket := served(t)
+func TestARetiredUpstreamThePoolNoLongerCarriesHasNothingInFlight(t *testing.T) {
+	held, socket := served(t)
+	held.queue = []string{
+		`[{"address":"{file./run/ocel-proxy/upstreams/web}","num_requests":1},{"address":"old:8080","num_requests":1}]`,
+		`[{"address":"{file./run/ocel-proxy/upstreams/web}","num_requests":0}]`,
+	}
 
 	var out, errs strings.Builder
-	code := draining(socket, []string{"old:8080"}, time.Second, &out, &errs)
-	if code == 0 {
-		t.Fatal("an upstream the proxy never reported read as drained, and a proxy upgrade that drops a retired upstream from the pool would stop old containers under live requests forever")
+	if code := draining(socket, []string{"old:8080"}, 30*time.Second, &out, &errs); code != 0 {
+		t.Fatalf("draining an upstream whose last request returned = %d, %q: caddy counts a request against the address it dialled only while that request is in flight", code, errs.String())
 	}
-	if code != exitUnattributable {
-		t.Errorf("the drain exited %d, want %d: it is neither a gate failure nor a rejected config", code, exitUnattributable)
+	if printed := strings.TrimSpace(out.String()); printed != caddyadmin.Drained+" old:8080" {
+		t.Errorf("the drain printed %q, want %q", printed, caddyadmin.Drained+" old:8080")
 	}
-	if !strings.Contains(errs.String(), "old:8080") {
-		t.Errorf("the drain failed with %q, want it to name the address the pool never carried", errs.String())
+	if asked := held.asked(); len(asked) != 2 {
+		t.Errorf("the drain asked %v, want it to wait out the read that still counted the held request", asked)
 	}
 }
 
@@ -806,7 +977,7 @@ func TestListenersNamesEverySocketBoundInsideThisNamespace(t *testing.T) {
 	proc := procWith(t, map[string]string{"tcp": listeningTable})
 
 	var out, errs strings.Builder
-	if code := run(t.TempDir(), proc, []string{"listeners"}, &out, &errs); code != 0 {
+	if code := run(t.TempDir(), proc, t.TempDir(), []string{"listeners"}, &out, &errs); code != 0 {
 		t.Fatalf("listeners = %d, %q", code, errs.String())
 	}
 	said := out.String()
@@ -821,7 +992,7 @@ func TestListenersNamesEverySocketBoundInsideThisNamespace(t *testing.T) {
 func TestListenersInAnEmptyNamespaceSaysNothingRatherThanFailing(t *testing.T) {
 	var out, errs strings.Builder
 	proc := procWith(t, map[string]string{"tcp": "  sl  local_address\n", "tcp6": "  sl  local_address\n"})
-	code := run(t.TempDir(), proc, []string{"listeners"}, &out, &errs)
+	code := run(t.TempDir(), proc, t.TempDir(), []string{"listeners"}, &out, &errs)
 	if code != 0 {
 		t.Fatalf("listeners = %d, %q", code, errs.String())
 	}
@@ -832,7 +1003,7 @@ func TestListenersInAnEmptyNamespaceSaysNothingRatherThanFailing(t *testing.T) {
 
 func TestListenersRefusesANamespaceWhoseTablesItNeverRead(t *testing.T) {
 	var out, errs strings.Builder
-	code := run(t.TempDir(), procWith(t, nil), []string{"listeners"}, &out, &errs)
+	code := run(t.TempDir(), procWith(t, nil), t.TempDir(), []string{"listeners"}, &out, &errs)
 	if code == 0 {
 		t.Fatalf("listeners = 0 having read neither %s nor %s, and an answer nothing was read for is read upstream as a namespace with nothing bound in it: %q",
 			listeners.TCPPath, listeners.TCP6Path, out.String())
@@ -844,7 +1015,7 @@ func TestListenersRefusesANamespaceWhoseTablesItNeverRead(t *testing.T) {
 
 func TestListenersReadsTheOneTableThatIsThere(t *testing.T) {
 	var out, errs strings.Builder
-	if code := run(t.TempDir(), procWith(t, map[string]string{"tcp6": listeningTable}), []string{"listeners"}, &out, &errs); code != 0 {
+	if code := run(t.TempDir(), procWith(t, map[string]string{"tcp6": listeningTable}), t.TempDir(), []string{"listeners"}, &out, &errs); code != 0 {
 		t.Fatalf("listeners = %d over a namespace carrying only %s, and a kernel built without one family is not a namespace nothing was read from: %q",
 			code, listeners.TCP6Path, errs.String())
 	}
@@ -856,7 +1027,7 @@ func TestListenersReadsTheOneTableThatIsThere(t *testing.T) {
 func TestListenersRefusesATableItCannotRead(t *testing.T) {
 	proc := procWith(t, map[string]string{"tcp": "  sl  local_address\n   0: zzzz:0050 0:0 0A 0 0 0\n"})
 	var out, errs strings.Builder
-	if code := run(t.TempDir(), proc, []string{"listeners"}, &out, &errs); code == 0 {
+	if code := run(t.TempDir(), proc, t.TempDir(), []string{"listeners"}, &out, &errs); code == 0 {
 		t.Errorf("listeners = 0 over a table it could not read, and an unreadable table would pass as an empty namespace: %q", out.String())
 	}
 }

@@ -32,7 +32,7 @@ func activeCheck(t *testing.T, rendered []byte, identity string) (caddyForward, 
 	return caddyForward{}, false
 }
 
-func TestAnAppRouteProbesItsHealthPathActivelyAndTheDrainRouteProbesNothing(t *testing.T) {
+func TestAnAppRouteProbesItsHealthPathActively(t *testing.T) {
 	t.Parallel()
 
 	state := releasing()
@@ -49,14 +49,6 @@ func TestAnAppRouteProbesItsHealthPathActivelyAndTheDrainRouteProbesNothing(t *t
 	}
 	if strings.Contains(string(rendered), `"path":"/healthz"`) {
 		t.Error("the check names its path under the deprecated `path` key rather than `uri`")
-	}
-
-	drain, found := activeCheck(t, rendered, drainIdentity)
-	if !found {
-		t.Fatal("the drain server forwards nothing")
-	}
-	if drain.HealthChecks != nil {
-		t.Errorf("the retiring upstream is probed %+v, and a container being drained is one the proxy is already leaving", drain.HealthChecks)
 	}
 
 	read, err := ReadProxyState(rendered)

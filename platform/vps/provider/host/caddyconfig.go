@@ -19,14 +19,11 @@ import (
 )
 
 const (
-	proxyServer      = "ocel"
-	proxyDrainServer = "ocel_drain"
-	drainListen      = "127.0.0.1:9"
-	routeIdentity    = "ocel-app-"
-	claimSeparator   = live.ClaimSeparator
-	drainIdentity    = "ocel-retiring"
-	boxIdentity      = "ocel-box"
-	connectorRoute   = "ocel-connector"
+	proxyServer    = "ocel"
+	routeIdentity  = "ocel-app-"
+	claimSeparator = live.ClaimSeparator
+	boxIdentity    = "ocel-box"
+	connectorRoute = "ocel-connector"
 )
 
 const ConnectorPath = "/" + constants.ProjectStateDirName + "/connector"
@@ -148,7 +145,6 @@ type ProxyState struct {
 	Routes      []AppRoute
 	Pins        []Pin
 	PreviewBase string
-	Retiring    []string
 	Connector   string
 }
 
@@ -315,16 +311,12 @@ func namingTheEdge() caddyForward {
 	}
 }
 
-func forwarding(identity string, upstreams ...string) caddyRoute {
-	dials := make([]caddyDial, 0, len(upstreams))
-	for _, upstream := range upstreams {
-		dials = append(dials, caddyDial{Dial: upstream})
-	}
+func forwarding(identity, upstream string) caddyRoute {
 	return caddyRoute{
 		Identity: identity,
 		Handle: []caddyForward{namingTheEdge(), {
 			Handler:   forwardHandler,
-			Upstreams: dials,
+			Upstreams: []caddyDial{{Dial: upstream}},
 		}},
 	}
 }
@@ -496,13 +488,6 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 			PKI: seeded.Apps.PKI,
 		},
 	}
-	if len(state.Retiring) > 0 {
-		retiring := slices.Sorted(slices.Values(state.Retiring))
-		rendered.Apps.HTTP.Servers[proxyDrainServer] = caddyServer{
-			Listen: []string{drainListen},
-			Routes: []caddyRoute{forwarding(drainIdentity, slices.Compact(retiring)...)},
-		}
-	}
 	return json.Marshal(rendered)
 }
 
@@ -661,7 +646,7 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 			ProxyConfig, read.Apps.HTTP.GracePeriod)
 	}
 	for _, named := range slices.Sorted(maps.Keys(read.Apps.HTTP.Servers)) {
-		if named != proxyServer && named != proxyDrainServer {
+		if named != proxyServer {
 			return ProxyState{}, unwritten("server", named)
 		}
 	}
@@ -675,19 +660,6 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 			ProxyConfig)
 	}
 	state := ProxyState{Grace: grace, Pins: pins}
-	if draining, declared := read.Apps.HTTP.Servers[proxyDrainServer]; declared {
-		if len(draining.Routes) != 1 || draining.Routes[0].Identity != drainIdentity {
-			return ProxyState{}, unwritten("server", proxyDrainServer)
-		}
-		retiring, health, err := forwardedBy(draining.Routes[0])
-		if err != nil {
-			return ProxyState{}, err
-		}
-		if health != "" {
-			return ProxyState{}, unwritten("route", drainIdentity)
-		}
-		state.Retiring = retiring
-	}
 	entry := map[string]string{}
 	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
 		if route.Identity == boxIdentity {
@@ -729,16 +701,13 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 		if !keyed || len(fields) != 3 {
 			return ProxyState{}, unwritten("route", route.Identity)
 		}
-		upstreams, health, err := forwardedBy(route)
+		upstream, health, err := forwardedBy(route)
 		if err != nil {
 			return ProxyState{}, err
 		}
-		if len(upstreams) != 1 {
-			return ProxyState{}, misshapen(route.Identity, fmt.Sprintf("%d upstreams", len(upstreams)))
-		}
 		state.Routes = append(state.Routes, AppRoute{
 			RouteKey: RouteKey{Owner: fields[0], Pointer: fields[1], App: fields[2]},
-			Upstream: upstreams[0],
+			Upstream: upstream,
 			Health:   health,
 		})
 	}
@@ -750,35 +719,30 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 	return state, nil
 }
 
-func forwardedBy(route caddyRoute) ([]string, string, error) {
+func forwardedBy(route caddyRoute) (string, string, error) {
 	if len(route.Handle) != 2 {
-		return nil, "", misshapen(route.Identity, fmt.Sprintf("%d handlers", len(route.Handle)))
+		return "", "", misshapen(route.Identity, fmt.Sprintf("%d handlers", len(route.Handle)))
 	}
 	naming, forwards := route.Handle[0], route.Handle[1]
 	edged := naming.Response != nil && maps.EqualFunc(naming.Response.Set, map[string][]string{EdgeHeader: {EdgeName}}, slices.Equal)
 	switch {
 	case naming.Handler != edgeHandler || !edged || len(naming.Upstreams) > 0 || naming.Status != 0 || len(naming.Headers) > 0:
-		return nil, "", misshapen(route.Identity, fmt.Sprintf("a leading %q handler not setting only %s: %s", naming.Handler, EdgeHeader, EdgeName))
+		return "", "", misshapen(route.Identity, fmt.Sprintf("a leading %q handler not setting only %s: %s", naming.Handler, EdgeHeader, EdgeName))
 	case forwards.Handler != forwardHandler || forwards.Status != 0 || len(forwards.Headers) > 0 || forwards.Response != nil:
-		return nil, "", misshapen(route.Identity, fmt.Sprintf("a terminal %q handler", forwards.Handler))
-	case len(forwards.Upstreams) == 0:
-		return nil, "", misshapen(route.Identity, "no upstreams")
-	}
-	dials := make([]string, 0, len(forwards.Upstreams))
-	for _, upstream := range forwards.Upstreams {
-		if upstream.Dial == "" {
-			return nil, "", misshapen(route.Identity, "an upstream naming nothing to dial")
-		}
-		dials = append(dials, upstream.Dial)
+		return "", "", misshapen(route.Identity, fmt.Sprintf("a terminal %q handler", forwards.Handler))
+	case len(forwards.Upstreams) != 1:
+		return "", "", misshapen(route.Identity, fmt.Sprintf("%d upstreams", len(forwards.Upstreams)))
+	case forwards.Upstreams[0].Dial == "":
+		return "", "", misshapen(route.Identity, "an upstream naming nothing to dial")
 	}
 	health := ""
 	if forwards.HealthChecks != nil {
 		health = forwards.HealthChecks.Active.URI
 		if health == "" || !routeEqual(caddyRoute{Handle: []caddyForward{{HealthChecks: forwards.HealthChecks}}}, caddyRoute{Handle: []caddyForward{{HealthChecks: checking(health)}}}) {
-			return nil, "", misshapen(route.Identity, "an unexpected active health check")
+			return "", "", misshapen(route.Identity, "an unexpected active health check")
 		}
 	}
-	return dials, health, nil
+	return forwards.Upstreams[0].Dial, health, nil
 }
 
 func misshapen(named, found string) error {

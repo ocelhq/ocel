@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"regexp"
 	"strconv"
 	"strings"
@@ -23,7 +24,6 @@ const (
 	liveOwner   = "ocel--shop--production"
 	livePointer = "@production"
 	healthPath  = "/healthz"
-	drainPort   = "9"
 )
 
 type release struct {
@@ -146,11 +146,8 @@ func TestLiveAReleaseServesThroughTheProxyAndNothingElseOnTheBoxCanReachIt(t *te
 	if reached := vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+host.ProxyContainer+"/"); !strings.Contains(reached, "200") {
 		t.Fatalf("a peer on the shared network cannot reach the proxy on port 80 at all (%q), so what it cannot reach proves nothing", reached)
 	}
-	for what, port := range map[string]string{"the admin endpoint": adminPort, "the drain server": drainPort} {
-		reached := vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+host.ProxyContainer+":"+port+"/")
-		if strings.Contains(reached, "200") {
-			t.Errorf("a peer on the shared network reached %s on %s and got %q", what, port, strings.TrimSpace(reached))
-		}
+	if reached := vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+host.ProxyContainer+":"+adminPort+"/"); strings.Contains(reached, "200") {
+		t.Errorf("a peer on the shared network reached the admin endpoint on %s and got %q", adminPort, strings.TrimSpace(reached))
 	}
 	if bound := vm.ssh(t, "ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null || true"); strings.Contains(bound, ":"+adminPort) {
 		t.Errorf("something on this host listens on %s:\n%s", adminPort, bound)
@@ -228,21 +225,30 @@ func TestLiveARedeployUnderContinuousLoadDropsNothingAndDrainsWhenTheHeldRequest
 		t.Errorf("the proxy serves %q after the flip", served)
 	}
 
-	both := false
+	counted := false
 	sampling.Lock()
 	defer sampling.Unlock()
 	for _, read := range samples {
-		if strings.Contains(read, one.address) && strings.Contains(read, two.address) {
-			both = true
+		var pool []struct {
+			Address     string `json:"address"`
+			NumRequests int    `json:"num_requests"`
+		}
+		if json.Unmarshal([]byte(read), &pool) != nil {
+			continue
+		}
+		for _, upstream := range pool {
+			if upstream.Address == one.address && upstream.NumRequests > 0 {
+				counted = true
+			}
 		}
 	}
-	if !both {
-		t.Errorf("the retired upstream never appeared beside the new one in %s:\n%v\nthe drain reads the live config's upstreams, so a retired container that leaves the pool at the flip cannot be waited on at all",
+	if !counted {
+		t.Errorf("the request held against the retired upstream was never counted against it in %s:\n%v\nthe drain reads that count, so a proxy that stops attributing in-flight requests to the address it dialled has the drain stop the old container under them",
 			"/reverse_proxy/upstreams", samples)
 	}
 	drained := told.at(one.physical + " reported nothing in flight")
 	if drained < 0 {
-		t.Errorf("the release said %v and never that the drain read %s empty, so nothing here says it waited rather than expired: the count is zero for about one drain poll before the steady-state config drops the upstream, which is too short a window for an outside sampler to be held to",
+		t.Errorf("the release said %v and never that the drain read %s empty, so nothing here says it waited rather than expired: the retired address leaves the pool the moment its count reaches zero, which is too short a window for an outside sampler to be held to",
 			told.lines, one.physical)
 	}
 	if stopping := told.at("Stopping " + one.physical); stopping < 0 || drained > stopping {
@@ -253,9 +259,6 @@ func TestLiveARedeployUnderContinuousLoadDropsNothingAndDrainsWhenTheHeldRequest
 	}
 	if !vm.running(t, two.physical) {
 		t.Error("the new container is not running after the release returned")
-	}
-	if steady := vm.drives(t, "config apps/http/servers"); strings.Contains(steady, "ocel_drain") {
-		t.Errorf("the proxy still serves a drain server after the release:\n%s", steady)
 	}
 }
 

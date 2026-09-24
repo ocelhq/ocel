@@ -3,8 +3,6 @@ package host
 import (
 	"bytes"
 	"encoding/json"
-	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -41,9 +39,8 @@ func servers(t *testing.T, read map[string]any) map[string]any {
 
 func releasing() ProxyState {
 	return ProxyState{
-		Grace:    30 * time.Second,
-		Routes:   []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + providerkit.InjectedPortText}},
-		Retiring: []string{"shop-web-1111:" + providerkit.InjectedPortText},
+		Grace:  30 * time.Second,
+		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + providerkit.InjectedPortText}},
 	}
 }
 
@@ -52,7 +49,6 @@ func TestEveryConfigTheRendererEmitsCarriesTheAdminBlockItsGuardWouldRefuseItFor
 
 	for what, state := range map[string]ProxyState{
 		"a flip":               releasing(),
-		"the steady state":     {Grace: 30 * time.Second, Routes: releasing().Routes},
 		"a box serving no app": {Grace: 30 * time.Second},
 	} {
 		read := loading(t, state)
@@ -63,59 +59,6 @@ func TestEveryConfigTheRendererEmitsCarriesTheAdminBlockItsGuardWouldRefuseItFor
 		if listen := admin["listen"]; listen != caddyadmin.Listen(ProxyAdminSocket) {
 			t.Errorf("%s declares the admin endpoint at %v, want %s", what, listen, caddyadmin.Listen(ProxyAdminSocket))
 		}
-	}
-}
-
-func TestTheDrainServerBindsTheProxysOwnLoopbackAndCarriesNothingButTheRetiredUpstream(t *testing.T) {
-	t.Parallel()
-
-	found := servers(t, loading(t, releasing()))
-	drain, _ := found[proxyDrainServer].(map[string]any)
-	if drain == nil {
-		t.Fatalf("a flip renders no %s server, and the retired upstream then leaves the pool the moment the flip lands", proxyDrainServer)
-	}
-	listen, _ := drain["listen"].([]any)
-	if len(listen) != 1 || listen[0] != drainListen {
-		t.Errorf("%s listens on %v, want %s alone: it is reachable from nothing outside the proxy's own network namespace",
-			proxyDrainServer, listen, drainListen)
-	}
-	if dialled := strings.Count(string(mustRender(t, releasing())), releasing().Retiring[0]); dialled != 1 {
-		t.Errorf("the retired upstream is dialled %d times, want once, on the drain server alone", dialled)
-	}
-}
-
-func TestEveryUpstreamAPromotionRetiresIsDeclaredOnTheOneDrainServerAndReadsBack(t *testing.T) {
-	t.Parallel()
-
-	state := releasing()
-	state.Routes = append(state.Routes, AppRoute{RouteKey: keyed("api"), Upstream: "shop-api-2222:" + providerkit.InjectedPortText})
-	state.Retiring = []string{"shop-web-1111:" + providerkit.InjectedPortText, "shop-api-1111:" + providerkit.InjectedPortText}
-	rendered := mustRender(t, state)
-	for _, retired := range state.Retiring {
-		if dialled := strings.Count(string(rendered), retired); dialled != 1 {
-			t.Errorf("%s is dialled %d times, want once on the drain server: a promotion of two apps flips both at once, and a retiree left off the pool cannot be drained", retired, dialled)
-		}
-	}
-	read, err := ReadProxyState(rendered)
-	if err != nil {
-		t.Fatalf("ReadProxyState(two retiring upstreams) = %v", err)
-	}
-	if want := []string{"shop-api-1111:" + providerkit.InjectedPortText, "shop-web-1111:" + providerkit.InjectedPortText}; !slices.Equal(read.Retiring, want) {
-		t.Errorf("the retiring upstreams read back as %v, want %v", read.Retiring, want)
-	}
-}
-
-func TestTheSteadyStateIsTheFlipWithoutTheDrainServer(t *testing.T) {
-	t.Parallel()
-
-	steady := releasing()
-	steady.Retiring = nil
-	found := servers(t, loading(t, steady))
-	if _, stood := found[proxyDrainServer]; stood {
-		t.Errorf("the steady state still declares %s, and the retired container stays declared after it is stopped", proxyDrainServer)
-	}
-	if live, _ := found[proxyServer].(map[string]any); live == nil {
-		t.Fatalf("the steady state declares no %s server at all: %v", proxyServer, found)
 	}
 }
 
@@ -161,9 +104,6 @@ func TestTheBoxsOwnFileReadsBackAsTheStateThatRenderedIt(t *testing.T) {
 	}
 	if len(read.Routes) != 1 || read.Routes[0] != state.Routes[0] {
 		t.Errorf("the routes read back as %v, want %v: a deploy that cannot read the box's other apps overwrites them", read.Routes, state.Routes)
-	}
-	if !slices.Equal(read.Retiring, state.Retiring) {
-		t.Errorf("the retiring upstreams read back as %q, want %q: a deploy that cannot read a neighbour's drain server rewrites the box without it, and the neighbour's helper then counts an upstream the pool no longer names", read.Retiring, state.Retiring)
 	}
 }
 

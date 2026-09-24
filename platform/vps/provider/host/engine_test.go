@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -229,10 +230,10 @@ func TestAConfigMovedIntoPlaceIsWhatTheRunningProxyLoads(t *testing.T) {
 		t.Logf("the flip said %q", strings.TrimSpace(read))
 	}
 
-	upstream := flipped.Routes[0].Upstream
-	if held := stood.drives(t, "config", "apps/http/servers/"+proxyServer+"/routes"); !strings.Contains(held, upstream) {
+	upstream, route := flipped.Routes[0].Upstream, flipped.Routes[0].identity()
+	if held := stood.drives(t, "config", "apps/http/servers/"+proxyServer+"/routes"); !strings.Contains(held, route) {
 		t.Fatalf("the running proxy holds\n%s\nafter a deploy moved a config naming %s into place: the deploy writes %s by staging beside it and renaming, and a proxy handed that file through a bind of the file itself keeps reading the inode it was started on and reloads whatever it was seeded with",
-			strings.TrimSpace(held), upstream, ProxyConfig)
+			strings.TrimSpace(held), route, ProxyConfig)
 	}
 
 	ask := func(hostname string) *http.Response {
@@ -266,5 +267,95 @@ func TestAConfigMovedIntoPlaceIsWhatTheRunningProxyLoads(t *testing.T) {
 	if said.Header.Get(EdgeHeader) != EdgeName {
 		t.Errorf("the surface's own route answered %s: %q, want %q: the bind's probe reads this header off the hostname itself and a route that forwards without it reports the box as serving nothing",
 			EdgeHeader, said.Header.Get(EdgeHeader), EdgeName)
+	}
+}
+
+func (p standingProxy) moves(t *testing.T, held []byte, state ProxyState) []byte {
+	t.Helper()
+
+	rendered, err := RenderProxyConfig(state)
+	if err != nil {
+		t.Fatalf("RenderProxyConfig() = %v", err)
+	}
+	write := exec.Command("/bin/sh", "-c", p.here(stagedWrite(contentSum(held))))
+	write.Stdin = strings.NewReader(string(rendered))
+	if out, err := write.CombinedOutput(); err != nil {
+		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)
+	}
+	p.drives(t, "flip", ProxyConfigMount)
+	return rendered
+}
+
+func TestARealProxyDropsNoRequestWhileAFlipMovesAStandingRouteBetweenUpstreams(t *testing.T) {
+	stood := proxyStanding(t)
+
+	one, two := "shop-web-1111:"+providerkit.InjectedPortText, "shop-web-2222:"+providerkit.InjectedPortText
+	stood.standsApp(t, one, "one")
+	stood.standsApp(t, two, "two")
+	serving := func(upstream string) ProxyState {
+		return ProxyState{
+			Grace:  DrainWindow,
+			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
+			Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
+		}
+	}
+	held := stood.moves(t, proxyBaseline, serving(one))
+
+	var (
+		mu      sync.Mutex
+		dropped []string
+		bodies  = map[string]int{}
+		group   sync.WaitGroup
+	)
+	done := make(chan struct{})
+	for range 8 {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{DisableKeepAlives: true}}
+			for {
+				select {
+				case <-done:
+					return
+				default:
+				}
+				request, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+proxyPort+"/", nil)
+				request.Host = claimed
+				said, err := client.Do(request)
+				var body []byte
+				if err == nil {
+					body, err = io.ReadAll(said.Body)
+					said.Body.Close()
+					if err == nil && said.StatusCode != http.StatusOK {
+						err = errors.New(said.Status)
+					}
+				}
+				mu.Lock()
+				if err != nil {
+					dropped = append(dropped, err.Error())
+				} else {
+					bodies[string(body)]++
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+
+	time.Sleep(500 * time.Millisecond)
+	flips := 0
+	for _, upstream := range []string{two, one, two, one, two, one, two, one, two, one} {
+		held = stood.moves(t, held, serving(upstream))
+		flips++
+		time.Sleep(200 * time.Millisecond)
+	}
+	close(done)
+	group.Wait()
+
+	if len(dropped) > 0 {
+		t.Errorf("%d of the requests made while %d flips moved %s between two standing upstreams went unanswered, and a release is meant to drop nothing while one release takes over from the other: %v",
+			len(dropped), flips, claimed, dropped[:min(len(dropped), 5)])
+	}
+	if bodies["one"] == 0 || bodies["two"] == 0 {
+		t.Errorf("the requests made across the flips were answered %v, want both upstreams: a flip that never moved the route drops nothing and proves nothing", bodies)
 	}
 }

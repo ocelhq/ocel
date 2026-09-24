@@ -427,10 +427,10 @@ func TestAPromotionThatFailedAfterTheFlipKeepsThePointerOnTheReleaseTheBoxServes
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
-	stood.refuseOn("Release", providerkit.Refuse(providerkit.CodeNotReady, "flipped onto shop-web-2222, but the follow-up config write failed"))
+	stood.refuseOn("Release", providerkit.Refuse(providerkit.CodeNotReady, "flipped onto shop-web-2222, which now serve, but shop-web-1111 was drained and unrouted but not stopped"))
 
 	if err := promoted(t, stack, "p2", "web", "b2"); err == nil {
-		t.Fatal("a promotion whose steady-state write failed reported success")
+		t.Fatal("a promotion whose retiree would not stop after the flip reported success")
 	}
 	if active := activePromotion(t, stack); active != "p2" {
 		t.Errorf("after a failure past the flip the pointer stands at %q, want p2: the box is serving p2", active)
