@@ -130,17 +130,11 @@ func (s BucketSpec) calls() ([]storeCall, error) {
 		},
 	}
 	if !s.Internal {
-		cors, err := corsBody(s.AllowedOrigins)
+		cors, err := s.corsCall()
 		if err != nil {
 			return nil, err
 		}
-		if cors != nil {
-			calls = append(calls, storeCall{
-				name: "cors", what: "set CORS on bucket " + s.Bucket,
-				method: http.MethodPut,
-				query:  "cors", body: cors, typed: "application/xml", md5: true, allow: []string{"200", "204"},
-			})
-		}
+		calls = append(calls, cors)
 	}
 	calls = append(calls, storeCall{
 		name: lifecycleCall, what: "set the lifecycle of bucket " + s.Bucket,
@@ -159,6 +153,24 @@ func (s BucketSpec) calls() ([]storeCall, error) {
 		})
 	}
 	return calls, nil
+}
+
+func (s BucketSpec) corsCall() (storeCall, error) {
+	cors, err := corsBody(s.AllowedOrigins)
+	if err != nil {
+		return storeCall{}, err
+	}
+	if cors == nil {
+		return storeCall{
+			name: "cors", what: "clear CORS on bucket " + s.Bucket,
+			method: http.MethodDelete, query: "cors", allow: []string{"200", "204", "404"},
+		}, nil
+	}
+	return storeCall{
+		name: "cors", what: "set CORS on bucket " + s.Bucket,
+		method: http.MethodPut,
+		query:  "cors", body: cors, typed: "application/xml", md5: true, allow: []string{"200", "204"},
+	}, nil
 }
 
 func (s BucketSpec) signed(call storeCall, now time.Time) (*http.Request, error) {
@@ -270,6 +282,26 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStan
 		}
 	}
 	return standing, nil
+}
+
+func (h *Host) HoldOrigins(ctx context.Context, spec BucketSpec) error {
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return err
+	}
+	call, err := spec.corsCall()
+	if err != nil {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"bucket %s cannot be described to the store: %v", spec.Bucket, err)
+	}
+	req, err := spec.signed(call, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("sign %s: %w", call.what, err)
+	}
+	if _, err := h.ran(ctx, call.what, curlCommand(spec.Store, req, call), fedBody(call.body), elevation); err != nil {
+		return providerkit.Refuse(providerkit.CodeNotReady, "could not %s on %s: %v", call.what, h.named(), err)
+	}
+	return nil
 }
 
 type BucketRef struct {

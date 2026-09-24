@@ -65,7 +65,7 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	if err != nil {
 		return err
 	}
-	if err := s.e.machine.ClaimHosts(ctx, claims); err != nil {
+	if err := s.claim(ctx, claims); err != nil {
 		return err
 	}
 	for _, held := range ready {
@@ -202,6 +202,9 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, report edge.R
 	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err
 	}
+	if err := s.holdOrigins(ctx); err != nil {
+		return edge.PruneResult{}, err
+	}
 	if err := s.e.machine.UnroutePointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err
 	}
@@ -277,12 +280,26 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 			Pointer: edge.DefaultPointer, App: live.StoreLabel,
 		})
 	}
-	if err := s.e.machine.ClaimHosts(ctx, claims); err != nil {
+	if err := s.claim(ctx, claims); err != nil {
 		return err
 	}
 	s.state.Bind(binding.Hostname)
 	s.state.PublishFront(binding.Hostname, address)
 	return nil
+}
+
+func (s *stack) claim(ctx context.Context, claims []host.HostClaim) error {
+	if len(claims) == 0 {
+		return nil
+	}
+	if err := s.e.machine.ClaimHosts(ctx, claims); err != nil {
+		return err
+	}
+	return s.holdOrigins(ctx)
+}
+
+func (s *stack) holdOrigins(ctx context.Context) error {
+	return s.e.machine.HoldOrigins(ctx, s.state.Slug, s.state.Class)
 }
 
 func (s *stack) stores(ctx context.Context, pointer string) (bool, error) {
@@ -295,6 +312,9 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 		return err
 	}
 	if err := s.e.machine.DisclaimHost(ctx, live.StoreHostname(hostname), s.surface()); err != nil {
+		return err
+	}
+	if err := s.holdOrigins(ctx); err != nil {
 		return err
 	}
 	s.state.Release(hostname)

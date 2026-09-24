@@ -36,6 +36,7 @@ type Machine interface {
 	DisclaimHost(ctx context.Context, hostname, owner string) error
 	DisclaimPointer(ctx context.Context, owner, pointer string) error
 	DisclaimSurface(ctx context.Context, owner string) error
+	HoldOrigins(ctx context.Context, project string, class providerkit.Class) error
 	PreviewEntry(ctx context.Context) (string, error)
 	InstallPreviewEntry(ctx context.Context, base string) error
 	RemovePreviewEntry(ctx context.Context, base string) error
