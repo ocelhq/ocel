@@ -134,8 +134,14 @@ func (h *Host) settle(ctx context.Context, rel Release, cut cutover, report prov
 	ctx, stop := sparing(ctx)
 	defer stop()
 	var failed, unstopped []string
+	idle, err := h.unheld(ctx, cut.retiring, elevation)
+	if err != nil {
+		for _, retiree := range cut.retiring {
+			failed = append(failed, fmt.Sprintf("%s was drained and unrouted but not stopped, so it is still running: %v", containerOf(retiree), err))
+		}
+	}
 	refused := map[string]error{}
-	for _, retiree := range cut.retiring {
+	for _, retiree := range idle {
 		say(report, "Stopping "+containerOf(retiree))
 		if err := h.StopContainer(ctx, containerOf(retiree)); err != nil {
 			unstopped = append(unstopped, retiree)
@@ -154,6 +160,26 @@ func (h *Host) settle(ctx context.Context, rel Release, cut cutover, report prov
 	return providerkit.Refuse(providerkit.CodeNotReady,
 		"release %s onto %s: flipped onto %s, which now serve, but what follows the flip did not all finish:\n%s",
 		rel.apps(), h.named(), rel.names(), strings.Join(failed, "\n"))
+}
+
+func (h *Host) unheld(ctx context.Context, upstreams []string, elevation string) ([]string, error) {
+	if len(upstreams) == 0 {
+		return nil, nil
+	}
+	said, err := h.ran(ctx, "ask the proxy whether a route or a drain still holds "+listed(upstreams, containerOf),
+		words(idleCommand(upstreams)), nil, elevation)
+	if err != nil {
+		return nil, err
+	}
+	state, _, err := h.proxyState(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%s could not be read to tell whether the proxy routes to them: %w", ProxyConfig, err)
+	}
+	idle := strings.Fields(said)
+	return slices.DeleteFunc(slices.Clone(upstreams), func(upstream string) bool {
+		return !slices.Contains(idle, upstream) ||
+			slices.ContainsFunc(state.Routes, func(route AppRoute) bool { return route.Upstream == upstream })
+	}), nil
 }
 
 func runningCommand(names []string) string {
@@ -485,30 +511,14 @@ func (h *Host) putBack(ctx context.Context, cut cutover, elevation string) (bool
 }
 
 func (h *Host) discard(ctx context.Context, rel Release, elevation string) string {
-	state, _, err := h.proxyState(ctx)
-	if err != nil {
-		return fmt.Sprintf("\n%s left standing: %s could not be read to tell whether the proxy routes to them: %v",
-			rel.names(), ProxyConfig, err)
-	}
-	var live []string
-	for _, route := range state.Routes {
-		live = append(live, route.Upstream)
-	}
-	var unrouted []string
+	targets := make([]string, 0, len(rel.Apps))
 	for _, app := range rel.Apps {
-		if !slices.Contains(live, app.Target) {
-			unrouted = append(unrouted, app.Target)
-		}
+		targets = append(targets, app.Target)
 	}
-	if len(unrouted) == 0 {
-		return ""
-	}
-	said, err := h.ran(ctx, "ask the proxy whether a route or a drain still holds "+listed(unrouted, containerOf),
-		words(idleCommand(unrouted)), nil, elevation)
+	idle, err := h.unheld(ctx, targets, elevation)
 	if err != nil {
-		return fmt.Sprintf("\n%s left standing: %v", listed(unrouted, containerOf), err)
+		return fmt.Sprintf("\n%s left standing: %v", rel.names(), err)
 	}
-	idle := strings.Fields(said)
 	var left strings.Builder
 	for _, app := range rel.Apps {
 		if !slices.Contains(idle, app.Target) {

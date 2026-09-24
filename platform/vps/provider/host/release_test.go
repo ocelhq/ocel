@@ -1273,6 +1273,72 @@ func TestARetireeAlreadyGoneFromTheBoxIsNoStopTheReleaseFailedToMake(t *testing.
 	}
 }
 
+func TestWhatFollowsTheFlipNeverStopsARetireeARouteDialsAgainOrAnotherFlipIsDraining(t *testing.T) {
+	t.Parallel()
+
+	stood := benched(t, session.Result{}, session.Result{})
+	proxied := stood.answer
+	stood.answer = func(command string) (session.Result, bool) {
+		if idles(command) {
+			return session.Result{}, true
+		}
+		return proxied(command)
+	}
+
+	if err := stood.host().Release(context.Background(), aRelease(), nil); err != nil {
+		t.Fatalf("Release() = %v", err)
+	}
+	if stood.at("docker stop "+quoted(retiring)) >= 0 {
+		t.Errorf("the release stopped %s after the proxy said it is still held: a rollback that flipped a route back onto it while this release drained it then serves a stopped container", retiring)
+	}
+}
+
+func TestWhatFollowsTheFlipNeverStopsARetireeARollbackRoutedBeforeItsFlipRenamedTheRouteFile(t *testing.T) {
+	t.Parallel()
+
+	stood := benched(t, session.Result{}, session.Result{})
+	proxied := stood.answer
+	var once sync.Once
+	stood.answer = func(command string) (session.Result, bool) {
+		if idles(command) {
+			once.Do(func() {
+				stood.mu.Lock()
+				stood.held = configFor(t, retired)
+				stood.mu.Unlock()
+			})
+		}
+		return proxied(command)
+	}
+
+	if err := stood.host().Release(context.Background(), aRelease(), nil); err != nil {
+		t.Fatalf("Release() = %v", err)
+	}
+	if stood.at("docker stop "+quoted(retiring)) >= 0 {
+		t.Errorf("the release stopped %s while %s routes web to it: the rollback that wrote that route flips onto a stopped container and web answers 502 until the next deploy", retiring, ProxyConfig)
+	}
+}
+
+func TestWhatFollowsTheFlipCannotAskWhetherItsRetireeIsIdleStopsNothingAndSaysSo(t *testing.T) {
+	t.Parallel()
+
+	stood := benched(t, session.Result{}, session.Result{})
+	proxied := stood.answer
+	stood.answer = func(command string) (session.Result, bool) {
+		if idles(command) {
+			return session.Result{Code: 5, Stderr: "permission denied reading /proc"}, true
+		}
+		return proxied(command)
+	}
+
+	err := stood.host().Release(context.Background(), aRelease(), nil)
+	if stood.at("docker stop "+quoted(retiring)) >= 0 {
+		t.Errorf("the release stopped %s without knowing whether a route dials it again", retiring)
+	}
+	if err == nil || !strings.Contains(err.Error(), retiring) || !strings.Contains(err.Error(), "permission denied reading /proc") {
+		t.Errorf("Release() = %v, want it to name %s as still running and why", err, retiring)
+	}
+}
+
 func TestAReleaseWhosePromotionWasOvertakenWhileItGatedWritesNothing(t *testing.T) {
 	t.Parallel()
 
