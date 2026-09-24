@@ -968,7 +968,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	}
 	for _, verdict := range []string{
 		lifecycleHostname + " resolves to " + run.vm.addr + ", which is this box",
-		"something listens on port " + host.RenewalPort,
+		"port " + host.RenewalPort + " answers from this machine",
 		"nothing listens on tcp " + host.AdminPort + " inside " + host.ProxyContainer,
 	} {
 		if !strings.Contains(standing, verdict) {
@@ -1003,7 +1003,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 		t.Errorf("`ocel permissions bootstrap` printed no grant to hand an ops team:\n%s", bootstrapping)
 	}
 	deploying := run.must(t, "permissions", "deploy")
-	for _, want := range []string{host.DeployUser(), "root on this machine under another name"} {
+	for _, want := range []string{host.DeployUser(), "equivalent to root"} {
 		if !strings.Contains(deploying, want) {
 			t.Errorf("`ocel permissions deploy` never says %q, and what a user trusts goes unsaid:\n%s", want, deploying)
 		}
