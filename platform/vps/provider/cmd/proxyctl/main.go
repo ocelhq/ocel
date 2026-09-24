@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -75,10 +76,9 @@ func run(data, proc string, argv []string, out, errs io.Writer) int {
 	rest := argv[1:]
 	switch argv[0] {
 	case "flip":
-		if len(rest) != 1 {
-			return usage(errs)
-		}
-		return flip(socket, rest[0], out, errs)
+		return flipping(socket, rest, out, errs)
+	case "gate":
+		return gate(rest, out, errs)
 	case "upstreams":
 		if len(rest) != 0 {
 			return usage(errs)
@@ -109,20 +109,18 @@ func run(data, proc string, argv []string, out, errs io.Writer) int {
 			return usage(errs)
 		}
 		return forget(data, rest, out, errs)
-	case "deploy":
-		return deploy(socket, rest, out, errs)
 	default:
 		return usage(errs)
 	}
 }
 
 func usage(errs io.Writer) int {
-	fmt.Fprintln(errs, "usage: ocel-proxyctl flip <config> | upstreams | config <path> | leaf <hostname> |")
+	fmt.Fprintln(errs, "usage: ocel-proxyctl upstreams | config <path> | leaf <hostname> |")
 	fmt.Fprintln(errs, "       probe <hostname> |")
 	fmt.Fprintln(errs, "       listeners |")
 	fmt.Fprintln(errs, "       forget <hostname>... |")
-	fmt.Fprintln(errs, "       deploy --target <host:port> --health-check-path <path> --deploy-timeout <seconds>")
-	fmt.Fprintln(errs, "              --config <path> --drain-timeout <seconds> [--retire <host:port>]")
+	fmt.Fprintln(errs, "       gate --deploy-timeout <seconds> <host:port/path>... |")
+	fmt.Fprintln(errs, "       flip [--drain-timeout <seconds> --retire <host:port>...] <config>")
 	return exitRefused
 }
 
@@ -296,32 +294,58 @@ func declined(err error) bool {
 	return errors.As(err, &refused) && refused.Op == "remote error"
 }
 
-func deploy(socket string, argv []string, out, errs io.Writer) int {
-	flags := flag.NewFlagSet("deploy", flag.ContinueOnError)
+type addresses []string
+
+func (a *addresses) String() string { return strings.Join(*a, " ") }
+
+func (a *addresses) Set(address string) error {
+	*a = append(*a, address)
+	return nil
+}
+
+func gate(argv []string, out, errs io.Writer) int {
+	flags := flag.NewFlagSet("gate", flag.ContinueOnError)
 	flags.SetOutput(errs)
-	target := flags.String("target", "", "")
-	path := flags.String("health-check-path", "", "")
-	config := flags.String("config", "", "")
-	retire := flags.String("retire", "", "")
 	deployTimeout := flags.Int("deploy-timeout", 0, "")
+	if err := flags.Parse(argv); err != nil {
+		return usage(errs)
+	}
+	targets := flags.Args()
+	if *deployTimeout <= 0 || len(targets) == 0 {
+		return usage(errs)
+	}
+	for _, target := range targets {
+		if !strings.Contains(target, "/") {
+			return usage(errs)
+		}
+	}
+	deadline := time.Now().Add(time.Duration(*deployTimeout) * time.Second)
+	for _, target := range targets {
+		address, path, _ := strings.Cut(target, "/")
+		if code := gating(address, "/"+path, max(time.Until(deadline), gateInterval), out, errs); code != 0 {
+			fmt.Fprintf(out, "%s %s\n", caddyadmin.Ungated, target)
+			return code
+		}
+	}
+	return 0
+}
+
+func flipping(socket string, argv []string, out, errs io.Writer) int {
+	flags := flag.NewFlagSet("flip", flag.ContinueOnError)
+	flags.SetOutput(errs)
+	var retiring addresses
+	flags.Var(&retiring, "retire", "")
 	drainTimeout := flags.Int("drain-timeout", 0, "")
 	if err := flags.Parse(argv); err != nil {
 		return usage(errs)
 	}
-	if *target == "" || *path == "" || *config == "" || *deployTimeout <= 0 || *drainTimeout <= 0 {
+	if flags.NArg() != 1 || (len(retiring) > 0 && *drainTimeout <= 0) {
 		return usage(errs)
 	}
-
-	if code := gating(*target, *path, time.Duration(*deployTimeout)*time.Second, out, errs); code != 0 {
+	if code := flip(socket, flags.Arg(0), out, errs); code != 0 || len(retiring) == 0 {
 		return code
 	}
-	if code := flip(socket, *config, out, errs); code != 0 {
-		return code
-	}
-	if *retire == "" {
-		return 0
-	}
-	return draining(socket, *retire, time.Duration(*drainTimeout)*time.Second, out, errs)
+	return draining(socket, retiring, time.Duration(*drainTimeout)*time.Second, out, errs)
 }
 
 func gating(target, path string, window time.Duration, out, errs io.Writer) int {
@@ -362,9 +386,10 @@ type upstream struct {
 	NumRequests int    `json:"num_requests"`
 }
 
-func draining(socket, address string, window time.Duration, out, errs io.Writer) int {
+func draining(socket string, retiring []string, window time.Duration, out, errs io.Writer) int {
 	deadline := time.Now().Add(window)
-	inFlight := 0
+	inFlight := map[string]int{}
+	pending := slices.Clone(retiring)
 	for {
 		var read strings.Builder
 		if code := ask(socket, upstreamsPath, &read, errs); code != 0 {
@@ -376,28 +401,36 @@ func draining(socket, address string, window time.Duration, out, errs io.Writer)
 				strings.TrimSpace(read.String()), err)
 			return exitUnattributable
 		}
-		held := -1
+		held := map[string]int{}
 		for _, up := range pool {
-			if up.Address == address {
-				held = up.NumRequests
+			held[up.Address] = up.NumRequests
+		}
+		for _, address := range pending {
+			if _, pooled := held[address]; !pooled {
+				fmt.Fprintf(errs, "ocel-proxyctl: %s has no upstream %s\n",
+					upstreamsPath, address)
+				return exitUnattributable
 			}
 		}
-		if held < 0 {
-			fmt.Fprintf(errs, "ocel-proxyctl: %s has no upstream %s\n",
-				upstreamsPath, address)
-			return exitUnattributable
-		}
-		if held == 0 {
+		pending = slices.DeleteFunc(pending, func(address string) bool {
+			if held[address] > 0 {
+				inFlight[address] = held[address]
+				return false
+			}
 			fmt.Fprintf(out, "%s %s\n", caddyadmin.Drained, address)
+			return true
+		})
+		if len(pending) == 0 {
 			return 0
 		}
-		inFlight = held
 		if time.Now().Add(drainInterval).After(deadline) {
 			break
 		}
 		time.Sleep(drainInterval)
 	}
-	fmt.Fprintf(out, "%s %s %d\n", caddyadmin.DrainExpired, address, inFlight)
+	for _, address := range pending {
+		fmt.Fprintf(out, "%s %s %d\n", caddyadmin.DrainExpired, address, inFlight[address])
+	}
 	return 0
 }
 

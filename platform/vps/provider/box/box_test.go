@@ -110,10 +110,19 @@ func (m *machine) Serving(_ context.Context, key host.RouteKey) (string, error) 
 }
 
 func (m *machine) Release(_ context.Context, rel host.Release, _ providerkit.Reporter) error {
-	m.calls = append(m.calls, "release "+rel.App+" onto "+rel.Target)
 	m.releases = append(m.releases, rel)
-	m.upstream[rel.RouteKey] = rel.Target
-	return m.refuse("Release")
+	onto := make([]string, 0, len(rel.Apps))
+	for _, app := range rel.Apps {
+		onto = append(onto, app.App+" onto "+app.Target)
+	}
+	m.calls = append(m.calls, "release "+strings.Join(onto, ", "))
+	if err := m.refuse("Release"); err != nil {
+		return err
+	}
+	for _, app := range rel.Apps {
+		m.upstream[app.RouteKey] = app.Target
+	}
+	return nil
 }
 
 func (m *machine) UnroutePointer(_ context.Context, owner, pointer string) error {
@@ -335,16 +344,100 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItFlips(t *testing.T) {
 		t.Fatalf("Promote: %v", err)
 	}
 
-	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "serving web", "release web onto shop-web-1111:" + providerkit.InjectedPortText}
+	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + providerkit.InjectedPortText}
 	if !slices.Equal(stood.calls, want) {
 		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running and only then flips", stood.calls, want)
 	}
-	if stood.releases[0].HealthPath != "/healthz" {
-		t.Errorf("the release is gated on %q, want the path the record names: up is a 2xx on the path the wire named", stood.releases[0].HealthPath)
+	if stood.releases[0].Apps[0].HealthPath != "/healthz" {
+		t.Errorf("the release is gated on %q, want the path the record names: up is a 2xx on the path the wire named", stood.releases[0].Apps[0].HealthPath)
 	}
-	if stood.releases[0].Retire != "" {
-		t.Errorf("the first release of an app retires %q, want nothing: there is no previous container to drain", stood.releases[0].Retire)
+}
+
+func TestAPromotionOfSeveralAppsFlipsThemAllInOneRelease(t *testing.T) {
+	t.Parallel()
+
+	stood, _, stack := standing(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	staged(t, stack, "api", "b1", "shop-api-1111")
+
+	if err := stack.Promote(context.Background(), edge.Promotion{
+		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1", "api": "b1"},
+	}, "", edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote: %v", err)
 	}
+
+	want := []string{
+		"stand-up shop-api-1111", "head shop/api at " + imageFor("api", "b1"),
+		"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"),
+		"release api onto shop-api-1111:" + providerkit.InjectedPortText + ", web onto shop-web-1111:" + providerkit.InjectedPortText,
+	}
+	if !slices.Equal(stood.calls, want) {
+		t.Fatalf("a promotion of two apps drove the box as %v, want %v: every container stands before one release flips them all, so a failure on either leaves the box on the promotion it was serving", stood.calls, want)
+	}
+}
+
+func TestAPromotionTheBoxNeverServedLeavesThePointerOnTheOneItServes(t *testing.T) {
+	t.Parallel()
+
+	for what, refuse := range map[string]func(*machine){
+		"a container that would not stand": func(m *machine) {
+			m.refuseOn("StandUp", providerkit.Refuse(providerkit.CodeNotReady, "docker run failed"))
+		},
+		"a release the box kept off": func(m *machine) {
+			m.refuseOn("Release", host.Unserved{Err: providerkit.Refuse(providerkit.CodeNotReady, "the gate exited 4; the previous release is still live")})
+		},
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			stood, _, stack := standing(t)
+			staged(t, stack, "web", "b1", "shop-web-1111")
+			staged(t, stack, "web", "b2", "shop-web-2222")
+			if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+				t.Fatalf("Promote(p1): %v", err)
+			}
+			refuse(stood)
+
+			if err := promoted(t, stack, "p2", "web", "b2"); err == nil {
+				t.Fatalf("a promotion refused by %s succeeded", what)
+			}
+			if active := activePromotion(t, stack); active != "p1" {
+				t.Errorf("after %s the pointer stands at %q, want p1: the box still serves p1, and a rollback read from a pointer at p2 re-points from a release that never served", what, active)
+			}
+		})
+	}
+}
+
+func TestAPromotionThatFailedAfterTheFlipKeepsThePointerOnTheReleaseTheBoxServes(t *testing.T) {
+	t.Parallel()
+
+	stood, _, stack := standing(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	staged(t, stack, "web", "b2", "shop-web-2222")
+	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote(p1): %v", err)
+	}
+	stood.refuseOn("Release", providerkit.Refuse(providerkit.CodeNotReady, "flipped onto shop-web-2222, but the follow-up config write failed"))
+
+	if err := promoted(t, stack, "p2", "web", "b2"); err == nil {
+		t.Fatal("a promotion whose steady-state write failed reported success")
+	}
+	if active := activePromotion(t, stack); active != "p2" {
+		t.Errorf("after a failure past the flip the pointer stands at %q, want p2: the box is serving p2", active)
+	}
+}
+
+func activePromotion(t *testing.T, stack edge.EdgeStack) string {
+	t.Helper()
+	entries, err := stack.Ledger().History(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := slices.IndexFunc(entries, func(entry edge.HistoryEntry) bool { return entry.Active })
+	if at < 0 {
+		return ""
+	}
+	return entries[at].PromotionID
 }
 
 func TestARollbackStandsThePreviousContainerBackUpAndFlipsOntoIt(t *testing.T) {
@@ -371,13 +464,9 @@ func TestARollbackStandsThePreviousContainerBackUpAndFlipsOntoIt(t *testing.T) {
 		t.Fatalf("Promote(rollback): %v", err)
 	}
 
-	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "serving web", "release web onto shop-web-1111:" + providerkit.InjectedPortText}
+	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + providerkit.InjectedPortText}
 	if !slices.Equal(stood.calls, want) {
 		t.Fatalf("a rollback drove the box as %v, want %v: nothing provisions on this path, so re-pointing at a release that is not running is a ledger edit and not a restored site", stood.calls, want)
-	}
-	last := stood.releases[len(stood.releases)-1]
-	if last.Retire != "shop-web-2222:"+providerkit.InjectedPortText {
-		t.Errorf("the rollback retires %q, want the container it is rolling off", last.Retire)
 	}
 }
 
@@ -753,16 +842,12 @@ func TestTwoProjectsRunningTheSameAppNameOnOneBoxAreReleasedSeparately(t *testin
 
 	keys := map[string]bool{}
 	for _, rel := range stood.releases {
-		if keys[rel.Owner] {
-			continue
+		for _, app := range rel.Apps {
+			keys[app.Owner] = true
 		}
-		keys[rel.Owner] = true
 	}
 	if len(keys) != 2 {
 		t.Fatalf("the two projects released under %v, want a route apiece: a route named by the app alone is one project's deploy stopping the other's live container", keys)
-	}
-	if retiring := stood.releases[1].Retire; retiring != "" {
-		t.Errorf("the second project's first deploy retires %q, want nothing: that upstream belongs to the other project and stopping it takes a live site down", retiring)
 	}
 }
 

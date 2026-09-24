@@ -9,6 +9,7 @@ import (
 const (
 	DrainExpired = "drain-expired"
 	Drained      = "drained"
+	Ungated      = "ungated"
 )
 
 const SocketMode = "0600"
