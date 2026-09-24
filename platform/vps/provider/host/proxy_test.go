@@ -1322,8 +1322,15 @@ func TestAnUpgradedOcelRendersTheConfigAnOlderOneRenderedAgainRatherThanRefusing
 	if _, err := boot.Describe(context.Background(), class); err != nil {
 		t.Fatalf("Describe() over a box an older ocel rendered = %v: an upgrade that changes the rendering is not a hand edit, and refusing it locks every existing box out of `ocel doctor`", err)
 	}
-	if _, err := boot.Plan(context.Background(), request); err != nil {
+	plan, err := boot.Plan(context.Background(), request)
+	if err != nil {
 		t.Fatalf("Plan() over a box an older ocel rendered = %v, and the bootstrap is what would render it again", err)
+	}
+	if group := plan.Groups[0]; group.Action == providerkit.ActionKeep {
+		t.Errorf("the plan over a box an older ocel rendered keeps %s whole, and the apply it would skip is what renders the config again", group.Name)
+	}
+	if rendering := planFor(plan.Groups[0].Changes, proxyConfigItem().ID()); rendering.Action != providerkit.ActionUpdate || !strings.Contains(rendering.Reason, live.RoutingTable) {
+		t.Errorf("the plan over a box an older ocel rendered shows %s as %q (%q), want the update the apply makes: rendering it again from %s", ProxyConfig, rendering.Action, rendering.Reason, live.RoutingTable)
 	}
 	if err := boot.Apply(context.Background(), request, nil); err != nil {
 		t.Fatalf("Apply() over a box an older ocel rendered = %v", err)
