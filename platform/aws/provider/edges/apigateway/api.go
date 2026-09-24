@@ -21,6 +21,8 @@ const (
 	proxyPathPart  = "{proxy+}"
 	staticParent   = "_next"
 	staticPathPart = "static"
+	probeParent    = ".well-known"
+	probePathPart  = "ocel-edge"
 
 	edgeHeaderParameter = "method.response.header." + EdgeHeader
 
@@ -112,6 +114,17 @@ func shapeAPI(ctx context.Context, c Clients, plan apiPlan, id string) error {
 		if err := putEntryRoute(ctx, c, plan, id, resources[path]); err != nil {
 			return err
 		}
+	}
+	known, err := ensureResource(ctx, c, id, resources, rootPath, probeParent)
+	if err != nil {
+		return err
+	}
+	probe, err := ensureResource(ctx, c, id, resources, known, probePathPart)
+	if err != nil {
+		return err
+	}
+	if err := putProbeRoute(ctx, c, id, resources[probe]); err != nil {
+		return err
 	}
 	if plan.assetBucket != "" {
 		next, err := ensureResource(ctx, c, id, resources, rootPath, staticParent)
@@ -268,6 +281,45 @@ func putEntryRoute(ctx context.Context, c Clients, plan apiPlan, api, resource s
 		ResponseTransferMode:  agtypes.ResponseTransferModeStream,
 	}); err != nil {
 		return fmt.Errorf("point REST API %s at the entry function: %w", api, err)
+	}
+	return nil
+}
+
+func putProbeRoute(ctx context.Context, c Clients, api, resource string) error {
+	if err := ensureMethod(ctx, c, &apigateway.PutMethodInput{
+		RestApiId:         aws.String(api),
+		ResourceId:        aws.String(resource),
+		HttpMethod:        aws.String(getMethod),
+		AuthorizationType: aws.String("NONE"),
+	}); err != nil {
+		return fmt.Errorf("open the liveness probe method on REST API %s: %w", api, err)
+	}
+	if _, err := c.APIGateway.PutIntegration(ctx, &apigateway.PutIntegrationInput{
+		RestApiId:        aws.String(api),
+		ResourceId:       aws.String(resource),
+		HttpMethod:       aws.String(getMethod),
+		Type:             agtypes.IntegrationTypeMock,
+		RequestTemplates: map[string]string{"application/json": `{"statusCode": 200}`},
+	}); err != nil {
+		return fmt.Errorf("have REST API %s answer the liveness probe itself: %w", api, err)
+	}
+	if err := ensureMethodResponse(ctx, c, &apigateway.PutMethodResponseInput{
+		RestApiId:          aws.String(api),
+		ResourceId:         aws.String(resource),
+		HttpMethod:         aws.String(getMethod),
+		StatusCode:         aws.String("200"),
+		ResponseParameters: map[string]bool{edgeHeaderParameter: true},
+	}); err != nil {
+		return fmt.Errorf("declare the liveness probe's edge header on REST API %s: %w", api, err)
+	}
+	if err := ensureIntegrationResponse(ctx, c, &apigateway.PutIntegrationResponseInput{
+		RestApiId:          aws.String(api),
+		ResourceId:         aws.String(resource),
+		HttpMethod:         aws.String(getMethod),
+		StatusCode:         aws.String("200"),
+		ResponseParameters: map[string]string{edgeHeaderParameter: "'" + edgeHeaderValue + "'"},
+	}); err != nil {
+		return fmt.Errorf("set the liveness probe's edge header on REST API %s: %w", api, err)
 	}
 	return nil
 }

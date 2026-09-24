@@ -280,7 +280,7 @@ func probe(socket, at, hostname string, out, errs io.Writer) int {
 		},
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	answer, err := client.Get("https://" + hostname + "/")
+	answer, err := client.Get("https://" + hostname + edge.LivenessProbePath)
 	if err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: %s answered nothing from inside the proxy: %v\n", hostname, err)
 		return exitNotServingYet

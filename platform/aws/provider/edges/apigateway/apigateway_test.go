@@ -133,6 +133,7 @@ func TestReconcileShapesTheProductionAPI(t *testing.T) {
 	}
 	assertSet(t, "resources", slices.Collect(maps.Values(api.resources)), []string{
 		"/", "/{proxy+}", "/_next", "/_next/static", "/_next/static/{proxy+}",
+		"/.well-known", "/.well-known/ocel-edge",
 	})
 	if !slices.Contains(api.binary, "*/*") {
 		t.Errorf("binary media types = %v, want */* so the static assets survive the trip", api.binary)
@@ -192,6 +193,31 @@ func TestOnlyTheRoutesThatCanCarryTheEdgeHeaderDeclareIt(t *testing.T) {
 	static := methodOn(api, "/_next/static/{proxy+}", getMethod)
 	if got := static.integrationResponse["200"][edgeHeaderParameter]; got != "'"+string(Kind)+"'" {
 		t.Errorf("static integration response sets %s = %q, want 'api-gateway'", EdgeHeader, got)
+	}
+}
+
+func TestTheLivenessProbePathIsAnsweredByTheGatewayItselfWithTheEdgeMarker(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	reconciled(t, w)
+
+	api := w.gateway.named(productionAPIName())
+	if api == nil {
+		t.Fatal("no REST API for the stack")
+	}
+	probed := methodOn(api, edge.LivenessProbePath, getMethod)
+	if probed == nil {
+		t.Fatalf("no method on %s; methods are %v. An app behind the proxy integration answers every other path without %s, so a probe that reads the marker never sees this edge serve", edge.LivenessProbePath, slices.Sorted(maps.Keys(api.methods)), EdgeHeader)
+	}
+	if probed.integration != agtypes.IntegrationTypeMock {
+		t.Errorf("the probe path's integration = %q, want MOCK: the gateway answers it, not the app", probed.integration)
+	}
+	if !probed.methodResponses["200"][edgeHeaderParameter] {
+		t.Errorf("the probe path's 200 declares %v, want %s", probed.methodResponses["200"], EdgeHeader)
+	}
+	if got := probed.integrationResponse["200"][edgeHeaderParameter]; got != "'"+string(Kind)+"'" {
+		t.Errorf("the probe path's integration response sets %s = %q, want 'api-gateway'", EdgeHeader, got)
 	}
 }
 
@@ -474,6 +500,7 @@ func TestReconcileRepairsAnAPIThatWasNeverFinished(t *testing.T) {
 	}
 	assertSet(t, "resources", slices.Collect(maps.Values(api.resources)), []string{
 		"/", "/{proxy+}", "/_next", "/_next/static", "/_next/static/{proxy+}",
+		"/.well-known", "/.well-known/ocel-edge",
 	})
 	if api.stage != stageName {
 		t.Errorf("stage = %q, want %q; the repair has to publish what it shaped", api.stage, stageName)
