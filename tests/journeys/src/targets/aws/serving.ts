@@ -17,6 +17,22 @@ export type ServingWait = {
   sleep: (ms: number) => Promise<void>;
 };
 
+const CAUSE_FIELDS = ["code", "errno", "syscall", "hostname", "address", "port"] as const;
+
+function described(error: unknown): string {
+  const parts: string[] = [];
+  let at: unknown = error;
+  while (at instanceof Error) {
+    const fields = CAUSE_FIELDS.flatMap((field) => {
+      const value = (at as unknown as Record<string, unknown>)[field];
+      return value === undefined ? [] : [`${field} ${String(value)}`];
+    });
+    parts.push(fields.length > 0 ? `${at.message} (${fields.join(", ")})` : at.message);
+    at = at.cause;
+  }
+  return parts.length > 0 ? parts.join(": ") : String(error);
+}
+
 export async function awaitServing(
   request: Fetch,
   urls: Map<string, string>,
@@ -52,7 +68,7 @@ export async function awaitServing(
           edged = 0;
         }
       } catch (refused) {
-        last = (refused as Error).message;
+        last = described(refused);
         edged = 0;
       }
       if (edged >= STABLE_EDGE_ANSWERS) {

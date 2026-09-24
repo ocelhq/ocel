@@ -110,15 +110,9 @@ export function lookupVia(resolver: AuthoritativeResolver, fallbackLookup: Fallb
 
 const publicServers = ["1.1.1.1", "1.0.0.1", "8.8.8.8"];
 
-let publicResolver: dns.promises.Resolver | undefined;
-
 async function publicAddresses(target: string): Promise<string[]> {
-  if (!publicResolver) {
-    publicResolver = new dns.promises.Resolver();
-    publicResolver.setServers(publicServers);
-  }
   try {
-    return await publicResolver.resolve4(target);
+    return await resolverAt(publicServers).resolve4(target);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENODATA" || code === "ENOTFOUND") {
@@ -128,9 +122,9 @@ async function publicAddresses(target: string): Promise<string[]> {
   }
 }
 
-const authorities = new Map<string, Promise<dns.promises.Resolver>>();
+const authorities = new Map<string, Promise<string[]>>();
 
-function authority(zone: string): Promise<dns.promises.Resolver> {
+function authority(zone: string): Promise<string[]> {
   let pending = authorities.get(zone);
   if (!pending) {
     pending = (async () => {
@@ -139,9 +133,7 @@ function authority(zone: string): Promise<dns.promises.Resolver> {
       if (servers.length === 0) {
         throw new Error(`${zone} publishes no nameserver address to ask about its own names`);
       }
-      const resolver = new dns.promises.Resolver();
-      resolver.setServers(servers);
-      return resolver;
+      return servers;
     })();
     pending.catch(() => authorities.delete(zone));
     authorities.set(zone, pending);
@@ -149,10 +141,21 @@ function authority(zone: string): Promise<dns.promises.Resolver> {
   return pending;
 }
 
+function resolverAt(servers: string[]): dns.promises.Resolver {
+  const resolver = new dns.promises.Resolver();
+  resolver.setServers(servers);
+  return resolver;
+}
+
+export function authoritativeLookup(servers: string[], fallbackLookup: FallbackLookup) {
+  return (hostname: string, options: dns.LookupOptions, callback: LookupCallback): void =>
+    lookupVia(resolverAt(servers), fallbackLookup)(hostname, options, callback);
+}
+
 export function authoritativeFetch(zone: string): Fetch {
   const lookup = (hostname: string, options: dns.LookupOptions, callback: LookupCallback): void => {
     authority(zone).then(
-      (resolver) => lookupVia(resolver, publicAddresses)(hostname, options, callback),
+      (servers) => authoritativeLookup(servers, publicAddresses)(hostname, options, callback),
       (error) => callback(error as NodeJS.ErrnoException),
     );
   };

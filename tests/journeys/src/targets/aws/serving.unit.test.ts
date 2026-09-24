@@ -81,6 +81,22 @@ describe("awaitServing", () => {
     );
   });
 
+  it("names what lies beneath a bare fetch failure when it gives up", async () => {
+    const lookup = Object.assign(new Error("queryA ENOTFOUND app.example.com"), {
+      code: "ENOTFOUND",
+      errno: 4,
+      hostname: "app.example.com",
+    });
+    const failing = (async () => {
+      throw new TypeError("fetch failed", { cause: lookup });
+    }) as unknown as Fetch;
+    await assert.rejects(awaitServing(failing, URLS, clock(10_000)), (error: Error) => {
+      assert.match(error.message, /fetch failed: queryA ENOTFOUND app\.example\.com/);
+      assert.match(error.message, /code ENOTFOUND, errno 4, hostname app\.example\.com/);
+      return true;
+    });
+  });
+
   it("gives up long before the deadline once the edge itself has answered six times", async () => {
     await assert.rejects(
       awaitServing(answering([edged(404)]), URLS, clock(900_000)),
