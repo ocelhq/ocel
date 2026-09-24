@@ -147,6 +147,9 @@ func fmtReaches(pass *analysis.Pass, t types.Type, top bool, r reach, seen map[v
 		return false
 	}
 	seen[visit{t, top, r}] = true
+	if isGenericMessage(t) {
+		return r == methodsCalled
+	}
 	if r == methodsCalled {
 		if method := renderer(t); method != nil {
 			return isCarrier(pass, method.Signature().Recv().Type())
@@ -186,6 +189,11 @@ func isCarrier(pass *analysis.Pass, t types.Type) bool {
 	}
 	named, ok := types.Unalias(t).(*types.Named)
 	return ok && namesCarrier(pass, named.Obj())
+}
+
+func isGenericMessage(t types.Type) bool {
+	named, ok := types.Unalias(t).(*types.Named)
+	return ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == "google.golang.org/protobuf/reflect/protoreflect" && named.Obj().Name() == "ProtoMessage"
 }
 
 func renderer(t types.Type) *types.Func {
