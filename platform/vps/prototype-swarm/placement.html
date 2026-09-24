@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE: VPS machines and placement</title>
+<style>
+  :root { --ink:#1d1d1f; --mute:#6b6b70; --line:#e3e3e6; --bg:#fbfbfa; --card:#fff; --accent:#2f5bd3; --bad:#b3261e; --warn:#8a5a00; --good:#1e6b3a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); }
+  main { max-width:1100px; margin:0 auto; padding:28px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  h2 { font-size:15px; margin:0 0 10px; text-transform:uppercase; letter-spacing:.04em; color:var(--mute); }
+  p.lead { color:var(--mute); margin:0 0 22px; max-width:760px; }
+  .tag { display:inline-block; font-size:11px; padding:1px 7px; border-radius:99px; border:1px solid var(--line); color:var(--mute); margin-left:6px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  .tabs button, .btn { font:inherit; font-size:13px; padding:6px 11px; border-radius:7px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+  .tabs button.on { border-color:var(--accent); color:var(--accent); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn:disabled { opacity:.35; cursor:default; }
+  .steps { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; }
+  .machine { border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .machine.down { background:#f6f0ef; border-color:#e6c9c6; }
+  .machine h3 { margin:0; font-size:14px; display:flex; justify-content:space-between; align-items:center; }
+  .role { font-size:12px; color:var(--mute); margin:2px 0 8px; }
+  .task { font-size:13px; padding:3px 7px; border-radius:5px; background:#eef2fb; margin:3px 0; }
+  .task.stateful { background:#f4efe3; }
+  .pending { color:var(--warn); }
+  ul.msgs { margin:0; padding-left:18px; }
+  .err { color:var(--bad); } .warn { color:var(--warn); } .ok { color:var(--good); }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  td, th { text-align:left; padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  code { font:12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .changed { outline:2px solid #f0c24b; outline-offset:1px; }
+  textarea { width:100%; min-height:220px; font:12px/1.45 ui-monospace, Menlo, monospace; border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:760px) { .cols { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Machines and placement on the VPS provider <span class="tag">PROTOTYPE — throwaway</span></h1>
+  <p class="lead">Question: can one <code>machines</code> list plus an optional <code>placement</code> map describe one box, split apps, replicas and pinned databases, all on one Swarm path? And does the cluster behave sensibly when machines die, come back or get added? The behaviour here mirrors what the spike measured on Docker 29.8: Swarm reschedules stateless tasks within their allowed machines, keeps pinned data services pending, never rebalances by itself, and needs a majority of managers to change anything.</p>
+
+  <section>
+    <h2>Guided walkthroughs</h2>
+    <div class="tabs" id="tabs"></div>
+    <div id="scenario"></div>
+  </section>
+
+  <div class="cols">
+    <section>
+      <h2>Project config (provider options)</h2>
+      <textarea id="config" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn primary" id="apply">Deploy this config</button>
+        <span id="parse" class="err"></span>
+      </div>
+    </section>
+    <section>
+      <h2>What Ocel derives</h2>
+      <div id="derived"></div>
+    </section>
+  </div>
+
+  <section>
+    <h2>Machines right now</h2>
+    <div class="row" id="freeplay" style="margin-bottom:10px"></div>
+    <div class="grid" id="machines"></div>
+  </section>
+
+  <section>
+    <h2>Health</h2>
+    <ul class="msgs" id="health"></ul>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <ul class="msgs" id="log"></ul>
+  </section>
+</main>
+
+<script>
+const Placement = (() => {
+  const nameOf = (m) => m.name || (typeof m.ssh === "string" ? m.ssh : (m.ssh && m.ssh.host)) || "";
+
+  function managersFor(names) {
+    return names.slice(0, names.length >= 3 ? 3 : 1);
+  }
+
+  function derive(options, workloads) {
+    const errors = [], warnings = [];
+    const machines = (options.machines || []).map((m) => ({ ...m, name: nameOf(m) }));
+    const names = machines.map((m) => m.name);
+    if (machines.length === 0) errors.push("machines is empty: name at least one machine to deploy to.");
+    const dupes = names.filter((n, i) => names.indexOf(n) !== i);
+    if (dupes.length) errors.push(`machine names repeat: ${[...new Set(dupes)].join(", ")}.`);
+
+    const ingress = options.ingress || names.slice(0, 1);
+    for (const i of ingress) if (!names.includes(i)) errors.push(`ingress names ${i}, which is not in machines.`);
+    const managers = managersFor(names);
+    if (names.length === 2) warnings.push("two machines means one manager: if the first machine is lost, deploys and rescheduling stop until it returns (running containers keep serving).");
+
+    const placement = options.placement || {};
+    for (const key of Object.keys(placement)) {
+      if (!workloads.some((w) => w.name === key)) errors.push(`placement names ${key}, which is neither an app nor a resource in this project.`);
+    }
+
+    const services = workloads.map((w) => {
+      const rule = placement[w.name] || {};
+      const allowed = rule.machines || (w.stateful ? names.slice(0, 1) : names);
+      for (const m of allowed) if (!names.includes(m)) errors.push(`${w.name} is placed on ${m}, which is not in machines.`);
+      if (w.stateful && allowed.length !== 1) errors.push(`${w.name} keeps data on a node-local volume, so it must be placed on exactly one machine (got ${allowed.length}).`);
+      if (w.stateful && rule.replicas && rule.replicas !== 1) errors.push(`${w.name} keeps data on one machine, so it runs one replica.`);
+      const replicas = w.stateful ? 1 : (rule.replicas || allowed.length);
+      return {
+        name: w.name, stateful: !!w.stateful, allowed, replicas,
+        label: `ocel.place.${w.name}`,
+        order: w.stateful ? "stop-first" : "start-first",
+      };
+    });
+
+    const labels = Object.fromEntries(names.map((n) => [n, [
+      `ocel.machine=${n}`,
+      ...(ingress.includes(n) ? ["ocel.ingress=true"] : []),
+      ...services.filter((s) => s.allowed.includes(n)).map((s) => `${s.label}=true`),
+    ]]));
+
+    return { errors, warnings, machines, names, ingress, managers, services, labels };
+  }
+
+  function schedule(service, up, tasks) {
+    const eligible = service.allowed.filter((m) => up[m]);
+    const count = (m) => tasks.filter((t) => t.service === service.name && t.machine === m).length;
+    const load = (m) => tasks.filter((t) => t.machine === m).length;
+    if (!eligible.length) return null;
+    return [...eligible].sort((a, b) => count(a) - count(b) || load(a) - load(b) || service.allowed.indexOf(a) - service.allowed.indexOf(b))[0];
+  }
+
+  function deploy(plan, up) {
+    const tasks = [];
+    for (const s of plan.services) {
+      for (let i = 1; i <= s.replicas; i++) {
+        const machine = schedule(s, up, tasks);
+        tasks.push({ service: s.name, slot: i, machine, stateful: s.stateful });
+      }
+    }
+    return tasks;
+  }
+
+  function quorum(plan, up) {
+    const alive = plan.managers.filter((m) => up[m]).length;
+    return { alive, total: plan.managers.length, held: alive > plan.managers.length / 2 };
+  }
+
+  function machineDown(plan, up, tasks, name) {
+    const nextUp = { ...up, [name]: false };
+    const q = quorum(plan, nextUp);
+    const next = tasks.map((t) => ({ ...t }));
+    for (const t of next) {
+      if (t.machine !== name) continue;
+      if (!q.held) { t.machine = null; t.stranded = true; continue; }
+      if (t.stateful) { t.machine = null; t.waitingFor = name; continue; }
+      const s = plan.services.find((x) => x.name === t.service);
+      t.machine = schedule(s, nextUp, next.filter((o) => o !== t));
+    }
+    return { up: nextUp, tasks: next };
+  }
+
+  function machineUp(plan, up, tasks, name) {
+    const nextUp = { ...up, [name]: true };
+    const q = quorum(plan, nextUp);
+    const next = tasks.map((t) => ({ ...t }));
+    if (!q.held) return { up: nextUp, tasks: next };
+    for (const t of next) {
+      if (t.machine) continue;
+      const s = plan.services.find((x) => x.name === t.service);
+      if (t.stateful && t.waitingFor && t.waitingFor !== name) continue;
+      const m = schedule(s, nextUp, next.filter((o) => o !== t));
+      if (m) { t.machine = m; delete t.waitingFor; delete t.stranded; }
+    }
+    return { up: nextUp, tasks: next };
+  }
+
+  function health(plan, up, tasks) {
+    const out = [];
+    const q = quorum(plan, up);
+    out.push(q.held
+      ? { level: "ok", text: `Control plane: ${q.alive}/${q.total} managers up, so deploys and rescheduling work.` }
+      : { level: "err", text: `Control plane: ${q.alive}/${q.total} managers up, which is not a majority. Deploys and rescheduling are frozen; containers that are running keep running.` });
+    const entry = plan.ingress.filter((m) => up[m]);
+    out.push(entry.length
+      ? { level: "ok", text: `Visitors reach ${entry.join(", ")} (DNS A records point at ${plan.ingress.join(", ")}).` }
+      : { level: "err", text: `Every ingress machine is down: the site is unreachable even if app tasks run elsewhere.` });
+    for (const s of plan.services) {
+      const running = tasks.filter((t) => t.service === s.name && t.machine && up[t.machine]);
+      const where = [...new Set(running.map((t) => t.machine))];
+      if (running.length === s.replicas) {
+        const skew = s.replicas > 1 && s.allowed.filter((m) => up[m]).length > where.length;
+        out.push({ level: skew ? "warn" : "ok", text: `${s.name}: ${running.length}/${s.replicas} running on ${where.join(", ")}${skew ? ". Skewed: Swarm does not move tasks back on its own; the next deploy spreads them again" : ""}.` });
+      } else if (s.stateful) {
+        out.push({ level: "err", text: `${s.name}: waiting for ${s.allowed[0]}. Its data lives on that machine's volume, so Swarm keeps it pending instead of starting an empty copy elsewhere.` });
+      } else {
+        out.push({ level: running.length ? "warn" : "err", text: `${s.name}: ${running.length}/${s.replicas} running. No allowed machine (${s.allowed.join(", ")}) is up for the rest.` });
+      }
+    }
+    return out;
+  }
+
+  return { derive, deploy, machineDown, machineUp, health, quorum };
+})();
+</script>
+
+<script>
+const workloads = [
+  { name: "web" }, { name: "api" }, { name: "worker" },
+  { name: "db", stateful: true }, { name: "files", stateful: true },
+];
+
+const presets = {
+  one: { machines: [{ ssh: "my-vps" }] },
+  split: {
+    machines: [
+      { name: "edge-1", ssh: "root@203.0.113.10" },
+      { name: "app-1", ssh: "root@10.0.0.11" },
+      { name: "app-2", ssh: "root@10.0.0.12" },
+      { name: "data-1", ssh: "root@10.0.0.13" },
+    ],
+    ingress: ["edge-1"],
+    placement: {
+      web: { machines: ["app-1", "app-2"] },
+      api: { machines: ["app-1", "app-2"], replicas: 4 },
+      worker: { machines: ["app-2"] },
+      db: { machines: ["data-1"] },
+      files: { machines: ["data-1"] },
+    },
+  },
+  two: {
+    machines: [{ name: "a", ssh: "root@a.example" }, { name: "b", ssh: "root@b.example" }],
+    placement: { db: { machines: ["b"] }, files: { machines: ["b"] } },
+  },
+  illegal: {
+    machines: [{ name: "a", ssh: "a" }, { name: "b", ssh: "b" }, { name: "c", ssh: "c" }],
+    ingress: ["z"],
+    placement: { db: { machines: ["a", "b"] }, web: { machines: ["q"] }, cache: { machines: ["a"] } },
+  },
+};
+
+const scenarios = [
+  { id: "one", title: "One machine (today)", text: "The VPS you have now. No placement at all: one machine is the manager, the ingress and the only place to run. Nothing about this is a special case; it is the same plan with a list of one.", preset: "one",
+    steps: [["Deploy", "deploy"], ["Machine my-vps dies", "down:my-vps"], ["It comes back", "up:my-vps"]] },
+  { id: "split", title: "Split apps across machines", text: "An edge machine takes the traffic, two app machines run web/api (api with 4 replicas), a worker lives on app-2 only, and both data services are pinned to data-1. Watch where each task lands and which labels each machine gets.", preset: "split",
+    steps: [["Deploy", "deploy"], ["app-2 dies", "down:app-2"], ["app-2 returns", "up:app-2"], ["Deploy again", "deploy"]] },
+  { id: "loss", title: "Lose the data machine", text: "When the machine holding a volume dies, Swarm will not start the database somewhere else (that would be an empty database). It waits. Stateless apps carry on.", preset: "split",
+    steps: [["Deploy", "deploy"], ["data-1 dies", "down:data-1"], ["data-1 returns", "up:data-1"]] },
+  { id: "two", title: "Two machines", text: "Two machines give you room but not redundancy in the control plane: there is one manager. Lose it and nothing reschedules, even though b keeps serving what it already runs.", preset: "two",
+    steps: [["Deploy", "deploy"], ["b dies", "down:b"], ["b returns", "up:b"], ["a (the manager) dies", "down:a"]] },
+  { id: "grow", title: "Grow from one to three", text: "Start on one machine, then add two. The swarm keeps its identity; two more managers are promoted so any one machine can be lost. Existing tasks do not move until the next deploy.", preset: "one",
+    steps: [["Deploy on one", "deploy"], ["Add two machines", "grow"], ["Deploy again", "deploy"], ["Lose the first machine", "down:my-vps"]] },
+  { id: "illegal", title: "Configs that must be refused", text: "A database on two machines, an unknown ingress, a placement for a machine that does not exist, and a placement for something the project does not declare. Ocel should refuse before touching a server.", preset: "illegal",
+    steps: [["Try to deploy", "deploy"]] },
+];
+
+let state = { options: presets.one, plan: null, up: {}, tasks: [], log: [], changed: new Set() };
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+function record(text) { state.log.unshift(text); state.log = state.log.slice(0, 12); }
+
+function snapshot() { return JSON.stringify(state.tasks.map((t) => [t.service, t.slot, t.machine])); }
+function markChanges(before) {
+  const prev = new Map(JSON.parse(before).map(([s, i, m]) => [`${s}.${i}`, m]));
+  state.changed = new Set(state.tasks.filter((t) => prev.get(`${t.service}.${t.slot}`) !== t.machine).map((t) => `${t.service}.${t.slot}`));
+}
+
+function act(action) {
+  const before = snapshot();
+  if (action === "deploy") {
+    try { state.options = JSON.parse($("config").value); $("parse").textContent = ""; }
+    catch (e) { $("parse").textContent = "Config is not valid JSON: " + e.message; return; }
+    const plan = Placement.derive(state.options, workloads);
+    state.plan = plan;
+    if (plan.errors.length) { record("Deploy refused: " + plan.errors.length + " problem(s) in the config."); state.tasks = []; render(); return; }
+    for (const n of plan.names) if (!(n in state.up)) state.up[n] = true;
+    for (const n of Object.keys(state.up)) if (!plan.names.includes(n)) delete state.up[n];
+    const q = Placement.quorum(plan, state.up);
+    if (!q.held) { record("Deploy refused: the managers have no majority."); render(); return; }
+    state.tasks = Placement.deploy(plan, state.up);
+    record(`Deployed ${plan.services.length} services across ${plan.names.filter((n) => state.up[n]).length} machine(s).`);
+  } else if (action === "grow") {
+    const opts = JSON.parse($("config").value);
+    opts.machines = [...opts.machines, { name: "node-2", ssh: "root@10.0.0.2" }, { name: "node-3", ssh: "root@10.0.0.3" }];
+    $("config").value = JSON.stringify(opts, null, 2);
+    state.options = opts;
+    state.plan = Placement.derive(opts, workloads);
+    state.up["node-2"] = true; state.up["node-3"] = true;
+    record("Added node-2 and node-3: they join the existing swarm and are promoted, so there are 3 managers. Running tasks stay where they are.");
+  } else if (action.startsWith("down:")) {
+    const name = action.slice(5);
+    ({ up: state.up, tasks: state.tasks } = Placement.machineDown(state.plan, state.up, state.tasks, name));
+    record(`${name} went down. After about 15 seconds Swarm marks it Down and acts.`);
+  } else if (action.startsWith("up:")) {
+    const name = action.slice(3);
+    ({ up: state.up, tasks: state.tasks } = Placement.machineUp(state.plan, state.up, state.tasks, name));
+    record(`${name} is back.`);
+  }
+  markChanges(before);
+  render();
+}
+
+function render() {
+  const plan = state.plan;
+  const d = $("derived");
+  if (!plan) { d.innerHTML = "<p class='pending'>Press Deploy to derive the cluster.</p>"; }
+  else {
+    const msgs = [...plan.errors.map((e) => `<li class="err">${esc(e)}</li>`), ...plan.warnings.map((w) => `<li class="warn">${esc(w)}</li>`)].join("");
+    d.innerHTML = `
+      ${msgs ? `<ul class="msgs" style="margin-bottom:10px">${msgs}</ul>` : `<p class="ok" style="margin-top:0">Config accepted.</p>`}
+      <table>
+        <tr><th>Managers</th><td>${plan.managers.map(esc).join(", ") || "—"}</td></tr>
+        <tr><th>Ingress (DNS)</th><td>${plan.ingress.map(esc).join(", ")}</td></tr>
+        <tr><th>Node labels</th><td>${Object.entries(plan.labels).map(([n, l]) => `<div><b>${esc(n)}</b>: <code>${l.map(esc).join(" ")}</code></div>`).join("")}</td></tr>
+      </table>
+      <table style="margin-top:10px">
+        <tr><th>Service</th><th>Replicas</th><th>Constraint</th><th>Update</th></tr>
+        ${plan.services.map((s) => `<tr><td>${esc(s.name)}${s.stateful ? " <span class='tag'>volume</span>" : ""}</td><td>${s.replicas}</td><td><code>node.labels.${esc(s.label)}==true</code></td><td>${s.order}</td></tr>`).join("")}
+      </table>`;
+  }
+
+  const names = plan ? plan.names : [];
+  $("freeplay").innerHTML = [
+    `<button class="btn primary" data-act="deploy">Deploy</button>`,
+    `<button class="btn" data-act="grow" ${names.length === 1 ? "" : "disabled"}>Add two machines</button>`,
+    ...names.map((n) => state.up[n] === false
+      ? `<button class="btn" data-act="up:${esc(n)}">Bring ${esc(n)} back</button>`
+      : `<button class="btn" data-act="down:${esc(n)}" ${state.tasks.length ? "" : "disabled"}>Take ${esc(n)} down</button>`),
+  ].join("");
+
+  $("machines").innerHTML = names.map((n) => {
+    const roles = [plan.managers.includes(n) ? "manager" : "worker", plan.ingress.includes(n) ? "ingress" : null].filter(Boolean).join(" · ");
+    const here = state.tasks.filter((t) => t.machine === n);
+    return `<div class="machine ${state.up[n] === false ? "down" : ""}">
+      <h3>${esc(n)} <span class="tag">${state.up[n] === false ? "down" : "up"}</span></h3>
+      <div class="role">${roles}</div>
+      ${here.map((t) => `<div class="task ${t.stateful ? "stateful" : ""} ${state.changed.has(`${t.service}.${t.slot}`) ? "changed" : ""}">${esc(t.service)} #${t.slot}</div>`).join("") || "<div class='role'>nothing scheduled</div>"}
+    </div>`;
+  }).join("") + (state.tasks.some((t) => !t.machine)
+    ? `<div class="machine"><h3>Not running</h3><div class="role">no machine can take these</div>${state.tasks.filter((t) => !t.machine).map((t) => `<div class="task pending">${esc(t.service)} #${t.slot}${t.waitingFor ? ` (waits for ${esc(t.waitingFor)})` : ""}</div>`).join("")}</div>` : "");
+
+  $("health").innerHTML = plan && !plan.errors.length && state.tasks.length
+    ? Placement.health(plan, state.up, state.tasks).map((h) => `<li class="${h.level}">${esc(h.text)}</li>`).join("")
+    : "<li class='pending'>Nothing deployed.</li>";
+  $("log").innerHTML = state.log.map((l) => `<li>${esc(l)}</li>`).join("");
+
+  document.querySelectorAll("[data-act]").forEach((b) => b.onclick = () => act(b.dataset.act));
+}
+
+function startScenario(sc) {
+  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.id === sc.id));
+  state = { options: presets[sc.preset], plan: null, up: {}, tasks: [], log: [], changed: new Set() };
+  $("config").value = JSON.stringify(presets[sc.preset], null, 2);
+  let next = 0;
+  const draw = () => {
+    $("scenario").innerHTML = `<p style="margin:0">${esc(sc.text)}</p><div class="steps">${sc.steps.map(([label], i) =>
+      `<button class="btn ${i === next ? "primary" : ""}" data-step="${i}" ${i === next ? "" : "disabled"}>${i + 1}. ${esc(label)}</button>`).join("")}</div>`;
+    document.querySelectorAll("[data-step]").forEach((b) => b.onclick = () => { act(sc.steps[+b.dataset.step][1]); next++; draw(); });
+  };
+  draw();
+  render();
+}
+
+$("tabs").innerHTML = scenarios.map((s) => `<button data-id="${s.id}">${esc(s.title)}</button>`).join("");
+document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => startScenario(scenarios.find((s) => s.id === b.dataset.id)));
+$("apply").onclick = () => act("deploy");
+startScenario(scenarios[0]);
+</script>
+</body>
+</html>
