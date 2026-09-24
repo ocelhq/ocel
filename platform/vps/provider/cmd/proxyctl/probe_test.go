@@ -136,8 +136,8 @@ func TestTheProbeRefusesACertificateTheProxysOwnAuthorityNeverIssued(t *testing.
 	})
 
 	code, out, errs := probed(t, at, "web.localhost")
-	if code != exitUnhealthy {
-		t.Fatalf("probe over a certificate nothing on the box vouches for = %d, want %d: a header read off a handshake nobody verified proves nothing served the name", code, exitUnhealthy)
+	if code != exitNotServingYet {
+		t.Fatalf("probe over a certificate nothing on the box vouches for = %d, want %d: a header read off a handshake nobody verified proves nothing served the name", code, exitNotServingYet)
 	}
 	if strings.TrimSpace(out) != "" {
 		t.Errorf("probe printed %q over a refused handshake", out)
@@ -172,10 +172,39 @@ func TestTheProbeSaysWhatStoppedItWhenNothingListens(t *testing.T) {
 	at := listening(t, func(taken net.Conn) { taken.Close() })
 
 	code, _, errs := probed(t, at, "web.localhost")
-	if code != exitUnhealthy {
-		t.Fatalf("probe over a peer that never spoke tls = %d, want %d: the settle keeps waiting on that", code, exitUnhealthy)
+	if code != exitNotServingYet {
+		t.Fatalf("probe over a peer that never spoke tls = %d, want %d: the settle keeps waiting on that", code, exitNotServingYet)
 	}
 	if strings.TrimSpace(errs) == "" {
 		t.Error("probe said nothing about why it reached no edge")
+	}
+}
+
+func TestAProxyThatHoldsNoLocalAuthorityYetIsNotServingYet(t *testing.T) {
+	held, _ := served(t)
+	held.status = http.StatusNotFound
+	held.body = `{"error":"no certificate authority configured with id: local"}`
+	at := listening(t, func(taken net.Conn) { taken.Close() })
+
+	code, out, errs := probed(t, at, "web.localhost")
+	if code != exitNotServingYet {
+		t.Fatalf("probe over a proxy whose local authority does not exist yet = %d (%q), want %d: the proxy creates it the first time it issues under it, which a bind of a .localhost name is about to make happen", code, errs, exitNotServingYet)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("probe printed %q with no authority to verify anything against", out)
+	}
+	if !strings.Contains(errs, "authority") {
+		t.Errorf("probe said %q, want the missing authority named as the cause", errs)
+	}
+}
+
+func TestAnAdminApiThatFailsIsStillAnError(t *testing.T) {
+	held, _ := served(t)
+	held.status = http.StatusInternalServerError
+	held.body = `{"error":"loading pki app: boom"}`
+	at := listening(t, func(taken net.Conn) { taken.Close() })
+
+	if code, _, errs := probed(t, at, "web.localhost"); code != exitRefused {
+		t.Errorf("probe over an admin api that failed = %d (%q), want %d: a broken proxy is not a hostname still converging", code, errs, exitRefused)
 	}
 }
