@@ -941,3 +941,30 @@ func TestALedgerOpenedOnStateThatNamesNoTableRefuses(t *testing.T) {
 		t.Errorf("PutStaged err = %v, want %v", err, edge.ErrStoreAbsent)
 	}
 }
+
+func TestBindDomainAfterAPromotionMapsTheHostOntoThePromotedStage(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := newWorld()
+	stack := reconciled(t, w)
+	staged(t, stack, entryFunction, "")
+	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}
+	if err := stack.Promote(ctx, promotion, "", edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+
+	host := "shop.example.com"
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: "arn:aws:acm:eu-west-1:123456789012:certificate/abc"}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+
+	api := w.gateway.named(productionAPIName())
+	mapping, mapped := w.gateway.domains[host].mappings["(none)"]
+	if !mapped || aws.ToString(mapping.RestApiId) != api.id || aws.ToString(mapping.Stage) != stageName {
+		t.Fatalf("%s maps onto %+v, want the %s stage of %s: a hostname bound after the promotion serves it without another deploy", host, mapping, stageName, api.id)
+	}
+	if api.variables[entryVariable] != entryFunction {
+		t.Errorf("the stage %s is mapped onto serves %q, want the promoted %q", host, api.variables[entryVariable], entryFunction)
+	}
+}

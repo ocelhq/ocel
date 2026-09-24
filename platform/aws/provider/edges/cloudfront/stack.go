@@ -214,7 +214,10 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 }
 
 func (s *stack) publish(ctx context.Context, c Clients, promotion edge.Promotion, pointer string) error {
-	hostnames := s.servedHostnames(pointer)
+	return s.publishOn(ctx, c, promotion, s.servedHostnames(pointer))
+}
+
+func (s *stack) publishOn(ctx context.Context, c Clients, promotion edge.Promotion, hostnames []string) error {
 	if len(hostnames) == 0 {
 		return nil
 	}
@@ -438,8 +441,22 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err := serveAlias(ctx, c, s.plan(), held.id, binding.Hostname, binding.Certificate); err != nil {
 		return err
 	}
+	if err := s.serveActive(ctx, c, binding.Hostname); err != nil {
+		return err
+	}
 	s.state.Bind(binding.Hostname)
 	return nil
+}
+
+func (s *stack) serveActive(ctx context.Context, c Clients, hostname string) error {
+	if !s.provisioned() {
+		return nil
+	}
+	active, found, err := s.activePromotion(ctx, c, edge.DefaultPointer)
+	if err != nil || !found {
+		return err
+	}
+	return s.publishOn(ctx, c, active, []string{hostname})
 }
 
 func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
