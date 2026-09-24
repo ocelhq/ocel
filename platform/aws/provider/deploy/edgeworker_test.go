@@ -23,7 +23,11 @@ func TestAnAppSynthesizedFromFunctionsNamesTheComputeItRunsOn(t *testing.T) {
 	})
 
 	if len(apps) != 1 {
-		t.Fatalf("manifestApps() = %d apps, want one app synthesized from the function", len(apps))
+		names := make([]string, 0, len(apps))
+		for _, app := range apps {
+			names = append(names, app.GetName())
+		}
+		t.Fatalf("manifestApps() = %q, want one app synthesized from the function", names)
 	}
 	if got, want := apps[0].GetCompute(), string(providerkit.ComputeServerless); got != want {
 		t.Errorf("app compute = %q, want %q — every other ManifestApp answers the field, and this one is read by the same code", got, want)

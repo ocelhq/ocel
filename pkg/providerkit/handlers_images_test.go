@@ -436,7 +436,7 @@ func TestTheDeploySaysWhereTheImageWentRatherThanWhatItIsCalledThere(t *testing.
 
 	want := "Sending web's image to deploy@box.invalid"
 	for _, event := range events {
-		if wireCarries(t, event, want) {
+		if event.GetProgress().GetMessage() == want {
 			return
 		}
 	}

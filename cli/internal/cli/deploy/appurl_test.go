@@ -26,7 +26,11 @@ func manifestVariable(t *testing.T, manifest *contractv1.Manifest, app, key stri
 				return v
 			}
 		}
-		t.Fatalf("app %q carries no %s among its %d variables", app, key, len(a.GetVariables()))
+		keys := make([]string, 0, len(a.GetVariables()))
+		for _, v := range a.GetVariables() {
+			keys = append(keys, v.GetKey())
+		}
+		t.Fatalf("app %q carries no %s among its variables %q", app, key, keys)
 	}
 	t.Fatalf("manifest carries no app %q", app)
 	return nil
