@@ -34,7 +34,13 @@ function one(name: string, over: Partial<Omit<Fixture, "name" | "concern">> = {}
   });
 }
 
-type Input = { lane?: Lane; filter?: Partial<RunFilter>; gaps?: Gap[]; releaseCycle?: boolean };
+type Input = {
+  lane?: Lane;
+  filter?: Partial<RunFilter>;
+  gaps?: Gap[];
+  releaseCycle?: boolean;
+  env?: NodeJS.ProcessEnv;
+};
 
 function planOf(fixtures: Fixture[], input: Input = {}): Plan {
   return plan({
@@ -43,6 +49,7 @@ function planOf(fixtures: Fixture[], input: Input = {}): Plan {
     lane: input.lane ?? "aws",
     releaseCycle: input.releaseCycle ?? true,
     filter: { ...NO_FILTER, ...input.filter },
+    env: input.env ?? {},
   });
 }
 
@@ -304,6 +311,21 @@ describe("the gaps a lane expects", () => {
     const gaps = [gap("one", [{ on: ["vps"], fails: [step.deploy] }])];
     expect(planOf(matrix, { gaps }).expectedFailures).toEqual({});
     expect(planOf(matrix, { gaps, lane: "vps" }).expectedFailures["deploy/node/web"]).toBeDefined();
+  });
+
+  it("reads a scope only while a variable it names is unset", () => {
+    const gaps = [
+      gap("one", [
+        { on: ["aws"], variants: [edge], whileUnset: ["USER", "TOKEN"], fails: [step.deploy] },
+      ]),
+    ];
+    const held = { USER: "octocat", TOKEN: "ghs_t0ken" };
+    expect(planOf(matrix, { gaps, env: held }).expectedFailures).toEqual({});
+    for (const env of [{}, { USER: "octocat" }, { ...held, TOKEN: " " }]) {
+      expect(
+        planOf(matrix, { gaps, env }).expectedFailures["deploy/node-edge/web"]?.deploy,
+      ).toBeDefined();
+    }
   });
 
   it("expects only what the lane runs", () => {

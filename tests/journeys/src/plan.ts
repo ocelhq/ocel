@@ -134,9 +134,17 @@ function hitsFor(scope: GapScope, tests: LaneTest[], said: string): LaneTest[] {
   return hits;
 }
 
+function applies(scope: GapScope, lane: Lane, env: NodeJS.ProcessEnv): boolean {
+  return (
+    scope.on.includes(lane) &&
+    (scope.whileUnset === undefined || scope.whileUnset.some((name) => !env[name]?.trim()))
+  );
+}
+
 function resolveGaps(
   gaps: Gap[],
   lane: Lane,
+  env: NodeJS.ProcessEnv,
   tests: LaneTest[],
 ): { expectedFailures: ExpectedFailures; skipped: SkippedCells } {
   const expectedFailures: ExpectedFailures = {};
@@ -145,7 +153,7 @@ function resolveGaps(
     const carried = new Set<string>();
     const skippedCells = new Set<string>();
     for (const scope of gap.where) {
-      if (!scope.on.includes(lane)) {
+      if (!applies(scope, lane, env)) {
         continue;
       }
       for (const hit of hitsFor(scope, tests, `${gap.id} on ${lane}`)) {
@@ -261,8 +269,9 @@ export function plan(input: {
   lane: Lane;
   releaseCycle: boolean;
   filter: RunFilter;
+  env: NodeJS.ProcessEnv;
 }): Plan {
-  const { fixtures, gaps, lane, releaseCycle, filter } = input;
+  const { fixtures, gaps, lane, releaseCycle, filter, env } = input;
   checkMatrix(fixtures);
   checkGaps(gaps);
   checkVariantsAsked(fixtures, filter.variants);
@@ -281,7 +290,7 @@ export function plan(input: {
       })),
     ),
   );
-  const resolved = resolveGaps(gaps, lane, laneTests);
+  const resolved = resolveGaps(gaps, lane, env, laneTests);
   const skips = filter.runSkipped ? {} : resolved.skipped;
 
   const chosen = named(
