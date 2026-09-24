@@ -96,6 +96,7 @@ func sanitizeMessage(msg string) string {
 const (
 	environmentUnitTitle = "Environment"
 	edgeUnitTitle        = "Edge"
+	hostnamesUnitTitle   = "Hostnames"
 	promotionUnitTitle   = "Promotion"
 	infraUnitTitle       = "Shared infrastructure"
 	connectorUnitTitle   = "Connector"

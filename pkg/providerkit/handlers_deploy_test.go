@@ -871,6 +871,35 @@ func TestTheFirstDeploySettlesALocalhostNameWithNoDNSWriter(t *testing.T) {
 	}
 }
 
+func TestADeployBindsItsHostnamesOnlyOnceEveryStackItProvisionsStands(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	result, events := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	var said []string
+	bound, provisioned := -1, -1
+	for _, event := range events {
+		message := event.GetProgress().GetMessage()
+		switch {
+		case strings.HasPrefix(message, "Binding shop.example") && bound < 0:
+			bound = len(said)
+		case strings.HasPrefix(message, "provisioned "):
+			provisioned = len(said)
+		}
+		if message != "" {
+			said = append(said, message)
+		}
+	}
+	if bound < 0 || provisioned < 0 || bound < provisioned {
+		t.Errorf("the deploy said %v, want shop.example bound only after every stack was provisioned: an edge binds what already stands, such as the box's store name", said)
+	}
+}
+
 func TestALaterDeploySettlesAHostnameTheConfigNewlyDeclares(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)

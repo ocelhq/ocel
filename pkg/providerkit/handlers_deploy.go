@@ -47,6 +47,7 @@ type deployStages struct {
 	Infra       Stage
 	Apps        map[string]Stage
 	Edge        Stage
+	Hostnames   Stage
 	Promotion   Stage
 	Roster      []Stage
 }
@@ -56,6 +57,7 @@ func newDeployStages(plan DeployPlan) deployStages {
 		Environment: UnitStage(naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISIONING),
 		Infra:       UnitStage(plan.Infra.String(), infraUnitTitle, progressv1.Phase_PHASE_PROVISIONING),
 		Edge:        UnitStage(naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING),
+		Hostnames:   UnitStage(naming.UnitHostnames, hostnamesUnitTitle, progressv1.Phase_PHASE_PROVISIONING),
 		Promotion:   UnitStage(naming.UnitPromotion, promotionUnitTitle, progressv1.Phase_PHASE_FINALIZING),
 		Apps:        make(map[string]Stage, len(plan.Apps)),
 	}
@@ -68,7 +70,11 @@ func newDeployStages(plan DeployPlan) deployStages {
 		s.Apps[entry.App] = app
 		s.Roster = append(s.Roster, app)
 	}
-	s.Roster = append(s.Roster, s.Edge, s.Promotion)
+	s.Roster = append(s.Roster, s.Edge)
+	if plan.Class != ClassPreview {
+		s.Roster = append(s.Roster, s.Hostnames)
+	}
+	s.Roster = append(s.Roster, s.Promotion)
 	return s
 }
 
@@ -213,6 +219,9 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	if err := r.provision(ctx); err != nil {
 		return nil, err
 	}
+	if err := r.settleHostnames(ctx); err != nil {
+		return nil, err
+	}
 	return r.promote(ctx)
 }
 
@@ -327,10 +336,7 @@ func (r *deployRun) raiseEdge(ctx context.Context) error {
 				return nil
 			}
 			report.Say(fmt.Sprintf("Reconciling the %s edge", r.front.Kind()))
-			if err := r.reconcileEdge(ctx); err != nil {
-				return err
-			}
-			return r.settleHostnames(ctx, report)
+			return r.reconcileEdge(ctx)
 		})
 	})
 }
@@ -376,25 +382,29 @@ func (r *deployRun) reconcileEdge(ctx context.Context) error {
 	return r.checkpoint(ctx)
 }
 
-func (r *deployRun) settleHostnames(ctx context.Context, report Reporter) error {
-	if r.world() != hostingProduction {
+func (r *deployRun) settleHostnames(ctx context.Context) error {
+	if r.dry || r.world() != hostingProduction {
 		return nil
 	}
-	settling := &hostnames{stackSession: r.stackSession}
-	for _, host := range r.configuredHosts() {
-		if r.state.Ready(host.Hostname, r.front.Kind()) {
-			continue
-		}
-		_, err := settling.settleHost(ctx, host, report)
-		if waits, held := LeftPending(err); held {
-			r.pending = append(r.pending, fmt.Sprintf("%s is not served yet: %s", host.Hostname, waits))
-			continue
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return r.tracked.unit(r.stages.Hostnames, func(u *unitRun) error {
+		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
+			settling := &hostnames{stackSession: r.stackSession}
+			for _, host := range r.configuredHosts() {
+				if r.state.Ready(host.Hostname, r.front.Kind()) {
+					continue
+				}
+				_, err := settling.settleHost(ctx, host, report)
+				if waits, held := LeftPending(err); held {
+					r.pending = append(r.pending, fmt.Sprintf("%s is not served yet: %s", host.Hostname, waits))
+					continue
+				}
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	})
 }
 
 func (r *deployRun) configuredHosts() []ConfiguredHost {
