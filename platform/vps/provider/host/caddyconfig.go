@@ -77,12 +77,7 @@ const (
 	healthExpects  = 2
 )
 
-type HostClaim struct {
-	Hostname string `json:"hostname"`
-	Owner    string `json:"owner"`
-	Pointer  string `json:"pointer"`
-	App      string `json:"app,omitempty"`
-}
+type HostClaim live.Claimed
 
 type claimKey struct {
 	Owner   string
@@ -104,7 +99,7 @@ func (r AppRoute) surface() surfaceKey {
 }
 
 func (c HostClaim) identity() string {
-	return live.ClaimIdentity(live.Claimed{Owner: c.Owner, Hostname: c.Hostname, Pointer: c.Pointer, App: c.App})
+	return live.ClaimIdentity(live.Claimed(c))
 }
 
 func (r AppRoute) app() bool { return r.App != live.StoreLabel }
