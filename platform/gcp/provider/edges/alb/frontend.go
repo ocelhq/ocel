@@ -64,6 +64,18 @@ func refusingRouteAction() compute.URLMapDefaultRouteActionPtrInput {
 	}
 }
 
+func markingHeaderAction() compute.URLMapHeaderActionPtrInput {
+	return &compute.URLMapHeaderActionArgs{
+		ResponseHeadersToAdds: compute.URLMapHeaderActionResponseHeadersToAddArray{
+			&compute.URLMapHeaderActionResponseHeadersToAddArgs{
+				HeaderName:  pulumi.String(edge.HeaderEdge),
+				HeaderValue: pulumi.String(string(Kind)),
+				Replace:     pulumi.Bool(true),
+			},
+		},
+	}
+}
+
 func previewWildcardResources(ctx *pulumi.Context, spec frontSpec, project string) error {
 	base := spec.Preview.BaseDomain
 	if base == "" {
@@ -153,6 +165,7 @@ func frontProgram(spec frontSpec) Program {
 			Project:            held,
 			DefaultService:     notFound.SelfLink,
 			DefaultRouteAction: refusingRouteAction(),
+			HeaderAction:       markingHeaderAction(),
 		}, pulumi.IgnoreChanges(frontRouting))
 		if err != nil {
 			return err
