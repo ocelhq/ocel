@@ -36,10 +36,13 @@ func onABoxServingContainers(t *testing.T) (machine, *vps.Provider) {
 	vm := live(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 	fixtures(t, vm)
+	p := vm.deploying(t)
 	t.Cleanup(func() {
+		if err := p.Host().UnrouteSurface(context.Background(), liveOwner); err != nil {
+			t.Errorf("UnrouteSurface(%s) before removing the containers its routes dial = %v", liveOwner, err)
+		}
 		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 	})
-	p := vm.deploying(t)
 	if err := p.Host().ClaimHosts(context.Background(), []host.HostClaim{{Hostname: host.ProxyContainer, Owner: liveOwner, Pointer: edge.DefaultPointer}}); err != nil {
 		t.Fatalf("ClaimHosts(%s) = %v", host.ProxyContainer, err)
 	}
