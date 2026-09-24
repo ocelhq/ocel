@@ -500,10 +500,10 @@ func (p *Provider) bucketOrigins(ctx context.Context, ref providerkit.StackRef, 
 	if err != nil {
 		return nil, err
 	}
-	return answered(ref, declaredOrigins(spec), claims), nil
+	return corsOrigins(ref, declaredOrigins(spec), claims), nil
 }
 
-func answered(ref providerkit.StackRef, declared []string, claims []host.HostClaim) []string {
+func corsOrigins(ref providerkit.StackRef, declared []string, claims []host.HostClaim) []string {
 	origins := slices.Clone(declared)
 	owner := live.Surface(ref.Project, string(ref.Class))
 	for _, claim := range claims {
@@ -525,37 +525,37 @@ func (p *Provider) holdOrigins(ctx context.Context, project string, class provid
 	if err != nil {
 		return err
 	}
-	var claims []host.HostClaim
-	claimed := false
+	claims := sync.OnceValues(func() ([]host.HostClaim, error) { return p.host.Claims(ctx) })
 	for _, entry := range entries {
 		ref := providerkit.StackRef{Project: project, Class: class, Name: entry.Name}
-		var root storeCredential
-		opened := false
-		for _, binding := range entry.Bindings {
-			if binding.Type != providerkit.BindingBucket || p.stores.forgotten(entry.Name, binding.Name) {
-				continue
-			}
-			if !claimed {
-				if claims, err = p.host.Claims(ctx); err != nil {
-					return err
-				}
-				claimed = true
-			}
-			if !opened {
-				if root, err = p.storeRoot(ctx, ref, storeName(ref)); err != nil {
-					return err
-				}
-				opened = true
-			}
-			if root.secret == "" {
-				break
-			}
-			if err := p.host.HoldOrigins(ctx, storeBucketSpec(ref, storeName(ref), root.secret, host.BucketSpec{
-				Bucket:         binding.Properties[providerkit.PropertyBucket],
-				AllowedOrigins: answered(ref, recordedOrigins(binding), claims),
-			})); err != nil {
-				return err
-			}
+		if err := p.holdStackOrigins(ctx, ref, entry, claims); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *Provider) holdStackOrigins(ctx context.Context, ref providerkit.StackRef, entry providerkit.StackEntry, claims func() ([]host.HostClaim, error)) error {
+	buckets := slices.DeleteFunc(slices.Clone(entry.Bindings), func(binding providerkit.Binding) bool {
+		return binding.Type != providerkit.BindingBucket || p.stores.forgotten(entry.Name, binding.Name)
+	})
+	if len(buckets) == 0 {
+		return nil
+	}
+	held, err := claims()
+	if err != nil {
+		return err
+	}
+	root, err := p.storeRoot(ctx, ref, storeName(ref))
+	if err != nil || root.secret == "" {
+		return err
+	}
+	for _, binding := range buckets {
+		if err := p.host.HoldOrigins(ctx, storeBucketSpec(ref, storeName(ref), root.secret, host.BucketSpec{
+			Bucket:         binding.Properties[providerkit.PropertyBucket],
+			AllowedOrigins: corsOrigins(ref, recordedOrigins(binding), held),
+		})); err != nil {
+			return err
 		}
 	}
 	return nil

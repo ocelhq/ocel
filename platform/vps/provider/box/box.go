@@ -36,22 +36,24 @@ type Machine interface {
 	DisclaimHost(ctx context.Context, hostname, owner string) error
 	DisclaimPointer(ctx context.Context, owner, pointer string) error
 	DisclaimSurface(ctx context.Context, owner string) error
-	HoldOrigins(ctx context.Context, project string, class providerkit.Class) error
 	PreviewEntry(ctx context.Context) (string, error)
 	InstallPreviewEntry(ctx context.Context, base string) error
 	RemovePreviewEntry(ctx context.Context, base string) error
 }
 
+type Origins func(ctx context.Context, project string, class providerkit.Class) error
+
 type Edge struct {
 	machine Machine
+	origins Origins
 	records providerkit.RecordStore
 	scope   string
 }
 
 var _ edge.Edge = (*Edge)(nil)
 
-func New(machine Machine, records providerkit.RecordStore, scope string) *Edge {
-	return &Edge{machine: machine, records: records, scope: scope}
+func New(machine Machine, origins Origins, records providerkit.RecordStore, scope string) *Edge {
+	return &Edge{machine: machine, origins: origins, records: records, scope: scope}
 }
 
 func (e *Edge) Kind() edge.Kind { return Kind }

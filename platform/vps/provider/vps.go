@@ -270,16 +270,7 @@ func (p *Provider) Credentials() providerkit.Credentials { return credentials{p}
 func (p *Provider) Edges() providerkit.EdgeRegistry { return edges{p} }
 
 func (p *Provider) box() *box.Edge {
-	return box.New(machine{Host: p.host, origins: p.holdOrigins}, p.records, p.options.SSH.session().Destination())
-}
-
-type machine struct {
-	*host.Host
-	origins func(ctx context.Context, project string, class providerkit.Class) error
-}
-
-func (m machine) HoldOrigins(ctx context.Context, project string, class providerkit.Class) error {
-	return m.origins(ctx, project, class)
+	return box.New(p.host, p.holdOrigins, p.records, p.options.SSH.session().Destination())
 }
 
 func pins(configured map[string]string) []host.Pin {
