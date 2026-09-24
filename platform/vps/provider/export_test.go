@@ -2,7 +2,6 @@ package vps
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/transformkit"
@@ -28,8 +27,6 @@ func Elevating(inner providerkit.Bootstrapper, gate func(context.Context) error)
 func (p *Provider) Host() *host.Host { return p.host }
 
 func (p *Provider) Recording(records providerkit.RecordStore) { p.records = records }
-
-func (p *Provider) Probing(client *http.Client) { p.liveness.Transport = client.Transport }
 
 func (p *Provider) Resolving(look Lookup) { p.resolve = look }
 

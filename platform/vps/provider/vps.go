@@ -123,17 +123,15 @@ type Provider struct {
 	sealer  *host.Sealer
 
 	transform transformkit.Evaluator
-	liveness  providerkit.Liveness
 	resolve   Lookup
 	reaches   Reach
 
 	stores standingStores
 
-	probed    sync.Mutex
-	unreached map[string]string
-
 	dial sync.Mutex
 	live *session.Session
+
+	providerkit.Liveness
 }
 
 var _ providerkit.Diagnoser = (*Provider)(nil)
@@ -207,6 +205,7 @@ func (p *Provider) standing(dial host.Dial) *Provider {
 	p.host = host.New(dial, host.Keys{Path: p.options.DeployKey}, pins(p.options.Certificates))
 	p.records = host.NewRecords(p.host)
 	p.sealer = host.NewSealer(p.host)
+	p.Loopback = p.servedOnTheBox
 	return p
 }
 
@@ -306,10 +305,7 @@ func (p *Provider) ContainerRuntime(_ context.Context, arch string) ([]byte, err
 	return host.ContainerRuntime(arch)
 }
 
-var (
-	_ providerkit.Provider  = (*Provider)(nil)
-	_ providerkit.Diagnoser = (*Provider)(nil)
-)
+var _ providerkit.Provider = (*Provider)(nil)
 
 var (
 	_ providerkit.Prober            = (*Provider)(nil)

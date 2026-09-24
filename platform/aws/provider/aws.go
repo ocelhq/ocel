@@ -62,7 +62,8 @@ type Provider struct {
 	account  memo[struct{}, string]
 
 	releases *deploy.Releaser
-	live     providerkit.Liveness
+
+	providerkit.Liveness
 }
 
 type classEdge struct {
@@ -88,6 +89,7 @@ func New(ctx context.Context, settings providerkit.Settings) (providerkit.Provid
 
 func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootstrap.Namespace) *Provider {
 	p := &Provider{options: options, transforms: transforms, aws: cfg, namespace: ns}
+	p.Front = emulatedFront(cfg)
 	p.releases = deploy.NewReleaser(deploy.ResolverFunc(p.release), &deploy.Realized{})
 	return p
 }
@@ -158,11 +160,16 @@ func (p *Provider) Credentials() providerkit.Credentials {
 	return control.CredentialsFor(p.aws, p.namespace)
 }
 
-func (p *Provider) Serving(ctx context.Context, kind edge.Kind, hostname string) (edge.Kind, error) {
-	return p.live.Serving(ctx, kind, hostname)
+func emulatedFront(cfg aws.Config) *url.URL {
+	if cfg.BaseEndpoint == nil {
+		return nil
+	}
+	front, err := url.Parse(*cfg.BaseEndpoint)
+	if err != nil || front.Host == "" {
+		return nil
+	}
+	return front
 }
-
-func (p *Provider) Unreached(hostname string) string { return p.live.Unreached(hostname) }
 
 func (p *Provider) Edges() providerkit.EdgeRegistry { return p.edges() }
 

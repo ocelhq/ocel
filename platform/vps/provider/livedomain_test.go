@@ -3,8 +3,8 @@ package vps_test
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -23,16 +23,6 @@ import (
 )
 
 const domainSlug = "bound"
-
-type overPlainHTTP struct{ at string }
-
-func (o overPlainHTTP) RoundTrip(req *http.Request) (*http.Response, error) {
-	asked := req.Clone(req.Context())
-	asked.URL.Scheme = "http"
-	asked.URL.Host = o.at
-	asked.Host = req.URL.Hostname()
-	return http.DefaultTransport.RoundTrip(asked)
-}
 
 func overTheContract(t *testing.T, p *vps.Provider) contractv1connect.ProviderServiceClient {
 	t.Helper()
@@ -106,7 +96,7 @@ func servingTheBox(t *testing.T) (machine, *vps.Provider, contractv1connect.Prov
 
 	vm, p := onABoxServingContainers(t)
 	t.Cleanup(func() { closing(t, p) })
-	p.Probing(&http.Client{Transport: overPlainHTTP{at: vm.addr + ":80"}})
+	p.Front = &url.URL{Scheme: "http", Host: vm.addr + ":80"}
 
 	opened, err := p.Edges().Open(boxedge.Kind)
 	if err != nil {

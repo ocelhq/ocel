@@ -32,7 +32,8 @@ type Provider struct {
 	bases  map[string]base
 	pull   func(ctx context.Context, ref string) (v1.Image, error)
 	pulled sync.Map
-	live   providerkit.Liveness
+
+	providerkit.Liveness
 }
 
 func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
@@ -172,12 +173,6 @@ func (p *Provider) Credentials() providerkit.Credentials {
 		Projects: resourceManager{endpoint: p.endpoint},
 	}
 }
-
-func (p *Provider) Serving(ctx context.Context, kind edge.Kind, hostname string) (edge.Kind, error) {
-	return p.live.Serving(ctx, kind, hostname)
-}
-
-func (p *Provider) Unreached(hostname string) string { return p.live.Unreached(hostname) }
 
 func (p *Provider) Edges() providerkit.EdgeRegistry {
 	return edges{

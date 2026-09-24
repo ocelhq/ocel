@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -22,7 +21,40 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-const probeCeiling = 15 * time.Second
+const (
+	trusted   = true
+	untrusted = false
+)
+
+type resolvesEverywhere struct{ resolvesNothing }
+
+func (resolvesEverywhere) LookupHost(context.Context, string) ([]string, error) {
+	return []string{"192.0.2.1"}, nil
+}
+
+type resolvesNothing struct{}
+
+func (resolvesNothing) LookupHost(_ context.Context, host string) ([]string, error) {
+	return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+}
+
+func (resolvesNothing) LookupNS(_ context.Context, name string) ([]*net.NS, error) {
+	return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
+}
+
+func (resolvesNothing) LookupCNAME(_ context.Context, host string) (string, error) {
+	return "", &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+}
+
+func probedAt(p *vps.Provider, at string, trust bool) {
+	p.System = resolvesEverywhere{}
+	p.Dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, network, at)
+	}
+	if trust {
+		p.TLS = &tls.Config{InsecureSkipVerify: true}
+	}
+}
 
 func probingAt(t *testing.T, header string) *vps.Provider {
 	t.Helper()
@@ -42,15 +74,8 @@ func probingAt(t *testing.T, header string) *vps.Provider {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := &http.Client{Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, network, at.Host)
-		},
-	}}
-
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
-	p.Probing(client)
+	probedAt(p, at.Host, trusted)
 	return p
 }
 
@@ -90,17 +115,8 @@ func TestTheEdgeIsReadOffTheHostnameProbedAndNotOffWhereeverItPointsOn(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := &http.Client{Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		DialContext: func(ctx context.Context, network, asked string) (net.Conn, error) {
-			if strings.HasPrefix(asked, at.Hostname()) {
-				return (&net.Dialer{}).DialContext(ctx, network, asked)
-			}
-			return (&net.Dialer{}).DialContext(ctx, network, at.Host)
-		},
-	}}
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
-	p.Probing(client)
+	probedAt(p, at.Host, trusted)
 
 	kind, err := p.Serving(context.Background(), boxedge.Kind, "shop.example.com")
 	if err != nil {
@@ -125,11 +141,7 @@ func TestAHostnameServingACertificateNothingTrustsKeepsConvergingAndSaysWhy(t *t
 		t.Fatal(err)
 	}
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
-	p.Probing(&http.Client{Transport: &http.Transport{
-		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, network, at.Host)
-		},
-	}})
+	probedAt(p, at.Host, untrusted)
 
 	kind, err := p.Serving(context.Background(), boxedge.Kind, "shop.example.com")
 	if err != nil {
@@ -159,16 +171,14 @@ func TestAHostnameThatAnswersClearsTheCauseTheLastAttemptLeft(t *testing.T) {
 	}
 	refused := true
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
-	p.Probing(&http.Client{Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
-			if refused {
-				refused = false
-				return nil, errors.New("connect: connection refused")
-			}
-			return (&net.Dialer{}).DialContext(ctx, network, at.Host)
-		},
-	}})
+	probedAt(p, at.Host, trusted)
+	p.Dial = func(ctx context.Context, network, _ string) (net.Conn, error) {
+		if refused {
+			refused = false
+			return nil, errors.New("connect: connection refused")
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, at.Host)
+	}
 
 	if _, err := p.Serving(context.Background(), boxedge.Kind, "shop.example.com"); err != nil {
 		t.Fatal(err)
@@ -188,7 +198,7 @@ func TestAProbeTheRunGaveUpOnSaysSoRatherThanReportingTheHostnameUnserved(t *tes
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
-	p.Probing(&http.Client{Timeout: probeCeiling, Transport: &http.Transport{}})
+	p.System = resolvesNothing{}
 
 	ctx, stop := context.WithCancel(context.Background())
 	stop()
@@ -202,7 +212,7 @@ func TestAHostnameNothingAnswersIsNotAnErrorTheSettleGivesUpOn(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
-	p.Probing(&http.Client{Timeout: probeCeiling, Transport: &http.Transport{}})
+	p.System = resolvesNothing{}
 
 	kind, err := p.Serving(context.Background(), boxedge.Kind, "nothing.invalid")
 	if err != nil {
@@ -299,12 +309,7 @@ func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testi
 		t.Fatal(err)
 	}
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
-	p.Probing(&http.Client{Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, network, at.Host)
-		},
-	}})
+	probedAt(p, at.Host, trusted)
 
 	kind, err := p.Serving(context.Background(), boxedge.Kind, hostname)
 	if err != nil {
@@ -328,12 +333,10 @@ func probedOnTheBox(t *testing.T, answer session.Result) (*vps.Provider, *box) {
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
-	p.Probing(&http.Client{Transport: &http.Transport{
-		DialContext: func(context.Context, string, string) (net.Conn, error) {
-			t.Error("a .localhost name was dialled from the operator's machine, where RFC 6761 resolves it to this machine's own loopback and never to the box")
-			return nil, errors.New("dialled from here")
-		},
-	}})
+	p.Dial = func(context.Context, string, string) (net.Conn, error) {
+		t.Error("a .localhost name was dialled from the operator's machine, where RFC 6761 resolves it to this machine's own loopback and never to the box")
+		return nil, errors.New("dialled from here")
+	}
 	return p, machine
 }
 
