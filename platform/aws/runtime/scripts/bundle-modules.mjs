@@ -31,8 +31,8 @@ const cjsInterop = [
   'import { fileURLToPath as ocelFileURLToPath } from "node:url";',
   'import { dirname as ocelDirname } from "node:path";',
   "const require = ocelCreateRequire(import.meta.url);",
-  "const __filename = ocelFileURLToPath(import.meta.url);",
-  "const __dirname = ocelDirname(__filename);",
+  "const ocelFilename = ocelFileURLToPath(import.meta.url);",
+  "const ocelDirnameOf = ocelDirname(ocelFilename);",
 ].join("\n");
 
 async function bundle(entry, outfile, options) {
@@ -73,6 +73,7 @@ await Promise.all(
     bundle(join(pkgDir, `src/next/${name}.mts`), join(distNext, `${name}.mjs`), {
       format: "esm",
       banner: cjsInterop,
+      define: { __filename: "ocelFilename", __dirname: "ocelDirnameOf" },
     }),
   ),
 );
