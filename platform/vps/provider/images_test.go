@@ -134,7 +134,12 @@ func (b *box) proxying(command, carried string) (session.Result, bool) {
 		held := func(read []byte) string { return "+" + base64.StdEncoding.EncodeToString(read) + "\n" }
 		return session.Result{Stdout: held([]byte(b.routingDoc)) + held(rendered)}, true
 	case strings.Contains(command, `mv "$staged" `):
-		b.routingDoc, _, _ = strings.Cut(carried, "\n")
+		fed, _, _ := strings.Cut(carried, "\n")
+		written, err := base64.StdEncoding.DecodeString(fed)
+		if err != nil {
+			return session.Result{Code: 1, Stderr: err.Error()}, true
+		}
+		b.routingDoc = string(written)
 		sum := sha256.Sum256([]byte(b.routingDoc))
 		return session.Result{Stdout: hex.EncodeToString(sum[:]) + "\n"}, true
 	}

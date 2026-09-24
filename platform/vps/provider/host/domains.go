@@ -229,15 +229,21 @@ func (h *Host) recomposed(ctx context.Context, compose func(RoutingTable) (Routi
 	}
 	if _, err := h.ran(ctx, "reload the proxy",
 		words(helperCommand("flip", ProxyConfigMount)), nil, elevation); err != nil {
-		return h.reverted(ctx, shaped.held, shaped.written, err)
+		return h.reverted(ctx, shaped, err, elevation)
 	}
 	return nil
 }
 
-func (h *Host) reverted(ctx context.Context, previous RoutingTable, expected tableDigest, why error) error {
-	if _, err := h.writeRouting(ctx, expected, previous); err != nil {
+func (h *Host) reverted(ctx context.Context, shaped composed, why error, elevation string) error {
+	if _, err := h.writePair(ctx, shaped.written, shaped.prior); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"the running proxy rejected %s: %v\nrestoring %s and %s also failed: %v",
+			"reloading the proxy onto %s failed: %v\nrestoring %s and %s also failed: %v",
+			ProxyConfig, why, live.RoutingTable, ProxyConfig, err)
+	}
+	if _, err := h.ran(ctx, "reload the proxy onto what it served before",
+		words(helperCommand("flip", ProxyConfigMount)), nil, elevation); err != nil {
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"reloading the proxy onto %s failed: %v\n%s and %s were restored, but reloading the proxy onto them failed too, so it may still serve what they no longer record: %v\nRun the deploy again",
 			ProxyConfig, why, live.RoutingTable, ProxyConfig, err)
 	}
 	return why

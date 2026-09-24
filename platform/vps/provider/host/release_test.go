@@ -746,7 +746,7 @@ func TestAWriteThatDiesBetweenItsMovesLeavesTheTableItWroteRatherThanTheConfig(t
 	here := strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
 	write := exec.Command("/bin/sh", "-c", here(stagedWrite(tableDigest(contentSum([]byte(before))))))
 	write.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
-	write.Stdin = strings.NewReader(after + "\n" + string(mustRender(t, routed())))
+	write.Stdin = strings.NewReader(pairFed(routingPair{table: []byte(after), config: mustRender(t, routed())}))
 	if err := write.Run(); err == nil {
 		t.Fatal("a write whose second move failed reported success, so nothing below is about a write that died between its moves")
 	}
@@ -871,7 +871,7 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 	for _, writer := range []string{"one", "the other"} {
 		go func() {
 			run := exec.Command("/bin/sh", "-c", strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace(stagedWrite(read)))
-			run.Stdin = strings.NewReader("table by " + writer + "\nconfig by " + writer)
+			run.Stdin = strings.NewReader(pairFed(routingPair{table: []byte("table by " + writer), config: []byte("config by " + writer)}))
 			racing <- run.Run()
 		}()
 	}

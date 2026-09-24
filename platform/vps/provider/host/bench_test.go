@@ -358,15 +358,21 @@ func expectedDigest(command string) string {
 	return strings.Trim(expected, "'")
 }
 
-func tableOf(fed string) string {
-	table, _, _ := strings.Cut(fed, "\n")
-	return table
+func fedLine(fed string, at int) string {
+	lines := strings.Split(fed, "\n")
+	if len(lines) <= at {
+		return ""
+	}
+	decoded, err := base64.StdEncoding.DecodeString(lines[at])
+	if err != nil {
+		return ""
+	}
+	return string(decoded)
 }
 
-func configOf(fed string) string {
-	_, config, _ := strings.Cut(fed, "\n")
-	return config
-}
+func tableOf(fed string) string { return fedLine(fed, 0) }
+
+func configOf(fed string) string { return fedLine(fed, 1) }
 
 func renderedFrom(document string) string {
 	table, err := ReadRoutingTable([]byte(document))
