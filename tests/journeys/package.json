@@ -15,6 +15,7 @@
     "journey:next": "OCEL_TARGET=aws bun src/run/journey.ts",
     "plan": "bun src/report/lane.ts",
     "sweep": "bun src/sweep.ts",
+    "sweep:registry": "bun src/sweepRegistry.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
