@@ -2,6 +2,8 @@ package pin
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"maps"
 	"slices"
 
@@ -22,6 +24,7 @@ func Promote(
 	pointer string,
 	report edge.Reporter,
 ) error {
+	var pinning []edge.DeploymentRecord
 	for _, app := range slices.Sorted(maps.Keys(promotion.Builds)) {
 		identity := promotion.Builds[app]
 		record, held, err := ledger.Record(ctx, app, identity)
@@ -39,15 +42,24 @@ func Promote(
 					"re-deploy %s so its release records one, then promote that",
 				identity, app, app)
 		}
+		pinning = append(pinning, record)
+	}
+	if err := ledger.Promote(ctx, promotion, pointer, report); err != nil {
+		return err
+	}
+	for _, record := range pinning {
 		for _, service := range slices.Sorted(maps.Keys(record.Revisions)) {
 			revision := record.Revisions[service]
 			if report != nil {
 				report.Detail("Pinning " + service + " to " + revision)
 			}
 			if err := pins.Pin(ctx, service, revision); err != nil {
+				if undo := ledger.Unpromote(ctx, promotion.PromotionID, pointer); undo != nil {
+					return errors.Join(err, fmt.Errorf("the ledger still names promotion %s, which Cloud Run never finished pinning: %w", promotion.PromotionID, undo))
+				}
 				return err
 			}
 		}
 	}
-	return ledger.Promote(ctx, promotion, pointer, report)
+	return nil
 }
