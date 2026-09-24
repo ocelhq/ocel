@@ -174,6 +174,11 @@ func TestLiveARedeployUnderContinuousLoadDropsNothingAndDrainsWhenTheHeldRequest
 	var samples []string
 	var sampling sync.Mutex
 	done := make(chan struct{})
+	stop := sync.OnceFunc(func() {
+		close(done)
+		group.Wait()
+	})
+	t.Cleanup(stop)
 
 	group.Add(3)
 	go func() {
@@ -204,13 +209,11 @@ func TestLiveARedeployUnderContinuousLoadDropsNothingAndDrainsWhenTheHeldRequest
 	told := &said{}
 	began := time.Now()
 	if err := releasing(p, two, 30*time.Second, told); err != nil {
-		close(done)
-		group.Wait()
+		stop()
 		t.Fatalf("Release() over a box under load = %v", err)
 	}
 	took := time.Since(began)
-	close(done)
-	group.Wait()
+	stop()
 
 	if took > 20*time.Second {
 		t.Errorf("the release took %s with a request held for 8s and a 30s window, so the drain waited out its ceiling rather than returning on the ack", took)
@@ -380,6 +383,11 @@ func TestLiveAHijackedConnectionDrainsWithItsRetireeRatherThanBeingCutAtCutover(
 	var samples []string
 	var sampling sync.Mutex
 	done := make(chan struct{})
+	stop := sync.OnceFunc(func() {
+		close(done)
+		group.Wait()
+	})
+	t.Cleanup(stop)
 
 	group.Add(3)
 	go func() {
@@ -411,13 +419,11 @@ func TestLiveAHijackedConnectionDrainsWithItsRetireeRatherThanBeingCutAtCutover(
 	warned := &said{}
 	began := time.Now()
 	if err := releasing(p, two, window, warned); err != nil {
-		close(done)
-		group.Wait()
+		stop()
 		t.Fatalf("Release() with hijacked connections open = %v", err)
 	}
 	took := time.Since(began)
-	close(done)
-	group.Wait()
+	stop()
 
 	t.Logf("a release with an sse stream and a websocket open against the retired upstream took %s", took)
 	t.Logf("the retired upstream reported %v", samples)
