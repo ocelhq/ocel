@@ -82,7 +82,6 @@ export class AwsTarget implements Target, ReleaseCycle {
     }
     await runOcel(cell, dir, "deploy", "deploy", ["deploy", "--yes"], env);
     await runOcel(cell, dir, "deploy", "domain-add", ["domain", "add"], env);
-    await runOcel(cell, dir, "deploy", "deploy-bound", ["deploy", "--yes"], env);
 
     const deployed = await this.deployment(cell);
     await this.awaitEdge(cell, "deploy", deployed);
