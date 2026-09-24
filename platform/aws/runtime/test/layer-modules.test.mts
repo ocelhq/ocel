@@ -62,3 +62,14 @@ test("every relative import in the layer lands on a module the layer ships", asy
   expect(shipped.has(join(dist, "next", "entrypoint.mjs"))).toBe(true);
   expect(shipped.has(join(dist, "node", "entrypoint.mjs"))).toBe(true);
 });
+
+test("no layer module carries a path of the checkout it was built in", async () => {
+  const checkout = resolve(pkgDir, "..", "..", "..");
+  const entries = await readdir(dist, { recursive: true, withFileTypes: true });
+  const leaking: string[] = [];
+  for (const entry of entries.filter((held) => held.isFile())) {
+    const file = join(entry.parentPath, entry.name);
+    if ((await readFile(file, "utf8")).includes(checkout)) leaking.push(relative(dist, file));
+  }
+  expect(leaking).toEqual([]);
+});

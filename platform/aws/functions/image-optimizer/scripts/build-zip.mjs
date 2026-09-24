@@ -1,16 +1,28 @@
 const TARGET = { os: ["linux"], cpu: ["arm64"], libc: ["glibc"] };
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { bunArgs } from "./bundle.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const sharp = JSON.parse(
-  readFileSync(join(root, "node_modules", "sharp", "package.json"), "utf8"),
-).version;
+const sharpDir = realpathSync(join(root, "node_modules", "sharp"));
+const manifestOf = (dir) => JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+const sharpManifest = manifestOf(sharpDir);
+const sharp = sharpManifest.version;
+const locked = Object.keys(sharpManifest.dependencies).map(
+  (name) => `  "${name}": ${manifestOf(join(sharpDir, "..", name)).version}`,
+);
 const out = join(root, "dist", "zip");
 const stage = join(root, "dist", "stage");
 
@@ -45,6 +57,8 @@ writeFileSync(
     `  os: [${TARGET.os.join(", ")}]`,
     `  cpu: [${TARGET.cpu.join(", ")}]`,
     `  libc: [${TARGET.libc.join(", ")}]`,
+    "overrides:",
+    ...locked,
     "",
   ].join("\n"),
 );
