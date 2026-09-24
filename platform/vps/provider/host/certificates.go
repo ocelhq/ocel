@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 )
 
-const proxyServesNoCertificate = 3
+const proxyNotServingYet = 3
 
 func (h *Host) VerifiedPins(ctx context.Context) ([]Pin, error) {
 	h.pinning.Lock()
@@ -143,7 +143,7 @@ func (h *Host) ServedCertificate(ctx context.Context, hostname string) ([]byte, 
 	switch result.Code {
 	case 0:
 		return []byte(result.Stdout), nil
-	case proxyServesNoCertificate:
+	case proxyNotServingYet:
 		return nil, nil
 	default:
 		return nil, h.refuse("read what the proxy serves for "+hostname, result)
@@ -167,7 +167,7 @@ func (h *Host) ServedEdge(ctx context.Context, hostname string) (Answer, error) 
 	switch result.Code {
 	case 0:
 		return Answer{Edge: strings.TrimSpace(result.Stdout)}, nil
-	case proxyServesNoCertificate:
+	case proxyNotServingYet:
 		return Answer{Unreached: spoken(result)}, nil
 	default:
 		return Answer{}, h.refuse("probe "+hostname+" from inside the proxy", result)

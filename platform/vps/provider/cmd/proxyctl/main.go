@@ -36,7 +36,7 @@ const (
 
 const (
 	exitRefused        = 2
-	exitUnhealthy      = 3
+	exitNotServingYet  = 3
 	exitSilent         = 4
 	exitUnattributable = 5
 	exitUnservable     = 6
@@ -231,7 +231,7 @@ func serving(at, hostname string, out, errs io.Writer) int {
 			return exitUnservable
 		}
 		fmt.Fprintf(errs, "ocel-proxyctl: the proxy served no certificate for %s: %v\n", hostname, err)
-		return exitUnhealthy
+		return exitNotServingYet
 	}
 	chain := spoken.ConnectionState().PeerCertificates
 	if len(chain) == 0 {
@@ -246,14 +246,22 @@ func serving(at, hostname string, out, errs io.Writer) int {
 }
 
 func probe(socket, at, hostname string, out, errs io.Writer) int {
-	var said bytes.Buffer
-	if code := ask(socket, authorityPath, &said, errs); code != 0 {
-		return code
+	status, said, err := exchange(socket, http.MethodGet, authorityPath, nil)
+	switch {
+	case err != nil:
+		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+		return exitRefused
+	case status == http.StatusNotFound:
+		fmt.Fprintf(errs, "ocel-proxyctl: the proxy holds no local authority yet, so nothing it serves for %s can be verified: %s\n", hostname, strings.TrimSpace(string(said)))
+		return exitNotServingYet
+	case status/100 != 2:
+		fmt.Fprintf(errs, "ocel-proxyctl: the proxy answered %s with %d %s: %s\n", authorityPath, status, http.StatusText(status), strings.TrimSpace(string(said)))
+		return exitRefused
 	}
 	var authority struct {
 		Root string `json:"root_certificate"`
 	}
-	if err := json.Unmarshal(said.Bytes(), &authority); err != nil {
+	if err := json.Unmarshal(said, &authority); err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: the proxy described its local authority as something other than json: %v\n", err)
 		return exitRefused
 	}
@@ -275,7 +283,7 @@ func probe(socket, at, hostname string, out, errs io.Writer) int {
 	answer, err := client.Get("https://" + hostname + "/")
 	if err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: %s answered nothing from inside the proxy: %v\n", hostname, err)
-		return exitUnhealthy
+		return exitNotServingYet
 	}
 	defer answer.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(answer.Body, 1<<12))
@@ -346,7 +354,7 @@ func gating(target, path string, window time.Duration, out, errs io.Writer) int 
 	}
 	fmt.Fprintln(out, status)
 	fmt.Fprintf(errs, "%s answered %s with status %d, no 2xx within %s\n", target, path, status, window)
-	return exitUnhealthy
+	return exitNotServingYet
 }
 
 type upstream struct {
@@ -411,10 +419,28 @@ func ask(socket, path string, out, errs io.Writer) int {
 }
 
 func speak(socket, method, path string, body []byte, out, errs io.Writer) int {
-	request, err := http.NewRequest(method, "http://localhost"+path, bytes.NewReader(body))
+	status, said, err := exchange(socket, method, path, body)
 	if err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
 		return exitRefused
+	}
+	if status/100 != 2 {
+		fmt.Fprintf(errs, "ocel-proxyctl: the proxy answered %s with %d %s: %s\n", path, status, http.StatusText(status), strings.TrimSpace(string(said)))
+		return exitRefused
+	}
+	if len(said) > 0 {
+		_, _ = out.Write(said)
+		if said[len(said)-1] != '\n' {
+			fmt.Fprintln(out)
+		}
+	}
+	return 0
+}
+
+func exchange(socket, method, path string, body []byte) (int, []byte, error) {
+	request, err := http.NewRequest(method, "http://localhost"+path, bytes.NewReader(body))
+	if err != nil {
+		return 0, nil, err
 	}
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
@@ -426,24 +452,12 @@ func speak(socket, method, path string, body []byte, out, errs io.Writer) int {
 	}}
 	answer, err := client.Do(request)
 	if err != nil {
-		fmt.Fprintf(errs, "ocel-proxyctl: the proxy answered nothing over %s: %v\n", socket, err)
-		return exitRefused
+		return 0, nil, fmt.Errorf("the proxy answered nothing over %s: %w", socket, err)
 	}
 	defer answer.Body.Close()
 	said, err := io.ReadAll(answer.Body)
 	if err != nil {
-		fmt.Fprintf(errs, "ocel-proxyctl: the proxy cut its answer to %s short: %v\n", path, err)
-		return exitRefused
+		return 0, nil, fmt.Errorf("the proxy cut its answer to %s short: %w", path, err)
 	}
-	if answer.StatusCode/100 != 2 {
-		fmt.Fprintf(errs, "ocel-proxyctl: the proxy answered %s with %s: %s\n", path, answer.Status, strings.TrimSpace(string(said)))
-		return exitRefused
-	}
-	if len(said) > 0 {
-		_, _ = out.Write(said)
-		if said[len(said)-1] != '\n' {
-			fmt.Fprintln(out)
-		}
-	}
-	return 0
+	return answer.StatusCode, said, nil
 }

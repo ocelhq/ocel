@@ -147,8 +147,8 @@ func TestTheGateCallsATargetUpOnlyOnATwoHundred(t *testing.T) {
 	} else if strings.TrimSpace(out) != "204" {
 		t.Errorf("the gate printed %q, want the status it read", out)
 	}
-	if code, out, _ := gated(target, "/down", time.Second); code != exitUnhealthy {
-		t.Errorf("gating a target answering 502 = %d, want %d: forcing past the gate is rejected", code, exitUnhealthy)
+	if code, out, _ := gated(target, "/down", time.Second); code != exitNotServingYet {
+		t.Errorf("gating a target answering 502 = %d, want %d: forcing past the gate is rejected", code, exitNotServingYet)
 	} else if strings.TrimSpace(out) != "502" {
 		t.Errorf("the gate printed %q, and answered-with-N is a different bug from never-answered", out)
 	}
@@ -273,8 +273,8 @@ func TestAGateThatExpiresSaysWhetherTheTargetAnsweredAtAllAndDoesNotConflateTheT
 	answering := refusing(t, 1<<30)
 
 	code, out, said := gated(answering, "/up", time.Second)
-	if code != exitUnhealthy {
-		t.Fatalf("gating a target that answers 503 throughout = %d, want %d: %q", code, exitUnhealthy, said)
+	if code != exitNotServingYet {
+		t.Fatalf("gating a target that answers 503 throughout = %d, want %d: %q", code, exitNotServingYet, said)
 	}
 	if strings.TrimSpace(out) != "503" {
 		t.Errorf("the gate printed %q, want the last status it read", out)
@@ -491,7 +491,7 @@ func TestAHandshakeThatFailedForAnyReasonButAMissingCertificateIsNotReportedAsPe
 		address string
 		want    int
 	}{
-		"a proxy that has not obtained one for this name": {declining, exitUnhealthy},
+		"a proxy that has not obtained one for this name": {declining, exitNotServingYet},
 		"a peer that never spoke tls at all":              {silent, exitUnservable},
 	} {
 		var out, errs strings.Builder
