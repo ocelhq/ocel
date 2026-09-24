@@ -60,9 +60,9 @@ func TestRunDestroyPreviewProject(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   domains: { preview: "*.preview.acme.com" },
-  dns: { kind: "route53" },
+  dns: "route53",
 };
 `)
 		deps := newDeps()

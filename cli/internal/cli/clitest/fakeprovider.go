@@ -941,7 +941,7 @@ type fakeProviderOptions struct {
 }
 
 func decodeFakeProviderOptions(config *contractv1.ProviderConfig) (fakeProviderOptions, error) {
-	return providerkit.Decode[fakeProviderOptions](providerkit.Options(config.GetOptions().AsMap()))
+	return providerkit.Decode[fakeProviderOptions]("aws", providerkit.Options(config.GetOptions().AsMap()))
 }
 
 func journalBootstrap(req *contractv1.BootstrapRequest) {

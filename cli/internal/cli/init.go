@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/slug"
 	"github.com/ocelhq/ocel/cli/internal/version"
+	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
 const sdkPackage = "ocel"
@@ -141,8 +142,12 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 	}
 
 	provider := strings.TrimSpace(opts.provider)
+	shipped := configdoc.ProviderIDs()
 	if provider == "" {
-		return errors.New("name the provider this project deploys through, e.g. `ocel init --provider <name>` — the providers ocel ships are listed at https://ocel.dev/docs/providers")
+		return fmt.Errorf("name the provider this project deploys through, e.g. `ocel init --provider <id>` — ocel ships %s", strings.Join(shipped, ", "))
+	}
+	if !slices.Contains(shipped, provider) {
+		return fmt.Errorf("--provider names %q, and ocel ships no such provider — name one of %s", provider, strings.Join(shipped, ", "))
 	}
 
 	lang, detected, err := languageOfProject(projectDir, opts)
@@ -256,7 +261,7 @@ func configTemplate(name, slug, provider string) string {
 	return fmt.Sprintf(`{
   "$schema": %q,
   "slug": %q,
-  "provider": { "name": %q, "options": {} }
+  "provider": { %q: {} }
 }
 `, schemaURL(), slug, provider)
 }
@@ -265,8 +270,7 @@ func yamlTemplate(slug, provider string) string {
 	return fmt.Sprintf(`# yaml-language-server: $schema=%s
 slug: %q
 provider:
-  name: %q
-  options: {}
+  %s: {}
 `, schemaURL(), slug, provider)
 }
 

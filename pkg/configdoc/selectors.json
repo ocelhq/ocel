@@ -1,0 +1,14 @@
+{
+  "provider": {
+    "ids": ["aws", "gcp", "vps"],
+    "shorthand": ["aws"]
+  },
+  "edge": {
+    "ids": ["alb", "api-gateway", "box", "cloudflare", "cloudfront", "direct"],
+    "shorthand": ["alb", "api-gateway", "box", "cloudflare", "cloudfront", "direct"]
+  },
+  "dns": {
+    "ids": ["cloudflare", "route53"],
+    "shorthand": ["cloudflare", "route53"]
+  }
+}

@@ -177,8 +177,7 @@ func (j journey) installed() string {
 func (j journey) declaration(t *testing.T, login string) string {
 	t.Helper()
 	options, err := json.Marshal(map[string]any{
-		"name": "vps",
-		"options": map[string]any{"ssh": map[string]any{
+		"vps": map[string]any{"ssh": map[string]any{
 			"host":         j.vm.addr,
 			"user":         login,
 			"identityFile": j.vm.key,

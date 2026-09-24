@@ -170,23 +170,47 @@
       "type": "object"
     },
     "dns": {
-      "additionalProperties": false,
-      "description": "Where the project's hostname records are written.",
-      "properties": {
-        "kind": {
-          "description": "The DNS the project's records are written into.",
-          "type": "string"
+      "description": "Where the project's hostname records are written, keyed by the DNS service's identifier and holding its options, or named alone.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "cloudflare",
+            "route53"
+          ]
         },
-        "zone": {
-          "description": "The zone the records are written into. Omit it and ocel picks the zone that covers the hostname.",
-          "type": "string"
+        {
+          "additionalProperties": false,
+          "maxProperties": 1,
+          "minProperties": 1,
+          "type": "object",
+          "properties": {
+            "cloudflare": {
+              "additionalProperties": false,
+              "properties": {
+                "zone": {
+                  "description": "The zone the records are written into. Omit it and ocel picks the zone that covers the hostname.",
+                  "type": "string"
+                }
+              },
+              "title": "DnsOptions",
+              "type": "object"
+            },
+            "route53": {
+              "additionalProperties": false,
+              "properties": {
+                "zone": {
+                  "description": "The zone the records are written into. Omit it and ocel picks the zone that covers the hostname.",
+                  "type": "string"
+                }
+              },
+              "title": "DnsOptions",
+              "type": "object"
+            }
+          }
         }
-      },
-      "required": [
-        "kind"
       ],
-      "title": "DnsDescriptor",
-      "type": "object"
+      "title": "DnsDescriptor"
     },
     "domains": {
       "additionalProperties": false,
@@ -215,30 +239,82 @@
       "type": "object"
     },
     "edge": {
-      "additionalProperties": false,
-      "description": "The edge in front of the origin. Omit it and the provider fronts the deployment with its own default edge.",
-      "properties": {
-        "kind": {
-          "description": "The edge the project's hostnames are served from.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind"
-      ],
-      "title": "EdgeDescriptor",
-      "type": "object"
-    },
-    "provider": {
-      "description": "The provider ocel deploy provisions into.",
+      "description": "The edge in front of the origin, keyed by its identifier and holding its options, or named alone. Omit it and the provider fronts the deployment with its own default edge.",
       "oneOf": [
         {
+          "type": "string",
+          "enum": [
+            "alb",
+            "api-gateway",
+            "box",
+            "cloudflare",
+            "cloudfront",
+            "direct"
+          ]
+        },
+        {
           "additionalProperties": false,
+          "maxProperties": 1,
+          "minProperties": 1,
+          "type": "object",
           "properties": {
-            "name": {
-              "const": "aws"
+            "alb": {
+              "additionalProperties": false,
+              "properties": {},
+              "title": "EdgeOptions",
+              "type": "object"
             },
-            "options": {
+            "api-gateway": {
+              "additionalProperties": false,
+              "properties": {},
+              "title": "EdgeOptions",
+              "type": "object"
+            },
+            "box": {
+              "additionalProperties": false,
+              "properties": {},
+              "title": "EdgeOptions",
+              "type": "object"
+            },
+            "cloudflare": {
+              "additionalProperties": false,
+              "properties": {},
+              "title": "EdgeOptions",
+              "type": "object"
+            },
+            "cloudfront": {
+              "additionalProperties": false,
+              "properties": {},
+              "title": "EdgeOptions",
+              "type": "object"
+            },
+            "direct": {
+              "additionalProperties": false,
+              "properties": {},
+              "title": "EdgeOptions",
+              "type": "object"
+            }
+          }
+        }
+      ],
+      "title": "EdgeDescriptor"
+    },
+    "provider": {
+      "description": "The provider ocel deploy provisions into, keyed by its identifier and holding its options. A provider that needs no options may be named alone.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "aws"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "maxProperties": 1,
+          "minProperties": 1,
+          "type": "object",
+          "properties": {
+            "aws": {
               "additionalProperties": false,
               "properties": {
                 "certificates": {
@@ -267,20 +343,8 @@
               },
               "title": "AwsProviderOptions",
               "type": "object"
-            }
-          },
-          "required": [
-            "name"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "name": {
-              "const": "gcp"
             },
-            "options": {
+            "gcp": {
               "additionalProperties": false,
               "properties": {
                 "project": {
@@ -298,20 +362,8 @@
               ],
               "title": "GcpProviderOptions",
               "type": "object"
-            }
-          },
-          "required": [
-            "name"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "name": {
-              "const": "vps"
             },
-            "options": {
+            "vps": {
               "additionalProperties": false,
               "properties": {
                 "bucket": {
@@ -405,13 +457,10 @@
               "title": "VpsProviderOptions",
               "type": "object"
             }
-          },
-          "required": [
-            "name"
-          ],
-          "type": "object"
+          }
         }
-      ]
+      ],
+      "title": "ProviderDescriptor"
     },
     "registry": {
       "additionalProperties": false,

@@ -37,6 +37,7 @@ func spawnFake(t *testing.T, ctx context.Context, mode string, cfg Config) (*Run
 		fakeProviderEnvVar + "=1",
 		fakeProviderModeEnvVar + "=" + mode,
 		fakeProviderSockEnvVar + "=" + sockPath,
+		fakeProviderVendorEnvVar + "=" + cfg.ProviderName,
 	}, cfg.Env...)
 
 	r, err := Spawn(ctx, cfg)
@@ -198,7 +199,7 @@ func TestConfigure(t *testing.T) {
 		}
 		for _, want := range []string{
 			`configures provider "aws" with options it does not accept`,
-			`"provider.options.regionn"`,
+			`"provider.aws.regionn"`,
 		} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("Ready() error = %q, want it to contain %q", err, want)
@@ -223,7 +224,7 @@ func TestConfigure(t *testing.T) {
 		if err == nil {
 			t.Fatal("Ready() error = nil, want the provider's refusal")
 		}
-		if !strings.Contains(err.Error(), "provider.options.ssh.hostt") {
+		if !strings.Contains(err.Error(), "provider.vps.ssh.hostt") {
 			t.Errorf("Ready() error = %q, want the option's path in the config", err)
 		}
 	})

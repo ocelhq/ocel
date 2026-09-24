@@ -11,5 +11,5 @@ export interface CloudflareDnsOptions {
 
 /** Declares Cloudflare as the DNS the project's records are written into. */
 export function cloudflareDns(options: CloudflareDnsOptions = {}): DnsDescriptor {
-  return { kind: "cloudflare", ...options };
+  return { cloudflare: options };
 }

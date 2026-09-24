@@ -4,7 +4,7 @@ import { route53 } from "./dns.js";
 
 describe("route53", () => {
   it("serialises without a zone when none is named", () => {
-    expect(JSON.parse(JSON.stringify(route53()))).toEqual({ kind: "route53" });
+    expect(JSON.parse(JSON.stringify(route53()))).toEqual({ route53: {} });
   });
 
   it("type-checks as an ocel.config.ts `dns` field and serialises the zone it is given", () => {
@@ -14,8 +14,7 @@ describe("route53", () => {
     });
 
     expect(JSON.parse(JSON.stringify(config.dns))).toEqual({
-      kind: "route53",
-      zone: "Z123456789ABCDEFGHIJK",
+      route53: { zone: "Z123456789ABCDEFGHIJK" },
     });
   });
 });

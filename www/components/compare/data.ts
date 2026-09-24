@@ -37,7 +37,7 @@ const configAws: Pane = {
     code: `{
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "my-app",
-  "provider": { "name": "aws" }
+  "provider": "aws"
 }`,
   },
 };
@@ -49,7 +49,7 @@ const configVps: Pane = {
     code: `{
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "my-app",
-  "provider": { "name": "vps", "options": { "ssh": "my-vps" } }
+  "provider": { "vps": { "ssh": "my-vps" } }
 }`,
   },
 };
@@ -74,7 +74,7 @@ const boundPostgres: Pane = {
     code: `{
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "shop",
-  "provider": { "name": "aws" },
+  "provider": "aws",
   "bindings": { "postgres": { "orders": "orders" } }
 }`,
   },

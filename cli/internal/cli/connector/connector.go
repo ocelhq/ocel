@@ -156,7 +156,7 @@ func vendored(cfg *projectconfig.Config) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return desc.Name, nil
+	return desc.ID, nil
 }
 
 func printed(out io.Writer, held consoleconnector.Connector, live consoleconnector.Liveness) {

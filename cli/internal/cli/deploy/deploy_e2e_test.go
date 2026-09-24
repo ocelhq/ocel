@@ -77,7 +77,7 @@ func setUpRealProviderFixture(t *testing.T) (root, binPath string) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
 };
 `)
 	clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), `
@@ -111,7 +111,7 @@ func setUpRealProviderExpressFixture(t *testing.T) (root, binPath, funcLogicalNa
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
 export default {
   slug: "test-app",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   apps: [{ name: %q, path: %q, framework: "node" }],
 };
 `, appName, filepath.ToSlash(appPath)))

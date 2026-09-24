@@ -180,8 +180,8 @@ func IdentityEvent(cfg *projectconfig.Config, tier environmentv1.Tier, id *contr
 }
 
 func edgeVendor(cfg *projectconfig.Config) string {
-	if kind := string(cfg.EdgeKind()); kind != "" {
-		return kind
+	if id := string(cfg.EdgeID()); id != "" {
+		return id
 	}
 	return "edge"
 }

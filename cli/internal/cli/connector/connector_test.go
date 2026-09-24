@@ -451,7 +451,7 @@ func TestTheVendorIsWhateverTheConfigPointsAtAndNoTableGatesIt(t *testing.T) {
 	for _, vendor := range []string{"aws", "gcp", "vps", "nowhere"} {
 		cfg := &projectconfig.Config{
 			Path:     "ocel." + vendor + ".json",
-			Provider: &projectconfig.ProviderDescriptor{Name: vendor},
+			Provider: &projectconfig.ProviderDescriptor{ID: vendor},
 		}
 		named, err := vendored(cfg)
 		if err != nil {

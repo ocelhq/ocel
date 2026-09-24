@@ -20,7 +20,7 @@
       "!**/drizzle/meta",
       "!**/fixtures/**/*.json",
       "!**/schema.core.json",
-      "!**/schema.options.json",
+      "!**/schema.provider.json",
       "!**/*_pb.ts",
       "!**/*_pb.js",
       "!**/next-env.d.ts",

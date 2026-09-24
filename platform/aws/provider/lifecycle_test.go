@@ -67,8 +67,7 @@ func (j journey) installed() string {
 func (j journey) declaration(t *testing.T) string {
 	t.Helper()
 	options, err := json.Marshal(map[string]any{
-		"name":    "aws",
-		"options": map[string]any{"region": liveRegion},
+		"aws": map[string]any{"region": liveRegion},
 	})
 	if err != nil {
 		t.Fatal(err)

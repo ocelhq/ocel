@@ -32,9 +32,18 @@ export const apiGatewayEdge = defineConfig({
 
 export const providerDefaultEdge = defineConfig({ slug: "test-app" });
 
-export const namedByHand = defineConfig({
+export const keyedByHand = defineConfig({
   slug: "test-app",
-  edge: { kind: "cloudflare" },
+  provider: { aws: { region: "us-east-1" } },
+  edge: { cloudflare: {} },
+  dns: { cloudflare: { zone: "acme.com" } },
+});
+
+export const namedAloneByHand = defineConfig({
+  slug: "test-app",
+  provider: "aws",
+  edge: "cloudfront",
+  dns: "route53",
 });
 
 export const edgeFromAString = defineConfig({

@@ -14,8 +14,7 @@ func TestResolveReadsYAMLWithoutNode(t *testing.T) {
 	write(t, filepath.Join(dir, YAMLFileName), `# the provider this project deploys into
 slug: yaml-only
 provider:
-  name: aws
-  options: { region: eu-west-2 }
+  aws: { region: eu-west-2 }
 apps:
   - name: web
     path: ./server
@@ -30,7 +29,7 @@ apps:
 	if cfg.Slug != "yaml-only" {
 		t.Fatalf("slug = %q", cfg.Slug)
 	}
-	if cfg.Provider == nil || cfg.Provider.Name != "aws" {
+	if cfg.Provider == nil || cfg.Provider.ID != "aws" {
 		t.Fatalf("provider = %+v", cfg.Provider)
 	}
 	if string(cfg.Provider.Options) != `{"region":"eu-west-2"}` {
@@ -143,8 +142,8 @@ func TestResolveRefusesYAMLItCannotReadAsOneDocument(t *testing.T) {
 	for name, tc := range map[string]struct{ source, want string }{
 		"malformed":        {"slug: [acme\n", "not valid YAML"},
 		"two documents":    {"slug: acme\n---\nslug: other\n", "more than one YAML document"},
-		"aliased int key":  {"slug: acme\nprovider:\n  name: &n 1\n  options:\n    *n : x\n", `has the key 1 under "provider.options"`},
-		"infinite number":  {"slug: acme\nprovider:\n  name: aws\n  options: { weight: .inf }\n", `sets "provider.options.weight" to +Inf`},
+		"aliased int key":  {"slug: acme\nprovider:\n  vps:\n    ssh: &n 1\n    *n : x\n", `has the key 1 under "provider.vps"`},
+		"infinite number":  {"slug: acme\nprovider:\n  aws: { weight: .inf }\n", `sets "provider.aws.weight" to +Inf`},
 		"duplicate key":    {"slug: acme\nslug: other\n", "already defined"},
 		"not an object":    {"- slug: acme\n", "must be an object"},
 		"empty":            {"", "must be an object"},
@@ -182,8 +181,7 @@ func TestResolveKeepsTheSourceTextOfWhatJSONHasNoTypeFor(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, YAMLFileName), `slug: 2024-01-01
 provider:
-  name: vps
-  options:
+  vps:
     since: 2024-01-01
     at: 2001-12-14t21:59:43.10-05:00
     blob: !!binary aGVsbG8=
@@ -228,8 +226,8 @@ provider:
 
 func TestResolveReadsAYAMLNumberAsTheSameJSONNumberWouldBeRead(t *testing.T) {
 	yamlDir, jsonDir := t.TempDir(), t.TempDir()
-	write(t, filepath.Join(yamlDir, YAMLFileName), "slug: acme\nprovider:\n  name: vps\n  options: { version: 1.10, port: 22 }\n")
-	write(t, filepath.Join(jsonDir, DefaultFileName), `{"slug":"acme","provider":{"name":"vps","options":{"version":1.10,"port":22}}}`)
+	write(t, filepath.Join(yamlDir, YAMLFileName), "slug: acme\nprovider:\n  vps: { version: 1.10, port: 22 }\n")
+	write(t, filepath.Join(jsonDir, DefaultFileName), `{"slug":"acme","provider":{"vps":{"version":1.10,"port":22}}}`)
 
 	fromYAML, err := Resolve(context.Background(), yamlDir, "")
 	if err != nil {
@@ -246,7 +244,7 @@ func TestResolveReadsAYAMLNumberAsTheSameJSONNumberWouldBeRead(t *testing.T) {
 
 func TestResolveReadsAYAMLFileWithEmptyDocumentsAroundItsOne(t *testing.T) {
 	for name, source := range map[string]string{
-		"trailing separator": "slug: acme\nprovider:\n  name: vps\n---\n",
+		"trailing separator": "slug: acme\nprovider: aws\n---\n",
 		"leading separator":  "---\nslug: acme\n",
 		"null document":      "slug: acme\n---\n~\n",
 	} {
@@ -269,20 +267,44 @@ func TestResolveReportsTheSameYAMLErrorOnEveryRun(t *testing.T) {
 	dir := t.TempDir()
 	write(t, filepath.Join(dir, YAMLFileName), `slug: acme
 provider:
-  name: vps
-  options:
+  vps:
     z: .inf
     a: .nan
     m: -.inf
 `)
 
 	_, first := Resolve(context.Background(), dir, "")
-	if first == nil || !strings.Contains(first.Error(), `sets "provider.options.a" to NaN`) {
+	if first == nil || !strings.Contains(first.Error(), `sets "provider.vps.a" to NaN`) {
 		t.Fatalf("error %v does not name the first bad key in order", first)
 	}
 	for range 50 {
 		if _, err := Resolve(context.Background(), dir, ""); err == nil || err.Error() != first.Error() {
 			t.Fatalf("error %v differs from the first run's %v", err, first)
 		}
+	}
+}
+
+func TestResolveReadsYAMLSelectorsNamedAloneOrKeyed(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, YAMLFileName), `slug: acme
+provider: aws
+edge: cloudflare
+dns:
+  cloudflare:
+    zone: example.com
+`)
+
+	cfg, err := Resolve(context.Background(), dir, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if cfg.Provider == nil || cfg.Provider.ID != "aws" || string(cfg.Provider.Options) != `{}` {
+		t.Fatalf("provider = %+v, want aws with no options", cfg.Provider)
+	}
+	if cfg.EdgeID() != "cloudflare" {
+		t.Fatalf("edge = %q, want cloudflare", cfg.EdgeID())
+	}
+	if cfg.DNS == nil || cfg.DNS.ID != "cloudflare" || cfg.DNS.Zone != "example.com" {
+		t.Fatalf("dns = %+v, want cloudflare in example.com", cfg.DNS)
 	}
 }

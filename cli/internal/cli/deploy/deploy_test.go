@@ -252,7 +252,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   domains: { production: "app.acme.com" },
 };
 `)
@@ -473,7 +473,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   apps: [{ name: "api", path: "apps/api", framework: "node", domains: { production: "Api.Acme.com" } }],
 };
 `)
@@ -512,7 +512,7 @@ export default {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   apps: [
     { name: "web", path: "apps/web", framework: "node", domains: { production: "acme.com" } },
     { name: "admin", path: "apps/admin", framework: "node" },
@@ -593,7 +593,7 @@ func addAppToFixtureConfig(t *testing.T, root string) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { name: "aws", options: { region: "eu-west-2" } },
+  provider: { aws: { region: "eu-west-2" } },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "node" }],
 };
@@ -620,7 +620,7 @@ func TestRunDeployRefusesAComputeTheProviderDoesNotRun(t *testing.T) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "node", compute: "container" }],
 };

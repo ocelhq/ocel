@@ -29,22 +29,28 @@ func Schema() ([]byte, error) {
 	return json.MarshalIndent(root, "", "  ")
 }
 
-func OptionsSchema(name string, options any) ([]byte, error) {
-	if name == "" {
-		return nil, errors.New("an options schema is titled after the provider it belongs to, and this one is unnamed")
+func ProviderSchema[E, D ~string](id string, options any, edges []E, dns []D) ([]byte, error) {
+	if id == "" {
+		return nil, errors.New("a provider schema is titled after the provider it belongs to, and this one has no identifier")
 	}
 	shape := schemaOf(reflect.TypeOf(options))
-	shape["title"] = strings.ToUpper(name[:1]) + name[1:] + "ProviderOptions"
-	variant := object{
-		"type": "object",
-		"properties": object{
-			"name":    object{"const": name},
-			"options": shape,
-		},
-		"required":             []any{"name"},
-		"additionalProperties": false,
+	shape["title"] = strings.ToUpper(id[:1]) + id[1:] + "ProviderOptions"
+	fragment := object{
+		"id":      id,
+		"options": shape,
+		"edges":   sortedIDs(edges),
+		"dns":     sortedIDs(dns),
 	}
-	return json.MarshalIndent(variant, "", "  ")
+	return json.MarshalIndent(fragment, "", "  ")
+}
+
+func sortedIDs[T ~string](ids []T) []any {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, string(id))
+	}
+	slices.Sort(out)
+	return toAny(out)
 }
 
 func schemaOf(target reflect.Type) object {

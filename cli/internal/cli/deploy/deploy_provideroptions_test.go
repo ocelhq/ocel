@@ -37,7 +37,7 @@ func setUpProviderFixtureWith(t *testing.T, options string, transforms []string)
 export default {
   slug: "test-app",
   transforms: `+mustJSON(t, transforms)+`,
-  provider: { name: "aws", options: `+options+` },
+  provider: { aws: `+options+` },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "node" }],
 };
@@ -85,7 +85,7 @@ func TestDeployRendersTheProviderRefusalAgainstTheConfigFile(t *testing.T) {
 	rendered := stdout.String() + stderr.String()
 	for _, want := range []string{
 		`configures provider "aws" with options it does not accept`,
-		`"provider.options.regionn"`,
+		`"provider.aws.regionn"`,
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Errorf("rendered output = %q, want it to contain %q", rendered, want)

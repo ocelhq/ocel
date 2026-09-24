@@ -19,6 +19,6 @@ export type AlbEdgeOptions = Record<string, never>;
  * no edge is answered on the URL Cloud Run gives each service, and that edge
  * binds no hostname.
  */
-export function alb(_options: AlbEdgeOptions = {}): EdgeDescriptor {
-  return { kind: "alb" };
+export function alb(options: AlbEdgeOptions = {}): EdgeDescriptor {
+  return { alb: options };
 }

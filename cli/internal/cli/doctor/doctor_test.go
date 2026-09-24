@@ -163,7 +163,7 @@ func healthyProject(t *testing.T) string {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "my-shop",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   domains: { production: "shop.example.com", preview: "*.preview.example.com" },
   apps: [
     { name: "web", path: "apps/web", framework: "node" },
@@ -353,7 +353,7 @@ func TestRunDoctorServesPreviewsOnTheGlobalWildcardWithoutAWarning(t *testing.T)
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "my-shop",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   domains: { production: "shop.example.com" },
   apps: [
     { name: "web", path: "apps/web", framework: "node" },
@@ -411,7 +411,7 @@ func TestRunDoctorLeavesAnUnwantedTierAlone(t *testing.T) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "my-shop",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   domains: { production: "shop.example.com" },
 };
 `)

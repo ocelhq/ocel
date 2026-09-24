@@ -3,8 +3,7 @@
   "slug": "with-transforms",
   "transforms": ["./transforms/defaults.transform.ts"],
   "provider": {
-    "name": "vps",
-    "options": {
+    "vps": {
       "ssh": {
         "host": "${OCEL_VPS_HOST}",
         "user": "${OCEL_VPS_USER}",

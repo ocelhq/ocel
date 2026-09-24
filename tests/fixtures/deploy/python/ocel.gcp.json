@@ -2,8 +2,7 @@
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "python",
   "provider": {
-    "name": "gcp",
-    "options": { "project": "${OCEL_GCP_PROJECT}", "region": "${OCEL_GCP_REGION}" }
+    "gcp": { "project": "${OCEL_GCP_PROJECT}", "region": "${OCEL_GCP_REGION}" }
   },
   "apps": [{ "name": "web", "path": "./server" }]
 }

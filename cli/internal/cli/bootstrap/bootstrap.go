@@ -203,7 +203,7 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 
 		asking := ui.Asking()
 		picked := asking && !opts.FeaturesDeclared
-		requested, selected, err := chooseFeatures(ctx, opts, catalogue, standing, going, string(cfg.EdgeKind()), tier, asking, stdout)
+		requested, selected, err := chooseFeatures(ctx, opts, catalogue, standing, going, string(cfg.EdgeID()), tier, asking, stdout)
 		if err != nil {
 			return err
 		}
@@ -260,11 +260,11 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, tier environmentv1.
 			ui.Diagnostic("No infrastructure changes — applying refreshes bootstrap seals and records.")
 		}
 		if !picked {
-			kind := plan.GetEdgeKind()
-			if kind == "" {
-				kind = string(cfg.EdgeKind())
+			edgeID := plan.GetEdgeKind()
+			if edgeID == "" {
+				edgeID = string(cfg.EdgeID())
 			}
-			printImplied(stdout, impliedFeatures(catalogue, requested, kind))
+			printImplied(stdout, impliedFeatures(catalogue, requested, edgeID))
 		}
 		status := planned.GetBootstrap()
 		if status.GetDowngrade() {

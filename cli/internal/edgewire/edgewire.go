@@ -7,11 +7,11 @@ import (
 
 func Selection(cfg *projectconfig.Config) *contractv1.EdgeSelection {
 	selection := &contractv1.EdgeSelection{
-		Kind:          string(cfg.EdgeKind()),
+		Kind:          string(cfg.EdgeID()),
 		AllowDegraded: cfg.AllowDegraded,
 	}
 	if cfg.DNS != nil {
-		selection.Dns = &contractv1.Dns{Kind: cfg.DNS.Kind, Zone: cfg.DNS.Zone}
+		selection.Dns = &contractv1.Dns{Kind: cfg.DNS.ID, Zone: cfg.DNS.Zone}
 	}
 	return selection
 }

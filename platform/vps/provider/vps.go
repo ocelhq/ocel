@@ -170,7 +170,7 @@ func (p *Provider) Close() error {
 }
 
 func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
-	decoded, err := providerkit.Decode[Options](settings.Options)
+	decoded, err := providerkit.Decode[Options](Vendor, settings.Options)
 	if err != nil {
 		return nil, err
 	}

@@ -9,8 +9,8 @@ import type { EdgeDescriptor } from "../../generated/config.js";
 export type CloudFrontEdgeOptions = Record<string, never>;
 
 /** Declares CloudFront as the edge the project's hostnames are served from. */
-export function cloudfront(_options: CloudFrontEdgeOptions = {}): EdgeDescriptor {
-  return { kind: "cloudfront" };
+export function cloudfront(options: CloudFrontEdgeOptions = {}): EdgeDescriptor {
+  return { cloudfront: options };
 }
 
 /**
@@ -22,6 +22,6 @@ export function cloudfront(_options: CloudFrontEdgeOptions = {}): EdgeDescriptor
 export type ApiGatewayEdgeOptions = Record<string, never>;
 
 /** Declares API Gateway as the edge the project's hostnames are served from. */
-export function apiGateway(_options: ApiGatewayEdgeOptions = {}): EdgeDescriptor {
-  return { kind: "api-gateway" };
+export function apiGateway(options: ApiGatewayEdgeOptions = {}): EdgeDescriptor {
+  return { "api-gateway": options };
 }

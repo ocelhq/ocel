@@ -124,3 +124,108 @@ describe("a project's registry", () => {
     });
   });
 });
+
+describe("a project's provider", () => {
+  it("is named alone when it needs no options", () => {
+    defineConfig({ slug: "shop", provider: "aws" });
+  });
+
+  it("is keyed by its identifier, holding its options", () => {
+    defineConfig({
+      slug: "shop",
+      provider: { gcp: { project: "acme-prod", region: "europe-west1" } },
+    });
+  });
+
+  it("is refused keyed by two providers", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error a project deploys through one provider
+      provider: { aws: {}, gcp: { project: "acme-prod", region: "europe-west1" } },
+    });
+  });
+
+  it("is refused named alone when it cannot go without its options", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error gcp needs a project and a region
+      provider: "gcp",
+    });
+  });
+
+  it("is refused when ocel ships no such provider", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error azure is not a provider ocel ships
+      provider: { azure: {} },
+    });
+  });
+
+  it("is refused spelled as a name beside its options", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error the identifier is the key, not a name field
+      provider: { name: "aws", options: {} },
+    });
+  });
+});
+
+describe("a project's edge", () => {
+  it("is named alone", () => {
+    defineConfig({ slug: "shop", edge: "cloudfront" });
+  });
+
+  it("is keyed by its identifier", () => {
+    defineConfig({ slug: "shop", edge: { "api-gateway": {} } });
+  });
+
+  it("is refused keyed by two edges", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error a project is fronted by one edge
+      edge: { cloudflare: {}, cloudfront: {} },
+    });
+  });
+
+  it("is refused when no provider fronts with it", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error fastly is not an edge ocel fronts with
+      edge: "fastly",
+    });
+  });
+
+  it("is refused spelled as a kind", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error the identifier is the key, not a kind field
+      edge: { kind: "cloudflare" },
+    });
+  });
+});
+
+describe("a project's dns", () => {
+  it("is keyed by its identifier, holding its zone", () => {
+    defineConfig({ slug: "shop", dns: { route53: { zone: "example.com" } } });
+  });
+
+  it("is named alone when it picks the zone itself", () => {
+    defineConfig({ slug: "shop", dns: "cloudflare" });
+  });
+
+  it("is refused keyed by two dns services", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error records are written into one dns
+      dns: { route53: {}, cloudflare: {} },
+    });
+  });
+
+  it("is refused with a zone beside its identifier", () => {
+    defineConfig({
+      slug: "shop",
+      // @ts-expect-error the zone sits under the identifier
+      dns: { kind: "route53", zone: "example.com" },
+    });
+  });
+});

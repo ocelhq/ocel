@@ -7,10 +7,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/configdoc/schematest"
 )
 
-func TestOptionsSchemaIsCommitted(t *testing.T) {
-	generated, err := configdoc.OptionsSchema(string(Vendor), Options{})
+func TestProviderSchemaIsCommitted(t *testing.T) {
+	generated, err := configdoc.ProviderSchema(string(Vendor), Options{}, edges{}.Supported(), dns{}.Supported())
 	if err != nil {
-		t.Fatalf("options schema: %v", err)
+		t.Fatalf("provider schema: %v", err)
 	}
-	schematest.AssertCommitted(t, schematest.OptionsSchemaFile, generated)
+	schematest.AssertCommitted(t, schematest.ProviderSchemaFile, generated)
 }

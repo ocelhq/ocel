@@ -56,7 +56,7 @@ func TestRunInit(t *testing.T) {
 		dir := initTestDir(t, "My Cool App")
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), deps, dir, "", initOptions{provider: "acme"}, &stdout, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "", initOptions{provider: "aws"}, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
@@ -74,12 +74,12 @@ func TestRunInit(t *testing.T) {
 		dir := initTestDir(t, "ignored-dir-name")
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "acme"}, &stdout, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 		}
 
 		content := readConfig(t, dir)
-		for _, want := range []string{`"slug": "my-app"`, `"provider": { "name": "acme", "options": {} }`, `"$schema"`} {
+		for _, want := range []string{`"slug": "my-app"`, `"provider": { "aws": {} }`, `"$schema"`} {
 			if !strings.Contains(content, want) {
 				t.Errorf("config = %q, want it to contain %q", content, want)
 			}
@@ -97,7 +97,7 @@ func TestRunInit(t *testing.T) {
 				argv := stubPackageManager(&deps, nil)
 				dir := initTestDir(t, "proj")
 
-				err := runInit(context.Background(), deps, dir, slug, initOptions{provider: "acme"}, &bytes.Buffer{}, &bytes.Buffer{})
+				err := runInit(context.Background(), deps, dir, slug, initOptions{provider: "aws"}, &bytes.Buffer{}, &bytes.Buffer{})
 				if err == nil {
 					t.Fatal("runInit err = nil, want error")
 				}
@@ -118,7 +118,7 @@ func TestRunInit(t *testing.T) {
 		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "!!!")
 
-		err := runInit(context.Background(), deps, dir, "", initOptions{provider: "acme"}, &bytes.Buffer{}, &bytes.Buffer{})
+		err := runInit(context.Background(), deps, dir, "", initOptions{provider: "aws"}, &bytes.Buffer{}, &bytes.Buffer{})
 		if err == nil || !strings.Contains(err.Error(), "ocel init my-app") {
 			t.Fatalf("err = %v, want it to ask for a slug", err)
 		}
@@ -135,7 +135,7 @@ func TestRunInit(t *testing.T) {
 			t.Fatalf("write existing config: %v", err)
 		}
 
-		err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "acme"}, &bytes.Buffer{}, &bytes.Buffer{})
+		err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}, &bytes.Buffer{}, &bytes.Buffer{})
 		if err == nil || !strings.Contains(err.Error(), projectconfig.DefaultFileName) {
 			t.Fatalf("err = %v, want it to name the config already there", err)
 		}
@@ -161,7 +161,7 @@ func TestRunInit(t *testing.T) {
 		}
 
 		content := readConfig(t, dir)
-		if !strings.Contains(content, `"provider": { "name": "gcp", "options": {} }`) {
+		if !strings.Contains(content, `"provider": { "gcp": {} }`) {
 			t.Fatalf("config = %q, want the provider asked for and options only the provider knows", content)
 		}
 	})
@@ -176,6 +176,9 @@ func TestRunInit(t *testing.T) {
 		err := runInit(context.Background(), deps, dir, "my-app", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
 		if err == nil || !strings.Contains(err.Error(), "--provider") {
 			t.Fatalf("err = %v, want it to ask for --provider", err)
+		}
+		if !strings.Contains(err.Error(), "aws, gcp, vps") {
+			t.Fatalf("err = %v, want it to name the providers ocel ships", err)
 		}
 		if _, statErr := os.Stat(filepath.Join(dir, projectconfig.DefaultFileName)); statErr == nil {
 			t.Fatal("a config was written with no provider named")
@@ -205,7 +208,7 @@ func TestRunInit(t *testing.T) {
 					t.Fatalf("write lockfile: %v", err)
 				}
 
-				if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "acme"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+				if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 					t.Fatalf("runInit err = %v", err)
 				}
 				if got := *argv; !slices.Equal(got, want) {
@@ -226,7 +229,7 @@ func TestRunInit(t *testing.T) {
 		}
 
 		var stdout bytes.Buffer
-		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "acme"}, &stdout, &bytes.Buffer{}); err != nil {
+		if err := runInit(context.Background(), deps, dir, "my-app", initOptions{provider: "aws"}, &stdout, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v, want the failed install to be non-fatal", err)
 		}
 		if !strings.Contains(readConfig(t, dir), `"slug": "my-app"`) {
@@ -257,7 +260,7 @@ func TestRunInit(t *testing.T) {
 
 		deps := newDeps()
 		argv := stubPackageManager(&deps, nil)
-		opts := initOptions{provider: "acme", configPath: filepath.Join("..", "project", projectconfig.DefaultFileName)}
+		opts := initOptions{provider: "aws", configPath: filepath.Join("..", "project", projectconfig.DefaultFileName)}
 
 		var stdout bytes.Buffer
 		if err := runInit(context.Background(), deps, cwd, "", opts, &stdout, &bytes.Buffer{}); err != nil {
@@ -286,7 +289,7 @@ func TestRunInit(t *testing.T) {
 		stubPackageManager(&deps, nil)
 		dir := initTestDir(t, "proj")
 
-		opts := initOptions{provider: "acme", configPath: filepath.Join("nested", "deep", projectconfig.DefaultFileName)}
+		opts := initOptions{provider: "aws", configPath: filepath.Join("nested", "deep", projectconfig.DefaultFileName)}
 		if err := runInit(context.Background(), deps, dir, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
 			t.Fatalf("runInit err = %v", err)
 		}

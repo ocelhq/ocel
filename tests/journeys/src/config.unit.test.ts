@@ -172,7 +172,7 @@ describe("overlayFor", () => {
 
 const ARCHED_JSON_BASE = `{
   "slug": "go",
-  "provider": { "name": "aws" },
+  "provider": "aws",
   "apps": [{ "name": "web", "path": "./server", "framework": "go", "arch": "arm64" }]
 }
 `;
@@ -235,7 +235,7 @@ export default defineConfig({
     expect(
       renderConfig({ base: TS_BASE, slug: "j-1-node", varsKey: "arn:aws:kms:key/k" }),
     ).toContain(
-      `  provider: { name: "aws", options: { ...(base.provider as { options?: object } | undefined)?.options, varsKey: "arn:aws:kms:key/k" } },`,
+      `  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), varsKey: "arn:aws:kms:key/k" } },`,
     );
   });
 
@@ -300,7 +300,7 @@ export default defineConfig({
 const COMMENTED_JSON_BASE = `{
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "go",
-  "provider": { "name": "aws" },
+  "provider": "aws",
   "apps": [
     {
       "name": "web",
@@ -320,7 +320,7 @@ describe("renderJsonConfig", () => {
     ).toEqual({
       $schema: "https://ocel.dev/schema/0.0.0/ocel.schema.json",
       slug: "j-1-go",
-      provider: { name: "aws" },
+      provider: "aws",
       apps: [{ name: "web", path: "./server", framework: "go" }],
     });
   });
@@ -341,9 +341,9 @@ describe("renderJsonConfig", () => {
     ).toEqual({
       $schema: "https://ocel.dev/schema/0.0.0/ocel.schema.json",
       slug: "j-1-go",
-      provider: { name: "aws", options: { varsKey: "arn:aws:kms:key/k" } },
-      edge: { kind: "api-gateway" },
-      dns: { kind: "cloudflare" },
+      provider: { aws: { varsKey: "arn:aws:kms:key/k" } },
+      edge: "api-gateway",
+      dns: "cloudflare",
       apps: [
         {
           name: "web",
@@ -370,12 +370,25 @@ describe("renderJsonConfig", () => {
   it("keeps the options the fixture's own provider carries", () => {
     expect(
       JSON.parse(
-        renderJsonConfig(
-          `{"slug":"go","provider":{"name":"aws","options":{"region":"eu-west-1"}}}`,
-          { base: "./ocel.json", slug: "j-1-go", varsKey: "arn:aws:kms:key/k" },
-        ),
+        renderJsonConfig(`{"slug":"go","provider":{"aws":{"region":"eu-west-1"}}}`, {
+          base: "./ocel.json",
+          slug: "j-1-go",
+          varsKey: "arn:aws:kms:key/k",
+        }),
       ).provider,
-    ).toEqual({ name: "aws", options: { region: "eu-west-1", varsKey: "arn:aws:kms:key/k" } });
+    ).toEqual({ aws: { region: "eu-west-1", varsKey: "arn:aws:kms:key/k" } });
+  });
+
+  it("seals vars under aws when the fixture's provider is null", () => {
+    expect(
+      JSON.parse(
+        renderJsonConfig(`{"slug":"go","provider":null}`, {
+          base: "./ocel.json",
+          slug: "j-1-go",
+          varsKey: "arn:aws:kms:key/k",
+        }),
+      ).provider,
+    ).toEqual({ aws: { varsKey: "arn:aws:kms:key/k" } });
   });
 });
 

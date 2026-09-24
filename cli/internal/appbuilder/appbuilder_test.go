@@ -682,7 +682,7 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 			cfg: func(root string) *projectconfig.Config {
 				return &projectconfig.Config{
 					Dir:           root,
-					Edge:          &projectconfig.EdgeDescriptor{Kind: "cloudflare"},
+					Edge:          &projectconfig.EdgeDescriptor{ID: "cloudflare"},
 					AllowDegraded: []string{"edge-middleware", "edge-runtime"},
 					Apps:          []projectconfig.App{{Name: "web", Path: "apps/web"}},
 				}
@@ -695,7 +695,7 @@ func TestBuildLearnsTheEdge(t *testing.T) {
 			cfg: func(root string) *projectconfig.Config {
 				return &projectconfig.Config{
 					Dir:           root,
-					Edge:          &projectconfig.EdgeDescriptor{Kind: "api-gateway"},
+					Edge:          &projectconfig.EdgeDescriptor{ID: "api-gateway"},
 					AllowDegraded: []string{"edge-middleware"},
 					Apps:          []projectconfig.App{{Name: "web", Path: "apps/web"}},
 				}
