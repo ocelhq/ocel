@@ -49,8 +49,8 @@ own account, and find the reference they need without having to search for it.
   no account is needed. The console only adds values a team shares, set with
   `ocel env set --dev`.
 - **Not an IaC replacement.** Ocel does not try to replace Terraform, Pulumi, or SST and
-  can interoperate with them (`examples/with-pulumi`, `examples/with-sst`). Never frame
-  it as "a plain alternative" to them.
+  can interoperate with them (`tests/fixtures/iac/with-pulumi`,
+  `tests/fixtures/iac/with-sst`). Never frame it as "a plain alternative" to them.
 
 ## Operating Context
 
