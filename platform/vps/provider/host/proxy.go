@@ -173,12 +173,16 @@ func seedingRouting(table, config Item) string {
 		at := quoted(item.Name)
 		script.WriteString("if [ -e " + at + " ] && [ ! -f " + at + " ]; then " + notAFile(item.Name) + "; fi\n")
 	}
-	install := func(item Item) string {
-		return fmt.Sprintf("printf '%%s' %s | install -m %04o -o %s -g %s /dev/stdin %s\n",
-			quoted(string(item.Content)), item.Mode, item.Owner, item.Owner, quoted(item.Name))
+	script.WriteString(routingLocked("-x") + "staged=''\ntrap 'rm -f \"$staged\"' EXIT\n")
+	seed := func(item Item) string {
+		at := quoted(item.Name)
+		return "staged=$(mktemp " + quoted(item.Name+".XXXXXX") + ")\n" +
+			"printf '%s' " + quoted(string(item.Content)) + " > \"$staged\"\n" +
+			fmt.Sprintf("chown %s:%s \"$staged\"\nchmod %04o \"$staged\"\n", item.Owner, item.Owner, item.Mode) +
+			"mv \"$staged\" " + at + "\n"
 	}
-	script.WriteString("if [ ! -f " + quoted(table.Name) + " ]; then\n" + install(table) + install(config) +
-		"elif [ ! -f " + quoted(config.Name) + " ]; then\n" + install(config) + "fi\n")
+	script.WriteString("if [ ! -f " + quoted(table.Name) + " ]; then\n" + seed(table) + seed(config) +
+		"elif [ ! -f " + quoted(config.Name) + " ]; then\n" + seed(config) + "fi\n")
 	for _, item := range []Item{table, config} {
 		fmt.Fprintf(&script, "chown %s:%s %s\nchmod %04o %s\n", item.Owner, item.Owner, quoted(item.Name), item.Mode, quoted(item.Name))
 	}

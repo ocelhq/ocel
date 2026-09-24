@@ -177,7 +177,9 @@ func TestARootOtherClassesShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T
 	}
 	taken := stood.taking()
 	for _, shared := range []string{stateRoot, helperRoot, classRoot} {
-		at := stood.took(quoted(shared))
+		at := slices.IndexFunc(taken, func(command string) bool {
+			return strings.Contains(command, quoted(shared)) && !strings.HasPrefix(command, routingLocked("-x"))
+		})
 		if at < 0 {
 			t.Fatalf("Remove() left %s standing on a host that carries nothing else:\n%s", shared, strings.Join(taken, "\n"))
 		}

@@ -292,6 +292,10 @@ const (
 	routingLock  = live.StateRoot
 )
 
+func routingLocked(mode string) string {
+	return "exec 9<" + quoted(routingLock) + "\nflock " + mode + " 9\n"
+}
+
 func pairReading() string {
 	held := func(path string) string {
 		at := quoted(path)
@@ -299,8 +303,7 @@ func pairReading() string {
 	}
 	return strings.Join([]string{
 		"set -e",
-		"exec 9<" + quoted(routingLock),
-		"flock -s 9",
+		strings.TrimSuffix(routingLocked("-s"), "\n"),
 		held(live.RoutingTable),
 		held(ProxyConfig),
 	}, "\n")
@@ -447,8 +450,7 @@ func stagedWrite(expected tableDigest) string {
 		`IFS= read -r rendering`,
 		`printf '%s' "$written" | base64 -d > "$staged"`,
 		`printf '%s' "$rendering" | base64 -d > "$rendered"`,
-		"exec 9<" + quoted(routingLock),
-		"flock -x 9",
+		strings.TrimSuffix(routingLocked("-x"), "\n"),
 		`held=$(sha256sum ` + table + ` | cut -d' ' -f1)`,
 		`if [ "$held" != ` + quoted(string(expected)) + ` ]; then printf '%s' "$held" >&2; exit ` + strconv.Itoa(routingMoved) + `; fi`,
 		`chmod --reference=` + table + ` "$staged"`,
