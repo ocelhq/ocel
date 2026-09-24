@@ -4,6 +4,7 @@ import path from "node:path";
 import stripJsonComments from "strip-json-comments";
 import { appHostname } from "./identity";
 import type { Cell, Compute, Edge, RegistryConfig, TargetName } from "./matrix/types";
+import { REGISTRY_USER_ENV } from "./registry/settings";
 import type { CellUnderTest } from "./run/cellRun";
 import { gcpSlug } from "./targets/gcp/names";
 
@@ -15,8 +16,6 @@ export const VPS_BASE = "./ocel.vps.json";
 export const GCP_BASE = "./ocel.gcp.json";
 
 const VPS_DEFAULT_ZONE = "localhost";
-
-export const REGISTRY_USER_ENV = "OCEL_JOURNEY_REGISTRY_USER";
 
 export function journeyZone(env: NodeJS.ProcessEnv): string {
   return env.OCEL_JOURNEY_ZONE?.trim() || VPS_DEFAULT_ZONE;
