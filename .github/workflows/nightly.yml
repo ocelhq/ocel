@@ -18,28 +18,23 @@ concurrency:
 permissions: {}
 
 jobs:
-  gcp:
-    name: gcp journey
+  vps:
+    name: vps journey
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
       contents: read
       id-token: write
+      packages: write
     outputs:
       sha: ${{ steps.sha.outputs.sha }}
     env:
-      NODE_VERSION: "22"
-      PNPM_VERSION: "11.10.0"
-      BUN_VERSION: "1.4.0"
       FORCE_COLOR: "1"
-      OCEL_NAMESPACE: ocel-nightly
-      OCEL_GCP_PROJECT: ${{ vars.GCP_LIVE_PROJECT }}
-      OCEL_GCP_LIVE_PROJECT: ${{ vars.GCP_LIVE_PROJECT }}
-      OCEL_GCP_REGION: ${{ vars.GCP_LIVE_REGION || 'europe-west1' }}
-      OCEL_GCP_LIVE_REGION: ${{ vars.GCP_LIVE_REGION || 'europe-west1' }}
-      OCEL_TARGET: gcp
-      OCEL_JOURNEY_CONCERN: deploy
+      OCEL_TARGET: vps
+      OCEL_JOURNEY_CONCERN: deploy lifecycle sdk
       OCEL_JOURNEY_COVERAGE: every-cell
+      OCEL_GCE_ZONE: ${{ vars.GCP_VPS_ZONE || 'europe-west1-b' }}
+      BOX: nightly-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Name the project this run may spend
         env:
@@ -50,7 +45,7 @@ jobs:
           set -euo pipefail
           for named in PROJECT WIF ACCOUNT; do
             if [ -z "${!named}" ]; then
-              echo "the repository variable behind $named is unset, and this run bootstraps a real project" >&2
+              echo "the repository variable behind $named is unset, and this run brings up a real VM" >&2
               exit 1
             fi
           done
@@ -59,6 +54,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
+          persist-credentials: false
 
       - name: Name the commit this run drives
         id: sha
@@ -71,7 +67,7 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
-      - name: The gcloud the harness mints a token with
+      - name: The gcloud the box is brought up with
         uses: google-github-actions/setup-gcloud@v2
 
       - uses: ./.github/actions/node-workspace
@@ -79,32 +75,14 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: The musl targets a rust fixture compiles for
-        run: rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
-
-      - name: Setup Go
-        uses: ./.github/actions/go
-
-      - name: The payloads the provider embeds
-        run: go generate -C platform/gcp/provider ./...
-
-      - name: Run the suites a real project answers differently
-        run: |
-          set -euo pipefail
-          go test -C platform/gcp/provider -count=1 -timeout 60m \
-            -run '^Test(Live|Project)' -json ./... | tee live-gcp.json
-
-      - name: Assert they ran
-        run: |
-          set -euo pipefail
-          scripts/assert-ran.sh live-gcp.json TestLive
-          scripts/assert-ran.sh live-gcp.json TestProject
-
       - name: The node bundle the fixtures import
         run: pnpm turbo run build --filter=ocel
 
-      - name: The Docker the container images are built with
+      - name: The Docker the image build on this runner needs
         uses: ./.github/actions/containerd-docker
+
+      - name: Setup Go
+        uses: ./.github/actions/go
 
       - uses: ./.github/actions/goreleaser
 
@@ -113,25 +91,40 @@ jobs:
           set -euo pipefail
           node scripts/snapshot.mjs | tee -a "$GITHUB_ENV"
 
-      - name: Reclaim what a run that died left behind
-        run: pnpm --filter @ocel-tests/journeys sweep --target gcp
+      - name: Reclaim boxes a run that died left behind
+        run: scripts/gce.sh sweep
+
+      - name: Bring up the box this run deploys to
+        run: |
+          set -euo pipefail
+          eval "$(scripts/gce.sh create "$BOX")"
+          {
+            echo "OCEL_VPS_HOST=$OCEL_GCE_ADDR"
+            echo "OCEL_VPS_USER=$OCEL_GCE_USER"
+            echo "OCEL_VPS_IDENTITY_FILE=$OCEL_GCE_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Reclaim journey images a run that died left in the registry
+        id: registry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm --filter @ocel-tests/journeys sweep:registry --target vps
 
       - name: Run the journey
+        env:
+          OCEL_JOURNEY_REGISTRY_USER: ${{ github.actor }}
+          OCEL_JOURNEY_REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm --filter @ocel-tests/journeys journey
 
-      - name: Take down what this run stood up
+      - name: No journey image left in the registry
+        if: ${{ always() && steps.registry.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm --filter @ocel-tests/journeys sweep:registry --target vps --own
+
+      - name: No box left behind
         if: always()
-        run: |
-          set -uo pipefail
-          if [ -z "${OCEL_BIN:-}" ]; then
-            echo "no binary was built, so this run stood nothing up to take down"
-            exit 0
-          fi
-          left=0
-          pnpm --filter @ocel-tests/journeys sweep --target gcp --own || left=1
-          (cd tests/fixtures/deploy/node && "$OCEL_BIN" --config ocel.gcp.config.ts bootstrap destroy production --yes) \
-            || left=1
-          exit "$left"
+        run: scripts/gce.sh destroy "$BOX" || echo "could not destroy $BOX"
 
       - name: Pack the evidence
         if: always()
@@ -148,13 +141,13 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gcp-nightly-evidence
+          name: vps-nightly-evidence
           path: ${{ runner.temp }}/journey-evidence.tgz
           if-no-files-found: warn
 
   release:
     name: release
-    needs: gcp
+    needs: vps
     runs-on: ubuntu-latest
     environment: release
     permissions: {}
@@ -169,7 +162,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.gcp.outputs.sha }}
+          ref: ${{ needs.vps.outputs.sha }}
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
 
@@ -180,7 +173,7 @@ jobs:
       - name: Name the nightly this commit releases
         id: plan
         env:
-          SHA: ${{ needs.gcp.outputs.sha }}
+          SHA: ${{ needs.vps.outputs.sha }}
         run: |
           set -euo pipefail
           node scripts/release/nightly.mjs plan "$SHA" > "$RUNNER_TEMP/plan"
@@ -215,7 +208,7 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           SLUG: ${{ steps.app.outputs.app-slug }}
           VERSION: ${{ steps.plan.outputs.version }}
-          SHA: ${{ needs.gcp.outputs.sha }}
+          SHA: ${{ needs.vps.outputs.sha }}
         run: |
           set -euo pipefail
           id=$(gh api "users/${SLUG}[bot]" --jq .id)
