@@ -10,6 +10,7 @@ on:
       - "platform/**"
       - "packages/ocel/**"
       - "tests/fixtures/sdk/go/**"
+      - "tests/fixtures/deploy/go/**"
       - "tests/fixtures/sdk/python/**"
       - "tests/fixtures/sdk/rust/**"
       - "tests/fixtures/sdk/rust-workspace/**"
@@ -51,17 +52,17 @@ jobs:
       matrix:
         group:
           - name: cli
-            dirs: cli sdk pkg/naming pkg/proto pkg/channel pkg/configdoc pkg/constants
-            packages: ./cli/... ./sdk/... ./pkg/naming/... ./pkg/proto/... ./pkg/channel/... ./pkg/configdoc/... ./pkg/constants/... ./tests/fixtures/sdk/go/...
+            dirs: cli sdk pkg/naming pkg/proto pkg/channel pkg/configdoc pkg/constants pkg/target tests/fixtures/sdk/go tests/fixtures/deploy/go/server
+            packages: ./cli/... ./sdk/... ./pkg/naming/... ./pkg/proto/... ./pkg/channel/... ./pkg/configdoc/... ./pkg/constants/... ./pkg/target/... ./tests/fixtures/sdk/go/... ./tests/fixtures/deploy/go/server/...
           - name: aws
-            dirs: platform/aws/provider platform/aws/runtime
-            packages: ./platform/aws/provider/... ./platform/aws/runtime/...
+            dirs: platform/aws/provider platform/aws/runtime platform/aws/connector
+            packages: ./platform/aws/provider/... ./platform/aws/runtime/... ./platform/aws/connector/...
           - name: gcp
-            dirs: platform/gcp/provider platform/gcp/runtime
-            packages: ./platform/gcp/provider/... ./platform/gcp/runtime/...
+            dirs: platform/gcp/provider platform/gcp/runtime platform/gcp/connector
+            packages: ./platform/gcp/provider/... ./platform/gcp/runtime/... ./platform/gcp/connector/...
           - name: providerkit
-            dirs: platform/vps/provider platform/vps/runtime pkg/providerkit pkg/providerkit/pulumi pkg/costkit pkg/transformkit platform/edge/cloudflare/deploy platform/edge/contract
-            packages: ./platform/vps/provider/... ./platform/vps/runtime/... ./pkg/providerkit/... ./pkg/providerkit/pulumi/... ./pkg/costkit/... ./pkg/transformkit/... ./platform/edge/cloudflare/deploy/... ./platform/edge/contract/...
+            dirs: platform/vps/provider platform/vps/runtime platform/vps/connector pkg/providerkit pkg/providerkit/pulumi pkg/costkit pkg/transformkit pkg/runtimekit pkg/connectorkit platform/edge/cloudflare/deploy platform/edge/contract
+            packages: ./platform/vps/provider/... ./platform/vps/runtime/... ./platform/vps/connector/... ./pkg/providerkit/... ./pkg/providerkit/pulumi/... ./pkg/costkit/... ./pkg/transformkit/... ./pkg/runtimekit/... ./pkg/connectorkit/... ./platform/edge/cloudflare/deploy/... ./platform/edge/contract/...
     env:
       DIRS: ${{ matrix.group.dirs }}
       PACKAGES: ${{ matrix.group.packages }}
