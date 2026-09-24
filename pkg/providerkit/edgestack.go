@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -116,6 +117,14 @@ func (s *stackSession) checkpoint(ctx context.Context) error {
 	s.state.Kind = s.front.Kind()
 	s.state.Edge = s.stack.State()
 	return s.store.write(ctx, s.state)
+}
+
+func (s *stackSession) promoted(ctx context.Context) (bool, error) {
+	history, err := s.stack.Ledger().History(ctx, edge.DefaultPointer)
+	if err != nil {
+		return false, err
+	}
+	return slices.ContainsFunc(history, func(entry edge.HistoryEntry) bool { return entry.Active }), nil
 }
 
 func (s *stackSession) on(kind edge.Kind) (edge.EdgeStack, error) {

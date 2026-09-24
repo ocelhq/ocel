@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -24,6 +25,15 @@ func deployed(t *testing.T, provider *fake.Provider, class providerkit.Class, sl
 	seedStack(t, provider, class, slug, providerkit.EdgeStackState{
 		Edge: edge.StackState{Slug: slug, Class: class, Endpoint: "https://" + slug + ".fake.invalid"},
 	})
+	promoted(t, provider, class, slug)
+}
+
+func promoted(t *testing.T, provider *fake.Provider, class providerkit.Class, slug string) {
+	t.Helper()
+	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1"}}
+	if err := ledger.New(provider.Records(), class, slug).Promote(context.Background(), promotion, "", edge.DiscardReporter()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func seedStack(t *testing.T, provider *fake.Provider, class providerkit.Class, slug string, state providerkit.EdgeStackState) {
@@ -96,6 +106,31 @@ func TestAddHostnameBindsWritesAndRecordsTheProbe(t *testing.T) {
 	}
 	if written := provider.DNS().(*fake.DNS).Writer("acme.com").Records(); len(written) != 1 {
 		t.Errorf("the zone holds %v, want the one record pointing app.acme.com at the edge", written)
+	}
+}
+
+func TestAddHostnameOnAProjectThatPromotedNothingSaysNothingServesIt(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
+		Edge: edge.StackState{Slug: "shop", Class: providerkit.ClassProduction, Endpoint: "https://shop.fake.invalid"},
+	})
+
+	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: configuredHosts("app.acme.com"),
+		Edge:       zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("AddHostname() error = %v", err)
+	}
+	result, err := drain(stream)
+	said := result.GetError() + connectMessage(err)
+	if result.GetSuccess() || !strings.Contains(said, "promoted no release") || strings.Contains(said, "deploy again") {
+		t.Fatalf("AddHostname() = %q, want it to say plainly that nothing is promoted for app.acme.com to serve", said)
+	}
+	if bound := readStack(t, provider, providerkit.ClassProduction, "shop").Edge.Bound; !slices.Contains(bound, "app.acme.com") {
+		t.Errorf("the edge binds %v, want app.acme.com kept bound: the next promotion serves it", bound)
 	}
 }
 
@@ -386,6 +421,7 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 			"app.acme.com": {Certificate: providerkit.Certificate{ID: "superseded", Requested: true, Written: []edge.Record{stale}}},
 		},
 	})
+	promoted(t, provider, providerkit.ClassProduction, "shop")
 	writer, err := provider.DNS().Open(fake.KindZone, "acme.com")
 	if err != nil {
 		t.Fatal(err)
@@ -518,6 +554,7 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 			},
 		},
 	})
+	promoted(t, provider, providerkit.ClassProduction, "shop")
 	provider.Pin("app.acme.com", "cert-of-today")
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
