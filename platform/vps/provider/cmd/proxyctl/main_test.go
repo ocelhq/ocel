@@ -293,6 +293,73 @@ func TestAFlipThatOnlyMovesAStandingRouteLoadsTheConfigTheProxyAlreadyRuns(t *te
 	}
 }
 
+func probedRouting(t *testing.T, socket, upstream, timeout string) string {
+	t.Helper()
+	return configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"},"apps":{"http":{"servers":{"ocel":{"listen":[":80"],"routes":[`+
+		`{"@id":"`+routed+`","match":[{"host":["shop.example.com"]}],"handle":[{"handler":"headers"},{"handler":"reverse_proxy","upstreams":[{"dial":"`+upstream+`"}],`+
+		`"health_checks":{"active":{"uri":"/up","interval":"10s","timeout":"`+timeout+`","expect_status":2}}}]}]}}}}}`)
+}
+
+func TestAFlipReturnsOnlyOnceNoProbeCanStillReachTheUpstreamItMovedARouteAwayFrom(t *testing.T) {
+	_, socket := served(t)
+	live := t.TempDir()
+	if code, errs := flippedAt(t, live, probedRouting(t, socket, "shop-web-1111:8080", "1s")); code != 0 {
+		t.Fatalf("the first flip = %d, %q", code, errs)
+	}
+
+	began := time.Now()
+	if code, errs := flippedAt(t, live, probedRouting(t, socket, "shop-web-2222:8080", "1s")); code != 0 {
+		t.Fatalf("the flip that moves %s = %d, %q", routed, code, errs)
+	}
+	if took := time.Since(began); took < time.Second {
+		t.Errorf("the flip that moved %s off shop-web-1111:8080 returned after %s, inside the 1s a health probe that read the old upstream before the move may still run: the caller stops that upstream next, the cut probe marks the route down, and the release that just passed its gate answers 503 until the next probe",
+			routed, took)
+	}
+}
+
+func TestAFlipRefusesAProbeWhoseTimeoutItCannotRead(t *testing.T) {
+	held, socket := served(t)
+
+	code, errs := flippedAt(t, t.TempDir(), probedRouting(t, socket, "shop-web-1111:8080", "soon"))
+	if code != exitRefused {
+		t.Fatalf("a flip probing %s with a timeout of %q = %d, want %d: it cannot tell how long a probe of the upstream it moves away from may run", routed, "soon", code, exitRefused)
+	}
+	if !strings.Contains(errs, routed) {
+		t.Errorf("the refused flip said %q, want it to name the route", errs)
+	}
+	if asked := held.asked(); len(asked) != 0 {
+		t.Errorf("a refused flip still reached the proxy with %v", asked)
+	}
+}
+
+func TestAFlipWaitingOutAProbeHoldsNoOtherFlipOnTheBox(t *testing.T) {
+	_, socket := served(t)
+	live := t.TempDir()
+	if code, errs := flippedAt(t, live, probedRouting(t, socket, "shop-web-1111:8080", "3s")); code != 0 {
+		t.Fatalf("the first flip = %d, %q", code, errs)
+	}
+	moving := probedRouting(t, socket, "shop-web-2222:8080", "3s")
+	waiting := make(chan int)
+	go func() {
+		code, _ := flippedAt(t, live, moving)
+		waiting <- code
+	}()
+	for upstreamOf(t, live, routed) != "shop-web-2222:8080" {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	began := time.Now()
+	if code, errs := flippedAt(t, live, moving); code != 0 {
+		t.Fatalf("the flip behind the waiting one = %d, %q", code, errs)
+	}
+	if took := time.Since(began); took > time.Second {
+		t.Errorf("a flip that moved nothing took %s behind one waiting out a probe: the wait held the lock every flip on the box takes", took)
+	}
+	if code := <-waiting; code != 0 {
+		t.Errorf("the waiting flip = %d", code)
+	}
+}
+
 func TestARouteReadsItsUpstreamBeforeTheLoadThatNamesItAndMovesOnlyOnceThatLoadIsTaken(t *testing.T) {
 	held, socket := served(t)
 	live := t.TempDir()

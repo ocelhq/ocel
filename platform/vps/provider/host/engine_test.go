@@ -2,6 +2,7 @@ package host
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -270,7 +271,7 @@ func TestAConfigMovedIntoPlaceIsWhatTheRunningProxyLoads(t *testing.T) {
 	}
 }
 
-func (p standingProxy) moves(t *testing.T, held []byte, state ProxyState) []byte {
+func (p standingProxy) writes(t *testing.T, held []byte, state ProxyState) []byte {
 	t.Helper()
 
 	rendered, err := RenderProxyConfig(state)
@@ -282,8 +283,31 @@ func (p standingProxy) moves(t *testing.T, held []byte, state ProxyState) []byte
 	if out, err := write.CombinedOutput(); err != nil {
 		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)
 	}
+	return rendered
+}
+
+func (p standingProxy) moves(t *testing.T, held []byte, state ProxyState) []byte {
+	t.Helper()
+
+	rendered := p.writes(t, held, state)
 	p.drives(t, "flip", ProxyConfigMount)
 	return rendered
+}
+
+func (p standingProxy) standsSlowApp(t *testing.T, upstream string, slow time.Duration) {
+	t.Helper()
+
+	name, _, _ := strings.Cut(upstream, ":")
+	exec.Command(dockerEngine, "rm", "--force", name).Run()
+	answer := fmt.Sprintf(`while read -r line && [ "$line" != "$(printf '\r')" ]; do :; done; sleep %d; printf 'HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n'`,
+		int(slow.Seconds()))
+	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
+		"--network", p.network, "--entrypoint", "nc", ProxyImage,
+		"-lk", "-p", providerkit.InjectedPortText, "-e", "sh", "-c", answer).CombinedOutput()
+	if err != nil {
+		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
+	}
+	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
 }
 
 func TestARealProxyDropsNoRequestWhileAFlipMovesAStandingRouteBetweenUpstreams(t *testing.T) {
@@ -357,5 +381,49 @@ func TestARealProxyDropsNoRequestWhileAFlipMovesAStandingRouteBetweenUpstreams(t
 	}
 	if bodies["one"] == 0 || bodies["two"] == 0 {
 		t.Errorf("the requests made across the flips were answered %v, want both upstreams: a flip that never moved the route drops nothing and proves nothing", bodies)
+	}
+}
+
+func TestARealProxyServesTheNewReleaseWhenTheRetiredOneStopsUnderAHealthProbe(t *testing.T) {
+	stood := proxyStanding(t)
+
+	retired, next := "shop-web-1111:"+providerkit.InjectedPortText, "shop-web-2222:"+providerkit.InjectedPortText
+	stood.standsSlowApp(t, retired, 2*time.Second)
+	stood.standsApp(t, next, "two")
+	serving := func(upstream string) ProxyState {
+		return ProxyState{
+			Grace:  DrainWindow,
+			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream, Health: "/up"}},
+			Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
+		}
+	}
+	held := stood.moves(t, proxyBaseline, serving(retired))
+	stood.writes(t, held, serving(next))
+	stood.drives(t, "gate", "--deploy-timeout", "10", next+"/up")
+	stood.drives(t, "flip", "--drain-timeout", "30", "--retire", retired, ProxyConfigMount)
+	name, _, _ := strings.Cut(retired, ":")
+	if out, err := exec.Command(dockerEngine, "rm", "--force", name).CombinedOutput(); err != nil {
+		t.Fatalf("stop the retired release: %v\n%s", err, out)
+	}
+
+	var answered []string
+	for range 10 {
+		time.Sleep(200 * time.Millisecond)
+		request, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+proxyPort+"/", nil)
+		request.Host = claimed
+		said, err := http.DefaultClient.Do(request)
+		if err != nil {
+			answered = append(answered, err.Error())
+			continue
+		}
+		body, _ := io.ReadAll(io.LimitReader(said.Body, 1<<12))
+		said.Body.Close()
+		if said.StatusCode != http.StatusOK || string(body) != "two" {
+			answered = append(answered, fmt.Sprintf("%d %q", said.StatusCode, body))
+		}
+	}
+	if len(answered) > 0 {
+		t.Errorf("%s was answered %v after the release whose gate passed took over from one stopped once the drain returned: the proxy's probe of the retired release began before the flip, the stop cut it, and the failed probe marked the route down until the next probe",
+			claimed, answered)
 	}
 }
