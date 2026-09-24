@@ -3,18 +3,16 @@ package host
 import (
 	"os/exec"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 )
 
-func TestAProbeStandsWhereAnInterruptedRunLeftItsNetworkAndContainerBehind(t *testing.T) {
+func TestAProbeStandsWhereAnInterruptedRunLeftItsContainerBehind(t *testing.T) {
 	engineOrSkip(t)
 
-	name, network := probeName(t), probeName(t)+"-net"
-	if out, err := exec.Command(dockerEngine, "network", "create", network).CombinedOutput(); err != nil {
-		t.Fatalf("plant the network a killed run would have left: %v\n%s", err, out)
-	}
-	if out, err := exec.Command(dockerEngine, "run", "--detach", "--name", name,
-		"--network", network, "--entrypoint", "sleep", ProxyImage, "600").CombinedOutput(); err != nil {
-		t.Fatalf("plant the container a killed run would have left on that network: %v\n%s", err, out)
+	if out, err := exec.Command(dockerEngine, "run", "--detach", "--name", probeName(t),
+		"--network", enginetest.Network(t), "--entrypoint", "sleep", ProxyImage, "600").CombinedOutput(); err != nil {
+		t.Fatalf("plant the container a killed run would have left under the name this probe takes: %v\n%s", err, out)
 	}
 
 	proxyStanding(t)
