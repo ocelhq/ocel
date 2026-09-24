@@ -353,10 +353,19 @@ func flipping(socket, live string, argv []string, out, errs io.Writer) int {
 	if flags.NArg() != 1 || (len(retiring) > 0 && *drainTimeout <= 0) {
 		return usage(errs)
 	}
-	if code := flip(socket, live, flags.Arg(0), out, errs); code != 0 || len(retiring) == 0 {
+	retired := make([]string, 0, len(retiring))
+	for _, address := range retiring {
+		keyed, err := dialled(address)
+		if err != nil {
+			fmt.Fprintf(errs, "ocel-proxyctl: --retire %v\n", err)
+			return exitRefused
+		}
+		retired = append(retired, keyed)
+	}
+	if code := flip(socket, live, flags.Arg(0), out, errs); code != 0 || len(retired) == 0 {
 		return code
 	}
-	return draining(socket, retiring, time.Duration(*drainTimeout)*time.Second, out, errs)
+	return draining(socket, retired, time.Duration(*drainTimeout)*time.Second, out, errs)
 }
 
 func gating(target, path string, window time.Duration, out, errs io.Writer) int {

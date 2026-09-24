@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -72,11 +74,15 @@ func shaping(live string, document []byte) (shaped, error) {
 				case strings.ContainsAny(dial, "{}"):
 					return shaped{}, fmt.Errorf("forwards route %q to %q, a placeholder rather than an address", identity, dial)
 				}
+				address, err := dialled(dial)
+				if err != nil {
+					continue
+				}
 				probe, err := probing(forwards)
 				if err != nil {
 					return shaped{}, fmt.Errorf("probes route %q %w", identity, err)
 				}
-				upstreams[named] = dial
+				upstreams[named] = address
 				probes[named] = probe
 				upstream["dial"] = "{file." + filepath.Join(dir, named) + "}"
 			}
@@ -87,6 +93,28 @@ func shaping(live string, document []byte) (shaped, error) {
 		return shaped{}, err
 	}
 	return shaped{dir: dir, config: written, upstreams: upstreams, probes: probes}, nil
+}
+
+func dialled(dial string) (string, error) {
+	if strings.ContainsAny(dial, "{}") {
+		return "", fmt.Errorf("%q is a placeholder rather than an address", dial)
+	}
+	address := dial
+	if network, rest, named := strings.Cut(dial, "/"); named {
+		if !strings.EqualFold(strings.TrimSpace(network), "tcp") {
+			return "", fmt.Errorf("%q is dialled over %s rather than tcp", dial, network)
+		}
+		address = rest
+	}
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return "", fmt.Errorf("%q is not a host:port: %w", dial, err)
+	}
+	number, err := strconv.ParseUint(port, 10, 16)
+	if err != nil {
+		return "", fmt.Errorf("%q does not name one port: %w", dial, err)
+	}
+	return net.JoinHostPort(host, strconv.FormatUint(number, 10)), nil
 }
 
 func probing(forwards map[string]any) (time.Duration, error) {
