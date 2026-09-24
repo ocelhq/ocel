@@ -122,7 +122,7 @@ func (l *Liveness) request(ctx context.Context, scheme, hostname string, address
 		},
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	asked, err := http.NewRequestWithContext(ctx, http.MethodGet, scheme+"://"+hostname+"/", nil)
+	asked, err := http.NewRequestWithContext(ctx, http.MethodGet, scheme+"://"+hostname+edge.LivenessProbePath, nil)
 	if err != nil {
 		return "", err
 	}

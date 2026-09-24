@@ -137,8 +137,8 @@ func TestTheLivenessProbeAsksForTheHostnameItProbesAndFollowsNoRedirect(t *testi
 
 	var asked []string
 	probe := resolvedAt(t, "", func(w http.ResponseWriter, r *http.Request) {
-		asked = append(asked, r.Host+" "+r.TLS.ServerName)
-		if r.URL.Path == "/" {
+		asked = append(asked, r.Host+" "+r.TLS.ServerName+" "+r.URL.Path)
+		if r.URL.Path == edge.LivenessProbePath {
 			http.Redirect(w, r, "/elsewhere", http.StatusFound)
 			return
 		}
@@ -152,8 +152,8 @@ func TestTheLivenessProbeAsksForTheHostnameItProbesAndFollowsNoRedirect(t *testi
 	if kind != "" {
 		t.Errorf("Serving() = %q, want nothing: the probe followed a redirect and read the edge off wherever it landed", kind)
 	}
-	if !slices.Equal(asked, []string{"shop.example.com shop.example.com"}) {
-		t.Errorf("the front was asked %v, want the hostname as both Host and SNI: an edge routes and terminates on the name, not the address", asked)
+	if !slices.Equal(asked, []string{"shop.example.com shop.example.com " + edge.LivenessProbePath}) {
+		t.Errorf("the front was asked %v, want the hostname as both Host and SNI, on the path every front answers itself: an edge routes and terminates on the name, not the address, and an app behind API Gateway's proxy integration answers / without the marker", asked)
 	}
 }
 
