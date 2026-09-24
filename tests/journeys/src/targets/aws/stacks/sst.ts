@@ -55,18 +55,25 @@ export class SstStack extends AwsStack {
     await spawnBin(bin, ["remove", "--stage", stage], dir, await sstEnv(this.world, process.env));
   }
 
-  async sweep(runId: string): Promise<void> {
-    const stages = new Set([
+  async sweepStale(runId: string): Promise<void> {
+    await this.remove(runId, [
       `${HARNESS_PREFIX}${runId}`,
       ...(await recordedStages(cliAt(await this.world.endpoint()))),
     ]);
+  }
+
+  async sweepRun(runId: string): Promise<void> {
+    await this.remove(runId, [`${HARNESS_PREFIX}${runId}`]);
+  }
+
+  private async remove(runId: string, stages: string[]): Promise<void> {
     const dir = await copyTree(
       fixtureDir("iac/with-sst"),
       treeDir(runId, "aws", "stack-sweep-with-sst"),
     );
     try {
       const bin = path.join(dir, "node_modules", ".bin", "sst");
-      for (const stage of stages) {
+      for (const stage of new Set(stages)) {
         try {
           await spawnBin(
             bin,

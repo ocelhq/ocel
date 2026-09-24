@@ -70,7 +70,8 @@ class RecordingStack implements ExternalStack {
   async destroy(): Promise<void> {
     this.called.push("stack destroy");
   }
-  async sweep(): Promise<void> {}
+  async sweepStale(): Promise<void> {}
+  async sweepRun(): Promise<void> {}
 }
 
 function recordingEvidence(written: Called): Evidence {

@@ -395,7 +395,9 @@ export abstract class AwsStack implements ExternalStack {
 
   abstract destroy(cell: CellUnderTest): Promise<void>;
 
-  abstract sweep(runId: string): Promise<void>;
+  abstract sweepStale(runId: string): Promise<void>;
+
+  abstract sweepRun(runId: string): Promise<void>;
 
   async refuse(cell: CellUnderTest): Promise<void> {
     const dir = await workTree(cell, "aws");

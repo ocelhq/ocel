@@ -1,10 +1,11 @@
 import { describe, expect, it } from "bun:test";
 import { DEFAULT_BASE } from "../../config";
 import { deploy, fixtures as matrix } from "../../matrix/fixtures";
-import type { Cell } from "../../matrix/types";
+import { type Cell, fixture as fixtureNamed } from "../../matrix/types";
 import { defaults } from "../../matrix/variants";
 import { cellsOn, fixturesOn } from "../../plan";
-import { bootstrapHeldBy, cellsBySlugPart, despite, sweepPlan } from "./sweeper";
+import type { ExternalStack } from "../../stacks";
+import { bootstrapHeldBy, cellsBySlugPart, despite, sweepPlan, sweepStacks } from "./sweeper";
 
 const fixture = deploy.node;
 
@@ -116,5 +117,40 @@ describe("sweepPlan", () => {
     expect(complaints).toEqual([
       "no fixture runs on aws, so nothing destroys j-1874-gone, j-1874-also-gone",
     ]);
+  });
+});
+
+describe("sweepStacks", () => {
+  function stacked(name: string, swept: string[], fails = false) {
+    const stack: ExternalStack = {
+      checks: { afterPublish: [], whileServing: [], afterOcelDestroy: [], afterStackDestroy: [] },
+      deploy: async () => {},
+      destroy: async () => {},
+      refuse: async () => {},
+      sweepStale: async (runId) => {
+        swept.push(`${name} stale ${runId}`);
+      },
+      sweepRun: async (runId) => {
+        if (fails) {
+          throw new Error(`${name} is stuck`);
+        }
+        swept.push(`${name} run ${runId}`);
+      },
+    };
+    return fixtureNamed(name, { apps: ["web"], checks: [], stack, on: { aws: [defaults] } });
+  }
+
+  it("sweeps the stack of every fixture that stands one, past one that fails", async () => {
+    const swept: string[] = [];
+    const complaints: string[] = [];
+
+    await sweepStacks(
+      [stacked("iac/stuck", swept, true), fixture, stacked("iac/with-sst", swept)],
+      complaints,
+      (stack) => stack.sweepRun("1874"),
+    );
+
+    expect(swept).toEqual(["iac/with-sst run 1874"]);
+    expect(complaints).toEqual(["iac/stuck stack sweep: Error: iac/stuck is stuck"]);
   });
 });

@@ -21,7 +21,8 @@ class ProbeStack implements ExternalStack {
   async deploy() {}
   async destroy() {}
   async refuse() {}
-  async sweep() {}
+  async sweepStale() {}
+  async sweepRun() {}
 }
 const pong: Check = { title: "pong", run: async () => undefined };
 

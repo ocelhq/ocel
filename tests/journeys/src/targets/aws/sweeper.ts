@@ -6,6 +6,7 @@ import type { Cell, Fixture } from "../../matrix/types";
 import { ocel } from "../../ocel";
 import { fixtureDir, treeDir } from "../../paths";
 import { cellsOn, fixturesOn } from "../../plan";
+import type { ExternalStack } from "../../stacks";
 import { copyTree } from "../../tree";
 import type { Sweeper } from "../types";
 import { BOOTSTRAP_DESTROY_ARGS } from "./bootstrap";
@@ -53,6 +54,19 @@ async function inFixture(
     await work(dir);
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+}
+
+export async function sweepStacks(
+  fixtures: Fixture[],
+  complaints: string[],
+  sweep: (stack: ExternalStack) => Promise<void>,
+): Promise<void> {
+  for (const fixture of fixtures) {
+    const stack = fixture.stack;
+    if (stack) {
+      await despite(complaints, `${fixture.name} stack sweep`, () => sweep(stack));
+    }
   }
 }
 
@@ -158,12 +172,7 @@ export class AwsSweeper implements Sweeper {
       this.sweepNamespaces(runId, cells, byPart, complaints, busy),
     );
 
-    for (const fixture of fixtures) {
-      const stack = fixture.stack;
-      if (stack) {
-        await despite(complaints, `${fixture.name} stack sweep`, () => stack.sweep(runId));
-      }
-    }
+    await sweepStacks(fixtures, complaints, (stack) => stack.sweepStale(runId));
 
     await report(real, complaints);
   }
@@ -187,6 +196,8 @@ export class AwsSweeper implements Sweeper {
         this.sweepStrayNamespace(runId, namespace, byPart, complaints, false),
       );
     }
+
+    await sweepStacks(fixtures, complaints, (stack) => stack.sweepRun(runId));
 
     await report(true, complaints);
   }

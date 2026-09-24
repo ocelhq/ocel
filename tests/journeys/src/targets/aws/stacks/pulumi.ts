@@ -95,7 +95,11 @@ export class PulumiStack extends AwsStack {
     await pulumi(dir, ["stack", "rm", "--yes"], env);
   }
 
-  async sweep(runId: string): Promise<void> {
+  async sweepStale(runId: string): Promise<void> {
+    await this.sweepRun(runId);
+  }
+
+  async sweepRun(runId: string): Promise<void> {
     const dir = await copyTree(
       fixtureDir("iac/with-pulumi"),
       treeDir(runId, "aws", "stack-sweep-with-pulumi"),

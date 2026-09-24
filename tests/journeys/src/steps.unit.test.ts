@@ -100,7 +100,8 @@ describe("a cell with an external stack", () => {
     async destroy() {
       calls.push("stack destroys");
     }
-    async sweep() {}
+    async sweepStale() {}
+    async sweepRun() {}
   }
 
   const stacked = fixture("iac/with-sst", {
