@@ -462,17 +462,11 @@ func flipped(socket, live, path string, out, errs io.Writer) (time.Duration, int
 		return 0, exitRefused
 	}
 	defer release()
-	document, err := os.ReadFile(path)
-	if err != nil {
-		fmt.Fprintf(errs, "ocel-proxyctl: read %s: %v\n", path, err)
+	shape, read := shapedAt(live, path, errs)
+	if !read {
 		return 0, exitRefused
 	}
-	if err := caddyadmin.Keeps(document, socket); err != nil {
-		fmt.Fprintf(errs, "ocel-proxyctl: %s %v\n", path, err)
-		return 0, exitRefused
-	}
-	shape, err := shaping(live, document)
-	if err != nil {
+	if err := caddyadmin.Keeps(shape.config, socket); err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: %s %v\n", path, err)
 		return 0, exitRefused
 	}
@@ -491,15 +485,23 @@ func flipped(socket, live, path string, out, errs io.Writer) (time.Duration, int
 	return probed, 0
 }
 
-func serve(live, path string, errs io.Writer) int {
+func shapedAt(live, path string, errs io.Writer) (shaped, bool) {
 	document, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: read %s: %v\n", path, err)
-		return exitRefused
+		return shaped{}, false
 	}
 	shape, err := shaping(live, document)
 	if err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: %s %v\n", path, err)
+		return shaped{}, false
+	}
+	return shape, true
+}
+
+func serve(live, path string, errs io.Writer) int {
+	shape, read := shapedAt(live, path, errs)
+	if !read {
 		return exitRefused
 	}
 	started := filepath.Join(live, liveConfig)
