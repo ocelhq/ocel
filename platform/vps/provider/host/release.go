@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -57,15 +58,12 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 		standing.Routes = Routing(standing.Routes, AppRoute{RouteKey: rel.RouteKey, Upstream: rel.Target, Health: rel.HealthPath})
 		return standing
 	}
-	flip, err := h.composeProxy(ctx, rel.DrainTimeout, func(standing ProxyState, patient bool) (ProxyState, bool, error) {
-		if patient && retiring != "" && standing.Retiring != "" && standing.Retiring != retiring {
-			return standing, false, nil
-		}
+	flip, err := h.composeProxy(ctx, func(standing ProxyState) (ProxyState, error) {
 		standing = compose(standing)
-		if retiring != "" {
-			standing.Retiring = retiring
+		if retiring != "" && !slices.Contains(standing.Retiring, retiring) {
+			standing.Retiring = append(standing.Retiring, retiring)
 		}
-		return standing, true, nil
+		return standing, nil
 	})
 	if err != nil {
 		return h.stranded(ctx, rel, flip.held, err)
@@ -91,12 +89,10 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 			return err
 		}
 	}
-	if _, err := h.composeProxy(ctx, rel.DrainTimeout, func(standing ProxyState, _ bool) (ProxyState, bool, error) {
+	if _, err := h.composeProxy(ctx, func(standing ProxyState) (ProxyState, error) {
 		standing = compose(standing)
-		if standing.Retiring == retiring {
-			standing.Retiring = ""
-		}
-		return standing, true, nil
+		standing.Retiring = slices.DeleteFunc(standing.Retiring, func(held string) bool { return held == retiring })
+		return standing, nil
 	}); err != nil {
 		return h.serving(rel, retiring, err)
 	}
@@ -156,10 +152,7 @@ func (h *Host) proxyDocument(ctx context.Context) (proxyDocument, error) {
 	return proxyDocument{text: text, digest: strings.TrimSpace(digest)}, nil
 }
 
-const (
-	proxyRewrites = 5
-	drainWait     = time.Second
-)
+const proxyRewrites = 5
 
 type composed struct {
 	held    proxyDocument
@@ -167,9 +160,8 @@ type composed struct {
 	changed bool
 }
 
-func (h *Host) composeProxy(ctx context.Context, patience time.Duration, compose func(ProxyState, bool) (ProxyState, bool, error)) (composed, error) {
+func (h *Host) composeProxy(ctx context.Context, compose func(ProxyState) (ProxyState, error)) (composed, error) {
 	rewrites := 0
-	deadline := time.Now().Add(patience)
 	for {
 		held, err := h.proxyDocument(ctx)
 		if err != nil {
@@ -179,17 +171,9 @@ func (h *Host) composeProxy(ctx context.Context, patience time.Duration, compose
 		if err != nil {
 			return composed{held: held}, err
 		}
-		next, ready, err := compose(standing, time.Now().Before(deadline))
+		next, err := compose(standing)
 		if err != nil {
 			return composed{held: held}, err
-		}
-		if !ready {
-			select {
-			case <-ctx.Done():
-				return composed{held: held}, ctx.Err()
-			case <-time.After(drainWait):
-			}
-			continue
 		}
 		before, err := RenderProxyConfig(standing)
 		if err != nil {
