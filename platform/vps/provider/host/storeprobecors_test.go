@@ -7,13 +7,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 )
 
 func TestARealStoreSettlesASessionWithIfMatchAndRefusesAStaleOne(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stands a real store up")
 	}
-	store := anExternalStore(t, "conditional-bucket")
+	store := anExternalStore(t, enginetest.AStore(t), "conditional-bucket")
 	now := time.Now().UTC()
 	const key = "session.json"
 

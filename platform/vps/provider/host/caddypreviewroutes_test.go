@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -128,7 +129,7 @@ func twoAppsOfOneBranch(web, api string) ProxyState {
 }
 
 func TestARealProxyServesOnePreviewHostPerAppAndOnePerBranch(t *testing.T) {
-	network := standingNetwork(t)
+	network := enginetest.Network(t)
 	web := standingAppOn(t, network, "web", "the web preview answered")
 	api := standingAppOn(t, network, "api", "the api preview answered")
 

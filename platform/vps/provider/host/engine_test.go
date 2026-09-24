@@ -16,7 +16,10 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 )
+
+func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }
 
 func engineOrSkip(t *testing.T) {
 	t.Helper()
@@ -38,31 +41,6 @@ func engineOrSkip(t *testing.T) {
 	}
 }
 
-func seenByTheEngine(t *testing.T) string {
-	t.Helper()
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip("this machine has no home directory to hand the engine a bind source from")
-	}
-	dir, err := os.MkdirTemp(home, "ocel-probe-")
-	if err != nil {
-		t.Skip("nothing under this home directory can be written, so the engine can be handed no bind source")
-	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
-
-	at := filepath.Join(dir, "seen")
-	if err := os.WriteFile(at, []byte("what the engine must be able to read\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	said, err := exec.Command(dockerEngine, "run", "--rm", "--volume", at+":/seen:ro",
-		ProxyImage, "test", "-f", "/seen").CombinedOutput()
-	if err != nil {
-		t.Skipf("this machine's engine cannot read %s, so a bind source cannot be handed to it here: %s", dir, said)
-	}
-	return dir
-}
-
 type standingProxy struct {
 	name    string
 	network string
@@ -76,10 +54,9 @@ func proxyStanding(t *testing.T) standingProxy {
 	t.Helper()
 
 	engineOrSkip(t)
-	name, network := probeName(t), probeName(t)+"-net"
-	t.Cleanup(func() { exec.Command(dockerEngine, "network", "rm", network).Run() })
+	name, network := probeName(t), enginetest.Network(t)
 	t.Cleanup(func() { taken(t, name) })
-	dir := seenByTheEngine(t)
+	dir := enginetest.BindSource(t)
 
 	arch, err := Architecture(runtime.GOARCH)
 	if err != nil {
@@ -102,11 +79,6 @@ func proxyStanding(t *testing.T) standingProxy {
 	}}
 
 	taken(t, name)
-	_ = exec.Command(dockerEngine, "network", "rm", network).Run()
-	if out, err := exec.Command(dockerEngine, "network", "create", network).CombinedOutput(); err != nil {
-		t.Fatalf("create the network every deploy resolves across: %v\n%s", err, out)
-	}
-
 	if out, err := exec.Command("/bin/sh", "-c", stood.here(containerCommand())).CombinedOutput(); err != nil {
 		t.Fatalf("the write that stands the proxy up = %v\n%s", err, out)
 	}
@@ -202,9 +174,9 @@ func (p standingProxy) standsApp(t *testing.T, upstream, body string) {
 
 	name, _, _ := strings.Cut(upstream, ":")
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
-	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
-		"--network", p.network, ProxyImage,
-		"caddy", "respond", "--listen", ":"+providerkit.InjectedPortText, body).CombinedOutput()
+	run := append([]string{"run", "--rm", "--detach", "--name", name}, enginetest.Labelled(t)...)
+	stood, err := exec.Command(dockerEngine, append(run, "--network", p.network, ProxyImage,
+		"caddy", "respond", "--listen", ":"+providerkit.InjectedPortText, body)...).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
 	}

@@ -7,44 +7,14 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 )
-
-func aStandingStore(t *testing.T) string {
-	t.Helper()
-	name := "ocel-store-probe"
-	_ = exec.Command(dockerEngine, "rm", "--force", name).Run()
-	up := exec.Command(dockerEngine, "run", "--detach", "--name", name,
-		"--env", "RUSTFS_ACCESS_KEY=ocel",
-		"--env", "RUSTFS_SECRET_KEY=probe-secret",
-		"--env", "RUSTFS_ADDRESS=:9000",
-		"--env", "RUSTFS_CONSOLE_ENABLE=false",
-		"--env", "RUSTFS_REGION=us-east-1",
-		"--env", "RUSTFS_VOLUMES=/data",
-		constants.ObjectStoreImage())
-	if out, err := up.CombinedOutput(); err != nil {
-		t.Skipf("no store to drive: %v\n%s", err, out)
-	}
-	t.Cleanup(func() { _ = exec.Command(dockerEngine, "rm", "--force", name).Run() })
-
-	deadline := time.Now().Add(90 * time.Second)
-	for {
-		ready := exec.Command(dockerEngine, "exec", name,
-			"curl", "-fsS", "http://127.0.0.1:9000/health/ready")
-		if err := ready.Run(); err == nil {
-			return name
-		}
-		if time.Now().After(deadline) {
-			t.Skip("the store never answered its readiness probe")
-		}
-		time.Sleep(time.Second)
-	}
-}
 
 func TestARealStoreTakesEveryCallABucketIsDescribedWith(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stands a real store up")
 	}
-	store := aStandingStore(t)
+	store := enginetest.AStore(t)
 
 	for what, spec := range map[string]BucketSpec{
 		"a bucket the project named no origin for": {Bucket: "plain-bucket"},
@@ -52,11 +22,12 @@ func TestARealStoreTakesEveryCallABucketIsDescribedWith(t *testing.T) {
 		"a public bucket":                          {Bucket: "public-bucket", Public: true},
 		"the store's own sessions bucket":          {Bucket: constants.StoreSessionsBucket(), Internal: true},
 	} {
-		spec.Store = store
-		spec.Endpoint = "http://127.0.0.1:9000"
-		spec.Region = "us-east-1"
-		spec.AccessKeyID = "ocel"
-		spec.SecretKey = "probe-secret"
+		store.Takes(t, spec.Bucket)
+		spec.Store = store.Name
+		spec.Endpoint = store.Inside
+		spec.Region = store.Region
+		spec.AccessKeyID = store.AccessKeyID
+		spec.SecretKey = store.SecretKey
 
 		calls, err := spec.calls()
 		if err != nil {
@@ -67,7 +38,7 @@ func TestARealStoreTakesEveryCallABucketIsDescribedWith(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: signed(%s) = %v", what, call.what, err)
 			}
-			run := exec.Command("sh", "-c", curlCommand(store, req, call))
+			run := exec.Command("sh", "-c", curlCommand(spec.Store, req, call))
 			run.Stdin = fedBody(call.body)
 			if out, err := run.CombinedOutput(); err != nil {
 				t.Errorf("%s: the store refused to %s: %v\n%s",

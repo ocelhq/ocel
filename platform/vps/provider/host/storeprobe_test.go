@@ -8,71 +8,18 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 )
 
-const probePort = "19100"
-
-func aPublishedStore(t *testing.T) string {
+func anExternalStore(t *testing.T, store enginetest.Store, bucket string) ExternalStore {
 	t.Helper()
-	name := "ocel-external-store-probe"
-	_ = exec.Command(dockerEngine, "rm", "--force", name).Run()
-	up := exec.Command(dockerEngine, "run", "--detach", "--name", name,
-		"--publish", "127.0.0.1:"+probePort+":9000",
-		"--env", "RUSTFS_ACCESS_KEY=ocel",
-		"--env", "RUSTFS_SECRET_KEY=probe-secret",
-		"--env", "RUSTFS_ADDRESS=:9000",
-		"--env", "RUSTFS_CONSOLE_ENABLE=false",
-		"--env", "RUSTFS_REGION=us-east-1",
-		"--env", "RUSTFS_VOLUMES=/data",
-		constants.ObjectStoreImage())
-	if out, err := up.CombinedOutput(); err != nil {
-		t.Skipf("no store to drive: %v\n%s", err, out)
-	}
-	t.Cleanup(func() { _ = exec.Command(dockerEngine, "rm", "--force", name).Run() })
-
-	deadline := time.Now().Add(90 * time.Second)
-	for {
-		ready := exec.Command("curl", "-fsS", "http://127.0.0.1:"+probePort+"/health/ready")
-		if err := ready.Run(); err == nil {
-			return name
-		}
-		if time.Now().After(deadline) {
-			t.Skip("the store never answered its readiness probe")
-		}
-		time.Sleep(time.Second)
-	}
-}
-
-func anExternalStore(t *testing.T, bucket string) ExternalStore {
-	t.Helper()
-	store := aPublishedStore(t)
-	spec := BucketSpec{
-		Store:       store,
-		Endpoint:    "http://127.0.0.1:9000",
-		Region:      "us-east-1",
-		AccessKeyID: "ocel",
-		SecretKey:   "probe-secret",
-		Bucket:      bucket,
-	}
-	calls, err := spec.calls()
-	if err != nil {
-		t.Fatal(err)
-	}
-	req, err := spec.signed(calls[0], time.Now().UTC())
-	if err != nil {
-		t.Fatal(err)
-	}
-	made := exec.Command("sh", "-c", curlCommand(store, req, calls[0]))
-	made.Stdin = fedBody(calls[0].body)
-	if out, err := made.CombinedOutput(); err != nil {
-		t.Fatalf("the store kept no bucket to probe: %v\n%s", err, out)
-	}
+	aBucketOn(t, store, bucket)
 	return ExternalStore{
-		Endpoint:    "http://127.0.0.1:" + probePort,
-		Region:      "us-east-1",
+		Endpoint:    store.Endpoint,
+		Region:      store.Region,
 		Bucket:      bucket,
-		AccessKeyID: "ocel",
-		SecretKey:   "probe-secret",
+		AccessKeyID: store.AccessKeyID,
+		SecretKey:   store.SecretKey,
 		PathStyle:   true,
 	}
 }
@@ -93,7 +40,7 @@ func TestARealStoreAnswersEveryCallTheProbeAsksOfIt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stands a real store up")
 	}
-	store := anExternalStore(t, "probe-bucket")
+	store := anExternalStore(t, enginetest.AStore(t), "probe-bucket")
 
 	probed, err := probeExternalStore(store, probePrefix+"abc123/", time.Now().UTC(), hereRuns(t))
 	if err != nil {
@@ -108,7 +55,7 @@ func TestTheProbeLeavesNothingOfItsOwnBehind(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stands a real store up")
 	}
-	store := anExternalStore(t, "swept-bucket")
+	store := anExternalStore(t, enginetest.AStore(t), "swept-bucket")
 
 	if _, err := probeExternalStore(store, probePrefix+"swept/", time.Now().UTC(), hereRuns(t)); err != nil {
 		t.Fatalf("probe = %v", err)

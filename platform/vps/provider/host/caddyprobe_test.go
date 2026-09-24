@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 )
 
 type answered struct {
@@ -35,7 +36,7 @@ func probingConfig(t *testing.T, rendered []byte, joined ...string) func(hostnam
 	t.Helper()
 
 	engineOrSkip(t)
-	dir := seenByTheEngine(t)
+	dir := enginetest.BindSource(t)
 	config := filepath.Join(dir, "caddy.json")
 	if err := os.WriteFile(config, rendered, 0o644); err != nil {
 		t.Fatal(err)
@@ -43,9 +44,9 @@ func probingConfig(t *testing.T, rendered []byte, joined ...string) func(hostnam
 
 	name := probeName(t)
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
-	run := []string{"run", "--rm", "--detach", "--name", name,
-		"--publish", "127.0.0.1::80",
-		"--volume", config + ":" + ProxyConfigMount + ":ro"}
+	run := append([]string{"run", "--rm", "--detach", "--name", name}, enginetest.Labelled(t)...)
+	run = append(run, "--publish", "127.0.0.1::80",
+		"--volume", config+":"+ProxyConfigMount+":ro")
 	for _, network := range joined {
 		run = append(run, "--network", network)
 	}
@@ -170,27 +171,14 @@ func TestARealProxyAnswersEveryHostnameOneSurfaceClaimsOnTheAppItRuns(t *testing
 	}
 }
 
-func standingNetwork(t *testing.T) string {
-	t.Helper()
-
-	engineOrSkip(t)
-	network := probeName(t) + "-net"
-	exec.Command(dockerEngine, "network", "rm", network).Run()
-	if out, err := exec.Command(dockerEngine, "network", "create", network).CombinedOutput(); err != nil {
-		t.Skipf("this machine's engine will not create a network for the app the proxy forwards to: %s", out)
-	}
-	t.Cleanup(func() { exec.Command(dockerEngine, "network", "rm", network).Run() })
-	return network
-}
-
 func standingAppOn(t *testing.T, network, named, body string) string {
 	t.Helper()
 
 	name := probeName(t) + "-" + named
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
-	stood, err := exec.Command(dockerEngine, "run", "--rm", "--detach", "--name", name,
-		"--network", network, ProxyImage,
-		"caddy", "respond", "--listen", ":"+providerkit.InjectedPortText, body).CombinedOutput()
+	run := append([]string{"run", "--rm", "--detach", "--name", name}, enginetest.Labelled(t)...)
+	stood, err := exec.Command(dockerEngine, append(run, "--network", network, ProxyImage,
+		"caddy", "respond", "--listen", ":"+providerkit.InjectedPortText, body)...).CombinedOutput()
 	if err != nil {
 		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
 	}
@@ -201,7 +189,7 @@ func standingAppOn(t *testing.T, network, named, body string) string {
 func standingApp(t *testing.T, body string) (network, upstream string) {
 	t.Helper()
 
-	network = standingNetwork(t)
+	network = enginetest.Network(t)
 	return network, standingAppOn(t, network, "app", body)
 }
 

@@ -9,14 +9,20 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 )
 
-func aBucketOn(t *testing.T, store, bucket string) {
-	t.Helper()
-	spec := BucketSpec{
-		Store: store, Endpoint: "http://127.0.0.1:9000", Region: "us-east-1",
-		AccessKeyID: "ocel", SecretKey: "probe-secret", Bucket: bucket,
+func bucketOn(store enginetest.Store, bucket string) BucketSpec {
+	return BucketSpec{
+		Store: store.Name, Endpoint: store.Inside, Region: store.Region,
+		AccessKeyID: store.AccessKeyID, SecretKey: store.SecretKey, Bucket: bucket,
 	}
+}
+
+func aBucketOn(t *testing.T, store enginetest.Store, bucket string) {
+	t.Helper()
+	store.Takes(t, bucket)
+	spec := bucketOn(store, bucket)
 	calls, err := spec.calls()
 	if err != nil {
 		t.Fatal(err)
@@ -25,20 +31,20 @@ func aBucketOn(t *testing.T, store, bucket string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	made := exec.Command("sh", "-c", curlCommand(store, req, calls[0]))
+	made := exec.Command("sh", "-c", curlCommand(spec.Store, req, calls[0]))
 	made.Stdin = fedBody(calls[0].body)
 	if out, err := made.CombinedOutput(); err != nil {
 		t.Fatalf("the store kept no bucket %s: %v\n%s", bucket, err, out)
 	}
 }
 
-func anAccountOn(t *testing.T, store string, account StoreAccount) error {
+func anAccountOn(t *testing.T, store enginetest.Store, account StoreAccount) error {
 	t.Helper()
-	account.Store = store
-	account.Endpoint = "http://127.0.0.1:9000"
-	account.Region = "us-east-1"
-	account.RootKeyID = "ocel"
-	account.RootSecret = "probe-secret"
+	account.Store = store.Name
+	account.Endpoint = store.Inside
+	account.Region = store.Region
+	account.RootKeyID = store.AccessKeyID
+	account.RootSecret = store.SecretKey
 
 	calls, err := account.calls()
 	if err != nil {
@@ -78,15 +84,16 @@ func TestAnAppsAccountReachesTheBucketsItWasGrantedAndNoOthers(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stands a real store up")
 	}
-	root := anExternalStore(t, "granted-bucket")
-	aBucketOn(t, "ocel-external-store-probe", "ungranted-bucket")
+	store := enginetest.AStore(t)
+	root := anExternalStore(t, store, "granted-bucket")
+	aBucketOn(t, store, "ungranted-bucket")
 
 	account := StoreAccount{
 		AccessKeyID: StoreAccountKey("prod", "web"),
 		SecretKey:   "an-app-secret",
 		Buckets:     []string{"granted-bucket"},
 	}
-	if err := anAccountOn(t, "ocel-external-store-probe", account); err != nil {
+	if err := anAccountOn(t, store, account); err != nil {
 		t.Fatalf("the store granted the app no account of its own: %v", err)
 	}
 
@@ -106,19 +113,20 @@ func TestGrantingTheSameAppTwiceHoldsItToWhatItDeclaresNow(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stands a real store up")
 	}
-	root := anExternalStore(t, "first-bucket")
-	aBucketOn(t, "ocel-external-store-probe", "second-bucket")
+	store := enginetest.AStore(t)
+	root := anExternalStore(t, store, "first-bucket")
+	aBucketOn(t, store, "second-bucket")
 
 	account := StoreAccount{
 		AccessKeyID: StoreAccountKey("prod", "regranted"),
 		SecretKey:   "an-app-secret",
 		Buckets:     []string{"first-bucket"},
 	}
-	if err := anAccountOn(t, "ocel-external-store-probe", account); err != nil {
+	if err := anAccountOn(t, store, account); err != nil {
 		t.Fatal(err)
 	}
 	account.Buckets = []string{"second-bucket"}
-	if err := anAccountOn(t, "ocel-external-store-probe", account); err != nil {
+	if err := anAccountOn(t, store, account); err != nil {
 		t.Fatalf("a second deploy of the same app was refused its account: %v", err)
 	}
 
@@ -201,7 +209,8 @@ func TestAnAppsAccountDrivesTheDataPlaneAndNothingThatReshapesTheBucket(t *testi
 	if testing.Short() {
 		t.Skip("stands a real store up")
 	}
-	root := anExternalStore(t, "scoped-bucket")
+	store := enginetest.AStore(t)
+	root := anExternalStore(t, store, "scoped-bucket")
 
 	account := StoreAccount{
 		AccessKeyID: StoreAccountKey("prod", "scoped"),
@@ -209,7 +218,7 @@ func TestAnAppsAccountDrivesTheDataPlaneAndNothingThatReshapesTheBucket(t *testi
 		Buckets:     []string{"scoped-bucket"},
 		Sessions:    constants.StoreSessionsBucket() + "/prod/scoped",
 	}
-	if err := anAccountOn(t, "ocel-external-store-probe", account); err != nil {
+	if err := anAccountOn(t, store, account); err != nil {
 		t.Fatalf("the store granted the app no account of its own: %v", err)
 	}
 	held := root

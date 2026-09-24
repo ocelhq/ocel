@@ -4,57 +4,29 @@ import (
 	"bytes"
 	"context"
 	"net/http"
-	"os/exec"
-	"strconv"
+	"os"
 	"testing"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 )
 
-const realStorePort = 19180
+func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }
 
 func aRunningStore(t *testing.T, bucket string) Store {
 	t.Helper()
-	name := "ocel-runtime-bucket-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	up := exec.Command("docker", "run", "--detach", "--name", name,
-		"--publish", "127.0.0.1:"+strconv.Itoa(realStorePort)+":9000",
-		"--env", "RUSTFS_ACCESS_KEY=ocel",
-		"--env", "RUSTFS_SECRET_KEY=runtime-secret",
-		"--env", "RUSTFS_ADDRESS=:9000",
-		"--env", "RUSTFS_CONSOLE_ENABLE=false",
-		"--env", "RUSTFS_REGION=us-east-1",
-		"--env", "RUSTFS_VOLUMES=/data",
-		constants.ObjectStoreImage())
-	if out, err := up.CombinedOutput(); err != nil {
-		t.Skipf("no store to drive: %v\n%s", err, out)
-	}
-	t.Cleanup(func() { _ = exec.Command("docker", "rm", "--force", name).Run() })
-
+	running := enginetest.AStore(t)
+	running.Takes(t, bucket)
 	store := Store{
-		Endpoint:        "http://127.0.0.1:" + strconv.Itoa(realStorePort),
-		Region:          "us-east-1",
-		AccessKeyID:     "ocel",
-		SecretAccessKey: "runtime-secret",
+		Endpoint:        running.Endpoint,
+		Region:          running.Region,
+		AccessKeyID:     running.AccessKeyID,
+		SecretAccessKey: running.SecretKey,
 		PathStyle:       true,
-	}
-	deadline := time.Now().Add(90 * time.Second)
-	for {
-		resp, err := http.Get(store.Endpoint + "/health/ready")
-		if err == nil {
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				break
-			}
-		}
-		if time.Now().After(deadline) {
-			t.Skip("the store never answered its readiness probe")
-		}
-		time.Sleep(time.Second)
 	}
 	if _, err := store.Client().CreateBucket(context.Background(), &s3.CreateBucketInput{Bucket: aws.String(bucket)}); err != nil {
 		t.Fatalf("create the bucket to drive: %v", err)
