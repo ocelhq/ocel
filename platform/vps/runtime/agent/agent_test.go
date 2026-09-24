@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"os"
@@ -354,8 +355,28 @@ func containerRuntime(t *testing.T, dir string) string {
 
 const testImage = "public.ecr.aws/docker/library/alpine:3.21"
 
+func pulled(t *testing.T, image string) {
+	t.Helper()
+	if exec.Command("docker", "image", "inspect", image).Run() == nil {
+		return
+	}
+	var said []byte
+	var err error
+	for attempt := range 6 {
+		if said, err = exec.Command("docker", "pull", "--quiet", image).CombinedOutput(); err == nil {
+			return
+		}
+		if !strings.Contains(strings.ToLower(string(said)), "toomanyrequests") {
+			break
+		}
+		time.Sleep(time.Second<<attempt + rand.N(time.Second))
+	}
+	t.Fatalf("pull %s: %v\n%s", image, err, said)
+}
+
 func TestAContainerReadsItsSecretOffTheBoxThroughTheRuntimeAndTheAgent(t *testing.T) {
 	engineOrSkip(t)
+	pulled(t, testImage)
 	dir := underHome(t)
 	runtimeBinary := containerRuntime(t, dir)
 
@@ -388,7 +409,7 @@ func TestAContainerReadsItsSecretOffTheBoxThroughTheRuntimeAndTheAgent(t *testin
 	})
 
 	manifest := manifestFor(t, "shop", "")
-	run := exec.Command("docker", "run", "--rm",
+	run := exec.Command("docker", "run", "--rm", "--pull", "never",
 		"--mount", "type=bind,src="+socketDir+",dst="+live.SocketDir+",readonly",
 		"--volume", runtimeBinary+":"+providerkit.ContainerRuntimePath+":ro",
 		"--env", live.EnvVar+"="+manifest,
