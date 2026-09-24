@@ -37,6 +37,8 @@ func mustSelections(data []byte) selections {
 
 func ProviderIDs() []string { return slices.Clone(known.Provider.IDs) }
 
+func ProviderNamedAlone(id string) bool { return slices.Contains(known.Provider.Shorthand, id) }
+
 type Selector[O any, K selectorKind] struct {
 	ID      string
 	Options O

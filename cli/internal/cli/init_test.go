@@ -79,7 +79,7 @@ func TestRunInit(t *testing.T) {
 		}
 
 		content := readConfig(t, dir)
-		for _, want := range []string{`"slug": "my-app"`, `"provider": { "aws": {} }`, `"$schema"`} {
+		for _, want := range []string{`"slug": "my-app"`, `"provider": "aws"`, `"$schema"`} {
 			if !strings.Contains(content, want) {
 				t.Errorf("config = %q, want it to contain %q", content, want)
 			}
