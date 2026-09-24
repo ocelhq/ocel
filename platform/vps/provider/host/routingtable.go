@@ -2,10 +2,8 @@ package host
 
 import (
 	"bytes"
-	"cmp"
 	"encoding/json"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -32,14 +30,10 @@ type tableRows struct {
 
 func WriteRoutingTable(table RoutingTable) ([]byte, error) {
 	return json.Marshal(tableRows{
-		Grace: spelled(table.Grace),
-		Claims: slices.SortedFunc(slices.Values(table.Claims), func(a, b HostClaim) int {
-			return strings.Compare(a.Hostname, b.Hostname)
-		}),
-		Routes: slices.SortedFunc(slices.Values(table.Routes), byKey),
-		Pins: slices.SortedFunc(slices.Values(table.Pins), func(a, b Pin) int {
-			return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Path, b.Path))
-		}),
+		Grace:       spelled(table.Grace),
+		Claims:      slices.SortedFunc(slices.Values(table.Claims), byClaimed),
+		Routes:      slices.SortedFunc(slices.Values(table.Routes), byKey),
+		Pins:        slices.SortedFunc(slices.Values(table.Pins), byPinned),
 		PreviewBase: table.PreviewBase,
 		Connector:   table.Connector,
 	})
