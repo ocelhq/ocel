@@ -559,3 +559,34 @@ func TestARemovalSaysSoWhenTheStandingBootstrapFrontsNoEdge(t *testing.T) {
 		t.Error("UnbindDomain against a bootstrap that fronts no edge = nil, want the refusal said out loud: a bootstrap standing without the edge feature is not an account with none")
 	}
 }
+
+func TestBindDomainAfterAPromotionServesThePromotedRelease(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	stack := reconciled(t, w)
+	staged(t, stack, fakeEntryURL, fakeAssetPrefix)
+	if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+
+	bound(t, stack)
+
+	published := routeOn(t, w, stack, boundHost)
+	if published.Release != "d1.f1" || published.Origin != fakeEntryHost {
+		t.Errorf("the hostname answers with release %q at %q, want the promoted d1.f1 at %q: a hostname bound after the promotion serves it without another deploy", published.Release, published.Origin, fakeEntryHost)
+	}
+}
+
+func TestBindDomainBeforeAnyPromotionPublishesNoRoute(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld()
+	stack := reconciled(t, w)
+
+	bound(t, stack)
+
+	if held := w.store.held(ownState(t, stack).KeyValueStore); len(held) != 0 {
+		t.Errorf("the key value store holds %v, want nothing: no release is promoted for the hostname to answer with", held)
+	}
+}
