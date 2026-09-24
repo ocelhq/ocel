@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -309,6 +310,61 @@ func TestARouteReadsItsUpstreamBeforeTheLoadThatNamesItAndMovesOnlyOnceThatLoadI
 		t.Errorf("the route read its upstream as %q while each config was loaded, want %q: a route loaded before its upstream is written answers 502, and one moved before a load the proxy may refuse runs a release the config never took",
 			during, want)
 	}
+}
+
+func TestAFlipThatReadTheConfigFirstCannotLandAfterOneThatReadItLater(t *testing.T) {
+	held, socket := served(t)
+	live := t.TempDir()
+	config := routing(t, socket, "shop-web-1111:8080")
+	posting, landing := make(chan struct{}), make(chan struct{})
+	var first atomic.Bool
+	held.during = func() {
+		if first.CompareAndSwap(false, true) {
+			close(posting)
+			<-landing
+		}
+	}
+
+	earlier := make(chan int)
+	go func() {
+		code, _ := flippedAt(t, live, config)
+		earlier <- code
+	}()
+	<-posting
+	if err := os.WriteFile(config, []byte(mustRead(t, routing(t, socket, "shop-web-2222:8080"))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	later := make(chan int)
+	go func() {
+		code, _ := flippedAt(t, live, config)
+		later <- code
+	}()
+	select {
+	case <-later:
+		close(landing)
+		<-earlier
+	case <-time.After(time.Second):
+		close(landing)
+		if code := <-earlier; code != 0 {
+			t.Fatalf("the earlier flip = %d", code)
+		}
+		if code := <-later; code != 0 {
+			t.Fatalf("the later flip = %d", code)
+		}
+	}
+
+	if at := upstreamOf(t, live, routed); at != "shop-web-2222:8080" {
+		t.Errorf("%s reads %q after two flips, want the upstream the config names now: the flip that read the older config landed last, and the box serves a release no config on it names", routed, at)
+	}
+}
+
+func mustRead(t *testing.T, path string) string {
+	t.Helper()
+	read, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(read)
 }
 
 func TestAFlipTheProxyRefusesMovesNoRoute(t *testing.T) {

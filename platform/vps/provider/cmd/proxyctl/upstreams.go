@@ -11,12 +11,14 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 )
 
 const (
 	liveRoot      = "/run/ocel-proxy"
 	upstreamsDir  = "upstreams"
 	liveConfig    = "caddy.json"
+	flipLock      = ".flip"
 	forwardModule = "reverse_proxy"
 )
 
@@ -136,4 +138,19 @@ func (s shaped) pruned() error {
 		}
 	}
 	return nil
+}
+
+func holding(live string) (func(), error) {
+	if err := os.MkdirAll(live, 0o700); err != nil {
+		return nil, err
+	}
+	lock, err := os.OpenFile(filepath.Join(live, flipLock), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		lock.Close()
+		return nil, err
+	}
+	return func() { lock.Close() }, nil
 }

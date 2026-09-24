@@ -439,6 +439,12 @@ func draining(socket string, retiring []string, window time.Duration, out, errs 
 }
 
 func flip(socket, live, path string, out, errs io.Writer) int {
+	release, err := holding(live)
+	if err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+		return exitRefused
+	}
+	defer release()
 	document, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: read %s: %v\n", path, err)
