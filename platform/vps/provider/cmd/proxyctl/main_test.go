@@ -659,6 +659,70 @@ func TestARetiredUpstreamThePoolNoLongerCarriesHasNothingInFlight(t *testing.T) 
 	}
 }
 
+func TestTheDrainCountsTheRetiredUpstreamUnderTheAddressItsRouteWasWrittenWith(t *testing.T) {
+	for _, spelled := range []struct{ dial, keyed string }{
+		{"shop-web-1111:8080", "shop-web-1111:8080"},
+		{"tcp/shop-web-1111:08080", "shop-web-1111:8080"},
+		{"[fd00::1]:08080", "[fd00::1]:8080"},
+	} {
+		t.Run(spelled.dial, func(t *testing.T) {
+			held, socket := served(t)
+			live := t.TempDir()
+			if code, errs := flippedAt(t, live, routing(t, socket, spelled.dial)); code != 0 {
+				t.Fatalf("the flip onto %s = %d, %q", spelled.dial, code, errs)
+			}
+			if at := upstreamOf(t, live, routed); at != spelled.keyed {
+				t.Errorf("%s reads its upstream as %q, want %q: caddy counts a request under the host:port it dialled, and the drain looks the retired upstream up under the address the route was written with",
+					routed, at, spelled.keyed)
+			}
+
+			held.body = `[{"address":"` + spelled.keyed + `","num_requests":1}]`
+			var out, errs strings.Builder
+			code := run(t.TempDir(), t.TempDir(), live, []string{"flip", "--drain-timeout", "1", "--retire", spelled.dial, routing(t, socket, "shop-web-2222:8080")}, &out, &errs)
+			if code != 0 {
+				t.Fatalf("flip retiring %s = %d, %q", spelled.dial, code, errs.String())
+			}
+			if want := caddyadmin.DrainExpired + " " + spelled.keyed + " 1"; !strings.Contains(out.String(), want) {
+				t.Errorf("retiring %s printed %q, want %q: a drain that looks for a spelling caddy never reports reads the upstream as drained, and the release stops it under the request still in flight",
+					spelled.dial, out.String(), want)
+			}
+		})
+	}
+}
+
+func TestARouteDialledOverAUnixSocketKeepsItsDialAndIsNeverMovedByFile(t *testing.T) {
+	held, socket := served(t)
+	live := t.TempDir()
+
+	if code, errs := flippedAt(t, live, routing(t, socket, "unix//run/ocel/connector.sock")); code != 0 {
+		t.Fatalf("the flip = %d, %q", code, errs)
+	}
+	if !strings.Contains(string(held.loaded), `"dial":"unix//run/ocel/connector.sock"`) {
+		t.Errorf("the proxy was loaded with\n%s\nwant the unix dial kept: caddy counts such a request under the socket path, which no retired host:port a drain looks up can name", held.loaded)
+	}
+	if at := upstreamOf(t, live, routed); at != "" {
+		t.Errorf("%s was given an upstream file reading %q", routed, at)
+	}
+}
+
+func TestAFlipRefusesARetiredUpstreamItCannotCountBeforeItReachesTheProxy(t *testing.T) {
+	held, socket := served(t)
+	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"}}`)
+
+	for _, retire := range []string{"shop-web-1111", "unix//run/app.sock", "shop-web-1111:8080-8081", "{file./run/ocel-proxy/upstreams/web}"} {
+		code, _, errs := ran(t, "flip", "--drain-timeout", "1", "--retire", retire, config)
+		if code != exitRefused {
+			t.Errorf("flip retiring %q = %d, want %d: caddy reports no in-flight count the drain could look that up by, so the drain would read it as drained and the release would stop it under live requests", retire, code, exitRefused)
+		}
+		if !strings.Contains(errs, retire) {
+			t.Errorf("flip retiring %q said %q, want it to name the address", retire, errs)
+		}
+	}
+	if asked := held.asked(); len(asked) != 0 {
+		t.Errorf("a refused flip still reached the proxy with %v", asked)
+	}
+}
+
 func loads(asked []string) int {
 	count := 0
 	for _, one := range asked {
